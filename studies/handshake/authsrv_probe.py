@@ -26,10 +26,16 @@ import selectors
 import threading
 import time
 
-# Historical Guild Wars auth/login ports. 6112 is the documented one; the
-# client is known to fall back to 80 and 443 when 6112 is blocked, so we watch
-# all three plus a couple of neighbours in case Reforged moved it.
-CANDIDATE_PORTS = [6112, 6113, 80, 443, 6111, 6114]
+# Guild Wars uses two separate server roles on two separate ports, and the probe
+# has to watch both or it will report silence for the wrong reason:
+#
+#   6600  the NCSoft "portal" / STS login. Text protocol (STS/1.0) carrying XML,
+#         wrapped in TLS-SRP. This is the FIRST hop and the one -portal targets.
+#   6112  the Guild Wars auth/game channel. This is what -authsrv targets.
+#
+# 80 and 443 are watched because portal traffic is HTTP-shaped and may land there;
+# the 611x neighbours are cheap insurance against the port having moved.
+CANDIDATE_PORTS = [6600, 6112, 6113, 80, 443, 6111, 6114]
 
 
 def hexdump(data: bytes, width: int = 16) -> str:

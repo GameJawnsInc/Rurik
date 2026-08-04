@@ -140,9 +140,19 @@ An agent session could not launch `Gw.exe` — the sandbox denied process launch
 be started by hand. Procedure:
 
 1. Start the listener with the command above and leave it running.
-2. In another shell: `C:\gw\Gw.exe -authsrv 127.0.0.1 -windowed`
+2. In another shell:
+
+   ```bash
+   C:\gw\Gw.exe -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed
+   ```
+
+   **Both flags, not just `-authsrv`.** `-portal` redirects the first hop (the NCSoft STS
+   login) and `-authsrv` the second (the Guild Wars auth channel). Redirecting only `-authsrv`
+   leaves the client talking to ArenaNet for the portal handshake, and if that stage fails or
+   stalls the client may never reach the stage we are watching — producing a silent listener
+   that means nothing. This is the invocation OpenTyria uses.
 3. Let it sit for the full listener duration, then close the client.
-4. Read `studies/handshake/runs/run1/REPORT.md`.
+4. Read `vault/probes/authsrv-run1/REPORT.md`.
 
 Interpreting the outcome:
 
