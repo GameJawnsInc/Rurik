@@ -21,6 +21,16 @@ vault/
 captures/
 !oracle/fixtures/index/
 
+# Probe output. A listener standing in for an auth server receives whatever the
+# client would have sent the real one — which can include account identifiers and
+# credential material. Probe runs are observations, so they live in the vault; these
+# rules exist so a stray run written to the wrong place still cannot be committed.
+runs/
+probes/
+*.probe/
+conn*.bin
+events.jsonl
+
 # --- ArenaNet client artifacts. Never commit, wherever they appear. ----------
 *.dat
 Gw.exe
