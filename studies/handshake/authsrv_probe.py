@@ -26,16 +26,19 @@ import selectors
 import threading
 import time
 
-# Guild Wars uses two separate server roles on two separate ports, and the probe
-# has to watch both or it will report silence for the wrong reason:
+# Guild Wars logs in through three stages on two ports, and the probe has to watch
+# both or it will report silence for the wrong reason:
 #
-#   6600  the NCSoft "portal" / STS login. Text protocol (STS/1.0) carrying XML,
-#         wrapped in TLS-SRP. This is the FIRST hop and the one -portal targets.
-#   6112  the Guild Wars auth/game channel. This is what -authsrv targets.
+#   6601  Stage A, the portal. This is what -portal targets. With -portal set, the
+#         client drops to PLAIN HTTP (TLS off) and prefixes every request path with
+#         /Spawned/WebGate. Unset, it is HTTPS against ArenaNet with cert validation.
+#   6112  Stage B, AuthSrv. This is what -authsrv targets. Diffie-Hellman + ARC4.
+#         Stage C, the game server, is handed over by Stage B and takes no flag.
 #
-# 80 and 443 are watched because portal traffic is HTTP-shaped and may land there;
-# the 611x neighbours are cheap insurance against the port having moved.
-CANDIDATE_PORTS = [6600, 6112, 6113, 80, 443, 6111, 6114]
+# 6600 is watched only because it is the equivalent port in Guild Wars 2 and costs
+# nothing to bind; 6601 is the GW1 one. 80 and 443 catch a portal that ignored the
+# downgrade, and the 611x neighbours are insurance against a moved port.
+CANDIDATE_PORTS = [6601, 6112, 6600, 6113, 80, 443, 6111, 6114]
 
 
 def hexdump(data: bytes, width: int = 16) -> str:
