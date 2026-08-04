@@ -1,0 +1,105 @@
+# ============================================================================
+# PROVENANCE GATE — read HANDOFF.md §9 before editing this file.
+#
+# Zero ArenaNet bytes in this repo, ever. No client files, no Gw.dat, no
+# extracted assets, no decompiled code. The repo contains OUR code and OUR
+# observations. Everything derived regenerates from the owner's own legally
+# purchased install via a documented extraction step.
+#
+# The capture vault is personal data recorded from the owner's own account.
+# It stays local. It does not go in the repo and it does not go on the
+# internet. This rule is why vault/ is the first entry below and why it was
+# committed before any capture existed.
+# ============================================================================
+
+# --- The vault. Never commit. ------------------------------------------------
+vault/
+/vault/**
+**/vault/
+*.gwcap
+*.gwcap.gz
+captures/
+!oracle/fixtures/index/
+
+# --- ArenaNet client artifacts. Never commit, wherever they appear. ----------
+*.dat
+Gw.exe
+Gw.dat
+GwLoginClient.dll
+gMod.dll
+GW_Launcher.exe
+GWToolbox.exe
+*.ffna
+*.mft
+*.tpf
+
+# --- Extracted / derived game assets ----------------------------------------
+extracted/
+assets_extracted/
+*.dds
+*.gwmodel
+*.gwmap
+
+# --- Build output ------------------------------------------------------------
+bin/
+obj/
+build/
+out/
+Debug/
+Release/
+x64/
+Win32/
+*.o
+*.obj
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.lib
+*.exp
+*.idb
+*.tlog
+*.suo
+*.user
+*.VC.db
+*.VC.opendb
+.vs/
+CMakeFiles/
+CMakeCache.txt
+cmake-build-*/
+
+# --- Python ------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+dist/
+*.whl
+
+# --- .NET --------------------------------------------------------------------
+[Bb]in/
+[Oo]bj/
+*.nupkg
+project.lock.json
+artifacts/
+
+# --- Editors / OS ------------------------------------------------------------
+.idea/
+*.swp
+*~
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# --- Local, machine-specific, secret -----------------------------------------
+.env
+*.local.toml
+local.settings.json
+Accounts.json
+*.credentials
