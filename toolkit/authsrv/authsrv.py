@@ -36,12 +36,34 @@ import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "schema"))
 from gwcrypto import ARC4, arc4_hash, compute_shared, make_server_seed  # noqa: E402
+from codec import Codec  # noqa: E402
 
 AUTH_CMSG_VERSION_HEADER = 0x000C0400
 GAME_CMSG_VERSION_HEADER = 0x000C0700  # game server variant; logged, not handled
 CMSG_CLIENT_SEED_HEADER = 0x4200
 SMSG_SERVER_SEED_HEADER = 0x1601
+
+# Client-to-auth opcodes carry a high bit; the schema indexes them without it.
+AUTH_CMSG_MASK = 0x8000
+AUTH_CMSG_SEND_COMPUTER_INFO = 0x0001
+AUTH_CMSG_SEND_COMPUTER_HASH = 0x0002
+AUTH_SMSG_SESSION_INFO = 0x0001
+
+AUTH_CMSG_NAMES = {
+    0x0000: "HEARTBEAT", 0x0001: "SEND_COMPUTER_INFO", 0x0002: "SEND_COMPUTER_HASH",
+    0x0003: "ACCOUNT_CREATE", 0x0004: "ACCOUNT_LOGIN", 0x0007: "DELETE_CHARACTER",
+    0x0009: "UPDATE_CHARACTER_SETTINGS", 0x000A: "CHANGE_PLAY_CHARACTER",
+    0x000D: "DISCONNECT", 0x000E: "SET_PLAYER_STATUS", 0x001A: "FRIEND_ADD",
+    0x001C: "ADD_ACCESS_KEY", 0x0020: "SETTING_UPDATE_CONTENT",
+    0x0021: "SETTING_UPDATE_SIZE", 0x0025: "REQUEST_GUILD_HALL",
+    0x0026: "ACCEPT_EULA", 0x0029: "REQUEST_GAME_INSTANCE",
+    0x0035: "ASK_SERVER_RESPONSE", 0x0038: "PORTAL_ACCOUNT_LOGIN",
+}
+
+codec = Codec()
 
 VAULT_DEFAULT = r"C:\gd\Rurik\vault\captures\authsrv"
 
@@ -128,12 +150,21 @@ def handle(sock, addr, keys, vault, conn_id, stop):
         derived = arc4_hash(master_secret)
         c2s = ARC4(derived)
         s2c = ARC4(derived)
+        state = {}
         print(f"[c{conn_id}] key exchange OK — ARC4 key {derived.hex()[:16]}…", flush=True)
         rec.event("key_exchange_ok", arc4_key=derived.hex())
 
-        # ---- 3. record the encrypted channel ----------------------------
+        # ---- 3. decode, answer, and record ------------------------------
+        def send(opcode, values, label):
+            blob = codec.encode("AUTH_SMSG", opcode, values)
+            sock.sendall(s2c.crypt(blob))
+            print(f"[c{conn_id}] s2c {label} (0x{opcode:04x}, {len(blob)}B)", flush=True)
+            rec.event("sent", opcode=opcode, label=label,
+                      plain=binascii.hexlify(blob).decode())
+
         sock.settimeout(1.0)
         total = 0
+        pending = b""          # decrypted bytes not yet framed into whole messages
         last = time.time()
         while not stop.is_set():
             try:
@@ -148,12 +179,42 @@ def handle(sock, addr, keys, vault, conn_id, stop):
             plain = c2s.crypt(chunk)
             total += len(chunk)
             rec.frame("c2s", chunk, plain)
-            # First u16 of each burst is the message header; surface it so the
-            # opcode catalog can be checked against reality immediately.
-            if len(plain) >= 2:
-                op = struct.unpack("<H", plain[:2])[0]
-                print(f"[c{conn_id}] c2s {len(chunk):5d}B  first header 0x{op:04x}",
+
+            # A TCP read is not a message boundary: a read may carry several
+            # messages, or half of one. Carry the remainder forward rather than
+            # decoding per-read, which would drop the tail of every split message.
+            pending += plain
+            msgs, consumed, err = codec.decode_stream(
+                "AUTH_CMSG", pending, mask=AUTH_CMSG_MASK)
+            pending = pending[consumed:]
+
+            for opcode, values in msgs:
+                name = AUTH_CMSG_NAMES.get(opcode, "?")
+                print(f"[c{conn_id}] c2s 0x{opcode | AUTH_CMSG_MASK:04x} {name}",
                       flush=True)
+                rec.event("decoded", opcode=opcode, name=name,
+                          values=[v.hex() if isinstance(v, bytes) else v
+                                  for v in values])
+
+                if opcode == AUTH_CMSG_SEND_COMPUTER_INFO:
+                    state["username"] = values[1]
+                    state["pcname"] = values[2]
+                elif opcode == AUTH_CMSG_SEND_COMPUTER_HASH:
+                    # This is the message the client waits on. Until we answer it
+                    # the login never proceeds past the key exchange.
+                    state["salt"] = secrets.randbits(32)
+                    send(AUTH_SMSG_SESSION_INFO, [state["salt"], 0], "SESSION_INFO")
+
+            if err and "incomplete" not in err:
+                # Unknown opcode: we cannot frame past it and must not guess,
+                # because there is no length prefix to resynchronise against.
+                print(f"[c{conn_id}] {err}", flush=True)
+                print(f"[c{conn_id}] {len(pending)}B undecodable — "
+                      f"first bytes {binascii.hexlify(pending[:16]).decode()}", flush=True)
+                rec.event("undecodable", error=err,
+                          head=binascii.hexlify(pending[:64]).decode())
+                pending = b""
+
         print(f"[c{conn_id}] done, {total} encrypted bytes recorded", flush=True)
         rec.event("disconnect", total_bytes=total)
     except (ConnectionError, socket.timeout, OSError) as ex:
@@ -195,8 +256,22 @@ def main():
           f"prime {keys['prime'].bit_length()} bits")
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind(("127.0.0.1", a.port))  # loopback only, deliberately
+    # Do NOT set SO_REUSEADDR here. On Windows it does not mean what it means on
+    # Unix: it lets a second process BIND A PORT ALREADY IN USE, and the older
+    # listener keeps taking the connections. That cost a real debugging session —
+    # a stale server from a timed-out test silently shadowed a freshly-started
+    # one, so the new code appeared to do nothing while an old build answered.
+    # SO_EXCLUSIVEADDRUSE makes the second instance fail loudly instead.
+    if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    try:
+        srv.bind(("127.0.0.1", a.port))  # loopback only, deliberately
+    except OSError as ex:
+        raise SystemExit(
+            f"Could not bind 127.0.0.1:{a.port} — {ex.strerror}.\n"
+            f"Another AuthSrv is almost certainly still running. Find it with\n"
+            f"  netstat -ano | findstr :{a.port}\n"
+            f"and stop it before starting this one.")
     srv.listen(8)
     print(f"Rurik AuthSrv on 127.0.0.1:{a.port}  (loopback only)")
     print("the client MUST be the patched copy — an unpatched one keys to "

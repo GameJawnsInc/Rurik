@@ -30,6 +30,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from gwcrypto import ARC4, arc4_hash, recover_master_secret  # noqa: E402
 from gwpe import PE  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'schema'))
+from codec import Codec  # noqa: E402
+
+codec = Codec()
 
 SIG_KEYS = bytes.fromhex("8B4508C70088000000B8")
 PORT = 6112
@@ -111,11 +115,41 @@ def main():
         derived = arc4_hash(master)
         print(f"   client-derived ARC4 key: {derived.hex()[:16]}…")
 
-        print("\n4. speak encrypted and let the server decrypt it")
+        print("\n4. speak real protocol and require the right answer back")
+        # The same two messages the real client sends, built through our own
+        # codec, so this exercises encode, decrypt, decode and dispatch together.
         c2s = ARC4(derived)
-        probe = struct.pack("<H", 0x0001) + b"RURIK-HANDSHAKE-SELFTEST"
-        s.sendall(c2s.crypt(probe))
-        time.sleep(1.0)
+        s2c = ARC4(derived)
+        info = codec.encode("AUTH_CMSG", 0x0001, ["selftest", "SELFTESTPC"],
+                            header_value=0x8001)
+        hsh = codec.encode("AUTH_CMSG", 0x0002, [BUILD, bytes(range(16))],
+                           header_value=0x8002)
+        # Deliberately sent as ONE write containing TWO messages, and then split
+        # across writes below, because the real client does both and a decoder
+        # that assumes one-message-per-read works right up until it doesn't.
+        s.sendall(c2s.crypt(info + hsh))
+
+        s.settimeout(10)
+        reply = b""
+        try:
+            while len(reply) < 10:
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                reply += chunk
+        except socket.timeout:
+            pass
+        ok &= check("server answered SEND_COMPUTER_HASH", len(reply) >= 10,
+                    f"{len(reply)} bytes")
+        if len(reply) >= 10:
+            msgs, consumed, err = codec.decode_stream("AUTH_SMSG", s2c.crypt(reply))
+            ok &= check("reply decodes cleanly", err is None and consumed == len(reply),
+                        err or f"consumed {consumed}/{len(reply)}")
+            ok &= check("reply is AUTH_SMSG_SESSION_INFO (0x0001)",
+                        bool(msgs) and msgs[0][0] == 0x0001,
+                        f"0x{msgs[0][0]:04x}" if msgs else "none")
+            if msgs:
+                print(f"   session salt: 0x{msgs[0][1][1]:08x}")
         s.close()
 
         out, _ = srv.communicate(timeout=20)
@@ -127,9 +161,8 @@ def main():
         ok &= check("server and client derived the SAME key",
                     bool(srv_key) and derived.hex().startswith(srv_key),
                     f"server {srv_key} vs client {derived.hex()[:16]}")
-        seen = "; ".join(l.strip() for l in out.splitlines() if "first header" in l)
-        ok &= check("server decrypted our probe to the right header",
-                    "first header 0x0001" in out, seen or "no frame logged")
+        ok &= check("server framed BOTH messages out of one TCP read",
+                    "SEND_COMPUTER_INFO" in out and "SEND_COMPUTER_HASH" in out)
 
         # ---- negative control -------------------------------------------
         # A test that only ever goes green proves nothing. An UNPATCHED client
