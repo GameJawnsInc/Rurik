@@ -86,6 +86,17 @@ AUTH_CMSG_REQUEST_GAME_INSTANCE = 0x0029
 AUTH_CMSG_ASK_SERVER_RESPONSE = 0x0035
 AUTH_SMSG_GAME_SERVER_INFO = 0x0009
 
+# The instance bring-up a real game server sends unprompted once the channel is
+# up. Order is OpenTyria's GameSrv_SendInitialPackets for a main town. The client
+# does NOT ask for these -- it sends its computer-info pair (GAME_CMSG 0x000A and
+# 0x000B, which no reference implementation handles) and then waits for the server
+# to start talking. Answering the computer info is not what unblocks it.
+GAME_SMSG_INSTANCE_LOAD_HEAD = 0x017C
+GAME_SMSG_INSTANCE_LOAD_PLAYER_NAME = 0x017D
+GAME_SMSG_INSTANCE_PLAYER_DATA_START = 0x0186
+GAME_SMSG_INSTANCE_PLAYER_DATA_DONE = 0x018A
+GAME_SMSG_INSTANCE_LOAD_INFO = 0x0199
+
 GAME_SRV_HOST = "127.0.0.1"
 GAME_SRV_PORT = 6113
 
@@ -347,12 +358,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         rec.event("key_exchange_ok", arc4_key=derived.hex())
 
         # ---- 3. decode, answer, and record ------------------------------
+        smsg = "AUTH_SMSG" if kind == "auth" else "GAME_SMSG"
+
         def send(opcode, values, label):
-            blob = codec.encode("AUTH_SMSG", opcode, values)
+            blob = codec.encode(smsg, opcode, values)
             sock.sendall(s2c.crypt(blob))
             print(f"[c{conn_id}] s2c {label} (0x{opcode:04x}, {len(blob)}B)", flush=True)
             rec.event("sent", opcode=opcode, label=label,
                       plain=binascii.hexlify(blob).decode())
+
+        if kind == "game":
+            # 0x31 | Prophecies(2) | Factions(4) | Nightfall(8) = 0x3F, straight
+            # from OpenTyria. Unlocking everything is wrong for a level 1 pre-Searing
+            # character but is the permissive choice while we are still learning
+            # which of these the client validates.
+            send(GAME_SMSG_INSTANCE_LOAD_HEAD, [0x3F, 0x3F, 0, 0],
+                 "INSTANCE_LOAD_HEAD")
+            send(GAME_SMSG_INSTANCE_PLAYER_DATA_START, [], "PLAYER_DATA_START")
+            send(GAME_SMSG_INSTANCE_LOAD_PLAYER_NAME, [TEST_CHAR_NAME],
+                 "INSTANCE_LOAD_PLAYER_NAME")
+            send(GAME_SMSG_INSTANCE_LOAD_INFO,
+                 [1,          # agent_id -- the player's own agent, 1 for the first
+                  map_id,     # echoed from the version frame, not guessed
+                  0,          # is_explorable: Ascalon City is an outpost
+                  0,          # district
+                  0,          # language
+                  0],         # is_observer
+                 "INSTANCE_LOAD_INFO")
 
         sock.settimeout(1.0)
         total = 0
