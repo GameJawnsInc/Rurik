@@ -1046,8 +1046,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # reports where it got to. Answering MOVE_TO_POINT and
                         # then never moving anyone is why the client cancelled
                         # after ~2s and reported itself still at the spawn point.
-                        dest, plane = values[1], values[2]
-                        state["plane"] = plane
+                        dest, dest_plane = values[1], values[2]
+                        # The two plane fields are NOT the same field twice.
+                        # GWLP-R sets currentPlane from the agent's own position
+                        # and nextPlane from the destination; we were sending the
+                        # click's plane for both, which tells the client it is
+                        # already standing on the plane it is trying to reach.
+                        #
+                        # This is the best candidate for "sometimes it paths
+                        # around the building and sometimes it walks straight
+                        # through it": a pathfinder handed a start node on the
+                        # wrong plane has nothing to route from, and a straight
+                        # line is what falling back looks like. MEASURED that the
+                        # planes really do differ -- the client reported plane 5
+                        # while we still believed plane 0, because we only ever
+                        # learned the plane from keyboard packets and clicking
+                        # sends none.
+                        cur_plane = state["plane"]
                         # A click ends whatever keyboard leg was running, so drop
                         # the remembered heading: the next key press must be
                         # treated as a fresh direction, not compared against one
@@ -1079,12 +1094,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # click-moving. 0x003E carries a destination and a plane
                         # and nothing else, and one capture ran 37 seconds
                         # without the client saying where it was.
-                        px, py = state["pos"]
                         model_dest, blocked = clip_to_walkable(state, dest)
                         state["dest"], state["clipped"] = model_dest, blocked
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-                             [PLAYER_AGENT_ID, list(dest), plane, plane],
+                             [PLAYER_AGENT_ID, list(dest), cur_plane, dest_plane],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
+                             f" plane {cur_plane}->{dest_plane}"
                              f"{', model stops short' if blocked else ''})")
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
                         # Stop where WE say it is, not where the client last
@@ -1129,51 +1144,49 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # you can stand. That keeps this from becoming a blanket
                         # "trust the client" that would undo the collision fix.
                         #
-                        # So the test is no longer "how far apart are we". Drift
-                        # is not evidence of anything now that we adopt the
-                        # client's position every report -- it measures how badly
-                        # OUR integrator guessed, not whether the client is
-                        # lying. The only thing worth refusing is a position that
-                        # is genuinely impossible, and the navmesh is what says
-                        # so. Two of the five corrections in the measured session
-                        # were stops of 58 and 216 units to positions that were
-                        # perfectly walkable; both were us snapping the player
-                        # for no reason.
+                        # THE SERVER NO LONGER ARGUES. Take the position and the
+                        # plane, record the disagreement, send nothing.
+                        #
+                        # Seven corrections went out in the session that settled
+                        # this, and reading them back not one was defensible:
+                        #
+                        #   on plane 5;  11u from ours
+                        #   on plane 5;  26u from ours
+                        #   off the navmesh; 26u from ours
+                        #   off the navmesh;  9u from ours
+                        #
+                        # Teleporting a player nine units is pure damage. The
+                        # plane ones were not even disagreements: we only ever
+                        # learned the plane from keyboard packets, and clicking
+                        # sends none, so every plane change the client made
+                        # looked like a lie to us. The off-mesh ones are gaps in
+                        # OUR trapezoids -- the client stops against collision
+                        # geometry we have never read, and where they differ at
+                        # the edges the client is the one standing there.
+                        #
+                        # on_mesh is still recorded, and it is a real measurement:
+                        # 57 of 61 stops landed on our mesh, so the mesh is
+                        # broadly right and wrong in exactly the places worth
+                        # studying. It is evidence about our map data, not
+                        # grounds for moving the player.
                         on_mesh = (None if pm is None
                                    else pm.walkable(reported[0], reported[1]))
-                        agreed = plane == state["plane"] and on_mesh is not False
-                        # Recorded on every stop so the drift distribution can be
-                        # measured rather than guessed at -- it is what says
-                        # whether 100.0 is the right number for us.
-                        #
-                        # on_mesh is the measurement that matters now. Our
-                        # trapezoids are the PATHING geometry; the client stops
-                        # itself against collision geometry we have never looked
-                        # at, and the two need not agree at the edges. If stops
-                        # routinely land off-mesh, the clip is too tight, and
-                        # this is the log that will say so rather than us
-                        # guessing from how it felt to play.
                         rec.event("position_report", drift=round(drift, 2),
-                                  accepted=agreed, reported=list(reported),
-                                  ours=[px, py], plane=plane, clipped=was_clipped,
-                                  on_mesh=on_mesh)
-                        if agreed:
-                            state["pos"] = reported
-                        else:
-                            # The client has stopped somewhere the map says is
-                            # not standable, or on a different plane. This is now
-                            # the ONLY position broadcast the server makes, and
-                            # it should be rare -- if it is not, the fault is far
-                            # more likely to be in our navmesh than in the
-                            # client, so it says so loudly rather than quietly
-                            # dragging the player around.
-                            print(f"[c{conn_id}] correcting: client reports "
-                                  f"({reported[0]:.0f}, {reported[1]:.0f}), which "
-                                  f"is {'off the navmesh' if on_mesh is False else 'on plane ' + str(plane)}"
-                                  f"; {drift:.0f}u from ours", flush=True)
-                            send(GAME_SMSG_AGENT_UPDATE_POSITION,
-                                 [PLAYER_AGENT_ID, state["pos"], state["plane"]],
-                                 "AGENT_UPDATE_POSITION(stop)")
+                                  accepted=True, reported=list(reported),
+                                  ours=[px, py], plane=plane,
+                                  server_plane=state["plane"],
+                                  clipped=was_clipped, on_mesh=on_mesh)
+                        state["pos"] = reported
+                        state["plane"] = plane
+                        if on_mesh is False:
+                            # Worth knowing about, not worth acting on. Every
+                            # one of these is a hole in our trapezoids at a spot
+                            # the client is happily standing in, which is a lead
+                            # on the map format rather than a misbehaving client.
+                            print(f"[c{conn_id}] off-mesh stop at "
+                                  f"({reported[0]:.0f}, {reported[1]:.0f}) "
+                                  f"plane {plane} -- navmesh gap, not corrected",
+                                  flush=True)
                     elif opcode == GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS:
                         # The client sent this and REQUEST_ITEMS in the same
                         # breath; we answered only items, and it then waited 44s
