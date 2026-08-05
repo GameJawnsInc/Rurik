@@ -130,7 +130,17 @@ def main():
             print("      already present, verifying instead of recopying", flush=True)
         else:
             t0 = time.time()
-            shutil.copy2(src, dst)
+            try:
+                shutil.copy2(src, dst)
+            except PermissionError as ex:
+                # The live client holds Gw.dat open. Never abort the whole snapshot
+                # for one locked file: the rest is still worth having, and a run that
+                # dies without writing a manifest is worse than useless -- it leaves a
+                # directory that LOOKS like a backup. Record the gap and carry on.
+                print(f"      LOCKED (client running?): {ex.strerror}", flush=True)
+                manifest["files"].append({"name": name, "size": size,
+                                          "status": "locked", "error": str(ex)})
+                continue
             print(f"      copied in {time.time()-t0:.1f}s", flush=True)
         digest, secs = sha256(dst)
         src_digest, _ = sha256(src)
@@ -148,9 +158,21 @@ def main():
     print(f"\nmanifest -> {mpath}")
 
     bad = [f for f in manifest["files"] if f.get("verified_against_source") is False]
+    locked = [f for f in manifest["files"] if f.get("status") == "locked"]
+    missing = [f for f in manifest["files"] if f.get("status") == "missing"]
+
     if bad:
         print(f"!! {len(bad)} file(s) FAILED verification: {[f['name'] for f in bad]}")
         return 1
+    if locked:
+        print(f"\n!! INCOMPLETE SNAPSHOT — {len(locked)} file(s) locked: "
+              f"{[f['name'] for f in locked]}")
+        print("   Close Guild Wars and re-run. This directory is NOT a complete backup yet;")
+        print("   the manifest records the gap so it cannot be mistaken for one.")
+        return 3
+    if missing:
+        print(f"note: {len(missing)} expected file(s) absent from source: "
+              f"{[f['name'] for f in missing]}")
     print("all copies verified byte-identical to source")
     return 0
 

@@ -268,17 +268,22 @@ failure:
 python toolkit/clientscan/dump_dh_params.py
 ```
 
-**Probe 1 — does the portal downgrade to plain HTTP?** *(hours)*
-Procedure and outcome table: [studies/handshake/PLAN.md](studies/handshake/PLAN.md) §5, runs A–C.
-Run the listener, launch with `-portal 127.0.0.1`, watch port **6601** for a plaintext request
-under `/Spawned/WebGate`. **If plaintext:** Stage A is days of work and the captured request body
-is your specification. **If TLS (leading `0x16`):** §1.6 is wrong and R1 re-plans around
-certificates. Everything downstream branches here.
+**Probes 1 and 2 — the auth handshake.** ✅ **Done. Both a GO.** Full result and byte-level
+decode: [studies/handshake/PLAN.md](studies/handshake/PLAN.md) §0.
 
-**Probe 2 — does this build still honour `-authsrv`?** *(hours)*
-Run C. Stage A goes to the real service and succeeds, so a connection on 6112 proves both that the
-flag works and that Stage B is gated behind a successful portal login. Caution: runs A and B put
-real credentials on the command line and into a socket that logs them.
+The portal is **plaintext HTTP on 6601**, exactly as predicted — the client sends
+`GET /Spawned/WebGate/session/create.xml HTTP/1.1` with `Authorization: Arena 0`, no TLS anywhere.
+That single request is the specification for our webgate. AuthSrv on 6112 speaks the documented
+Diffie-Hellman opening: a hello carrying the build number, then header `0x4200` followed by 64
+bytes of `A = g^a mod p`, with the generator `4` matching the value read out of `.rdata`. The
+client speaks first on both sockets, and `Code=058` after a successful connection is the *correct*
+outcome of a listener that never replies.
+
+Two things fell out that were not being looked for. The build number rides in the clear on every
+session (`User-Agent: Gw/38797.0 (Win32)`), which answers HANDOFF §9's unaddressed question of how
+to stamp a build id into capture manifests. And the client hit **6112 before 6601**, so the three
+stages are not a strict sequential chain — do not assume the portal must complete before the auth
+socket opens.
 
 **Probe 3 — does the WASM client boot and survive instrumentation?** *(days, agent-farmable)*
 Fetch the four artifacts, run `wasmscan.py` and `gensyms.py` from the mirrored `gw_in_browser`,
@@ -302,7 +307,7 @@ The last unexplained flag with real upside. A developer offline mode would be wo
 |---|---|---|---|
 | **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **done this session** — gate proven both directions, client pinned and hash-verified, prior art mirrored |
 | **R0b** | Proxy capture via the WebSocket bridge | Both directions of a real session tee'd to disk | Probe 3 |
-| **R1** | Handshake against a local server | Client reaches character select | Probes 1, 2, 4 |
+| **R1** | Handshake against a local server | Client reaches character select | ✅ probes 1–2 done and green; remaining work is *answering*, not discovering |
 | **R2** | Presence | Your own body standing in a real map | Probe 4 — OpenTyria may deliver this directly |
 | **R1.5** | **Tape player** *(new rung)* | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | Requires R0b only |
 | **R3** | Movement on real geometry | You walk to a wall and are stopped | `GmPaths.c` + `PathingMap` exist; this is a quarter, not a week |
@@ -460,7 +465,7 @@ changes is that capture is now cheap enough to leave running rather than a proje
 |---|---|---|
 | A prior-art repo disappears | **Already happening** — `gwdevhub/gw_in_browser` 404s today while `gwnative` still names it upstream **[measured]**. `toolkit/mirror_priorart.py` clones the field into `vault/mirrors/` with a manifest recording each HEAD; run it monthly. | done |
 | Service closes or changes | Leave the proxy on for every session; zero marginal cost once built | hours |
-| Client auto-patches over ground truth | Client pinned and hash-verified in `vault/client/2026-04-30_b174de1f2d8d/` | done |
+| **Client auto-patches over ground truth, and the DH keys rotate with it** | **This happened during the session that wrote this document.** The updater replaced `Gw.exe` (10,404,032 → 10,483,904 bytes) and `Gw.dat`, moved the DH struct from RVA `0x6843e8` to `0x6910d8`, and **changed both the prime and the server's public key**. ArenaNet rotates the Diffie-Hellman parameters per build — which is why Headquarter stores 107 server keys rather than one constant. Consequences: the client patch is a permanent recurring step, not a one-time one; every capture and schema revision must carry a build id (free, per §2); and re-snapshot *before* accepting an update prompt, never after. Both builds are now vaulted. | ongoing |
 | **The client phones home when it crashes** | `Gw.exe` embeds Sentry: `SENTRY_DSN`, `sentry.native`, `getsentry`, `x-sentry-rate-limits` are all present **[measured]**. The working method here is inject, patch, malform, crash — so the client's own outbound reporting channel is a posture problem HANDOFF §9 never considered, since §9 reasons only about server-side visibility. Neutralise it before the first malformed packet: block the endpoint at the firewall or null the DSN in the patched copy. Minutes, and it belongs on the R0 checklist next to the vault snapshot. | minutes |
 | Account loss | Never automate on the primary account. The proxy posture — watching your own traffic — is milder than injecting a DLL, which is what the original plan required | one account |
 | A client update invalidates months of offset work | Choose WASM: the module bytes are the code and offsets come from the module | free, if you switch |

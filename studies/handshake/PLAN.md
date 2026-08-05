@@ -1,8 +1,98 @@
 # studies/handshake — R1: getting the client to talk to us
 
-**Status:** static analysis done; live probe NOT YET RUN (blocked — see §5).
-**Client under study:** build `2026-04-30_b174de1f2d8d`, vaulted at
-`vault/client/2026-04-30_b174de1f2d8d/` with a verified manifest.
+**Status: probe RUN, and it is a GO on both stages.** See §0 for the result; §5 has the procedure.
+**Client under study:** build **38797**, read off the wire. Note the client auto-updated mid-session
+— see §0.4.
+
+---
+
+## 0. The probe result (2026-08-04)
+
+The owner ran the three-run probe. Both stages connected, the client spoke first on both, and the
+bytes match the predicted model exactly. Everything in §3 below moves from hypothesis to fact.
+
+### 0.1 Stage A confirmed: the portal really is plaintext HTTP on 6601
+
+```
+GET /Spawned/WebGate/session/create.xml HTTP/1.1
+Connection: Keep-Alive
+Authorization: Arena 0
+User-Agent: Gw/38797.0 (Win32)
+Host: 127.0.0.1:6601
+```
+
+No TLS — no `0x16` handshake byte, just an HTTP request in the clear. The path is exactly
+`/Spawned/WebGate/...` as predicted. `Authorization: Arena 0` is the token slot, still zero because
+no session exists yet. **This request body is the specification for our webgate**: answer this one
+endpoint and Stage A is done.
+
+The client held the connection open for 32 seconds and closed it when we never replied.
+
+### 0.2 The build number is on the wire, in the clear
+
+`User-Agent: Gw/38797.0 (Win32)`. HANDOFF.md §9 asks for a way to stamp a build id into every
+capture manifest and never says how. Here it is, free, in the first request of every session, no
+binary parsing required. **Adopt this as the canonical build stamp.**
+
+### 0.3 Stage B confirmed: AuthSrv speaks DH exactly as documented
+
+82 bytes on port 6112, in two writes, and they decode cleanly:
+
+| Offset | Bytes | Meaning |
+|---|---|---|
+| `0x00` | `00 04` | message header `0x0400` |
+| `0x02` | `0c 00` | payload length, 12 |
+| `0x04` | `8d 97 00 00` | **38797** — the build number again, as a little-endian dword |
+| `0x08` | `01 00 00 00` | 1 |
+| `0x0c` | `04 00 00 00` | **4 — the generator `g`**, matching the value read out of `.rdata` |
+| `0x10` | `00 42` | message header `0x4200` — the client-seed message |
+| `0x12` | 64 bytes | **`A = g^a mod p`**, the client's DH public value |
+
+That is 2 + 64 = 66 bytes for the second message, precisely the shape the public research
+predicted. The client opens with a hello carrying its build, then immediately sends its DH public
+value. It never receives a reply from our silent listener, so it stalls and reports `Code=058`.
+
+**`Code=058` after a successful connection is the expected, correct outcome of this probe.** It
+means "connected, spoke, got nothing back" — not "the flag is dead."
+
+Ordering note worth keeping: the client hit **6112 at t+4.4s and 6601 at t+6.5s** — AuthSrv *before*
+the portal. The three stages are not a strict sequential chain; do not assume the portal must
+complete before the auth socket opens.
+
+### 0.4 The client auto-updated mid-session, and the DH parameters rotated with it
+
+The Reforged update checker replaced `Gw.exe` while this work was in progress.
+
+| | Pre-update snapshot | Build 38797 |
+|---|---|---|
+| SHA256 | `b174de1f2d8d…` | `221c13772c7a…` |
+| Size | 10,404,032 | 10,483,904 |
+| DH struct RVA | `0x6843e8` | `0x6910d8` |
+| Prime fingerprint | `bb8f43af990fe21f` | `fccfed6d897593eb` |
+| Server public B | `9d8485c9466d66bd` | `dc1b568d13a81438` |
+
+**Both the prime and the server's public key changed, and the struct moved.** ArenaNet rotates the
+Diffie-Hellman parameters per build. That is why Headquarter carries 107 server public keys, one
+per client build, rather than a single constant.
+
+Three consequences, all of them operational:
+
+1. **The client patch is not a one-time step.** It must be redone after every ArenaNet update, and
+   the parameters are build-specific. Budget this permanently.
+2. **Every capture, schema revision, and key file must be build-stamped**, and §0.2 gives the stamp
+   for free.
+3. **The pin-and-snapshot law earned its keep within hours.** HANDOFF.md §9 says the ground truth is
+   "a moving target maintained by someone else"; it moved the same day. Re-snapshot before, not
+   after, any update prompt.
+
+The accessor signature still matched in the new build, so `toolkit/clientscan/dump_dh_params.py`
+found the relocated struct on its own. Keep using it as the post-update check.
+
+---
+
+**Client originally studied:** build `2026-04-30_b174de1f2d8d`, vaulted with a verified manifest.
+Superseded by 38797 but retained — two builds is the beginning of the key history this project
+needs.
 
 This arc owns one question: *what does it take to get the Guild Wars client to complete a
 handshake against something we control?* HANDOFF.md §4 assumed the answer was "nothing —
