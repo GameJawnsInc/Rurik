@@ -49,6 +49,14 @@ SIG_KEYS_PTR_OFF = 0x0A
 
 # The single-instance guard around CreateMutexA.
 SIG_MUTEX = bytes.fromhex("8BF885FF7411FFD63DB7")
+
+# DnSetEnabled's whole prologue, through the `mov [global], eax` opcode. Verified
+# unique in .text of build 38797 (1 hit, VA 0x00833ec0, global 0x01087810, which
+# has 4 guard sites). See studies/handshake/PLAN.md §9.
+SIG_DOWNLOAD = bytes.fromhex("558bec8b4d0833c085c90f94c0a3")
+SIG_DOWNLOAD_PATCHED = bytes.fromhex("558bec8b4d0833c085c9b00190a3")
+DOWNLOAD_PATCH_OFF = 10            # the `sete al` inside that prologue
+DOWNLOAD_PATCH = bytes.fromhex("b00190")   # mov al,1 ; nop
 MUTEX_PATCH_OFF = 0x08
 MUTEX_PATCH = bytes.fromhex("31C0909090 0F84".replace(" ", ""))
 
@@ -132,6 +140,11 @@ def main():
     ap.add_argument("--keydir", default=r"C:\gd\Rurik\vault\keys")
     ap.add_argument("--no-mutex-patch", action="store_true",
                     help="skip the multi-client patch")
+    ap.add_argument("--no-updater-patch", action="store_true",
+                    help="leave the auto-updater ENABLED. Only useful for comparing "
+                         "against an unpatched updater; a client with the updater "
+                         "live cannot be run behind the firewall cage, because the "
+                         "patcher stalls forever on its blocked update check.")
     a = ap.parse_args()
 
     pe = PE(a.input)
@@ -192,6 +205,38 @@ def main():
     put(off + 8, keys["prime"].to_bytes(64, "little"), "prime")
     put(off + 72, keys["server_public"].to_bytes(64, "little"), "server public")
 
+    if not a.no_updater_patch:
+        # The updater kill switch. DnSetEnabled(bool) is the only writer of one BSS
+        # global that gates the whole download path:
+        #
+        #   mov ecx,[ebp+8] ; xor eax,eax ; test ecx,ecx ; sete al ; mov [g],eax
+        #
+        # so the global is a *disabled* flag -- it is set when the argument is
+        # FALSE. Forcing `mov al,1` makes it set on every call, after which
+        # DnInit() returns immediately and DnRun() returns 1, "done, nothing to
+        # do", which its caller reads as patching finished.
+        #
+        # Why this matters beyond convenience: the firewall cage and the patcher
+        # are in direct conflict. The patcher needs one outbound check to succeed
+        # before the login screen appears, and a block denies it forever. The
+        # workaround -- open the cage during startup, close it after -- leaks by
+        # construction, because Windows firewall rules apply at connection
+        # ESTABLISHMENT and there is no supported way to tear down an established
+        # TCP connection. With the updater off, the cage never has to open.
+        #
+        # Signature-matched, not offset-hardcoded: the function sits at VA
+        # 0x00833ec0 in build 38797 and 0x0082dab0 in the 2026-04-30 build.
+        hits = pe.find(SIG_DOWNLOAD, ".text")
+        if len(hits) == 1:
+            put(hits[0] + DOWNLOAD_PATCH_OFF, DOWNLOAD_PATCH, "updater kill switch")
+        elif not hits:
+            print("  note: DnSetEnabled signature not found; updater left ENABLED")
+        else:
+            # Refuse rather than guess. Patching the wrong prologue would corrupt
+            # an unrelated function, and the symptom would appear far from here.
+            print(f"  note: {len(hits)} DnSetEnabled matches, expected 1; "
+                  f"updater left ENABLED")
+
     if not a.no_mutex_patch:
         hits = pe.find(SIG_MUTEX, ".text")
         if hits:
@@ -218,6 +263,19 @@ def main():
     print(f"verify     : parameters read back correctly and B == g^b mod p -> {ok}")
     if not ok:
         raise SystemExit("VERIFICATION FAILED — do not use this binary.")
+
+    # Read the updater state back out of the file too. A kill switch that silently
+    # did not apply is worse than one that was never attempted: the client would
+    # look fine until the first caged launch stalled on the patcher, and the
+    # symptom appears nowhere near this code.
+    if not a.no_updater_patch:
+        patched = len(v.find(SIG_DOWNLOAD_PATCHED, ".text"))
+        remaining = len(v.find(SIG_DOWNLOAD, ".text"))
+        print(f"updater    : disabled -> {patched == 1 and remaining == 0} "
+              f"({patched} patched, {remaining} unpatched)")
+        if patched != 1 or remaining:
+            raise SystemExit("Updater patch did not take — this client will stall "
+                             "behind the firewall cage. Do not use it caged.")
     print("\nNext: run toolkit/portal/webgate.py, then launch this patched copy with")
     print("  -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed")
     return 0
