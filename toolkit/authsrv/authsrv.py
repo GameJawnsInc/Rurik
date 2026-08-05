@@ -1072,10 +1072,41 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # as ending up inside the hollow under the stairs.
                         dest_plane = values[2]
                         cur_plane = state["plane"]
-                        # GWLP-R documents nextPlane as "0 if player stays in the
-                        # same plane", so a same-plane click says 0 rather than
-                        # restating it.
-                        next_plane = 0 if dest_plane == cur_plane else dest_plane
+                        # FIELD ORDER: destination plane FIRST, current plane
+                        # SECOND. The two lineages disagree here and we had been
+                        # following the wrong one.
+                        #
+                        #   OpenTyria GameMsg.h:538   uint16 plane          <- dest
+                        #                             uint16 current_plane
+                        #     and GmAgent.c fills them
+                        #       msg->plane         = agent->destination.plane
+                        #       msg->current_plane = agent->position.plane
+                        #
+                        #   GWLP-R P030               int currentPlane      <- first
+                        #                             int nextPlane
+                        #
+                        # OpenTyria defines this message as 0x0029, the same
+                        # opcode our build uses. GWLP-R's is 30, from a different
+                        # build era, and its AgentMoveDirection semantics -- which
+                        # ARE verified against our client -- do not make its field
+                        # order here authoritative too.
+                        #
+                        # Sending them the wrong way round told the client it was
+                        # standing on the plane it was trying to reach, and to
+                        # walk to the plane it was standing on. Click a staircase
+                        # and we sent (0, 12): "you are on the stairs, go to the
+                        # ground". The player fell through the stairs to the floor
+                        # below, which is what was reported from play. MEASURED
+                        # that this fired constantly -- 55 of 55 clicks in one
+                        # session announced a plane change, because planes are
+                        # connected regions of walkable surface, not floors, and
+                        # Kamadan has 39 of them.
+                        #
+                        # No zeroing. OpenTyria sends the destination's plane
+                        # unconditionally; GWLP-R's "0 if the player stays in the
+                        # same plane" belongs to its own field ordering and is not
+                        # carried over.
+                        plane_first, plane_second = dest_plane, cur_plane
                         # Deliberately NOT state["plane"] = dest_plane. Our idea
                         # of the player's plane comes from 0x003D and 0x0047,
                         # which report where the client IS. Recording a
@@ -1115,10 +1146,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         model_dest, blocked = clip_to_walkable(state, dest)
                         state["dest"], state["clipped"] = model_dest, blocked
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-                             [PLAYER_AGENT_ID, list(dest), cur_plane, next_plane],
+                             [PLAYER_AGENT_ID, list(dest), plane_first, plane_second],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
-                             f" plane {cur_plane}"
-                             f"{f'->{next_plane}' if next_plane else ''}"
+                             f" on plane {cur_plane}->{dest_plane}"
                              f"{', model stops short' if blocked else ''})")
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
                         # Stop where WE say it is, not where the client last
