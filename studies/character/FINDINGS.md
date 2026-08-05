@@ -1159,6 +1159,40 @@ size: 2-byte header, `string16(n)` = 4 + 2n.
 | headers 66 / 96 | `QuestTapestry` / `DungeonReward`: `experienceEarned`, `goldEarned`, `skillPointsEarned` | XP award | player | `GameRevision__GWLP-R/…/P066_QuestTapestry.java:14-16`, `P096_DungeonReward.java:14-16` | **UNVERIFIED** — single lineage, and no GWLP-R runtime ever fills them |
 | char-select settings blob | 5 bits at bit offset 4 of the dword after `last_guild_hall_id`: `campaign(4) \| level(5) \| is_pvp(1) \| secondary(4) \| helm(2)`; max level 31 | level | roster screen only | `ldufr__OpenTyria/code/GmChar.h:86, :93, :116-121`; `gw-preservation__server/authservice/handlers.go:184-189`; `th0br0__sgwlpr/db/…/Character.scala:27-38` | **CORROBORATED** — three lineages |
 
+### The 15 fields of `0x00E9`, mapped against our own client
+
+MEASURED 2026-08-05 with `toolkit/authsrv/probes.py --probe attr_legend`: one
+packet, every field set to `1000 + index` so each number names its own field.
+
+| Field | Drives | Label |
+|---|---|---|
+| 0 | experience (`424,242 xp`) | **OBSERVED** |
+| 1 | Kurzick faction, current | **OBSERVED** |
+| 2 | Kurzick maximum — sent 1002, bar reads `/ 0` | **NOT THIS MESSAGE** |
+| 3 | Luxon faction, current | **OBSERVED** |
+| 4 | Luxon maximum — reads `/ 0` | **NOT THIS MESSAGE** |
+| 5 | Imperial faction, current | **OBSERVED** |
+| 6 | Imperial maximum — reads `/ 0` | **NOT THIS MESSAGE** |
+| 7, 8 | nothing visible anywhere in the Hero window | **NO VISIBLE EFFECT** |
+| 9 | level | **OBSERVED** |
+| 10 | nothing visible. Specifically NOT the `-100%` top-left indicator: 0, 40, 100 and 110 all left it unchanged | **REFUTED as morale** |
+| 11 | Balthazar faction, current | **OBSERVED** |
+| 12 | Balthazar maximum — sent 1012 and 2000 on separate runs, bar reads `/ 0` both times | **NOT THIS MESSAGE** |
+| 13 | skill points | **OBSERVED** |
+| 14 | nothing visible | **NO VISIBLE EFFECT** |
+
+**The strongest result here is the negative one.** All four faction maxima ignore
+this message. A single instance (field 12) was dismissible; four independent
+bars behaving identically is a rule. A server that fills 2/4/6/12 expecting to
+set the denominators will ship faction bars that render as empty, and the study's
+"11-12 balthazar" reading invites exactly that mistake. Where the maxima do come
+from is **NOT FOUND** — plausibly a title-track or account-state message we have
+never sent.
+
+**Practical note for anyone probing this panel:** the Hero window does not
+live-refresh. It has to be closed and reopened after a packet lands, which made
+an earlier run read as self-contradictory until the owner noticed.
+
 Not on this list, deliberately: `CHARACTER_UPDATE_INFO` `0x0030` / 48. Its seven
 fields upstream are `n_charname` + `charname[32]` + six *offset-named* dwords
 (`ldufr__OpenTyria/code/GameMsg.h:303-313`, values assigned at

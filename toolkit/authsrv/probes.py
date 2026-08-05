@@ -191,6 +191,38 @@ def _attr_sweep_steps(agent_id):
     ]
 
 
+def _attr_legend_steps(agent_id):
+    """ONE packet. Every field distinct. Nothing after it to wipe the evidence.
+
+    This exists because attr_sweep was built wrong. Its later steps constructed a
+    fresh array with only a few fields set, which zeroed the 1000+i legend the
+    first step had painted -- so by the time a person read the panel it showed
+    the last step's state, not the sweep's. The observation was destroyed by the
+    probe that was meant to produce it, and the person watching had no way to
+    know that.
+
+    Rule this encodes: a probe whose result is read at rest must leave the
+    client in the state being measured. Multi-step probes are only safe when
+    every step is observed as it lands, or when later steps preserve earlier
+    fields.
+
+    Known from previous runs: 0 xp, 1-6 factions, 9 level, 11 balthazar current,
+    13 skill points. Unmapped: 7, 8, 12, 14. Field 10 is NOT the top-left
+    indicator -- 100, 110 and 40 all left it at -100%.
+    """
+    v = [1000 + i for i in range(15)]
+    v[0] = 424242     # xp -- known, kept distinctive
+    v[9] = 17         # level must stay legal (the char-select blob caps at 31)
+    return [
+        Step(3.0, 0x00E9, v,
+             "legend: every field = 1000+index (xp 424242, level 17)",
+             "read the whole Hero window at leisure -- nothing follows this. "
+             "Each number names its own field: 1007 means field 7, 1012 means "
+             "field 12. Check the Faction tab's four rows and both sides of "
+             "every bar, and note which numbers you CANNOT find anywhere."),
+    ]
+
+
 def _team_token_steps(agent_id):
     # Not a packet probe: the token now goes out at spawn. This exists so the
     # run is recorded with a question attached rather than being assumed fine.
@@ -253,6 +285,20 @@ PROBES = {
         note="Follows the player_attrs probe, which confirmed fields 0, 9, 11 "
              "and 13 and refuted the study's claim that field 12 is the "
              "Balthazar denominator -- we sent 2000 and the bar read 1000/0.",
+    ),
+    "attr_legend": lambda a: Probe(
+        question="Which field of 0x00E9 drives which readout? One packet, "
+                 "every field labelled with its own index.",
+        predicts="The Faction tab's four rows and the level/xp/skill-point "
+                 "readouts between them account for most of 1001-1014. Numbers "
+                 "that appear NOWHERE are as informative as the ones that do: "
+                 "fields 7, 8, 12 and 14 are the current suspects for having no "
+                 "visible effect at all.",
+        steps=_attr_legend_steps(a),
+        note="Replaces attr_sweep, which destroyed its own evidence -- its "
+             "later steps rebuilt the array from zeros and wiped the legend "
+             "before anyone could read it. This one is a single packet and "
+             "leaves the client in the state being measured.",
     ),
     "spawn": lambda a: Probe(
         question="Does the character still spawn correctly with team token 'play'?",
