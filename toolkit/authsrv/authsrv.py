@@ -180,25 +180,20 @@ INF = float("inf")
 # is not in the repository; without it the server runs exactly as it did before,
 # which is to say it lets you walk through walls.
 COLLISION_STEP = 16.0      # sampling interval along a leg, ~1/20s at run speed
-# The shortest leg worth granting. Both failure modes this project spent a
-# session on live at the two ends of this number, and they pin it from opposite
-# sides:
+# NOTHING CLIPPED EVER GOES ON THE WIRE. The navmesh bounds the server's own
+# idea of where the character is, and that is all it does.
 #
-#   Grant a destination PAST a wall and the client walks through it. Measured
-#   directly -- taking the clip off the wire brought the phasing straight back.
-#   A server-granted destination is not re-collided by the client.
+# A destination we invent is wrong in one of two ways and this project shipped
+# both, alternately, over five attempts. Past a wall: the client walks through
+# it, since a granted destination is not re-collided. At or behind the player:
+# it walks backwards, because against a wall clip(pos, pos + heading) returns
+# approximately pos. There is no safe value in between, only a narrower band of
+# wrongness -- a guard that refuses short legs merely swaps a warp for a click
+# that does nothing.
 #
-#   Grant a destination AT OR BEHIND the player and the client walks backwards
-#   to it. Against a wall, clip(pos, pos + heading) returns approximately pos,
-#   so an unguarded clip sends exactly that. Fresh position: a snap. Position
-#   stale from a stretch of click-to-move, during which the client sends no
-#   position at all: a long straight walk back over buildings.
-#
-# So: clip, but refuse to say anything at all when the clip cannot buy the
-# player real progress. Silence is safe -- the client keeps its current leg and
-# its own collision holds it at the wall, which is what it does in the stock
-# game. 100 units is about a third of a second of running.
-MIN_GRANTED_LEG = 100.0
+# The way out was not a better number. Keyboard movement should never have named
+# a point at all (see GAME_SMSG_AGENT_MOVE_DIRECTION), and a click should be
+# granted exactly as the player made it.
 try:
     sys.path.insert(0, os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mapdata"))
@@ -1058,39 +1053,39 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # treated as a fresh direction, not compared against one
                         # from before the click.
                         state["walking"], state["heading"] = False, None
-                        # Clicking past a wall is the ordinary case, not an
-                        # attack: a real server ROUTES you around the obstacle.
-                        # We cannot -- the pathfinding graph is not decoded -- so
-                        # the best available answer is to walk the straight line
-                        # and stop at the first thing in the way.
+                        # Grant the click exactly as asked. Nothing here second
+                        # guesses the player.
                         #
-                        # This is also where our position model is blindest.
-                        # MEASURED: the client sends NO position while
-                        # click-moving; 0x003E carries a destination and a plane
-                        # and nothing else, and one capture went 37 seconds
-                        # without a single position from the client. So the clip
-                        # origin here is our integrator's guess, not an observed
-                        # fact, which is exactly why a too-short grant is refused
-                        # rather than sent.
+                        # Two inventions of ours lived here and both are gone: a
+                        # destination clipped to the first wall, and a refusal to
+                        # answer at all when there was little clear ground. Those
+                        # produced "click past a wall and end up at some spot
+                        # near where the navmesh stops", which is not how the
+                        # game behaves. A real server ROUTES you around the
+                        # obstacle. We cannot do that -- the pathfinding graph in
+                        # the map file is not decoded -- and between two things
+                        # we cannot do, the honest one is the one that does not
+                        # invent a destination the player never chose.
+                        #
+                        # Whether this phases through walls is now an OPEN
+                        # question rather than a settled one. The test that
+                        # showed phasing when the clip came off had keyboard
+                        # movement on MOVE_TO_POINT as well, so it could not
+                        # separate the two paths. Keyboard is a direction now, so
+                        # a playtest finally isolates clicking.
+                        #
+                        # Click is also where our position model is blindest:
+                        # MEASURED, the client sends NO position while
+                        # click-moving. 0x003E carries a destination and a plane
+                        # and nothing else, and one capture ran 37 seconds
+                        # without the client saying where it was.
                         px, py = state["pos"]
-                        dest, blocked = clip_to_walkable(state, dest)
-                        granted = math.hypot(dest[0] - px, dest[1] - py)
-                        if blocked and granted < MIN_GRANTED_LEG:
-                            # Nothing worth granting. The click is dropped rather
-                            # than answered with a destination that would drag the
-                            # player; without pathfinding there is no third
-                            # option, and this is a visible limitation rather than
-                            # a silent one.
-                            print(f"[c{conn_id}] click refused: only {granted:.0f}u "
-                                  f"of clear ground toward "
-                                  f"({dest[0]:.0f}, {dest[1]:.0f})", flush=True)
-                            state["dest"], state["clipped"] = None, True
-                            continue
-                        state["dest"], state["clipped"] = dest, blocked
+                        model_dest, blocked = clip_to_walkable(state, dest)
+                        state["dest"], state["clipped"] = model_dest, blocked
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                              [PLAYER_AGENT_ID, list(dest), plane, plane],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
-                             f"{f', clipped to {granted:.0f}u' if blocked else ''})")
+                             f"{', model stops short' if blocked else ''})")
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
                         # Stop where WE say it is, not where the client last
                         # believed. Echoing the client's figure back pinned it to
