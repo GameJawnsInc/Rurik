@@ -159,6 +159,33 @@ class Archive:
                          f"entry {entry.index}")
 
 
+def file_id_table(archive):
+    """Map every file id to the MFT row that holds it.
+
+    MFT row 2 is a table of (file_id, row) u32 pairs -- 171,025 of them in this
+    archive, 8 bytes each, which is exactly its declared size. Nothing had to be
+    decompressed to find this; it is stored.
+
+    This is what makes the archive addressable the way the game addresses it. A
+    server hands the client a map_file_id and the client opens that file; with
+    this table we can open the same one.
+
+    MEASURED: all six of OpenTyria's map_file_id values resolve through this
+    table to rows that carry the map flags -- Kamadan 0x345CC to row 22371,
+    Kaineng 0x265F7 to 64474, Lion's Arch 352808 to 157484, Domain of Anguish
+    219215 to 102769, Sparkfly 287493 to 126903, Lornar's Pass 46594 to 34466.
+    Six for six landing on real map files is strong evidence both for this table
+    layout and for upstream's map ids, two of which no source we had could
+    previously corroborate.
+    """
+    blob = archive.read(archive.entries[1])
+    out = {}
+    for i in range(len(blob) // 8):
+        file_id, row = struct.unpack_from("<II", blob, i * 8)
+        out.setdefault(file_id, row)
+    return out
+
+
 def ffna_chunks(data):
     """Walk an FFNA file's chunk table.
 
