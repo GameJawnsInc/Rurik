@@ -108,6 +108,50 @@ GAME_SMSG_INSTANCE_MANIFEST_PHASE = 0x0198
 GAME_SMSG_INSTANCE_MANIFEST_DONE = 0x0197
 GAME_SMSG_INSTANCE_LOAD_FINISH = 0x018E
 
+# Nothing we sent ever put a body in the world. The client asks for everything it
+# knows to ask for, we answer all of it, and it stops at 100% because there is no
+# agent to spawn. These are the messages a real server volunteers unprompted --
+# GameSrv_HandleInstanceLoadRequestPlayers sends roughly twenty; this is the
+# subset that creates the player and hands them control of it.
+GAME_SMSG_WORLD_UPDATE_LOAD_TIME = 0x001F
+GAME_SMSG_WORLD_CREATE_AGENT = 0x0020
+GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT = 0x0022
+GAME_SMSG_PLAYER_CREATE = 0x0059
+GAME_SMSG_PLAYER_UPDATE_PROFESSION = 0x00B7
+GAME_SMSG_INSTANCE_LOADED = 0x00F2
+
+# Appearance is a 32-bit bitfield (GmChar.h): sex:1, height:4, skin:5, hair:5,
+# face:5, primary_profession:4, hair_style:6, race:2, packed low bits first. A
+# Warrior is profession 1, so it lands at bits 20-23.
+PROF_WARRIOR = 1
+APPEARANCE = PROF_WARRIOR << 20
+
+PLAYER_AGENT_ID = 1        # what INSTANCE_LOAD_INFO already claims
+DEFAULT_RUN_SPEED = 288.0  # Guild Wars' base movement speed
+INF = float("inf")
+
+# GmAgent.h. model_id is not a free-form number: the top nibble is a class tag,
+# so a player agent is 0x30000000 | player number. player_team_token is a literal
+# 0xBAADF00D upstream (GameSrv.c:1233) -- eye-catching on purpose, and not
+# something to substitute a tidier value for.
+GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
+GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
+
+# GmAttributes.h: Attribute_Count. The array is sent zeroed -- no attribute is
+# ranked yet -- but its LENGTH is what tells the client how many attribute slots
+# exist, so it cannot be shortened.
+ATTRIBUTE_COUNT = 42
+ATTRIBUTE_POINTS = 50   # unused and used both, from GmPlayer.c:125
+
+CHAR_CLASS_PLAYER_BASE = 0x30000000
+AGENT_TYPE_LIVING = 1
+PLAYER_TEAM_TOKEN = 0xBAADF00D
+# The in-instance player number, which is what PLAYER_CREATE and model_id use --
+# NOT the 32-bit player_id the client puts in its version frame. Those are
+# different namespaces and conflating them is an easy way to build an agent
+# nobody can address.
+PLAYER_NUMBER = 1
+
 # OpenTyria's ManifestPhase enum (GmMap.h) is ZERO based. Sending the literals
 # 1 and 2 as "phase 1, phase 2" put Done in a PHASE slot, and the client died on
 #   Assertion: Invalid manifest phase
@@ -587,6 +631,67 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                              "PLAYER_DATA_START(players)")
                         send(GAME_SMSG_INSTANCE_PLAYER_DATA_DONE, [],
                              "PLAYER_DATA_DONE(players)")
+
+                        cfg = MAP_STATIC_CONFIG.get(
+                            state["map_id"], MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
+                        pos = cfg[1]
+
+                        send(GAME_SMSG_INSTANCE_LOADED, [PLAYER_TEAM_TOKEN],
+                             "INSTANCE_LOADED")
+                        send(GAME_SMSG_WORLD_UPDATE_LOAD_TIME, [0],
+                             "WORLD_UPDATE_LOAD_TIME")
+                        send(GAME_SMSG_PLAYER_CREATE,
+                             [PLAYER_NUMBER, PLAYER_AGENT_ID, APPEARANCE,
+                              0, 0, 0, TEST_CHAR_NAME], "PLAYER_CREATE")
+                        # Field names carrying hex offsets (h000B, h001E, h0023,
+                        # h0027, h003B, h004B, h0059) let the 23 schema fields be
+                        # aligned to the struct by offset rather than by counting:
+                        # each named constant below lands exactly on its offset,
+                        # and the total closes at 0x63 = the declared 99 bytes.
+                        send(GAME_SMSG_WORLD_CREATE_AGENT,
+                             [PLAYER_AGENT_ID,   # agent_id
+                              CHAR_CLASS_PLAYER_BASE | PLAYER_NUMBER,
+                              AGENT_TYPE_LIVING,
+                              5,                 # h000B
+                              pos,               # position
+                              cfg[2],            # plane
+                              (1.0, 0.0),        # direction
+                              1,                 # h001E
+                              DEFAULT_RUN_SPEED, # speed_base
+                              1.0,               # h0023
+                              0x41400000,        # h0027
+                              PLAYER_TEAM_TOKEN,
+                              0, 0, 0, 0, 0,     # h003B and neighbours
+                              (0.0, 0.0),
+                              (INF, INF),        # h004B
+                              0, 0,
+                              (INF, INF),        # h0059
+                              0],
+                             "WORLD_CREATE_AGENT")
+                        # Attribute state must exist BEFORE the profession
+                        # update lands. Sending profession alone killed the
+                        # client on
+                        #   Assertion: attribState
+                        #   P:\\Code\\Gw\\Char\\Cli\\ChCliAttrib.cpp(435)
+                        # with 0xb7 -- this message -- named in the stack trace.
+                        # Upstream's SendSkillsAndAttributes sends the points
+                        # first and the profession second, in that order.
+                        send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
+                             [PLAYER_AGENT_ID, ATTRIBUTE_POINTS,
+                              ATTRIBUTE_POINTS], "AGENT_ATTRIBUTE_POINTS")
+                        send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
+                             [PLAYER_AGENT_ID, PROF_WARRIOR, 0, 0],
+                             "PLAYER_UPDATE_PROFESSION")
+                        send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
+                             [PLAYER_AGENT_ID, [0] * ATTRIBUTE_COUNT],
+                             "AGENT_UPDATE_ATTRIBUTES")
+                        # unk0 is a literal 3 upstream (GmAgent.c:246).
+                        send(GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT,
+                             [PLAYER_AGENT_ID, 3], "UPDATE_CONTROLLED_AGENT")
+                        # Upstream sends this at the END of REQUEST_PLAYERS, not
+                        # after spawn where we had it.
+                        send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
+                             "INSTANCE_LOAD_FINISH")
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
                         # map_file_id 0 is a placeholder: the real one comes from
                         # the map's static config, which we do not have yet. If the
