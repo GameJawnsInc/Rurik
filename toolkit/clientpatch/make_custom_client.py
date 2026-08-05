@@ -1,0 +1,227 @@
+"""Build a patched Guild Wars client that will talk to our server.
+
+R1 needs this and there is no way around it. The client's auth channel is keyed by
+a static-ephemeral Diffie-Hellman exchange in which the SERVER's public value B is
+compiled into the executable and never sent on the wire; the client derives the
+shared secret locally as B^a mod p. Our server cannot reproduce that secret without
+b, the discrete log of B, which ArenaNet never shipped. So the client's (g, p, B)
+triple has to be replaced with one whose private exponent we hold.
+
+That is why HANDOFF.md section 4's "R1 needs no binary patching" is wrong, and it
+was confirmed against this owner's own binary -- see studies/handshake/PLAN.md.
+
+**The parameters rotate per client build.** The 2026-08-04 update moved the struct
+from RVA 0x6843e8 to 0x6910d8 and changed both the prime and B. So keys are
+build-stamped here, and this tool is meant to be re-run after every update rather
+than once.
+
+Two further patches, both from the same public tooling, both wanted here:
+  * NOP the CreateMutexA single-instance check, and
+  * rename the mutex string,
+so several clients can run at once. That is not a nicety -- capture at scale wants
+many clients, and this is what makes multiboxing possible.
+
+Safety
+------
+Writes a COPY and refuses to write anywhere inside the live install. The live
+client is the owner's only source of truth (HANDOFF.md section 9); a patcher that
+can overwrite it is one typo away from costing a reinstall.
+
+Dependency-free: no openssl, no pefile.
+"""
+
+import argparse
+import hashlib
+import json
+import os
+import secrets
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from gwpe import PE  # noqa: E402
+
+# Prologue of the accessor returning the DH struct; the `mov eax, imm32` that
+# follows carries the struct's virtual address. Used identically by Headquarter's
+# reader and OpenTyria's writer -- two independent implementations that agree.
+SIG_KEYS = bytes.fromhex("8B4508C70088000000B8")
+SIG_KEYS_PTR_OFF = 0x0A
+
+# The single-instance guard around CreateMutexA.
+SIG_MUTEX = bytes.fromhex("8BF885FF7411FFD63DB7")
+MUTEX_PATCH_OFF = 0x08
+MUTEX_PATCH = bytes.fromhex("31C0909090 0F84".replace(" ", ""))
+
+MUTEX_NAME_OLD = b"AN-Mutex-Window"
+MUTEX_NAME_NEW = b"AN-Futex"
+
+LIVE_INSTALL = os.path.normcase(os.path.abspath(r"C:\gw"))
+
+
+# ---------------------------------------------------------------- primes ----
+def _is_probable_prime(n, rounds=40):
+    if n < 2:
+        return False
+    for p in (2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37):
+        if n % p == 0:
+            return n == p
+    d, r = n - 1, 0
+    while d % 2 == 0:
+        d //= 2
+        r += 1
+    for _ in range(rounds):
+        a = secrets.randbelow(n - 3) + 2
+        x = pow(a, d, n)
+        if x in (1, n - 1):
+            continue
+        for _ in range(r - 1):
+            x = x * x % n
+            if x == n - 1:
+                break
+        else:
+            return False
+    return True
+
+
+def gen_prime(bits=512):
+    while True:
+        c = secrets.randbits(bits) | (1 << (bits - 1)) | 1
+        if _is_probable_prime(c):
+            return c
+
+
+def gen_keys(bits=512, generator=4):
+    """A fresh DH triple. Matches the client's shape: g=4 over a 512-bit prime.
+
+    512 bits is weak by modern standards and that is not a defect here -- it is
+    dictated by the client's fixed 64-byte field, and this key protects a loopback
+    connection between the owner and their own server. It must never be reused
+    anywhere that matters.
+    """
+    p = gen_prime(bits)
+    b = secrets.randbits(bits) % (p - 2) + 1
+    B = pow(generator, b, p)
+    return {"generator": generator, "prime": p, "server_private": b, "server_public": B}
+
+
+# ---------------------------------------------------------------- patching --
+def locate(pe):
+    hits = pe.find(SIG_KEYS, ".text")
+    if not hits:
+        raise SystemExit(
+            "Could not find the DH accessor signature.\n"
+            "The client was recompiled, or the scheme changed. This is a real R1\n"
+            "finding, not a tool bug -- re-derive the signature before patching.")
+    if len(hits) > 1:
+        print(f"  note: {len(hits)} accessor matches; using the first")
+    import struct
+    va = struct.unpack_from("<I", pe.data, hits[0] + SIG_KEYS_PTR_OFF)[0]
+    rva = va - pe.image_base
+    off = pe.rva_to_off(rva)
+    if off is None:
+        raise SystemExit(f"DH struct RVA 0x{rva:x} is not backed by file bytes")
+    return va, rva, off
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--input", default=r"C:\gw\Gw.exe")
+    ap.add_argument("--output", help="default: vault/client-patched/Gw.custom.<build>.exe")
+    ap.add_argument("--keys", help="reuse an existing key file instead of generating one")
+    ap.add_argument("--keydir", default=r"C:\gd\Rurik\vault\keys")
+    ap.add_argument("--no-mutex-patch", action="store_true",
+                    help="skip the multi-client patch")
+    a = ap.parse_args()
+
+    pe = PE(a.input)
+    print(f"input      : {a.input}")
+    print(f"arch       : {pe.arch}   image base 0x{pe.image_base:08x}")
+    exe_hash = hashlib.sha256(pe.data).hexdigest()
+    build_tag = time.strftime("%Y-%m-%d", time.gmtime(pe.timestamp)) + "_" + exe_hash[:12]
+    print(f"build tag  : {build_tag}")
+
+    va, rva, off = locate(pe)
+    print(f"DH struct  : VA 0x{va:08x}  RVA 0x{rva:06x}  file 0x{off:x}")
+
+    # Show what we are replacing, so a wrong target is obvious before we write.
+    old_g = int.from_bytes(pe.data[off + 4:off + 8], "little")
+    old_p = int.from_bytes(pe.data[off + 8:off + 72], "little")
+    print(f"current    : g={old_g}, prime {old_p.bit_length()} bits, "
+          f"fp {hashlib.sha256(pe.data[off+8:off+72]).hexdigest()[:16]}")
+    if old_g != 4 or old_p.bit_length() != 512:
+        raise SystemExit("Unexpected parameter shape at the target. Refusing to patch.")
+
+    if a.keys:
+        keys = json.load(open(a.keys))
+        print(f"keys       : reusing {a.keys}")
+    else:
+        print("keys       : generating a 512-bit prime ...", flush=True)
+        keys = gen_keys()
+        keys["build_tag"] = build_tag
+        keys["source_exe_sha256"] = exe_hash
+        keys["generated_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        os.makedirs(a.keydir, exist_ok=True)
+        kp = os.path.join(a.keydir, f"rurik_dh_{build_tag}.json")
+        with open(kp, "w") as f:
+            json.dump(keys, f, indent=2)
+        print(f"             wrote {kp}")
+        print("             KEEP THIS. The server needs server_private to decrypt;")
+        print("             lose it and the patched client is useless.")
+
+    out = a.output or os.path.join(r"C:\gd\Rurik\vault\client-patched",
+                                   f"Gw.custom.{build_tag}.exe")
+    out_abs = os.path.normcase(os.path.abspath(out))
+    if out_abs.startswith(LIVE_INSTALL):
+        raise SystemExit(f"Refusing to write into the live install ({LIVE_INSTALL}).")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+
+    data = bytearray(pe.data)
+
+    def put(offset, blob, what):
+        data[offset:offset + len(blob)] = blob
+        print(f"  patched {what} at 0x{offset:x} ({len(blob)} bytes)")
+
+    # Offsets are from the STRUCT BASE: word0 at +0 (left alone, always 1),
+    # generator at +4, prime at +8, server public at +72. OpenTyria's patcher
+    # advances its cursor past word0 first and then writes at +0/+4/+68, which is
+    # the same place -- copying its literals without its cursor shifts every field
+    # four bytes and silently corrupts the struct. The verify step below caught
+    # exactly that during development.
+    put(off + 4, keys["generator"].to_bytes(4, "little"), "generator")
+    put(off + 8, keys["prime"].to_bytes(64, "little"), "prime")
+    put(off + 72, keys["server_public"].to_bytes(64, "little"), "server public")
+
+    if not a.no_mutex_patch:
+        hits = pe.find(SIG_MUTEX, ".text")
+        if hits:
+            put(hits[0] + MUTEX_PATCH_OFF, MUTEX_PATCH, "CreateMutexA check")
+        else:
+            print("  note: mutex guard signature not found; multi-client not enabled")
+        nm = pe.find(MUTEX_NAME_OLD, ".rdata")
+        if nm:
+            put(nm[0], MUTEX_NAME_NEW.ljust(len(MUTEX_NAME_OLD), b"\0"), "mutex name")
+
+    with open(out, "wb") as f:
+        f.write(bytes(data))
+    print(f"\nwrote {out}")
+
+    # Verify by re-reading the written file, not by trusting the buffer we wrote.
+    v = PE(out)
+    _, _, voff = locate(v)
+    g2 = int.from_bytes(v.data[voff + 4:voff + 8], "little")
+    p2 = int.from_bytes(v.data[voff + 8:voff + 72], "little")
+    B2 = int.from_bytes(v.data[voff + 72:voff + 136], "little")
+    ok = (g2 == keys["generator"] and p2 == keys["prime"]
+          and B2 == keys["server_public"]
+          and pow(keys["generator"], keys["server_private"], keys["prime"]) == B2)
+    print(f"verify     : parameters read back correctly and B == g^b mod p -> {ok}")
+    if not ok:
+        raise SystemExit("VERIFICATION FAILED — do not use this binary.")
+    print("\nNext: run toolkit/portal/webgate.py, then launch this patched copy with")
+    print("  -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
