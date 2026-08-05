@@ -396,6 +396,32 @@ GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
 
 GAME_SMSG_AGENT_MOVE_TO_POINT = 0x0029
 GAME_SMSG_AGENT_UPDATE_POSITION = 0x002C
+# Keyboard movement is answered with a DIRECTION, not a destination.
+#
+# This is the message the whole rubber-banding fight was about not having.
+# GWLP-R -- a working server emulator, and a different lineage from OpenTyria --
+# answers a keyboard move with AgentMoveDirection and reserves MoveToPoint for
+# click-to-move. Sending an absolute destination for WASD has two failure modes
+# and we hit both: a point past a wall makes the client walk through it, because
+# a granted destination is not re-collided, and a point at or behind the player
+# makes it walk backwards. A direction has neither. The client keeps applying
+# its own collision the entire time it is moving that way.
+#
+# The opcode is identified rather than guessed. GWLP-R's numbering runs 11 below
+# ours, consistently across five messages whose field shapes all match this
+# repository's schema -- and that schema was recovered from build 38797's own
+# tables, so the shapes are confirmed independently of GWLP-R:
+#
+#   P026 MoveDirection -> 0x0025  dword, vec2, byte    agent, direction, type
+#   P028 MovementSpeed -> 0x0027  dword, float         agent, speed
+#   P030 MoveToPoint   -> 0x0029  dword, vec2, 2x word agent, point, planes
+#   P032 SpeedModifier -> 0x002B  dword, float, byte   agent, modifier, type
+#   P035 AgentRotate   -> 0x002E  dword, dword, dword  agent, cos, sin
+#
+# What is borrowed is the SEMANTICS -- that keyboard movement belongs on this
+# message. That rests on GWLP-R alone, and is UNVERIFIED against our client
+# until a playtest says the walking looks right.
+GAME_SMSG_AGENT_MOVE_DIRECTION = 0x0025
 
 GAME_SRV_HOST = "127.0.0.1"
 # How GAME_SERVER_INFO fills its 24-byte host field. "sockaddr" is what both
@@ -981,20 +1007,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             state["pos"] = reported
                         if moving:
                             px, py = state["pos"]
-                            dest = (px + heading[0], py + heading[1])
-                            # Tell the client to WALK there. Setting a destination
-                            # silently is why the character slid along in its idle
-                            # pose: the walk animation is driven by MOVE_TO_POINT
-                            # (GmAgent.c:333-344), and keyboard movement never
-                            # sent one -- every MOVE_TO_POINT we have ever sent
-                            # answered a click.
+                            # Answer with a DIRECTION. See the comment on
+                            # GAME_SMSG_AGENT_MOVE_DIRECTION for why, and for how
+                            # the opcode was identified.
                             #
-                            # Only on a real change of direction, though. This
-                            # opcode arrives ~4x/second, while upstream broadcasts
-                            # one MOVE_TO_POINT per LEG. Re-issuing it every 250 ms
-                            # restarts the animation continuously, which is the
-                            # jitter we are trying to remove. An unfinished
-                            # destination 765 units out needs no refresh.
+                            # Everything the clip was doing on this path is gone
+                            # with it. There is nothing to clip -- we are not
+                            # naming a point, so we cannot name one past a wall
+                            # or one behind the player. The client walks that way
+                            # until it hits something, colliding for itself the
+                            # whole time, which is what it was always going to do
+                            # better than we can.
+                            #
+                            # Only on a real change of direction. This opcode
+                            # arrives several times a second and GWLP-R sends
+                            # ChangeDirection only when the direction changes; a
+                            # heading that has not changed needs no restating.
                             prev = state.get("heading")
                             if prev is None:
                                 turned = True
@@ -1004,32 +1032,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # cos(5 degrees); mags is never 0 here in practice
                                 turned = mags <= 0 or dot < 0.996 * mags
                             state["heading"] = tuple(heading)
-                            # Clip the leg, and grant it only if it buys real
-                            # progress. See MIN_GRANTED_LEG: past the wall the
-                            # client phases through, at the wall it walks
-                            # backwards, and the safe move in between is to say
-                            # nothing and let the client's own collision hold it.
-                            #
-                            # The origin here is the position the client reported
-                            # in THIS packet, so the clip cannot be computed from
-                            # a stale one -- which is the state click-to-move
-                            # leaves us in, since the client sends no position
-                            # while clicking.
-                            dest, blocked = clip_to_walkable(state, dest)
-                            granted = math.hypot(dest[0] - px, dest[1] - py)
-                            state["dest"] = dest
-                            state["clipped"] = blocked
-                            if blocked and granted < MIN_GRANTED_LEG:
-                                state["dest"] = None
-                                state["walking"] = False
-                                continue
+                            # Our own position model still walks a clipped leg, so
+                            # the server keeps an opinion that respects walls. It
+                            # goes nowhere near the wire.
+                            model_dest, blocked = clip_to_walkable(
+                                state, (px + heading[0], py + heading[1]))
+                            state["dest"], state["clipped"] = model_dest, blocked
                             if turned or state.get("walking") is not True:
                                 state["walking"] = True
-                                send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-                                     [PLAYER_AGENT_ID, list(dest), plane, plane],
-                                     f"AGENT_MOVE_TO_POINT"
-                                     f"(key {dest[0]:.0f},{dest[1]:.0f}"
-                                     f"{f', clipped to {granted:.0f}u' if blocked else ''})")
+                                send(GAME_SMSG_AGENT_MOVE_DIRECTION,
+                                     [PLAYER_AGENT_ID, list(heading), moving],
+                                     f"AGENT_MOVE_DIRECTION"
+                                     f"({heading[0]:.0f},{heading[1]:.0f} "
+                                     f"type {moving})")
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
