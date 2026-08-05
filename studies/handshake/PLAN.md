@@ -505,3 +505,45 @@ webgate there, and see whether the game connection follows to `127.0.0.2:80`. If
 does, the explanation is confirmed and the address in `GAME_SERVER_INFO` is
 decorative under `-portal`. Until that runs, this is the best-supported reading
 rather than a settled fact.
+
+---
+
+## §9. The updater kill switch — verified, not yet applied [2026-08-05]
+
+The firewall cage and the pre-login patcher are in direct conflict: the patcher
+needs one outbound check to succeed before it will show the login screen, and a
+block denies it forever (§ RUNBOOK, "The patcher stall"). `launch_caged.ps1` works
+around it by opening the cage during startup, but connections established inside
+that window survive the re-cage for the life of the process — Windows offers no
+supported way to tear down an established TCP connection. So the workaround leaks
+by construction.
+
+The real fix is to stop the updater running at all, using the client's own
+"nothing to do" branch.
+
+**Independently verified against `vault/run/2026-07-29_221c13772c7a/Gw.exe`:**
+
+| fact | status |
+|---|---|
+| `DnSetEnabled` prologue `558bec8b4d0833c085c90f94c0a3` | unique — exactly 1 hit in .text |
+| function VA | `0x00833ec0` (file `0x4332c0`) |
+| writes a single BSS global | `0x01087810` |
+| `cmp [0x01087810], 0` guard sites | 4 |
+
+The body is:
+
+    mov ecx,[ebp+8]      ; the bool argument
+    xor eax,eax
+    test ecx,ecx
+    sete al              ; eax = 1 when the argument is FALSE
+    mov [0x01087810], eax
+
+so the global is a *disabled* flag. Patching the 3 bytes of `sete al` at file
+offset **`0x4332ca`** from `0f 94 c0` to `b0 01 90` (`mov al,1` ; `nop`) forces it
+set on every call. `DnInit()` then returns immediately and `DnRun()` returns 1 —
+"done, nothing to do" — which its caller reads as patching finished.
+
+**Not yet applied.** It belongs in `toolkit/clientpatch/make_custom_client.py`
+beside the DH patch, signature-matched rather than offset-hardcoded, since the
+address moves per build (`0x0082dab0` in the 2026-04-30 build). Once applied, the
+cage never needs to open and `launch_caged.ps1` becomes unnecessary.
