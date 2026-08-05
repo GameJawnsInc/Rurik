@@ -115,6 +115,11 @@ GAME_CMSG_INSTANCE_LOAD_REQUEST_PLAYERS = 0x0090
 GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS = 0x0091
 
 GAME_SRV_HOST = "127.0.0.1"
+# How GAME_SERVER_INFO fills its 24-byte host field. "sockaddr" is what both
+# reference implementations do; "string" is the competing reading. Switchable
+# because the client demonstrably ignores what we send and dials the portal
+# host on port 80 instead.
+HOST_FIELD_ENCODING = "sockaddr"
 GAME_SRV_PORT = 6113
 
 PLAYER_STATUS = {0: "Offline", 1: "Online", 2: "DND", 3: "Away", 4: "Blank"}
@@ -199,6 +204,17 @@ def sockaddr_in(host: str, port: int) -> bytes:
     24 bytes is sizeof(struct sockaddr), padded; an IPv6 handoff would fill more
     of it. Both reference implementations size the field this way.
     """
+    if HOST_FIELD_ENCODING == "string":
+        # The competing reading: 24 bytes is a NUL-padded "host:port" string
+        # rather than a sockaddr. Under the sockaddr reading the field starts
+        # 02 00, which as a C string is EMPTY -- and an empty host would
+        # explain the client falling back to the -portal address on the
+        # default HTTP port, i.e. 127.0.0.1:80, which is exactly what it dials.
+        text = f"{host}:{port}".encode("ascii")
+        if len(text) > 24:
+            raise ValueError(f"host string {text!r} does not fit in 24 bytes")
+        return text.ljust(24, b"\x00")
+
     return (struct.pack("<H", socket.AF_INET)
             + struct.pack(">H", port)
             + socket.inet_aton(host)
@@ -617,13 +633,16 @@ def main():
     # `global` after any use of the name is a SyntaxError. Single-process server,
     # so rebinding the module constants is enough and keeps
     # handle_request_game_instance free of plumbing it would only ever use once.
-    global GAME_SRV_HOST, GAME_SRV_PORT
+    global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING
 
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=6112)
     ap.add_argument("--keys")
     ap.add_argument("--vault", default=VAULT_DEFAULT)
+    ap.add_argument("--host-encoding", choices=["sockaddr", "string"],
+                    default=HOST_FIELD_ENCODING,
+                    help="How to fill GAME_SERVER_INFO's 24-byte host field.")
     ap.add_argument("--game-host", default=GAME_SRV_HOST,
                     help="Address handed to the client in GAME_SERVER_INFO.")
     ap.add_argument("--game-port", type=int, default=GAME_SRV_PORT,
@@ -645,6 +664,7 @@ def main():
     a = ap.parse_args()
 
     GAME_SRV_HOST, GAME_SRV_PORT = a.game_host, a.game_port
+    HOST_FIELD_ENCODING = a.host_encoding
 
     keys = load_keys(a.keys)
     if "server_private" not in keys:

@@ -469,3 +469,39 @@ proved our message was correct, which relocated the fault — and the wire then
 showed the real cause: **the client dials port 80, not the port in the handoff.**
 The static work still stands on its own; it is the arbiter table for the auth
 channel, and it says the encoding is right.
+
+---
+
+## §8. Why the client dials port 80 — [measured 2026-08-05]
+
+The client never dialled the port we put in `AUTH_SMSG_GAME_SERVER_INFO`. The
+numbers `6113` and `6120` appeared only in its **error dialog text**, which is
+formatted from our field; the one time a 20 ms sampler watched the actual moment,
+it dialled **`127.0.0.1:80`** — the `-portal` address on the default HTTP port.
+
+Reading an error dialog as evidence of a connection attempt cost several hours.
+The dialog proved only that the client had *parsed* our bytes.
+
+**The host field encoding is not the cause.** Tested both readings of the 24-byte
+field:
+
+| encoding | result |
+|---|---|
+| `sockaddr` (family LE, port BE, 4 addr bytes) — what both references do | client dials `127.0.0.1:80` |
+| NUL-padded `"host:port"` ASCII string | **client makes no game connection at all** |
+
+The string form is strictly worse, so the sockaddr reading is right. Static
+analysis agrees independently: §7 shows the client parses the message against its
+own template and stores `host[24]` at `trans+0x5C`, and the template proves our 42
+bytes are byte-exact.
+
+**Standing explanation:** with `-portal 127.0.0.1` the client routes the game
+connection to the portal address on port 80 and ignores the address we hand it.
+Serving the game channel on port 80 is therefore the correct consequence of the
+flag we launch with, not a workaround.
+
+**Not yet proven.** The clean test is to launch with `-portal 127.0.0.2`, serve the
+webgate there, and see whether the game connection follows to `127.0.0.2:80`. If it
+does, the explanation is confirmed and the address in `GAME_SERVER_INFO` is
+decorative under `-portal`. Until that runs, this is the best-supported reading
+rather than a settled fact.
