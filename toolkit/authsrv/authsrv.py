@@ -105,6 +105,53 @@ GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET = 0x0148
 GAME_SMSG_UPDATE_GOLD_STORAGE = 0x0141
 GAME_SMSG_CHARACTER_UPDATE_INFO = 0x0030
 GAME_SMSG_INSTANCE_MANIFEST_PHASE = 0x0198
+GAME_SMSG_INSTANCE_MANIFEST_DONE = 0x0197
+GAME_SMSG_INSTANCE_LOAD_FINISH = 0x018E
+
+# OpenTyria's ManifestPhase enum (GmMap.h) is ZERO based. Sending the literals
+# 1 and 2 as "phase 1, phase 2" put Done in a PHASE slot, and the client died on
+#   Assertion: Invalid manifest phase
+#   P:\Code\Gw\Mission\Cli\MsCliMan.cpp(472)
+# with edi=00000002 -- our own second argument, named in the register dump.
+MANIFEST_PHASE1 = 0
+MANIFEST_PHASE2 = 1
+MANIFEST_DONE = 2
+# The sentinel OpenTyria passes as map_id on the first DONE: one past the last
+# real map (876), meaning "no map" rather than any actual destination.
+MAP_ID_COUNT = 877
+
+# OpenTyria's GmMapsConfig.c, verbatim: map_id -> (map_file_id, (x, y), plane).
+# map_file_id is what the client opens out of Gw.dat. Sending 0 killed it on
+#   Assertion: fileId
+#   P:\Code\Base\Rtl\File.cpp(367)
+# Only six maps are configured upstream, and Ascalon City Pre-Searing (148) --
+# the one this account's character actually stands in -- is not among them.
+MAP_STATIC_CONFIG = {
+    449: (0x345CC, (-9067.0, 13218.0), 0),   # Kamadan, Jewel of Istan (outpost)
+    194: (0x265F7, (0.0, 0.0), 0),           # Kaineng Center (outpost)
+    55:  (352808, (0.0, 0.0), 0),            # Lion's Arch (outpost)
+    474: (219215, (0.0, 0.0), 0),            # Domain of Anguish
+    558: (287493, (0.0, 0.0), 0),            # Sparkfly Swamp
+    90:  (46594, (0.0, 0.0), 0),             # Lornar's Pass
+}
+# Kamadan is the substitute because it is the only entry upstream gives a real
+# spawn point for. Loading it under another map's id is knowingly inconsistent;
+# it answers "is the file id the last blocker?" without first having to recover
+# Ascalon's id from Gw.dat.
+FALLBACK_MAP_ID = 449
+
+# The reply to CHAR_CREATION_REQUEST_ARMORS. The name is a red herring: nothing is
+# being created and no armour is sent. OpenTyria (GameSrv.c:1557) answers it with
+# account-wide unlock state, which is what the client is really asking for.
+GAME_SMSG_ACCOUNT_FEATURE = 0x000F
+GAME_SMSG_PVP_UPDATE_UNLOCKED_HEROES = 0x0018
+GAME_SMSG_PVP_ITEM_STREAM_END = 0x001B
+GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS = 0x001D
+
+# OpenTyria's GameSrv_SendAccountFeatures table, verbatim.
+ACCOUNT_FEATURES = ((1, 10, 0), (99, 3, 0), (100, 5, 0), (101, 5, 5),
+                    (102, 2, 2), (111, 1, 0), (124, 1, 0), (125, 1, 0),
+                    (131, 1, 0))
 
 # What the client asks for, in the order it asks. OpenTyria answers REQUEST_ITEMS
 # with a dozen messages (inventory, weapon sets, gold, factions, quests...). We
@@ -113,6 +160,11 @@ GAME_SMSG_INSTANCE_MANIFEST_PHASE = 0x0198
 GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN = 0x0088
 GAME_CMSG_INSTANCE_LOAD_REQUEST_PLAYERS = 0x0090
 GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS = 0x0091
+# Sent by this build during an ordinary map load, not during character creation.
+# Identified from the client's own numbering: Py4GW's CTO_OPCODES puts SPAWN,
+# PLAYERS and ITEMS at exactly the values we already use, which makes it the
+# aligned catalog; a second mirror's table is off by one throughout and disagrees.
+GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS = 0x008A
 
 GAME_SRV_HOST = "127.0.0.1"
 # How GAME_SERVER_INFO fills its 24-byte host field. "sockaddr" is what both
@@ -411,9 +463,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # which of these the client validates.
             send(GAME_SMSG_INSTANCE_LOAD_HEAD, [0x3F, 0x3F, 0, 0],
                  "INSTANCE_LOAD_HEAD")
+            # START and DONE are a matched pair bracketing one player's data.
+            # Sending START at bring-up and DONE only in reply to REQUEST_PLAYERS
+            # deadlocked: the client waits for the terminator before advancing,
+            # and REQUEST_PLAYERS is how it advances. It sat for 39.8s and then
+            # tore down both channels at once -- a timeout, not a rejection.
             send(GAME_SMSG_INSTANCE_PLAYER_DATA_START, [], "PLAYER_DATA_START")
             send(GAME_SMSG_INSTANCE_LOAD_PLAYER_NAME, [TEST_CHAR_NAME],
                  "INSTANCE_LOAD_PLAYER_NAME")
+            send(GAME_SMSG_INSTANCE_PLAYER_DATA_DONE, [], "PLAYER_DATA_DONE")
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
                  [1,          # agent_id -- the player's own agent, 1 for the first
                   map_id,     # echoed from the version frame, not guessed
@@ -489,19 +547,63 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                              "MAP_UPDATE_CURRENT")
                         send(GAME_SMSG_READY_FOR_MAP_SPAWN, [0],
                              "READY_FOR_MAP_SPAWN")
-                        for phase in (1, 2):
-                            send(GAME_SMSG_INSTANCE_MANIFEST_PHASE, [phase],
-                                 f"MANIFEST_PHASE[{phase}]")
+                        # GameSrv_SendDownloadManifest: two PHASE messages then a
+                        # DONE, twice. The DONE is not optional decoration -- it
+                        # is what closes each pair, and omitting it left the
+                        # client mid-manifest. First round carries the "no map"
+                        # sentinel, second round the real destination.
+                        for phase_arg, map_arg in ((MANIFEST_DONE, MAP_ID_COUNT),
+                                                   (MANIFEST_PHASE1, state["map_id"])):
+                            send(GAME_SMSG_INSTANCE_MANIFEST_PHASE,
+                                 [MANIFEST_PHASE1], "MANIFEST_PHASE[Phase1]")
+                            send(GAME_SMSG_INSTANCE_MANIFEST_PHASE,
+                                 [MANIFEST_PHASE2], "MANIFEST_PHASE[Phase2]")
+                            send(GAME_SMSG_INSTANCE_MANIFEST_DONE,
+                                 [phase_arg, map_arg, 0],
+                                 f"MANIFEST_DONE[{phase_arg}, map {map_arg}]")
+                    elif opcode == GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS:
+                        # The client sent this and REQUEST_ITEMS in the same
+                        # breath; we answered only items, and it then waited 44s
+                        # and dropped both channels. An unanswered request, not a
+                        # rejected message -- the same failure as the unclosed
+                        # player-data block, one layer up.
+                        # Nothing is unlocked: correct for a level 1 character,
+                        # and it keeps this from masking a later stall.
+                        send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [[0] * 128],
+                             "PVP_UNLOCKED_SKILLS")
+                        # Heroes are all-ones in OpenTyria; kept verbatim rather
+                        # than second-guessed.
+                        send(GAME_SMSG_PVP_UPDATE_UNLOCKED_HEROES,
+                             [[0xFFFFFFFF] * 8], "PVP_UNLOCKED_HEROES")
+                        send(GAME_SMSG_PVP_ITEM_STREAM_END, [],
+                             "PVP_ITEM_STREAM_END")
+                        for fid, p1, p2 in ACCOUNT_FEATURES:
+                            send(GAME_SMSG_ACCOUNT_FEATURE, [fid, p1, p2],
+                                 f"ACCOUNT_FEATURE[{fid}]")
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_PLAYERS:
+                        # A balanced empty block: no other players in the
+                        # instance, but the client still needs the brackets.
+                        send(GAME_SMSG_INSTANCE_PLAYER_DATA_START, [],
+                             "PLAYER_DATA_START(players)")
                         send(GAME_SMSG_INSTANCE_PLAYER_DATA_DONE, [],
-                             "PLAYER_DATA_DONE")
+                             "PLAYER_DATA_DONE(players)")
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
                         # map_file_id 0 is a placeholder: the real one comes from
                         # the map's static config, which we do not have yet. If the
                         # client refuses to spawn, this is the first thing to doubt.
+                        cfg = MAP_STATIC_CONFIG.get(state["map_id"])
+                        if cfg is None:
+                            cfg = MAP_STATIC_CONFIG[FALLBACK_MAP_ID]
+                            print(f"[c{conn_id}] no static config for map "
+                                  f"{state['map_id']}; substituting map "
+                                  f"{FALLBACK_MAP_ID} geometry", flush=True)
+                        file_id, pos, plane = cfg
                         send(GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT,
-                             [0, (0.0, 0.0), 0, 0, 0, b"\x00" * 8],
-                             "INSTANCE_LOAD_SPAWN_POINT")
+                             [file_id, pos, plane, 0, 0, b"\x00" * 8],
+                             f"INSTANCE_LOAD_SPAWN_POINT(file {file_id})")
+                        # The load bar reaches 100% without this and stops there.
+                        send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
+                             "INSTANCE_LOAD_FINISH")
                 elif kind != "auth":
                     # Game channel: capture only. Every handler below is keyed to
                     # AUTH_CMSG opcodes, and the two catalogs collide numerically
