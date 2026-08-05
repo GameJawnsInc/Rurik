@@ -43,6 +43,7 @@ from gwcrypto import ARC4, arc4_hash, compute_shared, make_server_seed  # noqa: 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'portal'))
 from codec import Codec  # noqa: E402
 from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
+import probes  # noqa: E402
 
 AUTH_CMSG_VERSION_HEADER = 0x000C0400
 # 0x000C0700 came from the reference sources. 0x000C0500 is what build 38797
@@ -301,6 +302,55 @@ AUTH_CMSG_NAMES = {
 codec = Codec()
 
 VAULT_DEFAULT = r"C:\gd\Rurik\vault\captures\authsrv"
+
+
+# Set from --probe. Read by the spawn path; None means the server behaves
+# exactly as it does in a normal session.
+PROBE_NAME = None
+
+
+def run_probe(name, send, conn_id, stop):
+    """Fire a scripted experiment at the client, on its own thread.
+
+    On its own thread because the steps are deliberately seconds apart -- a
+    person has to see one result before the next arrives -- and the receive loop
+    must keep running throughout or the client times out mid-probe.
+
+    Failures are printed and swallowed. A probe is an experiment; a packet the
+    client rejects is a result, not a crash, and it must not take the session
+    down with it or we lose the rest of the sequence.
+    """
+    probe = probes.get(name, PLAYER_AGENT_ID)
+    if probe is None:
+        print(f"[c{conn_id}] no probe named {name!r}; "
+              f"known: {', '.join(probes.names())}", flush=True)
+        return
+
+    def body():
+        bar = "=" * 62
+        print(f"\n{bar}\nPROBE: {name}\n  Q: {probe.question}\n"
+              f"  predicts: {probe.predicts}", flush=True)
+        if probe.note:
+            print(f"  note: {probe.note}", flush=True)
+        if not probe.steps:
+            print(f"  (no packets -- observation only)\n{bar}\n", flush=True)
+            return
+        for i, step in enumerate(probe.steps, 1):
+            if stop.wait(step.delay):
+                return
+            print(f"\n  --- step {i}/{len(probe.steps)}: {step.label}",
+                  flush=True)
+            try:
+                send(step.opcode, step.values, f"PROBE[{name}] {step.label}")
+            except Exception as exc:
+                print(f"      SEND FAILED: {type(exc).__name__}: {exc}",
+                      flush=True)
+                print(f"      (that is a result too -- record it)", flush=True)
+                continue
+            print(f"      WATCH: {step.watch}", flush=True)
+        print(f"\n  probe complete. What did you see?\n{bar}\n", flush=True)
+
+    threading.Thread(target=body, daemon=True).start()
 
 
 class Recorder:
@@ -938,6 +988,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # after spawn where we had it.
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
+                        if PROBE_NAME:
+                            run_probe(PROBE_NAME, send, conn_id, stop)
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
                         # map_file_id 0 is a placeholder: the real one comes from
                         # the map's static config, which we do not have yet. If the
@@ -1110,11 +1162,35 @@ def main():
                          "established — the two used to share one file, and a "
                          "test run silently clobbered live state.")
     ap.add_argument("--once", action="store_true", help="exit after one connection")
+    ap.add_argument("--probe", metavar="NAME",
+                    help="After the character spawns, fire a scripted experiment at "
+                         "the client. See --list-probes. Only affects a session you "
+                         "ask for it in; the default path is untouched.")
+    ap.add_argument("--list-probes", action="store_true",
+                    help="Print the available probes, their questions and their "
+                         "predictions, then exit.")
     ap.add_argument("--allow-any-session", action="store_true",
                     help="Accept a login with no matching session record. A debugging "
                          "escape hatch so a stale sessions.json cannot be mistaken for a "
                          "wire bug. Never the default: the rejection path has to stay exercised.")
     a = ap.parse_args()
+
+    if a.list_probes:
+        print("Probes -- scripted one-packet experiments against our own client.")
+        print("Each states what it expects BEFORE it runs, so the result cannot be")
+        print("rationalised afterwards into agreeing with whatever happened.")
+        print()
+        for n in probes.names():
+            print(probes.describe(n))
+            print()
+        return
+    if a.probe:
+        if a.probe not in probes.names():
+            raise SystemExit(f"no probe named {a.probe!r}. "
+                             f"Known: {', '.join(probes.names())}")
+        global PROBE_NAME
+        PROBE_NAME = a.probe
+        print(f"PROBE MODE: {a.probe} -- fires after the character spawns")
 
     GAME_SRV_HOST, GAME_SRV_PORT = a.game_host, a.game_port
     HOST_FIELD_ENCODING = a.host_encoding
