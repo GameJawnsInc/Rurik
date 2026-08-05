@@ -100,6 +100,11 @@ GAME_SMSG_MAP_UPDATE_CURRENT = 0x0099
 GAME_SMSG_ITEM_STREAM_CREATE = 0x0144
 GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT = 0x0195
 GAME_SMSG_READY_FOR_MAP_SPAWN = 0x01AB
+GAME_SMSG_ITEM_WEAPON_SET = 0x0147
+GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET = 0x0148
+GAME_SMSG_UPDATE_GOLD_STORAGE = 0x0141
+GAME_SMSG_CHARACTER_UPDATE_INFO = 0x0030
+GAME_SMSG_INSTANCE_MANIFEST_PHASE = 0x0198
 
 # What the client asks for, in the order it asks. OpenTyria answers REQUEST_ITEMS
 # with a dozen messages (inventory, weapon sets, gold, factions, quests...). We
@@ -445,12 +450,32 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
 
                 if kind == "game":
                     if opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS:
-                        send(GAME_SMSG_ITEM_STREAM_CREATE, [0, 0],
+                        # OpenTyria's full REQUEST_ITEMS burst, in its order.
+                        # Sending only the tail of it made the client accept every
+                        # message and then reset without asking for players or
+                        # spawn -- READY_FOR_MAP_SPAWN is the LAST of these, not a
+                        # shortcut to the end.
+                        # Skipped: inventory, max factions and hard mode. Those
+                        # need player state we do not model yet; if the client
+                        # stalls again they are the next candidates.
+                        send(GAME_SMSG_ITEM_STREAM_CREATE, [1, 0],
                              "ITEM_STREAM_CREATE")
+                        send(GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET, [1, 0],
+                             "SET_ACTIVE_WEAPON_SET")
+                        for slot in range(4):
+                            send(GAME_SMSG_ITEM_WEAPON_SET, [1, slot, 0, 0],
+                                 f"WEAPON_SET[{slot}]")
+                        send(GAME_SMSG_UPDATE_GOLD_STORAGE, [1, 0],
+                             "UPDATE_GOLD_STORAGE")
+                        send(GAME_SMSG_CHARACTER_UPDATE_INFO,
+                             ["", 0, 0, 1000, 0, 0, 0], "CHARACTER_UPDATE_INFO")
                         send(GAME_SMSG_MAP_UPDATE_CURRENT, [state["map_id"], 0],
                              "MAP_UPDATE_CURRENT")
                         send(GAME_SMSG_READY_FOR_MAP_SPAWN, [0],
                              "READY_FOR_MAP_SPAWN")
+                        for phase in (1, 2):
+                            send(GAME_SMSG_INSTANCE_MANIFEST_PHASE, [phase],
+                                 f"MANIFEST_PHASE[{phase}]")
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_PLAYERS:
                         send(GAME_SMSG_INSTANCE_PLAYER_DATA_DONE, [],
                              "PLAYER_DATA_DONE")
