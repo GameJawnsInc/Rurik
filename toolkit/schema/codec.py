@@ -44,10 +44,27 @@ class NeedMoreData(Exception):
 
 
 class Codec:
-    def __init__(self, path=DEFAULT_SCHEMA):
+    def __init__(self, path=DEFAULT_SCHEMA, overrides=None):
         with open(path, encoding="utf-8") as f:
             self.schema = json.load(f)
         self.channels = self.schema["channels"]
+
+        # messages.json is generated from OpenTyria and carries
+        # `authority: imported`. Where our own captures contradict it, the
+        # correction lives beside it rather than inside it, so regenerating from
+        # upstream cannot quietly revert a verdict the client already gave us.
+        if overrides is None:
+            overrides = os.path.join(os.path.dirname(os.path.abspath(path)),
+                                     "overrides.json")
+        self.overridden = []
+        if os.path.exists(overrides):
+            with open(overrides, encoding="utf-8") as f:
+                over = json.load(f)
+            for chan, msgs in over.get("channels", {}).items():
+                target = self.channels.setdefault(chan, {"messages": {}})
+                for key, msg in msgs.items():
+                    target["messages"][key] = msg
+                    self.overridden.append(f"{chan}[{key}]")
 
     def fields_for(self, channel, opcode):
         chan = self.channels.get(channel)

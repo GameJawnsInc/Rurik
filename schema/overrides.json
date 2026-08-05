@@ -1,0 +1,19 @@
+{
+  "provenance": "Measured against client build 38797 from Rurik's own captures. Every entry here CONTRADICTS the imported OpenTyria tables in messages.json. import_msgdefs.py already says why that is expected: the imported catalog is marked 'authority: imported' and the client's own deserializer is the arbiter. This file is where the arbiter's verdicts go, so that regenerating messages.json from upstream does not silently undo them.",
+  "channels": {
+    "GAME_CMSG": {
+      "144": {
+        "opcode": 144,
+        "table": "GAME_CMSG_0144",
+        "declared_unpack_size": 19,
+        "variable_length": true,
+        "fields": [
+          {"type": "msg_header", "length": 0},
+          {"type": "blob", "length": 16},
+          {"type": "byte", "length": 0}
+        ],
+        "why": "INSTANCE_LOAD_REQUEST_PLAYERS is 19 bytes on this build, not the imported 18. Decoding it as 18 left one byte in the stream and every following message was misframed: the decoder read 0x1201 (out of range) and abandoned the rest of the frame, so everything the client said after REQUEST_PLAYERS was invisible. Shifting one byte yields header 0x8092 followed by count 112, which is exactly the declared array8 cap of GAME_CMSG_0146 -- two independent agreements, not a lucky reading. Capture: vault/captures/authsrv/authsrv-20260805T103953-c5.jsonl @0.690s."
+      }
+    }
+  }
+}
