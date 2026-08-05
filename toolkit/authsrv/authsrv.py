@@ -985,44 +985,42 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # cos(5 degrees); mags is never 0 here in practice
                                 turned = mags <= 0 or dot < 0.996 * mags
                             state["heading"] = tuple(heading)
-                            # Cut the leg at the first wall. Held against the
-                            # client's own collision, which already stops the
-                            # player there -- the bug this fixes is that we did
-                            # not, so the server kept integrating forward and
-                            # eventually teleported the character out the far
-                            # side of whatever it was standing against.
-                            dest, blocked = clip_to_walkable(state, dest)
-                            if blocked and math.hypot(dest[0] - px,
-                                                      dest[1] - py) < 1.0:
-                                # Pressed flat against a wall. Say nothing: a
-                                # MOVE_TO_POINT to where the agent already is
-                                # restarts the walk animation ~4x/second.
-                                #
-                                # This is the HARDEST case for the two models to
-                                # agree, not the easiest: we are frozen at the
-                                # wall while the client slides along it, so drift
-                                # grows the whole time the key is held. Marking
-                                # it clipped is what stops the eventual stop
-                                # report from snapping the player backwards.
-                                state["dest"] = None
-                                state["walking"] = False
-                                state["clipped"] = True
-                                continue
-                            state["dest"] = dest
+                            # THE CLIP DOES NOT GO ON THE WIRE. It bounds our own
+                            # position model and nothing else.
+                            #
+                            # Sending a clipped destination was the rubber-band,
+                            # and the mechanism is worth stating exactly because
+                            # it took three wrong fixes to find. Against a wall,
+                            # clip(pos, pos + heading) returns approximately POS
+                            # -- so MOVE_TO_POINT carried "walk to where the
+                            # server thinks you are". The client obeys. If our
+                            # position was fresh that reads as a snap; if it was
+                            # stale from a stretch of click-to-move, during which
+                            # the client sends no position at all, it reads as a
+                            # long straight walk backwards over buildings. One
+                            # message, two appearances, both reported.
+                            #
+                            # MEASURED in the capture that found it: a 457-unit
+                            # jump in 0.11s -- 4,046 u/s against a run speed of
+                            # 288 -- at the same timestamp as a clipped keyboard
+                            # leg.
+                            #
+                            # So grant what the player asked for. The client
+                            # stops itself at walls, which is exactly what the
+                            # original bug report said it does. The phasing that
+                            # started this work came from the server BROADCASTING
+                            # a position past the wall, and the server no longer
+                            # broadcasts position at all.
+                            model_dest, blocked = clip_to_walkable(state, dest)
+                            state["dest"] = model_dest
                             state["clipped"] = blocked
-                            # NOT re-sent just because the leg was clipped. An
-                            # earlier version did, and against a wall that
-                            # restarts the walk animation four times a second.
-                            # The client is already refusing to enter the wall
-                            # under its own collision; it does not need us to
-                            # keep telling it where the wall is.
                             if turned or state.get("walking") is not True:
                                 state["walking"] = True
                                 send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                                      [PLAYER_AGENT_ID, list(dest), plane, plane],
                                      f"AGENT_MOVE_TO_POINT"
                                      f"(key {dest[0]:.0f},{dest[1]:.0f}"
-                                     f"{', clipped' if blocked else ''})")
+                                     f"{', model stops short' if blocked else ''})")
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
@@ -1036,19 +1034,27 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # treated as a fresh direction, not compared against one
                         # from before the click.
                         state["walking"], state["heading"] = False, None
-                        # Clicking past a wall is the ordinary case, not an
-                        # attack: the player clicks a spot across the map and a
-                        # real server routes them around. We cannot route yet --
-                        # that needs the pathfinding graph, which is not decoded
-                        # -- so we walk the straight line and stop at the first
-                        # thing in the way. Short of the real behaviour, and
-                        # honest about where it stops rather than sliding through.
-                        dest, blocked = clip_to_walkable(state, dest)
-                        state["dest"], state["clipped"] = dest, blocked
+                        # Echo the click back unchanged, same as the keyboard
+                        # path: clipping it would hand the client a destination
+                        # it did not ask for, and clicking past a wall is the
+                        # ordinary case rather than an attack. A real server
+                        # ROUTES you around the obstacle; we cannot, because the
+                        # pathfinding graph is not decoded. Granting the straight
+                        # line and letting the client stop itself is the honest
+                        # approximation. Substituting our own shorter destination
+                        # is not -- that was the rubber-band.
+                        #
+                        # Click-to-move is also where our position model is
+                        # blindest: MEASURED, the client sends no position
+                        # updates at all while clicking, going silent for up to
+                        # 37 seconds in one capture. Slot 1 of 0x003D only moves
+                        # on keyboard input.
+                        model_dest, blocked = clip_to_walkable(state, dest)
+                        state["dest"], state["clipped"] = model_dest, blocked
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                              [PLAYER_AGENT_ID, list(dest), plane, plane],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
-                             f"{', clipped' if blocked else ''})")
+                             f"{', model stops short' if blocked else ''})")
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
                         # Stop where WE say it is, not where the client last
                         # believed. Echoing the client's figure back pinned it to
