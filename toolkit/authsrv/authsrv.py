@@ -1096,7 +1096,38 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # underneath instead of up the steps -- reported from play
                         # as ending up inside the hollow under the stairs.
                         dest_plane = values[2]
+                        # The second field overwrites the client's own current
+                        # plane, so a stale value here corrupts the thing the
+                        # client collides against. READ OUT OF Gw.exe:
+                        #
+                        #   handler 0x005fd890 builds {x, y, FIRST word, 0} and
+                        #   calls 0x00602a40(agent, &pos, 0, SECOND word)
+                        #   0x00602a40:  cmp eax, -1 / je / mov [ebx+0x80], eax
+                        #
+                        # and the agent's own position is {x @0x78, y @0x7c,
+                        # plane @0x80} -- the function passes `lea esi, [ebx+
+                        # 0x78]` to the movement starters. So field 2 IS the
+                        # agent's current plane, as OpenTyria names it.
+                        #
+                        # -1 means "leave it alone" and we CANNOT say it: the
+                        # field is msgtable type 4, "unsigned, widened to a
+                        # 4-byte slot", so 0xFFFF arrives as 65535, not -1. Four
+                        # of the eight internal callers of 0x00602a40 push -1;
+                        # that idiom is not available over the wire.
+                        #
+                        # So it has to be right. Our tracked plane comes from
+                        # 0x003D and 0x0047, and MEASURED, the client sends
+                        # neither while click-moving -- which is precisely when
+                        # this field is used. The navmesh is the better source,
+                        # since its plane indices ARE the client's numbering
+                        # (189 of 198 reports agree).
                         cur_plane = state["plane"]
+                        pm = state.get("pathmap")
+                        if pm is not None:
+                            at = pm.plane_at(state["pos"][0], state["pos"][1],
+                                             prefer=cur_plane)
+                            if at is not None:
+                                cur_plane = at
                         # FIELD ORDER: destination plane FIRST, current plane
                         # SECOND. The two lineages disagree here and we had been
                         # following the wrong one.
