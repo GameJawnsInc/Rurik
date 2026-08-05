@@ -225,5 +225,44 @@ beside the exe, but it **buffers and only flushes on exit** — a stuck client s
 | `toolkit/clientpatch/` | Patching, run-dir assembly, the firewall cage |
 | `toolkit/clientpatch/launch_caged.ps1` | Elevated launcher: opens the cage for the patcher, shuts it before login |
 | `vault/` | Gitignored. Client snapshots, keys, captures, prior-art mirrors |
+| `vault/dat_study/Gw.dat` | A third copy of the archive, for reading map data. See below |
 | `studies/handshake/PLAN.md` | How R1 was actually solved, wire detail included |
+| `studies/movement/FINDINGS.md` | What we know about movement, and from whom |
+| `studies/mapdata/FORMAT.md` | Reading map geometry out of the archive |
 | `PLAN.md` | Strategy, the ladder, ranked angles of attack |
+
+---
+
+## The third copy of Gw.dat, and why it exists
+
+A running client holds an **exclusive lock** on the archive it was launched from.
+While `Gw.exe` is up, `vault/run/<build>/Gw.dat` cannot even be opened for
+reading — Python raises `PermissionError`, not a partial read — so any attempt to
+study map data during a play session fails outright.
+
+Rather than close the game every time, keep a copy that is never used to run
+anything:
+
+```bash
+Copy-Item "C:\gw\Gw.dat" "C:\gd\Rurik\vault\dat_study\Gw.dat"
+```
+
+3.9 GB, about a minute. It is under `vault/`, so the provenance gate covers it —
+`git check-ignore` confirms it, and it must never move anywhere else in the tree.
+
+**Never launch a client against this copy.** Its whole value is that nothing ever
+locks it.
+
+Verify a copy by parsing its header, which cross-checks itself:
+
+```bash
+python -c "import struct; f=open(r'C:\gd\Rurik\vault\dat_study\Gw.dat','rb'); h=f.read(32); mft,=struct.unpack('<I',h[16:20]); size,=struct.unpack('<I',h[24:28]); f.seek(mft); m=f.read(16); cnt,=struct.unpack('<I',m[12:16]); print(h[:4], m[:4], cnt, size==cnt*24)"
+```
+
+Expect `b'3AN\x1a' b'Mft\x1a' 177335 True`. The last value is the check that
+matters: the entry count sits in the MFT header and the table size sits in the
+file header, and the two agree only if the 24-byte entry layout is right.
+
+`C:\gw` is the owner's real install. Reading bytes from it is acceptable —
+strictly read-only, nothing written, nothing copied into the tracked tree — but
+it is never a target for patching or launching.
