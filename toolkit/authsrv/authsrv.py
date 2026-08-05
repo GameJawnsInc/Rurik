@@ -1046,23 +1046,37 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # reports where it got to. Answering MOVE_TO_POINT and
                         # then never moving anyone is why the client cancelled
                         # after ~2s and reported itself still at the spawn point.
-                        dest, dest_plane = values[1], values[2]
-                        # The two plane fields are NOT the same field twice.
-                        # GWLP-R sets currentPlane from the agent's own position
-                        # and nextPlane from the destination; we were sending the
-                        # click's plane for both, which tells the client it is
-                        # already standing on the plane it is trying to reach.
+                        dest = values[1]
+                        # Slot 2 is the client's CURRENT plane, not the
+                        # destination's, and the previous version of this code
+                        # had it backwards.
                         #
-                        # This is the best candidate for "sometimes it paths
-                        # around the building and sometimes it walks straight
-                        # through it": a pathfinder handed a start node on the
-                        # wrong plane has nothing to route from, and a straight
-                        # line is what falling back looks like. MEASURED that the
-                        # planes really do differ -- the client reported plane 5
-                        # while we still believed plane 0, because we only ever
-                        # learned the plane from keyboard packets and clicking
-                        # sends none.
-                        cur_plane = state["plane"]
+                        # MEASURED across one session, by field position -- slot
+                        # 2 sits in the same place in all three client movement
+                        # messages, and in two of them it is unambiguously where
+                        # the client is standing:
+                        #
+                        #   0x003E click     {0: 25, 5: 4, 12: 2}
+                        #   0x003D keyboard  {0: 64,       12: 24}
+                        #   0x0047 stop      {0:  9,       12:  2}
+                        #
+                        # So the click tells us the plane the player is on, which
+                        # also fixes the tracking gap that made every plane change
+                        # during click-to-move look like a disagreement.
+                        #
+                        # nextPlane is 0. GWLP-R documents the field as "0 if
+                        # player stays in the same plane", and we have no way to
+                        # know the destination's plane -- nothing in the click
+                        # says it, and our own trapezoid planes are not the same
+                        # numbering. Passing the CURRENT plane there, as this code
+                        # did, announced a plane transition on nearly every click.
+                        # A pathfinder told to cross planes when it is not has
+                        # every reason to do something strange, and "sometimes it
+                        # paths, sometimes it warps, sometimes it walks a straight
+                        # line through a building" is what strange looked like.
+                        cur_plane = values[2]
+                        state["plane"] = cur_plane
+                        next_plane = 0
                         # A click ends whatever keyboard leg was running, so drop
                         # the remembered heading: the next key press must be
                         # treated as a fresh direction, not compared against one
@@ -1097,9 +1111,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         model_dest, blocked = clip_to_walkable(state, dest)
                         state["dest"], state["clipped"] = model_dest, blocked
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-                             [PLAYER_AGENT_ID, list(dest), cur_plane, dest_plane],
+                             [PLAYER_AGENT_ID, list(dest), cur_plane, next_plane],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
-                             f" plane {cur_plane}->{dest_plane}"
+                             f" plane {cur_plane}"
                              f"{', model stops short' if blocked else ''})")
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
                         # Stop where WE say it is, not where the client last
