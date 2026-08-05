@@ -35,7 +35,7 @@ PLAYER_AGENT_ID = 1
 PLAYER_NUMBER = 1
 CHAR_CLASS_PLAYER_BASE = 0x30000000
 AGENT_TYPE_LIVING = 1
-PLAYER_TEAM_TOKEN = 0xBAADF00D
+PLAYER_TEAM_TOKEN = 0x706C6179   # 'play'
 DEFAULT_RUN_SPEED = 288.0
 POS = (-9067.0, 13218.0)
 
@@ -122,8 +122,9 @@ def main():
     print("\n3. values sourced from OpenTyria, not invented")
     check(CHAR_CLASS_PLAYER_BASE | PLAYER_NUMBER == 0x30000001,
           "model_id carries the 0x30000000 player class tag")
-    check(PLAYER_TEAM_TOKEN == 0xBAADF00D,
-          "player_team_token is upstream's literal 0xBAADF00D")
+    check(PLAYER_TEAM_TOKEN == 0x706C6179,
+          "player_team_token is 0x706C6179 ('play'), the three-lineage value, "
+          "not OpenTyria's lone 0xBAADF00D debug fill")
     # profession occupies bits 20-23: sex 1 + height 4 + skin 5 + hair 5 + face 5
     check(APPEARANCE == 0x00100000 and (APPEARANCE >> 20) & 0xF == PROF_WARRIOR,
           "appearance packs Warrior into bits 20-23")

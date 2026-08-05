@@ -149,20 +149,34 @@ INF = float("inf")
 
 # GmAgent.h. model_id is not a free-form number: the top nibble is a class tag,
 # so a player agent is 0x30000000 | player number. player_team_token is a literal
-# 0xBAADF00D upstream (GameSrv.c:1233) -- eye-catching on purpose, and not
-# something to substitute a tidier value for.
+# player_team_token was 0xBAADF00D here, copied from OpenTyria (GameSrv.c:1233)
+# on the reasoning that an eye-catching constant was deliberate and should not be
+# tidied away. It was deliberate -- it is a debug fill, and upstream is the only
+# lineage that sends it. Three others send 0x706C6179, ASCII 'play'
+# (studies/character/FINDINGS.md). One witness against three, and the three agree
+# on a value that reads as meaningful rather than as a placeholder.
+#
+# Changed at BOTH send sites at once, deliberately: every lineage keeps the two
+# equal, and a token that means "this team" is exactly the kind of thing that
+# would fail confusingly if the client saw two different values for it.
+# UNVERIFIED against our own client -- see the probe queue.
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
 
-# GmAttributes.h: Attribute_Count. The array is sent zeroed -- no attribute is
-# ranked yet -- but its LENGTH is what tells the client how many attribute slots
-# exist, so it cannot be shortened.
+# GmAttributes.h: Attribute_Count. UPSTREAM-ONLY -- the comment is accurate about
+# where 42 comes from, and that source stands alone. The claim this comment used
+# to make, that the array's LENGTH is what tells the client how many attribute
+# slots exist, is supported by NO source; it was our inference stated as fact.
+# Whether a 42-zero array is even well-formed is open: one lineage reads this as
+# triplets, and another never sends this message at all.
 ATTRIBUTE_COUNT = 42
-ATTRIBUTE_POINTS = 50   # unused and used both, from GmPlayer.c:125
+# UPSTREAM, and an uncited literal at that (GmPlayer.c:125). Two other lineages
+# send 0/0 here, and whether the two bytes mean used/max or max/used is contested.
+ATTRIBUTE_POINTS = 50
 
 CHAR_CLASS_PLAYER_BASE = 0x30000000
 AGENT_TYPE_LIVING = 1
-PLAYER_TEAM_TOKEN = 0xBAADF00D
+PLAYER_TEAM_TOKEN = 0x706C6179   # 'play'
 # The in-instance player number, which is what PLAYER_CREATE and model_id use --
 # NOT the 32-bit player_id the client puts in its version frame. Those are
 # different namespaces and conflating them is an easy way to build an agent
@@ -222,9 +236,11 @@ GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN = 0x0088
 GAME_CMSG_INSTANCE_LOAD_REQUEST_PLAYERS = 0x0090
 GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS = 0x0091
 # Sent by this build during an ordinary map load, not during character creation.
-# Identified from the client's own numbering: Py4GW's CTO_OPCODES puts SPAWN,
-# PLAYERS and ITEMS at exactly the values we already use, which makes it the
-# aligned catalog; a second mirror's table is off by one throughout and disagrees.
+# The Py4GW argument this comment used to make was CIRCULAR: Py4GW's table is
+# OpenTyria's verbatim, so "a second catalog agrees" was one witness twice, and
+# Py4GW ships the off-by-one table too. The real support is GWLP-R and
+# gw-preservation agreeing on internal order, plus the client dumps -- and now
+# the client's own tables, which measure delta = 0 against our numbering.
 GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS = 0x008A
 
 # Both of these exist on this build and they are NOT the same order:
@@ -834,9 +850,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     elif opcode == GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS:
                         # The client sent this and REQUEST_ITEMS in the same
                         # breath; we answered only items, and it then waited 44s
-                        # and dropped both channels. An unanswered request, not a
-                        # rejected message -- the same failure as the unclosed
-                        # player-data block, one layer up.
+                        # and dropped both channels.
+                        #
+                        # This comment used to read that as cause. It OVERCLAIMS.
+                        # That capture is confounded: the manifest-phase bug was
+                        # live and we were sending zero simulation ticks, and four
+                        # fixes shipped together. Answering this is SUFFICIENT to
+                        # get through the load; that it is NECESSARY is untested.
                         # Nothing is unlocked: correct for a level 1 character,
                         # and it keeps this from masking a later stall.
                         send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [[0] * 128],
