@@ -180,6 +180,25 @@ INF = float("inf")
 # is not in the repository; without it the server runs exactly as it did before,
 # which is to say it lets you walk through walls.
 COLLISION_STEP = 16.0      # sampling interval along a leg, ~1/20s at run speed
+# The shortest leg worth granting. Both failure modes this project spent a
+# session on live at the two ends of this number, and they pin it from opposite
+# sides:
+#
+#   Grant a destination PAST a wall and the client walks through it. Measured
+#   directly -- taking the clip off the wire brought the phasing straight back.
+#   A server-granted destination is not re-collided by the client.
+#
+#   Grant a destination AT OR BEHIND the player and the client walks backwards
+#   to it. Against a wall, clip(pos, pos + heading) returns approximately pos,
+#   so an unguarded clip sends exactly that. Fresh position: a snap. Position
+#   stale from a stretch of click-to-move, during which the client sends no
+#   position at all: a long straight walk back over buildings.
+#
+# So: clip, but refuse to say anything at all when the clip cannot buy the
+# player real progress. Silence is safe -- the client keeps its current leg and
+# its own collision holds it at the wall, which is what it does in the stock
+# game. 100 units is about a third of a second of running.
+MIN_GRANTED_LEG = 100.0
 try:
     sys.path.insert(0, os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mapdata"))
@@ -985,42 +1004,32 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # cos(5 degrees); mags is never 0 here in practice
                                 turned = mags <= 0 or dot < 0.996 * mags
                             state["heading"] = tuple(heading)
-                            # THE CLIP DOES NOT GO ON THE WIRE. It bounds our own
-                            # position model and nothing else.
+                            # Clip the leg, and grant it only if it buys real
+                            # progress. See MIN_GRANTED_LEG: past the wall the
+                            # client phases through, at the wall it walks
+                            # backwards, and the safe move in between is to say
+                            # nothing and let the client's own collision hold it.
                             #
-                            # Sending a clipped destination was the rubber-band,
-                            # and the mechanism is worth stating exactly because
-                            # it took three wrong fixes to find. Against a wall,
-                            # clip(pos, pos + heading) returns approximately POS
-                            # -- so MOVE_TO_POINT carried "walk to where the
-                            # server thinks you are". The client obeys. If our
-                            # position was fresh that reads as a snap; if it was
-                            # stale from a stretch of click-to-move, during which
-                            # the client sends no position at all, it reads as a
-                            # long straight walk backwards over buildings. One
-                            # message, two appearances, both reported.
-                            #
-                            # MEASURED in the capture that found it: a 457-unit
-                            # jump in 0.11s -- 4,046 u/s against a run speed of
-                            # 288 -- at the same timestamp as a clipped keyboard
-                            # leg.
-                            #
-                            # So grant what the player asked for. The client
-                            # stops itself at walls, which is exactly what the
-                            # original bug report said it does. The phasing that
-                            # started this work came from the server BROADCASTING
-                            # a position past the wall, and the server no longer
-                            # broadcasts position at all.
-                            model_dest, blocked = clip_to_walkable(state, dest)
-                            state["dest"] = model_dest
+                            # The origin here is the position the client reported
+                            # in THIS packet, so the clip cannot be computed from
+                            # a stale one -- which is the state click-to-move
+                            # leaves us in, since the client sends no position
+                            # while clicking.
+                            dest, blocked = clip_to_walkable(state, dest)
+                            granted = math.hypot(dest[0] - px, dest[1] - py)
+                            state["dest"] = dest
                             state["clipped"] = blocked
+                            if blocked and granted < MIN_GRANTED_LEG:
+                                state["dest"] = None
+                                state["walking"] = False
+                                continue
                             if turned or state.get("walking") is not True:
                                 state["walking"] = True
                                 send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                                      [PLAYER_AGENT_ID, list(dest), plane, plane],
                                      f"AGENT_MOVE_TO_POINT"
                                      f"(key {dest[0]:.0f},{dest[1]:.0f}"
-                                     f"{', model stops short' if blocked else ''})")
+                                     f"{f', clipped to {granted:.0f}u' if blocked else ''})")
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
@@ -1034,27 +1043,39 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # treated as a fresh direction, not compared against one
                         # from before the click.
                         state["walking"], state["heading"] = False, None
-                        # Echo the click back unchanged, same as the keyboard
-                        # path: clipping it would hand the client a destination
-                        # it did not ask for, and clicking past a wall is the
-                        # ordinary case rather than an attack. A real server
-                        # ROUTES you around the obstacle; we cannot, because the
-                        # pathfinding graph is not decoded. Granting the straight
-                        # line and letting the client stop itself is the honest
-                        # approximation. Substituting our own shorter destination
-                        # is not -- that was the rubber-band.
+                        # Clicking past a wall is the ordinary case, not an
+                        # attack: a real server ROUTES you around the obstacle.
+                        # We cannot -- the pathfinding graph is not decoded -- so
+                        # the best available answer is to walk the straight line
+                        # and stop at the first thing in the way.
                         #
-                        # Click-to-move is also where our position model is
-                        # blindest: MEASURED, the client sends no position
-                        # updates at all while clicking, going silent for up to
-                        # 37 seconds in one capture. Slot 1 of 0x003D only moves
-                        # on keyboard input.
-                        model_dest, blocked = clip_to_walkable(state, dest)
-                        state["dest"], state["clipped"] = model_dest, blocked
+                        # This is also where our position model is blindest.
+                        # MEASURED: the client sends NO position while
+                        # click-moving; 0x003E carries a destination and a plane
+                        # and nothing else, and one capture went 37 seconds
+                        # without a single position from the client. So the clip
+                        # origin here is our integrator's guess, not an observed
+                        # fact, which is exactly why a too-short grant is refused
+                        # rather than sent.
+                        px, py = state["pos"]
+                        dest, blocked = clip_to_walkable(state, dest)
+                        granted = math.hypot(dest[0] - px, dest[1] - py)
+                        if blocked and granted < MIN_GRANTED_LEG:
+                            # Nothing worth granting. The click is dropped rather
+                            # than answered with a destination that would drag the
+                            # player; without pathfinding there is no third
+                            # option, and this is a visible limitation rather than
+                            # a silent one.
+                            print(f"[c{conn_id}] click refused: only {granted:.0f}u "
+                                  f"of clear ground toward "
+                                  f"({dest[0]:.0f}, {dest[1]:.0f})", flush=True)
+                            state["dest"], state["clipped"] = None, True
+                            continue
+                        state["dest"], state["clipped"] = dest, blocked
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                              [PLAYER_AGENT_ID, list(dest), plane, plane],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
-                             f"{', model stops short' if blocked else ''})")
+                             f"{f', clipped to {granted:.0f}u' if blocked else ''})")
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
                         # Stop where WE say it is, not where the client last
                         # believed. Echoing the client's figure back pinned it to
