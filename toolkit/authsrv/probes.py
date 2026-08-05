@@ -144,6 +144,53 @@ def _player_attrs_steps(agent_id):
     ]
 
 
+def _attr_sweep_steps(agent_id):
+    """Map every remaining field of 0x00E9 in one packet.
+
+    OBSERVED so far (2026-08-05): field 0 is xp, 9 is level, 13 is skill points,
+    11 is the Balthazar numerator. Two surprises worth chasing:
+
+      - Field 12 is NOT the Balthazar denominator. We sent 2000 and the bar read
+        "1000/0". The study's "11-12 balthazar" is half right.
+      - Field 10 sent as 0 left the top-left indicator reading -100%. GW morale
+        runs -60% to +10%, so -100% is not a legal morale -- it looks exactly
+        like a display of (0 - 100). If the field is a percentage with 100 as
+        baseline, 100 should read 0%. That is what step 2 tests.
+
+    Step 1 gives every unmapped field its own recognisable number so the panel
+    can be read like a legend. 1000 + index is deliberate: any value showing up
+    anywhere names its own field.
+    """
+    def sweep():
+        v = [1000 + i for i in range(15)]
+        v[0] = 424242        # xp, already known, kept distinct
+        v[9] = 17            # level: must stay a legal level (blob caps at 31)
+        v[10] = 100          # morale: the baseline-100 hypothesis
+        return v
+
+    def morale(value, level=17):
+        v = [0] * 15
+        v[9] = level
+        v[10] = value
+        v[11] = 1000
+        return v
+
+    return [
+        Step(2.0, 0x00E9, sweep(),
+             "sweep: field i = 1000+i, xp 424242, level 17, morale 100",
+             "the whole Hero window. Which numbers appear where? Look for 1012 "
+             "and 1014 especially -- one of them may be the Balthazar "
+             "denominator. And is the top-left now 0% instead of -100%?"),
+        Step(8.0, 0x00E9, morale(110),
+             "morale 110 (predicts +10%)",
+             "top-left indicator. +10% would confirm morale = value - 100."),
+        Step(8.0, 0x00E9, morale(40),
+             "morale 40 (predicts -60%, max death penalty)",
+             "top-left indicator. -60% is GW's maximum death penalty, so this "
+             "value landing there confirms the encoding at both ends."),
+    ]
+
+
 def _team_token_steps(agent_id):
     # Not a packet probe: the token now goes out at spawn. This exists so the
     # run is recorded with a question attached rather than being assumed fine.
@@ -193,6 +240,19 @@ PROBES = {
              "switched off, while the Hero window is the per-PLAYER set here. "
              "Shape corroborated by four lineages; field 9's effect CONTESTED, "
              "which is exactly what this settles.",
+    ),
+    "attr_sweep": lambda a: Probe(
+        question="What are the remaining fields of 0x00E9, and is field 10 a "
+                 "morale percentage offset by 100?",
+        predicts="Each unmapped field shows its own 1000+i value somewhere in "
+                 "the Hero window, naming itself. The top-left indicator reads "
+                 "0%, then +10%, then -60% -- and -60% is GW's maximum death "
+                 "penalty, so hitting it exactly would confirm the encoding at "
+                 "both ends rather than just shifting a number.",
+        steps=_attr_sweep_steps(a),
+        note="Follows the player_attrs probe, which confirmed fields 0, 9, 11 "
+             "and 13 and refuted the study's claim that field 12 is the "
+             "Balthazar denominator -- we sent 2000 and the bar read 1000/0.",
     ),
     "spawn": lambda a: Probe(
         question="Does the character still spawn correctly with team token 'play'?",
