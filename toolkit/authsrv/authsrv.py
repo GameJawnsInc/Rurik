@@ -1047,36 +1047,40 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # then never moving anyone is why the client cancelled
                         # after ~2s and reported itself still at the spawn point.
                         dest = values[1]
-                        # Slot 2 is the client's CURRENT plane, not the
-                        # destination's, and the previous version of this code
-                        # had it backwards.
+                        # Slot 2 is the DESTINATION's plane. The client works out
+                        # which surface was clicked -- it rendered them -- and
+                        # tells us.
                         #
-                        # MEASURED across one session, by field position -- slot
-                        # 2 sits in the same place in all three client movement
-                        # messages, and in two of them it is unambiguously where
-                        # the client is standing:
+                        # MEASURED over 195 clicks, by testing the two readings
+                        # against each other rather than by analogy: 70 had slot
+                        # 2 matching the destination's plane and NOT the player's,
+                        # against 11 the other way round. The clear cases leave
+                        # nothing to argue with -- player on plane 0 clicks a
+                        # point whose only trapezoid plane is 5 and slot 2 is 5;
+                        # player on 5 clicks a point on 0 and slot 2 is 0.
                         #
-                        #   0x003E click     {0: 25, 5: 4, 12: 2}
-                        #   0x003D keyboard  {0: 64,       12: 24}
-                        #   0x0047 stop      {0:  9,       12:  2}
+                        # An earlier version read this as the CURRENT plane,
+                        # because slot 2 does hold the current plane in 0x003D and
+                        # 0x0047. That analogy was weak exactly where it mattered:
+                        # 112 of the 195 clicks were same-plane, where both
+                        # readings agree and neither is tested.
                         #
-                        # So the click tells us the plane the player is on, which
-                        # also fixes the tracking gap that made every plane change
-                        # during click-to-move look like a disagreement.
-                        #
-                        # nextPlane is 0. GWLP-R documents the field as "0 if
-                        # player stays in the same plane", and we have no way to
-                        # know the destination's plane -- nothing in the click
-                        # says it, and our own trapezoid planes are not the same
-                        # numbering. Passing the CURRENT plane there, as this code
-                        # did, announced a plane transition on nearly every click.
-                        # A pathfinder told to cross planes when it is not has
-                        # every reason to do something strange, and "sometimes it
-                        # paths, sometimes it warps, sometimes it walks a straight
-                        # line through a building" is what strange looked like.
-                        cur_plane = values[2]
-                        state["plane"] = cur_plane
-                        next_plane = 0
+                        # THIS IS THE STAIRS. Clicking a staircase sends the
+                        # stairs' plane, and answering "you are staying on the
+                        # plane you are on" walks the player along the ground
+                        # underneath instead of up the steps -- reported from play
+                        # as ending up inside the hollow under the stairs.
+                        dest_plane = values[2]
+                        cur_plane = state["plane"]
+                        # GWLP-R documents nextPlane as "0 if player stays in the
+                        # same plane", so a same-plane click says 0 rather than
+                        # restating it.
+                        next_plane = 0 if dest_plane == cur_plane else dest_plane
+                        # Deliberately NOT state["plane"] = dest_plane. Our idea
+                        # of the player's plane comes from 0x003D and 0x0047,
+                        # which report where the client IS. Recording a
+                        # destination's plane as the player's own was a second bug
+                        # stacked on the first.
                         # A click ends whatever keyboard leg was running, so drop
                         # the remembered heading: the next key press must be
                         # treated as a fresh direction, not compared against one
@@ -1114,6 +1118,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                              [PLAYER_AGENT_ID, list(dest), cur_plane, next_plane],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
                              f" plane {cur_plane}"
+                             f"{f'->{next_plane}' if next_plane else ''}"
                              f"{', model stops short' if blocked else ''})")
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
                         # Stop where WE say it is, not where the client last
