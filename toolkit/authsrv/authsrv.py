@@ -124,6 +124,29 @@ GAME_SMSG_WORLD_CREATE_AGENT = 0x0020
 GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT = 0x0022
 GAME_SMSG_PLAYER_CREATE = 0x0059
 GAME_SMSG_PLAYER_UPDATE_PROFESSION = 0x00B7
+
+# The 15-dword player attribute set. OBSERVED 2026-08-05: sending this with
+# field 9 = 15 moved the Hero window to Level 15 and it stayed there, so field 9
+# is the per-PLAYER level on this build. That resolves a claim four lineages
+# disagreed about, using the only source that can settle it.
+#
+# Do not confuse this with the per-AGENT level, which is int property 36 on
+# 0x009F and drives the nameplate. They are unrelated channels, and probing one
+# while watching the other is how the first attempt read as a false negative.
+#
+# Field map (studies/character/FINDINGS.md): 0 xp, 1-6 factions, 7-8 unknown,
+# 9 level, 10 morale, 11-12 balthazar, 13-14 skill points. Only field 9 is
+# confirmed by us; the rest are corroborated-but-unobserved, so they go out as
+# zeros rather than as invented values.
+GAME_SMSG_CHARACTER_UPDATE_FACTIONS = 0x00E9
+PLAYER_ATTR_COUNT = 15
+PLAYER_ATTR_XP = 0
+PLAYER_ATTR_LEVEL = 9
+PLAYER_ATTR_MORALE = 10
+# Level 1 rather than 20: the character-select blob already says level 1, and
+# two places disagreeing about the same character is a bug we would rather not
+# introduce while we are still learning what reads what.
+START_LEVEL = 1
 GAME_SMSG_INSTANCE_LOADED = 0x00F2
 
 # Appearance is a 32-bit bitfield (GmChar.h): sex:1, height:4, skin:5, hair:5,
@@ -978,6 +1001,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
                              [PLAYER_AGENT_ID, PROF_WARRIOR, 0, 0],
                              "PLAYER_UPDATE_PROFESSION")
+                        # Why the character used to read Level 0: we never sent
+                        # this at all. Every other field stays zero -- only
+                        # field 9's effect has actually been observed, and
+                        # filling the rest with plausible numbers would be
+                        # exactly the invention this project keeps having to
+                        # walk back.
+                        player_attrs = [0] * PLAYER_ATTR_COUNT
+                        player_attrs[PLAYER_ATTR_LEVEL] = START_LEVEL
+                        send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,
+                             f"CHARACTER_UPDATE_FACTIONS(level {START_LEVEL})")
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
                              [PLAYER_AGENT_ID, [0] * ATTRIBUTE_COUNT],
                              "AGENT_UPDATE_ATTRIBUTES")

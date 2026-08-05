@@ -103,6 +103,47 @@ def _armor_steps(agent_id):
     ]
 
 
+def _player_attrs_steps(agent_id):
+    """The 15-dword player attribute set, 0x00E9.
+
+    Written after the `level` probe came back apparently negative. It was not
+    negative -- it was aimed at the wrong channel. The study says outright that
+    two unrelated channels carry a level: int property 36 on 0x009F drives the
+    per-AGENT level (the nameplate), and field 9 of this message drives the
+    per-PLAYER level (the Hero window). We sent the first and read the second,
+    and the second is a message we have never sent at all.
+
+    This probe is better than the one it replaces because the Hero window shows
+    five fields of this same message at once -- level, xp, skill points and the
+    Balthazar bar -- plus, very likely, the "-100%" indicator in the top-left
+    corner, which is what max death penalty looks like and which we have never
+    given a morale value. Distinct values per field turn one packet into several
+    independent checkpoints, the same trick that caught the WORLD_CREATE_AGENT
+    field alignment.
+    """
+    def attrs(xp=0, level=0, morale=0, balth=(0, 0), sp=(0, 0)):
+        v = [0] * 15
+        v[0] = xp
+        v[9] = level
+        v[10] = morale
+        v[11], v[12] = balth
+        v[13], v[14] = sp
+        return v
+
+    return [
+        Step(2.0, 0x00E9,
+             attrs(xp=4242, level=5, balth=(300, 900), sp=(7, 0)),
+             "attrs: xp 4242, level 5, balthazar 300/900, sp 7",
+             "the Hero window. Level 5? '4242 xp'? Skill Points 7? Balthazar "
+             "300/900? Also check the -100% top-left -- did it clear?"),
+        Step(8.0, 0x00E9,
+             attrs(xp=999999, level=15, balth=(1000, 2000), sp=(12, 0)),
+             "attrs: xp 999999, level 15, balthazar 1000/2000, sp 12",
+             "same panel. If every field tracked BOTH times, the 15-dword field "
+             "map is confirmed against our own client."),
+    ]
+
+
 def _team_token_steps(agent_id):
     # Not a packet probe: the token now goes out at spawn. This exists so the
     # run is recorded with a question attached rather than being assumed fine.
@@ -137,6 +178,21 @@ PROBES = {
         steps=_armor_steps(a),
         note="EXPLORATORY. The study calls this mapping disputed; we are trying "
              "readings, not confirming a known one.",
+    ),
+    "player_attrs": lambda a: Probe(
+        question="Does 0x00E9 field 9 drive the Hero window's level, and does "
+                 "field 0 drive its xp?",
+        predicts="The Hero window reads Level 5 and 4242 xp, then Level 15 and "
+                 "999999 xp. Skill Points show 7 then 12, and the Balthazar bar "
+                 "moves. If the -100% indicator top-left also clears, field 10 "
+                 "is morale and we have simply never sent it.",
+        steps=_player_attrs_steps(a),
+        note="Replaces what the `level` probe was trying to do. That probe was "
+             "not wrong, it was aimed at the other channel: property 36 on "
+             "0x009F is the per-AGENT level shown on the nameplate, which was "
+             "switched off, while the Hero window is the per-PLAYER set here. "
+             "Shape corroborated by four lineages; field 9's effect CONTESTED, "
+             "which is exactly what this settles.",
     ),
     "spawn": lambda a: Probe(
         question="Does the character still spawn correctly with team token 'play'?",
