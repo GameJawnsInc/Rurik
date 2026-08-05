@@ -521,30 +521,37 @@ that the client is available to anyone.
 
 ## 8. Immediate next actions
 
-0. **Neutralise the crash-telemetry channel** before any patching or malformed traffic — see §6.
-   Minutes, and everything else in this list is the kind of work that crashes clients.
-1. **Drive the real client against our two servers** —
-   [studies/handshake/PLAN.md](studies/handshake/PLAN.md) §5b has the three-terminal runbook.
-   Everything up to and including the encrypted channel is implemented and self-tested; this is
-   the first run against the actual game.
-2. **Answer what it asks next.** The post-handshake messages now arrive *in plaintext* in
-   `vault/captures/authsrv/`. Decode them, reply, and R1's acceptance criterion — a character
-   select screen — falls out. This is transcription against a working reference, not research.
-3. **Build the capture harness (A1).** Still the hedge that lets Q1 stay open, and still required
+**Done as of 2026-08-04** — kept short so the list stays a plan rather than a diary. R1 is
+complete: a real client reaches character select against our portal, our DH parameters, our ARC4
+channel and our login burst (`studies/handshake/PLAN.md`). The crash-telemetry channel is
+neutralised by `toolkit/clientpatch/isolate_client.ps1`, which cages the patched client to
+loopback. Operations are in [RUNBOOK.md](RUNBOOK.md).
+
+1. **R2 — the game server.** Clicking *Play* makes the client send `CHANGE_PLAY_CHARACTER` and
+   `REQUEST_GAME_INSTANCE`, expecting `AUTH_SMSG_GAME_SERVER_INFO` pointing at a game server on
+   6113. That server repeats the same version → DH → ARC4 handshake we already have, then speaks a
+   different catalog: 194 client and 487 server messages, all already in `schema/messages.json`.
+   The acceptance criterion is your own body standing in a real map.
+   *Start by capturing what the client sends on Play — it decodes today, and unknown opcodes stop
+   the framer loudly rather than inventing anything.*
+2. **Build the capture harness (A1).** Still the hedge that lets Q1 stay open, and still required
    under every strategic option. Start from Headquarter's headless-client approach; read
-   `gw-preservation/network-logger` for the in-client route.
-4. **Dump the client's packet-template table** (§1.2), then reconcile it against the five existing
+   `gw-preservation/network-logger` for the in-client route. Note the shape of the win so far:
+   every hard question was settled by *capturing the client and reading it*, never by reasoning
+   about it — the UUID encoding, the token-vs-session semantics, and the wire count width were all
+   decided that way, and two of the three contradicted the written sources.
+3. **Dump the client's packet-template table** (§1.2), then reconcile it against the five existing
    opcode corpora (A3). Build-stamp the result. Any disagreement with the client's own
    `template_size` is a mechanically detectable defect, which is what makes this agent work.
-5. **Build OpenTyria** (`vault/mirrors/ldufr__OpenTyria`) and connect a *patched copy* of the
+4. **Build OpenTyria** (`vault/mirrors/ldufr__OpenTyria`) and connect a *patched copy* of the
    client. Never patch `C:\gw`. Fastest route to understanding the whole stack end to end.
-6. **Read `gw-preservation/server`'s pathing and instance definitions** — 397 maps and a real
+5. **Read `gw-preservation/server`'s pathing and instance definitions** — 397 maps and a real
    `Gw.dat` navmesh. Read only: no license means all rights reserved.
-7. **Extract the skill table.** `Fournux/Tyria-Extractor` (MIT) already does `Gw.dat` →
+6. **Extract the skill table.** `Fournux/Tyria-Extractor` (MIT) already does `Gw.dat` →
    skills/items/quests/NPCs; cross-check against `build-wars/gw-skilldata`. This is R4b's numeric
    bootstrap and it needs no capture vault to exist. Agent work.
-8. **Run Probe 3** (`vault/mirrors/shiburito__gw_in_browser`) for offline WASM analysis only —
+7. **Run Probe 3** (`vault/mirrors/shiburito__gw_in_browser`) for offline WASM analysis only —
    not for live capture, per §1.3.
-9. **Install a .NET SDK** if the C# server core survives Q1/Q2 — only the 6.0 runtime is present
+8. **Install a .NET SDK** if the C# server core survives Q1/Q2 — only the 6.0 runtime is present
    and the plan calls for 8+. Defer until the language decision is settled.
-10. **Re-run `toolkit/mirror_priorart.py`** monthly. Repos in this ecosystem vanish; one already has.
+9. **Re-run `toolkit/mirror_priorart.py`** monthly. Repos in this ecosystem vanish; one already has.
