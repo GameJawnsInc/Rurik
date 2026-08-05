@@ -171,6 +171,23 @@ TICK_SECONDS = 0.05
 MAXIMUM_ALLOWED_CORRECTION = 100.0
 INF = float("inf")
 
+# Collision. The navmesh comes out of Gw.dat -- see toolkit/mapdata/pathmap.py,
+# which documents both the layout and how much of it is checked rather than
+# believed. This is the first thing the server does that is grounded in the
+# game's own data instead of in someone's reconstruction of a server.
+#
+# It is OPTIONAL on purpose. The archive is 5 GB of the player's own install and
+# is not in the repository; without it the server runs exactly as it did before,
+# which is to say it lets you walk through walls.
+COLLISION_STEP = 16.0      # sampling interval along a leg, ~1/20s at run speed
+try:
+    sys.path.insert(0, os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "mapdata"))
+    from pathmap import PathingMap                            # noqa: E402
+except Exception as _exc:                                     # noqa: BLE001
+    PathingMap = None
+    _PATHMAP_IMPORT_ERROR = _exc
+
 # GmAgent.h. model_id is not a free-form number: the top nibble is a class tag,
 # so a player agent is 0x30000000 | player number. player_team_token is a literal
 # player_team_token was 0xBAADF00D here, copied from OpenTyria (GameSrv.c:1233)
@@ -238,6 +255,64 @@ MAP_STATIC_CONFIG = {
 # it answers "is the file id the last blocker?" without first having to recover
 # Ascalon's id from Gw.dat.
 FALLBACK_MAP_ID = 449
+
+# Parsed navmeshes, keyed by map_file_id. Loading one costs about a second,
+# nearly all of it decompressing the map out of the archive, so it is worth
+# keeping -- but only worth doing once, at instance load, off the wire path.
+_PATHMAPS = {}
+_PATHMAP_LOCK = threading.Lock()
+
+
+def load_pathmap(map_file_id):
+    """The walkable geometry for a map, or None if we cannot get it.
+
+    None is a normal outcome, not an error: no archive on this machine, or a map
+    whose file id we do not have. The caller falls back to no collision.
+    """
+    if PathingMap is None:
+        return None
+    with _PATHMAP_LOCK:
+        if map_file_id in _PATHMAPS:
+            return _PATHMAPS[map_file_id]
+        try:
+            pm = PathingMap.load(map_file_id)
+            print(f"[map] navmesh 0x{map_file_id:X}: {len(pm.planes)} planes, "
+                  f"{len(pm.trapezoids)} trapezoids")
+        except Exception as exc:                              # noqa: BLE001
+            print(f"[map] no navmesh for 0x{map_file_id:X}: {exc}")
+            print("[map] collision is OFF; the character can walk through walls")
+            pm = None
+        _PATHMAPS[map_file_id] = pm
+        return pm
+
+
+def clip_to_walkable(state, dest):
+    """Trim a destination to where the navmesh says a character can get.
+
+    Returns (destination, blocked). `blocked` means the leg was cut short.
+
+    Standing OUTSIDE the navmesh disables the check rather than freezing the
+    character in place. That case is not hypothetical -- our spawn points come
+    from upstream's static config and only one of the six has ever been checked
+    against real geometry, so a map we know less about can easily drop a player
+    somewhere the mesh does not cover. Refusing every move from there would look
+    like a hang, and a hang is a much worse failure than the wall-clipping this
+    replaces.
+    """
+    pm = state.get("pathmap")
+    dest = (float(dest[0]), float(dest[1]))
+    if pm is None:
+        return dest, False
+    px, py = state["pos"]
+    if not pm.walkable(px, py):
+        if not state.get("off_mesh_warned"):
+            state["off_mesh_warned"] = True
+            print(f"[map] standing at ({px:.0f}, {py:.0f}), which the navmesh "
+                  f"does not cover -- collision suspended for this character")
+        return dest, False
+    state["off_mesh_warned"] = False
+    stopped = pm.clip(px, py, dest[0], dest[1], step=COLLISION_STEP)
+    return stopped, stopped != dest
 
 # The reply to CHAR_CREATION_REQUEST_ARMORS. The name is a red herring: nothing is
 # being created and no armour is sent. OpenTyria (GameSrv.c:1557) answers it with
@@ -661,6 +736,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             spawn = MAP_STATIC_CONFIG.get(state["map_id"],
                                           MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
             state["pos"], state["plane"], state["dest"] = spawn[1], spawn[2], None
+            state["pathmap"] = load_pathmap(spawn[0])
 
             def world_tick():
                 """Walk the agent toward its destination and say where it got to.
@@ -850,13 +926,29 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # cos(5 degrees); mags is never 0 here in practice
                                 turned = mags <= 0 or dot < 0.996 * mags
                             state["heading"] = tuple(heading)
+                            # Cut the leg at the first wall. Held against the
+                            # client's own collision, which already stops the
+                            # player there -- the bug this fixes is that we did
+                            # not, so the server kept integrating forward and
+                            # eventually teleported the character out the far
+                            # side of whatever it was standing against.
+                            dest, blocked = clip_to_walkable(state, dest)
+                            if blocked and math.hypot(dest[0] - px,
+                                                      dest[1] - py) < 1.0:
+                                # Pressed flat against a wall. Say nothing: a
+                                # MOVE_TO_POINT to where the agent already is
+                                # restarts the walk animation ~4x/second.
+                                state["dest"] = None
+                                state["walking"] = False
+                                continue
                             state["dest"] = dest
-                            if turned or state.get("walking") is not True:
+                            if turned or blocked or state.get("walking") is not True:
                                 state["walking"] = True
                                 send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-                                     [PLAYER_AGENT_ID, dest, plane, plane],
+                                     [PLAYER_AGENT_ID, list(dest), plane, plane],
                                      f"AGENT_MOVE_TO_POINT"
-                                     f"(key {dest[0]:.0f},{dest[1]:.0f})")
+                                     f"(key {dest[0]:.0f},{dest[1]:.0f}"
+                                     f"{', clipped' if blocked else ''})")
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
@@ -864,15 +956,25 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # then never moving anyone is why the client cancelled
                         # after ~2s and reported itself still at the spawn point.
                         dest, plane = values[1], values[2]
-                        state["dest"], state["plane"] = tuple(dest), plane
+                        state["plane"] = plane
                         # A click ends whatever keyboard leg was running, so drop
                         # the remembered heading: the next key press must be
                         # treated as a fresh direction, not compared against one
                         # from before the click.
                         state["walking"], state["heading"] = False, None
+                        # Clicking past a wall is the ordinary case, not an
+                        # attack: the player clicks a spot across the map and a
+                        # real server routes them around. We cannot route yet --
+                        # that needs the pathfinding graph, which is not decoded
+                        # -- so we walk the straight line and stop at the first
+                        # thing in the way. Short of the real behaviour, and
+                        # honest about where it stops rather than sliding through.
+                        dest, blocked = clip_to_walkable(state, dest)
+                        state["dest"] = dest
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-                             [PLAYER_AGENT_ID, dest, plane, plane],
-                             f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f})")
+                             [PLAYER_AGENT_ID, list(dest), plane, plane],
+                             f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
+                             f"{', clipped' if blocked else ''})")
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
                         # Stop where WE say it is, not where the client last
                         # believed. Echoing the client's figure back pinned it to
@@ -905,9 +1007,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # Recorded on every stop so the drift distribution can be
                         # measured rather than guessed at -- it is what says
                         # whether 100.0 is the right number for us.
+                        # Does the navmesh cover where the client thinks it is
+                        # standing? Recorded, not acted on. The mesh is the
+                        # PATHING geometry; the client stops itself using
+                        # collision geometry we have not looked at, and the two
+                        # need not agree at the edges. If stops routinely land
+                        # off-mesh, the clip in clip_to_walkable() is too tight
+                        # and this log is what will say so.
+                        pm = state.get("pathmap")
                         rec.event("position_report", drift=round(drift, 2),
                                   accepted=agreed, reported=list(reported),
-                                  ours=[px, py], plane=plane)
+                                  ours=[px, py], plane=plane,
+                                  on_mesh=None if pm is None
+                                  else pm.walkable(reported[0], reported[1]))
                         if agreed:
                             state["pos"] = reported
                         else:

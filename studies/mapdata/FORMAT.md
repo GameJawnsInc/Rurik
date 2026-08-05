@@ -53,6 +53,15 @@ severity:
 So the honest position: **server-side collision is achievable now; server-side
 pathfinding is not; and neither can be aimed at a specific map yet.**
 
+**Update, 2026-08-05: collision is no longer achievable-in-principle, it is
+implemented.** `toolkit/mapdata/pathmap.py` decodes the navmesh and answers
+"is this point walkable"; `toolkit/authsrv/authsrv.py` clips both keyboard and
+click destinations against it. Item 2 above still stands and constrains it: with
+no height in the file, the test is "walkable on ANY plane", which is right for
+flat ground and wrong under a bridge. Item 3 stands unchanged — a click across
+the map walks the straight line and stops at the first wall instead of routing
+around it.
+
 ---
 
 ## The archive container
@@ -153,8 +162,8 @@ Inside a map's pathing chunk, a tag-structured stream. What is decoded:
 
 | Tag | Content | Status |
 |---|---|---|
-| 7 | Boundary polygon: `u16 count` then `count` × `Vec2f`. `length == 2 + 8*count` in 349/349 maps. | MEASURED |
-| 8 | Planes, each carrying trapezoids — the walkable surfaces | MEASURED (trapezoids only) |
+| 7 | A polygon, `u16 count` then `count` × `Vec2f`. `length == 2 + 8*count` in 349/349 maps. Duplicates plane 0's `polyData`; NOT the map boundary — see the corrections below. | MEASURED |
+| 8 | `u32 plane count`, then that many planes of ten tag-framed sub-records — the walkable surfaces | DECODED, and checked |
 | 12 | `u16 count` + one `u16` per plane, non-decreasing | structure MEASURED, meaning NOT FOUND |
 | 13 | Static obstacles: 3-byte grid cells at 1024 units, plus float triples | framing MEASURED, cell meaning NOT FOUND |
 | 14 | `u32 boundaryHash + u8 flag` | MEASURED |
@@ -239,27 +248,91 @@ byte 12 both match what OpenTyria specifies, so those two constants move from
 reconstruction to confirmed.
 
 Header is `sig u32, version u32, u32 (83 here)`, then tag-framed records from
-offset 12.
+offset 12. **The framing IS uniform: `u8 tag`, `u32 size`, payload.** It walks
+Kamadan's 199,130 bytes to the exact final byte, six records, ending on a
+`tag 255, size 0` terminator with nothing left over.
 
-**Tag 7 is the boundary polygon**, and the offset matters: after the tag byte
-there are `u32 count` and a `u16` (16 here) before the points begin, so the
-float array starts at **tag + 7**, not tag + 3. Reading it three bytes early
-yields a denormal for every x and a plausible value for every y -- the kind of
-half-right result that looks like a partial success and is entirely wrong.
+### Two corrections to an earlier version of this section
 
-For Kamadan: 130 points, x from -17952 to 2400, y from 0 to 21504.
+Both were made here on 2026-08-05 and both are instructive, so they are recorded
+rather than quietly overwritten.
 
-**The sanity check that matters:** our spawn point (-9067, 13218), which came
-from OpenTyria's static config and has never been checked against anything,
-falls inside that range. Geometry pulled from the archive containing the
-coordinate our server independently spawns the character at is real
-corroboration for both. Note the limit: this is a bounding-box test, not a
-point-in-polygon test, so it rules out a gross mismatch rather than confirming
-the point is walkable.
+**The u32 after tag 7 is a SIZE, not a count.** Tag 7's is 130 -- the byte
+length of its payload -- and the point count is the `u16` that follows, 16. An
+earlier pass read the size as the count and pulled 130 points out of a record
+holding 16, running 114 points past the end and into tag 8. Every value looked
+plausible, because what follows tag 7 is also map coordinates in the same space.
+The half-right result this section already warned about, one paragraph after the
+warning. The corpus measurement in the table above (`length == 2 + 8*count` in
+349/349 maps) had it right the whole time and was not reconciled against.
 
-Immediately after the polygon (offset 1059) sits a byte reading 0 followed by
-more floats, so the top-level framing is not a uniform `u8 tag + sized payload`.
-Do not assume it is when parsing tag 8.
+**Tag 7 is not the map boundary.** It is a byte-identical copy of plane 0's
+`polyData`, and the walkable geometry extends well outside it: trapezoids span
+x -18432..9081 and y 1726..21504, against tag 7's x -11856..-1636, y 4840..19912.
+Its 16 points are also not ordered as a ring, so a point-in-polygon test over
+them means little. Do not use tag 7 to decide what is in the map.
+
+**Spawn check, redone properly.** Our spawn (-9067, 13218), from OpenTyria's
+static config and never checked against anything, falls inside **exactly one**
+of the 1,270 trapezoids. Exactly one is what a non-overlapping tiling should
+give -- stronger than the bounding-box test the earlier version settled for, and
+it corroborates upstream's static config and the navmesh layout at once.
+
+### Tag 8: the planes, decoded
+
+Layout from GuildWarsMapBrowser's ImHex pattern
+(`FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat`) — **one lineage**, a fork
+pair, no test and no fixture. A hypothesis, and treated as one. What promotes it
+to evidence is that it is self-checking and checks out; see
+`toolkit/mapdata/test_pathmap.py`, which is where these numbers live.
+
+`u32 plane_count`, then per plane ten sub-records in a fixed order, each with the
+same `u8 tag + u32 size` framing as the top level:
+
+| Order | Tag | Content | Element |
+|---|---|---|---|
+| 1 | 0 | Plane header: 8 × `u32` counts | 32 B |
+| 2 | 11 | `polyData` | `Vec2f`, 8 B |
+| 3 | 1 | `edgeVectors` | `Vec2f`, 8 B |
+| 4 | **2** | **trapezoids — the walkable surfaces** | **44 B** |
+| 5 | 3 | root node type (0=X, 1=Y, 2=sink) | 1 B |
+| 6 | 4 | x BSP nodes | 16 B |
+| 7 | 5 | y BSP nodes | 12 B |
+| 8 | 6 | sink nodes | 4 B |
+| 9 | 10 | portal trapezoid indices | 4 B |
+| 10 | 9 | portals | 9 B |
+
+Header counts, in order: `polyData, edgeVectors, trapezoids, xNodes, yNodes,
+sinkNodes, portals, portalTraps`.
+
+Trapezoid, 44 bytes: `u32 ×4` plane-local neighbours (`0xFFFFFFFF` = none),
+`u16 ×2` portals (`0xFFFF` = none), then `float yTop, yBottom, xTopLeft,
+xTopRight, xBottomLeft, xBottomRight`. A y span whose left and right edges are
+straight lines, so the point test is one interpolation and two comparisons.
+
+**Why this is more than "a source said so":**
+
+- The plane walk consumes tag 8 exactly — 39 planes over Kamadan's 193,629
+  bytes, landing on the final byte. Every element size participates; a wrong 44,
+  16, 12 or 9 desyncs inside the first plane.
+- Each sub-record's length equals its count from the plane header, and the count
+  lives in a different part of the file from the data it sizes.
+- All 1,270 of Kamadan's trapezoids are well formed: **zero** inverted y spans,
+  **zero** crossed x edges. A misread struct gives inversions in bulk.
+- The walk succeeds on every map sampled across the corpus, not just Kamadan.
+
+**Where the source is wrong.** Tag 11's `size` field is exactly **twice** the
+length of the data that follows, in all 39 of Kamadan's planes. Counts are
+authoritative; the size field is not. Anything that trusts it to skip forward
+desyncs on every map. GuildWarsMapBrowser is unaffected because its pattern
+indexes arrays by count and only displays the size — which is also why the error
+could survive there unnoticed.
+
+**Still not decoded:** portals, BSP nodes, sink nodes, edge vectors. Those are
+the pathfinding graph — routing *around* an obstacle. Collision does not need
+them, and Rurik does not have them.
+
+---
 
 ## Implementation plan for Rurik
 
@@ -271,14 +344,17 @@ work different from the protocol grind.
 2. **Identify one map.** Everything downstream is blocked on this. Recommend
    rendering candidates in GuildWarsMapBrowser rather than more static analysis —
    it is a one-afternoon answer to a question three tracks could not reason out.
-3. **Parse tag 8 into trapezoids** for that one map. Verifiable: the polygons
-   should tile a region whose extent matches the tag-7 boundary polygon.
-4. **Point-in-trapezoid test**, server-side. Verifiable in the best way we have:
-   walk the character into a wall and see whether the server now refuses instead
-   of letting them through. That converts the study into a playtest.
-5. **Refuse destinations outside walkable space** on 0x003E, as upstream does —
-   the client already stops at walls by itself, so the server agreeing with it
-   should remove the wallhug-and-teleport entirely.
+3. **Done.** Tag 8 parses into 1,270 trapezoids for Kamadan
+   (`toolkit/mapdata/pathmap.py`). The verification proposed here — "extent
+   should match the tag-7 boundary polygon" — turned out to be **the wrong
+   test**, because tag 7 is not the boundary. What replaced it: the plane walk
+   consuming tag 8 to the exact byte, zero malformed trapezoids out of 1,270,
+   and the spawn point landing in exactly one of them.
+4. **Done.** `PathingMap.walkable()` and `clip()`. Still owed the playtest that
+   makes it real: walk into the cube and see whether the server holds.
+5. **Done**, on both 0x003D (keyboard) and 0x003E (click) rather than 0x003E
+   alone — keyboard movement is the path that actually produced the wall-clip,
+   since it sets a fresh destination four times a second.
 6. **Only then** consider the pathfinding graph. It needs sub-tags nobody has
    decoded, and step 5 delivers most of the visible benefit without it.
 
@@ -286,6 +362,11 @@ Do not treat OpenTyria's parser as a validated spec while doing this. Its
 44-byte trapezoid record, `0xEEFE704C` signature and fast-math tables are
 reconstruction, and two blocks in its chunk walk are skipped blind with only an
 upper-bound assert, so a wrong length assumption desyncs the parse silently.
+
+Two of those three have since been **confirmed against real bytes**: the
+signature and the 44-byte trapezoid record both hold for Kamadan, the latter
+because a wrong size desyncs the plane walk. That is upstream being right, not
+upstream being trustworthy — it was checked, and the check is what counts.
 
 ---
 
@@ -297,7 +378,9 @@ upper-bound assert, so a wrong length assumption desyncs the parse silently.
 | Which of a map's two file numbers does a server send as `map_file_id`? | A retail capture, which we do not have; or testing both against our own client. |
 | Is our decompressor exactly right? | Diff against `xentax.cpp` output on the same input. Needs a C compiler. |
 | What is the u32 at entry+0x14? | Test CRC polynomials against known payloads. Nobody has. |
-| What do plane sub-tags 1, 3–6, 9–11 hold? | Required for pathfinding; not for collision. |
+| What do plane sub-tags 1, 3–6, 9–11 hold? | Named and sized (see the tag-8 table), contents not decoded. Required for pathfinding; not for collision. |
+| Why is tag 11's size field double its data, in every plane of every map? | Unknown. Systematic, not noise, so it means something. |
+| Does the navmesh agree with the collision the client enforces? | The server now logs `on_mesh` on every stop report. A playtest answers it. |
 | What height does a plane sit at? | Not in the file. Possibly derived by the client from terrain. |
 | Does the client load stage-1 or stage-2 map files? | Watch it. We have the instrumentation.  |
 
