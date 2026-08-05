@@ -694,3 +694,132 @@ The last row is the honest shape of this whole document. None of these mirrors i
 the client's own deserializer table. Until that is dumped, every one of them —
 OpenTyria included — is a reconstruction of varying quality, and our own client's
 behaviour is the only ground truth we have.
+
+---
+
+## Movement, rebuilt from playtests (2026-08-05)
+
+The section above was written before any of this was tested against a running
+client. What follows was.
+
+### Keyboard movement is a DIRECTION. FIXED, and verified in play.
+
+`GAME_SMSG_AGENT_MOVE_DIRECTION` = **0x0025**, `dword agent, vec2 direction,
+byte movement_type`. Answering WASD with `AGENT_MOVE_TO_POINT` — an absolute
+destination — was the single cause of a whole session's worth of symptoms.
+
+An absolute destination has exactly two failure modes and this server hit both,
+alternately, across five attempted fixes:
+
+* a point **past a wall** and the client walks toward it;
+* a point **at or behind** the player and the client walks backwards to it.
+  Against a wall `clip(pos, pos + heading)` returns approximately `pos`, so a
+  clipped grant means "walk to where the server thinks you are". With a fresh
+  position that is a snap; with one gone stale during click-to-move it is a long
+  straight walk back over buildings. Both were reported, and they are one bug.
+
+A direction has neither failure mode. There is no point to name, so there is no
+wrong point to name.
+
+SOURCE: GWLP-R (`MoveRotateClick.onKeyboardMove` → `EntityMovementView
+.sendChangeDirection`), a different lineage from OpenTyria. Its opcodes run 11
+below build 38797's, consistently across five messages whose field shapes all
+match `schema/messages.json` — which came from the client's own tables, so the
+shapes are corroborated independently of GWLP-R:
+
+| GWLP-R | ours | our schema's shape | reading |
+|---|---|---|---|
+| P026 MoveDirection | 0x0025 | `dword, vec2, byte` | agent, direction, type |
+| P028 MovementSpeed | 0x0027 | `dword, float` | agent, speed |
+| P030 MoveToPoint | 0x0029 | `dword, vec2, word, word` | agent, point, planes |
+| P032 SpeedModifier | 0x002B | `dword, float, byte` | agent, modifier, type |
+| P035 AgentRotate | 0x002E | `dword, dword, dword` | agent, cos, sin |
+
+`movement_type` is a DIRECTION enum, not a mode: Forward 1, DiagFwLeft 2,
+DiagFwRight 3, Backward 4, DiagBwLeft 5, DiagBwRight 6, SideLeft 7, SideRight 8,
+Stop 9. Our own captures only ever showed 1 and 4 — forward and backward.
+
+### The server does not broadcast position at all any more
+
+Every correction it ever sent was damage. In the session that settled it, seven
+went out and not one was defensible: two "plane disagreements" of 11 and 26
+units that were an artefact of never learning the plane, and two off-mesh stops
+of 26 and 9 units. Teleporting a player nine units is pure harm.
+
+`AGENT_UPDATE_POSITION` is **not a teleport**. Observed in play: the client
+appears to WALK to a granted position, in a straight line, over a couple of
+seconds, passing over buildings. "Instant snap" and "warped across the map" are
+the same message at two distances. The claim that it is a teleport was inherited
+from upstream and is contradicted by our own client.
+
+### Slot 1 of 0x003D is the client's live position — believe it
+
+MEASURED advancing at 211 units/sec over 120 samples. GWLP-R does the same thing
+(`pos.position = position` straight out of the keyboard packet), which is
+independent agreement reached from opposite directions.
+
+The earlier failure that produced "pinned at spawn" was a different situation,
+not a warning against this: back then no keyboard `MOVE_TO_POINT` was sent at
+all, so the client never animated, reported spawn forever, and we copied it back.
+
+### Plane indices in the archive ARE the protocol's plane numbers
+
+MEASURED over 198 position-and-plane reports: 189 landed inside a trapezoid
+whose plane index was exactly the plane the client named — 0→0 (148×), 12→12,
+5→5, 4→4, 3→3. First result tying map geometry to the wire.
+
+The 9 exceptions were all "client says 12, we find 0": a bridge and the ground
+under it, in a file with no height. `PathingMap.plane_at` returns None rather
+than guessing when a point is ambiguous.
+
+Planes are **not floors**. Kamadan has 39 and there is no Z anywhere in the
+file; they are connected regions of walkable surface. Crossing one is routine,
+which is why a server that treats every plane change as significant is wrong
+almost constantly.
+
+### Click-to-move: BROKEN, and NOT DEBUGGABLE FROM THE WIRE
+
+Reported from play: sometimes it paths correctly, sometimes it warps the player
+to the clicked point, sometimes it walks a straight line through walls, and
+clicking a staircase can drop the player onto the floor underneath.
+
+The two `word` fields of 0x0029 are **UNRESOLVED**, and the two sources
+contradict each other:
+
+* OpenTyria `GameMsg.h:538` — `uint16 plane` then `uint16 current_plane`, filled
+  from `destination.plane` and `position.plane`. Destination FIRST.
+* GWLP-R `P030` — `currentPlane` then `nextPlane`, documented "0 if player stays
+  in the same plane". Current FIRST.
+
+Both orders have been shipped and played. Neither fixed anything. OpenTyria is
+the better-matched witness on this message — it defines the opcode as 0x0029,
+exactly our build, where GWLP-R's is 30 from another era — and that is the order
+currently in the server, on grounds of provenance rather than evidence.
+
+**Why the experiment cannot be run.** Two routes, both closed:
+
+1. *A/B by eye.* Ruled out by the player: the bugs are intermittent, so single
+   trials of a symptom that comes and goes measure nothing. `--click-sweep`
+   exists and cycles the fields through every assignment, but a human cannot
+   score it.
+2. *Automatic detection.* We have the navmesh, so "did that path cross
+   unwalkable ground" is computable — if there is a path to check. There is not.
+   MEASURED: the median number of client position reports between one click and
+   the next is **ZERO**, across 35 click intervals. The client reports position
+   on keyboard input; while click-moving it says nothing until it stops or the
+   player clicks again, once for 37 seconds straight.
+
+So the server sees the request, and sometimes where it ended up, and nothing in
+between. **Click-to-move is unobservable from the server.**
+
+What remains is the client's own code: the handler for 0x0029 in `Gw.exe`. The
+msgtable study recovered build 38797's message tables from that binary with
+capstone and pefile, so the approach is proven in this repository, but
+`toolkit/clientscan/` is string scanning only. The disassembly is new work.
+
+One piece of player knowledge worth keeping, because it corrects a claim made
+earlier in this branch: in the stock game a click at a far or awkward point
+walks a plain straight line toward it — and is still STOPPED by obstacles. So
+the client does collide on a server-granted destination. An earlier test here
+suggested otherwise; that test had keyboard movement on `MOVE_TO_POINT` as well
+and could not tell the two paths apart.
