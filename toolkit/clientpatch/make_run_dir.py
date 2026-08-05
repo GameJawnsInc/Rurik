@@ -88,12 +88,22 @@ def main():
         secs = copy_with_progress(src, dst)
         print(f"  {name:18s}done in {secs:.1f}s")
 
+    # PowerShell parses a leading quoted string as a VALUE, not a command, so
+    # `"C:\...\Gw.exe" -authsrv ...` is a parser error rather than a launch. The
+    # call operator `&` is what makes it a command. cmd.exe wants no operator at
+    # all. Print both rather than guess which shell is reading this.
     print(f"""
 Run it from three terminals:
 
   1)  python toolkit/portal/webgate.py
   2)  python toolkit/authsrv/authsrv.py
-  3)  "{tgt}" -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed
+  3)  the patched client:
+
+      PowerShell:
+        & "{tgt}" -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed
+
+      cmd.exe:
+        "{tgt}" -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed
 
 Terminal 3 must be THIS copy. A stock client keys against ArenaNet's compiled-in
 public value, so the handshake completes and nothing after it can be decrypted.

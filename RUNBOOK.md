@@ -1,7 +1,12 @@
 # Runbook — driving the real client against Rurik
 
-Everything here is copy-pasteable from `C:\gd\Rurik`. Where a command produces
-output worth checking, the expected output is shown.
+Everything here is copy-pasteable from `C:\gd\Rurik` **in PowerShell**, which is
+the shell this project is driven from. Where a command produces output worth
+checking, the expected output is shown.
+
+The only shell-sensitive line is launching the client, which needs a leading `&`
+— see step 2. Every `python …` line works unchanged in PowerShell, `cmd.exe` and
+bash alike.
 
 Current state: the portal and the key exchange work. The client will connect, log
 in, key up, then ask something we do not answer yet and give up. **That is the
@@ -101,11 +106,17 @@ python toolkit/portal/webgate.py
 python toolkit/authsrv/authsrv.py
 ```
 
-**Terminal 3 — the patched client:**
+**Terminal 3 — the patched client.** Note the leading `&`:
 
 ```bash
-"C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe" -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed
+& "C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe" -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed
 ```
+
+The `&` is required in PowerShell and is not decoration. Without it PowerShell
+reads the quoted path as a *value* rather than a command and fails at parse time
+with `Unexpected token '-authsrv'` — nothing launches, and the error looks like a
+problem with the flags when it is really a problem with the shell. From `cmd.exe`,
+drop the `&`.
 
 That path is build-specific. After any re-patch, take the exact command printed at
 the end of `make_run_dir.py`.
@@ -178,6 +189,7 @@ every `u16` in the buffer would produce confident-looking nonsense.
 | Terminal 2 shows connect but `unexpected first header` | Not the auth channel, or a protocol change | Record the header value; it is a real finding |
 | `expected 0x4200, got …` | Key exchange never started | Almost always an unpatched client |
 | Key exchange OK, then immediate disconnect | We failed to answer something required | Expected today. The plaintext is in the vault — that is the next work item |
+| `Unexpected token '-authsrv'` | PowerShell parsed the quoted path as a value | Add the leading `&` (step 2). Nothing launched; the flags are fine |
 | Client won't start / repairs itself | Run dir incomplete | Re-run `make_run_dir.py` |
 | Anything at all after an ArenaNet update | Parameters rotated | Redo step 0 in full |
 
