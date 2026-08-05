@@ -477,7 +477,7 @@ From `C:\gd\Rurik\toolkit\authsrv\authsrv.py`, honestly labelled.
 | Thing | Where | Status |
 |---|---|---|
 | The straight-line integrator itself | `:568-607` | **INVENTED**, and structurally correct by accident — it is the same shape as `GmAgent.c:392-428`. The difference is that upstream's legs come from A* over real geometry and ours come from a single click. |
-| `TICK_SECONDS = 0.05` (20 Hz) | `:139` | **INVENTED.** Upstream's cap is 500 ms. Ours is internal integration granularity for click-to-move — but see the correction below: for keyboard movement we *do* still broadcast every tick. |
+| `TICK_SECONDS = 0.05` (20 Hz) | `:139` | **INVENTED.** Upstream's cap is 500 ms. Ours is internal integration granularity only; measurement confirms we do not broadcast per tick (3 arrival packets in a 14-second session). |
 | Sending `UPDATE_POSITION` only on arrival and on stop | `:591-603`, `:715-723` | **OBSERVED, and it matches upstream.** We learned by experiment that 0x002C is a teleport that cancels the walk animation. Upstream independently uses it in only two places, both snap-backs. Our best-corroborated movement decision. |
 | `GAME_CMSG_TURN_TO_DIRECTION = 0x003D` as a *name* | `:229` | **CONTESTED.** Py4GW: `MOVE_TO_COORD_WITH_DIR`. GWLP-R: position + plane + moveDirection + movementType. Neither reads it as a turn. |
 | Keying keyboard movement off 0x003D | `:689-703` | **OBSERVED** that it is necessary — WASD does not send 0x003E. Our own empirical finding, held by nobody else because no reference server handles this opcode at all (OpenTyria has no handler; the constant has no name in its table). |
@@ -535,30 +535,79 @@ behaviour change and each currently a guess:
   message walks us exactly one world unit, and the walk only works because the
   client re-sends continuously. Nothing verifies that.
 
-### 2b. Wrong, and the likely cause of the remaining idle-slide: WASD never sends `MOVE_TO_POINT`
+### 2b. MEASURED — and the mechanism I first proposed here was wrong
 
-Added after the pass, by reading the tick and the 0x003D handler together. It
-corrects the claim above that we "no longer broadcast per tick".
+**Superseded.** The first version of this item claimed 0x003D set a destination
+one world unit away, so that arrival fired every tick and teleported the
+character continuously. That is wrong, and the commit that introduced it
+(`5ed61ff`) carries the wrong version in its message. Measurement, not reading,
+settled it — `toolkit/authsrv/analyze_movement.py` over the 2026-08-05 capture,
+52 samples of 0x003D. What follows replaces it.
 
-The 0x003D handler sets `state["dest"] = pos + heading` (`:701-703`) and sends
-**nothing**. Only the 0x003E handler broadcasts `MOVE_TO_POINT` (`:709-712`).
-So for keyboard movement the client is never told to walk anywhere.
+**The three open questions from the pass are now answered, from our own capture.**
 
-Worse, the destination it sets is roughly one world unit away, while one tick
-steps `288.0 * 0.05` = **14.4 units** (`:584`). So `arrived` is true on the very
-next tick, every time, and the arrival branch fires `AGENT_UPDATE_POSITION`
-(`:598-603`) — the teleport whose 20 Hz cancellation of the walk cycle we
-already diagnosed at `:591-597`. The fix we applied for click-to-move never
-took effect for WASD, because WASD re-arrives continuously.
+| Question | Answer | Evidence |
+|---|---|---|
+| Is `values[3]` a unit vector or a displacement? | **Neither — a fixed-magnitude direction.** `\|v\|` was 765–768 in all 52 samples regardless of facing. | `analyze_movement.py`, section 1 |
+| Is `values[4]` a boolean or an enum? | **An enum.** Values 1 (×50) and 4 (×2). Never 0. GWLP-R's `movementType` naming is corroborated; our truthiness test was reading a boolean that is not there. | section 2 |
+| Is the 0x8000 CMSG mask on the wire? | **Yes.** Every decoded header was `0x803D`. This settles the contradiction the tick track flagged as UNRESOLVED, and settles it in OpenTyria's favour. | raw `values[0]` |
 
-This predicts exactly what we see: click-to-move animates, keyboard movement
-slides in the idle pose and jitters. It is a testable claim about our own code,
-not a reading of anybody's reconstruction, and it should be checked before any
-of the larger structural work below.
+Since `\|v\|` ≈ 765, `dest = pos + heading` aimed ~765 units away, not one — so
+arrival fired rarely (3 times in 14 seconds), not every tick. The old mechanism
+was wrong in both directions.
 
-The open question in item 2 — whether `values[3]` is a unit vector or a
-displacement — decides the fix. If it is a unit vector, a keyboard step needs a
-destination projected some distance ahead and a `MOVE_TO_POINT` to go with it.
+**What is actually happening.** The client predicts and animates keyboard
+movement *itself*. Its self-reported position advanced −9067 → −8510 over two
+seconds while we sent it nothing whatsoever. It does not need to be told to walk.
+
+The failure is the correction we send afterwards. At t=3.97 the client reported
+itself at −8512; we overruled it with our own integrator's figure of −8603, a
+**99-unit backward snap**. The next five reports carried a frozen position: the
+client stopped predicting. `AGENT_UPDATE_POSITION` is a teleport, and a teleport
+cancels whatever the client was animating — which we already knew from
+`authsrv.py:591-597` and had fixed for click-to-move but not here.
+
+Note the number. Upstream's `MAXIMUM_ALLOWED_CORRECTION` is **100.0**
+(`GmAgent.c:4`), and the drift that accumulated over one ordinary two-second
+keyboard walk was 99. That does not make upstream's constant sourced — it is
+still its author's own choice — but it stops looking arbitrary.
+
+**First fix attempt — TRIED, REGRESSED, REVERTED.** The reasoning above led to
+two changes that both removed invented code: believe the client's reported
+position on 0x003D, and accept its figure within tolerance on 0x0047. Tested
+against the client on 2026-08-05. It was **worse than what it replaced** —
+the character was pinned at the spawn point entirely, moving only in ~2-second
+teleport hops under repeated clicking.
+
+The cause was written down in the code I deleted. The comment on the old 0x0047
+handler said: *"Echoing the client's figure back pinned it to the spawn point:
+it reported 'still at spawn' because we had not moved it, and we confirmed that
+was correct."* Believing `values[1]` reset our integrator to the client's stale
+position four times a second, so the tick could never accumulate progress —
+exactly the deadlock that comment was written to prevent. Reverted.
+
+The lesson generalises past this bug: a comment explaining why something is the
+way it is, is evidence. I read it as history and it was a warning.
+
+**What the failed attempt still established.** The measurements hold — the
+magnitudes, the enum, the wire mask are properties of the capture, not of the
+fix. And it ruled out the "just trust the client" model: the client will not
+drive its own position without server agreement, so we cannot get there by
+subtraction alone.
+
+**Second fix attempt — the current one, untested at time of writing.** One
+change from the known-good state, targeting the original complaint directly:
+0x003D now sends `AGENT_MOVE_TO_POINT` for the destination it sets, so the
+client is actually told to *walk*. Every `MOVE_TO_POINT` we had ever sent
+answered a click; keyboard movement set a destination silently and the client
+had no reason to animate. The walk animation is driven by that message
+(`GmAgent.c:333-344`).
+
+It is rate-limited to one message per change of direction (>5°) rather than one
+per report. Upstream broadcasts one `MOVE_TO_POINT` per *leg*, and this opcode
+arrives ~4x/second; re-issuing it every 250 ms would restart the animation
+continuously, which is the jitter we are trying to remove. The 0x0047 handler is
+left exactly as it was — one variable at a time.
 
 ### 3. Unverified but harmless for now: `TICK_SECONDS = 0.05`
 

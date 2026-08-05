@@ -114,6 +114,10 @@ GAME_SMSG_INSTANCE_LOAD_FINISH = 0x018E
 # agent to spawn. These are the messages a real server volunteers unprompted --
 # GameSrv_HandleInstanceLoadRequestPlayers sends roughly twenty; this is the
 # subset that creates the player and hands them control of it.
+# The one message upstream broadcasts on EVERY world tick, unconditionally, and
+# the only thing its tick sends at all (GmAgent.c:261-268, :440). Payload is a
+# single uint32 of elapsed milliseconds. We had never sent it once.
+GAME_SMSG_WORLD_SIMULATION_TICK = 0x001E
 GAME_SMSG_WORLD_UPDATE_LOAD_TIME = 0x001F
 GAME_SMSG_WORLD_CREATE_AGENT = 0x0020
 GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT = 0x0022
@@ -137,6 +141,10 @@ DEFAULT_RUN_SPEED = 288.0  # Guild Wars' base movement speed
 # AGENT_UPDATE_DESTINATION rather than MOVE_TO_POINT), a fast tick buys
 # smoothness cheaply -- this is loopback, and 20 Hz of one small message is free.
 TICK_SECONDS = 0.05
+# How far the client's own idea of where it stopped may differ from ours before
+# we overrule it. Upstream's figure (OpenTyria GmAgent.c:4) and, like every other
+# constant in that file, its own invention rather than a measurement.
+MAXIMUM_ALLOWED_CORRECTION = 100.0
 INF = float("inf")
 
 # GmAgent.h. model_id is not a free-form number: the top nibble is a class tag,
@@ -573,8 +581,28 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 tick it asked, waited about two seconds for a position that never
                 arrived, cancelled, and reported itself back at the spawn point.
                 """
+                prev_tick = time.perf_counter()
                 while not stop.is_set():
                     time.sleep(TICK_SECONDS)
+                    # Advance the client's simulation clock FIRST, every tick,
+                    # whether or not anyone is moving -- that is what upstream
+                    # does, and it is unconditional there.
+                    #
+                    # Measured symptom this is aimed at (2026-08-05 capture): the
+                    # client predicts a walk for about 125 units and then freezes
+                    # at a fixed position while still sending input, jerking
+                    # forward only when a teleport arrives. A client that cannot
+                    # advance its own clock cannot animate past its first guess.
+                    now = time.perf_counter()
+                    delta_ms = int((now - prev_tick) * 1000)
+                    if delta_ms > 0:
+                        prev_tick = now
+                        try:
+                            # quiet: 20 of these a second would bury the log.
+                            send(GAME_SMSG_WORLD_SIMULATION_TICK, [delta_ms],
+                                 "WORLD_SIMULATION_TICK", quiet=True)
+                        except OSError:
+                            return
                     dest = state.get("dest")
                     if not dest:
                         continue
@@ -585,6 +613,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     arrived = dist <= step
                     if arrived:
                         state["pos"], state["dest"] = dest, None
+                        # The leg is over, so the next keyboard report must issue
+                        # a fresh MOVE_TO_POINT even if the player never turned.
+                        state["walking"] = False
                     else:
                         state["pos"] = (px + dx / dist * step,
                                         py + dy / dist * step)
@@ -692,15 +723,51 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # stand, while clicking sends an absolute destination.
                         # That is why click-to-move worked and WASD did not --
                         # we treated this as a pure turn and did nothing.
-                        # values[4] appears to be a "moving" flag (seen as 1
-                        # while walking); when it is absent or 0 this really is
-                        # just a turn and there is nothing for us to do.
+                        # values[4] is an ENUM, not a flag: measured values were 1
+                        # and 4, never 0 (analyze_movement.py, 167 samples across
+                        # two sessions). GWLP-R calls the field movementType.
+                        # Testing it for truthiness happens to work because 0
+                        # never appears, but do not read "moving" into it.
+                        #
+                        # values[3] is a fixed-magnitude direction -- |v| was
+                        # 765-768 in every sample whichever way the player faced.
+                        # So pos + heading is a leg about 2.6 seconds of running
+                        # ahead, which is why this worked at all.
                         plane, heading = values[2], values[3]
                         moving = values[4] if len(values) > 4 else 0
                         state["plane"] = plane
                         if moving:
                             px, py = state["pos"]
-                            state["dest"] = (px + heading[0], py + heading[1])
+                            dest = (px + heading[0], py + heading[1])
+                            # Tell the client to WALK there. Setting a destination
+                            # silently is why the character slid along in its idle
+                            # pose: the walk animation is driven by MOVE_TO_POINT
+                            # (GmAgent.c:333-344), and keyboard movement never
+                            # sent one -- every MOVE_TO_POINT we have ever sent
+                            # answered a click.
+                            #
+                            # Only on a real change of direction, though. This
+                            # opcode arrives ~4x/second, while upstream broadcasts
+                            # one MOVE_TO_POINT per LEG. Re-issuing it every 250 ms
+                            # restarts the animation continuously, which is the
+                            # jitter we are trying to remove. An unfinished
+                            # destination 765 units out needs no refresh.
+                            prev = state.get("heading")
+                            if prev is None:
+                                turned = True
+                            else:
+                                dot = heading[0] * prev[0] + heading[1] * prev[1]
+                                mags = (math.hypot(*heading) * math.hypot(*prev))
+                                # cos(5 degrees); mags is never 0 here in practice
+                                turned = mags <= 0 or dot < 0.996 * mags
+                            state["heading"] = tuple(heading)
+                            state["dest"] = dest
+                            if turned or state.get("walking") is not True:
+                                state["walking"] = True
+                                send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                                     [PLAYER_AGENT_ID, dest, plane, plane],
+                                     f"AGENT_MOVE_TO_POINT"
+                                     f"(key {dest[0]:.0f},{dest[1]:.0f})")
                     elif opcode == GAME_CMSG_MOVE_TO_COORD:
                         # Granting the move is not the same as performing it.
                         # The server owns position: it walks the agent along and
@@ -709,6 +776,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # after ~2s and reported itself still at the spawn point.
                         dest, plane = values[1], values[2]
                         state["dest"], state["plane"] = tuple(dest), plane
+                        # A click ends whatever keyboard leg was running, so drop
+                        # the remembered heading: the next key press must be
+                        # treated as a fresh direction, not compared against one
+                        # from before the click.
+                        state["walking"], state["heading"] = False, None
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                              [PLAYER_AGENT_ID, dest, plane, plane],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f})")
@@ -717,10 +789,48 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # believed. Echoing the client's figure back pinned it to
                         # the spawn point: it reported "still at spawn" because
                         # we had not moved it, and we confirmed that was correct.
+                        # Believe the client, within a tolerance, and say nothing.
+                        #
+                        # This is a teleport, and a teleport cancels whatever the
+                        # client is animating. Sending one on every stop is the
+                        # rubber-banding on sudden stops and turns: our integrator
+                        # runs at DEFAULT_RUN_SPEED while the client's own walk
+                        # measured ~197 units/sec, so we arrive ahead of it and
+                        # then yank it forward.
+                        #
+                        # An earlier attempt at this same change made things far
+                        # worse -- the character was pinned at spawn. That version
+                        # also believed the client's position on 0x003D, four
+                        # times a second, which reset the integrator before it
+                        # could accumulate anything. The old comment here warned
+                        # about exactly that and I read it as history. It only
+                        # applies when the client is not moving itself; now that
+                        # it is, its figure is the better one.
+                        reported, plane = tuple(values[1]), values[2]
                         state["dest"] = None
-                        send(GAME_SMSG_AGENT_UPDATE_POSITION,
-                             [PLAYER_AGENT_ID, state["pos"], state["plane"]],
-                             "AGENT_UPDATE_POSITION(stop)")
+                        state["walking"], state["heading"] = False, None
+                        px, py = state["pos"]
+                        drift = math.hypot(reported[0] - px, reported[1] - py)
+                        agreed = (plane == state["plane"]
+                                  and drift <= MAXIMUM_ALLOWED_CORRECTION)
+                        # Recorded on every stop so the drift distribution can be
+                        # measured rather than guessed at -- it is what says
+                        # whether 100.0 is the right number for us.
+                        rec.event("position_report", drift=round(drift, 2),
+                                  accepted=agreed, reported=list(reported),
+                                  ours=[px, py], plane=plane)
+                        if agreed:
+                            state["pos"] = reported
+                        else:
+                            # Upstream sends nothing even here. We correct,
+                            # knowingly: with no other position broadcast, a
+                            # divergence this large would otherwise never resolve.
+                            print(f"[c{conn_id}] position correction: {drift:.0f}u"
+                                  f" (plane {plane} vs {state['plane']})",
+                                  flush=True)
+                            send(GAME_SMSG_AGENT_UPDATE_POSITION,
+                                 [PLAYER_AGENT_ID, state["pos"], state["plane"]],
+                                 "AGENT_UPDATE_POSITION(stop)")
                     elif opcode == GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS:
                         # The client sent this and REQUEST_ITEMS in the same
                         # breath; we answered only items, and it then waited 44s
