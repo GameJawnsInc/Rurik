@@ -468,6 +468,31 @@ VAULT_DEFAULT = r"C:\gd\Rurik\vault\captures\authsrv"
 # exactly as it does in a normal session.
 PROBE_NAME = None
 
+# Set from --click-sweep. Cycles the two 16-bit fields of MOVE_TO_POINT through
+# every plausible assignment, one per click, so the CLIENT decides which is
+# right instead of us arguing from two sources that contradict each other.
+#
+# We have spent this whole investigation inferring these two fields. OpenTyria
+# says (destination, current); GWLP-R says (current, next); both orders were
+# shipped and neither fixed the player walking through walls and falling through
+# staircases. The setup for a real experiment is finally clean: keyboard
+# movement works, so the transport and the client are known good, and clicking
+# is one message with exactly two unknown fields.
+#
+# Variants are ordered so the two we have already tried come first, which makes
+# the run its own control: if 1 and 2 misbehave exactly as they did in normal
+# play, the harness is measuring the right thing.
+CLICK_SWEEP = False
+CLICK_SWEEP_VARIANTS = (
+    ("dest,cur   (OpenTyria order, shipped)", lambda c, d: (d, c)),
+    ("cur,dest   (GWLP-R order, shipped)",    lambda c, d: (c, d)),
+    ("0,0        (both zero)",                lambda c, d: (0, 0)),
+    ("cur,0",                                 lambda c, d: (c, 0)),
+    ("0,cur",                                 lambda c, d: (0, c)),
+    ("dest,dest",                             lambda c, d: (d, d)),
+    ("cur,cur",                               lambda c, d: (c, c)),
+)
+
 
 def run_probe(name, send, conn_id, stop):
     """Fire a scripted experiment at the client, on its own thread.
@@ -1107,6 +1132,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # same plane" belongs to its own field ordering and is not
                         # carried over.
                         plane_first, plane_second = dest_plane, cur_plane
+                        sweep_note = ""
+                        if CLICK_SWEEP:
+                            i = state.get("click_n", 0)
+                            state["click_n"] = i + 1
+                            label, fn = CLICK_SWEEP_VARIANTS[
+                                i % len(CLICK_SWEEP_VARIANTS)]
+                            plane_first, plane_second = fn(cur_plane, dest_plane)
+                            sweep_note = (f"  <<< CLICK #{i + 1} "
+                                          f"variant {i % len(CLICK_SWEEP_VARIANTS) + 1}"
+                                          f"/{len(CLICK_SWEEP_VARIANTS)}: {label} "
+                                          f"-> sent ({plane_first}, {plane_second})")
                         # Deliberately NOT state["plane"] = dest_plane. Our idea
                         # of the player's plane comes from 0x003D and 0x0047,
                         # which report where the client IS. Recording a
@@ -1150,6 +1186,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
                              f" on plane {cur_plane}->{dest_plane}"
                              f"{', model stops short' if blocked else ''})")
+                        if sweep_note:
+                            print(sweep_note, flush=True)
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
                         # Stop where WE say it is, not where the client last
                         # believed. Echoing the client's figure back pinned it to
@@ -1518,6 +1556,13 @@ def main():
     ap.add_argument("--list-probes", action="store_true",
                     help="Print the available probes, their questions and their "
                          "predictions, then exit.")
+    ap.add_argument("--click-sweep", action="store_true",
+                    help="Cycle MOVE_TO_POINT's two plane fields through every "
+                         "plausible assignment, one per click, and label each in "
+                         "the log. Click the same wall or staircase repeatedly "
+                         "and report which attempt numbers behaved; that "
+                         "identifies the fields from the client instead of from "
+                         "two sources that contradict each other.")
     ap.add_argument("--allow-any-session", action="store_true",
                     help="Accept a login with no matching session record. A debugging "
                          "escape hatch so a stale sessions.json cannot be mistaken for a "
@@ -1540,6 +1585,17 @@ def main():
         global PROBE_NAME
         PROBE_NAME = a.probe
         print(f"PROBE MODE: {a.probe} -- fires after the character spawns")
+
+    if a.click_sweep:
+        global CLICK_SWEEP
+        CLICK_SWEEP = True
+        print("CLICK SWEEP: every click sends MOVE_TO_POINT with a different")
+        print("assignment of the two plane fields, in this order:")
+        for i, (label, _) in enumerate(CLICK_SWEEP_VARIANTS, 1):
+            print(f"   click {i}: {label}")
+        print("Click the SAME spot each time -- a wall to walk through, or the")
+        print("staircase -- and note which attempts behaved. The cycle repeats.")
+        print()
 
     GAME_SRV_HOST, GAME_SRV_PORT = a.game_host, a.game_port
     HOST_FIELD_ENCODING = a.host_encoding
