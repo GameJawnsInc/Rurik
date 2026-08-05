@@ -32,12 +32,20 @@ from gwcrypto import ARC4, arc4_hash, recover_master_secret  # noqa: E402
 from gwpe import PE  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'schema'))
 from codec import Codec  # noqa: E402
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "portal"))
+from sessionstore import SessionStore, uuid_to_wire  # noqa: E402
 
 codec = Codec()
 
 SIG_KEYS = bytes.fromhex("8B4508C70088000000B8")
 PORT = 6112
 BUILD = 38797
+
+# Reuses the real UUIDs observed on the wire, so the encoding stays exercised.
+TEST_EMAIL = "selftest@rurik.local"
+TEST_USER_ID = "E696B44C-04FC-DF92-9EE1-B0CC329B424A"
+TEST_TOKEN = "233B382E-3CD2-E5B6-7018-7F547D2760A7"
 
 
 def read_client_params(exe):
@@ -150,6 +158,66 @@ def main():
                         f"0x{msgs[0][0]:04x}" if msgs else "none")
             if msgs:
                 print(f"   session salt: 0x{msgs[0][1][1]:08x}")
+
+        print("\n5. log in and require the character-select burst")
+        # Issue a session exactly as the portal would, so AuthSrv can validate it.
+        store = SessionStore()
+        store.issue(TEST_EMAIL, TEST_USER_ID, TEST_TOKEN)
+        login = codec.encode("AUTH_CMSG", 0x0038, [
+            1,                                    # req_id
+            uuid_to_wire(TEST_USER_ID),
+            uuid_to_wire(TEST_TOKEN),
+            "", "Portal",
+        ], header_value=0x8038)
+        s.sendall(c2s.crypt(login))
+
+        s.settimeout(10)
+        burst = b""
+        deadline = time.time() + 8
+        while time.time() < deadline:
+            try:
+                chunk = s.recv(65536)
+            except socket.timeout:
+                break
+            if not chunk:
+                break
+            burst += chunk
+            if len(burst) > 150:      # the whole burst is ~200 bytes
+                time.sleep(0.3)
+                s.setblocking(False)
+                try:
+                    burst += s.recv(65536)
+                except (BlockingIOError, OSError):
+                    pass
+                s.setblocking(True)
+                break
+        ok &= check("server sent a login burst", len(burst) > 0, f"{len(burst)} bytes")
+        if burst:
+            msgs, consumed, err = codec.decode_stream("AUTH_SMSG", s2c.crypt(burst))
+            got = [m[0] for m in msgs]
+            names = {0x0007: "CHARACTER_INFO", 0x0016: "ACCOUNT_SETTINGS",
+                     0x0014: "FRIEND_STREAM_END", 0x0011: "ACCOUNT_INFO",
+                     0x0003: "REQUEST_RESPONSE"}
+            print("   " + " -> ".join(names.get(o, f"0x{o:04x}") for o in got))
+            ok &= check("burst decodes cleanly", err is None and consumed == len(burst),
+                        err or f"consumed {consumed}/{len(burst)}")
+            ok &= check("contains a CHARACTER_INFO", 0x0007 in got)
+            ok &= check("contains ACCOUNT_INFO", 0x0011 in got)
+            ok &= check("REQUEST_RESPONSE is LAST", got and got[-1] == 0x0003,
+                        f"last is 0x{got[-1]:04x}" if got else "empty")
+            ok &= check("every CHARACTER_INFO precedes REQUEST_RESPONSE",
+                        all(i < got.index(0x0003) for i, o in enumerate(got)
+                            if o == 0x0007) if 0x0003 in got else False)
+            # NOT `resp` — that name holds the 22-byte server seed from step 3 and
+            # the negative control still needs it.
+            rr = [m for m in msgs if m[0] == 0x0003]
+            ok &= check("REQUEST_RESPONSE reports success (status 0)",
+                        bool(rr) and rr[-1][1][2] == 0,
+                        f"status {rr[-1][1][2]}" if rr else "absent")
+            ch = [m for m in msgs if m[0] == 0x0007]
+            if ch:
+                ok &= check("character is named", ch[0][1][4] == "Test Warrior",
+                            repr(ch[0][1][4]))
         s.close()
 
         out, _ = srv.communicate(timeout=20)

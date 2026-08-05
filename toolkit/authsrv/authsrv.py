@@ -39,7 +39,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "schema"))
 from gwcrypto import ARC4, arc4_hash, compute_shared, make_server_seed  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'portal'))
 from codec import Codec  # noqa: E402
+from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
 
 AUTH_CMSG_VERSION_HEADER = 0x000C0400
 GAME_CMSG_VERSION_HEADER = 0x000C0700  # game server variant; logged, not handled
@@ -52,8 +54,38 @@ AUTH_CMSG_SEND_COMPUTER_INFO = 0x0001
 AUTH_CMSG_SEND_COMPUTER_HASH = 0x0002
 AUTH_SMSG_SESSION_INFO = 0x0001
 
+AUTH_CMSG_HEARTBEAT = 0x0000
+AUTH_CMSG_UNKNOWN_8023 = 0x0023
+AUTH_CMSG_PORTAL_ACCOUNT_LOGIN = 0x0038
+AUTH_SMSG_HEARTBEAT = 0x0000
+AUTH_SMSG_REQUEST_RESPONSE = 0x0003
+AUTH_SMSG_CHARACTER_INFO = 0x0007
+AUTH_SMSG_ACCOUNT_INFO = 0x0011
+AUTH_SMSG_FRIEND_STREAM_END = 0x0014
+AUTH_SMSG_ACCOUNT_SETTINGS = 0x0016
+
+GM_ERROR_NETWORK = 2
+GM_ERROR_AUTH = 11
+
+# One test character, defined once. The same uuid appears in CHARACTER_INFO and in
+# ACCOUNT_INFO's "current character" slot; if those two ever drift apart the client
+# silently fails to pre-highlight a roster entry, with no error to notice.
+TEST_CHAR_UUID = bytes.fromhex("11111111111111111111111111111111")
+TEST_CHAR_NAME = "Test Warrior"
+TEST_CHAR_SETTINGS = bytes.fromhex(
+    "0600"              # version 6
+    "9400"              # last_outpost 148, Ascalon City (pre-Searing)  [medium]
+    "00000000"          # last_time_played
+    "00001000"          # appearance: profession Warrior at bit 20
+    + "00" * 16 +       # last_guild_hall_id: none
+    "11400000"          # campaign Prophecies, level 1, helm shown
+    "00"                # number_of_pieces: no equipment  [medium]
+    "00000000")         # trailing dword, believed unread  [medium]
+assert len(TEST_CHAR_SETTINGS) == 37, len(TEST_CHAR_SETTINGS)
+
 AUTH_CMSG_NAMES = {
     0x0000: "HEARTBEAT", 0x0001: "SEND_COMPUTER_INFO", 0x0002: "SEND_COMPUTER_HASH",
+    0x0023: "UNKNOWN_8023",
     0x0003: "ACCOUNT_CREATE", 0x0004: "ACCOUNT_LOGIN", 0x0007: "DELETE_CHARACTER",
     0x0009: "UPDATE_CHARACTER_SETTINGS", 0x000A: "CHANGE_PLAY_CHARACTER",
     0x000D: "DISCONNECT", 0x000E: "SET_PLAYER_STATUS", 0x001A: "FRIEND_ADD",
@@ -99,6 +131,57 @@ class Recorder:
         self.raw.close()
 
 
+def handle_portal_login(values, send, store, conn_id, allow_any, rec):
+    """Answer PORTAL_ACCOUNT_LOGIN with the burst that produces character select.
+
+    Order is load-bearing at both ends: every CHARACTER_INFO must precede
+    REQUEST_RESPONSE, and REQUEST_RESPONSE must be last. It is the only message
+    that advances the client's login state machine — the rest merely fill passive
+    structures. Send them early and the client can flip to character select
+    against an empty roster, which renders as "logged in, no characters" rather
+    than as an error.
+    """
+    req_id, user_id_wire, token_wire = values[1], values[2], values[3]
+    who = f"{wire_to_uuid(user_id_wire)} / token {wire_to_uuid(token_wire)}"
+
+    session = store.lookup(user_id_wire, token_wire)
+    if session is None and not allow_any:
+        # Reject loudly rather than hang. An error on screen proves the whole
+        # encrypted path works and narrows the fault to the session record.
+        print(f"[c{conn_id}] login REJECTED — no session for {who}", flush=True)
+        rec.event("login_rejected", who=who)
+        send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, GM_ERROR_AUTH],
+             "REQUEST_RESPONSE(AUTH_ERROR)")
+        return
+
+    if session is None:
+        print(f"[c{conn_id}] login accepted WITHOUT a session record "
+              f"(--allow-any-session) — {who}", flush=True)
+    else:
+        print(f"[c{conn_id}] login OK — {session['email']}", flush=True)
+    rec.event("login_ok", who=who, email=(session or {}).get("email"))
+
+    send(AUTH_SMSG_CHARACTER_INFO,
+         [req_id, TEST_CHAR_UUID, 0, TEST_CHAR_NAME, TEST_CHAR_SETTINGS],
+         "CHARACTER_INFO")
+    send(AUTH_SMSG_ACCOUNT_SETTINGS, [req_id, b""], "ACCOUNT_SETTINGS")
+    send(AUTH_SMSG_FRIEND_STREAM_END, [req_id, req_id], "FRIEND_STREAM_END")
+    send(AUTH_SMSG_ACCOUNT_INFO, [
+        req_id,
+        0,                                        # territory: America
+        4,                                        # language
+        bytes.fromhex("0100000000000000"),        # campaigns owned, bit0 Prophecies
+        b"\x00" * 8,                              # unknown  [low confidence]
+        bytes(user_id_wire),                      # account uuid, echoed back
+        TEST_CHAR_UUID,                           # current character
+        8,                                        # unknown  [low confidence]
+        bytes.fromhex("0100040057000100"),        # feature/slot bits
+        24,                                       # EULA revision — NOT a bool
+        3,                                        # unknown  [low confidence]
+    ], "ACCOUNT_INFO")
+    send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0], "REQUEST_RESPONSE(OK)")
+
+
 def recv_exact(sock, n, rec=None):
     buf = b""
     while len(buf) < n:
@@ -109,7 +192,7 @@ def recv_exact(sock, n, rec=None):
     return buf
 
 
-def handle(sock, addr, keys, vault, conn_id, stop):
+def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
     rec = Recorder(vault, conn_id)
     print(f"[c{conn_id}] connect from {addr[0]}:{addr[1]}", flush=True)
     rec.event("connect", peer=f"{addr[0]}:{addr[1]}")
@@ -204,6 +287,20 @@ def handle(sock, addr, keys, vault, conn_id, stop):
                     # the login never proceeds past the key exchange.
                     state["salt"] = secrets.randbits(32)
                     send(AUTH_SMSG_SESSION_INFO, [state["salt"], 0], "SESSION_INFO")
+                elif opcode == AUTH_CMSG_HEARTBEAT:
+                    # Reply unconditionally and regardless of login state. The
+                    # dword is a server tick nothing reads back; it does not echo
+                    # the client's value.
+                    send(AUTH_SMSG_HEARTBEAT, [16], "HEARTBEAT")
+                elif opcode == AUTH_CMSG_UNKNOWN_8023:
+                    # Intentional no-op, not an oversight. Unnamed in both C
+                    # references; a third implementation identifies this exact
+                    # opcode and also no-ops it. If it ever turns out to need a
+                    # reply the client will stall at a reproducible point.
+                    pass
+                elif opcode == AUTH_CMSG_PORTAL_ACCOUNT_LOGIN:
+                    handle_portal_login(values, send, store, conn_id,
+                                        allow_any, rec)
 
             if err and "incomplete" not in err:
                 # Unknown opcode: we cannot frame past it and must not guess,
@@ -247,6 +344,10 @@ def main():
     ap.add_argument("--keys")
     ap.add_argument("--vault", default=VAULT_DEFAULT)
     ap.add_argument("--once", action="store_true", help="exit after one connection")
+    ap.add_argument("--allow-any-session", action="store_true",
+                    help="Accept a login with no matching session record. A debugging "
+                         "escape hatch so a stale sessions.json cannot be mistaken for a "
+                         "wire bug. Never the default: the rejection path has to stay exercised.")
     a = ap.parse_args()
 
     keys = load_keys(a.keys)
@@ -277,6 +378,7 @@ def main():
     print("the client MUST be the patched copy — an unpatched one keys to "
           "ArenaNet's public value and we cannot read it\n")
 
+    store = SessionStore()
     stop = threading.Event()
     n = 0
     try:
@@ -284,7 +386,8 @@ def main():
             sock, addr = srv.accept()
             n += 1
             t = threading.Thread(target=handle,
-                                 args=(sock, addr, keys, a.vault, n, stop), daemon=True)
+                                 args=(sock, addr, keys, a.vault, n, stop, store, a.allow_any_session),
+                                 daemon=True)
             t.start()
             if a.once:
                 t.join()
