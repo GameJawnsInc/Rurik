@@ -27,7 +27,7 @@ sgwlpr in Scala) produced zero playable outcomes."* This is the load-bearing pre
 |---|---|---|
 | [ldufr/OpenTyria](https://github.com/ldufr/OpenTyria) | A working GW1 **server** in C | 180 commits, last 2026-02-21, **Unlicense (public domain)**, ~25,630 lines of real code |
 | [ldufr/Headquarter](https://github.com/ldufr/Headquarter) | A GW1 **headless client** in C | MIT, pushed 2026-07-11, full NCSoft portal stack in `code/portal/` |
-| [apoguita/Py4GW](https://github.com/apoguita/Py4GW) | Python scripting layer + packet sniffer | 68★, pushed 2026-07-21; `Py4GW_Reforged_Native` explicitly replaces GWCA |
+| [apoguita/Py4GW](https://github.com/apoguita/Py4GW) | Python scripting layer + packet sniffer | 68★, **4,626 commits**, pushed 2026-07-21; `Py4GW_Reforged_Native` (56 commits, 2026-08-02) explicitly replaces GWCA |
 | [gwdevhub/GWToolboxpp](https://github.com/gwdevhub/GWToolboxpp) | The in-client toolbox | 872★, MIT, pushed **2026-08-04 — today** |
 | [jean-humann/gwnative](https://github.com/jean-humann/gwnative) | Rust host for the WASM client | GPL-3.0, pushed **2026-08-04 — today** |
 | [build-wars/gw-skilldata](https://github.com/build-wars/gw-skilldata) | Community skill dataset | MIT, pushed **2026-08-04 — today** |
@@ -64,12 +64,47 @@ Each entry is a field list over a 15-type vocabulary: `MSG_HEADER`, `DWORD`, `WO
 Two things make this decisive. First, **Unlicense means public domain** — there is no license
 friction at all, unlike GWCA. Second, the 487 game-server messages **independently match Py4GW's
 separately-reported 487 StoC headers**, which is real cross-validation from two unrelated projects
-against the current client. That vocabulary also answers the technical critique's worry about
-whether a naive schema language survives real packet layouts: `NESTED_STRUCT` plus three array
-widths is what it takes, and someone has already paid for that lesson.
+against the current client.
+
+**But the real authority is inside the client, and nobody has ever read it.** The client
+deserializes with a table of `{uint32_t *packet_template; uint32_t template_size; handler_func}`
+against `STOC_HEADER_COUNT = 0x1e5` (485) **[sourced — GWCA's `StoCMgr_old.cpp`]**. GWCA resolves
+that pointer, asserts the count, and then uses **only `handler_func`** — the loop over
+`packet_template` was never written. The tag encoding is documented by working code in GWLP-R-Utils'
+`PacketTemplate Dumper`, and the type system it describes has sized integers, 1–3 floats, opaque
+handles, fixed blobs, UTF-16 strings and length-prefixed arrays, with **no unions, no bitfields and
+no conditional layouts** — because the client's generic deserializer cannot express them. That
+settles the schema-language design question with evidence rather than speculation, and it matches
+OpenTyria's 15-type vocabulary closely enough to be the same discovery arrived at twice.
+
+This matters because four corpora disagree about what the catalog even is: GWLP-R has 773 ID slots
+with 252 named, its dumper reported 752, GWCA names 217 StoC with 123 structs, OpenTyria defines
+487 game-server messages, and Py4GW observes 487 live. Codegen off the wrong one and you find out
+when fixtures fail, after the schema has calcified. **The client's own `template_size` is the
+arbiter**, and any external corpus that disagrees with it is a *mechanically detectable* defect —
+which makes the whole reconciliation job safely delegable to agents.
 
 **Consequence:** HANDOFF §5's codegen plan keeps its architecture and loses its input problem.
-Rurik's schema work becomes *translate and verify 777 existing definitions*, not *discover them*.
+Dump the client's template table, use it as truth, and treat OpenTyria's 777 definitions as the
+naming and cross-check layer.
+
+### 1.2b The capture hook point in §11 step 4 cannot produce raw bytes
+
+HANDOFF §3 says hooking StoC dispatch yields "decrypted, framed, already-typed messages, which is
+strictly better than pcap," and §11 step 4 says to write "framed, timestamped **raw** packets."
+Those are incompatible. GWCA's hook swaps `handler_func` in the dispatch table, so what it receives
+is an **already-deserialized struct** whose arrays and strings are pointers elsewhere. A
+`memcpy(pak, sizeof(T))` truncates every variable-length field in the game — silently, for a year,
+into an irreplaceable vault. Worse, the typed-callback API has no catch-all, so an opcode with no
+mapped struct is *invisible* rather than merely unparsed, which is strictly worse than pcap for
+exactly the packets you most want bytes of.
+
+**Fix: hook twice.** A low hook at the post-decrypt receive boundary feeds the byte vault — the
+irreplaceable artifact. A high hook at dispatch feeds a typed sidecar. The plaintext boundary is
+named in this build: `MsgConn.cpp`, `MSGCONN_MODE_ENCRYPTED` and `DispatchStream` are all present
+in `Gw.exe` **[measured]**. R0's acceptance criterion then becomes a real instrument calibration
+rather than a test of your file I/O: *the struct stream I parse from raw bytes equals the struct
+stream the client built, field for field, across a whole session.*
 
 ### 1.3 Reforged shipped an official WebAssembly client, and it is a far better RE target
 
@@ -279,7 +314,24 @@ and diff against your engine's prediction. A row counts as verified only when th
 the behaviour diffs clean. **No human reviews 1,300 rows**, and the pipeline cannot quietly fill
 the database with plausible garbage, because every step has a mechanical referee.
 
-**A7 — Reframe the deliverable as the instrumentation toolchain.** *(continuous)*
+**A7 — Author content into your own running client, with no server at all.** *(days · human, secondary account)*
+GWCA exposes `EmulatePacket(Packet::StoC::PacketBase*)` **[sourced]**, and Py4GW independently
+proved inbound packets can be rewritten in flight before the client materializes them. So you can
+synthesize agents, dialogue and markers into your own client on real Ascalon geometry *before any
+server exists*. This inverts the ladder's assumed dependency — R4-level semantic understanding
+accumulates during R1–R3 instead of waiting behind them — and it directly attacks the handoff's own
+admission that "you will not be able to use most of what you capture for two years."
+
+It also turns §8's strongest law from a docstring into a call-site rule. "Before writing a
+mechanism, ask whether the client even reads it" is currently enforced nowhere, which §8 itself says
+makes it a wish. Enforce it: **for every packet you intend to emit, first prove via `EmulatePacket`
+that the client changes observable behaviour when it receives one.**
+*Caveat, stated plainly:* this is the highest ToS-exposure item here — in-process modification of a
+live client on the real service. Secondary account, instanced content, supervised, never near
+anything competitive. That is why it is A7 and not A1.
+*First step:* re-emit a captured chat message and see it appear.
+
+**A8 — Reframe the deliverable as the instrumentation toolchain.** *(continuous)*
 The primary artifact becomes a documented, reproducible pipeline that turns the official WASM
 client into a symbolized, hookable research target: fetch → verify → patch → detour → symbolize →
 drive. It redistributes zero ArenaNet bytes, it is useful on day 30 rather than day 900, it is
@@ -326,6 +378,7 @@ changes is that capture is now cheap enough to leave running rather than a proje
 | A prior-art repo disappears | **Already happening** — `gwdevhub/gw_in_browser` 404s today while `gwnative` still names it upstream **[measured]**. `toolkit/mirror_priorart.py` clones the field into `vault/mirrors/` with a manifest recording each HEAD; run it monthly. | done |
 | Service closes or changes | Leave the proxy on for every session; zero marginal cost once built | hours |
 | Client auto-patches over ground truth | Client pinned and hash-verified in `vault/client/2026-04-30_b174de1f2d8d/` | done |
+| **The client phones home when it crashes** | `Gw.exe` embeds Sentry: `SENTRY_DSN`, `sentry.native`, `getsentry`, `x-sentry-rate-limits` are all present **[measured]**. The working method here is inject, patch, malform, crash — so the client's own outbound reporting channel is a posture problem HANDOFF §9 never considered, since §9 reasons only about server-side visibility. Neutralise it before the first malformed packet: block the endpoint at the firewall or null the DSN in the patched copy. Minutes, and it belongs on the R0 checklist next to the vault snapshot. | minutes |
 | Account loss | Never automate on the primary account. The proxy posture — watching your own traffic — is milder than injecting a DLL, which is what the original plan required | one account |
 | A client update invalidates months of offset work | Choose WASM: the module bytes are the code and offsets come from the module | free, if you switch |
 | Two years with nothing playable | A2 and R1.5 both target a visible result inside 90 days | — |
@@ -360,9 +413,13 @@ that the client is available to anyone.
 
 ## 8. Immediate next actions
 
+0. **Neutralise the crash-telemetry channel** before any patching or malformed traffic — see §6.
+   Minutes, and everything else in this list is the kind of work that crashes clients.
 1. **Run Probe 1** — [studies/handshake/PLAN.md](studies/handshake/PLAN.md) §5 run A. Everything branches here.
 2. **Run Probe 2** — run C. Confirms `-authsrv` on this build.
-3. **Read `vault/mirrors/OpenTyria/code/msgdefs.c`** and decide the schema representation.
+3. **Dump the client's packet-template table** (§1.2), then read
+   `vault/mirrors/OpenTyria/code/msgdefs.c` as the naming layer and reconcile the two. Any
+   disagreement with the client's own `template_size` is a mechanically detectable defect.
 4. **Build OpenTyria** and try to connect a *patched copy* of the client. Never patch `C:\gw`.
 5. **Run Probe 3** — `wasmscan.py` + `gensyms.py` from `vault/mirrors/gw_in_browser`.
 6. **Stand up the proxy** from `vault/mirrors/gw-web-player/serve.py`; tee both directions to `vault/captures/`.
