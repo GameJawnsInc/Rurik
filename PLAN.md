@@ -307,7 +307,7 @@ The last unexplained flag with real upside. A developer offline mode would be wo
 |---|---|---|---|
 | **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **done this session** — gate proven both directions, client pinned and hash-verified, prior art mirrored |
 | **R0b** | Proxy capture via the WebSocket bridge | Both directions of a real session tee'd to disk | Probe 3 |
-| **R1** | Handshake against a local server | Client reaches character select | 🟡 **in progress.** Portal answered, DH key exchange completing, ARC4 channel up and decrypting — all self-tested without the game. Remaining: answer the post-handshake messages. |
+| **R1** | Handshake against a local server | Client reaches character select | ✅ **DONE 2026-08-04.** Build 38797 rendered "Test Warrior" at character select against our portal, our DH parameters, our ARC4 channel and our five-message login burst. |
 | **R2** | Presence | Your own body standing in a real map | Probe 4 — OpenTyria may deliver this directly |
 | **R1.5** | **Tape player** *(new rung)* | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | Requires R0b only |
 | **R3** | Movement on real geometry | You walk to a wall and are stopped | `GmPaths.c` + `PathingMap` exist; this is a quarter, not a week |

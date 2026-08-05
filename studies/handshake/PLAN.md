@@ -1,6 +1,22 @@
 # studies/handshake — R1: getting the client to talk to us
 
-**Status: probe RUN, and it is a GO on both stages.** See §0 for the result; §5 has the procedure.
+**Status: R1 ACHIEVED, 2026-08-04.** A real Guild Wars client, build 38797, reached the character
+select screen against this server and displayed a character that exists nowhere but in our source
+code. HANDOFF.md's R1 acceptance criterion — *"Client reaches character select against your
+server"* — is met.
+
+The full path, all of it ours: portal on 6601 → Diffie-Hellman with a client patched to carry our
+parameters → ARC4 → computer info → session info → portal account login validated against a token
+our own webgate issued → the five-message character burst → the client renders "Test Warrior".
+Elapsed from the first byte captured to a character on screen: a few hours.
+
+Two things are worth writing down because they will not be obvious later. The client sat at the
+screen sending heartbeats with a rising tick counter, which is what a healthy idle client does —
+so the connection was genuinely stable, not merely rendered once. And the EULA dialog that appeared
+just before it was *progress*, not a fault: it is client-side UI, and accepting it sent three bytes
+to loopback.
+
+See §0 for the wire-level detail; §5b for the runbook.
 **Client under study:** build **38797**, read off the wire. Note the client auto-updated mid-session
 — see §0.4.
 
