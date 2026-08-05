@@ -319,7 +319,9 @@ straight lines, so the point test is one interpolation and two comparisons.
   lives in a different part of the file from the data it sizes.
 - All 1,270 of Kamadan's trapezoids are well formed: **zero** inverted y spans,
   **zero** crossed x edges. A misread struct gives inversions in bulk.
-- The walk succeeds on every map sampled across the corpus, not just Kamadan.
+- The walk succeeds on **349 of 349 maps in the archive**, not just Kamadan, and
+  no map anywhere in the corpus produced a single malformed trapezoid. A layout
+  that merely happened to fit one map would not survive that.
 
 **Where the source is wrong.** Tag 11's `size` field is exactly **twice** the
 length of the data that follows, in all 39 of Kamadan's planes. Counts are

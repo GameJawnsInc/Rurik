@@ -793,6 +793,27 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     # correcting drift, so it goes out on arrival and on stop.
                     if not arrived:
                         continue
+                    if state.get("clipped"):
+                        # Arriving at a CLIPPED destination is not arriving
+                        # anywhere -- it means we ran into a wall. Do not
+                        # broadcast it.
+                        #
+                        # This was the second rubber-banding regression, and a
+                        # self-inflicted one. Legs are normally ~765 units, about
+                        # 2.6 seconds, so "arrived" is rare. A leg cut short by a
+                        # wall is ~16 units, so it arrives EVERY TICK, and this
+                        # send is a teleport: at 20 Hz it fights the client's own
+                        # wall-slide continuously. Wall-hugging round a corner
+                        # was visibly worse than the stock game.
+                        #
+                        # Suppressing it cannot bring back the wall-phasing that
+                        # collision fixed. That bug was the server integrating
+                        # THROUGH the wall and then dragging the client after it;
+                        # the clip already prevents our position from crossing.
+                        # Here we simply stop correcting, in the one regime where
+                        # our navmesh is the weaker model -- the client is
+                        # colliding against the real geometry and we are not.
+                        continue
                     try:
                         send(GAME_SMSG_AGENT_UPDATE_POSITION,
                              [PLAYER_AGENT_ID, state["pos"], state["plane"]],
@@ -938,11 +959,26 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # Pressed flat against a wall. Say nothing: a
                                 # MOVE_TO_POINT to where the agent already is
                                 # restarts the walk animation ~4x/second.
+                                #
+                                # This is the HARDEST case for the two models to
+                                # agree, not the easiest: we are frozen at the
+                                # wall while the client slides along it, so drift
+                                # grows the whole time the key is held. Marking
+                                # it clipped is what stops the eventual stop
+                                # report from snapping the player backwards.
                                 state["dest"] = None
                                 state["walking"] = False
+                                state["clipped"] = True
                                 continue
                             state["dest"] = dest
-                            if turned or blocked or state.get("walking") is not True:
+                            state["clipped"] = blocked
+                            # NOT re-sent just because the leg was clipped. An
+                            # earlier version did, and against a wall that
+                            # restarts the walk animation four times a second.
+                            # The client is already refusing to enter the wall
+                            # under its own collision; it does not need us to
+                            # keep telling it where the wall is.
+                            if turned or state.get("walking") is not True:
                                 state["walking"] = True
                                 send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                                      [PLAYER_AGENT_ID, list(dest), plane, plane],
@@ -970,7 +1006,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # thing in the way. Short of the real behaviour, and
                         # honest about where it stops rather than sliding through.
                         dest, blocked = clip_to_walkable(state, dest)
-                        state["dest"] = dest
+                        state["dest"], state["clipped"] = dest, blocked
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                              [PLAYER_AGENT_ID, list(dest), plane, plane],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
@@ -1000,24 +1036,42 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         reported, plane = tuple(values[1]), values[2]
                         state["dest"] = None
                         state["walking"], state["heading"] = False, None
+                        was_clipped = state.get("clipped")
+                        state["clipped"] = False
                         px, py = state["pos"]
                         drift = math.hypot(reported[0] - px, reported[1] - py)
+                        pm = state.get("pathmap")
+                        # A wall makes the two models diverge legitimately. We
+                        # stop dead at the clip point; the client SLIDES along
+                        # the wall, which is what Guild Wars does and what our
+                        # straight-line clip cannot express. So the drift after a
+                        # blocked leg is the client being right and us being
+                        # coarse -- correcting it is a snap backwards along the
+                        # wall, which is exactly the rubber-banding reported.
+                        #
+                        # Believe the client instead, on one condition: that
+                        # where it says it is, is somewhere the navmesh agrees
+                        # you can stand. That keeps this from becoming a blanket
+                        # "trust the client" that would undo the collision fix.
+                        slid = (was_clipped and pm is not None
+                                and pm.walkable(reported[0], reported[1]))
                         agreed = (plane == state["plane"]
-                                  and drift <= MAXIMUM_ALLOWED_CORRECTION)
+                                  and (slid
+                                       or drift <= MAXIMUM_ALLOWED_CORRECTION))
                         # Recorded on every stop so the drift distribution can be
                         # measured rather than guessed at -- it is what says
                         # whether 100.0 is the right number for us.
-                        # Does the navmesh cover where the client thinks it is
-                        # standing? Recorded, not acted on. The mesh is the
-                        # PATHING geometry; the client stops itself using
-                        # collision geometry we have not looked at, and the two
-                        # need not agree at the edges. If stops routinely land
-                        # off-mesh, the clip in clip_to_walkable() is too tight
-                        # and this log is what will say so.
-                        pm = state.get("pathmap")
+                        #
+                        # on_mesh is the measurement that matters now. Our
+                        # trapezoids are the PATHING geometry; the client stops
+                        # itself against collision geometry we have never looked
+                        # at, and the two need not agree at the edges. If stops
+                        # routinely land off-mesh, the clip is too tight, and
+                        # this is the log that will say so rather than us
+                        # guessing from how it felt to play.
                         rec.event("position_report", drift=round(drift, 2),
                                   accepted=agreed, reported=list(reported),
-                                  ours=[px, py], plane=plane,
+                                  ours=[px, py], plane=plane, clipped=was_clipped,
                                   on_mesh=None if pm is None
                                   else pm.walkable(reported[0], reported[1]))
                         if agreed:
