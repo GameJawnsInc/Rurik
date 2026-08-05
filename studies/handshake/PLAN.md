@@ -330,6 +330,51 @@ them is "the flag is gone." Treat a silent listener as a prompt to instrument, n
 
 ---
 
+## 5b. Run it — the current state of R1
+
+Both stages are implemented and self-tested. Neither test needs the game, so run
+them first; if either is red, the game will only tell you "Connecting…" and then
+`Code=058`, which is a much worse error message.
+
+```bash
+python toolkit/portal/test_webgate.py
+python toolkit/authsrv/test_handshake.py
+```
+
+The handshake test is the interesting one. Its client side reads `(g, p, B)` **out of the patched
+executable** rather than from our key file, so a wrong patch offset, a flipped endianness, or a
+subtly wrong `arc4_hash` all show up as mismatched keys rather than as a mystery later. It carries
+a negative control too: an unpatched client must derive a *different* key, and does.
+
+To drive the real client, three terminals:
+
+```bash
+python toolkit/portal/webgate.py
+```
+
+```bash
+python toolkit/authsrv/authsrv.py
+```
+
+```bash
+C:\gd\Rurik\vault\client-patched\Gw.custom.<build>.exe -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed
+```
+
+**It must be the patched copy.** A stock client keys against ArenaNet's compiled-in public value,
+so the handshake completes and every byte after it is undecryptable. `toolkit/clientpatch/
+make_custom_client.py` builds the copy and refuses to write anywhere under `C:\gw`.
+
+What to expect right now: the portal answers, the client logs in, AuthSrv completes the key
+exchange, and then the client asks something we do not yet answer and eventually gives up. That is
+the current edge. The win is that its questions are now written to
+`vault/captures/authsrv/*.jsonl` **in plaintext** — which is the prerequisite for answering them,
+and the first plaintext CtoS this project has ever had.
+
+Re-run `toolkit/clientpatch/make_custom_client.py` after every ArenaNet update. The parameters
+rotate per build (§0.4), so a patched copy from last week keys to nothing.
+
+---
+
 ## 6. Open items
 
 - Run the three probes (§5). Everything else in this arc is downstream of them.

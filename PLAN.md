@@ -307,7 +307,7 @@ The last unexplained flag with real upside. A developer offline mode would be wo
 |---|---|---|---|
 | **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **done this session** — gate proven both directions, client pinned and hash-verified, prior art mirrored |
 | **R0b** | Proxy capture via the WebSocket bridge | Both directions of a real session tee'd to disk | Probe 3 |
-| **R1** | Handshake against a local server | Client reaches character select | ✅ probes 1–2 done and green; remaining work is *answering*, not discovering |
+| **R1** | Handshake against a local server | Client reaches character select | 🟡 **in progress.** Portal answered, DH key exchange completing, ARC4 channel up and decrypting — all self-tested without the game. Remaining: answer the post-handshake messages. |
 | **R2** | Presence | Your own body standing in a real map | Probe 4 — OpenTyria may deliver this directly |
 | **R1.5** | **Tape player** *(new rung)* | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | Requires R0b only |
 | **R3** | Movement on real geometry | You walk to a wall and are stopped | `GmPaths.c` + `PathingMap` exist; this is a quarter, not a week |
@@ -523,11 +523,16 @@ that the client is available to anyone.
 
 0. **Neutralise the crash-telemetry channel** before any patching or malformed traffic — see §6.
    Minutes, and everything else in this list is the kind of work that crashes clients.
-1. **Build the capture harness (A1).** It is required under every strategic option, it is the
-   wasting asset, and it is the hedge that lets you defer Q1. Start from Headquarter's
-   headless-client approach; read `gw-preservation/network-logger` for the in-client route.
-2. **Run Probe 1** — [studies/handshake/PLAN.md](studies/handshake/PLAN.md) §5 run A. Everything branches here.
-3. **Run Probe 2** — run C. Confirms `-authsrv` on this build.
+1. **Drive the real client against our two servers** —
+   [studies/handshake/PLAN.md](studies/handshake/PLAN.md) §5b has the three-terminal runbook.
+   Everything up to and including the encrypted channel is implemented and self-tested; this is
+   the first run against the actual game.
+2. **Answer what it asks next.** The post-handshake messages now arrive *in plaintext* in
+   `vault/captures/authsrv/`. Decode them, reply, and R1's acceptance criterion — a character
+   select screen — falls out. This is transcription against a working reference, not research.
+3. **Build the capture harness (A1).** Still the hedge that lets Q1 stay open, and still required
+   under every strategic option. Start from Headquarter's headless-client approach; read
+   `gw-preservation/network-logger` for the in-client route.
 4. **Dump the client's packet-template table** (§1.2), then reconcile it against the five existing
    opcode corpora (A3). Build-stamp the result. Any disagreement with the client's own
    `template_size` is a mechanically detectable defect, which is what makes this agent work.
