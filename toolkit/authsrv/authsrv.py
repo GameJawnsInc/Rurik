@@ -286,6 +286,28 @@ def load_pathmap(map_file_id):
         return pm
 
 
+# How far the client's reported position may be from ours before we stop
+# believing it. Reports arrive every ~250-340 ms and run speed is 288 u/s, so a
+# legitimate gap is ~100 units; 900 is deliberately loose because the cost of
+# refusing a real report is the drift this exists to prevent, while the cost of
+# accepting a wrong one is one bad leg that the next report corrects. It is a
+# sanity bound against a garbage decode, not an anti-cheat -- this server is
+# loopback only and the client is the one telling the truth here.
+CLIENT_POSITION_TRUST_RADIUS = 900.0
+
+
+def _adopt_client_position(state, reported):
+    """Should we take the client's word for where it is standing?"""
+    px, py = state["pos"]
+    jump = math.hypot(reported[0] - px, reported[1] - py)
+    if jump <= CLIENT_POSITION_TRUST_RADIUS:
+        return True
+    print(f"[map] ignoring a {jump:.0f}u jump in the client's reported "
+          f"position -- ours ({px:.0f}, {py:.0f}), theirs "
+          f"({reported[0]:.0f}, {reported[1]:.0f})", flush=True)
+    return False
+
+
 def clip_to_walkable(state, dest):
     """Trim a destination to where the navmesh says a character can get.
 
@@ -922,6 +944,35 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         plane, heading = values[2], values[3]
                         moving = values[4] if len(values) > 4 else 0
                         state["plane"] = plane
+                        # BELIEVE SLOT 1. The client reports where it actually is
+                        # in the same packet as where it wants to go, four times
+                        # a second, and MEASURED it advances at 211 units/sec
+                        # over 120 samples -- it is a live position, not a stale
+                        # echo. Read the pair as "I am here, and I want to go
+                        # there"; computing the leg from OUR position was always
+                        # the approximation.
+                        #
+                        # Why this matters more since collision landed: our
+                        # integrator stops dead at a wall while the client slides
+                        # along it, and measured drift at each stop went to a
+                        # median of 538 units and a maximum of 1,429. Every leg
+                        # we then issued was an ABSOLUTE destination computed
+                        # from a position a third of a map behind the player, so
+                        # the client walked backwards to reach it. That is the
+                        # rubber-banding -- MOVE_TO_POINT carrying our error, not
+                        # any teleport message. Suppressing AGENT_UPDATE_POSITION
+                        # was correct and did not touch it.
+                        #
+                        # An early attempt at believing this slot pinned the
+                        # character to spawn. That was a different situation, not
+                        # a warning against this one: back then we sent no
+                        # keyboard MOVE_TO_POINT at all, so the client never
+                        # animated, reported spawn forever, and we copied it. The
+                        # client moves itself now, which is precisely what makes
+                        # its report worth having.
+                        reported = tuple(values[1])
+                        if _adopt_client_position(state, reported):
+                            state["pos"] = reported
                         if moving:
                             px, py = state["pos"]
                             dest = (px + heading[0], py + heading[1])
