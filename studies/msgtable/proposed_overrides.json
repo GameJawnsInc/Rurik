@@ -1,0 +1,665 @@
+{
+  "provenance": "See studies/msgtable/FINDINGS.md for the full study, the recovered encoding, and the evidence behind every entry here. PROPOSED, not live. Study c3 (task C3, gap 3 of SPEC.md section 10): full unfiltered per-opcode diff of schema/messages.json (+ the existing schema/overrides.json) against the message-format tables recovered from C:\\gd\\Rurik\\vault\\run\\2026-07-29_221c13772c7a\\Gw.exe (Guild Wars build 38797), STATIC ANALYSIS ONLY. Channel map: ch0 RECV=GAME_SMSG, ch0 SEND=GAME_CMSG, ch3 RECV=AUTH_SMSG, ch3 SEND=AUTH_CMSG. Binary fixed-vs-variable is the binary's own determination (variable iff a type 7, 11 or 12 cmd is present) -- the schema's own variable_length flag was NOT used as a filter anywhere. declared_unpack_size here is computed with the SCHEMA's own size formula (msg_header 2, byte 1, word 2, dword/float/agent_id 4, vec2 8, vec3 12, blob=len, string16=4+2*len, array8=4+len, array16=4+2*len, array32=4+4*len, nested_struct=4+N*sizeof(tail)) applied to the binary-derived field list, so these numbers stay commensurable with the 777 entries already in messages.json -- that formula reproduces declared_unpack_size for 777/777 of them. It is NOT the client's true max wire size: the client's string/array length prefix is u16 (2 bytes, not 4) and its nested-struct count is u8 (1 byte, not 4), so every variable-length message's declared_unpack_size overstates the real maximum. toolkit/schema/codec.py already writes the correct 2-byte prefixes, so that is a documentation defect, not a live framing bug, and it is deliberately NOT patched here.",
+  "channels": {
+    "AUTH_CMSG": {
+      "2": {
+        "opcode": 2,
+        "table": "AUTH_CMSG_0002",
+        "declared_unpack_size": 22,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, blob(16). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xbf8dd0: [0x2, 0x404, 0x1005]; MsgFormat entry @VA 0xbec3e0. Wire size is a constant 22 bytes."
+      },
+      "12": {
+        "opcode": 12,
+        "table": "AUTH_CMSG_0012",
+        "declared_unpack_size": 26,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, dword, blob(16). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xbf8f24: [0xc, 0x404, 0x404, 0x1005]; MsgFormat entry @VA 0xbec4a8. Wire size is a constant 26 bytes."
+      },
+      "25": {
+        "opcode": 25,
+        "table": "AUTH_CMSG_0025",
+        "declared_unpack_size": 50,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 20
+          },
+          {
+            "type": "blob",
+            "length": 20
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, dword, blob(20), blob(20). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xbf8e3c: [0x19, 0x404, 0x404, 0x1409, 0x1409]; MsgFormat entry @VA 0xbec410. Wire size is a constant 50 bytes."
+      },
+      "37": {
+        "opcode": 37,
+        "table": "AUTH_CMSG_0037",
+        "declared_unpack_size": 38,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, dword, dword, dword, dword, blob(16). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xbf8f7c: [0x25, 0x404, 0x404, 0x404, 0x404, 0x404, 0x1005]; MsgFormat entry @VA 0xbec498. Wire size is a constant 38 bytes."
+      },
+      "58": {
+        "opcode": 58,
+        "table": "AUTH_CMSG_0058",
+        "declared_unpack_size": 526,
+        "variable_length": true,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "array8",
+            "length": 512
+          }
+        ],
+        "why": "We are blind to this opcode: AUTH_CMSG has no entry for it at all, so codec.fields_for raises Undecodable and decode_stream abandons the rest of the frame. It IS registered on build 38797. cmds[] @VA 0xbf9020 (file offset 0x7f8020) is fully static in the image -- no reconstruction involved -- and reads [0x3a, 0x404, 0x404, 0x2000b, 0x6]; the MsgFormat entry @VA 0xbec518 in the channel-3 SEND table @VA 0xbec3d0 takes count=5 (written by the initializer at VA 0x0045113f). Decode: msg_header, dword, dword, array8(512). cmd 0x2000b = type 11 (array length prefix, u16 on the wire) with index 0 (1-byte elements) and count 512 (max elements); the following 0x00000006 is its type-6 payload cmd, which is one binary cmd but not a separate schema field."
+      },
+      "59": {
+        "opcode": 59,
+        "table": "AUTH_CMSG_0059",
+        "declared_unpack_size": 522,
+        "variable_length": true,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "array8",
+            "length": 512
+          }
+        ],
+        "why": "We are blind to this opcode: AUTH_CMSG has no entry for it at all, so codec.fields_for raises Undecodable and decode_stream abandons the rest of the frame. It IS registered on build 38797. cmds[] @VA 0xbf9034 (file offset 0x7f8034) is fully static in the image -- no reconstruction involved -- and reads [0x3b, 0x404, 0x2000b, 0x6]; the MsgFormat entry @VA 0xbec520 in the channel-3 SEND table @VA 0xbec3d0 takes count=4 (written by the initializer at VA 0x00451149). Decode: msg_header, dword, array8(512). cmd 0x3b = type 11 (array length prefix, u16 on the wire) with index 0 (1-byte elements) and count 512 (max elements); the following 0x00000006 is its type-6 payload cmd, which is one binary cmd but not a separate schema field."
+      }
+    },
+    "AUTH_SMSG": {
+      "6": {
+        "opcode": 6,
+        "table": "AUTH_SMSG_0006",
+        "declared_unpack_size": 42,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 8
+          },
+          {
+            "type": "blob",
+            "length": 8
+          },
+          {
+            "type": "blob",
+            "length": 8
+          },
+          {
+            "type": "blob",
+            "length": 8
+          },
+          {
+            "type": "dword",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, blob(8), blob(8), blob(8), blob(8), dword. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xbf90e8: [0x6, 0x404, 0x805, 0x805, 0x805, 0x805, 0x404]; MsgFormat entry @VA 0xbec588. Wire size is a constant 42 bytes."
+      },
+      "8": {
+        "opcode": 8,
+        "table": "AUTH_SMSG_0008",
+        "declared_unpack_size": 38,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 24
+          },
+          {
+            "type": "dword",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, dword, blob(24), dword. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xbf9068: [0x8, 0x404, 0x404, 0x1805, 0x404]; MsgFormat entry @VA 0xbec648. Wire size is a constant 38 bytes."
+      },
+      "9": {
+        "opcode": 9,
+        "table": "AUTH_SMSG_0009",
+        "declared_unpack_size": 42,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 24
+          },
+          {
+            "type": "dword",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, dword, dword, blob(24), dword. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xbf91ec: [0x9, 0x404, 0x404, 0x404, 0x1805, 0x404]; MsgFormat entry @VA 0xbec600. Wire size is a constant 42 bytes."
+      },
+      "21": {
+        "opcode": 21,
+        "table": "AUTH_SMSG_0021",
+        "declared_unpack_size": 34,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 8
+          },
+          {
+            "type": "blob",
+            "length": 8
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, blob(8), blob(8), dword, dword, dword. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xbf9280: [0x15, 0x404, 0x805, 0x805, 0x404, 0x404, 0x404]; MsgFormat entry @VA 0xbec678. Wire size is a constant 34 bytes."
+      },
+      "35": {
+        "opcode": 35,
+        "table": "AUTH_SMSG_0035",
+        "declared_unpack_size": 26,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, dword, blob(16). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xbf92a8: [0x23, 0x404, 0x404, 0x1005]; MsgFormat entry @VA 0xbec69c. Wire size is a constant 26 bytes."
+      },
+      "39": {
+        "opcode": 39,
+        "table": "AUTH_SMSG_0039",
+        "declared_unpack_size": 4106,
+        "variable_length": true,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "array8",
+            "length": 4096
+          }
+        ],
+        "why": "We are blind to this opcode: AUTH_SMSG has no entry for it at all, so codec.fields_for raises Undecodable and decode_stream abandons the rest of the frame. It IS registered on build 38797. cmds[] @VA 0xbf92d4 (file offset 0x7f82d4) is fully static in the image -- no reconstruction involved -- and reads [0x27, 0x404, 0x10000b, 0x6]; the MsgFormat entry @VA 0xbec6b4 in the channel-3 RECV table @VA 0xbec540 takes count=4 (written by the initializer at VA 0x00450f6b). Decode: msg_header, dword, array8(4096). cmd 0x10000b = type 11 (array length prefix, u16 on the wire) with index 0 (1-byte elements) and count 4096 (max elements); the following 0x00000006 is its type-6 payload cmd, which is one binary cmd but not a separate schema field."
+      }
+    },
+    "GAME_CMSG": {
+      "144": {
+        "opcode": 144,
+        "table": "GAME_CMSG_0144",
+        "declared_unpack_size": 19,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          },
+          {
+            "type": "byte",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, blob(16), byte. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc016fc: [0x90, 0x1005, 0x104]; MsgFormat entry @VA 0xbcb070. Wire size is a constant 19 bytes. NOTE: this opcode is already in schema/overrides.json; the binary CONFIRMS its field list exactly (msg_header, blob(16), byte, 19 bytes) -- only variable_length changes."
+      },
+      "176": {
+        "opcode": 176,
+        "table": "GAME_CMSG_0176",
+        "declared_unpack_size": 19,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          },
+          {
+            "type": "byte",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, blob(16), byte. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc01d6c: [0xb0, 0x1005, 0x104]; MsgFormat entry @VA 0xbcbab8. Wire size is a constant 19 bytes."
+      },
+      "182": {
+        "opcode": 182,
+        "table": "GAME_CMSG_0182",
+        "declared_unpack_size": 23,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          },
+          {
+            "type": "byte",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, blob(16), byte. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00c90: [0xb6, 0x404, 0x1005, 0x104]; MsgFormat entry @VA 0xbca820. Wire size is a constant 23 bytes."
+      },
+      "183": {
+        "opcode": 183,
+        "table": "GAME_CMSG_0183",
+        "declared_unpack_size": 23,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          },
+          {
+            "type": "byte",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, blob(16), byte. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00ca0: [0xb7, 0x404, 0x1005, 0x104]; MsgFormat entry @VA 0xbca828. Wire size is a constant 23 bytes."
+      }
+    },
+    "GAME_SMSG": {
+      "140": {
+        "opcode": 140,
+        "table": "GAME_SMSG_0140",
+        "declared_unpack_size": 11,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "byte",
+            "length": 0
+          }
+        ],
+        "why": "Our table stops one field short. Binary cmds[] @VA 0x00bfff98 (file offset 0x7fef98) is [0x0000008c, 0x00000404, 0x00000404, 0x00000104]; the MsgFormatRecv entry @VA 0x00bc93a0 (file 0x7c83a0) statically holds count=4, i.e. cmds[0]+3 fields, and the next cmds[] array begins exactly 4 dwords later, so there is no room for more or fewer. Slots 1..3 are zero in the file and are written by the MSVC dynamic initializer at VA 0x00464650-0x0046466e (`a1 74 f8 bf 00 / a3 9c ff bf 00` etc.), copying the statically-present constants [0x00bff874]=0x404, [0x00bff878]=0x404, [0x00bff87c]=0x104. cmd 0x104 = type 4, count 1 = a 1-byte unsigned int (our `byte`). We are missing that trailing byte, so we frame this message as 10 bytes when the client writes 11 and every later message in the datagram shifts."
+      },
+      "146": {
+        "opcode": 146,
+        "table": "GAME_SMSG_0146",
+        "declared_unpack_size": 12,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "word",
+            "length": 0
+          }
+        ],
+        "why": "Our table stops one field short. Binary cmds[] @VA 0x00bffffc (file 0x7feffc) is [0x00000092, 0x00000404, 0x00000404, 0x00000204]; MsgFormatRecv entry @VA 0x00bc93e8 (file 0x7c83e8) statically holds count=4 and the next cmds[] array begins exactly 4 dwords later. Initializer at VA 0x00464730-0x0046474e copies [0x00bff8cc]=0x404, [0x00bff7d8]=0x404, [0x00bff888]=0x204, all statically present. cmd 0x204 = type 4, count 2 = a 2-byte unsigned int (our `word`). We are missing that trailing word: 12 bytes on the wire, not 10."
+      },
+      "278": {
+        "opcode": 278,
+        "table": "GAME_SMSG_0278",
+        "declared_unpack_size": 25,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "word",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          },
+          {
+            "type": "byte",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, word, blob(16), byte, dword. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00d0c: [0x116, 0x204, 0x1005, 0x104, 0x404]; MsgFormat entry @VA 0xbca870. Wire size is a constant 25 bytes."
+      },
+      "279": {
+        "opcode": 279,
+        "table": "GAME_SMSG_0279",
+        "declared_unpack_size": 18,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, blob(16). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00d20: [0x117, 0x1005]; MsgFormat entry @VA 0xbca87c. Wire size is a constant 18 bytes."
+      },
+      "280": {
+        "opcode": 280,
+        "table": "GAME_SMSG_0280",
+        "declared_unpack_size": 21,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "word",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          },
+          {
+            "type": "byte",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, word, blob(16), byte. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00d8c: [0x118, 0x204, 0x1005, 0x104]; MsgFormat entry @VA 0xbca8d0. Wire size is a constant 21 bytes."
+      },
+      "292": {
+        "opcode": 292,
+        "table": "GAME_SMSG_0292",
+        "declared_unpack_size": 19,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 16
+          },
+          {
+            "type": "byte",
+            "length": 0
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, blob(16), byte. Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc00e8c: [0x124, 0x1005, 0x104]; MsgFormat entry @VA 0xbca960. Wire size is a constant 19 bytes."
+      },
+      "405": {
+        "opcode": 405,
+        "table": "GAME_SMSG_0405",
+        "declared_unpack_size": 26,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "vec2",
+            "length": 0
+          },
+          {
+            "type": "word",
+            "length": 0
+          },
+          {
+            "type": "byte",
+            "length": 0
+          },
+          {
+            "type": "byte",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 8
+          }
+        ],
+        "why": "variable_length is false on this build. The binary's own fixed/variable determination is 'contains a type 7 (wide string), type 11 (array length prefix) or type 12 (nested-struct repeat count) cmd'. This message has none: msg_header, dword, vec2, word, byte, byte, blob(8). Our flag is true only because the importer treats `blob` as variable, but a blob is a type-5 cmd -- a fixed `count`-byte payload with NO length prefix on the wire (SPEC section 2; wire-size switch at VA 0x7dcec4 family). Binary cmds[] @VA 0xc019c8: [0x195, 0x404, 0x12, 0x204, 0x104, 0x104, 0x805]; MsgFormat entry @VA 0xbcb27c. Wire size is a constant 26 bytes."
+      },
+      "421": {
+        "opcode": 421,
+        "table": "GAME_SMSG_0421",
+        "declared_unpack_size": 39,
+        "variable_length": false,
+        "fields": [
+          {
+            "type": "msg_header",
+            "length": 0
+          },
+          {
+            "type": "blob",
+            "length": 24
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "byte",
+            "length": 0
+          },
+          {
+            "type": "word",
+            "length": 0
+          },
+          {
+            "type": "byte",
+            "length": 0
+          },
+          {
+            "type": "dword",
+            "length": 0
+          },
+          {
+            "type": "byte",
+            "length": 0
+          }
+        ],
+        "why": "Our table stops one field short AND mismarks the message variable. Binary cmds[] @VA 0x00c01b70 (file 0x800b70) is [0x000001a5, 0x00001805, 0x00000404, 0x00000104, 0x00000204, 0x00000104, 0x00000404, 0x00000104]; MsgFormatRecv entry @VA 0x00bcb36c (file 0x7ca36c) statically holds count=8 and the next cmds[] array begins exactly 8 dwords later. Initializer at VA 0x004661d0-0x00466216 copies the statically-present constants [0x00c015a8]=0x1805, [0x00c015ac]=0x404, [0x00c01668]=0x104, [0x00c015dc]=0x204, [0x00c015e4]=0x104, [0x00c01520]=0x404, [0x00c0152c]=0x104. The final 0x104 = type 4, count 1 = a trailing `byte` we do not have: 39 bytes, not 38. No type 7/11/12 field is present, so the message is FIXED, not variable_length."
+      }
+    }
+  }
+}
