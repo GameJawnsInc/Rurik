@@ -226,6 +226,38 @@ Better than the protocol corpus, with the same caveat about counting lineages.
 
 ---
 
+## Kamadan's pathing chunk, parsed
+
+MEASURED 2026-08-05, first geometry actually read out of the archive.
+
+Resolved via the file-id table: map_file_id `0x345CC` -> MFT row 22371 -> FFNA
+type 3 -> chunk `0x20000008`, 199,130 bytes. Signature `0xEEFE704C` and version
+byte 12 both match what OpenTyria specifies, so those two constants move from
+reconstruction to confirmed.
+
+Header is `sig u32, version u32, u32 (83 here)`, then tag-framed records from
+offset 12.
+
+**Tag 7 is the boundary polygon**, and the offset matters: after the tag byte
+there are `u32 count` and a `u16` (16 here) before the points begin, so the
+float array starts at **tag + 7**, not tag + 3. Reading it three bytes early
+yields a denormal for every x and a plausible value for every y -- the kind of
+half-right result that looks like a partial success and is entirely wrong.
+
+For Kamadan: 130 points, x from -17952 to 2400, y from 0 to 21504.
+
+**The sanity check that matters:** our spawn point (-9067, 13218), which came
+from OpenTyria's static config and has never been checked against anything,
+falls inside that range. Geometry pulled from the archive containing the
+coordinate our server independently spawns the character at is real
+corroboration for both. Note the limit: this is a bounding-box test, not a
+point-in-polygon test, so it rules out a gross mismatch rather than confirming
+the point is walkable.
+
+Immediately after the polygon (offset 1059) sits a byte reading 0 followed by
+more floats, so the top-level framing is not a uniform `u8 tag + sized payload`.
+Do not assume it is when parsing tag 8.
+
 ## Implementation plan for Rurik
 
 Ordered, with the verifiable steps marked — that property is what makes this
