@@ -34,11 +34,14 @@ map boundary, and 194,200 static obstacles with radii — is reachable today.
 **Three things block a working collision implementation**, in descending order of
 severity:
 
-1. **We cannot identify which map file is which.** NOT FOUND. We can enumerate
-   all 698 map payloads, but nothing we found maps a Guild Wars map id (449
-   Kamadan, 148 Ascalon City Pre-Searing) to a file in the archive. This is the
-   same blocker the movement study hit from the other side, and it is now the
-   single most valuable open question in the project.
+1. **SOLVED after this document was first written.** The claim here was that
+   nothing maps a map id to a file. In fact MFT row 2 is a stored table of
+   `(file_id, row)` pairs, and all six of OpenTyria's map_file_ids resolve
+   through it to real map files. Kamadan is row 22371 and its geometry is parsed
+   (see below). What remains open is narrower: we still cannot name a map we do
+   not already have an id for, so **Ascalon City Pre-Searing is still
+   unreachable** — but nothing needed it, because the character stands in
+   Kamadan.
 2. **There is no Z coordinate.** MEASURED. Nothing in the file says what height
    a plane sits at. GWToolbox fabricates `zplane = (i == 0 ? UINT32_MAX : i - 1)`
    when loading from the archive, which is a tell that it is not in the data.
