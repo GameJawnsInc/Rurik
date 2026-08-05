@@ -27,6 +27,7 @@ and we will have its words written down, which is the prerequisite for answering
 import argparse
 import binascii
 import json
+import math
 import os
 import secrets
 import socket
@@ -128,6 +129,14 @@ APPEARANCE = PROF_WARRIOR << 20
 
 PLAYER_AGENT_ID = 1        # what INSTANCE_LOAD_INFO already claims
 DEFAULT_RUN_SPEED = 288.0  # Guild Wars' base movement speed
+# How often the server reports where the agent got to. The client SNAPS to each
+# position we send rather than interpolating between them, so this rate is
+# visible directly as motion smoothness: at 0.25 the character jolted forward a
+# few times a second. A real server ticks slowly and lets the client animate
+# toward the destination; until we work out what makes it do that (probably
+# AGENT_UPDATE_DESTINATION rather than MOVE_TO_POINT), a fast tick buys
+# smoothness cheaply -- this is loopback, and 20 Hz of one small message is free.
+TICK_SECONDS = 0.05
 INF = float("inf")
 
 # GmAgent.h. model_id is not a free-form number: the top nibble is a class tag,
@@ -209,6 +218,20 @@ GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS = 0x0091
 # PLAYERS and ITEMS at exactly the values we already use, which makes it the
 # aligned catalog; a second mirror's table is off by one throughout and disagrees.
 GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS = 0x008A
+
+# Both of these exist on this build and they are NOT the same order:
+#   0x003D  position + heading  -> turn to face. Handled entirely client-side;
+#           answering it is unnecessary, and answering it with a move is worse.
+#   0x003E  destination + plane -> actually go there. Upstream's value, despite
+#           PLAN.md recording a 0x003C -> 0x003E drift across builds.
+# Keying movement on 0x003D was the reason the character turned to face every
+# input and never took a step: we were answering the turn and ignoring the move.
+GAME_CMSG_TURN_TO_DIRECTION = 0x003D
+GAME_CMSG_MOVE_TO_COORD = 0x003E
+GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
+
+GAME_SMSG_AGENT_MOVE_TO_POINT = 0x0029
+GAME_SMSG_AGENT_UPDATE_POSITION = 0x002C
 
 GAME_SRV_HOST = "127.0.0.1"
 # How GAME_SERVER_INFO fills its 24-byte host field. "sockaddr" is what both
@@ -493,10 +516,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         # ---- 3. decode, answer, and record ------------------------------
         smsg = "AUTH_SMSG" if kind == "auth" else "GAME_SMSG"
 
-        def send(opcode, values, label):
+        # The world ticker sends from its own thread, and ARC4 is a STATEFUL
+        # stream cipher: two threads interleaving inside s2c.crypt would advance
+        # one keystream across two messages and produce plaintext neither end
+        # could read. The lock covers crypt and sendall together, not separately.
+        send_lock = threading.Lock()
+
+        def send(opcode, values, label, quiet=False):
             blob = codec.encode(smsg, opcode, values)
-            sock.sendall(s2c.crypt(blob))
-            print(f"[c{conn_id}] s2c {label} (0x{opcode:04x}, {len(blob)}B)", flush=True)
+            with send_lock:
+                sock.sendall(s2c.crypt(blob))
+            # quiet is for the 20 Hz position tick only: it would bury every
+            # other line in the console. It still goes into the capture, because
+            # "did we actually send position updates" is exactly the question a
+            # movement bug needs answered.
+            if not quiet:
+                print(f"[c{conn_id}] s2c {label} (0x{opcode:04x}, {len(blob)}B)",
+                      flush=True)
             rec.event("sent", opcode=opcode, label=label,
                       plain=binascii.hexlify(blob).decode())
 
@@ -524,6 +560,51 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                   0,          # language
                   0],         # is_observer
                  "INSTANCE_LOAD_INFO")
+
+            spawn = MAP_STATIC_CONFIG.get(state["map_id"],
+                                          MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
+            state["pos"], state["plane"], state["dest"] = spawn[1], spawn[2], None
+
+            def world_tick():
+                """Walk the agent toward its destination and say where it got to.
+
+                Guild Wars puts the server in charge of position: the client asks
+                to go somewhere and then believes whatever it is told. With no
+                tick it asked, waited about two seconds for a position that never
+                arrived, cancelled, and reported itself back at the spawn point.
+                """
+                while not stop.is_set():
+                    time.sleep(TICK_SECONDS)
+                    dest = state.get("dest")
+                    if not dest:
+                        continue
+                    px, py = state["pos"]
+                    dx, dy = dest[0] - px, dest[1] - py
+                    dist = math.hypot(dx, dy)
+                    step = DEFAULT_RUN_SPEED * TICK_SECONDS
+                    arrived = dist <= step
+                    if arrived:
+                        state["pos"], state["dest"] = dest, None
+                    else:
+                        state["pos"] = (px + dx / dist * step,
+                                        py + dy / dist * step)
+                    # Track position every tick, but do NOT broadcast it every
+                    # tick. AGENT_UPDATE_POSITION is a teleport: the client
+                    # abandons whatever it was animating and snaps. Sending it at
+                    # 20 Hz cancelled the walk animation twenty times a second,
+                    # which is why the character slid along in its idle pose. The
+                    # walk is driven by MOVE_TO_POINT; position is only for
+                    # correcting drift, so it goes out on arrival and on stop.
+                    if not arrived:
+                        continue
+                    try:
+                        send(GAME_SMSG_AGENT_UPDATE_POSITION,
+                             [PLAYER_AGENT_ID, state["pos"], state["plane"]],
+                             "AGENT_UPDATE_POSITION(arrived)")
+                    except OSError:
+                        return          # connection gone; nothing to report to
+
+            threading.Thread(target=world_tick, daemon=True).start()
 
         sock.settimeout(1.0)
         total = 0
@@ -605,6 +686,41 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_INSTANCE_MANIFEST_DONE,
                                  [phase_arg, map_arg, 0],
                                  f"MANIFEST_DONE[{phase_arg}, map {map_arg}]")
+                    elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
+                        # Keyboard movement comes through here, not through
+                        # MOVE_TO_COORD: WASD sends a HEADING from where you
+                        # stand, while clicking sends an absolute destination.
+                        # That is why click-to-move worked and WASD did not --
+                        # we treated this as a pure turn and did nothing.
+                        # values[4] appears to be a "moving" flag (seen as 1
+                        # while walking); when it is absent or 0 this really is
+                        # just a turn and there is nothing for us to do.
+                        plane, heading = values[2], values[3]
+                        moving = values[4] if len(values) > 4 else 0
+                        state["plane"] = plane
+                        if moving:
+                            px, py = state["pos"]
+                            state["dest"] = (px + heading[0], py + heading[1])
+                    elif opcode == GAME_CMSG_MOVE_TO_COORD:
+                        # Granting the move is not the same as performing it.
+                        # The server owns position: it walks the agent along and
+                        # reports where it got to. Answering MOVE_TO_POINT and
+                        # then never moving anyone is why the client cancelled
+                        # after ~2s and reported itself still at the spawn point.
+                        dest, plane = values[1], values[2]
+                        state["dest"], state["plane"] = tuple(dest), plane
+                        send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                             [PLAYER_AGENT_ID, dest, plane, plane],
+                             f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f})")
+                    elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
+                        # Stop where WE say it is, not where the client last
+                        # believed. Echoing the client's figure back pinned it to
+                        # the spawn point: it reported "still at spawn" because
+                        # we had not moved it, and we confirmed that was correct.
+                        state["dest"] = None
+                        send(GAME_SMSG_AGENT_UPDATE_POSITION,
+                             [PLAYER_AGENT_ID, state["pos"], state["plane"]],
+                             "AGENT_UPDATE_POSITION(stop)")
                     elif opcode == GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS:
                         # The client sent this and REQUEST_ITEMS in the same
                         # breath; we answered only items, and it then waited 44s

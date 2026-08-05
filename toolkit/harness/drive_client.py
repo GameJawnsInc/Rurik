@@ -302,7 +302,10 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--exe", default=r"C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe")
-    ap.add_argument("--actions", default="9:enter 5:enter 5:enter",
+    # The original 9/5/5 spacing was tuned when the client still ran its updater
+    # on boot. With the updater patched out every screen -- load, login, EULA,
+    # character select -- comes up fast, and the old delays just sat idle.
+    ap.add_argument("--actions", default="5:enter 4:enter 4:enter",
                     help="Whitespace-separated '<delay>:<kind>[:args]' steps. "
                          "kind is enter | click:<fx>,<fy> | shot. Fractions are of "
                          "the window, so scripts survive a resize.")
