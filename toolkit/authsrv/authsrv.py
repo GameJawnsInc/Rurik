@@ -56,6 +56,7 @@ AUTH_SMSG_SESSION_INFO = 0x0001
 
 AUTH_CMSG_HEARTBEAT = 0x0000
 AUTH_CMSG_UNKNOWN_8023 = 0x0023
+AUTH_CMSG_ACCEPT_EULA = 0x0026
 AUTH_CMSG_PORTAL_ACCOUNT_LOGIN = 0x0038
 AUTH_SMSG_HEARTBEAT = 0x0000
 AUTH_SMSG_REQUEST_RESPONSE = 0x0003
@@ -292,6 +293,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     # dword is a server tick nothing reads back; it does not echo
                     # the client's value.
                     send(AUTH_SMSG_HEARTBEAT, [16], "HEARTBEAT")
+                elif opcode == AUTH_CMSG_ACCEPT_EULA:
+                    # The EULA dialog is client-side UI. Accepting it sends this
+                    # 3-byte message HERE, to loopback — not to ArenaNet. The
+                    # reference server treats it as a no-op with no reply, and so
+                    # do we; the client proceeds on its own.
+                    print(f"[c{conn_id}] EULA accepted by the user (value={values[1]}) "
+                          f"— recorded locally, nothing sent upstream", flush=True)
+                    state["eula_accepted"] = values[1]
                 elif opcode == AUTH_CMSG_UNKNOWN_8023:
                     # Intentional no-op, not an oversight. Unnamed in both C
                     # references; a third implementation identifies this exact
