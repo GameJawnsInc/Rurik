@@ -96,6 +96,18 @@ GAME_SMSG_INSTANCE_LOAD_PLAYER_NAME = 0x017D
 GAME_SMSG_INSTANCE_PLAYER_DATA_START = 0x0186
 GAME_SMSG_INSTANCE_PLAYER_DATA_DONE = 0x018A
 GAME_SMSG_INSTANCE_LOAD_INFO = 0x0199
+GAME_SMSG_MAP_UPDATE_CURRENT = 0x0099
+GAME_SMSG_ITEM_STREAM_CREATE = 0x0144
+GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT = 0x0195
+GAME_SMSG_READY_FOR_MAP_SPAWN = 0x01AB
+
+# What the client asks for, in the order it asks. OpenTyria answers REQUEST_ITEMS
+# with a dozen messages (inventory, weapon sets, gold, factions, quests...). We
+# send only the ones that drive the state machine, so that a stall names a missing
+# message rather than hiding inside a burst of guesses.
+GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN = 0x0088
+GAME_CMSG_INSTANCE_LOAD_REQUEST_PLAYERS = 0x0090
+GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS = 0x0091
 
 GAME_SRV_HOST = "127.0.0.1"
 GAME_SRV_PORT = 6113
@@ -354,6 +366,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         c2s = ARC4(derived)
         s2c = ARC4(derived)
         state = {}
+        if kind == "game":
+            state["map_id"] = map_id
+            state["world_id"] = world_id
+            state["player_id"] = player_id
         print(f"[c{conn_id}] key exchange OK — ARC4 key {derived.hex()[:16]}…", flush=True)
         rec.event("key_exchange_ok", arc4_key=derived.hex())
 
@@ -427,7 +443,25 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                           values=[v.hex() if isinstance(v, bytes) else v
                                   for v in values])
 
-                if kind != "auth":
+                if kind == "game":
+                    if opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS:
+                        send(GAME_SMSG_ITEM_STREAM_CREATE, [0, 0],
+                             "ITEM_STREAM_CREATE")
+                        send(GAME_SMSG_MAP_UPDATE_CURRENT, [state["map_id"], 0],
+                             "MAP_UPDATE_CURRENT")
+                        send(GAME_SMSG_READY_FOR_MAP_SPAWN, [0],
+                             "READY_FOR_MAP_SPAWN")
+                    elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_PLAYERS:
+                        send(GAME_SMSG_INSTANCE_PLAYER_DATA_DONE, [],
+                             "PLAYER_DATA_DONE")
+                    elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
+                        # map_file_id 0 is a placeholder: the real one comes from
+                        # the map's static config, which we do not have yet. If the
+                        # client refuses to spawn, this is the first thing to doubt.
+                        send(GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT,
+                             [0, (0.0, 0.0), 0, 0, 0, b"\x00" * 8],
+                             "INSTANCE_LOAD_SPAWN_POINT")
+                elif kind != "auth":
                     # Game channel: capture only. Every handler below is keyed to
                     # AUTH_CMSG opcodes, and the two catalogs collide numerically
                     # — GAME_CMSG 0x0002 is TRADE_ADD_ITEM, not SEND_COMPUTER_HASH.
