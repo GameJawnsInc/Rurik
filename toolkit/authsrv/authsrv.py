@@ -806,42 +806,29 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     else:
                         state["pos"] = (px + dx / dist * step,
                                         py + dy / dist * step)
-                    # Track position every tick, but do NOT broadcast it every
-                    # tick. AGENT_UPDATE_POSITION is a teleport: the client
-                    # abandons whatever it was animating and snaps. Sending it at
-                    # 20 Hz cancelled the walk animation twenty times a second,
-                    # which is why the character slid along in its idle pose. The
-                    # walk is driven by MOVE_TO_POINT; position is only for
-                    # correcting drift, so it goes out on arrival and on stop.
-                    if not arrived:
-                        continue
-                    if state.get("clipped"):
-                        # Arriving at a CLIPPED destination is not arriving
-                        # anywhere -- it means we ran into a wall. Do not
-                        # broadcast it.
-                        #
-                        # This was the second rubber-banding regression, and a
-                        # self-inflicted one. Legs are normally ~765 units, about
-                        # 2.6 seconds, so "arrived" is rare. A leg cut short by a
-                        # wall is ~16 units, so it arrives EVERY TICK, and this
-                        # send is a teleport: at 20 Hz it fights the client's own
-                        # wall-slide continuously. Wall-hugging round a corner
-                        # was visibly worse than the stock game.
-                        #
-                        # Suppressing it cannot bring back the wall-phasing that
-                        # collision fixed. That bug was the server integrating
-                        # THROUGH the wall and then dragging the client after it;
-                        # the clip already prevents our position from crossing.
-                        # Here we simply stop correcting, in the one regime where
-                        # our navmesh is the weaker model -- the client is
-                        # colliding against the real geometry and we are not.
-                        continue
-                    try:
-                        send(GAME_SMSG_AGENT_UPDATE_POSITION,
-                             [PLAYER_AGENT_ID, state["pos"], state["plane"]],
-                             "AGENT_UPDATE_POSITION(arrived)")
-                    except OSError:
-                        return          # connection gone; nothing to report to
+                    # NOTHING IS BROADCAST FROM HERE. This integrator is the
+                    # server's own opinion about where the character is, and it
+                    # is the weaker of the two opinions available.
+                    #
+                    # It used to announce arrivals. MEASURED on the wall-hugging
+                    # session: five AGENT_UPDATE_POSITION went out and three were
+                    # arrivals, carrying the client 630, 189 and 765 units. That
+                    # last figure is exactly one heading vector -- our integrator
+                    # had run the whole leg while the client had not moved at
+                    # all, because the client's own collision stopped it
+                    # somewhere our navmesh says is open. We then told it that
+                    # our position was the truth.
+                    #
+                    # That is the warp the player described: not a snap, a WALK.
+                    # A client sent to a position appears to path there in a
+                    # straight line over a couple of seconds, straight over
+                    # buildings, because a server-granted position is not
+                    # something it re-collides against.
+                    #
+                    # Since we adopt the client's reported position four times a
+                    # second, our arrival opinion is redundant even when right.
+                    # Keep integrating -- the server needs a position model for
+                    # everything that is not a player -- and stop arguing.
 
             threading.Thread(target=world_tick, daemon=True).start()
 
@@ -1104,11 +1091,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # where it says it is, is somewhere the navmesh agrees
                         # you can stand. That keeps this from becoming a blanket
                         # "trust the client" that would undo the collision fix.
-                        slid = (was_clipped and pm is not None
-                                and pm.walkable(reported[0], reported[1]))
-                        agreed = (plane == state["plane"]
-                                  and (slid
-                                       or drift <= MAXIMUM_ALLOWED_CORRECTION))
+                        #
+                        # So the test is no longer "how far apart are we". Drift
+                        # is not evidence of anything now that we adopt the
+                        # client's position every report -- it measures how badly
+                        # OUR integrator guessed, not whether the client is
+                        # lying. The only thing worth refusing is a position that
+                        # is genuinely impossible, and the navmesh is what says
+                        # so. Two of the five corrections in the measured session
+                        # were stops of 58 and 216 units to positions that were
+                        # perfectly walkable; both were us snapping the player
+                        # for no reason.
+                        on_mesh = (None if pm is None
+                                   else pm.walkable(reported[0], reported[1]))
+                        agreed = plane == state["plane"] and on_mesh is not False
                         # Recorded on every stop so the drift distribution can be
                         # measured rather than guessed at -- it is what says
                         # whether 100.0 is the right number for us.
@@ -1123,17 +1119,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         rec.event("position_report", drift=round(drift, 2),
                                   accepted=agreed, reported=list(reported),
                                   ours=[px, py], plane=plane, clipped=was_clipped,
-                                  on_mesh=None if pm is None
-                                  else pm.walkable(reported[0], reported[1]))
+                                  on_mesh=on_mesh)
                         if agreed:
                             state["pos"] = reported
                         else:
-                            # Upstream sends nothing even here. We correct,
-                            # knowingly: with no other position broadcast, a
-                            # divergence this large would otherwise never resolve.
-                            print(f"[c{conn_id}] position correction: {drift:.0f}u"
-                                  f" (plane {plane} vs {state['plane']})",
-                                  flush=True)
+                            # The client has stopped somewhere the map says is
+                            # not standable, or on a different plane. This is now
+                            # the ONLY position broadcast the server makes, and
+                            # it should be rare -- if it is not, the fault is far
+                            # more likely to be in our navmesh than in the
+                            # client, so it says so loudly rather than quietly
+                            # dragging the player around.
+                            print(f"[c{conn_id}] correcting: client reports "
+                                  f"({reported[0]:.0f}, {reported[1]:.0f}), which "
+                                  f"is {'off the navmesh' if on_mesh is False else 'on plane ' + str(plane)}"
+                                  f"; {drift:.0f}u from ours", flush=True)
                             send(GAME_SMSG_AGENT_UPDATE_POSITION,
                                  [PLAYER_AGENT_ID, state["pos"], state["plane"]],
                                  "AGENT_UPDATE_POSITION(stop)")
