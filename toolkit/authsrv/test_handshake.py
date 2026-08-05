@@ -36,6 +36,9 @@ sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "portal"))
 from sessionstore import SessionStore, uuid_to_wire  # noqa: E402
 
+SELFTEST_VAULT = r"C:\gd\Rurik\vault\captures\selftest"
+SELFTEST_SESSIONS = r"C:\gd\Rurik\vault\state\selftest-sessions.json"
+
 codec = Codec()
 
 SIG_KEYS = bytes.fromhex("8B4508C70088000000B8")
@@ -79,7 +82,15 @@ def main():
     g, p, B = read_client_params(exe)
     print(f"read from exe  : g={g}, prime {p.bit_length()} bits, B {B.bit_length()} bits")
 
-    srv = subprocess.Popen([sys.executable, "toolkit/authsrv/authsrv.py", "--once"],
+    # Keep the self-test's output out of the ground-truth vault. These used to
+    # share vault/captures/authsrv/ and vault/state/sessions.json with real
+    # client sessions: the files were indistinguishable in a listing, and a test
+    # run overwrote the live token record. That mixing produced a false timeline
+    # during a real debugging session — two self-test captures were read as
+    # evidence of successful client logins that never happened.
+    srv = subprocess.Popen([sys.executable, "toolkit/authsrv/authsrv.py", "--once",
+                            "--vault", SELFTEST_VAULT,
+                            "--sessions", SELFTEST_SESSIONS],
                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     ok = True
     try:
@@ -161,7 +172,7 @@ def main():
 
         print("\n5. log in and require the character-select burst")
         # Issue a session exactly as the portal would, so AuthSrv can validate it.
-        store = SessionStore()
+        store = SessionStore(SELFTEST_SESSIONS)
         store.issue(TEST_EMAIL, TEST_USER_ID, TEST_TOKEN)
         login = codec.encode("AUTH_CMSG", 0x0038, [
             1,                                    # req_id

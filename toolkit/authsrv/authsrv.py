@@ -44,7 +44,13 @@ from codec import Codec  # noqa: E402
 from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
 
 AUTH_CMSG_VERSION_HEADER = 0x000C0400
-GAME_CMSG_VERSION_HEADER = 0x000C0700  # game server variant; logged, not handled
+# 0x000C0700 came from the reference sources. 0x000C0500 is what build 38797
+# actually sends to a game server -- measured on the wire 2026-08-05, from a raw
+# listener that assumed nothing about the protocol. Accept both; the sources have
+# been wrong about this build before.
+GAME_CMSG_VERSION_HEADER = 0x000C0700
+GAME_CMSG_VERSION_HEADER_38797 = 0x000C0500
+GAME_VERSION_HEADERS = (GAME_CMSG_VERSION_HEADER, GAME_CMSG_VERSION_HEADER_38797)
 CMSG_CLIENT_SEED_HEADER = 0x4200
 SMSG_SERVER_SEED_HEADER = 0x1601
 
@@ -64,6 +70,26 @@ AUTH_SMSG_CHARACTER_INFO = 0x0007
 AUTH_SMSG_ACCOUNT_INFO = 0x0011
 AUTH_SMSG_FRIEND_STREAM_END = 0x0014
 AUTH_SMSG_ACCOUNT_SETTINGS = 0x0016
+
+# ---- R2: the handoff to the game server ---------------------------------
+# Pressing Play walks this path:
+#   SET_PLAYER_STATUS  -> recorded, no reply
+#   CHANGE_PLAY_CHARACTER -> REQUEST_RESPONSE(req_id, 0)
+#   REQUEST_GAME_INSTANCE -> GAME_SERVER_INFO, then REQUEST_RESPONSE(req_id, 0)
+# after which the client opens a SECOND connection, to the address we hand it,
+# and repeats the version/DH/ARC4 handshake on a different message catalog.
+AUTH_CMSG_CHANGE_PLAY_CHARACTER = 0x000A
+AUTH_CMSG_SETTING_UPDATE_CONTENT = 0x0020
+AUTH_CMSG_SETTING_UPDATE_SIZE = 0x0021
+AUTH_CMSG_SET_PLAYER_STATUS = 0x000E
+AUTH_CMSG_REQUEST_GAME_INSTANCE = 0x0029
+AUTH_CMSG_ASK_SERVER_RESPONSE = 0x0035
+AUTH_SMSG_GAME_SERVER_INFO = 0x0009
+
+GAME_SRV_HOST = "127.0.0.1"
+GAME_SRV_PORT = 6113
+
+PLAYER_STATUS = {0: "Offline", 1: "Online", 2: "DND", 3: "Away", 4: "Blank"}
 
 GM_ERROR_NETWORK = 2
 GM_ERROR_AUTH = 11
@@ -130,6 +156,63 @@ class Recorder:
     def close(self):
         self.meta.close()
         self.raw.close()
+
+
+def sockaddr_in(host: str, port: int) -> bytes:
+    """The 24-byte `host` blob in GAME_SERVER_INFO is a raw sockaddr, not a string.
+
+    Byte order is mixed and that is not a mistake: the address family is
+    little-endian, the port is big-endian (network order, as sockaddr_in has
+    always stored it), and the four address bytes are already in network order
+    from inet_aton. Getting the port endianness wrong sends the client to a
+    plausible-looking port thousands away from ours, and the only symptom is a
+    connection that never arrives.
+
+    24 bytes is sizeof(struct sockaddr), padded; an IPv6 handoff would fill more
+    of it. Both reference implementations size the field this way.
+    """
+    return (struct.pack("<H", socket.AF_INET)
+            + struct.pack(">H", port)
+            + socket.inet_aton(host)
+            + b"\x00" * 16)
+
+
+def handle_request_game_instance(values, send, conn_id, state, rec):
+    """Answer REQUEST_GAME_INSTANCE by pointing the client at our game server.
+
+    Wire order in is  req_id, map_type, map_id, region, district, language;
+    wire order out is req_id, world_id, map_id, host[24], player_id.
+
+    GAME_SERVER_INFO must precede REQUEST_RESPONSE, the same way every
+    CHARACTER_INFO must precede it during login: REQUEST_RESPONSE is what
+    advances the client's state machine, and anything sent after it arrives to a
+    client that has already moved on.
+
+    world_id and player_id are ours to choose -- the client only echoes them back
+    to the game server, which uses them to match the connection to this handoff.
+    They are recorded here so that server can check them.
+    """
+    _, req_id, map_type, map_id, region, district, language = values
+
+    world_id = state.setdefault("world_id", secrets.randbits(31) or 1)
+    player_id = secrets.randbits(31) or 1
+    state["player_id"] = player_id
+    state["map_id"] = map_id
+
+    print(f"[c{conn_id}] play requested: map_id={map_id} map_type={map_type} "
+          f"region={region} district={district} language={language}", flush=True)
+    print(f"[c{conn_id}] handing off to {GAME_SRV_HOST}:{GAME_SRV_PORT} "
+          f"world_id={world_id} player_id={player_id}", flush=True)
+    rec.event("game_instance_request", req_id=req_id, map_id=map_id,
+              map_type=map_type, region=region, district=district,
+              language=language, world_id=world_id, player_id=player_id,
+              host=GAME_SRV_HOST, port=GAME_SRV_PORT)
+
+    send(AUTH_SMSG_GAME_SERVER_INFO,
+         [req_id, world_id, map_id, sockaddr_in(GAME_SRV_HOST, GAME_SRV_PORT),
+          player_id],
+         "GAME_SERVER_INFO")
+    send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0], "REQUEST_RESPONSE(OK)")
 
 
 def handle_portal_login(values, send, store, conn_id, allow_any, rec):
@@ -203,15 +286,40 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         # ---- 1. version -------------------------------------------------
         head = recv_exact(sock, 4)
         header, = struct.unpack("<I", head)
-        if header not in (AUTH_CMSG_VERSION_HEADER, GAME_CMSG_VERSION_HEADER):
+        if header not in (AUTH_CMSG_VERSION_HEADER,) + GAME_VERSION_HEADERS:
             rec.event("bad_version_header", header=hex(header))
             print(f"[c{conn_id}] unexpected first header 0x{header:08x}", flush=True)
             return
-        body = recv_exact(sock, 12)
-        build, h8, hC = struct.unpack("<3I", body)
         kind = "auth" if header == AUTH_CMSG_VERSION_HEADER else "game"
-        print(f"[c{conn_id}] {kind} version: build={build} h0008={h8} h000C={hC}", flush=True)
-        rec.event("version", channel=kind, build=build, h0008=h8, h000C=hC)
+        cmsg = "AUTH_CMSG" if kind == "auth" else "GAME_CMSG"
+
+        if kind == "auth":
+            body = recv_exact(sock, 12)
+            build, h8, hC = struct.unpack("<3I", body)
+            print(f"[c{conn_id}] auth version: build={build} h0008={h8} h000C={hC}",
+                  flush=True)
+            rec.event("version", channel="auth", build=build, h0008=h8, h000C=hC)
+        else:
+            # 60 more bytes, measured: build, unk1, world_id, map_id, player_id,
+            # then the account uuid and the character uuid we handed this client in
+            # CHARACTER_INFO -- the transfer's identity, echoed back so the game
+            # server can match the connection to the handoff that created it.
+            body = recv_exact(sock, 60)
+            (build, unk1, world_id, map_id, player_id) = struct.unpack_from("<5I", body, 0)
+            account_uuid = body[20:36]
+            char_uuid = body[36:52]
+            tail = body[52:60]
+            hC = keys["generator"]      # not carried on this channel; keep the check quiet
+            print(f"[c{conn_id}] GAME version: build={build} world_id={world_id} "
+                  f"map_id={map_id} player_id={player_id}", flush=True)
+            print(f"[c{conn_id}]   account {wire_to_uuid(account_uuid)}", flush=True)
+            print(f"[c{conn_id}]   character {wire_to_uuid(char_uuid)}", flush=True)
+            rec.event("version", channel="game", build=build, unk1=unk1,
+                      world_id=world_id, map_id=map_id, player_id=player_id,
+                      account_uuid=wire_to_uuid(account_uuid),
+                      char_uuid=wire_to_uuid(char_uuid),
+                      tail=binascii.hexlify(tail).decode(),
+                      header=hex(header))
         if hC != keys["generator"]:
             print(f"[c{conn_id}] NOTE client generator {hC} != our {keys['generator']}",
                   flush=True)
@@ -268,19 +376,32 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # messages, or half of one. Carry the remainder forward rather than
             # decoding per-read, which would drop the tail of every split message.
             pending += plain
+            # The client declares its own channel in the version header, so the
+            # catalog self-selects: run a second instance on 6113 and it decodes
+            # the game channel with no extra flag. GAME_CMSG_MASK is also 0x8000,
+            # so the framing is identical -- only the catalog differs.
             msgs, consumed, err = codec.decode_stream(
-                "AUTH_CMSG", pending, mask=AUTH_CMSG_MASK)
+                cmsg, pending, mask=AUTH_CMSG_MASK)
             pending = pending[consumed:]
 
             for opcode, values in msgs:
-                name = AUTH_CMSG_NAMES.get(opcode, "?")
+                # No semantic names exist for GAME_CMSG in this repo yet; the
+                # schema knows shapes only. Printing "?" is the honest answer
+                # rather than borrowing an auth name that means something else.
+                name = AUTH_CMSG_NAMES.get(opcode, "?") if kind == "auth" else "?"
                 print(f"[c{conn_id}] c2s 0x{opcode | AUTH_CMSG_MASK:04x} {name}",
                       flush=True)
                 rec.event("decoded", opcode=opcode, name=name,
                           values=[v.hex() if isinstance(v, bytes) else v
                                   for v in values])
 
-                if opcode == AUTH_CMSG_SEND_COMPUTER_INFO:
+                if kind != "auth":
+                    # Game channel: capture only. Every handler below is keyed to
+                    # AUTH_CMSG opcodes, and the two catalogs collide numerically
+                    # — GAME_CMSG 0x0002 is TRADE_ADD_ITEM, not SEND_COMPUTER_HASH.
+                    # Answering one as the other would be worse than silence.
+                    pass
+                elif opcode == AUTH_CMSG_SEND_COMPUTER_INFO:
                     state["username"] = values[1]
                     state["pcname"] = values[2]
                 elif opcode == AUTH_CMSG_SEND_COMPUTER_HASH:
@@ -310,6 +431,60 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 elif opcode == AUTH_CMSG_PORTAL_ACCOUNT_LOGIN:
                     handle_portal_login(values, send, store, conn_id,
                                         allow_any, rec)
+                elif opcode == AUTH_CMSG_ASK_SERVER_RESPONSE:
+                    # A bare request/response ping. We ignored this through all
+                    # of R1 and the client still reached character select, which
+                    # made it look optional -- but the request stays OPEN until
+                    # answered, and pressing Play then stalled with req_id 2
+                    # outstanding for eight minutes. Silence here is not a no-op.
+                    send(AUTH_SMSG_REQUEST_RESPONSE, [values[1], 0],
+                         f"REQUEST_RESPONSE(ask {values[1]})")
+                elif opcode == AUTH_CMSG_SETTING_UPDATE_SIZE:
+                    # The client uploads its account settings blob in two parts:
+                    # this announces the total, then one or more CONTENT messages
+                    # carry it. Both share a req_id and the pair is acknowledged
+                    # once, after the last chunk.
+                    #
+                    # Neither message exists in OpenTyria -- no struct, no
+                    # handler. Everything here is read off our own wire, so the
+                    # chunking rule is inferred from the declared array8 cap of
+                    # 512 bytes rather than from a reference implementation.
+                    state["settings_req"] = values[1]
+                    state["settings_total"] = values[2]
+                    state["settings_buf"] = b""
+                    print(f"[c{conn_id}] settings upload: req {values[1]}, "
+                          f"{values[2]} bytes announced", flush=True)
+                elif opcode == AUTH_CMSG_SETTING_UPDATE_CONTENT:
+                    req_id, chunk = values[1], values[2]
+                    state["settings_buf"] = state.get("settings_buf", b"") + chunk
+                    got = len(state["settings_buf"])
+                    total = state.get("settings_total", got)
+                    print(f"[c{conn_id}] settings chunk: {len(chunk)}B, "
+                          f"{got}/{total}", flush=True)
+                    if got >= total:
+                        rec.event("account_settings", req_id=req_id, size=got,
+                                  blob=binascii.hexlify(
+                                      state["settings_buf"]).decode())
+                        send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0],
+                             f"REQUEST_RESPONSE(settings {req_id})")
+                elif opcode == AUTH_CMSG_SET_PLAYER_STATUS:
+                    # Deliberately no reply: the reference server records the
+                    # status and returns. Sent on pressing Play, status 1.
+                    state["player_status"] = values[1]
+                    print(f"[c{conn_id}] player status -> {values[1]} "
+                          f"({PLAYER_STATUS.get(values[1], '?')})", flush=True)
+                elif opcode == AUTH_CMSG_CHANGE_PLAY_CHARACTER:
+                    req_id, name = values[1], values[2]
+                    known = (name == TEST_CHAR_NAME)
+                    state["selected_character"] = name
+                    print(f"[c{conn_id}] play character: {name!r}"
+                          f"{'' if known else ' — NOT on our roster'}", flush=True)
+                    send(AUTH_SMSG_REQUEST_RESPONSE,
+                         [req_id, 0 if known else GM_ERROR_NETWORK],
+                         f"REQUEST_RESPONSE({'OK' if known else 'unknown char'})")
+                elif opcode == AUTH_CMSG_REQUEST_GAME_INSTANCE:
+                    handle_request_game_instance(values, send, conn_id,
+                                                 state, rec)
 
             if err and "incomplete" not in err:
                 # Unknown opcode: we cannot frame past it and must not guess,
@@ -347,17 +522,38 @@ def load_keys(path):
 
 
 def main():
+    # Declared up front because argparse reads these as its defaults below, and a
+    # `global` after any use of the name is a SyntaxError. Single-process server,
+    # so rebinding the module constants is enough and keeps
+    # handle_request_game_instance free of plumbing it would only ever use once.
+    global GAME_SRV_HOST, GAME_SRV_PORT
+
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=6112)
     ap.add_argument("--keys")
     ap.add_argument("--vault", default=VAULT_DEFAULT)
+    ap.add_argument("--game-host", default=GAME_SRV_HOST,
+                    help="Address handed to the client in GAME_SERVER_INFO.")
+    ap.add_argument("--game-port", type=int, default=GAME_SRV_PORT,
+                    help="Port handed to the client in GAME_SERVER_INFO. Movable "
+                         "because the client stops dialling an address that has "
+                         "refused it, and a fresh port is the cheapest way to tell "
+                         "'the client gave up on that endpoint' apart from 'the "
+                         "client never acts on our message'.")
+    ap.add_argument("--sessions",
+                    help="Session store path. The self-test passes its own so it "
+                         "cannot overwrite the token record a real client "
+                         "established — the two used to share one file, and a "
+                         "test run silently clobbered live state.")
     ap.add_argument("--once", action="store_true", help="exit after one connection")
     ap.add_argument("--allow-any-session", action="store_true",
                     help="Accept a login with no matching session record. A debugging "
                          "escape hatch so a stale sessions.json cannot be mistaken for a "
                          "wire bug. Never the default: the rejection path has to stay exercised.")
     a = ap.parse_args()
+
+    GAME_SRV_HOST, GAME_SRV_PORT = a.game_host, a.game_port
 
     keys = load_keys(a.keys)
     if "server_private" not in keys:
@@ -387,7 +583,7 @@ def main():
     print("the client MUST be the patched copy — an unpatched one keys to "
           "ArenaNet's public value and we cannot read it\n")
 
-    store = SessionStore()
+    store = SessionStore(a.sessions) if a.sessions else SessionStore()
     stop = threading.Event()
     n = 0
     try:

@@ -24,9 +24,20 @@ python toolkit/portal/webgate.py
 python toolkit/authsrv/authsrv.py
 ```
 
+Terminal 3 is the client, and it must be **elevated** — the launcher changes
+firewall rules:
+
 ```bash
-& "C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe" -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed
+& "C:\gd\Rurik\toolkit\clientpatch\launch_caged.ps1"
 ```
+
+Do **not** launch the exe directly while the cage is up. The pre-login patcher
+needs one outbound check to succeed before it will show the login screen, and the
+block rule denies it instantly and forever — the client sits on *Connecting to
+ArenaNet* with no socket to explain why. `launch_caged.ps1` opens the cage, walks
+it through the patcher, records every non-loopback endpoint it touched to
+`vault/captures/patcher/`, and closes the cage again before you log in. The
+re-cage is in a `finally`, so Ctrl-C and crashes still close it.
 
 Then log in at the client's own screen with **any** account name and password —
 the webgate authenticates nobody by design. Accept the User Agreement if it
@@ -147,6 +158,7 @@ Then heartbeats with a rising tick counter, which is a healthy idle client.
 
 | Symptom | Meaning | Do this |
 |---|---|---|
+| Stuck on `Connecting to ArenaNet`, no sockets, servers see nothing | The cage is blocking the pre-login patcher's update check | Launch via `launch_caged.ps1`, not the exe directly. See below |
 | `Unexpected token '-authsrv'` | PowerShell parsed the quoted path as a value | Add the leading `&`. Nothing launched; the flags are fine |
 | `Could not bind … Another AuthSrv is almost certainly still running` | Working as intended | `netstat -ano \| findstr :6112`, stop the old one. This replaced a silent-shadowing bug that cost two sessions |
 | `Code=058`, nothing in terminal 2 | Client never reached us | Both flags present? Launched the **run-dir** copy, not `C:\gw\Gw.exe`? |
@@ -163,6 +175,43 @@ traffic worth not sending.
 
 ---
 
+## The patcher stall, and why it read as innocent
+
+Diagnosed 2026-08-04. Worth writing down because the evidence pointed the wrong
+way for half an hour.
+
+The client hung on *Connecting to ArenaNet* — which is the **patcher**, not the
+login: that string sits in the same localized block as `Downloading...` and
+`Downloading %u.%uMB (%uKB/sec)`. The cause was the cage's outbound block denying
+the patcher's update check.
+
+What made it hard: **a Windows Firewall outbound block fails `connect()`
+immediately rather than black-holing it.** The socket never reaches `SYN_SENT`,
+so it never appears in a sample. Twenty-four samples over twenty seconds found no
+sockets at all, which reads as *the process is not using the network* — the exact
+opposite of the truth. The tell was two threads parked in `ExecutionDelay`, i.e.
+`Sleep()`: try, denied instantly, sleep, retry, forever.
+
+Two other traps in the same hour:
+
+- `Get-Process().Modules` against `Gw.exe` returns only `ntdll` and the wow64
+  shims. That is not a half-initialised process — it is a 64-bit query against a
+  32-bit process, which cannot see the 32-bit module list. It means nothing.
+- `Gw.tmp` appearing at 0 bytes next to the exe looks like an interrupted
+  download. It is a normal startup scratch file; the live install has one too.
+
+What actually settled it was an A/B: the **unpatched, uncaged** client at
+`C:\gw\Gw.exe` with the same flags walked straight past the patcher to the login
+screen, then died at key exchange exactly as the negative control predicts
+(`AUTH_CMSG has no opcode 26763` — our ARC4 keystream against its ArenaNet-keyed
+one). Same machine, same flags, one variable.
+
+The client's own log is the fastest way in. `-log` is live and writes `Gw.log`
+beside the exe, but it **buffers and only flushes on exit** — a stuck client shows
+0 bytes. Close it, then read.
+
+---
+
 ## Where the pieces live
 
 | Path | What it is |
@@ -174,6 +223,7 @@ traffic worth not sending.
 | `schema/messages.json` | The wire schema itself (tracked in git) |
 | `toolkit/clientscan/` | Read-only client analysis |
 | `toolkit/clientpatch/` | Patching, run-dir assembly, the firewall cage |
+| `toolkit/clientpatch/launch_caged.ps1` | Elevated launcher: opens the cage for the patcher, shuts it before login |
 | `vault/` | Gitignored. Client snapshots, keys, captures, prior-art mirrors |
 | `studies/handshake/PLAN.md` | How R1 was actually solved, wire detail included |
 | `PLAN.md` | Strategy, the ladder, ranked angles of attack |

@@ -402,3 +402,70 @@ rotate per build (§0.4), so a patched copy from last week keys to nothing.
 Closed since the first revision: `-portaldll` is dead code; `GwLoginClient.dll` is not on the
 client's login path; the flag-table delta against public documentation is recorded in §3.
 - Confirm whether `DispatchStream` is the message chokepoint (capture arc, not this one).
+
+---
+
+## §7. The client's own message tables (build 38797) — [measured 2026-08-05]
+
+Dumped by static analysis of `vault/run/2026-07-29_221c13772c7a/Gw.exe` (ImageBase
+0x400000) and independently re-verified byte-for-byte. This is the packet-template
+table PLAN.md §8 asked for, for the auth direction.
+
+The auth `MsgChannel` is registered at **VA 0x00492570**:
+
+    push 0x20; push 0xBEC540; push 0x2E; push 0xBEC3D0; push 0; push 3; call 0x7DE010
+
+| | |
+|---|---|
+| send table | **VA 0xBEC3D0**, 46 entries × 8 bytes — `{const u32 *cmds, u32 count}` |
+| recv table | **VA 0xBEC540**, 32 entries × 12 bytes — `{const u32 *cmds, u32 count, handler}` |
+
+They are contiguous: `0xBEC3D0 + 46*8 = 0xBEC540`, and `0xBEC540 + 32*12 = 0xBEC6C0`.
+
+**The message id is `cmds[0]`, not the array index.** Ids run out of order in both
+tables, so anything that indexes them positionally is silently wrong.
+
+Field tags are `(byte_count << 8) | type_code`:
+
+| code | meaning |
+|---|---|
+| `0x04` | scalar |
+| `0x05` | fixed blob |
+| `0x17` | UTF-16 string |
+| `0x0B` | length-prefixed array |
+
+### AUTH_SMSG_GAME_SERVER_INFO (0x0009) is confirmed byte-exact
+
+Recv record 16 at VA 0xBEC600 = `{cmds 0xBF91EC, 0, handler 0x00493E00}`. The
+template at VA 0xBF91EC is `[9, 0x404, 0x404, 0x404, 0x1805, 0x404]` — five fields,
+`2+4+4+4+24+4 = 42` bytes, matching `declared_unpack_size` in `schema/messages.json`
+and matching what `authsrv.py` sends. **The 42 bytes we emit are provably right.**
+
+### What gates the client acting on it
+
+`0x00493E00` is a trampoline into **`0x0048D6D0`**, the sole consumer. There is no
+state enum — the real precondition is a live GcApi transaction:
+
+1. walk the intrusive list at head `[0xC0312C]`, link offset `[0xC03124]`;
+2. find the node whose `+0x20` equals the message's `req_id`;
+3. require `word [node+0x0C] == 0x0F` (the transaction type).
+
+**Both failures return silently** — no log, no assert, no event (`0x0048D703`,
+`0x0048D74F`). On success it stores `host[24]` at `trans+0x5C`, `world_id` at
+`+0x28`, `map_id` at `+0x2C`, `player_id` at `+0x74`, and sets `trans+0x14 = 1`.
+
+`trans+0x20` is assigned in the `GcTransBase` ctor at `0x0048C065` from the global
+counter `[0xC034D0]` (pre-increment, skipping zero), and the send path at
+`0x004909D0` puts that same field on the wire as the first dword. **So the wire
+`req_id` IS the transaction id, and echoing it back is correct.**
+
+The type-0x0F transaction is built at `0x0048ED20`, called only from
+`0x0085105E` / `0x00851122` / `0x008511D8` in `P:\Code\Gw\Mission\Cli\MsCliGame.cpp`.
+
+### Why this mattered less than expected
+
+This was commissioned to explain why the client "never dialled" our game server. It
+proved our message was correct, which relocated the fault — and the wire then
+showed the real cause: **the client dials port 80, not the port in the handoff.**
+The static work still stands on its own; it is the arbiter table for the auth
+channel, and it says the encoding is right.

@@ -18,6 +18,7 @@ directory as a point-in-time working copy, not a reference.
 import argparse
 import os
 import shutil
+import stat
 import sys
 import time
 
@@ -71,8 +72,16 @@ def main():
 
     # Named plain Gw.exe so nothing downstream depends on an odd filename.
     tgt = os.path.join(dest, "Gw.exe")
+    # The run copy is left read-only: the client's own patcher replaces Gw.exe by
+    # writing Gw.tmp and renaming over it, and a successful self-update would
+    # rotate the Diffie-Hellman parameters and turn our patch into a brick. The
+    # read-only bit makes that fail loudly instead of silently succeeding. It has
+    # to be cleared here or this copy raises PermissionError on the second run.
+    if os.path.exists(tgt):
+        os.chmod(tgt, stat.S_IWRITE | stat.S_IREAD)
     shutil.copy2(patched, tgt)
-    print(f"  Gw.exe            copied ({os.path.getsize(tgt)/1e6:.1f} MB)")
+    os.chmod(tgt, stat.S_IREAD)
+    print(f"  Gw.exe            copied ({os.path.getsize(tgt)/1e6:.1f} MB), read-only")
 
     for name in SUPPORT:
         src = os.path.join(SRC, name)
@@ -104,6 +113,12 @@ Run it from three terminals:
 
       cmd.exe:
         "{tgt}" -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed
+
+If you have run isolate_client.ps1, do NOT launch it that way -- the pre-login
+patcher needs one outbound check and the cage denies it forever, leaving the
+client on "Connecting to ArenaNet". Use the launcher instead, elevated:
+
+      & "C:\\gd\\Rurik\\toolkit\\clientpatch\\launch_caged.ps1"
 
 Terminal 3 must be THIS copy. A stock client keys against ArenaNet's compiled-in
 public value, so the handshake completes and nothing after it can be decrypted.

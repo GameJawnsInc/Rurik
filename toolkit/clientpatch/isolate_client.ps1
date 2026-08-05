@@ -38,9 +38,14 @@ if (-not ([Security.Principal.WindowsPrincipal] `
 }
 
 if ($Remove) {
-    Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue |
-        Remove-NetFirewallRule
-    "Removed: $RuleName"
+    # Both rules have to go, and they do NOT share a display name -- the allow
+    # rule carries a " (allow loopback)" suffix. Matching the bare name removes
+    # the block and silently leaves the allow behind, so a later -Remove looks
+    # like it cleaned up while the machine still carries a rule for a binary
+    # that may no longer exist. The trailing * catches the pair.
+    $gone = @(Get-NetFirewallRule -DisplayName "$RuleName*" -ErrorAction SilentlyContinue)
+    $gone | Remove-NetFirewallRule
+    "Removed $($gone.Count) rule(s) matching '$RuleName*'"
     exit 0
 }
 
@@ -49,7 +54,9 @@ if (-not (Test-Path -LiteralPath $Exe)) {
     exit 1
 }
 
-Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue |
+# Same trailing * as above: without it the allow rule survives this cleanup and
+# a second copy is created below, stacking one more on every re-run.
+Get-NetFirewallRule -DisplayName "$RuleName*" -ErrorAction SilentlyContinue |
     Remove-NetFirewallRule
 
 # Allow loopback explicitly first. Windows evaluates block rules ahead of allow
@@ -72,6 +79,16 @@ C:\gw is untouched; the real client still reaches the live service normally.
 Verify while the patched client runs, with:
     netstat -ano | findstr <its pid>
 Only 127.0.0.1 entries should appear.
+
+Do NOT launch the client directly while this is active. The pre-login patcher
+needs one outbound check to complete before it will show the login screen, and
+a block denies it instantly and forever -- the client sits on "Connecting to
+ArenaNet" with no visible socket to explain why. Launch with:
+
+    .\launch_caged.ps1
+
+which opens the cage, walks the client through the patcher, records whatever it
+talked to, and closes the cage again before you log in.
 
 Undo with:  .\isolate_client.ps1 -Remove
 "@
