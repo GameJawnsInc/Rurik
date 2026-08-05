@@ -30,13 +30,20 @@ import argparse
 import hashlib
 import json
 import os
+import socket
 import time
 import uuid
 import xml.etree.ElementTree as ET
 from base64 import b64decode
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from sessionstore import SessionStore  # noqa: E402
+
 VAULT_DEFAULT = r"C:\gd\Rurik\vault\captures\portal"
+
+store = SessionStore()
 
 sessions = {}
 _log_path = None
@@ -204,6 +211,11 @@ class Handler(BaseHTTPRequestHandler):
         if s is None:
             return self._fail(401, "no session")
         self._read_xml()
+        # Hand the pair to AuthSrv, which runs in a different process and will see
+        # this token come back over the encrypted auth channel. Confirmed from a
+        # live capture: the client presents THIS token in the field the reference
+        # implementations call session_id.
+        store.issue(s.email, s.user_id, s.token)
         log("token_issued", email=s.email, token=s.token)
         # This token is what the client presents to AuthSrv on 6112. Stage B has
         # to recognise it, so both stages must agree on how it is derived.
@@ -224,7 +236,28 @@ def main():
 
     # Loopback only. This server authenticates nobody; exposing it would be
     # handing out an identity endpoint. HANDOFF.md section 9: local and personal.
-    srv = HTTPServer(("127.0.0.1", a.port), Handler)
+    #
+    # allow_reuse_address is disabled deliberately. HTTPServer turns it ON by
+    # default, and on Windows that permits binding a port ALREADY IN USE while the
+    # older listener keeps taking the connections. It cost a debugging session
+    # here: a stale webgate from an earlier run silently shadowed a fresh one, so
+    # edited code appeared to have no effect. Fail loudly instead.
+    class ExclusiveHTTPServer(HTTPServer):
+        allow_reuse_address = False
+
+        def server_bind(self):
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            HTTPServer.server_bind(self)
+
+    try:
+        srv = ExclusiveHTTPServer(("127.0.0.1", a.port), Handler)
+    except OSError as ex:
+        raise SystemExit(
+            f"Could not bind 127.0.0.1:{a.port} — {ex.strerror}.\n"
+            f"Another webgate is almost certainly still running. Find it with\n"
+            f"  netstat -ano | findstr :{a.port}\n"
+            f"and stop it before starting this one.")
     print(f"Rurik webgate on http://127.0.0.1:{a.port}  (loopback only)")
     print(f"logging to {_log_path}")
     print("launch the client with:  -portal 127.0.0.1 -authsrv 127.0.0.1\n")
