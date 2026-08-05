@@ -31,8 +31,19 @@ REPOS = [
     ("GregLando113/GWCA",            "ARCHIVED 2023-11-14. Still the best StoC naming corpus."),
     ("gwdevhub/GWToolboxpp",         "Actively maintained; vendors the closed-source gwca.dll"),
     ("gwdevhub/GuildWarsMapBrowser", "Gw.dat extraction and map viewing"),
+    # The most advanced current effort. NO LICENSE -- readable, NOT copyable.
+    ("gw-preservation/server",       "GW1 server in Go. 397 map defs, Gw.dat navmesh + A*, TLS-SRP portal"),
+    ("gw-preservation/network-logger", "Drop-in DLL logging 100% of game<->client traffic. The capture tool."),
+    ("gw-preservation/network-log-explorer", "Web UI over those logs"),
+    ("gw-preservation/fileserver-utils", "Pulls assets from ArenaNet's official file servers by file_id"),
+    # Current client-side extraction and RE.
+    ("Fournux/Tyria-Extractor",      "MIT, Rust. Gw.dat -> skills/items/quests/NPCs, plus an injected sniffer"),
+    ("JaborGW/GWCA",                 "Best public GWCA successor; branch reforged-fixes"),
+    ("Jonathan-Greve/GuildWarsMapBrowser", "The canonical Gw.dat browser (gwdevhub's copy is an archived fork)"),
+    ("apoguita/Py4GW_Reforged",      "Live successor to the archived Py4GW. NO LICENSE."),
     # The dead emulators, for their protocol notes.
     ("GameRevision/GWLP-R",          "Dead Java emulator; wiki carries the packet catalog"),
+    ("GameRevision/GWLP-R-Utils",    "The GWLP Dumper + PacketTemplates.xml: 769 packets, 907 named entries"),
     ("th0br0/sgwlpr",                "Dead Scala emulator"),
 ]
 
@@ -52,7 +63,11 @@ def main():
     }
 
     for slug, why in REPOS:
-        name = slug.split("/")[1]
+        # Namespace by owner. Two different owners ship a repo called GWCA
+        # (GregLando113's archived original and JaborGW's reforged-fixes fork);
+        # keying on the bare repo name silently made the second a no-op fetch
+        # against the first's origin.
+        name = slug.replace("/", "__")
         path = os.path.join(DEST, name)
         print(f"\n=== {slug} — {why}")
         if os.path.isdir(os.path.join(path, ".git")):

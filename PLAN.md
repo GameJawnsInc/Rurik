@@ -25,21 +25,40 @@ sgwlpr in Scala) produced zero playable outcomes."* This is the load-bearing pre
 
 | Project | What it is | State **[measured]** |
 |---|---|---|
+| [gw-preservation/server](https://github.com/gw-preservation/server) | A GW1 **server in Go** — the most advanced effort in the field | pushed **2026-08-04 19:07 UTC**, i.e. hours before this was written. **No license = all rights reserved.** |
 | [ldufr/OpenTyria](https://github.com/ldufr/OpenTyria) | A working GW1 **server** in C | 180 commits, last 2026-02-21, **Unlicense (public domain)**, ~25,630 lines of real code |
-| [ldufr/Headquarter](https://github.com/ldufr/Headquarter) | A GW1 **headless client** in C | MIT, pushed 2026-07-11, full NCSoft portal stack in `code/portal/` |
-| [apoguita/Py4GW](https://github.com/apoguita/Py4GW) | Python scripting layer + packet sniffer | 68★, **4,626 commits**, pushed 2026-07-21; `Py4GW_Reforged_Native` (56 commits, 2026-08-02) explicitly replaces GWCA |
-| [gwdevhub/GWToolboxpp](https://github.com/gwdevhub/GWToolboxpp) | The in-client toolbox | 872★, MIT, pushed **2026-08-04 — today** |
-| [jean-humann/gwnative](https://github.com/jean-humann/gwnative) | Rust host for the WASM client | GPL-3.0, pushed **2026-08-04 — today** |
-| [build-wars/gw-skilldata](https://github.com/build-wars/gw-skilldata) | Community skill dataset | MIT, pushed **2026-08-04 — today** |
+| [ldufr/Headquarter](https://github.com/ldufr/Headquarter) | A GW1 **headless client** in C | MIT, 496 commits, pushed 2026-07-11, tracking live builds to 38688 |
+| [gw-preservation/network-logger](https://github.com/gw-preservation/network-logger) | Drop-in DLL logging **100% of game↔client traffic** | pushed 2026-07-25. No license. |
+| [apoguita/Py4GW_Reforged](https://github.com/apoguita/Py4GW_Reforged) | Live successor to Py4GW | pushed **2026-08-04 19:53 UTC**. No license. (`apoguita/Py4GW`, 68★, was **archived 2026-07-21**.) |
+| [Fournux/Tyria-Extractor](https://github.com/Fournux/Tyria-Extractor) | `Gw.dat` → skills/items/quests/NPCs, plus a sniffer | **MIT**, Rust, created 2026-06-30 |
+| [gwdevhub/GWToolboxpp](https://github.com/gwdevhub/GWToolboxpp) | The in-client toolbox | 872★, MIT, pushed **2026-08-04** |
+| [build-wars/gw-skilldata](https://github.com/build-wars/gw-skilldata) | Community skill dataset | MIT, pushed **2026-08-04** |
 
-Three separate repositories in this ecosystem were pushed to on the day this plan was written. The
-same developer, `ldufr`, has independently built both halves of the problem HANDOFF.md treats as
-unprecedented. `entice` (the GWLP-R successor org) is genuinely dead — last activity 2016
-**[measured]** — so the handoff's pessimism was accurate *as of about 2016* and has not been
-revisited since.
+Four repositories were pushed to on the day this plan was written, two of them within the hour. The
+`gw-preservation/server` tree carries **397 map definitions** (essentially the whole game), a real
+`Gw.dat` trapezoid navmesh with A* and line-of-sight, working map portals with spawn coordinates,
+character creation, dye, emotes and cartography, plus a from-scratch TLS-SRP portal — with commits
+like `fix world/movement tick sync` and `trap pathing impl` landing this week. It pins
+`clientVersion == 37600`, a **pre-Reforged** build, which is its one significant limitation.
 
-**Consequence:** the estimate that "R1 is a few weeks or a research project" resolves to *weeks*,
-and the two-year no-output stretch that is this plan's biggest morale risk is not necessary.
+`entice` (the GWLP-R successor org) is genuinely dead — last activity 2016 **[measured]** — so the
+handoff's pessimism was accurate *as of about 2016* and has not been revisited since.
+
+**But the sober conclusion survives, for a better reason than the handoff gives.** At least four
+independent projects have driven a real client to character select, into a map, and moving:
+GWLP-R (2012–13), entice (2015–16), OpenTyria, and gw-preservation. **Nobody has ever built R4.**
+No combat, no skill engine, no AI, no spawns — not in fifteen years, not in any repo any of this
+research could find. `entice/skill`, whose description was "Defines skills. All of them.", is
+marked DEPRECATED. That precedent lands *precisely* on Rurik's actual deliverable, which makes it
+a sharper warning than the one HANDOFF.md gives, not a weaker one.
+
+**Consequence, stated carefully:** R1–R3 drop from research to transcription, because working
+reference implementations exist for all three. R4 remains exactly as hard as the handoff feared —
+and it is now unambiguously *the* project, rather than the last third of it.
+
+**License discipline matters here.** OpenTyria is public domain and Headquarter is MIT, so both are
+freely usable. `gw-preservation/*` and `Py4GW_Reforged` carry **no license at all**, which means
+all rights reserved: read them, learn from them, cite them — never copy from them.
 
 ### 1.2 The packet catalog already exists, in the public domain
 
@@ -119,21 +138,30 @@ Direct3D at all **[measured]**, which is exactly the renderer you build to targe
 `C:\gw\THIRD-PARTY-LICENSES.md` lists only four dependencies — `jsmn`, `OpenAL-Soft`, `PFFFT`,
 `stb_image` — a deliberately portable, dependency-light core.
 
-Why this matters more than it sounds: a WASM module is a structured, typed format, not a stripped
-x86 blob. `gw_in_browser` ships `wasmscan.py`, `wasmdetour.py`, `wasmpatch.py` and `gensyms.py`
-**[measured — present in the mirror]**. Its own documentation reports full decode of all 17,596
-functions, detour capability on every one of them, and — the part that should stop you — **850
-original source paths surviving in `.data`**, e.g. `../../../../Gw/Ui/UiRoot.cpp`, letting
-`gensyms.py` attribute most functions to their originating C++ file and emit a standard `name`
-section that Ghidra and Chrome DevTools both read. Those are that project's self-reported numbers,
-not independently reproduced here **[sourced, not measured]**.
+Why this matters: a WASM module is a structured, typed format with explicit control flow and no
+register allocation, so it decompiles far better than x86. `gw_in_browser` ships `wasmscan.py`,
+`wasmdetour.py`, `wasmpatch.py` and `gensyms.py` **[measured — present in the mirror]**, reporting
+full decode of all 17,596 functions and detour capability across them **[sourced, not reproduced]**.
 
-Fifteen years of GW1 reverse engineering fought a stripped binary. The WASM build hands over the
-map.
+**Two corrections, because the first version of this section overstated the case.** The shipped
+module is **stripped** — no `name` section. What survives is better than nothing but weaker than
+symbols: string literals are byte-identical to the `.exe` (same source tree), and ~850 original
+source paths persist in `.data` (`../../../../Gw/Ui/UiRoot.cpp`), so `gensyms.py` *reconstructs*
+per-function attribution rather than reading it off. Separately, the fully-mangled C++ names that
+Py4GW works from appear to come from an **earlier, archived build** that shipped with its `name`
+section intact — its function count is 18,004 against today's 17,596. Chunks are content-addressed
+and retained while referenced, so retrieving that symbol-bearing build is plausible but unproven.
+
+**And a posture warning that outranks the technical upside.** These browser harnesses reach
+ArenaNet production using a shared client key lifted from the Android APK, `gw_in_browser` cannot
+log in at all (its `login`/`secureStorage` paths are stubs, making it a **static-RE tool, not a
+live-capture one**), and `gwdevhub/gw_in_browser` is now 404 with no stated reason. This is the
+riskiest area in this document and it sits badly against HANDOFF §9's "local and personal only"
+posture. Treat the WASM path as an *offline analysis* asset — which is where its real value is
+anyway — and do not build the live capture story on it.
 
 **Consequence:** HANDOFF §5's *"capture harness — C++, because it must live inside the client next
-to GWCA"* is the highest-friction choice in the plan and it is now optional. The harness can be
-Python plus JavaScript — the pairing the handoff already prefers everywhere else.
+to GWCA"* is still the wrong default, but the replacement is A1 below, not the browser.
 
 ### 1.4 GWCA is no longer an open dependency
 
@@ -145,7 +173,34 @@ vendored into GWToolboxpp as a prebuilt DLL, import library and headers.
 **Consequence:** downgrade GWCA from *dependency* to *dictionary*. Its named opcodes and typed
 structs remain the best naming corpus in the field. Do not plan to build on its DLL.
 
-### 1.5 R1 is not patch-free, and the reason is specific
+### 1.5 R1 is not patch-free — verified against your own binary this session
+
+**This is now measured, not argued.** `toolkit/clientscan/dump_dh_params.py` locates the pinned
+Diffie-Hellman parameter struct in `C:\gw\Gw.exe` by the accessor signature that Headquarter's
+`dump_key.py` (which reads it) and OpenTyria's `patch-gw.py` (which writes it) both use — two
+independent implementations that agree. Result on our pinned build **[measured]**:
+
+```
+match at file 0x003d7523 -> struct VA 0x00a843e8 (RVA 0x6843e8, section .rdata)
+  word0 = 1     generator g = 4     prime p = 512 bits     server public B = 509 bits
+  all shape checks pass
+```
+
+The scheme is static-ephemeral Diffie-Hellman in which **the server's public value B is never
+transmitted** — the client already has it compiled in and derives the shared secret locally as
+`B^a mod p`. A server we control cannot reproduce that secret without `b`, the discrete log of B,
+which ArenaNet never shipped and which a 512-bit discrete log puts out of scope. So the client's
+`(g, p, B)` triple **must** be replaced with one whose private exponent we hold.
+
+**HANDOFF.md §4's "R1 needs no binary patching" is therefore falsified against our own binary,
+not merely on someone else's authority.** `-authsrv` gets the client to connect to us; without the
+patch the stream is undecryptable. `patch-gw.py` additionally NOPs a `CreateMutexA` check and
+renames the mutex, which is what allows multiple client instances — directly useful for capture at
+scale. Budget a client-patching step permanently, including redoing it after every ArenaNet build.
+
+The parameters themselves are ArenaNet-derived and were written to `vault/keys/`, never the repo.
+
+### 1.5b Why this was worth doing before touching the network
 
 HANDOFF.md §4: *"`-authsrv <ip>` ... R1 needs no binary patching."* The flag is real — it is the
 first entry in a contiguous, alphabetically sorted 41-entry argument table at file offset
@@ -202,6 +257,16 @@ server-only; extract the rest.
 
 Ordered by information gained per unit cost. Probes 1 and 2 need a human at the keyboard — an agent
 session cannot launch `Gw.exe` on this machine.
+
+**Probe 0 — the DH parameter struct.** ✅ **Done this session.** No network, no launch, thirty
+minutes. It validated the entire R1 approach against our own build and settled the patching
+question. Re-run it after every ArenaNet update — if the signature stops matching, no published
+patching tool can be trusted until it is re-derived, and that is a real finding rather than a tool
+failure:
+
+```bash
+python toolkit/clientscan/dump_dh_params.py
+```
 
 **Probe 1 — does the portal downgrade to plain HTTP?** *(hours)*
 Procedure and outcome table: [studies/handshake/PLAN.md](studies/handshake/PLAN.md) §5, runs A–C.
@@ -262,21 +327,31 @@ into a replay problem you already have the data for.
 
 ## 4. Angles of attack, ranked
 
-**A1 — Proxy first: the two-server trick, and it is already written.** *(days · agent-farmable)*
-`toboshii/gw-web-player`'s `serve.py` proxies `/cdn` → the ArenaNet patching CDN, `/webgate` →
-login, `/account` → account management, and `/ws?d=HOST:PORT` → **a raw TCP bridge over WebSocket
-for the game servers** **[measured — mirrored locally]**. That last route is a complete
-bidirectional man-in-the-middle on every byte the client and server exchange, with no DLL
-injection, no pattern scanning, no admin rights, and nothing for a client patch to break.
-It buys three things in increasing order of ambition: tee both directions to disk (R0b, an
-afternoon); run your server in parallel on the real CtoS stream and diff its would-be output
-against the real server's while still forwarding the real answer (HANDOFF §7's replay oracle, at
-R0 instead of R2, open-loop, self-updating as you play); and then stop forwarding message types
-that diff clean and answer them yourself, so the system stays continuously playable and the
-project becomes incremental replacement rather than a cold start.
-*Wasted if:* the game channel's DH/ARC4 makes the proxy see only ciphertext — but you host the
-page, so the crypto boundary inside the module is hookable. *Risk is moderate, not fatal.*
-*First step:* Probe 3, then run `serve.py` against your own account.
+**A1 — Capture first, and do not write the harness from scratch.** *(days · mixed)*
+The single largest schedule saving available. Two instruments already exist and they are
+complementary rather than competing.
+
+*A headless-client recorder*, following Headquarter's approach (MIT, C, tracking live builds to
+38688). It needs no injection, no patched client and no GWToolbox, it runs unattended, and it can
+be scripted to sweep maps — which turns the capture campaign from months of manual play into a
+batch job. Headquarter is a complete from-scratch GW1 client that logs into live servers and is
+already used in production by `gwdevhub/GuildWarsPartySearch` and `kamadanv2`. Adding framed,
+timestamped raw-packet writing is roughly one function.
+
+*An in-client sniffer*, for fidelity. `gw-preservation/network-logger` is a drop-in DLL that logs
+100% of game-server↔client traffic to disk **[measured — mirrored]**, and `Fournux/Tyria-Extractor`
+(MIT) ships an injected sniffer alongside its `Gw.dat` extractor.
+
+Layer the shadow-server idea on top once capture works: feed your server the real CtoS stream and
+diff its would-be output against the real server's while still forwarding the real answer. That is
+HANDOFF §7's replay oracle at R0 instead of R2, open-loop, self-updating as you play. Then stop
+forwarding message types that diff clean and answer them yourself, so the system stays playable
+throughout and the project becomes incremental replacement rather than a cold start.
+*Wasted if:* nothing obvious — this is required under every strategic option, it does not depend on
+the language decision, and building it is how you find out how good the rest of the prior art
+really is. **Build it first regardless of every other choice in this document.**
+*Note:* the browser/WebSocket proxy route is attractive on paper but `gw_in_browser` cannot log in
+(its auth paths are stubs), so it is a static-analysis asset, not a capture one. See §1.3.
 
 **A2 — Stand up OpenTyria and see your character.** *(days · human)*
 Public domain, ~25k lines, with agent, chat, inventory, item, map, pathfinding, party and title
@@ -285,11 +360,19 @@ running it converts a pile of protocol theory into a working reference you can s
 debugger. *Wasted if:* it does not build against the 2026-04-30 client — in which case *why* is
 itself the most valuable R1 finding available. *First step:* Probe 4.
 
-**A3 — Adopt the 777-message schema as Rurik's source of truth.** *(days · agent-farmable)*
-Translate `msgdefs.c` into the TOML/JSON schema HANDOFF §5 specifies, then codegen from it. Verify
-each definition against captures rather than trusting it. This is exactly the work the handoff
-scoped, minus the discovery cost, with no license friction. *Wasted if:* the definitions have
-drifted from the current build — which the capture stream will tell you, message by message.
+**A3 — Reconcile the five existing opcode corpora into one build-stamped schema.** *(days · agent-farmable)*
+Five independent catalogs now exist: OpenTyria's `msgdefs.c` + `opcodes.h` (public domain),
+Headquarter's `opcodes.h` (MIT, declaring 60/40/194/487), `Py4GW_Reforged_Native`'s
+`include/GW/common/opcodes.h`, the GWCA lineage, and GWLP-R-Utils' `PacketTemplates.xml` — **177 KB,
+769 packets, 907 named entries** across all four directions **[sourced]**. They agree on values
+where they overlap (`INSTANCE_LOAD_SPAWN_POINT = 0x0195` in three of them independently), which is
+strong evidence they are all describing the same real protocol.
+
+**Every schema revision must carry a client build id.** `MOVE_TO_COORD` drifted `0x003C` → `0x003E`
+between builds, so an unstamped catalog is not merely stale, it is actively dangerous. The client's
+own `template_size` (§1.2) is the arbiter, and disagreement with it is mechanically detectable —
+which is exactly what makes this whole job safely delegable to agents.
+*Wasted if:* nothing — this work is required under every option and gets cheaper as captures grow.
 
 **A4 — Instrument the WASM client and take decoded ground truth, not bytes.** *(weeks · mixed)*
 HANDOFF's model is record bytes → decode later → hope the decoder is right. Inverted: hook the
@@ -387,12 +470,32 @@ changes is that capture is now cheap enough to leave running rather than a proje
 
 ## 7. Open questions for the owner
 
-**Q1. Build on OpenTyria, or learn from it and stay independent?** *Recommendation: learn from it,
-stay independent, and vendor nothing except `msgdefs.c` (public domain).* Rurik's actual goal is
-the declarative authoring toolkit, and inheriting 25k lines of someone else's C server architecture
-would fight that. But build it and run it first — the fastest route to understanding the stack.
-*Counterargument worth weighing:* if it already reaches R2–R3, refusing it may cost a year of
-rebuilding for purity.
+**Q1. Build on the existing servers, or learn from them and stay independent?**
+*Recommendation: independent codebase, treating OpenTyria and gw-preservation as published answer
+keys for R1–R3 and Headquarter as the capture instrument. Vendor nothing except possibly
+OpenTyria's public-domain schema.* The reasons to refuse adoption are concrete: OpenTyria implements
+only about 8–9% of the opcode space, has 2 unit tests, 6 hardcoded maps, **zero content tables** in
+its schema, an empty "Known issues" section and a HEAD that has not moved since February while its
+author commits weekly elsewhere; and `gw-preservation` carries no license at all, pins a
+pre-Reforged client version, and coordinates entirely off GitHub. Neither is a platform. Both are
+one person's exploration.
+
+*The counterargument is genuinely strong and should be recorded honestly.* You want R4c and R5.
+Everything below that is plumbing you did not ask for. OpenTyria suggests a competent person needs
+something like eighteen months to reach R3 — and Rurik would redo it in another language without
+that person's accumulated protocol knowledge, so plausibly slower. That is a large slice of a
+multi-year solo budget spent re-deriving something already public domain, before writing a line of
+the thing you actually want.
+
+*The recommendation is therefore contingent, not principled.* It rests on one testable assumption:
+that a working reference implementation plus a solved crypto scheme plus five agreeing opcode
+catalogs turns R1–R3 from research into transcription. If that assumption fails, adoption was right
+and independence costs a year.
+
+**The hedge costs nothing: build the capture harness (A1) first, before committing either way.** It
+is required under every option, it is the wasting asset, it does not depend on the language
+decision, and building it is precisely how you find out how good the prior art really is. Defer
+this decision until it has recorded its first sessions.
 
 **Q2. Is the WASM client the primary target?** *Recommendation: yes if Probe 3 passes.* It is
 better instrumented, better symbolized, patch-resilient, and drivable by browser automation. Keep
@@ -415,16 +518,23 @@ that the client is available to anyone.
 
 0. **Neutralise the crash-telemetry channel** before any patching or malformed traffic — see §6.
    Minutes, and everything else in this list is the kind of work that crashes clients.
-1. **Run Probe 1** — [studies/handshake/PLAN.md](studies/handshake/PLAN.md) §5 run A. Everything branches here.
-2. **Run Probe 2** — run C. Confirms `-authsrv` on this build.
-3. **Dump the client's packet-template table** (§1.2), then read
-   `vault/mirrors/OpenTyria/code/msgdefs.c` as the naming layer and reconcile the two. Any
-   disagreement with the client's own `template_size` is a mechanically detectable defect.
-4. **Build OpenTyria** and try to connect a *patched copy* of the client. Never patch `C:\gw`.
-5. **Run Probe 3** — `wasmscan.py` + `gensyms.py` from `vault/mirrors/gw_in_browser`.
-6. **Stand up the proxy** from `vault/mirrors/gw-web-player/serve.py`; tee both directions to `vault/captures/`.
-7. **Translate `msgdefs.c`** into `schema/` and generate the first parsers. Agent work.
-8. **Dump the skill table** via a WASM detour on the skill-lookup function. Agent work.
-9. **Install a .NET SDK** if the C# server core survives Q2 — only the 6.0 runtime is present, and
-   the plan calls for 8+. Defer until the language decision is settled.
-10. **Re-run `toolkit/mirror_priorart.py`** monthly. Repos in this ecosystem vanish.
+1. **Build the capture harness (A1).** It is required under every strategic option, it is the
+   wasting asset, and it is the hedge that lets you defer Q1. Start from Headquarter's
+   headless-client approach; read `gw-preservation/network-logger` for the in-client route.
+2. **Run Probe 1** — [studies/handshake/PLAN.md](studies/handshake/PLAN.md) §5 run A. Everything branches here.
+3. **Run Probe 2** — run C. Confirms `-authsrv` on this build.
+4. **Dump the client's packet-template table** (§1.2), then reconcile it against the five existing
+   opcode corpora (A3). Build-stamp the result. Any disagreement with the client's own
+   `template_size` is a mechanically detectable defect, which is what makes this agent work.
+5. **Build OpenTyria** (`vault/mirrors/ldufr__OpenTyria`) and connect a *patched copy* of the
+   client. Never patch `C:\gw`. Fastest route to understanding the whole stack end to end.
+6. **Read `gw-preservation/server`'s pathing and instance definitions** — 397 maps and a real
+   `Gw.dat` navmesh. Read only: no license means all rights reserved.
+7. **Extract the skill table.** `Fournux/Tyria-Extractor` (MIT) already does `Gw.dat` →
+   skills/items/quests/NPCs; cross-check against `build-wars/gw-skilldata`. This is R4b's numeric
+   bootstrap and it needs no capture vault to exist. Agent work.
+8. **Run Probe 3** (`vault/mirrors/shiburito__gw_in_browser`) for offline WASM analysis only —
+   not for live capture, per §1.3.
+9. **Install a .NET SDK** if the C# server core survives Q1/Q2 — only the 6.0 runtime is present
+   and the plan calls for 8+. Defer until the language decision is settled.
+10. **Re-run `toolkit/mirror_priorart.py`** monthly. Repos in this ecosystem vanish; one already has.
