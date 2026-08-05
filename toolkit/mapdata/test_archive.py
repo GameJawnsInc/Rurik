@@ -1,0 +1,141 @@
+"""Check the archive reader against real bytes, not against anyone's source.
+
+This is the test the protocol layer cannot have. Every claim our server makes
+about the wire rests on reconstructions, so its tests can only check that we
+encode what we intended to encode. Here the artifact is on disk and the format
+is falsifiable, so these assertions can fail for the right reason: because the
+file says otherwise.
+
+The strongest check is section 3, and it is worth understanding why it is strong.
+Decompression cannot be validated by "the output was as long as the header said"
+-- the decoder stops at that length by construction, so the match is forced (see
+the caveat at the top of gwdat.py). But a map's FFNA chunk table is a completely
+independent structure: a walk of (id, size, payload) records either consumes the
+decompressed output to the exact final byte or it does not. Wrong decompression
+produces garbage sizes and the walk runs off the end. That check has no
+circularity in it.
+
+    python toolkit/mapdata/test_archive.py
+    python toolkit/mapdata/test_archive.py --dat <path>
+
+ROW INDICES ARE COPY-SPECIFIC. The reference rows below were measured against
+the archive our patched client has actually run (177,342 entries). A running
+client writes to its own archive, so the install copy has a different entry
+count and different row numbers. Against a different copy the reference-row
+check is skipped rather than failed -- it is not a defect in the reader.
+"""
+
+import argparse
+import os
+import sys
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from archive import Archive, ffna_chunks, ffna_type, DEFAULT_DAT  # noqa: E402
+
+# Map files carry flags 259. The high byte is the stream (1) and the low byte is
+# the entry flags (3). MEASURED: exactly 349 entries in this archive have it, and
+# every one sampled decompressed to an ffna type-3 payload.
+MAP_FLAGS = 259
+EXPECTED_MAP_COUNT = 349
+FFNA_TYPE_MAP = 3
+
+# Reference maps, measured on the run-dir archive. The point of pinning exact
+# byte counts is that a decompressor regression changes them.
+EXPECTED_ENTRY_COUNT = 177342
+REFERENCE_MAPS = {7982: (24, 2925270), 20444: (22, 3389269)}
+
+SAMPLE_SIZE = 6
+
+fails = []
+
+
+def check(cond, msg):
+    print(f"  [{'PASS' if cond else 'FAIL'}] {msg}")
+    if not cond:
+        fails.append(msg)
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dat", default=DEFAULT_DAT)
+    args = ap.parse_args()
+
+    if not os.path.exists(args.dat):
+        print(f"no archive at {args.dat}")
+        print("See RUNBOOK.md for how the study copy is made.")
+        return 1
+
+    print(f"archive: {args.dat}")
+    with Archive(args.dat) as ar:
+        print("\n1. the header cross-checks itself")
+        # Archive() already raises if count * 24 != mft_size, so reaching here
+        # is the check. Restate it so a reader sees the arithmetic.
+        check(ar.entry_count * 24 == ar.mft_size,
+              f"{ar.entry_count} entries x 24 == declared MFT size "
+              f"{ar.mft_size}")
+        check(ar.block_size == 512, f"block size is 512 (got {ar.block_size})")
+
+        print("\n2. map files are identifiable by flags alone")
+        maps = [e for e in ar.entries if e.flags == MAP_FLAGS]
+        check(len(maps) == EXPECTED_MAP_COUNT,
+              f"exactly {EXPECTED_MAP_COUNT} entries carry flags "
+              f"{MAP_FLAGS} (got {len(maps)})")
+        if not maps:
+            print("\nno map entries; nothing further to check")
+            return 1
+
+        print("\n3. every sampled map decompresses and tiles its chunk table")
+        print("   (independent of the declared output length -- see the header)")
+        t0 = time.time()
+        walked = 0
+        for e in maps[:SAMPLE_SIZE]:
+            try:
+                data = ar.read(e)
+            except Exception as exc:
+                check(False, f"row {e.index}: read raised {type(exc).__name__}")
+                continue
+            if bytes(data[:4]) != b"ffna":
+                check(False, f"row {e.index}: magic {bytes(data[:4])!r}, "
+                             f"expected b'ffna'")
+                continue
+            if ffna_type(data) != FFNA_TYPE_MAP:
+                check(False, f"row {e.index}: ffna type {ffna_type(data)}, "
+                             f"expected {FFNA_TYPE_MAP}")
+                continue
+            try:
+                chunks = list(ffna_chunks(data))
+            except ValueError as exc:
+                check(False, f"row {e.index}: chunk walk failed -- {exc}")
+                continue
+            walked += 1
+            check(True, f"row {e.index}: {len(chunks)} chunks tiling "
+                        f"{len(data)} bytes exactly")
+        print(f"   {walked}/{min(SAMPLE_SIZE, len(maps))} maps in "
+              f"{time.time() - t0:.0f}s")
+
+        print("\n4. reference maps reproduce byte for byte")
+        if ar.entry_count != EXPECTED_ENTRY_COUNT:
+            print(f"  [SKIP] this archive has {ar.entry_count} entries, not "
+                  f"{EXPECTED_ENTRY_COUNT}; row indices differ between copies")
+        else:
+            by_index = {e.index: e for e in maps}
+            for row, (want_chunks, want_bytes) in REFERENCE_MAPS.items():
+                e = by_index.get(row)
+                if e is None:
+                    check(False, f"row {row} is not a map entry in this archive")
+                    continue
+                data = ar.read(e)
+                chunks = list(ffna_chunks(data))
+                check(len(data) == want_bytes and len(chunks) == want_chunks,
+                      f"row {row}: {len(chunks)} chunks, {len(data)} bytes "
+                      f"(expected {want_chunks}, {want_bytes})")
+
+    print("\n" + ("ALL CHECKS PASSED" if not fails
+                  else f"{len(fails)} CHECK(S) FAILED"))
+    return 1 if fails else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

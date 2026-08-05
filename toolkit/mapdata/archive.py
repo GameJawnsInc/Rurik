@@ -150,7 +150,11 @@ class Archive:
         if entry.compression == COMPRESSION_STORED:
             return data
         if entry.compression == COMPRESSION_HUFFMAN:
-            return gwdat.decompress(data)
+            # decompress() returns (payload, declared_size). The declared size is
+            # the loop's own termination bound, so it is not a check on anything
+            # -- see the caveat in gwdat.py. Take the bytes and drop it.
+            payload, _declared = gwdat.decompress(data)
+            return payload
         raise ValueError(f"unknown compression {entry.compression} on "
                          f"entry {entry.index}")
 

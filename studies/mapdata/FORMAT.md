@@ -131,6 +131,12 @@ Chunk ids observed resolve to distinct payload kinds; `0x21000009` resolves to
 both ATEX and DDS payloads, so chunk id does not determine payload format
 uniquely.
 
+**Map files are identifiable by their MFT flags alone**, which is cheaper than
+anything the tracks proposed. MEASURED: exactly **349 entries carry flags 259**,
+and every one sampled decompresses to an `ffna` type-3 payload. The high byte is
+the stream (1, which carries maps) and the low byte is the entry flags (3). No
+decompression is needed to enumerate them — one pass over the table.
+
 **698 map payloads, not 349.** Every map exists as a *pair* — a stage-1 file and
 a stage-2 file, linked by the MFT `next` field. OpenTyria hardcodes stage 2.
 Which one the client actually loads at runtime is **INFERRED**, not measured:
