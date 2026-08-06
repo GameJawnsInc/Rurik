@@ -88,6 +88,31 @@ def main():
     # run overwrote the live token record. That mixing produced a false timeline
     # during a real debugging session — two self-test captures were read as
     # evidence of successful client logins that never happened.
+    # Is the port already taken? This has to be checked BEFORE spawning, and it
+    # is not cosmetic. If another authsrv is already listening, our subprocess
+    # fails to bind and dies -- but the connect below then SUCCEEDS against the
+    # other server, so the whole run silently measures the wrong process. What
+    # that looks like from the output is three unrelated FAILs and an empty
+    # server key, which reads exactly like a real handshake regression. It cost
+    # two debugging detours in one session before anyone read the last line of
+    # the server log.
+    probe = socket.socket()
+    probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
+    try:
+        probe.bind(("127.0.0.1", PORT))
+    except OSError:
+        probe.close()
+        print(f"\n[BLOCKED] 127.0.0.1:{PORT} is already in use.\n"
+              f"  Something else -- almost certainly an authsrv you are running\n"
+              f"  for a client session -- holds the port. This test starts its\n"
+              f"  own server, so it cannot run alongside one, and if it tried it\n"
+              f"  would connect to yours and report nonsense about it.\n"
+              f"\n"
+              f"  Find it:  netstat -ano | findstr :{PORT}\n"
+              f"  Then stop it and re-run. NOTHING WAS TESTED.")
+        return 2
+    probe.close()
+
     srv = subprocess.Popen([sys.executable, "toolkit/authsrv/authsrv.py", "--once",
                             "--vault", SELFTEST_VAULT,
                             "--sessions", SELFTEST_SESSIONS],
