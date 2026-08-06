@@ -357,12 +357,121 @@ client on the first try.
 
 ---
 
+## 6c. E1 is done, and allegiance is not the hostility switch — OBSERVED
+
+Probe `allegiance`, 2026-08-06, build 38797. Six packets: three
+`PLAYER_CREATE` + `WORLD_CREATE_AGENT` pairs, identical except for the position
+and the field-12 FourCC, named for their own tokens.
+
+**E1 fell out for free, and it is the more important result.** All three bodies
+appeared, correctly placed, correctly named. **The client renders agents it was
+not told to control, from six packets, with no agent table and no server
+refactor at all.** §6's estimate of "days" for E1 was wrong by about two orders
+of magnitude — it is one function, and the probe already contains it.
+
+**The allegiance question came back negative, and the design was confounded.**
+All three read as *other players*: light-blue nameplates, light-blue compass
+dots, and a **Trade** button on the target window. `'play'`, `'nonc'` and
+`'mons'` were indistinguishable.
+
+That is a real result about field 12 but a much weaker one than intended,
+because **player-class agents are players by construction**. Every body carried
+`model_id = 0x30000000 | n` and a preceding `PLAYER_CREATE`, so the client had
+two independent reasons to classify them as players before it ever read field
+12. The probe held the wrong thing constant: it varied the token while pinning
+the agent class that plausibly outranks it. Choosing player-class was deliberate
+— it avoided needing a model file id we do not have — and it is exactly what
+made the answer uninterpretable.
+
+A second confound, spotted from play rather than from the packets: **an outpost
+does not permit attacking at all**, so "could not attack any of them" carries no
+information about hostility. (Kamadan's rift-quest area is reportedly an
+exception worth knowing about, but the spawn point is not in it.)
+
+So: **field 12 does not make a player-class agent hostile.** Whether it does
+anything for a monster-class agent is untouched. The re-run needs
+`model_id = 0x20000000 | n`, no `PLAYER_CREATE`, agent-kind byte 9 rather than
+5 — and an explorable map, which makes §7.3 a blocker for this question too.
+
+Three incidental observations, all free:
+
+- The target window reads **`W0`** — profession letter and level — so it takes
+  the profession from somewhere without being sent `0x00B7`, and shows level 0
+  because we never sent property 36 for these agents.
+- Created agents get a **full red health bar** in the target window with no
+  health property sent at all.
+- The player's own bar reads **1** before anything sets health. Combined with
+  §6b's clamp floor of 1, the reading that fits both is that 1 is a display
+  floor for a living agent rather than a true health value.
+
+---
+
+## 6d. E2 is done — a real NPC, correctly modelled and correctly named — OBSERVED
+
+Probe `npc_agent`, 2026-08-06, build 38797. Four packets: an NPC definition, its
+model, a monster-class agent using it, and a control using a definition index
+that was never sent.
+
+**It worked on the first attempt.** `Hatcher [Collector]` stood in the map,
+wearing a collector's body, with a **gold nameplate** — plainly different from
+the light-blue Trade-able player bodies §6c produced. Everything below follows
+from that one screenshot.
+
+**File id 116228 is valid on build 38797.** That number comes from GWLP-R's mock
+NPC in **2013** and is still in gw-preservation's agent table in **2026**; it is
+now OBSERVED working against our own client. Three lineages, thirteen years, one
+id. Two consequences: gw-preservation's NPC table is a *good* lead rather than a
+plausible one, and `Gw.dat` model ids are far more stable across builds than the
+opcode drift in this project would lead you to expect.
+
+**The EncString mechanism is confirmed, and it is better news than §4 assumed.**
+We sent four opaque 16-bit words — `328A E3B9 AA36 2E69` — and the client
+displayed **"Hatcher [Collector]"** in English. It resolved them against its own
+localized text resources exactly as Fournux describes. So a name cannot be
+invented, as §4 said; but a *captured* EncString is portable, self-describing and
+needs no text extraction on our side to be useful.
+
+**NPC definitions are MANDATORY, and the definition index is a raw array index.**
+The control created a monster-class agent whose definition had never been sent.
+The client died on:
+
+```
+Assertion: index < m_count
+P:\Code\Base\rtl\Array.h(587)
+Build: 38797     When: 8/6/2026 09:43:32
+```
+
+`0x63` — our 99 — appears repeatedly in the trace arguments, and the crash
+timestamp equals the packet's send timestamp exactly. This is a **bounds check on
+a dense array**, not a missing-resource path: the client indexes its NPC
+definition table directly with whatever the agent's model id carries. A server
+that creates an agent before defining its type does not get a missing model, it
+gets a crash.
+
+That is why gw-preservation sends `NPC_UPDATE_PROPERTIES` + `NPC_UPDATE_MODEL`
+**once per definition, before any agent that uses it**
+(`gameservice/instance.go:614-640`). We copied the ordering because it was the
+only observed one; now we know what enforces it.
+
+**Open, and cheap to close:** whether definition indices must be dense. We defined
+only index 2 — never 0 or 1 — and it worked, so the array presumably grew to hold
+three entries and 99 was simply past the end. Whether the client tolerates sparse
+definitions, or silently allocates up to the highest index seen, is untested.
+
+**Where this leaves the arc.** E1 and E2 are done, four rungs collapsed to two.
+What remains between here and an enemy is not rendering — it is **hostility**
+(§6c, still open and now needing an explorable) and **a hostile creature's
+definition** (§7.1, still NOT FOUND — every id we have is an Ascalon townsperson).
+
+---
+
 ## 7. Blockers, ranked
 
-### 7.1 No monster definition exists anywhere — NOT FOUND
+### 7.1 No HOSTILE definition exists anywhere — NOT FOUND
 
-E2 is unblocked for a *friendly Ascalon NPC* and still blocked for an *enemy*.
-Every published definition is a townsperson. Fournux states outright that "no
+Narrowed by §6d rather than removed. The *method* is proven end to end and one
+definition is known to work, so this is no longer "can we render an NPC" but
+"which numbers make a Charr". Every published definition is a townsperson. Fournux states outright that "no
 complete static NPC-definition table has been confirmed in the archive or client
 executable" — its own extractor recovers definitions by sniffing the live
 service, which is exactly the capture campaign PLAN.md §1.7 predicted would be

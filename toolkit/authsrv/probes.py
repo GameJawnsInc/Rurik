@@ -312,6 +312,229 @@ def _damage_steps(agent_id):
     ]
 
 
+def _death_steps(agent_id):
+    """Does 0x002D kill, when damage demonstrably cannot?
+
+    The `damage` probe established that health CLAMPS AT 1: 2500 damage against
+    75 left the character standing, with no death animation and no state change.
+    So an enemy that only deals damage can never finish a kill, and something
+    else has to end it. AGENT_PLAYER_DIE (0x002D, agent_id and nothing else) is
+    the candidate -- one dword, and the only message in the catalogue whose name
+    says death.
+
+    Steps 1 and 2 are not filler. They re-run the damage measurement, which makes
+    this probe its own control: if -25.0 does not land the bar on 1 exactly as it
+    did before, the session is not comparable and step 3 proves nothing.
+
+    Ends on the death deliberately. Nothing follows it, so the state can be read
+    at rest -- the lesson attr_sweep taught by destroying its own evidence.
+    """
+    return [
+        Step(2.0, 0x009F, [42, agent_id, 100],
+             "health -> 100 (int property 42)",
+             "the health bar reads 100. Same as the damage probe's step 1."),
+        Step(6.0, 0x00A3, [16, agent_id, agent_id, _f32(-25.0)],
+             "damage -25.0 (down to the floor)",
+             "the health bar should read 1, and the character should still be "
+             "standing. If it reads anything else, stop -- this session does not "
+             "reproduce the damage probe and step 3 is uninterpretable."),
+        Step(6.0, 0x002D, [agent_id],
+             "AGENT_PLAYER_DIE",
+             "EVERYTHING. Death animation? Ragdoll? A greyed screen, a resurrect "
+             "prompt, a death-penalty change in the top-left, a party-window "
+             "state? Or nothing at all, in which case death needs more than this "
+             "one dword and we have narrowed it rather than found it. Nothing "
+             "follows this step -- take your time."),
+    ]
+
+
+# The three allegiance FourCCs, in the order they go out. Two are MEASURED from
+# gw-preservation's agent table ('play' for party-allied NPCs, 'nonc' for
+# non-combatant townsfolk, studies/enemy/PLAN.md section 4); 'mons' is OUR
+# INFERENCE from the pattern and appears in no source on disk.
+#
+# Order is load-bearing. The invented one goes LAST so that if the client
+# rejects an unknown token, the two measured agents are already on screen and
+# the run still returns its main result.
+ALLEGIANCE = [
+    ("play", 0x706C6179, "MEASURED -- gw-preservation's party-allied NPCs"),
+    ("nonc", 0x6E6F6E63, "MEASURED -- its merchants, collectors and guards"),
+    ("mons", 0x6D6F6E73, "INFERRED by us. In no source anywhere."),
+]
+
+CHAR_CLASS_PLAYER_BASE = 0x30000000
+AGENT_TYPE_LIVING = 1
+AGENT_KIND_PLAYER = 5       # h000B: 0 item, 5 player, 9 NPC
+DEFAULT_RUN_SPEED = 288.0
+APPEARANCE_WARRIOR = 1 << 20
+INF = float("inf")
+
+
+def _allegiance_steps(agent_id, origin):
+    """Three bodies, side by side, differing in one dword. Which one is an enemy?
+
+    THIS IS THE ENEMY QUESTION, and it costs six packets and no server code.
+    Field 12 of WORLD_CREATE_AGENT is an allegiance FourCC -- we already send
+    'play' in it for the player's own body without ever having asked what it
+    does. If hostility lives there, an enemy is one dword away from a friend.
+
+    Player-class agents rather than NPCs on purpose. It reuses the exact
+    WORLD_CREATE_AGENT the player's own body is built from, so the only thing
+    that differs between the three is the token under test and the position.
+    Bringing NPC models into it would add a model file id we do not have and a
+    second reason for a body to fail to appear.
+
+    Each carries its token as its NAME, so the nameplates are the legend: no
+    correlating by position, and a screenshot read later still says which is
+    which. Same trick that mapped the 15-dword attribute set.
+
+    WHAT TO LOOK FOR, in order of how much it would settle:
+      - nameplate COLOUR differing between the three
+      - whether clicking one targets it, and whether the attack command is
+        offered on any of them
+      - whether the compass shows them in different colours
+    """
+    ox, oy, plane = origin
+    out = []
+    # A triangle around the spawn rather than a line, because the camera starts
+    # behind the character and a row in front would put the far ones off screen.
+    spots = [(ox + 250, oy), (ox, oy + 250), (ox - 250, oy)]
+    for i, ((tag, token, provenance), (x, y)) in enumerate(zip(ALLEGIANCE, spots)):
+        num = i + 2                      # 1 is the player
+        name = f"Token {tag}"
+        # PLAYER_CREATE first: SendWorldAgents sends it before the agent for
+        # every player-class body, and it is what carries the name.
+        out.append(Step(
+            3.0 if i else 2.0, 0x0059,
+            [num, num, APPEARANCE_WARRIOR, 0, 0, 0, name],
+            f"PLAYER_CREATE agent {num}: {name!r}",
+            "nothing yet -- the body arrives with the next packet."))
+        out.append(Step(
+            1.0, 0x0020,
+            [num,                                   # agent_id
+             CHAR_CLASS_PLAYER_BASE | num,          # model_id
+             AGENT_TYPE_LIVING,
+             AGENT_KIND_PLAYER,                     # h000B
+             (float(x), float(y)),                  # position
+             plane,
+             (1.0, 0.0),                            # direction
+             1,                                     # h001E
+             DEFAULT_RUN_SPEED,
+             1.0,                                   # h0023
+             0x41400000,                            # h0027
+             token,                                 # <-- THE VARIABLE
+             0, 0, 0, 0, 0,
+             (0.0, 0.0),
+             (INF, INF),
+             0, 0,
+             (INF, INF),
+             0],
+            f"WORLD_CREATE_AGENT {num} @ ({x:.0f}, {y:.0f}) token '{tag}'",
+            f"a second body should appear. Its nameplate names its own token. "
+            f"{provenance}. Compare its nameplate colour against the others, and "
+            f"try to click and attack it."))
+    return out
+
+
+CHAR_CLASS_MONSTER_BASE = 0x20000000
+AGENT_KIND_NPC = 9          # h000B, against 5 for a player
+
+# One real NPC definition, transcribed from gw-preservation's agent table as a
+# PROBE INPUT and nothing else. That repo carries no license, so these numbers
+# are a lead to be tested rather than data to import -- if the NPC renders, the
+# id gets re-derived and recorded as our own observation, and if it does not,
+# nothing was adopted. See studies/enemy/PLAN.md section 5 on the licensing.
+#
+# `hatcher_collector`, an Ascalon collector. Its file id 116228 is the strongest
+# id available anywhere: GWLP-R's mock NPC used the same number in 2013, which is
+# two lineages thirteen years apart agreeing on one value.
+HATCHER = dict(
+    definition=2,           # OUR handle for this NPC type, not a game-wide id
+    file_id=116228,
+    model_id=116703,
+    profession=3,           # Monk, per that table
+    level=1,
+    # An EncString: text-resource references, not characters. Four u16 words,
+    # passed as the code units our string16 encoder will write back out.
+    enc_name="".join(chr(w) for w in (0x328A, 0xE3B9, 0xAA36, 0x2E69)),
+    scale=0x64000000,       # visual adjustment: hue 0, sat 0, light 0, scale 100%
+    flags=0x20C,
+)
+
+
+def _create_agent(agent_id, model_id, kind, x, y, plane, token=0x706C6179):
+    """The 23-field WORLD_CREATE_AGENT, in the shape the player's body uses.
+
+    Kept in one place because the allegiance probe, this one and eventually the
+    server all need the identical field order, and three copies of a 23-field
+    literal is how a field quietly drifts between them.
+    """
+    return [agent_id, model_id, AGENT_TYPE_LIVING, kind,
+            (float(x), float(y)), plane, (1.0, 0.0), 1,
+            DEFAULT_RUN_SPEED, 1.0, 0x41400000, token,
+            0, 0, 0, 0, 0, (0.0, 0.0), (INF, INF), 0, 0, (INF, INF), 0]
+
+
+def _npc_agent_steps(agent_id, origin):
+    """Will the client render a monster-class agent, and does it need a definition?
+
+    The allegiance probe proved the client happily spawns extra bodies, but it
+    spawned PLAYERS -- model class 0x3, a preceding PLAYER_CREATE, agent-kind 5 --
+    and the client treated them as players in every respect that was checked.
+    Everything about an ENEMY starts one step earlier than that: class 0x2.
+
+    Two questions, in one run, ordered so the valuable one cannot be lost:
+
+      1. Does a monster-class agent with a real NPC definition render a body?
+         This is E2 in studies/enemy/PLAN.md, and it turns on whether file id
+         116228 still addresses a model in build 38797's archive. It is a 2013
+         number that an unrelated project was still using in 2026, which is why
+         it is worth one packet before anyone goes model-hunting in Gw.dat.
+
+      2. Are the definition messages REQUIRED? Step 4 creates a monster-class
+         agent whose definition index was never defined. If it renders anyway,
+         properties are decoration; if it renders nothing, they are mandatory;
+         if it asserts, that is the loudest answer of the three.
+
+    Question 2 goes last on purpose. An undefined model is exactly the kind of
+    thing that takes a client down -- a missing file id already killed this
+    project's map load once with `Assertion: fileId` -- and if it does, the
+    answer to question 1 is already on screen.
+
+    NO PLAYER_CREATE anywhere here. That message is what made the last probe's
+    bodies read as players, and sending it for an NPC would repeat the confound.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    return [
+        Step(2.0, 0x0056,
+             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {h['definition']}: "
+             f"file {h['file_id']}, prof {h['profession']}, level {h['level']}",
+             "nothing yet. This defines a TYPE, not a body."),
+        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {h['definition']} -> model {h['model_id']}",
+             "still nothing. One more packet before anything can appear."),
+        Step(1.0, 0x0020,
+             _create_agent(2, CHAR_CLASS_MONSTER_BASE | h["definition"],
+                           AGENT_KIND_NPC, ox + 250, oy, plane),
+             "WORLD_CREATE_AGENT 2, monster class, defined",
+             "THE QUESTION. Is there a body? What does its nameplate look like "
+             "-- colour, name, level? Is there a Trade button, or something "
+             "else, or nothing? Compare it against the light-blue player bodies "
+             "the last probe made: anything that differs is the class nibble "
+             "doing work."),
+        Step(8.0, 0x0020,
+             _create_agent(3, CHAR_CLASS_MONSTER_BASE | 99,
+                           AGENT_KIND_NPC, ox - 250, oy, plane),
+             "WORLD_CREATE_AGENT 3, monster class, definition 99 NEVER DEFINED",
+             "the control. Nothing, a placeholder, or a crash -- all three are "
+             "answers. If the client is still up when you read this, note "
+             "whether a second body appeared."),
+    ]
+
+
 def _team_token_steps(agent_id):
     # Not a packet probe: the token now goes out at spawn. This exists so the
     # run is recorded with a question attached rather than being assumed fine.
@@ -319,7 +542,7 @@ def _team_token_steps(agent_id):
 
 
 PROBES = {
-    "level": lambda a: Probe(
+    "level": lambda a, o: Probe(
         question="Is agent int-property 36 on 0x009F the character's level?",
         predicts="The nameplate reads 1, then 15, then 20. If it never changes, "
                  "either the property id is wrong or level is not sent this way.",
@@ -329,7 +552,7 @@ PROBES = {
              "study's best-supported claim into an observation and explains why "
              "the character is level 0.",
     ),
-    "attributes": lambda a: Probe(
+    "attributes": lambda a, o: Probe(
         question="Is a 42-zero attribute array well-formed?",
         predicts="If ATTRIBUTE_COUNT = 42 is right, all three lengths are "
                  "accepted. If the client reads triplets, 42 misbehaves where 3 "
@@ -338,7 +561,7 @@ PROBES = {
         note="A null result is inconclusive -- one lineage never sends 0x003A at "
              "all, and one parser is documented to bail without a skillbar first.",
     ),
-    "armor": lambda a: Probe(
+    "armor": lambda a, o: Probe(
         question="What are the two dwords in 0x006F, and does it dress the agent?",
         predicts="One of the three argument orders produces visible chest armour. "
                  "If none does, 0x006F is not the visual-equip message on this "
@@ -347,7 +570,7 @@ PROBES = {
         note="EXPLORATORY. The study calls this mapping disputed; we are trying "
              "readings, not confirming a known one.",
     ),
-    "player_attrs": lambda a: Probe(
+    "player_attrs": lambda a, o: Probe(
         question="Does 0x00E9 field 9 drive the Hero window's level, and does "
                  "field 0 drive its xp?",
         predicts="The Hero window reads Level 5 and 4242 xp, then Level 15 and "
@@ -362,7 +585,7 @@ PROBES = {
              "Shape corroborated by four lineages; field 9's effect CONTESTED, "
              "which is exactly what this settles.",
     ),
-    "attr_sweep": lambda a: Probe(
+    "attr_sweep": lambda a, o: Probe(
         question="What are the remaining fields of 0x00E9, and is field 10 a "
                  "morale percentage offset by 100?",
         predicts="Each unmapped field shows its own 1000+i value somewhere in "
@@ -375,7 +598,7 @@ PROBES = {
              "and 13 and refuted the study's claim that field 12 is the "
              "Balthazar denominator -- we sent 2000 and the bar read 1000/0.",
     ),
-    "attr_legend": lambda a: Probe(
+    "attr_legend": lambda a, o: Probe(
         question="Which field of 0x00E9 drives which readout? One packet, "
                  "every field labelled with its own index.",
         predicts="The Faction tab's four rows and the level/xp/skill-point "
@@ -389,7 +612,7 @@ PROBES = {
              "before anyone could read it. This one is a single packet and "
              "leaves the client in the state being measured.",
     ),
-    "damage": lambda a: Probe(
+    "damage": lambda a, o: Probe(
         question="Does damage arrive as agent property 16 on 0x00A3, and is the "
                  "value absolute health or a fraction of maximum?",
         predicts="The property channel works -- we have already OBSERVED the "
@@ -409,7 +632,66 @@ PROBES = {
              "client on ArenaNet's own `damage.amount <= 0`. See "
              "studies/enemy/PLAN.md.",
     ),
-    "spawn": lambda a: Probe(
+    "npc_agent": lambda a, o: Probe(
+        question="Does a monster-class agent render, and does it need an NPC "
+                 "definition to do it?",
+        predicts="A body appears at +250 that does NOT read as another player -- "
+                 "different nameplate colour, no Trade button -- because the "
+                 "class nibble is 0x2 and there is no PLAYER_CREATE. Whether it "
+                 "wears the right MODEL rests on file id 116228 surviving from "
+                 "2013 to build 38797, which is a genuine coin-flip. The "
+                 "undefined control at -250 should render nothing, or assert.",
+        steps=_npc_agent_steps(a, o),
+        note="RUN 2026-08-06. BOTH ANSWERED, first attempt. 'Hatcher "
+             "[Collector]' rendered with a collector's body and a GOLD "
+             "nameplate, plainly not a player -- so file id 116228 survives from "
+             "2013 to build 38797, and the EncString resolved to real English "
+             "text out of the client's own resources. The control crashed on "
+             "`Assertion: index < m_count` at Base\\rtl\\Array.h(587) with our 99 "
+             "in the trace: the definition index is a raw ARRAY INDEX, so "
+             "creating an agent before defining its type is a crash, not a "
+             "missing model. STEP 4 IS THE KNOWN CRASH -- it has done its job "
+             "and re-running it only costs a session. Delete it before using "
+             "this probe as a spawn template. See studies/enemy/PLAN.md 6d.",
+    ),
+    "death": lambda a, o: Probe(
+        question="Does AGENT_PLAYER_DIE (0x002D) kill, when damage cannot?",
+        predicts="A death animation and a resurrect prompt. The `damage` probe "
+                 "proved health clamps at 1 and the character keeps standing, so "
+                 "SOMETHING has to end a life and this is the only message named "
+                 "for it. A null result is still worth having: it would mean "
+                 "death needs state we have never sent, and would move the "
+                 "question to what allocates it.",
+        steps=_death_steps(a),
+        note="Steps 1-2 re-run the damage measurement so the probe controls "
+             "itself: if the bar does not land on exactly 1, step 3 is "
+             "uninterpretable. Ends on the death so the state can be read at "
+             "rest.",
+    ),
+    "allegiance": lambda a, o: Probe(
+        question="Is field 12 of WORLD_CREATE_AGENT what makes an agent hostile?",
+        predicts="Three bodies appear, named for their tokens. 'play' and 'nonc' "
+                 "are MEASURED values from an independent server and should read "
+                 "as friendly. If 'mons' -- which is our guess and appears in no "
+                 "source -- renders a red nameplate or an attackable target, the "
+                 "enemy question is answered by one dword. If all three look "
+                 "identical, hostility is NOT in this field and the next "
+                 "candidate is AGENT_UPDATE_ALLEGIANCE (0x002F).",
+        steps=_allegiance_steps(a, o),
+        note="RUN 2026-08-06. NEGATIVE, and CONFOUNDED -- read the result as "
+             "'field 12 does not make a PLAYER-class agent hostile', not as "
+             "'field 12 is not allegiance'. All three rendered as other players: "
+             "light-blue nameplates, light-blue compass dots, a Trade button. "
+             "Player-class agents are players by construction -- model_id "
+             "0x30000000 and a preceding PLAYER_CREATE both say so before the "
+             "client reaches field 12 -- and the outpost forbids attacking "
+             "anyway, so the targetability half measured nothing. The re-run "
+             "needs monster-class agents in an explorable. "
+             "What it DID prove, for free: the client renders agents it was not "
+             "told to control, from six packets and no server code. That is E1 "
+             "in studies/enemy/PLAN.md, done.",
+    ),
+    "spawn": lambda a, o: Probe(
         question="Does the character still spawn correctly with team token 'play'?",
         predicts="Identical behaviour to 0xBAADF00D. A regression here means the "
                  "three-lineage value is wrong for this build and we revert.",
@@ -420,11 +702,22 @@ PROBES = {
 }
 
 
-def get(name, agent_id):
+# Where the character stands when a probe fires, as (x, y, plane).
+#
+# Only used by probes that place something in the world, and only meaningful
+# because a probe fires seconds after the spawn burst, before anyone has walked
+# anywhere. The default is Kamadan's spawn point -- the map every session
+# actually loads, via MAP_STATIC_CONFIG's fallback -- so that --list-probes and
+# the encode self-test work with no server running. A live run passes the real
+# one.
+DEFAULT_ORIGIN = (-9067.0, 13218.0, 0)
+
+
+def get(name, agent_id, origin=None):
     factory = PROBES.get(name)
     if factory is None:
         return None
-    return factory(agent_id)
+    return factory(agent_id, origin or DEFAULT_ORIGIN)
 
 
 def names():

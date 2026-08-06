@@ -494,7 +494,7 @@ CLICK_SWEEP_VARIANTS = (
 )
 
 
-def run_probe(name, send, conn_id, stop):
+def run_probe(name, send, conn_id, stop, origin=None):
     """Fire a scripted experiment at the client, on its own thread.
 
     On its own thread because the steps are deliberately seconds apart -- a
@@ -505,7 +505,10 @@ def run_probe(name, send, conn_id, stop):
     client rejects is a result, not a crash, and it must not take the session
     down with it or we lose the rest of the sequence.
     """
-    probe = probes.get(name, PLAYER_AGENT_ID)
+    # origin is where the character is standing. A probe that places something
+    # in the world needs it, and can only have it from here -- probes.py is a
+    # data module with no view of the session.
+    probe = probes.get(name, PLAYER_AGENT_ID, origin)
     if probe is None:
         print(f"[c{conn_id}] no probe named {name!r}; "
               f"known: {', '.join(probes.names())}", flush=True)
@@ -1510,7 +1513,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
                         if PROBE_NAME:
-                            run_probe(PROBE_NAME, send, conn_id, stop)
+                            run_probe(PROBE_NAME, send, conn_id, stop,
+                                      origin=(pos[0], pos[1], cfg[2]))
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
                         # map_file_id 0 is a placeholder: the real one comes from
                         # the map's static config, which we do not have yet. If the
