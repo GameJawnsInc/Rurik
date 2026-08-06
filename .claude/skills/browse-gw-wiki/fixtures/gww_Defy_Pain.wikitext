@@ -1,0 +1,23 @@
+{{Skill infobox
+| id = 318
+| name = Defy Pain
+| campaign = Prophecies
+| profession = Warrior
+| attribute = Strength
+| type = Skill
+| elite = y
+| has-pvp = y
+| adrenaline = 5
+| causes1 = Increased Maximum Health
+| description = [[Elite]] [[Skill]]. For 20 seconds you have an additional {{gr|90|300}} [[Health]], an additional 20 [[armor rating|armor]], and you take {{gr|1|10|-}} less [[damage]].
+| concise description = Elite Skill. (20 seconds.) You have {{gr|90|300|+}} maximum Health, +20 armor, and take {{gr|1|10}} less damage.
+}}
+
+{{Skill progression
+|attribute = [[Strength]]
+|var1 name = + Maximum [[health]]
+|var1 at0 = 90
+|var1 at15 = 300
+|var2 name = [[Damage reduction]]
+|var2 at0 = 1
+|var2 at15 = 10}}

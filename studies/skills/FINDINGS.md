@@ -18,6 +18,7 @@ No code was written and no client was launched for this pass. It is a study.
 | **CONTESTED** | Sources disagree, and this document does not pick a winner. |
 | **UNVERIFIED** | Claimed by a track, and the verifier could not confirm it. Do not build on this. |
 | **NOT FOUND** | We looked, and there is no answer in the sources we have. |
+| **WIKI** | The official Guild Wars Wiki (`wiki.guildwars.com`) says this — twenty years of players documenting observed retail behaviour, cited by page and section. Its strength is **not uniform**: strong for player-visible values (a skill's displayed cost, recharge, description), because mass observation of the retail client beats any single reimplementation's reading; weak for internals (byte layouts, wire formats), which players inferred from outside. The test is *could a player have seen this from the game window?* It shares no author, code or ancestry with the §6 cluster, so wiki + a code lineage agreeing is real corroboration. |
 
 **The single most important thing this pass learned about its own sources** is in
 §6, and it is bad news: the "ldufr" and "GWCA" lineages, which the movement pass
@@ -184,9 +185,13 @@ at `0x98`/`0x9c`/`0xa0` for the three string ids on its own.
    sources carry the same two special cases — GWCA as a `GetEnergyCost()` helper
    (`Skill.h:89-95` region), Tyria-Extractor as a documented rule
    (`doc/SKILL_EXTRACTION.md:43`). CLIENT-DATA, but see the caveat below.
-2. **`adrenaline` at `+0x38` is in internal units, 25 per displayed strike**
-   (`doc/SKILL_EXTRACTION.md`, adrenaline row). Tyria-Extractor has a unit test
-   for this conversion (`src/skills.rs:299-305`); the energy encoding has none.
+2. **`adrenaline` at `+0x38` is a total in adrenaline units, and the displayed
+   cost is `ceil(raw / 25)`** — *not* a plain division. The "25 internal units
+   per displayed strike" rule this document previously carried
+   (`doc/SKILL_EXTRACTION.md`, adrenaline row; Tyria-Extractor unit test at
+   `src/skills.rs:299-305`) predicts 3.2 for Battle Rage and 4.8 for Defy Pain,
+   which are not integers and are not what the client shows. Corrected below;
+   this is the one field in the record we have measured end to end.
 3. **62 of the 164 bytes are undocumented by Tyria-Extractor** — `0x04-0x07`,
    `0x14-0x27`, `0x32`, `0x37`, `0x50-0x57`, `0x74-0x8b`, `0x94-0x97`. GWCA names
    some of those bytes (notably the whole animation block and
@@ -198,6 +203,74 @@ The 11→15 / 12→25 mapping has no disassembly address, no journal entry, and 
 test in either source. Two special values is a suspiciously small set for a
 hand-derived encoding. Mark it **CLIENT-DATA, uncorroborated by measurement** —
 if Rurik ever serves energy costs, verify this one first.
+
+### The adrenaline field, measured and corrected
+
+**CORROBORATED — OBSERVED (ours) + WIKI (GWW), and it refutes the rule this
+document shipped.** This is the only field in the 164-byte record we have taken
+all the way from raw bytes to what the player sees.
+
+We read `+0x38` out of the client's skill row and watched what the client
+displayed:
+
+| Skill | id | raw `+0x38` | client shows |
+|---|---|---|---|
+| Battle Rage | 317 | 80 | 4 |
+| Rush | 319 | 80 | 4 |
+| Defy Pain | 318 | 120 | 5 |
+
+The inherited rule — raw ÷ 25 — gives 3.2, 3.2 and 4.8. None is an integer and
+none matches. Three observations were not enough to choose between the two
+obvious repairs, `ceil(raw/25)` and `floor(raw/25)+1`, since both fit all three.
+
+The wiki supplied the mechanism, which decides it:
+
+- **WIKI (GWW, "Adrenaline" §Gaining adrenaline):** "You gain 25 units of
+  adrenaline (=one strike) each time you successfully hit an opponent with a
+  weapon", plus 1 unit per 1% of maximum health lost, rounded down.
+- **WIKI (GWW, "Battle Rage" §Notes; identical text on "Rush" §Notes):** "This
+  skill exactly requires **80 units** of adrenaline to be fully charged, so 3
+  strikes and 5 units."
+
+Gain is a flat 25 per hit, so a skill's displayed cost is **the number of hits
+needed to charge it**:
+
+```
+displayed_strikes = ceil(raw_units / 25)
+```
+
+Battle Rage's 80 units is three full strikes with 5 units owing; the fourth hit
+covers them, so the client shows 4. `floor(raw/25)+1` is **refuted** — it
+predicts 2 for a 25-unit skill, 5 for 100, 6 for 125, 7 for 150 and 9 for 200,
+where the correct values are 1, 4, 5, 6 and 8. Any cost that is an exact
+multiple of 25 separates the two rules.
+
+Two things worth keeping beyond the formula:
+
+- **GWW independently confirms the raw magnitude**, not just the displayed
+  value. "80 units" is exactly our `+0x38`. That is a player-visible page
+  agreeing with a byte we read out of the binary, from a source with no
+  relationship to the §6 authorship cluster — the strongest corroboration in
+  this section.
+- **GWW skill pages carry ArenaNet's own skill `id`** in their infobox (Battle
+  Rage 317, Defy Pain 318, Rush 319 — consecutive). That is a direct join key
+  from a wiki page to a row in the client's skill table, and it makes
+  wiki-vs-client cross-checking mechanical rather than manual. `Gw.exe` row
+  count and wiki skill count already agree to 0.3% (§"The answer in one page");
+  the `id` field is how that comparison could be done row by row.
+
+**How to re-read the wiki.** `wiki.guildwars.com` returns 403 to every scripted
+client — it fingerprints the TLS/HTTP stack, so no User-Agent, header set or
+VPN change gets through. Use the `browse-gw-wiki` skill in `.claude/skills/`;
+it drives a real browser and documents the routes.
+
+**Do not use the Fandom GuildWiki (`guildwars.fandom.com`) for skill values.**
+Its skill templates were last edited 2008–2010 while ArenaNet still ships
+balance updates. It lists Defy Pain at 130 units / 6 strikes against GWW's 5 and
+our measured 120, and gives 20 seconds for out-of-combat adrenaline decay where
+GWW gives 25. Neither page flags itself as uncertain. A frozen wiki does not
+produce obvious garbage; it produces confidently wrong specifics that survive a
+casual cross-check.
 
 ### Where the table itself sits
 
@@ -949,6 +1022,7 @@ diff the corpus.
 | Opcode **numbering and naming** | **None.** One corpus, nine repos. |
 | Skill **record layout** | Two: the cluster (GWCA) and **Fournux/Tyria-Extractor** (partial — it cites GWToolbox and Py4GW as "conceptual references", and takes its FFNA file-reference formula from GuildWarsMapBrowser, but it also *corrects* GWCA, which is what real independence looks like). |
 | Skill **count** | Two, by unrelated methods: Tyria-Extractor's PE measurement (1,333 base rows) and the Guild Wars wiki (1,329 player skills). |
+| **`adrenaline` at `+0x38`** | Two, and one of them is ours: our own measurement of raw bytes against the client's display, and GWW stating the same raw magnitude ("80 units") on its skill pages. The wiki shares no author or code with this cluster. See "The adrenaline field, measured and corrected". |
 | Capture **methodology** | gw-preservation is genuinely independent here — its `annotate.py` decodes the client's *own* runtime field-descriptor bitfield rather than consulting a hand-maintained table, and its RC4 scan signatures appear nowhere else in the vault. |
 | Attribute id space | Three against one (see §1). |
 

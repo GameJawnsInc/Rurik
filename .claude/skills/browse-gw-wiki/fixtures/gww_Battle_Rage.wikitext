@@ -1,0 +1,27 @@
+{{Skill infobox
+| id = 317
+| name = Battle Rage
+| campaign = Core
+| profession = Warrior
+| attribute = Strength
+| type = Stance
+| elite = y
+| adrenaline = 4
+| causes1 = Increased Movement Speed
+| causes2 = Increased Adrenaline Build Rate
+| description = [[Elite]] [[Stance]]. For {{gr|5|20}} seconds, you [[Speed boost|move 33% faster]] and gain double [[adrenaline]] from [[attack]]s. Battle Rage ends if you use any non-[[List of adrenal skills|adrenal skills]].
+| concise description = Elite Stance. ({{gr|5|20}} seconds.) You move 33% faster and gain double adrenaline from your attacks. {{gray|Ends if you use any non-adrenal skills.}}
+}}
+
+{{Skill progression
+|attribute = [[Strength]]
+|var1 name = [[Duration]]
+|var1 at0 = 5
+|var1 at15 = 20}}
+
+== Related skills ==
+* {{skill icon|Berserker Stance}}
+* {{skill icon|Rush}}
+
+== Notes ==
+* This skill exactly requires 80 units of adrenaline to be fully charged, so 3 strikes and 5 units.
