@@ -44,6 +44,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from codec import Codec  # noqa: E402
 from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
 import probes  # noqa: E402
+import agents  # noqa: E402
 
 AUTH_CMSG_VERSION_HEADER = 0x000C0400
 # 0x000C0700 came from the reference sources. 0x000C0500 is what build 38797
@@ -215,6 +216,14 @@ except Exception as _exc:                                     # noqa: BLE001
 # equal, and a token that means "this team" is exactly the kind of thing that
 # would fail confusingly if the client saw two different values for it.
 # UNVERIFIED against our own client -- see the probe queue.
+# Non-player agents. Shapes agree with the client's own message-format tables
+# (studies/msgtable); what each field MEANS is in studies/enemy/PLAN.md.
+GAME_SMSG_NPC_UPDATE_PROPERTIES = 0x0056
+GAME_SMSG_NPC_UPDATE_MODEL = 0x0057
+GAME_SMSG_AGENT_PROPERTY_UPDATE_INT = 0x009F
+GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET = 0x00A3
+GAME_SMSG_AGENT_UPDATE_EFFECTS = 0x00F1
+
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
 
@@ -589,6 +598,12 @@ PROBE_NAME = None
 # town. See the INSTANCE_LOAD_INFO send site for why it is worth a flag.
 EXPLORABLE = False
 
+# Whether the world contains anything besides the player. On by default: an
+# enemy standing in the map is the point of the exercise, and every packet it
+# takes is proven (studies/enemy/PLAN.md). --no-enemy gives back an empty world
+# for probes that want one.
+SPAWN_ENEMY = True
+
 CLICK_SWEEP = False
 CLICK_SWEEP_VARIANTS = (
     ("dest,cur   (OpenTyria order, shipped)", lambda c, d: (d, c)),
@@ -599,6 +614,61 @@ CLICK_SWEEP_VARIANTS = (
     ("dest,dest",                             lambda c, d: (d, d)),
     ("cur,cur",                               lambda c, d: (c, c)),
 )
+
+
+# The first thing in this world that is not the player.
+#
+# Ids are deliberately clear of the probes, which use agents 2..7 and definition
+# 2, so a --probe session and the standing enemy cannot collide. That collision
+# is not cosmetic: an agent id reused for a second body would leave the client
+# with one agent's state under another's name.
+ENEMY_AGENT_ID = 10
+ENEMY_DEFINITION = 3
+ENEMY_MAX_HEALTH = 100
+ENEMY_OFFSET = (300.0, 0.0)
+
+
+def spawn_enemy(send, state, origin, conn_id):
+    """Put one hostile body in the map, using only packets we have proven.
+
+    Every message here was established one at a time against our own client and
+    is cited in studies/enemy/PLAN.md: the definition and model (6d), the
+    monster class nibble and the allegiance FourCC that makes it read as an
+    enemy (6e), and the maximum health (6g). Nothing in this function is new
+    protocol -- it is the `death` probe's opening, moved onto the normal path.
+
+    ORDER IS LOAD-BEARING. The definition must precede the agent that uses it:
+    the definition index is a raw array index on the client, and an agent whose
+    type was never defined crashes it outright. OBSERVED.
+    """
+    ox, oy, plane = origin
+    x, y = ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
+
+    send(GAME_SMSG_NPC_UPDATE_PROPERTIES,
+         agents.npc_properties(ENEMY_DEFINITION, agents.HATCHER),
+         f"NPC_UPDATE_PROPERTIES(def {ENEMY_DEFINITION})")
+    send(GAME_SMSG_NPC_UPDATE_MODEL,
+         agents.npc_model(ENEMY_DEFINITION, agents.HATCHER),
+         f"NPC_UPDATE_MODEL(def {ENEMY_DEFINITION})")
+    send(GAME_SMSG_WORLD_CREATE_AGENT,
+         agents.create_agent(ENEMY_AGENT_ID,
+                             agents.CHAR_CLASS_MONSTER_BASE | ENEMY_DEFINITION,
+                             agents.AGENT_KIND_NPC, x, y, plane,
+                             allegiance=agents.ALLEGIANCE_HOSTILE),
+         f"WORLD_CREATE_AGENT({ENEMY_AGENT_ID}, hostile)")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, ENEMY_AGENT_ID, ENEMY_MAX_HEALTH],
+         f"health {ENEMY_MAX_HEALTH} on agent {ENEMY_AGENT_ID}")
+
+    state.setdefault("agents", {})[ENEMY_AGENT_ID] = {
+        "pos": (x, y), "plane": plane,
+        "health": float(ENEMY_MAX_HEALTH), "max_health": float(ENEMY_MAX_HEALTH),
+        "dead": False,
+        "name": agents.HATCHER["name"],
+    }
+    print(f"[c{conn_id}] enemy {ENEMY_AGENT_ID} ({agents.HATCHER['name']}) "
+          f"at ({x:.0f}, {y:.0f}) plane {plane}, {ENEMY_MAX_HEALTH} hp",
+          flush=True)
 
 
 def run_probe(name, send, conn_id, stop, origin=None):
@@ -1646,6 +1716,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # after spawn where we had it.
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
+                        if SPAWN_ENEMY:
+                            spawn_enemy(send, state,
+                                        (pos[0], pos[1], cfg[2]), conn_id)
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -1848,6 +1921,10 @@ def main():
                          "and report which attempt numbers behaved; that "
                          "identifies the fields from the client instead of from "
                          "two sources that contradict each other.")
+    ap.add_argument("--no-enemy", action="store_true",
+                    help="Do not spawn the standing hostile NPC. The world is "
+                         "then the player alone, which is what most probes "
+                         "assume and what every session before 2026-08-06 was.")
     ap.add_argument("--explorable", action="store_true",
                     help="Tell the client this instance is explorable rather than "
                          "a town. Guild Wars forbids attacking in a town, so this "
@@ -1887,6 +1964,11 @@ def main():
         print("Click the SAME spot each time -- a wall to walk through, or the")
         print("staircase -- and note which attempts behaved. The cycle repeats.")
         print()
+
+    if a.no_enemy:
+        global SPAWN_ENEMY
+        SPAWN_ENEMY = False
+        print("NO ENEMY: the world will contain the player and nothing else.")
 
     if a.explorable:
         global EXPLORABLE

@@ -224,22 +224,31 @@ the four misses:  146 Lakeside County · 147 The Northlands
                   148 Pre Ascalon City · 164 Ashford Abbey
 ```
 
-Three of the four misses share the single id `0x1b97d`, which is what an unfilled
-placeholder looks like, not what build drift looks like — drift would have missed
-all 397, not four. Their table also disagrees with OpenTyria on Lion's Arch
-(`0x34fd` vs `0x56228`, and **ours resolves**), so it is neither derived from
-OpenTyria nor uniformly better than it.
+> **CORRECTED 2026-08-06, and the correction is the interesting part.** This
+> section originally read the four misses as unfilled placeholders in
+> gw-preservation's table, on the grounds that three of them share the id
+> `0x1b97d` and that build drift would have missed all 397 rather than four. The
+> drift half was right; the placeholder conclusion was **wrong, and it was our
+> bug rather than their data.** A parallel session found that
+> `file_id_table()` did an exact-match lookup while **25 of the archive's
+> 171,023 file ids are stored with bit 31 set** — see
+> [studies/mapdata/FORMAT.md](../mapdata/FORMAT.md). Masked, two of those land on
+> map rows and are exactly the Pre-Searing ids. Re-checked here after the fix:
+> `0x1B97D` resolves to row 7982 and `0x1C539` to row 20118. **All 397 resolve.**
+>
+> The lesson worth keeping: "their data is a placeholder" and "our lookup is
+> wrong" predict the same observation, and this section picked the one that
+> blamed the other project. The tell was available — three maps sharing an id is
+> odd, but so is exactly the four Pre-Searing rows failing together.
 
-Two consequences:
+Their table also disagrees with OpenTyria on Lion's Arch (`0x34fd` vs
+`0x56228`, and **both resolve**), so it is neither derived from OpenTyria nor
+uniformly better than it.
 
-1. **[studies/mapdata/FORMAT.md](../mapdata/FORMAT.md)'s "we cannot name a map we
-   do not already have an id for" is now true of 4 maps, not 391.** Pre-Searing
-   Ascalon City specifically is still unreachable.
-2. **One Pre-Searing map loads today.** The Catacombs (map 145, `0x1c530`) parses
-   to **51 planes and 5,246 trapezoids** — MEASURED, this session, using the
-   existing `PathingMap.load`. It is Pre-Searing, it is explorable, and it is
-   where the tutorial's undead live. It has no published spawn point, but a
-   walkable point is derivable from our own navmesh.
+**Pre-Searing is reachable.** [studies/mapdata/FORMAT.md](../mapdata/FORMAT.md)'s
+"Ascalon City Pre-Searing is still unreachable" is retired. The Catacombs (map
+145, `0x1c530`) also parses to **51 planes and 5,246 trapezoids** — MEASURED
+here before the fix, and it is where the tutorial's undead live.
 
 **License, flagged and not decided here.** `gw-preservation/*` carries **no
 license, i.e. all rights reserved** (PLAN.md §1.1: "read them, learn from them,
@@ -770,6 +779,39 @@ when to send them.
 
 ---
 
+## 6l. The enemy is in the world — OBSERVED
+
+2026-08-06. A hostile Hatcher stands in the map on an ordinary login, with a
+100-point health bar, no `--probe` flag and no timed sequence. `spawn_enemy()`
+in `toolkit/authsrv/authsrv.py`, with the shared definitions in
+`toolkit/authsrv/agents.py`.
+
+**Nothing on the wire is new.** It is §6k's opening burst moved onto the login
+path: NPC definition, model, monster-class `WORLD_CREATE_AGENT` carrying an
+unrecognised allegiance token, and maximum health. Each was established
+separately and is cited at its call site.
+
+**E1, E2 and the E4 gate are all closed.** What was scouted in §6 as four rungs
+is now: a body exists, it is an NPC, it is hostile, it has health, it can be
+damaged and killed and revived — and the server does the first four by itself.
+
+**What it does not do is anything.** It stands. It has no behaviour, no reaction
+to being clicked, and no reason to exist beyond proving it can. The next rung is
+the first one that requires the server to *decide* something rather than
+transcribe a proven packet:
+
+- **Answer `INTERACT_PLAYER`.** §7.3a measured the client sending `0x0033` at
+  the hostile agent 11 and 32 times in two sessions while we ignored every one.
+  That is the player's attack intent, already arriving, already recorded.
+- **Track health server-side.** `spawn_enemy` seeds `state["agents"]` with
+  health, max health and a `dead` flag, and nothing reads it yet.
+- **Close the loop.** Damage on a timer or on interaction, death at zero via the
+  effects bit, and a revive. Every packet for that is proven; what is missing is
+  the decision about when to send them, which is the first genuine game logic
+  this project would own.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND
@@ -841,7 +883,17 @@ merely desirable.
 Implemented as `--explorable` on the server, off by default — a server that lies
 about its own map should do so only when asked.
 
-### 7.3 Placement
+### 7.3 Placement — largely retired
+
+**Superseded by the file-id fix in §5.** Pre-Searing is reachable, so the map
+blocker is no longer "we cannot name the zone" but the much smaller "we have not
+chosen a spawn point in it". A walkable point is derivable from our own navmesh
+without anyone else's data.
+
+What survives: whether an explorable changes attackability is still untested
+(§7.3a/§7.3b), and now testable properly.
+
+### 7.3-old Placement
 
 The Catacombs is reachable (§5) and has no published spawn point; a walkable
 point must come from our own navmesh. Pre-Searing Ascalon City, the finish line's

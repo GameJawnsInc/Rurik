@@ -25,7 +25,15 @@ arrives. A probe that fires three packets in 50 ms tells you only what the last
 one did.
 """
 
+import os
 import struct
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from agents import (                                        # noqa: E402
+    AGENT_KIND_NPC, AGENT_KIND_PLAYER, AGENT_TYPE_LIVING, APPEARANCE_WARRIOR,
+    CHAR_CLASS_MONSTER_BASE, CHAR_CLASS_PLAYER_BASE, DEFAULT_RUN_SPEED,
+    EFFECT_DEAD, HATCHER, INF, create_agent, npc_model, npc_properties)
 
 # Agent int-property ids (GmAgentProperties.h via studies/character/FINDINGS.md).
 PROP_LEVEL = 36
@@ -370,12 +378,6 @@ ALLEGIANCE = [
     ("mons", 0x6D6F6E73, "INFERRED by us. In no source anywhere."),
 ]
 
-CHAR_CLASS_PLAYER_BASE = 0x30000000
-AGENT_TYPE_LIVING = 1
-AGENT_KIND_PLAYER = 5       # h000B: 0 item, 5 player, 9 NPC
-DEFAULT_RUN_SPEED = 288.0
-APPEARANCE_WARRIOR = 1 << 20
-INF = float("inf")
 
 
 def _allegiance_steps(agent_id, origin):
@@ -444,8 +446,6 @@ def _allegiance_steps(agent_id, origin):
     return out
 
 
-CHAR_CLASS_MONSTER_BASE = 0x20000000
-AGENT_KIND_NPC = 9          # h000B, against 5 for a player
 
 # One real NPC definition, transcribed from gw-preservation's agent table as a
 # PROBE INPUT and nothing else. That repo carries no license, so these numbers
@@ -456,31 +456,11 @@ AGENT_KIND_NPC = 9          # h000B, against 5 for a player
 # `hatcher_collector`, an Ascalon collector. Its file id 116228 is the strongest
 # id available anywhere: GWLP-R's mock NPC used the same number in 2013, which is
 # two lineages thirteen years apart agreeing on one value.
-HATCHER = dict(
-    definition=2,           # OUR handle for this NPC type, not a game-wide id
-    file_id=116228,
-    model_id=116703,
-    profession=3,           # Monk, per that table
-    level=1,
-    # An EncString: text-resource references, not characters. Four u16 words,
-    # passed as the code units our string16 encoder will write back out.
-    enc_name="".join(chr(w) for w in (0x328A, 0xE3B9, 0xAA36, 0x2E69)),
-    scale=0x64000000,       # visual adjustment: hue 0, sat 0, light 0, scale 100%
-    flags=0x20C,
-)
-
-
-def _create_agent(agent_id, model_id, kind, x, y, plane, token=0x706C6179):
-    """The 23-field WORLD_CREATE_AGENT, in the shape the player's body uses.
-
-    Kept in one place because the allegiance probe, this one and eventually the
-    server all need the identical field order, and three copies of a 23-field
-    literal is how a field quietly drifts between them.
-    """
-    return [agent_id, model_id, AGENT_TYPE_LIVING, kind,
-            (float(x), float(y)), plane, (1.0, 0.0), 1,
-            DEFAULT_RUN_SPEED, 1.0, 0x41400000, token,
-            0, 0, 0, 0, 0, (0.0, 0.0), (INF, INF), 0, 0, (INF, INF), 0]
+# Our handle for the Hatcher type within a probe run. Deliberately 2, which is
+# clear of the server's standing enemy at definition 3 -- the definition index
+# is a raw array index on the client and reusing one would put two types in
+# one slot.
+PROBE_DEFINITION = 2
 
 
 def _npc_agent_steps(agent_id, origin):
@@ -516,16 +496,16 @@ def _npc_agent_steps(agent_id, origin):
     h = HATCHER
     return [
         Step(2.0, 0x0056,
-             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
               h["profession"], h["level"], h["enc_name"]],
-             f"NPC_UPDATE_PROPERTIES def {h['definition']}: "
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}: "
              f"file {h['file_id']}, prof {h['profession']}, level {h['level']}",
              "nothing yet. This defines a TYPE, not a body."),
-        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
-             f"NPC_UPDATE_MODEL def {h['definition']} -> model {h['model_id']}",
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION} -> model {h['model_id']}",
              "still nothing. One more packet before anything can appear."),
         Step(1.0, 0x0020,
-             _create_agent(2, CHAR_CLASS_MONSTER_BASE | h["definition"],
+             create_agent(2, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
                            AGENT_KIND_NPC, ox + 250, oy, plane),
              "WORLD_CREATE_AGENT 2, monster class, defined",
              "THE QUESTION. Is there a body? What does its nameplate look like "
@@ -534,7 +514,7 @@ def _npc_agent_steps(agent_id, origin):
              "the last probe made: anything that differs is the class nibble "
              "doing work."),
         Step(8.0, 0x0020,
-             _create_agent(3, CHAR_CLASS_MONSTER_BASE | 99,
+             create_agent(3, CHAR_CLASS_MONSTER_BASE | 99,
                            AGENT_KIND_NPC, ox - 250, oy, plane),
              "WORLD_CREATE_AGENT 3, monster class, definition 99 NEVER DEFINED",
              "the control. Nothing, a placeholder, or a crash -- all three are "
@@ -604,20 +584,20 @@ def _npc_allegiance_steps(agent_id, origin):
     spots = [(ox + 300, oy), (ox, oy + 300), (ox - 300, oy), (ox, oy - 300)]
     steps = [
         Step(2.0, 0x0056,
-             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
               h["profession"], h["level"], h["enc_name"]],
-             f"NPC_UPDATE_PROPERTIES def {h['definition']} (Hatcher, known good)",
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION} (Hatcher, known good)",
              "nothing yet."),
-        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
-             f"NPC_UPDATE_MODEL def {h['definition']}",
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}",
              "nothing yet. All four bodies below share this one definition, so "
              "they will all look like Hatcher and all carry his name."),
     ]
     for i, ((token, label, expect), (x, y)) in enumerate(zip(tokens, spots)):
         steps.append(Step(
             8.0, 0x0020,
-            _create_agent(4 + i, CHAR_CLASS_MONSTER_BASE | h["definition"],
-                          AGENT_KIND_NPC, x, y, plane, token=token),
+            create_agent(4 + i, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                          AGENT_KIND_NPC, x, y, plane, allegiance=token),
             f"agent {4 + i}, token {label}",
             f"a Hatcher appears. Expected: {expect} Note its NAMEPLATE COLOUR "
             f"and its COMPASS DOT COLOUR, and try clicking it. This is an "
@@ -650,14 +630,14 @@ def _enemy_damage_steps(agent_id, origin):
     ENEMY = 7
     return [
         Step(2.0, 0x0056,
-             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
               h["profession"], h["level"], h["enc_name"]],
-             f"NPC_UPDATE_PROPERTIES def {h['definition']}", "nothing yet."),
-        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
-             f"NPC_UPDATE_MODEL def {h['definition']}", "nothing yet."),
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
         Step(1.0, 0x0020,
-             _create_agent(ENEMY, CHAR_CLASS_MONSTER_BASE | h["definition"],
-                           AGENT_KIND_NPC, ox + 300, oy, plane, token=0x6D6F6E73),
+             create_agent(ENEMY, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                           AGENT_KIND_NPC, ox + 300, oy, plane, allegiance=0x6D6F6E73),
              f"WORLD_CREATE_AGENT {ENEMY}, token 'mons' -- a hostile Hatcher",
              "a RED Hatcher. Click it to target it, and leave it targeted for "
              "the rest of the probe so its health bar stays on screen."),
@@ -726,14 +706,14 @@ def _death_steps(agent_id, origin):
     E = 7
     return [
         Step(2.0, 0x0056,
-             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
               h["profession"], h["level"], h["enc_name"]],
-             f"NPC_UPDATE_PROPERTIES def {h['definition']}", "nothing yet."),
-        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
-             f"NPC_UPDATE_MODEL def {h['definition']}", "nothing yet."),
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
         Step(1.0, 0x0020,
-             _create_agent(E, CHAR_CLASS_MONSTER_BASE | h["definition"],
-                           AGENT_KIND_NPC, ox + 300, oy, plane, token=0x6D6F6E73),
+             create_agent(E, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                           AGENT_KIND_NPC, ox + 300, oy, plane, allegiance=0x6D6F6E73),
              f"WORLD_CREATE_AGENT {E}, hostile Hatcher",
              "a red Hatcher. TARGET IT and keep it targeted."),
         Step(4.0, 0x009F, [42, E, 100], f"health 100 on agent {E}",
@@ -785,14 +765,14 @@ def _health_props_steps(agent_id, origin):
     E = 7
     return [
         Step(2.0, 0x0056,
-             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
               h["profession"], h["level"], h["enc_name"]],
-             f"NPC_UPDATE_PROPERTIES def {h['definition']}", "nothing yet."),
-        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
-             f"NPC_UPDATE_MODEL def {h['definition']}", "nothing yet."),
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
         Step(1.0, 0x0020,
-             _create_agent(E, CHAR_CLASS_MONSTER_BASE | h["definition"],
-                           AGENT_KIND_NPC, ox + 300, oy, plane, token=0x6D6F6E73),
+             create_agent(E, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                           AGENT_KIND_NPC, ox + 300, oy, plane, allegiance=0x6D6F6E73),
              f"WORLD_CREATE_AGENT {E}, hostile Hatcher",
              "a red Hatcher. TARGET IT and keep it targeted."),
         Step(4.0, 0x009F, [42, E, 100], f"health 100 on agent {E}",
@@ -936,14 +916,14 @@ def _kill_steps_v1_unused(agent_id, origin):
     E = 7
     return [
         Step(2.0, 0x0056,
-             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
               h["profession"], h["level"], h["enc_name"]],
-             f"NPC_UPDATE_PROPERTIES def {h['definition']}", "nothing yet."),
-        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
-             f"NPC_UPDATE_MODEL def {h['definition']}", "nothing yet."),
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
         Step(1.0, 0x0020,
-             _create_agent(E, CHAR_CLASS_MONSTER_BASE | h["definition"],
-                           AGENT_KIND_NPC, ox + 300, oy, plane, token=0x6D6F6E73),
+             create_agent(E, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                           AGENT_KIND_NPC, ox + 300, oy, plane, allegiance=0x6D6F6E73),
              f"WORLD_CREATE_AGENT {E}, hostile Hatcher",
              "a red Hatcher. TARGET IT and keep it targeted -- its health bar is "
              "the instrument for the whole probe."),
