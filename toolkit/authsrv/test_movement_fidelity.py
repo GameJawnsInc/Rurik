@@ -41,7 +41,8 @@ import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VAULT = os.path.join(HERE, "..", "..", "vault", "captures", "authsrv")
+sys.path.insert(0, os.path.dirname(HERE))
+import vaultpath  # noqa: E402
 
 TURN_TO_DIRECTION = 0x003D
 DEFAULT_RUN_SPEED = 288.0
@@ -120,10 +121,13 @@ def main():
                     help="pool every capture rather than only the newest")
     args = ap.parse_args()
 
-    paths = sorted(glob.glob(os.path.join(VAULT, "authsrv-*-c2.jsonl")),
+    vault = vaultpath.require_dir(
+        "captures", "authsrv",
+        why="the client's position reports -- this test has no other oracle")
+    paths = sorted(glob.glob(os.path.join(vault, "authsrv-*-c2.jsonl")),
                    key=os.path.getmtime, reverse=True)
     if not paths:
-        print(f"no game-channel captures under {VAULT}")
+        print(f"no game-channel captures under {vault}")
         return 1
 
     used, turns, reports = [], [], []

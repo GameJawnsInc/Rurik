@@ -35,9 +35,11 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "schema"))
+sys.path.insert(0, os.path.dirname(HERE))
 from codec import Codec  # noqa: E402
+import vaultpath  # noqa: E402
 
-VAULT = os.path.join(HERE, "..", "..", "vault", "captures", "authsrv")
+VAULT = vaultpath.vault_path("captures", "authsrv")
 
 TURN_TO_DIRECTION = 0x003D
 MOVE_TO_COORD = 0x003E

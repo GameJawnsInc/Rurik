@@ -13,8 +13,11 @@ import socket
 import struct
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 from codec import Codec, Undecodable  # noqa: E402
+import vaultpath  # noqa: E402
 
 AUTH_CMSG_MASK = 0x8000
 
@@ -36,9 +39,20 @@ def main():
     # SEND_COMPUTER_INFO that had nothing to do with the codec. Every captured
     # opening frame is checked instead, so more sessions make this stronger
     # rather than more fragile.
+    #
+    # Resolve the vault rather than trusting the working directory. This glob
+    # was relative to the CWD, so anywhere but the repo root — and a git
+    # worktree, which has no vault of its own, is always anywhere else — it
+    # matched nothing, printed [SKIP], and the run still ended in ALL CHECKS
+    # PASSED with the ground truth never consulted. A fixture the docstring
+    # calls primary is not optional: its absence is a failure, not a note.
     OPENING = 0x8001                       # SEND_COMPUTER_INFO, first thing sent
+    vault = vaultpath.require_dir(
+        "captures", "authsrv",
+        why="real client frames are this test's only ground truth")
+    captures = sorted(glob.glob(os.path.join(vault, "*.jsonl")))
     frames = []
-    for path in sorted(glob.glob(r"vault/captures/authsrv/*.jsonl")):
+    for path in captures:
         for line in open(path, encoding="utf-8"):
             e = json.loads(line)
             if e.get("kind") != "frame" or e.get("direction") != "c2s":
@@ -47,8 +61,13 @@ def main():
             if len(plain) >= 2 and int.from_bytes(plain[:2], "little") == OPENING:
                 frames.append((os.path.basename(path), plain))
 
-    if not frames:
-        print("  [SKIP] no client opening frame captured yet — run a live session")
+    if not captures:
+        ok &= check("the vault has sessions to check the codec against", False,
+                    f"no *.jsonl under {vault} — run a live session")
+    elif not frames:
+        ok &= check("a captured session carries the client's opening frame", False,
+                    f"{len(captures)} capture(s) under {vault}, none containing "
+                    f"a 0x{OPENING:04x} frame — run a live session")
     else:
         print(f"  checking {len(frames)} captured opening frame(s)")
         first = True
