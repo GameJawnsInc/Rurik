@@ -65,6 +65,10 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki).
+- **Find the vault with `toolkit/vaultpath.py`, never with `../../vault`.** A git
+  worktree has no vault of its own, so a relative walk lands on nothing — and a
+  fixture that resolves to nothing turns every assertion behind it into a no-op.
+  `require_dir()` raises instead. Override with `RURIK_VAULT` if the vault moves.
 - The daily three-terminal loop, the one-time client patching, and the failure table
   are in [RUNBOOK.md](RUNBOOK.md). The DH parameters rotate with every client build,
   so an ArenaNet update means redoing that setup in full.
