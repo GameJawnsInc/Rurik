@@ -153,6 +153,33 @@ for name, expect_paths in BUILDS:
               "%s%s: %d files, 0 under Cli%s" % (st.PREFIX, tree, len(owned), SEP),
               "has Cli dirs: %s" % with_cli if with_cli else "")
 
+# --- 3b. this scan and asserts.py must agree where they overlap --------------
+# Two modules extract `P:\Code\...` paths from the same image by methods that
+# share nothing: this one regex-scans the raw file for the string, `asserts.py`
+# decodes the four-instruction assert idiom in .text and takes the path out of
+# the `mov edx` operand. Neither is a superset of the other by construction --
+# but it must be one by RESULT, because every path an assert names is also a
+# string in the image. So the assert files are contained in the srctree paths,
+# and the remainder is real: files some other macro named, plus the linker's own
+# PDB path. If containment ever breaks, one of the two scans is broken, and the
+# direction of the break says which.
+print()
+print("3b. the assert scan's paths are contained in this one's")
+sys.path.insert(0, HERE)
+from asserts import Asserts                                  # noqa: E402
+import pinned as _P                                          # noqa: E402
+
+_st = set(st.source_paths(load(BUILDS[-1][0])))
+_az = {a.file for a in Asserts(_P.find()[0]).items}
+check(len(_st) == 937, "srctree finds 937 paths", "%d" % len(_st))
+check(len(_az) == 865, "asserts names 865 of them", "%d" % len(_az))
+check(not (_az - _st), "every assert path is one srctree found",
+      "missing %s" % sorted(_az - _st)[:3] if (_az - _st) else "")
+check(len(_st - _az) == 72, "and 72 paths no assert references",
+      "%d" % len(_st - _az))
+check(any(p.lower().endswith(".pdb") for p in _st - _az),
+      "including the linker's PDB path, which names the build target")
+
 # --- 4. -mock is a graphics device, not a mock server ------------------------
 print()
 print("4. -mock closeout, on the pinned build")

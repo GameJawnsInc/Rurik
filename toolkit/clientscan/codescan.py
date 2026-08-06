@@ -109,13 +109,14 @@ try:
 except ImportError:                                           # pragma: no cover
     sys.exit("needs capstone and pefile: python -m pip install capstone pefile")
 
-from vaultpath import vault_path                              # noqa: E402
+import pinned as _pinned                                      # noqa: E402
 
-# The build every address in the studies is measured against. Prefer the vaulted
-# snapshot over the live install: the live one auto-updates, and an offset read
-# from a different build is not wrong-looking, it is just wrong.
-PINNED = ("run", "2026-07-29_221c13772c7a", "Gw.exe")
-FALLBACK_EXE = r"C:\gw\Gw.exe"
+# The build every address in the studies is measured against. `pinned.py` owns
+# the resolution now, because the vault holds TWO copies of 38797 at the SAME
+# size -- pristine and our patched one -- and this module used to ask for the
+# patched copy by name while `srctree.py` asked for the pristine one. Neither
+# said so, and a size check cannot tell them apart.
+FALLBACK_EXE = _pinned.LIVE_INSTALL
 
 # Legacy prefixes that make one instruction decode twice at consecutive offsets.
 _PREFIXES = (0x66, 0x67, 0xF2, 0xF3)
@@ -125,15 +126,7 @@ _PREFIXES = (0x66, 0x67, 0xF2, 0xF3)
 _FPU_STORES = ("fst", "fstp", "fist", "fistp", "fisttp", "fbstp")
 
 
-def find_exe():
-    """The pinned snapshot, else the live install. Never silently either."""
-    pinned = vault_path(*PINNED)
-    if os.path.exists(pinned):
-        return pinned, "pinned vault snapshot"
-    if os.path.exists(FALLBACK_EXE):
-        return FALLBACK_EXE, "live install (pinned snapshot not in the vault)"
-    raise SystemExit(f"no client to read.\n  looked for {pinned}\n"
-                     f"  and for {FALLBACK_EXE}\n  See RUNBOOK.md.")
+find_exe = _pinned.find
 
 
 class Image:
