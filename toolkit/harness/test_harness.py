@@ -144,6 +144,33 @@ def test_preflight_helpers():
                       [("probe", "127.0.0.1", port, ["unused"])]))
 
 
+# ------------------------------------------------------------- game args ----
+
+def test_game_args():
+    """--game-args reaches the gamesrv and NOTHING else.
+
+    The asymmetry is the whole point and it is invisible from the outside: a
+    probe handed to both listeners arms a second idle copy of the experiment,
+    and a probe handed to the authsrv alone never runs, because the instance
+    loads on the game channel. Both failures look like "the probe did nothing".
+    """
+    specs = dict((name, argv) for name, _h, _p, argv in
+                 session.server_specs(game_args=["--probe", "attack_anim",
+                                                 "--map", "146"]))
+    check("gamesrv gets the extra flags",
+          specs["gamesrv"][-4:] == ["--probe", "attack_anim", "--map", "146"])
+    check("authsrv gets none of them",
+          "--probe" not in specs["authsrv"] and "--map" not in specs["authsrv"])
+    check("webgate gets none of them",
+          "--probe" not in specs["webgate"] and "--map" not in specs["webgate"])
+    # The default must stay byte-identical, or every run before this flag
+    # existed stops being comparable with every run after it.
+    plain = dict((n, a) for n, _h, _p, a in session.server_specs())
+    check("no --game-args leaves all three command lines unchanged",
+          all(plain[n] == specs[n][:len(plain[n])] for n in plain)
+          and plain["gamesrv"] == specs["gamesrv"][:-4])
+
+
 # ------------------------------------------------------------------ stack ----
 
 def test_stack():
@@ -184,6 +211,7 @@ if __name__ == "__main__":
     test_assert_safe()
     test_capture_tail()
     test_preflight_helpers()
+    test_game_args()
     test_stack()
     print()
     if FAILURES:

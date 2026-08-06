@@ -35,6 +35,7 @@ import argparse
 import ctypes
 import json
 import os
+import shlex
 import subprocess
 import sys
 import threading
@@ -66,7 +67,7 @@ PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                  capture_root=None, auth_host="127.0.0.1",
-                 game_host="127.0.0.3"):
+                 game_host="127.0.0.3", game_args=()):
     """The three server processes, as (name, host, port, argv).
 
     The game channel is served by a second authsrv.py instance: the client
@@ -82,6 +83,14 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
     client as -authsrv too). The webgate stays on 127.0.0.1: the -portal,
     -authsrv and handoff hosts have to be separable for a probe to say which
     of them the client's game dial follows.
+
+    game_args goes to the GAMESRV alone, and that asymmetry is the point. The
+    instance loads on the game channel, so --probe, --map, --no-enemy and
+    --no-weapon all have to reach that listener; handing them to the authsrv
+    as well would arm a second, idle copy of the same experiment. Without this
+    the one-command loop and the probe mechanism could not be used together at
+    all -- the probes had to be run from the hand-rolled three-terminal loop,
+    which is the one that has no port pre-flight and no capture checkpoints.
     """
     def cap(sub):
         return (os.path.join(capture_root, sub) if capture_root
@@ -100,7 +109,8 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
                "--port", str(game_port), "--bind", game_host,
                "--vault", cap("gamesrv"),
-               "--game-host", game_host, "--game-port", str(game_port)]),
+               "--game-host", game_host, "--game-port", str(game_port)]
+         + list(game_args)),
     ]
 
 
@@ -481,6 +491,13 @@ def main():
                          "client's -authsrv flag. 127/8 only. A second alias "
                          "(127.0.0.2) ran the probe that showed -authsrv plays "
                          "no part in the game dial (handshake PLAN §10).")
+    ap.add_argument("--game-args", default="",
+                    help="Extra authsrv flags for the GAMESRV only, space "
+                         "separated -- e.g. --game-args '--probe attack_anim' "
+                         "or '--map 146 --explorable'. The instance loads on "
+                         "the game channel, so anything about the world lives "
+                         "there; the authsrv gets none of it. Without this the "
+                         "one-command loop could not run a probe at all.")
     a = ap.parse_args()
 
     if not dc.is_loopback(a.auth_host):
@@ -496,7 +513,8 @@ def main():
             f"Give the game channel an alias of its own (default 127.0.0.3).")
 
     specs = server_specs(game_port=a.game_port, auth_host=a.auth_host,
-                         game_host=a.game_host)
+                         game_host=a.game_host,
+                         game_args=shlex.split(a.game_args))
     preflight(specs, replace=a.replace)
 
     stamp = time.strftime("%Y%m%dT%H%M%S")

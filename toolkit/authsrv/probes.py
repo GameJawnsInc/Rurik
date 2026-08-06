@@ -679,6 +679,71 @@ def _enemy_damage_steps(agent_id, origin):
     ]
 
 
+def _attack_anim_steps(agent_id, origin):
+    """Does an EQUIPPED weapon give the player a weapon_attack_speed?
+
+    THE ONE QUESTION THIS ASKS, and the reason it is worth a launch. The client
+    refuses to animate a melee swing unless both `[esi+0xEC]`
+    (weapon_attack_speed) and `[esi+0xF0]` are non-zero -- SOURCED, read at
+    0x007F82C0, where a zero at +0xEC pushes line 0x12b7 (4791) into the assert
+    call. Ours were zero, so `attack_started` took the client down on
+    `Assertion: m_attackInterval / P:\\Code\\Gw\\AgentView\\AvChar.cpp(4791)`.
+
+    Nothing in the image WRITES either offset by displacement, so what sets
+    them is NOT FOUND. GWCA calls +0xEC "the base attack speed of the last
+    attack's weapon", which reads as the client computing it from the equipped
+    weapon rather than being told -- and until 2026-08-06 our hammer was drawn
+    on the body (0x006E) with no bag behind it, which renders a weapon without
+    equipping one. It now goes into a real equipped-items bag at login.
+    studies/enemy/PLAN.md 6o, "Where to go next", item 1.
+
+    WHY A PROBE AND NOT A CLICK. The shipped path already sends this packet on
+    every swing, but only once a click has ordered an attack, and a click has
+    to land on the enemy's body on screen. This asks the same question with no
+    aiming and no interaction logic in the way: one packet, on a timer.
+
+    THE CRASHING STEP IS LAST, ON PURPOSE. One branch of the prediction ends
+    the session, so nothing may depend on running after it. The crash is the
+    documented outcome rather than an accident -- the cage keeps the dump local
+    (studies/enemy/PLAN.md 6b) and `toolkit/harness/read_error_dialog.py` reads
+    the assert text without pressing "Send report to ArenaNet".
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    ENEMY = 7
+    return [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0020,
+             create_agent(ENEMY, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                          AGENT_KIND_NPC, ox + 300, oy, plane,
+                          allegiance=0x6D6F6E73),
+             f"WORLD_CREATE_AGENT {ENEMY}, token 'mons' -- a hostile Hatcher",
+             "a RED Hatcher, so there is something to swing at. Its own body "
+             "is not the subject here; the PLAYER's is."),
+        # Spawned rather than reusing the standing enemy at agent 10 so the
+        # probe still runs under --no-enemy, and so it cannot be confused by
+        # the combat loop hitting the same body on a timer.
+        Step(8.0, 0x00A0, [4, ENEMY, agent_id, 0],
+             f"generic value 4 attack_started  target={ENEMY}  cause={agent_id}",
+             "THE TEST, and it has exactly two outcomes.\n"
+             "      SURVIVES -> the equipped-items bag gave the weapon an "
+             "attack speed. Watch the character: a hammer swing, or at least "
+             "no crash, means +0xEC is no longer zero and lead 1 is right.\n"
+             "      CRASHES on m_attackInterval / AvChar.cpp(4791) -> the bag "
+             "is NOT the source. That is a real result: it kills the only "
+             "written-and-unrun hypothesis and sends the next pass to "
+             "studies/enemy/PLAN.md 6o item 2 (find what writes +0xEC) or "
+             "item 3 (the Collector definition).\n"
+             "      Read the dialog with toolkit/harness/read_error_dialog.py "
+             "-- do NOT press its default button."),
+    ]
+
+
 # The agent EFFECTS bitfield, carried by 0x00F0 and 0x00F1. Bit 4 is death.
 #
 # SOURCED, and corroborated by two independent uses in the client binary:
@@ -1450,6 +1515,24 @@ PROBES = {
              "the client on CharPool.cpp's `range > 0`. That crash is why the "
              "fourth candidate never ran. This version cannot crash and can be "
              "re-run freely.",
+    ),
+    "attack_anim": lambda a, o: Probe(
+        question="Does putting the hammer in a real equipped-items bag give "
+                 "the player a non-zero weapon_attack_speed (+0xEC), so that a "
+                 "melee swing animates instead of asserting?",
+        predicts="EXACTLY ONE OF TWO, and both are informative. If the bag is "
+                 "what the client computes +0xEC from, attack_started animates "
+                 "a swing and the session continues. If it is not, the client "
+                 "dies on the SAME assert as before the bag existed -- "
+                 "m_attackInterval, P:\\Code\\Gw\\AgentView\\AvChar.cpp(4791) "
+                 "-- and the only written-and-unrun hypothesis is dead.",
+        steps=_attack_anim_steps(a, o),
+        note="The last step may end the session BY DESIGN; nothing follows it. "
+             "A crash here is the documented behaviour of a zero +0xEC, not an "
+             "accident: the cage keeps the dump local, and the assert text is "
+             "read with toolkit/harness/read_error_dialog.py, which never "
+             "presses 'Send report to ArenaNet'. Run with the weapon ON -- "
+             "--no-weapon makes this probe meaningless.",
     ),
     "enemy_damage": lambda a, o: Probe(
         question="Does the client render an ENEMY taking damage, and is the "
