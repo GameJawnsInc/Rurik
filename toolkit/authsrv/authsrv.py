@@ -571,6 +571,31 @@ VAULT_DEFAULT = r"C:\gd\Rurik\vault\captures\authsrv"
 # exactly as it does in a normal session.
 PROBE_NAME = None
 
+# Set from --click-sweep. Cycles the two 16-bit fields of MOVE_TO_POINT through
+# every plausible assignment, one per click, so the CLIENT decides which is
+# right instead of us arguing from two sources that contradict each other.
+#
+# We have spent this whole investigation inferring these two fields. OpenTyria
+# says (destination, current); GWLP-R says (current, next); both orders were
+# shipped and neither fixed the player walking through walls and falling through
+# staircases. The setup for a real experiment is finally clean: keyboard
+# movement works, so the transport and the client are known good, and clicking
+# is one message with exactly two unknown fields.
+#
+# Variants are ordered so the two we have already tried come first, which makes
+# the run its own control: if 1 and 2 misbehave exactly as they did in normal
+# play, the harness is measuring the right thing.
+CLICK_SWEEP = False
+CLICK_SWEEP_VARIANTS = (
+    ("dest,cur   (OpenTyria order, shipped)", lambda c, d: (d, c)),
+    ("cur,dest   (GWLP-R order, shipped)",    lambda c, d: (c, d)),
+    ("0,0        (both zero)",                lambda c, d: (0, 0)),
+    ("cur,0",                                 lambda c, d: (c, 0)),
+    ("0,cur",                                 lambda c, d: (0, c)),
+    ("dest,dest",                             lambda c, d: (d, d)),
+    ("cur,cur",                               lambda c, d: (c, c)),
+)
+
 
 def run_probe(name, send, conn_id, stop):
     """Fire a scripted experiment at the client, on its own thread.
@@ -901,6 +926,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             spawn = MAP_STATIC_CONFIG.get(state["map_id"],
                                           MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
             state["pos"], state["plane"], state["dest"] = spawn[1], spawn[2], None
+            # We placed the character here, so this position is known, not stale.
+            state["pos_seen"] = time.time()
             state["pathmap"] = load_pathmap(spawn[0])
 
             def world_tick():
@@ -1103,6 +1130,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         reported = tuple(values[1])
                         if _adopt_client_position(state, reported):
                             state["pos"] = reported
+                            state["pos_seen"] = time.time()
                         if moving:
                             px, py = state["pos"]
                             # Answer with a DIRECTION. See the comment on
@@ -1149,8 +1177,125 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # reports where it got to. Answering MOVE_TO_POINT and
                         # then never moving anyone is why the client cancelled
                         # after ~2s and reported itself still at the spawn point.
-                        dest, plane = values[1], values[2]
-                        state["plane"] = plane
+                        dest = values[1]
+                        # Slot 2 is the DESTINATION's plane. The client works out
+                        # which surface was clicked -- it rendered them -- and
+                        # tells us.
+                        #
+                        # MEASURED over 195 clicks, by testing the two readings
+                        # against each other rather than by analogy: 70 had slot
+                        # 2 matching the destination's plane and NOT the player's,
+                        # against 11 the other way round. The clear cases leave
+                        # nothing to argue with -- player on plane 0 clicks a
+                        # point whose only trapezoid plane is 5 and slot 2 is 5;
+                        # player on 5 clicks a point on 0 and slot 2 is 0.
+                        #
+                        # An earlier version read this as the CURRENT plane,
+                        # because slot 2 does hold the current plane in 0x003D and
+                        # 0x0047. That analogy was weak exactly where it mattered:
+                        # 112 of the 195 clicks were same-plane, where both
+                        # readings agree and neither is tested.
+                        #
+                        # THIS IS THE STAIRS. Clicking a staircase sends the
+                        # stairs' plane, and answering "you are staying on the
+                        # plane you are on" walks the player along the ground
+                        # underneath instead of up the steps -- reported from play
+                        # as ending up inside the hollow under the stairs.
+                        dest_plane = values[2]
+                        # The second field overwrites the client's own current
+                        # plane, so a stale value here corrupts the thing the
+                        # client collides against. READ OUT OF Gw.exe:
+                        #
+                        #   handler 0x005fd890 builds {x, y, FIRST word, 0} and
+                        #   calls 0x00602a40(agent, &pos, 0, SECOND word)
+                        #   0x00602a40:  cmp eax, -1 / je / mov [ebx+0x80], eax
+                        #
+                        # and the agent's own position is {x @0x78, y @0x7c,
+                        # plane @0x80} -- the function passes `lea esi, [ebx+
+                        # 0x78]` to the movement starters. So field 2 IS the
+                        # agent's current plane, as OpenTyria names it.
+                        #
+                        # -1 means "leave it alone" and we CANNOT say it: the
+                        # field is msgtable type 4, "unsigned, widened to a
+                        # 4-byte slot", so 0xFFFF arrives as 65535, not -1. Four
+                        # of the eight internal callers of 0x00602a40 push -1;
+                        # that idiom is not available over the wire.
+                        #
+                        # So it has to be right. Our tracked plane comes from
+                        # 0x003D and 0x0047, and MEASURED, the client sends
+                        # neither while click-moving -- which is precisely when
+                        # this field is used. The navmesh is the better source,
+                        # since its plane indices ARE the client's numbering
+                        # (189 of 198 reports agree).
+                        # The client's own reported plane, unmodified.
+                        #
+                        # This used to be second-guessed with pm.plane_at(), which
+                        # was added when our position could be stale. It cannot be
+                        # any more -- a click is only answered when a report is
+                        # under a second old (below), and the messages that carry
+                        # the position carry the plane with it. So the navmesh
+                        # override now runs ONLY when the client has just told us
+                        # the answer, and it can overrule a correct one.
+                        #
+                        # It overrules it in exactly the wrong place. plane_at
+                        # falls back to the geometry when the reported plane is
+                        # not among the trapezoids covering the point, and
+                        # MEASURED, that is 9 of 198 reports, every one of them
+                        # "client says 12, we find 0" -- a surface and the ground
+                        # under it, in a file with no height. Stairs. Which is
+                        # where the last of the warping was still being seen.
+                        cur_plane = state["plane"]
+                        # FIELD ORDER: destination plane FIRST, current plane
+                        # SECOND. The two lineages disagree here and we had been
+                        # following the wrong one.
+                        #
+                        #   OpenTyria GameMsg.h:538   uint16 plane          <- dest
+                        #                             uint16 current_plane
+                        #     and GmAgent.c fills them
+                        #       msg->plane         = agent->destination.plane
+                        #       msg->current_plane = agent->position.plane
+                        #
+                        #   GWLP-R P030               int currentPlane      <- first
+                        #                             int nextPlane
+                        #
+                        # OpenTyria defines this message as 0x0029, the same
+                        # opcode our build uses. GWLP-R's is 30, from a different
+                        # build era, and its AgentMoveDirection semantics -- which
+                        # ARE verified against our client -- do not make its field
+                        # order here authoritative too.
+                        #
+                        # Sending them the wrong way round told the client it was
+                        # standing on the plane it was trying to reach, and to
+                        # walk to the plane it was standing on. Click a staircase
+                        # and we sent (0, 12): "you are on the stairs, go to the
+                        # ground". The player fell through the stairs to the floor
+                        # below, which is what was reported from play. MEASURED
+                        # that this fired constantly -- 55 of 55 clicks in one
+                        # session announced a plane change, because planes are
+                        # connected regions of walkable surface, not floors, and
+                        # Kamadan has 39 of them.
+                        #
+                        # No zeroing. OpenTyria sends the destination's plane
+                        # unconditionally; GWLP-R's "0 if the player stays in the
+                        # same plane" belongs to its own field ordering and is not
+                        # carried over.
+                        plane_first, plane_second = dest_plane, cur_plane
+                        sweep_note = ""
+                        if CLICK_SWEEP:
+                            i = state.get("click_n", 0)
+                            state["click_n"] = i + 1
+                            label, fn = CLICK_SWEEP_VARIANTS[
+                                i % len(CLICK_SWEEP_VARIANTS)]
+                            plane_first, plane_second = fn(cur_plane, dest_plane)
+                            sweep_note = (f"  <<< CLICK #{i + 1} "
+                                          f"variant {i % len(CLICK_SWEEP_VARIANTS) + 1}"
+                                          f"/{len(CLICK_SWEEP_VARIANTS)}: {label} "
+                                          f"-> sent ({plane_first}, {plane_second})")
+                        # Deliberately NOT state["plane"] = dest_plane. Our idea
+                        # of the player's plane comes from 0x003D and 0x0047,
+                        # which report where the client IS. Recording a
+                        # destination's plane as the player's own was a second bug
+                        # stacked on the first.
                         # A click ends whatever keyboard leg was running, so drop
                         # the remembered heading: the next key press must be
                         # treated as a fresh direction, not compared against one
@@ -1182,13 +1327,103 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # click-moving. 0x003E carries a destination and a plane
                         # and nothing else, and one capture ran 37 seconds
                         # without the client saying where it was.
-                        px, py = state["pos"]
-                        model_dest, blocked = clip_to_walkable(state, dest)
-                        state["dest"], state["clipped"] = model_dest, blocked
+                        # ANSWER ONLY WHEN THERE IS NOTHING TO OVERWRITE.
+                        #
+                        # THE CLIENT PATHS CLICKS BY ITSELF. Caught in play with
+                        # screenshots: the player clicked a spot up a staircase,
+                        # the character set off correctly towards the FOOT of the
+                        # stairs -- a real route, around the railing -- and about
+                        # a second later snapped onto a straight line aimed at the
+                        # clicked point, straight through the railing. That is our
+                        # MOVE_TO_POINT landing on top of a path the client had
+                        # already worked out.
+                        #
+                        # So every click we answered replaced a correct path with
+                        # a worse one, and the clip made it worse still, because a
+                        # clipped point sits on the straight line the client was
+                        # not going to take.
+                        #
+                        # A real server owns pathing and would send the legs of
+                        # the route. We cannot: the pathfinding graph in the map
+                        # file is decoded only as far as its sub-record sizes. The
+                        # honest substitute is to stay out of the way when the
+                        # client has real work to do, and confirm only the trivial
+                        # case where the straight line IS the route.
+                        # AND ONLY WHEN WE KNOW WHERE THE PLAYER IS.
+                        #
+                        # The second plane field is written straight into the
+                        # agent's own current plane (agent+0x80, read out of
+                        # Gw.exe), and we have to fill it because -1, the client's
+                        # own "leave it alone" value, is unreachable from an
+                        # unsigned wire field. So a stale answer there is not a
+                        # missed opportunity, it is active corruption of the plane
+                        # the client resolves its position against.
+                        #
+                        # And stale is the normal state during click-to-move:
+                        # MEASURED, the client sends no position at all while
+                        # click-moving, so after one deferred click our position
+                        # is frozen wherever the player was standing when they
+                        # clicked. Answering a later click from there asserts
+                        # "your current plane is the plane of your starting
+                        # point", which is a good description of the two symptoms
+                        # still reported -- a warp near stairs, and being thrown
+                        # back towards where the player set off from.
+                        fresh = (time.time() - state.get("pos_seen", 0.0)) <= 1.0
+                        pm_c = state.get("pathmap")
+                        # And only when the geometry can actually place the
+                        # player: on the mesh, on exactly one plane, and that
+                        # plane the one the client just named. MEASURED over 532
+                        # reports -- 93.8% clean, 5.5% not on our mesh at all,
+                        # 0.8% on a single plane that is not the one the client
+                        # named, and 0.0% genuinely ambiguous. The trapezoids do
+                        # not overlap in 2D, so the earlier guess that stairs were
+                        # an ambiguity problem was wrong; they are a disagreement
+                        # problem.
+                        #
+                        # The off-mesh 5.5% closed a real hole. clip_to_walkable
+                        # gives up when our position is not on the mesh and
+                        # reports the line CLEAR, so the server was answering
+                        # confidently from positions whose geometry it knew
+                        # nothing about.
+                        here = set()
+                        if pm_c is not None:
+                            here = {t.plane for t in
+                                    pm_c.containing(state["pos"][0], state["pos"][1])}
+                        placed = here == {cur_plane}
+                        blocked = not (fresh and placed)
+                        if fresh and placed:
+                            stop_at = pm_c.clip(state["pos"][0], state["pos"][1],
+                                                dest[0], dest[1],
+                                                step=COLLISION_STEP)
+                            blocked = (math.hypot(stop_at[0] - dest[0],
+                                                  stop_at[1] - dest[1]) > COLLISION_STEP)
+                        if blocked:
+                            # Something is in the way, so the client is pathing
+                            # around it and knows more than we do. Say nothing,
+                            # and drop our own destination rather than integrate
+                            # along a line the player is not walking.
+                            state["dest"], state["clipped"] = None, True
+                            if not fresh:
+                                why = ("we last saw the player "
+                                       f"{time.time() - state.get('pos_seen', 0.0):.1f}s ago")
+                            elif not placed:
+                                why = (f"cannot place them -- client says plane "
+                                       f"{cur_plane}, geometry says "
+                                       f"{sorted(here) if here else 'off-mesh'}")
+                            else:
+                                why = "not a straight shot"
+                            print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
+                                  f"{dest[1]:.0f}): {why} -- leaving it to the "
+                                  f"client's own pathing", flush=True)
+                            continue
+                        state["dest"], state["clipped"] = (float(dest[0]),
+                                                           float(dest[1])), False
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
-                             [PLAYER_AGENT_ID, list(dest), plane, plane],
+                             [PLAYER_AGENT_ID, list(dest), plane_first, plane_second],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
-                             f"{', model stops short' if blocked else ''})")
+                             f" on plane {cur_plane}->{dest_plane}, clear line)")
+                        if sweep_note:
+                            print(sweep_note, flush=True)
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
                         # Stop where WE say it is, not where the client last
                         # believed. Echoing the client's figure back pinned it to
@@ -1232,51 +1467,50 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # you can stand. That keeps this from becoming a blanket
                         # "trust the client" that would undo the collision fix.
                         #
-                        # So the test is no longer "how far apart are we". Drift
-                        # is not evidence of anything now that we adopt the
-                        # client's position every report -- it measures how badly
-                        # OUR integrator guessed, not whether the client is
-                        # lying. The only thing worth refusing is a position that
-                        # is genuinely impossible, and the navmesh is what says
-                        # so. Two of the five corrections in the measured session
-                        # were stops of 58 and 216 units to positions that were
-                        # perfectly walkable; both were us snapping the player
-                        # for no reason.
+                        # THE SERVER NO LONGER ARGUES. Take the position and the
+                        # plane, record the disagreement, send nothing.
+                        #
+                        # Seven corrections went out in the session that settled
+                        # this, and reading them back not one was defensible:
+                        #
+                        #   on plane 5;  11u from ours
+                        #   on plane 5;  26u from ours
+                        #   off the navmesh; 26u from ours
+                        #   off the navmesh;  9u from ours
+                        #
+                        # Teleporting a player nine units is pure damage. The
+                        # plane ones were not even disagreements: we only ever
+                        # learned the plane from keyboard packets, and clicking
+                        # sends none, so every plane change the client made
+                        # looked like a lie to us. The off-mesh ones are gaps in
+                        # OUR trapezoids -- the client stops against collision
+                        # geometry we have never read, and where they differ at
+                        # the edges the client is the one standing there.
+                        #
+                        # on_mesh is still recorded, and it is a real measurement:
+                        # 57 of 61 stops landed on our mesh, so the mesh is
+                        # broadly right and wrong in exactly the places worth
+                        # studying. It is evidence about our map data, not
+                        # grounds for moving the player.
                         on_mesh = (None if pm is None
                                    else pm.walkable(reported[0], reported[1]))
-                        agreed = plane == state["plane"] and on_mesh is not False
-                        # Recorded on every stop so the drift distribution can be
-                        # measured rather than guessed at -- it is what says
-                        # whether 100.0 is the right number for us.
-                        #
-                        # on_mesh is the measurement that matters now. Our
-                        # trapezoids are the PATHING geometry; the client stops
-                        # itself against collision geometry we have never looked
-                        # at, and the two need not agree at the edges. If stops
-                        # routinely land off-mesh, the clip is too tight, and
-                        # this is the log that will say so rather than us
-                        # guessing from how it felt to play.
                         rec.event("position_report", drift=round(drift, 2),
-                                  accepted=agreed, reported=list(reported),
-                                  ours=[px, py], plane=plane, clipped=was_clipped,
-                                  on_mesh=on_mesh)
-                        if agreed:
-                            state["pos"] = reported
-                        else:
-                            # The client has stopped somewhere the map says is
-                            # not standable, or on a different plane. This is now
-                            # the ONLY position broadcast the server makes, and
-                            # it should be rare -- if it is not, the fault is far
-                            # more likely to be in our navmesh than in the
-                            # client, so it says so loudly rather than quietly
-                            # dragging the player around.
-                            print(f"[c{conn_id}] correcting: client reports "
-                                  f"({reported[0]:.0f}, {reported[1]:.0f}), which "
-                                  f"is {'off the navmesh' if on_mesh is False else 'on plane ' + str(plane)}"
-                                  f"; {drift:.0f}u from ours", flush=True)
-                            send(GAME_SMSG_AGENT_UPDATE_POSITION,
-                                 [PLAYER_AGENT_ID, state["pos"], state["plane"]],
-                                 "AGENT_UPDATE_POSITION(stop)")
+                                  accepted=True, reported=list(reported),
+                                  ours=[px, py], plane=plane,
+                                  server_plane=state["plane"],
+                                  clipped=was_clipped, on_mesh=on_mesh)
+                        state["pos"] = reported
+                        state["plane"] = plane
+                        state["pos_seen"] = time.time()
+                        if on_mesh is False:
+                            # Worth knowing about, not worth acting on. Every
+                            # one of these is a hole in our trapezoids at a spot
+                            # the client is happily standing in, which is a lead
+                            # on the map format rather than a misbehaving client.
+                            print(f"[c{conn_id}] off-mesh stop at "
+                                  f"({reported[0]:.0f}, {reported[1]:.0f}) "
+                                  f"plane {plane} -- navmesh gap, not corrected",
+                                  flush=True)
                     elif opcode == GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS:
                         # The client sent this and REQUEST_ITEMS in the same
                         # breath; we answered only items, and it then waited 44s
@@ -1591,6 +1825,13 @@ def main():
     ap.add_argument("--list-probes", action="store_true",
                     help="Print the available probes, their questions and their "
                          "predictions, then exit.")
+    ap.add_argument("--click-sweep", action="store_true",
+                    help="Cycle MOVE_TO_POINT's two plane fields through every "
+                         "plausible assignment, one per click, and label each in "
+                         "the log. Click the same wall or staircase repeatedly "
+                         "and report which attempt numbers behaved; that "
+                         "identifies the fields from the client instead of from "
+                         "two sources that contradict each other.")
     ap.add_argument("--allow-any-session", action="store_true",
                     help="Accept a login with no matching session record. A debugging "
                          "escape hatch so a stale sessions.json cannot be mistaken for a "
@@ -1613,6 +1854,17 @@ def main():
         global PROBE_NAME
         PROBE_NAME = a.probe
         print(f"PROBE MODE: {a.probe} -- fires after the character spawns")
+
+    if a.click_sweep:
+        global CLICK_SWEEP
+        CLICK_SWEEP = True
+        print("CLICK SWEEP: every click sends MOVE_TO_POINT with a different")
+        print("assignment of the two plane fields, in this order:")
+        for i, (label, _) in enumerate(CLICK_SWEEP_VARIANTS, 1):
+            print(f"   click {i}: {label}")
+        print("Click the SAME spot each time -- a wall to walk through, or the")
+        print("staircase -- and note which attempts behaved. The cycle repeats.")
+        print()
 
     GAME_SRV_HOST, GAME_SRV_PORT = a.game_host, a.game_port
     HOST_FIELD_ENCODING = a.host_encoding
