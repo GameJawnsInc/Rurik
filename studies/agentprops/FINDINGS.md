@@ -110,6 +110,38 @@ probe.
 
 ---
 
+## 1b. Tested against the client, and both readings held — OBSERVED
+
+Probe `health_props`, 2026-08-06, build 38797, against a hostile NPC with
+maximum health set to 100.
+
+| Sent | Client showed |
+|---|---|
+| property 16 = `-0.5` (control) | **50 damage, with a floating number** |
+| property 34 = `-50.0` | **no number at all**, bar 50 → **~0** |
+| property 34 = `-1000.0` | nothing — the bar was already at the floor |
+| property 55 = `-1.0` | **100 damage, with a floating number** |
+
+**Absolute versus fraction is confirmed, and it could have been refuted.** If 34
+had been a fraction, `-50.0` against a maximum of 100 would have arrived as 5000
+and the disassembly would have been wrong. It arrived as exactly 50. And `-1.0`
+on property 55 arrived as exactly 100 — the whole bar — which is the fraction
+reading landing on the nose.
+
+**Property 34 is silent.** No floating number, where 16 and 55 both produce one.
+That matches the second dispatch, where 16/17/18 converge on the damage
+notifier and 34 has its own separate case: **34 changes health without claiming
+anybody did it.** For an emulator that is the more useful of the two — it is how
+you would set an NPC's starting health, apply regeneration, or heal, without
+spraying combat numbers over the screen.
+
+**And the finding that matters most: health reached zero and nothing died.** The
+bar emptied and the agent kept standing. Combined with §3b, this is decisive:
+
+> **Zero health is not death, client-side, and no agent property is death.**
+
+---
+
 ## 2. How the two paths reach the dispatch — SOURCED
 
 Both property messages are thin shims into a shared per-agent record.
@@ -192,27 +224,62 @@ made that exact mistake and caught it only because the "addresses" were absurd.
 
 ---
 
+## 3b. All four dispatch tables, and none of them is death — SOURCED
+
+Each property message updates a status record and then dispatches a second time.
+That is four tables in total, and this document has now read all four:
+
+| Path | Table | Range | Real cases |
+|---|---|---|---|
+| int, record | `0x00818170` | chained `sub`, not a table | 3 — properties 32, 41, 42 |
+| int, second | bytes `0x00812EE0` → `0x00812ED0` | properties 4–64 | 4 — {4, 50, 60}, {10}, {64}, and one generic case for the other 55 |
+| float, record | bytes `0x008183B8` → `0x00818394` | properties 16–62 | 8 — 16, 33, 34, 43, 44, 52, 55, 62 |
+| float, second | bytes `0x0081328C` → `0x00813250` | properties 16–63 | 14 |
+
+**No case in any of the four is death.** Together with the OBSERVED result in
+§1b — health driven to zero on a live agent, which kept standing — the property
+channel is closed as a route to death, and it is closed by enumeration rather
+than by another failed guess.
+
+### A false lead, killed and recorded so nobody re-chases it
+
+The image contains the literal string `"owner dead"`, which is the only
+death-shaped string in 10 MB and looks irresistible. It is `EOWNERDEAD` from the
+C++ standard library, sitting in a pointer table between `"value too large"` and
+`"protocol error"`, alongside `"host unreachable"` and `"bad file descriptor"`.
+It has nothing to do with agents. **NOT FOUND** stands.
+
+---
+
 ## 4. What this does not answer, and where death goes next
 
-**Death is not an agent property**, on either path. The remaining leads, in
-order:
+**Death is not an agent property, and zero health is not death.** Both are now
+settled by enumeration plus measurement rather than by guessing. Seven candidate
+mechanisms have been eliminated: `AGENT_PLAYER_DIE` on an NPC and on the player,
+`AGENT_ALLY_DESTROY`, float health = 0, int health = 0, damage past the floor,
+and an absolute health modifier past zero.
 
-1. **`0x005FC380`**, called by `0x00813040` immediately after the record update,
-   with the target id and two out-parameters. Not yet read. It is the only other
+The remaining leads, best first:
+
+1. **The agent effects word.** `GAME_SMSG_AGENT_INITIAL_EFFECTS` (`0x00F0`) and
+   `AGENT_UPDATE_EFFECTS` (`0x00F1`) carry a bitfield, and OpenTyria's own agent
+   struct has a `uint32_t effects` beside health and level. A "dead" bit in a
+   state word fits every negative above: it would explain why no property and no
+   dedicated message kills, and why the client keeps an agent standing at zero
+   health until told otherwise. **Read `0x00F1`'s handler before sending
+   anything** — that is what the last two rounds of this arc taught.
+2. **The agent's flags word at `+0x20`.** `studies/enemy/PLAN.md` §6h found
+   `0x002D`'s whole effect gated on bit `0x20000` of it. Whatever marks an agent
+   dead is plausibly another bit in the same word, and its writers are
+   enumerable.
+3. **`0x005FC380`**, called by `0x00813040` right after the record update with
+   the target id and two out-parameters. Still unread, and still the only other
    thing the damage path does.
-2. **The agent view layer.** `P:\Code\Gw\AgentView\AvChar.cpp` is named by the
-   assert that `studies/enemy/PLAN.md` §6b crashed on — `damage.amount <= 0` —
-   so the view has its own damage handling, and a death *animation* would live
-   there rather than in the status record.
-3. **The agent's flags word at `+0x20`.** §6h found `0x002D`'s effect gated on
-   bit `0x20000` of it. Whatever sets a "dead" state is plausibly another bit in
-   the same word, and the writers of that word are enumerable.
 
-**The int path was read only far enough to explain the three properties it
-handles.** Properties above 42 on the integer path were not investigated, and
-`PublicLevel` (36) — which drives the nameplate and is the one property this
-project has OBSERVED the client accept without visible confirmation — is among
-them.
+**Not investigated:** what the int path's generic case (`0x008129B0`, ~55
+properties) actually does. `PublicLevel` (36) goes there, and it is the property
+this project has OBSERVED the client accept three times without ever confirming
+a visible effect.
 
 ---
 
