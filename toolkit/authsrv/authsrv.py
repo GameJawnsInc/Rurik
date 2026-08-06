@@ -1124,13 +1124,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # this field is used. The navmesh is the better source,
                         # since its plane indices ARE the client's numbering
                         # (189 of 198 reports agree).
+                        # The client's own reported plane, unmodified.
+                        #
+                        # This used to be second-guessed with pm.plane_at(), which
+                        # was added when our position could be stale. It cannot be
+                        # any more -- a click is only answered when a report is
+                        # under a second old (below), and the messages that carry
+                        # the position carry the plane with it. So the navmesh
+                        # override now runs ONLY when the client has just told us
+                        # the answer, and it can overrule a correct one.
+                        #
+                        # It overrules it in exactly the wrong place. plane_at
+                        # falls back to the geometry when the reported plane is
+                        # not among the trapezoids covering the point, and
+                        # MEASURED, that is 9 of 198 reports, every one of them
+                        # "client says 12, we find 0" -- a surface and the ground
+                        # under it, in a file with no height. Stairs. Which is
+                        # where the last of the warping was still being seen.
                         cur_plane = state["plane"]
-                        pm = state.get("pathmap")
-                        if pm is not None:
-                            at = pm.plane_at(state["pos"][0], state["pos"][1],
-                                             prefer=cur_plane)
-                            if at is not None:
-                                cur_plane = at
                         # FIELD ORDER: destination plane FIRST, current plane
                         # SECOND. The two lineages disagree here and we had been
                         # following the wrong one.
