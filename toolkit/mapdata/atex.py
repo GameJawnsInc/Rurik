@@ -71,6 +71,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import dxt1  # noqa: E402
 
 MAGIC_ATEX = b"ATEX"
 MAGIC_ATTX = b"ATTX"
@@ -238,6 +239,46 @@ def build(fourcc, width, height, levels=None, code=CODE_RAW, fill=0):
     return bytes(out)
 
 
+def build_image(rgb, width, height, levels=None, layout=dxt1.PLANAR):
+    """Author a DXT1 ATEX from real pixels, mipmapping down as needed.
+
+    Every level carries code 0, so nothing here is compressed in the ATEX sense
+    -- the blocks go in raw and the client reads them raw.
+    """
+    if levels is None:
+        levels = full_chain_levels(width, height)
+    out = bytearray()
+    out += MAGIC_ATEX + b"DXT1" + struct.pack("<HH", width, height)
+    img, w, h = rgb, width, height
+    for lv in range(levels):
+        # ATEX rounds each level up to whole 4x4 blocks; below 4 pixels the
+        # image is smaller than one block, so pad by repeating the last row and
+        # column rather than inventing black, which would show as a dark 1x1.
+        pw, ph = max(w, 4), max(h, 4)
+        if (pw, ph) != (w, h):
+            padded = bytearray(pw * ph * 3)
+            for y in range(ph):
+                sy = min(y, h - 1)
+                for x in range(pw):
+                    sx = min(x, w - 1)
+                    s = (sy * w + sx) * 3
+                    d = (y * pw + x) * 3
+                    padded[d:d + 3] = img[s:s + 3]
+            blocks = dxt1.encode(bytes(padded), pw, ph)
+        else:
+            blocks = dxt1.encode(img, w, h)
+        payload = dxt1.pack(blocks, layout)
+        want = level_payload_size(b"DXT1", width, height, lv)
+        if len(payload) != want:
+            raise ValueError(f"level {lv} encoded to {len(payload)} bytes, "
+                             f"the container expects {want}")
+        out += struct.pack("<II", len(payload) + RECORD_SIZE, CODE_RAW)
+        out += payload
+        if lv + 1 < levels:
+            img, w, h = dxt1.mipmap(img, w, h)
+    return bytes(out)
+
+
 def describe(a, name=""):
     ok = "closes exactly" if a.closes_exactly else "DOES NOT CLOSE"
     print(f"{name}{a.magic.decode()} {a.fourcc.decode()} "
@@ -269,12 +310,22 @@ def main():
     ap.add_argument("--code", type=lambda s: int(s, 0), default=CODE_RAW)
     ap.add_argument("--fill", type=lambda s: int(s, 0), default=0,
                     help="the dword repeated through every payload")
+    ap.add_argument("--pattern", choices=sorted(dxt1.PATTERNS),
+                    help="author real DXT1 art instead of a uniform fill")
+    ap.add_argument("--layout", choices=dxt1.LAYOUTS, default=dxt1.PLANAR,
+                    help="payload order for --pattern. The whole point of "
+                         "having both is that only a running client can say "
+                         "which is right; see dxt1.py.")
     a = ap.parse_args()
 
     if a.make:
         w = a.width or a.size
         h = a.height or a.size
-        data = build(a.fourcc.encode(), w, h, a.levels, a.code, a.fill)
+        if a.pattern:
+            data = build_image(dxt1.PATTERNS[a.pattern](w, h), w, h,
+                               a.levels, a.layout)
+        else:
+            data = build(a.fourcc.encode(), w, h, a.levels, a.code, a.fill)
         with open(a.make, "wb") as f:
             f.write(data)
         print(f"wrote {a.make}  ({len(data)} bytes)")

@@ -1,8 +1,9 @@
 # The ATEX texture container
 
-**Status: the texture layer is open.** On 2026-08-06 the retail client rendered a
-texture this project authored from scratch, on a skillbar, in a map. Everything
-in this document is either MEASURED from the client's own code and the archive's
+**Status: the texture layer is open, end to end.** On 2026-08-06 the retail
+client drew a skill icon this project authored from nothing — the image, the
+DXT1 encoding, the container, the archive write, all of it ours. Everything in
+this document is either MEASURED from the client's own code and the archive's
 own bytes, or OBSERVED on screen.
 
 This arc was split out of [../datwrite/FINDINGS.md](../datwrite/FINDINGS.md),
@@ -150,12 +151,81 @@ therefore tested the header, the framing, the size formula, the raw path and the
 whole write path, and could not be confounded by the ordering question — and
 equally, they say nothing about it.
 
-**Still UNVERIFIED: the payload ordering.** The experiment that settles it is a
-two-tone image — fill the first half of the payload with one dword and the second
-half with another. Under planar reading it renders as one flat colour with a
-different index pattern; under interleaved reading the top half of the image goes
-noisy and the bottom half goes uniform. Diagnostic either way, and it is one
-launch.
+### OBSERVED, later the same day: the ordering is PLANAR
+
+The two-tone plan above was replaced by a better one. Rather than infer the
+answer from what garbage looks like, **encode the same image both ways and ask
+which slot is a picture.** Two files, byte-identical headers, identical length,
+differing in 5,226 of 8,212 payload bytes, with the layout as the only variable.
+
+| Slot | Layout | **OBSERVED** |
+|---|---|---|
+| 6 | **planar** | a coherent image |
+| 8 | interleaved | noise |
+
+Then the two were swapped between rows and relaunched: the slot that had been
+noise rendered the image, which rules out the slot, the skill row and the MFT row
+as explanations and leaves only the bytes.
+
+**A raw ATEX level is PLANAR** — every block's colour dword, then every block's
+index dword. Upstream said so, in a lineage that counts as one witness (§7); it
+is now OBSERVED against the running client, twice, and the corpus could never
+have settled it because both layouts are the same length.
+
+`toolkit/mapdata/dxt1.py` implements both and keeps the loser, because the fastest
+way to check this again on a future build is to render the image both ways.
+
+## 4a. The skillbar does not draw the whole texture
+
+The first authored image came back **"cropped/off-center"**, which no source we
+have mentions and which would put authored art permanently in the wrong place if
+left as folklore. So it was measured with a ruler.
+
+**Coarse target** — four differently-coloured 12×12 corners (so a mirror or a
+rotation could not masquerade as a crop) and 2px frames at insets 0, 4, 8, 16
+and 32. OBSERVED: corners **gone**, inset 0 **gone**, inset 4 **gone**, inset 8
+**gone**, inset 16 **visible**, inset 32 **visible**, centre cross centred. No
+mirroring: the crop is symmetric.
+
+**Fine target** — six adjacent 2px bands from inset 10 to 21. OBSERVED: red at
+**inset 10 is barely visible**, and the owner identified why — *the bar's own
+bevelled frame overlaps the icon edge, which is stock behaviour for real icons
+too.*
+
+So, MEASURED:
+
+| Region | Fate |
+|---|---|
+| inset 0–9 | not drawn |
+| inset 10–15 | drawn, but partly under the bar's frame chrome |
+| inset ≥ 16 | fully visible |
+
+**The safe area for authored art is the central 96×96 of a 128×128 texture**, and
+`pattern_icon` in `dxt1.py` is drawn to it.
+
+The mechanism is worth stating because it changes what the number means: this is
+**not** a UV crop of the texture, it is the skillbar's frame drawn over the icon.
+Retail icons lose their edges the same way, which is why every shipped skill icon
+has its subject centred with margin. We were not seeing a bug in our file; we
+were seeing the UI behaving normally against art that ignored the margin.
+
+## 4b. OBSERVED: an authored icon, on the bar
+
+The point of the arc, rather than another test pattern. `dxt1.pattern_icon` draws
+a rising sun over a horizon — warm foreground against a deep sky, vignetted,
+entirely inside the safe area — which was encoded to DXT1, packed planar, wrapped
+in a single-level ATEX, written into the archive as a stored row, and pointed at
+by a skill's `+0x90`.
+
+**It rendered. The owner's description: "8 does appear as a sunset."**
+
+The whole path is ours and every stage is checkable alone: image → DXT1 blocks
+(`dxt1.encode`) → planar payload (`dxt1.pack`) → ATEX container (`atex.build_image`)
+→ archive row (`datwrite --replace`) → skill row (`repoint_skill --set`). Standard
+library only, no ArenaNet bytes anywhere in it.
+
+DXT1 round-trip error on this art is **1.00/255 mean absolute per channel** —
+effectively lossless for flat UI work, which is what a skill icon is.
 
 ## 5. What we can and cannot author today
 
@@ -186,8 +256,11 @@ want art rather than test patterns.
 
 | Question | What would settle it |
 |---|---|
-| Is a raw level planar or block-interleaved? | The two-tone fill of §4. One launch. |
+| ~~Is a raw level planar or block-interleaved?~~ | **Answered: planar.** See §4. |
+| ~~Does the bar draw the whole texture?~~ | **Answered: no**, the frame covers everything inside inset ~10. See §4a. |
 | What does the terminal `code = 8` 1x1 record's 4-byte payload mean? | It is a compact colour fill; read the `code & 8` branch at `0x6c2010`. Only needed to clone a retail file byte-for-byte, never to author one. |
+| Does the `+0x8c` DXTL 64x64 slot have its own safe area? | Whatever consumes it is unidentified, so the question is downstream of finding that first. |
+| Is the bar's frame inset a fixed pixel count or a fraction of the texture? | Repeat the fine ruler at 64x64 and 256x256. If the safe inset scales, it is UV; if it stays 16px, it is pixels — which decides whether a 256x256 icon buys real detail. |
 | Do the other fourccs author as predicted? | Repeat arm B at DXTA and DXT5. Cheap. |
 | Does a texture larger than its reservation force a relocation we can survive? | Everything so far fits in place. Relocation is the one archive operation still unexercised. |
 | What consumes `+0x8c`, given the bar reads `+0x90`? | Untested. Candidates: the effects monitor, the Skills panel, the party-window recharge overlay. |
