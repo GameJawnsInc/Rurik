@@ -711,6 +711,14 @@ def _attack_anim_steps(agent_id, origin):
     ox, oy, plane = origin
     h = HATCHER
     ENEMY = 7
+    # 600, NOT 300. The standing enemy is placed by enemy_spot(), which only
+    # ever offsets by +/-300 on one axis or the other -- so a probe body at
+    # +300 east lands EXACTLY on top of it whenever that first candidate is
+    # walkable, which it usually is. That happened: two Hatchers in one spot,
+    # z-fighting, two nameplates stacked, and an animation whose performer
+    # could not be told from its neighbour. 600 is outside every offset
+    # enemy_spot can choose, so the two bodies are always distinct.
+    ex, ey = ox + 600, oy
     return [
         Step(2.0, 0x0056,
              [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
@@ -720,27 +728,56 @@ def _attack_anim_steps(agent_id, origin):
              f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
         Step(1.0, 0x0020,
              create_agent(ENEMY, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
-                          AGENT_KIND_NPC, ox + 300, oy, plane,
+                          AGENT_KIND_NPC, ex, ey, plane,
                           allegiance=0x6D6F6E73),
              f"WORLD_CREATE_AGENT {ENEMY}, token 'mons' -- a hostile Hatcher",
-             "a RED Hatcher, so there is something to swing at. Its own body "
-             "is not the subject here; the PLAYER's is."),
+             "a RED Hatcher, well clear of the standing one. If you can see "
+             "TWO overlapping nameplates, this probe is invalid -- say so."),
         # Spawned rather than reusing the standing enemy at agent 10 so the
         # probe still runs under --no-enemy, and so it cannot be confused by
         # the combat loop hitting the same body on a timer.
+        #
+        # THIS AGENT NEEDS AN ATTACK SPEED TOO, and the first run of this probe
+        # is why. The player had one and the client still died on
+        # m_attackInterval -- because the assert does not fire on the packet.
+        # attack_started QUEUES a request at AvChar+0xCC and the per-frame tick
+        # processes it a frame later, so the AvChar that asserts is whichever
+        # one the request was queued on, and the two agent slots of this
+        # message are victim and attacker in an order we have not established.
+        # Every living agent gets one; that is what the client requires anyway,
+        # since AvChar's constructor writes 0.0 to both fields.
+        Step(1.0, 0x0035, [ENEMY, _f32(1.33), _f32(1.0)],
+             f"ATTACK_SPEED(agent {ENEMY}: base 1.33s, modifier 1.0)",
+             "nothing visible. 1.33 is a real number from the wiki's table "
+             "rather than an invented one, but a Hatcher's true rate is "
+             "unknown -- the client only demands that it is not zero."),
+        # A/B ON THE SLOT ORDER, which is now the open question and which the
+        # first run could not answer because both bodies were in one place.
+        #
+        # GWCA's note on generic value 4 reads "caster_id is victim, target_id
+        # is attacker" -- i.e. this id INVERTS the usual roles. Our two agent
+        # slots are named target-then-cause after 0x00A3, where section 6f
+        # MEASURED the first slot as the one damaged. If both were true, the
+        # first slot here would be the victim. The first run says otherwise:
+        # sent first=the Hatcher, and a HATCHER swung.
+        #
+        # Ten seconds apart, on two bodies that are now hundreds of units
+        # apart, so "which one moved" is answerable by looking.
         Step(8.0, 0x00A0, [4, ENEMY, agent_id, 0],
-             f"generic value 4 attack_started  target={ENEMY}  cause={agent_id}",
-             "THE TEST, and it has exactly two outcomes.\n"
-             "      SURVIVES -> the equipped-items bag gave the weapon an "
-             "attack speed. Watch the character: a hammer swing, or at least "
-             "no crash, means +0xEC is no longer zero and lead 1 is right.\n"
-             "      CRASHES on m_attackInterval / AvChar.cpp(4791) -> the bag "
-             "is NOT the source. That is a real result: it kills the only "
-             "written-and-unrun hypothesis and sends the next pass to "
-             "studies/enemy/PLAN.md 6o item 2 (find what writes +0xEC) or "
-             "item 3 (the Collector definition).\n"
-             "      Read the dialog with toolkit/harness/read_error_dialog.py "
-             "-- do NOT press its default button."),
+             f"attack_started  slot1={ENEMY} (Hatcher)  slot2={agent_id} (you)",
+             "WHICH BODY SWINGS? PREDICTION: the HATCHER, repeating the first "
+             "run now that the two are far enough apart to tell. If instead "
+             "YOUR character swings, the first run was misread and the slots "
+             "are victim-then-attacker after all.\n"
+             "      Either way the client must NOT crash. It did, every "
+             "session before the attack speed was sent."),
+        Step(10.0, 0x00A0, [4, agent_id, ENEMY, 0],
+             f"attack_started  slot1={agent_id} (you)  slot2={ENEMY} (Hatcher)",
+             "THE SAME PACKET WITH THE SLOTS SWAPPED. PREDICTION: now YOUR "
+             "character swings the hammer. If both steps move the same body, "
+             "the second slot is decorative and the first names the attacker "
+             "outright; if each step moves the body named in slot 1, that is "
+             "the same conclusion from two directions."),
     ]
 
 
@@ -1517,22 +1554,21 @@ PROBES = {
              "re-run freely.",
     ),
     "attack_anim": lambda a, o: Probe(
-        question="Does putting the hammer in a real equipped-items bag give "
-                 "the player a non-zero weapon_attack_speed (+0xEC), so that a "
-                 "melee swing animates instead of asserting?",
-        predicts="EXACTLY ONE OF TWO, and both are informative. If the bag is "
-                 "what the client computes +0xEC from, attack_started animates "
-                 "a swing and the session continues. If it is not, the client "
-                 "dies on the SAME assert as before the bag existed -- "
-                 "m_attackInterval, P:\\Code\\Gw\\AgentView\\AvChar.cpp(4791) "
-                 "-- and the only written-and-unrun hypothesis is dead.",
+        question="Which agent slot of generic value 4 names the ATTACKER -- "
+                 "the one that plays the swing animation?",
+        predicts="The FIRST slot. Sending slot1=the Hatcher makes the HATCHER "
+                 "swing; swapping to slot1=you makes YOUR character swing. If "
+                 "the same body moves both times, the second slot is "
+                 "decorative and the first still names the attacker.",
         steps=_attack_anim_steps(a, o),
-        note="The last step may end the session BY DESIGN; nothing follows it. "
-             "A crash here is the documented behaviour of a zero +0xEC, not an "
-             "accident: the cage keeps the dump local, and the assert text is "
-             "read with toolkit/harness/read_error_dialog.py, which never "
-             "presses 'Send report to ArenaNet'. Run with the weapon ON -- "
-             "--no-weapon makes this probe meaningless.",
+        note="This probe used to ask whether the equipped-items bag supplies "
+             "the attack speed. It does not -- that was answered NO and the "
+             "real answer is GAME_SMSG 0x0035 (studies/enemy/PLAN.md 6q), "
+             "which the server now sends to every living agent. The probe kept "
+             "its name and became the next question. It no longer expects to "
+             "crash: if m_attackInterval fires again, an agent somewhere is "
+             "missing its attack speed and THAT is the finding. Run with the "
+             "weapon ON -- --no-weapon makes this meaningless.",
     ),
     "enemy_damage": lambda a, o: Probe(
         question="Does the client render an ENEMY taking damage, and is the "

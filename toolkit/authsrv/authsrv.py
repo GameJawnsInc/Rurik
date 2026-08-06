@@ -48,6 +48,18 @@ from vaultpath import vault_path  # noqa: E402
 import probes  # noqa: E402
 import agents  # noqa: E402
 
+
+def _f32(x):
+    """A float as the dword the codec will put on the wire.
+
+    The schema types these fields `dword` because the client's own format
+    tables do -- a float and a dword are the same four bytes to its generic
+    deserializer, and only the handler knows which it is. So every float we
+    send goes out through here.
+    """
+    return struct.unpack("<I", struct.pack("<f", x))[0]
+
+
 AUTH_CMSG_VERSION_HEADER = 0x000C0400
 # 0x000C0700 came from the reference sources. 0x000C0500 is what build 38797
 # actually sends to a game server -- measured on the wire 2026-08-05, from a raw
@@ -130,6 +142,13 @@ GAME_SMSG_NPC_UPDATE_WEAPONS = 0x006D
 # agent_id + allegiance byte. The field that decides whether a click is an
 # attack or a conversation; the team token only decides colour.
 GAME_SMSG_AGENT_UPDATE_ALLEGIANCE = 0x002F
+# agent_id + float base + float modifier. The ONLY way to give an agent an
+# attack speed: without it the client's AvChar keeps the 0.0 its constructor
+# wrote and asserts m_attackInterval the moment a swing would animate. Unnamed
+# in every reconstruction we hold; the name is ours, from the client's own
+# AvChar::SetAttackSpeed argument names. See agents.ATTACK_SPEED and
+# studies/enemy/PLAN.md 6q.
+GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED = 0x0035
 
 # The item id we hand the starter hammer. Any nonzero value the client has not
 # already seen would do; 1 is the first because the inventory is otherwise
@@ -138,6 +157,12 @@ WEAPON_ITEM_ID = 1
 # Give the character a weapon at all. --no-weapon turns it off so the "naked
 # character cannot attack" reading can be re-tested rather than remembered.
 EQUIP_WEAPON = True
+# Seconds between swings for the weapon we actually hand out, which is a
+# hammer. WIKI (GWW, "Attack speed"), and the client agrees -- see
+# agents.ATTACK_SPEED for the six-for-six cross-check. This is the value that
+# goes on the wire AND the interval the server swings on, deliberately the same
+# constant: two numbers that must match and used to be 1.33 and nothing.
+WEAPON_ATTACK_SPEED = agents.ATTACK_SPEED["hammer"]
 GAME_SMSG_UPDATE_GOLD_STORAGE = 0x0141
 GAME_SMSG_CHARACTER_UPDATE_INFO = 0x0030
 GAME_SMSG_INSTANCE_MANIFEST_PHASE = 0x0198
@@ -776,6 +801,14 @@ ENEMY_AGENT_ID = 10
 ENEMY_DEFINITION = 3
 ENEMY_MAX_HEALTH = 100
 ENEMY_OFFSET = (300.0, 0.0)
+# A PLACEHOLDER, and it has to be non-zero rather than right. WIKI (GWW,
+# "Attack speed") says a creature that wields no weapon takes its rate from its
+# creature type, and we do not know a Hatcher's -- it is a collector that has
+# never swung at anything. This is the axe/sword/dagger figure because that is
+# a real number from the table rather than one we made up, and the only thing
+# the client demands of it is that it is not 0. A capture of a real fight would
+# replace it; nothing here is a claim about what a Hatcher does in retail.
+ENEMY_ATTACK_SPEED = agents.ATTACK_SPEED["axe"]
 
 
 # ---- the combat loop -----------------------------------------------------
@@ -791,8 +824,11 @@ ENEMY_OFFSET = (300.0, 0.0)
 # and weapon damage, and a captured fight would give the real thing. Until then
 # these are placeholders chosen to make a fight legible to a person watching.
 HIT_FRACTION = 0.15        # of maximum health, so ~7 clicks to kill
-HIT_COOLDOWN = 1.0         # seconds; the client sends interact far faster
 REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
+# HIT_COOLDOWN was here and is gone: it dated from when a click dealt a hit
+# directly, and nothing has read it since the swing moved onto ATTACK_INTERVAL.
+# A second, unused rate constant sitting beside the real one is exactly the
+# thing someone tunes for an hour before noticing it is not wired to anything.
 
 # SERVER-DRIVEN ATTACKING, and it is a workaround rather than the mechanism.
 #
@@ -812,9 +848,15 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 # server-authoritative and the client renders what it is told -- but the client
 # initiating is still the real thing and this is not it. Do not read a working
 # fight on screen as evidence that attacking is solved.
-ATTACK_INTERVAL = 1.33     # seconds between swings. Ours, not measured: GWCA
-                           # calls 1.33 the base for axe/sword/daggers, and a
-                           # hammer is slower. A capture would give the truth.
+# Seconds between swings, and this one is NO LONGER OURS. It used to be 1.33
+# with a comment admitting that was the axe/sword/dagger figure and a hammer is
+# slower. It is now the hammer's real 1.75 -- WIKI (GWW, "Attack speed", whose
+# table states outright that these are the exact values the game uses), and the
+# client's own arithmetic agrees to four decimals across three weapon classes
+# (agents.ATTACK_SPEED). It is deliberately the SAME constant we put on the
+# wire in ATTACK_SPEED, because the rate the server swings at and the rate the
+# client animates at are one number, and they were two.
+ATTACK_INTERVAL = WEAPON_ATTACK_SPEED
 ATTACK_RANGE = 1500.0      # units. Ours entirely; nothing measured it.
 
 
@@ -892,7 +934,7 @@ def hit_enemy(send, state, target_id, conn_id):
     # fraction is at 0x0081823C in the client.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID,
-          struct.unpack("<I", struct.pack("<f", -HIT_FRACTION))[0]],
+          _f32(-HIT_FRACTION)],
          f"damage {dealt:.0f} to agent {target_id}")
     # And close the swing. Harmless if the client ignores it; without it the
     # attack has a beginning and no end.
@@ -944,10 +986,32 @@ def revive_due(send, state, conn_id):
         # positive direction fills a bar the death path had zeroed.
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_HEALTH, agent_id, agent_id,
-              struct.unpack("<I", struct.pack("<f", agent["max_health"]))[0]],
+              _f32(agent["max_health"])],
              f"refill bar on agent {agent_id}")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)
+
+
+def send_attack_speed(send, agent_id, base, what):
+    """Give one agent an attack speed. EVERY living agent needs one.
+
+    Not a nicety. The client's AvChar constructor writes 0.0 to both fields
+    (0x007F1FD2) and the animation path asserts both non-zero on the way in
+    (AvChar.cpp:4791/4792), so an agent the server never told cannot be
+    animated attacking -- the client dies instead. GAME_SMSG 0x0035 is the only
+    thing in the image that sets them. studies/enemy/PLAN.md 6q.
+
+    The assert does NOT fire on the packet that starts the swing. That packet
+    queues a request at AvChar+0xCC and the per-frame tick
+    (AvApi 0x007DF280 -> AvManager) processes it a frame later, which is where
+    it dies -- so the crash lands a moment after the send and blames whichever
+    agent the request was queued on, not necessarily the one you aimed at.
+    That is why this goes on every agent rather than only the attacker.
+    """
+    send(GAME_SMSG_AGENT_UPDATE_ATTACK_SPEED,
+         [agent_id, _f32(base), _f32(agents.ATTACK_SPEED_UNMODIFIED)],
+         f"ATTACK_SPEED({what} {agent_id}: base {base}s, modifier "
+         f"{agents.ATTACK_SPEED_UNMODIFIED})")
 
 
 def enemy_spot(state, ox, oy):
@@ -1018,6 +1082,7 @@ def spawn_enemy(send, state, origin, conn_id):
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, ENEMY_AGENT_ID, ENEMY_MAX_HEALTH],
          f"health {ENEMY_MAX_HEALTH} on agent {ENEMY_AGENT_ID}")
+    send_attack_speed(send, ENEMY_AGENT_ID, ENEMY_ATTACK_SPEED, "enemy")
 
     state.setdefault("agents", {})[ENEMY_AGENT_ID] = {
         "pos": (x, y), "plane": plane,
@@ -2191,8 +2256,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
                              [agents.PROP_UNKNOWN_FLOAT_43, PLAYER_AGENT_ID,
                               PLAYER_AGENT_ID,
-                              struct.unpack("<I", struct.pack(
-                                  "<f", agents.PLAYER_FLOAT_43))[0]],
+                              _f32(agents.PLAYER_FLOAT_43)],
                              "PLAYER float 43 (purpose unknown upstream too)")
                         # Putting the weapon on the BODY is a different question
                         # from putting it in the weapon-set UI, and we had only
@@ -2235,6 +2299,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  [PLAYER_AGENT_ID, WEAPON_ITEM_ID, 0],
                                  "NPC_UPDATE_WEAPONS(leadhand = item "
                                  f"{WEAPON_ITEM_ID})")
+                            # And how fast that weapon swings, which the client
+                            # does NOT work out from any of the four messages
+                            # above. Its AvChar is constructed with an attack
+                            # speed of 0.0 and exactly one thing in the image
+                            # ever changes it: this message. Until it arrives,
+                            # telling the client to start a swing asserts
+                            # m_attackInterval and takes it down -- which is
+                            # what every session before this one did.
+                            send_attack_speed(send, PLAYER_AGENT_ID,
+                                              WEAPON_ATTACK_SPEED, "player")
                         # unk0 is a literal 3 upstream (GmAgent.c:246).
                         send(GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT,
                              [PLAYER_AGENT_ID, 3], "UPDATE_CONTROLLED_AGENT")

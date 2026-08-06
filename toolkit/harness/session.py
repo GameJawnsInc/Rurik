@@ -475,8 +475,13 @@ def run_client(a, outdir):
         if a.keep_open:
             hold_open(proc, a.hold, tails, outdir)
     finally:
-        if not a.keep_open:
-            dc.close_client(proc)
+        # ALWAYS close the client, --keep-open included. The hold above is the
+        # whole of what keep-open buys; once it ends the stack is about to be
+        # stopped, and a client with no servers is not a running session, it is
+        # a zombie sitting on Code=007. Worse, it keeps an exclusive handle on
+        # Gw.log, so the NEXT run dies with PermissionError before it can even
+        # launch -- which is exactly what happened once this hold existed.
+        dc.close_client(proc)
         sampler.stop()
 
     for t in tails.values():
@@ -516,12 +521,12 @@ def main():
     ap.add_argument("--replace", action="store_true",
                     help="stop stale python listeners found on our ports")
     ap.add_argument("--keep-open", action="store_true",
-                    help="leave the client AND the stack running after the "
-                         "verdict. Keeping the client alone is useless: the "
-                         "servers were its only peer, so it loses them within "
-                         "seconds and shows Code=007 at character select. "
-                         "Anything that happens AFTER the map verdict -- a "
-                         "probe, a fight, a revive -- needs this.")
+                    help="hold the client AND the stack up after the verdict, "
+                         "then shut both down together. Anything that happens "
+                         "AFTER the map verdict -- a probe, a fight, a revive "
+                         "-- needs this: the verdict is read at the spawn "
+                         "rung, and a probe's first step lands seconds later. "
+                         "Without --hold it holds until you close the client.")
     ap.add_argument("--exe", default=None,
                     help="patched client exe; default: newest under vault/run")
     ap.add_argument("--actions", default=None,

@@ -1228,33 +1228,26 @@ from field shapes: `0x00A0` and `0x00A3` are the int and float halves of one
 mechanism. **Frame 6 names its own arguments** — `AvApi` asserting `agent` and
 `stat` on consecutive lines is an entry point taking exactly those two things.
 
-### The correction that matters most: `esi` is not the agent — INFERRED
+### Where to look next: AgentView, not the agent
 
-§6o read the precondition site as operating on the agent, on the strength of
-`[esi+0x158]` matching `type_map` in GWCA's `AgentLiving` map. **Every frame
-from 1 to 6 is an AgentView file.** `AvChar` is the AgentView's own per-character
-object, and `AvManager:775` calls its pool `s_reusableAgentArray` — these things
-are recycled, which a simulation agent would not be.
+§6o read the precondition site as operating on the agent. Every frame from 1 to
+6 is an AgentView file, `AvChar` is the AgentView's own per-character object,
+and `AvManager:775` calls its pool `s_reusableAgentArray` — recycled, which a
+simulation agent would not be. So the object at `esi` is an **AvChar**, and the
+searches that came up empty were aimed at the wrong place: "nothing writes
+`+0x1B1`" and "no `fstp` writes `+0xEC` by displacement" were both looked for
+outside AgentView.
 
-So the object at `esi` is almost certainly an **AvChar**, a view-layer record,
-and **not** the struct GWCA documents. That reframes two of §6o's dead ends at
-once, and in the same direction:
+> **§6q settles this and corrects the half of it that overreached.** There *is*
+> an `fstp` to `+0xEC`, two of them, both inside `AvChar` — the displacement
+> scan that missed them was simply not looking in this range. And the inference
+> that AvChar is "not the struct GWCA documents" is **wrong**: GWCA names
+> `+0xEC` `weapon_attack_speed` and `+0xF0` `attack_speed_modifier`, which is
+> exactly what ArenaNet's own asserts call them. GWCA's `AgentLiving` *is*
+> AvChar. What is true is that GWCA's map **drifts** — see §6q.
 
-- "Nothing in this image writes `+0x1B1` or `+0x1B2`" and "no `mov` and no
-  `fstp` writes `+0xEC` by displacement" were both searches for writes to the
-  *simulation* agent. If the field lives on a pooled view object, the write is
-  in AgentView's own construction or refresh path, which is not where anyone
-  looked.
-- It also explains why every server-side thing we equipped changed nothing: we
-  have been feeding the simulation, and the assert fires in presentation. §6b
-  flagged exactly this — "`AvChar.cpp` is a **view**-layer file, so the assert
-  fires in presentation rather than in the simulation" — and it is worth more
-  now than when it was written.
-
-**The next move for item 2 is therefore to read AvManager's pool init and
-AvChar's refresh, not to keep scanning for stores to an agent.** Labelled a
-lead, not a finding: the file attribution is SOURCED, the AvChar reading is
-INFERRED from it, and nothing here has disassembled the write.
+**The next move for item 2 is to read AvManager's pool init and AvChar's own
+code, not to keep scanning for stores to an agent.**
 
 ### Lead 3 was unsupported, and reading beat guessing again — MEASURED
 
@@ -1329,6 +1322,146 @@ gamesrv log one line before the interesting one.
 4. **The revive fix is still untested** — the probe ends the session by design
    before a kill-and-revive cycle can run, so property 34 has not been seen
    against a revived body. It needs a session driven by clicks, not a probe.
+
+---
+
+## 6q. The attack speed is a MESSAGE, and it is one nobody has ever sent
+
+2026-08-06, continuing §6p. The wall is down. The client no longer asserts on
+`m_attackInterval`, and a body swings a weapon on screen.
+
+**`GAME_SMSG 0x0035` — `agent_id, float base, float modifier`, 14 bytes.** It is
+the only thing in the entire image that gives an agent an attack speed, and
+without it the client physically cannot animate a melee attack.
+
+### The chain, end to end — SOURCED
+
+Every step read out of our own pinned build 38797. Each caller is *unique*:
+there is exactly one path in, which is why it can be stated this flatly.
+
+```
+GAME_SMSG 0x0035   handler 0x0091D810   (CharMsg neighbourhood)
+                     reads {[msg+4] agent_id, [msg+8] float, [msg+0xC] float}
+  -> 0x0080EA60      thin forwarder, same three arguments
+  -> 0x007E0690      AvApi: agent id -> AvChar* via AvManager 0x00802160,
+                     asserts the lookup (AvApi.cpp:739 `ptr`)
+  -> 0x007FBD30      AvChar::SetAttackSpeed(float base, float modifier)
+                       assert base     != 0    AvChar.cpp:7207
+                       assert modifier != 0    AvChar.cpp:7208
+                       [this+0xEC] = base
+                       [this+0xF0] = modifier
+```
+
+`base` and `modifier` are **ArenaNet's own argument names**, read from the
+assert strings at `0xA93F2C` and `0xA93F34` — not ours and not a
+reconstruction's.
+
+**The constructor writes 0.0 to both** (`0x007F1FD2`: `fldz; fstp [ebx+0xEC];
+fstp [ebx+0xF0]`). So an agent the server never tells has an attack speed of
+exactly zero, and the animation path asserts non-zero on the way in
+(AvChar.cpp:4791/4792). The client asserts at **both ends** — on the write and
+on the read — which is as clear a statement as a binary can make that this
+field is never legitimately zero.
+
+That is the whole of the `m_attackInterval` crash, and it explains why §6p's
+negative was so total: **equipment was never the channel.** Bag, slot, weapon
+set and body are all inputs to the *simulation*; the attack speed is something
+the server states outright, on its own message.
+
+### Nobody sends it, and nobody has named it
+
+- **OpenTyria** names `GAME_SMSG 0x0033`, `0x0034` and `0x0037` and **skips
+  `0x0035`** — a hole in the most complete public catalog, right where this is.
+- No reference server sends it. Checked across gw-preservation, OpenTyria and
+  GWLP-R.
+- Our own catalog had the shape right all along (`agent_id, dword, dword`, 14
+  bytes — one of the 477 that agree with the binary) and no name.
+
+The name in `authsrv.py` is therefore **ours**, taken from the client's own
+`SetAttackSpeed` argument names rather than invented.
+
+### What the two floats mean — CORROBORATED, three ways
+
+| field | meaning |
+|---|---|
+| `+0xEC` `base` | seconds between attacks, by weapon or creature type |
+| `+0xF0` `modifier` | multiplier on that duration; **1.0 = none**, 0.75 = +25% IAS, 0.67 = +33% IAS |
+
+An increase in attack speed makes each attack *shorter*, so the modifier goes
+**down** as the character gets faster. The client multiplies the pair at
+`0x007F837E` (`fld [esi+0xf0]; fmul [esi+0xec]`).
+
+**And that multiplication reproduces the wiki's published table exactly.**
+WIKI (GWW, "Attack speed" §"Attack durations and effect of IAS and DAS", read
+2026-08-06), which states outright that these are the exact values the game
+uses:
+
+| base | ×0.67 | wiki's +33% | ×0.75 | wiki's +25% |
+|---|---|---|---|---|
+| 1.33 axe/sword/daggers | 0.8911 | **0.8911** | 0.9975 | **0.9975** |
+| 1.5 scythe/spear | 1.005 | **1.005** | 1.125 | **1.125** |
+| 1.75 hammer/staff/wand | 1.1725 | **1.1725** | 1.3125 | **1.3125** |
+
+Six for six, to four decimals, on a check that could have failed. GWCA's
+`Agent.h:181-182` independently names the same two offsets
+`weapon_attack_speed` and `attack_speed_modifier`, gives 1.33 for
+axe/sword/daggers and glosses the modifier as "0.67 = 33% increase". Three
+sources with no shared ancestry — a wiki built from twenty years of play, a
+reimplementation's header, and our own disassembly — agreeing on the same two
+fields at the same two offsets.
+
+**Our hammer therefore swings at 1.75s, not the 1.33 the server had been using.**
+`ATTACK_INTERVAL` was invented in §6m and is now WIKI, and it is the same
+constant we put on the wire, because the rate the server swings at and the rate
+the client animates at are one number and they had been two.
+
+### The assert is NOT synchronous with the packet — OBSERVED, and it cost a run
+
+The first fix sent `0x0035` for the player only. **The client still died on the
+same assert.** The reason is in the frames §6p had already named without anyone
+reading what they were:
+
+`AvApi 0x007DF280` takes a single float and fans it out to seven subsystems —
+it is the **per-frame tick**, not the message path. So `attack_started` does not
+animate anything. It **queues a request** at `AvChar+0xCC`, and a later frame
+walks the queue and dispatches on `request->type` through a 28-entry jump table
+at `0x007F8BF8`. **Type 3 is the melee swing**, and type 3 is the entry that
+reaches the precondition.
+
+Two consequences, and the first is a trap worth naming:
+
+- **The crash blames the frame, not the packet.** It lands a moment after the
+  send, in a stack with no message-handling in it at all, on whichever AvChar
+  the request was queued against — *not necessarily the agent you aimed at*.
+  Anyone reading that stack cold would not guess a packet caused it.
+- **Every living agent needs an attack speed**, not just the one you think is
+  attacking. That is what fixed it: the player, the standing enemy and the
+  probe's own body all get one now.
+
+### GWCA's offsets are exact here and drift later — MEASURED
+
+Worth recording because §6o burned a session on the other end of the same map.
+
+- `+0xEC` / `+0xF0`: GWCA is **exact**, names confirmed against ArenaNet's asserts.
+- `+0x1B1` / `+0x1B2` (GWCA's `allegiance` byte and `weapon_type` u16):
+  **nothing in AgentView touches either offset.** But a `byte` at `+0x1B7` and a
+  `u16` at `+0x1B8` are written from seven and six sites respectively — the same
+  byte-then-u16 shape, displaced by exactly 6.
+
+So GWCA's map is not wrong, it is **drifting**: correct at `+0xEC`, six bytes
+stale by `+0x1B1` on this build. Treat any GWCA offset as a lead to verify
+per-field, and never as a coordinate. The `+0x1B7`/`+0x1B8` identification is
+INFERRED from the shape match, not proven.
+
+### A note on method, since §6o's search was reported as exhaustive
+
+§6o recorded "no `mov` and no `fstp` writes either offset by displacement
+anywhere in the image". There are 233 instructions touching `+0xEC` image-wide,
+and two of them write it from inside `AvChar`. The scan was not wrong about its
+own results; it was **scoped to the wrong module and reported as a global
+absence**. The fix that found it in minutes was to bound AgentView by its own
+assert sites (`asserts.py --file AvChar`) and filter to that range — a range
+§6p had already established and nobody had used.
 
 ---
 
