@@ -1538,9 +1538,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # the moment an attack was meant to animate, so the
                             # weapon it was drawing had no attack speed. An
                             # item that is in no bag and no slot is not worn by
-                            # anything, which is the obvious candidate for why.
+                            # anything, which was the obvious candidate for why.
                             # Field order follows GmInventory.c:174-182 and
                             # :145-152 exactly.
+                            #
+                            # IT WAS NOT WHY, and this stays only because it is
+                            # more correct than not sending it. TESTED
+                            # 2026-08-06, probe `attack_anim`: with the hammer
+                            # in the bag AND the slot AND the weapon set AND on
+                            # the body, the client still died on the same
+                            # assert at the same line -- m_attackInterval,
+                            # AvChar.cpp(4791). Nothing we know how to equip
+                            # sets +0xEC. The crash chain is nineteen frames of
+                            # AgentView, so the field is plausibly on the
+                            # client's view-layer AvChar rather than on the
+                            # agent every search so far has scanned.
+                            # studies/enemy/PLAN.md 6p.
                             send(GAME_SMSG_INVENTORY_CREATE_BAG,
                                  [1, BAG_TYPE_EQUIPPED, BAG_MODEL_EQUIPPED,
                                   EQUIPPED_BAG_ID, EQUIPPED_SLOT_COUNT, 0],

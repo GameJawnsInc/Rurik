@@ -1137,19 +1137,198 @@ nearly published one.
 
 ### Where to go next, in order
 
-1. **Does the equipped-items bag give the weapon an attack speed?** The code is
-   written and unrun. If the `m_attackInterval` assert still fires, the bag is
-   not the source and `+0xEC` needs finding another way.
+**Superseded by §6p, which ran item 1 and killed it.** Kept because the ordering
+was right and because item 3 turns out to be unsupported for a reason worth
+reading. The live list is at the end of §6p.
+
+1. ~~**Does the equipped-items bag give the weapon an attack speed?**~~ **RUN.
+   It does not.** §6p.
 2. **If it is not the bag**, find what writes `+0xEC`. It is not a displacement
    store. Try the caller chain from the crash — runtime→static is `+0x120000`
    for that dump, giving `0x7F867F`, `0x7F9F5F`, `0x7F3486`, `0x801732`.
-3. **The Collector lead, untried.** The enemy is built from a `Hatcher
-   [Collector]` definition whose flags word is `0x20C`, and collectors are
-   non-combatants. Those bits are a live candidate for why a click reads as
-   interact. Not chased because guessing at bit meanings is what produced the six
-   misses above — but a *different* NPC definition would test it without
-   guessing at anything.
+   *§6p reproduces the crash and extends this chain from four frames to
+   nineteen, each named to ArenaNet's own source file.*
+3. ~~**The Collector lead, untried.**~~ **Unsupported — see §6p.** `0x20C` is not
+   a collector marker; it is a hardcoded wire constant in the one lineage we
+   copied it from, sent identically for a merchant, a collector and a guard.
 4. **Pathing into range**, which is ours to write and needs no client knowledge.
+
+---
+
+## 6p. The bag is not the source, and the crash chain is an AgentView chain
+
+Probe `attack_anim`, 2026-08-06, build 38797. One packet that mattered:
+`0x00A0` generic value **4** `attack_started`, target = a hostile Hatcher,
+cause = the player. Everything else in the probe exists to give it something to
+swing at.
+
+### The result: lead 1 is dead — OBSERVED
+
+**The equipped-items bag does not give the client a weapon attack speed.** The
+client died on the *same assert, at the same line*, as it did before the bag
+existed:
+
+```
+Assertion: m_attackInterval
+P:\Code\Gw\AgentView\AvChar.cpp(4791)
+Build: 38797     When: 8/6/2026 16:31:49
+```
+
+The causal link needs no argument: the gamesrv log has
+`s2c PROBE[attack_anim] generic value 4 attack_started target=7 cause=1
+(0x00a0, 18B)` and then, with nothing in between,
+`ConnectionResetError: [WinError 10054]`.
+
+And the weapon really was equipped this time — the same log shows
+`CREATE_NAMED_ITEM(starter hammer)`, `INVENTORY_CREATE_BAG(equipped)`,
+`ITEM_MOVED_TO_LOCATION(hammer -> equipped 0)`, `WEAPON_SET[0] leadhand=1` and
+`NPC_UPDATE_WEAPONS(leadhand = item 1)`. Bag, slot, weapon set and body, all
+four, and `+0xEC` is still zero. So the reading GWCA's comment invited — that
+the client computes the attack speed from the equipped weapon — is **not
+satisfied by any of the four things we know how to equip.**
+
+That closes the only written-and-unrun hypothesis in the arc. It is a negative,
+and it is worth more than it looks: `--no-weapon` aside, there is now nothing
+about *our* item handling left to blame.
+
+### The caller chain, named to ArenaNet's own files — SOURCED
+
+§6o asked for this and could only give four frames. The dump gives nineteen.
+`BaseAddr: 002E0000` against the image base `0x400000` makes the fixup
+**`static = runtime + 0x120000`**, and that is not assumed — the innermost frame
+lands at `0x00487BDB`, `0x1B` bytes into the assert routine §6o had already
+identified as `0x487BC0`.
+
+Each frame is named by running `asserts.py --at` on it: **a function's own
+assert call sites carry ArenaNet's source path**, which is §6g's method applied
+to a stack trace instead of to a message handler.
+
+| # | static | ArenaNet's file, from asserts in the same function |
+|---|---|---|
+| 0 | `0x00487BDB` | the assert routine itself |
+| 1 | `0x007F82FA` | **AvChar** — 4791 `m_attackInterval`, 4792 `m_attackModifier` |
+| 2 | `0x007F867F` | **AvChar** — 2222 `dancer`, 4745 `loop < 500` |
+| 3 | `0x007F9F5F` | **AvChar** — 5893 `damage.amount <= 0`, the §6b assert |
+| 4 | `0x007F3486` | **AvChar** — 1484 `curr->fileId` |
+| 5 | `0x00801732` | **AvManager** — 714 `s_refCountAlert`, 775 `!s_reusableAgentArray.Count()` |
+| 6 | `0x007DF2CE` | **AvApi** — 480 `agent`, 497 `stat` |
+| 7 | `0x004E28C3` | **GmView** — 2840 `MissionCliIsGameMaster()` |
+| 11 | `0x0063543D` | **FrApi** |
+| 14 | `0x0062BE5F` | **EvtApi** |
+| 15 | `0x004815B0` | **ExeTimer** |
+
+Read bottom-up it is `ExeTimer → EvtApi → FrApi → … → GmView → AvApi →
+AvManager → AvChar → AvChar → AvChar → assert`. Two things fall out.
+
+**Frame 3 is the damage function.** `0x007F9F5F` sits inside the very function
+that asserts `damage.amount <= 0` — the assert §6b earned with a positive
+damage value. So generic value 4 and generic value 16 arrive at the *same*
+AvChar routine, which is direct support for something the arc had only inferred
+from field shapes: `0x00A0` and `0x00A3` are the int and float halves of one
+mechanism. **Frame 6 names its own arguments** — `AvApi` asserting `agent` and
+`stat` on consecutive lines is an entry point taking exactly those two things.
+
+### The correction that matters most: `esi` is not the agent — INFERRED
+
+§6o read the precondition site as operating on the agent, on the strength of
+`[esi+0x158]` matching `type_map` in GWCA's `AgentLiving` map. **Every frame
+from 1 to 6 is an AgentView file.** `AvChar` is the AgentView's own per-character
+object, and `AvManager:775` calls its pool `s_reusableAgentArray` — these things
+are recycled, which a simulation agent would not be.
+
+So the object at `esi` is almost certainly an **AvChar**, a view-layer record,
+and **not** the struct GWCA documents. That reframes two of §6o's dead ends at
+once, and in the same direction:
+
+- "Nothing in this image writes `+0x1B1` or `+0x1B2`" and "no `mov` and no
+  `fstp` writes `+0xEC` by displacement" were both searches for writes to the
+  *simulation* agent. If the field lives on a pooled view object, the write is
+  in AgentView's own construction or refresh path, which is not where anyone
+  looked.
+- It also explains why every server-side thing we equipped changed nothing: we
+  have been feeding the simulation, and the assert fires in presentation. §6b
+  flagged exactly this — "`AvChar.cpp` is a **view**-layer file, so the assert
+  fires in presentation rather than in the simulation" — and it is worth more
+  now than when it was written.
+
+**The next move for item 2 is therefore to read AvManager's pool init and
+AvChar's refresh, not to keep scanning for stores to an agent.** Labelled a
+lead, not a finding: the file attribution is SOURCED, the AvChar reading is
+INFERRED from it, and nothing here has disassembled the write.
+
+### Lead 3 was unsupported, and reading beat guessing again — MEASURED
+
+§6o's item 3 was "the enemy is a `Hatcher [Collector]` whose flags word is
+`0x20C`, and collectors are non-combatants". Checked against the mirror it came
+from, before spending a launch on it:
+
+```
+gameservice/StoC.go:113     flags  int  //wire:uint32,val:0x20C
+```
+
+**`0x20C` is a hardcoded constant on the wire field, not a per-NPC value.**
+gw-preservation sends it identically for `gram_merchant`, `hatcher_collector`
+and `ascalon_guard`; not one of its seven definitions carries a flags value of
+its own. A number that never varies cannot be what distinguishes a collector
+from a guard, so "those bits are why a click reads as interact" has no support
+behind it.
+
+What *does* vary per definition is `AllegianceFlags`, and it is the field-12
+team token §6e already settled: five of the seven are `'nonc'` and two are
+`'play'`. The non-combatant marker upstream is the allegiance, and we already
+override it to an unrecognised token to get a red nameplate.
+
+**The proposed experiment would not have tested its own hypothesis.** Swapping
+in "a genuinely hostile NPC definition" changes the model id, the file id and
+the EncString. The flags word would stay `0x20C`, because `0x20C` is all we
+have. The hypothesis is about the flags; the experiment changes the model; §6e
+established those are independent fields. Six misses in §6o came from guessing
+at bit meanings, and this would have been the seventh — caught by reading the
+source of the number rather than by running it.
+
+### The run before this one measured nothing, and said so in the friendliest way
+
+Recorded because the failure is a general one and it nearly landed in this
+document as a finding.
+
+The first attempt used `session.py --keep-open`, which spared the client and
+let `main()`'s `finally` stop the servers anyway. The client's only peer was
+those servers, so it dropped the connection and fell back to character select —
+**`Code=007`, "Your connection to the server was lost"**. The probe never fired:
+its first step is two seconds after the spawn rung the harness reads its verdict
+at, and the stack was killed in that gap.
+
+**The symptom was a client still running, still responding, with no assert
+dialog** — which is exactly what a probe that ran and found nothing looks like.
+The reading it invited was "no crash, so the bag worked", i.e. the opposite of
+the truth. It was caught by checking the gamesrv log for the probe's own step
+lines before believing the absence, and the log had none.
+
+That is the fourth time this project has been wrong, or nearly wrong, about an
+absence produced by an instrument that was not running. `--keep-open` now holds
+the stack too, and blocks inside the run rather than orphaning it — the log
+pumps are daemon threads on that process, so exiting would have truncated the
+gamesrv log one line before the interesting one.
+
+### Where to go next, in order
+
+1. **Find what writes `+0xEC`, in AgentView.** Read `AvManager`'s pooled
+   `s_reusableAgentArray` init and `AvChar`'s refresh path. The frames above are
+   the entry points, and `asserts.py --at` names the file for any address, so
+   the chain can be walked further without a disassembler.
+2. **What does the client already know about a weapon that we never told it?**
+   The `0x006E` mesh renders from `file_id`, so the client resolves an item's
+   real record from `Gw.dat` — which means an attack speed may be a property of
+   the *item type* rather than of anything on the wire, and our `STARTER_HAMMER`
+   is UPSTREAM (OpenTyria's `GmDefaultArmors.c`) with two modifier words nobody
+   in this repo has decoded. Those words are the obvious place a weapon's speed
+   would live.
+3. **Pathing into range**, still ours to write and still needing no client
+   knowledge. It is the only item on this list that cannot fail for a reason we
+   do not understand.
+4. **The revive fix is still untested** — the probe ends the session by design
+   before a kill-and-revive cycle can run, so property 34 has not been seen
+   against a revived body. It needs a session driven by clicks, not a probe.
 
 ---
 
