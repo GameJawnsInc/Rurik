@@ -823,3 +823,73 @@ walks a plain straight line toward it — and is still STOPPED by obstacles. So
 the client does collide on a server-granted destination. An earlier test here
 suggested otherwise; that test had keyboard movement on `MOVE_TO_POINT` as well
 and could not tell the two paths apart.
+
+---
+
+## What the client's own code says (2026-08-05, disassembly)
+
+The first movement facts in this project that are neither a reconstruction nor an
+inference from play. `toolkit/clientscan/msghandler.py` turns an opcode into the
+function that consumes it; the route is a table lookup, not a search, because the
+12-byte receive descriptor the msgtable study recovered carries a dispatch
+pointer as its third member.
+
+### 0x0029 AGENT_MOVE_TO_POINT — both fields identified
+
+```
+0x005fd890   handler
+    builds a local {x = [msg+8], y = [msg+0xc], plane = [msg+0x10], 0}
+    calls 0x00602a40(this = agent, &that, 0, [msg+0x14])
+
+0x00602a40   cmp eax, -1 / je / mov [ebx+0x80], eax
+             [ebx+0x88..0x94] = the point        (first copy)
+             [ebx+0x98]       = arg2
+             [ebx+0x9c..0xa8] = the point again  (second copy)
+             lea esi, [ebx+0x78]  ->  passed to the movement starters
+```
+
+* **First wire word = the DESTINATION's plane.** It is packed into the position
+  struct beside x and y and travels with the point.
+* **Second wire word = the AGENT's CURRENT plane.** It is written to
+  `agent+0x80`, and the agent's own position is `{x @0x78, y @0x7c, plane
+  @0x80}` — which is what `lea esi, [ebx+0x78]` hands to the movement code.
+
+So **OpenTyria's field order is correct** (`plane` then `current_plane`,
+`GameMsg.h:538`) and GWLP-R's `(currentPlane, nextPlane)` is not, for this build.
+Two lineages contradicted each other, both orders were shipped and playtested,
+and the binary settles it.
+
+Corroboration for `+0x80` being a plane that does not depend on either source:
+across the agent module it is used as `add ecx, [esi+0x80]` (indexing per-plane
+data) and `xor eax, [ecx+0x80]` (an equality test).
+
+**-1 means "leave the plane alone", and a server CANNOT say it.** The field is
+msgtable type 4 — "unsigned int, count wire bytes widened to a 4-byte slot" — so
+`0xFFFF` arrives as 65535, not -1. Four of the eight internal callers of
+`0x00602a40` push `-1`; the idiom exists but is unreachable from the wire. A
+server must therefore send a CORRECT current plane, and a wrong one is written
+straight into the agent, after which the client collides against the wrong
+surface. That is the shape of both reported click bugs.
+
+### 0x002A AGENT_UPDATE_DESTINATION is the same call with one more argument
+
+Its handler at `0x005fd930` is byte-identical to `0x0029`'s except for a single
+push: where MOVE_TO_POINT hardcodes `0` for arg2, UPDATE_DESTINATION passes a
+fifth wire field (`[msg+0x18]`, a dword). That argument lands in `agent+0x98`,
+which the internal move re-issuers at `0x00602448` and `0x00602984` deliberately
+preserve by passing `[edi+0x98]` back in.
+
+**NOT YET TRIED**, and the most promising remaining lead for click-to-move. An
+older comment in our own tick code guessed that AGENT_UPDATE_DESTINATION was
+what makes the client animate properly; the disassembly says it is at minimum
+the same movement call with one more server-controlled input.
+
+### The handler table is a general tool now
+
+Any message whose meaning is contested can be resolved this way rather than
+argued about:
+
+    python toolkit/clientscan/msghandler.py 0x0029 --follow
+
+Send-only opcodes report "the client only SENDS this one" instead of failing,
+because send descriptors are 8 bytes and have no dispatch member.
