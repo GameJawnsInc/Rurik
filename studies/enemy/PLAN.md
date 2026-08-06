@@ -605,6 +605,53 @@ this arc, but it was discovered here.
 
 ---
 
+## 6h. Why `0x002D` did nothing, read out of the client — and it is probably not death
+
+`AGENT_PLAYER_DIE` aimed at the player did nothing either. That is four dead
+candidates, so the guessing stopped and the handler got read properly.
+
+The handler resolves the agent's `syncPtr` and calls `0x006025F0` on it. That
+function is twenty instructions and **its entire body is behind one test**:
+
+```
+0x006025F0   mov  esi, ecx                    ; the agent
+             test dword ptr [esi+0x20], 0x20000
+             je   return                      ; <-- flag clear: DO NOTHING AT ALL
+             ...
+             call 0x5FF880
+             fldz
+             fst  dword ptr [esi+0xC8]        ; zero a float pair
+             fstp dword ptr [esi+0xCC]
+             mov  dword ptr [esi+0x4C], 0
+return:      ret
+```
+
+**Bit `0x20000` of the agent's flags word decides whether the message does
+anything.** Every agent we have ever aimed `0x002D` at — a freshly spawned NPC,
+a standing player — was stationary and almost certainly had that bit clear. So
+all three null results are explained by *state*, exactly as the probe's own
+prediction said they would have to be: the message is not inert, we were sending
+it to agents that could not respond to it.
+
+**And the body is not death.** It zeroes a float pair at `+0xC8`/`+0xCC` and
+clears `+0x4C` after a call carrying a literal `6`. A zeroed two-float vector on
+an agent is a velocity or a facing, not a corpse. `0x002D`'s handler and
+`0x0028`'s (`AGENT_STOP_MOVING`) share the identical opening — same context
+fetch, same bounds check, same `Array.h` assert — which puts them in the same
+family.
+
+**Best current reading: `0x002D` cancels something on a moving agent, and
+ldufr's name for it is wrong.** That is a hypothesis with an obvious experiment:
+send it while the character is running. If the character stops dead, the message
+is a movement cancel and death is somewhere else entirely.
+
+**Consequence for the arc.** Death is not any of the five things we have tried.
+An enemy can be spawned, made hostile, and damaged to 1, but nothing in our hands
+can finish it. That is now the single blocking unknown for combat, and the way to
+it is the method from §6g — read the handlers — rather than more packets.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND

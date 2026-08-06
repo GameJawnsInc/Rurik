@@ -677,6 +677,48 @@ def _enemy_damage_steps(agent_id, origin):
     ]
 
 
+def _moving_die_steps(agent_id):
+    """0x002D does nothing to a STANDING agent. Read out of the client, not guessed.
+
+    Its handler resolves the agent's syncPtr and calls 0x006025F0, whose entire
+    body sits behind one test:
+
+        test dword ptr [esi+0x20], 0x20000
+        je   return              <-- flag clear: the function does NOTHING
+
+    Every agent we ever aimed this message at was standing still, so all three
+    null results are explained by state rather than by the message being inert.
+
+    And what the body does is not death. It zeroes a float PAIR at +0xC8/+0xCC
+    and clears +0x4C -- a velocity or a facing, not a corpse -- and the handler
+    shares its entire opening with AGENT_STOP_MOVING (0x0028): same context
+    fetch, same bounds check, same Array.h assert.
+
+    So: RUN THE WHOLE TIME. Both messages fire twice, alternating, while the
+    character is moving. If 0x002D stops you the way 0x0028 does, it is a
+    movement cancel, ldufr's name for it is wrong, and death is somewhere else.
+    """
+    return [
+        Step(6.0, 0x002D, [agent_id],
+             "0x002D (ldufr calls this AGENT_PLAYER_DIE) -- while RUNNING",
+             "KEEP RUNNING. Did you stop dead? Stutter? Nothing? You must be "
+             "moving when this lands or the test is void -- the flag it needs "
+             "is only set on a moving agent."),
+        Step(8.0, 0x0028, [agent_id],
+             "0x0028 AGENT_STOP_MOVING -- the known-meaning comparison",
+             "still running? Whatever this one does to you is the baseline. If "
+             "the previous step felt identical, the two messages are the same "
+             "family and 0x002D is not death."),
+        Step(8.0, 0x002D, [agent_id],
+             "0x002D again -- while RUNNING",
+             "confirm the first result. Once is an anecdote."),
+        Step(8.0, 0x0028, [agent_id],
+             "0x0028 again -- while RUNNING",
+             "confirm the baseline. If these two are indistinguishable across "
+             "both pairs, that is the answer."),
+    ]
+
+
 def _kill_steps(agent_id, origin):
     """The one death candidate the last run could not reach.
 
@@ -886,6 +928,21 @@ PROBES = {
              "damage packet cannot kill, and a positive value crashes the "
              "client on ArenaNet's own `damage.amount <= 0`. See "
              "studies/enemy/PLAN.md.",
+    ),
+    "moving_die": lambda a, o: Probe(
+        question="Does 0x002D do anything to a MOVING agent, and is it really "
+                 "death or just a movement cancel?",
+        predicts="It stops the character, indistinguishably from 0x0028 "
+                 "AGENT_STOP_MOVING. The two handlers share their entire "
+                 "opening, and 0x002D's body zeroes a float pair and clears a "
+                 "state word -- a velocity, not a corpse. If that is what "
+                 "happens, ldufr's AGENT_PLAYER_DIE is a misnomer and death is "
+                 "somewhere else in the catalogue.",
+        steps=_moving_die_steps(a),
+        note="THE PLAYER MUST BE RUNNING for every step or the run is void: the "
+             "handler's whole body is behind `test [agent+0x20], 0x20000`, which "
+             "a standing agent does not satisfy. That single instruction "
+             "explains all three of the null results this probe replaces.",
     ),
     "kill": lambda a, o: Probe(
         question="Does AGENT_PLAYER_DIE kill the PLAYER? It is the one death "
