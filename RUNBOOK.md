@@ -14,6 +14,38 @@ edge, and its questions land in the vault in plaintext.
 
 ## TL;DR — the daily loop
 
+One command, once the one-time setup below has been done:
+
+```bash
+python toolkit/harness/session.py
+```
+
+It pre-flights the ports (a stale listener is named by pid and image;
+`--replace` stops it if it is a python server, and refuses to touch anything
+else), starts all three servers and proves each owns its port, drives the
+client through login → EULA → Play with focus-verified clicks, and judges the
+run from the client's own messages — one `[PASS]`/`[FAIL]` line per checkpoint,
+ending at the spawn request. `--until login` stops sooner, `--serve` runs just
+the stack in one terminal, and the report, server logs and screenshots land in
+`vault/captures/harness/<stamp>/`. The harness's own offline tests:
+
+```bash
+python toolkit/harness/test_harness.py
+```
+
+Two things it knows that the terminals below do not say:
+
+- The game channel is served by a **second authsrv.py instance** — the client
+  declares its channel in its version header, so the same code decodes the game
+  catalog with no extra flag.
+- OBSERVED build 38797 (2026-08-06): the GAME_SERVER_INFO handoff points at
+  6113, and the client opens its game connection to **6112**, where the auth
+  listener self-selects the game catalog. The 6113 instance is kept as
+  insurance in case a build ever honors the host field; the harness asserts on
+  where the events actually land.
+
+### The same loop by hand
+
 Three terminals, in this order. Nothing here needs admin.
 
 ```bash

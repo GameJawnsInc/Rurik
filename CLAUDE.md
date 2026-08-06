@@ -61,6 +61,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   ```
 
   Others: `toolkit/schema/test_codec.py` (codec vs. real captured bytes),
+  `toolkit/harness/test_harness.py` (the one-command stack, the launch safety
+  gate, the live capture tail),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),

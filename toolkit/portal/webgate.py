@@ -39,9 +39,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sessionstore import SessionStore  # noqa: E402
+from vaultpath import vault_path  # noqa: E402
 
-VAULT_DEFAULT = r"C:\gd\Rurik\vault\captures\portal"
+VAULT_DEFAULT = vault_path("captures", "portal")
 
 store = SessionStore()
 
