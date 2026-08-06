@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve a client string id to the text the game displays.
+r"""Resolve a client string id to the text the game displays.
 
 Python 3 standard library only. Read-only on both the client binary and the
 archive; never launches anything.
@@ -36,8 +36,7 @@ THE CHAIN, and what is measured about each step:
 
   archive file id -> MFT row -> decompressed blob    (toolkit/mapdata)
 
-  blob -> records            u16 total_length, u16 aux, u16 kind, then
-                             total_length - 6 bytes of payload.
+  blob -> records            the 6-byte StringHeader, then bytes - 6 of payload.
 
       MEASURED, and the check is the good kind: with this header, **all 99
       language-0 files tile to exactly 1,024 records and a 2-byte tail**, with
@@ -49,24 +48,51 @@ THE CHAIN, and what is measured about each step:
       was the one file gwdat.py could not decompress at all.
 
       Reading the length as a u32 instead -- which is what a first pass did --
-      walks a plausible-looking distance and then stops dead mid-file, because
-      the first record of a kind whose `aux` is non-zero turns into an absurd
-      length. It got 3 files right out of 99 and looked fine on the ones it
-      got.
+      walks a plausible-looking distance and then stops dead mid-file. It got 3
+      files right out of 99 and looked fine on the ones it got.
 
-WHAT A RECORD KIND MEANS is only partly established. Census over language 0:
+THE HEADER IS ArenaNet's OWN, and this file used to guess at two of its three
+fields. The decoder is `P:\Code\Engine\Text\TextDecode.cpp` at VA 0x007cb000,
+and it opens by asserting `data->bytes >= sizeof(StringHeader)` against a
+compare with 6. Reading it settled the layout (see studies/textrec/FINDINGS.md):
 
-      kind 0x07  66,330  65.4%  the majority. High-entropy payload, `aux`
-                                non-zero and varying -- shaped like a
-                                per-record compression with `aux` as the
-                                decoded size. NOT ESTABLISHED.
-      kind 0x10  28,410  28.0%  plain UTF-16LE. This is what `get()` returns.
-      kind 0x06   5,735   5.7%      kind 0x05  879  0.9%
-      kind 0x08      16          kind 0x0D    4     kind 0x0E  2
+      +0  u16 bytes    total record length, header included
+      +2  u16 base     base codepoint for the symbol alphabet
+      +4  u8  bits     bit width of a packed symbol, 1..0x10
+      +5  u8  (zero in all 101,376 language-0 records)
 
-`get()` returns None for any kind it cannot decode, rather than handing back
-bytes dressed as a string. An id that resolves is trustworthy; an id that does
-not is reported missing, not invented.
+`bits` is what this file used to call `kind`, and calling it a kind was the
+mistake that made the census below look like a taxonomy. It is a **bit width**.
+The client's own file walker range-checks it -- `cmp byte ptr [edi+4], 0x10;
+ja invalid` -- which is a bound that makes sense for a width and none at all
+for a type tag. Corroboration our decoder cannot force: the Korean, Japanese
+and Chinese files are almost entirely `bits == 0x10` where the English file at
+the same index is mostly `bits == 7`, because a wide script needs wide symbols.
+
+A record decodes as: read `bits` bits at a time, LSB-first, then map
+symbol 0 to U+0000, symbols 1..31 through a 32-entry table in the image, and
+symbols >= 0x20 to `base - 0x20 + symbol`.
+
+BUT ONLY ONE FORM IS READABLE FROM THE ARCHIVE ALONE. The client takes a
+verbatim path only when `base == 0 and bits == 0x10`, which is plain UTF-16LE
+and is 28% of records. Every other record is **RC4 ciphertext**
+(`P:\Code\Base\Crypt\CptRc4.cpp`), decrypted with a key the *caller* supplies
+and that is not stored in the record. Payload entropy is 8.000 bits/byte over
+4.9 MB, and 17 readings of "the key is a function of the record's identity"
+were refuted at scale. Census over language 0:
+
+      bits 0x07  66,330  65.4%   encrypted
+      bits 0x10  28,410  28.0%   28,407 plain (base 0); 3 encrypted (base != 0)
+      bits 0x06   5,735   5.7%   encrypted
+      bits 0x05     879   0.9%   encrypted
+      bits 0x08  16   bits 0x0D  4   bits 0x0E  2      all encrypted
+
+This is not a gap in our reading of the format -- the format is now read all
+the way down -- it is a key we do not have. `decode()` below implements the
+whole codec and will produce the text the moment a key turns up; `get()` still
+returns None for encrypted records rather than handing back bytes dressed as a
+string. An id that resolves is trustworthy; an id that does not is reported
+missing, not invented.
 """
 
 from __future__ import annotations
@@ -78,8 +104,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mapdata"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "authsrv"))
 from gwpe import PE  # noqa: E402
 from archive import Archive, file_id_table, DEFAULT_DAT  # noqa: E402
+# The text records and the game channel use the SAME two primitives. Not a
+# guess: the five folded round constants at Gw.exe 0x909db8 are exactly what
+# arc4_hash's spec produces (see test_textrec.py section 5), so this import is
+# a measured identity, not a convenience. Reusing it also means the cipher on
+# this path is one a real client has already accepted during a handshake.
+from gwcrypto import arc4_hash, ARC4  # noqa: E402
 
 RECORDS_PER_FILE = 1024
 FILES_PER_LANGUAGE = 99
@@ -87,8 +120,23 @@ LANGUAGES = 11
 POINTER_COUNT = FILES_PER_LANGUAGE * LANGUAGES   # 1089
 REF_BIAS = 0x100
 REF_STRIDE = 0xFF00
-KIND_TEXT = 0x0010
 HEADER_SIZE = 6
+
+# The widest symbol the client will accept, from its own range check on the
+# file walk at Gw.exe 0x7ca382. A record declaring more is rejected outright
+# with "Invalid text string file data at language %u string %u".
+MAX_BITS = 0x10
+KIND_TEXT = MAX_BITS          # kept: callers predate the bit-width reading
+
+# Symbols below this index come from the escape table; at or above it they are
+# `base - ESCAPE_COUNT + symbol`. Both from Gw.exe 0x7cb23a-0x7cb251.
+ESCAPE_COUNT = 0x20
+
+# The assert path string the escape table sits directly in front of. An
+# assertion-string anchor is the most durable kind against a client update
+# (studies/datwrite/FINDINGS.md measured 94.7% survival), which is why the
+# table is found this way and not at a build-specific address.
+TEXTDECODE_CPP = rb"P:\Code\Engine\Text\TextDecode.cpp"
 
 DEFAULT_EXE = r"C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe"
 
@@ -148,20 +196,147 @@ def walk(blob: bytes):
     """Split a decompressed text file into records.
 
     Returns (records, trailing, tiled). `records` is a list of
-    (kind, aux, payload); `tiled` says the walk consumed the blob down to
+    (bits, base, payload); `tiled` says the walk consumed the blob down to
     exactly the 2-byte (language, file) tail. A short walk is reported, never
-    smoothed over -- it means a record kind is framed in a way we do not know.
+    smoothed over -- it means a record is framed in a way we do not know.
+
+    The tuple keeps the shape it had when the first element was called `kind`;
+    only the meaning is corrected. See the module docstring.
     """
     recs = []
     p = 0
     end = len(blob)
     while p + HEADER_SIZE <= end:
-        length, aux, kind = struct.unpack_from("<HHH", blob, p)
+        length, base, bits = struct.unpack_from("<HHH", blob, p)
         if length < HEADER_SIZE or p + length > end:
             break
-        recs.append((kind, aux, blob[p + HEADER_SIZE:p + length]))
+        recs.append((bits, base, blob[p + HEADER_SIZE:p + length]))
         p += length
     return recs, blob[p:], len(blob) - p == 2
+
+
+def find_escape_table(pe: PE) -> int:
+    """File offset of the 32-entry symbol escape table.
+
+    Anchored on ArenaNet's own assert path string rather than an address: the
+    table is the 64 bytes ending at the last non-zero u16 before
+    `P:\\Code\\Engine\\Text\\TextDecode.cpp`, which is the string the module's
+    asserts name. That bounds the array on BOTH sides -- padding and a known
+    string above it, its own entry 0 below -- so a wrong answer cannot merely
+    "look long enough".
+
+    Raises rather than guessing. A silently wrong table would swap characters
+    without changing a single length, which is the failure mode that would
+    survive every other check in this file.
+    """
+    hits = pe.find(TEXTDECODE_CPP)
+    if len(hits) != 1:
+        raise LookupError(
+            f"expected exactly one {TEXTDECODE_CPP.decode()} in the image, "
+            f"found {len(hits)}; do not fall back to a hardcoded address")
+    off = hits[0]
+    # Step back over the alignment padding. `off` then sits on the first pad
+    # word, one past the last entry, so the table starts a whole table below.
+    while off >= 2 and struct.unpack_from("<H", pe.data, off - 2)[0] == 0:
+        off -= 2
+    start = off - 2 * ESCAPE_COUNT
+    if start < 0:
+        raise LookupError("escape table runs off the front of the image")
+    table = list(struct.unpack_from(f"<{ESCAPE_COUNT}H", pe.data, start))
+    # Invariants the artifact can refute: slot 0 is the unused NUL slot (the
+    # decoder branches around it), and every other slot is a distinct
+    # printable-ASCII character.
+    if table[0] != 0:
+        raise LookupError(f"escape slot 0 is 0x{table[0]:04x}, expected 0")
+    body = table[1:]
+    if len(set(body)) != len(body):
+        raise LookupError("escape table has duplicate entries")
+    if not all(c == 0x0A or 0x20 <= c < 0x7F for c in body):
+        raise LookupError("escape table holds a non-printable entry")
+    return start
+
+
+def escape_table(pe: PE) -> list[int]:
+    """The 32 escape characters, read out of the image every time.
+
+    Never hardcoded. These are ArenaNet's bytes and the provenance gate is
+    absolute -- and a table transcribed into source would also go stale
+    silently on the next client build.
+    """
+    return list(struct.unpack_from(f"<{ESCAPE_COUNT}H", pe.data,
+                                   find_escape_table(pe)))
+
+
+def is_plain(bits: int, base: int) -> bool:
+    """Does the client copy this record's payload out verbatim?
+
+    Gw.exe 0x7cb16a-0x7cb173 takes the memcpy path only when the base is zero
+    AND the width is 16. Both conditions, which is why 3 records with
+    `bits == 0x10` and a non-zero base are NOT plain text.
+    """
+    return base == 0 and bits == MAX_BITS
+
+
+def unpack_symbols(bits: int, payload: bytes) -> list[int]:
+    """The client's bit reader, Gw.exe 0x7cb1d5-0x7cb230.
+
+    Symbol count is `len(payload) * 8 // bits + 1` -- the client's own
+    `shl eax,3; div ecx; inc eax`, so the last symbol may read past the end.
+    Past the end the accumulator takes zeroes, exactly as the client's refill
+    loop does when its source pointer has reached the terminator.
+    """
+    if not 1 <= bits <= MAX_BITS:
+        raise ValueError(f"bit width {bits} outside the client's own 1..0x10")
+    count = (len(payload) * 8) // bits + 1
+    mask = (1 << bits) - 1
+    acc = avail = pos = 0
+    out = []
+    for _ in range(count):
+        while avail <= 24:                    # cmp eax, 0x18 / jbe
+            if pos < len(payload):
+                acc |= payload[pos] << avail
+            pos += 1
+            avail += 8
+        out.append(acc & mask)
+        acc >>= bits
+        avail -= bits
+    return out
+
+
+def map_symbols(symbols, base: int, escape) -> str:
+    """Symbols to characters, Gw.exe 0x7cb232-0x7cb251."""
+    return "".join(
+        chr(0 if s == 0 else
+            escape[s] if s < ESCAPE_COUNT
+            else (base - ESCAPE_COUNT + s) & 0xFFFF)
+        for s in symbols)
+
+
+def record_key(pair) -> bytes:
+    """The RC4 key for one record, from the 8-byte pair the caller holds.
+
+    Gw.exe 0x7cb034: the two dwords are hashed as an 8-byte buffer repeated to
+    20 bytes, and the result is the ARC4 key. `pair` is (u32, u32).
+    """
+    raw = struct.pack("<II", pair[0] & 0xFFFFFFFF, pair[1] & 0xFFFFFFFF)
+    return arc4_hash(bytes(raw[i % len(raw)] for i in range(20)))
+
+
+def decode(bits: int, base: int, payload: bytes, escape, key_pair=None):
+    """One record to text, or None if it needs a key we were not given.
+
+    This is the whole of `TextDecode.cpp`'s decoder. With `key_pair` it also
+    runs the RC4 step the client runs for every non-plain record.
+    """
+    if is_plain(bits, base):
+        try:
+            return payload.decode("utf-16-le")
+        except UnicodeDecodeError:
+            return None
+    if key_pair is None:
+        return None
+    plain = ARC4(record_key(key_pair)).crypt(payload)
+    return map_symbols(unpack_symbols(bits, plain), base, escape)
 
 
 class TextIndex:
@@ -178,6 +353,7 @@ class TextIndex:
                 "to a hardcoded address.")
         self.table_off = table
         self.table_va = self.pe.off_to_rva(table) + self.pe.image_base
+        self.escape = escape_table(self.pe)
         self.archive = Archive(dat)
         self.file_ids = file_id_table(self.archive)
         self._rows = {e.index: e for e in self.archive.entries}
@@ -223,25 +399,37 @@ class TextIndex:
             self._cache[file_index] = recs
         return self._cache[file_index]
 
-    def get(self, string_id: int):
-        """The text for a string id, or None if we could not reach it."""
+    def record(self, string_id: int):
+        """(bits, base, payload) for a string id, or None if unreachable."""
         recs = self.records(string_id // RECORDS_PER_FILE)
         idx = string_id % RECORDS_PER_FILE
-        if idx >= len(recs):
+        return recs[idx] if idx < len(recs) else None
+
+    def get(self, string_id: int, key_pair=None):
+        """The text for a string id, or None if we could not reach it.
+
+        Without `key_pair` this answers for plain records only, which is every
+        string id any table in `Gw.exe` actually points at (MEASURED: 11,208 of
+        the 11,217 ids in the skill and area tables, the other 9 belonging to
+        three dead skill rows whose every stat is zero). Encrypted records
+        return None rather than a plausible-looking string.
+        """
+        rec = self.record(string_id)
+        if rec is None:
             return None
-        kind, _aux, payload = recs[idx]
-        if kind != KIND_TEXT:
-            return None
-        try:
-            return payload.decode("utf-16-le")
-        except UnicodeDecodeError:
-            return None
+        bits, base, payload = rec
+        return decode(bits, base, payload, self.escape, key_pair)
+
+    def needs_key(self, string_id: int):
+        """True if this id is RC4-encrypted, False if plain, None if absent."""
+        rec = self.record(string_id)
+        return None if rec is None else not is_plain(rec[0], rec[1])
 
     def kind_of(self, string_id: int):
-        """The record kind behind a string id, or None if unreachable."""
-        recs = self.records(string_id // RECORDS_PER_FILE)
-        idx = string_id % RECORDS_PER_FILE
-        return recs[idx][0] if idx < len(recs) else None
+        """The record's `bits` field. Named for callers that predate the
+        bit-width reading; `record()` is the honest accessor."""
+        rec = self.record(string_id)
+        return None if rec is None else rec[0]
 
 
 def main() -> int:
@@ -263,15 +451,19 @@ def main() -> int:
                       f"{ix.get(sid)!r}")
             return 0
 
+        print(f"escape table at file 0x{find_escape_table(ix.pe):06x}, "
+              f"{ESCAPE_COUNT} entries, anchored on the TextDecode.cpp assert")
+
         # No ids given: census the language and report coverage honestly.
-        kinds: dict[int, int] = {}
+        widths: dict[tuple, int] = {}
         walked = 0
         for fi in range(FILES_PER_LANGUAGE):
             recs = ix.records(fi)
             if len(recs) == RECORDS_PER_FILE:
                 walked += 1
-            for k, _aux, _p in recs:
-                kinds[k] = kinds.get(k, 0) + 1
+            for bits, base, _p in recs:
+                key = (bits, is_plain(bits, base))
+                widths[key] = widths.get(key, 0) + 1
         print(f"  {walked} of {FILES_PER_LANGUAGE} files tile to exactly "
               f"{RECORDS_PER_FILE} records and a 2-byte tail")
         short = {k: v for k, v in ix.short_files.items() if v >= 0}
@@ -281,12 +473,16 @@ def main() -> int:
         if undec:
             print(f"  {len(undec)} would not decompress "
                   f"(gwdat.py's huffman table hole): {sorted(undec)}")
-        print("  record kinds:")
-        total_recs = sum(kinds.values())
-        for k in sorted(kinds, key=lambda k: -kinds[k]):
-            note = "  plain UTF-16" if k == KIND_TEXT else ""
-            print(f"      0x{k:02x}  {kinds[k]:>6}  "
-                  f"{100.0 * kinds[k] / total_recs:5.1f}%{note}")
+        print("  symbol widths:")
+        total_recs = sum(widths.values())
+        for k in sorted(widths, key=lambda k: -widths[k]):
+            bits, plain = k
+            note = "  plain UTF-16" if plain else "  RC4, key not in the record"
+            print(f"      {bits:>2} bits  {widths[k]:>6}  "
+                  f"{100.0 * widths[k] / total_recs:5.1f}%{note}")
+        readable = sum(v for k, v in widths.items() if k[1])
+        print(f"  {readable} of {total_recs} records "
+              f"({100.0 * readable / total_recs:.1f}%) are readable without a key")
     return 0
 
 
