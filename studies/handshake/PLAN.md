@@ -164,7 +164,13 @@ Several of these are interesting beyond `-authsrv`:
   which reads like dynamic `LoadLibrary` of a DLL matched by pattern rather than a static import.
   If this flag accepts an arbitrary path, substituting our own portal DLL may be dramatically
   cheaper than implementing the real auth protocol. **This is the most valuable lead in this file.**
-- **`mock`** — unexplained. A developer mock mode would be extraordinarily valuable.
+- ~~**`mock`** — unexplained. A developer mock mode would be extraordinarily valuable.~~
+  **Closed: it is a mock *graphics device*.** Three strings in the image contain "mock" —
+  `mockDevice`, the flag itself, and `MockDevice` among a run of window names — and the one assert
+  site is `MainCli:176 mockDevice`, in `Gw\Main\MainCli.cpp`'s argument handling. No offline mode,
+  no mock server. The salvage is real though: a null render device is what you want for running
+  many clients at once during capture. See
+  [studies/srvtree/FINDINGS.md](../srvtree/FINDINGS.md) §7.
 - **`port`** — a port override distinct from `authsrv`, so the endpoint is likely `<host>` + `<port>`.
 - **`map`, `resetmap`, `autologin`, `noui`, `stress`, `fqdn`/`nofqdn`** — all plausibly relevant to
   driving a client at scale for the capture campaign (see the capture arc).
@@ -396,11 +402,13 @@ rotate per build (§0.4), so a patched copy from last week keys to nothing.
 - Run the three probes (§5). Everything else in this arc is downstream of them.
 - Read `ldufr/OpenTyria`'s `tools/webgate.py` and treat it as the reference Stage A. Confirm its
   `tools/patch-gw.py` byte pattern still matches our pinned build before relying on it.
-- Find out what `-mock` does. It is the last unexplained flag with real upside.
 - Establish whether `DispatchStream` is the message chokepoint (capture arc, not this one).
 
 Closed since the first revision: `-portaldll` is dead code; `GwLoginClient.dll` is not on the
-client's login path; the flag-table delta against public documentation is recorded in §3.
+client's login path; the flag-table delta against public documentation is recorded in §3; and
+**`-mock` is a mock graphics device, not a mock server** (§3, and
+[studies/srvtree/FINDINGS.md](../srvtree/FINDINGS.md) §7) — which retires the last unexplained flag
+in the table and leaves the argument list with no remaining leads on it.
 - Confirm whether `DispatchStream` is the message chokepoint (capture arc, not this one).
 
 ---

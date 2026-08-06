@@ -251,6 +251,34 @@ yourself"), spawn placement, drop tables, and AI decision logic. **Four things, 
 **Consequence:** the capture campaign gets much more sharply targeted. Capture what is genuinely
 server-only; extract the rest.
 
+### 1.8 There *was* a server binary, and the client is one half of its source tree
+
+HANDOFF.md §1 opens *"There is no server binary. There never was one to have."* The first sentence
+is true of what we can hold. The second is false, and correcting it changes the shape of the work.
+
+`Gw.exe` carries **937 distinct `P:\Code\…` source paths** — ArenaNet's own build-machine paths,
+left in the image by `assert()` and a few other macros **[measured, on both vaulted builds]**. Every
+gameplay subsystem in them sits under a client marker: `Gw\Char\Cli\ChCliApi.cpp`,
+`Gw\Item\Cli\ItCliApi.cpp`, `Gw\Party\Cli\PyCliParty.cpp`, `Gw\Main\MainCli.cpp`. **Twelve
+subsystems ship a `Cli` half and nothing else**, and **no path in either image lies under a `Srv\`
+directory** — six spellings checked, zero hits, on two builds four months apart. The linker's own
+PDB path agrees from the other side: `P:\Code\.build\target\Gw\vs2022\builder_x32\bin\Gw.pdb`, one
+`.build` with a directory per target.
+
+So the client and the server were **two build targets over one source tree**, and the shipped client
+is the `Cli` half. That is a materially better position than inventing from nothing, because it says
+exactly which of ArenaNet's code we can read: `Base\`, `Engine\`, `Net\` and `Gw\Const\` carry no
+Cli/Srv split at all, so both targets compiled them. `Net\Msg\` is the transport both ends spoke —
+which is why §1.2's message-table dump worked. `Engine\Agent\` is the agent *model* (the client's
+own `Gw\AgentView\` is only its rendering), and `Engine\Map\Path\` is R3's authority.
+
+**Consequence:** "reconstruct the server binary" is the wrong target and always was. The right one
+is the `Srv` half of `P:\Code`, which decomposes into transport (recovered), constants (readable),
+agent model and pathing (readable, shared engine), and twelve subsystem halves — narrowed further by
+§1.7's four genuinely server-only behaviours. Full census, method and limits:
+[studies/srvtree/FINDINGS.md](studies/srvtree/FINDINGS.md), checked by
+`toolkit/clientscan/test_srctree.py`.
+
 ---
 
 ## 2. The go/no-go probes
@@ -296,8 +324,14 @@ Build it, seed the SQLite database, generate DH params, patch a *copy* of the cl
 `webgate.py`, connect. **Success is a character standing in a map on your own server** — HANDOFF's
 R2, in week one instead of year one. Even total failure is cheap and teaches you the stack.
 
-**Probe 5 — is `-mock` anything?** *(hours)*
-The last unexplained flag with real upside. A developer offline mode would be worth a lot.
+**Probe 5 — is `-mock` anything?** ❌ **Answered NO, statically, no launch needed.** It selects a
+mock *graphics device*. Exactly three strings in the image contain "mock" — `mockDevice` (ASCII),
+the flag `mock`, and `MockDevice` sitting in a run of window names (`BtnExit`, `BtnRestore`,
+`BtnMin`, `Game`, `UiRoot`) — and the single assert site naming it is `MainCli:176 mockDevice`,
+inside `Gw\Main\MainCli.cpp`'s argument handling **[measured]**. There is no offline mode and no
+mock server. Salvage: a null render device belongs on the capture-arc list next to `-noui`,
+`-nosound` and the mutex NOP, for running many clients at once.
+[studies/srvtree/FINDINGS.md](studies/srvtree/FINDINGS.md) §7.
 
 ---
 
