@@ -78,6 +78,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
+  `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
+  vaulted builds — and it proves its own negative result can go red first),
   `toolkit/clientscan/test_codescan.py` (the attack-speed chain, and the two
   decoding traps that hid it — needs capstone).
 - **Find the vault with `toolkit/vaultpath.py`, never with `../../vault`.** A git

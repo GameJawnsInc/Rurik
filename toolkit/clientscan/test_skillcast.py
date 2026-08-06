@@ -43,6 +43,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import asserts as A                                          # noqa: E402
 import msgshape as MS                                        # noqa: E402
 import genericvalue as GV                                    # noqa: E402
+import avevents as AV                                        # noqa: E402
 from vaultpath import vault_path, vault_root, vault_why      # noqa: E402
 
 BUILD = 38797
@@ -237,7 +238,77 @@ BYTES = [
      "property 35 loads a compiled-in float constant"),
     (0x00813239, "d94514",
      "where property 63 takes its float from the wire -- same callee"),
+    # -- section 16, the four things section 15.4 left open ---------------
+    (0x0081295F, "837df8017407",
+     "the AgentView switches run only when the agent resolves to type 1 -- "
+     "cmp [ebp-8], 1; je"),
+    (0x00812965, "33c9894dfceb14",
+     "and any other type discards the resolved object and skips them"),
+    (0x0081BD86, "83f805740a83f833740583f83d7509",
+     "the float dispatcher's AgentView switch compares the property id "
+     "against 5, 51 and 61 -- so 5 and 51 are NOT unhandled"),
+    (0x0081BD98, "d99924010000",
+     "and all three store the wire float at agentObject+0x124"),
+    (0x0081BCFB, "83c801",
+     "property 8 with a non-zero value SETS bit 0 of agentObject+0x64 ..."),
+    (0x0081BD11, "83e0fe",
+     "... and with zero CLEARS it: GWCA's `disabled`, a 1/0 flag"),
+    (0x0081BCE1, "d9eed99e24010000",
+     "properties 4, 50 and 60 zero +0x124, so a cast-time modifier sent "
+     "BEFORE the cast-start property is discarded"),
+    (0x00818185, "745e",
+     "the int pre-store switches on only three ids -- it is not the "
+     "universal record write section 6 claimed"),
+    (0x00818207, "c20800",
+     "and its default returns without storing anything at all"),
+    (0x008129B6, "f6863c05000002",
+     "both dispatchers gate the MAIN switch on bit 1 of charContext+0x53C"),
+    (0x008130C2, "f6873c05000002",
+     "the float one at the same offset"),
+    (0x007F76D3, "6a19",
+     "property 60 queues AgentView ACTION event kind 0x19 ..."),
+    (0x007F76D5, "e8b6b7ffff",
+     "... by calling the action allocator at 0x007F2E90"),
+    (0x007F2EA2, "8917",
+     "which writes the kind to event+0x00"),
+    (0x007F5352, "8913",
+     "and the effect allocator at 0x007F5340 does the same"),
+    (0x00816CF5, "8b402c8b80a4060000",
+     "one accessor reads charContext+0x6A4, the slot property 64 fills"),
+    (0x004D33E3, "3907",
+     "and CharCreate.cpp compares a UI payload's first dword against it"),
+    (0x007F7C4F, "889113010000",
+     "property 66 writes a BYTE to AvChar+0x113 ..."),
+    (0x007F7C4C, "885007",
+     "... and the same byte to +7 of the record at AvChar+0x108, where "
+     "property 65 writes +5"),
+    (0x007F7BE5, "885a05",
+     "property 65's +5, for comparison -- and it is guarded on a change"),
 ]
+
+# ---------------------------------------------------------------- section 7
+# property id -> (queue, AgentView event kind). MEASURED by avevents.py walking
+# case body -> AvApi -> AvChar and reading the `push <kind>` that feeds the
+# allocator. This is the second, independent grouping section 15.4 asked for:
+# the ids are the wire vocabulary the reconstructions argue about, the kinds are
+# the client's internal one, and the started/finished/stopped trios line up in
+# both. Property 22 branches four ways and this records only the fall-through --
+# see avevents.py's docstring.
+EVENT_KINDS = {
+    1: ("action", 0x00), 2: ("action", 0x01), 3: ("action", 0x02),
+    4: ("action", 0x03), 6: ("effect", 0x00), 7: ("effect", 0x00),
+    9: ("effect", 0x01), 13: ("action", 0x0F), 16: ("effect", 0x02),
+    17: ("effect", 0x02), 18: ("effect", 0x02), 20: ("effect", 0x09),
+    21: ("effect", 0x09), 22: ("action", 0x07), 28: ("action", 0x05),
+    32: ("effect", 0x0F), 35: ("effect", 0x13), 37: ("effect", 0x06),
+    38: ("effect", 0x07), 39: ("action", 0x0D), 41: ("effect", 0x0E),
+    42: ("effect", 0x0E), 43: ("effect", 0x0F), 44: ("effect", 0x0F),
+    46: ("action", 0x11), 47: ("action", 0x12), 49: ("action", 0x13),
+    50: ("action", 0x15), 52: ("effect", 0x0B), 53: ("effect", 0x0B),
+    54: ("effect", 0x0D), 55: ("effect", 0x0B), 56: ("effect", 0x0B),
+    58: ("action", 0x16), 59: ("action", 0x17), 60: ("action", 0x19),
+    61: ("action", 0x18), 62: ("effect", 0x10), 63: ("effect", 0x13),
+}
 
 
 def main():
@@ -316,7 +387,7 @@ def main():
     eq(len(ints), 47, "int dispatcher case bodies")
     eq(len(floats), 14, "float dispatcher case bodies")
     eq(len(pre), 2, "handled only by the int pre-switch")
-    eq(sorted(none), [5, 8, 40, 51], "handled by neither")
+    eq(sorted(none), [5, 8, 40, 51], "no case body in either MAIN switch")
     both = GV.handled(gimg, GV.INT_SWITCH) & GV.handled(gimg, GV.FLOAT_SWITCH)
     check(not both, "the two switches are DISJOINT", f"overlap {sorted(both)}")
     eq(len(ints | floats | pre | none), 67, "and together they cover every id")
@@ -334,6 +405,47 @@ def main():
     eq(sorted(shared), [4, 50, 60], "the pre-switch groups exactly 4, 50, 60")
     check(presw[4] != GV.PRE_SWITCH["default"],
           "and that group is a real body, not the fall-through")
+
+    # -- the correction section 16 forced. Modelling three of the seven
+    # switches gave a self-consistent, wrong answer for three ids.
+    cons = GV.consumers(gimg)
+    eq(GV.handled_by_nothing(gimg), [40],
+       "acted on by NO switch at all -- 5, 8 and 51 are NOT in this set")
+    eq(sorted(cons[5]), ["float-agentview"], "property 5 is acted on")
+    eq(sorted(cons[51]), ["float-agentview"], "property 51 likewise")
+    eq(sorted(cons[8]), ["int-agentview"], "property 8, on the int side")
+    eq(sorted(cons[61]), ["float-agentview", "float-main"],
+       "and 61 shares 5 and 51's case body as well as having its own")
+    eq(sorted(GV.chain_ids(gimg, GV.CHAINS[1])), [5, 51, 61],
+       "the float compare chain still encodes exactly those three ids")
+    eq(sorted(GV.chain_ids(gimg, GV.CHAINS[0])), [32, 41, 42],
+       "and the int pre-store exactly these")
+    for va, ok in GV.gate_bytes(gimg):
+        check(ok, f"the main-switch gate at 0x{va:08x} is where we left it")
+
+    print("\n7. The AgentView event each property queues")
+    aimg = AV.Image(exe)
+    kinds, unresolved = AV.census(aimg)
+    eq(sum(len(v) for v in kinds["action"].values()) + 1, 24,
+       "action allocator call sites resolved")
+    eq(len(kinds["action"]), 22, "distinct action event kinds")
+    eq(len(kinds["effect"]), 20, "distinct effect event kinds")
+    eq(sorted(kinds["effect"]), list(range(20)),
+       "the effect kinds are dense, 0x00..0x13")
+    eq([(w, hex(s)) for w, s in unresolved], [("effect", "0x7f7a1d")],
+       "exactly one site refuses to resolve, and it is named")
+    got = {i: (w, k) for i, h in AV.by_property(aimg).items()
+           for w, k, _p in h}
+    eq(got, EVENT_KINDS, "property -> AgentView event kind")
+    # The structural result: three families of three, each contiguous in the
+    # kind space. This is what corroborates GWCA's started/finished/stopped
+    # naming from a direction no catalogue reaches.
+    eq([EVENT_KINDS[i][1] for i in (4, 1, 3)], [0x03, 0x00, 0x02],
+       "attack: started / finished / stopped")
+    eq([EVENT_KINDS[i][1] for i in (50, 46, 49)], [0x15, 0x11, 0x13],
+       "attack skill: the same three, same order")
+    eq([EVENT_KINDS[i][1] for i in (60, 58, 59)], [0x19, 0x16, 0x17],
+       "skill: and again")
 
     print()
     if FAILED:
