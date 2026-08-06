@@ -1686,6 +1686,34 @@ bad write is recoverable."* After the repair:
 other side valid, addressable and playable. Arm C is now much less interesting
 than it was — we have watched the repair path run and survive it.
 
+**A free test for the next session, stated now so it cannot be rationalised
+afterwards.** The unclean-shutdown hypothesis makes a sharp prediction. The three
+launches so far:
+
+| Launch | Ended | Logged `Repairing corrupt archive` at start? |
+|---|---|---|
+| 1 — planted bad crc | crash, exit 1 | no |
+| 2 — stored icons | crash, exit 1 | **yes** |
+| 3 — clean controls | **clean, exit 0** | no |
+
+Launch 2 logged it and was preceded by a crash; launch 3 did not and was preceded
+by a crash too — *which already strains the hypothesis*. Either the trigger is not
+simply "the last session crashed", or the repair itself cleared the flag and
+launch 3 inherited a clean one. Those are distinguishable:
+
+> **PREDICTION:** the next launch, following launch 3's **clean** exit, logs **no**
+> `Repairing corrupt archive`. If it does log one, the trigger has nothing to do
+> with shutdown cleanliness and the hypothesis is dead.
+
+Cost: read one line of `Gw.log` next time the client runs, for any reason.
+
+**And a third independent confirmation of the self-crc rule.** Each of the three
+sessions left the table in a state that had never existed, and the client wrote a
+different self-crc each time — `0xDB258D15`, `0x2A16CEC7`, `0x5AF54752`. Our rule
+predicted all three, plus the shipped value it was derived from. A reconstruction
+that survives four novel inputs from the original implementation is no longer a
+reconstruction in any interesting sense.
+
 ### A correction to §2 of the skills study's icon finding
 
 The two icon fields are not rival guesses at one asset. MEASURED from the ATEX
