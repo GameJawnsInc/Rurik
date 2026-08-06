@@ -535,6 +535,89 @@ def _npc_agent_steps(agent_id, origin):
     ]
 
 
+def _npc_allegiance_steps(agent_id, origin):
+    """Is the team token an IDENTITY compared between agents, not a magic word?
+
+    The first allegiance probe guessed at magic values and was confounded by
+    spawning player-class bodies. This one is built on a reading of the client
+    binary instead, and it changes the question.
+
+    MEASURED in Gw.exe (build 38797, static, file never executed):
+
+      - 'play' -- the token this server has always sent, and which three
+        lineages agree on -- appears NOWHERE in the image as a dword constant.
+        Not once. The client cannot be comparing the field against it.
+      - The only allegiance-shaped constants in the whole binary are 'nonc' and
+        'nonn', and they occur in exactly one function, which is four
+        instructions long:
+
+            0x1AB130   mov  eax, [ebp+8]
+                       cmp  eax, 'nonc'  ; 0x6E6F6E63
+                       je   yes
+                       cmp  eax, 'nonn'  ; 0x6E6F6E6E
+                       je   yes
+                       xor  eax, eax     ; return 0
+            yes:       mov  eax, 1
+
+    So the field is an opaque team IDENTITY, and 'play' works for the player not
+    because the client knows the word but because the player's own agent carries
+    the same value -- equality makes them allies. On top of that, the client
+    special-cases exactly two values, and 'non-combatant' is the obvious reading
+    of both.
+
+    THE HYPOTHESIS: same token as the player = ally; 'nonc'/'nonn' = neutral and
+    unattackable whatever the player's token is; anything else = a different
+    team, and therefore an enemy.
+
+    That predicts step 6 is the hostile one -- not because 'mons' is a magic
+    word, but precisely because it is NOT one. Any unrecognised value should do,
+    and if the hypothesis is right the specific bytes are irrelevant.
+
+    Agents arrive ONE AT A TIME, eight seconds apart, because they share a
+    definition and therefore a name -- there is no way to label them on screen
+    the way the player-class probe labelled its bodies, so order in time is the
+    label. Watch each one appear.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    tokens = [
+        (0x706C6179, "'play' -- the player's own token",
+         "an ALLY. Same team as you, so equality should make it friendly."),
+        (0x6E6F6E63, "'nonc' -- the client's own constant",
+         "NEUTRAL. This is one of the two values that function accepts."),
+        (0x6E6F6E6E, "'nonn' -- the client's other constant",
+         "also neutral. Any difference from the last one is the whole reason "
+         "the client bothers to distinguish them."),
+        (0x6D6F6E73, "'mons' -- a value the client has never seen",
+         "THE TEST. Under the hypothesis this is an ENEMY: red nameplate, red "
+         "compass dot, and targetable as a foe. The bytes themselves should not "
+         "matter -- being unrecognised is the whole point."),
+    ]
+    spots = [(ox + 300, oy), (ox, oy + 300), (ox - 300, oy), (ox, oy - 300)]
+    steps = [
+        Step(2.0, 0x0056,
+             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {h['definition']} (Hatcher, known good)",
+             "nothing yet."),
+        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {h['definition']}",
+             "nothing yet. All four bodies below share this one definition, so "
+             "they will all look like Hatcher and all carry his name."),
+    ]
+    for i, ((token, label, expect), (x, y)) in enumerate(zip(tokens, spots)):
+        steps.append(Step(
+            8.0, 0x0020,
+            _create_agent(4 + i, CHAR_CLASS_MONSTER_BASE | h["definition"],
+                          AGENT_KIND_NPC, x, y, plane, token=token),
+            f"agent {4 + i}, token {label}",
+            f"a Hatcher appears. Expected: {expect} Note its NAMEPLATE COLOUR "
+            f"and its COMPASS DOT COLOUR, and try clicking it. This is an "
+            f"outpost so attacking may be refused whatever the answer -- colour "
+            f"is the signal that still works here."))
+    return steps
+
+
 def _team_token_steps(agent_id):
     # Not a packet probe: the token now goes out at spawn. This exists so the
     # run is recorded with a question attached rather than being assumed fine.
@@ -631,6 +714,24 @@ PROBES = {
              "damage packet cannot kill, and a positive value crashes the "
              "client on ArenaNet's own `damage.amount <= 0`. See "
              "studies/enemy/PLAN.md.",
+    ),
+    "npc_allegiance": lambda a, o: Probe(
+        question="Is the team token an opaque identity compared between agents, "
+                 "rather than a magic value the client recognises?",
+        predicts="Agents 4 and 5 and 6 read as friendly or neutral; agent 7, "
+                 "carrying a token the client has never seen, reads as an ENEMY "
+                 "-- red nameplate, red compass dot. If all four look identical, "
+                 "the token is not what decides hostility and the next candidate "
+                 "is AGENT_UPDATE_ALLEGIANCE (0x002F), which no reference server "
+                 "on disk ever sends.",
+        steps=_npc_allegiance_steps(a, o),
+        note="Built on a reading of Gw.exe rather than a guess: 'play' appears "
+             "NOWHERE in the image as a dword constant, and the only "
+             "allegiance-shaped constants anywhere are 'nonc' and 'nonn', "
+             "sitting in one four-instruction predicate at 0x1AB130. So the "
+             "field cannot be a word the client looks up -- it is an identity, "
+             "with two special cases. Monster-class bodies this time, so the "
+             "player-class confound that ruined the first attempt is gone.",
     ),
     "npc_agent": lambda a, o: Probe(
         question="Does a monster-class agent render, and does it need an NPC "

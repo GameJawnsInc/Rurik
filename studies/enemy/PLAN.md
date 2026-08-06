@@ -465,6 +465,57 @@ definition** (§7.1, still NOT FOUND — every id we have is an Ascalon townsper
 
 ---
 
+## 6e. Hostility is one dword, and it is not a magic word — OBSERVED
+
+Probe `npc_allegiance`, 2026-08-06. One Hatcher definition, four monster-class
+bodies, identical in every field but the team token. Result, in order:
+
+| Token | Nameplate |
+|---|---|
+| `'play'` — the player's own | **green** |
+| `'nonc'` — a client constant | **green** |
+| `'nonn'` — the other client constant | **green** |
+| `'mons'` — a value the client has never seen | **RED** |
+
+**Field 12 of `WORLD_CREATE_AGENT` is what makes an agent an enemy.** That is the
+question §6c set out to answer and got confounded on; here it is, clean.
+
+**The mechanism is identity, not vocabulary — and that was read out of the binary
+before the probe ran, which is why the probe was worth running.** Static analysis
+of our own `Gw.exe` (build 38797, never executed):
+
+- **`'play'` appears nowhere in the image as a dword constant.** Not once in
+  10 MB. The client cannot be comparing the field against it — yet three
+  lineages send it and it demonstrably works.
+- The only allegiance-shaped constants anywhere are `'nonc'` and `'nonn'`, and
+  they occur in exactly one four-instruction function at `0x1AB130`:
+  `f(x) = (x == 'nonc' || x == 'nonn')`.
+
+So the field is an opaque team **identity** with exactly two special cases. The
+player's own agent carries `'play'`, equality makes anything else carrying it an
+ally, and the two constants mark non-combatants. Anything else is a team that is
+not yours — which the client renders red.
+
+**`'mons'` was right for the wrong reason.** It is not a magic value; it is
+hostile *because it is unrecognised*. Any arbitrary dword should do the same, and
+that is a one-packet check whenever someone wants it.
+
+**Not attackable — but that is the outpost, not the allegiance.** Guild Wars
+forbids attacking in a town, so this run could not test targetability whatever
+the answer was. §7.3 explains why that is now the load-bearing blocker rather
+than a cosmetic one — and §7.3a gives a way to test it without solving the map
+problem at all.
+
+**What this means for the arc.** Combined with §6b (damage lands and is
+fractional) and §6d (NPCs render from a known-good definition), **every wire
+mechanism a first enemy needs is now proven.** We can put a red, hostile,
+correctly-modelled body in a map today. §7.1's "no hostile definition exists"
+stops being a blocker for a *first* enemy the moment you accept that a hostile
+Hatcher is an enemy: the model and the allegiance are independent fields, and
+only the allegiance decides whether the client treats it as a foe.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND
@@ -488,6 +539,21 @@ every model on screen and is required under every strategic option anyway.
 Not research, just work, and it should land at E1 rather than E4: an agent table,
 allocated ids, a tick that iterates agents, and broadcast-to-connections instead
 of the current single-connection `send`. Every later rung assumes it.
+
+### 7.3a Attackability may not need a real explorable at all
+
+`INSTANCE_LOAD_INFO` carries an **`is_explorable`** field, and this server has
+always sent 0 — correctly, since map 148 is a town. Guild Wars forbids attacking
+in a town. So the outpost that blocked §6e may be the client's own reading of
+that one field rather than anything about the geometry.
+
+If it is, combat is testable **today**, on Kamadan's geometry, with no map work
+at all. If it is not, the negative is worth as much: it says the town/field
+distinction is baked into the map data, and §7.3 becomes mandatory rather than
+merely desirable.
+
+Implemented as `--explorable` on the server, off by default — a server that lies
+about its own map should do so only when asked.
 
 ### 7.3 Placement
 
