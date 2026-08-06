@@ -310,13 +310,20 @@ Incidental: the wiki lists exactly **1,329** skills carrying an energy cost —
 the same 1,329 this document already cites for the wiki skill count, arrived at
 by a different route.
 
-**How to re-read the wiki.** `wiki.guildwars.com` returns 403 to every scripted
-client — it fingerprints the TLS/HTTP stack, so no User-Agent, header set or
-VPN change gets through. Use the `browse-gw-wiki` skill in `.claude/skills/`;
-it drives a real browser and documents the routes. The API *is* reachable from
-inside a browser page context (`fetch('/api.php?...')` under
-`javascript_tool`), which is how 1,788 pages were pulled here — far cheaper
-than one navigation per page.
+**How to re-read the wiki.** `wiki.guildwars.com` gives a scripted client a
+small burst of requests and then refuses it for a long while — MEASURED at 5
+consecutive successes out of 20, then hard 403s, with a two-minute backoff not
+restoring access. No User-Agent, header set or VPN change helps, and retrying
+in a loop is what exhausts the allowance. Use the `browse-gw-wiki` skill in
+`.claude/skills/`; a browser is unaffected, and the API *is* reachable from
+inside a browser page context (`fetch('/api.php?...')` under `javascript_tool`),
+which is how 1,788 pages were pulled here — far cheaper than one navigation per
+page.
+
+The occasional scripted success is a trap worth naming: it briefly made the
+skill's own selftest report GWW as unblocked, because the check was reading a
+cache entry written during a lucky window. A network check a cache can satisfy
+is not a network check.
 
 **Do not use the Fandom GuildWiki (`guildwars.fandom.com`) for skill values.**
 Its skill templates were last edited 2008–2010 while ArenaNet still ships

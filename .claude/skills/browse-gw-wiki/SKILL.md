@@ -30,15 +30,19 @@ no value. If you find yourself reaching for it because GWW is down, read
 
 ## Scripted HTTP cannot reach GWW — use a browser
 
-GWW's AWS edge **403s scripted clients on every path**. Ruled out by
-experiment: it is not the IP (a browser on the same machine and VPN tunnel
+GWW's AWS edge gives a scripted client **a small burst of requests and then
+refuses it for a long while** — measured at 5 consecutive successes out of 20,
+then hard 403s, with a two-minute backoff failing to restore access. Ruled out
+by experiment: it is not the IP (a browser on the same machine and VPN tunnel
 succeeds), not the User-Agent, and not the headers (a full Chrome header set
-over HTTP/1.1 still 403s while the identical request to Wikipedia returns 200).
-What is left is the TLS/HTTP-stack fingerprint, which headers cannot forge.
+still 403s while the identical request to Wikipedia returns 200).
 
-**Do not spend time on UA strings, header sets or VPN toggles. They do not
-work.** `references/access.md` has the full table, including a wrong diagnosis
-this skill previously shipped and why it was wrong.
+**Do not spend time on UA strings, header sets or VPN toggles, and above all
+do not retry in a loop** — retrying is what exhausts the allowance. The
+occasional success is a trap: it invites a design that dies at request six.
+
+`references/access.md` has the measurements, plus **two** diagnoses this skill
+shipped and had to retract. Read the numbers there before forming a third.
 
 Routes, in order:
 
@@ -54,8 +58,17 @@ Routes, in order:
    ```
 
    `action=raw` is worth the habit — it returns wikitext directly, so the
-   infobox arrives already structured. Use `browser_batch` to chain
-   navigate/get_page_text pairs across several skills in one round trip.
+   infobox arrives already structured.
+
+   **Past a handful of pages, stop navigating per page.** The WAF blocks
+   scripted *clients*, not scripted *requests*: a `fetch('/api.php?…')` issued
+   from a wiki page runs on Chrome's own stack, so the MediaWiki API works
+   normally under `javascript_tool` — 50 pages per request instead of one. A
+   1,788-page crawl took a handful of calls that way.
+   `references/access.md` has the recipe, plus the output limits that shape
+   how you use it: results truncate near ~1,900 chars and *less* inside
+   `browser_batch`, and base64 is blocked, so **filter and aggregate in the
+   browser and return only the answer** — export disagreements, not tables.
 
    If the tools say "not connected", the extension needs installing and signing
    in. Note this is **not** the "Control Chrome" connector in the Directory —

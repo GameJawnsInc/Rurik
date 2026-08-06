@@ -21,7 +21,7 @@ sys.path.insert(0, str(HERE))
 FIXTURES = HERE.parent / "fixtures"
 
 from gwwiki import (  # noqa: E402
-    WikiBlocked, get_wikitext, infobox_from_wikitext,
+    WikiBlocked, api, infobox_from_wikitext,
 )
 
 fails = []
@@ -75,13 +75,19 @@ counter = [p for p in (25, 100, 125, 150, 200) if (p // 25) + 1 != math.ceil(p /
 check("floor(raw/25)+1 is refutable", bool(counter), f"differs at {counter}")
 
 # -- network, best effort -------------------------------------------------
+# use_cache=False deliberately. get_wikitext() will serve a 7-day-old cache
+# entry and report it as a live fetch -- it did exactly that once, and briefly
+# made this suite look like GWW had stopped blocking us. A network check a
+# cache can satisfy is not a network check.
 try:
-    wt = get_wikitext("Adrenaline")
-    check("live GWW fetch", len(wt) > 1000, f"{len(wt)} chars")
+    wt = api({"action": "parse", "page": "Adrenaline", "prop": "wikitext"},
+             use_cache=False)["parse"]["wikitext"]
+    check("live GWW fetch (uncached)", len(wt) > 1000, f"{len(wt)} chars")
     check("live GWW states 25 units per hit", "25 units of adrenaline" in wt)
 except WikiBlocked:
-    print("[SKIP] live GWW fetch -- edge blocks scripted clients (expected). "
-          "Use the browser MCP; see references/access.md.")
+    print("[SKIP] live GWW fetch -- refused, which is the normal case. Scripted "
+          "access gets a small allowance and then locks out for a long while; "
+          "see references/access.md. Use the browser MCP.")
 
 print()
 if fails:
