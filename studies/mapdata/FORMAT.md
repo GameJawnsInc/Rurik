@@ -294,17 +294,24 @@ two disjoint *sets*.)
 
 ### What is still not answered
 
-Naming the remaining 100 map rows. Upstream cannot name them either, so no
-mirror will settle it. The routes, in the order they now look cheapest:
+Naming the remaining 100 map rows. Route 1 below was tried the same day and
+**half worked**, which is recorded in [studies/areatable/FINDINGS.md](../areatable/FINDINGS.md):
 
-1. **Find the area table in `Gw.exe` and read its name string ids.**
-   `AreaInfo.file_id` is zero throughout the static image — that much was already
-   measured and still holds — but a *name* string id need not be, and
-   `studies/datwrite/FINDINGS.md` decoded the archive's text records, so a string
-   id resolves to actual text today. `toolkit/clientscan/skilltable.py` is a
-   working example of locating a fixed-stride record array structurally.
+1. ~~**Find the area table in `Gw.exe` and read its name string ids.**~~ Done.
+   The table is at VA `0x0096DE38`, it holds **888 records** (not upstream's 877
+   or 883), and all 888 name ids now resolve to text via
+   `toolkit/clientscan/textrec.py`. So **map id → name is solved for the whole
+   game, from the client itself.**
+
+   But it does not name an archive row, because **`AreaInfo.file_id` is not a
+   map file** — all 157 populated values resolve to `ATEX` textures and none to
+   a map-flagged row. This corrects the claim made higher up in this document
+   that the field is "zero throughout the static executable": it is non-zero 157
+   times and still useless for geometry. The map file id genuinely is not in the
+   client's static data, which is why a server has to send it.
 2. Render candidates in GuildWarsMapBrowser and identify by eye.
-3. Match geometry against a known landmark or map extent.
+3. Match geometry against a known landmark or map extent — now much cheaper,
+   because a candidate's *name* is available even when its file is not.
 
 ---
 
