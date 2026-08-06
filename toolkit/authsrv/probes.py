@@ -711,14 +711,21 @@ def _attack_anim_steps(agent_id, origin):
     ox, oy, plane = origin
     h = HATCHER
     ENEMY = 7
-    # 600, NOT 300. The standing enemy is placed by enemy_spot(), which only
-    # ever offsets by +/-300 on one axis or the other -- so a probe body at
-    # +300 east lands EXACTLY on top of it whenever that first candidate is
-    # walkable, which it usually is. That happened: two Hatchers in one spot,
-    # z-fighting, two nameplates stacked, and an animation whose performer
-    # could not be told from its neighbour. 600 is outside every offset
-    # enemy_spot can choose, so the two bodies are always distinct.
-    ex, ey = ox + 600, oy
+    # +150, with the standing enemy at +300 -- the owner's placement, and it is
+    # better than either of the two this probe tried first. Both bodies end up
+    # on screen, at different distances, so they can be told apart by eye
+    # without turning the standing enemy off and changing what is being tested.
+    #
+    #   +300 (first try) -> lands EXACTLY on the standing enemy, which
+    #     enemy_spot puts at +300 whenever that is walkable. Two Hatchers in
+    #     one spot, z-fighting, nameplates stacked, and an animation whose
+    #     performer could not be told from its neighbour.
+    #   +600 (second try) -> clear of it, and out of sight behind a wall. The
+    #     only Hatcher on screen was then the STANDING one, which neither
+    #     packet ever names -- so "the Hatcher did not swing" meant nothing.
+    #
+    # enemy_spot only ever offsets by +/-300, so +150 can never collide with it.
+    ex, ey = ox + 150, oy
     return [
         Step(2.0, 0x0056,
              [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
@@ -731,8 +738,11 @@ def _attack_anim_steps(agent_id, origin):
                           AGENT_KIND_NPC, ex, ey, plane,
                           allegiance=0x6D6F6E73),
              f"WORLD_CREATE_AGENT {ENEMY}, token 'mons' -- a hostile Hatcher",
-             "a RED Hatcher, well clear of the standing one. If you can see "
-             "TWO overlapping nameplates, this probe is invalid -- say so."),
+             "TWO red Hatchers, one behind the other. The NEAR one is this "
+             "probe's and is the only one the packets below ever name; the FAR "
+             "one is the server's standing enemy and should never move. If "
+             "they are on top of each other, stop -- the placement is wrong "
+             "again and nothing below can be read."),
         # Spawned rather than reusing the standing enemy at agent 10 so the
         # probe still runs under --no-enemy, and so it cannot be confused by
         # the combat loop hitting the same body on a timer.
@@ -764,20 +774,21 @@ def _attack_anim_steps(agent_id, origin):
         # Ten seconds apart, on two bodies that are now hundreds of units
         # apart, so "which one moved" is answerable by looking.
         Step(8.0, 0x00A0, [4, ENEMY, agent_id, 0],
-             f"attack_started  slot1={ENEMY} (Hatcher)  slot2={agent_id} (you)",
-             "WHICH BODY SWINGS? PREDICTION: the HATCHER, repeating the first "
-             "run now that the two are far enough apart to tell. If instead "
-             "YOUR character swings, the first run was misread and the slots "
-             "are victim-then-attacker after all.\n"
-             "      Either way the client must NOT crash. It did, every "
+             f"attack_started  slot1={ENEMY} (NEAR Hatcher)  slot2={agent_id} (you)",
+             "STEP A -- WATCH THE NEAR HATCHER. PREDICTION: it swings and you "
+             "do not. If YOUR character swings instead, the slots are "
+             "victim-then-attacker and GWCA's note is right.\n"
+             "      Either way the client must NOT crash. It did, in every "
              "session before the attack speed was sent."),
-        Step(10.0, 0x00A0, [4, agent_id, ENEMY, 0],
-             f"attack_started  slot1={agent_id} (you)  slot2={ENEMY} (Hatcher)",
-             "THE SAME PACKET WITH THE SLOTS SWAPPED. PREDICTION: now YOUR "
-             "character swings the hammer. If both steps move the same body, "
-             "the second slot is decorative and the first names the attacker "
-             "outright; if each step moves the body named in slot 1, that is "
-             "the same conclusion from two directions."),
+        Step(12.0, 0x00A0, [4, agent_id, ENEMY, 0],
+             f"attack_started  slot1={agent_id} (you)  slot2={ENEMY} (NEAR Hatcher)",
+             "STEP B -- THE SAME PACKET, SLOTS SWAPPED. WATCH YOURSELF. "
+             "PREDICTION: now YOUR character swings the hammer and the Hatcher "
+             "does not.\n"
+             "      A and B together are the whole experiment: if each step "
+             "moves the body named in slot 1, slot 1 is the attacker. If the "
+             "SAME body moves both times, slot 1 is not what selects it and "
+             "the answer is somewhere else."),
     ]
 
 

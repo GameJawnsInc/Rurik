@@ -913,17 +913,26 @@ def hit_enemy(send, state, target_id, conn_id):
 
     # A swing is two events, and sending only the second is why the first
     # attempt produced damage with no animation: 1 is melee_attack_FINISHED,
-    # the end of a swing. 4 is attack_started, and GWCA's note on it is
-    # "caster_id is victim, target_id is attacker" -- so the enemy goes in the
-    # target slot and the player in the cause slot, the same order the damage
-    # send below uses.
+    # the end of a swing. 4 is attack_started.
     #
-    # 4 travels on GenericValueTarget, which we believe is 0x00A0 because its
-    # field shape matches 0x00A3 exactly. INFERRED, not observed: if no swing
-    # animation appears, this opcode is the first thing to doubt.
+    # THE FIRST SLOT IS THE ATTACKER, and it used to hold the enemy here --
+    # so every swing this server ordered was telling the client to animate the
+    # ENEMY, not the player. OBSERVED, from a run that made the point without
+    # anyone watching the screen: the only agent with an attack speed was the
+    # player, the packet named the Hatcher in slot 1 and the player in slot 2,
+    # and the client died on m_attackInterval. It could only assert on an agent
+    # whose attack speed was zero, and the player's was 1.75 -- so the body
+    # being animated was the one in slot 1.
+    #
+    # That CONTRADICTS GWCA's note on this id ("caster_id is victim, target_id
+    # is attacker"), which is what the old order was built on. Ours is the
+    # measurement; theirs is a comment. Note it does NOT contradict section 6f:
+    # 0x00A3's first slot is the agent damaged, and 0x00A0 value 4's first slot
+    # is the agent swinging. Same shape, different roles per value id, which is
+    # exactly what GWCA's per-id note was trying to warn about.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-         [agents.GV_ATTACK_STARTED, target_id, PLAYER_AGENT_ID, 0],
-         f"attack_started on {target_id}")
+         [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
+         f"attack_started: player swings at {target_id}")
 
     dealt = agent["max_health"] * HIT_FRACTION
     agent["health"] = max(0.0, agent["health"] - dealt)

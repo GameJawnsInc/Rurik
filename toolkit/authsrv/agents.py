@@ -345,7 +345,11 @@ ALLEGIANCE_NPC_MINIPET = 6
 #   GenericTargetModifier float, with target  -- 0x00A3
 # The first and last are OBSERVED working. The middle two are INFERRED from the
 # field shapes matching; nothing has confirmed them on the wire.
-GV_ATTACK_STARTED = 4      # GenericValueTarget: caster is victim, target is attacker
+# GenericValueTarget. GWCA's note reads "caster_id is victim, target_id is
+# attacker"; OBSERVED on our own client, the FIRST agent slot is the one that
+# plays the swing -- the attacker. See hit_enemy() for the run that showed it
+# and why a crash proved it more cleanly than watching the screen could.
+GV_ATTACK_STARTED = 4
 GV_ADD_EFFECT = 6
 GV_REMOVE_EFFECT = 7
 GV_CRITICAL = 17

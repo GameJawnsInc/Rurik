@@ -1453,6 +1453,83 @@ stale by `+0x1B1` on this build. Treat any GWCA offset as a lead to verify
 per-field, and never as a coordinate. The `+0x1B7`/`+0x1B8` identification is
 INFERRED from the shape match, not proven.
 
+### The first agent slot of generic value 4 is the ATTACKER — OBSERVED
+
+This corrects an UPSTREAM claim with our own bytes, and the evidence is a crash
+rather than a screenshot, which makes it stronger than anything watching could
+have produced.
+
+GWCA's note on generic value 4 reads **"caster_id is victim, target_id is
+attacker"** — i.e. this id inverts the usual roles. `hit_enemy` was built on
+that: it put the enemy in slot 1 and the player in slot 2. **It is wrong for our
+field order, and every swing this server has ever ordered was telling the client
+to animate the ENEMY.**
+
+The proof is the intermediate run that failed, and it was a controlled
+experiment by accident:
+
+| | agent 1 (player) | agent 7 (Hatcher) | packet | result |
+|---|---|---|---|---|
+| run A | attack speed **1.75** | **none** | `slot1=7, slot2=1` | **CRASH** m_attackInterval |
+| run B | 1.75 | 1.33 | `slot1=7, slot2=1` | survives |
+
+In run A the *only* agent in the world with a valid attack speed was the
+player, in slot 2. The client asserted, and it can only assert on an AvChar
+whose attack speed is zero. **So the body being animated was not the player,
+and therefore not slot 2.** Slot 1 named agent 7. Slot 1 is the attacker.
+
+That the fix for run A was "give the other agent an attack speed too" is what
+makes it a measurement: had slot 2 been the attacker, run A could not have
+crashed at all.
+
+The A/B run, with both bodies on screen at different distances, agrees — and
+returned one thing the model does not yet explain:
+
+| step | packet | seen |
+|---|---|---|
+| A | `slot1=Hatcher, slot2=player` | the Hatcher **turns to face the player** and attacks — **and the player attacks too** |
+| B | `slot1=player, slot2=Hatcher` | **only** the player attacks |
+
+Step B is decisive on its own: if slot 2 were the attacker the Hatcher would
+have swung and it did not. Step A's turn-to-face is a second free result — the
+client reorients the slot-1 agent toward slot 2 before swinging, so slot 2 is at
+minimum what the attack is *aimed at*.
+
+**The extra player animation in step A is UNEXPLAINED and is not being written
+down as understood.** MEASURED from the capture: the server sent exactly two
+`0x00A0` packets that session and nothing else — no `INTERACT_PLAYER`, no
+`hit_enemy`, no second attack — so the client produced two animations from one
+packet. The candidate worth testing first is that **slot 2 plays a hit
+reaction** and a flinch on a hammer-carrying body read as an attack at a
+glance; that would also explain the asymmetry, since step A's victim is the
+player in the foreground and step B's is a Hatcher nobody was watching. One
+probe settles it: send step A and watch the *Hatcher* rather than yourself.
+
+**This does not contradict §6f.** `0x00A3`'s first slot is the agent *damaged*;
+`0x00A0` value 4's first slot is the agent *swinging*. Same message shape,
+different roles per value id — which is exactly what GWCA's per-id note exists
+to warn about, even though the note itself has the roles the wrong way round
+for this build. **Read the slots per value id, never once for the opcode.**
+
+### Two placement mistakes, both of which invalidated a run
+
+Worth keeping because neither was a protocol error and both cost a launch, and
+because the second was only caught by the owner looking at the screen.
+
+- **The probe's Hatcher at +300 east landed exactly on the standing enemy.**
+  `enemy_spot()` places that one at +300 whenever it is walkable, which it
+  usually is. Two bodies in one spot: z-fighting, two nameplates stacked, and an
+  animation whose performer could not be told from its neighbour.
+- **Moving it to +600 to get clear put it out of sight**, apparently behind a
+  wall. The only Hatcher on screen was then the *standing* one — which neither
+  packet ever names. "The Hatcher did not swing" was therefore uninformative,
+  and would have read as evidence for the wrong conclusion.
+
+It sits at **+150** now, with the standing enemy at +300: both on screen, at
+different distances, no flag needed and nothing turned off. A probe whose two
+candidate bodies are not simultaneously visible cannot answer "which one moved",
+and neither placement failure was visible from the server side at all.
+
 ### A note on method, since §6o's search was reported as exhaustive
 
 §6o recorded "no `mov` and no `fstp` writes either offset by displacement
