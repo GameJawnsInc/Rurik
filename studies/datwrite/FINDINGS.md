@@ -1732,3 +1732,30 @@ is the label that is actually misplaced.
 
 The useful claim from that pass is unchanged and still ours: **the skillbar draws
 `+0x90`**, which no source states.
+
+---
+
+## 11. Next day: blocker #3 is gone, and the arc moves to its own study
+
+This document ranks the ATEX container and its mip-chain framing as **blocker
+#3**, and the open-questions table above carries *"How is an ATEX mip chain framed
+below the first level?"* as NOT FOUND and gating.
+
+**Both are settled, and the framing question turned out not to matter.** On
+2026-08-06 the client rendered a 128x128 DXT1 texture this project authored from
+nothing, in a skillbar slot, in a map — and it rendered just as well from a
+**single-level** file, so the sub-level framing that was NOT FOUND is not on the
+path to a new icon at all.
+
+Two of this document's own measurements were wrong in the same way and are
+corrected there: the ATEX header is **12 bytes**, not 20, and the fields recorded
+here as `+12` (a size, 150/150) and `+16` (an unidentified discriminator taking
+only 10 and 4) are **level 0's `size` and `code`**. The `150/150` held only
+because the sample was single-level files; `+16` takes 0/1/2/4/8/9/10/12 across
+the stored population, as a compression bitfield should.
+
+**The full account is [../texture/FINDINGS.md](../texture/FINDINGS.md).** What it
+means here: every blocker this document raised against writing a new skill icon
+is now either solved or shown not to apply. The archive can be written, the
+client verifies and accepts it, the write survives, and the texture can be
+authored.

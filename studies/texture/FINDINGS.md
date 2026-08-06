@@ -1,0 +1,223 @@
+# The ATEX texture container
+
+**Status: the texture layer is open.** On 2026-08-06 the retail client rendered a
+texture this project authored from scratch, on a skillbar, in a map. Everything
+in this document is either MEASURED from the client's own code and the archive's
+own bytes, or OBSERVED on screen.
+
+This arc was split out of [../datwrite/FINDINGS.md](../datwrite/FINDINGS.md),
+which established that the *archive* can be written and left the *texture* as the
+remaining blocker. That framing is now spent: both are solved, and the honest
+summary is that the texture container was much smaller than the study feared.
+
+Labels are the project vocabulary from
+[../character/FINDINGS.md](../character/FINDINGS.md).
+
+---
+
+## 1. The container
+
+```
+ATEX file
+    +0x00  4  magic "ATEX"      ("ATTX" also parses; it carries a trailer)
+    +0x04  4  fourcc            DXT1 DXT2 DXT3 DXT4 DXT5 DXTA DXTL DXTN
+    +0x08  2  width  u16
+    +0x0A  2  height u16
+    +0x0C     level records, to the end of the buffer
+
+level record
+    +0x00  4  size u32   -- the record's TOTAL size, its own 8 bytes included
+    +0x04  4  code u32   -- compression code; 0 means the payload is raw blocks
+    +0x08     payload, size-8 bytes
+
+    The next record starts at this record's offset + size. The walk ends when
+    the running offset equals the buffer length EXACTLY.
+```
+
+**MEASURED**, two ways that cannot both be wrong in the same direction:
+
+- **From the client.** The validating probe at VA `0x6c3050` checks the magic,
+  switches on the fourcc, and walks 8-byte records from offset 12, counting them
+  out through a pointer the caller supplies. ArenaNet's own assertion string
+  `"offset + sizeof(AtexLevel) <= bytes"` from `ImgAtex.cpp:1560` sits in the
+  binary and fixes the record at 8 bytes. Read independently by two agents, and
+  a third wrote a small x86 decoder rather than trust either.
+- **From the corpus.** The walk closes to the exact final byte on every ATEX
+  file our decompressor can produce — 52,253 closed exactly out of 53,922 rows
+  scanned, the remainder being files whose mip dimensions exhaust first, plus 4
+  rows that cannot be decompressed at all (a known huffman table hole, already
+  documented against text files).
+
+Level payload size, for a level whose own `code` is 0:
+
+```
+w, h  = max(width >> level, 1), max(height >> level, 1)
+bytes = roundup4(w) * roundup4(h) * bits_per_pixel / 8
+```
+
+`bits_per_pixel` comes from the client's table at VA `0xa5dd60`: **4** for DXT1
+and DXTA, **8** for DXT2/3/4/5, DXTL and DXTN. Every dimension rounds up to a
+whole 4x4 block, so a 1x1 level still costs a full block — which is why the 2x2
+and 1x1 records of a chain are the same size.
+
+## 2. Two of this project's NOT FOUNDs were the same mistake
+
+[../datwrite/FINDINGS.md](../datwrite/FINDINGS.md) recorded, from a 150-entry
+sample:
+
+> `+12` `u32` == `payload_len - 12`, a **size** (150/150); `+16` `u32` taking
+> only the values 10 and 4 with dimensions held constant — an unidentified
+> discriminator, and specifically **not** a mip count.
+
+**Both were level 0's record fields, read as though they were header fields.**
+The header is 12 bytes. `+12` is level 0's `size` and `+16` is level 0's `code`.
+
+Everything strange about them dissolves at once:
+
+- `+12 == payload_len - 12` holds exactly when level 0 consumes the whole
+  buffer — i.e. on **single-level files**. The 150-entry sample was drawn from a
+  population where that was common; across the archive-stored population it
+  fails, and it should.
+- `+16` does not take "only 10 and 4". Across the stored ATEX population it
+  takes **0, 1, 2, 4, 8, 9, 10 and 12** — exactly the shape of a bitfield, which
+  is what a compression code is. The earlier reading held dimensions constant,
+  which held the *level 0 encoding* constant with them.
+
+The lesson is not about ATEX. A field at a fixed offset is only a "header field"
+if you know where the header ends, and we had assumed a 20-byte header because
+`12 + 8` is also `20`. The corpus could not refute that; only the client's own
+record walk could.
+
+## 3. OBSERVED: the client rendered our bytes
+
+Four arms in one frame, four untouched controls interleaved with them, on a real
+character in a real map. Predictions were written down before the launch.
+
+| Slot | Arm | What was written | Predicted | **OBSERVED** |
+|---|---|---|---|---|
+| 1,3,5,7 | controls | nothing | normal icons | normal icons |
+| 2 | **0** — real bytes | row 174086 decompressed, written **stored** | skill 4's real icon | **skill 4's real icon** (a developer texture reading "Dev Hax") |
+| 4 | **A** — full chain | 11,012 B, 8 levels, all `code 0`, authored | solid magenta, faint dashes | **magenta, dotted grid** |
+| 6 | **B** — single level | 8,212 B, 1 level, `code 0`, authored | solid green | **green, dotted grid** |
+| 8 | **D** — negative control | 8,212 B, 1 level, **`code 1`**, authored | **not** clean red | **red with black bands** |
+
+Four for four. What each one bought:
+
+**Arm 0 proves the write path, not the format.** It is real ArenaNet bytes, so
+the only thing under test is the archive plumbing: payload replaced in place,
+size field rewritten, compression flipped 8 to 0, entry crc recomputed, MFT
+self-crc recomputed. Five things that must all be right, any one of which fails
+identically to a malformed texture from the bar's point of view. It exists so
+that a failure in slots 4/6/8 would have been interpretable. It passed, so they
+are.
+
+**Arm A proves the container.** Header, `{size, code}` framing, the size formula
+and the raw path, all authored by `toolkit/mapdata/atex.py` and all correct.
+
+**Arm B is the answer this arc was chasing.** *"How is an ATEX mip chain framed
+below the first level?"* was NOT FOUND and gating. **It does not need to be.**
+A single-level file renders, at full quality, in the slot the skillbar draws.
+The codec accepting one level was MEASURED from the disassembly beforehand — the
+probe's loop tail at `0x6c3198` succeeds the instant the offset equals the buffer
+length, with no requirement that mip dimensions be exhausted — but whether the
+*texture layer above it* would accept one was genuinely open, because
+`GrTex2d.cpp` asserts on a level count and nobody traced which flags the icon
+path passes. Now observed.
+
+**Arm D is the arm that could have caught us fooling ourselves.** If `code = 1`
+had rendered clean red, the client would not have been reading the code field
+and our whole model of the record would have been decoration over a client that
+ignores it. It came back wrong — red broken by black bands, our raw blocks fed
+to a compressed sub-codec and partly surviving. The field is read, and it means
+what we think.
+
+The **dotted grid** in arms A and B is predicted, not a defect. The fill is one
+repeated dword, `0x0000F81F` for magenta; the low half is `color0`, the high
+half `color1 = 0`, and the same dword reused as the index word gives every 4x4
+block an identical two-tone pattern. A solid fill would have needed a different
+value in the index word.
+
+## 4. Why the fill was uniform, and what is still untested
+
+**The one RECONSTRUCTION in the model is the raw payload's internal ordering** —
+whether a raw level stores every block's colour words and then every block's
+index words (planar), or complete blocks back to back (interleaved). One witness,
+and it fails *silently*: the wrong ordering renders noise, not an error.
+
+So the fill was chosen to make it unobservable. **If every dword in the payload
+is identical, planar and interleaved produce byte-identical files.** Arms A and B
+therefore tested the header, the framing, the size formula, the raw path and the
+whole write path, and could not be confounded by the ordering question — and
+equally, they say nothing about it.
+
+**Still UNVERIFIED: the payload ordering.** The experiment that settles it is a
+two-tone image — fill the first half of the payload with one dword and the second
+half with another. Under planar reading it renders as one flat colour with a
+different index pattern; under interleaved reading the top half of the image goes
+noisy and the bottom half goes uniform. Diagnostic either way, and it is one
+launch.
+
+## 5. What we can and cannot author today
+
+**Can, and observed:** any DXT1 texture at any legal dimension, single-level or
+full chain, written into the archive as a stored entry and drawn by the client.
+That is enough for a genuinely new skill icon, which is what the skills arc
+wanted and what [../datwrite/FINDINGS.md](../datwrite/FINDINGS.md) listed as
+blocker #3.
+
+**Can, untested:** the same for DXTA (4 bpp) and DXT3/5/DXTL/DXTN (8 bpp). The
+size formula covers them and the fourcc switch accepts them; nothing else about
+the container changes. DXTL was feared because it has no DirectX equivalent, but
+**the skillbar reads `+0x90`, which is DXT1 128x128** — DXTL lives at `+0x8c` and
+is not on the critical path for a bar icon.
+
+**Cannot, and do not need to:** produce a *compressed* ATEX level. The four
+sub-codecs at `0x6c2420`, `0x6c1990`, `0x6c1cd0` and `0x6c2010`, and the 256x256
+special case at `0x6c22a0`, are unread. `code = 0` makes them unnecessary for
+writing; they are needed only to read retail art back out, which is a different
+project and not one we need.
+
+**Cannot yet:** turn an ordinary image into DXT1 blocks. Nothing here does colour
+quantisation — `atex.py` writes the blocks it is given. A minimal DXT1 encoder is
+ordinary work with no unknowns in it, and it is the next thing to write if we
+want art rather than test patterns.
+
+## 6. Open
+
+| Question | What would settle it |
+|---|---|
+| Is a raw level planar or block-interleaved? | The two-tone fill of §4. One launch. |
+| What does the terminal `code = 8` 1x1 record's 4-byte payload mean? | It is a compact colour fill; read the `code & 8` branch at `0x6c2010`. Only needed to clone a retail file byte-for-byte, never to author one. |
+| Do the other fourccs author as predicted? | Repeat arm B at DXTA and DXT5. Cheap. |
+| Does a texture larger than its reservation force a relocation we can survive? | Everything so far fits in place. Relocation is the one archive operation still unexercised. |
+| What consumes `+0x8c`, given the bar reads `+0x90`? | Untested. Candidates: the effects monitor, the Skills panel, the party-window recharge overlay. |
+
+## 7. Witness count
+
+The prior art contributed **less than it appeared to**, and the appearance was
+dangerous. Four repositories implement ATEX decoding and they are **one lineage**:
+`Jonathan-Greve/GuildWarsMapBrowser` and `gwdevhub/GuildWarsMapBrowser` are the
+same project mirrored twice; `gwdevhub/GWToolboxpp` names GuildWarsMapBrowser in
+its own `CREDITS.txt` as the source of the derived files; and
+`apoguita/Py4GW_Reforged_Native` embeds the legacy `AtexAsm` decompressor with
+IDA-style labels intact. `Fournux/Tyria-Extractor` is an independent
+implementation but its own source cites GuildWarsMapBrowser, so it is dependent
+information at best.
+
+Two agents in this pass independently presented pairs from that set as mutual
+corroboration. They are one witness. Everything load-bearing in this document is
+MEASURED from the client binary or from archive bytes instead, and the upstream
+family is decoration on top of it.
+
+## 8. Reproducing this
+
+```bash
+python toolkit/mapdata/atex.py --dat <archive> --row 174086
+python toolkit/mapdata/atex.py --make out.atex --fourcc DXT1 --size 128 --levels 1 --fill 0x000007E0
+python toolkit/mapdata/datwrite.py --dat <copy> --replace <row> --data out.atex
+python toolkit/clientpatch/repoint_skill.py --exe <exe> --target <skill> --set icon2=<file id>
+```
+
+`datwrite.py --replace` journals the previous value of every byte it writes, so
+an arm reverts without re-cutting 4.2 GB. It refuses to relocate: a payload
+larger than the row's 512-byte-block reservation is an error, not a silent move.

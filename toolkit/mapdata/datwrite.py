@@ -52,6 +52,8 @@ MFT_SELF_ROW = 3
 SELF_ROW_START = MFT_SELF_ROW * ENTRY_SIZE          # 0x48
 SELF_ROW_END = SELF_ROW_START + ENTRY_SIZE          # 0x60
 
+ENTRY_SIZE_OFF = 0x08   # u32, the entry's stored length
+ENTRY_COMP_OFF = 0x0C   # u16, 0 stored / 8 huffman
 ENTRY_CRC = 0x14        # offset of the crc within a 24-byte MFT row
 HDR_CRC = 0x0C          # offset of the crc within the 32-byte file header
 
@@ -149,6 +151,43 @@ class Writer:
     def set_entry_crc(self, row, value):
         self.put(row_offset(self.ar, row) + ENTRY_CRC,
                  struct.pack("<I", value), f"MFT row {row} crc")
+
+    def replace(self, row, new):
+        """Put different bytes, of a different length, in an existing row.
+
+        The one thing this will not do is relocate. Space is reserved in whole
+        512-byte blocks, so a row owns ceil(size/512)*512 bytes whatever its
+        size field says; anything that fits there can be written without moving
+        a byte of anyone else's data. Anything that does not fit is a
+        relocation, which is a different and much more dangerous operation, and
+        this refuses it rather than half-doing it.
+
+        Writes four things: the payload, the size field, the compression field
+        and the crc. Getting three of four right looks exactly like a malformed
+        payload from the client's side, which is why they are done together.
+        """
+        e = self.ar.entries[row - 1]
+        block = self.ar.block_size
+        reserved = -(-e.size // block) * block
+        if len(new) > reserved:
+            raise SystemExit(
+                f"row {row} reserves {reserved} bytes ({e.size} used, "
+                f"{block}-byte blocks) and the new payload is {len(new)}. "
+                f"That is a relocation, not a replacement. Pick a row with a "
+                f"bigger reservation -- datplan.py --free lists them.")
+        print(f"replacing row {row}: {e.size} -> {len(new)} bytes, "
+              f"compression {e.compression} -> 0, at 0x{e.offset:X} "
+              f"(reservation {reserved})")
+        self.put(e.offset, new, f"row {row} payload")
+        self.put(row_offset(self.ar, row) + ENTRY_SIZE_OFF,
+                 struct.pack("<I", len(new)),
+                 f"MFT row {row} size {e.size} -> {len(new)}")
+        if e.compression != 0:
+            self.put(row_offset(self.ar, row) + ENTRY_COMP_OFF,
+                     struct.pack("<H", 0),
+                     f"MFT row {row} compression {e.compression} -> 0 (stored)")
+        self.set_entry_crc(row, binascii.crc32(new))
+        self.fix_mft_self_crc()
 
     def fix_mft_self_crc(self):
         """Recompute row 3's crc from the table as it now stands on disk.
@@ -261,6 +300,10 @@ def main():
                     help="replace a row's stored bytes, same length, in place")
     ap.add_argument("--data", metavar="FILE",
                     help="with --overwrite, the replacement bytes")
+    ap.add_argument("--replace", type=int, metavar="ROW",
+                    help="replace a row's contents with a DIFFERENT-length "
+                         "payload, writing it stored: payload, size field, "
+                         "compression field and crc. Refuses to relocate.")
     ap.add_argument("--corrupt-mft-crc", action="store_true",
                     help="flip the MFT self-crc (Arm C -- expect a full rescan)")
     ap.add_argument("--revert", metavar="JOURNAL",
@@ -312,6 +355,11 @@ def main():
             w.put(e.offset, new, f"row {row} stored bytes")
             w.set_entry_crc(row, binascii.crc32(new))
             w.fix_mft_self_crc()
+
+        if args.replace is not None:
+            if not args.data:
+                raise SystemExit("--replace needs --data")
+            w.replace(args.replace, open(args.data, "rb").read())
 
         if args.corrupt_mft_crc:
             mft = read_mft(w.ar)
