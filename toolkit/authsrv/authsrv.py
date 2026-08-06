@@ -579,6 +579,30 @@ GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS = 0x008A
 # client's.
 GAME_CMSG_INTERACT_PLAYER = 0x0033
 
+# The client asks to use a skill and then WAITS to be told it worked. Pressing a
+# skill plays the bar animation and never casts, which is the same shape as every
+# other bug this project has had: the client asks, we say nothing.
+#
+# Payload, from our schema and the one capture we have: dword skill_id, dword
+# copy, agent_id target, byte. Both observed sends carried a target of 0 because
+# nothing was selected at the time.
+GAME_CMSG_USE_SKILL = 0x0046
+
+# The reply, and its field meanings are the CLIENT'S OWN WORDS. 0x00823090 builds
+# a lookup key from the two payload fields and, when it misses, logs
+#
+#     'Pending skill %u copy %d not found'
+#
+# with the word field as %u and the dword as %d. So the message is
+# (agent_id, skill_id, copy), the client is matching it against a PENDING entry
+# it created when it sent USE_SKILL, and both fields have to be echoed back
+# unchanged for the match to land.
+#
+# 0x00E3 rather than 0x00E4, and that is measured too: 0x00E4's handler compares
+# the agent against your own and RETURNS EARLY when they match, so it is how you
+# see other people cast. 0x00E3 has no such check.
+GAME_SMSG_SKILL_ACTIVATED = 0x00E3
+
 GAME_CMSG_TURN_TO_DIRECTION = 0x003D
 GAME_CMSG_MOVE_TO_COORD = 0x003E
 GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
@@ -1376,6 +1400,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_INSTANCE_MANIFEST_DONE,
                                  [phase_arg, map_arg, 0],
                                  f"MANIFEST_DONE[{phase_arg}, map {map_arg}]")
+                    elif opcode == GAME_CMSG_USE_SKILL:
+                        # Confirm the cast by echoing the key the client is
+                        # waiting on. If the echo is wrong the client says so in
+                        # its own log -- 'Pending skill %u copy %d not found' --
+                        # which makes this one of the few things in the project
+                        # that reports its own failure.
+                        skill_id, copy, target = values[1], values[2], values[3]
+                        send(GAME_SMSG_SKILL_ACTIVATED,
+                             [PLAYER_AGENT_ID, skill_id, copy],
+                             f"SKILL_ACTIVATED(skill {skill_id}, copy {copy})")
+                        print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
+                              f"agent {target or 'nothing'}", flush=True)
+                        # A skill aimed at something hostile does what a click
+                        # does. Whether a skill should damage at all, and by how
+                        # much, is OURS -- the client carries every real number
+                        # (studies/skills/FINDINGS.md) and we do not read it yet.
+                        if target:
+                            hit_enemy(send, state, target, conn_id)
                     elif opcode == GAME_CMSG_INTERACT_PLAYER:
                         # The player clicked something. If it is one of ours and
                         # it is hostile, that is an attack -- see the comment on
