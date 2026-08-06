@@ -276,6 +276,50 @@ beside the exe, but it **buffers and only flushes on exit** — a stuck client s
 
 ---
 
+## Backing up the vault, and the one thing that blocks going off-disk
+
+The vault is the only part of this project that cannot be rebuilt. Code regenerates
+from git; two pinned ArenaNet builds do not, and ArenaNet's own updater has already
+replaced one in place mid-session. `vault/client/` alone is 8 GB of that, and its
+directory names are the sha256 prefixes of the binaries inside, so a copy verifies
+itself.
+
+**The mirror.** Same-disk, so it covers the failure with history here — an install or
+a script overwriting files — but not the disk dying:
+
+```bash
+robocopy C:\gd\Rurik\vault C:\gd\Rurik-Backups\vault /MIR /R:1 /W:1 /MT:8 /NP /NFL /NDL
+```
+
+Robocopy exit codes 0–7 all mean success; 1 is "files were copied". Check `FAILED : 0`
+in the summary rather than the exit code. Last full run: 20,855 files, 20.897 GB,
+about three minutes, both client `Gw.exe` hashes verified equal afterwards.
+
+**Off-disk is the copy that matters, and it needs the scrub first.** The client sends
+the owner's real ArenaNet credential to our own webgate on every login and we record
+it, so `vault/captures/portal/` carries the account email, the password as base64, and
+every issued session token. Nothing has ever been in git — `vault/` was gitignored in
+the first commit — but that set cannot leave the machine as it stands. It is a filter,
+not a blocker:
+
+```bash
+python toolkit/scrub_captures.py
+```
+
+Writes `vault/captures/portal-scrubbed/` (387 KB) and never touches the originals,
+which stay as recorded because an original capture is evidence about the protocol.
+Placeholders are assigned sequentially rather than hashed — the password is short
+and a hash of it would be brute-forceable — and are the same length as what they
+replace, so `Content-Length` and the base64 width stay honest. `toolkit/test_scrub.py`
+harvests the secrets out of the originals independently and asserts not one survives in
+the output; that check found 181 values still leaking through the reply body the first
+time it ran, which is why `SECRET_ELEMENTS` covers both directions. Re-run it after
+touching that list.
+
+For an off-disk copy, take everything except `run/` and `dat_study/` (11.9 GB, both
+regenerate from `client/` plus the patcher and `Gw.dat`) and substitute
+`portal-scrubbed/` for `portal/`. That is roughly 10.8 GB — a USB stick.
+
 ## The third copy of Gw.dat, and why it exists
 
 A running client holds an **exclusive lock** on the archive it was launched from.

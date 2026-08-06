@@ -84,7 +84,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   vaulted builds — and it proves its own negative result can go red first),
   `toolkit/clientscan/test_codescan.py` (the attack-speed chain, and the two
   decoding traps that hid it — needs capstone),
-  `toolkit/test_checks.py` (the check on the checker — see below).
+  `toolkit/test_checks.py` (the check on the checker — see below),
+  `toolkit/test_scrub.py` (the credential scrub, and that no secret survives it).
 
   **This list is the suite.** A test in the tree but not named here is a test
   nobody runs: `test_pathmap.py`, `test_skillcast.py` and `test_textrec.py` were
