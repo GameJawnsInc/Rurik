@@ -43,7 +43,12 @@ from gwpe import PE  # noqa: E402
 
 # Prologue of the accessor returning the DH struct; the `mov eax, imm32` that
 # follows carries the struct's virtual address. Used identically by Headquarter's
-# reader and OpenTyria's writer -- two independent implementations that agree.
+# reader and OpenTyria's writer -- which is ONE witness, not two: both are ldufr.
+# An earlier version of this comment called them "two independent implementations
+# that agree" and that was the house's own lineage rule being broken in a
+# load-bearing place. What actually justifies this signature is that we re-derive
+# it from the owner's own binary every run (dump_dh_params.py) and check the
+# struct's shape; upstream agreement is a convenience, not the evidence.
 SIG_KEYS = bytes.fromhex("8B4508C70088000000B8")
 SIG_KEYS_PTR_OFF = 0x0A
 
