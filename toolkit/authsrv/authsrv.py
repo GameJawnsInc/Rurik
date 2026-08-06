@@ -823,6 +823,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             spawn = MAP_STATIC_CONFIG.get(state["map_id"],
                                           MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
             state["pos"], state["plane"], state["dest"] = spawn[1], spawn[2], None
+            # We placed the character here, so this position is known, not stale.
+            state["pos_seen"] = time.time()
             state["pathmap"] = load_pathmap(spawn[0])
 
             def world_tick():
@@ -1025,6 +1027,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         reported = tuple(values[1])
                         if _adopt_client_position(state, reported):
                             state["pos"] = reported
+                            state["pos_seen"] = time.time()
                         if moving:
                             px, py = state["pos"]
                             # Answer with a DIRECTION. See the comment on
@@ -1232,9 +1235,29 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # honest substitute is to stay out of the way when the
                         # client has real work to do, and confirm only the trivial
                         # case where the straight line IS the route.
-                        blocked = False
+                        # AND ONLY WHEN WE KNOW WHERE THE PLAYER IS.
+                        #
+                        # The second plane field is written straight into the
+                        # agent's own current plane (agent+0x80, read out of
+                        # Gw.exe), and we have to fill it because -1, the client's
+                        # own "leave it alone" value, is unreachable from an
+                        # unsigned wire field. So a stale answer there is not a
+                        # missed opportunity, it is active corruption of the plane
+                        # the client resolves its position against.
+                        #
+                        # And stale is the normal state during click-to-move:
+                        # MEASURED, the client sends no position at all while
+                        # click-moving, so after one deferred click our position
+                        # is frozen wherever the player was standing when they
+                        # clicked. Answering a later click from there asserts
+                        # "your current plane is the plane of your starting
+                        # point", which is a good description of the two symptoms
+                        # still reported -- a warp near stairs, and being thrown
+                        # back towards where the player set off from.
+                        fresh = (time.time() - state.get("pos_seen", 0.0)) <= 1.0
+                        blocked = not fresh
                         pm_c = state.get("pathmap")
-                        if pm_c is not None and pm_c.walkable(*state["pos"]):
+                        if fresh and pm_c is not None and pm_c.walkable(*state["pos"]):
                             stop_at = pm_c.clip(state["pos"][0], state["pos"][1],
                                                 dest[0], dest[1],
                                                 step=COLLISION_STEP)
@@ -1246,10 +1269,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # and drop our own destination rather than integrate
                             # along a line the player is not walking.
                             state["dest"], state["clipped"] = None, True
+                            why = ("we last saw the player "
+                                   f"{time.time() - state.get('pos_seen', 0.0):.1f}s "
+                                   "ago" if not fresh else "not a straight shot")
                             print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
-                                  f"{dest[1]:.0f}) is not a straight shot -- "
-                                  f"leaving it to the client's own pathing",
-                                  flush=True)
+                                  f"{dest[1]:.0f}): {why} -- leaving it to the "
+                                  f"client's own pathing", flush=True)
                             continue
                         state["dest"], state["clipped"] = (float(dest[0]),
                                                            float(dest[1])), False
@@ -1336,6 +1361,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   clipped=was_clipped, on_mesh=on_mesh)
                         state["pos"] = reported
                         state["plane"] = plane
+                        state["pos_seen"] = time.time()
                         if on_mesh is False:
                             # Worth knowing about, not worth acting on. Every
                             # one of these is a hole in our trapezoids at a spot
