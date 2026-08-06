@@ -1392,7 +1392,16 @@ of per-context scratch, which at least bounds its lifetime to one context.
 switch, at `0x00818170`" — REFUTED, and it was §6's.** That sentence was the
 reason §6 could say the twenty apparently-unhandled ids were "not necessarily
 unhandled". `0x00818170` is not a universal store. It is a three-way compare
-chain:
+chain — and **`studies/agentprops/FINDINGS.md` §2 already said so**, under the
+heading *"The int path handles only three properties — SOURCED"*, before §6 was
+written. §6 then published the opposite, in a different study, about the same
+address, and nothing caught it: the tests are per-study, and this pass
+re-derived the answer from scratch rather than finding it two directories away.
+**The correction is agentprops'; all §16 added was noticing.** That is the more
+useful half of this entry — a claim can be refuted by a sibling study and stay
+in print indefinitely, because nothing here cross-checks one study against
+another. `agentprops` §3b has the same problem in the other direction: it counts
+"all four dispatch tables" and there are seven.
 
 ```
 0x00818182   sub edx, 0x20 ; je <32>      sub edx, 9 ; je <41>
