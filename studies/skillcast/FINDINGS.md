@@ -681,17 +681,30 @@ Two more that need no probe machinery, only a session:
 
 ## 12. Reproducing this
 
-```bash
-EXE=vault/run/2026-07-29_221c13772c7a/Gw.exe
+The test finds the client itself and says which one it used — the pinned
+snapshot if the vault has it, the live install otherwise, and it refuses to
+continue if the file size does not match build 38797:
 
-python toolkit/clientscan/test_skillcast.py                    # everything above, checked
-python toolkit/clientscan/asserts.py --exe $EXE --file ChCliSkill --unique
-python toolkit/clientscan/asserts.py --exe $EXE --grep "skillCopy|pending"
-python toolkit/clientscan/msgshape.py --census --exe $EXE      # the recovery, self-checked
-python toolkit/clientscan/msgshape.py 0x00E5 --exe $EXE
-python toolkit/clientscan/msghandler.py 0x00E2 --exe $EXE --follow --depth 3 --annotate
-python toolkit/clientscan/msghandler.py --callers 0x00822B80 --exe $EXE
-python toolkit/authsrv/probes.py                               # every probe step encodes
+```bash
+python toolkit/clientscan/test_skillcast.py
+```
+
+The tools take `--exe`, defaulting to `C:\gw\Gw.exe`. **Do not write
+`vault/run/...` as a relative path** — a git worktree has no vault of its own
+and the walk lands on nothing. Ask `vaultpath.py`:
+
+```bash
+EXE="$(python -c "import sys; sys.path.insert(0,'toolkit'); import vaultpath; print(vaultpath.vault_path('run','2026-07-29_221c13772c7a','Gw.exe'))")"
+```
+
+```bash
+python toolkit/clientscan/asserts.py --exe "$EXE" --file ChCliSkill --unique
+python toolkit/clientscan/asserts.py --exe "$EXE" --grep "SkillCopy|hotKeyState"
+python toolkit/clientscan/asserts.py --exe "$EXE" --callers 0x00821CC0
+python toolkit/clientscan/msgshape.py --census --exe "$EXE"     # the recovery, self-checked
+python toolkit/clientscan/msgshape.py 0x00E5 --exe "$EXE"
+python toolkit/clientscan/msghandler.py 0x00E2 --exe "$EXE" --follow --depth 3 --annotate
+python toolkit/authsrv/probes.py                                # every probe step encodes
 ```
 
 Bulk extractions live in `vault/skillcast/` (gitignored, client-derived):
