@@ -30,11 +30,19 @@ two are started in separate terminals and either may be restarted mid-debugging.
 
 import json
 import os
+import sys
 import tempfile
 import time
 import uuid
 
-DEFAULT_PATH = r"C:\gd\Rurik\vault\state\sessions.json"
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from vaultpath import vault_path  # noqa: E402
+
+# Resolved through vaultpath, not hardcoded: from a git worktree a fixed
+# C:\gd\Rurik path still works on this machine, but the portal and AuthSrv must
+# agree on ONE file or every login is "REJECTED — no session" with both sides
+# looking correct in isolation.
+DEFAULT_PATH = vault_path("state", "sessions.json")
 
 
 def uuid_to_wire(u) -> bytes:

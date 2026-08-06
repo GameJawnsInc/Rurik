@@ -32,10 +32,27 @@ import time
 from ctypes import wintypes
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tcptable import connections  # noqa: E402
+from vaultpath import vault_path  # noqa: E402
 
-RUN_ROOT = os.path.normcase(r"C:\gd\Rurik\vault\run")
+RUN_ROOT = os.path.normcase(vault_path("run"))
 REQUIRED = [("-authsrv", "127.0.0.1"), ("-portal", "127.0.0.1")]
+
+
+def newest_run_exe():
+    """The most recently assembled vault/run/<build>/Gw.exe, or None.
+
+    Discovered rather than hardcoded: the run dir is rebuilt after every
+    ArenaNet update, and a default frozen to one build stamp goes stale the
+    moment make_run_dir.py assembles the next one.
+    """
+    import glob
+    cands = glob.glob(os.path.join(vault_path("run"), "*", "Gw.exe"))
+    # -probe dirs are experiment copies; prefer the plain build dir.
+    plain = [c for c in cands if not os.path.dirname(c).endswith("-probe")]
+    pick = plain or cands
+    return max(pick, key=os.path.getmtime) if pick else None
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 VK_RETURN = 0x0D
@@ -298,10 +315,33 @@ def shot(hwnd, path):
 
 # ------------------------------------------------------------------ main ----
 
+def close_client(proc):
+    """Close the client cleanly enough that Gw.log survives.
+
+    WM_CLOSE, not terminate(). The client buffers Gw.log and only flushes on a
+    clean shutdown -- killing it throws away the very record we launched it to
+    collect, which is how an earlier run came back with an 11-line log that
+    stopped before anything interesting happened.
+    """
+    closer, _ = wait_window(proc.pid, timeout=5)
+    if closer:
+        user32.PostMessageW(closer, WM_CLOSE, 0, 0)
+    try:
+        proc.wait(timeout=20)
+    except Exception:
+        print("  clean close timed out - terminating, Gw.log may be truncated")
+        try:
+            proc.terminate()
+            proc.wait(timeout=10)
+        except Exception:
+            pass
+    time.sleep(1.0)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--exe", default=r"C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe")
+    ap.add_argument("--exe", default=newest_run_exe())
     # The original 9/5/5 spacing was tuned when the client still ran its updater
     # on boot. With the updater patched out every screen -- load, login, EULA,
     # character select -- comes up fast, and the old delays just sat idle.
@@ -311,11 +351,14 @@ def main():
                          "the window, so scripts survive a resize.")
     ap.add_argument("--linger", type=int, default=25,
                     help="Seconds to keep sampling after the last Enter.")
-    ap.add_argument("--outdir", default=r"C:\gd\Rurik\vault\captures\harness")
+    ap.add_argument("--outdir", default=vault_path("captures", "harness"))
     ap.add_argument("--keep-open", action="store_true",
                     help="Leave the client running at the end instead of closing it.")
     a = ap.parse_args()
 
+    if not a.exe:
+        raise SystemExit(f"No Gw.exe under {vault_path('run')} — "
+                         f"run make_run_dir.py first (RUNBOOK.md, one-time setup).")
     args = ["-authsrv", "127.0.0.1", "-portal", "127.0.0.1", "-windowed", "-log"]
     assert_safe(a.exe, args)
 
@@ -380,23 +423,7 @@ def main():
     time.sleep(0.1)
 
     if not a.keep_open:
-        # WM_CLOSE, not terminate(). The client buffers Gw.log and only flushes on
-        # a clean shutdown -- killing it throws away the very record we launched it
-        # to collect, which is how an earlier run came back with an 11-line log
-        # that stopped before anything interesting happened.
-        closer, _ = wait_window(proc.pid, timeout=5)
-        if closer:
-            user32.PostMessageW(closer, WM_CLOSE, 0, 0)
-        try:
-            proc.wait(timeout=20)
-        except Exception:
-            print("  clean close timed out - terminating, Gw.log may be truncated")
-            try:
-                proc.terminate()
-                proc.wait(timeout=10)
-            except Exception:
-                pass
-        time.sleep(1.0)
+        close_client(proc)
 
     gwlog = ""
     if os.path.exists(log_path):

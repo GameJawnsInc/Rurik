@@ -41,8 +41,10 @@ sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "schema"))
 from gwcrypto import ARC4, arc4_hash, compute_shared, make_server_seed  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'portal'))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from codec import Codec  # noqa: E402
 from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
+from vaultpath import vault_path  # noqa: E402
 import probes  # noqa: E402
 import agents  # noqa: E402
 
@@ -618,7 +620,7 @@ AUTH_CMSG_NAMES = {
 
 codec = Codec()
 
-VAULT_DEFAULT = r"C:\gd\Rurik\vault\captures\authsrv"
+VAULT_DEFAULT = vault_path("captures", "authsrv")
 
 
 # Set from --probe. Read by the spawn path; None means the server behaves
@@ -1994,7 +1996,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
 def load_keys(path):
     if path:
         return json.load(open(path))
-    kd = r"C:\gd\Rurik\vault\keys"
+    from vaultpath import require_dir
+    kd = require_dir("keys", why="the DH private half; the server cannot decrypt without it")
     cands = sorted(f for f in os.listdir(kd) if f.startswith("rurik_dh_"))
     if not cands:
         raise SystemExit("No rurik_dh_*.json in vault/keys — run make_custom_client.py first.")

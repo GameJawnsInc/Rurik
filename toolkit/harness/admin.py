@@ -13,7 +13,13 @@ import sys
 import time
 import uuid
 
-QUEUE = r"C:\gd\Rurik\vault\admin-queue"
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from vaultpath import vault_path  # noqa: E402
+
+# admin_runner.ps1 hardcodes the same directory on its side; if RURIK_VAULT ever
+# points the python half elsewhere, the runner stops seeing requests -- the
+# stale .req files this leaves behind are the visible symptom.
+QUEUE = vault_path("admin-queue")
 ACTIONS = ("cage-on", "cage-off", "launch-caged", "rules", "stop")
 
 

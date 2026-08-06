@@ -19,9 +19,13 @@ import argparse
 import glob
 import json
 import os
+import sys
 
-VAULTS = (r"C:\gd\Rurik\vault\captures\authsrv",
-          r"C:\gd\Rurik\vault\captures\gamesrv")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from vaultpath import vault_path  # noqa: E402
+
+VAULTS = (vault_path("captures", "authsrv"),
+          vault_path("captures", "gamesrv"))
 
 # (opcode, short name), in the order the client sends them.
 LADDER = [
