@@ -855,6 +855,42 @@ Honest list, because "a fight works" invites over-reading:
 
 ---
 
+## 6n. The enemy stands in Pre-Searing, on Pre-Searing's own ground — OBSERVED
+
+2026-08-06. Map 148 is a real entry instead of a substitute, so the character
+now stands in Ascalon City Pre-Searing rather than in Kamadan's geometry under
+Ascalon's name. The Hatcher is there and takes damage, **and the collision
+follows what is drawn** — the first time in this project that the navmesh the
+server clips against has described the same place the client is rendering.
+
+**It took a correction to another session's inference to get there, and the
+client made it.** Sending the *masked* id `0x1B97D` — the form
+gw-preservation's table carries and the form `archive.py` was built to resolve —
+reached the client and was refused outright:
+
+```
+Map file '0x01b97d' failed to load.  Attempting to re-bloat.
+Map '0x01b97d' failed to load / Creating default map
+Assertion: found    P:\Code\Engine\Map\Map.cpp(1762)
+```
+
+The archive stores it as `0x8001B97D`, and sending that loads. So **masking is
+right for finding the row and wrong on the wire**, and the two had been
+conflated. `archive.py`'s docstring had flagged "the client masks it" as an
+inference rather than a measurement, which is exactly why it was safe to test:
+the claim was labelled, so falsifying it cost one launch. Corrected at the
+source in [studies/mapdata/FORMAT.md](../mapdata/FORMAT.md) and in
+`archive.py` rather than only here.
+
+**A mistake of mine worth keeping.** Before that launch I checked that the
+pathing chunk parsed, that the spawn point was walkable, and that the enemy's
+spot was walkable — three real checks, all of them on *our* side of the wire.
+None of them could have caught this, because the question was never whether we
+could read the file. "Our parser accepts it" and "the client accepts it" are
+different claims, and only the second one mattered.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND

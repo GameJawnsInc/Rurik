@@ -194,8 +194,14 @@ def file_id_table(archive):
     never be shadowed by another entry's masked one.
 
     Why the bit is set is NOT ESTABLISHED. We have not read the client's own
-    lookup, so "the client masks it" is our inference from the id a working
-    server sends, not something measured in the binary.
+    lookup path in the binary.
+
+    But "the client masks it" is now FALSIFIED for build 38797, measured by
+    handing the client each form: 0x1B97D is refused with `Map file '0x01b97d'
+    failed to load` and then an assert, while 0x8001B97D loads Ascalon City
+    Pre-Searing. Masking is right HERE, for finding the row; it is wrong on the
+    wire. A server must send the id exactly as the archive stores it. See
+    studies/mapdata/FORMAT.md.
     """
     blob = archive.read(archive.entries[1])
     out = {}
