@@ -1210,31 +1210,53 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # click-moving. 0x003E carries a destination and a plane
                         # and nothing else, and one capture ran 37 seconds
                         # without the client saying where it was.
-                        # CLIP THE CLICK, and send the clipped point.
+                        # ANSWER ONLY WHEN THERE IS NOTHING TO OVERWRITE.
                         #
-                        # This was removed once, on the theory that substituting
-                        # our own destination was the rubber-banding. It was not:
-                        # the rubber-banding was the KEYBOARD path, which should
-                        # never have been naming points at all and is now a
-                        # direction (see GAME_SMSG_AGENT_MOVE_DIRECTION). Clicking
-                        # was never tested with the clip in isolation, and with it
-                        # gone the player walks through walls.
+                        # THE CLIENT PATHS CLICKS BY ITSELF. Caught in play with
+                        # screenshots: the player clicked a spot up a staircase,
+                        # the character set off correctly towards the FOOT of the
+                        # stairs -- a real route, around the railing -- and about
+                        # a second later snapped onto a straight line aimed at the
+                        # clicked point, straight through the railing. That is our
+                        # MOVE_TO_POINT landing on top of a path the client had
+                        # already worked out.
                         #
-                        # The player's description of the stock game is what
-                        # decides it: a click at a far or awkward point walks a
-                        # plain straight line and is STOPPED by obstacles. A
-                        # server granting a straight line cut at the first wall
-                        # produces exactly that, with no client-side collision
-                        # needed to explain it. What it does NOT reproduce is
-                        # routing around the obstacle, which needs the
-                        # pathfinding graph we have not decoded.
-                        dest, blocked = clip_to_walkable(state, dest)
-                        state["dest"], state["clipped"] = dest, blocked
+                        # So every click we answered replaced a correct path with
+                        # a worse one, and the clip made it worse still, because a
+                        # clipped point sits on the straight line the client was
+                        # not going to take.
+                        #
+                        # A real server owns pathing and would send the legs of
+                        # the route. We cannot: the pathfinding graph in the map
+                        # file is decoded only as far as its sub-record sizes. The
+                        # honest substitute is to stay out of the way when the
+                        # client has real work to do, and confirm only the trivial
+                        # case where the straight line IS the route.
+                        blocked = False
+                        pm_c = state.get("pathmap")
+                        if pm_c is not None and pm_c.walkable(*state["pos"]):
+                            stop_at = pm_c.clip(state["pos"][0], state["pos"][1],
+                                                dest[0], dest[1],
+                                                step=COLLISION_STEP)
+                            blocked = (math.hypot(stop_at[0] - dest[0],
+                                                  stop_at[1] - dest[1]) > COLLISION_STEP)
+                        if blocked:
+                            # Something is in the way, so the client is pathing
+                            # around it and knows more than we do. Say nothing,
+                            # and drop our own destination rather than integrate
+                            # along a line the player is not walking.
+                            state["dest"], state["clipped"] = None, True
+                            print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
+                                  f"{dest[1]:.0f}) is not a straight shot -- "
+                                  f"leaving it to the client's own pathing",
+                                  flush=True)
+                            continue
+                        state["dest"], state["clipped"] = (float(dest[0]),
+                                                           float(dest[1])), False
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                              [PLAYER_AGENT_ID, list(dest), plane_first, plane_second],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
-                             f" on plane {cur_plane}->{dest_plane}"
-                             f"{', clipped at a wall' if blocked else ''})")
+                             f" on plane {cur_plane}->{dest_plane}, clear line)")
                         if sweep_note:
                             print(sweep_note, flush=True)
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
