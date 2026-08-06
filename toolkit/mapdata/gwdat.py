@@ -27,9 +27,32 @@ the exact byte. That holds on MFT row 7982 (24 chunks, 2925270 bytes) and row
 resolved to correctly-typed payloads. Two structural confirmations plus the
 reference resolution is why this is considered good enough to build on.
 
+A third structural confirmation now exists, and it is the strongest of the three
+because the expected bytes are PREDICTED rather than merely self-consistent: all
+1,089 text files decompress and split into exactly 1,024 records that tile the
+blob, each ending in a two-byte (language_index, file_index) tail whose value the
+decode has to get right and which differs per file. See test_gwdat.py.
+
+WHERE BOTH REFERENCE IMPLEMENTATIONS ARE WRONG -- the zero-length code.
+
+Twelve of those 1,089 files used to fail here outright. The cause is a real
+defect shared by the Go reference and xentax.cpp, not a slip in this port: a
+table holding one symbol encodes it in ZERO bits, build_table deliberately parks
+that symbol at follow_root[0], and then both implementations begin code
+assignment at length 1 and never read it back. Every lookup lands on an unfilled
+node.
+
+The failure modes differ, and ours was the useful one. Go's getNextCode has no
+guard: it reads encLen 0, consumes no bits, returns node value 0, and does that
+forever from a bit position that never advances -- filling the block with a
+constant byte and returning silently. This port raised, which is the only reason
+the defect was noticed. It is fixed below, and the fix cannot change any file
+that already worked, because it only runs where the old code raised.
+
 What has NOT been done: diffing this implementation's output against xentax.cpp's
 on the same input. That is the check that would settle it, and it needs a C
-compiler this environment does not have.
+compiler this environment does not have. Note that it would now be a diff against
+a decoder we believe to be wrong on this one case.
 """
 import struct
 
@@ -139,12 +162,16 @@ class BitReader:
 
 
 class HuffTable:
-    __slots__ = ('nodes', 'trans', 'vals')
+    __slots__ = ('nodes', 'trans', 'vals', 'zero_len')
 
     def __init__(self):
         self.nodes = [[0, 0] for _ in range(256)]
         self.trans = [[0, 0, 0] for _ in range(24)]  # firstEncoding, lastIndex, encLen
         self.vals = []
+        # A table holding exactly one symbol encoded in zero bits. See
+        # build_table: upstream parks such a symbol at follow_root[0] and then
+        # never reads it back.
+        self.zero_len = False
 
     def next_code(self, r):
         bits = r.peek(8)
@@ -168,7 +195,9 @@ class HuffTable:
                 raise ValueError('largeEncIndex out of range')
             enc_val = self.vals[large_idx]
         if enc_len == 0:
-            raise ValueError('zero-length code (table hole)')
+            if not self.zero_len:
+                raise ValueError('zero-length code (table hole)')
+            return enc_val          # zero-length code: consumes no bits
         r.consume(enc_len)
         return enc_val
 
@@ -209,6 +238,31 @@ def build_table(r):
         follow_root[0] = symbol_count - 1
         total = 1
 
+    # THE ZERO-LENGTH CODE, which is where both reference implementations stop.
+    #
+    # follow_root[0] is the chain of symbols encoded in ZERO bits -- one symbol
+    # that is always the answer. It is reachable two ways: the fallback directly
+    # above, and a table declaring fewer than two symbols (the `symbol_count < 2`
+    # arm of the length walk is the only way sym_len == 0 enters that branch).
+    #
+    # Neither upstream reads it. Go's buildHuffmanTable and xentax.cpp both begin
+    # code assignment at length 1, so the symbol they had just deliberately
+    # parked at length 0 never enters the table and every lookup lands on an
+    # unfilled node. The consequences differ and ours was the better failure:
+    # Go's getNextCode has no guard, so it reads encLen 0, consumes no bits and
+    # returns node value 0 -- forever, filling the block with a constant byte
+    # from a bit position that never advances. Our port raised instead, which is
+    # how this was found at all.
+    #
+    # MEASURED: 12 of the 1,089 text files hit this, and every one of them is a
+    # distance table. With the symbol installed they decompress and the result
+    # passes the record walk exactly. See test_gwdat.py.
+    zero_symbol = None
+    cur = follow_root[0]
+    while cur != 0xFFFFFFFF:
+        zero_symbol = cur
+        cur = follow[cur]
+
     next_bits = 1
     in_table = 0
     t = HuffTable()
@@ -228,6 +282,15 @@ def build_table(r):
             next_bits -= 1
         next_bits = (next_bits << 1) + 1
 
+    if in_table == 0 and zero_symbol is not None:
+        # Every 8-bit prefix maps to the one symbol, and reading it costs
+        # nothing. Filling all 256 nodes rather than special-casing the lookup
+        # keeps next_code's fast path unchanged.
+        for i in range(256):
+            t.nodes[i][0] = 0
+            t.nodes[i][1] = zero_symbol
+        t.zero_len = True
+        return t
     if in_table == total:
         return t
     for enc_len in range(9, 32):

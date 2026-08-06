@@ -91,9 +91,13 @@ first thing to do.** Three findings reorder the problem:
   is recoverable — the "Repairing corrupt archive" rescan was located but not
   followed to completion, so we cannot say whether it can rebuild the
   fileId→mftIndex map or whether it is a one-way door.
-- **We have no compression-8 encoder**, and our *decompressor* already fails on 12
-  of 1,089 text files with a huffman table hole — evidence we do not fully
-  understand the format we would need to emit.
+- **We have no compression-8 encoder.** This bullet also used to argue we did not
+  understand the format, on the evidence that our decompressor failed on 12 of
+  1,089 text files with a huffman table hole. **That evidence is withdrawn as of
+  2026-08-06** — the hole was a zero-length code that both reference
+  implementations drop on the floor, and all 1,089 files now decompress and tile
+  exactly (§2). The encoder is still missing; the argument against our
+  understanding is not.
 - **A genuinely new skill id still needs a PE patch**, and it is harder than the
   prior study thought: all 3,443 rows are populated, the table base is referenced
   by **nine** relocated absolute addresses across three base constants plus a
@@ -675,10 +679,25 @@ examples in the whole archive**, as is `flags=259`; `flags=515` is 21,420:1 and
 `flags=257` is 1,117:1. Stored is only common in `flags=3` (22,188 of 110,852) and
 `flags=2817` (16,188 of 21,420). Text records live in `flags=3`, which is the good
 case; **the flags class of skill-icon rows was never measured, and it should be
-before anyone plans an icon write.** Worse: our decompressor already raises
-"zero-length code (table hole)" on 12 of the 1,089 text files — file index 98 in
-all eleven languages plus one more — a consistent, structured failure that says we
-do not fully understand the format we would have to emit.
+before anyone plans an icon write.**
+
+The decompressor half of this is **RESOLVED, 2026-08-06.** It raised
+"zero-length code (table hole)" on 12 of the 1,089 text files, and this section
+read that as evidence we did not understand the format. The real cause was
+narrower and more useful: a Huffman table holding a single symbol encodes it in
+**zero bits**, `build_table` parks that symbol at `follow_root[0]`, and both the
+Go reference and `xentax.cpp` begin code assignment at length 1 and never read it
+back — so the table comes out completely empty. It is a defect in both upstream
+lineages, not in the port. Go has no guard for it and silently fills the block
+with a constant byte from a bit position that never advances; our port raised,
+which is the only reason it was found.
+
+With the symbol installed, **all 1,089 text files decompress and every one splits
+into exactly 1,024 records that tile the blob, ending in the predicted
+(language, file) tail.** All 349 maps and a strided archive sample are unchanged,
+because the fix only runs where the old code raised. See
+`toolkit/mapdata/test_gwdat.py`. The encoder is still missing — but the specific
+evidence cited here for "we do not understand the format" no longer stands.
 
 **3. The icon, on every route.** The dat route needs the ATEX container, and it is
 a **mip chain**, not a single image. MEASURED with predictions stated in advance:
@@ -1069,7 +1088,7 @@ reversibly, and route 1 narrows to the icon alone.
 | Are MFT rows 8315–8317 text rows? | Ten-minute set-membership check against the 1,077 resolved text rows. Gates the in-place text plan. |
 | Which `flags` class do skill-icon rows carry, and does that class ever ship stored? | Resolve the 3,439 icon file ids to MFT rows and histogram their flags and `extraBytes`. Decides whether the stored escape hatch exists for icons. |
 | How is an ATEX mip chain framed below the first level? | No simple stride closes it to EOF and the smallest levels use a shorter record. Needs the client's own decoder read, not more corpus fitting. |
-| Can a compression-8 encoder be written at all with stdlib Python? | Nobody has tried, and our *decompressor* fails on 12 of 1,089 text files with a huffman table hole — fix that first; it is the same knowledge. |
+| Can a compression-8 encoder be written at all with stdlib Python? | Nobody has tried. The prerequisite this row named — "our decompressor fails on 12 of 1,089 text files with a huffman table hole" — is **done, 2026-08-06**: the hole was a zero-length code that both reference implementations drop, and all 1,089 files now decompress and tile. |
 | Are any of the 678 all-empty string ids genuinely unreferenced by every live table? | Cross-language emptiness is strong evidence, not proof. Cross-reference every skill, item, npc, quest and UI table that can hold a string id. |
 | Can the text-record decoder's output be **substituted**, or only observed? | Hook VA 0x007cb000 and try returning a different pointer. Tyria only reads there; nobody has written. |
 | Does hooking `GetRecObjectBytes` feed the game's own texture pipeline? | The only untried route to a genuinely new in-game icon. Py4GW calls those functions; nobody hooks them. |

@@ -33,8 +33,8 @@ Everything here is checked by `toolkit/clientscan/test_areatable.py`.
   **1089 of 1089** text-file references. This is the general bridge from a
   reference baked into `Gw.exe` to a row in `Gw.dat`.
 - A **text file is 1,024 records and a 2-byte tail**; a record is
-  `u16 length, u16 aux, u16 kind` then `length - 6` payload bytes. **98 of 99
-  files tile exactly.** The 99th is the file `gwdat.py` cannot decompress.
+  `u16 length, u16 aux, u16 kind` then `length - 6` payload bytes. **All 1,089
+  files, across all eleven languages, tile exactly.**
 - **`AreaInfo.file_id` is not a map file.** All 157 populated values resolve to
   `ATEX` textures and **none** to a map-flagged row. Four upstream sources name
   this field `file_id` and give it `file_id1()`/`file_id2()` accessors as though
@@ -188,20 +188,22 @@ slot 99 → `01 00`, slot 100 → `01 01`.
 first pass read it as a `u32`, which walks a plausible distance into a file and
 then stops dead — it tiled 3 files of 99 and looked correct on the ones it got,
 because the failure only appears when a record's `aux` field is non-zero. With
-the `u16` reading, **98 of 99 files tile to exactly 1,024 records and a 2-byte
-tail with no remainder**. The 99th is file 98, which `gwdat.py` cannot
-decompress at all — the known huffman table hole, and now the *only* thing
-standing between us and complete text coverage for a language.
+the `u16` reading, **all 1,089 files tile to exactly 1,024 records and a 2-byte
+tail with no remainder**. Text coverage is complete.
+
+(It was 98 of 99 for one language when this was first written, the holdout being
+file 98, which `gwdat.py` could not decompress. That was a zero-length Huffman
+code both reference implementations drop; fixed the same day — see §8.)
 
 Record kinds, censused over language 0:
 
-| kind | count | what it is |
-|---|---|---|
-| `0x07` | 66,330 | high-entropy payload, `aux` non-zero and varying. Shaped like a per-record compression with `aux` as the decoded size. **NOT ESTABLISHED.** |
-| `0x10` | 27,386 | plain UTF-16LE. This is what `get()` returns. |
-| `0x06` | 5,735 | NOT ESTABLISHED |
-| `0x05` | 879 | NOT ESTABLISHED |
-| `0x08` / `0x0D` / `0x0E` | 16 / 4 / 2 | NOT ESTABLISHED |
+| kind | count | share | what it is |
+|---|---|---|---|
+| `0x07` | 66,330 | 65.4% | high-entropy payload, `aux` non-zero and varying. Shaped like a per-record compression with `aux` as the decoded size. **NOT ESTABLISHED.** |
+| `0x10` | 28,410 | 28.0% | plain UTF-16LE. This is what `get()` returns. |
+| `0x06` | 5,735 | 5.7% | NOT ESTABLISHED |
+| `0x05` | 879 | 0.9% | NOT ESTABLISHED |
+| `0x08` / `0x0D` / `0x0E` | 16 / 4 / 2 | — | NOT ESTABLISHED |
 
 `get()` returns `None` for a kind it cannot decode rather than handing back
 bytes dressed as a string. **All 888 area names happen to be kind `0x10`**, so
@@ -253,9 +255,12 @@ the id turns up in a table we have not found.
    corpus. `aux` is a candidate decoded-size field on shape alone.
 2. **The `aux` field on kind `0x10` records is always 0**, so nothing here
    constrains what it means in general.
-3. **Text file 98** does not decompress — `gwdat.py`'s huffman table hole. It is
-   now the single defect blocking complete text coverage, which raises its
-   priority above where `studies/datwrite/FINDINGS.md` left it.
+3. ~~**Text file 98** does not decompress — `gwdat.py`'s huffman table hole.~~
+   **Fixed the same day.** It was a zero-length Huffman code that both reference
+   implementations park and never read back; see `toolkit/mapdata/gwdat.py` and
+   `test_gwdat.py`. All **1,089** text files across all 11 languages now
+   decompress and tile to 1,024 records, so text coverage is complete and the
+   census in §5 above is over the whole corpus rather than 98 of 99 files.
 4. **Whether `AreaInfo`'s remaining fields mean what upstream says.** Only the
    ones our constraints exercise are evidenced; the icon and chronology fields
    were carried across untested.

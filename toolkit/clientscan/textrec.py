@@ -39,12 +39,14 @@ THE CHAIN, and what is measured about each step:
   blob -> records            u16 total_length, u16 aux, u16 kind, then
                              total_length - 6 bytes of payload.
 
-      MEASURED, and the check is the good kind: with this header, **98 of the
-      99 language-0 files tile to exactly 1,024 records and a 2-byte tail**,
-      with no file left over and none short. The one failure is file 98, which
-      gwdat.py cannot decompress at all (its huffman table hole). Upstream
-      reports "1,024 records then two trailing bytes" for every file; this
-      reproduces that independently and says why.
+      MEASURED, and the check is the good kind: with this header, **all 99
+      language-0 files tile to exactly 1,024 records and a 2-byte tail**, with
+      no file left over and none short — and so do all 1,089 files across all
+      eleven languages. Upstream reports "1,024 records then two trailing
+      bytes" for every file; this reproduces that independently and says why.
+
+      It was 98 of 99 until gwdat.py's zero-length-code fix landed; the holdout
+      was the one file gwdat.py could not decompress at all.
 
       Reading the length as a u32 instead -- which is what a first pass did --
       walks a plausible-looking distance and then stops dead mid-file, because
@@ -54,12 +56,13 @@ THE CHAIN, and what is measured about each step:
 
 WHAT A RECORD KIND MEANS is only partly established. Census over language 0:
 
-      kind 0x10  27,386   plain UTF-16LE. This is what `get()` returns.
-      kind 0x07  66,330   the majority. High-entropy payload, `aux` non-zero
-                          and varying -- shaped like a per-record compression
-                          with `aux` as the decoded size. NOT ESTABLISHED.
-      kind 0x06   5,735       kind 0x05  879     kind 0x08  16
-      kind 0x0D       4       kind 0x0E    2
+      kind 0x07  66,330  65.4%  the majority. High-entropy payload, `aux`
+                                non-zero and varying -- shaped like a
+                                per-record compression with `aux` as the
+                                decoded size. NOT ESTABLISHED.
+      kind 0x10  28,410  28.0%  plain UTF-16LE. This is what `get()` returns.
+      kind 0x06   5,735   5.7%      kind 0x05  879  0.9%
+      kind 0x08      16          kind 0x0D    4     kind 0x0E  2
 
 `get()` returns None for any kind it cannot decode, rather than handing back
 bytes dressed as a string. An id that resolves is trustworthy; an id that does

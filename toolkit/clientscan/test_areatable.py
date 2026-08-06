@@ -40,7 +40,7 @@ from archive import Archive, file_id_table  # noqa: E402
 
 AREA_RECORDS = 888
 POINTER_VA = 0x00BF0210             # cross-check only; located structurally
-TEXT_FILES_TILING = 98              # of 99; file 98 will not decompress
+TEXT_FILES_TILING = 99              # all of them, since the zero-length-code fix
 
 # (string id, expected text). The ids come from the area table itself.
 ORACLE = [
