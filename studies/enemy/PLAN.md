@@ -552,6 +552,59 @@ the assert in §6b.
 
 ---
 
+## 6g. Three of four death candidates are dead, and we can now name ArenaNet's files
+
+Probe `kill`, 2026-08-06. Four candidates, one packet each, on one hostile
+Hatcher. The crash timestamp (`10:56:33`) lands exactly on step 8's send
+timestamp, which identifies the culprit without argument.
+
+| Candidate | Result |
+|---|---|
+| float property 42 = `0.0` (health fraction → zero) | **nothing** |
+| `AGENT_ALLY_DESTROY` (`0x003E`) | **nothing** |
+| int property 42 = `0` (maximum health → zero) | health bar **refilled to full**, then `Assertion: range > 0`, `P:\Code\Gw\Char\CharPool.cpp(98)` |
+| `AGENT_PLAYER_DIE` on the *player* | **never ran** — sent 7 s after the crash, into a client that was no longer reading |
+
+**Int property 42 sets the maximum AND refills to full — OBSERVED.** This is the
+first direct confirmation of Headquarter's `agent->health = 1.f;
+agent->health_max = value;` against the real client, and it has a practical
+consequence: **property 42 cannot be used to set current health.** It is
+max-health-and-heal. Anything that wants an agent at partial health must set the
+max and then damage it down, which is what our probes have been doing by luck
+rather than by design.
+
+**`CharPool.cpp` corroborates §6b in ArenaNet's own vocabulary.** The crash
+dump's string region carries that file's assert expressions, and beside
+`range > 0` sits **`fraction <= 1.0f`**. *Fraction* is their word for it. §6b
+measured that health is a fraction; the client's own assert text says so.
+
+### The capability that matters more than the result
+
+`toolkit/clientscan/msghandler.py` finds a message's handler by table lookup, and
+**every assert call site inside a handler carries a pointer to ArenaNet's own
+source path.** Reading those strings turns "which reconstruction do we believe"
+into "which file did they write it in":
+
+```
+GAME_SMSG 0x002D handler @ 0x005FDB70
+  asserts in  P:\Code\Engine\Agent\AgMsg.cpp   expressions 'syncPtr', 'asyncPtr'
+  (the bounds check that killed us in 6d is the same P:\Code\Base\rtl\Array.h,
+   'index < m_count' — one shared assert, two different crashes)
+```
+
+The handler is **not a no-op**: it bounds-checks the agent id, resolves a `syncPtr`
+and conditionally an `asyncPtr` out of two per-agent arrays, calls the same
+routine on each, and finishes with a call against a structure at `+0x94`. So
+`0x002D` does real work and our NPC simply did not visibly respond to it — which
+is a different problem from the message being wrong, and it is why the untested
+fourth candidate is worth one more packet before anything larger.
+
+**This method generalises to all 482 receive handlers**, and it is the strongest
+naming source this project has found. It belongs to `studies/msgtable`, not to
+this arc, but it was discovered here.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND

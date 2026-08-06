@@ -678,6 +678,48 @@ def _enemy_damage_steps(agent_id, origin):
 
 
 def _kill_steps(agent_id, origin):
+    """The one death candidate the last run could not reach.
+
+    RUN 2026-08-06 tried four. Three are dead and are not re-sent here:
+
+        float property 42 = 0.0      nothing
+        AGENT_ALLY_DESTROY 0x003E    nothing
+        int property 42 = 0          refilled the bar to FULL, then killed the
+                                     client on `Assertion: range > 0`,
+                                     P:\\Code\\Gw\\Char\\CharPool.cpp(98)
+
+    The fourth never ran: it was scheduled seven seconds after that crash and
+    went into a socket nobody was reading. So AGENT_PLAYER_DIE aimed at the
+    PLAYER -- the one agent its name claims it is for -- is still untested, and
+    it is three packets to find out.
+
+    No NPC here. The question is about the player, the enemy was only ever
+    context, and a probe that cannot crash is one that can be re-run.
+
+    Why the third candidate refilling matters for this probe's setup: property
+    42 is max-health-AND-heal, not current health, so the only way to stand at
+    partial health is to set the max and damage down. Step 2 does exactly that.
+    """
+    return [
+        Step(2.0, 0x009F, [42, agent_id, 100],
+             "health 100 on YOUR agent",
+             "your own health bar reads 100."),
+        Step(5.0, 0x00A3, [16, agent_id, agent_id, _f32(-0.9)],
+             "damage -0.9 on yourself (90 damage, leaving 10)",
+             "90 damage, bar at 10. Section 6b says it floors at 1 and cannot "
+             "kill you however hard it is hit, so this is as close to death as "
+             "damage alone can bring you."),
+        Step(7.0, 0x002D, [agent_id],
+             "AGENT_PLAYER_DIE on YOUR OWN agent",
+             "THE QUESTION. Death animation, a greyed screen, a resurrect "
+             "prompt, a death penalty appearing top-left? Or nothing? The "
+             "client's handler for this message is real -- it resolves two "
+             "per-agent pointers and calls into them -- so 'nothing' would mean "
+             "it needs state we have never sent, not that the message is inert."),
+    ]
+
+
+def _kill_steps_v1_unused(agent_id, origin):
     """What actually kills an agent? Four candidates, one packet each.
 
     We know what does NOT: damage floors at 1 (section 6b) and
@@ -846,19 +888,22 @@ PROBES = {
              "studies/enemy/PLAN.md.",
     ),
     "kill": lambda a, o: Probe(
-        question="What actually kills an agent, given that damage floors at 1 "
-                 "and AGENT_PLAYER_DIE does nothing to an NPC?",
-        predicts="The float health property set to 0.0. Health is a fraction -- "
-                 "that is measured, not assumed -- and nothing has ever tried "
-                 "writing that fraction directly. If none of the four candidates "
-                 "works, death is not a message we hold and the next move is "
-                 "reading the client's own agent-view code rather than guessing "
-                 "further.",
+        question="Does AGENT_PLAYER_DIE kill the PLAYER? It is the one death "
+                 "candidate the last run could not reach.",
+        predicts="A death animation and a resurrect prompt. The message's name "
+                 "says player, its handler is real code rather than a stub, and "
+                 "it did nothing when aimed at an NPC -- 'player-only' is the "
+                 "reading that fits all three. If it does nothing here either, "
+                 "death needs state we have never sent, and the next move is "
+                 "reading P:\\Code\\Engine\\Agent\\AgMsg.cpp's handler properly "
+                 "rather than sending a fifth guess.",
         steps=_kill_steps(a, o),
-        note="Four candidates, one packet each, on one disposable body, ordered "
-             "so the risky ones cannot cost the safe ones. The last step aims "
-             "AGENT_PLAYER_DIE at the player, because its name says PLAYER and "
-             "we have only ever aimed it at an NPC.",
+        note="Three candidates died in the 2026-08-06 run and are not re-sent: "
+             "float property 42 = 0.0 (nothing), AGENT_ALLY_DESTROY (nothing), "
+             "and int property 42 = 0, which refilled the bar and then crashed "
+             "the client on CharPool.cpp's `range > 0`. That crash is why the "
+             "fourth candidate never ran. This version cannot crash and can be "
+             "re-run freely.",
     ),
     "enemy_damage": lambda a, o: Probe(
         question="Does the client render an ENEMY taking damage, and is the "
