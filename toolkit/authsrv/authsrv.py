@@ -369,6 +369,20 @@ MAP_ID_COUNT = 877
 # Only six maps are configured upstream, and Ascalon City Pre-Searing (148) --
 # the one this account's character actually stands in -- is not among them.
 MAP_STATIC_CONFIG = {
+    # Pre-Searing. This is the map our test character's own record says it is
+    # standing in -- the client asks for map_id 148 on every Play -- and until
+    # now the server substituted Kamadan's geometry because the id would not
+    # resolve. It resolves: file_id_table() was doing an exact-match lookup
+    # while 25 of the archive's ids carry bit 31 (studies/mapdata/FORMAT.md).
+    #
+    # The id and the spawn point are gw-preservation's, and both are CHECKED
+    # against our own archive rather than taken on faith -- which is the middle
+    # path studies/enemy/PLAN.md section 5 describes for their unlicensed data.
+    # MEASURED here: 0x1B97D is row 7982 and parses to 58 planes and 6,120
+    # trapezoids, and (9826, 8077) is walkable on plane 0 of that mesh. A wrong
+    # map would put the spawn off-mesh, which is exactly how the parallel
+    # session told these two maps apart from Kamadan.
+    148: (0x1B97D, (9826.0, 8077.0), 0),     # Ascalon City, Pre-Searing
     449: (0x345CC, (-9067.0, 13218.0), 0),   # Kamadan, Jewel of Istan (outpost)
     194: (0x265F7, (0.0, 0.0), 0),           # Kaineng Center (outpost)
     55:  (352808, (0.0, 0.0), 0),            # Lion's Arch (outpost)
@@ -376,10 +390,11 @@ MAP_STATIC_CONFIG = {
     558: (287493, (0.0, 0.0), 0),            # Sparkfly Swamp
     90:  (46594, (0.0, 0.0), 0),             # Lornar's Pass
 }
-# Kamadan is the substitute because it is the only entry upstream gives a real
-# spawn point for. Loading it under another map's id is knowingly inconsistent;
-# it answers "is the file id the last blocker?" without first having to recover
-# Ascalon's id from Gw.dat.
+# The fallback for maps we have no entry for. It used to catch map 148 as well,
+# which meant the character stood in Kamadan's geometry under Ascalon City's
+# name -- knowingly inconsistent, and accepted at the time because Ascalon's
+# file id could not be recovered. It can now, so 148 is a real entry above and
+# this is back to being what it says it is: a substitute for the unknown.
 FALLBACK_MAP_ID = 449
 
 # Parsed navmeshes, keyed by map_file_id. Loading one costs about a second,

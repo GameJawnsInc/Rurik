@@ -25,10 +25,37 @@
 #>
 param(
     [string]$Exe = "C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe",
-    [switch]$Remove
+    [switch]$Remove,
+    [switch]$List
 )
 
-$RuleName = "Rurik - patched GW client: block outbound"
+# ONE CAGE PER RUN DIRECTORY, and that is a fix rather than a flourish.
+#
+# This script used to name every rule the same thing and delete all rules
+# matching that name before creating new ones. Caging a second client therefore
+# UNCAGED the first, silently, with a success message. It happened for real on
+# 2026-08-06: a second run directory was built so a parallel session could keep
+# reading the archive, caging it dropped the cage on the original, and nobody
+# would have noticed until something reached the internet from a binary we had
+# already malformed packets at.
+#
+# The rule name now carries the run directory, so cages are independent and
+# re-running for the same client is still idempotent.
+$RuleBase = "Rurik - patched GW client: block outbound"
+$Tag = Split-Path -Leaf (Split-Path -Parent $Exe)
+$RuleName = "$RuleBase [$Tag]"
+
+if ($List) {
+    $rules = @(Get-NetFirewallRule -DisplayName "$RuleBase*" -ErrorAction SilentlyContinue |
+               Where-Object { $_.Action -eq 'Block' })
+    if (-not $rules) { "No cages are active."; exit 0 }
+    "Active cages:"
+    foreach ($r in $rules) {
+        $app = ($r | Get-NetFirewallApplicationFilter).Program
+        "  {0,-8} {1}" -f $r.Enabled, $app
+    }
+    exit 0
+}
 
 if (-not ([Security.Principal.WindowsPrincipal] `
         [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -43,9 +70,14 @@ if ($Remove) {
     # the block and silently leaves the allow behind, so a later -Remove looks
     # like it cleaned up while the machine still carries a rule for a binary
     # that may no longer exist. The trailing * catches the pair.
-    $gone = @(Get-NetFirewallRule -DisplayName "$RuleName*" -ErrorAction SilentlyContinue)
+    #
+    # -Remove takes down EVERY cage, including ones this invocation's -Exe does
+    # not name and any left over from before the per-directory naming. Removing
+    # only the named one would be the tidier API and the worse safety property:
+    # "I asked for the cages to be gone" should not leave some of them up.
+    $gone = @(Get-NetFirewallRule -DisplayName "$RuleBase*" -ErrorAction SilentlyContinue)
     $gone | Remove-NetFirewallRule
-    "Removed $($gone.Count) rule(s) matching '$RuleName*'"
+    "Removed $($gone.Count) rule(s) matching '$RuleBase*' -- ALL cages are now down."
     exit 0
 }
 
@@ -56,6 +88,9 @@ if (-not (Test-Path -LiteralPath $Exe)) {
 
 # Same trailing * as above: without it the allow rule survives this cleanup and
 # a second copy is created below, stacking one more on every re-run.
+#
+# Scoped to THIS run directory's rules by the tag in $RuleName, so re-caging one
+# client leaves every other cage standing. That scoping is the whole fix.
 Get-NetFirewallRule -DisplayName "$RuleName*" -ErrorAction SilentlyContinue |
     Remove-NetFirewallRule
 
@@ -90,5 +125,10 @@ ArenaNet" with no visible socket to explain why. Launch with:
 which opens the cage, walks the client through the patcher, records whatever it
 talked to, and closes the cage again before you log in.
 
-Undo with:  .\isolate_client.ps1 -Remove
+Each run directory gets its own cage, so caging a second client no longer
+uncages the first. See what is active with:
+
+    .\isolate_client.ps1 -List
+
+Undo with:  .\isolate_client.ps1 -Remove   (takes down ALL cages, not just this one)
 "@
