@@ -382,7 +382,23 @@ MAP_STATIC_CONFIG = {
     # trapezoids, and (9826, 8077) is walkable on plane 0 of that mesh. A wrong
     # map would put the spawn off-mesh, which is exactly how the parallel
     # session told these two maps apart from Kamadan.
-    148: (0x1B97D, (9826.0, 8077.0), 0),     # Ascalon City, Pre-Searing
+    # BIT 31 STAYS ON, and that is the experiment. Sending the MASKED id
+    # (0x1B97D) reached the client and it refused the file outright:
+    #
+    #   Map file '0x01b97d' failed to load.  Attempting to re-bloat.
+    #   Map '0x01b97d' failed to load / Creating default map
+    #   Assertion: found  P:\Code\Engine\Map\Map.cpp(1762)
+    #
+    # The archive stores this id as 0x8001B97D. archive.py's own docstring flags
+    # "the client masks the bit" as NOT ESTABLISHED -- an inference from the id
+    # a pre-Reforged upstream server sends, never read out of the binary -- and
+    # the crash is the first measurement to bear on it. Our reader registers
+    # both forms, so only the client's opinion is under test here.
+    #
+    # PREDICTION: the raw stored id loads where the masked one did not. If it
+    # also fails, the bit is not the difference and Pre-Searing needs something
+    # neither session has found; revert 148 and the map falls back to Kamadan.
+    148: (0x8001B97D, (9826.0, 8077.0), 0),  # Ascalon City, Pre-Searing
     449: (0x345CC, (-9067.0, 13218.0), 0),   # Kamadan, Jewel of Istan (outpost)
     194: (0x265F7, (0.0, 0.0), 0),           # Kaineng Center (outpost)
     55:  (352808, (0.0, 0.0), 0),            # Lion's Arch (outpost)

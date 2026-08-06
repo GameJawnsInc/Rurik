@@ -222,11 +222,32 @@ never compete; `toolkit/mapdata/archive.py` now registers a bit-31 id under both
 forms, plain ids first, and `test_pathmap.py` §6 asserts that non-collision so a
 future archive cannot quietly break the assumption.
 
-**Why the bit is set is NOT ESTABLISHED.** That the client's own lookup masks it
-is INFERRED from the id a working server sends, not measured — we have not read
-the client's lookup code. `studies/datwrite/FINDINGS.md` lists a "~29-entry bit-31
-file-id watchlist" as an open question; this is that watchlist, and it is 25
-entries on this copy. Reading `Gw.exe`'s file-open path would settle the meaning.
+**Why the bit is set is still NOT ESTABLISHED, but what to send is — MEASURED
+2026-08-06, against the real client.** This section used to say the client's own
+lookup masks the bit, INFERRED from the id a working upstream server sends. That
+inference is now **falsified for our build**, and it was falsified the only way
+it could be: by handing the client each form and watching.
+
+| Sent as `map_file_id` | Build 38797 |
+|---|---|
+| `0x1B97D` — masked, and what gw-preservation's table carries | **rejected.** `Map file '0x01b97d' failed to load. Attempting to re-bloat.` → `Creating default map` → `Assertion: found`, `P:\Code\Engine\Map\Map.cpp(1762)` |
+| `0x8001B97D` — the raw stored form | **loads.** Ascalon City Pre-Searing renders, and its collision matches what is drawn |
+
+So **a server must send the bit-31 id exactly as the archive stores it.** Masking
+remains correct for *our* lookup — it is how we find the row — but it is wrong on
+the wire, and those two had been conflated.
+
+Two things this does not settle. It does not explain *why* the bit is set;
+reading `Gw.exe`'s file-open path is still the way to that. And it does not make
+gw-preservation wrong on their own terms — they pin `clientVersion` 37600, a
+pre-Reforged build, so their masked id may well be right there and simply not
+here. What is now certain is that their value cannot be copied onto this build
+unchanged.
+
+`studies/datwrite/FINDINGS.md` lists a "~29-entry bit-31 file-id watchlist" as an
+open question; this is that watchlist, and it is 25 entries on this copy. The
+other map-flagged one, `0x8001C539` (The Northlands, row 20118), has not been
+sent to a client and should be assumed to want its bit too.
 
 ### Row 7982 is the Pre-Searing region
 
@@ -474,7 +495,7 @@ upstream being trustworthy — it was checked, and the check is what counts.
 | ~~Which map file is Ascalon City Pre-Searing?~~ | **Answered 2026-08-06: row 7982, file id `0x1B97D`, stored with bit 31 set.** |
 | ~~Which of a map's two file numbers does a server send?~~ | **Answered 2026-08-06: the smaller one, 397 for 397.** |
 | ~~What is the u32 at entry+0x14?~~ | **Answered elsewhere and this table was stale.** `studies/datwrite/FINDINGS.md` establishes it as CRC-32/ISO-HDLC over the stored bytes, and `toolkit/mapdata/test_datcrc.py` checks it against real bytes. Same for the header field at 0x0C. |
-| Why is bit 31 set on 25 of the 171,023 file ids? | Read the client's file-open path in `Gw.exe`. That the lookup masks it is inference from a working server's behaviour, not measurement. |
+| Why is bit 31 set on 25 of the 171,023 file ids? | Read the client's file-open path in `Gw.exe`. Still open — but what a SERVER must send is settled: the raw bit-31 id loads on build 38797 and the masked one is refused. The client does not mask. |
 | What are the other 100 map-flagged rows? | No mirror names them. Route 1 above: find the area table in `Gw.exe` and resolve its name string ids through the archive's text records. |
 | Are the 101 shared file ids real, or upstream copy-paste? | Geometry. If two named zones share a file, both their spawns should land in it, as Pre Ascalon City's and Ashford Abbey's do. |
 | Is our decompressor exactly right? | Diff against `xentax.cpp` output on the same input. Needs a C compiler. Separately, it fails on 12 of 1,089 text files with a huffman table hole — that is a live defect and the cheaper thread to pull. |
