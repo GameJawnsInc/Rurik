@@ -652,6 +652,58 @@ it is the method from §6g — read the handlers — rather than more packets.
 
 ---
 
+## 6i. `0x002D` is not death, and the tool that found that had a defect
+
+Probe `moving_die`, 2026-08-06, with the player running throughout. No death, no
+animation, no prompt — **and the character's movement appeared to stop when it
+landed.** Reported tentatively by the operator ("I think it did"), so this is
+*consistent with* the §6h reading rather than a clean confirmation; `0x002D` and
+`0x0028` were not distinguished from each other.
+
+Taken with §6h's disassembly — a body gated on a moving-agent flag that zeroes a
+float pair and clears a state word — the fair summary is: **`0x002D` does
+something to a moving agent, that something looks like cancelling motion, and
+ldufr's name `AGENT_PLAYER_DIE` is not supported by the code.** Five candidates
+have now failed to kill anything.
+
+### The map: every receive opcode to the file ArenaNet implemented it in
+
+Every assert compiles to `mov edx, <expr>; mov ecx, <file>; call <assert>`, so a
+handler names its own source file. `msghandler.py --map` now does this for all
+477 receive handlers:
+
+| Handlers | File |
+|---|---|
+| 30 | `P:\Code\Gw\Item\Cli\ItCliApi.cpp` — `0x0135`–`0x0162` |
+| 18 | `P:\Code\Base\rtl\Array.h` — the shared bounds assert |
+| 17 | `P:\Code\Engine\Agent\AgMsg.cpp` — **`0x001E`–`0x002F`, the whole agent cluster** |
+| 7 | `P:\Code\Gw\Guild\Cli\GuCliApi.cpp` |
+| 3 | `P:\Code\Gw\Mission\Cli\MsCliApi.cpp` — `0x0191`, `0x01A2`, `0x01A3` |
+| 2 | `P:\Code\Gw\Char\CharMsg.cpp` — `0x0057`, `0x0091` |
+| 1 | `P:\Code\Engine\Agent\agint.h` — `0x0020` |
+
+Only 7 files across 477 handlers, because a handler with no assert names nothing.
+That is silence, not absence.
+
+### A defect that had already produced a wrong reading, in this session
+
+`read_table()` masked the opcode with `0xFF`. **MEASURED: 229 of the 477 receive
+opcodes are above `0xFF`**, so nearly half of them collapsed onto a byte and a
+lookup returned whichever entry the walk reached first — with nothing in the
+output to say so.
+
+It had already bitten. The first version of the table above read
+`MsCliApi.cpp` as handling `0x91, 0xA2, 0xA3`, and **`0x00A3` is the damage
+message**, so "damage is implemented in the mission client" was one sentence away
+from being written down as a finding. The real opcodes are `0x0191, 0x01A2,
+0x01A3` and none of them is damage. `0x00A3` has no assert and names no file.
+
+Fixed, with the mask removed at both the table walk and the CLI, and verified
+both directions: `0x002D` still resolves to the same handler, and `0x0199` now
+resolves to itself instead of to `0x0099`.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND
