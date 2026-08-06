@@ -716,3 +716,12 @@ serves the game — the gamesrv instance on 6113 has never received a connection
 Moving the default stack to advertise a dedicated loopback alias (e.g.
 `--game-host 127.0.0.3` + gamesrv bound `127.0.0.3:6112`) would land the game
 channel on the actual game server and un-mix the capture directories.
+
+**Done 2026-08-06:** the harness default is now exactly that — handoff
+advertises `127.0.0.3`, gamesrv binds `127.0.0.3:6112`, preflight went
+host-aware so the two 6112 listeners coexist, and the map checkpoints watch
+only `captures/gamesrv`. OBSERVED on the first run (`harness/20260806T155742`):
+game channel SYN → ESTABLISHED `127.0.0.3:6112` 1.4 s after the Play click,
+version header echoing the handoff's `world_id`/`player_id`, full pass to the
+spawn rung, game capture in `captures/gamesrv/authsrv-20260806T155758-c1.jsonl`
+with the auth capture clean of game traffic.

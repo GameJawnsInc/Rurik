@@ -64,42 +64,59 @@ PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 # ------------------------------------------------------------- pre-flight ----
 
-def server_specs(portal_port=6601, auth_port=6112, game_port=6113,
-                 capture_root=None, auth_host="127.0.0.1"):
-    """The three server processes, as (name, port, argv).
+def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
+                 capture_root=None, auth_host="127.0.0.1",
+                 game_host="127.0.0.3"):
+    """The three server processes, as (name, host, port, argv).
 
     The game channel is served by a second authsrv.py instance: the client
     declares its channel in its version header, so the same listener decodes
-    the game catalog with no extra flag -- only the port and capture dir differ.
+    the game catalog with no extra flag. OBSERVED (handshake PLAN §10): the
+    client dials <GAME_SERVER_INFO host> : hardcoded 6112, so the gamesrv gets
+    a loopback alias of its own (game_host) and binds 6112 there, and the
+    authsrv advertises exactly that endpoint in the handoff. Auth and game may
+    share port 6112 because their hosts differ.
     capture_root overrides the vault capture dirs (tests use a temp dir).
 
     auth_host moves ONLY the authsrv listener (and must be handed to the
-    client as -authsrv too). The webgate stays on 127.0.0.1: the -portal and
-    -authsrv hosts have to be separable for the handoff probe to say which of
-    the two the client's game dial follows.
+    client as -authsrv too). The webgate stays on 127.0.0.1: the -portal,
+    -authsrv and handoff hosts have to be separable for a probe to say which
+    of them the client's game dial follows.
     """
     def cap(sub):
         return (os.path.join(capture_root, sub) if capture_root
                 else vault_path("captures", sub))
     py = [sys.executable, "-u"]
     return [
-        ("webgate", portal_port,
+        ("webgate", "127.0.0.1", portal_port,
          py + [os.path.join(TOOLKIT, "portal", "webgate.py"),
                "--port", str(portal_port), "--vault", cap("portal")]),
-        ("authsrv", auth_port,
+        ("authsrv", auth_host, auth_port,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
                "--port", str(auth_port), "--bind", auth_host,
-               "--vault", cap("authsrv"), "--game-port", str(game_port)]),
-        ("gamesrv", game_port,
+               "--vault", cap("authsrv"),
+               "--game-host", game_host, "--game-port", str(game_port)]),
+        ("gamesrv", game_host, game_port,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
-               "--port", str(game_port), "--vault", cap("gamesrv"),
-               "--game-port", str(game_port)]),
+               "--port", str(game_port), "--bind", game_host,
+               "--vault", cap("gamesrv"),
+               "--game-host", game_host, "--game-port", str(game_port)]),
     ]
 
 
-def listeners_on(port):
-    return [c for c in connections()
+def listeners_on(port, host=None):
+    """LISTEN rows on a port; with host, only rows that would collide there.
+
+    host=None keeps the old port-only reading. With a host, a row matches if
+    it is bound to that exact host OR to the 0.0.0.0 wildcard -- a wildcard
+    bind owns the port on every alias, so it is never out of the way.
+    """
+    rows = [c for c in connections()
             if c["state"] == "LISTEN" and c["local"].endswith(f":{port}")]
+    if host is None:
+        return rows
+    return [r for r in rows
+            if r["local"] in (f"{host}:{port}", f"0.0.0.0:{port}")]
 
 
 def image_name(pid):
@@ -117,32 +134,37 @@ def image_name(pid):
 
 
 def preflight(specs, replace=False):
-    """Every port free, or a loud exit naming exactly what is in the way."""
-    for name, port, _ in specs:
-        for row in listeners_on(port):
+    """Every endpoint free, or a loud exit naming exactly what is in the way.
+
+    Host-aware on purpose: authsrv and gamesrv both use port 6112, at
+    different loopback aliases. A port-only match would report each as
+    squatting on the other's endpoint.
+    """
+    for name, host, port, _ in specs:
+        for row in listeners_on(port, host):
             img = image_name(row["pid"])
             base = os.path.basename(img).lower()
             if replace and base in ("python.exe", "pythonw.exe"):
                 print(f"pre-flight: stopping stale {name} listener "
-                      f"pid {row['pid']} on :{port}")
+                      f"pid {row['pid']} on {row['local']}")
                 os.kill(row["pid"], 15)
             else:
                 hint = ("re-run with --replace to stop it"
                         if base in ("python.exe", "pythonw.exe") else
                         "not a python server -- REFUSING to touch it; stop it yourself")
                 raise SystemExit(
-                    f"Port {port} ({name}) is taken by pid {row['pid']} ({img}).\n"
+                    f"{host}:{port} ({name}) is taken by pid {row['pid']} ({img}).\n"
                     f"  {hint}.")
     # Verify the kills landed rather than assuming: TerminateProcess is
     # asynchronous and a bind that races the dying listener still fails.
     deadline = time.monotonic() + 5
     while replace and time.monotonic() < deadline:
-        if not any(listeners_on(p) for _, p, _ in specs):
+        if not any(listeners_on(p, h) for _, h, p, _ in specs):
             return
         time.sleep(0.1)
-    leftover = [(n, p) for n, p, _ in specs if listeners_on(p)]
+    leftover = [(n, h, p) for n, h, p, _ in specs if listeners_on(p, h)]
     if leftover:
-        raise SystemExit(f"pre-flight: ports still taken after --replace: {leftover}")
+        raise SystemExit(f"pre-flight: endpoints still taken after --replace: {leftover}")
 
 
 # ------------------------------------------------------------------ stack ----
@@ -167,7 +189,7 @@ class Stack:
 
     def start(self, timeout=20):
         os.makedirs(self.logdir, exist_ok=True)
-        for name, port, cmd in self.specs:
+        for name, host, port, cmd in self.specs:
             self.logs[name] = os.path.join(self.logdir, f"{name}.log")
             logf = open(self.logs[name], "a", encoding="utf-8")
             proc = subprocess.Popen(
@@ -178,21 +200,23 @@ class Stack:
             threading.Thread(target=self._pump, args=(name, proc, logf),
                              daemon=True).start()
 
-        # Listening is proven per-pid: the port must be LISTEN *and* owned by
-        # the child we just started. "Something answers on 6112" was exactly
-        # the symptom of the stale-server bug this exists to prevent.
+        # Listening is proven per-pid: the endpoint must be LISTEN *and* owned
+        # by the child we just started. "Something answers on 6112" was exactly
+        # the symptom of the stale-server bug this exists to prevent -- and now
+        # that two servers share port 6112 at different hosts, the host is part
+        # of what must be proven.
         deadline = time.monotonic() + timeout
-        pending = {name: port for name, port, _ in self.specs}
+        pending = {name: (host, port) for name, host, port, _ in self.specs}
         while pending and time.monotonic() < deadline:
-            for name, port in list(pending.items()):
+            for name, (host, port) in list(pending.items()):
                 proc = self.procs[name]
                 if proc.poll() is not None:
                     self.stop()
                     raise SystemExit(
                         f"{name} exited with code {proc.returncode} before "
                         f"listening.\n{self._tail(name)}")
-                if any(r["pid"] == proc.pid for r in listeners_on(port)):
-                    print(f"  {name} up: port {port}  pid {proc.pid}")
+                if any(r["pid"] == proc.pid for r in listeners_on(port, host)):
+                    print(f"  {name} up: {host}:{port}  pid {proc.pid}")
                     del pending[name]
             time.sleep(0.1)
         if pending:
@@ -243,19 +267,23 @@ LOGIN_CHECKPOINTS = [
      by_any(by(kind="login_ok"), by(kind="login_rejected")),
      "no login reply at all: portal and authsrv disagree on sessions.json"),
 ]
-# The game-channel checkpoints watch BOTH capture dirs. OBSERVED 2026-08-06
-# (three discriminating runs, studies/handshake/PLAN.md §10): the client dials
-# <GAME_SERVER_INFO host> : hardcoded 6112 for the game channel -- the
-# advertised port is decorative, and -authsrv plays no part in the game dial.
-# Under this stack's defaults that host is 127.0.0.1, so the dial lands on the
-# AUTH listener, whose catalog self-selection serves the game and records to
-# captures/authsrv; the gamesrv instance only receives it if the handoff names
-# a host of its own. The harness asserts on where the events actually land.
+# The game-channel checkpoints watch the gamesrv capture dir ALONE. OBSERVED
+# 2026-08-06 (three discriminating runs, studies/handshake/PLAN.md §10): the
+# client dials <GAME_SERVER_INFO host> : hardcoded 6112 for the game channel --
+# the advertised port is decorative, and -authsrv plays no part in the game
+# dial. The default stack therefore advertises a loopback alias the gamesrv
+# owns (--game-host, 127.0.0.3) and binds the gamesrv there on 6112, so game
+# traffic records to captures/gamesrv. Before the hosts were separated the
+# dial landed on the AUTH listener, whose catalog self-selection served the
+# game into captures/authsrv -- watching only the gamesrv dir makes that
+# regression a named failure instead of a silent pass on the wrong listener.
 MAP_CHECKPOINTS = [
     ("client asked for a game instance", "auth", by(kind="game_instance_request"),
      "no Play request -- did the client reach character select?"),
     ("client opened its game channel", "game", by(kind="version", channel="game"),
-     "no game-channel connection anywhere -- did the client die after Play?"),
+     "no game-channel connection on the gamesrv host -- did the client die "
+     "after Play? A game channel in captures/authsrv instead means the "
+     "handoff advertised the auth host, not --game-host"),
     ("game channel keyed", "game", by(kind="key_exchange_ok"),
      "game DH failed -- same keys serve both channels, so this is new information"),
     ("client requested its spawn", "game", by(kind="decoded", opcode=0x0088),
@@ -331,8 +359,7 @@ def shot_if_foreground(hwnd, pid, path):
 
 def run_client(a, outdir):
     tails = {"auth": CaptureTail(vault_path("captures", "authsrv")),
-             "game": CaptureTail(vault_path("captures", "authsrv"),
-                                 vault_path("captures", "gamesrv"))}
+             "game": CaptureTail(vault_path("captures", "gamesrv"))}
 
     # Instrumentation first, always -- an instrument that was not yet running
     # produces absence of evidence, never evidence of absence.
@@ -437,11 +464,18 @@ def main():
     ap.add_argument("--actions", default=None,
                     help="override the input script; default depends on --until "
                          f"(login: {ACTIONS['login']!r}, map: {ACTIONS['map']!r})")
-    ap.add_argument("--game-port", type=int, default=6113,
+    ap.add_argument("--game-host", default="127.0.0.3",
+                    help="Loopback alias the gamesrv binds and the handoff "
+                         "advertises. 127/8 only. OBSERVED (handshake PLAN "
+                         "§10): the client dials this host at hardcoded 6112, "
+                         "so it must differ from --auth-host for the game "
+                         "channel to reach the gamesrv at all.")
+    ap.add_argument("--game-port", type=int, default=6112,
                     help="Port the handoff advertises AND the gamesrv listens "
                          "on. OBSERVED (handshake PLAN §10): the client never "
-                         "dials it -- it dials the handoff HOST at 6112. This "
-                         "flag ran the probe that established that.")
+                         "dials it -- it dials --game-host at hardcoded 6112, "
+                         "so any other value leaves the gamesrv unreachable. "
+                         "This flag ran the probe that established that.")
     ap.add_argument("--auth-host", default="127.0.0.1",
                     help="Loopback address for the authsrv listener and the "
                          "client's -authsrv flag. 127/8 only. A second alias "
@@ -452,8 +486,17 @@ def main():
     if not dc.is_loopback(a.auth_host):
         raise SystemExit(f"--auth-host {a.auth_host!r} is not a 127/8 loopback "
                          f"address. The client must stay unable to reach ArenaNet.")
+    if not dc.is_loopback(a.game_host):
+        raise SystemExit(f"--game-host {a.game_host!r} is not a 127/8 loopback "
+                         f"address. The client must stay unable to reach ArenaNet.")
+    if a.game_host == a.auth_host and a.game_port == 6112:
+        raise SystemExit(
+            f"--game-host {a.game_host} is the auth host: the gamesrv would "
+            f"try to bind the authsrv's own endpoint {a.auth_host}:6112. "
+            f"Give the game channel an alias of its own (default 127.0.0.3).")
 
-    specs = server_specs(game_port=a.game_port, auth_host=a.auth_host)
+    specs = server_specs(game_port=a.game_port, auth_host=a.auth_host,
+                         game_host=a.game_host)
     preflight(specs, replace=a.replace)
 
     stamp = time.strftime("%Y%m%dT%H%M%S")

@@ -1,7 +1,8 @@
 """Tests for the harness itself: the safety gate, the live capture tail, and
 the one-command stack. No client is launched and no real port is touched --
-the stack test runs on offset ports (16601/16112/16113) with captures sent to
-a temp dir, so it can run while a real session is up.
+the stack test runs on offset ports (16601, and 16112 at both loopback
+aliases, mirroring the shared-port production shape) with captures sent to a
+temp dir, so it can run while a real session is up.
 
 A red line here names the broken thing before a game run turns it into thirty
 silent seconds and a Code=058.
@@ -119,32 +120,48 @@ def test_preflight_helpers():
         rows = session.listeners_on(port)
         check("listeners_on finds our own listener",
               any(r["pid"] == os.getpid() for r in rows))
+        # Host-aware matching: the same port at another loopback alias is a
+        # DIFFERENT endpoint (auth and game both live on 6112 in production).
+        check("listeners_on with the bound host still finds it",
+              any(r["pid"] == os.getpid()
+                  for r in session.listeners_on(port, "127.0.0.1")))
+        check("listeners_on with another alias does not",
+              not session.listeners_on(port, "127.0.0.3"))
         img = session.image_name(os.getpid())
         check("image_name resolves our own pid to python",
               "python" in os.path.basename(img).lower(), img)
-        specs = [("probe", port, ["unused"])]
-        check("preflight refuses an occupied port without --replace",
+        specs = [("probe", "127.0.0.1", port, ["unused"])]
+        check("preflight refuses an occupied endpoint without --replace",
               refused(session.preflight, specs))
+        check("preflight passes the same port at a free alias",
+              not refused(session.preflight,
+                          [("probe", "127.0.0.3", port, ["unused"])]))
     finally:
         probe.close()
     time.sleep(0.2)
     check("preflight passes once the port is free",
-          not refused(session.preflight, [("probe", port, ["unused"])]))
+          not refused(session.preflight,
+                      [("probe", "127.0.0.1", port, ["unused"])]))
 
 
 # ------------------------------------------------------------------ stack ----
 
 def test_stack():
     with tempfile.TemporaryDirectory() as d:
+        # Same shape as production: auth and game share ONE port at different
+        # loopback aliases, so this exercises the host-aware pre-flight and
+        # the per-pid listen proof against the endpoint pair that matters.
         specs = session.server_specs(portal_port=16601, auth_port=16112,
-                                     game_port=16113, capture_root=d)
+                                     game_port=16112, capture_root=d)
         stack = session.Stack(specs, logdir=os.path.join(d, "logs"))
         try:
             stack.start(timeout=30)
-            for name, port, _ in specs:
+            for name, host, port, _ in specs:
                 owned = any(r["pid"] == stack.procs[name].pid
-                            for r in session.listeners_on(port))
-                check(f"{name} owns 127.0.0.1:{port}", owned)
+                            for r in session.listeners_on(port, host))
+                check(f"{name} owns {host}:{port}", owned)
+            check("auth and game hold the same port at different hosts",
+                  stack.procs["authsrv"].pid != stack.procs["gamesrv"].pid)
 
             body = urllib.request.urlopen(
                 "http://127.0.0.1:16601/Spawned/WebGate/session/create.xml",
@@ -157,8 +174,8 @@ def test_stack():
             # --replace may stop these listeners: they are python. This is the
             # kill path exercised against processes this test owns.
             session.preflight(specs, replace=True)
-            check("--replace freed every port",
-                  not any(session.listeners_on(p) for _, p, _ in specs))
+            check("--replace freed every endpoint",
+                  not any(session.listeners_on(p, h) for _, h, p, _ in specs))
         finally:
             stack.stop()
 

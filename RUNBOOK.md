@@ -38,25 +38,36 @@ Two things it knows that the terminals below do not say:
 - The game channel is served by a **second authsrv.py instance** — the client
   declares its channel in its version header, so the same code decodes the game
   catalog with no extra flag.
-- OBSERVED build 38797 (2026-08-06): the GAME_SERVER_INFO handoff points at
-  6113, and the client opens its game connection to **6112**, where the auth
-  listener self-selects the game catalog. The 6113 instance is kept as
-  insurance in case a build ever honors the host field; the harness asserts on
-  where the events actually land.
+- OBSERVED build 38797 (2026-08-06, handshake PLAN §10): the client dials the
+  GAME_SERVER_INFO **host** at hardcoded port **6112**; the advertised port is
+  decorative. The stack therefore gives the game catalog a loopback alias of
+  its own: the handoff advertises `127.0.0.3`, the gamesrv listens on
+  `127.0.0.3:6112`, and game traffic records to `vault/captures/gamesrv/`
+  instead of mixing into the auth capture. The harness's map checkpoints watch
+  only that dir, so a handoff pointing back at the auth host fails loudly.
 
 ### The same loop by hand
 
-Three terminals, in this order. Nothing here needs admin.
+Four terminals, in this order. Nothing here needs admin except the client.
 
 ```bash
 python toolkit/portal/webgate.py
 ```
 
 ```bash
-python toolkit/authsrv/authsrv.py
+python toolkit/authsrv/authsrv.py --game-host 127.0.0.3
 ```
 
-Terminal 3 is the client, and it must be **elevated** — the launcher changes
+```bash
+python toolkit/authsrv/authsrv.py --bind 127.0.0.3 --port 6112 --vault vault/captures/gamesrv
+```
+
+(That third terminal is the game catalog. Without it — or with the handoff left
+at its `127.0.0.1` default — the game dial lands back on the auth listener,
+whose catalog self-selection still serves the game but records it into
+`vault/captures/authsrv/`, mixed with auth traffic.)
+
+Terminal 4 is the client, and it must be **elevated** — the launcher changes
 firewall rules:
 
 ```bash
@@ -192,7 +203,7 @@ Then heartbeats with a rising tick counter, which is a healthy idle client.
 |---|---|---|
 | Stuck on `Connecting to ArenaNet`, no sockets, servers see nothing | The cage is blocking the pre-login patcher's update check | Launch via `launch_caged.ps1`, not the exe directly. See below |
 | `Unexpected token '-authsrv'` | PowerShell parsed the quoted path as a value | Add the leading `&`. Nothing launched; the flags are fine |
-| `Could not bind … Another AuthSrv is almost certainly still running` | Working as intended | `netstat -ano \| findstr :6112`, stop the old one. This replaced a silent-shadowing bug that cost two sessions |
+| `Could not bind … Another AuthSrv is almost certainly still running` | Working as intended | `netstat -ano \| findstr :6112`, stop the old one. Note a healthy stack shows TWO 6112 listeners — auth on `127.0.0.1`, game on `127.0.0.3`; the stale one is at the host you are trying to bind. This replaced a silent-shadowing bug that cost two sessions |
 | `Code=058`, nothing in terminal 2 | Client never reached us | Both flags present? Launched the **run-dir** copy, not `C:\gw\Gw.exe`? |
 | `expected 0x4200, got …` | Key exchange never started | Almost always an unpatched client |
 | `login REJECTED — no session` | Portal and AuthSrv disagree | Restart the webgate so it re-issues, or use `--allow-any-session` to prove the rest of the path works |
