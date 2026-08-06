@@ -68,7 +68,9 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
-  `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding).
+  `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
+  `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
+  vaulted builds — and it proves its own negative result can go red first).
 - **Find the vault with `toolkit/vaultpath.py`, never with `../../vault`.** A git
   worktree has no vault of its own, so a relative walk lands on nothing — and a
   fixture that resolves to nothing turns every assertion behind it into a no-op.
