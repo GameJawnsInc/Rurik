@@ -42,6 +42,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 import asserts as A                                          # noqa: E402
 import msgshape as MS                                        # noqa: E402
+import genericvalue as GV                                    # noqa: E402
 from vaultpath import vault_path, vault_root, vault_why      # noqa: E402
 
 BUILD = 38797
@@ -96,6 +97,8 @@ QUOTED = [
     ("ChCliBuff", 235, "!buffTarget->sourceAgent"),
     ("GmEffect", 882, "targetBuff.skill == m_skillId"),
     ("GmEffect", 1252, "m_sourceBuff.buffId"),
+    ("AvChar", 4320, "stat == AV_CHAR_STAT_ENERGY"),
+    ("ChCliApi", 2112, "sourceAgent < 5"),
     ("PathDir", 1494, "m_trapezoid->portalLeft < pathMap.portalCount"),
 ]
 
@@ -213,6 +216,27 @@ BYTES = [
      "and stamps appliedAt with the skill timer instead"),
     (0x0081D051, "837f0c00",
      "which is why ExtendTimed asserts !buffTarget->sourceAgent"),
+    # -- section 15, the agent-property dispatchers ---------------------
+    (0x008129DA, "899e40060000",
+     "property 10 stores the skill id at charContext+0x640"),
+    (0x008129E2, "89bea4060000",
+     "property 64 stores an AGENT id at charContext+0x6A4"),
+    (0x0081311A, "c7874006000000000000",
+     "the damage family clears +0x640 after consuming it"),
+    (0x008131F4, "c7874006000000000000",
+     "and so does the armour-ignoring family"),
+    (0x007F78DB, "85f67414",
+     "AvChar skips `stat == AV_CHAR_STAT_ENERGY` when stat is 0, so "
+     "ENERGY is 0 and the 0/1 flag throughout is energy/health"),
+    (0x00812B6C, "535157",
+     "property 20 passes (agent, TARGET, value) ..."),
+    (0x00812B7E, "535757",
+     "... and property 21 passes the agent twice, which is exactly "
+     "GWCA's effect_on_target / effect_on_agent"),
+    (0x00812D17, "d905ac8d9400",
+     "property 35 loads a compiled-in float constant"),
+    (0x00813239, "d94514",
+     "where property 63 takes its float from the wire -- same callee"),
 ]
 
 
@@ -278,6 +302,38 @@ def main():
        "opcode 211's write path has exactly one caller (its own handler)")
     eq(len(az.direct_callers(0x00822B80)), 2,
        "the SKILL_ACTIVATE path has two: the handler AND ChCliApiUseSkill")
+
+    print("\n6. The two agent-property dispatchers")
+    gimg = GV.Image(exe)
+    table = GV.classify(gimg)
+    ints = {i for i, (w, _) in table.items() if w == "int"}
+    floats = {i for i, (w, _) in table.items() if w == "float"}
+    pre = {i for i, (w, _) in table.items() if w == "int-pre"}
+    none = {i for i, (w, _) in table.items() if w is None}
+    eq(len(table), 67, "the client accepts property ids 0..66")
+    check(len(GV.OPENTYRIA) == 66 and 66 not in GV.OPENTYRIA,
+          "and OpenTyria's enum stops one short, at 65")
+    eq(len(ints), 47, "int dispatcher case bodies")
+    eq(len(floats), 14, "float dispatcher case bodies")
+    eq(len(pre), 2, "handled only by the int pre-switch")
+    eq(sorted(none), [5, 8, 40, 51], "handled by neither")
+    both = GV.handled(gimg, GV.INT_SWITCH) & GV.handled(gimg, GV.FLOAT_SWITCH)
+    check(not both, "the two switches are DISJOINT", f"overlap {sorted(both)}")
+    eq(len(ints | floats | pre | none), 67, "and together they cover every id")
+    eq(table[60][0], "int", "60 (skill_activated) is an int property")
+    eq(table[63][0], "float", "63 (knocked_down) is a float property")
+    eq(table[44][0], "float", "44 (health regen) is a float property")
+    check(table[35][1] is not None and table[63][1] is not None,
+          "35 and 63 both have case bodies (they share an AvApi callee)")
+    # 4, 50 and 60 each have their OWN body in the main int switch, and all
+    # three share one body in the pre-switch that runs before it. Both
+    # lineages independently call those three "X started/activated"; the
+    # binary bucketing exactly those three and no others is the corroboration.
+    presw = GV.read_switch(gimg, GV.PRE_SWITCH)
+    shared = {i for i, va in presw.items() if va == presw[4]}
+    eq(sorted(shared), [4, 50, 60], "the pre-switch groups exactly 4, 50, 60")
+    check(presw[4] != GV.PRE_SWITCH["default"],
+          "and that group is a real body, not the fall-through")
 
     print()
     if FAILED:
