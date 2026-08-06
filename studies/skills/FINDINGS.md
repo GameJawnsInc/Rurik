@@ -186,12 +186,14 @@ at `0x98`/`0x9c`/`0xa0` for the three string ids on its own.
    (`Skill.h:89-95` region), Tyria-Extractor as a documented rule
    (`doc/SKILL_EXTRACTION.md:43`). CLIENT-DATA, but see the caveat below.
 2. **`adrenaline` at `+0x38` is a total in adrenaline units, and the displayed
-   cost is `ceil(raw / 25)`** — *not* a plain division. The "25 internal units
-   per displayed strike" rule this document previously carried
-   (`doc/SKILL_EXTRACTION.md`, adrenaline row; Tyria-Extractor unit test at
-   `src/skills.rs:299-305`) predicts 3.2 for Battle Rage and 4.8 for Defy Pain,
-   which are not integers and are not what the client shows. Corrected below;
-   this is the one field in the record we have measured end to end.
+   cost is `ceil(raw / 25)`** — not a plain division. **This document, not
+   Tyria-Extractor, is what was wrong.** `doc/SKILL_EXTRACTION.md` §2.1 states
+   the ceil formula explicitly, with a worked example (Gash stores 140 units,
+   displays 6); only the one-line gloss in its offset table reads "25 units
+   correspond to one displayed strike", and that gloss is what this document
+   copied. Dividing gives 3.2 for Battle Rage and 4.8 for Defy Pain, which are
+   not integers and are not what the client shows. Now verified against 115
+   skills — see "The adrenaline field, measured and corrected".
 3. **62 of the 164 bytes are undocumented by Tyria-Extractor** — `0x04-0x07`,
    `0x14-0x27`, `0x32`, `0x37`, `0x50-0x57`, `0x74-0x8b`, `0x94-0x97`. GWCA names
    some of those bytes (notably the whole animation block and
@@ -259,10 +261,69 @@ Two things worth keeping beyond the formula:
   count and wiki skill count already agree to 0.3% (§"The answer in one page");
   the `id` field is how that comparison could be done row by row.
 
-**How to re-read the wiki.** `wiki.guildwars.com` returns 403 to every scripted
-client — it fingerprints the TLS/HTTP stack, so no User-Agent, header set or
-VPN change gets through. Use the `browse-gw-wiki` skill in `.claude/skills/`;
-it drives a real browser and documents the routes.
+### The row-by-row audit
+
+**OBSERVED (ours), 2026-08-06.** `toolkit/clientscan/skilltable.py` is our own
+stdlib-Python reader for `s_skill`. It locates the table structurally — never by
+address — and dumps every row. Against `C:\gw\Gw.exe` (10,483,904 bytes) it
+finds the table at file offset `5799632`, **3,443 rows**, of which **1,333** are
+the player corpus (`equip_family == 1`, PvP flag clear).
+
+**1,333 is exactly Tyria-Extractor's count.** That is a second implementation,
+in a different language, written from the spec rather than the code, landing on
+the same number — which is what makes the layout claim above CORROBORATED
+rather than merely repeated.
+
+The wiki's `id` field makes the join mechanical. Crawling the ten profession
+categories plus Common skills via the MediaWiki API yields 1,788 pages, 1,564
+carrying an infobox `id`. Joined against the client table:
+
+| Field | Compared | Agree | Disagree |
+|---|---|---|---|
+| `adrenaline` → `ceil(units/25)` | 115 | **115** | **0** |
+| energy encoding `11` → 15 | 104 | **104** | **0** |
+| energy encoding `12` → 25 | 30 | **30** | **0** |
+| `elite` flag | 307 client-corpus elites | **all** | **0** |
+
+**Nothing disagreed.** Every gap resolved to a set-definition or coverage
+difference, checked rather than assumed:
+
+- 49 wiki-elite ids sit outside the client's corpus-elite set. Sampled 15: all
+  15 are `pvp_only` rows with `equip_family == 0` whose `linked_id` points back
+  at the base skill — precisely the reciprocal PvP relation
+  `SKILL_EXTRACTION.md` §4 describes, and excluded from the corpus by design.
+  The elite flag itself agrees on them.
+- Ids `121` and `229` carry the encoded energy byte but appear nowhere in the
+  crawl. They are not a conflict; the eleven categories walked do not cover
+  every skill page. **UNVERIFIED** rather than clean.
+- The wiki dump spans 1,564 ids against a 1,333-row corpus, so raw distribution
+  totals differ. That is the PvP variants, not a discrepancy.
+
+**This settles the energy encoding**, which this document flagged two sections
+above as the field "most likely to bite us" — CLIENT-DATA with no disassembly
+address, no journal entry and no test. It now has 134 independent confirmations
+and zero exceptions: every skill the wiki shows at 15 energy stores `11`, every
+skill it shows at 25 stores `12`. Promote it to **CORROBORATED**. The caveat
+above is retained deliberately as a record of what the doubt was worth.
+
+Incidental: the wiki lists exactly **1,329** skills carrying an energy cost —
+the same 1,329 this document already cites for the wiki skill count, arrived at
+by a different route.
+
+**How to re-read the wiki.** `wiki.guildwars.com` gives a scripted client a
+small burst of requests and then refuses it for a long while — MEASURED at 5
+consecutive successes out of 20, then hard 403s, with a two-minute backoff not
+restoring access. No User-Agent, header set or VPN change helps, and retrying
+in a loop is what exhausts the allowance. Use the `browse-gw-wiki` skill in
+`.claude/skills/`; a browser is unaffected, and the API *is* reachable from
+inside a browser page context (`fetch('/api.php?...')` under `javascript_tool`),
+which is how 1,788 pages were pulled here — far cheaper than one navigation per
+page.
+
+The occasional scripted success is a trap worth naming: it briefly made the
+skill's own selftest report GWW as unblocked, because the check was reading a
+cache entry written during a lucky window. A network check a cache can satisfy
+is not a network check.
 
 **Do not use the Fandom GuildWiki (`guildwars.fandom.com`) for skill values.**
 Its skill templates were last edited 2008–2010 while ArenaNet still ships
@@ -1022,7 +1083,9 @@ diff the corpus.
 | Opcode **numbering and naming** | **None.** One corpus, nine repos. |
 | Skill **record layout** | Two: the cluster (GWCA) and **Fournux/Tyria-Extractor** (partial — it cites GWToolbox and Py4GW as "conceptual references", and takes its FFNA file-reference formula from GuildWarsMapBrowser, but it also *corrects* GWCA, which is what real independence looks like). |
 | Skill **count** | Two, by unrelated methods: Tyria-Extractor's PE measurement (1,333 base rows) and the Guild Wars wiki (1,329 player skills). |
-| **`adrenaline` at `+0x38`** | Two, and one of them is ours: our own measurement of raw bytes against the client's display, and GWW stating the same raw magnitude ("80 units") on its skill pages. The wiki shares no author or code with this cluster. See "The adrenaline field, measured and corrected". |
+| **`adrenaline` at `+0x38`** | Two, and one of them is ours: our own reader over `Gw.exe`, and GWW. 115 skills, zero disagreements. The wiki shares no author or code with this cluster. |
+| **Energy encoding (`11`→15, `12`→25)** | Two: our own reader and GWW, 134 skills, zero exceptions. Was the weakest CLIENT-DATA claim in this document; now the best-tested one. |
+| **Skill corpus size (1,333)** | Two implementations from the spec: Tyria-Extractor (Rust) and `toolkit/clientscan/skilltable.py` (ours, Python), same structural search, identical count. |
 | Capture **methodology** | gw-preservation is genuinely independent here — its `annotate.py` decodes the client's *own* runtime field-descriptor bitfield rather than consulting a hand-maintained table, and its RC4 scan signatures appear nowhere else in the vault. |
 | Attribute id space | Three against one (see §1). |
 

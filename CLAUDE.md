@@ -63,7 +63,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   Others: `toolkit/schema/test_codec.py` (codec vs. real captured bytes),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
-  `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`.
+  `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
+  `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki).
 - The daily three-terminal loop, the one-time client patching, and the failure table
   are in [RUNBOOK.md](RUNBOOK.md). The DH parameters rotate with every client build,
   so an ArenaNet update means redoing that setup in full.
@@ -79,6 +80,6 @@ reasoning about it. Two of the three hardest questions so far were settled that 
 | `toolkit/schema/` | Codec and the message-catalog importer |
 | `schema/messages.json`, `overrides.json` | The wire schema, tracked in git |
 | `toolkit/clientscan/`, `toolkit/clientpatch/` | Read-only client analysis; patching and the firewall cage |
-| `toolkit/mapdata/` | `Gw.dat` archive reader, plan (`datplan`) and writer (`datwrite`) |
+| `toolkit/mapdata/` | `Gw.dat` reader, planner (`datplan`), writer (`datwrite`), textures (`atex`, `dxt1`) |
 | `studies/` | Per-arc research, labelled by confidence |
 | `vault/` | Gitignored. Snapshots, keys, captures, prior-art mirrors |

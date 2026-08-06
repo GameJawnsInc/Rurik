@@ -12,10 +12,13 @@ happens to match the client is a false corroboration, which is worse for this
 project than no value at all. It was evaluated and dropped; see
 references/access.md before reintroducing it.
 
-GWW's AWS edge 403s scripted clients on every path -- it fingerprints the
-HTTP/TLS stack, so no User-Agent, header set or VPN toggle gets through (a
-browser on the same machine and tunnel succeeds; see references/access.md).
-Use the Chrome browser MCP to fetch, then parse here with --from-file. The
+GWW's AWS edge gives scripted clients a small burst allowance and then refuses
+them for a long while -- MEASURED: 5 consecutive successes out of 20, then hard
+403s, with a 2-minute backoff failing to restore access. No User-Agent, header
+set or VPN toggle changes this, and retrying in a loop is precisely what
+exhausts the allowance. A browser is unaffected; see references/access.md.
+
+So: fetch with the Chrome browser MCP, then parse here with --from-file. The
 parsers are transport-independent for exactly that reason.
 
 Commands
@@ -62,16 +65,19 @@ MIN_INTERVAL = 1.0  # seconds between live requests; be a good citizen
 
 BLOCKED_HELP = (
     f"{HOST} returned 403 before MediaWiki saw the request.\n"
-    "The edge fingerprints the HTTP/TLS client. Ruled out by experiment:\n"
-    "egress IP (a browser on the same machine and tunnel succeeds),\n"
-    "User-Agent, and headers (a full Chrome header set over HTTP/1.1 still\n"
-    "403s while the same request to Wikipedia returns 200). No UA string,\n"
-    "header set or VPN toggle will fix this -- do not spend time on it.\n"
+    "Scripted clients get a small burst allowance and are then refused for a\n"
+    "long while. MEASURED: 5 consecutive successes out of 20, then hard 403s;\n"
+    "a 2-minute backoff did not restore access.\n"
     "\n"
-    "This script cannot reach GWW from any HTTP/1.1 + Schannel/OpenSSL\n"
-    "client. Use instead:\n"
-    "  * the Chrome browser MCP tools -- a real browser passes; this is the\n"
-    "    primary route\n"
+    "DO NOT RETRY IN A LOOP. Retrying is what exhausts the allowance, and it\n"
+    "is rude to a wiki that owes us nothing. Ruled out by experiment: egress\n"
+    "IP (a browser on the same machine and tunnel succeeds), User-Agent, and\n"
+    "headers (a full Chrome header set still 403s while the same request to\n"
+    "Wikipedia returns 200). No UA or VPN change fixes this.\n"
+    "\n"
+    "Use instead:\n"
+    "  * the Chrome browser MCP tools -- unaffected, and via fetch('/api.php')\n"
+    "    from a wiki page it is faster than this script ever was\n"
     "  * WebSearch restricted to wiki.guildwars.com -- prose, not infobox\n"
     "    numbers\n"
     "Then feed what you retrieved back through the parsers here with\n"
