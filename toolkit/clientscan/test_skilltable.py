@@ -176,7 +176,33 @@ def main():
               f"energy store the encoded byte {want_raw}"
               + (f" -- EXCEPTIONS {wrong[:5]}" if wrong else ""))
 
-    print("\n4. build-specific counts (a change here is a finding, not a bug)")
+    print("\n4. the string ids resolve to the names the client renders")
+    try:
+        import textrec
+    except ImportError:                                     # noqa: BLE001
+        check(False, "textrec is importable")
+    else:
+        with textrec.TextIndex(args.exe) as ix:
+            named = [r for r in rows if r["name_id"] and ix.get(r["name_id"])]
+            check(len(named) >= EXPECTED_RECORD_COUNT - 8,
+                  f"{len(named)} of {len(rows)} skill names resolve to text")
+            # These two identities were established in studies/skills by
+            # DRIVING A LIVE CLIENT and reading what it drew, long before any
+            # offline decoder existed. Reproducing them from Gw.dat is the
+            # decoder agreeing with the game rather than with itself.
+            for sid, want in ((322, "Power Attack"), (318, "Defy Pain")):
+                got = ix.get(by_id[sid]["name_id"]) if sid in by_id else None
+                check(got == want,
+                      f"skill {sid} decodes to {want!r}, which is what the "
+                      f"live client drew (got {got!r})")
+            trail = [r for r in rows
+                     if r["description_id"] == r["name_id"] + 1
+                     and ix.get(r["name_id"]) and ix.get(r["description_id"])]
+            check(len(trail) > 3000,
+                  f"name and description both resolve on {len(trail)} of the "
+                  f"rows where the ids are adjacent")
+
+    print("\n5. build-specific counts (a change here is a finding, not a bug)")
     check(count == EXPECTED_RECORD_COUNT,
           f"{EXPECTED_RECORD_COUNT} rows (got {count}) -- if this moved, the "
           f"client was updated; re-run the wiki join before trusting old numbers")

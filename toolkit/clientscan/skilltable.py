@@ -178,6 +178,12 @@ def displayed_adrenaline(units: int) -> int:
 
 
 def parse_record(data: bytes, base: int, skill_id: int) -> dict:
+    # `base` is the TABLE base from locate_table(), not the row's offset -- the
+    # row arithmetic happens here. Passing an already-advanced offset reads at
+    # base + 2*skill_id*RECORD_SIZE, which decodes cleanly for the first half of
+    # the table and then walks off the end into whatever follows it, so the
+    # damage shows up as "the tail of the table is garbage" rather than as an
+    # error. Ask how a bad row index compares to count/2 before believing it.
     r = base + skill_id * RECORD_SIZE
     flags = u32(data, r + 0x10)
     units = u32(data, r + 0x38)

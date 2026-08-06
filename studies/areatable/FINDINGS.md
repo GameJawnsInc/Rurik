@@ -238,8 +238,26 @@ explained as an upstream copy-paste rather than a fact about the archive.
 ## 7. What this does and does not solve
 
 **Solved.** Map id → name, for all 888 maps the client knows, from the client
-itself. Any `name_id` in any client table, including the skill table's, is now
-resolvable offline.
+itself. Any `name_id` in any client table is now resolvable offline, and the
+skill table is the case that pays: **3,440 of 3,443 skill names, concise
+descriptions and full descriptions decode**, which is R4b's naming bootstrap
+with no capture vault involved.
+
+That decode is corroborated three ways, and the first is the one that counts.
+`studies/skills/FINDINGS.md` established skill 322 as *Power Attack* and 318 as
+*Defy Pain* by **driving a live client and reading what it drew**, months before
+any offline decoder existed; both now fall out of `Gw.dat`. Second, description
+ids trail name ids by one on 3,350 rows and both ends resolve. Third, against
+GWCA's hand-typed skill enum — an independent lineage, self-labelled
+`// This array needs testing lol.` — **2,920 of 2,997 shared ids agree** (2,520
+exactly, 400 where GWCA appends a suffix such as `_environment` or
+`_monster_skill` to keep enum identifiers unique).
+
+The 77 residual disagreements are almost all **GWCA being stale rather than us
+being wrong**, which is worth stating because it is the direction nobody
+expects: the client says `REMOVE` for skills ArenaNet deleted while GWCA keeps
+the old name, and says `Asuran Bodyguard Rank 2/3/4` where GWCA invented
+`Asuran_Bodyguard`, `_1`, `_2`.
 
 **Not solved.** Map id → *map file*. `AreaInfo` does not carry it (§3), so
 naming the 100 map-flagged archive rows that no mirror names is still open. The
@@ -251,8 +269,21 @@ the id turns up in a table we have not found.
 ## 8. What we did not establish
 
 1. **Record kinds `0x05`, `0x06`, `0x07`, `0x08`, `0x0D`, `0x0E`.** Kind `0x07`
-   is 71% of all records; if it is a compression, decoding it opens the whole
-   corpus. `aux` is a candidate decoded-size field on shape alone.
+   is 65% of all records and its payload is high-entropy.
+
+   **The obvious hypothesis is refuted.** `aux` is not a decoded size: in text
+   file 10, record 475 carries `aux = 56` with a **483-byte** payload, while
+   record 474 carries `aux = 65` with 35 bytes. There is no consistent
+   relationship in either direction, so whatever `aux` is, it is not the size
+   the record decodes to. Recorded because it was the first thing to try and is
+   now not worth trying again.
+
+   **It also blocks nothing this project currently wants**, which is the more
+   useful half of the answer. Everything we need text for is kind `0x10`:
+   **888 of 888** area names, and **3,440 of 3,443** skill names, concise
+   descriptions and full descriptions — the other three are kind `0x05`. Kind
+   `0x07` is worth opening for its own sake, most likely item and dialogue
+   text, but it is not on the critical path.
 2. **The `aux` field on kind `0x10` records is always 0**, so nothing here
    constrains what it means in general.
 3. ~~**Text file 98** does not decompress — `gwdat.py`'s huffman table hole.~~
