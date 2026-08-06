@@ -731,6 +731,45 @@ after the record update and not yet read.
 
 ---
 
+## 6k. Death, found — and the arc's blocking unknown is closed
+
+`AGENT_UPDATE_EFFECTS` (`0x00F1`), **bit 4 (`0x10`) of the effects dword**. Set
+it and the agent dies; clear it and the agent gets back up. OBSERVED both
+directions, 2026-08-06. Full write-up in
+[studies/agentprops/FINDINGS.md](../agentprops/FINDINGS.md) §1c.
+
+**Death was never a message.** Seven candidates were tried across §6f–§6i —
+`AGENT_PLAYER_DIE` at an NPC and at the player, `AGENT_ALLY_DESTROY`, float
+health zero, int health zero, damage past its floor, an absolute health modifier
+past zero — and every one was a guess at *which message kills*. The answer is a
+bit in a bitfield, and it was found by reading the client's own use of the
+`+0x30` word rather than by sending an eighth guess.
+
+Two practical consequences for anything built on this:
+
+- **Reviving is two operations.** The death path zeroes the health and energy
+  pools, so clearing the bit alone returns a body at ~0–1 health that dies to
+  any scratch. Clear the bit, then set health.
+- **Death drops the client's target**, nameplate and all.
+
+**Every mechanism a first enemy needs is now proven against our own client:**
+
+| Capability | Where |
+|---|---|
+| spawn a second agent | §6c |
+| render it as a correctly-modelled, correctly-named NPC | §6d |
+| make it hostile | §6e |
+| give it health | §6g, §1c of the props study |
+| damage it, in the right units, at the right target | §6b, §6f |
+| heal or set health silently | agentprops §1b, property 34 |
+| **kill it, and revive it** | **§6k** |
+
+What remains is not protocol. It is a server that does these things on its own —
+§7.2's agent table, a hostile NPC at instance load, and something that decides
+when to send them.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND
@@ -808,7 +847,13 @@ The Catacombs is reachable (§5) and has no published spawn point; a walkable
 point must come from our own navmesh. Pre-Searing Ascalon City, the finish line's
 home map, still has no resolvable file id.
 
-### 7.4 Combat is unwritten, everywhere — NOT FOUND
+### 7.4 Combat is unwritten everywhere else — but no longer unknown here
+
+**Superseded in part by §6b, §6f and §6k.** The wire mechanisms for damage and
+death are now measured against our own client, so this is no longer a research
+blocker — it is unwritten *code*, which is a different and much smaller problem.
+What the survey below still describes accurately is that **no other project has
+any of it**, so there is nothing to copy and no reference to check against.
 
 Checked per-file across the mirrors: no damage model, no aggro, no monster AI
 anywhere. gw-preservation spawns NPCs and never makes them act.

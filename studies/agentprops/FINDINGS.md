@@ -142,6 +142,47 @@ bar emptied and the agent kept standing. Combined with §3b, this is decisive:
 
 ---
 
+## 1c. Death is bit 4 of the agent effects word — OBSERVED, both directions
+
+Probe `death`, 2026-08-06, build 38797, against a hostile NPC.
+
+| Sent | Client showed |
+|---|---|
+| property 16 = `-0.5` (control) | 50 damage — the session reproduces |
+| `AGENT_UPDATE_EFFECTS` (`0x00F1`), effects = **`0x10`** | **dead** — the body drops, the nameplate and the target both disappear |
+| `AGENT_UPDATE_EFFECTS`, effects = **`0`** | **resurrected**, at ~0–1 health, and needs re-clicking to retarget |
+
+**`0x00F1 [agent_id, effects]` with bit 4 set kills an agent, and clearing it
+brings the agent back.** Bidirectional, which is the strong form of the result:
+plenty of things can break an agent once, but a mechanism that reverses cleanly
+is the mechanism itself rather than a symptom of it.
+
+This was predicted from the binary before it was sent — §2's two uses of the
+`+0x30` word — so it is a reading confirmed by measurement rather than a guess
+that happened to work. **Seven earlier attempts, all guesses at a death
+*message*, all failed** (`studies/enemy/PLAN.md` §6f–§6i). Death was never a
+message.
+
+Three consequences worth having:
+
+- **Death drops the client's target.** The nameplate goes with the body, so a
+  server cannot assume a client still has a dead agent selected.
+- **Reviving does not restore health.** The body came back at ~0–1, because the
+  death path had already zeroed the pools (§2, `fldz` into `0x009215F0` and
+  `0x00921780`). A resurrect is therefore **two** operations: clear the bit, then
+  set health. Sending only the first leaves a living agent that dies to any
+  scratch.
+- **It explains the refill mystery.** Int property 42 always refilled the health
+  bar, in every probe that used it, because the health path checks
+  `!((effects >> 4) & 1)` first. The client only refills an agent it does not
+  believe is dead. That behaviour was OBSERVED days before the reason was found.
+
+**The effects word is a bitfield and only bit 4 is identified.** The other 31
+bits are unread. Nothing here says what they are, and the client's own handler
+tests only this one at `0x008183F0` — the rest are consumed elsewhere.
+
+---
+
 ## 2. How the two paths reach the dispatch — SOURCED
 
 Both property messages are thin shims into a shared per-agent record.

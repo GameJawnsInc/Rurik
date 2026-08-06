@@ -312,8 +312,16 @@ def _damage_steps(agent_id):
     ]
 
 
-def _death_steps(agent_id):
-    """Does 0x002D kill, when damage demonstrably cannot?
+def _die_0x2d_steps(agent_id):
+    """SUPERSEDED, and kept because the negative is worth reading.
+
+    This asked whether 0x002D kills. It does not -- not an NPC, not the player.
+    Its handler's body is gated on a moving-agent flag and zeroes a velocity
+    (studies/enemy/PLAN.md 6h), and ldufr's name AGENT_PLAYER_DIE is not
+    supported by the code. Death turned out to be a BIT, not a message: see the
+    `death` probe below.
+
+    Does 0x002D kill, when damage demonstrably cannot?
 
     The `damage` probe established that health CLAMPS AT 1: 2500 damage against
     75 left the character standing, with no death animation and no state change.
@@ -677,6 +685,76 @@ def _enemy_damage_steps(agent_id, origin):
     ]
 
 
+# The agent EFFECTS bitfield, carried by 0x00F0 and 0x00F1. Bit 4 is death.
+#
+# SOURCED, and corroborated by two independent uses in the client binary:
+#
+#   0x008183F0   mov  [ebx+0x30], eax     ; the effects word, stored on the record
+#                test al, 0x10            ; bit 4
+#                je   skip
+#                fldz ... call 0x9215F0   ; zero the health pool -- the SAME
+#                fldz ... call 0x921780   ; callee property 34 uses
+#                (and again for two further sub-structures)
+#
+#   0x00818191   mov  eax, [edi+0x30]     ; the health path reads the same word
+#                shr  eax, 4              ; and computes !((effects >> 4) & 1),
+#                not  eax                 ; i.e. "is this agent NOT dead",
+#                and  eax, 1              ; passing it to the health setter
+#
+# The second explains a result this project has had for days without
+# understanding it: int property 42 always REFILLED the health bar, because the
+# client only refills an agent it does not believe is dead.
+EFFECT_DEAD = 0x10
+
+
+def _death_steps(agent_id, origin):
+    """Kill something, then bring it back.
+
+    Seven mechanisms failed before this: AGENT_PLAYER_DIE at an NPC and at the
+    player, AGENT_ALLY_DESTROY, float health zero, int health zero, damage past
+    its floor, and an absolute health modifier past zero. All seven were guesses
+    at a MESSAGE. Death is not a message -- it is a bit in the agent's effects
+    word, and the two places the binary uses that bit agree with each other.
+
+    The last step is the one that matters. A bit that kills should also un-kill,
+    and if the body gets up again the mechanism is not merely correlated with
+    death, it IS death. A one-way result would be much weaker: plenty of things
+    can break an agent once.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    E = 7
+    return [
+        Step(2.0, 0x0056,
+             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {h['definition']}", "nothing yet."),
+        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {h['definition']}", "nothing yet."),
+        Step(1.0, 0x0020,
+             _create_agent(E, CHAR_CLASS_MONSTER_BASE | h["definition"],
+                           AGENT_KIND_NPC, ox + 300, oy, plane, token=0x6D6F6E73),
+             f"WORLD_CREATE_AGENT {E}, hostile Hatcher",
+             "a red Hatcher. TARGET IT and keep it targeted."),
+        Step(4.0, 0x009F, [42, E, 100], f"health 100 on agent {E}",
+             "target bar reads 100."),
+        Step(5.0, 0x00A3, [16, E, agent_id, _f32(-0.5)],
+             "control: damage -0.5",
+             "50 damage, bar to 50 -- the session reproduces, so what follows "
+             "means something."),
+        Step(7.0, 0x00F1, [E, EFFECT_DEAD],
+             f"AGENT_UPDATE_EFFECTS on agent {E}, effects = 0x10 (the DEAD bit)",
+             "THE ANSWER, IF IT IS ONE. Does it die? Death animation, ragdoll, a "
+             "corpse on the ground, the nameplate greying or vanishing, the bar "
+             "emptying on its own? Anything a live body would not do."),
+        Step(8.0, 0x00F1, [E, 0],
+             f"AGENT_UPDATE_EFFECTS on agent {E}, effects = 0 (clear the bit)",
+             "THE CONTROL, and the more important half. Does it get back up? A "
+             "bit that kills should un-kill. If the body revives, this is death "
+             "rather than something merely correlated with it."),
+    ]
+
+
 def _health_props_steps(agent_id, origin):
     """The health properties the client dispatches and we have never sent.
 
@@ -995,6 +1073,26 @@ PROBES = {
              "client on ArenaNet's own `damage.amount <= 0`. See "
              "studies/enemy/PLAN.md.",
     ),
+    "death": lambda a, o: Probe(
+        question="Is death bit 0x10 of the agent effects word, carried by "
+                 "AGENT_UPDATE_EFFECTS (0x00F1)?",
+        predicts="The hostile Hatcher dies when the bit is set and gets back up "
+                 "when it is cleared. Two places in the client agree on the bit: "
+                 "the effects setter zeroes the health and energy pools when it "
+                 "is present, and the health path refuses to refill an agent "
+                 "whose effects word carries it. If the body dies but does not "
+                 "revive, the bit is a one-way state and something else resets "
+                 "it.",
+        steps=_death_steps(a, o),
+        note="ANSWERED 2026-08-06, BOTH DIRECTIONS. 0x10 killed the Hatcher -- "
+             "body down, nameplate and target gone -- and 0 brought it back at "
+             "~0-1 health. Two things to carry into any server built on this: "
+             "death DROPS the client's target, and reviving is TWO operations, "
+             "because the death path zeroes the pools, so clearing the bit alone "
+             "returns a body that dies to any scratch. Clear the bit, then set "
+             "health. Seven guesses at a death MESSAGE failed before this; death "
+             "is not a message.",
+    ),
     "health_props": lambda a, o: Probe(
         question="Do the health properties we have never sent -- 34 and 55 -- "
                  "behave differently from damage, and can either one kill?",
@@ -1100,7 +1198,7 @@ PROBES = {
              "and re-running it only costs a session. Delete it before using "
              "this probe as a spawn template. See studies/enemy/PLAN.md 6d.",
     ),
-    "death": lambda a, o: Probe(
+    "die_0x2d": lambda a, o: Probe(
         question="Does AGENT_PLAYER_DIE (0x002D) kill, when damage cannot?",
         predicts="A death animation and a resurrect prompt. The `damage` probe "
                  "proved health clamps at 1 and the character keeps standing, so "
@@ -1108,11 +1206,11 @@ PROBES = {
                  "for it. A null result is still worth having: it would mean "
                  "death needs state we have never sent, and would move the "
                  "question to what allocates it.",
-        steps=_death_steps(a),
-        note="Steps 1-2 re-run the damage measurement so the probe controls "
-             "itself: if the bar does not land on exactly 1, step 3 is "
-             "uninterpretable. Ends on the death so the state can be read at "
-             "rest.",
+        steps=_die_0x2d_steps(a),
+        note="ANSWERED, NEGATIVE. 0x002D does not kill, and its handler explains "
+             "why (studies/enemy/PLAN.md 6h). Kept runnable because the negative "
+             "is load-bearing for the `death` probe below. Steps 1-2 re-run the "
+             "damage measurement so the probe controls itself.",
     ),
     "allegiance": lambda a, o: Probe(
         question="Is field 12 of WORLD_CREATE_AGENT what makes an agent hostile?",
