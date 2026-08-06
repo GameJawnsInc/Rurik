@@ -44,6 +44,22 @@ PROP_LEVEL = 36
 # studies/skillcast/FINDINGS.md section 6.
 PROP_CAST_SKILL = 60
 
+# Property 61 is a FLOAT property, so it rides 0x00A2/0x00A3 and NOT 0x009F.
+# MEASURED (studies/skillcast section 15.1): the two dispatchers' main switches
+# are disjoint, and a property sent on the wrong message type is discarded in
+# silence -- no error, no log line. Sending 61 on 0x009F would look exactly like
+# the probe's hypothesis being wrong.
+PROP_CAST_TIME = 61
+
+# Properties 65 and 66 write two BYTES of the same per-agent appearance record,
+# at +5 and +7 (studies/skillcast section 16.4). 65 is OpenTyria's `PvPTeam`;
+# 66 is past the end of its enum and unnamed in every source we hold. 65's
+# setter compares before writing and then calls a refresh; 66's writes
+# unconditionally and calls nothing, which is why the sweep below borrows 65 to
+# force a redraw.
+PROP_APPEARANCE_65 = 65
+PROP_APPEARANCE_66 = 66
+
 # The skill ids authsrv.py puts on the bar. Kept in step with authsrv's
 # TEST_SKILLBAR rather than imported, because a probe has to keep working when
 # the bar is rebound from --skills and the probe's own point is the slot, not
@@ -1183,7 +1199,194 @@ def _buff_side_steps(agent_id):
     ]
 
 
+def _cast_modifier_order_steps(agent_id):
+    """Must the cast-time modifier arrive AFTER the cast-start property?
+
+    studies/skillcast section 16.2, and this probe exists because that section
+    makes a claim no other reading can check. Three properties -- 5, 51 and 61
+    -- write one float at the agent object's +0x124, and the cast-start
+    properties 4, 50 and 60 END their case body by ZEROING it:
+
+        0x0081BCE1   fldz
+        0x0081BCE3   fstp dword ptr [esi+0x124]
+
+    So a modifier sent before the cast it was meant to modify is wiped by that
+    cast. That is the opposite ordering from property 10 before the damage
+    property, and from 23-27 before the animation that consumes them -- three
+    sticky-parameter mechanisms in one dispatcher, two wanting the parameter
+    first and one wanting it second. Getting it backwards would mean every cast
+    this server ever speeds up or slows down silently plays at normal speed.
+
+    DEPENDS ON THE `cast_anim` PROBE. Everything here assumes property 60 plays
+    the animation, which is section 6's static answer and has never been
+    observed. Step 2 is therefore the self-control: if a bare property 60 does
+    not visibly cast, steps 3-5 are uninterpretable and the run should stop --
+    the same rule `die_0x2d` follows by re-running the damage measurement first.
+
+    UNITS ARE UNKNOWN and this probe does not try to settle them. Nothing in the
+    image names +0x124 or says whether it is a multiplier, a scale or an added
+    time, so two magnitudes go out on the correct ordering: if 2.0 does nothing
+    and 0.25 does, the field is a multiplier being clamped at the top end rather
+    than the ordering being wrong.
+    """
+    bar = [PROBE_BAR_SKILL + i for i in range(8)]
+    skill = bar[4]
+    return [
+        Step(2.0, 0x00DA, [agent_id, bar, [0] * 8, 1], "fresh skillbar",
+             "the bar, all eight ready."),
+        Step(6.0, 0x009F, [PROP_CAST_SKILL, agent_id, skill],
+             "BASELINE: property 60 alone, no modifier",
+             "the character's body. Time the cast animation, roughly -- this is "
+             "the length everything below is compared against. IF NOTHING CASTS "
+             "AT ALL, stop here: the `cast_anim` probe has not been run and this "
+             "one cannot be read."),
+        Step(10.0, 0x00A2, [PROP_CAST_TIME, agent_id, _f32(2.0)],
+             "modifier FIRST: property 61 = 2.0 (float channel, 0x00A2)",
+             "nothing yet -- 61 on its own has no animation to modify. Note "
+             "whether anything happens anyway, which would itself be news."),
+        Step(2.0, 0x009F, [PROP_CAST_SKILL, agent_id, skill],
+             "... then property 60",
+             "PREDICTION: a cast the SAME length as the baseline, because 60's "
+             "own case body zeroed the modifier before the animation started. "
+             "If this one is visibly different, the zeroing does not do what "
+             "section 16.2 says and that claim needs withdrawing."),
+        Step(10.0, 0x009F, [PROP_CAST_SKILL, agent_id, skill],
+             "modifier SECOND: property 60 first ...",
+             "a cast starts. Keep watching -- the next packet lands during it."),
+        Step(1.0, 0x00A2, [PROP_CAST_TIME, agent_id, _f32(2.0)],
+             "... then property 61 = 2.0, one second into the cast",
+             "PREDICTION: THIS is the one that looks different -- the animation "
+             "speeding up or slowing down mid-cast. If steps 4 and 6 are "
+             "indistinguishable, either the ordering does not matter or +0x124 "
+             "is not a cast-time modifier, and this probe cannot separate those "
+             "two. Step 7 is the tiebreak on magnitude."),
+        Step(10.0, 0x009F, [PROP_CAST_SKILL, agent_id, skill],
+             "again, with a small modifier: property 60 ...",
+             "a cast starts."),
+        Step(1.0, 0x00A2, [PROP_CAST_TIME, agent_id, _f32(0.25)],
+             "... then property 61 = 0.25",
+             "the last step. If 2.0 did nothing and 0.25 does, the field is a "
+             "multiplier and 2.0 was out of range rather than out of order. "
+             "Nothing follows this -- take your time."),
+    ]
+
+
+def _prop66_sweep_steps(agent_id):
+    """What is property 66? Walk the byte and watch the character.
+
+    Section 16.4 bounded this one without naming it. The chain is short and
+    every step of it is MEASURED:
+
+        0x00812EBD  case 66  ->  AvApi 0x007E0550   (assert(agent), AvApi:1474)
+        0x007E0550  resolve  ->  0x007F7C40 if the agent has an AvChar,
+                                 0x007F7C60 if it does not
+        0x007F7C40  av->m108->byte7 = (uint8)value ; av->byte113 = (uint8)value
+
+    Three things follow, and they are what make this probe cheap:
+
+      * THE VALUE IS ONE BYTE. Everything above bit 7 is discarded silently, so
+        a server sending a large int loses it without a word.
+      * IT IS AN APPEARANCE ATTRIBUTE, NOT AN EVENT. The else-branch writes the
+        same byte into a global agent-indexed table for agents that have no
+        AgentView object yet, which only makes sense for something applied when
+        a body is next built.
+      * IT IS PROPERTY 65'S NEIGHBOUR. 65 writes byte +5 of the same record and
+        66 writes byte +7. OpenTyria names 65 `PvPTeam`; 66 is past the end of
+        its enum and unnamed everywhere.
+
+    WHY 65 IS IN THIS PROBE AT ALL. 65's setter compares the old byte against
+    the new one and calls a refresh (0x007F3BC0) when it changed; 66's writes
+    unconditionally and calls nothing. So 66's byte may sit in the record doing
+    nothing visible until something else rebuilds the character -- and toggling
+    65 is the cheapest way we know to force that rebuild. Every value of 66
+    below is therefore followed by a 65 toggle.
+
+    WHICH MAKES STEP 1 THE CONTROL, and it is not optional: a 65 toggle may well
+    change the character by itself, so what a BARE toggle looks like has to be
+    established before any of it can be attributed to 66.
+
+    NOT A FULL SWEEP, deliberately. A byte has 256 values and the `attr_legend`
+    lesson says a result read at rest shows only the last state, so this walks
+    six spaced values with the observer watching each one land. 255 goes last:
+    it is outside any plausible enum, so if the earlier values do nothing and
+    255 does something ugly, that is still an answer.
+    """
+    def toggle(delay):
+        return [
+            Step(delay, 0x009F, [PROP_APPEARANCE_65, agent_id, 1],
+                 "  65 -> 1 (force a refresh)", "watch the character."),
+            Step(2.0, 0x009F, [PROP_APPEARANCE_65, agent_id, 0],
+                 "  65 -> 0 (and back)", "watch the character."),
+        ]
+
+    steps = [
+        Step(2.0, 0x009F, [PROP_APPEARANCE_66, agent_id, 0],
+             "CONTROL: property 66 = 0, then a bare 65 toggle",
+             "the character. 66 = 0 should be whatever it already was."),
+    ]
+    steps += toggle(3.0)
+    steps[-1] = Step(2.0, 0x009F, [PROP_APPEARANCE_65, agent_id, 0],
+                     "  65 -> 0 (and back)",
+                     "THE CONTROL. Whatever changed across these two packets is "
+                     "65's doing, not 66's, and must be discounted below. If the "
+                     "character flickered, changed colour, changed nameplate or "
+                     "moved at all, write down exactly what.")
+    for value in (1, 3, 8, 255):
+        steps.append(Step(
+            8.0, 0x009F, [PROP_APPEARANCE_66, agent_id, value],
+            f"property 66 = {value}",
+            f"the character, immediately. Anything at all? "
+            f"{'255 is outside any plausible enum, so ugly is informative. ' if value == 255 else ''}"
+            f"Then the refresh pair lands."))
+        steps += toggle(4.0)
+    steps[-1] = Step(2.0, 0x009F, [PROP_APPEARANCE_65, agent_id, 0],
+                     "  65 -> 0 (and back)",
+                     "the last packet. Read the character at leisure -- nothing "
+                     "follows. It is standing at 66 = 255, 65 = 0. If nothing "
+                     "differed from the control at ANY value, 66 needs a "
+                     "rebuild this probe cannot trigger, and the next move is "
+                     "finding what reads AvChar+0x113 rather than sending a "
+                     "seventh value.")
+    return steps
+
+
 PROBES = {
+    "cast_modifier_order": lambda a, o: Probe(
+        question="Must the cast-time modifier (property 61) be sent AFTER the "
+                 "cast-start property (60) rather than before it?",
+        predicts="61-then-60 casts at the SAME speed as a bare 60, because 60's "
+                 "own case body zeroes the modifier field before the animation "
+                 "starts. 60-then-61 casts visibly differently. If the two "
+                 "orderings are indistinguishable, either the ordering does not "
+                 "matter or +0x124 is not the cast-time modifier -- this probe "
+                 "cannot separate those, and says so.",
+        steps=_cast_modifier_order_steps(a),
+        note="Tests a claim studies/skillcast section 16.2 makes and nothing "
+             "else can check: 4, 50 and 60 end with `fldz; fstp [esi+0x124]` at "
+             "0x0081BCE1, zeroing the float that 5, 51 and 61 write. UNRUN. "
+             "Depends on the `cast_anim` probe -- step 2 is the self-control and "
+             "the run should stop there if a bare property 60 does not cast. "
+             "Note 61 goes out on 0x00A2, the FLOAT channel: on 0x009F it would "
+             "be discarded in silence and look like a negative result.",
+    ),
+    "prop66_sweep": lambda a, o: Probe(
+        question="What is agent property 66, the one id past the end of "
+                 "OpenTyria's enum that no source anywhere names?",
+        predicts="Uncertain by construction, which is the point -- static "
+                 "analysis bounded this one and could not name it. Something "
+                 "visible should change for at least one value, because the "
+                 "byte is stored per agent even for agents with no AgentView "
+                 "object yet, which is what an appearance attribute looks like. "
+                 "If nothing changes at any value, 66 needs a character rebuild "
+                 "the 65 toggle does not trigger.",
+        steps=_prop66_sweep_steps(a),
+        note="MEASURED (section 16.4): 66 writes ONE BYTE to AvChar+0x113 and "
+             "to +7 of the record at AvChar+0x108, where property 65 -- "
+             "OpenTyria's PvPTeam -- writes +5. Anything above bit 7 of the "
+             "value is discarded silently. UNRUN. The 65 toggles are there "
+             "because 66's setter calls no refresh and 65's does; step 1 "
+             "establishes what a bare toggle does so it can be discounted.",
+    ),
     "buff_type_field": lambda a, o: Probe(
         question="Is opcode 66's third field Headquarter's `effect_type` or "
                  "GWCA's `attribute_level`?",

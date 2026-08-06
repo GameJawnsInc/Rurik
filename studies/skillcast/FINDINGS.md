@@ -17,6 +17,11 @@ the next two things R4b needs: effects and conditions (the client names five of
 those six opcodes itself), and the agent-property vocabulary (there are two
 dispatchers, not one, and their id spaces are disjoint).
 
+**§16 answers the four items §15.4 left open** — and corrects §15.1 while doing
+it. The two dispatchers run **seven** switches over the property id, not the
+three that were modelled, so three of the four ids §15.1 called unhandled are
+handled. Read §16.5 before trusting any "handled by neither" statement above.
+
 ## Labels used throughout
 
 | Label | Meaning |
@@ -79,6 +84,15 @@ property id has a case body in both. A property sent on the wrong one of those
 is silently ignored — no error, no log line. The id space runs 0..66, one wider
 than OpenTyria's enum, and the client's own `AV_CHAR_STAT_ENERGY == 0` decodes
 five pairs of properties at a stroke. (§15.)
+
+**Each dispatcher runs several switches over the property id, and the client's
+internal event vocabulary groups the cast family the same way GWCA's names
+do.** Every property in the cast and effect families ends by queueing an
+AgentView event with a numeric *kind*, and the three families come out as three
+contiguous trios — attack `0x03/0x00/0x02`, attack skill `0x15/0x11/0x13`,
+skill `0x19/0x16/0x17`, each in started/finished/stopped order. No
+reconstruction has these numbers, so their agreement with GWCA's naming is a
+second witness rather than an echo. (§16.3.)
 
 **The six `EFFECT_*` opcodes are `BuffSourceAdd`, `BuffSourceRemove`,
 `BuffTargetAdd` (twice), `BuffTargetExtendTimed` and `BuffTargetRemove`** — the
@@ -1130,3 +1144,351 @@ sending it.
 No probe is listed for these: the honest next step is more static reading of
 `AvApi.cpp`, not a client run, and §11's queue is already long enough to fill a
 session.
+
+**§16 is that reading.** All four are answered or bounded, and one of them
+turned out to be answered because §15.1 was wrong.
+
+---
+
+# 16. §15.4's four open items — added 2026-08-06
+
+Same session, same method, same pinned build. Two new stdlib tools:
+`toolkit/clientscan/avevents.py` recovers the AgentView event kinds, and
+`genericvalue.py` grew from three switches to seven. `test_skillcast.py` gained
+a section 7 and 24 more pinned byte strings.
+
+**The headline is a correction, and it is ours.** §15.1 reported ids 5, 8, 40
+and 51 as acted on by neither dispatcher. **Three of those four were wrong.**
+5 and 51 are handled by the float dispatcher; 8 is handled by the int one. Only
+40 is untouched. §16.5 has the cause, which is the same cause as §10's.
+
+## 16.1 The property dispatchers run SEVEN switches, not two — MEASURED
+
+`genericvalue.py` modelled the two main switches and the int pre-switch. That is
+three of seven. In dispatch order:
+
+| # | switch | VA | ids | case bodies | shape |
+|---|---|---|---|---|---|
+| 1 | `int-store` | `0x00818170` | 32, 41, 42 | 3 | compare chain |
+| 2 | `int-agentview` | `0x0081BC60` | 4, 8, 13, 50, 60 | 5 | jump table |
+| 3 | `int-pre` | inline | 4, 10, 50, 60, 64 | 5 | jump table |
+| 4 | `int-main` | inline | 0..66 | 47 | jump table |
+| 5 | `float-store` | `0x00818210` | 16, 33, 34, 43, 44, 52, 55, 62 | 8 | jump table |
+| 6 | `float-agentview` | `0x0081BD80` | 5, 51, 61 | 3 | compare chain |
+| 7 | `float-main` | inline | 16..63 | 14 | jump table |
+
+The cast trio 4 / 50 / 60 appears in three of the seven — `int-agentview`,
+`int-pre` and `int-main` — which is a fourth independent grouping of exactly
+those three ids, after §6's pre-switch bucket, §15.3's call shapes and §16.3's
+event kinds.
+
+Switches 2 and 6 run **only when the message's agent id resolves to an object
+of type 1** — the dispatcher calls `0x005FC380(agent, &ptr, &type)` and takes
+this branch on `type == 1`. So a property in this group does nothing for an
+agent that is not resident and of that type, and nothing says so.
+
+Two of the seven are compare chains, so there is no table to read as data. Their
+ids are recorded in `genericvalue.py` as constants **and pinned to the exact
+bytes that encode the comparisons** (`chain_ids()` raises rather than returning
+a stale map), because a hardcoded answer that survives a build change is the
+kind of check this repository refuses to ship.
+
+**Both dispatchers gate the MAIN switch** behind
+`test byte ptr [charContext + 0x53C], 2` (`0x008129B6` and `0x008130C2`). With
+that bit set the main switch is skipped entirely and only the earlier switches
+run. Nothing in the image read here says when it is set. NOT FOUND, and worth a
+server's attention: it would look exactly like the client ignoring properties.
+
+## 16.2 Who consumes 5, 8, 40 and 51 — answered for three of the four
+
+### Property 8 — `int-agentview`, and GWCA is right
+
+Case body `0x0081BCF0`, on the resolved agent object:
+
+```
+value != 0  ->  obj->flags64 |= 1;  call 0x0081BE90     ; 0x0081BCFB  or  eax,1
+value == 0  ->  obj->flags64 &= ~1; call 0x0081C090     ; 0x0081BD11  and eax,-2
+```
+
+A one-bit flag at object `+0x64`, set by a non-zero value and cleared by zero,
+with a different follow-up call each way. **GWCA's `disabled`, documented as
+"(aftercast) value 1/0", is CORROBORATED** — the binary shows precisely a 1/0
+flag. OpenTyria's `FreezePlayer` is not contradicted so much as unspecific.
+
+### Properties 5 and 51 — `float-agentview`, and they are 61's siblings
+
+The whole switch is three compares and one body (`0x0081BD80`):
+
+```c
+if (propId == 5 || propId == 51 || propId == 61)
+    agentObject->f124 = wireFloat;         // 0x0081BD98  fstp [ecx+0x124]
+```
+
+**5, 51 and 61 write the same float field.** 61 is `CastTimeModifier` /
+`casttime` in both lineages — the one member of the trio anybody named. So 5 and
+51, which OpenTyria calls `Value5` and `Value51` and GWCA does not name at all,
+are **two more channels onto the cast-time modifier**. INFERRED: three ids
+feeding one field are most likely three sources of the same modifier (a skill, a
+stance, an item, say) rather than three unrelated things that happen to collide.
+That is an argument from structure, and it is the only thing on offer — no
+assert and no log string mentions the field.
+
+**And the field is reset by the cast-start properties.** MEASURED at
+`0x0081BCE1`: properties 4, 50 and 60 end their `int-agentview` case with
+`fldz; fstp [esi+0x124]`. So:
+
+> **Send the cast-start property (4 / 50 / 60) first and the modifier
+> (5 / 51 / 61) after.** A modifier sent first is zeroed by the cast that was
+> supposed to use it.
+
+That is the opposite ordering from property 10 before the damage property, and
+from 23-27 before 22/28. Three sticky-parameter mechanisms in one dispatcher,
+two of which want the parameter first and one of which wants it second. INFERRED
+from the zeroing; `probes.py` has no probe for it and should get one.
+
+### Property 40 — NOT FOUND, and now that means something
+
+40 has no case body in any of the seven switches. §15.1 could not say that
+cleanly because it believed every property was recorded somewhere on the way
+past; §16.5 shows it is not. **Nothing in either dispatcher reads, stores or
+forwards property 40.** It is a wire id the client accepts and discards.
+
+## 16.3 The AgentView event kinds — the second grouping, and it holds
+
+Every property in the cast and effect families ends the same way: the case body
+calls an `AvApi.cpp` entry point, which resolves an AgentView character and
+calls a method on it, which **allocates an event, writes a KIND to its first
+dword and links it onto two lists**. Two allocators, disjoint kind spaces:
+
+| allocator | payload from | kinds seen | what its neighbours' asserts call the records |
+|---|---|---|---|
+| `0x007F2E90` | `+0x30` | 22, sparse in `0x00..0x1B` | `action->queueLink` / `action->sequenceLink` (AvChar:1243, 1251) |
+| `0x007F5340` | `+0x1C` | 20, **dense `0x00..0x13`** | `effect->effectLink` / `effect->queueLink` (AvChar:2433, 2438) |
+
+The names `action` and `effect` are **INFERRED**, and the inference is this:
+neither allocator contains an assert of its own; the asserts above are in the
+immediately adjacent functions; **each of those assert pairs names exactly two
+links, and each allocator links its fresh record onto exactly two intrusive
+lists.** `AvChar:2646-2648` names three outright — `m_actionQueue`,
+`m_actionSidelineQueue`, `m_triggerList`. Adjacency plus a matching structure,
+not a quotation.
+
+MEASURED, and this is the check that could have failed: **44 call sites across
+both allocators, 43 of which resolve to a `push <kind>`.** The one that does not
+(`0x007F7A1D`) has its push hoisted above a branch; `avevents.py` reports it
+rather than guessing. No property resolves to two different kinds.
+
+### The three families, and why this corroborates GWCA
+
+```
+                        started   finished  stopped
+  attack          (action)  0x03     0x00      0x02      properties  4,  1,  3
+  attack skill    (action)  0x15     0x11      0x13      properties 50, 46, 49
+  skill           (action)  0x19     0x16      0x17      properties 60, 58, 59
+```
+
+Three families of three, each a tight contiguous block in a space the wire
+protocol never mentions. §15.3 argued from the *call shapes* that GWCA's
+started/finished/stopped naming fits and OpenTyria's `FightStance` /
+`InterruptAttack` / `MeleeSkillAttack2` cannot. The kinds are an independent
+second witness: the client's internal event vocabulary groups exactly the same
+nine properties into exactly the same three trios. **CORROBORATED, from a
+direction no catalogue can reach**, since no reconstruction has these numbers.
+
+Two ids get named by their position:
+
+- **47 is a member of the attack-skill family.** Action kind `0x12`, sitting
+  between `attack_skill_finished` (`0x11`) and `attack_skill_stopped` (`0x13`).
+  OpenTyria calls it `Value47`; GWCA does not name it. INFERRED.
+- **61 (`casttime`) is a member of the skill family.** Action kind `0x18`, the
+  one number between `skill_stopped` (`0x17`) and `skill_activated` (`0x19`).
+  So the skill block is four contiguous kinds, not three, and the cast-time
+  modifier is part of it — which fits 16.2's finding that 60 zeroes the field
+  61 writes.
+
+The full 39-property map is in `vault/skillcast/agentview-event-kinds-38797.txt`
+and pinned in `test_skillcast.py`'s `EVENT_KINDS`.
+
+**One limitation, stated because it changes an answer.** `avevents.py` follows
+straight-line code and unconditional jumps, not the taken side of conditionals.
+Property 22 (`ApplyAnimation`) is the case that matters: `0x00812B90` tries
+`charContext + 0x55C`, `+0x560`, `+0x558` and finally `+0x550`/`+0x554` in that
+order and calls a **different** AvApi entry for whichever is set first, so it can
+queue action kind `0x07`, `0x08`, `0x06` or `0x05`. The tool reports `0x07`.
+This also refines §15.2: property 22 consumes **four** of the five sticky
+parameters in priority order, not two, and clears them all afterwards.
+
+## 16.4 Property 66, and `charContext + 0x6A4` — bounded, not named
+
+### Property 66 is a byte-wide display attribute, and 65's neighbour
+
+`0x00812EBD` → `AvApi 0x007E0550` (`assert(agent)`, AvApi:1474) → two paths:
+
+```c
+av = ResolveAvChar(agent);
+if (av) {                       // 0x007F7C40
+    av->m108->byte7 = (uint8)value;      // 0x007F7C4C  mov [eax+7], dl
+    av->byte113     = (uint8)value;      // 0x007F7C4F  mov [ecx+0x113], dl
+} else {                        // 0x007F7C60
+    globalTable[agent]->byte7 = (uint8)value;
+}
+```
+
+MEASURED and useful even without a name:
+
+- **The value is a single byte.** A server sending a large int loses everything
+  above bit 7, silently.
+- **It is remembered for agents that have no AgentView object yet** — the else
+  branch writes the same byte into a global agent-indexed table
+  (`0x007F58A0`). So it is an *appearance* attribute, applied whenever the agent
+  becomes visible, not an event.
+- **Property 65 is the same mechanism one field over**: `0x007F7BD0` writes byte
+  **+5** of that record where 66 writes **+7**. OpenTyria names 65 `PvPTeam`.
+- **65 is guarded and 66 is not.** 65 compares before writing and calls a
+  refresh (`0x007F7BE1`: `cmp eax,ebx; je`); 66 writes unconditionally and calls
+  nothing. INFERRED: 66 is read by whatever next rebuilds the character, rather
+  than driving a redraw itself.
+
+The **name** is still NOT FOUND. It is past the end of OpenTyria's enum, absent
+from GWCA, and no assert or log string in the image mentions either offset. A
+displacement search for `+0x113` finds the one write and no clean read.
+
+### `charContext + 0x6A4` is read by exactly one accessor, for the character screen
+
+Property 64's store at `0x008129E2` writes `edi`, and `edi` is the **agent id**
+(the dispatcher's second argument), not the value — §15.4 had that right. The
+consumer:
+
+```
+0x00816CF0   call 0x0047F660          ; the module
+             mov  eax, [eax+0x2C]     ; -> charContext      <- same two steps
+             mov  eax, [eax+0x6A4]    ;    as the store site
+             ret
+```
+
+MEASURED: **two direct callers, `0x004D33DE` and `0x004D3407`,** both inside one
+UI message handler whose asserts name
+`P:\Code\Gw\Ui\Game\CharCreate\CharCreate.cpp` (CharCreate:865 `m_context`,
+CharCreate:1159 `msg.summaryBytes <= NET_CHARACTER_SUMMARY_MAX`). That handler
+is a 104-case switch over UI messages `0x10000030..0x10000097`, and decoding its
+index table shows exactly **two** cases reach the accessor:
+
+| UI message | what the case does |
+|---|---|
+| `0x10000030` | `if (payload[0] == charContext->x6A4) handler_0x004A0B10(payload[1])` |
+| `0x1000004E` | `if (payload[0] == charContext->x6A4) handler_0x004DAE70(payload[1])` |
+
+So the slot is an **agent-id filter**: the character screen ignores both UI
+messages unless they concern the agent whose id property 64 last stored.
+INFERRED, and it is the most that can be claimed: it says what the field is
+*for* on one screen, not what the property means in general. Both lineages have
+64 as `Value64` / unnamed and this does not name it either. The two clear sites
+(`0x008239E2`, `0x00824D3A`) zero `+0x6A4` alongside `+0x640` in the same block
+of per-context scratch, which at least bounds its lifetime to one context.
+
+## 16.5 Refuted this pass, including ours again
+
+**1. "Every property is stored into a 52-byte per-agent record before the
+switch, at `0x00818170`" — REFUTED, and it was §6's.** That sentence was the
+reason §6 could say the twenty apparently-unhandled ids were "not necessarily
+unhandled". `0x00818170` is not a universal store. It is a three-way compare
+chain:
+
+```
+0x00818182   sub edx, 0x20 ; je <32>      sub edx, 9 ; je <41>
+             sub edx, 1    ; je <42>      -> 0x00818203: pop/pop/pop/ret 8
+```
+
+MEASURED at `0x00818207`: the default **returns having stored nothing**. Its
+float twin `0x00818210` is a real jump table but covers only 8 ids. So a
+property id that no switch names is genuinely discarded, and the stronger,
+correct statement is the one §16.2 can now make about property 40.
+
+The record array is real — `0x34` bytes per entry at `charContext + 0x7C`,
+indexed by **agent id**, grown to `agent+1` on every property message and
+bounds-checked against `Array.h:587 index < m_count`. It is only the *writing*
+of every property into it that was invented.
+
+**2. "5, 8, 40 and 51 are acted on by neither dispatcher" — REFUTED, §15.1's.**
+Three of the four are handled. The cause is the one §10 already named in a
+different costume: a **partial model of the client produces answers that are
+self-consistent and carry no signal that they are wrong.** §10's version was
+reading `cmds[]` without the initializer recovery; this one was reading three
+switches out of seven. Both times the output looked complete. `genericvalue.py`
+now enumerates all seven and `handled_by_nothing()` is the answer to ask for.
+
+**3. "Property 22 reads +0x55C and +0x560" — incomplete, §15.2's.** It reads
+four sticky parameters in priority order and picks a different AgentView action
+kind for each. Not wrong, just half of it.
+
+**4. "`AvApi.cpp` line ~1318 is property 60's entry point" — off by one
+function, §6's.** `0x007E0200` has no assert; AvApi:1318 belongs to
+`0x007E0230`, the next function along. The entry points do carry their own line
+numbers where they assert `agent`, and those are usable: AvApi:1256 =
+`0x007E0130`, 1347 = `0x007E02C0`, 1363 = `0x007E0310`, 1453 = `0x007E04C0`,
+1474 = `0x007E0550`.
+
+## 16.6 What §16 changes for a server
+
+- **Check the dispatcher before sending.** `genericvalue.py --id N` now reports
+  every switch that acts on an id, not just the main one. Property 40 is the
+  only id in 0..66 that does nothing at all.
+- **Order matters, in two directions.** Property 10 goes *before* the damage
+  property; 23-27 go *before* 22/28; but 5/51/61 must go *after* 4/50/60,
+  because the cast-start zeroes the modifier field.
+- **Properties 8, 5 and 51 need the agent to be resident and of type 1**, or
+  their switches never run.
+- **Property 66's value is a byte.** So, on the evidence, is 65's.
+- **If properties stop working entirely, suspect `charContext + 0x53C` bit 1**
+  rather than the ids.
+- The event kinds are the vocabulary to use when talking to ourselves about what
+  the client will *do*, since they are the client's own grouping and the wire
+  ids are three catalogues' guesses.
+
+## 16.7 Reproducing §16
+
+```bash
+python toolkit/clientscan/genericvalue.py --exe "$EXE"
+python toolkit/clientscan/genericvalue.py --exe "$EXE" --id 8
+python toolkit/clientscan/avevents.py --exe "$EXE"
+python toolkit/clientscan/avevents.py --exe "$EXE" --census
+python toolkit/clientscan/avevents.py --exe "$EXE" --id 60
+python toolkit/clientscan/msghandler.py 0x009F --exe "$EXE" --follow --annotate
+python toolkit/clientscan/test_skillcast.py
+```
+
+New in `vault/skillcast/` (gitignored): `agentview-event-kinds-38797.txt`.
+
+## 16.8 What §16 leaves open
+
+- **The name of property 66**, and of 40, 47, 5 and 51. Structure placed all of
+  them; nothing named them. A probe could: 66 is a byte-wide appearance
+  attribute beside `PvPTeam`, so sending 0..255 and watching the character is a
+  cheap experiment with a visible answer.
+- **When `charContext + 0x53C` bit 1 is set.** NOT FOUND.
+- **What reads `AvChar + 0x113`.** The write is the only reference a
+  displacement search finds.
+- **The remaining 22 action and 20 effect event kinds.** Only the 39 reachable
+  from an agent property were followed; the rest are queued by code that has
+  nothing to do with the property channel, and reading them would name the
+  AgentView vocabulary properly.
+**Two probes this pass earned**, committed and executable in
+`toolkit/authsrv/probes.py` with their predictions written before the
+experiment, after §11's six and §14.5's two. Both are UNRUN.
+
+| # | Probe | Question | Prediction |
+|---|---|---|---|
+| 9 | `cast_modifier_order` | Must the cast-time modifier arrive *after* the cast-start property? | 61-then-60 casts at the **same** speed as a bare 60, because 60 zeroes the modifier field first. 60-then-61 casts visibly differently. If the two are indistinguishable this probe cannot say whether the ordering does not matter or `+0x124` is not the modifier, and it says so. |
+| 10 | `prop66_sweep` | What is property 66? | Uncertain by construction. Something visible changes for at least one byte value, because the byte is stored per agent even for agents with no AgentView object yet. If nothing changes at any value, 66 needs a rebuild the probe cannot trigger. |
+
+Two things about their design are worth reading before running either, because
+both come out of §16 rather than out of guesswork:
+
+- **`cast_modifier_order` sends property 61 on `0x00A2`, the float channel.** On
+  `0x009F` it would be discarded in silence (§15.1) and the run would look like
+  a clean negative. It also depends on `cast_anim`: its step 2 is a bare
+  property 60, and if that does not visibly cast, nothing after it can be read.
+- **`prop66_sweep` toggles property 65 after every value of 66.** 66's setter
+  calls no refresh and 65's does, so the toggle is there to force the redraw
+  that would make a latent byte visible. Step 1 is a bare 65 toggle, so whatever
+  that does by itself can be discounted from everything after it.
