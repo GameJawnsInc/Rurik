@@ -516,6 +516,42 @@ only the allegiance decides whether the client treats it as a foe.
 
 ---
 
+## 6f. A fight renders, the field order is confirmed, and death is not `0x002D`
+
+Probe `enemy_damage`, 2026-08-06. A hostile Hatcher, health 100, then damage
+aimed at *it* with the player as the cause.
+
+| Sent | Client displayed |
+|---|---|
+| `-0.25`, target = enemy | **25 damage** on the enemy |
+| `-0.5`, target = enemy | **50 damage** on the enemy |
+| `AGENT_PLAYER_DIE` on the enemy | **nothing** |
+
+**The first agent slot of `0x00A3` is the target — OBSERVED.** §6b could not test
+this: it sent target and cause as the same agent, so the two slots were
+indistinguishable and the order rested on ldufr's struct alone. Here they
+differed and the damage landed on the enemy. Every damage packet this project
+writes from now on is aimed correctly, and that was a coin-flip until this run.
+
+**Fractional health is confirmed on a second agent**, with a maximum we chose:
+`-0.25` and `-0.5` of 100 came out as 25 and 50. §6b was not a quirk of the
+player's own bar.
+
+**So the client renders a fight.** Floating damage numbers over a hostile body,
+its health bar draining, damage accumulating across packets. That is the visible
+result the arc was aiming at, and it needs no AI, no interaction handling and no
+explorable map.
+
+**`AGENT_PLAYER_DIE` (`0x002D`) does nothing to an NPC.** Combined with §6b's
+finding that damage floors at 1 and cannot kill, **we do not currently hold a
+mechanism that kills anything.** The name is ldufr's and says *player*; the four
+remaining candidates are in the `kill` probe, ordered so the risky ones cannot
+cost the safe ones. If none works, the next move is reading the client's
+agent-view code rather than guessing further — `AvChar.cpp` is already named by
+the assert in §6b.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND

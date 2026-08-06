@@ -677,6 +677,77 @@ def _enemy_damage_steps(agent_id, origin):
     ]
 
 
+def _kill_steps(agent_id, origin):
+    """What actually kills an agent? Four candidates, one packet each.
+
+    We know what does NOT: damage floors at 1 (section 6b) and
+    AGENT_PLAYER_DIE on an NPC does nothing at all (section 6f). So death is
+    neither of the two obvious things, and the catalogue offers exactly four
+    more candidates worth a packet. Each is sent alone, on the same disposable
+    red Hatcher, so whichever works is identified without ambiguity.
+
+      float property 42 = 0.0   Health is a FRACTION -- section 6b proved it by
+                                measurement. Nothing has ever tried setting that
+                                fraction directly, and the float channel is the
+                                one that would carry it. This is the best
+                                candidate and it goes first.
+      AGENT_ALLY_DESTROY 0x003E One agent id, and the only other message in the
+                                catalogue whose name means an agent ceasing to
+                                exist. UPSTREAM name, never sent by anyone.
+      int property 42 = 0       Sets health_max, which Headquarter shows also
+                                refills health. Zero max is either death or a
+                                divide-by-zero -- RISKY, so it goes late.
+      AGENT_PLAYER_DIE on the   Its name says PLAYER. It did nothing to an NPC;
+      PLAYER                    the honest test of the name is to aim it at the
+                                one agent it claims to be for. LAST, because a
+                                dead player may take the UI somewhere the rest
+                                of the probe cannot be read from.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    E = 7
+    return [
+        Step(2.0, 0x0056,
+             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {h['definition']}", "nothing yet."),
+        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {h['definition']}", "nothing yet."),
+        Step(1.0, 0x0020,
+             _create_agent(E, CHAR_CLASS_MONSTER_BASE | h["definition"],
+                           AGENT_KIND_NPC, ox + 300, oy, plane, token=0x6D6F6E73),
+             f"WORLD_CREATE_AGENT {E}, hostile Hatcher",
+             "a red Hatcher. TARGET IT and keep it targeted -- its health bar is "
+             "the instrument for the whole probe."),
+        Step(4.0, 0x009F, [42, E, 100], f"health 100 on agent {E}",
+             "target bar reads 100."),
+        Step(5.0, 0x00A3, [16, E, agent_id, _f32(-0.5)],
+             f"damage -0.5 on agent {E}",
+             "50 damage, bar to 50. This is the control -- it reproduces section "
+             "6f. If it does not, nothing below is interpretable."),
+        Step(7.0, 0x00A2, [42, E, _f32(0.0)],
+             f"FLOAT property 42 = 0.0 on agent {E}  (health fraction -> zero)",
+             "THE BEST CANDIDATE. Health is a fraction, and this sets it to "
+             "nothing. Death animation? Corpse? Bar to 0? Or no change at all?"),
+        Step(7.0, 0x003E, [E],
+             f"AGENT_ALLY_DESTROY on agent {E}",
+             "does the body vanish, die, or ignore it? 'Destroy' is not "
+             "necessarily 'die' -- a body that disappears cleanly is a REMOVE, "
+             "and a corpse is a death. The difference matters for what an enemy "
+             "should send."),
+        Step(7.0, 0x009F, [42, E, 0],
+             f"INT property 42 = 0 on agent {E}  (maximum health -> zero)",
+             "RISKY -- zero maximum health is either death or a divide by zero. "
+             "If the client is still running, did anything happen?"),
+        Step(7.0, 0x002D, [agent_id],
+             "AGENT_PLAYER_DIE on YOUR OWN agent",
+             "the message did nothing to an NPC, and its name says PLAYER. Does "
+             "it kill you? Death screen, resurrect prompt, a death penalty in "
+             "the top-left? This is last because a dead player may take the UI "
+             "somewhere nothing else can be read from."),
+    ]
+
+
 def _team_token_steps(agent_id):
     # Not a packet probe: the token now goes out at spawn. This exists so the
     # run is recorded with a question attached rather than being assumed fine.
@@ -773,6 +844,21 @@ PROBES = {
              "damage packet cannot kill, and a positive value crashes the "
              "client on ArenaNet's own `damage.amount <= 0`. See "
              "studies/enemy/PLAN.md.",
+    ),
+    "kill": lambda a, o: Probe(
+        question="What actually kills an agent, given that damage floors at 1 "
+                 "and AGENT_PLAYER_DIE does nothing to an NPC?",
+        predicts="The float health property set to 0.0. Health is a fraction -- "
+                 "that is measured, not assumed -- and nothing has ever tried "
+                 "writing that fraction directly. If none of the four candidates "
+                 "works, death is not a message we hold and the next move is "
+                 "reading the client's own agent-view code rather than guessing "
+                 "further.",
+        steps=_kill_steps(a, o),
+        note="Four candidates, one packet each, on one disposable body, ordered "
+             "so the risky ones cannot cost the safe ones. The last step aims "
+             "AGENT_PLAYER_DIE at the player, because its name says PLAYER and "
+             "we have only ever aimed it at an NPC.",
     ),
     "enemy_damage": lambda a, o: Probe(
         question="Does the client render an ENEMY taking damage, and is the "
