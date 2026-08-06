@@ -1472,6 +1472,23 @@ New in `vault/skillcast/` (gitignored): `agentview-event-kinds-38797.txt`.
   from an agent property were followed; the rest are queued by code that has
   nothing to do with the property channel, and reading them would name the
   AgentView vocabulary properly.
-- **Two probes this pass earned**, to go after §14.5's: *modifier ordering* —
-  send 61 before 60 and then after it, and see which cast changes speed; and
-  *property 66 sweep* — walk the byte and photograph the result.
+**Two probes this pass earned**, committed and executable in
+`toolkit/authsrv/probes.py` with their predictions written before the
+experiment, after §11's six and §14.5's two. Both are UNRUN.
+
+| # | Probe | Question | Prediction |
+|---|---|---|---|
+| 9 | `cast_modifier_order` | Must the cast-time modifier arrive *after* the cast-start property? | 61-then-60 casts at the **same** speed as a bare 60, because 60 zeroes the modifier field first. 60-then-61 casts visibly differently. If the two are indistinguishable this probe cannot say whether the ordering does not matter or `+0x124` is not the modifier, and it says so. |
+| 10 | `prop66_sweep` | What is property 66? | Uncertain by construction. Something visible changes for at least one byte value, because the byte is stored per agent even for agents with no AgentView object yet. If nothing changes at any value, 66 needs a rebuild the probe cannot trigger. |
+
+Two things about their design are worth reading before running either, because
+both come out of §16 rather than out of guesswork:
+
+- **`cast_modifier_order` sends property 61 on `0x00A2`, the float channel.** On
+  `0x009F` it would be discarded in silence (§15.1) and the run would look like
+  a clean negative. It also depends on `cast_anim`: its step 2 is a bare
+  property 60, and if that does not visibly cast, nothing after it can be read.
+- **`prop66_sweep` toggles property 65 after every value of 66.** 66's setter
+  calls no refresh and 65's does, so the toggle is there to force the redraw
+  that would make a latent byte visible. Step 1 is a bare 65 toggle, so whatever
+  that does by itself can be discounted from everything after it.
