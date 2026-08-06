@@ -262,14 +262,41 @@ UNLOCK_ALL_WORD = 0xFFFFFFFF
 # OpenTyria's own bit helpers are too broken to copy (its set_bit assigns instead
 # of OR-ing, destroying 31 bits at a time), so this is written from the
 # description rather than from its code.
-UNLOCKED = [UNLOCK_ALL_WORD] * UNLOCK_WORDS
+# The message carries 4096 bits and build 38797's skill table holds 3443 rows,
+# so 653 of those bits name skills that do not exist. Setting them CRASHES the
+# client -- MEASURED, twice:
+#
+#     Assertion: *skill
+#     P:\Code\Gw\Char\Cli\ChCliSkill.cpp(1022)
+#
+# The Skills and Attributes panel walks the unlocked ids and dereferences each
+# one, so a bit past the end of the table is a null deref. The crash was first
+# blamed on a corrupt texture we had planted in the same session; it reproduced
+# with a clean archive and a stock binary, and disappeared the moment the bitmap
+# was clamped. "all" therefore means all REAL skills, not all bits.
+#
+# MEASURED against build 38797. A different build has a different row count, and
+# this number is not read from the binary -- if the client starts asserting in
+# ChCliSkill.cpp again, re-derive it with repoint_skill.py --show.
+SKILL_TABLE_ROWS = 3443
+
+
+def unlock_all_words():
+    """Every bit up to SKILL_TABLE_ROWS, and not one past it."""
+    words = [0] * UNLOCK_WORDS
+    for sid in range(SKILL_TABLE_ROWS):
+        words[sid // 32] |= 1 << (sid % 32)
+    return words
+
+
+UNLOCKED = unlock_all_words()
 UNLOCK_LABEL = "all"
 
 
 def build_unlock_bitmap(spec):
     """--unlocks: 'all', 'none', 'bar', or an explicit comma-separated id list."""
     if spec == "all":
-        return [UNLOCK_ALL_WORD] * UNLOCK_WORDS, "all"
+        return unlock_all_words(), f"all ({SKILL_TABLE_ROWS} real skills)"
     words = [0] * UNLOCK_WORDS
     if spec == "none":
         return words, "none"
@@ -282,6 +309,11 @@ def build_unlock_bitmap(spec):
         if w >= UNLOCK_WORDS:
             raise SystemExit(f"skill id {sid} needs word {w}, past the "
                              f"{UNLOCK_WORDS}-word message")
+        if sid >= SKILL_TABLE_ROWS:
+            raise SystemExit(
+                f"skill id {sid} is past the end of this build's skill table "
+                f"({SKILL_TABLE_ROWS} rows). Unlocking it asserts in the "
+                f"client's ChCliSkill.cpp the moment the Skills panel opens.")
         words[w] |= 1 << b
     return words, ",".join(str(i) for i in ids)
 

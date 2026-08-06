@@ -137,6 +137,11 @@ def main():
                     help="Comma-separated subset of: " + ", ".join(FIELDS) +
                          ". Use one at a time to find out which icon field the "
                          "skillbar actually draws.")
+    ap.add_argument("--set", action="append", default=[], metavar="FIELD=VALUE",
+                    help="Write a raw value into a field instead of copying a "
+                         "donor's. Repeatable. VALUE is a file id or string id, "
+                         "NOT a skill id -- which is the only way to aim a row "
+                         "at an asset no shipped skill points to.")
     ap.add_argument("--show", type=int, metavar="ID",
                     help="Print one row's ids and exit. Writes nothing.")
     ap.add_argument("--in-place", action="store_true",
@@ -168,23 +173,44 @@ def main():
         show(pe, table, count, a.show)
         return 0
 
-    if a.target is None or a.donor is None:
-        raise SystemExit("need --target and --donor (or --show ID)")
-    for sid in (a.target, a.donor):
+    if a.target is None or (a.donor is None and not a.set):
+        raise SystemExit("need --target and either --donor or --set FIELD=VALUE "
+                         "(or --show ID)")
+    for sid in ([a.target] + ([a.donor] if a.donor is not None else [])):
         if not 0 <= sid < count:
             raise SystemExit(f"id {sid} out of range 0..{count - 1}")
 
-    fields = [f.strip() for f in a.fields.split(",") if f.strip()]
-    unknown = [f for f in fields if f not in FIELDS]
-    if unknown:
-        raise SystemExit(f"unknown field(s): {unknown}. Known: {list(FIELDS)}")
+    explicit = {}
+    for spec in a.set:
+        key, sep, raw = spec.partition("=")
+        key = key.strip()
+        if not sep or key not in FIELDS:
+            raise SystemExit(f"--set wants FIELD=VALUE with FIELD one of "
+                             f"{list(FIELDS)}; got {spec!r}")
+        explicit[key] = int(raw, 0)
+
+    if a.donor is not None:
+        fields = [f.strip() for f in a.fields.split(",") if f.strip()]
+        unknown = [f for f in fields if f not in FIELDS]
+        if unknown:
+            raise SystemExit(f"unknown field(s): {unknown}. Known: {list(FIELDS)}")
+        dv = row_values(pe.data, table, a.donor)
+    else:
+        fields, dv = [], {}
+    dv.update(explicit)
+    fields += [k for k in explicit if k not in fields]
 
     print("before:")
     show(pe, table, count, a.target)
-    print(f"  donor {a.donor}:")
-    dv = row_values(pe.data, table, a.donor)
-    for k in fields:
-        print(f"    +0x{FIELDS[k]:02X} {k:<8} {dv[k]}")
+    if a.donor is not None:
+        print(f"  donor {a.donor}:")
+        for k in fields:
+            if k not in explicit:
+                print(f"    +0x{FIELDS[k]:02X} {k:<8} {dv[k]}")
+    if explicit:
+        print("  explicit (raw ids, no donor skill involved):")
+        for k, v in explicit.items():
+            print(f"    +0x{FIELDS[k]:02X} {k:<8} {v}")
     print()
 
     data = bytearray(pe.data)

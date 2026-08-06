@@ -1469,16 +1469,12 @@ the archive read that failed. This corroborates §3 of the skills study from the
 opposite direction: there, text was borrowed while numbers stayed; here, art was
 destroyed while text survived.
 
-**Then opening the Skills and Attributes panel crashed the client.** Same
-texture, different consumer, and that consumer does not tolerate the failure the
-skillbar absorbed. So "the client degrades gracefully on a corrupt asset" is
-**false as a general claim** — it degrades gracefully on one path and dies on
-another. A writer that gets a crc wrong has not merely produced a missing icon;
-it has planted a crash in whatever code path is less careful.
-
-*Not established:* why the panel died. It may read the same file at a different
-size, or re-use the failed texture handle, or read `+0x8c` (a different file id,
-which we did **not** break). Three candidates, no evidence between them.
+**Opening the Skills and Attributes panel then crashed the client — and that was
+our fault, not the archive's.** ~~Same texture, different consumer, and that
+consumer does not tolerate the failure the skillbar absorbed.~~ **RETRACTED
+within the day; see §10.** The crash reproduced with a clean archive and a stock
+binary, so it was never about the texture. The corrupt asset degraded gracefully
+on every path we exercised.
 
 ## 4. The write survived the session — the decisive question, answered
 
@@ -1594,3 +1590,117 @@ self-crc to find out whether "Repairing corrupt archive" is a one-way door — i
 still unrun and is now the only arm left with an unknown outcome, though §5 makes
 it less alarming than it was: the client rewrites that field itself, in the
 ordinary course of play, using a rule we can compute.
+
+---
+
+## 10. Same day, later: stored content is served, and two things above are wrong
+
+Three results from one more launch. The experiment was cheap because it needed
+**no archive write at all**: point a skill row's `+0x90` at a file id that is
+already stored, with `repoint_skill.py --set icon2=<file id>`, and see whether
+the icon pipeline draws it.
+
+### The compression field is honoured per entry
+
+`compression` is a per-row field, so if the client reads it per row rather than
+assuming a class-wide format, **new content can be written stored and the
+compression-8 encoder is never needed** — the blocker this document ranks as the
+long pole for everything new.
+
+Three slots were repointed at stored (`compression=0`) ATEX files, in two size
+classes, with a replicate; five slots left as shipped icons for controls.
+
+| Slot | Skill | `+0x90` → | Stored file | **OBSERVED** |
+|---|---|---|---|---|
+| 2 | 317 | 8957 | 32×32 DXT1, 348 B | **drew a mouse cursor** |
+| 4 | 319 | 248637 | 64×64 DXT1, 280 B | drew faint content |
+| 6 | 321 | 252331 | 64×64 DXT1, 280 B | appeared blank |
+| 1,3,5,7,8 | — | unchanged | 128×128 DXT1, compressed | drew normally |
+
+**Slot 2 settles it.** A recognisable mouse cursor — an actual UI asset, clearly
+not skill art — rendered on the skillbar out of an uncompressed archive entry.
+The pipeline read a `compression=0` row and drew what was in it.
+
+Slots 4 and 6 looked empty, and **the log is what distinguishes "empty" from
+"rejected"**: §2's genuine failure produced two explicit `Error:` lines naming
+the file id. This run produced **none** for either id. The client accepted and
+decoded both; 280 bytes for a 64×64 is what near-uniform art compresses to, and
+near-uniform art looks like nothing on a dark bar.
+
+*The limit of the claim:* this proves the **archive layer** serves stored
+entries. It says nothing about ATEX's own internal compression — those 280-byte
+files are heavily compressed *inside* the container — so `DXTL` and the mip
+framing remain exactly as blocked as they were. What is removed is the need to
+write a Huffman/LZ77 encoder for the archive.
+
+### The panel crash was ours, and §3's reading of it is retracted
+
+§3 concluded that a corrupt asset "degrades gracefully on one path and dies on
+another". **Wrong.** The crash reproduced with a clean archive and a stock
+binary, and the crash log names the real cause:
+
+```
+Assertion: *skill
+P:\Code\Gw\Char\Cli\ChCliSkill.cpp(1022)
+```
+
+A null **skill** pointer, not a texture. `authsrv.py --unlocks all` set all 4,096
+bits of the unlock bitmap, but this build's skill table has **3,443 rows**, so
+653 bits named skills that do not exist. The Skills panel walks the unlocked ids
+and dereferences each one. Re-running with `--unlocks bar` — eight real ids — the
+panel **opened without crashing**, on the same binary and the same archive.
+
+Two lessons, and the second is the expensive one:
+
+- **The corrupt asset was survivable on every path we exercised.** §3's stronger
+  claim is withdrawn.
+- **Two failures in one session are not one failure.** The texture corruption and
+  the panel crash happened minutes apart, so the second was read as a consequence
+  of the first. It was an independent bug in *our* server, sitting in the same
+  session. A planted fault makes a very tempting explanation for any crash that
+  follows it, which is exactly when a control run is worth its cost.
+
+`authsrv.py` now clamps `--unlocks all` to `SKILL_TABLE_ROWS` and refuses an
+explicit id past the end of the table, with the assertion text in the comment.
+
+### "Repairing corrupt archive" fired on a clean archive, and was harmless
+
+This launch logged `Repairing corrupt archive` at startup — on an archive that had
+verified **PASS on all three rules minutes earlier**, with nothing corrupted.
+
+The likely trigger is that the *previous* session ended in a crash, leaving the
+archive marked dirty; the message is a rescan-on-unclean-shutdown, not a verdict
+that anything is wrong. That is a hypothesis, not a measurement.
+
+What *is* measured is the outcome, and it answers this document's #2 open
+question — *"Can the rescan rebuild the fileId→mftIndex map? Decides whether a
+bad write is recoverable."* After the repair:
+
+- all three checksum rules **PASS** (the client rewrote the MFT self-crc again,
+  to a third value, and our rule predicts it again);
+- all **171,023** file-id pairs resolve;
+- map file ids from three campaigns still land on their rows;
+- the stored textures we had repointed at still rendered.
+
+**"Repairing corrupt archive" is not a one-way door.** The archive came out the
+other side valid, addressable and playable. Arm C is now much less interesting
+than it was — we have watched the repair path run and survive it.
+
+### A correction to §2 of the skills study's icon finding
+
+The two icon fields are not rival guesses at one asset. MEASURED from the ATEX
+headers:
+
+| Field | Container | Format | Size |
+|---|---|---|---|
+| `+0x8c` | ATEX | **DXTL** | 64×64 |
+| `+0x90` | ATEX | **DXT1** | **128×128** |
+
+Tyria-Extractor calls `+0x8c` the standard icon and `+0x90` the high-resolution
+one, and **by dimensions that is exactly right** — so its field labels are
+CORROBORATED, not refuted. The error was ours: "standard" was read as "the one
+the bar uses", and the bar uses the hi-res one. GWCA's `+0x94 = icon_file_id_hi_res`
+is the label that is actually misplaced.
+
+The useful claim from that pass is unchanged and still ours: **the skillbar draws
+`+0x90`**, which no source states.
