@@ -540,7 +540,39 @@ Not research, just work, and it should land at E1 rather than E4: an agent table
 allocated ids, a tick that iterates agents, and broadcast-to-connections instead
 of the current single-connection `send`. Every later rung assumes it.
 
-### 7.3a Attackability may not need a real explorable at all
+### 7.3a "Attacking doesn't work" is partly our own silence — OBSERVED
+
+`--explorable` was tried and did not unlock attacking. But instrumenting the
+session rather than believing the symptom found something better, and it
+contradicts the assumption both runs were made under:
+
+| Run | `INTERACT_PLAYER` (`0x0033`) at the red agent | `ATTACK_AGENT` (`0x0026`) |
+|---|---|---|
+| no flag | **11** | never |
+| `--explorable` | **32** | never |
+
+**The client issues interaction requests at the hostile agent in a town, and our
+server answers none of them.** There is no handler for `0x0033` anywhere in
+`authsrv.py`. That is the same shape as every movement bug this project has had:
+the client asks, we say nothing, and the symptom looks like the client refusing.
+
+Two candidate causes remain, and this narrows rather than settles:
+
+1. The client never sends `ATTACK_AGENT` at all — possibly the town, possibly
+   the character having no weapon and no skills, possibly because it wants the
+   interaction acknowledged first.
+2. We ignore the interaction it *does* send.
+
+Cause 2 is ours and is cheap to remove; cause 1 needs cause 2 gone before it can
+be read honestly. **Do not conclude the outpost is the blocker** — the evidence
+for that is currently an absence, and this project has been wrong three times
+about absences produced by instruments that were not running.
+
+One caution on `--explorable`: it changed nothing visible, but it also was not
+*disproven* — 11 interactions versus 32 is a difference in how hard the player
+clicked, not a measurement. Leave the flag; do not read it either way yet.
+
+### 7.3b Attackability may not need a real explorable at all
 
 `INSTANCE_LOAD_INFO` carries an **`is_explorable`** field, and this server has
 always sent 0 — correctly, since map 148 is a town. Guild Wars forbids attacking

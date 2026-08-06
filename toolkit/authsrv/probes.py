@@ -618,6 +618,65 @@ def _npc_allegiance_steps(agent_id, origin):
     return steps
 
 
+def _enemy_damage_steps(agent_id, origin):
+    """Can the client show an ENEMY taking damage? And which slot is the target?
+
+    Everything so far damaged the player. This aims the same channel at a
+    hostile body, which is the first thing in the project that would look like a
+    fight, and it does it WITHOUT needing the server to react to anything -- the
+    steps are on a timer, so no interaction logic has to be invented first.
+
+    IT ALSO SETTLES A FIELD ORDER THAT SECTION 6b COULD NOT. That probe sent
+    target and cause as the same agent, so the two slots were indistinguishable
+    and the order rested on ldufr's struct alone. Here they differ: target is the
+    NPC, cause is the player. If the NPC's bar drops, the order is confirmed
+    against our own client. If the PLAYER's bar drops instead, it is reversed and
+    every damage packet this project would have sent was aimed backwards.
+
+    The last step asks the death question on a disposable body rather than on the
+    player -- a better place to ask it, since 6b showed the player's health floors
+    at 1 and never dies.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    ENEMY = 7
+    return [
+        Step(2.0, 0x0056,
+             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {h['definition']}", "nothing yet."),
+        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {h['definition']}", "nothing yet."),
+        Step(1.0, 0x0020,
+             _create_agent(ENEMY, CHAR_CLASS_MONSTER_BASE | h["definition"],
+                           AGENT_KIND_NPC, ox + 300, oy, plane, token=0x6D6F6E73),
+             f"WORLD_CREATE_AGENT {ENEMY}, token 'mons' -- a hostile Hatcher",
+             "a RED Hatcher. Click it to target it, and leave it targeted for "
+             "the rest of the probe so its health bar stays on screen."),
+        Step(6.0, 0x009F, [42, ENEMY, 100],
+             f"health 100 on agent {ENEMY}",
+             "the TARGET's health bar, in the target window at the top. Does it "
+             "read 100?"),
+        Step(6.0, 0x00A3, [16, ENEMY, agent_id, _f32(-0.25)],
+             f"damage -0.25  target={ENEMY} (enemy)  cause={agent_id} (you)",
+             "THE TEST. A floating damage number over the enemy, and its bar to "
+             "75? Then the channel works on other agents and the field order is "
+             "right. IF YOUR OWN HEALTH DROPS INSTEAD, the two agent slots are "
+             "reversed -- that is a bigger finding than the one being looked "
+             "for, so check your own bar too."),
+        Step(6.0, 0x00A3, [16, ENEMY, agent_id, _f32(-0.5)],
+             f"damage -0.5 on agent {ENEMY}",
+             "the enemy's bar should be near 25. Confirms it accumulates rather "
+             "than being a one-off."),
+        Step(8.0, 0x002D, [ENEMY],
+             f"AGENT_PLAYER_DIE on agent {ENEMY}",
+             "EVERYTHING. Does the enemy die -- animation, ragdoll, corpse, does "
+             "it vanish? Section 6b proved damage alone floors at 1 and cannot "
+             "kill, so if anything dies here, this is the message that does it. "
+             "Nothing follows; take your time."),
+    ]
+
+
 def _team_token_steps(agent_id):
     # Not a packet probe: the token now goes out at spawn. This exists so the
     # run is recorded with a question attached rather than being assumed fine.
@@ -714,6 +773,21 @@ PROBES = {
              "damage packet cannot kill, and a positive value crashes the "
              "client on ArenaNet's own `damage.amount <= 0`. See "
              "studies/enemy/PLAN.md.",
+    ),
+    "enemy_damage": lambda a, o: Probe(
+        question="Does the client render an ENEMY taking damage, and is the "
+                 "first agent slot of 0x00A3 really the target?",
+        predicts="A floating damage number over the red Hatcher and its target "
+                 "bar dropping 100 -> 75 -> 25. Section 6b established the "
+                 "channel and the units but could not test the field order, "
+                 "because it sent target and cause as the same agent. If the "
+                 "PLAYER's bar drops instead, the slots are reversed and every "
+                 "damage packet we would have written was aimed backwards.",
+        steps=_enemy_damage_steps(a, o),
+        note="Needs no interaction handling: the steps are on a timer, so "
+             "nothing has to be invented about what a click means. Ends by "
+             "asking the death question on a disposable body rather than on the "
+             "player, who floors at 1 and never dies.",
     ),
     "npc_allegiance": lambda a, o: Probe(
         question="Is the team token an opaque identity compared between agents, "
