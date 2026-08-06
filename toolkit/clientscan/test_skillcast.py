@@ -93,7 +93,31 @@ QUOTED = [
     ("GmSkSlot", 807, "charCliSkillId == m_skillId"),
     ("GmSkSlot", 808, "charCliSkillCopy == m_skillCopy"),
     ("GmSkSlot", 206, "unlockedSkills->BitTest(sourceSkillId)"),
+    ("ChCliBuff", 235, "!buffTarget->sourceAgent"),
+    ("GmEffect", 882, "targetBuff.skill == m_skillId"),
+    ("GmEffect", 1252, "m_sourceBuff.buffId"),
     ("PathDir", 1494, "m_trapezoid->portalLeft < pathMap.portalCount"),
+]
+
+# The client's own log format strings, at the VAs the study cites them from.
+# These are the naming source: an assert bounds a value, but a log line spells
+# out what the handler calls its arguments. "Pending skill %u copy %d not
+# found" is why section 3 exists, and the six Buff* lines are why section 14
+# can name all six EFFECT_* opcodes in ArenaNet's vocabulary.
+LOG_STRINGS = [
+    (0x00A95C94, "Pending skill %u copy %d not found"),
+    (0x00A955A0, "BuffSourceAdd (agent %d, skill %d): "
+                 "BuffId exists on agent already"),
+    (0x00A95608, "BuffSourceRemove (agent %d, buffId %d): "
+                 "No BuffState exists for agent"),
+    (0x00A95650, "BuffSourceRemove (agent %d, buffId %d): "
+                 "BuffId is not on agent"),
+    (0x00A95690, "BuffTargetAdd (agent %d, skill %d, buffId %d): "
+                 "BuffId exists on agent already"),
+    (0x00A956E0, "BuffTargetExtendTimed (agent %d, buffId %d): "
+                 "No BuffState exists for agent"),
+    (0x00A95798, "BuffTargetRemove (agent %d, buffId %d): "
+                 "No BuffState exists for agent"),
 ]
 
 
@@ -116,6 +140,14 @@ SHAPES = {
     0x00E8: ("RECV", ["dword", "u16", "u32", "u32", "u32"], 20, 20),  # unnamed
     0x0046: ("SEND", ["u32", "u32", "dword", "u8"], 15, 15),          # USE_SKILL
     0x0027: ("SEND", ["dword", "u32", "u32", "u8"], 15, 15),          # unnamed
+    # The buff family, section 14. Note 0x0042 and 0x0043's last field: the
+    # descriptor types it as a plain u32 and the HANDLER loads it with fld.
+    0x003F: ("RECV", ["dword", "dword", "u16", "u32", "u32"], 20, 20),  # BuffSourceAdd
+    0x0040: ("RECV", ["dword", "u32"], 10, 10),                         # BuffSourceRemove
+    0x0041: ("RECV", ["dword", "dword", "u16", "u32", "u32"], 20, 20),  # BuffTargetAdd
+    0x0042: ("RECV", ["dword", "u16", "u32", "u32", "u32"], 20, 20),    # BuffTargetAdd timed
+    0x0043: ("RECV", ["dword", "u32", "u32", "u32"], 18, 18),           # BuffTargetExtendTimed
+    0x0044: ("RECV", ["dword", "u32"], 10, 10),                         # BuffTargetRemove
 }
 
 
@@ -160,10 +192,28 @@ BYTES = [
      "opcode 231 writes recharge = -1 instead -- a different sentinel"),
     (0x0091F707, "d94014",
      "opcode 232's 5th field is loaded with fld: it is an IEEE float"),
+    # -- section 14, the buff family ------------------------------------
+    (0x0091DA27, "d94014",
+     "opcode 66's 5th field is loaded with fld: a float duration"),
+    (0x0091DA57, "d94010",
+     "opcode 67's 4th field likewise"),
+    (0x0081CC57, "8d5804",
+     "the SOURCE buff list is at BuffState+0x04 -- lea ebx, [eax+4]"),
+    (0x0081CE9A, "8d5814",
+     "the TARGET buff list is a different one at BuffState+0x14"),
+    (0x0081CD62, "c1e704",
+     "a source buff record is 16 bytes -- shl edi, 4"),
+    (0x0081CED8, "d9ee",
+     "opcode 65 stores duration = 0.0f: an upkeep buff has no timer"),
+    (0x0081CEF0, "c7401400000000",
+     "and appliedAt = 0 with it"),
+    (0x0081CF95, "c7460c00000000",
+     "opcode 66 stores sourceAgent = 0: a timed buff has no maintainer"),
+    (0x0081CFA7, "894614",
+     "and stamps appliedAt with the skill timer instead"),
+    (0x0081D051, "837f0c00",
+     "which is why ExtendTimed asserts !buffTarget->sourceAgent"),
 ]
-
-LOG_STRING_VA = 0x00A95C94
-LOG_STRING = "Pending skill %u copy %d not found"
 
 
 def main():
@@ -186,8 +236,8 @@ def main():
     have = {(a.module, a.line, a.expr) for a in az.items}
     for triple in QUOTED:
         check(triple in have, f"quoted: {triple[0]}:{triple[1]}  {triple[2]}")
-    hits = [a for a in az.items if a.expr == LOG_STRING]
-    check(not hits, "the log string is not itself an assert expression")
+    for va, want in LOG_STRINGS:
+        eq(az.cstr(va), want, f"log string at 0x{va:08x}")
 
     print("\n3. The descriptor recovery  (the trap this study nearly fell into)")
     img = MS.Image(exe)
@@ -224,8 +274,6 @@ def main():
         off = img.pe.rva_to_off(va - img.base)
         got = img.pe.data[off:off + len(hexs) // 2].hex() if off else None
         eq(got, hexs, f"0x{va:08x}: {why_}")
-    s = az.cstr(LOG_STRING_VA)
-    eq(s, LOG_STRING, "the client's own name for field 3 is in the image")
     eq(len(az.direct_callers(0x00821CC0)), 1,
        "opcode 211's write path has exactly one caller (its own handler)")
     eq(len(az.direct_callers(0x00822B80)), 2,

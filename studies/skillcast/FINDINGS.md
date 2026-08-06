@@ -12,6 +12,10 @@ INFERRED from those words. §11 is the probe queue that would convert the useful
 half into observations, ranked cheapest-and-most-decisive first, and every probe
 in it is committed and executable in `toolkit/authsrv/probes.py`.
 
+**§14 was added later the same day** and carries the same method into the next
+thing R4b needs: effects, conditions and enchantments. The client names five of
+those six opcodes itself.
+
 ## Labels used throughout
 
 | Label | Meaning |
@@ -67,6 +71,15 @@ named catalogue lacks. (§5.)
 **Opcode 211 writes a second skill bitmap that nothing in the image reads.**
 Its write path has exactly one caller — its own handler — and unlike 219 it
 broadcasts no UI notification. (§8.)
+
+**The six `EFFECT_*` opcodes are `BuffSourceAdd`, `BuffSourceRemove`,
+`BuffTargetAdd` (twice), `BuffTargetExtendTimed` and `BuffTargetRemove`** — the
+client's own log strings. Each agent keeps two buff lists, one for what it is
+maintaining and one for what is on it, and a maintained enchantment is the same
+`buffId` filed in both. Upkeep versus timed is a structural distinction
+(`sourceAgent` versus a float `duration` plus a timestamp), not a type code,
+which is a real argument against Headquarter's `effect_type` reading of the one
+field the binary would not name. (§14.)
 
 **And one methodological result that outranks all of the above for anyone
 repeating this work.** More than half the client's field descriptors are zero
@@ -731,3 +744,194 @@ debt to pay down. It is flagged here rather than silently resolved either way.
 Related: `studies/msgtable`'s initializer decoder was left in scratch and lost,
 which is why this pass had to rebuild it. It is committed now, with a test that
 reproduces that study's own oracle.
+
+---
+
+# 14. Effects, conditions and enchantments — added 2026-08-06
+
+Same method, same session, the next thing R4b needs. `studies/skills` §2 has
+this family as six defined opcodes that **no reference server ever sends**, with
+type codes from a single uncited source and one **CONTESTED** field name. The
+client names five of the six itself.
+
+## 14.1 The client's own function names — SOURCED
+
+Eight log format strings in `.rdata`, each xrefed to exactly one opcode's
+handler chain:
+
+```
+0x00A955A0  BuffSourceAdd (agent %d, skill %d): BuffId exists on agent already
+0x00A95608  BuffSourceRemove (agent %d, buffId %d): No BuffState exists for agent
+0x00A95650  BuffSourceRemove (agent %d, buffId %d): BuffId is not on agent
+0x00A95690  BuffTargetAdd (agent %d, skill %d, buffId %d): BuffId exists on agent already
+0x00A956E0  BuffTargetExtendTimed (agent %d, buffId %d): No BuffState exists for agent
+0x00A95730  BuffTargetExtendTimed (agent %d, buffId %d): BuffId not found for agent
+0x00A95798  BuffTargetRemove (agent %d, buffId %d): No BuffState exists for agent
+0x00A957E0  BuffTargetRemove (agent %d, buffId %d): BuffId is not on agent
+```
+
+| Opcode | ldufr's name | The client's own name | Handler chain |
+|---|---|---|---|
+| 63 `0x3F` | `EFFECT_UPKEEP_ADDED` | **`BuffSourceAdd`** | `0x0091D9A0` → `0x0080EEC0` → `0x0081CC30` |
+| 64 `0x40` | `EFFECT_UPKEEP_REMOVED` | **`BuffSourceRemove`** | `0x0091D9D0` → `0x0080EEF0` → `0x0081CDA0` |
+| 65 `0x41` | `EFFECT_UPKEEP_APPLIED` | **`BuffTargetAdd`** | `0x0091D9F0` → `0x0080EF10` → `0x0081CE70` |
+| 66 `0x42` | `EFFECT_APPLIED` | **`BuffTargetAdd`**, timed variant | `0x0091DA20` → `0x0080EF40` → `0x0081CF20` |
+| 67 `0x43` | `EFFECT_RENEWED` | **`BuffTargetExtendTimed`** | `0x0091DA50` → `0x0080EF70` → `0x0081CFD0` |
+| 68 `0x44` | `EFFECT_REMOVED` | **`BuffTargetRemove`** | `0x0091DA80` → `0x0080EFA0` → `0x0081D0B0` |
+
+All six live in `P:\Code\Gw\Char\Cli\ChCliBuff.cpp`, reached through a
+sub-object at `charContext + 0x508` — a sibling of the skill context at `+0x6F0`
+and the skillbar at `+0x700`.
+
+**ldufr's names are structurally right and directionally wrong.** Its
+`UPKEEP_ADDED` / `UPKEEP_APPLIED` pair is really `Source` / `Target`: the *same*
+buff, filed under two different agents.
+
+## 14.2 Two lists per agent, two record shapes — MEASURED
+
+`0x0064AAE0` finds, and `0x0081C890` creates, a per-agent `BuffState`. Each one
+holds **two independent sorted arrays**, both keyed by the dword at record
+`+0x08`:
+
+```c
+struct BuffState {
+    /* +0x00 */ uint32_t agent;
+    /* +0x04 */ rtl::Array<SourceBuff> source;   // 16-byte records; opcodes 63/64
+    /* +0x14 */ rtl::Array<TargetBuff> target;   // 24-byte records; 65/66/67/68
+};
+
+struct SourceBuff {          // 0x10 = 16 bytes.  What this agent is MAINTAINING.
+    /* +0x00 */ uint32_t skill;
+    /* +0x04 */ uint32_t <unnamed>;
+    /* +0x08 */ uint32_t buffId;        // the sort key
+    /* +0x0C */ uint32_t targetAgent;
+};
+
+struct TargetBuff {          // 0x18 = 24 bytes.  What is ON this agent.
+    /* +0x00 */ uint32_t skill;         // GmEffect:882  targetBuff.skill
+    /* +0x04 */ uint32_t <unnamed>;     // the CONTESTED field -- 14.4
+    /* +0x08 */ uint32_t buffId;        // sort key; GmEffect:1252 m_sourceBuff.buffId
+    /* +0x0C */ uint32_t sourceAgent;   // ChCliBuff:235; 0 for a timed buff
+    /* +0x10 */ float    duration;      // 0.0f for an upkeep buff
+    /* +0x14 */ uint32_t appliedAt;     // GetSkillTimer() at apply; 0 for upkeep
+};
+```
+
+Strides MEASURED from the compiler's own index arithmetic: `shl edi, 4` at
+`0x0081CD62` (16 bytes), and `lea eax,[reg+reg*2]` with `lea edx,[ecx+eax*8]` at
+`0x0081CAED` and `0x0081C7F8` (3 × 8 = 24 bytes).
+
+**CORROBORATED against GWCA, with a clarification.** GWCA's 16-byte
+`GW::Buff { skill_id; h0004; buff_id; target_agent_id; }` is exactly
+`SourceBuff` — the list of what *you* are maintaining, which is the one a
+toolbox cares about. Its `h0004` is our unnamed `+0x04`. The 24-byte
+`TargetBuff` — what is on an agent, with the duration and the timestamp — is
+not in GWCA at all as far as this pass could see.
+
+## 14.3 The six messages, field by field — SOURCED
+
+Wire shapes from the recovered descriptors; field roles from the stores, and
+from the log strings' own argument order.
+
+```c
+// 63 / 0x3F  BuffSourceAdd            20 wire bytes
+{ agent_id targetAgent; agent_id casterAgent; u16 skill; u32 unnamed; u32 buffId; }
+//   filed under casterAgent's SOURCE list; targetAgent goes to record +0x0C
+
+// 64 / 0x40  BuffSourceRemove         10 wire bytes
+{ agent_id casterAgent; u32 buffId; }
+
+// 65 / 0x41  BuffTargetAdd            20 wire bytes
+{ agent_id targetAgent; agent_id sourceAgent; u16 skill; u32 unnamed; u32 buffId; }
+//   filed under targetAgent's TARGET list; duration = 0.0f, appliedAt = 0
+
+// 66 / 0x42  BuffTargetAdd, timed     20 wire bytes
+{ agent_id targetAgent; u16 skill; u32 unnamed; u32 buffId; float duration; }
+//   sourceAgent = 0, appliedAt = GetSkillTimer()
+
+// 67 / 0x43  BuffTargetExtendTimed    18 wire bytes
+{ agent_id targetAgent; u32 unnamed; u32 buffId; float duration; }
+//   asserts !buffTarget->sourceAgent, then rewrites duration and appliedAt
+
+// 68 / 0x44  BuffTargetRemove         10 wire bytes
+{ agent_id targetAgent; u32 buffId; }
+```
+
+Two things fall straight out, and neither was available before.
+
+**The source/target split is the maintained-enchantment mechanism.** 63 and 65
+carry *identical* wire fields. They differ only in which agent's list the record
+lands in, and correspondingly which of the two agent ids ends up at record
+`+0x0C`. A maintained enchantment needs both: 63 so the caster's upkeep row
+shows a pip, 65 so the target's effect row shows an icon. One `buffId` ties them
+together, and 64 and 68 remove them independently.
+
+**Upkeep and timed are distinguished structurally, not by a type code.** An
+upkeep buff has `sourceAgent != 0` and `duration == 0.0f`; a timed buff has
+`sourceAgent == 0`, a float duration and a timestamp. `BuffTargetExtendTimed`
+asserts `!buffTarget->sourceAgent` before touching the timer — you cannot extend
+something that is being maintained. That assert is the client stating the
+invariant in its own words.
+
+**CORROBORATED — Headquarter, on the two field names it got right.**
+`studies/skills` records its `EFFECT_APPLIED` as
+`{agent_id, u16 skill_id, u32 effect_type, u32 effect_id, float duration}`. The
+binary confirms the shape exactly; confirms field 5 is a float the client stores
+as a duration (`fld` at `0x0091DA27`, against a descriptor that types it as a
+plain u32); and confirms field 4 is an id, whose name in the client's own words
+is `buffId`. Only `effect_type` is left standing on nothing.
+
+**A practical warning, SOURCED, of the same class as the unlock-bitmap crash.**
+`GmEffect:3030` asserts
+`buffId < (CTL_EFFECT_UPKEEP_TERM - CTL_EFFECT_UPKEEP_FIRST)`, and
+`GmEffect:3021` asserts
+`skillId < (CTL_EFFECT_SKILL_TERM - CTL_EFFECT_SKILL_FIRST)`. Both index UI
+frame-code ranges. A server that hands out large buff ids will assert in the
+client the moment the effect UI touches one, so **buff ids are a small dense
+space the server must allocate carefully**, not an arbitrary handle.
+
+## 14.4 The one field the binary would not name — CONTESTED
+
+Record `+0x04`, from field 4 of opcodes 63 and 65 and field 3 of opcode 66.
+`studies/skills` has it as Headquarter's `effect_type` — codes 0 = condition or
+shout, 8 = stance, 11 = maintained enchantment, 14 = enchantment or nature
+ritual, single-source and uncited — against GWCA's `attribute_level`.
+
+**Static analysis ran out here.** `ChCliBuff.cpp` stores the field and never
+reads it; no assert in the image names it; and the UI event payloads carry the
+record *pointer* rather than the field, so the consumer is several frames of UI
+code away. **NOT FOUND**, searched three ways: the assert corpus, a string
+sweep, and the `GmEffect` consumer chain from event `0x10000055`.
+
+One new piece of evidence, and it cuts against `effect_type`: **the client
+already distinguishes upkeep from timed structurally** — different opcodes,
+different lists, `sourceAgent` versus `duration`. A type code whose values are
+"stance / enchantment / maintained enchantment" would re-encode a distinction
+the client has already made by other means. That is an argument, not a proof,
+and it is exactly the shape of reasoning this repository distrusts — so it is
+written down as an argument, and a probe settles it.
+
+`buff_type_field` sends the same skill with field 3 = 0, then 14, then 12, and
+watches whether the icon changes *kind* (effect_type) or only its numbers
+(attribute_level). 12 is deliberately not one of Headquarter's four codes: if
+the field is that enum, 12 should misbehave where 0 and 14 do not.
+
+## 14.5 What this changes for R4b
+
+- There is **no** condition, hex or enchantment message. Everything rides these
+  six, and the `buffId` is the server's handle for one applied effect.
+- A duration is a **float in seconds**, and the client stamps its own clock at
+  apply time — the same architecture as the skill recharge. The server never
+  sends "time remaining"; it sends 67 to change the duration.
+- Removing an effect early is 68 with the `buffId`. There is no "expire"
+  message: the client owns the countdown.
+- A maintained enchantment costs **two** messages, and dropping it costs two
+  more.
+- Buff ids must be small and densely allocated, or the effect UI asserts.
+
+Two more probes join the queue, after the six in §11:
+
+| # | Probe | Question | Prediction |
+|---|---|---|---|
+| 7 | `buff_side` | Do 63 and 65 file one buff under two agents? | 65 alone gives one effect icon with no countdown; adding 63 with the same buffId gives a second, separate upkeep indicator; removing either leaves the other. |
+| 8 | `buff_type_field` | Is field 3 `effect_type` or `attribute_level`? | If `effect_type`, 0 and 14 render as different *kinds* and an out-of-enum 12 misbehaves. If `attribute_level`, all three look identical and only the tooltip numbers move. |
