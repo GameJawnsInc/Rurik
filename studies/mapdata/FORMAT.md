@@ -446,9 +446,41 @@ desyncs on every map. GuildWarsMapBrowser is unaffected because its pattern
 indexes arrays by count and only displays the size — which is also why the error
 could survive there unnoticed.
 
-**Still not decoded:** portals, BSP nodes, sink nodes, edge vectors. Those are
-the pathfinding graph — routing *around* an obstacle. Collision does not need
-them, and Rurik does not have them.
+**The routing graph was never in those sub-tags.** This section used to end
+"Still not decoded: portals, BSP nodes, sink nodes, edge vectors. Those are the
+pathfinding graph." Half wrong, and the useful half is where it was wrong.
+
+The intra-plane routing graph is the **four neighbour indices inside every
+trapezoid record**, which our parser unpacked and discarded on the next line.
+MEASURED 2026-08-06: 2,472 directed links in Kamadan and 12,478 in Pre-Searing,
+none out of range, and **every one symmetric** — and on the stronger test that
+upstream's TL/TR/BL/BR naming predicts, a link across a top edge is answered
+across a bottom edge, **14,950 of 14,950**. Four indices in one 44-byte record
+checked against four in a different record; our decoder cannot force that.
+
+**Portals (tag 9) are now decoded too**, three fields of five:
+
+| field | meaning | evidence |
+|---|---|---|
+| `u16 traps` | trapezoids of this plane touching the crossing | summed per plane it equals that plane's `portalTraps` count — **1,168 of 1,168 planes** |
+| `u16 offset` | start of this portal's run in `portalTraps` | the `[offset, offset+traps)` slices **partition** that array exactly — **396 of 396 planes**, every entry covered once; all 6,146 indices valid trapezoids of their own plane |
+| `u16 neighbour` | the plane on the other side | in range **3,034 of 3,034**; the plane relation is reciprocal **764 of 764** |
+| `u16 unknown` | **NOT ESTABLISHED** | always below the map's total portal count, so "a global portal index" is the obvious reading, and it is **refuted**: pairing through it is reciprocal **0 of 3,034** |
+| `u8 flag` | always zero on all 3,034 | no information |
+
+**BSP x/y nodes and sink nodes are still skipped, and nothing needs them.** They
+are an acceleration structure for point-to-trapezoid lookup, which
+`PathingMap.containing()` already does by y-banding.
+
+`PathingMap.route()` implements A* over the adjacency graph with shared-edge
+waypoints and a string-pulling pass. Two things bound it, both measured rather
+than assumed. Waypoints must be the **shared edge**, not the trapezoid centre —
+centre-to-centre between two adjacent trapezoids leaves the mesh when either is
+long and oblique, which produced an unwalkable segment before it was fixed. And
+intra-plane links alone leave Kamadan in **61 components** (largest 17%) and
+Pre-Searing in **91** (largest 50%), because portals are what stitch a map
+together. So routing works inside a region and returns None between regions; it
+never returns a path through a wall.
 
 ---
 
@@ -473,8 +505,11 @@ work different from the protocol grind.
 5. **Done**, on both 0x003D (keyboard) and 0x003E (click) rather than 0x003E
    alone — keyboard movement is the path that actually produced the wall-clip,
    since it sets a fresh destination four times a second.
-6. **Only then** consider the pathfinding graph. It needs sub-tags nobody has
-   decoded, and step 5 delivers most of the visible benefit without it.
+6. **Mostly done, and it cost far less than this step assumed.** "It needs
+   sub-tags nobody has decoded" was wrong: the intra-plane graph was in the
+   trapezoid record the whole time, and `PathingMap.route()` does A* over it.
+   What is genuinely left is pairing trapezoids across a portal, which is the
+   only thing between us and whole-map routing.
 
 Do not treat OpenTyria's parser as a validated spec while doing this. Its
 44-byte trapezoid record, `0xEEFE704C` signature and fast-math tables are
@@ -499,7 +534,9 @@ upstream being trustworthy — it was checked, and the check is what counts.
 | What are the other 100 map-flagged rows? | No mirror names them. Route 1 above: find the area table in `Gw.exe` and resolve its name string ids through the archive's text records. |
 | Are the 101 shared file ids real, or upstream copy-paste? | Geometry. If two named zones share a file, both their spawns should land in it, as Pre Ascalon City's and Ashford Abbey's do. |
 | Is our decompressor exactly right? | Diff against `xentax.cpp` output on the same input. Needs a C compiler. Separately, it fails on 12 of 1,089 text files with a huffman table hole — that is a live defect and the cheaper thread to pull. |
-| What do plane sub-tags 1, 3–6, 9–11 hold? | Named and sized (see the tag-8 table), contents not decoded. Required for pathfinding; not for collision. |
+| ~~What do plane sub-tags 1, 3–6, 9–11 hold?~~ | **Largely answered 2026-08-06.** Tag 9 (portals) is decoded but for one field; tags 4/5/6 are a lookup acceleration structure nothing needs. The routing graph turned out to be in the trapezoid record all along. |
+| How do you pair a portal's trapezoids with its neighbour's? | The one thing between us and whole-map routing. The portal record's fourth `u16` is the obvious candidate and is refuted. Geometric overlap matches 90% (Kamadan) and 81% (Pre-Searing) but is our heuristic, and with no height in the file it would link a bridge to the ground beneath it. |
+| What is the portal record's fourth `u16`? | NOT ESTABLISHED. Always below the map's portal count; pairing through it is reciprocal 0 of 3,034 times. |
 | Why is tag 11's size field double its data, in every plane of every map? | Unknown. Systematic, not noise, so it means something. |
 | Does the navmesh agree with the collision the client enforces? | The server now logs `on_mesh` on every stop report. A playtest answers it. |
 | What height does a plane sit at? | Not in the file. Possibly derived by the client from terrain. |
