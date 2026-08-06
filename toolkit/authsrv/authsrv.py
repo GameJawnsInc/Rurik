@@ -229,6 +229,109 @@ ATTRIBUTE_COUNT = 42
 # send 0/0 here, and whether the two bytes mean used/max or max/used is contested.
 ATTRIBUTE_POINTS = 50
 
+# ---------------------------------------------------------------- skills ----
+# The server owns WHICH and WHEN; the client owns WHAT. A skill's name, icon,
+# energy cost, cast time and recharge all live in a 164-byte row compiled into
+# Gw.exe and indexed by the bare id we send here -- nothing about any of them
+# crosses the wire. studies/skills/FINDINGS.md is the long version;
+# studies/datwrite/FINDINGS.md located that table in OUR binary (.rdata file
+# offset 0x00587ED0, 3,443 rows) and the ids below were read out of it.
+#
+# Shapes confirmed against schema/messages.json, which matches what the study
+# describes: 218 is {agent_id, array32[8] skills, array32[8] pvp_masks, byte},
+# 79 declared and 75 on the wire at 8/8 because the packer writes array counts
+# as u16. 29 and 219 are both {array32[128]}.
+#
+# CAVEAT, and it is the one most likely to bite: messages.json carries
+# "validated_against_build": null. These three opcode NUMBERS have never been
+# checked against our own client, and there is a dated renumbering in this range
+# in the wider corpus. If the bar stays empty, doubt the numbers before the shape.
+GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS = 0x001D   # 29
+GAME_SMSG_SKILLBAR_UPDATE = 0x00DA              # 218
+GAME_SMSG_UPDATE_UNLOCKED_SKILLS = 0x00DB       # 219
+
+SKILLBAR_SLOTS = 8
+# 128 dwords = 4,096 bits, comfortably covering the 0..3442 id space this build
+# actually has. Blanket-unlocking everything is deliberate: whether the client
+# REFUSES to draw a bar skill that is not unlocked is NOT FOUND in every source
+# we have, so we remove the variable rather than guess at it. The Go server does
+# the same thing.
+UNLOCK_WORDS = 128
+UNLOCK_ALL_WORD = 0xFFFFFFFF
+# Bit n of word n/32 means skill n is unlocked. UPSTREAM describes the layout;
+# OpenTyria's own bit helpers are too broken to copy (its set_bit assigns instead
+# of OR-ing, destroying 31 bits at a time), so this is written from the
+# description rather than from its code.
+# The message carries 4096 bits and build 38797's skill table holds 3443 rows,
+# so 653 of those bits name skills that do not exist. Setting them CRASHES the
+# client -- MEASURED, twice:
+#
+#     Assertion: *skill
+#     P:\Code\Gw\Char\Cli\ChCliSkill.cpp(1022)
+#
+# The Skills and Attributes panel walks the unlocked ids and dereferences each
+# one, so a bit past the end of the table is a null deref. The crash was first
+# blamed on a corrupt texture we had planted in the same session; it reproduced
+# with a clean archive and a stock binary, and disappeared the moment the bitmap
+# was clamped. "all" therefore means all REAL skills, not all bits.
+#
+# MEASURED against build 38797. A different build has a different row count, and
+# this number is not read from the binary -- if the client starts asserting in
+# ChCliSkill.cpp again, re-derive it with repoint_skill.py --show.
+SKILL_TABLE_ROWS = 3443
+
+
+def unlock_all_words():
+    """Every bit up to SKILL_TABLE_ROWS, and not one past it."""
+    words = [0] * UNLOCK_WORDS
+    for sid in range(SKILL_TABLE_ROWS):
+        words[sid // 32] |= 1 << (sid % 32)
+    return words
+
+
+UNLOCKED = unlock_all_words()
+UNLOCK_LABEL = "all"
+
+
+def build_unlock_bitmap(spec):
+    """--unlocks: 'all', 'none', 'bar', or an explicit comma-separated id list."""
+    if spec == "all":
+        return unlock_all_words(), f"all ({SKILL_TABLE_ROWS} real skills)"
+    words = [0] * UNLOCK_WORDS
+    if spec == "none":
+        return words, "none"
+    ids = SKILLBAR if spec == "bar" else [int(s, 0) for s in spec.split(",")
+                                          if s.strip() != ""]
+    for sid in ids:
+        if sid <= 0:
+            continue
+        w, b = divmod(sid, 32)
+        if w >= UNLOCK_WORDS:
+            raise SystemExit(f"skill id {sid} needs word {w}, past the "
+                             f"{UNLOCK_WORDS}-word message")
+        if sid >= SKILL_TABLE_ROWS:
+            raise SystemExit(
+                f"skill id {sid} is past the end of this build's skill table "
+                f"({SKILL_TABLE_ROWS} rows). Unlocking it asserts in the "
+                f"client's ChCliSkill.cpp the moment the Skills panel opens.")
+        words[w] |= 1 << b
+    return words, ",".join(str(i) for i in ids)
+
+# Eight real Warrior skills (profession byte 1 at row+0x28), read from this
+# build's own table, each with both icon file ids present and name/description
+# string ids consecutive. Our test character is a Warrior, so a Warrior bar is
+# the case least likely to be refused for a reason we would then misattribute.
+TEST_SKILLBAR = [316, 317, 318, 319, 320, 321, 322, 323]
+# What actually goes out. Rebindable from --skills so the ids can be changed
+# between launches without editing this file -- which matters because the whole
+# point of the exercise is varying them and watching what the client draws.
+SKILLBAR = list(TEST_SKILLBAR)
+# Upstream declares 8 pvp_masks and never writes them, so eight zeros go out
+# from its memset. We send the same thing, and what it is for is NOT FOUND.
+SKILLBAR_PVP_MASKS = [0] * SKILLBAR_SLOTS
+# Trailing byte. Upstream sets it to 1 with no citation anywhere.
+SKILLBAR_TRAILER = 1
+
 CHAR_CLASS_PLAYER_BASE = 0x30000000
 AGENT_TYPE_LIVING = 1
 PLAYER_TEAM_TOKEN = 0x706C6179   # 'play'
@@ -1489,6 +1592,25 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
                              [PLAYER_AGENT_ID, PROF_WARRIOR, 0, 0],
                              "PLAYER_UPDATE_PROFESSION")
+                        # The skill block. Upstream's SendSkillsAndAttributes
+                        # sends the bar (218) BEFORE the unlock list (219); we
+                        # send the unlocks first, deliberately. Upstream never
+                        # puts a real id on a bar -- it sends eight zeros -- so
+                        # its ordering is not evidence about a POPULATED bar,
+                        # and if the client gates drawing on unlock state then
+                        # having that state already in hand is the ordering that
+                        # can work. If the bar draws, try upstream's order too:
+                        # a difference there is a real finding either way.
+                        send(GAME_SMSG_PVP_UPDATE_UNLOCKED_SKILLS, [UNLOCKED],
+                             f"PVP_UPDATE_UNLOCKED_SKILLS({UNLOCK_LABEL})")
+                        send(GAME_SMSG_UPDATE_UNLOCKED_SKILLS, [UNLOCKED],
+                             f"UPDATE_UNLOCKED_SKILLS({UNLOCK_LABEL})")
+                        skills = list(SKILLBAR)[:SKILLBAR_SLOTS]
+                        skills += [0] * (SKILLBAR_SLOTS - len(skills))
+                        send(GAME_SMSG_SKILLBAR_UPDATE,
+                             [PLAYER_AGENT_ID, skills, SKILLBAR_PVP_MASKS,
+                              SKILLBAR_TRAILER],
+                             f"SKILLBAR_UPDATE{skills}")
                         # Why the character used to read Level 0: we never sent
                         # this at all. Every other field stays zero -- only
                         # field 9's effect has actually been observed, and
@@ -1659,11 +1781,24 @@ def main():
     # `global` after any use of the name is a SyntaxError. Single-process server,
     # so rebinding the module constants is enough and keeps
     # handle_request_game_instance free of plumbing it would only ever use once.
-    global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING
+    global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
+    global UNLOCKED, UNLOCK_LABEL
 
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=6112)
+    ap.add_argument("--skills", default=",".join(str(s) for s in TEST_SKILLBAR),
+                    help="Comma-separated skill ids for the bar, 0 for an empty "
+                         "slot. Ids are row indices into the client's own skill "
+                         "table, so they must exist in the build being launched "
+                         "(0..3442 here). Fewer than 8 are padded with zeros.")
+    ap.add_argument("--unlocks", default="all",
+                    help="Unlock bitmap sent as opcodes 29 and 219: 'all' "
+                         "(every bit set), 'none', 'bar' (exactly the --skills "
+                         "ids), or an explicit comma-separated id list. Whether "
+                         "the client REFUSES to draw a bar skill that is not "
+                         "unlocked is NOT FOUND in every source we have; this "
+                         "flag exists to settle it by experiment.")
     ap.add_argument("--keys")
     ap.add_argument("--vault", default=VAULT_DEFAULT)
     ap.add_argument("--host-encoding", choices=["sockaddr", "string"],
@@ -1733,6 +1868,23 @@ def main():
 
     GAME_SRV_HOST, GAME_SRV_PORT = a.game_host, a.game_port
     HOST_FIELD_ENCODING = a.host_encoding
+
+    try:
+        SKILLBAR = [int(s, 0) for s in a.skills.split(",") if s.strip() != ""]
+    except ValueError as ex:
+        raise SystemExit(f"--skills must be a comma-separated list of ids: {ex}")
+    if len(SKILLBAR) > SKILLBAR_SLOTS:
+        raise SystemExit(f"--skills takes at most {SKILLBAR_SLOTS} ids, "
+                         f"got {len(SKILLBAR)}")
+    print(f"skillbar: {SKILLBAR}")
+    UNLOCKED, UNLOCK_LABEL = build_unlock_bitmap(a.unlocks)
+    set_bits = sum(bin(w).count("1") for w in UNLOCKED)
+    print(f"unlocks:  {UNLOCK_LABEL}  ({set_bits} bit(s) set across "
+          f"{UNLOCK_WORDS} words)")
+    if a.unlocks != "all":
+        drawn = [s for s in SKILLBAR
+                 if s > 0 and UNLOCKED[s // 32] >> (s % 32) & 1]
+        print(f"          of the bar, unlocked: {drawn or 'none'}")
 
     keys = load_keys(a.keys)
     if "server_private" not in keys:

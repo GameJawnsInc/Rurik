@@ -1223,3 +1223,310 @@ does not implement it at all.
 
 And the one thing we could check cheaply — whether our own client draws a real
 skill when we send it opcode 218 — has never been tried.
+
+---
+
+# OBSERVED, 2026-08-05: the first results measured against our own client
+
+Everything above this line was written without launching a client. This section
+was produced by running §3's "concrete first experiment" and then a follow-up,
+against build 38797 on our own server. It is the only part of this document
+labelled **OBSERVED** — we watched it happen — and where it contradicts what is
+above, the observation wins and the earlier text is left in place for the record.
+
+Method: `toolkit/authsrv/authsrv.py` gained a skill block (opcodes 29, 219, 218)
+sending eight real Warrior ids read out of this build's own table;
+`toolkit/clientpatch/repoint_skill.py` rewrote individual fields of individual
+skill rows in a copy of `Gw.exe`. Two launches, three screenshots each. The four
+skills used, identified BY the experiment rather than assumed: **316 "To the
+Limit!", 317 Battle Rage, 318 Defy Pain, 319 Rush.**
+
+## 1. §3 was right, and its caveats did not bite
+
+**One message put eight real skills on the bar, drawn correctly.** The client
+rendered eight distinct icons with correct names, energy costs, adrenaline costs,
+recharge times, skill types and attributes — from nothing but eight bare `uint32`
+ids in a 75-byte message.
+
+- **`GAME_SMSG_SKILLBAR_UPDATE` = 218 / `0x00DA` is correct for build 38797.**
+  So are `UPDATE_UNLOCKED_SKILLS` = 219 and `PVP_UPDATE_UNLOCKED_SKILLS` = 29.
+  §3's first caveat — "our opcode numbering has never been validated against our
+  own client", `messages.json` carrying `"validated_against_build": null` — is
+  now discharged for these three. It remains true for every other opcode.
+- **The wire shape is exactly as computed**: 75 bytes at 8/8 against a declared
+  79, the two-byte difference per array being the `u16` count the packer writes.
+  516 bytes each for 29 and 219.
+- **Unlock state was not a gate, or was satisfied.** We blanket-set 128 words of
+  `0xFFFFFFFF` precisely so it could not be a confounder, so §3's open question —
+  whether the client refuses to draw a locked skill — is still **NOT FOUND**. It
+  is now cheap to answer: send the bar with an empty bitmap and look.
+- **Ordering:** we sent the unlock lists BEFORE the bar, where upstream sends the
+  bar first. It worked. Whether upstream's order also works is untested.
+
+## 2. The icon question is settled, and every source we have is wrong
+
+§1 recorded this as **CONTESTED**: Tyria-Extractor documents `+0x8c` as the
+standard icon and `+0x90` as high-resolution; GWCA names `+0x8c` `icon_file_id`
+and `+0x94` `icon_file_id_hi_res`; GWToolbox is not self-consistent across its
+own three call sites.
+
+**MEASURED: the skillbar draws `+0x90`.**
+
+Three skills were repointed at Rush's art, one variable each, with real Rush in
+the adjacent slot as the reference:
+
+| Slot | Skill | Field changed | Result |
+|---|---|---|---|
+| 1 | 316 | `+0x8c` only | **unchanged** |
+| 2 | 317 | `+0x90` only | **became Rush's icon** |
+| 3 | 318 | both | became Rush's icon |
+| 4 | 319 | none | reference |
+
+The field every source calls the standard or primary icon has no effect on the
+bar. An earlier, messier run agreed once the result is known: a slot with only
+`+0x8c` changed did not move, and a slot with both changed did.
+
+**What this does not say.** `+0x8c` is populated in 3,439 of 3,443 rows and pairs
+one-to-one with `+0x90`, so it is certainly *something* — plausibly the icon used
+somewhere we did not look (skill list, hero panel, a different UI scale). All
+that is established is the bar, at this resolution. `+0x94` remains untested and
+is populated in only 86 rows.
+
+**Consequence for re-skinning: a borrowed icon needs `+0x90`, and repointing
+`+0x8c` alone does nothing visible.**
+
+## 3. Descriptions are templates, and the numbers come from the target row
+
+§1 states this from two lineages; it is now watched. Skill 322 was given 318's
+name/concise/description string ids and nothing else:
+
+| | real Defy Pain (318) | 322 wearing Defy Pain's text |
+|---|---|---|
+| tooltip | Elite Skill. **(20 seconds.)** You have **+90** maximum Health, +20 armor, and take **-1** less damage. (Attrib: Strength) | Melee Attack. **(0 seconds.)** You have **+10** maximum Health, +20 armor, and take **-0** less damage. (Attrib: Strength) |
+
+Same template, different numbers — the placeholders were filled from **322's own**
+`duration`/`scale`/`bonusScale` fields, not the donor's. `+20 armor` is literal
+text in the template and is identical in both, which is the control.
+
+The same held for Rush: id 323 wearing Rush's text printed *(2 seconds)* from its
+own `duration0 = 2`, where real Rush prints *(8 seconds)* from its own `8`. Its
+attribute line read Tactics — 323's own `+0x29` — against Rush's Strength.
+
+**So text and numbers are completely independent.** The skill type word ("Melee
+Attack" vs "Elite Stance"), energy, adrenaline, recharge, attribute and every
+scaling endpoint stayed with the target row while the prose came from the donor.
+
+## 4. Which numbers render green, and why
+
+The owner noticed that a cloned Defy Pain showed **one** attribute-scaled (green)
+value where the real one shows **two**, and asked whether "number of raisable
+values" is a skill property. It is, and it is `skill_arguments` at **`+0x58`** —
+GWCA's comment reads "1 duration set, 2 scale set, 4 bonus scale set", and it is
+a bitfield.
+
+But the bit alone is not the rule. MEASURED:
+
+| id | `args` | sets enabled | rank-0 → rank-15 | green |
+|---|---|---|---|---|
+| 318 Defy Pain | 7 | duration, scale, bonusScale | 20→20, 90→300, 1→10 | **2** |
+| 322 clone | 2 | scale | 10→40 | **1** |
+| 316 "To the Limit!" | 7 | duration, scale, bonusScale | 10→20, 10→60, 1→6 | **3** |
+| 319 Rush | 1 | duration | 8→20 | **1** |
+
+**A value renders green when its set is enabled AND its two endpoints differ.**
+Defy Pain's duration is enabled but constant at 20→20, so it prints without being
+green — which is exactly the missing second green number.
+
+## 5. Two corrections to §1
+
+**The adrenaline conversion is not a division.** *(Superseded by §10 below, which
+settles it as `ceil(raw/25)` and walks back the overstatement in this
+paragraph's original heading — the 25-unit figure is correct and is corroborated
+by an independent source; only the division was wrong. Left in place because the
+reasoning here is what motivated the probe.)* §1 records, from
+Tyria-Extractor and with a unit test behind it, that `adrenaline` at `+0x38` is in
+internal units of 25 per displayed strike. Three observations refute the division:
+
+| skill | raw `+0x38` | client displayed | raw/25 |
+|---|---|---|---|
+| Battle Rage (317) | 80 | **4** | 3.2 |
+| Rush (319) | 80 | **4** | 3.2 |
+| Defy Pain (318) | 120 | **5** | 4.8 |
+
+Both `ceil(raw/25)` and `floor(raw/25)+1` fit all three; they diverge only on
+exact multiples of 25 and none of these is one. The table holds 18 distinct
+non-zero values (20, 25, 50, 60, 75, 80, 100, 120, 125, 130, 140, 150, 160, 175,
+200, 220, 240, 250) and they are not all multiples of 25, so the clean-division
+model was never going to hold. **One observation of a skill whose raw value is an
+exact multiple of 25 would discriminate.** §1's own warning that this field is
+"CLIENT-DATA, uncorroborated by measurement" was well placed.
+
+**The elite border is `special` (+0x10) bit `0x4`, not part of the icon.** When
+two elite skills had their icons repointed to a non-elite skill's, they kept
+their golden borders. MEASURED: `special == 0x00000004` for Battle Rage and Defy
+Pain, `0x00000000` for "To the Limit!" and Rush.
+
+## 6. What this means for §5, "New skill, or re-skinned id?"
+
+§5's honest summary says a re-skinned skill's tooltip "will lie, because the
+client renders the shipped text", and lists name, description and icon under
+"what the server cannot touch" with **No** in every row.
+
+That is still true **of the server**. It is not true of the project, because we
+already patch the client binary for the Diffie-Hellman key, and the same patcher
+can repoint a skill row's string ids and icon file ids at any other skill's:
+
+| Property | Server can change? | PE repoint can borrow? |
+|---|---|---|
+| Name | No | **Yes** — observed |
+| Concise / full description | No | **Yes** — observed |
+| Skillbar icon | No | **Yes**, via `+0x90` — observed |
+| Energy, adrenaline, recharge, activation | No | yes, though untested here |
+| Attribute, profession, type, elite flag | No | yes, though untested here |
+| Numbers filling the description | No | they follow the row, not the text |
+
+**A re-skinned skill's tooltip no longer has to lie.** Its name, its prose and its
+bar icon can all be borrowed from any of the ~1,300 shipped skills, with no
+`Gw.dat` write, no injected DLL and no new content — only the client patching this
+project already performs. What cannot be borrowed is text that no shipped skill
+contains, and that is where `studies/datwrite/FINDINGS.md` picks the story up.
+
+## 7. Where this leaves the caveats §3 raised
+
+| §3 caveat | Status |
+|---|---|
+| Opcode numbering never validated | **discharged** for 218/219/29 on build 38797 |
+| Skill id must exist in the client's table | held; ids were read from the table itself |
+| Client updates its own skillbar without waiting for the server | not contradicted, and not separable here — but the bar was empty until we sent 218, so the server message is doing the work |
+| Not every row is a player skill | avoided by filtering on profession and icons |
+| `pvp_masks[]` unexplained | still **NOT FOUND**; eight zeros worked |
+
+## 8. Reproducing this
+
+```bash
+python toolkit/authsrv/authsrv.py --skills 316,317,318,319,320,321,322,323
+python toolkit/clientpatch/repoint_skill.py --show 318
+python toolkit/clientpatch/repoint_skill.py --target 316 --donor 319 --fields icon2
+```
+
+`repoint_skill.py` never writes in place by default, refuses anything under
+`C:\gw`, locates the table structurally rather than by address, and cross-checks
+the result against ArenaNet's own `ConstSkill.cpp` / `arrsize(s_skill)` strings
+sitting immediately after the table. The run dir keeps `Gw.exe.pre-repoint` as
+the pristine patched binary; the firewall cage is scoped to the literal path
+`…\Gw.exe`, so a repointed build must be swapped over that name rather than run
+under its own, or it runs uncaged.
+
+## 9. The unlock bitmap gates the skill picker, not the skillbar
+
+§3 left this **NOT FOUND**: *"Whether the client refuses to draw a bar skill that
+is not unlocked is NOT FOUND — no source states it either way."* The first pass
+side-stepped it by blanket-setting all 4,096 bits, exactly so it could not be a
+confounder.
+
+**Probe.** Same eight skills on the bar; unlock bitmap with **four** bits set —
+316, 318, 320, 322, which are slots 1, 3, 5, 7. An alternating pattern was chosen
+because it is unmistakable at a glance and cannot be confused with "the bar failed
+to load".
+
+**OBSERVED: all eight icons drew.** The unlock state did not suppress a single
+one. What it did control was the **Skills and Attributes panel** (`K`), which
+listed exactly the four unlocked skills and nothing else, grouped by attribute:
+
+| Panel entry | shown cost | id | matches the row |
+|---|---|---|---|
+| Defy Pain (Strength) | 5 adrenaline | 318 | attr 17, adren 120 |
+| Power Attack (Strength) | 5 energy / 3 recharge | 322 | attr 17, energy 5, recharge 3 |
+| Hamstring (Swordsmanship) | 5 energy / 10 recharge | 320 | attr 20, energy 5, recharge 10 |
+| "To the Limit!" (Tactics) | 5 energy / 10 recharge | 316 | attr 21, energy 5, recharge 10 |
+
+**The division is clean and it is the useful one: bar contents are the server's,
+the unlock list is the player's.** A server can place any skill on any bar
+regardless of unlock state; the bitmap decides only what the player may pick for
+themselves. For a private server this means the unlock list is optional
+scaffolding, not a gate to be fought.
+
+One inconsistency worth recording: the panel's own eight-slot strip along its top
+rendered **empty** while the action bar below it was full. That widget filters by
+unlock state and disagrees with the bar it is supposed to mirror.
+
+**A free side effect: unlocking a skill names it.** The panel prints the resolved
+name, cost and attribute for every unlocked id, which is a way to identify skills
+without decoding a single text record. Four ids were named this way, and the
+tooltips named three more: **316 "To the Limit!", 317 Battle Rage, 318 Defy Pain,
+319 Rush, 320 Hamstring, 322 Power Attack.**
+
+**Attribute bytes, MEASURED** from those four against `+0x29`: **17 = Strength,
+20 = Swordsmanship, 21 = Tactics.** §1's warning against importing OpenTyria's
+attribute enum stands; these three are ours.
+
+---
+
+## 10. The adrenaline field is a threshold, not a strike count
+
+§1 records, from Tyria-Extractor and with a unit test behind it, that `adrenaline`
+at `+0x38` is "in internal units, 25 per displayed strike". §5 of this section
+earlier called that refuted. **That was an over-correction, and this is the
+settled version.**
+
+The **unit is right**. The Guild Wars Wiki's *Adrenaline* page states the mechanic
+directly: *"You gain 25 units of adrenaline (=one strike) each time you
+successfully hit an opponent with a weapon"*, and *"all other skills lose one
+strike (25 units) of adrenaline"*.
+
+What was wrong is treating it as division. **`+0x38` holds a threshold in units,
+and the displayed cost is the number of strikes needed to reach it:**
+
+```
+displayed adrenaline cost = ceil(raw / 25)
+```
+
+That is why the field is not always a multiple of 25 — 11 of the 18 distinct
+non-zero values in the table are not (20, 60, 75, 130, 140, 160, 220, 240 among
+them). A threshold can sit anywhere; the strike count rounds up.
+
+**The probe.** Both `ceil(raw/25)` and `floor(raw/25)+1` fit the three skills
+observed in §5, because they diverge only on exact multiples of 25 and none of
+those three was one. A bar was built from four Warrior skills whose raw values
+*are* exact multiples, so the two rules predict different numbers in every slot:
+
+| Slot | id | raw `+0x38` | `ceil` predicts | `floor+1` predicts | **OBSERVED** |
+|---|---|---|---|---|---|
+| 1 | 1142 | 25 | 1 | 2 | **1** |
+| 2 | 357 | 100 | 4 | 5 | **4** |
+| 3 | 329 | 150 | 6 | 7 | **6** |
+| 4 | 336 | 200 | 8 | 9 | **8** |
+| 5 | 317 Battle Rage | 80 | 4 | 4 | 4 |
+| 6 | 318 Defy Pain | 120 | 5 | 5 | 5 |
+| 7 | 319 Rush | 80 | 4 | 4 | 4 |
+
+Four for four for `ceil`, and the three controls — where both rules agree —
+reported unchanged, so nothing else moved between runs. `floor(raw/25)+1` is
+dead.
+
+**A note on the wiki as a source.** It does not fit this document's existing
+labels. It is community documentation of observed retail behaviour, which for a
+*player-visible* mechanic is strong evidence and is genuinely **a separate lineage
+from every code source in `vault/mirrors/`** — unlike the ldufr/GWCA cluster,
+which shares an author and counts once. For *internal* representation it is weak:
+it says nothing about `+0x38` being a threshold, and it could not have. Here the
+two halves are complementary rather than redundant — the wiki supplied the game
+mechanic, the client supplied the encoding, and neither alone would have produced
+`ceil(raw/25)`.
+
+---
+
+## 11. Everything §3 left open, as of this pass
+
+| Question | Status |
+|---|---|
+| Are opcodes 218 / 219 / 29 right for our build? | **Answered** — yes, build 38797 |
+| Does the client refuse to draw a locked skill? | **Answered** — no; unlocks gate the picker |
+| Which of `+0x8c` / `+0x90` / `+0x94` does the bar draw? | **Answered** — `+0x90` |
+| How does raw adrenaline map to the displayed cost? | **Answered** — `ceil(raw/25)` |
+| Are descriptions templates filled from the row's own numbers? | **Answered** — yes |
+| What decides how many values render green? | **Answered** — `args` (+0x58) ∩ endpoints differing |
+| Where does the elite border come from? | **Answered** — `special` (+0x10) bit `0x4` |
+| What is `pvp_masks[]` for? | still **NOT FOUND**; eight zeros worked throughout |
+| What is `+0x94` for? | still **NOT FOUND**; 86 rows carry it, none tested |
+| Does upstream's message ordering also work? | untested — we sent unlocks before the bar |
