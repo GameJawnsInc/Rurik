@@ -497,6 +497,20 @@ GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS = 0x008A
 #           PLAN.md recording a 0x003C -> 0x003E drift across builds.
 # Keying movement on 0x003D was the reason the character turned to face every
 # input and never took a step: we were answering the turn and ignoring the move.
+# What the client sends when the player clicks an agent meaning to do something
+# to it. MEASURED: it arrives at a hostile agent 11 times in one session and 32
+# in another, in a TOWN, while this server answered none of them
+# (studies/enemy/PLAN.md 7.3a). It is the only attack intent we have ever seen
+# the client express -- GAME_CMSG_ATTACK_AGENT (0x0026) was never sent on the
+# game channel in either session.
+#
+# Driving combat from this message rather than from 0x0026 is deliberate, and it
+# is what makes a fight possible in an outpost at all: Guild Wars forbids
+# attacking in a town, so the client will not issue an attack there, but it will
+# still say "I clicked that". What we do about it is our decision, not the
+# client's.
+GAME_CMSG_INTERACT_PLAYER = 0x0033
+
 GAME_CMSG_TURN_TO_DIRECTION = 0x003D
 GAME_CMSG_MOVE_TO_COORD = 0x003E
 GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
@@ -626,6 +640,86 @@ ENEMY_AGENT_ID = 10
 ENEMY_DEFINITION = 3
 ENEMY_MAX_HEALTH = 100
 ENEMY_OFFSET = (300.0, 0.0)
+
+
+# ---- the combat loop -----------------------------------------------------
+#
+# EVERY PACKET BELOW IS PROVEN; EVERY NUMBER BELOW IS INVENTED. That split is
+# the whole point of this block, so keep it visible. The damage message, the
+# death bit and the two-step revive were each measured against our own client
+# and are cited where they are sent. How hard a click hits, how often it may
+# hit, and how long a body stays down are OURS -- they are not claims about
+# retail Guild Wars, and nothing here should ever be cited as one.
+#
+# Retail numbers exist and we do not have them: the wiki documents attack rates
+# and weapon damage, and a captured fight would give the real thing. Until then
+# these are placeholders chosen to make a fight legible to a person watching.
+HIT_FRACTION = 0.15        # of maximum health, so ~7 clicks to kill
+HIT_COOLDOWN = 1.0         # seconds; the client sends interact far faster
+REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
+
+
+def hit_enemy(send, state, target_id, conn_id):
+    """Answer a click on a hostile agent by hurting it.
+
+    The client sends INTERACT_PLAYER several times a second while the player
+    holds a target, so this rate-limits. Without that, one click would kill.
+    """
+    agent = state.get("agents", {}).get(target_id)
+    if agent is None or agent["dead"]:
+        return
+    now = time.time()
+    if now - agent.get("last_hit", 0.0) < HIT_COOLDOWN:
+        return
+    agent["last_hit"] = now
+
+    dealt = agent["max_health"] * HIT_FRACTION
+    agent["health"] = max(0.0, agent["health"] - dealt)
+
+    # Property 16 on 0x00A3: prop, TARGET, cause, value -- target before cause,
+    # and the value is a FRACTION of the target's maximum health. Both were
+    # measured (studies/enemy/PLAN.md 6b, 6f), and the fmul that makes it a
+    # fraction is at 0x0081823C in the client.
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID,
+          struct.unpack("<I", struct.pack("<f", -HIT_FRACTION))[0]],
+         f"damage {dealt:.0f} to agent {target_id}")
+    print(f"[c{conn_id}] hit agent {target_id}: "
+          f"{agent['health']:.0f}/{agent['max_health']:.0f}", flush=True)
+
+    if agent["health"] <= 0.0:
+        # Death is bit 4 of the effects word, not a message. Seven guesses at a
+        # death message failed before this was read out of the client
+        # (studies/agentprops/FINDINGS.md 1c).
+        agent["dead"], agent["died_at"] = True, now
+        send(GAME_SMSG_AGENT_UPDATE_EFFECTS, [target_id, agents.EFFECT_DEAD],
+             f"KILL agent {target_id}")
+        print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
+              f"back up in {REVIVE_AFTER:.0f}s", flush=True)
+
+
+def revive_due(send, state, conn_id):
+    """Stand the dead back up. Called from the world tick.
+
+    TWO operations, and that is not tidiness. The client's death path zeroes the
+    health and energy pools, so clearing the bit alone returns a body at ~0-1
+    health that dies to the next scratch -- OBSERVED, and the reason is visible
+    at 0x008183F0 where the effects setter does `fldz` into the pools.
+    """
+    now = time.time()
+    for agent_id, agent in state.get("agents", {}).items():
+        if not agent["dead"] or now - agent["died_at"] < REVIVE_AFTER:
+            continue
+        agent["dead"] = False
+        agent["health"] = agent["max_health"]
+        agent["last_hit"] = 0.0
+        send(GAME_SMSG_AGENT_UPDATE_EFFECTS, [agent_id, 0],
+             f"revive agent {agent_id}")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
+             f"restore health on agent {agent_id}")
+        print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
+              flush=True)
 
 
 def spawn_enemy(send, state, origin, conn_id):
@@ -1045,6 +1139,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  "WORLD_SIMULATION_TICK", quiet=True)
                         except OSError:
                             return
+                    # Anything the world owes on a timer goes here. Bodies get
+                    # back up whether or not the player is moving, so this must
+                    # be above the destination check that skips the rest.
+                    try:
+                        revive_due(send, state, conn_id)
+                    except OSError:
+                        return
+
                     dest = state.get("dest")
                     if not dest:
                         continue
@@ -1167,6 +1269,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_INSTANCE_MANIFEST_DONE,
                                  [phase_arg, map_arg, 0],
                                  f"MANIFEST_DONE[{phase_arg}, map {map_arg}]")
+                    elif opcode == GAME_CMSG_INTERACT_PLAYER:
+                        # The player clicked something. If it is one of ours and
+                        # it is hostile, that is an attack -- see the comment on
+                        # the opcode for why this and not ATTACK_AGENT.
+                        hit_enemy(send, state, values[1], conn_id)
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through
                         # MOVE_TO_COORD: WASD sends a HEADING from where you
