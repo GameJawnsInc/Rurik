@@ -64,7 +64,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
-  `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki).
+  `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
+  `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding).
 - **Find the vault with `toolkit/vaultpath.py`, never with `../../vault`.** A git
   worktree has no vault of its own, so a relative walk lands on nothing — and a
   fixture that resolves to nothing turns every assertion behind it into a no-op.

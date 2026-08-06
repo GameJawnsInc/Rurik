@@ -34,7 +34,8 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from archive import Archive, ffna_chunks, file_id_table, DEFAULT_DAT  # noqa: E402
+from archive import (Archive, ffna_chunks, file_id_table,  # noqa: E402
+                     DEFAULT_DAT, FILE_ID_HIGH_BIT)
 from pathmap import (PathingMap, PATHING_CHUNK, SIGNATURE, VERSION,  # noqa: E402
                      TRAPEZOID_SIZE)
 
@@ -47,6 +48,18 @@ KAMADAN_TRAPEZOIDS = 1270
 # OpenTyria's static spawn for Kamadan. It was never checked against anything
 # until this file; section 4 is that check.
 KAMADAN_SPAWN = (-9067.0, 13218.0)
+
+# The two map file ids the archive stores with bit 31 set. An exact-match lookup
+# misses both, which is why the Pre-Searing region was written off as
+# unreachable; section 6 is the regression guard on that.
+PRESEARING_FILE_ID = 0x1B97D
+PRESEARING_ROW = 7982
+PRESEARING_PLANES = 58
+PRESEARING_TRAPEZOIDS = 6120
+NORTHLANDS_FILE_ID = 0x1C539
+NORTHLANDS_ROW = 20118
+HIGH_BIT_IDS = 25
+MEASURED_ENTRY_COUNT = 177342
 
 MAP_FLAGS = 259
 FAILED = []
@@ -164,6 +177,56 @@ def main():
               f"{walked} walked, {skipped} without a pathing chunk")
         for row_i, why in broke[:6]:
             print(f"        row {row_i}: {why}")
+
+        # -- 6. the maps behind the bit-31 ids ---------------------------
+        # These fail loudly if file_id_table() ever goes back to an
+        # exact-match lookup: the id a server sends is the masked form and
+        # only the raw form is in the table.
+        print("\n6. The file ids stored with bit 31 set")
+        raw = struct.unpack_from(
+            f"<{(len(ar.read(ar.entries[1])) // 8) * 2}I", ar.read(ar.entries[1]))
+        stored = {raw[i * 2] for i in range(len(raw) // 2)}
+        high = {f for f in stored if f & FILE_ID_HIGH_BIT}
+        check(len(high) == HIGH_BIT_IDS, "the high-bit id census is unchanged",
+              f"{len(high)} ids")
+        # The invariant the mask-on-miss lookup depends on: no bit-31 id's
+        # masked form is also a real id, so the two can never compete.
+        shadowed = {f & ~FILE_ID_HIGH_BIT for f in high} & stored
+        check(not shadowed, "no masked form collides with a real file id",
+              f"{len(shadowed)} collision(s)")
+
+        for label, fid, want_row in (
+                ("Pre-Searing", PRESEARING_FILE_ID, PRESEARING_ROW),
+                ("The Northlands", NORTHLANDS_FILE_ID, NORTHLANDS_ROW)):
+            got = table.get(fid)
+            check(got is not None, f"{label} id resolves at all",
+                  f"0x{fid:X} -> {got}")
+            if got is None:
+                continue
+            check(table.get(fid | FILE_ID_HIGH_BIT) == got,
+                  f"{label} raw and masked ids agree")
+            e = next(x for x in ar.entries if x.index == got)
+            check(e.flags == MAP_FLAGS, f"{label} row carries map flags",
+                  f"flags {e.flags}")
+            if ar.entry_count == MEASURED_ENTRY_COUNT:
+                check(got == want_row, f"{label} row is the measured one",
+                      f"{got}")
+            else:
+                print(f"  skip  {label} row index "
+                      f"(archive has {ar.entry_count} entries, "
+                      f"measured on {MEASURED_ENTRY_COUNT})")
+
+        pre = PathingMap.load(PRESEARING_FILE_ID, archive=ar, table=table)
+        check(len(pre.planes) == PRESEARING_PLANES, "Pre-Searing plane count",
+              f"{len(pre.planes)}")
+        check(len(pre.trapezoids) == PRESEARING_TRAPEZOIDS,
+              "Pre-Searing trapezoid count", f"{len(pre.trapezoids)}")
+        bad = [t for t in pre.trapezoids
+               if t.y_top < t.y_bottom
+               or t.x_top_left > t.x_top_right
+               or t.x_bottom_left > t.x_bottom_right]
+        check(not bad, "Pre-Searing trapezoids are well formed",
+              f"{len(bad)} malformed")
 
     dt = time.perf_counter() - t0
     print(f"\n{'ALL CHECKS PASSED' if not FAILED else str(len(FAILED)) + ' FAILED'}"

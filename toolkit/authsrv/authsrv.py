@@ -585,6 +585,10 @@ PROBE_NAME = None
 # Variants are ordered so the two we have already tried come first, which makes
 # the run its own control: if 1 and 2 misbehave exactly as they did in normal
 # play, the harness is measuring the right thing.
+# Set from --explorable. Tells the client this instance is a field rather than a
+# town. See the INSTANCE_LOAD_INFO send site for why it is worth a flag.
+EXPLORABLE = False
+
 CLICK_SWEEP = False
 CLICK_SWEEP_VARIANTS = (
     ("dest,cur   (OpenTyria order, shipped)", lambda c, d: (d, c)),
@@ -597,7 +601,7 @@ CLICK_SWEEP_VARIANTS = (
 )
 
 
-def run_probe(name, send, conn_id, stop):
+def run_probe(name, send, conn_id, stop, origin=None):
     """Fire a scripted experiment at the client, on its own thread.
 
     On its own thread because the steps are deliberately seconds apart -- a
@@ -608,7 +612,10 @@ def run_probe(name, send, conn_id, stop):
     client rejects is a result, not a crash, and it must not take the session
     down with it or we lose the rest of the sequence.
     """
-    probe = probes.get(name, PLAYER_AGENT_ID)
+    # origin is where the character is standing. A probe that places something
+    # in the world needs it, and can only have it from here -- probes.py is a
+    # data module with no view of the session.
+    probe = probes.get(name, PLAYER_AGENT_ID, origin)
     if probe is None:
         print(f"[c{conn_id}] no probe named {name!r}; "
               f"known: {', '.join(probes.names())}", flush=True)
@@ -914,14 +921,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             send(GAME_SMSG_INSTANCE_LOAD_PLAYER_NAME, [TEST_CHAR_NAME],
                  "INSTANCE_LOAD_PLAYER_NAME")
             send(GAME_SMSG_INSTANCE_PLAYER_DATA_DONE, [], "PLAYER_DATA_DONE")
+            # is_explorable is the client's own town-versus-field switch, and
+            # Guild Wars refuses to let you attack anything in a town. So this
+            # one field may be all that stands between us and testing combat --
+            # cheaper to flip than to recover a real explorable's map file id,
+            # which is what studies/enemy/PLAN.md section 7.3 would otherwise
+            # require. Off by default because a town is what map 148 IS, and a
+            # server that lies about its own map should do so only when asked.
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
                  [1,          # agent_id -- the player's own agent, 1 for the first
                   map_id,     # echoed from the version frame, not guessed
-                  0,          # is_explorable: Ascalon City is an outpost
+                  1 if EXPLORABLE else 0,
                   0,          # district
                   0,          # language
                   0],         # is_observer
-                 "INSTANCE_LOAD_INFO")
+                 "INSTANCE_LOAD_INFO"
+                 + (" [is_explorable=1, FORCED]" if EXPLORABLE else ""))
 
             spawn = MAP_STATIC_CONFIG.get(state["map_id"],
                                           MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
@@ -1632,7 +1647,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
                         if PROBE_NAME:
-                            run_probe(PROBE_NAME, send, conn_id, stop)
+                            run_probe(PROBE_NAME, send, conn_id, stop,
+                                      origin=(pos[0], pos[1], cfg[2]))
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
                         # map_file_id 0 is a placeholder: the real one comes from
                         # the map's static config, which we do not have yet. If the
@@ -1832,6 +1848,12 @@ def main():
                          "and report which attempt numbers behaved; that "
                          "identifies the fields from the client instead of from "
                          "two sources that contradict each other.")
+    ap.add_argument("--explorable", action="store_true",
+                    help="Tell the client this instance is explorable rather than "
+                         "a town. Guild Wars forbids attacking in a town, so this "
+                         "is the cheap way to find out whether combat is gated on "
+                         "the map or on this one field — the alternative is "
+                         "recovering a real explorable's file id out of Gw.dat.")
     ap.add_argument("--allow-any-session", action="store_true",
                     help="Accept a login with no matching session record. A debugging "
                          "escape hatch so a stale sessions.json cannot be mistaken for a "
@@ -1865,6 +1887,12 @@ def main():
         print("Click the SAME spot each time -- a wall to walk through, or the")
         print("staircase -- and note which attempts behaved. The cycle repeats.")
         print()
+
+    if a.explorable:
+        global EXPLORABLE
+        EXPLORABLE = True
+        print("EXPLORABLE: telling the client this instance is a field, not a "
+              "town. The geometry is unchanged -- only the flag.")
 
     GAME_SRV_HOST, GAME_SRV_PORT = a.game_host, a.game_port
     HOST_FIELD_ENCODING = a.host_encoding

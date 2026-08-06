@@ -100,7 +100,14 @@ def read_table(img, va, count, direction):
         cmds = [img.u32(cmds_va + 4 * k) for k in range(n)]
         if not cmds or cmds[0] is None:
             continue
-        yield cmds[0] & 0xFF, cmds, dispatch
+        # NO & 0xFF HERE, and the mask that used to be here was a real defect.
+        # MEASURED on build 38797: 229 of the 477 receive opcodes are above
+        # 0xFF, so masking to a byte collapsed 0x0129 onto 0x0029 and a lookup
+        # returned whichever entry the table walk reached first. Nearly half the
+        # catalogue could resolve to somebody else's handler, and it would have
+        # looked like a successful read -- the failure mode this repository
+        # cares about most, since nothing in the output says which one you got.
+        yield cmds[0], cmds, dispatch
 
 
 def disasm(img, va, limit=90, indent="  "):
@@ -122,9 +129,60 @@ def disasm(img, va, limit=90, indent="  "):
     return calls
 
 
+def source_files(img, va, limit=400):
+    """The ArenaNet source paths an assert inside this handler names.
+
+    Every assert compiles to `mov edx, <expr string>; mov ecx, <file string>;
+    call <assert>`, so the file a message is implemented in is readable straight
+    out of its handler. That turns "which reconstruction do we believe" into
+    "which file did ArenaNet write it in", and it is the strongest naming source
+    this project has. Discovered while failing to find the death message.
+    """
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+    o = img.off(va)
+    if o is None:
+        return set()
+    out = set()
+    for n, ins in enumerate(md.disasm(img.blob[o:o + limit * 8], va)):
+        if ins.mnemonic == "mov" and ins.op_str.startswith(("edx, 0x", "ecx, 0x")):
+            so = img.off(int(ins.op_str.split("0x")[1], 16))
+            if so is not None:
+                text = img.blob[so:so + 120].split(b"\0")[0]
+                if text.startswith(b"P:"):
+                    out.add(text.decode("ascii", "replace"))
+        if ins.mnemonic == "ret" or n >= limit:
+            break
+    return out
+
+
+def print_map(img):
+    """opcode -> the source file its handler asserts in, for every RECV table."""
+    import collections
+    byfile = collections.defaultdict(list)
+    n = 0
+    for tva, count, direction in TABLES:
+        if direction != "RECV":
+            continue
+        for op, cmds, disp in read_table(img, tva, count, direction):
+            if not disp:
+                continue
+            n += 1
+            for f in source_files(img, disp):
+                byfile[f].append(op)
+    print(f"{n} receive handlers read; {len(byfile)} source files named\n")
+    for f in sorted(byfile, key=lambda k: -len(byfile[k])):
+        ops = sorted(set(byfile[f]))
+        print(f"{len(ops):5}  {f}")
+        print("       " + " ".join(f"0x{o:04X}" for o in ops))
+    print("\nHandlers with no assert name no file. That is silence, not absence.")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("opcode", nargs="?", help="e.g. 0x0029")
+    ap.add_argument("--map", action="store_true",
+                    help="map every receive opcode to the ArenaNet source file "
+                         "its handler asserts in")
     ap.add_argument("--exe", default=DEFAULT_EXE)
     ap.add_argument("--table", help="dump one table by VA instead")
     ap.add_argument("--follow", action="store_true",
@@ -136,6 +194,10 @@ def main():
         sys.exit(f"no such file: {a.exe}")
     img = Image(a.exe)
     print(f"{a.exe}  {len(img.blob):,} bytes, image base 0x{img.base:08x}")
+
+    if a.map:
+        print_map(img)
+        return 0
 
     if a.table:
         tva = int(a.table, 0)
@@ -149,7 +211,7 @@ def main():
 
     if not a.opcode:
         ap.error("give an opcode, or --table")
-    want = int(a.opcode, 0) & 0xFF
+    want = int(a.opcode, 0)
 
     found = []
     for tva, count, direction in TABLES:
