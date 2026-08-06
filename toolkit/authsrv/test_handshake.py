@@ -20,6 +20,7 @@ A green result here means the real client should key up too.
 """
 
 import os
+import re
 import socket
 import struct
 import subprocess
@@ -260,7 +261,14 @@ def main():
         srv_key = ""
         for line in out.splitlines():
             if "ARC4 key" in line:
-                srv_key = line.split("ARC4 key")[1].strip().rstrip("…").strip()
+                # The server ends this line with a Unicode ellipsis, and what
+                # that glyph arrives as depends on the codepage the pipe was
+                # decoded with -- under cp1252 it is three mojibake characters
+                # that rstrip("…") cannot see, and the comparison below then
+                # fails on display garbage rather than on the key. Keep the
+                # leading hex run and nothing else.
+                m = re.match(r"[0-9a-f]+", line.split("ARC4 key")[1].strip())
+                srv_key = m.group(0) if m else ""
         ok &= check("server completed key exchange", "key exchange OK" in out)
         ok &= check("server and client derived the SAME key",
                     bool(srv_key) and derived.hex().startswith(srv_key),

@@ -37,7 +37,18 @@ from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 
 RUN_ROOT = os.path.normcase(vault_path("run"))
-REQUIRED = [("-authsrv", "127.0.0.1"), ("-portal", "127.0.0.1")]
+# Both flags must be present and both must name a 127/8 address. Any loopback
+# alias is as unreachable-from-ArenaNet as 127.0.0.1 itself, and the handoff
+# probes need a second alias (127.0.0.2) precisely so the wire can show WHICH
+# configured host the client dials. What stays absolute: a missing flag or a
+# routable address is refused, never warned about.
+REQUIRED_FLAGS = ["-authsrv", "-portal"]
+
+
+def is_loopback(value):
+    parts = value.split(".")
+    return (len(parts) == 4 and parts[0] == "127"
+            and all(p.isdigit() and int(p) <= 255 for p in parts))
 
 
 def newest_run_exe():
@@ -107,14 +118,15 @@ def assert_safe(exe, args):
             f"  C:\\gw is the live install and is never a valid target for automation.")
 
     flat = [a.lower() for a in args]
-    for flag, value in REQUIRED:
+    for flag in REQUIRED_FLAGS:
         if flag not in flat:
             raise SystemExit(f"REFUSING to launch: {flag} missing.\n"
                              f"  Required so the client cannot reach ArenaNet: "
-                             f"{' '.join(f'{f} {v}' for f, v in REQUIRED)}")
+                             f"{' '.join(f'{f} 127.x.x.x' for f in REQUIRED_FLAGS)}")
         got = flat[flat.index(flag) + 1] if flat.index(flag) + 1 < len(flat) else ""
-        if got != value:
-            raise SystemExit(f"REFUSING to launch: {flag} points at {got!r}, not {value!r}.\n"
+        if not is_loopback(got):
+            raise SystemExit(f"REFUSING to launch: {flag} points at {got!r}, "
+                             f"which is not a 127/8 loopback address.\n"
                              f"  Driving a modded client against a non-loopback server is "
                              f"exactly what the owner's rule forbids.")
 
@@ -354,12 +366,17 @@ def main():
     ap.add_argument("--outdir", default=vault_path("captures", "harness"))
     ap.add_argument("--keep-open", action="store_true",
                     help="Leave the client running at the end instead of closing it.")
+    ap.add_argument("--authsrv", default="127.0.0.1",
+                    help="Host for the client's -authsrv flag. 127/8 only -- "
+                         "assert_safe refuses anything else. A second loopback "
+                         "alias is how the handoff probes make the client's own "
+                         "dials say which configured host they follow.")
     a = ap.parse_args()
 
     if not a.exe:
         raise SystemExit(f"No Gw.exe under {vault_path('run')} — "
                          f"run make_run_dir.py first (RUNBOOK.md, one-time setup).")
-    args = ["-authsrv", "127.0.0.1", "-portal", "127.0.0.1", "-windowed", "-log"]
+    args = ["-authsrv", a.authsrv, "-portal", "127.0.0.1", "-windowed", "-log"]
     assert_safe(a.exe, args)
 
     stamp = time.strftime("%Y%m%dT%H%M%S")

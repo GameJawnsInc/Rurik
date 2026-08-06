@@ -675,9 +675,11 @@ GAME_SMSG_AGENT_MOVE_DIRECTION = 0x0025
 
 GAME_SRV_HOST = "127.0.0.1"
 # How GAME_SERVER_INFO fills its 24-byte host field. "sockaddr" is what both
-# reference implementations do; "string" is the competing reading. Switchable
-# because the client demonstrably ignores what we send and dials the portal
-# host on port 80 instead.
+# reference implementations do; "string" is the competing reading, kept only
+# because the switch already exists. OBSERVED 2026-08-06 (handshake PLAN §10):
+# under the sockaddr encoding the client dials the HOST we put here, at
+# hardcoded port 6112 -- the PORT field below goes out on the wire but the
+# client never dials it.
 HOST_FIELD_ENCODING = "sockaddr"
 GAME_SRV_PORT = 6113
 
@@ -2388,6 +2390,13 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--port", type=int, default=6112)
+    ap.add_argument("--bind", default="127.0.0.1",
+                    help="Loopback address to listen on. Any 127.x.y.z works "
+                         "without setup on Windows; a second alias (127.0.0.2) "
+                         "lets a probe show WHICH configured host the client "
+                         "dials, since ports alone cannot when they collide. "
+                         "Refuses anything outside 127/8 -- this server is "
+                         "local-only by design.")
     ap.add_argument("--skills", default=",".join(str(s) for s in TEST_SKILLBAR),
                     help="Comma-separated skill ids for the bar, 0 for an empty "
                          "slot. Ids are row indices into the client's own skill "
@@ -2408,11 +2417,11 @@ def main():
     ap.add_argument("--game-host", default=GAME_SRV_HOST,
                     help="Address handed to the client in GAME_SERVER_INFO.")
     ap.add_argument("--game-port", type=int, default=GAME_SRV_PORT,
-                    help="Port handed to the client in GAME_SERVER_INFO. Movable "
-                         "because the client stops dialling an address that has "
-                         "refused it, and a fresh port is the cheapest way to tell "
-                         "'the client gave up on that endpoint' apart from 'the "
-                         "client never acts on our message'.")
+                    help="Port handed to the client in GAME_SERVER_INFO. "
+                         "OBSERVED 2026-08-06 (handshake PLAN §10): the client "
+                         "never dials it -- it dials --game-host at hardcoded "
+                         "6112. Kept on the wire because retail put a real "
+                         "value here and a probe may yet find what reads it.")
     ap.add_argument("--sessions",
                     help="Session store path. The self-test passes its own so it "
                          "cannot overwrite the token record a real client "
@@ -2547,16 +2556,22 @@ def main():
     # SO_EXCLUSIVEADDRUSE makes the second instance fail loudly instead.
     if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    parts = a.bind.split(".")
+    if not (len(parts) == 4 and parts[0] == "127"
+            and all(p.isdigit() and int(p) <= 255 for p in parts)):
+        raise SystemExit(f"--bind {a.bind!r} is not a 127/8 loopback address. "
+                         f"This server is local-only by design and will not "
+                         f"listen anywhere a LAN could reach.")
     try:
-        srv.bind(("127.0.0.1", a.port))  # loopback only, deliberately
+        srv.bind((a.bind, a.port))  # loopback only, deliberately
     except OSError as ex:
         raise SystemExit(
-            f"Could not bind 127.0.0.1:{a.port} — {ex.strerror}.\n"
+            f"Could not bind {a.bind}:{a.port} — {ex.strerror}.\n"
             f"Another AuthSrv is almost certainly still running. Find it with\n"
             f"  netstat -ano | findstr :{a.port}\n"
             f"and stop it before starting this one.")
     srv.listen(8)
-    print(f"Rurik AuthSrv on 127.0.0.1:{a.port}  (loopback only)")
+    print(f"Rurik AuthSrv on {a.bind}:{a.port}  (loopback only)")
     print("the client MUST be the patched copy — an unpatched one keys to "
           "ArenaNet's public value and we cannot read it\n")
 

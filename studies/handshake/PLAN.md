@@ -495,16 +495,14 @@ analysis agrees independently: §7 shows the client parses the message against i
 own template and stores `host[24]` at `trans+0x5C`, and the template proves our 42
 bytes are byte-exact.
 
-**Standing explanation:** with `-portal 127.0.0.1` the client routes the game
-connection to the portal address on port 80 and ignores the address we hand it.
-Serving the game channel on port 80 is therefore the correct consequence of the
-flag we launch with, not a workaround.
-
-**Not yet proven.** The clean test is to launch with `-portal 127.0.0.2`, serve the
-webgate there, and see whether the game connection follows to `127.0.0.2:80`. If it
-does, the explanation is confirmed and the address in `GAME_SERVER_INFO` is
-decorative under `-portal`. Until that runs, this is the best-supported reading
-rather than a settled fact.
+**Standing explanation — SUPERSEDED by §10 (2026-08-06):** this section read the
+port-80 dial as "the client routes the game connection to the portal address".
+The host-separation probes proved the host is the **handoff sockaddr's**, not
+the portal's — the two were the same address in every run this section had to
+work with — and on the current run exe the port is 6112, first try, every run.
+The port-80 landings above were real but belong to an earlier state of the run
+exe/stack; see §10 for the three-run discrimination and what remains open about
+port 80.
 
 ---
 
@@ -547,3 +545,174 @@ set on every call. `DnInit()` then returns immediately and `DnRun()` returns 1 �
 beside the DH patch, signature-matched rather than offset-hardcoded, since the
 address moves per build (`0x0082dab0` in the 2026-04-30 build). Once applied, the
 cage never needs to open and `launch_caged.ps1` becomes unnecessary.
+
+---
+
+## §10. Which endpoint the client dials for the game channel [2026-08-06]
+
+§8 left a standing explanation — "the client routes the game connection to the
+portal address on port 80" — and flagged it not yet proven. The 2026-08-06 runs
+then landed the game channel somewhere else entirely: **127.0.0.1:6112**, the
+`-authsrv` port (capture `vault/captures/authsrv/authsrv-20260806T151251-c2.jsonl`,
+timeline `vault/captures/harness/20260806T151236/report.json`). This section
+separates the candidate readings.
+
+### What the artifacts already settle, before any new run
+
+- **OBSERVED (2026-08-06, 15:12 run):** the handoff advertised `127.0.0.1:6113`
+  (sockaddr encoding) and a game-catalog listener was provably up on 6113 — the
+  stack proves LISTEN per-pid before the client launches, and
+  `harness/20260806T151236/gamesrv.log` shows the banner and **no connection
+  ever**. The game channel arrived as a second connection to `127.0.0.1:6112`.
+  So the client did not dial the advertised port **even when it answered** —
+  "the client gave up on a refused endpoint" is excluded for this run.
+- **OBSERVED (2026-08-05 morning runs):** with a game-catalog listener on
+  `127.0.0.1:80`, the game channel ESTABLISHED to `127.0.0.1:80` ~26 s in,
+  right after Play, while 6112 was also listening (harness reports
+  `20260805T013415/015317/091032/092415` + the matching
+  `vault/captures/gamesrv/authsrv-20260805T*` game-channel captures). When 80
+  answers, 80 wins over 6112.
+- Together: the client walks some preference list of endpoints it already
+  knows, and the advertised sockaddr is either absent from it or below every
+  tier we have seen win. Two readings survive for the 6112 landing:
+  **(a)** it reuses the `-authsrv` endpoint; **(b)** it transforms the
+  advertised port — and 6113−1 = 6112 **is** the auth port, so yesterday's run
+  cannot tell the two apart. The host question is equally open: portal host and
+  authsrv host have both always been `127.0.0.1`.
+
+### Probe A — does the advertised port influence the dial at all?
+
+One change against the daily config: `--game-port 6200`, so the handoff
+advertises `127.0.0.1:6200` and the gamesrv listens there. Canary listeners
+(accept, log, never reply — `studies/handshake/authsrv_probe.py --ports
+6199,6201`) sit on the ±1 neighbours, because a SYN met by an instant loopback
+RST can fall between two 20 ms samples of the TCP table, and an unwatched
+refusal would read as "no dial".
+
+Predictions, stated before the run:
+
+- **(a) endpoint reuse:** game channel lands on `127.0.0.1:6112` again; the
+  6200 listener and both canaries stay silent; the run passes to the spawn rung.
+  *This is the expected outcome.*
+- **(b) port−1 transform:** the 6199 canary receives a connection opening with
+  the game version header; the run stalls at "game channel keyed".
+- **sockaddr honoured:** the game channel lands on 6200 — which would mean
+  yesterday's 6113 was refused for some other reason, and §8 needs rereading.
+
+### Probe B — which configured HOST does the 6112 dial follow?
+
+One change against the daily config: `--auth-host 127.0.0.2` (authsrv binds
+there; the client is launched with `-authsrv 127.0.0.2`), while `-portal` stays
+`127.0.0.1` and the handoff still says `127.0.0.1`. Whatever host the game dial
+aims at names its source.
+
+Predictions, stated before the run:
+
+- **authsrv-host reuse:** game channel arrives at `127.0.0.2:6112`; run passes.
+  *This is the expected outcome, jointly with (a) above: the client reuses the
+  whole `-authsrv` endpoint.*
+- **portal-host at 6112:** the dial goes to `127.0.0.1:6112`, where nothing now
+  listens; the run fails at "client opened its game channel". Follow-up: canary
+  on `127.0.0.1:6112` to turn the refusal into a recorded connection.
+- **handoff-host:** indistinguishable from portal-host here (both `127.0.0.1`);
+  separated only if the previous bullet fires, by a third run advertising
+  `127.0.0.3`.
+
+### Probe A result — OBSERVED 2026-08-06, run `harness/20260806T153830`
+
+The handoff advertised `127.0.0.1:6200` (recorded in
+`captures/authsrv/authsrv-20260806T153830-c1.jsonl`); a game-catalog listener
+owned 6200, canaries owned 6199 and 6201. The game channel arrived on
+`127.0.0.1:6112` 1.5 s after Play and the run passed to the spawn rung. The
+6200 listener logged **no connection ever**; the canary summary
+(`vault/probes/handoff-A-20260806/summary.json`) shows **zero connections** over
+its 300 s. **The advertised port does not influence the dial. The port-transform
+reading (b) is dead** — 6113→6112 was the auth port's doing, not arithmetic.
+
+Bonus, and load-bearing for what "ignores" means: the game version header on
+6112 echoed the handoff's `world_id` 743702691 and `player_id` 1971349722. The
+client **parsed GAME_SERVER_INFO and used its ids while discarding its
+address** — the message is read, the sockaddr is not acted on.
+
+### Probe B result — OBSERVED 2026-08-06, run `harness/20260806T153938`
+
+Auth on `127.0.0.2:6112` worked end to end — keyed, logged in, requested the
+game instance — so the client honours `-authsrv` for the auth channel. Then the
+game dial went to **`127.0.0.1:6112`**, where nothing listened: the sampler
+caught `SYN_SENT 127.0.0.1:6112` at t+15.6, 17.6 and 19.6 s (a fresh attempt
+every ~2 s), `Gw.log` ends with repeated `Error: Retrying game server
+connection`, and `127.0.0.2` never received a second connection. The run failed
+at "client opened its game channel", as this outcome predicted.
+**Authsrv-endpoint reuse (a) is dead.** The client walked AWAY from the host it
+was launched against and dialled a `127.0.0.1`-flavoured host at hardcoded
+port 6112.
+
+Also settled by the two runs together: `6112` is not "the port auth actually
+used" in any per-connection sense — auth USED `.2:6112` in probe B and the game
+dial still went to `.1:6112`. The port is a constant; only the HOST question
+remains, and in probe B portal host and handoff host were both `127.0.0.1`, so
+they are still confounded.
+
+### Probe C — which 127-host is the game dial's: the handoff's or the portal's?
+
+One change against probe B: the handoff advertises **`127.0.0.3`** (authsrv
+`--game-host 127.0.0.3`), with `-authsrv 127.0.0.2` and `-portal 127.0.0.1`
+unchanged. Three hosts, three meanings. Game-catalog listeners sit on BOTH
+candidates — `127.0.0.3:6112` and `127.0.0.1:6112` — so the landing is a
+recorded connection either way, not another invisible refusal. (session.py's
+preflight is host-blind on ports, so this run uses the stack by hand +
+`drive_client --authsrv 127.0.0.2`.)
+
+Predictions, stated before the run:
+
+- **handoff-host rule:** game lands on `127.0.0.3:6112`. *Expected*, because it
+  is the only reading under which retail could work at all — a real game server
+  handoff must carry a host the client actually uses, and probe A showed the
+  message IS parsed (the ids come out of it).
+- **portal-host rule:** game lands on `127.0.0.1:6112`. If this fires it is
+  ambiguous with a third reading — a cached/default host — since the portal has
+  always been `127.0.0.1` in every run this client has ever made.
+- **neither:** the retry loop aims somewhere else again; sampler + `Gw.log`
+  record it.
+
+### Probe C result — OBSERVED 2026-08-06, run `harness/20260806T154607`
+
+The game channel **ESTABLISHED to `127.0.0.3:6112`** 0.2 s after Play, keyed
+ARC4, and ran a full game session — 669 decoded events including the 0x0088
+spawn rung (`captures/gamesrv/authsrv-20260806T154623-c1.jsonl`). The
+portal-host listener on `127.0.0.1:6112` recorded **no connection ever**, and
+the sampler shows exactly two dials: auth to `.2`, game to `.3`. The
+handoff-host prediction fired; the portal-host and cached-host readings are
+dead.
+
+### The rule, and what it supersedes
+
+**OBSERVED, three runs, 2026-08-06, build 38797:** for the game channel the
+client dials **`<GAME_SERVER_INFO sockaddr host> : 6112`**, first try, within
+~2 s of Play. The sockaddr's HOST field is honoured; its PORT field is
+decorative; `world_id`/`player_id` from the same message are echoed back on the
+game channel's version header. When `host:6112` refuses, the client retries the
+same endpoint every ~2 s (`Error: Retrying game server connection`) — probe B
+watched 45 s of that and it never fell back to any other endpoint, including
+port 80.
+
+This kills §8's standing explanation ("the client routes the game connection to
+the portal address on port 80"): the portal host and the handoff host were the
+same address in every §8-era run, and the port-80 landings of 2026-08-05
+(handoffs advertising 6120, game served and accepted on `127.0.0.1:80` —
+`captures/gamesrv/authsrv-20260805T*`) were produced by an earlier state of the
+run exe/stack that no current run reproduces. Between those runs and 2026-08-06
+the run copy was re-patched (§9's updater kill switch applied), the webgate's
+XML answers changed, and every run since dials `host:6112` — which of those
+changes moved the port is NOT FOUND, recorded here so nobody chases port 80
+again on today's binary. UNVERIFIED and untested: whether the current exe would
+try port 80 under some failure mode probe B's 45 s did not reach.
+
+**Consequence for the stack:** the game catalog must be served on **port 6112
+at a host of its own**, and that host goes in the handoff. The daily
+three-server stack "works" today only because the handoff says `127.0.0.1`, so
+the game dial lands on the AUTH listener, whose catalog self-selection then
+serves the game — the gamesrv instance on 6113 has never received a connection.
+Moving the default stack to advertise a dedicated loopback alias (e.g.
+`--game-host 127.0.0.3` + gamesrv bound `127.0.0.3:6112`) would land the game
+channel on the actual game server and un-mix the capture directories.

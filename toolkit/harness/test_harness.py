@@ -58,6 +58,12 @@ def test_assert_safe():
                   ["-authsrv", "8.8.8.8", "-portal", "127.0.0.1"]))
     check("gate accepts a vault/run path with loopback flags",
           not refused(dc.assert_safe, good, flags))
+    check("gate accepts a 127/8 alias for -authsrv (the handoff probe needs one)",
+          not refused(dc.assert_safe, good,
+                      ["-authsrv", "127.0.0.2", "-portal", "127.0.0.1"]))
+    check("gate still refuses a dotted non-loopback that starts plausibly",
+          refused(dc.assert_safe, good,
+                  ["-authsrv", "128.0.0.1", "-portal", "127.0.0.1"]))
 
 
 # ------------------------------------------------------------ live tail ----

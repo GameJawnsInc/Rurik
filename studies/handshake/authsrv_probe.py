@@ -52,7 +52,14 @@ def hexdump(data: bytes, width: int = 16) -> str:
 
 
 class Probe:
-    def __init__(self, outdir: str, duration: float):
+    def __init__(self, outdir: str, duration: float, endpoints=None):
+        # endpoints: list of (host, port). Default is the historical candidate
+        # sweep on 127.0.0.1; --ports overrides it so the same tool can serve
+        # as a canary on exactly the addresses a hypothesis names. A canary
+        # that ACCEPTS is the point: a SYN met by an instant loopback RST can
+        # fall between two 20 ms samples of the TCP table, but an accepted
+        # connection persists until somebody reads it.
+        self.endpoints = endpoints or [("127.0.0.1", p) for p in CANDIDATE_PORTS]
         self.outdir = outdir
         self.duration = duration
         self.sel = selectors.DefaultSelector()
@@ -72,18 +79,19 @@ class Probe:
               flush=True)
 
     def bind_all(self):
-        for port in CANDIDATE_PORTS:
+        for host, port in self.endpoints:
+            label = f"{host}:{port}"
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             try:
-                s.bind(("127.0.0.1", port))
+                s.bind((host, port))
                 s.listen(8)
                 s.setblocking(False)
-                self.sel.register(s, selectors.EVENT_READ, ("listen", port))
-                self.listeners[port] = s
-                print(f"  bound 127.0.0.1:{port}", flush=True)
+                self.sel.register(s, selectors.EVENT_READ, ("listen", label))
+                self.listeners[label] = s
+                print(f"  bound {label}", flush=True)
             except OSError as e:
-                print(f"  SKIP  127.0.0.1:{port} -- {e.strerror}", flush=True)
+                print(f"  SKIP  {label} -- {e.strerror}", flush=True)
                 s.close()
         if not self.listeners:
             raise SystemExit("could not bind any candidate port")
@@ -166,7 +174,8 @@ class Probe:
                 lines += ["```", hexdump(rx[:512]), "```", ""]
                 if len(rx) > 512:
                     lines += [f"(+{len(rx) - 512} more bytes, see raw file)", ""]
-            with open(os.path.join(self.outdir, f"conn{cid}_port{c['port']}.bin"), "wb") as f:
+            safe = str(c["port"]).replace(":", "_").replace(".", "-")
+            with open(os.path.join(self.outdir, f"conn{cid}_{safe}.bin"), "wb") as f:
                 f.write(rx)
 
         with open(os.path.join(self.outdir, "events.jsonl"), "w") as f:
@@ -184,7 +193,23 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--duration", type=float, default=90.0)
+    ap.add_argument("--ports", default=None,
+                    help="Comma-separated [host:]port list overriding the "
+                         "candidate sweep, e.g. '6199,6201' or "
+                         "'127.0.0.2:80,127.0.0.1:6112'. Hosts must be 127/8: "
+                         "this tool exists to watch a local client, and a "
+                         "canary a LAN can reach is a different tool.")
     a = ap.parse_args()
-    p = Probe(a.outdir, a.duration)
+    endpoints = None
+    if a.ports:
+        endpoints = []
+        for spec in a.ports.split(","):
+            spec = spec.strip()
+            host, _, port = spec.rpartition(":")
+            host = host or "127.0.0.1"
+            if not host.startswith("127."):
+                raise SystemExit(f"refusing non-loopback canary {spec!r}")
+            endpoints.append((host, int(port)))
+    p = Probe(a.outdir, a.duration, endpoints)
     p.bind_all()
     p.run()

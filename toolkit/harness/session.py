@@ -65,13 +65,18 @@ PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 # ------------------------------------------------------------- pre-flight ----
 
 def server_specs(portal_port=6601, auth_port=6112, game_port=6113,
-                 capture_root=None):
+                 capture_root=None, auth_host="127.0.0.1"):
     """The three server processes, as (name, port, argv).
 
     The game channel is served by a second authsrv.py instance: the client
     declares its channel in its version header, so the same listener decodes
     the game catalog with no extra flag -- only the port and capture dir differ.
     capture_root overrides the vault capture dirs (tests use a temp dir).
+
+    auth_host moves ONLY the authsrv listener (and must be handed to the
+    client as -authsrv too). The webgate stays on 127.0.0.1: the -portal and
+    -authsrv hosts have to be separable for the handoff probe to say which of
+    the two the client's game dial follows.
     """
     def cap(sub):
         return (os.path.join(capture_root, sub) if capture_root
@@ -83,8 +88,8 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6113,
                "--port", str(portal_port), "--vault", cap("portal")]),
         ("authsrv", auth_port,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
-               "--port", str(auth_port), "--vault", cap("authsrv"),
-               "--game-port", str(game_port)]),
+               "--port", str(auth_port), "--bind", auth_host,
+               "--vault", cap("authsrv"), "--game-port", str(game_port)]),
         ("gamesrv", game_port,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
                "--port", str(game_port), "--vault", cap("gamesrv"),
@@ -187,7 +192,7 @@ class Stack:
                         f"{name} exited with code {proc.returncode} before "
                         f"listening.\n{self._tail(name)}")
                 if any(r["pid"] == proc.pid for r in listeners_on(port)):
-                    print(f"  {name} up: 127.0.0.1:{port}  pid {proc.pid}")
+                    print(f"  {name} up: port {port}  pid {proc.pid}")
                     del pending[name]
             time.sleep(0.1)
         if pending:
@@ -238,13 +243,14 @@ LOGIN_CHECKPOINTS = [
      by_any(by(kind="login_ok"), by(kind="login_rejected")),
      "no login reply at all: portal and authsrv disagree on sessions.json"),
 ]
-# The game-channel checkpoints watch BOTH capture dirs. OBSERVED 2026-08-06,
-# build 38797: GAME_SERVER_INFO pointed the client at 6113 and it opened its
-# game channel to 6112 -- the -authsrv port -- where the auth listener
-# self-selects the game catalog and records to captures/authsrv. Whether that
-# is "ignores the host field, reuses -authsrv" or something subtler is an open
-# question; the harness asserts on where the events actually land, not on
-# where the handoff said they should.
+# The game-channel checkpoints watch BOTH capture dirs. OBSERVED 2026-08-06
+# (three discriminating runs, studies/handshake/PLAN.md §10): the client dials
+# <GAME_SERVER_INFO host> : hardcoded 6112 for the game channel -- the
+# advertised port is decorative, and -authsrv plays no part in the game dial.
+# Under this stack's defaults that host is 127.0.0.1, so the dial lands on the
+# AUTH listener, whose catalog self-selection serves the game and records to
+# captures/authsrv; the gamesrv instance only receives it if the handoff names
+# a host of its own. The harness asserts on where the events actually land.
 MAP_CHECKPOINTS = [
     ("client asked for a game instance", "auth", by(kind="game_instance_request"),
      "no Play request -- did the client reach character select?"),
@@ -333,7 +339,7 @@ def run_client(a, outdir):
     sampler = dc.Sampler()
     sampler.start()
 
-    args = ["-authsrv", "127.0.0.1", "-portal", "127.0.0.1", "-windowed", "-log"]
+    args = ["-authsrv", a.auth_host, "-portal", "127.0.0.1", "-windowed", "-log"]
     dc.assert_safe(a.exe, args)
     log_path = os.path.join(os.path.dirname(a.exe), "Gw.log")
     if os.path.exists(log_path):
@@ -431,9 +437,23 @@ def main():
     ap.add_argument("--actions", default=None,
                     help="override the input script; default depends on --until "
                          f"(login: {ACTIONS['login']!r}, map: {ACTIONS['map']!r})")
+    ap.add_argument("--game-port", type=int, default=6113,
+                    help="Port the handoff advertises AND the gamesrv listens "
+                         "on. OBSERVED (handshake PLAN §10): the client never "
+                         "dials it -- it dials the handoff HOST at 6112. This "
+                         "flag ran the probe that established that.")
+    ap.add_argument("--auth-host", default="127.0.0.1",
+                    help="Loopback address for the authsrv listener and the "
+                         "client's -authsrv flag. 127/8 only. A second alias "
+                         "(127.0.0.2) ran the probe that showed -authsrv plays "
+                         "no part in the game dial (handshake PLAN §10).")
     a = ap.parse_args()
 
-    specs = server_specs()
+    if not dc.is_loopback(a.auth_host):
+        raise SystemExit(f"--auth-host {a.auth_host!r} is not a 127/8 loopback "
+                         f"address. The client must stay unable to reach ArenaNet.")
+
+    specs = server_specs(game_port=a.game_port, auth_host=a.auth_host)
     preflight(specs, replace=a.replace)
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
