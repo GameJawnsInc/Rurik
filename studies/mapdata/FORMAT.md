@@ -38,10 +38,11 @@ severity:
    nothing maps a map id to a file. In fact MFT row 2 is a stored table of
    `(file_id, row)` pairs, and all six of OpenTyria's map_file_ids resolve
    through it to real map files. Kamadan is row 22371 and its geometry is parsed
-   (see below). What remains open is narrower: we still cannot name a map we do
-   not already have an id for, so **Ascalon City Pre-Searing is still
-   unreachable** — but nothing needed it, because the character stands in
-   Kamadan.
+   (see below). A later revision of this section still said "**Ascalon City
+   Pre-Searing is still unreachable**". **That is now false too** — it is row
+   7982, and the reason it looked unreachable is a bug in our own lookup rather
+   than anything missing from the archive. See "Finding a specific map" below,
+   which has been rewritten.
 2. **There is no Z coordinate.** MEASURED. Nothing in the file says what height
    a plane sits at. GWToolbox fabricates `zplane = (i == 0 ? UINT32_MAX : i - 1)`
    when loading from the archive, which is a tell that it is not in the data.
@@ -72,7 +73,7 @@ All MEASURED unless noted, and implemented in `toolkit/mapdata/archive.py`.
 0x00  33 41 4E 1A     magic "3AN\x1A"
 0x04  20 00 00 00     header size, 32
 0x08  00 02 00 00     block size, 512
-0x0C  70 AD CB 4C     UNKNOWN
+0x0C  70 AD CB 4C     CRC-32/ISO-HDLC of the first 12 bytes (0x4CCBAD70)
 0x10  00 FE BE F8     MFT offset
 0x18  28 F1 40 00     MFT size in bytes
 ```
@@ -96,9 +97,15 @@ counter u32, crc u32`.
 
 - Compression is 0 (stored) or 8 (huffman/LZ77). Tally across the whole archive:
   **{0: 38633, 8: 138708}**, reproduced independently by our own reader.
-- `crc` is **NOT FOUND**. GWUnpacker calls it CRC, OpenTyria calls it checksum,
-  neither computes or verifies it, and no polynomial was tested. Do not assume.
-- The header field at 0x0C is likewise unexplained by every source and by us.
+- `crc` was **NOT FOUND** when this was written, and is now MEASURED: it is
+  CRC-32/ISO-HDLC over the entry's stored bytes. GWUnpacker calls it CRC,
+  OpenTyria calls it checksum, and neither computes or verifies it, so upstream
+  was right by name and untested in fact. `studies/datwrite/FINDINGS.md` has the
+  derivation and `toolkit/mapdata/test_datcrc.py` checks it — 19,703 rows on a
+  strided sample, all three rules, `--full` for every row.
+- The header field at 0x0C is the same polynomial over the header's own first 12
+  bytes, and MFT row 3 checksums itself with its self-entry removed from the
+  stream. **A writer must maintain all three.**
 
 **Two archives are not the same archive.** The install copy holds 177,335
 entries; the copy our patched client has actually run holds **177,342** — same
@@ -190,32 +197,113 @@ turns out to match what the file offers.
 
 ---
 
-## Finding a specific map — the blocker
+## Finding a specific map — solved 2026-08-06
 
-**NOT FOUND**, and this is the finding that shapes what to do next.
+This section used to open "**NOT FOUND**, and this is the finding that shapes
+what to do next." It is kept as a heading because the reasoning that replaced it
+is worth more than the conclusion: **the blocker was never in the archive. It was
+in our reader.**
 
-We can enumerate every map payload by MFT index and file id. We cannot say which
-one is Ascalon City. What was ruled out or left open:
+### The bit-31 file ids
 
-- No name table was found in the archive or in the static `Gw.exe`.
-- `AreaInfo.file_id` is zero throughout the static executable, so the client
-  gets it from the server — which is exactly the direction we need to go and
-  cannot.
-- OpenTyria's six `map_id -> file_id` pairs could not be adjudicated against
-  other projects. Two of them (maps 55 and 474) could not be checked at all.
-- **No retail packet capture exists in the vault**, so we cannot observe what a
-  real server sent as `map_file_id` for any map. The network-logger projects are
-  tooling only, with no captured sessions.
-- Each map carries exactly *two* file numbers from two different bands, and
-  which band a server should use is unknown. Notably this is map-specific: most
-  archive rows carry one file number.
+MEASURED. The file-id table holds 171,025 pairs and 171,023 distinct ids. **25 of
+those ids have bit 31 set**, and `file_id_table()` did an exact-match lookup, so
+it silently resolved none of them. Two of the 25 land on map-flagged rows:
 
-Cheapest routes to an answer, none yet attempted:
+```
+0x8001B97D -> row 7982    flags 259   1,300,036 bytes
+0x8001C539 -> row 20118   flags 259   1,394,028 bytes
+```
 
-1. Render candidate maps with GuildWarsMapBrowser and identify Ascalon by eye.
-   Crude, and almost certainly fastest.
-2. Find the id→file table in `Gw.exe` — which is precisely what the message-table
-   study session is already tooled up to do.
+Masked, those are `0x1B97D` and `0x1C539` — and those are exactly the two ids
+that a working upstream server sends for the Pre-Searing zones. For **none** of
+the 25 is the masked form also present in the table as a real id, so the two can
+never compete; `toolkit/mapdata/archive.py` now registers a bit-31 id under both
+forms, plain ids first, and `test_pathmap.py` §6 asserts that non-collision so a
+future archive cannot quietly break the assumption.
+
+**Why the bit is set is NOT ESTABLISHED.** That the client's own lookup masks it
+is INFERRED from the id a working server sends, not measured — we have not read
+the client's lookup code. `studies/datwrite/FINDINGS.md` lists a "~29-entry bit-31
+file-id watchlist" as an open question; this is that watchlist, and it is 25
+entries on this copy. Reading `Gw.exe`'s file-open path would settle the meaning.
+
+### Row 7982 is the Pre-Searing region
+
+The identification does not rest on upstream's say-so. gw-preservation's map
+table (unlicensed — read, cite, never copy) assigns three zone names to file id
+`0x1B97D` and records independent spawn coordinates for two of them. Those
+coordinates were never fitted to anything of ours, so they are a real test:
+
+| Point | In row 7982 | In Kamadan (control) |
+|---|---|---|
+| Pre Ascalon City spawn | **1 trapezoid** | 0 |
+| Ashford Abbey spawn | **1 trapezoid** | 0 |
+| Barradin Estate spawn (id `0x1BA26`) | **1 trapezoid** | 0 |
+| Foible's Fair spawn (id `0x1BACB`) | **1 trapezoid** | 0 |
+| Kamadan spawn | — | 1 trapezoid |
+
+Exactly one is what a non-overlapping tiling gives for a point on the ground, and
+the control shows the test discriminates rather than accepting anything. Row 7982
+parses to **58 planes and 6,120 trapezoids with zero malformed**, spanning
+x −18432..21504, y −24576..24576 — about five times Kamadan's trapezoid count.
+The two spawns that land in it are ~26,000 units apart, so at minimum this one
+file covers both locations.
+
+A quiet corroboration worth recording: row 7982 was **already** one of the two
+reference maps in `test_archive.py`, the "24 chunks tiling 2,925,270 bytes
+exactly" fixture that validates the decompressor. The Pre-Searing map had been
+sitting in our own test suite the whole time, unrecognised.
+
+### The upstream table, refereed
+
+397 map definitions were read out of the mirror and every one checked against the
+archive. This is the useful shape of the result — not "upstream says so" but
+"upstream makes 397 mechanically checkable claims, and here is the pass rate":
+
+- **393 of 397 file ids resolve, and 393 of 393 land on a map-flagged row.** Not
+  one lands on a non-map row. A sampled FFNA check is 25/25 type-3.
+- The 4 that did not resolve are **exactly** the two bit-31 ids, i.e. our bug,
+  not their error.
+- 249 of the 349 map-flagged rows are claimed. **100 map rows are named by
+  nobody.**
+- 101 file ids are claimed by more than one map id. Some are obviously right —
+  The Underworld appears 7 times, The Hall of Heroes 3 — and some are
+  explorable/outpost pairs that plausibly share one terrain file. Which of those
+  are real and which are upstream copy-paste is UNVERIFIED and this document does
+  not adjudicate it.
+- File id is **not** monotonic in map id (227 rises, 135 falls, 30 equal), so the
+  bracketing trick that would have named the remaining 100 maps is dead. Recorded
+  because it was the cheapest idea and it failed.
+
+### Which of a map's two ids a server sends — answered
+
+MEASURED, and it closes an open question this document previously said needed a
+retail capture. Every map-flagged row carries **exactly two** file ids, 349 of
+349. Taking the smaller of each pair gives 349 distinct ids, taking the larger
+gives 349 distinct ids, and **the two sets are disjoint** — no id is the smaller
+for one map and the larger for another, so the split is a real structural
+property and not an artefact of sorting.
+
+Upstream's 397 `map_file_id` values are **397 for 397 the smaller id. Zero are
+the larger.** The server sends the low id.
+
+(This also corrects the old wording here. The two ids are not in separate
+*ranges* — low `0x29BA..0x5B38E` and high `0x22E2C..0x5EC06` interleave. They are
+two disjoint *sets*.)
+
+### What is still not answered
+
+Naming the remaining 100 map rows. Upstream cannot name them either, so no
+mirror will settle it. The routes, in the order they now look cheapest:
+
+1. **Find the area table in `Gw.exe` and read its name string ids.**
+   `AreaInfo.file_id` is zero throughout the static image — that much was already
+   measured and still holds — but a *name* string id need not be, and
+   `studies/datwrite/FINDINGS.md` decoded the archive's text records, so a string
+   id resolves to actual text today. `toolkit/clientscan/skilltable.py` is a
+   working example of locating a fixed-stride record array structurally.
+2. Render candidates in GuildWarsMapBrowser and identify by eye.
 3. Match geometry against a known landmark or map extent.
 
 ---
@@ -376,10 +464,13 @@ upstream being trustworthy — it was checked, and the check is what counts.
 
 | Question | What would answer it |
 |---|---|
-| Which map file is Ascalon City Pre-Searing? | Render candidates in GuildWarsMapBrowser, or find the id table in Gw.exe. |
-| Which of a map's two file numbers does a server send as `map_file_id`? | A retail capture, which we do not have; or testing both against our own client. |
-| Is our decompressor exactly right? | Diff against `xentax.cpp` output on the same input. Needs a C compiler. |
-| What is the u32 at entry+0x14? | Test CRC polynomials against known payloads. Nobody has. |
+| ~~Which map file is Ascalon City Pre-Searing?~~ | **Answered 2026-08-06: row 7982, file id `0x1B97D`, stored with bit 31 set.** |
+| ~~Which of a map's two file numbers does a server send?~~ | **Answered 2026-08-06: the smaller one, 397 for 397.** |
+| ~~What is the u32 at entry+0x14?~~ | **Answered elsewhere and this table was stale.** `studies/datwrite/FINDINGS.md` establishes it as CRC-32/ISO-HDLC over the stored bytes, and `toolkit/mapdata/test_datcrc.py` checks it against real bytes. Same for the header field at 0x0C. |
+| Why is bit 31 set on 25 of the 171,023 file ids? | Read the client's file-open path in `Gw.exe`. That the lookup masks it is inference from a working server's behaviour, not measurement. |
+| What are the other 100 map-flagged rows? | No mirror names them. Route 1 above: find the area table in `Gw.exe` and resolve its name string ids through the archive's text records. |
+| Are the 101 shared file ids real, or upstream copy-paste? | Geometry. If two named zones share a file, both their spawns should land in it, as Pre Ascalon City's and Ashford Abbey's do. |
+| Is our decompressor exactly right? | Diff against `xentax.cpp` output on the same input. Needs a C compiler. Separately, it fails on 12 of 1,089 text files with a huffman table hole — that is a live defect and the cheaper thread to pull. |
 | What do plane sub-tags 1, 3–6, 9–11 hold? | Named and sized (see the tag-8 table), contents not decoded. Required for pathfinding; not for collision. |
 | Why is tag 11's size field double its data, in every plane of every map? | Unknown. Systematic, not noise, so it means something. |
 | Does the navmesh agree with the collision the client enforces? | The server now logs `on_mesh` on every stop report. A playtest answers it. |
