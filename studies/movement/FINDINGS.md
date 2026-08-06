@@ -893,3 +893,86 @@ argued about:
 
 Send-only opcodes report "the client only SENDS this one" instead of failing,
 because send descriptors are 8 bytes and have no dispatch member.
+
+---
+
+## Where movement was left (2026-08-05, end of session)
+
+Closed by the owner as good enough, with the remaining faults recorded rather
+than chased. Read this before reopening movement — several of the obvious next
+ideas were tried in this session and made things worse.
+
+### Working, and verified in play
+
+* **Keyboard movement.** Stable, wall-hugs without rubber-banding.
+  `AGENT_MOVE_DIRECTION` 0x0025, direction echoed from the client, movement type
+  passed through, re-sent only on a real change of direction.
+* **Click-to-move at range.** "Incalculable distances now stop in a
+  straight-line-til-obstacle way just like stock." That is the owner's
+  comparison against the retail game, and it is the closest thing to a fidelity
+  result this project has.
+* **Stairs.** Stable in ordinary play; the character paths to the foot of a
+  staircase and climbs it rather than walking through the railing.
+
+### Still broken
+
+**Warping near stairs when mixing input modes.** Reproduction, from the owner:
+**hold S and spam-click destinations on different planes.** Rare in normal play,
+easy this way.
+
+That combination is exactly what the server handles worst, and the mechanism is
+known even though the fix is not:
+
+* Holding S drives `AGENT_MOVE_DIRECTION` with movement type 4 (Backward) while
+  clicks drive `AGENT_MOVE_TO_POINT`. Two movement commands, interleaved, with
+  one shared piece of state.
+* Every answered click writes the player's *current plane* into `agent+0x80`
+  (read out of `Gw.exe` — see the disassembly section). We take that from the
+  client's last report, which may be up to a second old, and spam-clicking
+  across planes changes the true value faster than we learn it.
+* `-1` means "leave the plane alone" and is **unreachable from the wire**: the
+  field is msgtable type 4, unsigned. So the server cannot decline to answer the
+  question; it can only decline to answer the click.
+
+Guards already in place, each of which reduced the rate: answer a click only
+when a client position report is under a second old, only when the geometry can
+place the player (on the mesh, exactly one plane, and that plane the one the
+client named), and only when the straight line to the destination is clear.
+About 6% of clicks are deferred to the client's own pathing as a result.
+
+### Do not retry these
+
+Each was tried in this session and was wrong.
+
+1. **Clipping the keyboard leg.** Any destination we invent is wrong in one of
+   two ways — past a wall the client walks through it, at the wall
+   `clip(pos, pos + heading)` returns approximately `pos` and the client walks
+   backwards to it. There is no safe value between. Keyboard movement must not
+   name a point at all.
+2. **Broadcasting position.** `AGENT_UPDATE_POSITION` is not a teleport; the
+   client appears to WALK to a granted position, over buildings, taking seconds.
+   Every correction this server ever sent was damage, including 9- and 26-unit
+   ones.
+3. **Clipping the click, or refusing a short one.** The client paths clicks by
+   itself, competently. Substituting our own destination overwrites a correct
+   route with a straight line — caught in play with screenshots on a staircase.
+4. **Deriving the plane from the navmesh when the client has just told us.**
+   MEASURED, that overrules the client on 3.7% of reports, most often "client
+   said 5, we would have sent 0", and writes the wrong surface into the agent.
+
+### The one untried lead
+
+`0x002A AGENT_UPDATE_DESTINATION`. Its handler is byte-identical to
+MOVE_TO_POINT's except that the server supplies the argument 0x0029 hardcodes to
+zero — the value written to `agent+0x98`, which the client's own internal move
+re-issuers deliberately preserve. What `+0x98` does is not decoded. Read the
+handler before sending anything:
+
+    python toolkit/clientscan/msghandler.py 0x002a --follow
+
+### The larger gap
+
+**There is no server-side pathfinding**, and there cannot be until the plane
+sub-records (portals, x/y BSP nodes, sink nodes, edge vectors) are decoded. Every
+click the server declines is the client covering for us. A real server owns
+pathing and sends the legs of the route.
