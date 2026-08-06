@@ -704,6 +704,33 @@ resolves to itself instead of to `0x0099`.
 
 ---
 
+## 6j. The property dispatch, read — and death is not in it
+
+Full write-up: **[studies/agentprops/FINDINGS.md](../agentprops/FINDINGS.md)**.
+
+The float-property path (`0x00A3` → `0x00813040` → `0x00818210`) is a jump table
+over properties 16–62, and **it acts on exactly 8 of the 47**: 16 (damage), 33,
+34, 43, 44, 52, 55, 62 — health and energy, and nothing else. The other 39 fall
+to the default case.
+
+Three results matter for this arc:
+
+- **The fraction is confirmed from the code.** The damage case is
+  `fld [esi+0x24]` (the agent's maximum health) `fmul` the value we sent. §6b
+  measured that from the outside; this is the instruction that does it.
+- **Headquarter is wrong about critical damage.** It applies properties 16, 17
+  and 55 identically in one fall-through switch. The real client dispatches 16
+  and 55 to their own targets and sends **17 to the default**, where it does
+  nothing.
+- **Death is not an agent property**, on either the float or the int path. That
+  closes the last place §6i left to look on this channel.
+
+Where death goes next is recorded in that document §4, and the best lead is
+`0x005FC380` — the only other thing the damage path does, called immediately
+after the record update and not yet read.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND
