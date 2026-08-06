@@ -812,6 +812,49 @@ transcribe a proven packet:
 
 ---
 
+## 6m. A repeatable fight — OBSERVED, and the arc's deliverable
+
+2026-08-06. Clicking the hostile Hatcher damages it, seven or so clicks kill it,
+and eight seconds later it stands back up at full health. **The cycle repeats.**
+
+**It works in an outpost**, which was the open worry, and it works because
+combat is driven from `INTERACT_PLAYER` rather than `ATTACK_AGENT`. A town
+forbids attacking, so the client never sends `0x0026` there — but it does keep
+reporting the click, which §7.3a had already measured arriving 11 and 32 times
+while this server ignored every one. What to do about a click is the server's
+decision. That single choice retired the map blocker for this rung.
+
+**Where the line falls between what is known and what is ours:**
+
+| Proven against our client | Invented by us |
+|---|---|
+| the damage message, its fraction units, its target-before-cause field order | how hard a click hits (15% of maximum) |
+| the death bit, and that it reverses | how often a click may hit (1 s) |
+| that reviving takes two operations | how long a body stays down (8 s) |
+| that the client reports clicks in a town | that a click means an attack at all |
+
+The right column is not a claim about retail Guild Wars and must never be cited
+as one. Real numbers are obtainable — the wiki documents attack rates and weapon
+damage, and a captured fight would give the true thing — and nothing about the
+structure changes when they replace these.
+
+### What this arc did not build
+
+Honest list, because "a fight works" invites over-reading:
+
+- **The enemy does not fight back.** It has no attacks, no aggro, no target. It
+  is a punching bag that dies convincingly.
+- **It does not move.** §6's E3 is untouched; the tick integrates the player
+  only, and the navmesh clipping that exists is the player's.
+- **There is one of it, in one map, at one spot**, hardcoded 300 units east of
+  a spawn point that is itself a fallback.
+- **Nothing persists.** Health, death and the revive timer live in the
+  connection's `state` dict and vanish with the socket.
+- **Aggro, drops, experience, respawn placement and skills do not exist**, and
+  none of them was scouted.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND
