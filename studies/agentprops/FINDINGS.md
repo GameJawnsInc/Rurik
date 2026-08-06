@@ -265,22 +265,58 @@ made that exact mistake and caught it only because the "addresses" were absurd.
 
 ---
 
-## 3b. All four dispatch tables, and none of them is death — SOURCED
+## 3b. The dispatch tables, and none of them is death — SOURCED
 
-Each property message updates a status record and then dispatches a second time.
-That is four tables in total, and this document has now read all four:
+> **CORRECTED 2026-08-06. There are SEVEN switches, not four**, and this section
+> read four of them. The heading used to read *"All four dispatch tables"*; the
+> word *all* was wrong and it was load-bearing, because the argument below closes
+> the death question **by enumeration**. An enumeration over four sevenths is not
+> an enumeration. `studies/skillcast/FINDINGS.md` §16.1 has the full set and
+> `toolkit/clientscan/genericvalue.py` is now the executable authority —
+> `consumers(img)` reports every switch that acts on an id and
+> `handled_by_nothing(img)` reports the ids none does.
+>
+> **The conclusion survives, and it survives on better evidence than it had.**
+> None of the three missing switches contains a death case either: the int main
+> switch dispatches to `AvApi` and the UI, and the two AgentView switches carry
+> five ids between them (4, 8, 13, 50, 60 and 5, 51, 61). Death was independently
+> found afterwards, and it is not a property at all — §1c, bit 4 of the agent
+> effects word. So this section reached a true answer by an argument weaker than
+> the one it stated.
 
-| Path | Table | Range | Real cases |
-|---|---|---|---|
-| int, record | `0x00818170` | chained `sub`, not a table | 3 — properties 32, 41, 42 |
-| int, second | bytes `0x00812EE0` → `0x00812ED0` | properties 4–64 | 4 — {4, 50, 60}, {10}, {64}, and one generic case for the other 55 |
-| float, record | bytes `0x008183B8` → `0x00818394` | properties 16–62 | 8 — 16, 33, 34, 43, 44, 52, 55, 62 |
-| float, second | bytes `0x0081328C` → `0x00813250` | properties 16–63 | 14 |
+Each property message updates a status record and then dispatches again — more
+than once, which is the part this section originally missed. In dispatch order:
 
-**No case in any of the four is death.** Together with the OBSERVED result in
+| # | Path | Table | Range | Real cases |
+|---|---|---|---|---|
+| 1 | int, record | `0x00818170` | chained `sub`, not a table | 3 — properties 32, 41, 42 |
+| 2 | int, AgentView | bytes `0x0081BD44` → `0x0081BD30` | properties 4–60 | 5 — 4, 8, 13, 50, 60 |
+| 3 | int, second | bytes `0x00812EE0` → `0x00812ED0` | properties 4–64 | 4 — {4, 50, 60}, {10}, {64}, and one generic case for the other 55 |
+| 4 | **int, main** | bytes `0x00812FE0` → `0x00812F20` | properties 0–66 | **47** |
+| 5 | float, record | bytes `0x008183B8` → `0x00818394` | properties 16–62 | 8 — 16, 33, 34, 43, 44, 52, 55, 62 |
+| 6 | float, AgentView | chained `cmp`, not a table | 5, 51, 61 | 3, sharing one body |
+| 7 | float, second | bytes `0x0081328C` → `0x00813250` | properties 16–63 | 14 |
+
+Rows 2 and 6 run **only when the message's agent resolves to an object of type
+1**, and rows 4 and 7 are skipped entirely when bit 1 of `charContext + 0x53C`
+is set. Rows 2, 4 and 6 are the ones this section did not have.
+
+**No case in any of the seven is death.** Together with the OBSERVED result in
 §1b — health driven to zero on a live agent, which kept standing — the property
 channel is closed as a route to death, and it is closed by enumeration rather
-than by another failed guess.
+than by another failed guess. §1c then found death elsewhere, which is the real
+confirmation.
+
+### What §2's "only three properties" got right, and who noticed
+
+§2's reading of `0x00818170` — *"on the integer path only 32, 41 and 42 do
+anything to this record"* — is **correct and was correct first**.
+`studies/skillcast` §6 later published the opposite about the same address,
+claiming every property is recorded there, and nothing in this repository caught
+it for two days: the tests are per-study, and the next pass re-derived the answer
+from scratch rather than finding it one directory away. Recorded here as well as
+there, because a correction filed only in the study that was wrong is invisible
+from the study that was right.
 
 ### A false lead, killed and recorded so nobody re-chases it
 
