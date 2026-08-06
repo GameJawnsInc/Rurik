@@ -25,6 +25,8 @@ arrives. A probe that fires three packets in 50 ms tells you only what the last
 one did.
 """
 
+import struct
+
 # Agent int-property ids (GmAgentProperties.h via studies/character/FINDINGS.md).
 PROP_LEVEL = 36
 
@@ -223,6 +225,93 @@ def _attr_legend_steps(agent_id):
     ]
 
 
+def _f32(x):
+    """A float, as the dword our schema says this field is.
+
+    Not a workaround. The client's own message table types this field as
+    "unsigned int, 4 wire bytes widened to a 4-byte slot" (studies/msgtable
+    FINDINGS.md §2.2 type 4), i.e. a straight copy -- the generic deserializer
+    never interprets it, and the per-opcode HANDLER is what reads the bits as a
+    float. So the schema is right that it is four opaque bytes, and the caller is
+    responsible for what those bytes mean.
+    """
+    return struct.unpack("<I", struct.pack("<f", x))[0]
+
+
+def _damage_steps(agent_id):
+    """Is damage an agent property, and is it absolute or a fraction?
+
+    THERE IS NO DAMAGE MESSAGE. Damage arrives as a property on
+    AGENT_PROPERTY_UPDATE_FLOAT_TARGET (0x00A3) and is ADDED to the target's
+    health -- so damage is a negative number. The handler is four lines in
+    ldufr/Headquarter (code/client/agent.c:823-867):
+
+        case AG_ATTR_DAMAGE:            // 16
+        case AG_ATTR_CRITICAL_DAMAGE:   // 17
+        case AG_ATTR_ARMOR_IGNORING:    // 55
+            target->health = clampf(target->health + value, 0.f, health_max);
+
+    Field order is prop_id, TARGET, CAUSE, value -- target before cause, which is
+    the opposite of the natural reading, and getting it backwards would damage
+    the attacker.
+
+    WHAT THIS PROBE IS ACTUALLY FOR. The same file makes the units contradictory,
+    and no source on disk resolves it. Setting health (int property 42) assigns
+    `health_max = value` and `health = 1.f` -- a FRACTION -- and then the damage
+    path clamps that fraction against health_max as though it were absolute.
+    GWCA independently comments the live client's AgentLiving.hp as a percentage
+    (PLAN.md §1.7). One of those readings is wrong and the client is the only
+    thing that can say which.
+
+    So the two hypotheses are separated by MAGNITUDE, and each step is chosen so
+    that exactly one hypothesis predicts a visible change:
+
+        -0.25   fraction: a quarter of the bar.  absolute: 0.25 of 100, invisible.
+        -25.0   fraction: 2500%, instant death.  absolute: a quarter of the bar.
+
+    NEEDS NO NPC. This tests the whole combat delivery mechanism against the body
+    we already spawn, so a failure localises to health state we have never sent
+    rather than to anything about enemies.
+
+    NOT TESTED HERE, deliberately: whether damage works with no health state at
+    all. Health cannot be un-set once sent, so that question needs its own run,
+    and asking it first risks an assert that would cost the rest of this one.
+    """
+    return [
+        Step(2.0, 0x009F, [42, agent_id, 100],
+             "health -> 100 (int property 42)",
+             "the health bar / orb. Did one appear, or change? Any number on it? "
+             "Nothing we send today carries health, so this is the first time "
+             "the client has been told the character has any."),
+        Step(6.0, 0x00A3, [16, agent_id, agent_id, _f32(-0.25)],
+             "damage -0.25 (property 16, target and cause both us)",
+             "the health bar. A quarter gone means health is a FRACTION and the "
+             "0..1 reading wins. No visible change means it is ABSOLUTE and 0.25 "
+             "of 100 was simply too small to see -- which step 3 then confirms."),
+        Step(6.0, 0x00A3, [16, agent_id, agent_id, _f32(-25.0)],
+             "damage -25.0",
+             "the health bar. A quarter gone here means ABSOLUTE. Instant death "
+             "means FRACTIONAL and this was 2500% of the bar -- in which case "
+             "watch what death looks like, because we have never seen it."),
+        # THERE IS NO FOURTH STEP, and this is the finding rather than an
+        # omission. It used to send +25.0 as a control on "the value is added".
+        # ANSWERED 2026-08-06, by the client, with its own assertion:
+        #
+        #   Assertion: damage.amount <= 0
+        #   P:\Code\Gw\AgentView\AvChar.cpp(5893)
+        #
+        # A positive value on this property is ILLEGAL and takes the client down.
+        # That is ArenaNet's own text, so it is the strongest class of evidence
+        # we get: the channel is damage-only, the sign convention is fixed at the
+        # client, and the field is literally named `damage.amount` in their
+        # source. Healing must travel some other way -- unknown, and NOT to be
+        # guessed at by flipping this sign again.
+        #
+        # Re-running this probe is safe and repeatable as it now stands. Adding
+        # the positive step back is not.
+    ]
+
+
 def _team_token_steps(agent_id):
     # Not a packet probe: the token now goes out at spawn. This exists so the
     # run is recorded with a question attached rather than being assumed fine.
@@ -299,6 +388,26 @@ PROBES = {
              "later steps rebuilt the array from zeros and wiped the legend "
              "before anyone could read it. This one is a single packet and "
              "leaves the client in the state being measured.",
+    ),
+    "damage": lambda a: Probe(
+        question="Does damage arrive as agent property 16 on 0x00A3, and is the "
+                 "value absolute health or a fraction of maximum?",
+        predicts="The property channel works -- we have already OBSERVED the "
+                 "client accept 0x009F without complaint. The units are a real "
+                 "coin-flip: Headquarter's own client contradicts itself, "
+                 "setting health to 1.0 and then clamping it against a maximum. "
+                 "-0.25 moving the bar a quarter says FRACTION; -25.0 moving it "
+                 "a quarter says ABSOLUTE. Exactly one of the two should be "
+                 "visible.",
+        steps=_damage_steps(a),
+        note="ANSWERED 2026-08-06 -- FRACTION. Int property 42 raised a health "
+             "bar reading 100; -0.25 took it to 75; -25.0 was dealt as 2500 and "
+             "left it at 1. Kept runnable because it is the calibration for "
+             "every combat number that follows, and because it turned up two "
+             "things nobody asked it: health CLAMPS AT 1 rather than 0, so a "
+             "damage packet cannot kill, and a positive value crashes the "
+             "client on ArenaNet's own `damage.amount <= 0`. See "
+             "studies/enemy/PLAN.md.",
     ),
     "spawn": lambda a: Probe(
         question="Does the character still spawn correctly with team token 'play'?",
