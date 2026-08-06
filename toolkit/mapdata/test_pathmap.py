@@ -28,6 +28,7 @@ changes shape these numbers are the alarm.
 
 import argparse
 import os
+import random
 import struct
 import sys
 import time
@@ -37,7 +38,7 @@ sys.path.insert(0, HERE)
 from archive import (Archive, ffna_chunks, file_id_table,  # noqa: E402
                      DEFAULT_DAT, FILE_ID_HIGH_BIT)
 from pathmap import (PathingMap, PATHING_CHUNK, SIGNATURE, VERSION,  # noqa: E402
-                     TRAPEZOID_SIZE)
+                     TRAPEZOID_SIZE, NO_NEIGHBOUR)
 
 KAMADAN_FILE_ID = 0x345CC
 KAMADAN_ROW = 22371
@@ -60,6 +61,8 @@ NORTHLANDS_FILE_ID = 0x1C539
 NORTHLANDS_ROW = 20118
 HIGH_BIT_IDS = 25
 MEASURED_ENTRY_COUNT = 177342
+
+ROUTE_SAMPLE = 60
 
 MAP_FLAGS = 259
 FAILED = []
@@ -215,6 +218,89 @@ def main():
                 print(f"  skip  {label} row index "
                       f"(archive has {ar.entry_count} entries, "
                       f"measured on {MEASURED_ENTRY_COUNT})")
+
+        # -- 7. the routing graph ----------------------------------------
+        # The adjacency check is the strongest thing in this file. Four
+        # indices read out of one 44-byte record are checked against four
+        # read out of a different record, and upstream's TL/TR/BL/BR naming
+        # additionally predicts WHICH of the four answers. Nothing in our
+        # decoder can force that.
+        print("\n7. the trapezoid routing graph")
+        links = sym = opposite = oor = 0
+        for t in pm.trapezoids:
+            here = [x for x in pm.trapezoids if x.plane == t.plane]
+            for slot, n in enumerate(t.neighbours):
+                if n == NO_NEIGHBOUR:
+                    continue
+                links += 1
+                if n >= len(here):
+                    oor += 1
+                    continue
+                other = here[n]
+                if t.index in other.neighbours:
+                    sym += 1
+                want = (2, 3) if slot < 2 else (0, 1)
+                if t.index in (other.neighbours[want[0]],
+                               other.neighbours[want[1]]):
+                    opposite += 1
+        check(oor == 0, "every neighbour index is in range", f"{links} links")
+        check(sym == links, "adjacency is symmetric", f"{sym}/{links}")
+        check(opposite == links,
+              "a top-edge link is answered across the bottom edge",
+              f"{opposite}/{links}")
+
+        print("\n8. portals")
+        total_portals = sum(len(r) for r in pm.portals)
+        bad_plane = sum(1 for r in pm.portals for p in r
+                        if p.neighbour >= len(pm.planes))
+        check(bad_plane == 0, "every portal names a plane that exists",
+              f"{total_portals} portals")
+        partition_ok = 0
+        for pi, row in enumerate(pm.portals):
+            traps = pm.portal_traps[pi]
+            cover = [0] * len(traps)
+            for p in row:
+                for k in range(p.offset, min(p.offset + p.traps, len(cover))):
+                    cover[k] += 1
+            if all(c == 1 for c in cover):
+                partition_ok += 1
+        check(partition_ok == len(pm.portals),
+              "portal slices partition each plane's portalTraps exactly",
+              f"{partition_ok}/{len(pm.portals)} planes")
+        # Reciprocity of the plane relation, the same argument as adjacency.
+        names = {pi: {p.neighbour for p in row}
+                 for pi, row in enumerate(pm.portals)}
+        rel = [(a, b) for a, s in names.items() for b in s]
+        recip = sum(1 for a, b in rel if a in names.get(b, ()))
+        check(recip == len(rel), "the plane-to-plane relation is reciprocal",
+              f"{recip}/{len(rel)}")
+
+        print("\n9. routing finds walkable paths around obstacles")
+        random.seed(7)
+        plane0 = [t for t in pm.trapezoids if t.plane == 0]
+        blocked = routed = clean = 0
+        for _ in range(20000):
+            a, b = random.choice(plane0), random.choice(plane0)
+            ax, ay = a.centre
+            bx, by = b.centre
+            if pm.clip(ax, ay, bx, by) == (bx, by):
+                continue                      # straight line already works
+            blocked += 1
+            path = pm.route(ax, ay, bx, by)
+            if path:
+                routed += 1
+                if all(pm.clip(*path[i], *path[i + 1]) == path[i + 1]
+                       for i in range(len(path) - 1)):
+                    clean += 1
+            if blocked >= ROUTE_SAMPLE:
+                break
+        check(routed > 0, "some blocked pair is routable at all",
+              f"{routed} of {blocked} sampled")
+        # The load-bearing one: a path we return must be walkable end to end.
+        # Returning nothing is allowed -- planes are fragmented without the
+        # cross-plane links -- but returning a path through a wall is not.
+        check(clean == routed, "EVERY returned path is walkable end to end",
+              f"{clean}/{routed}")
 
         pre = PathingMap.load(PRESEARING_FILE_ID, archive=ar, table=table)
         check(len(pre.planes) == PRESEARING_PLANES, "Pre-Searing plane count",

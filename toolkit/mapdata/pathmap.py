@@ -33,14 +33,46 @@ authoritative and the size field is not; anything that trusts it to skip forward
 desyncs on every map. GuildWarsMapBrowser itself is unaffected because its
 pattern indexes arrays by count and only displays the size.
 
-WHAT IS NOT DECODED. Portals, x/y BSP nodes, sink nodes and edge vectors are
-read as sized blocks and skipped. They are the pathfinding graph -- what you
-need to route AROUND an obstacle. Collision does not need them.
+THE ROUTING GRAPH WAS ALREADY IN THE PARSE. An earlier version of this file
+said portals and the node blocks "are the pathfinding graph -- what you need to
+route AROUND an obstacle", and skipped them. That was half wrong in a way worth
+recording: the intra-plane graph is not in those blocks at all. It is the four
+neighbour indices in every trapezoid record, which this file unpacked and threw
+away on the next line.
+
+  * MEASURED: 2,472 directed links in Kamadan and 12,478 in Pre-Searing, none
+    out of range, and **every one symmetric** -- if A names B, B names A. On the
+    stronger test that upstream's TL/TR/BL/BR naming predicts, a link across a
+    top edge is answered across a bottom edge, 14,950 of 14,950. Nothing in our
+    decoder forces that: the four indices in one 44-byte record are checked
+    against four indices in a different record.
+
+Portals (tag 9) carry the CROSS-plane structure and are now decoded too, with
+one field left over -- see the Portal class. The x/y BSP nodes and sink nodes
+are an acceleration structure for point-to-trapezoid lookup, which `containing()`
+already does by banding; they are still read as sized blocks and skipped, and
+nothing needs them.
+
+HOW MUCH OF A MAP route() ACTUALLY COVERS, stated up front because the honest
+number is not flattering. Intra-plane links alone leave Kamadan's 1,270
+trapezoids in **61 connected components**, the largest holding 17%; Pre-Searing
+is 91 components with the largest at 50%. Planes are stitched together by
+portals -- 38 plane pairs across Kamadan's 39 planes -- and pairing a portal's
+trapezoids with its neighbour's is the piece still missing. So route() answers
+well inside a region and returns None between regions. It never returns a path
+through a wall, which is the property the test pins.
+
+A geometric rule (link trapezoids that overlap in x and y across a portal)
+matches 90% of Kamadan's portal trapezoids and 81% of Pre-Searing's. That is
+suggestive, and it is NOT implemented, because it is our heuristic rather than
+something the file says -- and its failure mode is precisely the one below.
 
 THERE IS NO HEIGHT. Planes are not elevations in any units we can read; nothing
 in the file says what z a plane sits at, and GWToolbox fabricates one on load.
 walkable() therefore asks "walkable on ANY plane", which is right for flat
-ground and wrong under a bridge. Said plainly because it will matter later.
+ground and wrong under a bridge. Said plainly because it will matter later --
+and it is exactly why an (x, y) overlap rule for cross-plane links is dangerous:
+a bridge and the ground beneath it overlap perfectly.
 """
 
 import os
@@ -61,6 +93,7 @@ TERMINATOR = 255
 
 TRAPEZOID = struct.Struct("<4I2H6f")
 TRAPEZOID_SIZE = TRAPEZOID.size          # 44
+PORTAL_SIZE = 9
 
 PLANE_HEADER_FIELDS = ("polyData", "edgeVectors", "trapezoids", "xNodes",
                        "yNodes", "sinkNodes", "portals", "portalTraps")
@@ -77,17 +110,72 @@ PLANE_LAYOUT = ((0, None, None), (11, "polyData", 8), (1, "edgeVectors", 8),
 BAND = 256.0
 
 
+NO_NEIGHBOUR = 0xFFFFFFFF
+
+
+class Portal:
+    """A crossing between two planes.
+
+    Nine bytes, and three of the five fields are MEASURED rather than taken
+    from a source, because each one has a check the file can fail:
+
+      traps     u16   how many of this plane's trapezoids touch the crossing.
+                      Summed over a plane's portals this equals the plane's
+                      own portalTraps count -- 1,168 of 1,168 planes, zero
+                      exceptions, and the two numbers live in different records.
+      offset    u16   where this portal's run starts in the plane's portalTraps
+                      array. The [offset, offset+traps) slices PARTITION that
+                      array exactly -- every entry covered once, no overlap and
+                      no gap, on 396 of 396 planes that have portals. All 6,146
+                      indices so covered are valid trapezoids of their own plane.
+      neighbour u16   the plane on the other side. In range on 3,034 of 3,034
+                      portals, and the plane-to-plane relation is reciprocal
+                      764 of 764 times.
+      unknown   u16   NOT ESTABLISHED. It is always less than the map's total
+                      portal count, which makes "a global portal index" the
+                      obvious reading, and that reading is REFUTED: pairing
+                      through it is reciprocal 0 times out of 3,034, and every
+                      time the target's plane matches `neighbour` it is because
+                      the target is in the portal's own plane. Recorded so the
+                      idea is not retried.
+      flag      u8    zero on all 3,034 portals seen. No information.
+    """
+
+    __slots__ = ("plane", "index", "traps", "offset", "neighbour",
+                 "unknown", "flag")
+
+    def __init__(self, plane, index, traps, offset, neighbour, unknown, flag):
+        self.plane = plane
+        self.index = index
+        self.traps = traps
+        self.offset = offset
+        self.neighbour = neighbour
+        self.unknown = unknown
+        self.flag = flag
+
+    def __repr__(self):
+        return (f"<Portal p{self.plane}#{self.index} -> plane "
+                f"{self.neighbour}, {self.traps} trapezoid(s)>")
+
+
 class Trapezoid:
     """One walkable quad: a y span whose left and right edges are lines.
 
     Field names are the source's. The geometry is ours to check, and does.
+
+    `neighbours` is the plane-local index of the trapezoid across each edge, in
+    the source's order (top-left, top-right, bottom-left, bottom-right), with
+    NO_NEIGHBOUR for a wall. This is the routing graph; see the module header
+    for what makes it evidence rather than a field name.
     """
 
     __slots__ = ("plane", "index", "y_top", "y_bottom",
-                 "x_top_left", "x_top_right", "x_bottom_left", "x_bottom_right")
+                 "x_top_left", "x_top_right", "x_bottom_left", "x_bottom_right",
+                 "neighbours", "portal_left", "portal_right")
 
     def __init__(self, plane, index, y_top, y_bottom,
-                 x_top_left, x_top_right, x_bottom_left, x_bottom_right):
+                 x_top_left, x_top_right, x_bottom_left, x_bottom_right,
+                 neighbours=(), portal_left=0xFFFF, portal_right=0xFFFF):
         self.plane = plane
         self.index = index
         self.y_top = y_top
@@ -96,6 +184,16 @@ class Trapezoid:
         self.x_top_right = x_top_right
         self.x_bottom_left = x_bottom_left
         self.x_bottom_right = x_bottom_right
+        self.neighbours = neighbours
+        self.portal_left = portal_left
+        self.portal_right = portal_right
+
+    @property
+    def centre(self):
+        y = (self.y_top + self.y_bottom) * 0.5
+        x = (self.x_top_left + self.x_top_right
+             + self.x_bottom_left + self.x_bottom_right) * 0.25
+        return x, y
 
     def contains(self, x, y):
         if not (self.y_bottom <= y <= self.y_top):
@@ -114,15 +212,22 @@ class Trapezoid:
 class PathingMap:
     """Every trapezoid in one map, with a point test over them."""
 
-    def __init__(self, trapezoids, planes):
+    def __init__(self, trapezoids, planes, portals=None, portal_traps=None):
         self.trapezoids = trapezoids
         self.planes = planes
+        self.portals = portals or []
+        self.portal_traps = portal_traps or []
         self._bands = {}
         for t in trapezoids:
             lo = int(t.y_bottom // BAND)
             hi = int(t.y_top // BAND)
             for b in range(lo, hi + 1):
                 self._bands.setdefault(b, []).append(t)
+        # Plane-local indices are what the file stores; routing wants one flat
+        # space. `_base[p]` is where plane p's trapezoids start in self.trapezoids.
+        self._base = {}
+        for i, t in enumerate(trapezoids):
+            self._base.setdefault(t.plane, i)
 
     # -- queries ---------------------------------------------------------
 
@@ -188,6 +293,127 @@ class PathingMap:
             last = (px, py)
         return (x1, y1)
 
+    # -- routing ---------------------------------------------------------
+
+    def adjacent(self, t):
+        """The trapezoids reachable from `t` in one step, as flat indices."""
+        base = self._base[t.plane]
+        return [base + n for n in t.neighbours if n != NO_NEIGHBOUR]
+
+    def route(self, x0, y0, x1, y1):
+        """A walkable path from start to goal, or None if there is not one.
+
+        A* over the trapezoid adjacency graph, then a string-pulling pass that
+        drops any waypoint the previous one can already see. The result is a
+        list of points beginning at the start and ending at the goal; walking
+        it in straight segments never leaves the navmesh.
+
+        SAME PLANE ONLY, and it says None rather than guessing otherwise.
+        Crossing planes needs a rule for pairing a portal's trapezoids with its
+        neighbour's, and the field that would most obviously carry it is the one
+        the Portal class records as refuted. There is also no height in this
+        file, so a wrong cross-plane link would route a player through a bridge
+        rather than over it -- a silent, plausible-looking error of exactly the
+        kind this project refuses to ship.
+        """
+        starts = self.containing(x0, y0)
+        goals = self.containing(x1, y1)
+        if not starts or not goals:
+            return None
+        shared = {s.plane for s in starts} & {g.plane for g in goals}
+        if not shared:
+            return None
+        plane = next(iter(shared))
+        start = next(s for s in starts if s.plane == plane)
+        goal = next(g for g in goals if g.plane == plane)
+        if start is goal:
+            return [(x0, y0), (x1, y1)]
+
+        idx = {id(t): i for i, t in enumerate(self.trapezoids)}
+        si, gi = idx[id(start)], idx[id(goal)]
+        gx, gy = x1, y1
+
+        def h(i):
+            cx, cy = self.trapezoids[i].centre
+            return ((cx - gx) ** 2 + (cy - gy) ** 2) ** 0.5
+
+        open_q = [(h(si), si)]
+        came = {si: None}
+        best = {si: 0.0}
+        found = False
+        while open_q:
+            open_q.sort(reverse=True)
+            _f, cur = open_q.pop()
+            if cur == gi:
+                found = True
+                break
+            cx, cy = self.trapezoids[cur].centre
+            for nxt in self.adjacent(self.trapezoids[cur]):
+                nx, ny = self.trapezoids[nxt].centre
+                step = ((nx - cx) ** 2 + (ny - cy) ** 2) ** 0.5
+                g = best[cur] + step
+                if g < best.get(nxt, float("inf")):
+                    best[nxt] = g
+                    came[nxt] = cur
+                    open_q.append((g + h(nxt), nxt))
+        if not found:
+            return None
+
+        chain = []
+        cur = gi
+        while cur is not None:
+            chain.append(cur)
+            cur = came[cur]
+        chain.reverse()
+
+        # Waypoints are the SHARED EDGES, not the centres. Two adjacent
+        # trapezoids are both walkable, but the straight line between their
+        # centres can leave the mesh when either is long and oblique -- which
+        # it does in practice, and produced a path with an unwalkable segment
+        # before this was fixed. A point on the edge they share is inside both
+        # by construction.
+        pts = [(x0, y0)]
+        for a, b in zip(chain, chain[1:]):
+            pts.append(self._shared_edge(self.trapezoids[a],
+                                         self.trapezoids[b]))
+        pts.append((x1, y1))
+        return self._string_pull(pts)
+
+    def _shared_edge(self, a, b):
+        """A point on the edge `a` and `b` share, inside both."""
+        slot = next((k for k, n in enumerate(a.neighbours)
+                     if n == b.index), None)
+        if slot is None or slot < 2:
+            y = a.y_top
+            lo_a, hi_a = a.x_top_left, a.x_top_right
+            lo_b, hi_b = b.x_bottom_left, b.x_bottom_right
+        else:
+            y = a.y_bottom
+            lo_a, hi_a = a.x_bottom_left, a.x_bottom_right
+            lo_b, hi_b = b.x_top_left, b.x_top_right
+        lo, hi = max(lo_a, lo_b), min(hi_a, hi_b)
+        if lo > hi:                       # no overlap: stay on a's own edge
+            lo, hi = lo_a, hi_a
+        return ((lo + hi) * 0.5, y)
+
+    def _string_pull(self, pts):
+        """Drop waypoints that the previous kept point can already reach.
+
+        Uses the same sampling clip() does, so a segment survives only if every
+        sample along it is walkable.
+        """
+        out = [pts[0]]
+        i = 0
+        while i < len(pts) - 1:
+            j = len(pts) - 1
+            while j > i + 1:
+                if self.clip(*out[-1], *pts[j]) == pts[j]:
+                    break
+                j -= 1
+            out.append(pts[j])
+            i = j
+        return out
+
     # -- loading ---------------------------------------------------------
 
     @classmethod
@@ -216,7 +442,7 @@ class PathingMap:
         pay = memoryview(blob)[off:off + size]
         count, = struct.unpack_from("<I", pay, 0)
 
-        trapezoids, planes, p = [], [], 4
+        trapezoids, planes, portals, portal_traps, p = [], [], [], [], 4
         for pi in range(count):
             header = None
             for want, field, esz in PLANE_LAYOUT:
@@ -239,16 +465,31 @@ class PathingMap:
                     length = header[field] * esz
                 if want == 2:
                     for i in range(header["trapezoids"]):
-                        (_ntl, _ntr, _nbl, _nbr, _pl, _pr,
+                        (ntl, ntr, nbl, nbr, pl, pr,
                          yt, yb, xtl, xtr, xbl, xbr) = \
                             TRAPEZOID.unpack_from(pay, body + TRAPEZOID_SIZE * i)
                         trapezoids.append(
-                            Trapezoid(pi, i, yt, yb, xtl, xtr, xbl, xbr))
+                            Trapezoid(pi, i, yt, yb, xtl, xtr, xbl, xbr,
+                                      (ntl, ntr, nbl, nbr), pl, pr))
+                elif want == 10 and header["portalTraps"]:
+                    portal_traps.append(list(struct.unpack_from(
+                        f"<{header['portalTraps']}I", pay, body)))
+                elif want == 10:
+                    portal_traps.append([])
+                elif want == 9:
+                    row = []
+                    for i in range(header["portals"]):
+                        o = body + PORTAL_SIZE * i
+                        traps, offset, neigh, unknown = \
+                            struct.unpack_from("<4H", pay, o)
+                        row.append(Portal(pi, i, traps, offset, neigh,
+                                          unknown, pay[o + 8]))
+                    portals.append(row)
                 p = body + length
             planes.append(header)
         if p != len(pay):
             raise ValueError(f"plane walk ended at {p} of {len(pay)} bytes")
-        return cls(trapezoids, planes)
+        return cls(trapezoids, planes, portals, portal_traps)
 
     @classmethod
     def load(cls, map_file_id, archive=None, table=None):
