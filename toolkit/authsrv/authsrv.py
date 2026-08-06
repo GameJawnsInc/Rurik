@@ -398,13 +398,35 @@ MAP_STATIC_CONFIG = {
     # PREDICTION: the raw stored id loads where the masked one did not. If it
     # also fails, the bit is not the difference and Pre-Searing needs something
     # neither session has found; revert 148 and the map falls back to Kamadan.
-    148: (0x8001B97D, (9826.0, 8077.0), 0),  # Ascalon City, Pre-Searing
-    449: (0x345CC, (-9067.0, 13218.0), 0),   # Kamadan, Jewel of Istan (outpost)
-    194: (0x265F7, (0.0, 0.0), 0),           # Kaineng Center (outpost)
-    55:  (352808, (0.0, 0.0), 0),            # Lion's Arch (outpost)
-    474: (219215, (0.0, 0.0), 0),            # Domain of Anguish
-    558: (287493, (0.0, 0.0), 0),            # Sparkfly Swamp
-    90:  (46594, (0.0, 0.0), 0),             # Lornar's Pass
+    148: (0x8001B97D, (9826.0, 8077.0), 0, False),  # Ascalon City, Pre-Searing
+    # Lakeside County -- the same region FILE as Ascalon City. Row 7982 covers
+    # the whole Pre-Searing region (studies/mapdata/FORMAT.md calls it that),
+    # which is why three map ids share one file and why its extent runs
+    # x -18432..21504 against Kamadan's much smaller box.
+    #
+    # WE DO NOT KNOW WHERE LAKESIDE'S SPAWN IS, and this line says so rather
+    # than pretending. gw-preservation records no spawn point for 146. Ashford
+    # Abbey's (map 164) was tried first and rejected on the owner's correction:
+    # Ashford is its own OUTPOST, so its coordinate is a point inside a
+    # different instance, not a spot in Lakeside.
+    #
+    # What is used instead is Ascalon City's coordinate -- MEASURED walkable on
+    # plane 0 of this same file, and honest about what it is: a known-good point
+    # in the shared region, not Lakeside's real arrival point. Pre-Searing is one
+    # continuous terrain, so if this lands inside the city walls the fix is to
+    # walk out rather than to guess again.
+    #
+    # Explorable is the reason for coming here at all, and it is the CLIENT's
+    # own answer rather than a borrowed flag: AreaInfo type is 2 for maps 145,
+    # 146 and 147 and 10 for 148 and 164, which lines up exactly with
+    # gw-preservation's Explorable column. See toolkit/clientscan/areatable.py.
+    146: (0x8001B97D, (9826.0, 8077.0), 0, True),   # Lakeside County
+    449: (0x345CC, (-9067.0, 13218.0), 0, False),   # Kamadan (outpost)
+    194: (0x265F7, (0.0, 0.0), 0, False),           # Kaineng Center (outpost)
+    55:  (352808, (0.0, 0.0), 0, False),            # Lion's Arch (outpost)
+    474: (219215, (0.0, 0.0), 0, True),             # Domain of Anguish
+    558: (287493, (0.0, 0.0), 0, True),             # Sparkfly Swamp
+    90:  (46594, (0.0, 0.0), 0, True),              # Lornar's Pass
 }
 # The fallback for maps we have no entry for. It used to catch map 148 as well,
 # which meant the character stood in Kamadan's geometry under Ascalon City's
@@ -412,6 +434,21 @@ MAP_STATIC_CONFIG = {
 # file id could not be recovered. It can now, so 148 is a real entry above and
 # this is back to being what it says it is: a substitute for the unknown.
 FALLBACK_MAP_ID = 449
+
+
+def map_explorable(map_id):
+    """Is this map a field rather than a town?
+
+    Guild Wars forbids attacking in a town, so this decides whether combat is
+    possible at all. CLIENT-DATA: AreaInfo's type field is 2 for the Pre-Searing
+    explorables (145, 146, 147) and 10 for its outposts (148, 164), which is the
+    client's own answer and agrees exactly with gw-preservation's Explorable
+    column. Maps we have not configured default to False, because a town is the
+    safer wrong answer -- it fails to allow combat rather than allowing it
+    somewhere the client will not.
+    """
+    cfg = MAP_STATIC_CONFIG.get(map_id)
+    return bool(cfg[3]) if cfg and len(cfg) > 3 else False
 
 # Parsed navmeshes, keyed by map_file_id. Loading one costs about a second,
 # nearly all of it decompressing the map out of the archive, so it is worth
@@ -643,6 +680,11 @@ PROBE_NAME = None
 # town. See the INSTANCE_LOAD_INFO send site for why it is worth a flag.
 EXPLORABLE = False
 
+# Send the client somewhere other than the map it asked for. The character
+# record names 148, so without this every session lands in Ascalon City. A
+# server overriding the destination is not a hack -- it is what map travel is.
+MAP_OVERRIDE = None
+
 # Whether the world contains anything besides the player. On by default: an
 # enemy standing in the map is the point of the exercise, and every packet it
 # takes is proven (studies/enemy/PLAN.md). --no-enemy gives back an empty world
@@ -753,6 +795,31 @@ def revive_due(send, state, conn_id):
               flush=True)
 
 
+def enemy_spot(state, ox, oy):
+    """Somewhere near the player that the navmesh agrees is ground.
+
+    The offset used to be a fixed 300 east, which was fine in Kamadan and is
+    not fine anywhere else -- MEASURED on the Pre-Searing region, +300 east of
+    one candidate spawn is off the mesh entirely. A body placed off-mesh is
+    worse than a body in an odd spot: it is standing somewhere the server's own
+    collision says does not exist, so everything downstream reasons about it
+    wrongly.
+
+    Falls back to the plain offset when there is no navmesh at all, which is a
+    normal outcome -- the archive is the player's own install and is not
+    required to be present.
+    """
+    pm = state.get("pathmap")
+    if pm is None:
+        return ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
+    d = ENEMY_OFFSET[0]
+    for dx, dy in ((d, 0), (0, d), (-d, 0), (0, -d),
+                   (d, d), (-d, d), (d, -d), (-d, -d)):
+        if pm.walkable(ox + dx, oy + dy):
+            return ox + dx, oy + dy
+    return ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
+
+
 def spawn_enemy(send, state, origin, conn_id):
     """Put one hostile body in the map, using only packets we have proven.
 
@@ -767,7 +834,7 @@ def spawn_enemy(send, state, origin, conn_id):
     type was never defined crashes it outright. OBSERVED.
     """
     ox, oy, plane = origin
-    x, y = ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
+    x, y = enemy_spot(state, ox, oy)
 
     send(GAME_SMSG_NPC_UPDATE_PROPERTIES,
          agents.npc_properties(ENEMY_DEFINITION, agents.HATCHER),
@@ -1071,6 +1138,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         s2c = ARC4(derived)
         state = {}
         if kind == "game":
+            if MAP_OVERRIDE is not None and MAP_OVERRIDE != map_id:
+                print(f"[c{conn_id}] client asked for map {map_id}; "
+                      f"sending it to {MAP_OVERRIDE} instead", flush=True)
+                map_id = MAP_OVERRIDE
             state["map_id"] = map_id
             state["world_id"] = world_id
             state["player_id"] = player_id
@@ -1126,7 +1197,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
                  [1,          # agent_id -- the player's own agent, 1 for the first
                   map_id,     # echoed from the version frame, not guessed
-                  1 if EXPLORABLE else 0,
+                  # The map's own kind, not a global switch. The client's
+                  # AreaInfo type says which is which -- 2 explorable, 10
+                  # outpost -- and MAP_STATIC_CONFIG carries that per map.
+                  # --explorable still forces it on for maps we have not
+                  # configured, which is what it was added for.
+                  1 if (EXPLORABLE or map_explorable(state["map_id"])) else 0,
                   0,          # district
                   0,          # language
                   0],         # is_observer
@@ -1870,7 +1946,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             print(f"[c{conn_id}] no static config for map "
                                   f"{state['map_id']}; substituting map "
                                   f"{FALLBACK_MAP_ID} geometry", flush=True)
-                        file_id, pos, plane = cfg
+                        file_id, pos, plane = cfg[0], cfg[1], cfg[2]
                         send(GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT,
                              [file_id, pos, plane, 0, 0, b"\x00" * 8],
                              f"INSTANCE_LOAD_SPAWN_POINT(file {file_id})")
@@ -2059,6 +2135,11 @@ def main():
                          "and report which attempt numbers behaved; that "
                          "identifies the fields from the client instead of from "
                          "two sources that contradict each other.")
+    ap.add_argument("--map", type=int, metavar="ID",
+                    help="Put the character in this map instead of the one its "
+                         "character record asks for. 146 is Lakeside County, "
+                         "which is explorable and therefore the first place "
+                         "combat can be tested; 148 is Ascalon City.")
     ap.add_argument("--no-enemy", action="store_true",
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
@@ -2102,6 +2183,15 @@ def main():
         print("Click the SAME spot each time -- a wall to walk through, or the")
         print("staircase -- and note which attempts behaved. The cycle repeats.")
         print()
+
+    if a.map is not None:
+        global MAP_OVERRIDE
+        MAP_OVERRIDE = a.map
+        known = MAP_STATIC_CONFIG.get(a.map)
+        print(f"MAP OVERRIDE: {a.map}"
+              + (f", explorable={bool(known[3])}" if known
+                 else " -- NOT in MAP_STATIC_CONFIG, so geometry falls back "
+                    f"to map {FALLBACK_MAP_ID} and it will not be explorable"))
 
     if a.no_enemy:
         global SPAWN_ENEMY
