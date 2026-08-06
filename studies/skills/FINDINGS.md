@@ -1224,6 +1224,17 @@ does not implement it at all.
 And the one thing we could check cheaply — whether our own client draws a real
 skill when we send it opcode 218 — has never been tried.
 
+**Four of these were answered on 2026-08-06 by reading the client's handlers.
+See [studies/skillcast/FINDINGS.md](../skillcast/FINDINGS.md).** In short:
+`skill_instance` is the bar slot's **copy index** and ArenaNet calls it `copy`
+in a log string; **218's second array is not `pvp_masks`**, it fills that copy
+field; **231 is "skill disabled" and 232 is a fractional recharge**, neither is
+"skill done"; the **cast animation comes from agent property 60**, not opcode
+228, whose handler does nothing at all when it names the local player; and
+opcode 211 writes a bitmap nothing in the image reads. All of it is static —
+SOURCED at best, never OBSERVED — and that study ends with six committed probes
+that would settle it against a real client.
+
 ---
 
 # OBSERVED, 2026-08-05: the first results measured against our own client

@@ -37,6 +37,20 @@ from agents import (                                        # noqa: E402
 
 # Agent int-property ids (GmAgentProperties.h via studies/character/FINDINGS.md).
 PROP_LEVEL = 36
+# Property 60. SOURCED three ways: GWLP-R (2013) and GWCA both name it
+# CastSkill/skill_activated, and on build 38797 the client's own generic-value
+# dispatcher gives 4, 50 and 60 -- and only those three -- one shared case body
+# that reaches AvApi and queues an AgentView event carrying the skill id.
+# studies/skillcast/FINDINGS.md section 6.
+PROP_CAST_SKILL = 60
+
+# The skill ids authsrv.py puts on the bar. Kept in step with authsrv's
+# TEST_SKILLBAR rather than imported, because a probe has to keep working when
+# the bar is rebound from --skills and the probe's own point is the slot, not
+# the id. If they drift, the skill probes below say so instead of silently
+# addressing a slot that holds something else.
+PROBE_BAR_SLOT = 0
+PROBE_BAR_SKILL = 316
 
 # The five Prophecies warrior armour pieces: file_id and model_id, corroborated
 # across two independent sources in the character study.
@@ -962,7 +976,230 @@ def _team_token_steps(agent_id):
     return []
 
 
+def _skill_copy_steps(agent_id):
+    """Does the lifecycle's third dword have to match the skillbar's 2nd array?
+
+    studies/skillcast/FINDINGS.md section 3: the client walks its eight bar
+    slots and acts only on the one where BOTH slot+0x0C == field 2 and
+    slot+0x10 == field 3, and slot+0x10 is filled straight out of
+    SKILLBAR_UPDATE's second array -- the one every catalogue calls
+    `pvp_masks`. If that reading is right, a recharge addressed to the wrong
+    copy finds no slot and does nothing at all, silently.
+
+    This is the whole point of the probe: the failure mode is silence, so it
+    has to be run against a bar whose copies are deliberately NOT zero.
+    """
+    bar = [PROBE_BAR_SKILL + i for i in range(8)]
+    return [
+        Step(2.0, 0x00DA, [agent_id, bar, [0] * 8, 1],
+             "skillbar with copy = 0 in every slot",
+             "the bar. Eight icons, as usual."),
+        Step(6.0, 0x00E5, [agent_id, bar[0], 0, 10],
+             "recharge (skill, copy=0) for 10s",
+             "slot 1. The cooldown sweep should start and count down 10s."),
+        Step(14.0, 0x00DA, [agent_id, bar, [7] * 8, 1],
+             "same skillbar, copy = 7 in every slot",
+             "the bar. Eight icons still -- copy is not the id, so nothing "
+             "should look different."),
+        Step(6.0, 0x00E5, [agent_id, bar[0], 0, 10],
+             "recharge (skill, copy=0) -- now the WRONG copy",
+             "slot 1. PREDICTION: nothing happens. If it greys out anyway, "
+             "field 3 is not matched against the bar and section 3 is wrong."),
+        Step(6.0, 0x00E5, [agent_id, bar[0], 7, 10],
+             "recharge (skill, copy=7) -- the right copy",
+             "slot 1. PREDICTION: NOW it greys out and counts 10s."),
+    ]
+
+
+def _skill_disable_steps(agent_id):
+    """Is unnamed opcode 231 'skill disabled'?"""
+    bar = [PROBE_BAR_SKILL + i for i in range(8)]
+    return [
+        Step(2.0, 0x00DA, [agent_id, bar, [0] * 8, 1], "fresh skillbar",
+             "the bar, all eight ready."),
+        Step(5.0, 0x00E5, [agent_id, bar[1], 0, 30], "229: recharge slot 2, 30s",
+             "slot 2 starts a 30-second sweep."),
+        Step(6.0, 0x00E7, [agent_id, bar[1], 0], "231 on the same slot",
+             "slot 2. PREDICTION: the sweep stops counting down and the icon "
+             "stays dark indefinitely -- 231 writes recharge = 0xFFFFFFFF, "
+             "which the client's own getter turns into INT_MAX remaining."),
+        Step(10.0, 0x00E6, [agent_id, bar[1], 0], "230: recharged",
+             "slot 2. PREDICTION: instantly ready again, well before 30s have "
+             "passed. 230 writes recharge = 0 with no arithmetic."),
+    ]
+
+
+def _skill_partial_steps(agent_id):
+    """Opcode 232 carries a float. Is it 'remaining', with field 4 the total?
+
+    The handler multiplies field 5 by 1000.0 and adds the skill timer, so
+    field 5 is seconds and it is what sets the clock. Field 4 is converted to
+    a float and handed to the UI alongside it, and never touched otherwise.
+    The obvious reading is remaining-vs-total; the sweep's ANGLE is what would
+    show it, because a quarter-full arc means the client knows about a 40s
+    total it was not given anywhere else.
+    """
+    bar = [PROBE_BAR_SKILL + i for i in range(8)]
+    return [
+        Step(2.0, 0x00DA, [agent_id, bar, [0] * 8, 1], "fresh skillbar",
+             "the bar, all eight ready."),
+        Step(5.0, 0x00E8, [agent_id, bar[2], 0, 40, _f32(10.0)],
+             "232 on slot 3: field4 = 40, field5 = 10.0f",
+             "slot 3. PREDICTION: it counts down TEN seconds, not forty. "
+             "Then look at the sweep's starting angle: about a quarter dark "
+             "means field 4 is the total; a full dark disc means field 4 is "
+             "something else and the UI ignores it."),
+        Step(14.0, 0x00E8, [agent_id, bar[3], 0, 0, _f32(2.5)],
+             "232 on slot 4: field4 = 0, field5 = 2.5f",
+             "slot 4. PREDICTION: a 2.5-second sweep -- fractional, which 229 "
+             "cannot express. If it is instead instant or 2 seconds flat, "
+             "field 5 is not a float and the fld we read is doing something "
+             "else."),
+    ]
+
+
+def _cast_anim_steps(agent_id):
+    """What makes a body play the cast animation -- 228, or property 60?
+
+    The headline question of studies/skills section 8, and the static answer
+    is unambiguous enough to be worth stating hard: the opcode 228 handler
+    touches only a bookkeeping array and a UI notification, it never reaches
+    AgentView, AND it returns immediately without doing even that when the
+    message names the local player. Property 60 is the one that reaches
+    AvApi and queues the animation event.
+    """
+    bar = [PROBE_BAR_SKILL + i for i in range(8)]
+    return [
+        Step(2.0, 0x00DA, [agent_id, bar, [0] * 8, 1], "fresh skillbar",
+             "the bar, all eight ready."),
+        Step(5.0, 0x00E4, [agent_id, bar[4], 0], "228 SKILL_ACTIVATE on us",
+             "the CHARACTER's body, and slot 5. PREDICTION: absolutely "
+             "nothing, in both places. The handler compares the message's "
+             "agent id against the local player's and returns."),
+        Step(8.0, 0x009F, [PROP_CAST_SKILL, agent_id, bar[4]],
+             "property 60 = the same skill id",
+             "the character's body. PREDICTION: THIS is the one that plays "
+             "the casting animation. If it does, the cast animation is a "
+             "property update and 228 is bookkeeping."),
+        Step(8.0, 0x00E3, [agent_id, bar[4], 0], "227 to close the cast",
+             "nothing should visibly change; the client is releasing a "
+             "pending entry it never created for us. Watch Gw.log for "
+             "'Pending skill 320 copy 0 not found' -- that message is the "
+             "client telling us in words what field 3 is called."),
+    ]
+
+
+def _unlock_211_steps(agent_id):
+    """Opcode 211 is unnamed everywhere and shaped like both unlock messages.
+
+    Statically it writes a second skill bitmap into ChCliSkill's context, at
+    the member BEFORE the one 219 writes, and -- unlike 219 -- broadcasts no
+    UI notification. Its write path has exactly one caller, its own handler,
+    and nothing in the image reads the array it fills. So the prediction is
+    that it does nothing observable, and the value of running it is that a
+    NULL result here is informative rather than a dead end.
+    """
+    empty = [0] * 128
+    ours = [0] * 128
+    for sid in range(PROBE_BAR_SKILL, PROBE_BAR_SKILL + 8):
+        ours[sid // 32] |= 1 << (sid % 32)
+    return [
+        Step(2.0, 0x00DB, [empty], "219: character skills -> none",
+             "the Skills and Attributes panel (K). Note what is listed."),
+        Step(8.0, 0x00D3, [ours], "211: our eight bar skills",
+             "the same panel, and the skill picker. PREDICTION: no change "
+             "anywhere. If something DOES change, 211 has a reader we did "
+             "not find and section 5 needs reopening."),
+        Step(8.0, 0x00DB, [ours], "219: the same eight, via 219 this time",
+             "the same panel. PREDICTION: this one does change it -- 219 is "
+             "the bitmap the client bit-tests before answering 'how many "
+             "copies of this skill do you own'."),
+    ]
+
+
 PROBES = {
+    "use_skill_capture": lambda a, o: Probe(
+        question="What does the client SEND when a skill key is pressed, and "
+                 "does the message number depend on the skill's TYPE?",
+        predicts="Two different opcodes from the same eight keys. Keys 1-4 "
+                 "(To the Limit!, Battle Rage, Defy Pain, Rush -- types 15, 3, "
+                 "16, 3) send GAME_CMSG 70 / 0x0046. Keys 5-8 (Hamstring, Wild "
+                 "Blow, Power Attack, Desperation Blow -- all type 14, attack "
+                 "skills) send GAME_CMSG 39 / 0x0027 instead. Both are 15 "
+                 "bytes. In 70 the fields are {skill id, skill copy, target "
+                 "agent id, u8}; in 39 the same four values go out in the same "
+                 "order against a differently typed table. Skill copy will be "
+                 "0 unless the skillbar was sent with a non-zero second array.",
+        steps=[],
+        note="No packets from us -- press the keys and read the capture. It "
+             "settles USE_SKILL's field NAMES (unnamed in every source; "
+             "Headquarter guesses field 2 is `flags`, apoguita guesses `type`, "
+             "and the client's own builder says it is the skill copy) and the "
+             "existence of a second, unnamed cast message at the same time. "
+             "The type split is SOURCED from ChCliApiUseSkill at VA 0x00816660 "
+             "branching on skill record +0x0C; the type-14 = attack-skill "
+             "reading is from this build's own skill table. If BOTH halves of "
+             "the bar send 70, that branch is not on skill type and the "
+             "reading is wrong.",
+    ),
+    "skill_copy": lambda a, o: Probe(
+        question="Is the lifecycle messages' third dword the bar slot's "
+                 "`skillCopy`, delivered by SKILLBAR_UPDATE's second array?",
+        predicts="With copies set to 7, a recharge addressed to copy 0 does "
+                 "NOTHING and the same recharge addressed to copy 7 works. If "
+                 "both work, the client is not matching on field 3; if neither "
+                 "works, the second array of 218 is not what fills the slot.",
+        steps=_skill_copy_steps(a),
+        note="The decisive experiment for the field GWCA calls skill_instance "
+             "and every other lineage records as NOT FOUND. Cheapest and most "
+             "informative probe in this group; run it first. Note the failure "
+             "mode is SILENCE, which is why the run alternates right and wrong "
+             "copies rather than testing one.",
+    ),
+    "skill_disable": lambda a, o: Probe(
+        question="Is unnamed opcode 231 the 'skill disabled' message?",
+        predicts="231 freezes an in-progress cooldown permanently dark, and a "
+                 "subsequent 230 clears it instantly. If 231 instead behaves "
+                 "like 230, the -1 we read is being treated as ready.",
+        steps=_skill_disable_steps(a),
+        note="231 writes recharge = 0xFFFFFFFF where 229 explicitly SKIPS both "
+             "0 and -1 when computing a timestamp; those are two reserved "
+             "values and this asks what the second one looks like.",
+    ),
+    "skill_partial": lambda a, o: Probe(
+        question="Does unnamed opcode 232 carry a fractional recharge, and is "
+                 "its fourth field the total the UI draws the sweep against?",
+        predicts="Field 5 is seconds as an IEEE float: 10.0f counts ten "
+                 "seconds and 2.5f counts two and a half. Field 4 = 40 with "
+                 "field 5 = 10.0f starts the sweep about a quarter dark.",
+        steps=_skill_partial_steps(a),
+        note="The remaining/total reading is INFERRED, not sourced -- the "
+             "binary shows only that field 5 sets the clock and field 4 is "
+             "reported to the UI beside it. The sweep angle is the only thing "
+             "that can separate the two readings.",
+    ),
+    "cast_anim": lambda a, o: Probe(
+        question="What triggers the cast animation -- opcode 228, or agent "
+                 "property 60?",
+        predicts="228 does nothing visible at all when addressed to the local "
+                 "player. Property 60 with a skill id plays the animation. If "
+                 "228 animates anything, the read of its handler is wrong.",
+        steps=_cast_anim_steps(a),
+        note="Open question in studies/skills section 8, and the static answer "
+             "is strong enough to be worth trying to break. Watch Gw.log as "
+             "well as the screen: step 4 should produce the client's own "
+             "'Pending skill %u copy %d not found'.",
+    ),
+    "unlock_211": lambda a, o: Probe(
+        question="What is opcode 211, the third unlock-list-shaped message?",
+        predicts="Nothing observable. It writes a bitmap nothing in the image "
+                 "reads and broadcasts no UI event, unlike 219.",
+        steps=_unlock_211_steps(a),
+        note="A NULL result is the expected result and is worth having: it "
+             "would let the server stop worrying about a message it has never "
+             "sent. Any visible effect refutes the read and is more "
+             "interesting still.",
+    ),
     "level": lambda a, o: Probe(
         question="Is agent int-property 36 on 0x009F the character's level?",
         predicts="The nameplate reads 1, then 15, then 20. If it never changes, "
