@@ -1079,15 +1079,54 @@ that were undecodable now decode. The old test asserted nested messages were
 nested message at all — so it is replaced by a round-trip that pins the count
 byte to a computed offset.
 
-**`0x00E3 SKILL_ACTIVATED` disagrees with our schema and works by coincidence.**
-Recovered from the runtime initializers: the binary is `dword, agent_id, word`;
-we carry `agent_id, word, dword`. Both total 12 bytes, and our
-`(agent, skill, copy=0)` happens to serialise to the same ten bytes the client
-reads. **It breaks the first time `copy` is nonzero, silently.** Worth an entry
-in `schema/overrides.json`.
+**~~`0x00E3 SKILL_ACTIVATED` disagrees with our schema and works by
+coincidence.~~ RETRACTED 2026-08-06 — it agrees, and the disagreement was a
+misreading of our own tool's output.** The claim was that the binary is
+`dword, agent_id, word` against our `agent_id, word, dword`, that the two
+coincide only while `copy` is 0, and that it "breaks the first time `copy` is
+nonzero, silently". None of that is true. The client's descriptor is
+`cmds ['0xe3', '0x10', '0x204', '0x404']`, which decodes to
+**`agent_id(4), word(2), dword(4)`** — field for field what we carry. The last
+two cmds were read in the wrong order.
 
-This also contradicts the msgtable study's claim that *"zero messages agree on
-total size but disagree on decomposition"* — `0x00E3` does exactly that.
+MEASURED, and the check is deliberately wider than the one opcode so a broken
+comparator would show up as disagreement everywhere rather than agreement here:
+**all 477 GAME_SMSG messages the client registers agree field-for-field with
+`schema/messages.json` + `overrides.json` on build 38797. Zero disagreements.**
+`0x00E2`, `0x00E4` and `0x00E5` agree too.
+
+Two things made the misreading easy, and both are now closed:
+
+- **`msgshape.py` printed types 0 and 1 both as `dword`.** They are 4 bytes
+  either way so nothing was ever misframed, but it discarded the only two
+  semantic tags the client's descriptors carry, and `[dword, u16, u32]` is
+  exactly the output a reader reconstructs "dword, agent_id, word" from. It now
+  prints `agent_id` and `float`, so its output is directly comparable to the
+  catalog. The mapping is `studies/msgtable`'s inference, cited at the
+  definition: 127 type-0 fields against 127 `agent_id` fields across the 748
+  shared messages, and type 1 appearing 4 times only inside the agent-position
+  messages we type as `float`. Restricted to GAME_SMSG the correlation is
+  **90/90 type-0 ↔ `agent_id` and 4/4 type-1 ↔ `float`, no exceptions.**
+- **No `overrides.json` entry was needed and none was written.** Adding one, or
+  "fixing" the call site to match the retracted layout, would have broken a
+  working code path — `authsrv.py`'s `SKILL_ACTIVATED` echo is correct as it
+  stands.
+
+So the msgtable study's *"zero messages agree on total size but disagree on
+decomposition"* stands; this section previously claimed it had found the
+counter-example and it had not.
+
+```bash
+python toolkit/clientscan/msgshape.py 0x00E3
+```
+
+**The lesson is the one this repo keeps relearning from the other direction.**
+Every prior trap here was the binary being harder to read than it looked
+(zeroed `cmds` arrays, the `0xFF` opcode mask). This one was a *rendering* that
+was easier to read than it should have been: the output was correct and
+lossy, and lossy output invites the reader to supply the missing half from
+memory. A tool that prints less than it knows is a tool that will eventually be
+quoted as saying something it did not.
 
 **A trap for anyone re-deriving field layouts:** most `cmds[]` arrays read as all
 zeros in the file and are filled in at runtime by initializers that **copy from a

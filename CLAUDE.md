@@ -61,6 +61,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   ```
 
   Others: `toolkit/schema/test_codec.py` (codec vs. real captured bytes),
+  `toolkit/schema/test_catalog.py` (our message catalog vs. the client's own
+  format tables — 477/477 GAME_SMSG agree field-for-field on build 38797),
   `toolkit/harness/test_harness.py` (the one-command stack, the launch safety
   gate, the live capture tail),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
