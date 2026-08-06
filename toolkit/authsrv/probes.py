@@ -1117,7 +1117,98 @@ def _unlock_211_steps(agent_id):
     ]
 
 
+def _buff_type_steps(agent_id):
+    """Opcode 66 field 3: Headquarter's `effect_type` or GWCA's `attribute_level`?
+
+    studies/skillcast section 14: the client stores field 3 at buff record
+    +0x04 and does not interpret it in ChCliBuff at all, so static analysis
+    runs out here. The two readings predict visibly different things, which is
+    what makes this worth a probe rather than an argument.
+
+    KEEP buffId SMALL. GmEffect:3030 asserts
+    `buffId < (CTL_EFFECT_UPKEEP_TERM - CTL_EFFECT_UPKEEP_FIRST)` -- the id
+    indexes a UI frame-code range, so a large one asserts in the client the way
+    an out-of-range unlock bit does.
+    """
+    skill = PROBE_BAR_SKILL
+    return [
+        Step(2.0, 0x0042, [agent_id, skill, 0, 1, _f32(30.0)],
+             "66: field3 = 0 (Headquarter: condition/shout)",
+             "the effect area above the skill bar. Note WHERE the icon "
+             "appears and what its tooltip says."),
+        Step(7.0, 0x0044, [agent_id, 1], "68: remove it", "the icon goes."),
+        Step(4.0, 0x0042, [agent_id, skill, 14, 2, _f32(30.0)],
+             "66: field3 = 14 (Headquarter: enchantment)",
+             "PREDICTION A (effect_type): the icon lands in a DIFFERENT "
+             "place or draws a different border from the first one. "
+             "PREDICTION B (attribute_level): it looks identical and only "
+             "the numbers in the tooltip change."),
+        Step(7.0, 0x0044, [agent_id, 2], "68: remove it", "the icon goes."),
+        Step(4.0, 0x0042, [agent_id, skill, 12, 3, _f32(30.0)],
+             "66: field3 = 12 (a plausible attribute rank, not a "
+             "Headquarter type code)",
+             "if 12 renders as happily as 0 and 14 did, the field is not a "
+             "four-value enum and Headquarter's effect_type reading is in "
+             "trouble."),
+        Step(7.0, 0x0044, [agent_id, 3], "68: remove it", "clean up."),
+    ]
+
+
+def _buff_side_steps(agent_id):
+    """Do 63 and 65 file the same buff under two different agents?
+
+    The client keeps TWO lists per agent -- a source list at BuffState+0x04
+    and a target list at +0x14 -- and 63/64 touch the first while 65/66/67/68
+    touch the second. A maintained enchantment should therefore need BOTH 63
+    and 65 with the same buffId: one to say 'you are maintaining this' and one
+    to say 'this is on them'.
+    """
+    skill = PROBE_BAR_SKILL
+    return [
+        Step(2.0, 0x0041, [agent_id, agent_id, skill, 0, 4],
+             "65 BuffTargetAdd: source and target both us",
+             "the effect area. An icon with NO countdown -- opcode 65 stores "
+             "duration 0.0f, so it should sit there indefinitely."),
+        Step(8.0, 0x003F, [agent_id, agent_id, skill, 0, 4],
+             "63 BuffSourceAdd: the same buffId, the source side",
+             "PREDICTION: a SECOND indicator appears, in the maintained-"
+             "enchantment upkeep row rather than the effects row. If nothing "
+             "changes, the two lists do not both drive UI and section 14's "
+             "source/target split matters less than it looks."),
+        Step(8.0, 0x0040, [agent_id, 4], "64 BuffSourceRemove",
+             "PREDICTION: the upkeep indicator goes and the effect icon "
+             "stays -- they are separate records keyed by the same buffId."),
+        Step(6.0, 0x0044, [agent_id, 4], "68 BuffTargetRemove",
+             "now the effect icon goes too."),
+    ]
+
+
 PROBES = {
+    "buff_type_field": lambda a, o: Probe(
+        question="Is opcode 66's third field Headquarter's `effect_type` or "
+                 "GWCA's `attribute_level`?",
+        predicts="If effect_type, 0 and 14 render as visibly different KINDS "
+                 "of effect and an out-of-enum 12 misbehaves. If "
+                 "attribute_level, all three render identically and only the "
+                 "tooltip numbers move. The binary cannot separate these: it "
+                 "stores the field at buff record +0x04 and never reads it in "
+                 "ChCliBuff.",
+        steps=_buff_type_steps(a),
+        note="The one CONTESTED field name in the effect family. Keep buffId "
+             "small -- GmEffect:3030 bounds it against a UI frame-code range.",
+    ),
+    "buff_side": lambda a, o: Probe(
+        question="Do opcodes 63 and 65 file the same buff under two different "
+                 "agents, in two different lists?",
+        predicts="65 alone gives one effect icon with no countdown. Adding 63 "
+                 "with the same buffId gives a SECOND, separate indicator "
+                 "(the upkeep row). Removing one leaves the other.",
+        steps=_buff_side_steps(a),
+        note="SOURCED: BuffState keeps a source list at +0x04 and a target "
+             "list at +0x14, and the client's own log strings are "
+             "BuffSourceAdd/BuffSourceRemove for 63/64 and "
+             "BuffTargetAdd/ExtendTimed/Remove for 65/66/67/68.",
+    ),
     "use_skill_capture": lambda a, o: Probe(
         question="What does the client SEND when a skill key is pressed, and "
                  "does the message number depend on the skill's TYPE?",
