@@ -71,8 +71,14 @@ SRV_PATTERNS = [
 
 
 def default_exe():
-    """The pinned pristine client. Not the patched run-dir copy."""
-    return vaultpath.vault_path("client", "2026-07-29_221c13772c7a", "Gw.exe")
+    """The pinned pristine client. Not the patched run-dir copy.
+
+    This module was the ONLY one in clientscan/ that asked for the pristine
+    copy, and it was right -- `pinned.py` now makes that everyone's default and
+    hashes the answer. Kept as a function so the rest of this file is unchanged.
+    """
+    import pinned
+    return pinned.find()[0]
 
 
 def source_paths(blob):

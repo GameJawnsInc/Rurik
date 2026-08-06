@@ -44,10 +44,9 @@ sys.path.insert(0, os.path.join(ROOT, "toolkit"))
 sys.path.insert(0, os.path.join(ROOT, "toolkit", "clientscan"))
 
 import msgshape as MS                                        # noqa: E402
-from vaultpath import vault_path, vault_root, vault_why      # noqa: E402
+import pinned as P                                           # noqa: E402
 
-PINNED = ("run", "2026-07-29_221c13772c7a", "Gw.exe")
-FALLBACK_EXE = r"C:\gw\Gw.exe"
+FALLBACK_EXE = P.LIVE_INSTALL
 
 # MEASURED on build 38797. A change in either number is a real event: the
 # catalog moved, the recovery moved, or the client did.
@@ -70,19 +69,10 @@ def check(ok, label, detail=""):
     return ok
 
 
-def find_exe():
-    """The pinned snapshot, else the live install. Never silently either."""
-    pinned = vault_path(*PINNED)
-    if os.path.exists(pinned):
-        return pinned, "pinned vault snapshot"
-    if os.path.exists(FALLBACK_EXE):
-        return FALLBACK_EXE, "live install (pinned snapshot not in the vault)"
-    raise SystemExit(
-        f"no client to read.\n"
-        f"  looked for {pinned}\n"
-        f"  vault resolved to {vault_root()} ({vault_why()})\n"
-        f"  and for {FALLBACK_EXE}\n"
-        f"  Set RURIK_VAULT, or see RUNBOOK.md.")
+# `pinned.py` resolves AND identifies the client. The vault holds two copies of
+# build 38797 at the same size -- pristine and our patched one -- so a local
+# resolver naming one of them by directory was picking a file, not a build.
+find_exe = P.find
 
 
 def ours(field):

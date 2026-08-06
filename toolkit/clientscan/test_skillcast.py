@@ -44,12 +44,10 @@ import asserts as A                                          # noqa: E402
 import msgshape as MS                                        # noqa: E402
 import genericvalue as GV                                    # noqa: E402
 import avevents as AV                                        # noqa: E402
-from vaultpath import vault_path, vault_root, vault_why      # noqa: E402
+import pinned as P                                           # noqa: E402
 
-BUILD = 38797
-EXE_BYTES = 10_483_904
-PINNED = ("run", "2026-07-29_221c13772c7a", "Gw.exe")
-FALLBACK_EXE = r"C:\gw\Gw.exe"
+BUILD = P.BUILD
+EXE_BYTES = P.SIZE
 
 FAILED = []
 
@@ -66,19 +64,12 @@ def eq(got, want, label):
 
 
 # ---------------------------------------------------------------- section 1
-def find_exe():
-    """The pinned snapshot, else the live install. Never silently either."""
-    pinned = vault_path(*PINNED)
-    if os.path.exists(pinned):
-        return pinned, "pinned vault snapshot"
-    if os.path.exists(FALLBACK_EXE):
-        return FALLBACK_EXE, "live install (pinned snapshot not in the vault)"
-    raise SystemExit(
-        f"no client to read.\n"
-        f"  looked for {pinned}\n"
-        f"  vault resolved to {vault_root()} ({vault_why()})\n"
-        f"  and for {FALLBACK_EXE}\n"
-        f"  Set RURIK_VAULT, or see RUNBOOK.md.")
+# `pinned.py` resolves and IDENTIFIES the client. This used to be a local copy
+# that checked the file SIZE, and the vault holds two copies of build 38797 --
+# the pristine client and our patched one -- that are the same size and differ
+# in 144 bytes, nine of them in .text. A size check cannot tell them apart, so
+# section 1 could not do the job its own docstring claims. It hashes now.
+find_exe = P.find
 
 
 # ---------------------------------------------------------------- section 2
@@ -316,10 +307,21 @@ def main():
     size = os.path.getsize(exe)
     print(f"\nclient under test: {exe}\n  ({why})")
     print(f"\n1. Which binary  (build {BUILD})")
-    if not eq(size, EXE_BYTES, "file size matches the pinned build"):
+    eq(size, EXE_BYTES, "file size matches the pinned build")
+    what, detail = P.identify(exe)
+    check(what in ("pristine", "patched"), f"and its sha256 is a copy we know",
+          f"{what}: {detail}")
+    if what == "patched":
+        print("      note: this is OUR patched copy. Both suites reproduce "
+              "against it,\n      but the pristine client is the one to read.")
+    if what == "unknown":
         print("\n  Refusing to continue: every address below is build-specific "
               "and\n  measuring a different build proves nothing either way.")
         return 1
+    # Our patch rewrites nine bytes of .text. No claim below may rest on them.
+    collide = [(va, h) for va, h, _ in BYTES for h in [h]
+               if P.patches_touch(va, len(h) // 2)]
+    eq(collide, [], "no pinned address lands on a byte our patch rewrites")
 
     print("\n2. The client's own assertions")
     az = A.Asserts(exe)
