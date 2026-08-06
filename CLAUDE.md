@@ -62,7 +62,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
 
   Others: `toolkit/schema/test_codec.py` (codec vs. real captured bytes),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
-  `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`.
+  `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
+  `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki).
 - The daily three-terminal loop, the one-time client patching, and the failure table
   are in [RUNBOOK.md](RUNBOOK.md). The DH parameters rotate with every client build,
   so an ArenaNet update means redoing that setup in full.
