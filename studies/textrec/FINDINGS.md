@@ -318,20 +318,102 @@ Refuted readings, so nobody repeats them:
 - **`aux` is the decoded size — REFUTED** before this session by the brief's own
   counterexample, and now explained rather than merely denied.
 
-### The honest shape of the remaining question
+### The key is one 64-bit integer, and the coded string spells it out
 
-The client can decode these records because something handed it a coded string
-carrying the key. Nothing in this study establishes what produces those coded
-strings for the 72,969 encrypted slots. The candidates, none tested:
+**SOURCED + MEASURED**, `TextParser.cpp` `0x7ccd2a`–`0x7ccd9b`. The "pair" is
+not two independent dwords; it is the low and high halves of a single 64-bit
+value, accumulated from the coded string a word at a time:
 
-1. The server sends them. This is what happens for item names and chat.
-2. They come from another record that is itself plain.
-3. They come from a table in `Gw.exe` that pairs an id with two dwords.
+```
+movzx edi, word ptr [eax]      ; a value word
+mov   esi, edi
+and   esi, 0xffff7fff          ; strip WORD_BIT_MORE
+cmp   esi, 0x100
+jae   ok                       ; assert (value & ~WORD_BIT_MORE) >= WORD_VALUE_BASE
+test  edi, 0x8000              ; more words to come?
+lea   eax, [esi - 0x100]       ; digit = value - WORD_VALUE_BASE
+mov   ecx, 0x7f00
+mul   ecx                      ; 32x32 -> 64
+...  add esi, eax / adc edi, ecx
+```
 
-Candidate 3 is the cheapest to test and would settle it: scan `.rdata` for
-12-byte records whose first dword is a string id in the encrypted set. Candidate
-1 is the most likely and is directly relevant to R2 — if true, **a server must
-send the key alongside the string id**, and Rurik will need to know it.
+So, with ArenaNet's own constant names from the assert it guards:
+
+| | value | source |
+|---|---|---|
+| `WORD_VALUE_BASE` | `0x100` | the `cmp esi, 0x100` the assert guards |
+| `WORD_BIT_MORE` | `0x8000` | `and esi, 0xffff7fff` / `test edi, 0x8000` |
+| radix | `0x7F00` | `mov ecx, 0x7f00; mul ecx` |
+
+`acc64 = acc64 * 0x7F00 + (word - 0x100)`, most significant word first, with
+`0x8000` marking "another word follows". Five words hold 64 bits.
+
+**This settles the character of the unknown.** The key is not derived from
+anything — it is an arbitrary 64-bit datum that whoever emits the reference
+must already know. That also puts brute force out of reach at 2^64, and it tells
+a future Rurik server exactly how to *encode* a key once one is known.
+
+### The scan for a key source: three candidates, two refuted
+
+`studies/textrec/tools/keyscan.py`. Predictions stated before running, scored on
+whether a candidate key **decodes**, never on whether a dword looks like an id —
+72% of the id range is encrypted, so membership alone is nearly free.
+
+**Candidate 3, a `(string_id, u64)` table in `Gw.exe` — REFUTED.** MEASURED. The
+scan finds every dword-aligned occurrence of an encrypted id (42,819 of them)
+and reports the longest constant-stride run at every stride from 4 to 256.
+
+*Positive control first*, because a scan that finds nothing proves nothing
+unless it can find something: run against **plain** ids it recovers the skill
+table, **3,444 records at stride 164** at VA 0x00988e34. The instrument works.
+
+Against encrypted ids the longest run is 1,031 at stride 164 at VA 0x009a8700 —
+which is `0x988ed0 + 783 x 164 + 0x94`, i.e. field `+0x94` of the *same* skill
+table, an icon **file** id that merely shares the numeric range with string ids.
+Every other run is 260 or shorter and sits at VA 0x00bbe040, where strides 4, 8,
+12 and 16 all run together, which is the signature of one dense block of small
+integers and not of a keyed table. A real table would be thousands long at
+stride 12 or 16. There is none.
+
+**Candidate 2, a key riding in a plain record — REFUTED.** MEASURED. Plain
+records are the only archive contents we can read, so if the archive carried its
+own keys they would be here. Of 28,407 plain language-0 records, **0** contain a
+varint run of three or more continuation words. The 119 that contain a word
+below 0x20 contain newlines in ordinary prose (`sid 2` is `\n[b]`; `sid 44`
+begins "Enter your mai…"). Every plain record is literal text.
+
+**A blind neighbour search — NOTHING.** MEASURED. For each of the 20,288
+aligned id occurrences whose record is long enough to score, six layouts of the
+surrounding dwords were tried as the 64-bit key, and each decode scored on space
+frequency (escape slot 27; natural text runs 15–18%, noise 0.8%) against a null
+built by decrypting a *different* record with the same key. No layout beat its
+null: 31/33, 32/48, 34/39, 31/31, 21/36, 25/28. The best decode anywhere was
+8.1% spaces and reads as garbage.
+
+> **A trap worth recording.** Counting *offsets* rather than distinct
+> `(id, key)` pairs made one layout look like a 6x excess over the null — 196
+> against 31. The 196 turned out to be 31 distinct ids, and 165 of them shared
+> the single key `0x100000011`: one test repeated at every address holding the
+> same dword, which the shuffled null does not reproduce. Deduplicating removed
+> the effect entirely. The tool now counts distinct pairs.
+
+**A phase that could not have worked, reported rather than dropped.** Searching
+the image for base-0x7F00 varint runs long enough to hold 64 bits returns
+115,867 — against ~159,614 expected from uniform noise, because a random `u16`
+qualifies as a continuation word about 48% of the time. The filter has no
+specificity and the result is not evidence of anything.
+
+### What is left
+
+**Candidate 1 — the coded string comes from the server — now stands alone**, and
+it is the one that matters for R2: if the key travels on the wire beside the
+string id, then **Rurik must send it**, and a Rurik-authored reference to an
+encrypted record is impossible until we have observed a real one. The test is
+to look for a `string16` field in a captured `GAME_SMSG` whose words parse as
+`WORD_VALUE_BASE`-biased varints, using our own captures rather than a scan.
+
+Not excluded, and not tested: the key could be computed at runtime from game
+state (an item's mod list, a quest's id) rather than stored anywhere.
 
 ---
 
@@ -351,6 +433,8 @@ send the key alongside the string id**, and Rurik will need to know it.
   the refutation is reproducible and extendable rather than just asserted here.
 - `studies/textrec/tools/census.py` — writes the per-language census to
   `vault/textrec/census-38797.json`. Extracted client values go to the vault.
+- `studies/textrec/tools/keyscan.py` — the four-phase search for a key source
+  of §4, positive control included.
 
 ### A house-rule tension that needs an owner ruling
 
@@ -378,7 +462,8 @@ owner's call. This study did not make it.
 
 | Question | How to settle it |
 |---|---|
-| **Where does the 8-byte key come from?** | The three candidates in §4. Start with the `.rdata` scan for `(string_id, dword, dword)` triples — cheapest, and falsifiable in an hour. |
+| **Where does the 64-bit key come from?** | Two of the three candidates in §4 are now refuted. Look for it on the wire: parse `string16` payloads in our own `GAME_SMSG` captures as `0x100`-biased base-`0x7F00` varints. |
+| Is the key computed from game state rather than stored? | Not excluded by anything here. Would explain why it is in neither the image nor the archive. |
 | What are the 72,969 encrypted slots *for*? | Currently unknown, and the brief's guess (item names, dialogue, quest text) is an inference from a false premise. Once one key is found, one decode answers it. |
 | Does the server send the key with a string reference? | Directly relevant to R2. Look for a string16 field in a GAME_SMSG whose contents parse as a coded string with a parameter pair, against our own captures. |
 | Is the 12th language row (23 files, language tag 17) also this format? | `studies/datwrite/FINDINGS.md` records it as unaddressable by the shipped PE table. The record walk should still apply. |
