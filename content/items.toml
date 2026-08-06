@@ -1,0 +1,43 @@
+# Items. Today: the one weapon the player is handed so that attacking is possible.
+#
+# A character with no weapon cannot attack and cannot use a weapon skill, and until
+# 2026-08-06 ours had none -- we sent four ITEM_WEAPON_SET slots of zeros and never
+# created an item. The visible symptoms were that ATTACK_AGENT was never sent by the
+# client at all (not on click, not on space, in an outpost or in an explorable) and
+# that weapon skills would not even begin to cast.
+
+[item.starter_hammer]
+name = "starter hammer (Prophecies warrior)"
+file_id = 0x80009B60
+item_type = 15              # ItemType_Hammer, OpenTyria GmItem.h enum
+dye_tint = 6
+dye_colors = 0              # DyeColor_None, GmColors.h:4
+materials = 0
+unk1 = 0
+flags = 0x22201000
+value = 0
+model_id = 1699
+quantity = 1
+enc_name = [0x2455, 0xB7FB, 0xCA41, 0x458F]
+modifiers = [0x24B80000, 0xA4880503]
+
+[item.starter_hammer.provenance]
+source = "opentyria"
+verified = ""
+note = """
+NOT VERIFIED, and this row says so rather than borrowing the confidence of the ones
+around it. Verbatim from OpenTyria's GmDefaultArmors.c:80-93 -- the sixth and last
+entry of g_DefWarriorPropheciesPveEquipments, an array of five armour pieces plus one
+ItemType_Hammer. UPSTREAM: it is one lineage's hand-written table, and no capture of
+ours has ever carried these bytes. OpenTyria is Unlicense (public domain), so there is
+no licence question; the weakness here is evidential, not legal.
+
+The client accepting it is the only thing that has been OBSERVED. If it ever refuses,
+the two fields worth watching are file_id and flags.
+
+`modifiers` goes out verbatim because it came from the same table row and nobody in
+this repo has decoded a single one of those words -- armour rating lives in them for
+armour, and whatever a weapon's damage range is, it is in there too. See
+studies/character/FINDINGS.md, "The modifier words: NOT DONE". Do not tune these
+numbers hoping for an effect; nothing here knows what they mean.
+"""

@@ -85,7 +85,9 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientscan/test_codescan.py` (the attack-speed chain, and the two
   decoding traps that hid it — needs capstone),
   `toolkit/test_checks.py` (the check on the checker — see below),
-  `toolkit/test_scrub.py` (the credential scrub, and that no secret survives it).
+  `toolkit/test_scrub.py` (the credential scrub, and that no secret survives it),
+  `toolkit/test_content.py` (the content store, and that its provenance and licence
+  refusals actually refuse).
 
   **This list is the suite.** A test in the tree but not named here is a test
   nobody runs: `test_pathmap.py`, `test_skillcast.py` and `test_textrec.py` were
@@ -118,6 +120,7 @@ reasoning about it. Two of the three hardest questions so far were settled that 
 | `toolkit/portal/`, `toolkit/authsrv/` | The server: portal (6601), auth + ARC4 channel (6112) |
 | `toolkit/schema/` | Codec and the message-catalog importer |
 | `schema/messages.json`, `overrides.json` | The wire schema, tracked in git |
+| `content/*.toml` | The world: maps, NPCs, items, spawns. One row per fact, each carrying its own provenance. Loaded by `toolkit/content.py`; the server holds no content literals. Bulk extraction goes to `vault/content/` and is merged over these. |
 | `toolkit/clientscan/`, `toolkit/clientpatch/` | Read-only client analysis; patching and the firewall cage |
 | `toolkit/mapdata/` | `Gw.dat` reader, planner (`datplan`), writer (`datwrite`), textures (`atex`, `dxt1`) |
 | `studies/` | Per-arc research, labelled by confidence |

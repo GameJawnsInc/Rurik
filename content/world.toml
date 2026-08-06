@@ -1,0 +1,106 @@
+# Placement and player defaults: what stands where, and what the player starts with.
+#
+# The spawn table is the one that will grow. Today it holds a single test enemy placed
+# relative to the player so that combat is exercisable at all; R4c's real spawns are
+# server-only data that has to be captured, and none of it exists yet
+# (PLAN.md section 1.7 names spawn placement as one of the four genuinely server-only
+# things). When those arrive they are rows here, not code.
+
+[spawn.test_enemy]
+npc = "hatcher"
+agent_id = 10
+definition = 3
+max_health = 100
+# Placed relative to the player's arrival point rather than at an absolute coordinate,
+# because the player's arrival point differs per map and this enemy is meant to be
+# reachable in whichever one is loaded.
+offset_x = 300.0
+offset_y = 0.0
+enabled = true
+
+[spawn.test_enemy.provenance]
+source = "invented"
+verified = ""
+note = """
+Ours, chosen rather than observed, and the row says so. There is no evidence that
+anything stands 300 units east of the arrival point in any Guild Wars map. This exists
+so that a hostile body can be hit, killed and revived on demand -- studies/enemy
+records the repeatable cycle it supports.
+
+`agent_id = 10` and `definition = 3` are allocator choices, not facts about the game.
+studies/enemy/PLAN.md section 7.2 asks for a real agent table with allocated ids; when
+that lands these two fields stop being constants and this row keeps only the placement.
+
+max_health 100 is a placeholder matching the player's, so that damage arithmetic is
+easy to read by eye during a fight. Absolute monster health is server-only data
+(PLAN.md section 1.7) and nothing here has measured a Hatcher's.
+"""
+
+# ---------------------------------------------------------------- the player
+
+[player.defaults]
+energy = 25
+health = 100
+float_43 = 0.0396
+
+[player.defaults.provenance]
+source = "gw-preservation"
+verified = """The PROPERTY IDS these values ride on were verified against our own \
+binary, which is the part that mattered: our read of the int-record dispatch found \
+cases for {32, 41, 42} and nothing else (studies/agentprops/FINDINGS.md section 3b), \
+we had already MEASURED 42 as maximum health, and 41 is the only remaining slot in \
+that dispatch and the one upstream calls energy. The float channel does have a real \
+case for 43."""
+note = """
+The VALUES are weaker than the ids and should not be read as measured. 25 energy and
+100 health are a starting character's, taken from gw-preservation's
+gameservice/player.go:268-269, not observed on our wire.
+
+float_43 = 0.0396 is worse still and is kept only because it travels with the pair
+above in a server that works. gw-preservation's own comment next to it says "REVERSE
+THIS MORE", so nobody upstream knows what it is either. Energy regeneration is the
+obvious reading and it is a GUESS. If something ever depends on this number, measure
+it first.
+"""
+
+# ------------------------------------------------- weapon and creature swing rates
+#
+# One row per weapon class. The client multiplies this by an attack-speed MODIFIER at
+# 0x007F837E (`fld [esi+0xf0]; fmul [esi+0xec]`), and "unmodified" is 1.0 -- never 0,
+# because the client asserts on a zero at both ends.
+
+[attack_speed.rates]
+axe = 1.33
+daggers = 1.33
+sword = 1.33
+scythe = 1.5
+spear = 1.5
+hammer = 1.75
+staff = 1.75
+wand = 1.75
+flatbow = 2.025
+shortbow = 2.025
+longbow = 2.475
+recurve = 2.475
+hornbow = 2.7
+pet = 2.0
+melee_minion = 3.1
+bone_fiend = 1.86
+unmodified_modifier = 1.0
+
+[attack_speed.rates.provenance]
+source = "wiki"
+verified = """A check that could have failed and did not: the client's own product \
+reproduces the wiki's published IAS table exactly for three weapon classes and two \
+modifiers -- 1.33/1.5/1.75 against 0.67 and 0.75 give 0.8911/1.005/1.1725 and \
+0.9975/1.125/1.3125, six for six to four decimals. GWCA's Agent.h:181-182 \
+independently names the same two offsets weapon_attack_speed and \
+attack_speed_modifier and gives 1.33 for axe/sword/daggers, agreeing on both."""
+note = """
+WIKI (GWW, "Attack speed", section "Attack durations and effect of IAS and DAS", read
+2026-08-06), whose table says outright "These are the exact values used by the game".
+
+These are the rates the game uses, not rates we chose. A Hatcher's real swing rate is
+not among them -- nothing has measured what a collector swings at -- so any code
+standing an axe's 1.33 in for a monster is using a labelled placeholder.
+"""

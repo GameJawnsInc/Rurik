@@ -1,0 +1,40 @@
+# NPC templates: what the client must be told before an agent of this type exists.
+#
+# The fields are exactly the ones agents.npc_properties() and agents.npc_model() take.
+# Not optional and not decoration: the definition index is a raw array index on the
+# client, and creating an agent whose definition was never sent takes the client down
+# on `index < m_count` in Base\rtl\Array.h. OBSERVED.
+#
+# `enc_name` is a list of 16-bit GW string ids, not text. The client resolves them
+# against its own string table and renders the result in whatever language it is
+# running -- we sent four opaque words and got "Hatcher [Collector]" in English. These
+# can be copied and cannot be invented.
+
+[npc.hatcher]
+name = "Hatcher [Collector]"
+file_id = 116228
+model_id = 116703
+profession = 3
+level = 1
+enc_name = [0x328A, 0xE3B9, 0xAA36, 0x2E69]
+scale = 0x64000000          # hue 0, saturation 0, lightness 0, scale 100%
+flags = 0x20C
+
+[npc.hatcher.provenance]
+source = "gw-preservation"
+verified = """OBSERVED working against our own client on build 38797, which is stronger \
+than any cross-reference: it stood in the map wearing a collector's body with a gold \
+nameplate, plainly different from the light-blue Trade-able player bodies section 6c \
+produced, and the four EncString words resolved to "Hatcher [Collector]" in English. \
+Independently, file id 116228 appears in BOTH gw-preservation (2026, hatcher_collector) \
+and GWLP-R's mock NPC (2013, NPCFactory.java:109) -- thirteen years and two lineages \
+apart. studies/enemy/PLAN.md sections E2 and 6."""
+note = """
+Two consequences drawn in studies/enemy/PLAN.md and worth keeping attached to the row:
+gw-preservation's NPC table is a GOOD lead rather than a plausible one, and Gw.dat model
+ids are far more stable across builds than this project's experience of opcode drift
+would lead you to expect.
+
+This is a borrowed Ascalon collector standing in for a monster. It is not a Pre-Searing
+enemy and nothing about it has been checked against what actually spawns there.
+"""
