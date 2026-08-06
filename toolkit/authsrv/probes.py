@@ -677,6 +677,72 @@ def _enemy_damage_steps(agent_id, origin):
     ]
 
 
+def _health_props_steps(agent_id, origin):
+    """The health properties the client dispatches and we have never sent.
+
+    Five death candidates failed. Then the float-property jump table came out of
+    the binary (studies/agentprops/FINDINGS.md) and named the properties the
+    client actually acts on -- and three of them are HEALTH properties this
+    project has never once sent: 34, 55 and 56. We had been sending 16 (damage)
+    and 42 (max health) and nothing else.
+
+    Reading the two cases side by side shows they are not the same kind of thing:
+
+      prop 16, DAMAGE          fld [esi+0x24]      ; the agent's max health
+      prop 55, ARMOR_IGNORING  fmul [ebp+0xc]      ; x the value we send
+                               -> a FRACTION, and byte-identical between the two
+
+      prop 34, HealthModifier1 fld [ebp+0xc]       ; the value, RAW
+                               -> ABSOLUTE, and a different callee entirely
+
+    So 34 is the only health property that takes a real quantity rather than a
+    proportion, which makes it the one that can name zero exactly. Damage cannot:
+    it floors at 1 however hard it is hit (section 6b).
+
+    Ordered cheapest-to-interpret first. Every step is on a disposable NPC, so
+    nothing here can cost the session.
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    E = 7
+    return [
+        Step(2.0, 0x0056,
+             [h["definition"], h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {h['definition']}", "nothing yet."),
+        Step(1.0, 0x0057, [h["definition"], [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {h['definition']}", "nothing yet."),
+        Step(1.0, 0x0020,
+             _create_agent(E, CHAR_CLASS_MONSTER_BASE | h["definition"],
+                           AGENT_KIND_NPC, ox + 300, oy, plane, token=0x6D6F6E73),
+             f"WORLD_CREATE_AGENT {E}, hostile Hatcher",
+             "a red Hatcher. TARGET IT and keep it targeted."),
+        Step(4.0, 0x009F, [42, E, 100], f"health 100 on agent {E}",
+             "target bar reads 100."),
+        Step(5.0, 0x00A3, [16, E, agent_id, _f32(-0.5)],
+             "control: damage -0.5 (property 16, a FRACTION)",
+             "50 damage, bar to 50. Reproduces section 6f; if it does not, "
+             "nothing below is interpretable."),
+        Step(7.0, 0x00A3, [34, E, agent_id, _f32(-50.0)],
+             "property 34 HealthModifier1 = -50.0, sent as an ABSOLUTE",
+             "THE ASYMMETRY TEST. 34 does not multiply by maximum health, so if "
+             "the bar drops by 50 the value is absolute and the two health "
+             "channels genuinely differ. If it drops by 5000-worth, it is a "
+             "fraction after all and the disassembly was misread."),
+        Step(7.0, 0x00A3, [34, E, agent_id, _f32(-1000.0)],
+             "property 34 = -1000.0 -- far past zero",
+             "THE DEATH TEST. Damage floors at 1 no matter how hard it is hit. "
+             "If an absolute health modifier can push past that floor, this is "
+             "where something finally dies. Animation? Corpse? Or a bar at 1 "
+             "again?"),
+        Step(7.0, 0x00A3, [55, E, agent_id, _f32(-1.0)],
+             "property 55 ARMOR_IGNORING = -1.0 (a fraction, so exactly 100%)",
+             "the last health property we hold. -1.0 of maximum is exactly the "
+             "whole bar, which damage can only approach from above. Nothing "
+             "follows this step."),
+    ]
+
+
 def _moving_die_steps(agent_id):
     """0x002D does nothing to a STANDING agent. Read out of the client, not guessed.
 
@@ -928,6 +994,23 @@ PROBES = {
              "damage packet cannot kill, and a positive value crashes the "
              "client on ArenaNet's own `damage.amount <= 0`. See "
              "studies/enemy/PLAN.md.",
+    ),
+    "health_props": lambda a, o: Probe(
+        question="Do the health properties we have never sent -- 34 and 55 -- "
+                 "behave differently from damage, and can either one kill?",
+        predicts="34 is ABSOLUTE and 55 is a FRACTION, from their disassembly: "
+                 "55 multiplies the value by the agent's maximum health exactly "
+                 "as damage does, and 34 passes it raw to a different callee. If "
+                 "that holds, -50.0 on property 34 takes a 100-point bar to 50 "
+                 "while -1.0 on property 55 empties it. Death is the open "
+                 "question: damage floors at 1, and an absolute modifier is the "
+                 "only thing we hold that can name zero.",
+        steps=_health_props_steps(a, o),
+        note="Came out of the client rather than out of a guess -- the float "
+             "jump table in studies/agentprops/FINDINGS.md named the eight "
+             "properties the client acts on, and three of them are health "
+             "properties this project had never sent. Five earlier death "
+             "candidates were guesses; this one is a reading.",
     ),
     "moving_die": lambda a, o: Probe(
         question="Does 0x002D do anything to a MOVING agent, and is it really "

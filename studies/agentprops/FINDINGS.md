@@ -54,17 +54,59 @@ against a maximum of 100 arriving as 25 damage. This is the instruction that
 does it. A measurement and the code agreeing is the strongest position this
 project reaches.
 
-**A correction to Headquarter — SOURCED against UPSTREAM.** `ldufr/Headquarter`
-applies `AG_ATTR_DAMAGE` (16), `AG_ATTR_CRITICAL_DAMAGE` (17) and
-`AG_ATTR_ARMOR_IGNORING` (55) identically, in one `switch` with three
-fall-through cases (`code/client/agent.c:860-867`). **The real client does not.**
-16 and 55 have their own dispatch targets; **17 falls to the default case** and
-does nothing on this path. Any server modelling critical hits by sending property
-17 the way Headquarter reads it will produce no effect at all.
+**There are TWO dispatches, not one, and reading only the first produces a wrong
+answer.** `0x00813040` updates the status record via `0x00818210` (the table
+above) and then dispatches *again* on the same `prop_id` through a second table —
+byte index at `0x0081328C`, 48 entries covering properties 16–63, targets at
+`0x00813250`, **14 real cases**. The two do not agree on which properties matter:
 
-**Death is not in this dispatch.** None of the eight is a death property, which
-closes off the last place §6i had left to look on the property channel and says
-where to look next (§4).
+| | record dispatch `0x818210` | second dispatch `0x813040` |
+|---|---|---|
+| properties acted on | 8 | 14 |
+| handles 17, 18 | no | **yes** |
+| handles 53, 56, 61, 63 | no | **yes** |
+
+**Properties 16, 17 and 18 are three damage KINDS.** In the second dispatch they
+converge on one call with a discriminator:
+
+```
+prop 16 -> push 0 \
+prop 17 -> push 1  >  jmp 0x00813101 -> call 0x007DFB60(target, cause, value, …)
+prop 18 -> push 2 /
+```
+
+So Headquarter's instinct to group 16 and 17 is right, and it identifies a third
+kind (18) that OpenTyria leaves unnamed. **An earlier draft of this document said
+17 "falls to the default case and does nothing" — that was written from the
+record dispatch alone and is wrong.** What is true is narrower: 17 does not
+modify the health record, but it does raise a damage notification. A plausible
+reading, untested, is that a critical hit arrives as a 16 for the health change
+plus a 17 for the annotation.
+
+**The two health channels are not the same kind of quantity — SOURCED.** Within
+the record dispatch:
+
+```
+prop 16 DAMAGE          fld  dword ptr [esi+0x24]   ; maximum health
+prop 55 ARMOR_IGNORING  fmul dword ptr [ebp+0x0C]   ; × the value  -> a FRACTION
+                        (byte-identical between the two)
+
+prop 34 HealthModifier1 fld  dword ptr [ebp+0x0C]   ; the value, RAW
+                        -> ABSOLUTE, and a different callee (0x009215F0)
+```
+
+**Property 34 is the only health property that takes a real quantity rather than
+a proportion.** A server that treats the health properties uniformly is wrong by
+a factor of maximum health on whichever one it guesses wrong, and neither
+direction is signalled anywhere in the message.
+
+**Death is not a named case in either dispatch** — but the read produced a
+better death candidate than any of the five guesses that preceded it.
+`studies/enemy/PLAN.md` had only ever sent properties 16 and 42. **Properties 34,
+55 and 56 are health properties the client dispatches and this project has never
+sent**, and 34 is absolute, so it is the only thing we hold that can name zero.
+Damage cannot: it floors at 1 however hard it is hit. That is the `health_props`
+probe.
 
 ---
 
