@@ -35,13 +35,13 @@ shapes off the raw `cmds` this prints. `msgshape.py` next door recovers the
 load-time writes and refuses to guess past a slot it could not account for;
 that is the module to ask about shapes.
 
-DEPENDENCIES, and an open house-rule question. CLAUDE.md says the toolkit is
-standard library only. This file has imported capstone and pefile since it was
-written, because there is no reasonable stdlib x86 disassembler. Everything
-added alongside it since -- `asserts.py`, `msgshape.py` -- is deliberately
-stdlib, so the exception stays confined to the one thing that genuinely needs
-it. Whether that is a carve-out or a debt is the owner's call; it is flagged in
-studies/skillcast/FINDINGS.md rather than quietly widened.
+DEPENDENCIES. capstone and pefile. This used to be an unresolved exception to
+CLAUDE.md's standard-library-only rule; **the owner settled it on 2026-08-06 as
+an explicit carve-out for read-only client analysis**, and it now covers this
+file and `codescan.py` next door and nothing else. `asserts.py`, `msgshape.py`,
+`areatable.py` and `genericvalue.py` stay stdlib on purpose, so a bare machine
+keeps every tool whose byte patterns are fixed, and a *claim* still wants a
+stdlib checker even when a disassembler found it.
 
 READ ONLY. Opens Gw.exe for reading and does nothing else. The install at
 C:\\gw is the player's own and is never written, patched or launched from here.

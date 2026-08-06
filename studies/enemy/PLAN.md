@@ -1534,11 +1534,31 @@ and neither placement failure was visible from the server side at all.
 
 §6o recorded "no `mov` and no `fstp` writes either offset by displacement
 anywhere in the image". There are 233 instructions touching `+0xEC` image-wide,
-and two of them write it from inside `AvChar`. The scan was not wrong about its
-own results; it was **scoped to the wrong module and reported as a global
-absence**. The fix that found it in minutes was to bound AgentView by its own
-assert sites (`asserts.py --file AvChar`) and filter to that range — a range
-§6p had already established and nobody had used.
+and two of them write it from inside `AvChar`.
+
+Two things were wrong with that search, and the second is the one worth
+carrying forward.
+
+**It was scoped to the wrong place and reported as a global absence.** Bounding
+AgentView by its own assert sites turns 233 unreadable hits into 5, two of them
+stores, in under a minute — and the range §6p had already established was
+sitting there unused.
+
+**And an access-flag filter cannot see either writer.** MEASURED: classify the
+`+0xEC` accesses by capstone's operand-access flag and you get **zero** stores
+in AvChar. Both real writers are `fstp`, which capstone reports as an operand
+*read*. That is not a thin or suspicious result, it is a clean confident
+nothing — the exact shape of §6o's sentence. **A float field is essentially
+always written with an x87 store, so a tool that trusts the access flag is
+blind to precisely the fields most worth chasing.**
+
+Both traps are now in `toolkit/clientscan/codescan.py`, and both are pinned by
+`test_codescan.py` with the counts they produce when the rules are removed
+(18 instead of 11; 0 stores instead of 2), so neither can quietly come back.
+
+```bash
+python toolkit/clientscan/codescan.py --field 0xEC --in AvChar
+```
 
 ---
 
