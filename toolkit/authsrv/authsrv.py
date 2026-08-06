@@ -1266,9 +1266,29 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # still reported -- a warp near stairs, and being thrown
                         # back towards where the player set off from.
                         fresh = (time.time() - state.get("pos_seen", 0.0)) <= 1.0
-                        blocked = not fresh
                         pm_c = state.get("pathmap")
-                        if fresh and pm_c is not None and pm_c.walkable(*state["pos"]):
+                        # And only when the geometry can actually place the
+                        # player: on the mesh, on exactly one plane, and that
+                        # plane the one the client just named. MEASURED over 532
+                        # reports -- 93.8% clean, 5.5% not on our mesh at all,
+                        # 0.8% on a single plane that is not the one the client
+                        # named, and 0.0% genuinely ambiguous. The trapezoids do
+                        # not overlap in 2D, so the earlier guess that stairs were
+                        # an ambiguity problem was wrong; they are a disagreement
+                        # problem.
+                        #
+                        # The off-mesh 5.5% closed a real hole. clip_to_walkable
+                        # gives up when our position is not on the mesh and
+                        # reports the line CLEAR, so the server was answering
+                        # confidently from positions whose geometry it knew
+                        # nothing about.
+                        here = set()
+                        if pm_c is not None:
+                            here = {t.plane for t in
+                                    pm_c.containing(state["pos"][0], state["pos"][1])}
+                        placed = here == {cur_plane}
+                        blocked = not (fresh and placed)
+                        if fresh and placed:
                             stop_at = pm_c.clip(state["pos"][0], state["pos"][1],
                                                 dest[0], dest[1],
                                                 step=COLLISION_STEP)
@@ -1280,9 +1300,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # and drop our own destination rather than integrate
                             # along a line the player is not walking.
                             state["dest"], state["clipped"] = None, True
-                            why = ("we last saw the player "
-                                   f"{time.time() - state.get('pos_seen', 0.0):.1f}s "
-                                   "ago" if not fresh else "not a straight shot")
+                            if not fresh:
+                                why = ("we last saw the player "
+                                       f"{time.time() - state.get('pos_seen', 0.0):.1f}s ago")
+                            elif not placed:
+                                why = (f"cannot place them -- client says plane "
+                                       f"{cur_plane}, geometry says "
+                                       f"{sorted(here) if here else 'off-mesh'}")
+                            else:
+                                why = "not a straight shot"
                             print(f"[c{conn_id}] click to ({dest[0]:.0f}, "
                                   f"{dest[1]:.0f}): {why} -- leaving it to the "
                                   f"client's own pathing", flush=True)
