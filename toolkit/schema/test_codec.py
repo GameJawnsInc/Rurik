@@ -111,20 +111,45 @@ def main():
     ok &= check("is 10 bytes, not 14 — the format table wins over the C struct",
                 len(blob) == 10, f"{len(blob)}")
 
-    print("\n3. the codec must refuse what it cannot know")
+    print("\n3. nested_struct (client field type 12)")
+    # This block used to assert that nested_struct was REFUSED. That was the
+    # right behaviour while the element layout was unknown, and it stopped being
+    # a real check the moment studies/msgtable recovered the client's own tables:
+    # type 12 is a one-byte repeat count and the parser "rewinds to cmd+4 per
+    # repetition", so the element layout is the schema tail. Worse, the old check
+    # passed for the wrong reason -- it decoded 64 zero bytes, which is opcode 0,
+    # not a nested message at all, and any error at all satisfied it.
+    #
+    # What replaces it can actually fail: encode CREATE_NAMED_ITEM with a known
+    # modifier list, decode it back, and require the bytes to land where the
+    # one-byte count says they must.
     nested = [op for op, m in c.channels["GAME_SMSG"]["messages"].items()
               if any(f["type"] == "nested_struct" for f in m["fields"])]
-    ok &= check("nested_struct messages exist and are refused, not guessed",
+    ok &= check("nested_struct messages exist in the schema",
                 bool(nested), f"{len(nested)} such messages")
-    if nested:
-        try:
-            c.fields_for("GAME_SMSG", int(nested[0]))
-            fake = bytes(64)
-            _, _, err = c.decode_stream("GAME_SMSG", fake)
-            ok &= check("decoding one reports an error rather than inventing values",
-                        err is not None, str(err))
-        except Undecodable:
-            pass
+
+    CREATE_NAMED_ITEM = 0x0161
+    mods = [[0x24B80000], [0xA4880503]]
+    item = c.encode("GAME_SMSG", CREATE_NAMED_ITEM,
+                    [1, 0x80009B60, 15, 6, 0, 0, 0, 0x22201000, 0, 1699, 1,
+                     "ABCD", mods])
+    # 2 header + 4 item_id + 4 file_id + 1 type + 1 tint + 2 colors
+    # + 2 materials + 1 unk1 + 4 flags + 4 value + 4 model + 4 quantity = 33,
+    # + name (2 count + 4 chars * 2) = 10, + modifiers (1 count + 2 * 4) = 9.
+    ok &= check("a 2-modifier item is 52 bytes, with a ONE-byte modifier count",
+                len(item) == 52, f"{len(item)}")
+    ok &= check("the count byte is where the arithmetic above puts it",
+                item[43] == 2, f"item[43]={item[43]}")
+    msgs, consumed, err = c.decode_stream("GAME_SMSG", item)
+    ok &= check("it round-trips", consumed == len(item) and err is None
+                and msgs and msgs[0][1][13] == mods, err or f"{msgs[0][1][13] if msgs else None}")
+    # An empty list is the case we actually send first, and an off-by-one in the
+    # count would show up here as a decode error rather than as silence.
+    empty = c.encode("GAME_SMSG", CREATE_NAMED_ITEM,
+                     [1, 0x80009B60, 15, 6, 0, 0, 0, 0x22201000, 0, 1699, 1, "", []])
+    msgs, consumed, err = c.decode_stream("GAME_SMSG", empty)
+    ok &= check("zero modifiers round-trips too", consumed == len(empty)
+                and err is None and msgs and msgs[0][1][13] == [], err or "")
 
     print("\n4. the R2 handoff message (AUTH_SMSG_GAME_SERVER_INFO)")
     # The client casts the 24-byte host field straight to a sockaddr, so the

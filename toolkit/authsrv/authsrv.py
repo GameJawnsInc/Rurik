@@ -105,6 +105,37 @@ GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT = 0x0195
 GAME_SMSG_READY_FOR_MAP_SPAWN = 0x01AB
 GAME_SMSG_ITEM_WEAPON_SET = 0x0147
 GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET = 0x0148
+GAME_SMSG_CREATE_NAMED_ITEM = 0x0161
+GAME_SMSG_INVENTORY_CREATE_BAG = 0x013F
+GAME_SMSG_ITEM_MOVED_TO_LOCATION = 0x013E
+# The equipped-items bag: type 2, model 21, nine slots, weapon in slot 0.
+# CORROBORATED across ldufr (GmInventory.c:21-27, GmInventory.h:6-10) and
+# gw-preservation (item/item.go:139-152).
+BAG_TYPE_EQUIPPED = 2
+BAG_MODEL_EQUIPPED = 21
+EQUIPPED_BAG_ID = 1
+EQUIPPED_SLOT_WEAPON = 0
+EQUIPPED_SLOT_COUNT = 9
+# agent_id + NINE item ids. The message that puts equipment on a BODY, as
+# opposed to CREATE_NAMED_ITEM which only declares an item's bytes and
+# ITEM_WEAPON_SET which fills the weapon-swap UI.
+GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT = 0x006E
+# agent_id + leadhand + offhand, as WEAPON TYPES rather than item ids. This is
+# the one that decides whether the agent can attack at all; 0x006E only decides
+# what it looks like. Upstream's name says NPC because an NPC has no inventory
+# to point at, but the field it sets is on every living agent.
+GAME_SMSG_NPC_UPDATE_WEAPONS = 0x006D
+# agent_id + allegiance byte. The field that decides whether a click is an
+# attack or a conversation; the team token only decides colour.
+GAME_SMSG_AGENT_UPDATE_ALLEGIANCE = 0x002F
+
+# The item id we hand the starter hammer. Any nonzero value the client has not
+# already seen would do; 1 is the first because the inventory is otherwise
+# empty. It is what goes in the weapon set's leadhand slot.
+WEAPON_ITEM_ID = 1
+# Give the character a weapon at all. --no-weapon turns it off so the "naked
+# character cannot attack" reading can be re-tested rather than remembered.
+EQUIP_WEAPON = True
 GAME_SMSG_UPDATE_GOLD_STORAGE = 0x0141
 GAME_SMSG_CHARACTER_UPDATE_INFO = 0x0030
 GAME_SMSG_INSTANCE_MANIFEST_PHASE = 0x0198
@@ -222,6 +253,10 @@ GAME_SMSG_NPC_UPDATE_PROPERTIES = 0x0056
 GAME_SMSG_NPC_UPDATE_MODEL = 0x0057
 GAME_SMSG_AGENT_PROPERTY_UPDATE_INT = 0x009F
 GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET = 0x00A3
+# The int-with-target variant. Same field shape as 0x00A3 (prop, target, cause,
+# value) but the value is a plain int rather than IEEE bits. GWCA calls this
+# family GenericValueTarget. INFERRED from the shape match; not yet observed.
+GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET = 0x00A0
 GAME_SMSG_AGENT_UPDATE_EFFECTS = 0x00F1
 
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
@@ -398,13 +433,35 @@ MAP_STATIC_CONFIG = {
     # PREDICTION: the raw stored id loads where the masked one did not. If it
     # also fails, the bit is not the difference and Pre-Searing needs something
     # neither session has found; revert 148 and the map falls back to Kamadan.
-    148: (0x8001B97D, (9826.0, 8077.0), 0),  # Ascalon City, Pre-Searing
-    449: (0x345CC, (-9067.0, 13218.0), 0),   # Kamadan, Jewel of Istan (outpost)
-    194: (0x265F7, (0.0, 0.0), 0),           # Kaineng Center (outpost)
-    55:  (352808, (0.0, 0.0), 0),            # Lion's Arch (outpost)
-    474: (219215, (0.0, 0.0), 0),            # Domain of Anguish
-    558: (287493, (0.0, 0.0), 0),            # Sparkfly Swamp
-    90:  (46594, (0.0, 0.0), 0),             # Lornar's Pass
+    148: (0x8001B97D, (9826.0, 8077.0), 0, False),  # Ascalon City, Pre-Searing
+    # Lakeside County -- the same region FILE as Ascalon City. Row 7982 covers
+    # the whole Pre-Searing region (studies/mapdata/FORMAT.md calls it that),
+    # which is why three map ids share one file and why its extent runs
+    # x -18432..21504 against Kamadan's much smaller box.
+    #
+    # WE DO NOT KNOW WHERE LAKESIDE'S SPAWN IS, and this line says so rather
+    # than pretending. gw-preservation records no spawn point for 146. Ashford
+    # Abbey's (map 164) was tried first and rejected on the owner's correction:
+    # Ashford is its own OUTPOST, so its coordinate is a point inside a
+    # different instance, not a spot in Lakeside.
+    #
+    # What is used instead is Ascalon City's coordinate -- MEASURED walkable on
+    # plane 0 of this same file, and honest about what it is: a known-good point
+    # in the shared region, not Lakeside's real arrival point. Pre-Searing is one
+    # continuous terrain, so if this lands inside the city walls the fix is to
+    # walk out rather than to guess again.
+    #
+    # Explorable is the reason for coming here at all, and it is the CLIENT's
+    # own answer rather than a borrowed flag: AreaInfo type is 2 for maps 145,
+    # 146 and 147 and 10 for 148 and 164, which lines up exactly with
+    # gw-preservation's Explorable column. See toolkit/clientscan/areatable.py.
+    146: (0x8001B97D, (9826.0, 8077.0), 0, True),   # Lakeside County
+    449: (0x345CC, (-9067.0, 13218.0), 0, False),   # Kamadan (outpost)
+    194: (0x265F7, (0.0, 0.0), 0, False),           # Kaineng Center (outpost)
+    55:  (352808, (0.0, 0.0), 0, False),            # Lion's Arch (outpost)
+    474: (219215, (0.0, 0.0), 0, True),             # Domain of Anguish
+    558: (287493, (0.0, 0.0), 0, True),             # Sparkfly Swamp
+    90:  (46594, (0.0, 0.0), 0, True),              # Lornar's Pass
 }
 # The fallback for maps we have no entry for. It used to catch map 148 as well,
 # which meant the character stood in Kamadan's geometry under Ascalon City's
@@ -412,6 +469,21 @@ MAP_STATIC_CONFIG = {
 # file id could not be recovered. It can now, so 148 is a real entry above and
 # this is back to being what it says it is: a substitute for the unknown.
 FALLBACK_MAP_ID = 449
+
+
+def map_explorable(map_id):
+    """Is this map a field rather than a town?
+
+    Guild Wars forbids attacking in a town, so this decides whether combat is
+    possible at all. CLIENT-DATA: AreaInfo's type field is 2 for the Pre-Searing
+    explorables (145, 146, 147) and 10 for its outposts (148, 164), which is the
+    client's own answer and agrees exactly with gw-preservation's Explorable
+    column. Maps we have not configured default to False, because a town is the
+    safer wrong answer -- it fails to allow combat rather than allowing it
+    somewhere the client will not.
+    """
+    cfg = MAP_STATIC_CONFIG.get(map_id)
+    return bool(cfg[3]) if cfg and len(cfg) > 3 else False
 
 # Parsed navmeshes, keyed by map_file_id. Loading one costs about a second,
 # nearly all of it decompressing the map out of the archive, so it is worth
@@ -542,6 +614,30 @@ GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS = 0x008A
 # client's.
 GAME_CMSG_INTERACT_PLAYER = 0x0033
 
+# The client asks to use a skill and then WAITS to be told it worked. Pressing a
+# skill plays the bar animation and never casts, which is the same shape as every
+# other bug this project has had: the client asks, we say nothing.
+#
+# Payload, from our schema and the one capture we have: dword skill_id, dword
+# copy, agent_id target, byte. Both observed sends carried a target of 0 because
+# nothing was selected at the time.
+GAME_CMSG_USE_SKILL = 0x0046
+
+# The reply, and its field meanings are the CLIENT'S OWN WORDS. 0x00823090 builds
+# a lookup key from the two payload fields and, when it misses, logs
+#
+#     'Pending skill %u copy %d not found'
+#
+# with the word field as %u and the dword as %d. So the message is
+# (agent_id, skill_id, copy), the client is matching it against a PENDING entry
+# it created when it sent USE_SKILL, and both fields have to be echoed back
+# unchanged for the match to land.
+#
+# 0x00E3 rather than 0x00E4, and that is measured too: 0x00E4's handler compares
+# the agent against your own and RETURNS EARLY when they match, so it is how you
+# see other people cast. 0x00E3 has no such check.
+GAME_SMSG_SKILL_ACTIVATED = 0x00E3
+
 GAME_CMSG_TURN_TO_DIRECTION = 0x003D
 GAME_CMSG_MOVE_TO_COORD = 0x003E
 GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
@@ -643,6 +739,11 @@ PROBE_NAME = None
 # town. See the INSTANCE_LOAD_INFO send site for why it is worth a flag.
 EXPLORABLE = False
 
+# Send the client somewhere other than the map it asked for. The character
+# record names 148, so without this every session lands in Ascalon City. A
+# server overriding the destination is not a hack -- it is what map travel is.
+MAP_OVERRIDE = None
+
 # Whether the world contains anything besides the player. On by default: an
 # enemy standing in the map is the point of the exercise, and every packet it
 # takes is proven (studies/enemy/PLAN.md). --no-enemy gives back an empty world
@@ -689,20 +790,94 @@ HIT_FRACTION = 0.15        # of maximum health, so ~7 clicks to kill
 HIT_COOLDOWN = 1.0         # seconds; the client sends interact far faster
 REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 
+# SERVER-DRIVEN ATTACKING, and it is a workaround rather than the mechanism.
+#
+# The client has never once sent ATTACK_AGENT (0x0026) to us -- not on click,
+# not on space, armed or unarmed, in an outpost or an explorable, with the
+# target red and damageable. It answers a click on our enemy with
+# INTERACT_PLAYER (0x0033) and nothing else. OBSERVED every session.
+#
+# The opcode is registered in this build's own send table with two fields, so
+# the capability is compiled in and something about our world stops the client
+# choosing it. What that is remains NOT FOUND after testing the weapon (item
+# and body), energy and health pools, the explorable flag, the hostile team
+# token and 0x002F.
+#
+# So a click now STARTS an attack instead of being one, and the server swings
+# on a timer. That is closer to how Guild Wars actually works -- combat is
+# server-authoritative and the client renders what it is told -- but the client
+# initiating is still the real thing and this is not it. Do not read a working
+# fight on screen as evidence that attacking is solved.
+ATTACK_INTERVAL = 1.33     # seconds between swings. Ours, not measured: GWCA
+                           # calls 1.33 the base for axe/sword/daggers, and a
+                           # hammer is slower. A capture would give the truth.
+ATTACK_RANGE = 1500.0      # units. Ours entirely; nothing measured it.
+
+
+def begin_attack(send, state, target_id, conn_id):
+    """A click on a hostile agent starts an attack that the tick keeps up.
+
+    Previously this dealt one hit per click, which is where "press to deal
+    damage" came from. Clicking an enemy in Guild Wars orders an attack; it does
+    not BE one.
+    """
+    agent = state.get("agents", {}).get(target_id)
+    if agent is None or agent["dead"]:
+        # Clicking anything else -- scenery, a corpse -- stops the swing rather
+        # than leaving the player hitting a thing that is no longer there.
+        state["attacking"] = None
+        return
+    if state.get("attacking") != target_id:
+        state["attacking"] = target_id
+        # Swing immediately on the first click, then let the tick keep time.
+        # Waiting a full interval makes the click feel ignored.
+        agent["last_hit"] = 0.0
+        print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']})",
+              flush=True)
+
+
+def attack_tick(send, state, conn_id):
+    """Keep swinging at whatever the player last clicked."""
+    target_id = state.get("attacking")
+    if not target_id:
+        return
+    agent = state.get("agents", {}).get(target_id)
+    if agent is None or agent["dead"]:
+        state["attacking"] = None
+        return
+    px, py = state.get("pos", (0.0, 0.0))
+    ax, ay = agent["pos"]
+    if math.hypot(ax - px, ay - py) > ATTACK_RANGE:
+        # Out of range. Real Guild Wars would walk the player into range; we do
+        # not move the player, so the swing simply stops and resumes when they
+        # walk back. Keep the target so it picks up again without re-clicking.
+        return
+    hit_enemy(send, state, target_id, conn_id)
+
 
 def hit_enemy(send, state, target_id, conn_id):
-    """Answer a click on a hostile agent by hurting it.
-
-    The client sends INTERACT_PLAYER several times a second while the player
-    holds a target, so this rate-limits. Without that, one click would kill.
-    """
+    """Land one swing on a hostile agent, if the swing timer allows it."""
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
         return
     now = time.time()
-    if now - agent.get("last_hit", 0.0) < HIT_COOLDOWN:
+    if now - agent.get("last_hit", 0.0) < ATTACK_INTERVAL:
         return
     agent["last_hit"] = now
+
+    # A swing is two events, and sending only the second is why the first
+    # attempt produced damage with no animation: 1 is melee_attack_FINISHED,
+    # the end of a swing. 4 is attack_started, and GWCA's note on it is
+    # "caster_id is victim, target_id is attacker" -- so the enemy goes in the
+    # target slot and the player in the cause slot, the same order the damage
+    # send below uses.
+    #
+    # 4 travels on GenericValueTarget, which we believe is 0x00A0 because its
+    # field shape matches 0x00A3 exactly. INFERRED, not observed: if no swing
+    # animation appears, this opcode is the first thing to doubt.
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+         [agents.GV_ATTACK_STARTED, target_id, PLAYER_AGENT_ID, 0],
+         f"attack_started on {target_id}")
 
     dealt = agent["max_health"] * HIT_FRACTION
     agent["health"] = max(0.0, agent["health"] - dealt)
@@ -715,6 +890,11 @@ def hit_enemy(send, state, target_id, conn_id):
          [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID,
           struct.unpack("<I", struct.pack("<f", -HIT_FRACTION))[0]],
          f"damage {dealt:.0f} to agent {target_id}")
+    # And close the swing. Harmless if the client ignores it; without it the
+    # attack has a beginning and no end.
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_MELEE_ATTACK_FINISHED, PLAYER_AGENT_ID, 0],
+         "melee_attack_finished")
     print(f"[c{conn_id}] hit agent {target_id}: "
           f"{agent['health']:.0f}/{agent['max_health']:.0f}", flush=True)
 
@@ -748,9 +928,47 @@ def revive_due(send, state, conn_id):
              f"revive agent {agent_id}")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
-             f"restore health on agent {agent_id}")
+             f"restore max health on agent {agent_id}")
+        # Re-asserting the SAME maximum refills nothing, which is why a revived
+        # body stood up with an empty bar while our own bookkeeping said full --
+        # so it still took a full seven swings to drop, and the bar never moved.
+        # OBSERVED 2026-08-06.
+        #
+        # Property 34 is a DELTA on the health pool, not a setter: we measured
+        # -50.0 taking exactly 50 health off (studies/agentprops/FINDINGS.md 1b),
+        # and GWCA independently calls it `health`. A full maximum in the
+        # positive direction fills a bar the death path had zeroed.
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+             [agents.GV_HEALTH, agent_id, agent_id,
+              struct.unpack("<I", struct.pack("<f", agent["max_health"]))[0]],
+             f"refill bar on agent {agent_id}")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)
+
+
+def enemy_spot(state, ox, oy):
+    """Somewhere near the player that the navmesh agrees is ground.
+
+    The offset used to be a fixed 300 east, which was fine in Kamadan and is
+    not fine anywhere else -- MEASURED on the Pre-Searing region, +300 east of
+    one candidate spawn is off the mesh entirely. A body placed off-mesh is
+    worse than a body in an odd spot: it is standing somewhere the server's own
+    collision says does not exist, so everything downstream reasons about it
+    wrongly.
+
+    Falls back to the plain offset when there is no navmesh at all, which is a
+    normal outcome -- the archive is the player's own install and is not
+    required to be present.
+    """
+    pm = state.get("pathmap")
+    if pm is None:
+        return ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
+    d = ENEMY_OFFSET[0]
+    for dx, dy in ((d, 0), (0, d), (-d, 0), (0, -d),
+                   (d, d), (-d, d), (d, -d), (-d, -d)):
+        if pm.walkable(ox + dx, oy + dy):
+            return ox + dx, oy + dy
+    return ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
 
 
 def spawn_enemy(send, state, origin, conn_id):
@@ -767,7 +985,7 @@ def spawn_enemy(send, state, origin, conn_id):
     type was never defined crashes it outright. OBSERVED.
     """
     ox, oy, plane = origin
-    x, y = ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
+    x, y = enemy_spot(state, ox, oy)
 
     send(GAME_SMSG_NPC_UPDATE_PROPERTIES,
          agents.npc_properties(ENEMY_DEFINITION, agents.HATCHER),
@@ -781,6 +999,18 @@ def spawn_enemy(send, state, origin, conn_id):
                              agents.AGENT_KIND_NPC, x, y, plane,
                              allegiance=agents.ALLEGIANCE_HOSTILE),
          f"WORLD_CREATE_AGENT({ENEMY_AGENT_ID}, hostile)")
+    # NOT SENT, and the reason is worth keeping. 0x002F is ldufr's
+    # AGENT_UPDATE_ALLEGIANCE, and it looked like the way to set the byte GWCA
+    # documents at AgentLiving+h01B1 -- the one whose values are named
+    # "ally/non-attackable" and "enemy". It is not. Its handler at 0x005fdd70
+    # hands field 2 to a setter at 0x00602e20 which writes [esi+0xE8], nowhere
+    # near +0x1B1. SOURCED, read from this build. Sending it changed nothing
+    # observable, which is consistent with it being some other field entirely.
+    #
+    # Nothing in this image writes +0x1B1 or +0x1B2 in any addressing form a
+    # displacement scan finds, so either GWCA's offsets are for a different
+    # build or the write is computed. Do not send 0x002F for this purpose again
+    # without settling that first.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, ENEMY_AGENT_ID, ENEMY_MAX_HEALTH],
          f"health {ENEMY_MAX_HEALTH} on agent {ENEMY_AGENT_ID}")
@@ -1071,6 +1301,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         s2c = ARC4(derived)
         state = {}
         if kind == "game":
+            if MAP_OVERRIDE is not None and MAP_OVERRIDE != map_id:
+                print(f"[c{conn_id}] client asked for map {map_id}; "
+                      f"sending it to {MAP_OVERRIDE} instead", flush=True)
+                map_id = MAP_OVERRIDE
             state["map_id"] = map_id
             state["world_id"] = world_id
             state["player_id"] = player_id
@@ -1126,7 +1360,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
                  [1,          # agent_id -- the player's own agent, 1 for the first
                   map_id,     # echoed from the version frame, not guessed
-                  1 if EXPLORABLE else 0,
+                  # The map's own kind, not a global switch. The client's
+                  # AreaInfo type says which is which -- 2 explorable, 10
+                  # outpost -- and MAP_STATIC_CONFIG carries that per map.
+                  # --explorable still forces it on for maps we have not
+                  # configured, which is what it was added for.
+                  1 if (EXPLORABLE or map_explorable(state["map_id"])) else 0,
                   0,          # district
                   0,          # language
                   0],         # is_observer
@@ -1174,6 +1413,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     # back up whether or not the player is moving, so this must
                     # be above the destination check that skips the rest.
                     try:
+                        attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
                     except OSError:
                         return
@@ -1273,11 +1513,49 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # stalls again they are the next candidates.
                         send(GAME_SMSG_ITEM_STREAM_CREATE, [1, 0],
                              "ITEM_STREAM_CREATE")
+                        # The item has to exist before a weapon set can name it,
+                        # and upstream sends inventory before the slots for that
+                        # reason. CREATE_NAMED_ITEM only DECLARES the bytes --
+                        # it puts nothing in a bag and nothing in a hand.
+                        if EQUIP_WEAPON:
+                            send(GAME_SMSG_CREATE_NAMED_ITEM,
+                                 agents.named_item(WEAPON_ITEM_ID,
+                                                   agents.STARTER_HAMMER),
+                                 "CREATE_NAMED_ITEM(starter hammer)")
+                            # Rendering a weapon and EQUIPPING one are not the
+                            # same thing, and we had only done the first. The
+                            # bag was skipped on purpose to answer an open
+                            # question in studies/character/FINDINGS.md -- does
+                            # 0x006E draw with no bag behind it? -- and the
+                            # answer is yes, OBSERVED: the hammer appeared in
+                            # hand with no bag at all.
+                            #
+                            # But the client then asserted on m_attackInterval
+                            # the moment an attack was meant to animate, so the
+                            # weapon it was drawing had no attack speed. An
+                            # item that is in no bag and no slot is not worn by
+                            # anything, which is the obvious candidate for why.
+                            # Field order follows GmInventory.c:174-182 and
+                            # :145-152 exactly.
+                            send(GAME_SMSG_INVENTORY_CREATE_BAG,
+                                 [1, BAG_TYPE_EQUIPPED, BAG_MODEL_EQUIPPED,
+                                  EQUIPPED_BAG_ID, EQUIPPED_SLOT_COUNT, 0],
+                                 "INVENTORY_CREATE_BAG(equipped)")
+                            send(GAME_SMSG_ITEM_MOVED_TO_LOCATION,
+                                 [1, WEAPON_ITEM_ID, EQUIPPED_BAG_ID,
+                                  EQUIPPED_SLOT_WEAPON],
+                                 "ITEM_MOVED_TO_LOCATION(hammer -> equipped 0)")
                         send(GAME_SMSG_ITEM_SET_ACTIVE_WEAPON_SET, [1, 0],
                              "SET_ACTIVE_WEAPON_SET")
                         for slot in range(4):
-                            send(GAME_SMSG_ITEM_WEAPON_SET, [1, slot, 0, 0],
-                                 f"WEAPON_SET[{slot}]")
+                            # Slot 0 is the active set (SET_ACTIVE_WEAPON_SET
+                            # above selects it). leadhand is the main hand; a
+                            # hammer is two-handed, so offhand stays empty.
+                            lead = (WEAPON_ITEM_ID
+                                    if EQUIP_WEAPON and slot == 0 else 0)
+                            send(GAME_SMSG_ITEM_WEAPON_SET, [1, slot, lead, 0],
+                                 f"WEAPON_SET[{slot}]"
+                                 + (f" leadhand={lead}" if lead else ""))
                         send(GAME_SMSG_UPDATE_GOLD_STORAGE, [1, 0],
                              "UPDATE_GOLD_STORAGE")
                         send(GAME_SMSG_CHARACTER_UPDATE_INFO,
@@ -1300,11 +1578,41 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_INSTANCE_MANIFEST_DONE,
                                  [phase_arg, map_arg, 0],
                                  f"MANIFEST_DONE[{phase_arg}, map {map_arg}]")
+                    elif opcode == GAME_CMSG_USE_SKILL:
+                        # Confirm the cast by echoing the key the client is
+                        # waiting on. If the echo is wrong the client says so in
+                        # its own log -- 'Pending skill %u copy %d not found' --
+                        # which makes this one of the few things in the project
+                        # that reports its own failure.
+                        skill_id, copy, target = values[1], values[2], values[3]
+                        send(GAME_SMSG_SKILL_ACTIVATED,
+                             [PLAYER_AGENT_ID, skill_id, copy],
+                             f"SKILL_ACTIVATED(skill {skill_id}, copy {copy})")
+                        print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
+                              f"agent {target or 'nothing'}", flush=True)
+                        # TRIED AND IT DID NOT WORK, recorded so it is not
+                        # retried blind: sending generic values 60
+                        # (skill_activated) then 58 (skill_finished) here left
+                        # the cast exactly as stalled as before. They may still
+                        # be part of the answer -- they were never going to be
+                        # all of it -- but on their own they change nothing
+                        # visible, so they are out rather than sitting in the
+                        # code looking like they work. agents.py keeps the ids.
+                        #
+                        # Skill completion is being worked on a separate branch.
+                        # Do not build more of it here.
+                        # A skill aimed at something hostile does what a click
+                        # does. Whether a skill should damage at all, and by how
+                        # much, is OURS -- the client carries every real number
+                        # (studies/skills/FINDINGS.md) and we do not read it yet.
+                        if target:
+                            hit_enemy(send, state, target, conn_id)
                     elif opcode == GAME_CMSG_INTERACT_PLAYER:
-                        # The player clicked something. If it is one of ours and
-                        # it is hostile, that is an attack -- see the comment on
-                        # the opcode for why this and not ATTACK_AGENT.
-                        hit_enemy(send, state, values[1], conn_id)
+                        # The player clicked something. Clicking a hostile
+                        # agent ORDERS an attack; the tick does the swinging.
+                        # See ATTACK_INTERVAL for why this is server-driven and
+                        # why that is a workaround, not the mechanism.
+                        begin_attack(send, state, values[1], conn_id)
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through
                         # MOVE_TO_COORD: WASD sends a HEADING from where you
@@ -1847,6 +2155,69 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
                              [PLAYER_AGENT_ID, [0] * ATTRIBUTE_COUNT],
                              "AGENT_UPDATE_ATTRIBUTES")
+                        # The player's own pools, which we had never sent. See
+                        # agents.py: the enemy got a health pool the day it was
+                        # spawned and the player never got one, so every skill
+                        # on the bar was unaffordable. Order and values follow
+                        # gw-preservation's sendPlayerAttributes, which is a
+                        # server the real client accepts.
+                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                             [agents.PROP_ENERGY_MAX, PLAYER_AGENT_ID,
+                              agents.PLAYER_ENERGY],
+                             f"PLAYER energy = {agents.PLAYER_ENERGY}")
+                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                             [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID,
+                              agents.PLAYER_HEALTH],
+                             f"PLAYER health = {agents.PLAYER_HEALTH}")
+                        # The value field is a dword carrying IEEE float bits,
+                        # same as the damage path above.
+                        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+                             [agents.PROP_UNKNOWN_FLOAT_43, PLAYER_AGENT_ID,
+                              PLAYER_AGENT_ID,
+                              struct.unpack("<I", struct.pack(
+                                  "<f", agents.PLAYER_FLOAT_43))[0]],
+                             "PLAYER float 43 (purpose unknown upstream too)")
+                        # Putting the weapon on the BODY is a different question
+                        # from putting it in the weapon-set UI, and we had only
+                        # done the latter. Upstream sources this message from the
+                        # equipped-items bag, not from the weapon set
+                        # (GmAgent.c:200-218), and slot 0 of that bag is the
+                        # weapon -- so position 0 here is the weapon item id.
+                        #
+                        # Sending 0x006E with NO bag behind it is deliberate: it
+                        # is exactly the experiment studies/character/FINDINGS.md
+                        # left open ("Try 353 + 110 with no bag, then add 319 and
+                        # 318, and see which is the minimum that draws"), and it
+                        # is the smallest change that can answer it.
+                        #
+                        # Position order is bag order, which is 2 lineages
+                        # against 1 -- and positions 3-6 are CONTESTED. They are
+                        # all zero here, so this send does not depend on that
+                        # dispute; the moment armour goes in it will.
+                        if EQUIP_WEAPON:
+                            send(GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT,
+                                 [PLAYER_AGENT_ID, WEAPON_ITEM_ID,
+                                  0, 0, 0, 0, 0, 0, 0, 0],
+                                 "UPDATE_AGENT_VISUAL_EQUIPMENT(weapon)")
+                            # And separately, what the agent WIELDS.
+                            #
+                            # These are ITEM IDS, not weapon types, and the
+                            # client said so itself. Sending weapon type 3 here
+                            # -- on the theory that this message sets
+                            # AgentLiving::weapon_type at +h01B2 -- took the
+                            # client down on
+                            #     Assertion: ptr
+                            #     P:\Code\Gw\Item\Cli\ItCliApi.cpp(400)
+                            # with `baseItem` in the strings beside it. It
+                            # looked 3 up in the item table, got null and died.
+                            # OBSERVED, 2026-08-06. The client presumably
+                            # derives weapon_type from the item's own
+                            # ItemType, the same way it derives the mesh from
+                            # file_id.
+                            send(GAME_SMSG_NPC_UPDATE_WEAPONS,
+                                 [PLAYER_AGENT_ID, WEAPON_ITEM_ID, 0],
+                                 "NPC_UPDATE_WEAPONS(leadhand = item "
+                                 f"{WEAPON_ITEM_ID})")
                         # unk0 is a literal 3 upstream (GmAgent.c:246).
                         send(GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT,
                              [PLAYER_AGENT_ID, 3], "UPDATE_CONTROLLED_AGENT")
@@ -1870,7 +2241,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             print(f"[c{conn_id}] no static config for map "
                                   f"{state['map_id']}; substituting map "
                                   f"{FALLBACK_MAP_ID} geometry", flush=True)
-                        file_id, pos, plane = cfg
+                        file_id, pos, plane = cfg[0], cfg[1], cfg[2]
                         send(GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT,
                              [file_id, pos, plane, 0, 0, b"\x00" * 8],
                              f"INSTANCE_LOAD_SPAWN_POINT(file {file_id})")
@@ -2059,10 +2430,20 @@ def main():
                          "and report which attempt numbers behaved; that "
                          "identifies the fields from the client instead of from "
                          "two sources that contradict each other.")
+    ap.add_argument("--map", type=int, metavar="ID",
+                    help="Put the character in this map instead of the one its "
+                         "character record asks for. 146 is Lakeside County, "
+                         "which is explorable and therefore the first place "
+                         "combat can be tested; 148 is Ascalon City.")
     ap.add_argument("--no-enemy", action="store_true",
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
                          "assume and what every session before 2026-08-06 was.")
+    ap.add_argument("--no-weapon", action="store_true",
+                    help="Log in with empty weapon slots, as every session before "
+                         "2026-08-06 did. Attacking and weapon skills were both "
+                         "unavailable then; this flag is what makes that "
+                         "re-testable instead of merely remembered.")
     ap.add_argument("--explorable", action="store_true",
                     help="Tell the client this instance is explorable rather than "
                          "a town. Guild Wars forbids attacking in a town, so this "
@@ -2103,10 +2484,24 @@ def main():
         print("staircase -- and note which attempts behaved. The cycle repeats.")
         print()
 
+    if a.map is not None:
+        global MAP_OVERRIDE
+        MAP_OVERRIDE = a.map
+        known = MAP_STATIC_CONFIG.get(a.map)
+        print(f"MAP OVERRIDE: {a.map}"
+              + (f", explorable={bool(known[3])}" if known
+                 else " -- NOT in MAP_STATIC_CONFIG, so geometry falls back "
+                    f"to map {FALLBACK_MAP_ID} and it will not be explorable"))
+
     if a.no_enemy:
         global SPAWN_ENEMY
         SPAWN_ENEMY = False
         print("NO ENEMY: the world will contain the player and nothing else.")
+
+    if a.no_weapon:
+        global EQUIP_WEAPON
+        EQUIP_WEAPON = False
+        print("NO WEAPON: the character's four weapon slots stay empty.")
 
     if a.explorable:
         global EXPLORABLE

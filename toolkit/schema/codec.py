@@ -18,10 +18,18 @@ that code as if it described the wire and every variable-length message is frame
 two bytes wrong. The real capture settles it: `AUTH_CMSG_SEND_COMPUTER_INFO`
 begins `05 00` for a five-character string.
 
-nested_struct is deliberately unsupported. The field table gives a count prefix
-and an element cap but says nothing about the element layout, so any decoder that
-claims to handle it is guessing. Messages using it are reported as undecodable
-rather than decoded wrongly — 13 of 777 do.
+nested_struct was deliberately unsupported here, on the grounds that the field
+table gave a count prefix and an element cap but said nothing about the element
+layout, so any decoder claiming to handle it was guessing. That was correct when
+it was written and is now superseded: the client's own message-format tables were
+recovered from Gw.exe, and type 12 is documented there as "nested-struct repeat
+count; parser rewinds to cmd+4 per repetition" with a ONE-byte wire count
+(`studies/msgtable/FINDINGS.md` section 2.2, the `push 8` / mask `0xff` at
+0x7dc280). cmd+4 is the descriptor immediately after the type-12 one, so the
+element layout is exactly the schema's remaining tail, repeated `count` times.
+That is measured, not guessed, and it is why the 13 messages that use it decode
+now. The tail fields are NOT separate fields: a caller passes one value for the
+nested_struct — a list of rows — and nothing after it.
 """
 
 import json
@@ -86,59 +94,84 @@ class Codec:
 
         values = []
         p = off
-        for f in fields:
-            t, length = f["type"], f["length"]
-            if t == "msg_header":
+        for i, f in enumerate(fields):
+            if f["type"] == "msg_header":
                 p += 2
                 values.append(raw_header)
-            elif t in FIXED:
-                n = FIXED[t]
-                if p + n > len(data):
-                    raise NeedMoreData(t)
-                if t == "byte":
-                    values.append(data[p])
-                elif t == "word":
-                    values.append(struct.unpack_from("<H", data, p)[0])
-                elif t == "float":
-                    values.append(struct.unpack_from("<f", data, p)[0])
-                elif t == "vec2":
-                    values.append(struct.unpack_from("<2f", data, p))
-                elif t == "vec3":
-                    values.append(struct.unpack_from("<3f", data, p))
-                else:
-                    values.append(struct.unpack_from("<I", data, p)[0])
-                p += n
-            elif t == "blob":
-                if p + length > len(data):
-                    raise NeedMoreData("blob")
-                values.append(data[p:p + length])
-                p += length
-            elif t in COUNTED:
-                if p + 2 > len(data):
-                    raise NeedMoreData("count")
-                count = struct.unpack_from("<H", data, p)[0]
-                p += 2
-                if count > length:
-                    raise Undecodable(f"{t} count {count} exceeds declared cap {length}")
-                width = COUNTED[t]
-                need = count * width
-                if p + need > len(data):
-                    raise NeedMoreData(t)
-                raw = data[p:p + need]
-                p += need
-                if t == "string16":
-                    values.append(raw.decode("utf-16-le", "replace"))
-                elif t == "array8":
-                    values.append(raw)
-                elif t == "array16":
-                    values.append(list(struct.unpack(f"<{count}H", raw)))
-                else:
-                    values.append(list(struct.unpack(f"<{count}I", raw)))
-            elif t == "nested_struct":
-                raise Undecodable("nested_struct: element layout is not in the schema")
+            elif f["type"] == "nested_struct":
+                # One byte of count, then the tail repeated that many times.
+                # See the module docstring: the tail IS the element layout, so
+                # this consumes the rest of the field list and stops.
+                element = fields[i + 1:]
+                if not element:
+                    raise Undecodable(
+                        "nested_struct is the last field: the schema carries no "
+                        "element layout for it")
+                if p >= len(data):
+                    raise NeedMoreData("nested_struct count")
+                count = data[p]
+                p += 1
+                if count > f["length"]:
+                    raise Undecodable(
+                        f"nested_struct count {count} exceeds declared cap {f['length']}")
+                rows = []
+                for _ in range(count):
+                    row = []
+                    for ef in element:
+                        v, p = self._decode_field(ef, data, p)
+                        row.append(v)
+                    rows.append(row)
+                values.append(rows)
+                break
             else:
-                raise Undecodable(f"unhandled field type {t}")
+                v, p = self._decode_field(f, data, p)
+                values.append(v)
         return opcode, values, p
+
+    def _decode_field(self, f, data, p):
+        """Decode one non-header, non-nested field. Returns (value, new_off)."""
+        t, length = f["type"], f["length"]
+        if t in FIXED:
+            n = FIXED[t]
+            if p + n > len(data):
+                raise NeedMoreData(t)
+            if t == "byte":
+                v = data[p]
+            elif t == "word":
+                v = struct.unpack_from("<H", data, p)[0]
+            elif t == "float":
+                v = struct.unpack_from("<f", data, p)[0]
+            elif t == "vec2":
+                v = struct.unpack_from("<2f", data, p)
+            elif t == "vec3":
+                v = struct.unpack_from("<3f", data, p)
+            else:
+                v = struct.unpack_from("<I", data, p)[0]
+            return v, p + n
+        if t == "blob":
+            if p + length > len(data):
+                raise NeedMoreData("blob")
+            return data[p:p + length], p + length
+        if t in COUNTED:
+            if p + 2 > len(data):
+                raise NeedMoreData("count")
+            count = struct.unpack_from("<H", data, p)[0]
+            p += 2
+            if count > length:
+                raise Undecodable(f"{t} count {count} exceeds declared cap {length}")
+            need = count * COUNTED[t]
+            if p + need > len(data):
+                raise NeedMoreData(t)
+            raw = data[p:p + need]
+            p += need
+            if t == "string16":
+                return raw.decode("utf-16-le", "replace"), p
+            if t == "array8":
+                return raw, p
+            if t == "array16":
+                return list(struct.unpack(f"<{count}H", raw)), p
+            return list(struct.unpack(f"<{count}I", raw)), p
+        raise Undecodable(f"unhandled field type {t}")
 
     def decode_stream(self, channel, data, mask=0):
         """Decode as many whole messages as possible.
@@ -165,45 +198,74 @@ class Codec:
     def encode(self, channel, opcode, values, header_value=None):
         fields = self.fields_for(channel, opcode)
         payload = [f for f in fields if f["type"] != "msg_header"]
-        if len(values) != len(payload):
+        # A nested_struct swallows every field after it as its element layout,
+        # so the caller supplies one value for the whole repeated tail and none
+        # for the tail fields themselves.
+        nested = next((i for i, f in enumerate(payload)
+                       if f["type"] == "nested_struct"), None)
+        want = len(payload) if nested is None else nested + 1
+        if len(values) != want:
             raise ValueError(
-                f"{channel} 0x{opcode:04x} wants {len(payload)} values, got {len(values)}")
+                f"{channel} 0x{opcode:04x} wants {want} values, got {len(values)}")
         out = bytearray(struct.pack("<H", opcode if header_value is None else header_value))
         for f, v in zip(payload, values):
-            t, length = f["type"], f["length"]
-            if t == "byte":
-                out += struct.pack("<B", v)
-            elif t == "word":
-                out += struct.pack("<H", v)
-            elif t == "float":
-                out += struct.pack("<f", v)
-            elif t == "vec2":
-                out += struct.pack("<2f", *v)
-            elif t == "vec3":
-                out += struct.pack("<3f", *v)
-            elif t in ("dword", "agent_id"):
-                out += struct.pack("<I", v)
-            elif t == "blob":
-                b = bytes(v)
-                if len(b) != length:
-                    raise ValueError(f"blob wants exactly {length} bytes, got {len(b)}")
-                out += b
-            elif t == "string16":
-                s = str(v)
-                if len(s) > length:
-                    raise ValueError(f"string of {len(s)} exceeds cap {length}")
-                out += struct.pack("<H", len(s)) + s.encode("utf-16-le")
-            elif t in ("array8", "array16", "array32"):
-                seq = list(v)
-                if len(seq) > length:
-                    raise ValueError(f"{t} of {len(seq)} exceeds cap {length}")
-                out += struct.pack("<H", len(seq))
-                if t == "array8":
-                    out += bytes(seq)
-                elif t == "array16":
-                    out += struct.pack(f"<{len(seq)}H", *seq)
-                else:
-                    out += struct.pack(f"<{len(seq)}I", *seq)
+            if f["type"] == "nested_struct":
+                element = payload[nested + 1:]
+                if not element:
+                    raise ValueError(
+                        "nested_struct is the last field: the schema carries no "
+                        "element layout for it")
+                rows = list(v)
+                if len(rows) > f["length"]:
+                    raise ValueError(
+                        f"nested_struct of {len(rows)} exceeds cap {f['length']}")
+                out += struct.pack("<B", len(rows))
+                for row in rows:
+                    if len(row) != len(element):
+                        raise ValueError(
+                            f"nested_struct row wants {len(element)} values, "
+                            f"got {len(row)}")
+                    for ef, ev in zip(element, row):
+                        self._encode_field(ef, ev, out)
             else:
-                raise ValueError(f"cannot encode field type {t}")
+                self._encode_field(f, v, out)
         return bytes(out)
+
+    def _encode_field(self, f, v, out):
+        """Append one non-header, non-nested field to the bytearray `out`."""
+        t, length = f["type"], f["length"]
+        if t == "byte":
+            out += struct.pack("<B", v)
+        elif t == "word":
+            out += struct.pack("<H", v)
+        elif t == "float":
+            out += struct.pack("<f", v)
+        elif t == "vec2":
+            out += struct.pack("<2f", *v)
+        elif t == "vec3":
+            out += struct.pack("<3f", *v)
+        elif t in ("dword", "agent_id"):
+            out += struct.pack("<I", v)
+        elif t == "blob":
+            b = bytes(v)
+            if len(b) != length:
+                raise ValueError(f"blob wants exactly {length} bytes, got {len(b)}")
+            out += b
+        elif t == "string16":
+            s = str(v)
+            if len(s) > length:
+                raise ValueError(f"string of {len(s)} exceeds cap {length}")
+            out += struct.pack("<H", len(s)) + s.encode("utf-16-le")
+        elif t in ("array8", "array16", "array32"):
+            seq = list(v)
+            if len(seq) > length:
+                raise ValueError(f"{t} of {len(seq)} exceeds cap {length}")
+            out += struct.pack("<H", len(seq))
+            if t == "array8":
+                out += bytes(seq)
+            elif t == "array16":
+                out += struct.pack(f"<{len(seq)}H", *seq)
+            else:
+                out += struct.pack(f"<{len(seq)}I", *seq)
+        else:
+            raise ValueError(f"cannot encode field type {t}")

@@ -891,6 +891,229 @@ different claims, and only the second one mattered.
 
 ---
 
+## 6o. Arming the player, and the wall the client will not go past
+
+Session of 2026-08-06, continuing §6m. The deliverable was "make basic attacking
+work". It does not work, and this section says exactly how far it got and what
+is now known that was not known before. Six hypotheses were tested against the
+live client and all six failed; the failures are listed because each one costs a
+client relaunch and nobody should pay for them twice.
+
+### The client will not initiate an attack — NOT FOUND
+
+**`GAME_CMSG_ATTACK_AGENT` (0x0026) has never been sent by this client, to us,
+in any session.** Not on left click, not on space, armed or unarmed, in an
+outpost or an explorable, with the target rendering red and taking damage.
+OBSERVED across every capture in `vault/captures/authsrv`. A click on our enemy
+produces `INTERACT_PLAYER` (0x0033) and nothing else — which is what the client
+sends for an NPC you talk to.
+
+The opcode is real and registered on this build: send descriptor @VA
+`0x00bc8d78`, `cmds[] @0x00c00734`, two fields. **SOURCED.** So the capability is
+compiled in and something about the world we present stops the client choosing
+it.
+
+Eliminated, each by a live test:
+
+| Hypothesis | Result |
+|---|---|
+| No weapon item exists | Created one. No change. |
+| Weapon not on the body | `0x006E` sent, hammer renders in hand. No change. |
+| Weapon not in the hand slots | `0x006D` sent with the item id. No change. |
+| Player has no energy | Property 41 = 25. Globe shows it. No change. |
+| Player has no health pool | Property 42 = 100. No change. |
+| Map is a town | Lakeside County, `is_explorable` = 1. No change. |
+| Target not flagged attackable | `0x002F` sent. No change — and see below, it is not that field. |
+
+**Four independent attempts to locate the send site in the binary all failed**,
+and the reason is worth recording so the fifth person does not repeat them:
+descriptor xrefs (none), `cmds[]` xrefs (none), opcode-pushed-then-called
+clustering, and immediate stores of the opcode as word and as dword. All four
+also come up empty for **0x0046**, which the client demonstrably *does* send —
+so they are not evidence about attacking, they are evidence that the client
+reaches its send table by a route none of those methods sees. Do not re-run them.
+
+### `0x002F` is not the allegiance byte — SOURCED, and a correction
+
+GWCA documents `AgentLiving::allegiance` at `+h01B1` with values named
+outright — `1` ally/non-attackable, `3` enemy, `6` npc/minipet
+(`GameEntities/Agent.h:222`). ldufr names opcode `0x002F`
+`AGENT_UPDATE_ALLEGIANCE`, and it looks like the way to set it. **It is not.**
+Its handler at `0x005fdd70` passes field 2 to a setter at `0x00602e20`, which
+writes `[esi+0xE8]` — nowhere near `+0x1B1`. Sending it changed nothing
+observable.
+
+Further: **nothing in this image writes `+0x1B1` or `+0x1B2`** in any addressing
+form a displacement scan finds, including FPU stores. Either GWCA's offsets are
+for a different build than 38797, or the write is computed. Settle that before
+trusting any `+h01xx` offset from GWCA against this build.
+
+### Items: rendering a weapon is not equipping one — OBSERVED
+
+Three different messages, and they are not interchangeable:
+
+| Message | What it does |
+|---|---|
+| `0x0161 CREATE_NAMED_ITEM` | declares the item's bytes; places nothing |
+| `0x0147 ITEM_WEAPON_SET` | fills the weapon-swap UI slots |
+| `0x006E UPDATE_AGENT_VISUAL_EQUIPMENT` | puts it on the BODY — this is what draws it |
+| `0x006D NPC_UPDATE_WEAPONS` | agent + leadhand + offhand, as **item ids** |
+
+**An open question from `studies/character/FINDINGS.md` is now closed: `0x006E`
+renders with no bag behind it.** We sent `0x0161` + `0x006E` with no
+`INVENTORY_CREATE_BAG` and no `ITEM_MOVED_TO_LOCATION`, and the hammer appeared
+in the character's hands. OBSERVED.
+
+**`0x006D` carries item ids, not weapon types.** Sending weapon type 3 there —
+on the theory that it sets `weapon_type` at `+h01B2` — took the client down on
+`Assertion: ptr`, `P:\Code\Gw\Item\Cli\ItCliApi.cpp(400)`, with `baseItem` in
+the adjacent strings. It looked 3 up in the item table, got null and died.
+OBSERVED. The client presumably derives `weapon_type` from the item's own
+`ItemType`, the way it derives the mesh from `file_id`.
+
+The starter hammer itself is `GmDefaultArmors.c:80-93`, the sixth entry of the
+Prophecies warrior array — five armour pieces and one `ItemType_Hammer`.
+UPSTREAM; no capture of ours carries those bytes. It is accepted by the client
+without complaint, which is not the same as being correct.
+
+### The player's own pools were never sent — OBSERVED, and fixed
+
+The enemy got a health pool the day it was spawned and **the player never got
+one, in any session**. Property **41 = energy**, **42 = health**, both on the int
+channel `0x009F`. CORROBORATED before sending — gw-preservation's working server
+sends exactly these two with naming comments (`gameservice/player.go:268-269`),
+and our own read of the int-record dispatch found cases for `{32, 41, 42}` and
+nothing else (`studies/agentprops/FINDINGS.md` §3b), with 42 already measured as
+maximum health. **41 is now OBSERVED**: the energy globe reads 25.
+
+This did *not* make skills castable, so an empty energy pool was not the only
+thing stopping them. Skill completion moved to a separate branch.
+
+### Generic values, and the animation precondition — the best result here
+
+GWCA's `GenericValueID` namespace (`Packets/StoC.h:36-70`) is a richer and
+better-commented table than Py4GW's and it corrects one of our sends:
+
+- **`1` is `melee_attack_finished`** — the END of a swing. We sent it expecting
+  an animation and got none, which is correct behaviour for an id meaning "that
+  one is over".
+- **`4` is `attack_started`** — "caster_id is victim, target_id is attacker".
+- It independently corroborates three ids we had already MEASURED ourselves —
+  16 damage, 34 health, 55 armour-ignoring — and 4 lands in the same client
+  dispatch case as 50 and 60 that our own read of the int table found
+  (`{4, 50, 60}`).
+
+**`0x00A0` is `GenericValueTarget` — CONFIRMED by crash.** It was INFERRED from
+its field shape matching `0x00A3`. Sending `attack_started` on it reached the
+melee attack animation code, which is proof the opcode and the id are both
+right.
+
+**The precondition that blocks the animation, read out of the client at
+`0x007F82C0` — SOURCED:**
+
+```
+fld   dword ptr [esi + 0xec]     ; weapon_attack_speed
+fldz / fucom / fnstsw / test ah, 0x44
+jp    0x7f82fc                   ; assert ONLY if it is zero
+push  0x12b7                     ; line 4791 -> "m_attackInterval"
+call  0x487bc0
+0x7f82fc: fld dword ptr [esi + 0xf0]   ; attack_speed_modifier, line 4792
+```
+
+`esi` is the agent: `[esi+0x158]` is read a few instructions later and that is
+`type_map` in GWCA's map. So **both `+0xEC` and `+0xF0` must be non-zero before
+the client will animate a melee attack**, and ours are zero. That is the crash
+`Assertion: m_attackInterval / P:\Code\Gw\AgentView\AvChar.cpp(4791)`.
+
+**What sets them is NOT FOUND.** No `mov` and no `fstp` writes either offset by
+displacement anywhere in the image. GWCA calls `+0xEC` "the base attack speed of
+the last attack's weapon", which suggests the client computes it from the
+equipped weapon rather than being told — so the last thing tried was putting the
+hammer in a real equipped-items bag. **That change is UNTESTED.**
+
+### What does work — OBSERVED
+
+A click now *orders* an attack rather than being one, and the server swings on a
+timer (`begin_attack`, `attack_tick`). Confirmed by the owner:
+
+- the player visibly changes from **outside-combat idle to inside-combat idle** —
+  the client genuinely enters a combat state, we are not drawing that
+- swings land at an interval after a single click, without further input
+- the enemy dies and revives on the existing cycle
+
+Read that carefully: **a fight that looks right on screen is not evidence that
+attacking is solved.** The client still is not initiating, and this is a
+workaround standing in for a mechanism we have not found.
+
+Two gaps the owner named and this session did not close: **the player does not
+path into range** (the server never moves the player, so a click outside
+`ATTACK_RANGE` does nothing until you walk in), and **there is no swing
+animation** (the precondition above).
+
+`ATTACK_INTERVAL = 1.33` and `ATTACK_RANGE = 1500` are **OURS**, invented to make
+a fight legible. GWCA calls 1.33 the base for axe/sword/daggers and a hammer is
+slower. Nothing here is a claim about retail.
+
+### A revive bug, and its fix — UNTESTED
+
+A revived enemy stood up with an empty health bar while our own bookkeeping said
+full, so it still took seven swings to drop and the bar never moved. The cause:
+re-asserting the **same** maximum with property 42 refills nothing. The fix uses
+property 34, which we MEASURED as a delta (`-50.0` took off exactly 50 health,
+§1b of the agentprops study) and which GWCA independently just calls `health`.
+
+Note the reasoning trap this nearly created: "seven hits to kill" looks like
+evidence the client's health was restored. It is not — the client cannot die
+from property 16 at all (it floors at 1), so the seven is purely our server's
+counter resetting and says nothing about the client's pools.
+
+### Codec: nested_struct is implemented, and one schema entry is wrong
+
+`toolkit/schema/codec.py` refused field type 12 outright, which was correct while
+the element layout was unknown and stopped being correct once
+`studies/msgtable/FINDINGS.md` recovered the client's tables: type 12 is a
+**one-byte** repeat count and the parser "rewinds to cmd+4 per repetition", so
+the element layout is the schema tail. Implemented both directions; 11 messages
+that were undecodable now decode. The old test asserted nested messages were
+"refused" and was passing against 64 zero bytes — which is opcode 0, not a
+nested message at all — so it is replaced by a round-trip that pins the count
+byte to a computed offset.
+
+**`0x00E3 SKILL_ACTIVATED` disagrees with our schema and works by coincidence.**
+Recovered from the runtime initializers: the binary is `dword, agent_id, word`;
+we carry `agent_id, word, dword`. Both total 12 bytes, and our
+`(agent, skill, copy=0)` happens to serialise to the same ten bytes the client
+reads. **It breaks the first time `copy` is nonzero, silently.** Worth an entry
+in `schema/overrides.json`.
+
+This also contradicts the msgtable study's claim that *"zero messages agree on
+total size but disagree on decomposition"* — `0x00E3` does exactly that.
+
+**A trap for anyone re-deriving field layouts:** most `cmds[]` arrays read as all
+zeros in the file and are filled in at runtime by initializers that **copy from a
+constant pool** (`mov eax,[src]; mov [dst],eax`), not by immediate stores. A
+static zero decodes as type 0, a 4-byte scalar, which is a *plausible* field
+descriptor — so a naive scan produces a confident wrong answer. This session
+nearly published one.
+
+### Where to go next, in order
+
+1. **Does the equipped-items bag give the weapon an attack speed?** The code is
+   written and unrun. If the `m_attackInterval` assert still fires, the bag is
+   not the source and `+0xEC` needs finding another way.
+2. **If it is not the bag**, find what writes `+0xEC`. It is not a displacement
+   store. Try the caller chain from the crash — runtime→static is `+0x120000`
+   for that dump, giving `0x7F867F`, `0x7F9F5F`, `0x7F3486`, `0x801732`.
+3. **The Collector lead, untried.** The enemy is built from a `Hatcher
+   [Collector]` definition whose flags word is `0x20C`, and collectors are
+   non-combatants. Those bits are a live candidate for why a click reads as
+   interact. Not chased because guessing at bit meanings is what produced the six
+   misses above — but a *different* NPC definition would test it without
+   guessing at anything.
+4. **Pathing into range**, which is ours to write and needs no client knowledge.
+
+---
+
 ## 7. Blockers, ranked
 
 ### 7.1 No HOSTILE definition exists anywhere — NOT FOUND
