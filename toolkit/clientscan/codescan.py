@@ -60,9 +60,35 @@ toolkit is standard library only and that file has been the one exception since
 it was written, with studies/skillcast/FINDINGS.md flagging whether that is a
 carve-out or a debt as the owner's call. **Decided 2026-08-06: it is a carve-out,
 and this module joins it.** The rule is unchanged for everything else -- there is
-no reasonable stdlib x86 disassembler, and `asserts.py`, `msgshape.py` and
-`areatable.py` stay stdlib so a bare machine keeps the tools whose byte patterns
-are fixed.
+no reasonable stdlib x86 disassembler, and `asserts.py`, `msgshape.py`,
+`areatable.py` and `avevents.py` stay stdlib so a bare machine keeps the tools
+whose byte patterns are fixed.
+
+TWO DECODERS, ON PURPOSE. `avevents.py` was written in a parallel session and
+carries its own hand-rolled x86 length table, so for a day this repository had
+two independent decoders and no statement about which to use. Reconciled
+2026-08-06, and the answer is not "delete one":
+
+  * **This module is the default.** Reading code you have not read before,
+    finding what touches a field, following xrefs including data references --
+    all of that needs a real disassembler and none of it has a fixed pattern.
+  * **`avevents.py` stays stdlib** because its pattern IS fixed (`push <imm>`
+    then a call to one of two known addresses), which keeps
+    `test_skillcast.py` -- and every claim in studies/skillcast §16 -- runnable
+    with nothing installed.
+  * **The overlap is now a check rather than a risk.** `test_codescan.py` §6
+    disassembles every byte `avevents.py` walks and asserts the two agree
+    instruction for instruction: 127 functions, 1601 instructions, no
+    disagreement. Two independent decoders over the same bytes is an
+    independent witness, which is the same argument `msgshape.py` makes when
+    its initializer recovery lands on the identical count studies/msgtable
+    reached through PE relocations.
+
+What was genuinely redundant has gone: `avevents.py` used to carry a third copy
+of the `call rel32` scan that `asserts.direct_callers` already had, with
+byte-identical results. It now calls that. `xrefs()` here is the one that is
+not redundant -- it also finds `jmp rel32` and data words holding the VA, which
+is what §6o's four rel32-only searches missed.
 
 READ ONLY. Opens the exe for reading and does nothing else. `C:\\gw` is the
 owner's own install and is never written, patched or launched from here.
