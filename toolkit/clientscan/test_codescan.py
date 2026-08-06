@@ -23,6 +23,14 @@ Four of the five sections can fail for the right reason:
     ours.
   * §5 pins the prefix-shadow dedup with a field that provably duplicates
     without it: `+0x1B8` reads as 18 instructions undeduped and 11 real ones.
+  * §6 cross-checks the OTHER decoder in this directory. `avevents.py` is
+    stdlib and hand-rolls x86 instruction lengths, which is what keeps
+    studies/skillcast §16 checkable on a bare machine -- and is also exactly
+    the kind of table that is subtly wrong for years, because a wrong length
+    does not error, it desynchronises. Every boundary it produces is compared
+    against capstone's over the same ranges. Verified refutable: setting
+    `push imm8` to 3 bytes instead of 2 turns this section red and names 27
+    addresses.
 
 §1 is a guard, not a check: everything below is measured against one build.
 """
@@ -52,6 +60,61 @@ def check(ok, label, detail=""):
 
 def eq(got, want, label):
     return check(got == want, label, "" if got == want else f"got {got!r}, want {want!r}")
+
+
+def cross_check_avevents(img):
+    """`avesents.insn_len` vs capstone, over exactly the bytes it decodes.
+
+    THE POINT OF THIS SECTION. `avevents.py` carries a hand-written x86 length
+    table because it is stdlib -- that is what keeps studies/skillcast §16's
+    claims checkable on a machine with nothing installed, and it is the carve-out
+    the owner settled: capstone where the code is unknown, stdlib where the byte
+    pattern is fixed. But a hand-rolled length table is precisely the kind of
+    thing that is subtly wrong for years, and a wrong length does not error -- it
+    desynchronises and then decodes the middle of an immediate as an opcode.
+    §10 of that study is the same failure in a different tool.
+
+    So the second decoder is not a second chance to be wrong. Every instruction
+    boundary it produces is compared against capstone's, over the SAME ranges it
+    actually walks, and any disagreement names the address. `boundaries()` exists
+    so this reads what the tool reads rather than something adjacent to it.
+
+    Coverage is reported rather than assumed: a check that walked nothing would
+    pass silently, which is the failure mode this whole file is written against.
+    """
+    import avevents as AV
+    import genericvalue as GV
+
+    aimg = AV.Image(img.path)
+
+    # Every function the property chase visits: the case bodies, the AvApi entry
+    # points, the AvChar methods, plus the two allocators themselves.
+    starts = set(AV.ALLOCATORS)
+    for _i, (_w, body) in GV.classify(GV.Image(img.path)).items():
+        if body is not None:
+            starts.add(body)
+    for _i, hits in AV.by_property(aimg).items():
+        for _which, _kind, path in hits:
+            starts.update(path)
+
+    bad, n_ins, n_fn = [], 0, 0
+    for va in sorted(starts):
+        rows = aimg.boundaries(va)
+        if not rows:
+            continue
+        n_fn += 1
+        want = {a: n for a, n, _op in rows}
+        got = {i.address: i.size
+               for i in img.md.disasm(img.read(va, sum(want.values()) + 16), va)}
+        for a, n in sorted(want.items()):
+            n_ins += 1
+            if got.get(a) != n:
+                bad.append(f"0x{a:08x}: stdlib says {n}, capstone says "
+                           f"{got.get(a)}")
+
+    check(n_fn >= 60, "functions cross-checked", f"{n_fn}")
+    check(n_ins >= 600, "instructions cross-checked", f"{n_ins}")
+    eq(bad, [], "every boundary agrees with capstone")
 
 
 def main():
@@ -135,6 +198,9 @@ def main():
     # x87 stores must be classified as writes: capstone calls them reads.
     fstp = [r for r in img.field_access(0xEC, lo, hi) if r[0] == 0x007FBD88]
     check(fstp and fstp[0][1], "an fstp is classified as a store")
+
+    print("\n6. the stdlib decoder next door agrees with capstone")
+    cross_check_avevents(img)
 
     print()
     if FAILED:

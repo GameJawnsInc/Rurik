@@ -70,9 +70,32 @@ first, so it can queue action kind 0x07, 0x08, 0x06 or 0x05. This tool reports
 0x07, the fall-through. Read 0x00812B90 with `msghandler.py` before treating a
 single kind here as the whole story for a branching case body.
 
-STANDARD LIBRARY ONLY. The length table below covers what these particular
-functions use and nothing more; it is not a disassembler and does not pretend
-to be one. `msghandler.py` (capstone) is the tool for reading code.
+STANDARD LIBRARY ONLY, AND WHY THAT IS NOT DUPLICATION OF `codescan.py`.
+Written in a parallel session to `codescan.py`, so for a while this repository
+had two independent x86 decoders and no statement about which to use. The split
+is now deliberate and it follows the carve-out the owner settled on 2026-08-06:
+capstone is allowed, and the tools whose byte patterns are FIXED stay stdlib so
+a bare machine keeps them. This one's pattern is fixed -- `push <imm>` followed
+by a call to one of two known addresses -- so it belongs on the stdlib side with
+`asserts.py`, `msgshape.py` and `areatable.py`. The practical consequence is
+that `test_skillcast.py` runs, and every claim in studies/skillcast §16 stays
+checkable, with nothing installed.
+
+Which to reach for:
+
+    codescan.py   reading code you have not read before, finding what touches a
+                  field, following xrefs including table and data references.
+                  Capstone. The general tool, and the right default.
+    avevents.py   this one narrow recovery, re-run as a check.
+    msghandler.py a message's handler, annotated with the client's own strings.
+
+The length table below covers what these particular functions use and nothing
+more; it is not a disassembler and does not pretend to be one. It is also not
+trusted on its own: `test_codescan.py` disassembles every byte this module
+walks with capstone and asserts the two agree instruction for instruction, so
+the second decoder is an independent witness rather than a second chance to be
+wrong. A hand-rolled length table is exactly the kind of thing that is subtly
+wrong for years, and §10 of the study is about a subtly wrong decoder.
 
 READ ONLY. Opens the exe for reading and nothing else.
 """
@@ -187,6 +210,7 @@ def insn_len(data, i):
 class Image:
     def __init__(self, path=DEFAULT_EXE):
         self.path = path
+        self._az = None                        # asserts.Asserts, built on demand
         self.pe = PE(path)
         self.base = self.pe.image_base
         sec = self.pe.section(".text")
@@ -203,14 +227,20 @@ class Image:
         return i if 0 <= i < self.size else None
 
     def call_sites(self, target):
-        """Every `call rel32` in .text landing on target. Same rule as asserts.py."""
-        out = []
-        for i in range(len(self.text) - 5):
-            if self.text[i] == 0xE8:
-                rel = struct.unpack_from("<i", self.text, i + 1)[0]
-                if self.tlo + i + 5 + rel == target:
-                    out.append(self.tlo + i)
-        return out
+        """Every `call rel32` in .text landing on target.
+
+        Delegated to `asserts.direct_callers`, which is the same scan and was
+        here first. This module used to carry its own copy -- byte-identical
+        results, 23 and 21 sites on the two allocators, and one more place for
+        the rule to drift. `codescan.xrefs` is the third implementation and the
+        only one that is not redundant: it also finds `jmp rel32` and data words
+        holding the VA, which matters when a caller is reached through a table.
+        Use that one when an empty result would be load-bearing.
+        """
+        from asserts import Asserts
+        if self._az is None:
+            self._az = Asserts(self.path)
+        return self._az.direct_callers(target)
 
     # -- the two walks ---------------------------------------------------
     def kind_at(self, site):
@@ -253,16 +283,18 @@ class Image:
                 or b[:1] in (b"\x53", b"\x56", b"\x57")        # push ebx/esi/edi
                 or b[:1] == b"\x6a")                           # push imm8
 
-    def walk(self, va, window=FUNC_WINDOW):
-        """(targets, allocations) for the function at va.
+    def boundaries(self, va, window=FUNC_WINDOW):
+        """[(va, length, opcode)] the length table produces walking from `va`.
 
-        targets     direct call/jmp destinations, in order
-        allocations [(which, kind, site)] for calls to either allocator
+        Split out of `walk` so `test_codescan.py` can cross-check EXACTLY the
+        bytes this module decodes against capstone, rather than a similar-
+        looking range. If the two ever drift apart, the check would be
+        measuring something other than what the tool does.
         """
         i = self.off(va)
-        targets, allocs = [], []
+        out = []
         if i is None:
-            return targets, allocs
+            return out
         # -16 so the length decoder can always read a full ModRM + SIB + disp32
         # without running off the end of the section.
         end = min(i + window, len(self.text) - 16)
@@ -271,6 +303,23 @@ class Image:
             n = insn_len(self.text, i)
             if n is None:
                 break
+            out.append((self.tlo + i, n, op))
+            # Unconditional control flow ends the straight-line walk. 0xEB is
+            # the one that matters -- see the note in `walk`.
+            if op in (0xE9, 0xEB, 0xC3, 0xC2, 0xCC):
+                break
+            i += n
+        return out
+
+    def walk(self, va, window=FUNC_WINDOW):
+        """(targets, allocations) for the function at va.
+
+        targets     direct call/jmp destinations, in order
+        allocations [(which, kind, site)] for calls to either allocator
+        """
+        targets, allocs = [], []
+        for addr, n, op in self.boundaries(va, window):
+            i = self.off(addr)
             if op in (0xE8, 0xE9):
                 rel = struct.unpack_from("<i", self.text, i + 1)[0]
                 tgt = self.tlo + i + 5 + rel
@@ -293,10 +342,6 @@ class Image:
                                                             i + 1)[0]
                 if tgt not in targets:
                     targets.append(tgt)
-                break
-            if op in (0xC3, 0xC2, 0xCC):
-                break
-            i += n
         return targets, allocs
 
     def chase(self, va, depth=MAX_DEPTH, seen=None, path=None):
