@@ -63,6 +63,7 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   Others: `toolkit/schema/test_codec.py` (codec vs. real captured bytes),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
+  `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding).
