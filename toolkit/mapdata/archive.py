@@ -19,8 +19,7 @@ we have explains it and neither do we.
                           itself wrong; the bytes settle it.
         0x04  u32         header size, 32
         0x08  u32         block size, 512
-        0x0C  u32         UNKNOWN. Called a CRC by two projects, computed by
-                          neither, and never verified by us.
+        0x0C  u32         CRC-32/ISO-HDLC of this header's first 12 bytes.
         0x10  u32         MFT offset
         0x18  u32         MFT size in bytes
 
@@ -32,8 +31,10 @@ we have explains it and neither do we.
         offset u64, size u32, compression u16, flags u16, counter u32, crc u32
 
         compression is 0 (stored) or 8 (huffman/LZ77 -- see gwdat.py).
-        crc is UNKNOWN: named "CRC" by GWUnpacker and "checksum" by OpenTyria,
-        computed by neither. Do not assume it is a CRC.
+        crc is CRC-32/ISO-HDLC over the entry's stored bytes. GWUnpacker named
+        it "CRC" and OpenTyria "checksum"; neither computes or verifies it, so
+        that was upstream being right rather than upstream being checked. It is
+        checked now -- test_datcrc.py, against real bytes, all three rules.
 
 The header cross-checks itself, which is the cheapest real validation available:
 the file header declares the table's size and the table header declares its entry
@@ -61,6 +62,9 @@ FFNA_MAGIC = b"ffna"
 ENTRY_SIZE = 24
 COMPRESSION_STORED = 0
 COMPRESSION_HUFFMAN = 8
+
+# Some file ids are stored in the id table with bit 31 set. See file_id_table().
+FILE_ID_HIGH_BIT = 0x80000000
 
 # The study copy, which nothing ever locks. See RUNBOOK.md.
 DEFAULT_DAT = r"C:\gd\Rurik\vault\dat_study\Gw.dat"
@@ -177,12 +181,34 @@ def file_id_table(archive):
     Six for six landing on real map files is strong evidence both for this table
     layout and for upstream's map ids, two of which no source we had could
     previously corroborate.
+
+    TWENTY-FIVE IDS CARRY BIT 31, and an exact-match lookup silently misses
+    every one of them. MEASURED on this copy: 25 of the 171,023 ids have
+    0x80000000 set, and for none of them is the masked form also present, so the
+    two never compete. Two of the 25 land on map-flagged rows -- 0x8001B97D to
+    row 7982 and 0x8001C539 to row 20118 -- and those are the Pre-Searing maps.
+    Masking the bit is what makes them addressable by the id a server sends, and
+    that reading is corroborated by geometry rather than by argument: see
+    studies/mapdata/FORMAT.md. This function therefore registers a bit-31 id
+    under both its raw and its masked form, plain ids first so that a real id can
+    never be shadowed by another entry's masked one.
+
+    Why the bit is set is NOT ESTABLISHED. We have not read the client's own
+    lookup, so "the client masks it" is our inference from the id a working
+    server sends, not something measured in the binary.
     """
     blob = archive.read(archive.entries[1])
     out = {}
+    high = []
     for i in range(len(blob) // 8):
         file_id, row = struct.unpack_from("<II", blob, i * 8)
+        if file_id & FILE_ID_HIGH_BIT:
+            high.append((file_id, row))
+        else:
+            out.setdefault(file_id, row)
+    for file_id, row in high:
         out.setdefault(file_id, row)
+        out.setdefault(file_id & ~FILE_ID_HIGH_BIT, row)
     return out
 
 
