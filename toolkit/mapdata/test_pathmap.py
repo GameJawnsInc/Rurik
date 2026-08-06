@@ -38,7 +38,7 @@ sys.path.insert(0, HERE)
 from archive import (Archive, ffna_chunks, file_id_table,  # noqa: E402
                      DEFAULT_DAT, FILE_ID_HIGH_BIT)
 from pathmap import (PathingMap, PATHING_CHUNK, SIGNATURE, VERSION,  # noqa: E402
-                     TRAPEZOID_SIZE, NO_NEIGHBOUR)
+                     TRAPEZOID_SIZE, NO_NEIGHBOUR, NO_PORTAL)
 
 KAMADAN_FILE_ID = 0x345CC
 KAMADAN_ROW = 22371
@@ -274,13 +274,39 @@ def main():
         recip = sum(1 for a, b in rel if a in names.get(b, ()))
         check(recip == len(rel), "the plane-to-plane relation is reciprocal",
               f"{recip}/{len(rel)}")
+        # The pairing, and the reason cross-plane routing is a decode rather
+        # than a heuristic: exactly two portals share a pair id, never one or
+        # three, and the partner is always across the boundary named.
+        groups = {}
+        for row in pm.portals:
+            for p_ in row:
+                groups.setdefault(p_.pair_id, []).append(p_)
+        sizes = {len(v) for v in groups.values()}
+        check(sizes == {2}, "every pair id is shared by exactly two portals",
+              f"group sizes {sorted(sizes)}, {len(groups)} pairs")
+        crossed = sum(1 for v in groups.values() if len(v) == 2
+                      and v[0].plane == v[1].neighbour
+                      and v[1].plane == v[0].neighbour)
+        check(crossed == len(groups),
+              "each pair spans the planes its two halves name",
+              f"{crossed}/{len(groups)}")
+        # ArenaNet's own assert, from PathDir.cpp.
+        stray = 0
+        for t in pm.trapezoids:
+            n = len(pm.portals[t.plane])
+            for k in (t.portal_left, t.portal_right):
+                if k != NO_PORTAL and k >= n:
+                    stray += 1
+        check(stray == 0,
+              "m_trapezoid->portalLeft/Right < pathMap.portalCount",
+              "the client's own invariant")
 
         print("\n9. routing finds walkable paths around obstacles")
         random.seed(7)
-        plane0 = [t for t in pm.trapezoids if t.plane == 0]
+        pool = pm.trapezoids
         blocked = routed = clean = 0
-        for _ in range(20000):
-            a, b = random.choice(plane0), random.choice(plane0)
+        for _ in range(60000):
+            a, b = random.choice(pool), random.choice(pool)
             ax, ay = a.centre
             bx, by = b.centre
             if pm.clip(ax, ay, bx, by) == (bx, by):
@@ -294,7 +320,7 @@ def main():
                     clean += 1
             if blocked >= ROUTE_SAMPLE:
                 break
-        check(routed > 0, "some blocked pair is routable at all",
+        check(routed > blocked // 2, "most blocked pairs are routable",
               f"{routed} of {blocked} sampled")
         # The load-bearing one: a path we return must be walkable end to end.
         # Returning nothing is allowed -- planes are fragmented without the

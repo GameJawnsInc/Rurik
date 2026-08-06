@@ -47,25 +47,33 @@ away on the next line.
     decoder forces that: the four indices in one 44-byte record are checked
     against four indices in a different record.
 
-Portals (tag 9) carry the CROSS-plane structure and are now decoded too, with
-one field left over -- see the Portal class. The x/y BSP nodes and sink nodes
-are an acceleration structure for point-to-trapezoid lookup, which `containing()`
-already does by banding; they are still read as sized blocks and skipped, and
-nothing needs them.
+Portals (tag 9) carry the CROSS-plane structure and are fully decoded -- see the
+Portal class. The x/y BSP nodes and sink nodes are an acceleration structure for
+point-to-trapezoid lookup, which `containing()` already does by banding; they
+are still read as sized blocks and skipped, and nothing needs them.
 
-HOW MUCH OF A MAP route() ACTUALLY COVERS, stated up front because the honest
-number is not flattering. Intra-plane links alone leave Kamadan's 1,270
-trapezoids in **61 connected components**, the largest holding 17%; Pre-Searing
-is 91 components with the largest at 50%. Planes are stitched together by
-portals -- 38 plane pairs across Kamadan's 39 planes -- and pairing a portal's
-trapezoids with its neighbour's is the piece still missing. So route() answers
-well inside a region and returns None between regions. It never returns a path
-through a wall, which is the property the test pins.
+CROSSING BETWEEN PLANES, and how it was settled without guessing. Intra-plane
+links alone leave Kamadan in 61 components with the largest at 17%. Two readings
+of the portal record were tried and refuted, and an (x, y) overlap heuristic that
+matched 90% of Kamadan's portal trapezoids was deliberately NOT shipped, because
+it is our rule rather than the file's -- and with no height (below) it would join
+a bridge to the ground beneath it.
 
-A geometric rule (link trapezoids that overlap in x and y across a portal)
-matches 90% of Kamadan's portal trapezoids and 81% of Pre-Searing's. That is
-suggestive, and it is NOT implemented, because it is our heuristic rather than
-something the file says -- and its failure mode is precisely the one below.
+What settled it was reading the client. `Gw.exe` carries ArenaNet's own asserts:
+`PathDir.cpp` checks `m_trapezoid->portalLeft < pathMap.portalCount`, so a
+trapezoid's two portal fields index its own plane's portal array -- which holds
+on 3,051 and 3,095 set values with no exception -- and `PathDataImport.cpp`
+checks `!pairRef->portal->pair`, which says the pairing is RESOLVED at import
+rather than stored. The id it resolves through is the portal field this file
+called `unknown` for a day: every value is shared by exactly two portals, 1,517
+pairs covering all 3,034, always across the boundary they name.
+
+Linking through it takes Kamadan from 61 components to **4, the largest holding
+93%**, and Pre-Searing from 91 to 15 with the largest at 78%. That jump is
+itself evidence: a wrong pairing does not assemble a map.
+
+route() still returns None rather than a doubtful path, and now does so by
+construction -- every segment of a path is re-checked before it is returned.
 
 THERE IS NO HEIGHT. Planes are not elevations in any units we can read; nothing
 in the file says what z a plane sits at, and GWToolbox fabricates one on load.
@@ -111,6 +119,7 @@ BAND = 256.0
 
 
 NO_NEIGHBOUR = 0xFFFFFFFF
+NO_PORTAL = 0xFFFF
 
 
 class Portal:
@@ -131,26 +140,36 @@ class Portal:
       neighbour u16   the plane on the other side. In range on 3,034 of 3,034
                       portals, and the plane-to-plane relation is reciprocal
                       764 of 764 times.
-      unknown   u16   NOT ESTABLISHED. It is always less than the map's total
-                      portal count, which makes "a global portal index" the
-                      obvious reading, and that reading is REFUTED: pairing
-                      through it is reciprocal 0 times out of 3,034, and every
-                      time the target's plane matches `neighbour` it is because
-                      the target is in the portal's own plane. Recorded so the
-                      idea is not retried.
+      pair_id   u16   the crossing this portal is one side of. Two portals
+                      share a value and no more than two ever do: across 3,034
+                      portals the values fall into 1,517 groups of EXACTLY two,
+                      with no singleton and no triple, and in 3,034 of 3,034
+                      the partner sits in the plane this portal names and names
+                      this plane back.
+
+                      It is an IDENTIFIER, not an index, and reading it as one
+                      is what hid it. Its values are always below the map's
+                      total portal count, which makes "a global portal index"
+                      the obvious guess -- and that guess is refuted, pairing
+                      reciprocally 0 times out of 3,034. Recorded because the
+                      wrong reading looks right.
       flag      u8    zero on all 3,034 portals seen. No information.
+
+    The client computes the pairing rather than reading it: `PathDataImport.cpp`
+    asserts `!pairRef->portal->pair` before filling it in, so `pair` is a
+    resolved pointer and the id above is what it resolves through.
     """
 
     __slots__ = ("plane", "index", "traps", "offset", "neighbour",
-                 "unknown", "flag")
+                 "pair_id", "flag")
 
-    def __init__(self, plane, index, traps, offset, neighbour, unknown, flag):
+    def __init__(self, plane, index, traps, offset, neighbour, pair_id, flag):
         self.plane = plane
         self.index = index
         self.traps = traps
         self.offset = offset
         self.neighbour = neighbour
-        self.unknown = unknown
+        self.pair_id = pair_id
         self.flag = flag
 
     def __repr__(self):
@@ -228,6 +247,46 @@ class PathingMap:
         self._base = {}
         for i, t in enumerate(trapezoids):
             self._base.setdefault(t.plane, i)
+        self._cross = self._build_cross_links()
+
+    def _build_cross_links(self):
+        """Trapezoid-to-trapezoid links through paired portals.
+
+        Two things make this a decode rather than a guess, and both are the
+        client's own words. `PathDir.cpp` asserts
+        `m_trapezoid->portalLeft < pathMap.portalCount`, so a trapezoid's two
+        portal fields index its OWN plane's portal array -- which holds on
+        3,051 and 3,095 of the set values, with no exception. And portals pair
+        by their `pair_id`, exactly two to a value, always across the plane
+        boundary they name.
+
+        So a trapezoid sitting on a portal is linked to the trapezoids sitting
+        on that portal's partner. No geometry is consulted and nothing is
+        inferred from (x, y) overlap, which matters because with no height in
+        the file an overlap rule would join a bridge to the ground beneath it.
+        """
+        by_pair = {}
+        for row in self.portals:
+            for p in row:
+                by_pair.setdefault(p.pair_id, []).append(p)
+        # Which trapezoids sit on each (plane, portal index)?
+        on = {}
+        for i, t in enumerate(self.trapezoids):
+            for k in (t.portal_left, t.portal_right):
+                if k != NO_PORTAL:
+                    on.setdefault((t.plane, k), []).append(i)
+        links = {}
+        for group in by_pair.values():
+            if len(group) != 2:
+                continue          # not a clean pair; say nothing about it
+            a, b = group
+            ta = on.get((a.plane, a.index), ())
+            tb = on.get((b.plane, b.index), ())
+            for i in ta:
+                links.setdefault(i, []).extend(tb)
+            for j in tb:
+                links.setdefault(j, []).extend(ta)
+        return links
 
     # -- queries ---------------------------------------------------------
 
@@ -295,10 +354,21 @@ class PathingMap:
 
     # -- routing ---------------------------------------------------------
 
-    def adjacent(self, t):
-        """The trapezoids reachable from `t` in one step, as flat indices."""
+    def adjacent(self, t, flat=None):
+        """The trapezoids reachable from `t` in one step, as flat indices.
+
+        Neighbours within the plane, plus anything on the far side of a portal
+        this trapezoid sits on.
+        """
         base = self._base[t.plane]
-        return [base + n for n in t.neighbours if n != NO_NEIGHBOUR]
+        out = [base + n for n in t.neighbours if n != NO_NEIGHBOUR]
+        if flat is None:
+            flat = self._flat_index(t)
+        out.extend(self._cross.get(flat, ()))
+        return out
+
+    def _flat_index(self, t):
+        return self._base[t.plane] + t.index
 
     def route(self, x0, y0, x1, y1):
         """A walkable path from start to goal, or None if there is not one.
@@ -320,17 +390,12 @@ class PathingMap:
         goals = self.containing(x1, y1)
         if not starts or not goals:
             return None
-        shared = {s.plane for s in starts} & {g.plane for g in goals}
-        if not shared:
-            return None
-        plane = next(iter(shared))
-        start = next(s for s in starts if s.plane == plane)
-        goal = next(g for g in goals if g.plane == plane)
-        if start is goal:
+        goal_set = {self._flat_index(g) for g in goals}
+        start = starts[0]
+        si = self._flat_index(start)
+        if si in goal_set:
             return [(x0, y0), (x1, y1)]
-
-        idx = {id(t): i for i, t in enumerate(self.trapezoids)}
-        si, gi = idx[id(start)], idx[id(goal)]
+        gi = next(iter(goal_set))
         gx, gy = x1, y1
 
         def h(i):
@@ -344,11 +409,12 @@ class PathingMap:
         while open_q:
             open_q.sort(reverse=True)
             _f, cur = open_q.pop()
-            if cur == gi:
+            if cur in goal_set:
+                gi = cur
                 found = True
                 break
             cx, cy = self.trapezoids[cur].centre
-            for nxt in self.adjacent(self.trapezoids[cur]):
+            for nxt in self.adjacent(self.trapezoids[cur], cur):
                 nx, ny = self.trapezoids[nxt].centre
                 step = ((nx - cx) ** 2 + (ny - cy) ** 2) ** 0.5
                 g = best[cur] + step
@@ -377,10 +443,27 @@ class PathingMap:
             pts.append(self._shared_edge(self.trapezoids[a],
                                          self.trapezoids[b]))
         pts.append((x1, y1))
-        return self._string_pull(pts)
+        path = self._string_pull(pts)
+        # Last gate, and it is not belt-and-braces. A cross-plane step joins two
+        # trapezoids that the file says share a crossing; where they do not also
+        # overlap in (x, y) -- about a fifth of them in Pre-Searing -- the
+        # waypoint falls back to the far trapezoid's centre and the straight line
+        # to it can leave the mesh. Returning nothing is a worse answer than a
+        # detour and a better one than a path through a wall.
+        for a, b in zip(path, path[1:]):
+            if self.clip(*a, *b) != b:
+                return None
+        return path
 
     def _shared_edge(self, a, b):
-        """A point on the edge `a` and `b` share, inside both."""
+        """A point on the edge `a` and `b` share, inside both.
+
+        Across a portal the two trapezoids are the same physical place on two
+        planes rather than neighbours on one, so there is no shared edge; the
+        centre of where they overlap is inside both.
+        """
+        if a.plane != b.plane:
+            return self._overlap_point(a, b)
         slot = next((k for k, n in enumerate(a.neighbours)
                      if n == b.index), None)
         if slot is None or slot < 2:
@@ -395,6 +478,26 @@ class PathingMap:
         if lo > hi:                       # no overlap: stay on a's own edge
             lo, hi = lo_a, hi_a
         return ((lo + hi) * 0.5, y)
+
+    @staticmethod
+    def _x_at(t, y):
+        span = t.y_top - t.y_bottom
+        f = 0.0 if span <= 0.0 else (y - t.y_bottom) / span
+        return (t.x_bottom_left + f * (t.x_top_left - t.x_bottom_left),
+                t.x_bottom_right + f * (t.x_top_right - t.x_bottom_right))
+
+    def _overlap_point(self, a, b):
+        lo = max(a.y_bottom, b.y_bottom)
+        hi = min(a.y_top, b.y_top)
+        if lo > hi:
+            return b.centre
+        y = (lo + hi) * 0.5
+        al, ar = self._x_at(a, y)
+        bl, br = self._x_at(b, y)
+        left, right = max(al, bl), min(ar, br)
+        if left > right:
+            return b.centre
+        return ((left + right) * 0.5, y)
 
     def _string_pull(self, pts):
         """Drop waypoints that the previous kept point can already reach.

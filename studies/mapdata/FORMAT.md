@@ -444,22 +444,64 @@ checked against four in a different record; our decoder cannot force that.
 | `u16 traps` | trapezoids of this plane touching the crossing | summed per plane it equals that plane's `portalTraps` count — **1,168 of 1,168 planes** |
 | `u16 offset` | start of this portal's run in `portalTraps` | the `[offset, offset+traps)` slices **partition** that array exactly — **396 of 396 planes**, every entry covered once; all 6,146 indices valid trapezoids of their own plane |
 | `u16 neighbour` | the plane on the other side | in range **3,034 of 3,034**; the plane relation is reciprocal **764 of 764** |
-| `u16 unknown` | **NOT ESTABLISHED** | always below the map's total portal count, so "a global portal index" is the obvious reading, and it is **refuted**: pairing through it is reciprocal **0 of 3,034** |
+| `u16 pair_id` | the crossing this portal is one side of | every value shared by **exactly two** portals — 1,517 groups of two across 3,034 portals, no singleton and no triple — and the partner is in the plane named, naming back, **3,034 of 3,034** |
 | `u8 flag` | always zero on all 3,034 | no information |
+
+**`pair_id` is an identifier, not an index, and reading it as one is what hid
+it.** Its values are always below the map's total portal count, which makes "a
+global portal index" the obvious guess; that guess is refuted, pairing
+reciprocally 0 times out of 3,034. Two other readings were tried and refuted
+too — a local portal index in the neighbouring plane (12 of 1,465), and a
+one-to-one plane relation (only 18 of 3,034 portals have a unique reciprocal,
+because several portals can cross the same plane boundary).
 
 **BSP x/y nodes and sink nodes are still skipped, and nothing needs them.** They
 are an acceleration structure for point-to-trapezoid lookup, which
 `PathingMap.containing()` already does by y-banding.
 
-`PathingMap.route()` implements A* over the adjacency graph with shared-edge
-waypoints and a string-pulling pass. Two things bound it, both measured rather
-than assumed. Waypoints must be the **shared edge**, not the trapezoid centre —
-centre-to-centre between two adjacent trapezoids leaves the mesh when either is
-long and oblique, which produced an unwalkable segment before it was fixed. And
-intra-plane links alone leave Kamadan in **61 components** (largest 17%) and
-Pre-Searing in **91** (largest 50%), because portals are what stitch a map
-together. So routing works inside a region and returns None between regions; it
-never returns a path through a wall.
+### The client settled the cross-plane question, after the data would not
+
+Intra-plane links alone leave Kamadan in **61 components** (largest 17%) and
+Pre-Searing in **91** (largest 50%). Two readings of the portal record were
+tried and refuted, and an (x, y) overlap heuristic matching 90% of Kamadan's
+portal trapezoids was deliberately not shipped — it is our rule rather than the
+file's, and with no height in the file it would join a bridge to the ground
+beneath it.
+
+What settled it was reading `Gw.exe`. ArenaNet compiled its own assert
+expressions in, and the pathing modules are named:
+`P:\Code\Engine\Map\Path\{PathApi,PathData,PathDataImport,PathBsp,PathBuild,PathDir,PathFind,PathFlood,PathObstacle}.cpp`.
+Two of those asserts are the answer:
+
+- `m_trapezoid->portalLeft < pathMap.portalCount` (`PathDir.cpp`) — a
+  trapezoid's two portal fields index **its own plane's** portal array. Ours
+  hold on **3,051 and 3,095** set values, no exception. Every trapezoid
+  coordinate also satisfies `PathData.cpp`'s
+  `src.x < 131071.0f && src.x > -131071.0f` — **273,522 of 273,522**.
+- `!pairRef->portal->pair` (`PathDataImport.cpp`) — the pairing is **resolved at
+  import, not stored**. So the file carries an id to resolve *through*, which is
+  exactly what `pair_id` turned out to be.
+
+Linking trapezoid → portal → paired portal → trapezoid takes Kamadan from 61
+components to **4, the largest holding 93%**, and Pre-Searing from 91 to **15**
+with the largest at 78%. That jump is itself evidence: a wrong pairing does not
+assemble a map.
+
+### Routing
+
+`PathingMap.route()` is A* over that graph with a string-pulling pass. Three
+things about it are measured rather than assumed:
+
+- Waypoints must be the **shared edge**, not the trapezoid centre —
+  centre-to-centre between two adjacent trapezoids leaves the mesh when either
+  is long and oblique, which produced an unwalkable segment before it was fixed.
+- Across a portal there is no shared edge, so the waypoint is the centre of
+  where the two trapezoids overlap.
+- Where they do not overlap — about a fifth of Pre-Searing's — that fallback can
+  fail, so **every segment is re-checked before a path is returned** and a
+  doubtful path becomes None. On 120 sampled pairs per map where a straight line
+  is blocked, Kamadan routes 106 and Pre-Searing 69, and **every returned path
+  is walkable end to end**.
 
 ---
 
@@ -514,8 +556,9 @@ upstream being trustworthy — it was checked, and the check is what counts.
 | Are the 101 shared file ids real, or upstream copy-paste? | Geometry. If two named zones share a file, both their spawns should land in it, as Pre Ascalon City's and Ashford Abbey's do. |
 | Is our decompressor exactly right? | Diff against `xentax.cpp` output on the same input. Needs a C compiler. Separately, it fails on 12 of 1,089 text files with a huffman table hole — that is a live defect and the cheaper thread to pull. |
 | ~~What do plane sub-tags 1, 3–6, 9–11 hold?~~ | **Largely answered 2026-08-06.** Tag 9 (portals) is decoded but for one field; tags 4/5/6 are a lookup acceleration structure nothing needs. The routing graph turned out to be in the trapezoid record all along. |
-| How do you pair a portal's trapezoids with its neighbour's? | The one thing between us and whole-map routing. The portal record's fourth `u16` is the obvious candidate and is refuted. Geometric overlap matches 90% (Kamadan) and 81% (Pre-Searing) but is our heuristic, and with no height in the file it would link a bridge to the ground beneath it. |
-| What is the portal record's fourth `u16`? | NOT ESTABLISHED. Always below the map's portal count; pairing through it is reciprocal 0 of 3,034 times. |
+| ~~How do you pair a portal's trapezoids with its neighbour's?~~ | **Answered 2026-08-06 by reading the client's asserts.** The portal record's fourth `u16` is a shared pair id, not an index; `PathDir.cpp` pins trapezoid→portal and `PathDataImport.cpp` says the pairing is resolved at import. Kamadan goes from 61 components to 4. |
+| Why do 4 components remain in Kamadan, and 15 in Pre-Searing? | Some are genuinely separate (instanced sub-areas, unreachable geometry) and some may be a link we still miss. Nobody has looked. |
+| What is the portal `u8` flag for? | Zero on all 3,034 portals seen. No information in this corpus. |
 | Why is tag 11's size field double its data, in every plane of every map? | Unknown. Systematic, not noise, so it means something. |
 | Does the navmesh agree with the collision the client enforces? | The server now logs `on_mesh` on every stop report. A playtest answers it. |
 | What height does a plane sit at? | Not in the file. Possibly derived by the client from terrain. |
