@@ -46,6 +46,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
 
+import checks                                       # noqa: E402
 import textrec                                      # noqa: E402
 import skilltable                                   # noqa: E402
 from gwpe import PE                                 # noqa: E402
@@ -70,14 +71,17 @@ MAX_PLAIN_ENTROPY = 5.0     # plain UTF-16LE English is nowhere near uniform
 MIN_CIPHER_ENTROPY = 7.8    # 8.000 measured; the margin is for short widths
 KEY_PROBE_RECORDS = 400
 
-FAILED = []
-
-
-def check(ok, label, detail=""):
-    print(f"  {'ok  ' if ok else 'FAIL'}  {label}" + (f"   {detail}" if detail else ""))
-    if not ok:
-        FAILED.append(label)
-    return ok
+# The floor counts a real green run of 2026-08-06, section by section: 6 escape
+# table + 3 file-walk gate + 2 zero-base + 7 width-vs-script + 3 key hash + 2
+# entropy + 7 refuted keys + 4 plain decode + 1 skill-id sweep = 35. Nothing here
+# is optional and nothing is fixture-dependent -- every section reads the same
+# Gw.exe, so the count only moves when SCRIPTS, `schemes` or ORACLE gain an
+# entry, which can only push it up. A run that lands under 35 has had a section
+# stop executing, which is exactly the failure this file could not previously
+# report: sections 4 and 7 loop over dicts, and a loop over an empty dict prints
+# a heading, asserts nothing and looks identical to a pass.
+LEDGER = checks.Ledger("text records", floor=35)
+check = checks.adopt(LEDGER)
 
 
 def entropy(counter):
@@ -290,9 +294,8 @@ def main():
               f"{len(ids)} ids total")
 
     dt = time.perf_counter() - t0
-    print(f"\n{'ALL CHECKS PASSED' if not FAILED else str(len(FAILED)) + ' FAILED'}"
-          f"  ({dt:.1f}s)")
-    return 1 if FAILED else 0
+    print(f"\nread the image and all four languages in {dt:.1f}s")
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
 
 import areatable as at              # noqa: E402
 import textrec                      # noqa: E402
+import checks                       # noqa: E402
 from gwpe import PE                 # noqa: E402
 from archive import Archive, file_id_table  # noqa: E402
 
@@ -49,14 +50,15 @@ ORACLE = [
     (10362, "Lion's Arch"),
 ]
 
-FAILED = []
-
-
-def check(ok, label, detail=""):
-    print(f"  {'ok  ' if ok else 'FAIL'}  {label}" + (f"   {detail}" if detail else ""))
-    if not ok:
-        FAILED.append(label)
-    return ok
+# The floor is what a green run executes, counted from one on 2026-08-06:
+# 1 locator agreement + 4 table bounds + 5 file reference + 1 tiling
+# + 3 oracle strings + 1 name resolution + 2 texture targets = 17.
+# None of it is fixture-dependent -- every section reads the same exe and the
+# same archive, and the two variable-looking loops iterate over ORACLE and over
+# `rivals`, both fixed in this file. So a run scoring fewer than 17 has stopped
+# executing a section, which is precisely the failure this floor is here to name.
+LEDGER = checks.Ledger("area table", floor=17)
+check = checks.adopt(LEDGER)
 
 
 def main():
@@ -151,9 +153,8 @@ def main():
               f"{flagged} of {len(filed)}")
 
     dt = time.perf_counter() - t0
-    print(f"\n{'ALL CHECKS PASSED' if not FAILED else str(len(FAILED)) + ' FAILED'}"
-          f"  ({dt:.1f}s)")
-    return 1 if FAILED else 0
+    print(f"\nread the exe and the archive in {dt:.1f}s")
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

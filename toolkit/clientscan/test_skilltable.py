@@ -36,10 +36,12 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 from skilltable import (  # noqa: E402
     RECORD_SIZE, decode_energy, displayed_adrenaline, locate_table,
     parse_record, player_corpus,
 )
+import checks  # noqa: E402
 
 DEFAULT_EXE = r"C:\gw\Gw.exe"
 
@@ -89,13 +91,16 @@ WIKI_ENERGY_25 = {
     3013, 3009, 1592,
 }
 
-fails = []
-
-
-def check(cond, msg):
-    print(f"  [{'PASS' if cond else 'FAIL'}] {msg}")
-    if not cond:
-        fails.append(msg)
+# FLOOR 18 = every check this file executes on a real client binary, counted
+# from a green run on 2026-08-06 against Gw.exe: 3 structural (§1) + 4 corpus
+# (§2) + 5 wiki joins (§3: two adrenaline, one rival-rule refutation, and the
+# 15/25-energy pair) + 4 text-resolution (§4) + 2 build counts (§5). None of
+# them is conditional once the binary opens, so a run that reports fewer has
+# lost a section rather than passed -- which is exactly the failure §3 would
+# hide, since dropping the wiki join is what turns this file back into our
+# decoder agreeing with itself.
+LEDGER = checks.Ledger("skill table", floor=18)
+check = checks.adopt(LEDGER)
 
 
 def main():
@@ -210,9 +215,7 @@ def main():
           f"{EXPECTED_CORPUS} player-corpus rows (got {len(corpus)}) -- this is "
           f"also Tyria-Extractor's independent count")
 
-    print("\n" + ("ALL CHECKS PASSED" if not fails
-                  else f"{len(fails)} CHECK(S) FAILED"))
-    return 1 if fails else 0
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

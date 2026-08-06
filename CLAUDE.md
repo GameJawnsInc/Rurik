@@ -75,13 +75,30 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
+  `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
+  `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first),
   `toolkit/clientscan/test_codescan.py` (the attack-speed chain, and the two
-  decoding traps that hid it — needs capstone).
+  decoding traps that hid it — needs capstone),
+  `toolkit/test_checks.py` (the check on the checker — see below).
+
+  **This list is the suite.** A test in the tree but not named here is a test
+  nobody runs: `test_pathmap.py`, `test_skillcast.py` and `test_textrec.py` were
+  each missing from it for days. Add the line in the same commit as the test.
+- **A run that measured nothing failed.** Every test routes its verdict through
+  `toolkit/checks.py`, and declares a `floor` — the number of checks a healthy run
+  executes. Fewer than that, or none at all, is a FAIL naming the shortfall; a
+  section that cannot run declares `LEDGER.skip(...)` and is printed, never
+  silent. This exists because it happened twice: `test_codec.py` printed ALL
+  CHECKS PASSED with its fixture glob matching nothing, and
+  `test_movement_fidelity.py` printed it while skipping a whole section and
+  scoring its headline number over n=2. Set the floor from a real green run, never
+  from a guess, and never above what one produces. `toolkit/test_checks.py` breaks
+  each rule on purpose to prove the guard can go red.
 - **Find the vault with `toolkit/vaultpath.py`, never with `../../vault`.** A git
   worktree has no vault of its own, so a relative walk lands on nothing — and a
   fixture that resolves to nothing turns every assertion behind it into a no-op.

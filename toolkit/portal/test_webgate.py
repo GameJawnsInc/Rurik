@@ -9,12 +9,17 @@ sequence, so a broken webgate is caught here rather than by a human staring at a
 The first request below is not invented. It is what build 38797 sent.
 """
 
+import os
 import socket
 import subprocess
 import sys
 import time
 import xml.etree.ElementTree as ET
 from base64 import b64encode
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+import checks  # noqa: E402
 
 HOST, PORT = "127.0.0.1", 6601
 
@@ -68,9 +73,14 @@ def post(path, body, session):
     return send_raw(req)
 
 
-def check(name, cond, detail=""):
-    print(f"  [{'PASS' if cond else 'FAIL'}] {name}{(' — ' + detail) if detail else ''}")
-    return cond
+# Floor of 9: the five numbered stages below assert 2 + 2 + 2 + 2 + 1 checks, and
+# every one of them is mandatory — this test starts its own webgate, so there is no
+# fixture that can go missing and no section that legitimately sits out. Measured
+# from a green run on 2026-08-06, which printed exactly nine [PASS] lines. (The
+# "parses as XML" check inside stage 1 is an error-path extra: it only appears when
+# the body did NOT parse, so it can push the count to ten but never below nine.)
+LEDGER = checks.Ledger("webgate", floor=9)
+check = checks.adopt_named(LEDGER)
 
 
 def main():
@@ -131,8 +141,11 @@ def main():
         ok &= check("401 for unknown session", "401" in head.split("\r\n")[0],
                     head.split("\r\n")[0])
 
-        print(f"\n{'ALL CHECKS PASSED' if ok else 'FAILURES ABOVE'}")
-        return 0 if ok else 1
+        # The verdict is the ledger's, not `ok`'s: a run that failed nothing but
+        # stopped short of its nine checks is incomplete, and only the ledger can
+        # see that. Every `ok &= check(...)` above still records into the ledger,
+        # including the "parses as XML" failure path, so nothing is lost.
+        return LEDGER.verdict()
     finally:
         proc.terminate()
         try:

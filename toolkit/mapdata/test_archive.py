@@ -32,7 +32,9 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive, ffna_chunks, ffna_type, DEFAULT_DAT  # noqa: E402
+import checks  # noqa: E402
 
 # Map files carry flags 259. The high byte is the stream (1) and the low byte is
 # the entry flags (3). MEASURED: exactly 349 entries in this archive have it, and
@@ -48,13 +50,16 @@ REFERENCE_MAPS = {7982: (24, 2925270), 20444: (22, 3389269)}
 
 SAMPLE_SIZE = 6
 
-fails = []
-
-
-def check(cond, msg):
-    print(f"  [{'PASS' if cond else 'FAIL'}] {msg}")
-    if not cond:
-        fails.append(msg)
+# FLOOR: the nine checks that run against ANY copy of the archive -- the two
+# header invariants in section 1, the map-flag count in section 2, and one per
+# sampled map in section 3 (SAMPLE_SIZE = 6). Section 4's two reference rows are
+# deliberately outside the floor: row indices are copy-specific, so that section
+# declares a skip on an archive with a different entry count (see the header).
+# Measured on the run-dir Gw.dat, 2026-08-06: a green run prints eleven [PASS]
+# lines, nine of them mandatory. Scoring under nine means a map stopped being
+# sampled or a section stopped running, and the passes that remain prove nothing.
+LEDGER = checks.Ledger("dat archive", floor=9)
+check = checks.adopt(LEDGER)
 
 
 def main():
@@ -84,7 +89,7 @@ def main():
               f"{MAP_FLAGS} (got {len(maps)})")
         if not maps:
             print("\nno map entries; nothing further to check")
-            return 1
+            return LEDGER.verdict()
 
         print("\n3. every sampled map decompresses and tiles its chunk table")
         print("   (independent of the declared output length -- see the header)")
@@ -117,8 +122,10 @@ def main():
 
         print("\n4. reference maps reproduce byte for byte")
         if ar.entry_count != EXPECTED_ENTRY_COUNT:
-            print(f"  [SKIP] this archive has {ar.entry_count} entries, not "
-                  f"{EXPECTED_ENTRY_COUNT}; row indices differ between copies")
+            LEDGER.skip("reference maps",
+                        f"this archive has {ar.entry_count} entries, not "
+                        f"{EXPECTED_ENTRY_COUNT}; row indices differ between "
+                        "copies")
         else:
             by_index = {e.index: e for e in maps}
             for row, (want_chunks, want_bytes) in REFERENCE_MAPS.items():
@@ -132,9 +139,7 @@ def main():
                       f"row {row}: {len(chunks)} chunks, {len(data)} bytes "
                       f"(expected {want_chunks}, {want_bytes})")
 
-    print("\n" + ("ALL CHECKS PASSED" if not fails
-                  else f"{len(fails)} CHECK(S) FAILED"))
-    return 1 if fails else 0
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

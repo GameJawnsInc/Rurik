@@ -33,6 +33,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
 
+import checks                                           # noqa: E402
 import gwdat                                            # noqa: E402
 from archive import Archive, ffna_chunks, DEFAULT_DAT   # noqa: E402
 import textrec                                          # noqa: E402
@@ -43,14 +44,14 @@ LANGUAGES = 11
 RECORDS = 1024
 DECOMPRESSED_SIZE = 6146      # text file 98, identical in every language
 
-FAILED = []
-
-
-def check(ok, label, detail=""):
-    print(f"  {'ok  ' if ok else 'FAIL'}  {label}" + (f"   {detail}" if detail else ""))
-    if not ok:
-        FAILED.append(label)
-    return ok
+# The floor counts what a healthy run executes, measured at 15 green: one
+# chunk-walk check in section 1, one compressed-entry sweep in section 2, the
+# eleven per-language tails plus the guard that the zero-length path was taken
+# at all in section 3, and one zero-bit no-op in section 4. --sample changes the
+# stride inside section 2, not the number of checks, so the count does not move
+# with the fixture; section 3's eleven are fixed by LANGUAGES.
+LEDGER = checks.Ledger("gwdat decompressor", floor=15)
+check = checks.adopt(LEDGER)
 
 
 def main():
@@ -134,9 +135,8 @@ def main():
           "bit position and buffers are unchanged")
 
     dt = time.perf_counter() - t0
-    print(f"\n{'ALL CHECKS PASSED' if not FAILED else str(len(FAILED)) + ' FAILED'}"
-          f"  ({dt:.1f}s)")
-    return 1 if FAILED else 0
+    print(f"\nelapsed {dt:.1f}s")
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

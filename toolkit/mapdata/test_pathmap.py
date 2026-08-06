@@ -35,10 +35,12 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 from archive import (Archive, ffna_chunks, file_id_table,  # noqa: E402
                      DEFAULT_DAT, FILE_ID_HIGH_BIT)
 from pathmap import (PathingMap, PATHING_CHUNK, SIGNATURE, VERSION,  # noqa: E402
                      TRAPEZOID_SIZE, NO_NEIGHBOUR, NO_PORTAL)
+import checks  # noqa: E402
 
 KAMADAN_FILE_ID = 0x345CC
 KAMADAN_ROW = 22371
@@ -65,14 +67,19 @@ MEASURED_ENTRY_COUNT = 177342
 ROUTE_SAMPLE = 60
 
 MAP_FLAGS = 259
-FAILED = []
 
-
-def check(ok, label, detail=""):
-    print(f"  {'ok  ' if ok else 'FAIL'}  {label}" + (f"   {detail}" if detail else ""))
-    if not ok:
-        FAILED.append(label)
-    return ok
+# FLOOR: 41 -- the checks that run on any Gw.dat, whatever --sample or --all is
+# asked for. MEASURED on the run-dir archive, 2026-08-06: a green default run
+# prints 43, and the two above the floor are the "row is the measured one" checks
+# in section 6, which turn into declared skips on an archive with a different
+# entry count. Everything else here is unconditional: 6 in section 1, 5 in
+# section 2, 3 in section 3, 4 in section 4, 1 in section 5 (the sample size
+# changes how many maps that one check walks, not how many checks run), 8 of
+# section 6's 10, 3 in section 7, 6 in section 8, and 5 in section 9.
+# If a run scores 40, a section stopped executing and the passes above it are
+# not evidence of anything.
+LEDGER = checks.Ledger("pathing map", floor=41)
+check = checks.adopt(LEDGER)
 
 
 def main():
@@ -215,9 +222,9 @@ def main():
                 check(got == want_row, f"{label} row is the measured one",
                       f"{got}")
             else:
-                print(f"  skip  {label} row index "
-                      f"(archive has {ar.entry_count} entries, "
-                      f"measured on {MEASURED_ENTRY_COUNT})")
+                LEDGER.skip(f"{label} row index",
+                            f"archive has {ar.entry_count} entries, "
+                            f"measured on {MEASURED_ENTRY_COUNT}")
 
         # -- 7. the routing graph ----------------------------------------
         # The adjacency check is the strongest thing in this file. Four
@@ -341,9 +348,8 @@ def main():
               f"{len(bad)} malformed")
 
     dt = time.perf_counter() - t0
-    print(f"\n{'ALL CHECKS PASSED' if not FAILED else str(len(FAILED)) + ' FAILED'}"
-          f"  ({dt:.1f}s)")
-    return 1 if FAILED else 0
+    print(f"\nwalked the archive in {dt:.1f}s")
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

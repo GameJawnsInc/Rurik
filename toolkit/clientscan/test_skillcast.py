@@ -45,18 +45,20 @@ import msgshape as MS                                        # noqa: E402
 import genericvalue as GV                                    # noqa: E402
 import avevents as AV                                        # noqa: E402
 import pinned as P                                           # noqa: E402
+import checks                                                # noqa: E402
 
 BUILD = P.BUILD
 EXE_BYTES = P.SIZE
 
-FAILED = []
+# Floor: 190, counted from a real green run on the pinned build (2026-08-06,
+# build 38797) -- not a guess. Every check below is driven by a table in this
+# file (QUOTED, LOG_STRINGS, SHAPES, BYTES, EVENT_KINDS) or by a census of one
+# fixed binary, so a healthy run executes the same 190 every time. That makes
+# the floor sharp rather than nominal: it does not move with a fixture, so if
+# the count drops, a section stopped running. Raise it when you add checks.
+LEDGER = checks.Ledger("skill cast lifecycle", floor=190)
 
-
-def check(ok, label, detail=""):
-    print(f"  {'ok  ' if ok else 'FAIL'}  {label}" + (f"   {detail}" if detail else ""))
-    if not ok:
-        FAILED.append(label)
-    return ok
+check = checks.adopt(LEDGER)
 
 
 def eq(got, want, label):
@@ -449,14 +451,7 @@ def main():
     eq([EVENT_KINDS[i][1] for i in (60, 58, 59)], [0x19, 0x16, 0x17],
        "skill: and again")
 
-    print()
-    if FAILED:
-        print(f"[FAIL] {len(FAILED)} check(s) failed:")
-        for f in FAILED:
-            print(f"   - {f}")
-        return 1
-    print("[PASS] all checks passed")
-    return 0
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

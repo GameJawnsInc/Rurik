@@ -39,6 +39,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 
+import checks                                                # noqa: E402
 import srctree as st                                         # noqa: E402
 import vaultpath                                             # noqa: E402
 
@@ -69,15 +70,15 @@ SHARED = ["Base", "Engine", "Net", "Gw" + SEP + "Const"]
 # Every string in the image containing "mock", as (encoding, text).
 MOCK_STRINGS = {("ascii", "mockDevice"), ("utf16", "mock"), ("utf16", "MockDevice")}
 
-fails = []
-
-
-def check(ok, label, detail=""):
-    print("  [%s] %s%s" % ("PASS" if ok else "FAIL", label,
-                           "" if not detail else "  -- " + detail))
-    if not ok:
-        fails.append(label)
-    return ok
+# The floor counts a measured green run of 2026-08-06: 26 checks. That is 2 for the
+# detector self-test in section 1, then 9 per vaulted build (5 census + 4 shared
+# trees) across the two builds = 18, then 5 for the srctree/asserts containment in
+# 3b, and 1 for the -mock closeout. Nothing here is optional: every fixture arrives
+# through `vaultpath.require_dir`, which raises rather than yielding an empty scan,
+# so a run that reaches the banner having done fewer than 26 checks has lost a
+# section -- most likely one of the per-build loops -- rather than found less data.
+LEDGER = checks.Ledger("srctree", floor=26)
+check = checks.adopt(LEDGER)
 
 
 def load(name):
@@ -199,7 +200,5 @@ check(found == MOCK_STRINGS,
       "no mock server, no offline mode")
 
 print()
-if fails:
-    print("[FAIL] %d check(s) failed: %s" % (len(fails), "; ".join(fails)))
-    raise SystemExit(1)
-print("[PASS] all checks passed (%.1fs)" % (time.time() - START))
+print("scanned both builds in %.1fs" % (time.time() - START))
+sys.exit(LEDGER.verdict())

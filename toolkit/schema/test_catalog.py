@@ -43,6 +43,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(ROOT, "toolkit"))
 sys.path.insert(0, os.path.join(ROOT, "toolkit", "clientscan"))
 
+import checks                                                # noqa: E402
 import msgshape as MS                                        # noqa: E402
 import pinned as P                                           # noqa: E402
 
@@ -59,14 +60,16 @@ EXPECT_TYPE1 = 4             # binary type-1 fields among them
 # number, which is the same class of mistake as masking an opcode to a byte.
 AUTH_RECV_TABLES = (0x00BEC540, 0x00BEC394)
 
-FAILED = []
+# MEASURED, not guessed: a green run on build 38797 executes exactly 13 checks --
+# 1 census + 4 oracles (MS.ORACLE is a fixed four-entry dict) + 1 invariants, then
+# 2 for the catalog comparison, 2 for the type tags, and 3 for the 0x00E3
+# retraction. None of them are fixture-dependent: the per-message loop adds
+# findings to `disagreed`, not checks, so the total does not drift with the
+# catalog's size. A run that reports fewer has stopped executing a section.
+LEDGER = checks.Ledger("catalog vs client tables", floor=13)
 
-
-def check(ok, label, detail=""):
-    print(f"  {'ok  ' if ok else 'FAIL'}  {label}" + (f"   {detail}" if detail else ""))
-    if not ok:
-        FAILED.append(label)
-    return ok
+# Same (ok, label, detail) order the call sites below already use.
+check = checks.adopt(LEDGER)
 
 
 # `pinned.py` resolves AND identifies the client. The vault holds two copies of
@@ -196,14 +199,7 @@ def main():
     check(str(0x00E3) not in over["channels"].get("GAME_SMSG", {}),
           "and needs no override entry")
 
-    print()
-    if FAILED:
-        print(f"[FAIL] {len(FAILED)} check(s) failed:")
-        for f in FAILED:
-            print(f"  - {f}")
-        return 1
-    print("[PASS] all checks passed")
-    return 0
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

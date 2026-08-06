@@ -18,18 +18,25 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from codec import Codec, Undecodable  # noqa: E402
 import vaultpath  # noqa: E402
+import checks  # noqa: E402
 
 AUTH_CMSG_MASK = 0x8000
 
-
-def check(name, cond, detail=""):
-    print(f"  [{'PASS' if cond else 'FAIL'}] {name}{(' — ' + detail) if detail else ''}")
-    return cond
+# Floor 11 = every check below, all of them unconditional: section 1 contributes
+# exactly one whatever the vault holds (the three branches each score a single
+# verdict), then 2 + 5 + 3 for sections 2, 3 and 4. Measured from a green run on
+# 2026-08-06 against 162 captured opening frames. This file is the reason
+# checks.py exists — it once printed ALL CHECKS PASSED with its capture glob
+# matching nothing — so the floor is what makes section 1 going quiet a failure
+# rather than a shorter list of passes.
+LEDGER = checks.Ledger("codec vs captured bytes", floor=11)
+check = checks.adopt_named(LEDGER)
 
 
 def main():
     c = Codec()
-    ok = True
+    ok = True   # kept only so the `ok &= check(...)` call sites read unchanged;
+                # the verdict now lives in LEDGER, which also counts the checks.
 
     print("\n1. real client frames from the vault (build 38797)")
     # Select the fixture by CONTENT, never by position. This used to take "the
@@ -170,8 +177,7 @@ def main():
                 af == socket.AF_INET and port == 6113 and ip == "127.0.0.1",
                 f"af={af} {ip}:{port}")
 
-    print(f"\n{'ALL CHECKS PASSED' if ok else 'FAILURES ABOVE'}")
-    return 0 if ok else 1
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

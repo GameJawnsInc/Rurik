@@ -23,14 +23,19 @@ import drive_client as dc  # noqa: E402
 import session  # noqa: E402
 from livecapture import CaptureTail, by  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
+import checks  # noqa: E402
 
-FAILURES = []
-
-
-def check(desc, cond, detail=""):
-    print(f"[{'PASS' if cond else 'FAIL'}] {desc}" + (f"  ({detail})" if detail and not cond else ""))
-    if not cond:
-        FAILURES.append(desc)
+# The floor counts the checks the five sections below execute. Counted BY
+# READING the code, not by running it -- test_stack() starts a real server stack
+# and the agent that added the ledger was not permitted to launch one. The count
+# is 30: 7 gate + 5 tail + 7 pre-flight + 4 game-args + 7 stack (3 of the stack's
+# being one per server_specs() entry, of which there are three). The floor is set
+# to 26 -- the 23 checks before test_stack plus its three listener-ownership
+# checks -- so a section that quietly stops running is caught while an unmeasured
+# count cannot redden a healthy run. TIGHTEN THIS to the banner's real total the
+# first time a human runs the test green.
+LEDGER = checks.Ledger("harness", floor=26)
+check = checks.adopt_named(LEDGER)
 
 
 def refused(fn, *args):
@@ -213,10 +218,4 @@ if __name__ == "__main__":
     test_preflight_helpers()
     test_game_args()
     test_stack()
-    print()
-    if FAILURES:
-        print(f"{len(FAILURES)} FAILURE(S):")
-        for f in FAILURES:
-            print(f"  - {f}")
-        sys.exit(1)
-    print("ALL CHECKS PASSED")
+    sys.exit(LEDGER.verdict())
