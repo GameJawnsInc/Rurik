@@ -12,9 +12,10 @@ INFERRED from those words. §11 is the probe queue that would convert the useful
 half into observations, ranked cheapest-and-most-decisive first, and every probe
 in it is committed and executable in `toolkit/authsrv/probes.py`.
 
-**§14 was added later the same day** and carries the same method into the next
-thing R4b needs: effects, conditions and enchantments. The client names five of
-those six opcodes itself.
+**§14 and §15 were added later the same day** and carry the same method into
+the next two things R4b needs: effects and conditions (the client names five of
+those six opcodes itself), and the agent-property vocabulary (there are two
+dispatchers, not one, and their id spaces are disjoint).
 
 ## Labels used throughout
 
@@ -71,6 +72,13 @@ named catalogue lacks. (§5.)
 **Opcode 211 writes a second skill bitmap that nothing in the image reads.**
 Its write path has exactly one caller — its own handler — and unlike 219 it
 broadcasts no UI notification. (§8.)
+
+**There are two agent-property dispatchers, not one, and their id spaces are
+disjoint.** Opcodes 159/160 feed an int switch, 162/163 a float switch, and no
+property id has a case body in both. A property sent on the wrong one of those
+is silently ignored — no error, no log line. The id space runs 0..66, one wider
+than OpenTyria's enum, and the client's own `AV_CHAR_STAT_ENERGY == 0` decodes
+five pairs of properties at a stroke. (§15.)
 
 **The six `EFFECT_*` opcodes are `BuffSourceAdd`, `BuffSourceRemove`,
 `BuffTargetAdd` (twice), `BuffTargetExtendTimed` and `BuffTargetRemove`** — the
@@ -935,3 +943,190 @@ Two more probes join the queue, after the six in §11:
 |---|---|---|---|
 | 7 | `buff_side` | Do 63 and 65 file one buff under two agents? | 65 alone gives one effect icon with no countdown; adding 63 with the same buffId gives a second, separate upkeep indicator; removing either leaves the other. |
 | 8 | `buff_type_field` | Is field 3 `effect_type` or `attribute_level`? | If `effect_type`, 0 and 14 render as different *kinds* and an out-of-enum 12 misbehaves. If `attribute_level`, all three look identical and only the tooltip numbers move. |
+
+---
+
+# 15. The agent-property vocabulary — added 2026-08-06
+
+`studies/skills` §2 calls the 66-entry agent-property enum "the one place in the
+whole pass where three lineages agree across thirteen years" and says that if
+Rurik ever builds a skill-effect oracle, this enum is its vocabulary. Both
+halves of that need qualifying. The lineages agree on *some* of it and flatly
+contradict each other on ids 8, 18, 23, 35, 49, 53, 58 and 59, and 14 of
+OpenTyria's 66 entries are named only by their own number.
+
+The client settles a surprising amount of it **structurally**, without needing
+any name at all. `toolkit/clientscan/genericvalue.py` (new, stdlib only)
+extracts the mapping and the test re-derives it.
+
+## 15.1 There are two dispatchers, and they are disjoint — MEASURED
+
+```
+159 / 0x009F  AGENT_PROPERTY_UPDATE_INT           -.
+160 / 0x00A0  AGENT_PROPERTY_UPDATE_INT_TARGET     '->  ChCliApi 0x008128F0
+162 / 0x00A2  AGENT_PROPERTY_UPDATE_FLOAT         -.
+163 / 0x00A3  AGENT_PROPERTY_UPDATE_FLOAT_TARGET   '->  ChCliApi 0x00813040
+```
+
+The non-target variants pass a target agent of 0 and are otherwise identical —
+one dispatcher each for int and float, not one for all four. Each has its own
+dense switch over the property id, and:
+
+| | ids |
+|---|---|
+| the int switch has a case body for | **47** |
+| the float switch has a case body for | **14** |
+| an int-only pre-switch handles, and the main switch does not | **2** (10 and 64) |
+| **neither** switch acts on | **4** — ids 5, 8, 40, 51 |
+| both switches claim | **0. They are disjoint.** |
+
+47 + 14 + 2 + 4 = 67, and the two handled sets do not overlap by a single id.
+**A property id is an INT property or a FLOAT property, and sending one on the
+wrong message type is silently ignored** — no error, no log line, no assert.
+For a server that is a whole class of bug: health regen (44) sent as an int
+does nothing at all and looks exactly like a wrong id.
+
+This also dissolves what looked like a hole. Reading only the int switch, 20
+ids appeared unhandled, including `SkillDamage`, `EnergyRegen`, `HealthRegen`,
+`CastTimeModifier` and `Knockdown2` — the very things a combat system needs.
+Fourteen of them are simply float properties.
+
+**The id space is 0..66 — 67 values.** The int switch's own bound is
+`cmp eax, 0x42`, and id 66 has a real case body at `0x00812EBD`.
+**OpenTyria's enum stops at 65**, so it is one entry short, and nothing in
+either lineage names 66. NOT FOUND.
+
+## 15.2 What the groupings settle — SOURCED and MEASURED
+
+**`AV_CHAR_STAT_ENERGY == 0`, and the 0/1 flag everywhere is energy/health.**
+`AvChar.cpp:4320` asserts `stat == AV_CHAR_STAT_ENERGY`, guarded by
+`if (stat != 0)` at `0x007F78DB` — so the constant is 0. That one name decodes
+five pairs of properties at once, because each pair calls one helper with 0 or 1:
+
+| pair | helper | 0 | 1 |
+|---|---|---|---|
+| 41 / 42 (int) | `0x007E0310` | energy | health |
+| 33 / 34 (float) | `0x007E02C0` | energy modifier | health modifier |
+| 43 / 44 (float) | `0x007E0360` | energy regen | health regen |
+| 52 / 53 (float) | shared body | energy | health |
+| 62 (float) | `0x007E03B0` | energy | — |
+
+OpenTyria's `Energy`/`Health` (41/42) and `EnergyRegen`/`HealthRegen` (43/44)
+are **CORROBORATED**. GWCA's `health` (34) and `energygain` (52) are
+CORROBORATED and their unnamed twins are now named: 33 is 34's energy twin, and
+53 is 52's health twin — which makes OpenTyria's `EnergyModifier3` for 53
+**wrong**, since it is the health one.
+
+**Property 10 names the skill responsible for the next damage number, and the
+damage handler consumes and clears it.** Property 10 is handled only by the int
+pre-switch, and all it does is `charContext + 0x640 = value` (`0x008129DA`).
+Two float families then read that dword, pass it on, and **zero it**:
+
+- 16, 17, 18 → one body with a 0 / 1 / 2 selector → `0x007DFB60`, clears +0x640
+- 55, 56 → another body with a 0 / 1 selector → `0x007E0130`, clears +0x640
+
+GWCA's comment on 10 — *"The skill responsible for the last damage packet
+received"* — is **CORROBORATED exactly**, and the mechanism adds an ordering
+constraint no source states: **send property 10 immediately before the damage
+property, or the floating number is attributed to nothing.** It also says 18 is
+a third member of the 16/17 damage family (GWCA names 16 `damage` and 17
+`critical` and leaves 18 unnamed; OpenTyria has `DamageModifier1/2` and
+`Value18`), and 56 is the second member of 55's.
+
+**Properties 20 and 21 call the same function, and 21 passes the agent where 20
+passes the target.** At `0x00812B6C` the arguments are `(agent, target, value)`;
+at `0x00812B7E` they are `(agent, agent, value)`. That is precisely GWCA's
+`effect_on_target` / `effect_on_agent` — *"e.g. casting a skill on someone"* vs
+*"on myself/location"*. **GWCA is right in a way the binary can demonstrate.**
+OpenTyria's `ApplyEffect1`/`ApplyEffect2` is not wrong, just uninformative.
+
+**Properties 6 and 7 are one function with a 1 / 0 flag** — add and remove.
+Both lineages agree (`ApplyAura`/`RemoveAura`, `add_effect`/`remove_effect`)
+and the binary shows why they are a pair. CORROBORATED.
+
+**Properties 23, 24, 25, 26 and 27 are not actions — they are sticky parameters
+for the next animation.** Each is a bare store to five consecutive dwords in the
+char context:
+
+```
+23 -> +0x550      26 -> +0x55C
+24 -> +0x554      27 -> +0x560
+25 -> +0x558
+```
+
+and property 22 (`ApplyAnimation`) *reads* +0x55C and +0x560, while property 28
+(`ApplyAnimationLoop`) reads +0x550 and +0x554, ORs `0x10` into the first, and
+then **clears all five**. GWCA's comment on 23 — *"When received before dance,
+makes it fancy"* — describes exactly this mechanism, and the binary shows the
+whole set works that way, not just 23. So the server must send 23-27 **before**
+the 22 or 28 that consumes them, and they do not persist.
+
+**Properties 35 and 63 invoke the same AgentView call.** 35 (int) loads a
+compiled-in `0.4f` from `0x00948DAC` and calls `0x007E0490(agent, 0.4f)`; 63
+(float) calls `0x007E0490(agent, wireFloat)`. So they are one effect with a
+fixed and a variable duration. OpenTyria pairs them as `Knockdown1` /
+`Knockdown2`; GWCA calls 35 `interrupted` and 63 `knocked_down`. **The pairing
+is settled and the naming is not** — the binary proves they are the same
+animation, and 0.4 s is short for a Guild Wars knockdown and about right for an
+interrupt stagger. **CONTESTED**, with the relationship now fixed.
+
+**Property 48 is the only skill-ish property that does not reach AgentView.**
+It broadcasts UI message `0x10000025` with `{agent, value}` and stops. Every
+other member of the cast family calls into `AvApi`. GWCA names it
+`instant_skill_activated`; an instant skill is exactly the one with no cast
+animation to play. Suggestive, not proof — INFERRED.
+
+**Properties 14 and 15 assert `sourceAgent < 5`** (`ChCliApi:2112`, and again
+at 2123). Five is the number of armour pieces, and `probes.py` already carries
+the five Prophecies warrior slots. Corroborates OpenTyria's
+`AddArmor`/`ArmorColor` weakly but usefully.
+
+## 15.3 The cast family, in one place
+
+Pulling §6 and this section together, the properties an execution engine needs:
+
+| id | dispatcher | reaches | our reading |
+|---|---|---|---|
+| 4 | int + pre-switch | `AvApi 0x007DFA80` | attack started (3 args) |
+| 50 | int + pre-switch | `AvApi 0x007E0100` | attack-skill started (3 args) |
+| 60 | int + pre-switch | `AvApi 0x007E0200` → `AvChar` event kind 0x19 | **skill started — the cast animation** (3 args) |
+| 1 | int | `AvApi 0x007DFA20` | melee attack finished (agent only) |
+| 3 | int | `AvApi 0x007DFA60` | attack stopped (agent only) |
+| 46 | int | `AvApi 0x007E00A0` | attack-skill finished (agent only) |
+| 49 | int | `AvApi 0x007E00E0` | attack-skill stopped (agent only) |
+| 58 | int | `AvApi 0x007E0190` | skill finished (agent only) |
+| 59 | int | `AvApi 0x007E01B0` | skill stopped (agent only) |
+| 48 | int | UI only | instant skill — no animation |
+| 61 | float | `AvApi 0x007E01D0` | cast time modifier |
+| 10 | int pre-switch only | `+0x640` | the skill the next damage belongs to |
+
+**The started/finished/stopped shape is the strongest corroboration of GWCA in
+this document.** Three properties take `(agent, target, value)` and are grouped
+together by the pre-switch; six take only `(agent)` and split cleanly into a
+"finished" trio and a "stopped" trio. GWCA's names fit that structure exactly.
+OpenTyria's do not: it calls 58 `FightStance`, 49 `InterruptAttack`, 46
+`MeleeSkillAttack2`, 3 `MeleeSkillAttack1` and 1 `Value1` — five names that
+cannot all be right about six functions of identical shape.
+
+**Do not import OpenTyria's agent-property enum** for anything in the cast
+family, for the same reason `studies/skills` says not to import its attribute
+enum. Use GWCA's names where it has them, this document's structure where it
+does not, and `genericvalue.py` to check which dispatcher owns an id before
+sending it.
+
+## 15.4 What this leaves open
+
+- **Ids 5, 8, 40 and 51 are acted on by neither dispatcher.** GWCA names 8
+  `disabled` (aftercast, value 1/0) — if that is right, something other than
+  `ChCliApi` must consume it, and we did not find what. NOT FOUND.
+- **Id 66 has a case body and no name in any source.** NOT FOUND.
+- **Id 64 stores an *agent id*, not a value**, at `charContext + 0x6A4`
+  (`0x008129E2`, `mov [esi+0x6A4], edi`). A "last something agent" slot.
+  NOT FOUND in both lineages.
+- The AgentView event kinds each `AvApi` entry point queues would give a second,
+  independent grouping. Only one was read this pass (kind `0x19` for property
+  60, via `AvChar 0x007F76D0`).
+
+No probe is listed for these: the honest next step is more static reading of
+`AvApi.cpp`, not a client run, and §11's queue is already long enough to fill a
+session.
