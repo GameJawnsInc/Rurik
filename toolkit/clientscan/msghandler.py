@@ -3,6 +3,8 @@
     python toolkit/clientscan/msghandler.py 0x0029
     python toolkit/clientscan/msghandler.py 0x0029 --follow      # + called fn
     python toolkit/clientscan/msghandler.py --table 0xa52d70     # whole table
+    python toolkit/clientscan/msghandler.py 0x00E5 --follow --annotate
+    python toolkit/clientscan/msghandler.py --callers 0x00822b80 # who calls it
 
 WHY THIS EXISTS. Every other source we have for what a message MEANS is a
 reconstruction, and on the one message this project needed most -- 0x0029
@@ -26,6 +28,21 @@ everything the server sends, which is what we care about. Send tables are listed
 so a lookup can say "that message has no handler because the client only ever
 transmits it" rather than "not found".
 
+A WARNING THIS TOOL CANNOT GIVE YOU, so read it here. The `cmds` arrays it
+prints are, for more than half the catalogue, ZERO in the file and written at
+load time -- and a zero decodes as a legal four-byte field. Do not read wire
+shapes off the raw `cmds` this prints. `msgshape.py` next door recovers the
+load-time writes and refuses to guess past a slot it could not account for;
+that is the module to ask about shapes.
+
+DEPENDENCIES, and an open house-rule question. CLAUDE.md says the toolkit is
+standard library only. This file has imported capstone and pefile since it was
+written, because there is no reasonable stdlib x86 disassembler. Everything
+added alongside it since -- `asserts.py`, `msgshape.py` -- is deliberately
+stdlib, so the exception stays confined to the one thing that genuinely needs
+it. Whether that is a carve-out or a debt is the owner's call; it is flagged in
+studies/skillcast/FINDINGS.md rather than quietly widened.
+
 READ ONLY. Opens Gw.exe for reading and does nothing else. The install at
 C:\\gw is the player's own and is never written, patched or launched from here.
 """
@@ -34,36 +51,18 @@ import argparse
 import os
 import sys
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
 try:
     import capstone
     import pefile
 except ImportError:                                           # pragma: no cover
     sys.exit("needs capstone and pefile: python -m pip install capstone pefile")
 
-DEFAULT_EXE = r"C:\gw\Gw.exe"
+from msgshape import TABLES                                   # noqa: E402,F401
 
-# (VA, entry count, direction). SOURCED: studies/msgtable/FINDINGS.md section 3,
-# recovered from the 14 callers of MsgChannel::RegisterMsgs at VA 0x007de010.
-# Measured against build 38797; a different build moves all of these.
-TABLES = (
-    (0x00a52d70, 18, "RECV"),    # AgMsg -- agents and movement
-    (0x00a52e48, 2, "SEND"),
-    (0x00a96598, 1, "SEND"), (0x00a965a0, 1, "RECV"),
-    (0x00b97958, 2, "SEND"),
-    (0x00bc89b0, 15, "RECV"),
-    (0x00bc8cb8, 86, "SEND"),
-    (0x00bc8f68, 203, "RECV"),   # largest
-    (0x00bc9a10, 1, "SEND"), (0x00bc9a18, 8, "RECV"),
-    (0x00bca740, 15, "RECV"),
-    (0x00bca808, 13, "SEND"), (0x00bca870, 31, "RECV"),
-    (0x00bcac48, 34, "SEND"), (0x00bcad58, 56, "RECV"),
-    (0x00bcb030, 15, "SEND"), (0x00bcb0a8, 68, "RECV"),
-    (0x00bcb9f8, 27, "SEND"), (0x00bcb788, 52, "RECV"),
-    (0x00bcbaf0, 8, "SEND"), (0x00bcbb30, 10, "RECV"),
-    (0x00bec384, 2, "SEND"), (0x00bec394, 5, "RECV"),
-    (0x00bec3d0, 46, "SEND"),    # ch3 AUTH_CMSG
-    (0x00bec540, 32, "RECV"),    # ch3 AUTH_SMSG
-)
+DEFAULT_EXE = r"C:\gw\Gw.exe"
 
 
 class Image:
@@ -110,7 +109,52 @@ def read_table(img, va, count, direction):
         yield cmds[0], cmds, dispatch
 
 
-def disasm(img, va, limit=90, indent="  "):
+def _cstr(img, va, cap=140):
+    """The ASCII string at a VA, or None. Used only to annotate operands."""
+    o = img.off(va)
+    if o is None:
+        return None
+    b = img.blob[o:o + cap]
+    z = b.find(b"\0")
+    if z < 1:
+        return None
+    b = b[:z]
+    if len(b) < 4 or not all(32 <= c < 127 for c in b):
+        return None
+    return b.decode("ascii")
+
+
+def _annotator(img, exe):
+    """A per-instruction comment: the client's own asserts and strings.
+
+    A handler that logs `"Pending skill %u copy %d not found"` has told you
+    what its arguments are called. That one string settled `skill_instance`
+    after every written source had it as NOT FOUND, so surfacing them is worth
+    a flag.
+    """
+    from asserts import Asserts
+    az = Asserts(exe)
+    by_va = {a.va: a for a in az.items}
+
+    def note(ins):
+        out = []
+        a = by_va.get(ins.address)
+        if a:
+            out.append(f"ASSERT {a.module}:{a.line} {a.expr}")
+        for tok in ins.op_str.replace(",", " ").replace("[", " ") \
+                             .replace("]", " ").split():
+            if tok.startswith("0x") and len(tok) >= 8:
+                try:
+                    s = _cstr(img, int(tok, 16))
+                except ValueError:
+                    s = None
+                if s:
+                    out.append(f'"{s[:100]}"')
+        return ("   ; " + "  ".join(out)) if out else ""
+    return note
+
+
+def disasm(img, va, limit=90, indent="  ", note=None):
     md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
     o = img.off(va)
     if o is None:
@@ -118,15 +162,31 @@ def disasm(img, va, limit=90, indent="  "):
         return []
     calls = []
     for n, ins in enumerate(md.disasm(img.blob[o:o + limit * 8], va)):
-        print(f"{indent}0x{ins.address:08x}  {ins.mnemonic:<7} {ins.op_str}")
+        print(f"{indent}0x{ins.address:08x}  {ins.mnemonic:<7} {ins.op_str}"
+              f"{note(ins) if note else ''}")
         if ins.mnemonic == "call" and ins.op_str.startswith("0x"):
             try:
                 calls.append(int(ins.op_str, 16))
             except ValueError:
                 pass
+        # A one-line `push ebp / mov ebp,esp / pop ebp / jmp target` is MSVC's
+        # tail-call thunk. Following it is the difference between reading a
+        # trampoline and reading the function.
+        if ins.mnemonic == "jmp" and ins.op_str.startswith("0x") and n <= 4:
+            try:
+                calls.append(int(ins.op_str, 16))
+            except ValueError:
+                pass
+            break
         if ins.mnemonic == "ret" or n >= limit:
             break
     return calls
+
+
+def callers(exe, target):
+    """Every direct `call` to a VA. One implementation, in asserts.py."""
+    from asserts import Asserts
+    return Asserts(exe).direct_callers(target)
 
 
 def source_files(img, va, limit=400):
@@ -186,7 +246,14 @@ def main():
     ap.add_argument("--exe", default=DEFAULT_EXE)
     ap.add_argument("--table", help="dump one table by VA instead")
     ap.add_argument("--follow", action="store_true",
-                    help="also disassemble the functions the handler calls")
+                    help="also disassemble the functions the handler calls, "
+                         "and step through MSVC tail-call thunks")
+    ap.add_argument("--annotate", action="store_true",
+                    help="comment each line with the assert or string it "
+                         "references -- the client's own words")
+    ap.add_argument("--callers", help="VA; list every direct call to it")
+    ap.add_argument("--depth", type=int, default=1,
+                    help="how many call levels --follow descends (default 1)")
     ap.add_argument("--limit", type=int, default=90)
     a = ap.parse_args()
 
@@ -194,9 +261,18 @@ def main():
         sys.exit(f"no such file: {a.exe}")
     img = Image(a.exe)
     print(f"{a.exe}  {len(img.blob):,} bytes, image base 0x{img.base:08x}")
+    note = _annotator(img, a.exe) if a.annotate else None
 
     if a.map:
         print_map(img)
+        return 0
+
+    if a.callers:
+        target = int(a.callers, 0)
+        hits = callers(a.exe, target)
+        print(f"{len(hits)} direct caller(s) of 0x{target:08x}")
+        for h in hits:
+            print(f"  0x{h:08x}")
         return 0
 
     if a.table:
@@ -228,12 +304,23 @@ def main():
             continue
         print(f"  handler 0x{disp:08x}")
         print("  " + "-" * 66)
-        calls = disasm(img, disp, a.limit)
+        calls = disasm(img, disp, a.limit, note=note)
         if a.follow:
-            for c in dict.fromkeys(calls):
-                print(f"\n  called from the handler: 0x{c:08x}")
+            # Breadth-first to --depth. Depth 1 is the old behaviour. Depth 3
+            # is what it takes to get from a skill opcode to the code that
+            # means something: the handler is a trampoline into ChCliApi,
+            # which is a trampoline into ChCliSkill, which is where the
+            # asserts and the log strings live.
+            seen, queue = set(), [(c, 1) for c in dict.fromkeys(calls)]
+            while queue:
+                c, depth = queue.pop(0)
+                if c in seen or depth > a.depth:
+                    continue
+                seen.add(c)
+                print(f"\n  depth {depth}, reached from the handler: 0x{c:08x}")
                 print("  " + "-" * 66)
-                disasm(img, c, a.limit, indent="    ")
+                for m in disasm(img, c, a.limit, indent="    ", note=note):
+                    queue.append((m, depth + 1))
     return 0
 
 
