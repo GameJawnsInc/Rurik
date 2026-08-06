@@ -1210,13 +1210,31 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # click-moving. 0x003E carries a destination and a plane
                         # and nothing else, and one capture ran 37 seconds
                         # without the client saying where it was.
-                        model_dest, blocked = clip_to_walkable(state, dest)
-                        state["dest"], state["clipped"] = model_dest, blocked
+                        # CLIP THE CLICK, and send the clipped point.
+                        #
+                        # This was removed once, on the theory that substituting
+                        # our own destination was the rubber-banding. It was not:
+                        # the rubber-banding was the KEYBOARD path, which should
+                        # never have been naming points at all and is now a
+                        # direction (see GAME_SMSG_AGENT_MOVE_DIRECTION). Clicking
+                        # was never tested with the clip in isolation, and with it
+                        # gone the player walks through walls.
+                        #
+                        # The player's description of the stock game is what
+                        # decides it: a click at a far or awkward point walks a
+                        # plain straight line and is STOPPED by obstacles. A
+                        # server granting a straight line cut at the first wall
+                        # produces exactly that, with no client-side collision
+                        # needed to explain it. What it does NOT reproduce is
+                        # routing around the obstacle, which needs the
+                        # pathfinding graph we have not decoded.
+                        dest, blocked = clip_to_walkable(state, dest)
+                        state["dest"], state["clipped"] = dest, blocked
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                              [PLAYER_AGENT_ID, list(dest), plane_first, plane_second],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
                              f" on plane {cur_plane}->{dest_plane}"
-                             f"{', model stops short' if blocked else ''})")
+                             f"{', clipped at a wall' if blocked else ''})")
                         if sweep_note:
                             print(sweep_note, flush=True)
                     elif opcode == GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED:
