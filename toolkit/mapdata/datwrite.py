@@ -95,11 +95,22 @@ class Journal:
 
     Written to disk BEFORE the archive is touched and flushed after each write,
     so an interrupted run still leaves a usable way back.
+
+    It records the MFT's offset too, and that is not bookkeeping. Edits are
+    stored as ABSOLUTE file offsets, and MEASURED 2026-08-06 the client
+    relocates the master file table during ordinary play -- observed moving from
+    0xF8FFF000 to 0xF940E200 and back again within one session, which looks like
+    a double-buffer it alternates for crash safety. An MFT-field edit journalled
+    at one location is meaningless at the other, so replaying it would write four
+    bytes into whatever now occupies dead space and report success. Silent, and
+    the archive would still verify, because the row it meant to fix was never
+    touched. Hence the guard in revert().
     """
 
-    def __init__(self, path, dat):
+    def __init__(self, path, dat, mft_offset):
         self.path = path
         self.dat = dat
+        self.mft_offset = mft_offset
         self.entries = []
 
     def record(self, offset, before, after, what):
@@ -114,7 +125,8 @@ class Journal:
 
     def flush(self):
         with open(self.path, "w") as fh:
-            json.dump({"dat": self.dat, "edits": self.entries}, fh, indent=2)
+            json.dump({"dat": self.dat, "mft_offset": self.mft_offset,
+                       "edits": self.entries}, fh, indent=2)
 
 
 class Writer:
@@ -125,7 +137,8 @@ class Writer:
         self.path = path
         self.ar = Archive(path)
         self.fh = open(path, "r+b")
-        self.journal = Journal(journal_path, os.path.abspath(path))
+        self.journal = Journal(journal_path, os.path.abspath(path),
+                               self.ar.mft_offset)
 
     def close(self):
         self.fh.close()
@@ -245,7 +258,7 @@ def check_rows(path, rows):
     return bad
 
 
-def revert(journal_path):
+def revert(journal_path, force=False):
     """Undo every edit in a journal, newest first."""
     with open(journal_path) as fh:
         doc = json.load(fh)
@@ -255,6 +268,30 @@ def revert(journal_path):
     if not edits:
         print("journal is empty; nothing to revert")
         return 0
+
+    # See Journal's docstring: the client moves the MFT, and a stale MFT edit
+    # replayed at its old address is a silent no-op that still verifies.
+    was = doc.get("mft_offset")
+    with Archive(path) as ar:
+        now = ar.mft_offset
+    if was is None:
+        print(f"WARNING: this journal predates MFT-offset recording. If it "
+              f"contains MFT edits and the table has moved since, reverting "
+              f"them writes into dead space. The MFT is at 0x{now:X} now.")
+    elif was != now:
+        msg = (f"The MFT has MOVED since this journal was written:\n"
+               f"    journalled at 0x{was:X}\n"
+               f"    archive now   0x{now:X}\n"
+               f"Every MFT edit here names an address that is no longer the "
+               f"table. Replaying them would write into dead space, restore "
+               f"nothing, and still leave the archive verifying -- so the "
+               f"failure would be invisible. Restore the affected rows' size, "
+               f"compression and crc explicitly instead, then recompute the "
+               f"self-crc.")
+        if not force:
+            raise SystemExit(msg + "\n(--force to replay anyway; payload edits "
+                                   "are unaffected and safe.)")
+        print("WARNING, --force given:\n" + msg)
     print(f"reverting {len(edits)} edit(s) in {path}")
     restored = 0
     with open(path, "r+b") as fh:
@@ -308,10 +345,13 @@ def main():
                     help="flip the MFT self-crc (Arm C -- expect a full rescan)")
     ap.add_argument("--revert", metavar="JOURNAL",
                     help="undo every edit recorded in a journal")
+    ap.add_argument("--force", action="store_true",
+                    help="with --revert, replay MFT edits even if the "
+                         "table has moved. Almost always wrong.")
     args = ap.parse_args()
 
     if args.revert:
-        return revert(args.revert)
+        return revert(args.revert, args.force)
     if not args.dat:
         ap.error("--dat is required")
 
