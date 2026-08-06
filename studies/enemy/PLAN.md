@@ -1079,15 +1079,54 @@ that were undecodable now decode. The old test asserted nested messages were
 nested message at all — so it is replaced by a round-trip that pins the count
 byte to a computed offset.
 
-**`0x00E3 SKILL_ACTIVATED` disagrees with our schema and works by coincidence.**
-Recovered from the runtime initializers: the binary is `dword, agent_id, word`;
-we carry `agent_id, word, dword`. Both total 12 bytes, and our
-`(agent, skill, copy=0)` happens to serialise to the same ten bytes the client
-reads. **It breaks the first time `copy` is nonzero, silently.** Worth an entry
-in `schema/overrides.json`.
+**~~`0x00E3 SKILL_ACTIVATED` disagrees with our schema and works by
+coincidence.~~ RETRACTED 2026-08-06 — it agrees, and the disagreement was a
+misreading of our own tool's output.** The claim was that the binary is
+`dword, agent_id, word` against our `agent_id, word, dword`, that the two
+coincide only while `copy` is 0, and that it "breaks the first time `copy` is
+nonzero, silently". None of that is true. The client's descriptor is
+`cmds ['0xe3', '0x10', '0x204', '0x404']`, which decodes to
+**`agent_id(4), word(2), dword(4)`** — field for field what we carry. The last
+two cmds were read in the wrong order.
 
-This also contradicts the msgtable study's claim that *"zero messages agree on
-total size but disagree on decomposition"* — `0x00E3` does exactly that.
+MEASURED, and the check is deliberately wider than the one opcode so a broken
+comparator would show up as disagreement everywhere rather than agreement here:
+**all 477 GAME_SMSG messages the client registers agree field-for-field with
+`schema/messages.json` + `overrides.json` on build 38797. Zero disagreements.**
+`0x00E2`, `0x00E4` and `0x00E5` agree too.
+
+Two things made the misreading easy, and both are now closed:
+
+- **`msgshape.py` printed types 0 and 1 both as `dword`.** They are 4 bytes
+  either way so nothing was ever misframed, but it discarded the only two
+  semantic tags the client's descriptors carry, and `[dword, u16, u32]` is
+  exactly the output a reader reconstructs "dword, agent_id, word" from. It now
+  prints `agent_id` and `float`, so its output is directly comparable to the
+  catalog. The mapping is `studies/msgtable`'s inference, cited at the
+  definition: 127 type-0 fields against 127 `agent_id` fields across the 748
+  shared messages, and type 1 appearing 4 times only inside the agent-position
+  messages we type as `float`. Restricted to GAME_SMSG the correlation is
+  **90/90 type-0 ↔ `agent_id` and 4/4 type-1 ↔ `float`, no exceptions.**
+- **No `overrides.json` entry was needed and none was written.** Adding one, or
+  "fixing" the call site to match the retracted layout, would have broken a
+  working code path — `authsrv.py`'s `SKILL_ACTIVATED` echo is correct as it
+  stands.
+
+So the msgtable study's *"zero messages agree on total size but disagree on
+decomposition"* stands; this section previously claimed it had found the
+counter-example and it had not.
+
+```bash
+python toolkit/clientscan/msgshape.py 0x00E3
+```
+
+**The lesson is the one this repo keeps relearning from the other direction.**
+Every prior trap here was the binary being harder to read than it looked
+(zeroed `cmds` arrays, the `0xFF` opcode mask). This one was a *rendering* that
+was easier to read than it should have been: the output was correct and
+lossy, and lossy output invites the reader to supply the missing half from
+memory. A tool that prints less than it knows is a tool that will eventually be
+quoted as saying something it did not.
 
 **A trap for anyone re-deriving field layouts:** most `cmds[]` arrays read as all
 zeros in the file and are filled in at runtime by initializers that **copy from a
@@ -1098,19 +1137,428 @@ nearly published one.
 
 ### Where to go next, in order
 
-1. **Does the equipped-items bag give the weapon an attack speed?** The code is
-   written and unrun. If the `m_attackInterval` assert still fires, the bag is
-   not the source and `+0xEC` needs finding another way.
+**Superseded by §6p, which ran item 1 and killed it.** Kept because the ordering
+was right and because item 3 turns out to be unsupported for a reason worth
+reading. The live list is at the end of §6p.
+
+1. ~~**Does the equipped-items bag give the weapon an attack speed?**~~ **RUN.
+   It does not.** §6p.
 2. **If it is not the bag**, find what writes `+0xEC`. It is not a displacement
    store. Try the caller chain from the crash — runtime→static is `+0x120000`
    for that dump, giving `0x7F867F`, `0x7F9F5F`, `0x7F3486`, `0x801732`.
-3. **The Collector lead, untried.** The enemy is built from a `Hatcher
-   [Collector]` definition whose flags word is `0x20C`, and collectors are
-   non-combatants. Those bits are a live candidate for why a click reads as
-   interact. Not chased because guessing at bit meanings is what produced the six
-   misses above — but a *different* NPC definition would test it without
-   guessing at anything.
+   *§6p reproduces the crash and extends this chain from four frames to
+   nineteen, each named to ArenaNet's own source file.*
+3. ~~**The Collector lead, untried.**~~ **Unsupported — see §6p.** `0x20C` is not
+   a collector marker; it is a hardcoded wire constant in the one lineage we
+   copied it from, sent identically for a merchant, a collector and a guard.
 4. **Pathing into range**, which is ours to write and needs no client knowledge.
+
+---
+
+## 6p. The bag is not the source, and the crash chain is an AgentView chain
+
+Probe `attack_anim`, 2026-08-06, build 38797. One packet that mattered:
+`0x00A0` generic value **4** `attack_started`, target = a hostile Hatcher,
+cause = the player. Everything else in the probe exists to give it something to
+swing at.
+
+### The result: lead 1 is dead — OBSERVED
+
+**The equipped-items bag does not give the client a weapon attack speed.** The
+client died on the *same assert, at the same line*, as it did before the bag
+existed:
+
+```
+Assertion: m_attackInterval
+P:\Code\Gw\AgentView\AvChar.cpp(4791)
+Build: 38797     When: 8/6/2026 16:31:49
+```
+
+The causal link needs no argument: the gamesrv log has
+`s2c PROBE[attack_anim] generic value 4 attack_started target=7 cause=1
+(0x00a0, 18B)` and then, with nothing in between,
+`ConnectionResetError: [WinError 10054]`.
+
+And the weapon really was equipped this time — the same log shows
+`CREATE_NAMED_ITEM(starter hammer)`, `INVENTORY_CREATE_BAG(equipped)`,
+`ITEM_MOVED_TO_LOCATION(hammer -> equipped 0)`, `WEAPON_SET[0] leadhand=1` and
+`NPC_UPDATE_WEAPONS(leadhand = item 1)`. Bag, slot, weapon set and body, all
+four, and `+0xEC` is still zero. So the reading GWCA's comment invited — that
+the client computes the attack speed from the equipped weapon — is **not
+satisfied by any of the four things we know how to equip.**
+
+That closes the only written-and-unrun hypothesis in the arc. It is a negative,
+and it is worth more than it looks: `--no-weapon` aside, there is now nothing
+about *our* item handling left to blame.
+
+### The caller chain, named to ArenaNet's own files — SOURCED
+
+§6o asked for this and could only give four frames. The dump gives nineteen.
+`BaseAddr: 002E0000` against the image base `0x400000` makes the fixup
+**`static = runtime + 0x120000`**, and that is not assumed — the innermost frame
+lands at `0x00487BDB`, `0x1B` bytes into the assert routine §6o had already
+identified as `0x487BC0`.
+
+Each frame is named by running `asserts.py --at` on it: **a function's own
+assert call sites carry ArenaNet's source path**, which is §6g's method applied
+to a stack trace instead of to a message handler.
+
+| # | static | ArenaNet's file, from asserts in the same function |
+|---|---|---|
+| 0 | `0x00487BDB` | the assert routine itself |
+| 1 | `0x007F82FA` | **AvChar** — 4791 `m_attackInterval`, 4792 `m_attackModifier` |
+| 2 | `0x007F867F` | **AvChar** — 2222 `dancer`, 4745 `loop < 500` |
+| 3 | `0x007F9F5F` | **AvChar** — 5893 `damage.amount <= 0`, the §6b assert |
+| 4 | `0x007F3486` | **AvChar** — 1484 `curr->fileId` |
+| 5 | `0x00801732` | **AvManager** — 714 `s_refCountAlert`, 775 `!s_reusableAgentArray.Count()` |
+| 6 | `0x007DF2CE` | **AvApi** — 480 `agent`, 497 `stat` |
+| 7 | `0x004E28C3` | **GmView** — 2840 `MissionCliIsGameMaster()` |
+| 11 | `0x0063543D` | **FrApi** |
+| 14 | `0x0062BE5F` | **EvtApi** |
+| 15 | `0x004815B0` | **ExeTimer** |
+
+Read bottom-up it is `ExeTimer → EvtApi → FrApi → … → GmView → AvApi →
+AvManager → AvChar → AvChar → AvChar → assert`. Two things fall out.
+
+**Frame 3 is the damage function.** `0x007F9F5F` sits inside the very function
+that asserts `damage.amount <= 0` — the assert §6b earned with a positive
+damage value. So generic value 4 and generic value 16 arrive at the *same*
+AvChar routine, which is direct support for something the arc had only inferred
+from field shapes: `0x00A0` and `0x00A3` are the int and float halves of one
+mechanism. **Frame 6 names its own arguments** — `AvApi` asserting `agent` and
+`stat` on consecutive lines is an entry point taking exactly those two things.
+
+### Where to look next: AgentView, not the agent
+
+§6o read the precondition site as operating on the agent. Every frame from 1 to
+6 is an AgentView file, `AvChar` is the AgentView's own per-character object,
+and `AvManager:775` calls its pool `s_reusableAgentArray` — recycled, which a
+simulation agent would not be. So the object at `esi` is an **AvChar**, and the
+searches that came up empty were aimed at the wrong place: "nothing writes
+`+0x1B1`" and "no `fstp` writes `+0xEC` by displacement" were both looked for
+outside AgentView.
+
+> **§6q settles this and corrects the half of it that overreached.** There *is*
+> an `fstp` to `+0xEC`, two of them, both inside `AvChar` — the displacement
+> scan that missed them was simply not looking in this range. And the inference
+> that AvChar is "not the struct GWCA documents" is **wrong**: GWCA names
+> `+0xEC` `weapon_attack_speed` and `+0xF0` `attack_speed_modifier`, which is
+> exactly what ArenaNet's own asserts call them. GWCA's `AgentLiving` *is*
+> AvChar. What is true is that GWCA's map **drifts** — see §6q.
+
+**The next move for item 2 is to read AvManager's pool init and AvChar's own
+code, not to keep scanning for stores to an agent.**
+
+### Lead 3 was unsupported, and reading beat guessing again — MEASURED
+
+§6o's item 3 was "the enemy is a `Hatcher [Collector]` whose flags word is
+`0x20C`, and collectors are non-combatants". Checked against the mirror it came
+from, before spending a launch on it:
+
+```
+gameservice/StoC.go:113     flags  int  //wire:uint32,val:0x20C
+```
+
+**`0x20C` is a hardcoded constant on the wire field, not a per-NPC value.**
+gw-preservation sends it identically for `gram_merchant`, `hatcher_collector`
+and `ascalon_guard`; not one of its seven definitions carries a flags value of
+its own. A number that never varies cannot be what distinguishes a collector
+from a guard, so "those bits are why a click reads as interact" has no support
+behind it.
+
+What *does* vary per definition is `AllegianceFlags`, and it is the field-12
+team token §6e already settled: five of the seven are `'nonc'` and two are
+`'play'`. The non-combatant marker upstream is the allegiance, and we already
+override it to an unrecognised token to get a red nameplate.
+
+**The proposed experiment would not have tested its own hypothesis.** Swapping
+in "a genuinely hostile NPC definition" changes the model id, the file id and
+the EncString. The flags word would stay `0x20C`, because `0x20C` is all we
+have. The hypothesis is about the flags; the experiment changes the model; §6e
+established those are independent fields. Six misses in §6o came from guessing
+at bit meanings, and this would have been the seventh — caught by reading the
+source of the number rather than by running it.
+
+### The run before this one measured nothing, and said so in the friendliest way
+
+Recorded because the failure is a general one and it nearly landed in this
+document as a finding.
+
+The first attempt used `session.py --keep-open`, which spared the client and
+let `main()`'s `finally` stop the servers anyway. The client's only peer was
+those servers, so it dropped the connection and fell back to character select —
+**`Code=007`, "Your connection to the server was lost"**. The probe never fired:
+its first step is two seconds after the spawn rung the harness reads its verdict
+at, and the stack was killed in that gap.
+
+**The symptom was a client still running, still responding, with no assert
+dialog** — which is exactly what a probe that ran and found nothing looks like.
+The reading it invited was "no crash, so the bag worked", i.e. the opposite of
+the truth. It was caught by checking the gamesrv log for the probe's own step
+lines before believing the absence, and the log had none.
+
+That is the fourth time this project has been wrong, or nearly wrong, about an
+absence produced by an instrument that was not running. `--keep-open` now holds
+the stack too, and blocks inside the run rather than orphaning it — the log
+pumps are daemon threads on that process, so exiting would have truncated the
+gamesrv log one line before the interesting one.
+
+### Where to go next, in order
+
+1. **Find what writes `+0xEC`, in AgentView.** Read `AvManager`'s pooled
+   `s_reusableAgentArray` init and `AvChar`'s refresh path. The frames above are
+   the entry points, and `asserts.py --at` names the file for any address, so
+   the chain can be walked further without a disassembler.
+2. **What does the client already know about a weapon that we never told it?**
+   The `0x006E` mesh renders from `file_id`, so the client resolves an item's
+   real record from `Gw.dat` — which means an attack speed may be a property of
+   the *item type* rather than of anything on the wire, and our `STARTER_HAMMER`
+   is UPSTREAM (OpenTyria's `GmDefaultArmors.c`) with two modifier words nobody
+   in this repo has decoded. Those words are the obvious place a weapon's speed
+   would live.
+3. **Pathing into range**, still ours to write and still needing no client
+   knowledge. It is the only item on this list that cannot fail for a reason we
+   do not understand.
+4. **The revive fix is still untested** — the probe ends the session by design
+   before a kill-and-revive cycle can run, so property 34 has not been seen
+   against a revived body. It needs a session driven by clicks, not a probe.
+
+---
+
+## 6q. The attack speed is a MESSAGE, and it is one nobody has ever sent
+
+2026-08-06, continuing §6p. The wall is down. The client no longer asserts on
+`m_attackInterval`, and a body swings a weapon on screen.
+
+**`GAME_SMSG 0x0035` — `agent_id, float base, float modifier`, 14 bytes.** It is
+the only thing in the entire image that gives an agent an attack speed, and
+without it the client physically cannot animate a melee attack.
+
+### The chain, end to end — SOURCED
+
+Every step read out of our own pinned build 38797. Each caller is *unique*:
+there is exactly one path in, which is why it can be stated this flatly.
+
+```
+GAME_SMSG 0x0035   handler 0x0091D810   (CharMsg neighbourhood)
+                     reads {[msg+4] agent_id, [msg+8] float, [msg+0xC] float}
+  -> 0x0080EA60      thin forwarder, same three arguments
+  -> 0x007E0690      AvApi: agent id -> AvChar* via AvManager 0x00802160,
+                     asserts the lookup (AvApi.cpp:739 `ptr`)
+  -> 0x007FBD30      AvChar::SetAttackSpeed(float base, float modifier)
+                       assert base     != 0    AvChar.cpp:7207
+                       assert modifier != 0    AvChar.cpp:7208
+                       [this+0xEC] = base
+                       [this+0xF0] = modifier
+```
+
+`base` and `modifier` are **ArenaNet's own argument names**, read from the
+assert strings at `0xA93F2C` and `0xA93F34` — not ours and not a
+reconstruction's.
+
+**The constructor writes 0.0 to both** (`0x007F1FD2`: `fldz; fstp [ebx+0xEC];
+fstp [ebx+0xF0]`). So an agent the server never tells has an attack speed of
+exactly zero, and the animation path asserts non-zero on the way in
+(AvChar.cpp:4791/4792). The client asserts at **both ends** — on the write and
+on the read — which is as clear a statement as a binary can make that this
+field is never legitimately zero.
+
+That is the whole of the `m_attackInterval` crash, and it explains why §6p's
+negative was so total: **equipment was never the channel.** Bag, slot, weapon
+set and body are all inputs to the *simulation*; the attack speed is something
+the server states outright, on its own message.
+
+### Nobody sends it, and nobody has named it
+
+- **OpenTyria** names `GAME_SMSG 0x0033`, `0x0034` and `0x0037` and **skips
+  `0x0035`** — a hole in the most complete public catalog, right where this is.
+- No reference server sends it. Checked across gw-preservation, OpenTyria and
+  GWLP-R.
+- Our own catalog had the shape right all along (`agent_id, dword, dword`, 14
+  bytes — one of the 477 that agree with the binary) and no name.
+
+The name in `authsrv.py` is therefore **ours**, taken from the client's own
+`SetAttackSpeed` argument names rather than invented.
+
+### What the two floats mean — CORROBORATED, three ways
+
+| field | meaning |
+|---|---|
+| `+0xEC` `base` | seconds between attacks, by weapon or creature type |
+| `+0xF0` `modifier` | multiplier on that duration; **1.0 = none**, 0.75 = +25% IAS, 0.67 = +33% IAS |
+
+An increase in attack speed makes each attack *shorter*, so the modifier goes
+**down** as the character gets faster. The client multiplies the pair at
+`0x007F837E` (`fld [esi+0xf0]; fmul [esi+0xec]`).
+
+**And that multiplication reproduces the wiki's published table exactly.**
+WIKI (GWW, "Attack speed" §"Attack durations and effect of IAS and DAS", read
+2026-08-06), which states outright that these are the exact values the game
+uses:
+
+| base | ×0.67 | wiki's +33% | ×0.75 | wiki's +25% |
+|---|---|---|---|---|
+| 1.33 axe/sword/daggers | 0.8911 | **0.8911** | 0.9975 | **0.9975** |
+| 1.5 scythe/spear | 1.005 | **1.005** | 1.125 | **1.125** |
+| 1.75 hammer/staff/wand | 1.1725 | **1.1725** | 1.3125 | **1.3125** |
+
+Six for six, to four decimals, on a check that could have failed. GWCA's
+`Agent.h:181-182` independently names the same two offsets
+`weapon_attack_speed` and `attack_speed_modifier`, gives 1.33 for
+axe/sword/daggers and glosses the modifier as "0.67 = 33% increase". Three
+sources with no shared ancestry — a wiki built from twenty years of play, a
+reimplementation's header, and our own disassembly — agreeing on the same two
+fields at the same two offsets.
+
+**Our hammer therefore swings at 1.75s, not the 1.33 the server had been using.**
+`ATTACK_INTERVAL` was invented in §6m and is now WIKI, and it is the same
+constant we put on the wire, because the rate the server swings at and the rate
+the client animates at are one number and they had been two.
+
+### The assert is NOT synchronous with the packet — OBSERVED, and it cost a run
+
+The first fix sent `0x0035` for the player only. **The client still died on the
+same assert.** The reason is in the frames §6p had already named without anyone
+reading what they were:
+
+`AvApi 0x007DF280` takes a single float and fans it out to seven subsystems —
+it is the **per-frame tick**, not the message path. So `attack_started` does not
+animate anything. It **queues a request** at `AvChar+0xCC`, and a later frame
+walks the queue and dispatches on `request->type` through a 28-entry jump table
+at `0x007F8BF8`. **Type 3 is the melee swing**, and type 3 is the entry that
+reaches the precondition.
+
+Two consequences, and the first is a trap worth naming:
+
+- **The crash blames the frame, not the packet.** It lands a moment after the
+  send, in a stack with no message-handling in it at all, on whichever AvChar
+  the request was queued against — *not necessarily the agent you aimed at*.
+  Anyone reading that stack cold would not guess a packet caused it.
+- **Every living agent needs an attack speed**, not just the one you think is
+  attacking. That is what fixed it: the player, the standing enemy and the
+  probe's own body all get one now.
+
+### GWCA's offsets are exact here and drift later — MEASURED
+
+Worth recording because §6o burned a session on the other end of the same map.
+
+- `+0xEC` / `+0xF0`: GWCA is **exact**, names confirmed against ArenaNet's asserts.
+- `+0x1B1` / `+0x1B2` (GWCA's `allegiance` byte and `weapon_type` u16):
+  **nothing in AgentView touches either offset.** But a `byte` at `+0x1B7` and a
+  `u16` at `+0x1B8` are written from seven and six sites respectively — the same
+  byte-then-u16 shape, displaced by exactly 6.
+
+So GWCA's map is not wrong, it is **drifting**: correct at `+0xEC`, six bytes
+stale by `+0x1B1` on this build. Treat any GWCA offset as a lead to verify
+per-field, and never as a coordinate. The `+0x1B7`/`+0x1B8` identification is
+INFERRED from the shape match, not proven.
+
+### The first agent slot of generic value 4 is the ATTACKER — OBSERVED
+
+This corrects an UPSTREAM claim with our own bytes, and the evidence is a crash
+rather than a screenshot, which makes it stronger than anything watching could
+have produced.
+
+GWCA's note on generic value 4 reads **"caster_id is victim, target_id is
+attacker"** — i.e. this id inverts the usual roles. `hit_enemy` was built on
+that: it put the enemy in slot 1 and the player in slot 2. **It is wrong for our
+field order, and every swing this server has ever ordered was telling the client
+to animate the ENEMY.**
+
+The proof is the intermediate run that failed, and it was a controlled
+experiment by accident:
+
+| | agent 1 (player) | agent 7 (Hatcher) | packet | result |
+|---|---|---|---|---|
+| run A | attack speed **1.75** | **none** | `slot1=7, slot2=1` | **CRASH** m_attackInterval |
+| run B | 1.75 | 1.33 | `slot1=7, slot2=1` | survives |
+
+In run A the *only* agent in the world with a valid attack speed was the
+player, in slot 2. The client asserted, and it can only assert on an AvChar
+whose attack speed is zero. **So the body being animated was not the player,
+and therefore not slot 2.** Slot 1 named agent 7. Slot 1 is the attacker.
+
+That the fix for run A was "give the other agent an attack speed too" is what
+makes it a measurement: had slot 2 been the attacker, run A could not have
+crashed at all.
+
+The A/B run, with both bodies on screen at different distances, agrees — and
+returned one thing the model does not yet explain:
+
+| step | packet | seen |
+|---|---|---|
+| A | `slot1=Hatcher, slot2=player` | the Hatcher **turns to face the player** and attacks — **and the player attacks too** |
+| B | `slot1=player, slot2=Hatcher` | **only** the player attacks |
+
+Step B is decisive on its own: if slot 2 were the attacker the Hatcher would
+have swung and it did not. Step A's turn-to-face is a second free result — the
+client reorients the slot-1 agent toward slot 2 before swinging, so slot 2 is at
+minimum what the attack is *aimed at*.
+
+**The extra player animation in step A is UNEXPLAINED and is not being written
+down as understood.** MEASURED from the capture: the server sent exactly two
+`0x00A0` packets that session and nothing else — no `INTERACT_PLAYER`, no
+`hit_enemy`, no second attack — so the client produced two animations from one
+packet. The candidate worth testing first is that **slot 2 plays a hit
+reaction** and a flinch on a hammer-carrying body read as an attack at a
+glance; that would also explain the asymmetry, since step A's victim is the
+player in the foreground and step B's is a Hatcher nobody was watching. One
+probe settles it: send step A and watch the *Hatcher* rather than yourself.
+
+**This does not contradict §6f.** `0x00A3`'s first slot is the agent *damaged*;
+`0x00A0` value 4's first slot is the agent *swinging*. Same message shape,
+different roles per value id — which is exactly what GWCA's per-id note exists
+to warn about, even though the note itself has the roles the wrong way round
+for this build. **Read the slots per value id, never once for the opcode.**
+
+### Two placement mistakes, both of which invalidated a run
+
+Worth keeping because neither was a protocol error and both cost a launch, and
+because the second was only caught by the owner looking at the screen.
+
+- **The probe's Hatcher at +300 east landed exactly on the standing enemy.**
+  `enemy_spot()` places that one at +300 whenever it is walkable, which it
+  usually is. Two bodies in one spot: z-fighting, two nameplates stacked, and an
+  animation whose performer could not be told from its neighbour.
+- **Moving it to +600 to get clear put it out of sight**, apparently behind a
+  wall. The only Hatcher on screen was then the *standing* one — which neither
+  packet ever names. "The Hatcher did not swing" was therefore uninformative,
+  and would have read as evidence for the wrong conclusion.
+
+It sits at **+150** now, with the standing enemy at +300: both on screen, at
+different distances, no flag needed and nothing turned off. A probe whose two
+candidate bodies are not simultaneously visible cannot answer "which one moved",
+and neither placement failure was visible from the server side at all.
+
+### A note on method, since §6o's search was reported as exhaustive
+
+§6o recorded "no `mov` and no `fstp` writes either offset by displacement
+anywhere in the image". There are 233 instructions touching `+0xEC` image-wide,
+and two of them write it from inside `AvChar`.
+
+Two things were wrong with that search, and the second is the one worth
+carrying forward.
+
+**It was scoped to the wrong place and reported as a global absence.** Bounding
+AgentView by its own assert sites turns 233 unreadable hits into 5, two of them
+stores, in under a minute — and the range §6p had already established was
+sitting there unused.
+
+**And an access-flag filter cannot see either writer.** MEASURED: classify the
+`+0xEC` accesses by capstone's operand-access flag and you get **zero** stores
+in AvChar. Both real writers are `fstp`, which capstone reports as an operand
+*read*. That is not a thin or suspicious result, it is a clean confident
+nothing — the exact shape of §6o's sentence. **A float field is essentially
+always written with an x87 store, so a tool that trusts the access flag is
+blind to precisely the fields most worth chasing.**
+
+Both traps are now in `toolkit/clientscan/codescan.py`, and both are pinned by
+`test_codescan.py` with the counts they produce when the rules are removed
+(18 instead of 11; 0 stores instead of 2), so neither can quietly come back.
+
+```bash
+python toolkit/clientscan/codescan.py --field 0xEC --in AvChar
+```
 
 ---
 

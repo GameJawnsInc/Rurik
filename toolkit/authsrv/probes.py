@@ -695,6 +695,119 @@ def _enemy_damage_steps(agent_id, origin):
     ]
 
 
+def _attack_anim_steps(agent_id, origin):
+    """Does an EQUIPPED weapon give the player a weapon_attack_speed?
+
+    THE ONE QUESTION THIS ASKS, and the reason it is worth a launch. The client
+    refuses to animate a melee swing unless both `[esi+0xEC]`
+    (weapon_attack_speed) and `[esi+0xF0]` are non-zero -- SOURCED, read at
+    0x007F82C0, where a zero at +0xEC pushes line 0x12b7 (4791) into the assert
+    call. Ours were zero, so `attack_started` took the client down on
+    `Assertion: m_attackInterval / P:\\Code\\Gw\\AgentView\\AvChar.cpp(4791)`.
+
+    Nothing in the image WRITES either offset by displacement, so what sets
+    them is NOT FOUND. GWCA calls +0xEC "the base attack speed of the last
+    attack's weapon", which reads as the client computing it from the equipped
+    weapon rather than being told -- and until 2026-08-06 our hammer was drawn
+    on the body (0x006E) with no bag behind it, which renders a weapon without
+    equipping one. It now goes into a real equipped-items bag at login.
+    studies/enemy/PLAN.md 6o, "Where to go next", item 1.
+
+    WHY A PROBE AND NOT A CLICK. The shipped path already sends this packet on
+    every swing, but only once a click has ordered an attack, and a click has
+    to land on the enemy's body on screen. This asks the same question with no
+    aiming and no interaction logic in the way: one packet, on a timer.
+
+    THE CRASHING STEP IS LAST, ON PURPOSE. One branch of the prediction ends
+    the session, so nothing may depend on running after it. The crash is the
+    documented outcome rather than an accident -- the cage keeps the dump local
+    (studies/enemy/PLAN.md 6b) and `toolkit/harness/read_error_dialog.py` reads
+    the assert text without pressing "Send report to ArenaNet".
+    """
+    ox, oy, plane = origin
+    h = HATCHER
+    ENEMY = 7
+    # +150, with the standing enemy at +300 -- the owner's placement, and it is
+    # better than either of the two this probe tried first. Both bodies end up
+    # on screen, at different distances, so they can be told apart by eye
+    # without turning the standing enemy off and changing what is being tested.
+    #
+    #   +300 (first try) -> lands EXACTLY on the standing enemy, which
+    #     enemy_spot puts at +300 whenever that is walkable. Two Hatchers in
+    #     one spot, z-fighting, nameplates stacked, and an animation whose
+    #     performer could not be told from its neighbour.
+    #   +600 (second try) -> clear of it, and out of sight behind a wall. The
+    #     only Hatcher on screen was then the STANDING one, which neither
+    #     packet ever names -- so "the Hatcher did not swing" meant nothing.
+    #
+    # enemy_spot only ever offsets by +/-300, so +150 can never collide with it.
+    ex, ey = ox + 150, oy
+    return [
+        Step(2.0, 0x0056,
+             [PROBE_DEFINITION, h["file_id"], 0, h["scale"], 0, h["flags"],
+              h["profession"], h["level"], h["enc_name"]],
+             f"NPC_UPDATE_PROPERTIES def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, [PROBE_DEFINITION, [h["model_id"]]],
+             f"NPC_UPDATE_MODEL def {PROBE_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0020,
+             create_agent(ENEMY, CHAR_CLASS_MONSTER_BASE | PROBE_DEFINITION,
+                          AGENT_KIND_NPC, ex, ey, plane,
+                          allegiance=0x6D6F6E73),
+             f"WORLD_CREATE_AGENT {ENEMY}, token 'mons' -- a hostile Hatcher",
+             "TWO red Hatchers, one behind the other. The NEAR one is this "
+             "probe's and is the only one the packets below ever name; the FAR "
+             "one is the server's standing enemy and should never move. If "
+             "they are on top of each other, stop -- the placement is wrong "
+             "again and nothing below can be read."),
+        # Spawned rather than reusing the standing enemy at agent 10 so the
+        # probe still runs under --no-enemy, and so it cannot be confused by
+        # the combat loop hitting the same body on a timer.
+        #
+        # THIS AGENT NEEDS AN ATTACK SPEED TOO, and the first run of this probe
+        # is why. The player had one and the client still died on
+        # m_attackInterval -- because the assert does not fire on the packet.
+        # attack_started QUEUES a request at AvChar+0xCC and the per-frame tick
+        # processes it a frame later, so the AvChar that asserts is whichever
+        # one the request was queued on, and the two agent slots of this
+        # message are victim and attacker in an order we have not established.
+        # Every living agent gets one; that is what the client requires anyway,
+        # since AvChar's constructor writes 0.0 to both fields.
+        Step(1.0, 0x0035, [ENEMY, _f32(1.33), _f32(1.0)],
+             f"ATTACK_SPEED(agent {ENEMY}: base 1.33s, modifier 1.0)",
+             "nothing visible. 1.33 is a real number from the wiki's table "
+             "rather than an invented one, but a Hatcher's true rate is "
+             "unknown -- the client only demands that it is not zero."),
+        # A/B ON THE SLOT ORDER, which is now the open question and which the
+        # first run could not answer because both bodies were in one place.
+        #
+        # GWCA's note on generic value 4 reads "caster_id is victim, target_id
+        # is attacker" -- i.e. this id INVERTS the usual roles. Our two agent
+        # slots are named target-then-cause after 0x00A3, where section 6f
+        # MEASURED the first slot as the one damaged. If both were true, the
+        # first slot here would be the victim. The first run says otherwise:
+        # sent first=the Hatcher, and a HATCHER swung.
+        #
+        # Ten seconds apart, on two bodies that are now hundreds of units
+        # apart, so "which one moved" is answerable by looking.
+        Step(8.0, 0x00A0, [4, ENEMY, agent_id, 0],
+             f"attack_started  slot1={ENEMY} (NEAR Hatcher)  slot2={agent_id} (you)",
+             "STEP A -- WATCH THE NEAR HATCHER. PREDICTION: it swings and you "
+             "do not. If YOUR character swings instead, the slots are "
+             "victim-then-attacker and GWCA's note is right.\n"
+             "      Either way the client must NOT crash. It did, in every "
+             "session before the attack speed was sent."),
+        Step(12.0, 0x00A0, [4, agent_id, ENEMY, 0],
+             f"attack_started  slot1={agent_id} (you)  slot2={ENEMY} (NEAR Hatcher)",
+             "STEP B -- THE SAME PACKET, SLOTS SWAPPED. WATCH YOURSELF. "
+             "PREDICTION: now YOUR character swings the hammer and the Hatcher "
+             "does not.\n"
+             "      A and B together are the whole experiment: if each step "
+             "moves the body named in slot 1, slot 1 is the attacker. If the "
+             "SAME body moves both times, slot 1 is not what selects it and "
+             "the answer is somewhere else."),
+    ]
+
+
 # The agent EFFECTS bitfield, carried by 0x00F0 and 0x00F1. Bit 4 is death.
 #
 # SOURCED, and corroborated by two independent uses in the client binary:
@@ -1653,6 +1766,23 @@ PROBES = {
              "the client on CharPool.cpp's `range > 0`. That crash is why the "
              "fourth candidate never ran. This version cannot crash and can be "
              "re-run freely.",
+    ),
+    "attack_anim": lambda a, o: Probe(
+        question="Which agent slot of generic value 4 names the ATTACKER -- "
+                 "the one that plays the swing animation?",
+        predicts="The FIRST slot. Sending slot1=the Hatcher makes the HATCHER "
+                 "swing; swapping to slot1=you makes YOUR character swing. If "
+                 "the same body moves both times, the second slot is "
+                 "decorative and the first still names the attacker.",
+        steps=_attack_anim_steps(a, o),
+        note="This probe used to ask whether the equipped-items bag supplies "
+             "the attack speed. It does not -- that was answered NO and the "
+             "real answer is GAME_SMSG 0x0035 (studies/enemy/PLAN.md 6q), "
+             "which the server now sends to every living agent. The probe kept "
+             "its name and became the next question. It no longer expects to "
+             "crash: if m_attackInterval fires again, an agent somewhere is "
+             "missing its attack speed and THAT is the finding. Run with the "
+             "weapon ON -- --no-weapon makes this meaningless.",
     ),
     "enemy_damage": lambda a, o: Probe(
         question="Does the client render an ENEMY taking damage, and is the "

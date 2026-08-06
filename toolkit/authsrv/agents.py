@@ -245,6 +245,59 @@ WEAPON_TYPE_WAND = 10
 WEAPON_TYPE_STAFF = 12
 
 
+# ------------------------------------------------- how fast an agent swings
+#
+# GAME_SMSG 0x0035 is the ONLY thing in the client that gives an agent an
+# attack speed, and without it the client cannot animate a melee attack at all.
+# SOURCED, read end to end out of build 38797 -- see studies/enemy/PLAN.md 6q:
+#
+#   0x0035 handler 0x0091D810   reads {agent_id, float, float} off the message
+#     -> 0x0080EA60             thin forwarder, same three arguments
+#     -> 0x007E0690  AvApi      agent id -> AvChar*, asserts the lookup
+#     -> 0x007FBD30  AvChar::SetAttackSpeed(base, modifier)
+#          asserts base != 0     AvChar.cpp:7207, ArenaNet's own name `base`
+#          asserts modifier != 0 AvChar.cpp:7208, their name `modifier`
+#          [this+0xEC] = base ; [this+0xF0] = modifier
+#
+# The constructor at 0x007F1FD2 initialises BOTH to 0.0, and the animation path
+# asserts both non-zero on the way in (AvChar.cpp:4791 m_attackInterval, 4792
+# m_attackModifier). So an agent the server never told has an attack speed of
+# zero, and telling the client to start a swing kills it. That is the whole of
+# the m_attackInterval crash, and it is why nothing we equipped ever helped:
+# equipment was never the channel. This message is.
+#
+# The two fields, and what they mean -- CORROBORATED, wiki + GWCA + our own
+# disassembly, three sources with no shared ancestry:
+#
+#   +0xEC `base`     seconds between attacks for the weapon type
+#   +0xF0 `modifier` multiplier on that duration; 1.0 = none, 0.75 = +25% IAS,
+#                    0.67 = +33% IAS (an IAS makes each attack SHORTER)
+#
+# The client multiplies them at 0x007F837E (`fld [esi+0xf0]; fmul [esi+0xec]`),
+# and that product reproduces the wiki's published IAS table exactly for three
+# weapon classes and two modifiers -- 1.33/1.5/1.75 against 0.67 and 0.75 give
+# 0.8911/1.005/1.1725 and 0.9975/1.125/1.3125, six for six to four decimals.
+# A check that could have failed and did not.
+#
+# WIKI (GWW, "Attack speed" section "Attack durations and effect of IAS and
+# DAS", read 2026-08-06), whose table says outright "These are the exact values
+# used by the game". GWCA's Agent.h:181-182 independently names the same two
+# offsets weapon_attack_speed and attack_speed_modifier and gives 1.33 for
+# axe/sword/daggers and "0.67 = 33% increase", agreeing on both.
+ATTACK_SPEED = {
+    "axe": 1.33, "daggers": 1.33, "sword": 1.33,
+    "scythe": 1.5, "spear": 1.5,
+    "hammer": 1.75, "staff": 1.75, "wand": 1.75,
+    "flatbow": 2.025, "shortbow": 2.025,
+    "longbow": 2.475, "recurve": 2.475,
+    "hornbow": 2.7,
+    "pet": 2.0, "melee_minion": 3.1, "bone_fiend": 1.86,
+}
+# No increase and no decrease. The field may not be zero -- the client asserts
+# on that at both ends -- so "unmodified" is 1.0, never 0.
+ATTACK_SPEED_UNMODIFIED = 1.0
+
+
 # ------------------------------------------------- attackable, or merely red
 #
 # Being RED and being ATTACKABLE turned out to be two different things, and we
@@ -292,7 +345,11 @@ ALLEGIANCE_NPC_MINIPET = 6
 #   GenericTargetModifier float, with target  -- 0x00A3
 # The first and last are OBSERVED working. The middle two are INFERRED from the
 # field shapes matching; nothing has confirmed them on the wire.
-GV_ATTACK_STARTED = 4      # GenericValueTarget: caster is victim, target is attacker
+# GenericValueTarget. GWCA's note reads "caster_id is victim, target_id is
+# attacker"; OBSERVED on our own client, the FIRST agent slot is the one that
+# plays the swing -- the attacker. See hit_enemy() for the run that showed it
+# and why a crash proved it more cleanly than watching the screen could.
+GV_ATTACK_STARTED = 4
 GV_ADD_EFFECT = 6
 GV_REMOVE_EFFECT = 7
 GV_CRITICAL = 17

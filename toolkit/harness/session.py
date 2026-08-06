@@ -35,6 +35,7 @@ import argparse
 import ctypes
 import json
 import os
+import shlex
 import subprocess
 import sys
 import threading
@@ -66,7 +67,7 @@ PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                  capture_root=None, auth_host="127.0.0.1",
-                 game_host="127.0.0.3"):
+                 game_host="127.0.0.3", game_args=()):
     """The three server processes, as (name, host, port, argv).
 
     The game channel is served by a second authsrv.py instance: the client
@@ -82,6 +83,14 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
     client as -authsrv too). The webgate stays on 127.0.0.1: the -portal,
     -authsrv and handoff hosts have to be separable for a probe to say which
     of them the client's game dial follows.
+
+    game_args goes to the GAMESRV alone, and that asymmetry is the point. The
+    instance loads on the game channel, so --probe, --map, --no-enemy and
+    --no-weapon all have to reach that listener; handing them to the authsrv
+    as well would arm a second, idle copy of the same experiment. Without this
+    the one-command loop and the probe mechanism could not be used together at
+    all -- the probes had to be run from the hand-rolled three-terminal loop,
+    which is the one that has no port pre-flight and no capture checkpoints.
     """
     def cap(sub):
         return (os.path.join(capture_root, sub) if capture_root
@@ -100,7 +109,8 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
                "--port", str(game_port), "--bind", game_host,
                "--vault", cap("gamesrv"),
-               "--game-host", game_host, "--game-port", str(game_port)]),
+               "--game-host", game_host, "--game-port", str(game_port)]
+         + list(game_args)),
     ]
 
 
@@ -357,6 +367,51 @@ def shot_if_foreground(hwnd, pid, path):
     return dc.shot(hwnd, path)
 
 
+def hold_open(proc, seconds, tails, outdir):
+    """Keep the whole session alive past the verdict, and stay instrumented.
+
+    WHY THIS IS NOT `--keep-open` ON ITS OWN. `--keep-open` used to spare the
+    client and let main()'s `finally` stop the servers anyway. The client's
+    only peer was those servers, so it dropped the connection and fell back to
+    character select with "Your connection to the server was lost. (Code=007)".
+
+    That mattered because everything interesting happens AFTER the verdict. A
+    --probe fires seconds after the spawn rung the verdict is read at, so the
+    stack was being killed in the gap between arming an experiment and running
+    it. The symptom was the worst kind: a client still up, still responding,
+    with no assert dialog -- indistinguishable from a probe that ran and found
+    nothing. This project has been wrong about absences produced by instruments
+    that were not running three times already, and that is four.
+
+    So the hold blocks HERE, inside the run, rather than orphaning the stack:
+    the log pumps are daemon threads on this process, so an exit would stop the
+    gamesrv log at exactly the line before the interesting one.
+
+    Ends early when the client exits, which is what a crash looks like -- there
+    is no point holding a session whose client is a fatal-error dialog.
+    """
+    end = time.monotonic() + seconds if seconds else None
+    where = f"{seconds:.0f}s" if seconds else "until the client exits"
+    print(f"\n--keep-open: stack and client stay up ({where}). "
+          f"Ctrl-C stops both.")
+    last = 0.0
+    while proc.poll() is None and (end is None or time.monotonic() < end):
+        time.sleep(0.5)
+        for t in tails.values():
+            t.poll()                 # keep the capture flowing during the hold
+        now = time.monotonic()
+        if now - last >= 15:
+            last = now
+            left = f"{end - now:.0f}s left" if end else "holding"
+            print(f"  ...{left}", flush=True)
+    if proc.poll() is not None:
+        # A client that left on its own is a result, not a timeout. The assert
+        # text is in its dialog if there is one; read_error_dialog.py gets it
+        # without pressing "Send report to ArenaNet".
+        print(f"  client exited with code {proc.returncode} during the hold — "
+              f"read the dialog with toolkit/harness/read_error_dialog.py")
+
+
 def run_client(a, outdir):
     tails = {"auth": CaptureTail(vault_path("captures", "authsrv")),
              "game": CaptureTail(vault_path("captures", "gamesrv"))}
@@ -416,9 +471,17 @@ def run_client(a, outdir):
         hwnd, _ = dc.wait_window(proc.pid, timeout=5)
         if hwnd:
             shot_if_foreground(hwnd, proc.pid, os.path.join(outdir, "final.png"))
+
+        if a.keep_open:
+            hold_open(proc, a.hold, tails, outdir)
     finally:
-        if not a.keep_open:
-            dc.close_client(proc)
+        # ALWAYS close the client, --keep-open included. The hold above is the
+        # whole of what keep-open buys; once it ends the stack is about to be
+        # stopped, and a client with no servers is not a running session, it is
+        # a zombie sitting on Code=007. Worse, it keeps an exclusive handle on
+        # Gw.log, so the NEXT run dies with PermissionError before it can even
+        # launch -- which is exactly what happened once this hold existed.
+        dc.close_client(proc)
         sampler.stop()
 
     for t in tails.values():
@@ -458,7 +521,12 @@ def main():
     ap.add_argument("--replace", action="store_true",
                     help="stop stale python listeners found on our ports")
     ap.add_argument("--keep-open", action="store_true",
-                    help="leave the client running after the verdict")
+                    help="hold the client AND the stack up after the verdict, "
+                         "then shut both down together. Anything that happens "
+                         "AFTER the map verdict -- a probe, a fight, a revive "
+                         "-- needs this: the verdict is read at the spawn "
+                         "rung, and a probe's first step lands seconds later. "
+                         "Without --hold it holds until you close the client.")
     ap.add_argument("--exe", default=None,
                     help="patched client exe; default: newest under vault/run")
     ap.add_argument("--actions", default=None,
@@ -481,6 +549,18 @@ def main():
                          "client's -authsrv flag. 127/8 only. A second alias "
                          "(127.0.0.2) ran the probe that showed -authsrv plays "
                          "no part in the game dial (handshake PLAN §10).")
+    ap.add_argument("--hold", type=float, default=0.0, metavar="SECONDS",
+                    help="With --keep-open, stop holding after SECONDS instead "
+                         "of waiting for the client to exit. What a probe needs "
+                         "is its own step delays plus slack; --list-probes "
+                         "prints them.")
+    ap.add_argument("--game-args", default="",
+                    help="Extra authsrv flags for the GAMESRV only, space "
+                         "separated -- e.g. --game-args '--probe attack_anim' "
+                         "or '--map 146 --explorable'. The instance loads on "
+                         "the game channel, so anything about the world lives "
+                         "there; the authsrv gets none of it. Without this the "
+                         "one-command loop could not run a probe at all.")
     a = ap.parse_args()
 
     if not dc.is_loopback(a.auth_host):
@@ -496,7 +576,8 @@ def main():
             f"Give the game channel an alias of its own (default 127.0.0.3).")
 
     specs = server_specs(game_port=a.game_port, auth_host=a.auth_host,
-                         game_host=a.game_host)
+                         game_host=a.game_host,
+                         game_args=shlex.split(a.game_args))
     preflight(specs, replace=a.replace)
 
     stamp = time.strftime("%Y%m%dT%H%M%S")

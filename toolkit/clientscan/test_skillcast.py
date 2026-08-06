@@ -132,26 +132,26 @@ LOG_STRINGS = [
 SHAPES = {
     0x001D: ("RECV", ["array32[128]"], 4, 516),          # PVP_UPDATE_UNLOCKED_SKILLS
     0x00D3: ("RECV", ["array32[128]"], 4, 516),          # unnamed everywhere
-    0x00D9: ("RECV", ["dword", "u8", "u16", "u32"], 13, 13),
-    0x00DA: ("RECV", ["dword", "array32[8]", "array32[8]", "u8"], 11, 75),
+    0x00D9: ("RECV", ["agent_id", "u8", "u16", "u32"], 13, 13),
+    0x00DA: ("RECV", ["agent_id", "array32[8]", "array32[8]", "u8"], 11, 75),
     0x00DB: ("RECV", ["array32[128]"], 4, 516),          # UPDATE_UNLOCKED_SKILLS
-    0x00E2: ("RECV", ["dword", "u16", "u32"], 12, 12),   # SKILL_INTERUPTED
-    0x00E3: ("RECV", ["dword", "u16", "u32"], 12, 12),   # SKILL_CANCEL/ACTIVATED
-    0x00E4: ("RECV", ["dword", "u16", "u32"], 12, 12),   # SKILL_ACTIVATE
-    0x00E5: ("RECV", ["dword", "u16", "u32", "u32"], 16, 16),        # SKILL_RECHARGE
-    0x00E6: ("RECV", ["dword", "u16", "u32"], 12, 12),   # SKILL_RECHARGED
-    0x00E7: ("RECV", ["dword", "u16", "u32"], 12, 12),   # unnamed: disable
-    0x00E8: ("RECV", ["dword", "u16", "u32", "u32", "u32"], 20, 20),  # unnamed
-    0x0046: ("SEND", ["u32", "u32", "dword", "u8"], 15, 15),          # USE_SKILL
-    0x0027: ("SEND", ["dword", "u32", "u32", "u8"], 15, 15),          # unnamed
+    0x00E2: ("RECV", ["agent_id", "u16", "u32"], 12, 12),   # SKILL_INTERUPTED
+    0x00E3: ("RECV", ["agent_id", "u16", "u32"], 12, 12),   # SKILL_CANCEL/ACTIVATED
+    0x00E4: ("RECV", ["agent_id", "u16", "u32"], 12, 12),   # SKILL_ACTIVATE
+    0x00E5: ("RECV", ["agent_id", "u16", "u32", "u32"], 16, 16),      # SKILL_RECHARGE
+    0x00E6: ("RECV", ["agent_id", "u16", "u32"], 12, 12),   # SKILL_RECHARGED
+    0x00E7: ("RECV", ["agent_id", "u16", "u32"], 12, 12),   # unnamed: disable
+    0x00E8: ("RECV", ["agent_id", "u16", "u32", "u32", "u32"], 20, 20),  # unnamed
+    0x0046: ("SEND", ["u32", "u32", "agent_id", "u8"], 15, 15),       # USE_SKILL
+    0x0027: ("SEND", ["agent_id", "u32", "u32", "u8"], 15, 15),       # unnamed
     # The buff family, section 14. Note 0x0042 and 0x0043's last field: the
     # descriptor types it as a plain u32 and the HANDLER loads it with fld.
-    0x003F: ("RECV", ["dword", "dword", "u16", "u32", "u32"], 20, 20),  # BuffSourceAdd
-    0x0040: ("RECV", ["dword", "u32"], 10, 10),                         # BuffSourceRemove
-    0x0041: ("RECV", ["dword", "dword", "u16", "u32", "u32"], 20, 20),  # BuffTargetAdd
-    0x0042: ("RECV", ["dword", "u16", "u32", "u32", "u32"], 20, 20),    # BuffTargetAdd timed
-    0x0043: ("RECV", ["dword", "u32", "u32", "u32"], 18, 18),           # BuffTargetExtendTimed
-    0x0044: ("RECV", ["dword", "u32"], 10, 10),                         # BuffTargetRemove
+    0x003F: ("RECV", ["agent_id", "agent_id", "u16", "u32", "u32"], 20, 20),  # BuffSourceAdd
+    0x0040: ("RECV", ["agent_id", "u32"], 10, 10),                      # BuffSourceRemove
+    0x0041: ("RECV", ["agent_id", "agent_id", "u16", "u32", "u32"], 20, 20),  # BuffTargetAdd
+    0x0042: ("RECV", ["agent_id", "u16", "u32", "u32", "u32"], 20, 20), # BuffTargetAdd timed
+    0x0043: ("RECV", ["agent_id", "u32", "u32", "u32"], 18, 18),        # BuffTargetExtendTimed
+    0x0044: ("RECV", ["agent_id", "u32"], 10, 10),                      # BuffTargetRemove
 }
 
 

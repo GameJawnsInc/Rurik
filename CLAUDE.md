@@ -51,7 +51,14 @@ reasoning about it. Two of the three hardest questions so far were settled that 
 
 - Windows, PowerShell. `python …` lines work in any shell; `.ps1` needs a leading `&`.
 - **Python 3, standard library only.** No third-party dependencies anywhere in
-  `toolkit/`. Keep it that way.
+  `toolkit/`. Keep it that way — with one named carve-out, decided 2026-08-06:
+  **read-only client analysis may use `capstone` and `pefile`**, because there
+  is no reasonable stdlib x86 disassembler. It covers exactly
+  `toolkit/clientscan/msghandler.py` and `toolkit/clientscan/codescan.py`.
+  Nothing on the server path, and no tool whose byte patterns are fixed
+  (`asserts.py`, `msgshape.py`, `areatable.py`, `genericvalue.py`), may take
+  the dependency — those must keep working on a bare machine. Prefer a stdlib
+  checker for any *claim* even when a disassembler produced it.
 - Tests are plain scripts that print `[PASS]`/`[FAIL]` and exit non-zero. Run them
   before touching the game — a red test names the broken thing, the client says
   `Code=058` thirty seconds later and tells you nothing.
@@ -61,6 +68,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   ```
 
   Others: `toolkit/schema/test_codec.py` (codec vs. real captured bytes),
+  `toolkit/schema/test_catalog.py` (our message catalog vs. the client's own
+  format tables — 477/477 GAME_SMSG agree field-for-field on build 38797),
   `toolkit/harness/test_harness.py` (the one-command stack, the launch safety
   gate, the live capture tail),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
@@ -70,7 +79,9 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
-  vaulted builds — and it proves its own negative result can go red first).
+  vaulted builds — and it proves its own negative result can go red first),
+  `toolkit/clientscan/test_codescan.py` (the attack-speed chain, and the two
+  decoding traps that hid it — needs capstone).
 - **Find the vault with `toolkit/vaultpath.py`, never with `../../vault`.** A git
   worktree has no vault of its own, so a relative walk lands on nothing — and a
   fixture that resolves to nothing turns every assertion behind it into a no-op.

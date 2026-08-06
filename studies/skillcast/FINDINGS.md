@@ -763,6 +763,20 @@ disassembly, and it is honest about the two slots it cannot account for.
 **The question for the owner is whether analysis tooling gets an explicit
 carve-out in CLAUDE.md**, or whether `msghandler.py` should be treated as a
 debt to pay down. It is flagged here rather than silently resolved either way.
+
+> **ANSWERED by the owner, 2026-08-06: it is a carve-out.** Read-only analysis
+> tooling may use capstone and pefile; everything on the server path, and every
+> tool whose byte patterns are fixed, stays standard library. Recorded in
+> CLAUDE.md. `toolkit/clientscan/codescan.py` is the second module under it,
+> promoted out of scratch after it found the writer of `agent+0xEC` that four
+> earlier searches had reported absent (studies/enemy/PLAN.md §6q).
+>
+> The deciding argument was the one this section anticipated. Keeping the
+> exploration in scratch meant the *tools* were lost while their conclusions
+> survived, so each new question paid to rebuild them — and §6o's wrong finding
+> was produced by exactly that rebuilt-from-memory tooling. The claims still
+> want a stdlib checker where one is possible; what changed is that the
+> instrument no longer gets thrown away.
 Related: `studies/msgtable`'s initializer decoder was left in scratch and lost,
 which is why this pass had to rebuild it. It is committed now, with a test that
 reproduces that study's own oracle.

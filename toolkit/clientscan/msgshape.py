@@ -104,6 +104,22 @@ ORACLE = {
 
 _REG = ("eax", "ecx", "edx", "ebx", "esp", "ebp", "esi", "edi")
 
+# Types 0 and 1 are both a 4-byte scalar on the wire, so printing both as
+# "dword" costs nothing in framing and hides the only two semantic tags the
+# client's own descriptors carry. That is not hypothetical: this module printed
+# 0x00E3 as `[dword, u16, u32]`, a reader reconstructed "the binary is dword,
+# agent_id, word" from it, and studies/enemy/PLAN.md 6o recorded our (correct)
+# schema entry as a live hazard on the strength of it. Naming the tags makes
+# the output directly comparable to schema/messages.json.
+#
+# INFERRED, and the inference is studies/msgtable/FINDINGS.md's, not this
+# module's: across the 748 shared messages the binary has exactly 127 type-0
+# fields and our catalog exactly 127 `agent_id` fields, and type 1 appears 4
+# times, only inside the agent-position messages our catalog types as `float`.
+# The wire width is 4 either way, so a wrong label here cannot misframe
+# anything -- it can only mislabel.
+TYPE01_NAME = {0: "agent_id", 1: "float"}
+
 
 def decode_cmd(cmd):
     """(type, index, count). index is a log2 element size; count is unmasked."""
@@ -127,6 +143,8 @@ class Field:
             return f"string16({self.cap})"
         if self.kind == "uint":
             return {1: "u8", 2: "u16", 4: "u32"}.get(self.wire, f"uint{self.wire}")
+        if self.kind == "dword":
+            return TYPE01_NAME[self.type]
         return self.kind
 
 
