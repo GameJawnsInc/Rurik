@@ -25,16 +25,19 @@ from livecapture import CaptureTail, by  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 import checks  # noqa: E402
 
-# The floor counts the checks the five sections below execute. Counted BY
-# READING the code, not by running it -- test_stack() starts a real server stack
-# and the agent that added the ledger was not permitted to launch one. The count
-# is 30: 7 gate + 5 tail + 7 pre-flight + 4 game-args + 7 stack (3 of the stack's
-# being one per server_specs() entry, of which there are three). The floor is set
-# to 26 -- the 23 checks before test_stack plus its three listener-ownership
-# checks -- so a section that quietly stops running is caught while an unmeasured
-# count cannot redden a healthy run. TIGHTEN THIS to the banner's real total the
-# first time a human runs the test green.
-LEDGER = checks.Ledger("harness", floor=26)
+# MEASURED 2026-08-06: 36, from a green run that really did start the stack. The
+# previous note here said the count had been reached by READING the code (30, floored
+# conservatively at 26) because the agent that added the ledger could not launch a
+# server, and asked for it to be tightened at the first real green run. This is that
+# run: 13 gate + 5 tail + 7 pre-flight + 4 game-args + 7 stack. No section here
+# declares a skip, so the total is deterministic and the floor is the total -- a
+# section that quietly stops running now reddens the run instead of shrinking it.
+#
+# Worth recording why it was not measured sooner: this file could not be imported at
+# all from 2026-08-06 until the same day, because drive_client.py did `import cage`
+# without clientpatch on sys.path. It is named in CLAUDE.md's suite list and was not
+# among the tests run when that suite was last reported green.
+LEDGER = checks.Ledger("harness", floor=36)
 check = checks.adopt_named(LEDGER)
 
 
@@ -70,6 +73,28 @@ def test_assert_safe():
     check("gate still refuses a dotted non-loopback that starts plausibly",
           refused(dc.assert_safe, good,
                   ["-authsrv", "128.0.0.1", "-portal", "127.0.0.1"]))
+
+    # --- and the live-capture configuration, added 2026-08-06 -------------------
+    # The gate used to answer one question ("is every flag loopback?"), which could
+    # not express the authorized run at all. It now answers "where does this argv
+    # point?" and hands that to cage.assert_launch_safe, which reads the binary. So
+    # these check the ARGV half only; test_cage.py checks the bytes half.
+    live = os.path.join(vault_path("run-live"), "some_build", "Gw.exe")
+    check("gate accepts a path under vault/run-live",
+          not refused(dc.assert_safe, live, ["-authsrv", "1.2.3.4"]))
+    check("an argv with no server flags at all resolves to the REAL service",
+          dc.intended_target([]) == dc.ARENANET_DEFAULT)
+    check("...which is the point: a missing -portal is not neutral",
+          not dc.is_loopback(dc.ARENANET_DEFAULT))
+    check("gate refuses an argv that names both sides at once",
+          refused(dc.assert_safe, good,
+                  ["-authsrv", "127.0.0.1", "-portal", "gwportal.arenanetworks.com"]))
+    check("a fully routable argv passes the ARGV gate and reports its host",
+          dc.assert_safe(live, ["-authsrv", "1.2.3.4", "-portal", "1.2.3.4"])
+          == "1.2.3.4")
+    check("and a loopback argv reports the loopback host it named",
+          dc.assert_safe(good, ["-authsrv", "127.0.0.2", "-portal", "127.0.0.1"])
+          == "127.0.0.2")
 
 
 # ------------------------------------------------------------ live tail ----

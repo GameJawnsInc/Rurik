@@ -23,14 +23,17 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
 import checks  # noqa: E402
+import buildid  # noqa: E402
 import cage  # noqa: E402
 import pinned  # noqa: E402
 import vaultpath  # noqa: E402
 
-# 7 refusal + 2 live = 9, measured green on a machine with both clients caged. The live
-# pair declares a skip when the firewall cannot be read, which drops the count to 7 --
-# so the floor is 7, and the skip is printed rather than the run silently shrinking.
-LEDGER = checks.Ledger("launch cage guard", floor=7)
+# 17, MEASURED green 2026-08-06 on a machine with both DH-patched clients caged and a
+# live-capture build present. Three sections declare a skip instead when their artifact
+# is missing -- the vaulted pristine copy (-2), a live-capture build (-3), a firewall
+# that will not enumerate (-2) -- so the worst realistic run is 10 and the floor sits
+# just under it at 9. Every skip is printed rather than the run silently shrinking.
+LEDGER = checks.Ledger("launch gate", floor=9)
 
 
 def refused(fn, *a, **kw):
@@ -102,6 +105,64 @@ def main():
     finally:
         cage.cage_state = saved
 
+    # --- the decision table, which is what the gate actually is ------------------
+    # Both directions, on real binaries where they exist. These two refusals are the
+    # ones that cost something: the first is PLAN.md §6.2's account-ending case, and
+    # the second is the mirror mistake that would otherwise surface thirty seconds
+    # later as `AUTH_CMSG has no opcode 26763` and name nothing.
+    ours_exe = _one_with_dh(buildid.OURS)
+    live_exe = _one_with_dh(buildid.STOCK)
+
+    if ours_exe:
+        LEDGER.ok(refused(cage.assert_launch_safe, ours_exe, "Auth1.ArenaNetworks.com"),
+                  "a client carrying OUR DH parameters is REFUSED at the real service",
+                  "Stage A completes with the autofilled credential before Stage B fails")
+        LEDGER.ok(refused(cage.assert_launch_safe, ours_exe, "3.65.211.216"),
+                  "and refused at a bare routable ADDRESS too, not just a hostname",
+                  "the check is 'not 127/8', never a name match")
+    else:
+        LEDGER.skip("ours-at-live refusal", "no DH-patched client on disk")
+
+    if live_exe:
+        LEDGER.ok(refused(cage.assert_launch_safe, live_exe, "127.0.0.1"),
+                  "the LIVE-CAPTURE build is REFUSED at loopback",
+                  "it carries ArenaNet's parameters and cannot key against us")
+        saved_state = cage.cage_state
+        try:
+            cage.cage_state = lambda _exe: "CAGED"
+            LEDGER.ok(refused(cage.assert_launch_safe, live_exe, "1.2.3.4"),
+                      "a CAGED live-capture build is REFUSED at the real service",
+                      "the cage pins it to loopback, the one place it cannot work")
+            cage.cage_state = lambda _exe: "UNCAGED"
+            LEDGER.ok(cage.assert_launch_safe(live_exe, "1.2.3.4")["dh"] == buildid.STOCK,
+                      "and an UNCAGED one is ALLOWED there -- the authorized case",
+                      "a gate that refuses everything is not a gate, it is an outage")
+        finally:
+            cage.cage_state = saved_state
+    else:
+        LEDGER.skip("live-capture refusals", "no live-capture build on disk")
+
+    # The updater refusal, exercised against a crafted verdict rather than a crafted
+    # 10 MB binary: what is under test is assert_launch_safe's decision, and
+    # buildid's reading of the bytes is already proven by the real files above.
+    saved_desc, saved_state = cage.buildid.describe, cage.cage_state
+    try:
+        cage.cage_state = lambda _exe: "UNCAGED"
+        cage.buildid.describe = lambda *_a, **_k: {
+            "path": "synthetic", "dh": buildid.STOCK, "dh_detail": "crafted",
+            "patches": {"updater_killed": False}, "build_ok": True}
+        LEDGER.ok(refused(cage.assert_launch_safe, "synthetic", "1.2.3.4"),
+                  "a live-capture build with the updater STILL LIVE is REFUSED",
+                  "an update mid-capture replaces the ground truth being captured")
+        cage.buildid.describe = lambda *_a, **_k: {
+            "path": "synthetic", "dh": buildid.STOCK, "dh_detail": "crafted",
+            "patches": {"updater_killed": None}, "build_ok": True}
+        LEDGER.ok(refused(cage.assert_launch_safe, "synthetic", "1.2.3.4"),
+                  "and so is one whose updater state cannot be determined",
+                  "None is not a synonym for killed")
+    finally:
+        cage.buildid.describe, cage.cage_state = saved_desc, saved_state
+
     # --- and the live state, which is the thing the guard is protecting ----------
     run_root = vaultpath.vault_path("run")
     clients = []
@@ -123,21 +184,33 @@ def main():
                       f"({len(clients)} found)",
                       "; ".join(f"{os.path.basename(os.path.dirname(c))}="
                                 f"{states[c]}" for c in uncaged) if uncaged else "")
-            LEDGER.ok(all(cage.assert_caged(c) == "patched" for c in clients),
+            LEDGER.ok(all(cage.assert_caged(c) == buildid.OURS for c in clients),
                       "and assert_caged accepts each of them")
 
     return LEDGER.verdict()
 
 
-def _any_patched():
-    run_root = vaultpath.vault_path("run")
-    if not os.path.isdir(run_root):
-        return None
-    for d in sorted(os.listdir(run_root)):
-        exe = os.path.join(run_root, d, "Gw.exe")
-        if os.path.isfile(exe) and pinned.identify(exe)[0] == "patched":
-            return exe
+def _one_with_dh(want):
+    """Any staged or built client whose DH parameters read as `want`, or None."""
+    roots = [vaultpath.vault_path("run"), vaultpath.vault_path("run-live")]
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        for d in sorted(os.listdir(root)):
+            exe = os.path.join(root, d, "Gw.exe")
+            if os.path.isfile(exe) and buildid.dh_verdict(exe)[0] == want:
+                return exe
+    built = r"C:\gd\Rurik\vault\client-patched"
+    if os.path.isdir(built):
+        for f in sorted(os.listdir(built)):
+            exe = os.path.join(built, f)
+            if f.endswith(".exe") and buildid.dh_verdict(exe)[0] == want:
+                return exe
     return None
+
+
+def _any_patched():
+    return _one_with_dh(buildid.OURS)
 
 
 if __name__ == "__main__":

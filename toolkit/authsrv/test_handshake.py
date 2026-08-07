@@ -81,13 +81,31 @@ check = checks.adopt_named(LEDGER)
 
 
 def main():
+    # Select by what the binary IS, not by what sorts last. This read
+    # `sorted(exes)[-1]` until 2026-08-06, when the first live-capture build landed
+    # in the same directory: "Gw.live." sorts after "Gw.custom.", so the test
+    # silently started reading ArenaNet's Diffie-Hellman parameters and then
+    # reported that the client and server derived different keys -- a true statement
+    # about the wrong binary, and it looked exactly like a broken handshake.
+    #
+    # buildid.dh_verdict asks the question this test actually needs answered: which
+    # of these clients keys against OUR server. Nothing about the filename can.
+    sys.path.insert(0, os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "clientpatch"))
+    import buildid  # noqa: E402
+
     patched_dir = r"C:\gd\Rurik\vault\client-patched"
-    exes = [f for f in os.listdir(patched_dir) if f.endswith(".exe")]
-    if not exes:
-        raise SystemExit("no patched client in vault/client-patched — "
-                         "run toolkit/clientpatch/make_custom_client.py")
-    exe = os.path.join(patched_dir, sorted(exes)[-1])
-    print(f"patched client : {os.path.basename(exe)}")
+    exes = [os.path.join(patched_dir, f) for f in sorted(os.listdir(patched_dir))
+            if f.endswith(".exe")]
+    ours = [f for f in exes if buildid.dh_verdict(f)[0] == buildid.OURS]
+    if not ours:
+        raise SystemExit(
+            f"no client in vault/client-patched carries OUR Diffie-Hellman "
+            f"parameters ({len(exes)} .exe present) —\n"
+            f"  run toolkit/clientpatch/make_custom_client.py")
+    exe = ours[-1]
+    print(f"patched client : {os.path.basename(exe)}  "
+          f"({len(exes)} in the directory, {len(ours)} keyed to us)")
 
     g, p, B = read_client_params(exe)
     print(f"read from exe  : g={g}, prime {p.bit_length()} bits, B {B.bit_length()} bits")

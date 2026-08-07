@@ -71,20 +71,31 @@ at its `127.0.0.1` default — the game dial lands back on the auth listener,
 whose catalog self-selection still serves the game but records it into
 `vault/captures/authsrv/`, mixed with auth traffic.)
 
-Terminal 4 is the client, and it must be **elevated** — the launcher changes
-firewall rules:
+Terminal 4 is the client. Launch the exe directly — **no elevation, and not
+`launch_caged.ps1`**:
 
 ```bash
-& "C:\gd\Rurik\toolkit\clientpatch\launch_caged.ps1"
+& "C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe" -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed -log
 ```
 
-Do **not** launch the exe directly while the cage is up. The pre-login patcher
-needs one outbound check to succeed before it will show the login screen, and the
-block rule denies it instantly and forever — the client sits on *Connecting to
-ArenaNet* with no socket to explain why. `launch_caged.ps1` opens the cage, walks
-it through the patcher, records every non-loopback endpoint it touched to
-`vault/captures/patcher/`, and closes the cage again before you log in. The
-re-cage is in a `finally`, so Ctrl-C and crashes still close it.
+This step used to route through `launch_caged.ps1`, which drops the firewall
+block rule, walks the client past its pre-login patcher, and re-cages in a
+`finally`. That was necessary once: the patcher needs one outbound check before
+it shows the login screen, the block denies it instantly and forever, and the
+client sits on *Connecting to ArenaNet* with no socket to explain why.
+
+**It is no longer necessary, and it was never safe.** Firewall rules are
+evaluated at connection **establishment**, and Windows offers no supported way to
+tear down an established TCP connection — so anything opened inside the window
+outlives the re-cage for the life of the process. The updater kill switch
+`make_custom_client.py` applies by default removes the need entirely: with the
+updater off the patcher never runs, so the cage never has to open. That fix
+shipped and this page went on naming the script for weeks afterwards. It now
+refuses any build carrying the kill switch; check yours with
+
+```bash
+python toolkit/clientpatch/buildid.py
+```
 
 Then log in at the client's own screen with **any** account name and password —
 the webgate authenticates nobody by design. Accept the User Agreement if it
@@ -205,7 +216,10 @@ Then heartbeats with a rising tick counter, which is a healthy idle client.
 
 | Symptom | Meaning | Do this |
 |---|---|---|
-| Stuck on `Connecting to ArenaNet`, no sockets, servers see nothing | The cage is blocking the pre-login patcher's update check | Launch via `launch_caged.ps1`, not the exe directly. See below |
+| Stuck on `Connecting to ArenaNet`, no sockets, servers see nothing | The cage is blocking the pre-login patcher's update check — which means this build has no updater kill switch | `python toolkit/clientpatch/buildid.py`. If `updater=LIVE`, rebuild with `make_custom_client.py` rather than opening the cage. See below |
+| `REFUSING to launch … carries OUR Diffie-Hellman parameters` | A DH-patched client was aimed at a non-loopback host | Correct — that is the account-ending case. Use the `--live-capture` build under `vault/run-live` |
+| `REFUSING to launch … carries ArenaNet's Diffie-Hellman parameters, not ours` | The live-capture build was aimed at loopback | Use the copy under `vault/run`; the live build cannot key against our server |
+| `REFUSING to launch … no Gw.dat, so staging did not finish` | `make_run_dir.py` could not copy the 4 GB source | Close every `Gw.exe` (a running one holds it open exclusively) and re-run `make_run_dir.py` |
 | `Unexpected token '-authsrv'` | PowerShell parsed the quoted path as a value | Add the leading `&`. Nothing launched; the flags are fine |
 | `Could not bind … Another AuthSrv is almost certainly still running` | Working as intended | `netstat -ano \| findstr :6112`, stop the old one. Note a healthy stack shows TWO 6112 listeners — auth on `127.0.0.1`, game on `127.0.0.3`; the stale one is at the host you are trying to bind. This replaced a silent-shadowing bug that cost two sessions |
 | `Code=058`, nothing in terminal 2 | Client never reached us | Both flags present? Launched the **run-dir** copy, not `C:\gw\Gw.exe`? |
@@ -270,7 +284,9 @@ beside the exe, but it **buffers and only flushes on exit** — a stuck client s
 | `schema/messages.json` | The wire schema itself (tracked in git) |
 | `toolkit/clientscan/` | Read-only client analysis |
 | `toolkit/clientpatch/` | Patching, run-dir assembly, the firewall cage |
-| `toolkit/clientpatch/launch_caged.ps1` | Elevated launcher: opens the cage for the patcher, shuts it before login |
+| `toolkit/clientpatch/buildid.py` | What a `Gw.exe` **is**, read from its bytes: whose DH parameters, which patches |
+| `toolkit/clientpatch/cage.py` | The launch gate — binds a binary's DH parameters to the host it may be aimed at |
+| `toolkit/clientpatch/launch_caged.ps1` | **Legacy.** Elevated launcher that opens the cage for the patcher. Refuses any build with the updater kill switch, i.e. all of them |
 | `vault/` | Gitignored. Client snapshots, keys, captures, prior-art mirrors |
 | `vault/dat_study/Gw.dat` | A third copy of the archive, for reading map data. See below |
 | `studies/handshake/PLAN.md` | How R1 was actually solved, wire detail included |

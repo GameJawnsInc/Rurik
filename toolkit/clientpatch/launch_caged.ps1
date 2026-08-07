@@ -1,8 +1,22 @@
 <#
 .SYNOPSIS
-    Launch the patched client through its update check, then slam the cage shut.
+    Launch a client WITHOUT the updater kill switch through its update check, then
+    slam the cage shut. Refuses any build that has the kill switch -- which is every
+    build make_custom_client.py makes by default, so this is now a fallback rather
+    than the daily path.
 
 .DESCRIPTION
+    OBSOLETE FOR NORMAL USE, deliberately, as of 2026-08-06. The note further down
+    ends "The real fix is to stop the updater from running at all, so the cage never
+    has to open." That fix shipped and is applied by default; RUNBOOK step 4 went on
+    naming this script anyway, which left the one procedure that intentionally drops
+    the block rule sitting on the happy path months after it stopped being needed.
+    It now checks the binary (via buildid.py) and refuses when the kill switch is
+    present. Launch such a build directly.
+
+    Everything below is why the cage-opening dance existed at all, kept because a
+    build made with --no-updater-patch still needs it.
+
     The client will not reach its login screen until the pre-login patcher (the
     "Guild Wars Reforged / Connecting to ArenaNet" screen, which shares a string
     block with "Downloading %u.%uMB (%uKB/sec)") completes one outbound check.
@@ -61,20 +75,56 @@ if (-not (Test-Path -LiteralPath $Exe)) {
     exit 1
 }
 
-$block = Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue
-if (-not $block) {
-    Write-Error "No block rule named '$RuleName'.`nRun toolkit\clientpatch\isolate_client.ps1 first."
+# OBSOLETE FOR ANY BUILD THAT HAS THE UPDATER KILL SWITCH, and that is the point of
+# this check. This script's own note below says so: "The real fix is to stop the
+# updater from running at all, so the cage never has to open." That fix shipped --
+# make_custom_client.py applies it by default -- and yet RUNBOOK went on naming this
+# script as step 4 of the daily loop, so the one procedure in the repo that
+# deliberately drops the block rule stayed on the happy path after it stopped being
+# needed. Opening the cage leaks by construction: firewall rules are evaluated at
+# connection ESTABLISHMENT, and Windows offers no supported way to tear down an
+# established TCP connection, so anything opened inside the window outlives the
+# re-cage for the life of the process.
+#
+# Asking buildid.py rather than re-implementing the signature here: two definitions of
+# where the updater patch lives is the drift that module exists to remove.
+$probe = & python (Join-Path $PSScriptRoot "buildid.py") --json $Exe 2>$null
+if ($LASTEXITCODE -ne 0 -or -not $probe) {
+    Write-Error "Could not read the build state of '$Exe' (buildid.py --json failed).`nThis script drops a firewall block rule; it will not do that on a binary it cannot identify."
+    exit 1
+}
+$info = ($probe -join "`n") | ConvertFrom-Json
+if ($info.patches.updater_killed -eq $true) {
+    Write-Error @"
+REFUSING to open the cage for '$Exe'.
+
+This build already has the updater kill switch, so the pre-login patcher never
+runs and the cage never has to open. That is exactly what the kill switch is for.
+
+Launch it directly instead:
+    & "$Exe" $($ClientArgs -join ' ')
+
+This script exists only for a build made with --no-updater-patch, where the
+patcher does need one outbound check. Opening the cage is a real exposure -- rules
+apply at connection establishment, so connections opened during the window survive
+the re-cage -- and it is not worth paying for a check that will not happen.
+"@
     exit 1
 }
 
-# The rule is scoped to a program path. If it names a different exe than the one
-# we are about to launch, caging it afterwards would protect the wrong binary --
-# and would do so silently.
-$ruleExe = ($block | Get-NetFirewallApplicationFilter).Program
-if ($ruleExe -ne $Exe) {
-    Write-Error "The cage covers a different binary.`n  rule:   $ruleExe`n  launch: $Exe`nRe-run isolate_client.ps1 -Exe '$Exe'."
+# Match the way isolate_client.ps1 actually NAMES its rules. It appends " [<tag>]"
+# (the run directory's leaf), so an exact-name lookup finds only the untagged rules
+# left over from an older version of that script. Filter by the program path instead,
+# which is what the rule is really scoped to and what cage.py already asserts on.
+$block = @(Get-NetFirewallRule -DisplayName "$RuleName*" -ErrorAction SilentlyContinue |
+    Where-Object { ($_ | Get-NetFirewallApplicationFilter).Program -eq $Exe -and $_.Action -eq 'Block' })
+if ($block.Count -eq 0) {
+    Write-Error "No block rule covers '$Exe'.`nRun toolkit\clientpatch\isolate_client.ps1 first."
     exit 1
 }
+# Toggle by rule Name (the stable identifier), not DisplayName: display names are not
+# unique and the cached objects go stale across a disable/enable pair.
+$blockNames = @($block | ForEach-Object { $_.Name })
 
 if (-not (Test-Path -LiteralPath $CaptureDir)) {
     New-Item -ItemType Directory -Path $CaptureDir -Force | Out-Null
@@ -93,8 +143,8 @@ $endpoints = @{}
 $proc = $null
 
 try {
-    Disable-NetFirewallRule -DisplayName $RuleName
-    Write-Host "cage OPEN  -- block rule disabled" -ForegroundColor Yellow
+    Disable-NetFirewallRule -Name $blockNames
+    Write-Host "cage OPEN  -- $($blockNames.Count) block rule(s) disabled" -ForegroundColor Yellow
 
     $proc = Start-Process -FilePath $Exe -ArgumentList $ClientArgs -PassThru
     Write-Host "launched   -- pid $($proc.Id)"
@@ -165,8 +215,8 @@ try {
 }
 finally {
     # Whatever happened above -- timeout, crash, Ctrl-C -- the cage closes.
-    Enable-NetFirewallRule -DisplayName $RuleName
-    Write-Host "cage SHUT  -- block rule re-enabled" -ForegroundColor Green
+    Enable-NetFirewallRule -Name $blockNames
+    Write-Host "cage SHUT  -- $($blockNames.Count) block rule(s) re-enabled" -ForegroundColor Green
     Write-Event @{ event = "recaged"; wall = (Get-Date).ToUniversalTime().ToString("o") }
 }
 

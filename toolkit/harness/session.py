@@ -437,11 +437,11 @@ def run_client(a, outdir):
     acct = accounts.for_target(a.auth_host, getattr(a, "account", None))
     args += accounts.login_args(acct)
     print(f"account: {accounts.describe(acct)}")
-    dc.assert_safe(a.exe, args)
-    # Both launch sites assert the cage independently rather than one trusting the
-    # other. A guard that only guards one of two doors is the shape of the defect it
-    # is here to prevent -- vault/run held two patched binaries and one was caged.
-    print(f"cage: {cage.assert_caged(a.exe)} client, caged")
+    host = dc.assert_safe(a.exe, args)
+    # Both launch sites run the gate independently rather than one trusting the other.
+    # A guard that only guards one of two doors is the shape of the defect it is here
+    # to prevent -- vault/run held two patched binaries and one was caged.
+    print(f"cage: {cage.assert_launch_safe(a.exe, host)['dh']} build, cleared for {host}")
     log_path = os.path.join(os.path.dirname(a.exe), "Gw.log")
     if os.path.exists(log_path):
         os.remove(log_path)

@@ -623,10 +623,40 @@ account-visible event happens before the patch matters.
 **What must be true before the first live run**, none of which is true today:
 
 1. **A live-capture client is a separate build** — unpatched DH, with the updater and
-   mutex patches. There is no such build; `vault/run/` holds only DH-patched copies, and
-   the harness's `assert_safe` refuses anything outside `vault/run/`. Until one exists
-   there is no legal launch target for the authorized use, which is how someone ends up
-   forking a driver without the guards.
+   mutex patches. **Built 2026-08-06** (`make_custom_client.py --live-capture`), and the
+   gate that makes it usable is the real change: launch safety is no longer "is this
+   client caged" but a **binding between the binary and the target**, read out of the
+   bytes.
+   *The one thing still open is a 4 GB file copy.* `vault/run-live/<build>/` holds the
+   exe and the DLLs; `Gw.dat` could not be copied because a running client holds the
+   source open exclusively, and `assert_safe` refuses an incomplete run directory. Close
+   every client and re-run `make_run_dir.py --live`. **Until that finishes there is still
+   no legal launch target**, so this precondition is not ticked — but nothing further has
+   to be designed for it.
+
+   **`toolkit/clientpatch/buildid.py`** answers `ours` / `stock` / `unknown` by reading
+   the DH parameters out of any `Gw.exe` and comparing them against our key files and
+   against the owner's own install. `ours` requires the matching key file to satisfy
+   **B == g^b mod p**, which is what makes it a check rather than a label: it proves we
+   hold the exponent, which is the operational meaning of "this client can key against
+   our server, and its traffic to anyone else is garbage."
+   This replaces whole-file hashing for the safety question. `pinned.py` knows exactly
+   one patched SHA-256, so every client the patcher builds read as `unknown` and was
+   refused — a gate you must disarm to do your job — and its single `patched` bucket
+   held four independent modifications when only the DH substitution decides anything.
+   `cage.assert_launch_safe(exe, host)` enforces all four cells, and `test_cage.py`
+   proves each refusal fires: **ours→live** and **stock→loopback** are both refused, and
+   **stock→live uncaged** is allowed, because a gate that refuses everything is an
+   outage rather than a control.
+   Two more things fell out of it. A **missing** `-portal` is not neutral — the client
+   falls back to its compiled-in ArenaNet endpoint — so `intended_target()` resolves an
+   absent flag to the live target, which means §6.2's sharpest hazard (a DH-patched
+   client launched with no `-portal` completing a real Stage A login) is now caught by a
+   measurement rather than by a rule about flags. And the two builds are staged in
+   separate roots, `vault/run/` and `vault/run-live/`, because `isolate_client.ps1` with
+   no arguments cages every client under `vault/run` and would otherwise cage the one
+   binary that must not be. The bytes still decide at launch; the root only decides who
+   sweeps what.
 2. **The cage is per-client and its removal is elevated.** `isolate_client.ps1` pins a
    client to loopback by program path, so a live client cannot be caged — there is no
    partial setting. `cage-off` was reachable unelevated through
@@ -670,6 +700,38 @@ account-visible event happens before the patch matters.
    oracles invisibly. **MEASURED: 424 files, 341 ours, 83 unknown (patcher and short
    sessions), 0 live — and 113 of 113 game-channel files are ours**, so it refuses
    nothing today and refuses the first one that appears.
+
+**Four defects the build turned up, all of them in the controls themselves.** Recorded
+because every one was invisible to the thing meant to catch it:
+
+* **Both launch sites had been unimportable since the cage guard landed.**
+  `drive_client.py` did `import cage` with `clientpatch/` not on `sys.path`, so
+  `drive_client.py` and `session.py` both raised `ModuleNotFoundError` at module level
+  — the guard existed and the file holding it could not load. `test_harness.py` catches
+  it on the first run; it is named in `CLAUDE.md`'s suite list and was not among the
+  tests run when that suite was last reported green. Fixed, and `test_harness.py` now
+  passes 36 checks with its floor tightened from a read-off 26 to the measured total.
+* **`launch_caged.ps1` opened the cage on the daily path, months after it stopped
+  needing to.** Its own comment ends "The real fix is to stop the updater from running
+  at all, so the cage never has to open"; that fix shipped and is applied by default,
+  and `RUNBOOK` went on naming the script as step 4 anyway. Opening the cage leaks by
+  construction — firewall rules are evaluated at connection **establishment**, and
+  Windows offers no supported way to tear down an established TCP connection. It now
+  asks `buildid.py` and refuses any build carrying the kill switch. Its rule lookup was
+  also broken: it matched an exact display name while `isolate_client.ps1` appends
+  `[<tag>]`, so it found only rules left by an older version of that script.
+* **`drive_client.py` wrote the plaintext password into `report.json`** while the console
+  print of the same argv two lines later was redacted — the precise failure
+  `accounts.redact`'s docstring says it exists to prevent. Found before a real automation
+  account had ever used it. `redact_for_file()` now covers the address too, because
+  `scrub_captures.py` matches JSON **keys** and in a manifest the address is a **value**
+  inside an argv list, so a tree-wide scrub would have walked straight past it.
+* **`test_handshake.py` selected its client with `sorted(exes)[-1]`.** `Gw.live.` sorts
+  after `Gw.custom.`, so the first live-capture build in the directory silently became
+  "the patched client" and the test reported that client and server derived different
+  keys — a true statement about the wrong binary, and indistinguishable from a broken
+  handshake. It now selects on `dh_verdict == ours`, which is the property it actually
+  needs. `make_run_dir.py` had the same latent bug and was fixed before it could fire.
 
 **R0b's deliverable was wrong, and is fixed.** §3 called it "proxy capture of a real
 session", which cannot work: the channel is DH-keyed end to end and a proxy holds neither
@@ -783,13 +845,24 @@ which retires old item 3), the skill table extracted and joined to the wiki by i
 (`toolkit/clientscan/skilltable.py`, which retires old item 6), a hostile NPC that can be
 attacked, killed and revived, and the content store (`content/*.toml`, `501698b`).
 
-1. **Build the capture harness (A1).** *Unchanged, unstarted, and now the oldest item on the
-   list.* Every one of the 413 captures in the vault is Rurik talking to Rurik; **not one byte
-   is ArenaNet's**, so R0b is unmet and R1.5 and R4c's original criterion are both blocked
-   behind it. §4-A1 says "build it first regardless of every other choice in this document"
-   and it has been second here since the list was written — resolve that contradiction
-   explicitly rather than by continuing to skip it. Start from Headquarter's headless-client
-   approach; read `gw-preservation/network-logger` for the in-client route. Gated on Q4.
+1. **Build the capture harness (A1).** *Started 2026-08-06.* Every one of the 424 captures in
+   the vault is Rurik talking to Rurik; **not one byte is ArenaNet's**, so R0b is unmet and
+   R1.5 and R4c's original criterion are both blocked behind it. §4-A1 says "build it first
+   regardless of every other choice in this document" and it had been second on this list
+   since the list was written.
+   **Done:** the live-capture build exists and the launch gate binds a binary to a target
+   (§6.2 precondition 1). **Next, in order:** close every client and finish
+   `make_run_dir.py --live` so there is a complete launch target; then the capture itself.
+   Start from Headquarter's headless-client approach; read `gw-preservation/network-logger`
+   for the in-client route.
+   *What that capture has to produce is not obvious and is worth settling before writing it:*
+   `origin.py`'s docstring already defers to "a future live-capture tool", and today **no
+   client-side capture path exists at all** — the only `Recorder` in the tree is inside
+   `authsrv.py` and fires only when a client connects to a listener we run. Byte-for-byte
+   replay is also not achievable from today's captures: s2c ciphertext is never written to
+   the `.raw` sidecar, and the `sent` events that would let it be reconstructed are logged
+   **outside** the send lock, so the recorded order can differ from the wire order under
+   thread contention. Fix that before it becomes the only recording of the real server.
 2. **Spec the row format before the sniffer.** The half nobody owns: even with tape, nothing
    turns a capture into a content row. `content/*.toml` now gives that output a shape, so the
    job is a capture→row compiler, not a parser. **SOURCED:** this is the difference between

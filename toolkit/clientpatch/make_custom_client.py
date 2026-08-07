@@ -21,6 +21,24 @@ Two further patches, both from the same public tooling, both wanted here:
 so several clients can run at once. That is not a nicety -- capture at scale wants
 many clients, and this is what makes multiboxing possible.
 
+TWO CONFIGURATIONS, and only one of them is disqualified from the real service.
+`--live-capture` builds the other one: updater kill switch and mutex patches, with
+the Diffie-Hellman substitution deliberately WITHHELD. PLAN.md §6.2 §7 Q4 authorize
+capture against ArenaNet on the secondary account, and that authorized use had no
+legal target until this flag existed -- the launch sites refuse anything outside
+`vault/run`, and everything in `vault/run` carried our parameters.
+
+The distinction is not "how many patches": it is whose parameters the binary holds.
+
+  default          our DH + updater + mutex   loopback ONLY, and must be caged
+  --live-capture   updater + mutex            the real service ONLY, and never caged
+
+Note that the withheld patch is withheld, not undone. Building `--live-capture` from
+an already-patched client would produce a binary that reads as live by filename and is
+disqualified by bytes, so the input's parameters are checked before anything is
+written and the output's are checked after -- both through `buildid.dh_verdict`, the
+same function the launch gate calls.
+
 Safety
 ------
 Writes a COPY and refuses to write anywhere inside the live install. The live
@@ -38,35 +56,27 @@ import secrets
 import sys
 import time
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, HERE)
 from gwpe import PE  # noqa: E402
+import buildid  # noqa: E402
 
-# Prologue of the accessor returning the DH struct; the `mov eax, imm32` that
-# follows carries the struct's virtual address. Used identically by Headquarter's
-# reader and OpenTyria's writer -- which is ONE witness, not two: both are ldufr.
-# An earlier version of this comment called them "two independent implementations
-# that agree" and that was the house's own lineage rule being broken in a
-# load-bearing place. What actually justifies this signature is that we re-derive
-# it from the owner's own binary every run (dump_dh_params.py) and check the
-# struct's shape; upstream agreement is a convenience, not the evidence.
-SIG_KEYS = bytes.fromhex("8B4508C70088000000B8")
-SIG_KEYS_PTR_OFF = 0x0A
-
-# The single-instance guard around CreateMutexA.
-SIG_MUTEX = bytes.fromhex("8BF885FF7411FFD63DB7")
-
-# DnSetEnabled's whole prologue, through the `mov [global], eax` opcode. Verified
-# unique in .text of build 38797 (1 hit, VA 0x00833ec0, global 0x01087810, which
-# has 4 guard sites). See studies/handshake/PLAN.md §9.
-SIG_DOWNLOAD = bytes.fromhex("558bec8b4d0833c085c90f94c0a3")
-SIG_DOWNLOAD_PATCHED = bytes.fromhex("558bec8b4d0833c085c9b00190a3")
-DOWNLOAD_PATCH_OFF = 10            # the `sete al` inside that prologue
-DOWNLOAD_PATCH = bytes.fromhex("b00190")   # mov al,1 ; nop
-MUTEX_PATCH_OFF = 0x08
-MUTEX_PATCH = bytes.fromhex("31C0909090 0F84".replace(" ", ""))
-
-MUTEX_NAME_OLD = b"AN-Mutex-Window"
-MUTEX_NAME_NEW = b"AN-Futex"
+# The patch sites are defined once, in buildid.py, because identifying a build is
+# more fundamental than patching one -- the launch gate has to read these signatures
+# out of binaries this patcher never touched. Imported back here under their old
+# names so this file reads the same as it always did.
+SIG_KEYS = buildid.SIG_KEYS
+SIG_KEYS_PTR_OFF = buildid.SIG_KEYS_PTR_OFF
+SIG_MUTEX = buildid.SIG_MUTEX
+SIG_DOWNLOAD = buildid.SIG_DOWNLOAD
+SIG_DOWNLOAD_PATCHED = buildid.SIG_DOWNLOAD_PATCHED
+DOWNLOAD_PATCH_OFF = buildid.DOWNLOAD_PATCH_OFF
+DOWNLOAD_PATCH = buildid.DOWNLOAD_PATCH
+MUTEX_PATCH_OFF = buildid.MUTEX_PATCH_OFF
+MUTEX_PATCH = buildid.MUTEX_PATCH
+MUTEX_NAME_OLD = buildid.MUTEX_NAME_OLD
+MUTEX_NAME_NEW = buildid.MUTEX_NAME_NEW
 
 LIVE_INSTALL = os.path.normcase(os.path.abspath(r"C:\gw"))
 
@@ -150,7 +160,20 @@ def main():
                          "against an unpatched updater; a client with the updater "
                          "live cannot be run behind the firewall cage, because the "
                          "patcher stalls forever on its blocked update check.")
+    ap.add_argument("--live-capture", action="store_true",
+                    help="build the OTHER configuration: updater and mutex patches "
+                         "only, Diffie-Hellman left exactly as ArenaNet shipped it. "
+                         "This is the only build authorized to reach the real service "
+                         "(PLAN.md §6.2), and it cannot talk to our server at all.")
     a = ap.parse_args()
+
+    # The two configurations are mutually exclusive by construction, and saying so
+    # here is cheaper than discovering it from a verify failure after a 512-bit prime
+    # search. --keys only means anything when we are writing keys.
+    if a.live_capture and a.keys:
+        raise SystemExit(
+            "--live-capture and --keys are contradictory: a live-capture client is "
+            "defined by NOT carrying our Diffie-Hellman parameters.")
 
     pe = PE(a.input)
     print(f"input      : {a.input}")
@@ -170,7 +193,24 @@ def main():
     if old_g != 4 or old_p.bit_length() != 512:
         raise SystemExit("Unexpected parameter shape at the target. Refusing to patch.")
 
-    if a.keys:
+    if a.live_capture:
+        # Refuse to build the live configuration out of a client that already carries
+        # our parameters. Withholding the DH patch does not remove one already there,
+        # so this path would otherwise mint a binary that reads as a live-capture build
+        # by filename and is a disqualified one by bytes -- the exact confusion §6.2
+        # says ends an account. Checked against the input, before anything is written.
+        verdict, why = buildid.dh_verdict(a.input)
+        if verdict != buildid.STOCK:
+            raise SystemExit(
+                f"REFUSING to build a live-capture client from {a.input}\n"
+                f"  its Diffie-Hellman parameters read as {verdict!r}: {why}\n"
+                f"  A live-capture build must start from a client carrying ArenaNet's\n"
+                f"  own parameters, because this mode does not replace them -- it\n"
+                f"  withholds the replacement. Build it from the live install.")
+        keys = None
+        print("keys       : NOT patched -- this is a live-capture build "
+              "(PLAN.md §6.2)")
+    elif a.keys:
         keys = json.load(open(a.keys))
         print(f"keys       : reusing {a.keys}")
     else:
@@ -187,8 +227,9 @@ def main():
         print("             KEEP THIS. The server needs server_private to decrypt;")
         print("             lose it and the patched client is useless.")
 
+    stem = "Gw.live" if a.live_capture else "Gw.custom"
     out = a.output or os.path.join(r"C:\gd\Rurik\vault\client-patched",
-                                   f"Gw.custom.{build_tag}.exe")
+                                   f"{stem}.{build_tag}.exe")
     out_abs = os.path.normcase(os.path.abspath(out))
     if out_abs.startswith(LIVE_INSTALL):
         raise SystemExit(f"Refusing to write into the live install ({LIVE_INSTALL}).")
@@ -206,9 +247,12 @@ def main():
     # the same place -- copying its literals without its cursor shifts every field
     # four bytes and silently corrupts the struct. The verify step below caught
     # exactly that during development.
-    put(off + 4, keys["generator"].to_bytes(4, "little"), "generator")
-    put(off + 8, keys["prime"].to_bytes(64, "little"), "prime")
-    put(off + 72, keys["server_public"].to_bytes(64, "little"), "server public")
+    if a.live_capture:
+        print("  Diffie-Hellman LEFT ALONE -- ArenaNet's parameters, untouched")
+    else:
+        put(off + 4, keys["generator"].to_bytes(4, "little"), "generator")
+        put(off + 8, keys["prime"].to_bytes(64, "little"), "prime")
+        put(off + 72, keys["server_public"].to_bytes(64, "little"), "server public")
 
     if not a.no_updater_patch:
         # The updater kill switch. DnSetEnabled(bool) is the only writer of one BSS
@@ -257,17 +301,44 @@ def main():
     print(f"\nwrote {out}")
 
     # Verify by re-reading the written file, not by trusting the buffer we wrote.
+    #
+    # Both branches end by asking the WRITTEN FILE the same question the launch gate
+    # will ask it -- buildid.dh_verdict -- rather than a question only this tool knows
+    # how to ask. A build that verifies against its own intentions and then gets
+    # refused at launch has verified nothing useful.
     v = PE(out)
     _, _, voff = locate(v)
     g2 = int.from_bytes(v.data[voff + 4:voff + 8], "little")
     p2 = int.from_bytes(v.data[voff + 8:voff + 72], "little")
     B2 = int.from_bytes(v.data[voff + 72:voff + 136], "little")
-    ok = (g2 == keys["generator"] and p2 == keys["prime"]
-          and B2 == keys["server_public"]
-          and pow(keys["generator"], keys["server_private"], keys["prime"]) == B2)
-    print(f"verify     : parameters read back correctly and B == g^b mod p -> {ok}")
-    if not ok:
-        raise SystemExit("VERIFICATION FAILED — do not use this binary.")
+
+    if a.live_capture:
+        unchanged = (g2 == old_g
+                     and p2 == int.from_bytes(pe.data[off + 8:off + 72], "little")
+                     and B2 == int.from_bytes(pe.data[off + 72:off + 136], "little"))
+        verdict, why = buildid.dh_verdict(out)
+        print(f"verify     : DH bytes identical to the input -> {unchanged}")
+        print(f"             launch gate reads this build as {verdict!r}")
+        if not unchanged or verdict != buildid.STOCK:
+            raise SystemExit(
+                f"VERIFICATION FAILED — do not use this binary.\n"
+                f"  unchanged={unchanged}, dh_verdict={verdict!r}: {why}\n"
+                f"  A live-capture build whose parameters are not provably ArenaNet's\n"
+                f"  is the one artifact this repo must never produce.")
+    else:
+        ok = (g2 == keys["generator"] and p2 == keys["prime"]
+              and B2 == keys["server_public"]
+              and pow(keys["generator"], keys["server_private"], keys["prime"]) == B2)
+        print(f"verify     : parameters read back correctly and B == g^b mod p -> {ok}")
+        if not ok:
+            raise SystemExit("VERIFICATION FAILED — do not use this binary.")
+        verdict, why = buildid.dh_verdict(out)
+        print(f"             launch gate reads this build as {verdict!r}")
+        if verdict != buildid.OURS:
+            raise SystemExit(
+                f"The binary is correct but the launch gate will refuse it: {why}\n"
+                f"  buildid.our_keys() only trusts key files under the vault's keys/\n"
+                f"  directory named rurik_dh_*.json. Put the key file there.")
 
     # Read the updater state back out of the file too. A kill switch that silently
     # did not apply is worse than one that was never attempted: the client would
@@ -281,8 +352,18 @@ def main():
         if patched != 1 or remaining:
             raise SystemExit("Updater patch did not take — this client will stall "
                              "behind the firewall cage. Do not use it caged.")
-    print("\nNext: run toolkit/portal/webgate.py, then launch this patched copy with")
-    print("  -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed")
+    if a.live_capture:
+        print("\nThis build carries ArenaNet's Diffie-Hellman parameters. It CANNOT talk")
+        print("to our server, and it must NOT be caged -- the cage pins to loopback and")
+        print("this client has no business there. Stage it with:")
+        print(f"  python toolkit/clientpatch/make_run_dir.py --live --exe {out}")
+        print("Then read PLAN.md §6.2 before launching it: the behavioural rule is the")
+        print("control that matters, and the account is named per launch, never autofilled.")
+    else:
+        print("\nNext: run toolkit/portal/webgate.py, then launch this patched copy with")
+        print("  -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed")
+        print("Cage it FIRST, in an elevated shell -- the launch gate refuses otherwise:")
+        print("  & toolkit\\clientpatch\\isolate_client.ps1")
     return 0
 
 
