@@ -6,10 +6,13 @@ wall; without this the server disagrees with it and drags you back or shoves you
 through.
 
 WHERE THE LAYOUT COMES FROM. The struct names below are GuildWarsMapBrowser's
-ImHex pattern (FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat). That is ONE
-lineage -- the Jonathan-Greve and gwdevhub repositories are a fork pair, so
-agreement between them is not corroboration -- and it has no test or fixture. It
-is a hypothesis, not a spec.
+ImHex pattern (FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat), Copyright (c)
+2023 Jonathan Bjorn Greve, https://github.com/Jonathan-Greve/GuildWarsMapBrowser,
+used under its licence -- terms and the credit that licence requires are in
+THIRD-PARTY-NOTICES.md at the repository root, and this module is one of the two
+it covers. That is ONE lineage -- the Jonathan-Greve and gwdevhub repositories
+are a fork pair, so agreement between them is not corroboration -- and it has no
+test or fixture. It is a hypothesis, not a spec.
 
 WHAT MAKES IT EVIDENCE ANYWAY. The layout is self-checking, and it checks out:
 

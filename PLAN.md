@@ -584,6 +584,43 @@ changes is that capture is now cheap enough to leave running rather than a proje
 | A client update invalidates months of offset work | Choose WASM: the module bytes are the code and offsets come from the module | free, if you switch |
 | Two years with nothing playable | A2 and R1.5 both target a visible result inside 90 days | — |
 
+
+### 6.1 The derivation register
+
+Which upstream each module's *code or layout* came from, and what that upstream grants.
+It exists because on 2026-08-05 `toolkit/mapdata/gwdat.py` landed declaring itself a port
+of `gw-preservation/fileserver-utils` — **the day after §1.1 wrote "never copy from them"
+about exactly that repository** — and sat in the running server's dependency chain until
+the 2026-08-06 review found it. The rule was in the plan; nothing was checking.
+
+**SOURCED:** the model is ReactOS's post-2006 contributor taint register, not a Phoenix
+clean room. A clean room is two teams, a specification wall and an audit trail; that is
+disproportionate for one owner and a 356-line decompressor. A register is a table you
+keep honest.
+
+| Module | Derived from | Upstream grants | Status |
+|---|---|---|---|
+| `toolkit/mapdata/gwdat.py` | GuildWarsMapBrowser `SourceFiles/xentax.cpp` | custom licence — permissive, but **requires a repo link and visible credit**; it is *not* MIT | ✅ re-derived 2026-08-06, attributed in `THIRD-PARTY-NOTICES.md`, and the six-table correspondence is **checked** by `test_gwdat.py` against the vaulted mirror |
+| `toolkit/mapdata/pathmap.py` | GuildWarsMapBrowser ImHex FFNA pattern | same | ✅ attributed 2026-08-06, same notice |
+| `schema/messages.json` | OpenTyria `code/msgdefs.c` | Unlicense — public domain, no obligation | ✅ credited anyway; `overrides.json` keeps our corrections separable |
+| `content/items.toml` `starter_hammer` | OpenTyria `GmDefaultArmors.c` | Unlicense | ✅ row records source `opentyria`, and records that no capture corroborates it |
+| `toolkit/mapdata/archive.py` | OpenTyria — the archive magic's byte order | Unlicense | ✅ cited in the module |
+| `content/npcs.toml` `hatcher`, `content/maps.toml` ids | gw-preservation — **all rights reserved** | nothing | ✅ verified-only: each row records what it was checked against in our own artifacts, and `toolkit/content.py` **refuses to load** one that does not |
+| `toolkit/authsrv/probes.py` ALLEGIANCE constants | four-byte tokens `'play'`, `'nonc'`, `'mons'` | — | ✅ confirmed against our own client; **JUDGEMENT:** short functional identifiers of this kind are facts about the wire, not expression |
+| `toolkit/mapdata/atex.py` | nothing — authored from our own record walk | — | ✅ checked 2026-08-06, clean |
+| `toolkit/mapdata/dxt1.py` | nothing — DXT1/BC1 is a publicly documented format | — | ✅ checked 2026-08-06, clean |
+| `toolkit/mapdata/datwrite.py`, `datplan.py` | nothing declared | — | ✅ checked 2026-08-06, no derivation statement and none needed |
+
+**The rule this table encodes:** before a module takes a layout, an algorithm or a table
+from any upstream, add its row *first*. If the upstream grants nothing, the only
+permitted use is to verify a value we derived ourselves — which is what
+`toolkit/content.py` now enforces at load rather than leaving to memory.
+
+Two things this register deliberately does **not** claim. It is not a statement that no
+contributor ever read an unlicensed repository — reading them is explicitly allowed and
+is how several of our own bugs were found. And it says nothing about ArenaNet: the
+provenance gate is separate, absolute, and covers bytes rather than derivation.
+
 ---
 
 ## 7. Open questions for the owner

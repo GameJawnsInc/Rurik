@@ -1,58 +1,87 @@
-"""Port of the Guild Wars DAT huffman/LZ77 decompressor.
+"""The Gw.dat huffman/LZ77 decompressor, derived from GuildWarsMapBrowser.
 
-Ported from gw-preservation/fileserver-utils binutil/huffman.go + bitreader.go.
-That is an independent lineage from xentax.cpp in GuildWarsMapBrowser, and the
-static tables in the two projects are byte-identical -- checked element by
-element, all 256 entries of Table2, not merely spot-checked. Two independently
-maintained projects carrying the same tables is real corroboration; it is also
-the only corroboration we have, since neither states where the tables came from.
+DERIVATION AND LICENCE. The algorithm and its six constant tables are derived from
+`SourceFiles/xentax.cpp` in **GuildWarsMapBrowser**, Copyright (c) 2023 Jonathan Bjorn
+Greve, https://github.com/Jonathan-Greve/GuildWarsMapBrowser, used under its licence.
+Full terms and the credit that licence requires are in `THIRD-PARTY-NOTICES.md` at the
+repository root. That licence is **not** MIT despite resembling it: clause 1 additionally
+requires a link to the original repository, and clause 2 requires credit to the author in
+documentation or visibly in derived software.
 
-Framing for compression-code-8 payloads follows GuildWarsMapBrowser
-SourceFiles/xentax.cpp:136 -- the LAST u32 word of the stored payload is the
-decompressed size.
+WHY THIS FILE WAS RE-DERIVED, 2026-08-06. It previously declared itself a port of
+`gw-preservation/fileserver-utils` (`binutil/huffman.go`), and it carried that repo's Go
+identifiers -- `extraBitsLength`, `extraBitsDist`, `backtrackTable` -- inside an otherwise
+snake_case module. `gw-preservation/*` carries **no licence at all, i.e. all rights
+reserved**, and PLAN.md section 1.1's own rule about those repositories is "read them,
+learn from them, cite them -- never copy from them." This module was the counter-example
+to its own repo's rule, in git, in the running server's dependency chain.
+
+Nothing about the numbers changed, because nothing needed to: **the tables were never
+originated by the Go repository.** They are byte-identical in xentax.cpp, an older and
+separately maintained lineage named for the forum where this format was publicly reverse
+engineered. Re-deriving therefore meant changing which source we take them from and what
+we owe for them -- not changing a single value. The correspondence is exact and checkable,
+and `test_gwdat.py` checks it against the vaulted mirror rather than asserting it here:
+
+    ours                    xentax.cpp
+    CODE_LENGTH_THRESHOLDS  Table1, read as (u32, u32) pairs   14 pairs
+    CODE_LENGTH_SYMBOLS     Table2                             256 bytes
+    LENGTH_BASE             Table3[256:288]                    32 bytes
+    LENGTH_EXTRA_BITS       Table4[256:285]                    29 bytes
+    DISTANCE_EXTRA_BITS     Table5                             32 bytes
+    DISTANCE_BASE           Table6, read as u16                46 entries
+
+The two slices are why the decoder subtracts 256 from a length symbol before indexing:
+xentax indexes the full tables by the raw symbol, and we carry only the range the length
+codes actually use. Same values, same arithmetic, less table.
+
+The Go implementation remains useful and is still cited -- as an independent second
+lineage carrying the same tables, which is real corroboration for values that neither
+project explains the origin of. Corroboration is a thing you read. It is not a thing you
+copy.
 
 HOW MUCH TO TRUST THIS, because it is easy to overstate:
 
-"Produced exactly the declared number of bytes" is NOT evidence that this
-decoder is correct. The loop below terminates at out_size by construction, so
-that match is forced. Run it with the bound removed and it overshoots on every
-file tried -- 91350 against a declared 91114, 20766 against 20649 -- because the
-trailing u32 is a truncation length rather than a natural stopping point.
-Fournux's DECOMPRESSION.md:26 says the same thing outright.
+"Produced exactly the declared number of bytes" is NOT evidence that this decoder is
+correct. The loop below terminates at out_size by construction, so that match is forced.
+Run it with the bound removed and it overshoots on every file tried -- 91350 against a
+declared 91114, 20766 against 20649 -- because the trailing u32 is a truncation length
+rather than a natural stopping point. Fournux's DECOMPRESSION.md:26 says the same thing
+outright.
 
-The real evidence is structural and independent of the length field: decompress a
-map file and walk its FFNA chunk table, and the chunk sizes consume the output to
-the exact byte. That holds on MFT row 7982 (24 chunks, 2925270 bytes) and row
-20444 (22 chunks, 3389269 bytes). Separately, 628 of 628 cross-references
-resolved to correctly-typed payloads. Two structural confirmations plus the
-reference resolution is why this is considered good enough to build on.
+The real evidence is structural and independent of the length field: decompress a map file
+and walk its FFNA chunk table, and the chunk sizes consume the output to the exact byte.
+That holds on MFT row 7982 (24 chunks, 2925270 bytes) and row 20444 (22 chunks, 3389269
+bytes). Separately, 628 of 628 cross-references resolved to correctly-typed payloads. Two
+structural confirmations plus the reference resolution is why this is considered good
+enough to build on.
 
-A third structural confirmation now exists, and it is the strongest of the three
-because the expected bytes are PREDICTED rather than merely self-consistent: all
-1,089 text files decompress and split into exactly 1,024 records that tile the
-blob, each ending in a two-byte (language_index, file_index) tail whose value the
-decode has to get right and which differs per file. See test_gwdat.py.
+A third structural confirmation now exists, and it is the strongest of the three because
+the expected bytes are PREDICTED rather than merely self-consistent: all 1,089 text files
+decompress and split into exactly 1,024 records that tile the blob, each ending in a
+two-byte (language_index, file_index) tail whose value the decode has to get right and
+which differs per file. See test_gwdat.py.
 
 WHERE BOTH REFERENCE IMPLEMENTATIONS ARE WRONG -- the zero-length code.
 
-Twelve of those 1,089 files used to fail here outright. The cause is a real
-defect shared by the Go reference and xentax.cpp, not a slip in this port: a
-table holding one symbol encodes it in ZERO bits, build_table deliberately parks
-that symbol at follow_root[0], and then both implementations begin code
-assignment at length 1 and never read it back. Every lookup lands on an unfilled
-node.
+Twelve of those 1,089 files used to fail here outright. The cause is a real defect shared
+by xentax.cpp and the Go implementation alike, not a slip in this derivation: a table
+holding one symbol encodes it in ZERO bits, build_table deliberately parks that symbol at
+follow_root[0], and then both implementations begin code assignment at length 1 and never
+read it back. Every lookup lands on an unfilled node.
 
-The failure modes differ, and ours was the useful one. Go's getNextCode has no
-guard: it reads encLen 0, consumes no bits, returns node value 0, and does that
-forever from a bit position that never advances -- filling the block with a
-constant byte and returning silently. This port raised, which is the only reason
-the defect was noticed. It is fixed below, and the fix cannot change any file
-that already worked, because it only runs where the old code raised.
+The failure modes differ, and ours was the useful one. Go's getNextCode has no guard: it
+reads encLen 0, consumes no bits, returns node value 0, and does that forever from a bit
+position that never advances -- filling the block with a constant byte and returning
+silently. This implementation raised, which is the only reason the defect was noticed. It
+is fixed below, and the fix cannot change any file that already worked, because it only
+runs where the old code raised. It is also the clearest evidence that this is a derivation
+rather than a transcription: a transcription would have inherited the bug.
 
-What has NOT been done: diffing this implementation's output against xentax.cpp's
-on the same input. That is the check that would settle it, and it needs a C
-compiler this environment does not have. Note that it would now be a diff against
-a decoder we believe to be wrong on this one case.
+What has NOT been done: diffing this implementation's output against xentax.cpp's on the
+same input. That is the check that would settle it, and it needs a C compiler this
+environment does not have. Note that it would now be a diff against a decoder we believe
+to be wrong on this one case.
 """
 import struct
 
@@ -71,14 +100,14 @@ def shr(x, n):
     return (x & M) >> n
 
 
-table1 = [
+CODE_LENGTH_THRESHOLDS = [
     (0xa0000000, 2), (0x60000000, 6), (0x40000000, 10), (0x20000000, 18),
     (0x12000000, 25), (0x0c000000, 31), (0x07000000, 41), (0x03000000, 57),
     (0x01600000, 70), (0x00f00000, 77), (0x00c00000, 83), (0x00b00000, 87),
     (0x00a00000, 95), (0x00000000, 255),
 ]
 
-table2 = [
+CODE_LENGTH_SYMBOLS = [
     0x08, 0x09, 0x0A, 0x00, 0x07, 0x0B, 0x0C, 0x06, 0x29, 0x2A, 0xE0, 0x04, 0x05, 0x20, 0x28, 0x2B, 0x2C, 0x40,
     0x4A, 0x03, 0x0D, 0x25, 0x26, 0x27, 0x48, 0x49, 0x24, 0x47, 0x4B, 0x4C, 0x69, 0x6A, 0x23, 0x46, 0x60, 0x63,
     0x67, 0x68, 0x88, 0x89, 0xA0, 0xE8, 0x01, 0x02, 0x2D, 0x43, 0x44, 0x45, 0x65, 0x66, 0x80, 0x87, 0x8A, 0xA8,
@@ -96,22 +125,22 @@ table2 = [
     0xFC, 0xFD, 0xFE, 0xFF,
 ]
 
-table3 = [
+LENGTH_BASE = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x14, 0x18, 0x1C,
     0x20, 0x28, 0x30, 0x38, 0x40, 0x50, 0x60, 0x70, 0x80, 0xA0, 0xC0, 0xE0, 0xFF, 0x00, 0x00, 0x00,
 ]
 
-extraBitsLength = [
+LENGTH_EXTRA_BITS = [
     0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
     3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
 ]
 
-extraBitsDist = [
+DISTANCE_EXTRA_BITS = [
     0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6,
     7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14,
 ]
 
-backtrackTable = [
+DISTANCE_BASE = [
     0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0006, 0x0008, 0x000C,
     0x0010, 0x0018, 0x0020, 0x0030, 0x0040, 0x0060, 0x0080, 0x00C0,
     0x0100, 0x0180, 0x0200, 0x0300, 0x0400, 0x0600, 0x0800, 0x0C00,
@@ -166,7 +195,7 @@ class HuffTable:
 
     def __init__(self):
         self.nodes = [[0, 0] for _ in range(256)]
-        self.trans = [[0, 0, 0] for _ in range(24)]  # firstEncoding, lastIndex, encLen
+        self.trans = [[0, 0, 0] for _ in range(24)]  # first_encoding, last_index, enc_len
         self.vals = []
         # A table holding exactly one symbol encoded in zero bits. See
         # build_table: upstream parks such a symbol at follow_root[0] and then
@@ -186,13 +215,13 @@ class HuffTable:
                 hit = v
                 break
             if hit is None:
-                raise ValueError('no largeSymbolTranslation match')
+                raise ValueError('no long-code range matched')
             first_enc, last_index, enc_length = hit
             enc_len = enc_length
             group = shr((b - first_enc) & M, 32 - enc_length)
             large_idx = last_index - group
             if large_idx < 0 or large_idx >= len(self.vals):
-                raise ValueError('largeEncIndex out of range')
+                raise ValueError('long-code index out of range')
             enc_val = self.vals[large_idx]
         if enc_len == 0:
             if not self.zero_len:
@@ -210,14 +239,14 @@ def build_table(r):
     sym_idx = symbol_count - 1
     while sym_idx != -1:
         b = r.peek(32)
-        for i, (thr, _) in enumerate(table1):
+        for i, (thr, _) in enumerate(CODE_LENGTH_THRESHOLDS):
             if thr <= b:
                 idx = i
                 break
         bit_count = idx + 3
-        offset = shr((b - table1[idx][0]) & M, 32 - bit_count)
+        offset = shr((b - CODE_LENGTH_THRESHOLDS[idx][0]) & M, 32 - bit_count)
         r.consume(bit_count)
-        temp = table2[table1[idx][1] - offset]
+        temp = CODE_LENGTH_SYMBOLS[CODE_LENGTH_THRESHOLDS[idx][1] - offset]
         n_sym = temp >> 5
         sym_len = temp & 0x1F
         if sym_len != 0 or symbol_count < 2:
@@ -336,14 +365,14 @@ def decompress(data, out_size=None):
                     out.append(code)
                 else:
                     k = code - 256
-                    blen = extraBitsLength[k]
-                    code = table3[k]
+                    blen = LENGTH_EXTRA_BITS[k]
+                    code = LENGTH_BASE[k]
                     if blen:
                         code |= r.read(blen)
                     count = first_four + code + 1
                     code = dist.next_code(r)
-                    blen = extraBitsDist[code]
-                    back = backtrackTable[code]
+                    blen = DISTANCE_EXTRA_BITS[code]
+                    back = DISTANCE_BASE[code]
                     if blen:
                         back |= r.read(blen)
                     if back >= len(out):

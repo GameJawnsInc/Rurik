@@ -24,6 +24,15 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
   read-only. Live probes against ArenaNet need an explicit go-ahead from the owner.
 - **Local and personal only.** No public shard, no PRs against upstream client-side
   projects on this project's behalf.
+- **Other people's work is a second gate, and it is not the provenance gate.** Before a
+  module takes an algorithm, a layout or a constant table from any upstream, add its row
+  to `PLAN.md` §6.1's derivation register *first*, and credit it in
+  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) if its licence asks. Where an upstream
+  grants nothing — `gw-preservation/*`, `Py4GW_Reforged` — the only permitted use is
+  verifying a value we derived ourselves, and `toolkit/content.py` refuses to load a
+  content row that cites one without recording what we checked it against. This rule was
+  in `PLAN.md` §1.1 for two days while `gwdat.py` sat in the server's dependency chain
+  breaking it; a rule nothing checks is a wish.
 
 ## How we decide what is true
 

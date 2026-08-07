@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
 
 import checks                                           # noqa: E402
+import vaultpath                                        # noqa: E402
 import gwdat                                            # noqa: E402
 from archive import Archive, ffna_chunks, DEFAULT_DAT   # noqa: E402
 import textrec                                          # noqa: E402
@@ -50,7 +51,7 @@ DECOMPRESSED_SIZE = 6146      # text file 98, identical in every language
 # at all in section 3, and one zero-bit no-op in section 4. --sample changes the
 # stride inside section 2, not the number of checks, so the count does not move
 # with the fixture; section 3's eleven are fixed by LANGUAGES.
-LEDGER = checks.Ledger("gwdat decompressor", floor=15)
+LEDGER = checks.Ledger("gwdat decompressor", floor=21)
 check = checks.adopt(LEDGER)
 
 
@@ -134,9 +135,76 @@ def main():
     check((r.buf1, r.buf2, r.idx, r.avail) == before,
           "bit position and buffers are unchanged")
 
+    check_derivation()
+
     dt = time.perf_counter() - t0
     print(f"\nelapsed {dt:.1f}s")
     return LEDGER.verdict()
+
+
+# xentax.cpp's own table names, and where each of ours sits inside them. Slices
+# because our decoder only carries the range the length codes use; see gwdat.py's
+# header for why that costs a -256 on the symbol.
+DERIVED_FROM = [
+    ("CODE_LENGTH_THRESHOLDS", "TableData1", "u32pairs", None),
+    ("CODE_LENGTH_SYMBOLS",    "Table2",     "u8",       None),
+    ("LENGTH_BASE",            "TableData3", "u8",       (256, 288)),
+    ("LENGTH_EXTRA_BITS",      "TableData3", "u8",       (0x1DC + 256, 0x1DC + 285)),
+    ("DISTANCE_EXTRA_BITS",    "Table5",     "u8",       None),
+    ("DISTANCE_BASE",          "TableData6", "u16",      None),
+]
+
+
+def check_derivation():
+    """Our constant tables really are xentax.cpp's, at the offsets we claim.
+
+    gwdat.py's header states a derivation and a licence obligation. A stated
+    derivation nobody checks is the same class of claim as a study nobody
+    cross-checks -- and this one is load-bearing twice over, because it is what
+    makes the module attributable to a source that grants us a licence rather
+    than to one that does not (PLAN.md section 6's derivation register).
+
+    Skips rather than fails when the mirror is absent: the mirror lives in the
+    vault and a worktree may not have one. It is a real skip, declared, so a run
+    without it cannot be mistaken for a run that checked.
+    """
+    import re
+    import struct
+    src = os.path.join(vaultpath.vault_path("mirrors"),
+                       "Jonathan-Greve__GuildWarsMapBrowser",
+                       "SourceFiles", "xentax.cpp")
+    if not os.path.isfile(src):
+        LEDGER.skip("derivation", f"mirror not present at {src}")
+        return
+    text = open(src, encoding="utf-8", errors="replace").read()
+
+    def table(name):
+        m = re.search(re.escape(name) + r"\s*\[\s*\d*\s*\]\s*=\s*\{(.*?)\}\s*;",
+                      text, re.S)
+        return [int(x, 16) for x in
+                re.findall(r"0x([0-9A-Fa-f]{1,2})\b", m.group(1))] if m else None
+
+    print("\ntables are xentax.cpp's, at the offsets gwdat.py claims")
+    for ours_name, their_name, kind, span in DERIVED_FROM:
+        raw = table(their_name)
+        if raw is None:
+            check(False, f"{their_name} found in xentax.cpp")
+            continue
+        if kind == "u32pairs":
+            words = struct.unpack("<%dI" % (len(raw) // 4), bytes(raw))
+            theirs = list(zip(words[0::2], words[1::2]))
+        elif kind == "u16":
+            theirs = list(struct.unpack("<%dH" % (len(raw) // 2), bytes(raw)))
+        else:
+            theirs = raw
+        if span:
+            theirs = theirs[span[0]:span[1]]
+        mine = list(getattr(gwdat, ours_name))
+        where = f"{their_name}[{span[0]}:{span[1]}]" if span else their_name
+        check(mine == theirs,
+              f"{ours_name} is {where}",
+              f"{len(mine)} entries" if mine == theirs
+              else f"OURS {len(mine)} vs THEIRS {len(theirs)}")
 
 
 if __name__ == "__main__":
