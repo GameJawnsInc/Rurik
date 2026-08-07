@@ -48,6 +48,7 @@ from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 from livecapture import CaptureTail, by  # noqa: E402
 import drive_client as dc  # noqa: E402
+import cage  # noqa: E402
 
 TOOLKIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -433,6 +434,10 @@ def run_client(a, outdir):
 
     args = ["-authsrv", a.auth_host, "-portal", "127.0.0.1", "-windowed", "-log"]
     dc.assert_safe(a.exe, args)
+    # Both launch sites assert the cage independently rather than one trusting the
+    # other. A guard that only guards one of two doors is the shape of the defect it
+    # is here to prevent -- vault/run held two patched binaries and one was caged.
+    print(f"cage: {cage.assert_caged(a.exe)} client, caged")
     log_path = os.path.join(os.path.dirname(a.exe), "Gw.log")
     if os.path.exists(log_path):
         os.remove(log_path)

@@ -622,9 +622,18 @@ account-visible event happens before the patch matters.
    partial setting. `cage-off` was reachable unelevated through
    `toolkit/harness/admin.py`, and `-Remove` takes down **every** cage on the machine;
    removed from the allowlist 2026-08-06, so uncaging now costs a UAC prompt.
-3. **Launch sites check for a cage.** Nothing does. **MEASURED 2026-08-06: two patched
-   binaries on disk, one of them (`…-probe`) uncaged.** That is the forbidden
-   configuration sitting ready, and no guard would notice.
+3. ✅ **Launch sites check for a cage.** Done 2026-08-06. `toolkit/clientpatch/cage.py`
+   asks the Windows Firewall whether *this* binary has both rules — the loopback allow
+   AND the broad block, because an orphaned allow looks like cleanup and permits
+   everything — and both launch sites (`drive_client.py`, `session.py`) assert it
+   independently rather than one trusting the other. It classifies the binary through
+   `pinned.identify()` and **refuses `unknown`**, which is the case that matters next:
+   `make_custom_client` generates fresh DH parameters, so the next patched copy has a
+   hash nobody has recorded. Fail-closed throughout — an undeterminable firewall is a
+   refusal, not permission. `test_cage.py` proves all four refusals.
+   *The state that prompted it: two patched binaries on disk, one (`…-probe`) uncaged
+   for a day, and `assert_safe` waved it through because it checks the path and the
+   flags, both of which an uncaged copy passes. Both are caged as of 2026-08-06.*
 4. **The automation selects its account.** Nothing does — the client autofills the saved
    credential, which is the owner's primary. A live run today would log in as the wrong
    account by default.

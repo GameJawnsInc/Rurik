@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
+import cage  # noqa: E402
 
 RUN_ROOT = os.path.normcase(vault_path("run"))
 # Both flags must be present and both must name a 127/8 address. Any loopback
@@ -378,6 +379,10 @@ def main():
                          f"run make_run_dir.py first (RUNBOOK.md, one-time setup).")
     args = ["-authsrv", a.authsrv, "-portal", "127.0.0.1", "-windowed", "-log"]
     assert_safe(a.exe, args)
+    # And that the firewall cage is actually up. assert_safe checks the path and the
+    # flags; a binary can pass both and still be able to reach the internet, which is
+    # exactly the state one copy sat in for a day. See toolkit/clientpatch/cage.py.
+    print(f"cage: {cage.assert_caged(a.exe)} client, caged")
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
     outdir = os.path.join(a.outdir, stamp)
