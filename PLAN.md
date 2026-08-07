@@ -915,10 +915,17 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
    ran during a real handshake without crashing, and `keytap.py` read the exact
    `master_secret` our server independently derived (2026-08-07, `verify_keytap.py`). Key
    acquisition is proven with zero trust in the live service.
-   **Next, in order:** (a) the off-wire ciphertext capture (needs a packet backend
-   installed — WinDivert/Npcap, the CLAUDE.md carve-out); (b) the driver script tying
-   cage + account + live launch + key-tap + capture + `replay.py` + `origin: live` + scrub
-   together; (c) the live run, last and human-driven on the secondary account.
+   **Also done 2026-08-07:** the off-wire ciphertext capture (`wirecapture.py`, WinDivert
+   SNIFF, pure half tested) and the driver that ties it all together (`livesession.py`:
+   account + launch gate + key-tap + capture + decrypt + `origin: live` + scrub + the
+   behavioural guards). The driver's **offline assembly is proven on real bytes** — split
+   the plaintext handshake off a wire stream and decrypt the rest, reproducing the server's
+   logged plaintext *reached from the wire side*, both directions, self-consistent.
+   **What remains, both yours:** (a) install WinDivert (place the DLL/`.sys`, first-open
+   from an elevated shell — it loads a kernel driver, like caging); (b) put `--key-tap` on
+   the stock-DH live build and do the live run — human-driven, secondary account, behind
+   `--confirm`, on the cadence §6.1 requires. Every part it calls is proven; only the live
+   launch and the sniff have not run.
    *The s2c-ordering hazard this item used to raise is closed:* the keystream `seq` work
    (`b70920e`) numbers each send inside the send lock, so a capture sorts back to true wire
    order regardless of thread contention.

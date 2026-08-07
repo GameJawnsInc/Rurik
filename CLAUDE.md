@@ -167,6 +167,11 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   IPv4/TCP parse, direction from endpoints, TCP-seq reassembly that reports gaps rather
   than hiding them, a capture that reads back stamped `origin: live`, and an honest
   refusal when WinDivert is absent),
+  `toolkit/harness/test_livesession.py` (the live driver's offline half and guards:
+  splitting the plaintext handshake off a wire stream and decrypting the rest — grounded
+  on a real session's own ciphertext, reached from the wire side — a both-direction
+  `assemble` that self-checks and stamps `origin: live`, and that the guards refuse the
+  primary account, an ours-DH client aimed live, and a run with no `--confirm`),
   `toolkit/test_origin.py` (whose server a capture came from, and that ours and
   ArenaNet's can never be pooled).
 
