@@ -118,6 +118,24 @@ AUTH_SENTINELS = {"0"}
 # a field list could not, which is the argument for keeping the test built that way.
 COMPOSITE_KEYS = ("who",)
 
+# Keys whose value is an OPAQUE PAYLOAD -- a hex blob of protocol bytes -- which this tool
+# cannot clean and must therefore not appear to have cleaned.
+#
+# It is not a hypothetical. MEASURED 2026-08-07 over the vault's 401 captures that carry a
+# first c2s frame: the auth channel's opening client message is opcode 0x8001 followed by a
+# UTF-16 string, and that string is the ACCOUNT EMAIL -- 271 captures begin `0180 0500
+# 7300 6b00 ...`, which is the owner's own address, one byte pair at a time. The scrubber
+# matches JSON keys, the address here is bytes inside a value, and `plain` was in no list,
+# so scrub_record fell through to `else: out[key] = value` and copied it verbatim into
+# captures-scrubbed/ -- the tree RUNBOOK names as the one that may leave the machine.
+#
+# Redacting the blob is not the fix: it is the capture. So the policy is to REPORT rather
+# than pretend -- the manifest names every file that still holds one, and the tool says so
+# on the way out. A live capture makes this sharper, because then the same field holds a
+# real session against ArenaNet rather than one against ourselves.
+OPAQUE_KEYS = ("plain",)
+OPAQUE_STAT = "NOT_CLEANED_opaque_payload"
+
 # 8-4-4-4-12 hex. Matching the shape rather than the field means a UUID picks up the same
 # pseudonym here as it does in `account_uuid`, so correlation survives across both.
 UUID_RE = re.compile(r"\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"
@@ -197,6 +215,12 @@ def scrub_record(rec, names, stats):
             out[key] = scrub_xml(value, names, stats)
         elif key in COMPOSITE_KEYS and isinstance(value, str):
             out[key] = scrub_composite(value, names, stats)
+        elif key in OPAQUE_KEYS and isinstance(value, str) and value:
+            # Passed through UNCHANGED, and counted. The count is the whole point: this is
+            # the one field the tool knowingly does not clean, and a silent pass-through is
+            # indistinguishable from "there was nothing to do".
+            stats[OPAQUE_STAT] = stats.get(OPAQUE_STAT, 0) + 1
+            out[key] = value
         else:
             out[key] = value
     return out
@@ -222,6 +246,7 @@ def scrub_tree(src, out, dry_run=False, skip=()):
     names, stats = Pseudonyms(), {}
     files = records = 0
     unscrubbed = []
+    opaque_files = []
     for base, dirs, fnames in os.walk(src):
         dirs[:] = [d for d in dirs if d not in skip]
         rel = os.path.relpath(base, src)
@@ -232,6 +257,7 @@ def scrub_tree(src, out, dry_run=False, skip=()):
             if not name.endswith(".jsonl"):
                 continue
             files += 1
+            opaque_before = stats.get(OPAQUE_STAT, 0)
             lines = []
             with open(os.path.join(base, name), encoding="utf-8",
                       errors="replace") as fh:
@@ -246,6 +272,8 @@ def scrub_tree(src, out, dry_run=False, skip=()):
                         stats["UNPARSEABLE"] = stats.get("UNPARSEABLE", 0) + 1
                         continue
                     lines.append(json.dumps(scrub_record(rec, names, stats)))
+            if stats.get(OPAQUE_STAT, 0) > opaque_before:
+                opaque_files.append(os.path.join(rel, name) if rel != "." else name)
             if not dry_run:
                 dest = os.path.join(out, rel) if rel != "." else out
                 os.makedirs(dest, exist_ok=True)
@@ -260,10 +288,20 @@ def scrub_tree(src, out, dry_run=False, skip=()):
                 "distinct_secrets_replaced": names.count(),
                 "replacements_by_field": dict(sorted(stats.items())),
                 "NOT_SCRUBBED": unscrubbed,
+                "NOT_CLEANED_opaque_payloads": opaque_files,
                 "note": "Placeholders are sequential, not derived from the values. "
                         "No mapping is stored anywhere. Lengths are preserved. "
                         ".raw files are NOT scrubbed and are not copied -- they are "
                         "the undecoded byte stream and nothing here parses them.",
+                "WARNING": (
+                    f"{len(opaque_files)} file(s) here still carry `plain` frame "
+                    f"payloads, copied through UNCHANGED. This tool matches JSON keys "
+                    f"and cannot see inside a hex blob of protocol bytes -- and the auth "
+                    f"channel's first client message embeds the account email as UTF-16 "
+                    f"inside exactly such a blob (MEASURED over 271 captures). A tree "
+                    f"listed here is NOT safe to hand to anyone. See "
+                    f"NOT_CLEANED_opaque_payloads."
+                ) if opaque_files else "No opaque payloads: every field here was cleanable.",
             }, fh, indent=2)
     return files, records, stats, names.count(), unscrubbed
 
@@ -352,6 +390,14 @@ def main():
         print(f"\nNOT SCRUBBED, and NOT copied: {len(unscrubbed)} .raw file(s).")
         print("  They are the undecoded byte stream; nothing here parses them, so")
         print("  nothing here can promise what is in them. They stay behind.")
+    if stats.get(OPAQUE_STAT):
+        print(f"\nNOT CLEANED, and copied anyway: {stats[OPAQUE_STAT]} `plain` frame "
+              f"payload(s).")
+        print("  This tool matches JSON keys and cannot see inside a hex blob of protocol")
+        print("  bytes. The auth channel's first client message embeds the account email")
+        print("  as UTF-16 inside exactly such a blob (MEASURED, 271 captures), so the")
+        print(f"  output tree is NOT safe to hand to anyone. {out}/SCRUB-MANIFEST.json")
+        print("  names every file that still carries one.")
     print("\n(dry run -- nothing written)" if args.check
           else f"\nwrote    {out}")
     return 0

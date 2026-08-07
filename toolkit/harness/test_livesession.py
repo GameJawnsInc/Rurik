@@ -13,6 +13,13 @@ here against REAL captured bytes:
   3. a full assemble() round-trips both directions to a LIVE capture whose self-consistency
      check (re-encrypt == captured ciphertext) holds, carrying A / server_seed / arc4_key
      under the field names the scrub already treats as secret;
+  3b. assemble_live handles the shape a REAL session has and the dry-run never did -- three
+     connections (auth, game, and one joined mid-stream) and a keyring of two keys, one per
+     DH-keyed channel, because the single tap slot is overwritten at every handshake. It
+     must pair each connection with the right key, report the headless one rather than
+     crash on it, and -- the one that matters most -- decrypt NOTHING and write NO FILE
+     when the right key is absent. ARC4 is symmetric, so "it decrypted" is never evidence;
+     the client's own first opcode is;
   4. the guards refuse: the primary account, a non-stock (loopback) launch client, and a
      live run with no --confirm.
 
@@ -35,7 +42,7 @@ import livesession as ls  # noqa: E402
 import wirecapture as wc  # noqa: E402
 from gwcrypto import ARC4, arc4_hash  # noqa: E402
 
-LEDGER = checks.Ledger("livesession", floor=12)
+LEDGER = checks.Ledger("livesession", floor=23)
 
 
 def real_session():
@@ -162,6 +169,85 @@ def main():
             LEDGER.ok({"session_key", "client_seed", "server_seed"} <= keys_present,
                       "arc4_key / a / sent are recorded under the scrub's own field names",
                       "so scrub_captures.py redacts them before the capture leaves the vault")
+
+    # ---- 3b. the LIVE shape: several connections, several keys -----------------
+    print("\n3b. assemble_live pairs keys to connections, and refuses when none fits")
+    # A real session is two DH-keyed channels on separate connections with DIFFERENT keys,
+    # plus a portal connection that is not a GW channel at all. The single tap slot is
+    # overwritten at each handshake, so the driver carries a keyring and the pairing is a
+    # search settled by FIRST_C2S_OPCODE -- which a wrong key cannot satisfy.
+    auth_key = arc4_hash(bytes(range(20)))
+    game_key = arc4_hash(bytes(range(20, 40)))
+    wrong_key = arc4_hash(b"\xff" * 20)
+    auth_plain = struct.pack("<H", ls.FIRST_C2S_OPCODE["auth"]) + b"\x05\x00hello-auth"
+    game_plain = struct.pack("<H", ls.FIRST_C2S_OPCODE["game"]) + b"\x91\x80walking"
+    A1, A2 = bytes(range(64)), bytes(range(64, 128))
+    seed1, seed2 = bytes(range(20)), bytes(range(40, 60))
+
+    def wire_conn(record, cip, cport, sip, sport, c2s, s2c):
+        for direction, payload, a, b, pa, pb in (
+                (wc.C2S, c2s, cip, sip, cport, sport),
+                (wc.S2C, s2c, sip, cip, sport, cport)):
+            record(direction, 1000, payload,
+                   {"src": a, "sport": pa, "dst": b, "dport": pb})
+
+    with tempfile.TemporaryDirectory() as tmp:
+        wire = os.path.join(tmp, "wire.jsonl")
+        fh, record = wc.open_capture(wire, "10.0.0.9:*", None, 4242, {6112, 6601},
+                                     lambda: 0.0)
+        wire_conn(record, "10.0.0.9", 51000, "3.65.1.1", 6112,
+                  c2s_handshake(A1) + ARC4(auth_key).crypt(auth_plain),
+                  s2c_handshake(seed1) + ARC4(auth_key).crypt(b"auth said this"))
+        wire_conn(record, "10.0.0.9", 51001, "3.65.9.9", 6112,
+                  c2s_handshake(A2) + ARC4(game_key).crypt(game_plain),
+                  s2c_handshake(seed2) + ARC4(game_key).crypt(b"game said this"))
+        # A third connection on a sniffed port whose handshake is NOT at the front -- the
+        # realistic live case is a connection the sniff joined mid-stream, or a reconnect.
+        # It must be reported, not crashed on, and not fed to ARC4 as if it were a channel.
+        wire_conn(record, "10.0.0.9", 51002, "3.65.1.1", 6112,
+                  b"\x99\x99 not a handshake, joined mid-stream", b"\x88\x88 nor is this")
+        fh.close()
+
+        keyring = [("tap@1.0s", auth_key), ("tap@9.0s", game_key)]
+        rep = ls.assemble_live(wire, keyring, tmp)
+        by_channel = {r.get("channel"): r for r in rep["connections"] if r.get("decrypted")}
+        LEDGER.ok(rep["decrypted"] == 2 and set(by_channel) == {"auth", "game"},
+                  "both DH-keyed connections decrypt, each under its own tapped key",
+                  f"{rep['decrypted']}/{rep['total']} connections")
+        LEDGER.ok(by_channel.get("auth", {}).get("key_from") == "tap@1.0s"
+                  and by_channel.get("game", {}).get("key_from") == "tap@9.0s",
+                  "each connection is paired with the RIGHT key, not the first one",
+                  "swapping them would decrypt to a wrong first opcode")
+        auth_out = [json.loads(l) for l in open(by_channel["auth"]["out"], encoding="utf-8")]
+        LEDGER.ok(bytes.fromhex([r for r in auth_out
+                                 if r.get("direction") == "c2s"][0]["plain"]) == auth_plain,
+                  "the auth connection decrypts back to its exact plaintext")
+        LEDGER.ok(origin.origin_of(by_channel["game"]["out"])[0] == origin.LIVE,
+                  "every file assemble_live writes is stamped origin: live")
+        stray = [r for r in rep["connections"] if r["connection"].startswith("10.0.0.9:51002")]
+        LEDGER.ok(len(stray) == 1 and not stray[0]["decrypted"]
+                  and "no GW handshake" in stray[0]["why"],
+                  "a connection with no handshake at its front is reported, not crashed on",
+                  "a mid-stream join is a normal outcome of a sniff, not an error")
+
+        # And the case that matters most: a keyring that does NOT hold the right key must
+        # produce NOTHING, rather than a plausible-looking file full of garbage.
+        before = set(os.listdir(tmp))
+        bad = ls.assemble_live(wire, [("tap@0.0s", wrong_key)], tmp)
+        LEDGER.ok(bad["decrypted"] == 0,
+                  "a keyring with only a WRONG key decrypts nothing at all",
+                  "ARC4 is symmetric, so 'it decrypted' is not evidence -- the first "
+                  "opcode is")
+        LEDGER.ok(set(os.listdir(tmp)) == before,
+                  "and it writes no file, so a bad run cannot leave a believable artifact")
+        LEDGER.ok(all("none of the 1 tapped key(s)" in r["why"]
+                      for r in bad["connections"] if r.get("A")),
+                  "the refusal names how many keys were tried")
+
+    LEDGER.ok(ls.channel_of(auth_plain) == "auth" and ls.channel_of(game_plain) == "game",
+              "channel_of names the channel from the client's own first opcode")
+    LEDGER.ok(ls.channel_of(b"\x00\x00rubbish") is None and ls.channel_of(b"") is None,
+              "channel_of refuses anything else, including a truncated stream")
 
     # ---- 4. the guards refuse --------------------------------------------------
     print("\n4. the guards refuse the primary, a non-stock client, and no --confirm")

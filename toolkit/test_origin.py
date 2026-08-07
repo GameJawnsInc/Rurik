@@ -124,10 +124,27 @@ def main():
             LEDGER.skip("vault corpus", "no .jsonl captures on disk")
         else:
             groups = origin.partition(found)
-            LEDGER.ok(not groups[origin.LIVE],
-                      "no live capture exists yet, so nothing is at risk today",
-                      f"{len(found)} files: {len(groups[origin.OURS])} ours, "
-                      f"{len(groups[origin.UNKNOWN])} unknown")
+            # This used to assert `not groups[LIVE]` -- "no live capture exists yet, so
+            # nothing is at risk today". That is a check that goes RED on success: the first
+            # real R0b capture landing in the vault is the project's biggest win and it
+            # would have been reported as a regression, with the obvious cure being to move
+            # the evidence or soften the guard. What the corpus is actually protected by is
+            # below: a live file present must be REFUSED by the pooling guard, not absent.
+            # So the assertion now holds in both states and gets stronger in the second.
+            live = groups[origin.LIVE]
+            census = (f"{len(found)} files: {len(groups[origin.OURS])} ours, "
+                      f"{len(live)} live, {len(groups[origin.UNKNOWN])} unknown")
+            if not live:
+                LEDGER.ok(True, "no live capture in the corpus yet -- nothing to mix", census)
+            else:
+                refused = ""
+                try:
+                    origin.require_single([groups[origin.OURS][0], live[0]], origin.OURS)
+                except SystemExit as exc:
+                    refused = str(exc)
+                LEDGER.ok(os.path.basename(live[0]) in refused,
+                          "a live capture EXISTS, and pooling it with ours is refused by name",
+                          census)
             LEDGER.ok(len(groups[origin.OURS]) > 100,
                       "the pre-existing corpus classifies as ours rather than unknown",
                       f"{len(groups[origin.OURS])} classified -- if this collapses, the "

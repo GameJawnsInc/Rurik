@@ -294,8 +294,11 @@ account** and turns its wire bytes into a decrypted, `origin: live`, byte-replay
 capture. Every part is built and proven offline; two steps need an elevated shell and are
 deliberately not automated.
 
-**How it works.** The stock-DH live build (`vault/run-live/`) carries a **key-tap** cave
-(`make_custom_client.py --no-dh-patch --key-tap`) that copies the session's `master_secret`
+**How it works.** The stock-DH live build (`vault/run-live/`) must carry a **key-tap** cave
+— check with `python toolkit/clientpatch/dhbuild.py`, and if `key_tapped` is false rebuild
+with `make_custom_client.py --no-dh-patch --key-tap` then `make_run_dir.py --live`
+(`Gw.dat` is not re-copied). `livesession.py` refuses an untapped build, because without
+the cave there is no key and the ciphertext is unrecoverable. The cave copies `master_secret`
 to a data slot as the handshake runs; `keytap.py` reads it back. The ciphertext is captured
 **off the wire** with WinDivert (`wirecapture.py`, SNIFF mode — it observes, never alters).
 `livesession.py` assembles the two: it splits the plaintext DH handshake off each direction
@@ -313,20 +316,46 @@ python toolkit/harness/wirecapture.py --pid <client> --server 127.0.0.1:6112 --s
 ```
 
 **Do the loopback dry-run before going live.** The whole pipeline — key-tap → off-wire
-capture → assemble → decrypt — runs against our own server first, where a wrong byte is
-caught against a key we already hold. Build a key-tapped **loopback** client, run the stack
-(`session.py --until login --keep-open`), and in an elevated shell capture its
-`127.0.0.1:6112` traffic with `wirecapture.py`; then `livesession.assemble` it with the key
-`keytap.py` reads and confirm it decrypts. This is the same flow the live run uses, minus
-the live launch, and it is how you prove the driver end to end without touching ArenaNet.
+capture → keytap → assemble → decrypt — runs against our own server first, where every byte
+has an oracle. It is one elevated command and it cleans up after itself, including
+restoring the loopback client to its untapped default:
+
+```bash
+python toolkit/harness/dryrun_keycapture.py
+```
 
 **Elevated step 2 — the live run itself.** Only after the dry-run is green. Owner-driven,
 one client, human cadence, human hours, never in a competitive context (`PLAN.md` §6.1 —
 the traffic *pattern* is what closes accounts, and no gate substitutes for that):
 
 ```bash
-python toolkit/harness/livesession.py --account capture --exe <run-live>\Gw.exe --host <auth ip> --confirm
+python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\<build>\Gw.exe --confirm
 ```
+
+**Do not pass `--host`, and it is refused if you do.** This line used to carry
+`--host <auth ip>` and that was wrong in a way that looked like success. A live login is
+three stages on three endpoints, and Stage C's game-server address arrives *inside* the
+ARC4-encrypted `AUTH_SMSG_GAME_SERVER_INFO` — so it cannot be known when the packet filter
+opens and cannot be added later. Pinning the sniff to the auth IP records the auth channel
+only, prints `1/1 connection(s) decrypted`, exits 0, and spends the one authorized session
+on the only channel loopback already reproduces. The sniff filters by **port on any host**.
+
+**What the driver does and does not do.** It starts the sniff *before* the launch (the DH
+handshake is the first thing on the wire and it is the plaintext half), launches with no
+`-portal`/`-authsrv` so the client uses its own compiled-in ArenaNet endpoints, polls the
+tap for a **keyring** — each channel overwrites the one slot, so one read loses a channel —
+holds to `--minutes` (default 20), then closes the client with `WM_CLOSE` so `Gw.log`
+survives, and assembles per connection. **It sends no keystrokes and no clicks.** You log
+in and play; the driver only instruments. That is deliberate: the loopback harness's
+scripted three-Enters-and-a-Play-click is precisely the traffic pattern §6.1 warns about.
+
+**Output**, under `vault/captures/live/<stamp>/`: `wire.jsonl` (the raw off-wire capture,
+kept even if nothing decrypts), one `<channel>-<connection>.jsonl` per decrypted channel,
+`manifest.json`, and `scrubbed/`. **`scrubbed/` is not shareable.** The scrub matches JSON
+keys and cannot see inside a `plain` hex blob, and the auth channel's first client message
+carries the account email as UTF-16 inside exactly such a blob. The scrub says so on the
+way out and `SCRUB-MANIFEST.json` names every file affected — this applies to the existing
+`captures-scrubbed/` tree too (MEASURED: 401 of 517 vaulted captures carry one).
 
 ## Where the pieces live
 

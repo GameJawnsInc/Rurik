@@ -17,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 import tempfile
 
@@ -26,9 +27,9 @@ import checks  # noqa: E402
 import vaultpath  # noqa: E402
 import scrub_captures as sc  # noqa: E402
 
-# 6 structural + 6 leak/property + 2 red-team = 14, measured green over the whole capture
-# tree. Nothing here is optional; a run under this floor has lost a section.
-LEDGER = checks.Ledger("credential scrub", floor=14)
+# 6 structural + 6 leak/property + 2 red-team + 5 blind-spot = 19, measured green over the
+# whole capture tree. Nothing here is optional; a run under this floor has lost a section.
+LEDGER = checks.Ledger("credential scrub", floor=19)
 
 
 def harvest_secrets(src):
@@ -219,6 +220,41 @@ def main():
         finally:
             sc.SECRET_ELEMENTS.clear()
             sc.SECRET_ELEMENTS.update(saved)
+
+        # --- the blind spot, stated rather than papered over --------------------
+        # The leak check above searches for the harvested ASCII values. The auth
+        # channel's first client message carries the account email as UTF-16 inside a
+        # `plain` hex blob (MEASURED: 271 of the vault's 276 auth captures begin
+        # 0180 0500 7300 6b00 ...), so the address is present as "7300 6b00 ..." and
+        # the ASCII search walks straight past it. That is why the leak check stayed
+        # green while the credential shipped, and why the scrub now REPORTS the field
+        # instead of appearing to have handled it.
+        print("\n7. the opaque-payload blind spot is reported, not silently passed")
+        email = "leaky.address@example.invalid"
+        blob = struct.pack("<HH", 0x8001, len(email)) + email.encode("utf-16-le")
+        opq = os.path.join(tmp, "opaque")
+        os.makedirs(opq, exist_ok=True)
+        with open(os.path.join(opq, "frames.jsonl"), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"kind": "frame", "direction": "c2s",
+                                 "plain": blob.hex()}) + "\n")
+        opq_out = os.path.join(tmp, "opaque-scrubbed")
+        _f, _r, ostats, _d, _u = sc.scrub_tree(opq, opq_out)
+        LEDGER.ok(ostats.get(sc.OPAQUE_STAT) == 1,
+                  "a `plain` frame payload is COUNTED as not-cleaned, not ignored",
+                  f"{sc.OPAQUE_STAT} = {ostats.get(sc.OPAQUE_STAT)}")
+        out_text = open(os.path.join(opq_out, "frames.jsonl"), encoding="utf-8").read()
+        LEDGER.ok(blob.hex() in out_text,
+                  "the payload really does survive the scrub verbatim -- this is the fact "
+                  "the report exists to state", f"{len(blob)} bytes copied through")
+        LEDGER.ok(email not in out_text and email.encode("utf-16-le").hex() in out_text,
+                  "and the email inside it is invisible to an ASCII search but present "
+                  "as UTF-16", "which is exactly why the leak check above stayed green")
+        oman = json.load(open(os.path.join(opq_out, "SCRUB-MANIFEST.json"),
+                              encoding="utf-8"))
+        LEDGER.ok(oman.get("NOT_CLEANED_opaque_payloads") == ["frames.jsonl"],
+                  "the manifest names the file that still carries one")
+        LEDGER.ok("NOT safe to hand to anyone" in oman.get("WARNING", ""),
+                  "and says plainly that the output is not shareable")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

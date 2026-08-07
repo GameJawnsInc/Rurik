@@ -353,7 +353,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
-| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** Unblocked by §7 Q4, and **as of 2026-08-07 all five of §6.2's preconditions are met**: the unpatched-DH build exists (`make_custom_client.py --no-dh-patch`), its run directory is assembled and verified byte-identical to the source, and `cage.assert_launch_safe` will let it through to the live service and nothing else. What is missing is now only the driver — no tool yet knows how to run a capture session — and writing it is this rung's own first commit. |
+| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | 🔶 **built and proven on loopback, unrun against ArenaNet. The criterion is unmet: not one byte in the vault is ArenaNet's, and it stays the wasting asset until a session is recorded.** The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ⬜ not started. Requires R0b, so it inherits R0b's block. |
 
 Two structural changes, both argued below in §4.
@@ -694,10 +694,29 @@ ArenaNet's bytes is code nobody has written, not a control nobody has built.
    uncaged is what the row wants.
 
    **So all five preconditions are met, and A1 is the next thing to build rather than
-   the next thing to unblock.** What does not exist is the driver: nothing in the toolkit
-   yet knows how to run a capture session against the real service, and writing it is
-   R0b's own first commit. The gate will let it through; there is nothing to ask
-   permission for.
+   the next thing to unblock.** *(Updated 2026-08-07: the driver now exists —
+   `livesession.py` launches, sniffs, taps, holds, stops, assembles and scrubs. What is
+   left is the run.)*
+
+   *Two things a live session is that the loopback dry-run was not, both found by
+   building the driver rather than by reasoning about it.* **It is several connections**:
+   login is three stages (§1.6) on three endpoints, and Stage C's game-server address
+   arrives *inside* the ARC4-encrypted `AUTH_SMSG_GAME_SERVER_INFO`, so it cannot be known
+   when the packet filter is opened and cannot be added afterwards. The sniff therefore
+   filters by PORT on any host and there is deliberately no way to pin it to an address —
+   a pinned run records the auth channel, prints `1/1 connection(s) decrypted`, exits 0,
+   and spends the one authorized session on the only channel loopback already reproduces.
+   `--host` is accepted solely to refuse it by name, because RUNBOOK documented it for a
+   day. **And it is several keys**: each DH-keyed channel derives its own `master_secret`
+   through the same code, so the single tap slot is overwritten at every handshake and
+   reading it once loses whichever channel handshook first. The driver keeps a keyring of
+   every distinct value the slot held, and pairs keys to connections by a criterion the
+   artifact can refute — the client's own first message after the handshake is opcode
+   0x8001 on auth and 0x808a on game (**MEASURED 2026-08-07** over the 401 vaulted captures
+   carrying both a channel marker and a first c2s frame: 271 of 276 auth, 42 of 42 game;
+   the other five are the 08-04 synthetic markers). A wrong key cannot produce those two
+   bytes, so a keyring that does not fit decrypts nothing and writes no file rather than
+   leaving a believable artifact.
 
    *The duplication is resolved.* `dhbuild.py` and `buildid.py` were written the same
    afternoon by two sessions for the same job. Merged 2026-08-07, `dhbuild` surviving:
@@ -926,10 +945,27 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
    off-wire ciphertext matched the server's own `.raw` **byte for byte** (62/62), the
    tapped `master_secret` equalled what the server derived, and the capture decrypted to
    the server's logged plaintext. The whole pipeline works against a key we hold, with an
-   oracle for every byte. **What remains is only the live run:** put `--key-tap` on the
-   stock-DH live build and drive it human-side — secondary account, behind `--confirm`, on
-   the cadence §6.1 requires. Nothing in the pipeline is unproven now; only the live launch
-   itself has not happened.
+   oracle for every byte.
+   **Done 2026-08-07, the last of the code:** `livesession.run` is wired — it starts the
+   sniff, launches the stock-DH build at ArenaNet's own endpoints through the launch gate,
+   polls a keyring off the tap, holds to a ceiling under the operator's hand, then
+   assembles per connection and scrubs. It deliberately sends **no** scripted input: the
+   loopback harness's three-Enters-and-a-Play-click is exactly the traffic pattern §6.1
+   says closes accounts. The stock-DH live build is key-tapped and staged.
+   **What remains is only the live run:** elevated shell, secondary account, `--confirm`,
+   human cadence. Nothing in the pipeline is unproven now; only the live launch itself has
+   not happened.
+   *Two defects the wiring turned up, both in the controls rather than the pipeline.* The
+   sniff could be pinned to one address by a documented flag, which silently discarded the
+   game channel while reporting success (§6.2). And **`scrub_captures.py` cannot clean a
+   `plain` frame payload** — it matches JSON keys, and the auth channel's first client
+   message carries the account email as UTF-16 *inside* that hex blob, so the scrub walked
+   past it and the leak check stayed green because it searches ASCII. Redacting the blob
+   would delete the capture, so the scrub now reports it: a count, the file list, and a
+   `WARNING` in `SCRUB-MANIFEST.json` saying the tree is not shareable. This is retroactive
+   — **MEASURED 2026-08-07: 401 of the vault's 517 existing captures** carry a `plain`
+   payload, and `captures-scrubbed/` is the tree RUNBOOK names as the one that may leave
+   the machine.
    *The s2c-ordering hazard this item used to raise is closed:* the keystream `seq` work
    (`b70920e`) numbers each send inside the send lock, so a capture sorts back to true wire
    order regardless of thread contention.
