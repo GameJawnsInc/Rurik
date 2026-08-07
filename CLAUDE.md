@@ -163,6 +163,10 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/harness/test_keytap.py` (the ReadProcessMemory key reader — RPM round-trip,
   ASLR-correct module-base resolution, cross-process, and a clean failure on an unmapped
   address; Windows-only, skips whole otherwise),
+  `toolkit/harness/test_wirecapture.py` (the off-wire ciphertext capture's pure half:
+  IPv4/TCP parse, direction from endpoints, TCP-seq reassembly that reports gaps rather
+  than hiding them, a capture that reads back stamped `origin: live`, and an honest
+  refusal when WinDivert is absent),
   `toolkit/test_origin.py` (whose server a capture came from, and that ours and
   ArenaNet's can never be pooled).
 

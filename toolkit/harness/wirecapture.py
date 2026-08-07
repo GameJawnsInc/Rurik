@@ -1,0 +1,291 @@
+"""Capture a live session's ciphertext off the wire, so replay.py can decrypt it offline.
+
+    python toolkit/harness/wirecapture.py --pid <client> --server <ip:port> [--seconds N]
+
+The ciphertext half of the R0b live-capture driver (route C, studies/livekey/CAPTURE.md).
+Our own server is not in a live session, so nothing on our side sees the bytes; a network
+tap does. This reads the client's TCP stream from outside the process with WinDivert in
+SNIFF mode -- it observes and never alters, so the live connection is not perturbed -- and
+records each TCP segment with its sequence number. The session key comes separately from
+keytap.py (the code cave), and replay.py reassembles and decrypts offline.
+
+WHY THE HANDSHAKE IS CAPTURABLE TOO. ARC4 begins only after the key is derived, so the DH
+exchange -- VERSION, CLIENT_SEED (the client public A), SERVER_SEED -- crosses the wire in
+the clear. A wire capture therefore contains A and the server seed directly, which is what
+lets an offline reader split the plaintext prefix from the ciphertext and (with the tapped
+key) decrypt the rest. Both directions are recorded; direction is decided by which endpoint
+is the server, not by WinDivert's version-specific address struct, so this does not break
+across WinDivert releases.
+
+DEPENDENCY. WinDivert (LGPLv3, called via ctypes; PLAN.md §6.1) -- the CLAUDE.md carve-out,
+scoped to this driver only, never the server path, never the suite. Opening the handle
+needs an elevated shell (it loads a kernel driver); absent or unelevated, this refuses with
+the install step rather than proceeding. The parsing and reassembly below are pure and are
+what test_wirecapture.py exercises without the driver.
+
+standard library only apart from the carved-out WinDivert DLL.
+"""
+import argparse
+import json
+import os
+import socket
+import struct
+import sys
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
+import origin  # noqa: E402
+import tcptable  # noqa: E402
+
+C2S = "c2s"
+S2C = "s2c"
+
+
+# ------------------------------------------------------------- packet parsing --
+def parse_ipv4_tcp(pkt):
+    """{'src','dst','sport','dport','seq','flags','payload'} for an IPv4/TCP packet, else None.
+
+    Pure and total: any malformed or non-TCP/non-IPv4 packet returns None rather than
+    raising, because a sniff sees everything the filter let through plus the occasional
+    runt, and a capture loop that dies on one bad packet loses the session.
+    """
+    if len(pkt) < 20:
+        return None
+    ver_ihl = pkt[0]
+    if ver_ihl >> 4 != 4:
+        return None
+    ihl = (ver_ihl & 0x0F) * 4
+    if ihl < 20 or len(pkt) < ihl:
+        return None
+    proto = pkt[9]
+    if proto != 6:                       # TCP
+        return None
+    total_len = struct.unpack_from(">H", pkt, 2)[0]
+    # Trust the smaller of captured length and the IP header's claim.
+    end = min(len(pkt), total_len) if total_len >= ihl else len(pkt)
+    src = socket.inet_ntoa(pkt[12:16])
+    dst = socket.inet_ntoa(pkt[16:20])
+    if end < ihl + 20:
+        return None
+    tcp = pkt[ihl:end]
+    sport, dport, seq = struct.unpack_from(">HHI", tcp, 0)
+    data_off = (tcp[12] >> 4) * 4
+    if data_off < 20 or len(tcp) < data_off:
+        return None
+    flags = tcp[13]
+    payload = tcp[data_off:]
+    return {"src": src, "dst": dst, "sport": sport, "dport": dport,
+            "seq": seq, "flags": flags, "payload": payload}
+
+
+def direction_of(pkt, server_ip, server_ports):
+    """C2S if the packet is heading to the server, S2C if coming from it, else None.
+
+    Decided from the endpoints, not from any capture-time metadata, so a replay of the
+    same packets classifies identically and the direction survives a WinDivert upgrade.
+    """
+    if pkt["dst"] == server_ip and pkt["dport"] in server_ports:
+        return C2S
+    if pkt["src"] == server_ip and pkt["sport"] in server_ports:
+        return S2C
+    return None
+
+
+# --------------------------------------------------------------- reassembly ----
+def reassemble(segments):
+    """Ordered payload bytes for one direction, from [(seq, payload), ...].
+
+    TCP sequence numbers order the stream and wrap at 2**32. We anchor on the first
+    segment's seq as the stream origin, place every later segment at (seq - origin) mod
+    2**32, and drop pure-duplicate retransmits. Gaps are left as they fall -- a live tap
+    can miss a segment, and a decryptor must see the gap (its keystream desyncs there)
+    rather than have it silently closed. Returns (bytes, gaps) where gaps is a list of
+    (offset, length) holes.
+    """
+    if not segments:
+        return b"", []
+    origin_seq = segments[0][0]
+    placed = {}
+    for seq, payload in segments:
+        if not payload:
+            continue
+        off = (seq - origin_seq) & 0xFFFFFFFF
+        # A retransmit of already-seen bytes is fine; a conflicting overwrite is noted by
+        # keeping the first. Loopback and a quiet LAN rarely reorder, but be correct.
+        placed.setdefault(off, payload)
+    if not placed:
+        return b"", []
+    out = bytearray()
+    gaps = []
+    cursor = 0
+    for off in sorted(placed):
+        if off > cursor:
+            gaps.append((cursor, off - cursor))
+            out.extend(b"\x00" * (off - cursor))
+        elif off < cursor:
+            # Overlap: only append the part beyond the cursor.
+            overlap = cursor - off
+            if overlap >= len(placed[off]):
+                continue
+            out.extend(placed[off][overlap:])
+            cursor += len(placed[off]) - overlap
+            continue
+        out.extend(placed[off])
+        cursor = off + len(placed[off])
+    return bytes(out), gaps
+
+
+# ------------------------------------------------------------- capture output --
+def open_capture(path, client, server, pid, server_ports, clock):
+    """Start a live capture file: origin FIRST, then the wire metadata. Returns a writer.
+
+    The origin record is written explicitly as LIVE -- origin.py never infers LIVE, by
+    design, so a live capture that forgets to say so is UNKNOWN forever. `clock` is passed
+    in (time.perf_counter) so the pure tests can supply a deterministic one.
+    """
+    fh = open(path, "w", encoding="utf-8")
+    rec = origin.record("toolkit/harness/wirecapture.py", origin.LIVE,
+                        note="off-wire ciphertext; key from keytap.py, decrypt with replay.py")
+    fh.write(json.dumps(rec) + "\n")
+    fh.write(json.dumps({"kind": "wire_meta", "client": client, "server": server,
+                         "pid": pid, "server_ports": sorted(server_ports)}) + "\n")
+    fh.flush()
+    t0 = clock()
+
+    def record(direction, seq, payload):
+        fh.write(json.dumps({"kind": "wire", "dir": direction, "seq": seq,
+                             "t": clock() - t0,
+                             "payload": payload.hex()}) + "\n")
+        fh.flush()
+
+    return fh, record
+
+
+def load_wire(path):
+    """Read a wire capture back into (meta, {C2S: bytes, S2C: bytes}, gaps). For replay."""
+    meta = None
+    segs = {C2S: [], S2C: []}
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            try:
+                r = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if not isinstance(r, dict):
+                continue
+            if r.get("kind") == "wire_meta":
+                meta = r
+            elif r.get("kind") == "wire" and r.get("dir") in (C2S, S2C):
+                segs[r["dir"]].append((r["seq"], bytes.fromhex(r.get("payload", ""))))
+    streams, gaps = {}, {}
+    for d in (C2S, S2C):
+        streams[d], gaps[d] = reassemble(segs[d])
+    return meta, streams, gaps
+
+
+# ------------------------------------------------------------ WinDivert layer --
+class WinDivertError(SystemExit):
+    """The driver could not be used. Never a silent no-op -- a capture that records
+    nothing must say why, or a live run looks like it worked and produced an empty file."""
+
+
+def _load_windivert():
+    import ctypes
+    from ctypes import wintypes
+    try:
+        dll = ctypes.WinDLL("WinDivert.dll", use_last_error=True)
+    except OSError:
+        raise WinDivertError(
+            "WinDivert.dll not found. The off-wire capture needs it (CLAUDE.md carve-out,\n"
+            "PLAN.md §6.1). Put WinDivert.dll + WinDivert64.sys beside the client's run dir\n"
+            "or on PATH, and open the capture from an ELEVATED shell -- the first open loads\n"
+            "a kernel driver. Download: https://reqrypt.org/windivert.html (LGPLv3).")
+    dll.WinDivertOpen.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int16,
+                                  ctypes.c_uint64]
+    dll.WinDivertOpen.restype = wintypes.HANDLE
+    dll.WinDivertRecv.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_uint,
+                                  ctypes.POINTER(ctypes.c_uint), ctypes.c_void_p]
+    dll.WinDivertRecv.restype = wintypes.BOOL
+    dll.WinDivertClose.argtypes = [wintypes.HANDLE]
+    return dll, ctypes, wintypes
+
+
+def _filter(server_ip, server_ports):
+    # Parenthesised deliberately: WinDivert's `and` binds tighter than `or`, so without the
+    # groups this would read as "(tcp and SrcAddr) or DstAddr" and sniff unrelated traffic.
+    ports = " or ".join(f"tcp.SrcPort == {p} or tcp.DstPort == {p}"
+                        for p in sorted(server_ports))
+    return (f"ip and tcp and (ip.SrcAddr == {server_ip} or ip.DstAddr == {server_ip}) "
+            f"and ({ports})").encode()
+
+
+def capture_session(pid, server_ip, server_ports, out_path, seconds=0, clock=time.perf_counter):
+    """Sniff the client's connection to the server and record it. Driver-dependent.
+
+    Finds the client's own connection via tcptable to fill the capture's metadata, opens a
+    WinDivert SNIFF handle filtered to the server endpoint, and records every TCP segment's
+    payload with its sequence number until the connection closes (FIN/RST both ways) or
+    `seconds` elapses.
+    """
+    dll, ctypes, _ = _load_windivert()
+    conns = [c for c in tcptable.connections(pid)
+             if c["remote"].rsplit(":", 1)[0] == server_ip]
+    client = conns[0]["local"] if conns else f"pid{pid}"
+    server = f"{server_ip}:{sorted(server_ports)[0]}"
+
+    INVALID = ctypes.c_void_p(-1).value
+    handle = dll.WinDivertOpen(_filter(server_ip, server_ports), 0, 0, 0x0001)  # SNIFF
+    if handle == INVALID or handle is None:
+        err = ctypes.get_last_error()
+        raise WinDivertError(
+            f"WinDivertOpen failed (WinError {err}). The usual cause is a non-elevated\n"
+            f"shell -- loading the driver needs admin. Re-run elevated.")
+
+    fh, record = open_capture(out_path, client, server, pid, set(server_ports), clock)
+    buf = (ctypes.c_char * 65535)()
+    recv_len = ctypes.c_uint(0)
+    addr = (ctypes.c_char * 64)()        # WINDIVERT_ADDRESS; contents unused (see docstring)
+    deadline = clock() + seconds if seconds else None
+    n = 0
+    try:
+        while True:
+            if deadline and clock() > deadline:
+                break
+            if not dll.WinDivertRecv(handle, buf, 65535, ctypes.byref(recv_len),
+                                     ctypes.byref(addr)):
+                continue
+            pkt = parse_ipv4_tcp(bytes(buf[:recv_len.value]))
+            if not pkt:
+                continue
+            d = direction_of(pkt, server_ip, server_ports)
+            if d is None:
+                continue
+            if pkt["payload"]:
+                record(d, pkt["seq"], pkt["payload"])
+                n += 1
+    finally:
+        dll.WinDivertClose(handle)
+        fh.close()
+    return n, out_path
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--pid", type=int, required=True, help="the client process to follow")
+    ap.add_argument("--server", required=True, help="server ip:port (the endpoint to sniff)")
+    ap.add_argument("--ports", default="", help="extra server ports, comma-separated")
+    ap.add_argument("--seconds", type=int, default=0, help="stop after N seconds (0 = until closed)")
+    ap.add_argument("--out", required=True, help="capture file to write")
+    a = ap.parse_args()
+    ip, _, port = a.server.rpartition(":")
+    ports = {int(port)} | {int(p) for p in a.ports.split(",") if p.strip()}
+    n, path = capture_session(a.pid, ip, ports, a.out, a.seconds)
+    print(f"recorded {n} segments to {path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
