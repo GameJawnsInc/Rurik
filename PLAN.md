@@ -353,7 +353,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
-| **R0b** | Proxy capture of a real session | Both directions of a live session tee'd to disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. Gated on Probe 3 and on §7 Q4. |
+| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** Unblocked by §7 Q4; the remaining precondition is a build with unpatched DH (§6.2 item 1), which is this rung's own first commit. |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ⬜ not started. Requires R0b, so it inherits R0b's block. |
 
 Two structural changes, both argued below in §4.
@@ -417,9 +417,19 @@ raises one scope question no data can answer — whether "playable solo end to e
 the Ascalon Academy mission cluster and the hand-off into post-Searing, or stops at the
 mission being completable.
 
-**R0b replaces R0's C++ harness.** The capture harness stops being an in-process DLL and becomes a
-proxy. Same deliverable, a fraction of the friction, and it cannot be broken by a client patch
-moving an address.
+**R0b replaces R0's C++ harness.** The capture harness stops being an in-process DLL. It does
+**not** become a proxy — this section originally said it would, and that was wrong for a reason
+this document establishes elsewhere and then failed to apply here: §1.5 and §1.6 record that the
+auth and game channels are keyed by Diffie-Hellman between the client and the server, which is
+precisely why *our* server cannot talk to a stock client without patching its parameters. A proxy
+sits in the same position and holds neither private exponent, so it can relay ciphertext and read
+none of it.
+
+What R0b actually is: **a client we control, recording its own decrypted stream.** Headquarter's
+headless-client approach (MIT, C, tracking live builds) is the instrument named in §4-A1, and
+`gw-preservation/network-logger` is the in-client route to read for it. That keeps the property
+the proxy idea was chosen for — it is not an in-process DLL hooking addresses that move with every
+build — while being a thing that can exist.
 
 **R1.5, the tape player, is new and it is the best idea to come out of this exercise.** Before
 writing any simulating server, write a server that replays a recorded StoC stream at recorded
@@ -560,7 +570,7 @@ prior art.
 
 - **Days 1–14** — Probes 1 and 2. Build and run OpenTyria (A2). In parallel, agents translate
   `msgdefs.c` into the schema and stand up codegen (A3). *Target: a character standing in a map.*
-- **Days 15–45** — Probe 3. If it passes, the proxy becomes the capture harness (A1) and runs on
+- **Days 15–45** — Probe 3. If it passes, the instrumented client becomes the capture harness (A1) and runs on
   every session from then on, including sessions played for fun. Begin the WASM symbolization
   pipeline (A4, A7).
 - **Days 46–90** — Tape player (R1.5). Skill-table extraction and the referee'd data pipeline (A6).
@@ -576,7 +586,7 @@ changes is that capture is now cheap enough to leave running rather than a proje
 | Risk | Hedge | Cost |
 |---|---|---|
 | A prior-art repo disappears | **Already happening** — `gwdevhub/gw_in_browser` 404s today while `gwnative` still names it upstream **[measured]**. `toolkit/mirror_priorart.py` clones the field into `vault/mirrors/` with a manifest recording each HEAD; run it monthly. | done |
-| Service closes or changes | Leave the proxy on for every session; zero marginal cost once built | hours |
+| Service closes or changes | Record every live session from inside the instrumented client; zero marginal cost once built. *The hedge is unbuilt, so the risk is currently unhedged — and this row said "leave the proxy on", which was never a thing that could exist (§3 R0b).* | hours |
 | **Client auto-patches over ground truth, and the DH keys rotate with it** | **This happened during the session that wrote this document.** The updater replaced `Gw.exe` (10,404,032 → 10,483,904 bytes) and `Gw.dat`, moved the DH struct from RVA `0x6843e8` to `0x6910d8`, and **changed both the prime and the server's public key**. ArenaNet rotates the Diffie-Hellman parameters per build — which is why Headquarter stores 107 server keys rather than one constant. Consequences: the client patch is a permanent recurring step, not a one-time one; every capture and schema revision must carry a build id (free, per §2); and re-snapshot *before* accepting an update prompt, never after. Both builds are now vaulted. | ongoing |
 | **The client phones home when it crashes** | `Gw.exe` embeds Sentry: `SENTRY_DSN`, `sentry.native`, `getsentry`, `x-sentry-rate-limits` are all present **[measured]**. The working method here is inject, patch, malform, crash — so the client's own outbound reporting channel is a posture problem HANDOFF §9 never considered, since §9 reasons only about server-side visibility. Neutralise it before the first malformed packet: block the endpoint at the firewall or null the DSN in the patched copy. Minutes, and it belongs on the R0 checklist next to the vault snapshot. | minutes |
 | **The captures contain the owner's real ArenaNet credential** | The client sends its saved password to our own webgate on every login, and `vault/captures/portal/*.jsonl` records it as base64 — `<Password>…</Password>`, reversible in one command **[measured 2026-08-04]**. It has never been in git: `vault/` was gitignored in the first commit, before any content existed, so there is no history to rewrite and "private repo" does not bear on it either way. **Owner's decision, 2026-08-05: the repo stays private, and a credential-scrubbing / anonymising pass is a gate before any public push** — not a change to capture fidelity now, since the whole method depends on recording what the client actually sent. Until then the vault is the only copy and stays local. | deferred, by decision |
@@ -661,11 +671,13 @@ account-visible event happens before the patch matters.
    sessions), 0 live — and 113 of 113 game-channel files are ours**, so it refuses
    nothing today and refuses the first one that appears.
 
-**And R0b's deliverable is wrong.** §3 calls it "proxy capture of a real session", which
-cannot work: the channel is DH-keyed end to end and a proxy has neither private exponent.
-The repo already knows this — it is why our own server has to patch the client at all.
-R0b must be re-specified as an instrumented client (Headquarter's approach) rather than a
-proxy, before it is started rather than after.
+**R0b's deliverable was wrong, and is fixed.** §3 called it "proxy capture of a real
+session", which cannot work: the channel is DH-keyed end to end and a proxy holds neither
+private exponent — the same fact that forces us to patch the client to talk to our own
+server. Re-specified 2026-08-06 in §3's rung table and in §4's structural note as capture
+from inside a client we control, before the rung is started rather than after it fails.
+The property the proxy idea was chosen for survives: it is still not an in-process DLL
+hooking addresses that move with every build.
 
 ### 6.1 The derivation register
 
