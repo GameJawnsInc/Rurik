@@ -1276,7 +1276,16 @@ def handle_portal_login(values, send, store, conn_id, allow_any, rec):
         TEST_CHAR_UUID,                           # current character
         8,                                        # unknown  [low confidence]
         bytes.fromhex("0100040057000100"),        # feature/slot bits
-        24,                                       # EULA revision — NOT a bool
+        # The EULA revision this account has ALREADY ACCEPTED (not a bool, not the
+        # current revision). The client shows its EULA dialog when this is below its own
+        # current revision, and blocks entry to the world until the user clicks Accept.
+        # OBSERVED: the client's current revision is 26 -- it sends ACCEPT_EULA [_, 26]
+        # when a user accepts (captures 2026-08-05). We were sending 24, one bump stale
+        # (the 2026-08-04 client update), so the dialog fired every launch. Sending 26 --
+        # "this account is current on the EULA" -- is both the accurate value and what
+        # lets an automated loopback run reach the map. On a live run the human accepts
+        # ArenaNet's real EULA; this field is only our own server's answer.
+        26,                                       # EULA revision accepted [OBSERVED: current is 26]
         3,                                        # unknown  [low confidence]
     ], "ACCOUNT_INFO")
     send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0], "REQUEST_RESPONSE(OK)")

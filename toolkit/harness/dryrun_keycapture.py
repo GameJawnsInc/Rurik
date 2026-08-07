@@ -150,7 +150,11 @@ def stop(procs):
 
 def main():
     st = Stage()
-    scratch = vaultpath.vault_path("captures", "live")
+    # NOT under vault/captures/: this is loopback test data stamped origin: live (the wire
+    # capture is the live tool run against our own server), and captures/ is what the suite
+    # scans -- test_origin's "no live capture exists yet" and test_scrub both trip on it. A
+    # dedicated dryrun/ dir keeps the proof without polluting the real capture tree.
+    scratch = vaultpath.vault_path("dryrun")
     os.makedirs(scratch, exist_ok=True)
     wire = os.path.join(scratch, "dryrun_wire.jsonl")
     decrypted = os.path.join(scratch, "dryrun_decrypted.jsonl")

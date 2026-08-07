@@ -110,6 +110,11 @@ user32.BringWindowToTop.argtypes = [wintypes.HWND]
 user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
 user32.AttachThreadInput.restype = wintypes.BOOL
+user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT, ctypes.c_void_p,
+                                         wintypes.UINT]
+user32.SystemParametersInfoW.restype = wintypes.BOOL
+SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001
+_fg_lock_cleared = False
 
 user32.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
 user32.mouse_event.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.DWORD,
@@ -299,6 +304,16 @@ def _force_foreground(hwnd):
     """Raise hwnd, working around Windows' foreground lock. Returns success."""
     if user32.GetForegroundWindow() == hwnd:
         return True
+    global _fg_lock_cleared
+    if not _fg_lock_cleared:
+        # Windows denies a background process SetForegroundWindow for a timeout after the
+        # user's last input -- the "foreground lock". The AttachThreadInput dance below
+        # defeats it usually but not always, which is why an automated Play click could
+        # need the operator's own mouse to land. Setting the lock timeout to 0 lifts it.
+        # fWinIni=0: change the running value only, do not persist to the registry -- it
+        # resets on the next reboot, and this is a driving harness, not a system tweak.
+        user32.SystemParametersInfoW(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, None, 0)
+        _fg_lock_cleared = True
     fg = user32.GetForegroundWindow()
     cur = kernel32.GetCurrentThreadId()
     other = user32.GetWindowThreadProcessId(fg, None) if fg else 0

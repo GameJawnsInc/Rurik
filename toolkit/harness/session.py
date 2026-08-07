@@ -361,10 +361,55 @@ def judge(tails, checkpoints, t0, timeout_each=45):
 # more. The fractions are button centers within the window, read from run
 # screenshots: Log In (login screen), I Accept (EULA), Play (character select).
 # The EULA appears on every login -- nothing server-side remembers ACCEPT_EULA.
+# With -email/-password/-character (accounts.login_args) the client keys the channel, logs
+# in past a suppressed EULA (authsrv sends the current revision in ACCOUNT_INFO), and lands
+# on character select with the account's character already selected. -character only
+# SELECTS it -- it does not enter the world -- so `map` needs one Play click. That click is
+# EVENT-DRIVEN (`play`), not on a timer: the game loads near-instantly, so a fixed delay
+# either clicks the loading screen or, set late to be safe, clicks into the map after Play
+# already entered. `play` waits for login, then clicks Play and STOPS the instant the
+# client requests its instance, so it never clicks twice on the map. `login` needs no
+# input; auto-login gets there on its own.
 ACTIONS = {
-    "login": "5:click:0.316,0.385",
-    "map": "5:click:0.316,0.385 4:click:0.556,0.875 4:click:0.835,0.973",
+    "login": "3:enter",
+    "map": "0:play",
 }
+
+# Play button centre, MEASURED from a real character-select screenshot (green button at
+# pixel (1607,1010) in a 1926x1039 window) -- and the same spot the working 2026-08-06
+# drive clicked. An earlier value of 0.936 was measured against a wrong height and landed
+# just above the button.
+PLAY_FX, PLAY_FY = 0.834, 0.972
+
+
+def _play(tails, proc, outdir):
+    """Wait for login, then click the Play button until the client enters the world.
+
+    Event-driven: it starts once login completes (character select is up, -character
+    already selected) and STOPS the instant the client requests its game instance, so it
+    never clicks into the map. dc.click raises the client foreground first.
+    """
+    login = by_any(by(kind="login_ok"), by(kind="login_rejected"))
+    ev, idx = tails["auth"].wait_for(login, timeout=90)
+    if not ev:
+        print("  play: login never completed", flush=True)
+        return False
+    delivered = False
+    for attempt in range(6):
+        hwnd, _ = dc.wait_window(proc.pid, timeout=5)
+        if not hwnd:
+            break
+        time.sleep(0.5)                          # let character select paint
+        if dc.click(hwnd, proc.pid, PLAY_FX, PLAY_FY):
+            delivered = True
+        got, idx = tails["auth"].wait_for(by(kind="game_instance_request"),
+                                          timeout=2.0, since=idx)
+        if got:
+            print(f"  play: entered the world (click {attempt + 1})", flush=True)
+            return True
+    print("  play: clicked Play but saw no game-instance request "
+          f"(clicks landed: {delivered})", flush=True)
+    return delivered
 
 
 def shot_if_foreground(hwnd, pid, path):
@@ -473,6 +518,8 @@ def run_client(a, outdir):
                 delivered = dc.click(hwnd, proc.pid, fx, fy)
             elif kind == "enter":
                 delivered = dc.press_enter(hwnd, proc.pid)
+            elif kind == "play":
+                delivered = _play(tails, proc, outdir)
             else:
                 raise SystemExit(f"unknown action kind {kind!r} in {spec!r}")
             sent.append({"spec": spec, "sent": delivered})

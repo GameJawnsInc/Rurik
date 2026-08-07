@@ -61,6 +61,13 @@ SYNTHETIC = {
     "label": "synthetic",
     "email": "loopback@rurik.invalid",
     "password": "not-a-real-password",
+    # Our loopback server serves exactly one character (authsrv.TEST_CHAR_NAME). Naming it
+    # with -character is what turns -email/-password into an actual auto-login: the client's
+    # own rule (wiki UPSTREAM, corroborated -- `character` is in the arg table, MEASURED
+    # argtable.py) is that -password auto-logs-in only WITH -character and -email. Without
+    # it the login screen comes up with an empty password field and a dead Log In button,
+    # which is exactly what we saw. With it, the client goes straight into the world.
+    "character": "Test Warrior",
     "automation": True,
     "live": False,
 }
@@ -177,10 +184,25 @@ def _is_loopback(host):
 def login_args(acct):
     """The client flags that log this account in without touching the saved one.
 
-    MEASURED (toolkit/clientscan/argtable.py, build 38797): `email`, `password` and
-    `autologin` are all in the client's own 41-entry argument table.
+    MEASURED (toolkit/clientscan/argtable.py, build 38797): `email`, `password`,
+    `character` and `autologin` are all in the client's own 41-entry argument table.
+
+    `-character` is what makes it an AUTO-login rather than a pre-filled login screen: the
+    client auto-logs-in only when -password is paired with -character and -email. An
+    account with a `character` gets all three and goes straight into the world; one without
+    gets the login screen (a live account that has not named its character, say).
     """
-    return ["-email", acct["email"], "-password", acct["password"]]
+    args = ["-email", acct["email"], "-password", acct["password"]]
+    if str(acct.get("character") or "").strip():
+        # -character selects the account's character and -autologin carries it INTO the
+        # world -- but only while the client window is the active foreground one: GW does
+        # not advance an inactive window past character select, which is why -autologin
+        # alone looked like it did nothing until the harness started raising the window.
+        # MEASURED both are in the client's arg table (argtable.py). The driver's job is
+        # then just to keep the window foreground until it enters -- no click, no
+        # coordinates (session.py `_play`).
+        args += ["-character", acct["character"], "-autologin"]
+    return args
 
 
 def redact(argv):
