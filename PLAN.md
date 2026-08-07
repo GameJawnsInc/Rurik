@@ -894,24 +894,26 @@ which retires old item 3), the skill table extracted and joined to the wiki by i
 (`toolkit/clientscan/skilltable.py`, which retires old item 6), a hostile NPC that can be
 attacked, killed and revived, and the content store (`content/*.toml`, `501698b`).
 
-1. **Build the capture harness (A1).** *Started 2026-08-06.* Every one of the 424 captures in
-   the vault is Rurik talking to Rurik; **not one byte is ArenaNet's**, so R0b is unmet and
-   R1.5 and R4c's original criterion are both blocked behind it. §4-A1 says "build it first
-   regardless of every other choice in this document" and it had been second on this list
-   since the list was written.
-   **Done:** the live-capture build exists and the launch gate binds a binary to a target
-   (§6.2 precondition 1). **Next, in order:** close every client and finish
-   `make_run_dir.py --live` so there is a complete launch target; then the capture itself.
-   Start from Headquarter's headless-client approach; read `gw-preservation/network-logger`
-   for the in-client route.
-   *What that capture has to produce is not obvious and is worth settling before writing it:*
-   `origin.py`'s docstring already defers to "a future live-capture tool", and today **no
-   client-side capture path exists at all** — the only `Recorder` in the tree is inside
-   `authsrv.py` and fires only when a client connects to a listener we run. Byte-for-byte
-   replay is also not achievable from today's captures: s2c ciphertext is never written to
-   the `.raw` sidecar, and the `sent` events that would let it be reconstructed are logged
-   **outside** the send lock, so the recorded order can differ from the wire order under
-   thread contention. Fix that before it becomes the only recording of the real server.
+1. **Build the capture harness (A1).** *Started 2026-08-06, in build.* Every capture in the
+   vault is Rurik talking to Rurik; **not one byte is ArenaNet's**, so R0b is unmet and R1.5
+   and R4c's original criterion are both blocked behind it.
+   **Done:** the live-capture build exists, the launch gate binds a binary to a target
+   (§6.2 preconditions, all met), and the **decryption engine is built and proven** —
+   `toolkit/authsrv/replay.py` reads a `.raw` back and decrypts it offline, 329 captures
+   reproduced exactly (which also closed R0a's caveat, §3.1). The route is **decided**
+   (owner, 2026-08-07): **patch the real client to log its own session key**, capture
+   ciphertext passively, decrypt with `replay.py`. The headless-client route is rejected —
+   its client→server bytes are our reconstruction, not ArenaNet's, and both directions are
+   needed. See [studies/livekey/FINDINGS.md](studies/livekey/FINDINGS.md).
+   **Next, in order:** (a) finish the disassembly study — locate the instruction where the
+   20-byte key material is fully formed (the `CptSha.cpp` SHA-1 is anchored at VA
+   `0x0090a02c`, `CptRc4.cpp` holds the cipher); (b) add a signature-anchored key-logging
+   patch to `make_custom_client.py`, verifiable **on loopback** against a build we can
+   already decrypt; (c) the passive-capture + `origin: live` + scrub wiring; (d) the live
+   verification run, last and human-driven.
+   *The s2c-ordering hazard this item used to raise is closed:* the keystream `seq` work
+   (`b70920e`) numbers each send inside the send lock, so a capture sorts back to true wire
+   order regardless of thread contention.
 2. **Spec the row format before the sniffer.** The half nobody owns: even with tape, nothing
    turns a capture into a content row. `content/*.toml` now gives that output a shape, so the
    job is a capture→row compiler, not a parser. **SOURCED:** this is the difference between
