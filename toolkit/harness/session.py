@@ -298,6 +298,16 @@ MAP_CHECKPOINTS = [
      "game DH failed -- same keys serve both channels, so this is new information"),
     ("client requested its spawn", "game", by(kind="decoded", opcode=0x0088),
      "connected but stopped before the spawn rung -- run progress.py for the ladder"),
+    # R2's own acceptance criterion is "your own body standing in a real map", and
+    # this ladder used to stop one rung short of it: 0x0088 is the client ASKING for
+    # its spawn, which it does before it has one. 0x0090 is the last rung in
+    # progress.py's LADDER and the client only sends it once it is in the instance
+    # asking who else is there. Until 2026-08-06 R2 was assumed by every run rather
+    # than asserted by any of them.
+    ("body is in the map", "game", by(kind="decoded", opcode=0x0090),
+     "reached the spawn request and stopped -- the client asked for its spawn and "
+     "never asked for the player list, so it did not finish loading in. This is R2's "
+     "acceptance criterion; run progress.py to see the furthest rung reached"),
 ]
 
 

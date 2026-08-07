@@ -5,8 +5,10 @@ strategy is in [HANDOFF.md](HANDOFF.md), the corrected mechanism and the ladder 
 [PLAN.md](PLAN.md), and every operational procedure in [RUNBOOK.md](RUNBOOK.md).
 Read those rather than re-deriving them here. This file is the house rules.
 
-Current edge: R1 is done (a real client reaches character select and a body stands
-in a map); R2 is the game server. `PLAN.md` §8 is the live list.
+**Where the project is: [PLAN.md](PLAN.md) §3, and nowhere else.** That table is the
+single status authority, dated and stamped with a commit hash per rung. This file and
+`RUNBOOK.md` deliberately do not restate it — they did, they disagreed, and the newest
+of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
 
 ## Non-negotiable
 

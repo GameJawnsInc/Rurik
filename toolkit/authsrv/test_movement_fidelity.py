@@ -27,6 +27,15 @@ Three measurements, in decreasing order of how much they tell us:
   3. CORRECTION RATE. How often we had to overrule the client with a teleport.
      Every one of those is a visible glitch.
 
+  4. COLLISION FIRING, and 5. MESH COVERAGE. Added 2026-08-06, and they are here
+     because they are R3's acceptance criterion -- "you walk to a wall and are
+     stopped" -- which was landed at `a97c7c4` and then assumed by every run
+     afterwards rather than asserted by any of them. `clipped` is the server
+     refusing a destination the navmesh does not contain; `on_mesh` is whether the
+     client's own stop lands in our trapezoids. Mesh coverage is deliberately not
+     required to be 100%: the client stops against collision geometry we have never
+     read, so the misses are gaps in OUR data and are the ones worth studying.
+
 Scored over every game-channel capture in the vault:
 
     python toolkit/authsrv/test_movement_fidelity.py
@@ -78,10 +87,13 @@ MOVEMENT_TYPE_FORWARD = 1
 SPEED_TOLERANCE = 0.10          # p75 within 10% of DEFAULT_RUN_SPEED
 DRIFT_P50_LIMIT = 60.0          # median disagreement at a stop, in units
 ACCEPT_RATE_FLOOR = 0.75        # fraction of stops needing no teleport
+ON_MESH_FLOOR = 0.80            # fraction of stops landing in our own trapezoids
 
-# Three checks: one speed, two drift. Both sections must run for this test to mean
-# what its name says. It used to skip either one and still print ALL CHECKS PASSED.
-CHECK_FLOOR = 3
+# Five checks: one speed, two drift, and two that gate R3 -- collision firing at all,
+# and the client's stops landing on our own mesh. Both sections must run for this test
+# to mean what its name says; it used to skip either one and still print ALL CHECKS
+# PASSED. Measured from a real green run over the whole corpus on 2026-08-06.
+CHECK_FLOOR = 5
 
 LEDGER = checks.Ledger("movement fidelity", floor=CHECK_FLOOR)
 check = checks.adopt(LEDGER)
@@ -241,6 +253,36 @@ def main():
         check(rate >= ACCEPT_RATE_FLOOR,
               f"at least {ACCEPT_RATE_FLOOR:.0%} of stops need no teleport "
               f"(got {rate:.0%}, {accepted}/{len(reports)})")
+        # R3's own acceptance criterion -- "you walk to a wall and are stopped" --
+        # had no gate anywhere until 2026-08-06. It was landed at a97c7c4 and
+        # thereafter assumed. These two checks are that gate, and they are scored
+        # from the same corpus rather than needing a walk to be driven live.
+        #
+        # `clipped` is the server refusing a destination the navmesh does not
+        # contain; `on_mesh` is whether the client's own reported stop lands in our
+        # trapezoids. Both must be read only over reports that actually recorded the
+        # field -- older captures predate it and carry None, and counting those as
+        # False would quietly turn a missing measurement into a passing one.
+        clip = [r["clipped"] for r in reports if r.get("clipped") is not None]
+        mesh = [r["on_mesh"] for r in reports if r.get("on_mesh") is not None]
+        if clip:
+            fired = sum(1 for c in clip if c)
+            check(fired > 0,
+                  f"collision fired: the navmesh refused at least one destination "
+                  f"({fired} of {len(clip)} stops clipped)")
+        else:
+            LEDGER.skip("collision", "no capture recorded the `clipped` field")
+        if mesh:
+            on = sum(1 for m in mesh if m)
+            check(on / len(mesh) >= ON_MESH_FLOOR,
+                  f"at least {ON_MESH_FLOOR:.0%} of stops land on our own mesh "
+                  f"(got {on / len(mesh):.0%}, {on}/{len(mesh)})")
+            print("     Not 100%, and it should not be: the client stops against")
+            print("     collision geometry we have never read, so the misses are")
+            print("     gaps in OUR trapezoids and are the ones worth studying.")
+        else:
+            LEDGER.skip("mesh coverage", "no capture recorded the `on_mesh` field")
+
         over = sum(1 for d in drifts if d > MAXIMUM_ALLOWED_CORRECTION)
         if over:
             print(f"     {over} stop(s) exceeded the {MAXIMUM_ALLOWED_CORRECTION:.0f}"

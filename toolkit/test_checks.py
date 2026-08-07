@@ -30,7 +30,7 @@ def run(build):
 
 
 def main():
-    led = checks.Ledger("checks.py itself", floor=12)
+    led = checks.Ledger("checks.py itself", floor=14)
 
     # --- the rule that would have caught test_codec.py in 2026-08 ---------------
     def empty():
@@ -111,7 +111,71 @@ def main():
     led.ok(not phantom, "every test CLAUDE.md names still exists",
            f"missing from tree: {', '.join(phantom)}" if phantom else "")
 
+    # --- the top-level documents point at things that exist ---------------------
+    # PLAN.md §3 is now the single status authority and stamps each landed rung with
+    # a commit hash, and §3.2 grades R4b/R4c against a manifest. Both are claims that
+    # rot silently: a hash typo or a renamed study leaves a document confidently
+    # citing nothing. The rule is only worth writing down if something checks it.
+    dangling = broken_doc_links()
+    led.ok(not dangling, "every repo-relative link in the top-level docs resolves",
+           "; ".join(f"{d}: {t}" for d, t in dangling[:4]) if dangling else "")
+
+    bad_hashes = unresolvable_hashes()
+    if bad_hashes is None:
+        led.skip("commit stamps", "git not available to resolve them")
+    else:
+        led.ok(not bad_hashes,
+               "every commit hash PLAN.md §3 stamps a rung with resolves",
+               ", ".join(bad_hashes) if bad_hashes else "")
+
     return led.verdict()
+
+
+TOP_DOCS = ("CLAUDE.md", "PLAN.md", "RUNBOOK.md", "HANDOFF.md")
+
+
+def broken_doc_links():
+    """(doc, target) for every markdown link to a repo path that does not exist."""
+    root = repo_root()
+    out = []
+    for doc in TOP_DOCS:
+        path = os.path.join(root, doc)
+        if not os.path.isfile(path):
+            continue
+        with open(path, encoding="utf-8") as fh:
+            text = fh.read()
+        for target in re.findall(r"\]\(([^)#\s]+)\)", text):
+            if target.startswith(("http://", "https://", "mailto:")):
+                continue
+            if not os.path.exists(os.path.join(root, target.split("#")[0])):
+                out.append((doc, target))
+    return out
+
+
+def unresolvable_hashes():
+    """Short hashes PLAN.md §3 cites that git cannot resolve. None if no git."""
+    import subprocess
+    root = repo_root()
+    path = os.path.join(root, "PLAN.md")
+    if not os.path.isfile(path):
+        return []
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    section = text[text.find("## 3. The revised ladder"):text.find("## 4.")]
+    # Backticked 7-to-10 hex words. Long enough not to catch `0x1B97D` or a year.
+    candidates = set(re.findall(r"`([0-9a-f]{7,10})`", section))
+    if not candidates:
+        return []
+    bad = []
+    for h in sorted(candidates):
+        try:
+            r = subprocess.run(["git", "-C", root, "cat-file", "-t", h],
+                               capture_output=True, text=True, timeout=15)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if r.returncode != 0 or r.stdout.strip() != "commit":
+            bad.append(h)
+    return bad
 
 
 def repo_root():

@@ -5,10 +5,14 @@ driven from. Every `python …` line works unchanged in PowerShell, `cmd.exe` an
 bash alike; the one shell-sensitive line is launching the client, which needs a
 leading `&` (step 3).
 
-**State of play (2026-08-04): R1 is done.** A real client, build 38797, reaches
-character select and displays "Test Warrior". Clicking *Play* is unimplemented —
-the client will ask for a game instance and get nothing back. That is the current
-edge, and its questions land in the vault in plaintext.
+**Where the project is: [PLAN.md](PLAN.md) §3.** This runbook deliberately does not
+say — it used to, and it was wrong for 40 hours while asserting that clicking *Play*
+was unimplemented, long after a body was standing in a map and walking into walls.
+A procedure document that also claims to know the state of play will drift from it,
+and this is the first file a cold session opens.
+
+What this file is for: driving the real client against the stack, whatever rung the
+stack is on.
 
 ---
 

@@ -337,18 +337,85 @@ mock server. Salvage: a null render device belongs on the capture-arc list next 
 
 ## 3. The revised ladder
 
-| Rung | Deliverable | Acceptance criterion | Cheapest falsifying probe |
+**This table is the project's single status authority.** `CLAUDE.md` and `RUNBOOK.md`
+point here and do not restate it. That rule exists because on 2026-08-06 the three
+documents asserted three different current positions, the newest of them 40 hours stale,
+and a cold agent session reads whichever it opens first. If you land a rung, date it and
+stamp it with a commit hash **in the same commit**; if you cannot, the rung is not landed.
+
+| Rung | Deliverable | Acceptance criterion | Status |
 |---|---|---|---|
-| **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **done this session** — gate proven both directions, client pinned and hash-verified, prior art mirrored |
-| **R0b** | Proxy capture via the WebSocket bridge | Both directions of a real session tee'd to disk | Probe 3 |
-| **R1** | Handshake against a local server | Client reaches character select | ✅ **DONE 2026-08-04.** Build 38797 rendered "Test Warrior" at character select against our portal, our DH parameters, our ARC4 channel and our five-message login burst. |
-| **R2** | Presence | Your own body standing in a real map | Probe 4 — OpenTyria may deliver this directly |
-| **R1.5** | **Tape player** *(new rung)* | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | Requires R0b only |
-| **R3** | Movement on real geometry | You walk to a wall and are stopped | `GmPaths.c` + `PathingMap` exist; this is a quarter, not a week |
-| **R4a/b/c** | Agent model, skill substrate, AI and spawns | As HANDOFF.md | — |
-| **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | — |
+| **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **2026-08-04** — gate proven both directions, client pinned and hash-verified, prior art mirrored. *Caveat: closed against three facts, none of which is the stated criterion — nothing has ever read a `.raw` back. See §3.1.* |
+| **R1** | Handshake against a local server | Client reaches character select | ✅ **2026-08-04 22:58**, `e34c417`. Build 38797 rendered "Test Warrior" against our portal, our DH parameters, our ARC4 channel and our login burst. |
+| **R2** | Presence | Your own body standing in a real map | ✅ **2026-08-05 11:15**, `aedc214`. |
+| **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. |
+| **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). **Nothing swings back and the player cannot die**, which is the half the criterion actually names. There is still no agent table — `studies/enemy/PLAN.md` §7.2. |
+| **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
+| **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
+| **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
+| **R0b** | Proxy capture of a real session | Both directions of a live session tee'd to disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. Gated on Probe 3 and on §7 Q4. |
+| **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ⬜ not started. Requires R0b, so it inherits R0b's block. |
 
 Two structural changes, both argued below in §4.
+
+### 3.1 What "done" is doing in the table above
+
+R0a is the honest wart and is marked rather than quietly re-worded. Its criterion is *a
+capture replays byte-identically from disk*, and nothing in `toolkit/` has ever read a
+`.raw` file back. What was actually achieved — the gate, the pinned client, the mirrors —
+is worth having and is not what the row claimed. Either build the reader or restate the
+criterion; do not leave a ✅ standing on a different fact.
+
+The lesson generalises, and it is why the status column now carries hashes: **R2 and R3
+were both landed and neither was recorded here for 40 hours**, while R3's own estimate
+in this table ("a quarter, not a week") stayed in print through the six hours it actually
+took. A ladder nobody updates stops being a control instrument in both directions at
+once — it under-reports what is done and keeps mis-estimating what is next.
+
+### 3.2 R4b and R4c, rewritten as counts
+
+The old criteria could not be evaluated. R4b's was *"one skill from each mechanical
+family resolves correctly"* and **"mechanical family" is enumerated nowhere in this
+repo**. R4c's was *"an area populates and plays like the recording"* and **there is no
+recording** — R0b has not been built, so that criterion referenced an artifact the plan
+had deprioritised.
+
+Both are now graded against an enumerated content surface:
+[studies/presearing/MANIFEST.md](studies/presearing/MANIFEST.md).
+
+- **R4b — *n* of **9**.** Pre-Searing's reachable skills span nine of the client's 21
+  player-skill `type_code` families, and R4b is met when at least one named skill id in
+  each resolves its effect correctly *against the client's own state* — not against our
+  server agreeing with itself. The manifest names an exemplar per family (Frenzy 346,
+  Flare 194, Healing Signet 1, Sever Artery 382, …). **Today n = 0.** Nine and not 21
+  because the other twelve codes have no Pre-Searing content to test against; grading
+  against 21 would grade v1 against non-v1 content.
+- **R4c — split, because half of it is blocked and reporting one number hides which.**
+  *R4c-1, capture-free*: 19 of 19 map rows with resolved file ids and arrival points that
+  pass the spawn-in-trapezoid test (today 2), ≥15 NPC templates (today 1), 2 of 2
+  mandatory quests completable, 6 of 6 quest verbs implemented, 4 of 4 services working.
+  *R4c-2, capture-gated*: 35–40 monster types with real stats and skill bars, graded on
+  **types, never on spawn instances** — spawn counts are unstatable from any source this
+  project has. R4c-2 stays at 0 and is **reported as blocked until R0b exists**, which is
+  a dependency rather than a failure and the ladder should show it as one.
+
+**Carried in the criterion rather than buried:** five real mechanical families — Shout,
+Interrupt, Well/Spirit/Trap/Ward, Block, Ritual — have **no** Pre-Searing exemplar at
+all, and five more have exactly one. A green R4b therefore does not mean the skill engine
+is general. That is the GW1 specialist's dissent from the 2026-08-06 review, now
+quantified: you can finish v1 having proven very little about whether the engine can
+drive a real Guild Wars fight. If generality matters it needs its own rung with a
+post-Searing exemplar per absent family, and that is outside the declared v1 line.
+
+*Both are proposals until the owner adopts them.* Two caveats travel with them. The
+manifest's CLIENT numbers are strong and were re-derived independently here — 19 zone
+rows at `continent == 1`, 1,333 player skills over 21 type codes. Its **WIKI numbers are
+weaker than this repo's usual bar**: the browser route was unavailable for every pass, so
+wiki figures came through search-engine prose rather than page reads, and the manifest
+says so itself. Treat any wiki-only figure as approximate until re-read. And the manifest
+raises one scope question no data can answer — whether "playable solo end to end" includes
+the Ascalon Academy mission cluster and the hand-off into post-Searing, or stops at the
+mission being completable.
 
 **R0b replaces R0's C++ harness.** The capture harness stops being an in-process DLL and becomes a
 proxy. Same deliverable, a fraction of the friction, and it cannot be broken by a client patch
@@ -471,9 +538,20 @@ parse later").
 
 ## 5. Workstreams and the first 90 days
 
+> **The day-windows below are dead, kept until the owner rules on deleting them.** Measured
+> from git against this document's own commit (`1ac675c`, 2026-08-04 19:56): the Days 1–14
+> target *"a character standing in a map"* landed 15h19m later; Days 46–90's skill-table
+> extraction landed at 19h16m; §3's separate "a quarter, not a week" estimate for R3 took
+> 21h44m. The whole 90-day programme was consumed in under 46 hours — **except** the three
+> items needing a human to act against the live service or answer an open question (A1, A2,
+> Probe 3), which are still at zero. So the estimate is wrong by 15–100× in the agent-farmable
+> lane and by nothing at all in the other, which is the useful finding: *the constraint is not
+> throughput, it is the three things below that only the owner can do.* Status is §3; what to
+> do next is §8.
+
 The human is the bottleneck for exactly three things: anything that launches the game, anything
 that judges whether the game *feels* right, and the account risk decisions. Everything else is
-agent-farmable.
+agent-farmable. **That sentence is the part of this section that held.**
 
 **Human-only:** Probes 1, 2, 4. Playtesting. Deciding whether to use a secondary account.
 **Agent-farmable:** the schema translation (A3), WASM tooling and symbolization (A4), the browser
@@ -556,37 +634,52 @@ that the client is available to anyone.
 
 ## 8. Immediate next actions
 
-**Done as of 2026-08-04** — kept short so the list stays a plan rather than a diary. R1 is
-complete: a real client reaches character select against our portal, our DH parameters, our ARC4
-channel and our login burst (`studies/handshake/PLAN.md`). The crash-telemetry channel is
-neutralised by `toolkit/clientpatch/isolate_client.ps1`, which cages the patched client to
-loopback. Operations are in [RUNBOOK.md](RUNBOOK.md).
+**Status lives in §3, not here.** This list is what to *do*; §3 is where the project *is*.
+Cross off an item in the same commit that lands it — on 2026-08-06 this list still opened
+with "R2 — the game server" thirty-two hours after R2 was standing in a map, and `CLAUDE.md`
+calls this the live list, so a cold session was being handed a finished task as its next one.
 
-1. **R2 — the game server.** Clicking *Play* makes the client send `CHANGE_PLAY_CHARACTER` and
-   `REQUEST_GAME_INSTANCE`, expecting `AUTH_SMSG_GAME_SERVER_INFO` pointing at a game server on
-   6113. That server repeats the same version → DH → ARC4 handshake we already have, then speaks a
-   different catalog: 194 client and 487 server messages, all already in `schema/messages.json`.
-   The acceptance criterion is your own body standing in a real map.
-   *Start by capturing what the client sends on Play — it decodes today, and unknown opcodes stop
-   the framer loudly rather than inventing anything.*
-2. **Build the capture harness (A1).** Still the hedge that lets Q1 stay open, and still required
-   under every strategic option. Start from Headquarter's headless-client approach; read
-   `gw-preservation/network-logger` for the in-client route. Note the shape of the win so far:
-   every hard question was settled by *capturing the client and reading it*, never by reasoning
-   about it — the UUID encoding, the token-vs-session semantics, and the wire count width were all
-   decided that way, and two of the three contradicted the written sources.
-3. **Dump the client's packet-template table** (§1.2), then reconcile it against the five existing
-   opcode corpora (A3). Build-stamp the result. Any disagreement with the client's own
-   `template_size` is a mechanically detectable defect, which is what makes this agent work.
-4. **Build OpenTyria** (`vault/mirrors/ldufr__OpenTyria`) and connect a *patched copy* of the
+**Done since this list was written** — kept to one line each so it stays a plan and not a diary.
+R2 (`aedc214`), movement and collision (`885d05d`, `a97c7c4`), the client's packet-format
+tables dumped and reconciled against our catalog at 477/477 (`toolkit/schema/test_catalog.py`,
+which retires old item 3), the skill table extracted and joined to the wiki by id
+(`toolkit/clientscan/skilltable.py`, which retires old item 6), a hostile NPC that can be
+attacked, killed and revived, and the content store (`content/*.toml`, `501698b`).
+
+1. **Build the capture harness (A1).** *Unchanged, unstarted, and now the oldest item on the
+   list.* Every one of the 413 captures in the vault is Rurik talking to Rurik; **not one byte
+   is ArenaNet's**, so R0b is unmet and R1.5 and R4c's original criterion are both blocked
+   behind it. §4-A1 says "build it first regardless of every other choice in this document"
+   and it has been second here since the list was written — resolve that contradiction
+   explicitly rather than by continuing to skip it. Start from Headquarter's headless-client
+   approach; read `gw-preservation/network-logger` for the in-client route. Gated on Q4.
+2. **Spec the row format before the sniffer.** The half nobody owns: even with tape, nothing
+   turns a capture into a content row. `content/*.toml` now gives that output a shape, so the
+   job is a capture→row compiler, not a parser. **SOURCED:** this is the difference between
+   WowPacketParser and a packet logger, and TrinityCore's whole 3.3.5a world database exists
+   because that pipeline ran while retail was on 3.3.5a. Target the first monster row, not a
+   complete zone.
+3. **Finish R4a.** Nothing swings back. The player cannot die. The agent table
+   `studies/enemy/PLAN.md` §7.2 asks for is the prerequisite, and it should read its NPCs from
+   `content/npcs.toml` rather than minting constants.
+4. **Enumerate Pre-Searing** — [studies/presearing/MANIFEST.md](studies/presearing/MANIFEST.md).
+   It is what makes R4b and R4c countable (§3.2). Keep it current as content rows land.
+5. **Build OpenTyria** (`vault/mirrors/ldufr__OpenTyria`) and connect a *patched copy* of the
    client. Never patch `C:\gw`. Fastest route to understanding the whole stack end to end.
-5. **Read `gw-preservation/server`'s pathing and instance definitions** — 397 maps and a real
-   `Gw.dat` navmesh. Read only: no license means all rights reserved.
-6. **Extract the skill table.** `Fournux/Tyria-Extractor` (MIT) already does `Gw.dat` →
-   skills/items/quests/NPCs; cross-check against `build-wars/gw-skilldata`. This is R4b's numeric
-   bootstrap and it needs no capture vault to exist. Agent work.
+   *Note: its value has dropped — the assumption it was hedging (that R1–R3 would be research)
+   was tested and did not hold. See §7 Q1.*
+6. **Read `gw-preservation/server`'s pathing and instance definitions** — 397 maps and a real
+   `Gw.dat` navmesh. Read only: no licence means all rights reserved, and `toolkit/content.py`
+   now refuses a row citing them that does not record what we verified it against.
 7. **Run Probe 3** (`vault/mirrors/shiburito__gw_in_browser`) for offline WASM analysis only —
-   not for live capture, per §1.3.
-8. **Install a .NET SDK** if the C# server core survives Q1/Q2 — only the 6.0 runtime is present
-   and the plan calls for 8+. Defer until the language decision is settled.
-9. **Re-run `toolkit/mirror_priorart.py`** monthly. Repos in this ecosystem vanish; one already has.
+   not for live capture, per §1.3. It is the only thing gating §7 Q2, which has been open since
+   the plan was written; give it a date and a default answer of "no" if it does not run by then.
+8. **The C# server core.** *Contested, and open.* This item used to read "install a .NET SDK if
+   the C# server core survives Q1/Q2". Since then ~18,000 lines of working server have been
+   written in Python, `CLAUDE.md` binds `toolkit/` to the standard library, and the 2026-08-06
+   review measured the transport at ~7,000 encode+encrypt messages per 50 ms tick against an R4
+   budget near 60 — so performance was never the constraint. The review's recommendation is to
+   strike this item and record a closed decision. **That is the owner's call and it has not been
+   made**; until it is, no new server code should presume either answer.
+9. **Re-run `toolkit/mirror_priorart.py`** monthly. Repos in this ecosystem vanish; one already
+   has.
