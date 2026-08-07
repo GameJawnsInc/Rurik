@@ -94,7 +94,7 @@ shipped and this page went on naming the script for weeks afterwards. It now
 refuses any build carrying the kill switch; check yours with
 
 ```bash
-python toolkit/clientpatch/buildid.py
+python toolkit/clientpatch/dhbuild.py
 ```
 
 Then log in at the client's own screen with **any** account name and password —
@@ -230,7 +230,7 @@ Then heartbeats with a rising tick counter, which is a healthy idle client.
 
 | Symptom | Meaning | Do this |
 |---|---|---|
-| Stuck on `Connecting to ArenaNet`, no sockets, servers see nothing | The cage is blocking the pre-login patcher's update check — which means this build has no updater kill switch | `python toolkit/clientpatch/buildid.py`. If `updater=LIVE`, rebuild with `make_custom_client.py` rather than opening the cage. See below |
+| Stuck on `Connecting to ArenaNet`, no sockets, servers see nothing | The cage is blocking the pre-login patcher's update check — which means this build has no updater kill switch | `python toolkit/clientpatch/dhbuild.py`. If `updater=LIVE`, rebuild with `make_custom_client.py` rather than opening the cage. See below |
 | `REFUSING to launch … carries OUR Diffie-Hellman parameters` | A DH-patched client was aimed at a non-loopback host | Correct — that is the account-ending case. Use the `--live-capture` build under `vault/run-live` |
 | `REFUSING to launch … carries ArenaNet's Diffie-Hellman parameters, not ours` | The live-capture build was aimed at loopback | Use the copy under `vault/run`; the live build cannot key against our server |
 | `REFUSING to launch … no Gw.dat, so staging did not finish` | `make_run_dir.py` could not copy the 4 GB source | Close every `Gw.exe` (a running one holds it open exclusively) and re-run `make_run_dir.py` |
@@ -298,7 +298,7 @@ beside the exe, but it **buffers and only flushes on exit** — a stuck client s
 | `schema/messages.json` | The wire schema itself (tracked in git) |
 | `toolkit/clientscan/` | Read-only client analysis |
 | `toolkit/clientpatch/` | Patching, run-dir assembly, the firewall cage |
-| `toolkit/clientpatch/buildid.py` | What a `Gw.exe` **is**, read from its bytes: whose DH parameters, which patches |
+| `toolkit/clientpatch/dhbuild.py` | What a `Gw.exe` **is**, read from its bytes: whose DH parameters, which patches |
 | `toolkit/clientpatch/cage.py` | The launch gate — binds a binary's DH parameters to the host it may be aimed at |
 | `toolkit/clientpatch/launch_caged.ps1` | **Legacy.** Elevated launcher that opens the cage for the patcher. Refuses any build with the updater kill switch, i.e. all of them |
 | `vault/` | Gitignored. Client snapshots, keys, captures, prior-art mirrors |

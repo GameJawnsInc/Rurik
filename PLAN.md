@@ -681,12 +681,13 @@ account-visible event happens before the patch matters.
    `make_run_dir.py --live`, and A1 has a legal launch target. Nothing further has to be
    designed for it.
 
-   *Known duplication, being resolved.* `dhbuild.py` and `buildid.py` were written the
-   same afternoon by two sessions for the same job. `dhbuild` owns selection, staging and
-   the hostile-filename regression; `buildid` proves **B == g^b mod p** before calling a
-   build ours, which is what makes `ours` a check rather than a label — `dhbuild` asserts
-   that guarantee in its docstring and never tests it. They are merged in the commit
-   after this one, `dhbuild` surviving.
+   *The duplication is resolved.* `dhbuild.py` and `dhbuild.py` were written the same
+   afternoon by two sessions for the same job. Merged 2026-08-07, `dhbuild` surviving:
+   it keeps selection, staging and the hostile-filename regression, and gains `buildid`'s
+   exponent proof, `patch_state()` and `describe()`. Before deleting `buildid`, both
+   modules were run against all three clients on this machine and agreed on `dh` and
+   `patches` for every one — a migration is a claim about behaviour, so it was measured
+   rather than reasoned about.
 2. **The cage is per-client and its removal is elevated.** `isolate_client.ps1` pins a
    client to loopback by program path, so a live client cannot be caged — there is no
    partial setting. `cage-off` was reachable unelevated through
@@ -747,7 +748,7 @@ because every one was invisible to the thing meant to catch it:
   and `RUNBOOK` went on naming the script as step 4 anyway. Opening the cage leaks by
   construction — firewall rules are evaluated at connection **establishment**, and
   Windows offers no supported way to tear down an established TCP connection. It now
-  asks `buildid.py` and refuses any build carrying the kill switch. Its rule lookup was
+  asks `dhbuild.py` and refuses any build carrying the kill switch. Its rule lookup was
   also broken: it matched an exact display name while `isolate_client.ps1` appends
   `[<tag>]`, so it found only rules left by an older version of that script.
 * **`drive_client.py` wrote the plaintext password into `report.json`** while the console

@@ -41,7 +41,7 @@ client `make_custom_client.py` builds reads as `unknown` until a human edits a c
 and its `patched` bucket holds four independent modifications when only one of them --
 the DH substitution -- decides anything.
 
-`toolkit/clientpatch/buildid.py` reads the parameters out of the binary instead and
+`toolkit/clientpatch/dhbuild.py` reads the parameters out of the binary instead and
 answers `ours` / `stock` / `unknown`, where `ours` means the triple matches a key file
 that satisfies B == g^b mod p. That last clause is what makes it a check rather than a
 label: it proves we hold the exponent, which is the operational meaning of "this client
@@ -62,7 +62,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
-import buildid  # noqa: E402
+import dhbuild  # noqa: E402
 import origin  # noqa: E402
 
 RULE_BASE = "Rurik - patched GW client: block outbound"
@@ -142,20 +142,20 @@ def assert_launch_safe(exe, host, why="launch"):
                              thirty seconds later, which names nothing.
         unknown  anything    REFUSED.
 
-    Read from the BYTES, via buildid.dh_verdict, never from a filename, a directory or
+    Read from the BYTES, via dhbuild.classify, never from a filename, a directory or
     a flag. That matters because everything else about these two builds is identical --
     same size, same other patches, same run-dir layout -- and the one thing that
     differs is the one thing that decides.
 
-    Returns buildid.describe()'s dict on success, so a caller can log what it let
+    Returns dhbuild.describe()'s dict on success, so a caller can log what it let
     through rather than merely that it let something through.
     """
-    b = buildid.describe(exe)
+    b = dhbuild.describe(exe)
     dh, detail = b["dh"], b["dh_detail"]
     live = not origin.is_loopback(host)
     where = f"{host} (the REAL service)" if live else f"{host} (loopback)"
 
-    if dh == buildid.UNKNOWN:
+    if dh == dhbuild.UNKNOWN:
         raise CageError(
             f"REFUSING to {why} {exe} at {where}\n"
             f"  Its Diffie-Hellman parameters match neither a key file we hold nor\n"
@@ -164,7 +164,7 @@ def assert_launch_safe(exe, host, why="launch"):
             f"  copy is legitimate, the key file that goes with it belongs in the\n"
             f"  vault's keys/ directory, named rurik_dh_*.json.")
 
-    if dh == buildid.OURS and live:
+    if dh == dhbuild.OURS and live:
         raise CageError(
             f"REFUSING to {why} {exe} at {where}\n"
             f"  This client carries OUR Diffie-Hellman parameters. {detail}\n"
@@ -177,7 +177,7 @@ def assert_launch_safe(exe, host, why="launch"):
             f"  Build the live-capture configuration instead:\n"
             f"      python toolkit/clientpatch/make_custom_client.py --live-capture")
 
-    if dh == buildid.STOCK and not live:
+    if dh == dhbuild.STOCK and not live:
         raise CageError(
             f"REFUSING to {why} {exe} at {where}\n"
             f"  This client carries ArenaNet's Diffie-Hellman parameters, not ours.\n"
@@ -190,7 +190,7 @@ def assert_launch_safe(exe, host, why="launch"):
 
     state = cage_state(exe)
 
-    if dh == buildid.STOCK:
+    if dh == dhbuild.STOCK:
         # STOCK at a live target: the authorized capture run.
         #
         # The asymmetry below is deliberate rather than an oversight. Every refusal
@@ -278,7 +278,7 @@ def main():
     that shows up here as a mismatch rather than as a launch that quietly works.
     """
     import vaultpath
-    roots = [("run", buildid.OURS, "CAGED"), ("run-live", buildid.STOCK, "UNCAGED")]
+    roots = [("run", dhbuild.OURS, "CAGED"), ("run-live", dhbuild.STOCK, "UNCAGED")]
     bad = found = unknown = 0
     for root, want_dh, want_state in roots:
         base = vaultpath.vault_path(root)
@@ -290,7 +290,7 @@ def main():
             if not os.path.isfile(exe):
                 continue
             found += 1
-            b = buildid.describe(exe)
+            b = dhbuild.describe(exe)
             state = cage_state(exe)
             # "could not ask the firewall" is not "the firewall says no". Both are
             # non-zero exits -- undeterminable is never permission -- but a report
