@@ -123,7 +123,19 @@ SERVER_SEED_LEN = 2 + 20
 # session. `_hold` samples the client's own connections and the capture's watchdog reports
 # per-stage counters, so what actually carried traffic is now MEASURED per run rather than
 # assumed here.
-LIVE_PORTS = (6111, 6112, 6113, 6114, 6600, 6601)
+#
+# AND 80, WHICH IS WHERE IT ACTUALLY WAS. Run four (2026-08-07 14:17) tapped six keys and
+# captured nothing on the whole 6111-6601 range, while the driver's new connection sampler
+# named the client's real peers: `52.3.40.244:80` and `52.55.104.238:80`. Those are the
+# SAME two ArenaNet addresses that carried 6112 in runs one and two -- same servers,
+# different port. Guild Wars can run its channels over 80 (the firewall-friendly path), and
+# on this machine it now does. That is the whole reason three sessions recorded zero bytes.
+#
+# 443 is still excluded: the portal is TLS under a key we do not hold, and 443 is where a
+# machine's other traffic lives. Port 80 is comparatively quiet now that the web is HTTPS,
+# and `prune_wire` drops every captured connection that carries no GW handshake, so
+# unrelated HTTP does not survive into the artifact.
+LIVE_PORTS = (80, 6111, 6112, 6113, 6114, 6600, 6601)
 
 # WHICH CHANNEL a connection is comes from its VERSION header, which is the field that
 # actually carries it -- not from guessing at an opcode.
@@ -662,6 +674,14 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         time.sleep(1)
 
     # --- 4. offline: assemble what the wire and the keyring hold, then scrub.
+    # Prune BEFORE assembling: the filter has to be wide enough to catch GW on port 80, and
+    # everything else it caught is the owner's own traffic rather than evidence.
+    if os.path.exists(wire):
+        kept, dropped = prune_wire(wire)
+        if dropped:
+            print(f"\n  pruned: {dropped} record(s) from non-GW connections dropped; "
+                  f"{kept} GW connection(s) kept")
+
     keys = ring.keyring() if ring else []
     print(f"\n  keyring: {len(keys)} distinct session key(s) tapped")
     if not keys:
@@ -722,6 +742,40 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         json.dump(manifest, fh, indent=1)
     print(f"\n  {report['decrypted']}/{report['total']} connection(s) decrypted -> {outdir}")
     return 0 if report["decrypted"] else 1
+
+
+def prune_wire(wire_path):
+    """Drop every captured connection that carries no GW handshake. Returns (kept, dropped).
+
+    Sniffing port 80 is what finally caught the live channels, and port 80 also carries
+    whatever else the machine is doing. Those connections are not evidence of anything this
+    project wants, they are the owner's own browsing, and they should not sit in the vault
+    because a filter had to be wide enough to work.
+
+    The test is the same one assemble_live uses -- does the c2s stream begin with a VERSION
+    header we recognise -- so a GW connection is kept even when no key decrypts it. The raw
+    bytes of a channel we could not open are still the only recording of a real session.
+    """
+    meta, conns = wc.load_connections(wire_path)
+    keep = {k for k, e in conns.items() if channel_of_stream(e[wc.C2S])}
+    if len(keep) == len(conns):
+        return len(keep), 0
+    tmp = wire_path + ".pruned"
+    dropped = 0
+    with open(wire_path, encoding="utf-8", errors="replace") as src, \
+            open(tmp, "w", encoding="utf-8") as dst:
+        for line in src:
+            try:
+                r = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if r.get("kind") == "wire":
+                if wc.conn_key(r) not in keep:
+                    dropped += 1
+                    continue
+            dst.write(line if line.endswith("\n") else line + "\n")
+    os.replace(tmp, wire_path)
+    return len(keep), dropped
 
 
 def sha256(path):
@@ -834,13 +888,19 @@ def _hold(client, ring, wire, minutes, cap=None):
         # there is still time to stop rather than at the end.
         if not warned and size < 1024 and time.monotonic() - started > 60:
             warned = True
+            unmonitored = sorted(set(ports) - set(LIVE_PORTS))
             print(f"\n  *** NO WIRE BYTES after 60s, while {len(ring.values)} key(s) have "
-                  f"been tapped.\n      The sniff is filtering {LIVE_PORTS} on IPv4. The "
-                  f"client's own connections:\n      "
+                  f"been tapped.\n      Sniffing {sorted(LIVE_PORTS)} on IPv4. The client's "
+                  f"own connections:\n      "
                   f"{', '.join(sorted(seen)) or 'NONE VISIBLE -- tcptable is IPv4-only, so '
-                              'an IPv6 connection would look like this'}\n"
-                  f"      This capture will have no ciphertext. Ctrl-C once to stop.",
-                  flush=True)
+                              'an IPv6 connection would look like this'}", flush=True)
+            if unmonitored:
+                # This is the whole diagnosis, so say it as one sentence rather than
+                # leaving it to be read off two lists.
+                print(f"      >>> THE CLIENT IS ON PORT(S) {unmonitored}, WHICH ARE NOT "
+                      f"BEING SNIFFED. <<<\n      Add them to LIVE_PORTS and re-run; this "
+                      f"capture will have no ciphertext.", flush=True)
+            print("      Ctrl-C once to stop.", flush=True)
         _STOPPING.wait(5)
     else:
         if not _STOPPING.is_set():

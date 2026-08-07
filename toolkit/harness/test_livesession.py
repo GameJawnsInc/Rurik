@@ -42,7 +42,7 @@ import livesession as ls  # noqa: E402
 import wirecapture as wc  # noqa: E402
 from gwcrypto import ARC4, arc4_hash  # noqa: E402
 
-LEDGER = checks.Ledger("livesession", floor=32)
+LEDGER = checks.Ledger("livesession", floor=35)
 
 
 def real_session():
@@ -284,6 +284,20 @@ def main():
                   "opcode is")
         LEDGER.ok(set(os.listdir(tmp)) == before,
                   "and it writes no file, so a bad run cannot leave a believable artifact")
+
+        # prune_wire: the filter has to include port 80 to catch GW at all, and port 80
+        # also carries whatever else the machine is doing. That must not reach the vault.
+        kept, dropped = ls.prune_wire(wire)
+        LEDGER.ok(kept == 2 and dropped > 0,
+                  "prune_wire keeps the GW connections and drops the rest",
+                  f"{kept} kept, {dropped} record(s) dropped")
+        _m, after = wc.load_connections(wire)
+        LEDGER.ok(all(ls.channel_of_stream(e[wc.C2S]) for e in after.values()),
+                  "every connection left in the pruned capture carries a GW handshake",
+                  "unrelated HTTP is the owner's own traffic, not evidence")
+        LEDGER.ok(ls.assemble_live(wire, keyring, tmp)["decrypted"] == 2,
+                  "and the pruned capture still assembles both channels",
+                  "pruning must not cost a single GW byte")
         LEDGER.ok(all("none of the 1 tapped key(s)" in r["why"]
                       for r in bad["connections"] if r.get("A")),
                   "the refusal names how many keys were tried")
