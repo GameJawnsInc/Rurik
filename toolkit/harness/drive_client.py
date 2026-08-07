@@ -31,8 +31,19 @@ import threading
 import time
 from ctypes import wintypes
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOOLKIT = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+sys.path.insert(0, TOOLKIT)
+# `cage.py` lives in clientpatch/, not here, so without this line the `import
+# cage` below raises ModuleNotFoundError and THIS module -- the only one that
+# launches a client -- cannot be imported at all. That is how `test_harness.py`
+# sat red from 166ebbf, the commit that added the cage assertion, until
+# 2026-08-06: the guard that makes every launch check the cage stopped the
+# launcher from loading. Stated here rather than left to whoever imports us
+# first; `session.py` used to work only because it imported drive_client one
+# line before it imported cage, which is an ordering accident, not a path.
+sys.path.insert(0, os.path.join(TOOLKIT, "clientpatch"))
 from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 import cage  # noqa: E402

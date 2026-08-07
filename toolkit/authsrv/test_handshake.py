@@ -19,6 +19,7 @@ if arc4_hash is subtly wrong, the derived keys differ and the final check fails.
 A green result here means the real client should key up too.
 """
 
+import json
 import os
 import re
 import socket
@@ -37,6 +38,7 @@ sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "portal"))
 from sessionstore import SessionStore, uuid_to_wire  # noqa: E402
 import checks  # noqa: E402
+import vaultpath  # noqa: E402
 
 SELFTEST_VAULT = r"C:\gd\Rurik\vault\captures\selftest"
 SELFTEST_SESSIONS = r"C:\gd\Rurik\vault\state\selftest-sessions.json"
@@ -67,26 +69,97 @@ def read_client_params(exe):
     return g, p, B
 
 
-# The floor is what a completed handshake session executes. Counted BY READING
-# the code, not by running it -- this test spawns a real authsrv on 6112 and the
-# agent that added the ledger was not permitted to start one. There are 17
-# check() sites; 16 of them run in any session that gets far enough to pass (the
-# 17th is the unpatched-client negative control, which declares a skip when the
-# vault holds no stock build with different parameters). 13 is that core minus a
-# deliberate margin, because an unmeasured floor that is one too high turns the
-# suite permanently red. TIGHTEN THIS to the real count the first time a human
-# runs the test green and reads the banner's check total.
-LEDGER = checks.Ledger("handshake", floor=13)
+def server_keys():
+    """The key file `authsrv.py` will load, chosen the way it chooses it.
+
+    Mirrors `authsrv.load_keys(None)` rather than importing it, because importing
+    the server to ask it a question starts a server. If the two ever diverge the
+    final check in section 5 still catches it: that one compares the key both ends
+    actually derived, and it cannot be satisfied by agreeing about the wrong file.
+    """
+    kd = vaultpath.require_dir("keys", why="the DH parameters both ends must share")
+    cands = sorted(f for f in os.listdir(kd) if f.startswith("rurik_dh_"))
+    if not cands:
+        raise SystemExit("no rurik_dh_*.json in vault/keys — "
+                         "run toolkit/clientpatch/make_custom_client.py first")
+    return json.load(open(os.path.join(kd, cands[-1]), encoding="utf-8"))
+
+
+def pick_our_client(patched_dir, keys):
+    """The patched client keyed to OUR server. Anything else stops the run.
+
+    WHY THIS IS NOT A FILENAME SORT, which is what it was until 2026-08-06.
+    `sorted(exes)[-1]` picks by spelling, and `vault/client-patched/` is shared by
+    every worktree on this machine -- `vaultpath` resolves to the main working
+    tree, so a branch has code of its own but never a vault of its own. The moment
+    A1's unpatched-DH build landed beside ours as `Gw.live.*`, "live" sorted after
+    "custom", and this test read ArenaNet's modulus out of it, derived a key our
+    server could never match, and printed four unrelated FAILs and two mismatched
+    hex strings. That reads exactly like a handshake regression in our own code.
+    It was not: it was the wrong binary, and the test had no way to say so.
+
+    So the choice is made on the property that has to hold anyway -- the exe's
+    prime and server public value are the ones in the key file authsrv will load.
+    `g` is deliberately not part of it: generator 4 is ArenaNet's too, so every
+    candidate on this machine agrees on it and it discriminates nothing.
+
+    This will keep mattering. A1's first commit is an unpatched-DH build, so that
+    directory is expected to hold a client this test must refuse.
+    """
+    cands = sorted(f for f in os.listdir(patched_dir) if f.endswith(".exe"))
+    if not cands:
+        raise SystemExit("no patched client in vault/client-patched — "
+                         "run toolkit/clientpatch/make_custom_client.py")
+
+    ours, rejected = [], []
+    for name in cands:
+        try:
+            g, p, B = read_client_params(os.path.join(patched_dir, name))
+        except SystemExit as exc:
+            rejected.append((name, f"no DH accessor signature ({exc})"))
+            continue
+        if p == keys["prime"] and B == keys["server_public"]:
+            ours.append(name)
+        else:
+            which = []
+            if p != keys["prime"]:
+                which.append("prime")
+            if B != keys["server_public"]:
+                which.append("server public value")
+            rejected.append((name, "carries a DH " + " and ".join(which) +
+                             " that is not ours — an unpatched-DH build keys to "
+                             "ArenaNet, and this server cannot read it"))
+
+    for name, why in rejected:
+        print(f"  skipped      : {name}\n                 {why}")
+    if not ours:
+        raise SystemExit(
+            f"\nno client in {patched_dir} is keyed to our server.\n"
+            f"  {len(cands)} candidate(s) read, none matching "
+            f"vault/keys/rurik_dh_*.json.\n"
+            f"  Re-run toolkit/clientpatch/make_custom_client.py, which writes the\n"
+            f"  exe and the key file as a pair. NOTHING WAS TESTED.")
+    return os.path.join(patched_dir, ours[-1])
+
+
+# The floor is what a completed handshake session executes. MEASURED 2026-08-06:
+# a green run spawns its authsrv on 6112, completes the lifecycle and prints 17.
+# 16 of those are mandatory; the 17th is the unpatched-client negative control,
+# which declares a skip when the vault holds no stock build with different
+# parameters. So the floor is 16.
+#
+# It was 13 until that run -- the core minus a deliberate margin, because the
+# agent that added the ledger could not start a server and would not guess high.
+# The margin is what the comment asked to have removed once someone had a real
+# total, and 13 was three checks of slack in the test that proves the whole
+# channel: a run that lost the entire login burst would still have cleared it.
+LEDGER = checks.Ledger("handshake", floor=16)
 check = checks.adopt_named(LEDGER)
 
 
 def main():
     patched_dir = r"C:\gd\Rurik\vault\client-patched"
-    exes = [f for f in os.listdir(patched_dir) if f.endswith(".exe")]
-    if not exes:
-        raise SystemExit("no patched client in vault/client-patched — "
-                         "run toolkit/clientpatch/make_custom_client.py")
-    exe = os.path.join(patched_dir, sorted(exes)[-1])
+    exe = pick_our_client(patched_dir, server_keys())
     print(f"patched client : {os.path.basename(exe)}")
 
     g, p, B = read_client_params(exe)
