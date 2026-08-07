@@ -424,12 +424,20 @@ top-level report was giving an all-clear on a credential. `scrub_captures.mark_t
 now writes a `DO-NOT-SHARE.txt` at the root and stamps the root manifest, and the existing
 tree has been marked. A stale all-clear is worse than no report.
 
-**Still open, and deliberately not fixed here.** `origin.py`'s LIVE verdict rests on a
-self-declaration: `PEER_FIELDS` does not include the fields these captures actually record
-(`connection`, `src`, `dst`), so stripping the stamp drops all eight files to UNKNOWN even
-though every record names a public endpoint. The corroboration is in the artifact and the
-classifier does not look at it. That is a design change to `origin.py`, not a property of
-this capture, and it belongs in its own commit.
+**And the stamp is no longer a self-declaration** (fixed 2026-08-07, its own commit).
+`origin_of` used to return the stated value and stop reading. It now reads on and **refuses
+a `live` stamp on a file whose every recorded address is loopback** — a capture of ArenaNet
+cannot look like that. `PEER_FIELDS` gained the fields producers actually write (`src`,
+`dst`, `connection`), so the corroboration that was sitting unread in every live capture is
+now used; and placeholders like `"client": "unknown"` are excluded by `is_address`, because
+a non-address reads as "not loopback" and silently defeated the check on its first real
+test. Producers derive their stamp from the endpoint instead of asserting it. MEASURED over
+1,076 vault files, exactly **one** verdict moved: `vault/dryrun/dryrun_wire.jsonl`,
+`live → unknown (CONTRADICTED)` — the loopback file that had been mislabelled all along.
+754 `ours` and the 33 genuine live files are unmoved. The reverse direction is deliberately
+not symmetric: an `ours` stamp on a file with public addresses is reported as
+uncorroborated, never overridden, because our own tooling legitimately records ArenaNet
+endpoint metadata.
 
 ### 3.2 R4b and R4c, rewritten as counts
 

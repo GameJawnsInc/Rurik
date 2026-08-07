@@ -340,9 +340,17 @@ def assemble_live(wire_path, keyring, out_dir):
         out_path = os.path.join(out_dir, f"{channel}-{safe}.jsonl")
         c2s_plain = decrypt_stream(c2s_cipher, key)
         s2c_plain = decrypt_stream(s2c_cipher, key)
+        # DERIVE the stamp from the endpoints this connection actually had, rather than
+        # asserting LIVE because this file is called livesession.py. The dry-run drives the
+        # very same code against 127.0.0.1, so an asserted LIVE is wrong every time it runs
+        # -- and origin.py now REFUSES a live stamp on an all-loopback file, so asserting it
+        # here would produce artifacts that classify UNKNOWN and look like a defect.
+        who = origin.OURS if all(origin.is_loopback(h) for h in str(key_name).split("->")
+                                 if origin.is_address(h)) else origin.LIVE
         with open(out_path, "w", encoding="utf-8") as fh:
-            fh.write(json.dumps(origin.record("toolkit/harness/livesession.py", origin.LIVE,
-                                              note="decrypted from an off-wire live capture")) + "\n")
+            fh.write(json.dumps(origin.record("toolkit/harness/livesession.py", who,
+                                              note=f"decrypted from an off-wire capture of "
+                                                   f"{key_name}")) + "\n")
             fh.write(json.dumps({"kind": "version", "channel": channel,
                                  "connection": key_name, "key_from": label}) + "\n")
             fh.write(json.dumps({"kind": "session_key", "arc4_key": key.hex()}) + "\n")
