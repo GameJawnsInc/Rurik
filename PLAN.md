@@ -580,10 +580,64 @@ changes is that capture is now cheap enough to leave running rather than a proje
 | **Client auto-patches over ground truth, and the DH keys rotate with it** | **This happened during the session that wrote this document.** The updater replaced `Gw.exe` (10,404,032 → 10,483,904 bytes) and `Gw.dat`, moved the DH struct from RVA `0x6843e8` to `0x6910d8`, and **changed both the prime and the server's public key**. ArenaNet rotates the Diffie-Hellman parameters per build — which is why Headquarter stores 107 server keys rather than one constant. Consequences: the client patch is a permanent recurring step, not a one-time one; every capture and schema revision must carry a build id (free, per §2); and re-snapshot *before* accepting an update prompt, never after. Both builds are now vaulted. | ongoing |
 | **The client phones home when it crashes** | `Gw.exe` embeds Sentry: `SENTRY_DSN`, `sentry.native`, `getsentry`, `x-sentry-rate-limits` are all present **[measured]**. The working method here is inject, patch, malform, crash — so the client's own outbound reporting channel is a posture problem HANDOFF §9 never considered, since §9 reasons only about server-side visibility. Neutralise it before the first malformed packet: block the endpoint at the firewall or null the DSN in the patched copy. Minutes, and it belongs on the R0 checklist next to the vault snapshot. | minutes |
 | **The captures contain the owner's real ArenaNet credential** | The client sends its saved password to our own webgate on every login, and `vault/captures/portal/*.jsonl` records it as base64 — `<Password>…</Password>`, reversible in one command **[measured 2026-08-04]**. It has never been in git: `vault/` was gitignored in the first commit, before any content existed, so there is no history to rewrite and "private repo" does not bear on it either way. **Owner's decision, 2026-08-05: the repo stays private, and a credential-scrubbing / anonymising pass is a gate before any public push** — not a change to capture fidelity now, since the whole method depends on recording what the client actually sent. Until then the vault is the only copy and stays local. | deferred, by decision |
-| Account loss | Never automate on the primary account. The proxy posture — watching your own traffic — is milder than injecting a DLL, which is what the original plan required | one account |
+| Account loss | Never automate on the primary account — now enforceable rather than aspirational, because a second account exists (§7 Q4). **The old reason given here was wrong and is replaced:** it said "the proxy posture — watching your own traffic — is milder than injecting a DLL", but A1's instrument is Headquarter, a third-party client that logs into the live service. That is not a proxy. **SOURCED:** *MDY v. Blizzard* turned on unattended automation of gameplay, and Warden targeted automated play *patterns* rather than the presence of third-party code — which is why addons and injected tooling coexisted with it for years, and why `HANDOFF.md` can record that "GWToolbox is tolerated precisely because of how it has behaved". So the control is behavioural: human cadence, human hours, one client, never in a competitive context. §6.2 | one account |
 | A client update invalidates months of offset work | Choose WASM: the module bytes are the code and offsets come from the module | free, if you switch |
 | Two years with nothing playable | A2 and R1.5 both target a visible result inside 90 days | — |
 
+
+### 6.2 Live capture, and the two client configurations
+
+§7 Q4 authorizes automation against the live service. That breaks an assumption every
+safety control in this repo was built on — that **nothing ever talks to ArenaNet** — and
+the controls now have to distinguish two configurations rather than forbid one.
+
+**"Patched" is not the property the rule wants.** `make_custom_client.py` applies four
+modifications and only ONE disqualifies a client from touching the real service:
+
+| Patch | Effect on a live login |
+|---|---|
+| **Diffie-Hellman triple** (generator, prime, server public B) | **DISQUALIFYING.** The client derives the ARC4 key locally from our `B`; ArenaNet's AuthSrv keys from theirs. The result is not a clean refusal, it is **a stream of garbage frames delivered to ArenaNet's auth server** — the mirror image of the `AUTH_CMSG has no opcode 26763` failure a stock client produces against us, which RUNBOOK already calls "exactly the kind of malformed traffic worth not sending". |
+| Updater kill switch | Harmless, and **wanted** — it pins the build against an update that would replace our ground truth. |
+| `CreateMutexA` guard NOPed | Harmless, and **wanted** — multiple instances is what capture at scale needs. |
+| Mutex renamed | Harmless. A client-side fingerprint change, noted only because it is visible. |
+
+So the non-negotiable is restated as **a client carrying OUR DH parameters must never
+reach the real service** — three quarters of the patch set is fine on both sides.
+
+**The sharpest hazard is not the DH patch, because the DH patch fails late.** Login is
+three stages (§1.6). The DH substitution touches Stage B only. A patched client launched
+at the live service with no `-portal` completes a **real Stage A portal login, with the
+owner's autofilled primary credential**, and only then fails at Stage B. The
+account-visible event happens before the patch matters.
+
+**What must be true before the first live run**, none of which is true today:
+
+1. **A live-capture client is a separate build** — unpatched DH, with the updater and
+   mutex patches. There is no such build; `vault/run/` holds only DH-patched copies, and
+   the harness's `assert_safe` refuses anything outside `vault/run/`. Until one exists
+   there is no legal launch target for the authorized use, which is how someone ends up
+   forking a driver without the guards.
+2. **The cage is per-client and its removal is elevated.** `isolate_client.ps1` pins a
+   client to loopback by program path, so a live client cannot be caged — there is no
+   partial setting. `cage-off` was reachable unelevated through
+   `toolkit/harness/admin.py`, and `-Remove` takes down **every** cage on the machine;
+   removed from the allowlist 2026-08-06, so uncaging now costs a UAC prompt.
+3. **Launch sites check for a cage.** Nothing does. **MEASURED 2026-08-06: two patched
+   binaries on disk, one of them (`…-probe`) uncaged.** That is the forbidden
+   configuration sitting ready, and no guard would notice.
+4. **The automation selects its account.** Nothing does — the client autofills the saved
+   credential, which is the owner's primary. A live run today would log in as the wrong
+   account by default.
+5. **Live records are distinguishable from loopback ones.** Every capture is Rurik
+   talking to Rurik and nothing marks which. The moment some records are ArenaNet's, that
+   distinction is the most valuable metadata in the vault, and conflating them would be a
+   serious evidence defect.
+
+**And R0b's deliverable is wrong.** §3 calls it "proxy capture of a real session", which
+cannot work: the channel is DH-keyed end to end and a proxy has neither private exponent.
+The repo already knows this — it is why our own server has to patch the client at all.
+R0b must be re-specified as an instrumented client (Headquarter's approach) rather than a
+proxy, before it is started rather than after.
 
 ### 6.1 The derivation register
 
@@ -663,7 +717,13 @@ from a documented fetch of a freely downloadable client. That is a stronger and 
 formulation than a prohibition needing constant qualification, and it matches the owner's own point
 that the client is available to anyone.
 
-**Q4. A secondary account for automation?** *Recommendation: yes, before any scripted driving.*
+**Q4. A secondary account for automation?** ✅ **CLOSED 2026-08-06, by the owner.** A second
+account is bought. **Automation against the live ArenaNet service on that account is
+authorized** — and it "shouldn't be the go-to test mode". Both halves are binding: the
+default loop stays hand-driven against our own server, and live automation is a mode you
+enter deliberately for a capture campaign, never a convenience left switched on. The
+conditions and the machinery that has to change first are §6.2. **A1 is unblocked; it is
+not yet safe to run.**
 
 **Q5. Does Pre-Searing remain the finish line?** *Recommendation: yes, unchanged.*
 

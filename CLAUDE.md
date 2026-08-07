@@ -19,9 +19,23 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
 - **The vault stays local.** `vault/` holds captures, keys and client snapshots. It
   is gitignored, it is personal data from the owner's own account, and it never goes
   on the internet. Probe output goes there too.
-- **Never point a patched client at the real service**, and never patch or launch
-  anything under `C:\gw`. That install is the owner's, and reading bytes from it is
-  read-only. Live probes against ArenaNet need an explicit go-ahead from the owner.
+- **Never point a client carrying OUR Diffie-Hellman parameters at the real service.**
+  It does not fail cleanly — it delivers a stream of garbage frames to ArenaNet's auth
+  server, *after* completing a real Stage A login with whatever credential the client
+  autofilled. "Patched" is the wrong word for the rule: of the four patches
+  `make_custom_client.py` applies, only the DH substitution disqualifies a client; the
+  updater kill switch and the multi-instance NOP are wanted on both configurations.
+- **Never patch or launch anything under `C:\gw`.** That install is the owner's, and
+  reading bytes from it is read-only.
+- **Live automation against ArenaNet is authorized — on the secondary account, as a mode
+  you enter deliberately.** Owner's decision, 2026-08-06 (`PLAN.md` §7 Q4). It is *not*
+  the go-to test mode: the default loop is hand-driven against our own server, and live
+  runs are for a capture campaign. The behavioural rule is the control that matters —
+  human cadence, human hours, one client, never in a competitive context — because what
+  closes accounts is a traffic pattern no person could produce. **Preconditions in
+  `PLAN.md` §6.2 are not met yet**, so A1 is unblocked but not yet safe to run: there is
+  no unpatched-DH build to launch, nothing selects the account, and a patched binary is
+  sitting uncaged.
 - **Local and personal only.** No public shard, no PRs against upstream client-side
   projects on this project's behalf.
 - **Other people's work is a second gate, and it is not the provenance gate.** Before a

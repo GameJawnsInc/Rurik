@@ -307,22 +307,40 @@ the first commit — but that set cannot leave the machine as it stands. It is a
 not a blocker:
 
 ```bash
-python toolkit/scrub_captures.py
+python toolkit/scrub_captures.py --force
 ```
 
-Writes `vault/captures/portal-scrubbed/` (387 KB) and never touches the originals,
-which stay as recorded because an original capture is evidence about the protocol.
-Placeholders are assigned sequentially rather than hashed — the password is short
-and a hash of it would be brute-forceable — and are the same length as what they
-replace, so `Content-Length` and the base64 width stay honest. `toolkit/test_scrub.py`
-harvests the secrets out of the originals independently and asserts not one survives in
-the output; that check found 181 values still leaking through the reply body the first
-time it ran, which is why `SECRET_ELEMENTS` covers both directions. Re-run it after
-touching that list.
+Writes `vault/captures-scrubbed/`, mirroring the whole capture tree, and never touches
+the originals — they stay as recorded, because an original capture is evidence about the
+protocol and a scrubbed one is only evidence about a session.
 
-For an off-disk copy, take everything except `run/` and `dat_study/` (11.9 GB, both
-regenerate from `client/` plus the patcher and `Gw.dat`) and substitute
-`portal-scrubbed/` for `portal/`. That is roughly 10.8 GB — a USB stick.
+**This used to cover `captures/portal/` alone, and the recipe below used to say "take
+everything except `run/` and `dat_study/`."** Measured 2026-08-06, that shipped **206
+`email` records, 113 `account_uuid`, 113 `char_uuid` and 341 ARC4 keys and DH seeds**
+sitting in `authsrv/`, `gamesrv/` and `selftest/` — none of which the scrubber looked at.
+The recipe was the exposure, not the vault.
+
+Placeholders are assigned sequentially rather than hashed (the password is short; a
+hash would be brute-forceable), are the same length as what they replace so
+`Content-Length` and the base64 width stay honest, and are one-to-one so the same value
+lands on the same placeholder everywhere — correlation survives, identity does not.
+
+`toolkit/test_scrub.py` harvests every secret out of the originals with **its own** field
+list and asserts not one appears in the output. That check has now caught three fields
+nobody had listed: the reply body's `<Session>`/`<Token>`/`<UserId>`, the entire
+`authsrv/` directory, and `who` — a `login_ok` log line with an account UUID and a session
+token embedded in prose, which whole-value substitution could never have fixed. Re-run it
+after touching any list.
+
+**`.raw` files are NOT scrubbed and NOT copied — 342 of them.** They are the undecoded
+byte stream, nothing in the toolkit parses them, and the portal stage is plaintext HTTP,
+so they may hold the credential directly. Anything that leaves this machine must exclude
+them until someone does that work.
+
+For an off-disk copy: **`client/`, `mirrors/`, `keys/`, `research/`, and
+`captures-scrubbed/`** — roughly 10.5 GB, a USB stick. Not `captures/` (unscrubbed, and
+carries the `.raw` set), not `run/` or `dat_study/` (11.9 GB, both regenerate from
+`client/` plus the patcher and `Gw.dat`).
 
 ## The third copy of Gw.dat, and why it exists
 

@@ -41,9 +41,23 @@ if (-not (Test-Path -LiteralPath $Queue)) {
 }
 
 # The entire vocabulary. Adding to it is a deliberate act, not a parameter.
+#
+# `cage-off` WAS HERE AND WAS REMOVED, 2026-08-06. It ran isolate_client.ps1 -Remove,
+# which by design takes down EVERY cage on the machine rather than the one named -- a
+# good property for "I asked for the cages to be gone", and a terrible one to expose
+# through a queue that any unelevated process can write to. `python
+# toolkit/harness/admin.py cage-off` was one word, no UAC prompt, no exe named, no
+# confirmation, and nothing anywhere noticed afterwards. This allowlist is the security
+# boundary for this runner (see the header), so an action that removes the boundary
+# does not belong inside it.
+#
+# Uncaging is now a deliberate elevated act: run
+#   & toolkit\clientpatch\isolate_client.ps1 -Remove
+# in an admin shell, where the UAC prompt is the confirmation. Live capture on the
+# secondary account needs an UNCAGED client, which makes this the single control
+# standing between a patched client and ArenaNet -- see PLAN.md §6.2.
 $Actions = @{
     "cage-on"      = { & "$Clientpatch\isolate_client.ps1" }
-    "cage-off"     = { & "$Clientpatch\isolate_client.ps1" -Remove }
     "launch-caged" = { & "$Clientpatch\launch_caged.ps1" }
     "rules"        = {
         $r = @(Get-NetFirewallRule -DisplayName "Rurik*" -ErrorAction SilentlyContinue)

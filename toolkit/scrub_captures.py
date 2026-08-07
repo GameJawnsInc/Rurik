@@ -56,11 +56,26 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import vaultpath  # noqa: E402
 
-# Top-level JSONL keys whose whole value is account-identifying.
+# Top-level JSONL keys whose whole value is account-identifying or is session key
+# material. The first three were all this tool covered when it only ran against
+# captures/portal; the rest are why it now walks the whole tree. MEASURED 2026-08-06
+# across the other capture directories: 206 `email`, 113 `account_uuid`, 113
+# `char_uuid` and 341 ARC4 keys/seeds sat entirely outside the scrubber, and
+# RUNBOOK's own off-disk recipe shipped them.
+#
+# The key material is loopback-only today -- it keys our own server, so it unlocks
+# nothing of ArenaNet's -- and is scrubbed anyway, because the moment a live session
+# is captured the identical fields carry a real session key and nobody should be
+# relying on remembering to change the policy on that day.
 SECRET_KEYS = {
     "email": "email",
     "token": "tokn",
     "user_id": "uid",
+    "account_uuid": "acct",
+    "char_uuid": "char",
+    "arc4_key": "key",
+    "a": "dh",          # client DH public value
+    "sent": "seed",     # server seed
 }
 
 # XML elements whose text is account-identifying, in EITHER direction. The request
@@ -92,6 +107,29 @@ XML_FIELDS = ("body", "response")
 # `Authorization: <scheme> <credential>`. The credential is only a secret when it is a
 # real token; the literal "0" is the pre-login sentinel and is documented behaviour.
 AUTH_SENTINELS = {"0"}
+
+# Keys whose value is a HUMAN-READABLE LINE with secrets embedded in it, rather than a
+# secret on its own. `who` is authsrv's login_ok log line -- "<account_uuid> / token
+# <token>" -- so whole-value substitution does nothing for it: the string is unique per
+# session and the pseudonym would just be a different unique string of the same length.
+#
+# This was the third field the leak check found that nobody had listed, after `response`
+# and the whole authsrv/ directory. Each time, the harvest-then-search design caught what
+# a field list could not, which is the argument for keeping the test built that way.
+COMPOSITE_KEYS = ("who",)
+
+# 8-4-4-4-12 hex. Matching the shape rather than the field means a UUID picks up the same
+# pseudonym here as it does in `account_uuid`, so correlation survives across both.
+UUID_RE = re.compile(r"\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"
+                     r"-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b")
+
+
+def scrub_composite(value, names, stats):
+    """Replace every UUID inside a log line, leaving the prose around it intact."""
+    def repl(m):
+        stats["composite_uuid"] = stats.get("composite_uuid", 0) + 1
+        return names.get(m.group(0), "id")
+    return UUID_RE.sub(repl, value)
 
 
 class Pseudonyms:
@@ -157,6 +195,8 @@ def scrub_record(rec, names, stats):
             out[key] = scrub_auth(value, names, stats)
         elif key in XML_FIELDS and isinstance(value, str):
             out[key] = scrub_xml(value, names, stats)
+        elif key in COMPOSITE_KEYS and isinstance(value, str):
+            out[key] = scrub_composite(value, names, stats)
         else:
             out[key] = value
     return out
@@ -170,8 +210,66 @@ def scrub_auth(value, names, stats):
     return f"{parts[0]} {names.get(parts[1], 'tokn')}"
 
 
+def scrub_tree(src, out, dry_run=False, skip=()):
+    """Scrub every .jsonl under `src` AND its subdirectories into `out`.
+
+    Walks, because the credential was never only in captures/portal. Directory
+    structure is preserved so a scrubbed tree can stand in for the original.
+    """
+    src, out = os.path.abspath(src), os.path.abspath(out)
+    if os.path.normcase(src) == os.path.normcase(out):
+        raise SystemExit("refusing to scrub a directory into itself")
+    names, stats = Pseudonyms(), {}
+    files = records = 0
+    unscrubbed = []
+    for base, dirs, fnames in os.walk(src):
+        dirs[:] = [d for d in dirs if d not in skip]
+        rel = os.path.relpath(base, src)
+        for name in sorted(fnames):
+            if name.endswith(".raw"):
+                unscrubbed.append(os.path.join(rel, name))
+                continue
+            if not name.endswith(".jsonl"):
+                continue
+            files += 1
+            lines = []
+            with open(os.path.join(base, name), encoding="utf-8",
+                      errors="replace") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    records += 1
+                    try:
+                        rec = json.loads(line)
+                    except json.JSONDecodeError:
+                        stats["UNPARSEABLE"] = stats.get("UNPARSEABLE", 0) + 1
+                        continue
+                    lines.append(json.dumps(scrub_record(rec, names, stats)))
+            if not dry_run:
+                dest = os.path.join(out, rel) if rel != "." else out
+                os.makedirs(dest, exist_ok=True)
+                with open(os.path.join(dest, name), "w", encoding="utf-8") as fh:
+                    fh.write("\n".join(lines) + ("\n" if lines else ""))
+    if not dry_run:
+        os.makedirs(out, exist_ok=True)
+        with open(os.path.join(out, "SCRUB-MANIFEST.json"), "w",
+                  encoding="utf-8") as fh:
+            json.dump({
+                "source": src, "files": files, "records": records,
+                "distinct_secrets_replaced": names.count(),
+                "replacements_by_field": dict(sorted(stats.items())),
+                "NOT_SCRUBBED": unscrubbed,
+                "note": "Placeholders are sequential, not derived from the values. "
+                        "No mapping is stored anywhere. Lengths are preserved. "
+                        ".raw files are NOT scrubbed and are not copied -- they are "
+                        "the undecoded byte stream and nothing here parses them.",
+            }, fh, indent=2)
+    return files, records, stats, names.count(), unscrubbed
+
+
 def scrub_dir(src, out, dry_run=False):
-    """Scrub every .jsonl under `src` into `out`. Returns (files, records, stats)."""
+    """Scrub every .jsonl directly under `src` into `out`. One flat directory."""
     src, out = os.path.abspath(src), os.path.abspath(out)
     if os.path.normcase(src) == os.path.normcase(out):
         raise SystemExit("refusing to scrub a directory into itself -- the originals "
@@ -224,7 +322,7 @@ def scrub_dir(src, out, dry_run=False):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--src", default=None, help="capture dir (default: vault portal)")
+    ap.add_argument("--src", default=None, help="capture root (default: vault captures)")
     ap.add_argument("--out", default=None, help="output dir")
     ap.add_argument("--check", action="store_true",
                     help="report what would be replaced; write nothing")
@@ -233,26 +331,29 @@ def main():
     args = ap.parse_args()
 
     src = args.src or vaultpath.require_dir(
-        "captures", "portal", why="the credential scrub reads the portal captures")
-    out = args.out or os.path.join(os.path.dirname(src), "portal-scrubbed")
+        "captures", why="the credential scrub reads the capture tree")
+    out = args.out or os.path.join(os.path.dirname(src), "captures-scrubbed")
 
     if not args.check and os.path.isdir(out):
         if not args.force:
             raise SystemExit(f"{out} exists. Re-run with --force to replace it.")
         shutil.rmtree(out)
 
-    files, records, stats, distinct = scrub_dir(src, out, dry_run=args.check)
+    files, records, stats, distinct, unscrubbed = scrub_tree(
+        src, out, dry_run=args.check, skip=("captures-scrubbed", "portal-scrubbed"))
 
     print(f"source   {src}")
-    print(f"files    {len(files)}")
+    print(f"files    {files}")
     print(f"records  {records}")
     print(f"distinct secrets replaced  {distinct}")
     for field, n in sorted(stats.items()):
         print(f"  {field:16s} {n}")
-    if stats.get("UNPARSEABLE"):
-        print("  NOTE: unparseable lines were DROPPED from the scrubbed copy rather "
-              "than passed through unchecked.")
-    print("\n(dry run -- nothing written)" if args.check else f"\nwrote    {out}")
+    if unscrubbed:
+        print(f"\nNOT SCRUBBED, and NOT copied: {len(unscrubbed)} .raw file(s).")
+        print("  They are the undecoded byte stream; nothing here parses them, so")
+        print("  nothing here can promise what is in them. They stay behind.")
+    print("\n(dry run -- nothing written)" if args.check
+          else f"\nwrote    {out}")
     return 0
 
 

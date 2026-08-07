@@ -26,8 +26,8 @@ import checks  # noqa: E402
 import vaultpath  # noqa: E402
 import scrub_captures as sc  # noqa: E402
 
-# 6 structural + 6 leak/property + 2 red-team = 14. Every section reads the same real capture
-# directory, so nothing here is optional; a run under this floor has lost a section.
+# 6 structural + 6 leak/property + 2 red-team = 14, measured green over the whole capture
+# tree. Nothing here is optional; a run under this floor has lost a section.
 LEDGER = checks.Ledger("credential scrub", floor=14)
 
 
@@ -39,17 +39,17 @@ def harvest_secrets(src):
     would be the scrubber grading its own homework.
     """
     out = set()
-    elem = re.compile(r"<(LoginName|Password|AccountAlias)>(.*?)</\1>")
-    for name in sorted(os.listdir(src)):
-        if not name.endswith(".jsonl"):
-            continue
-        with open(os.path.join(src, name), encoding="utf-8", errors="replace") as fh:
+    elem = re.compile(r"<(LoginName|Password|AccountAlias|Session|Token|ResumeToken"
+                      r"|UserId|UserName|Alias)>(.*?)</\1>")
+    for path in jsonl_under(src):
+        with open(path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 try:
                     rec = json.loads(line)
                 except (json.JSONDecodeError, ValueError):
                     continue
-                for key in ("email", "token", "user_id"):
+                for key in ("email", "token", "user_id", "account_uuid",
+                            "char_uuid", "arc4_key", "a", "sent"):
                     v = rec.get(key)
                     if v not in (None, "", 0):
                         out.add(str(v))
@@ -68,20 +68,39 @@ def harvest_secrets(src):
     return {s for s in out if len(s) >= 6}
 
 
+def jsonl_under(root):
+    """Every .jsonl anywhere under root. Walks, because the credential was never
+    only in captures/portal -- 206 `email`, 113 `account_uuid` and 341 ARC4 keys
+    sat in sibling directories this test used not to look at."""
+    out = []
+    for base, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in ("captures-scrubbed",
+                                                "portal-scrubbed")]
+        out.extend(os.path.join(base, f) for f in sorted(files)
+                   if f.endswith(".jsonl"))
+    return sorted(out)
+
+
 def leaked(out_dir, secrets):
-    """Any secret appearing literally anywhere in the scrubbed output."""
+    """Any secret appearing literally anywhere in the scrubbed output.
+
+    Reads every file, not only the .jsonl -- a scrubber that redacted every
+    record and then wrote the values into its own manifest would pass a
+    shallower check.
+    """
     blob = []
-    for name in sorted(os.listdir(out_dir)):
-        with open(os.path.join(out_dir, name), encoding="utf-8",
-                  errors="replace") as fh:
-            blob.append(fh.read())
+    for base, _dirs, files in os.walk(out_dir):
+        for f in sorted(files):
+            with open(os.path.join(base, f), encoding="utf-8",
+                      errors="replace") as fh:
+                blob.append(fh.read())
     text = "\n".join(blob)
     return {s for s in secrets if s in text}
 
 
 def main():
-    src = vaultpath.require_dir("captures", "portal",
-                                why="the scrub test reads the real portal captures")
+    src = vaultpath.require_dir("captures",
+                                why="the scrub test reads the real capture tree")
     secrets = harvest_secrets(src)
     LEDGER.ok(len(secrets) >= 3,
               "the originals really do contain secrets to remove",
@@ -102,28 +121,31 @@ def main():
     tmp = tempfile.mkdtemp(prefix="rurik-scrub-")
     try:
         out = os.path.join(tmp, "scrubbed")
-        files, records, stats, distinct = sc.scrub_dir(src, out)
+        files, records, stats, distinct, unscrubbed = sc.scrub_tree(
+            src, out, skip=("captures-scrubbed", "portal-scrubbed"))
 
         # --- structure is preserved -------------------------------------------
-        LEDGER.ok(records > 0, "records were read", f"{records} across {len(files)}")
-        written = sorted(f for f in os.listdir(out) if f.endswith(".jsonl"))
-        LEDGER.ok(written == sorted(files),
+        LEDGER.ok(records > 0, "records were read", f"{records} across {files} file(s)")
+        written = jsonl_under(out)
+        LEDGER.ok(len(written) == files,
                   "every source file has a scrubbed counterpart",
-                  f"{len(written)}/{len(files)}")
+                  f"{len(written)}/{files}")
 
-        src_lines = sum(1 for f in files for line in
-                        open(os.path.join(src, f), encoding="utf-8",
-                             errors="replace") if line.strip())
+        src_lines = sum(1 for f in jsonl_under(src) for line in
+                        open(f, encoding="utf-8", errors="replace")
+                        if line.strip())
         out_lines = sum(1 for f in written for line in
-                        open(os.path.join(out, f), encoding="utf-8",
-                             errors="replace") if line.strip())
-        LEDGER.ok(src_lines == out_lines,
-                  "no record was silently dropped", f"{src_lines} -> {out_lines}")
+                        open(f, encoding="utf-8", errors="replace")
+                        if line.strip())
+        dropped = stats.get("UNPARSEABLE", 0)
+        LEDGER.ok(src_lines - dropped == out_lines,
+                  "every parseable record survives; unparseable ones are dropped",
+                  f"{src_lines} in, {out_lines} out, {dropped} unparseable")
 
         # every output line is still valid JSON
         bad = 0
         for f in written:
-            for line in open(os.path.join(out, f), encoding="utf-8"):
+            for line in open(f, encoding="utf-8", errors="replace"):
                 if not line.strip():
                     continue
                 try:
@@ -143,10 +165,13 @@ def main():
         lengths_ok, corr_ok = True, True
         seen = {}
         elem = re.compile(r"<(LoginName|Password|AccountAlias)>(.*?)</\1>")
-        for f in files:
-            a = [line for line in open(os.path.join(src, f), encoding="utf-8",
+        for sf in jsonl_under(src):
+            of = os.path.join(out, os.path.relpath(sf, src))
+            if not os.path.isfile(of):
+                continue
+            a = [line for line in open(sf, encoding="utf-8-sig",
                                        errors="replace") if line.strip()]
-            b = [line for line in open(os.path.join(out, f), encoding="utf-8",
+            b = [line for line in open(of, encoding="utf-8-sig",
                                        errors="replace") if line.strip()]
             for la, lb in zip(a, b):
                 ra, rb = json.loads(la), json.loads(lb)
@@ -182,7 +207,8 @@ def main():
         try:
             sc.SECRET_ELEMENTS.pop("Password")
             broken = os.path.join(tmp, "broken")
-            sc.scrub_dir(src, broken)
+            sc.scrub_tree(src, broken,
+                          skip=("captures-scrubbed", "portal-scrubbed"))
             caught = leaked(broken, secrets)
             LEDGER.ok(bool(caught),
                       "removing Password from the list makes the leak check FAIL",
