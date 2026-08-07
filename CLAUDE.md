@@ -34,11 +34,13 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
   human cadence, human hours, one client, never in a competitive context — because what
   closes accounts is a traffic pattern no person could produce. **Preconditions in
   `PLAN.md` §6.2 are not all met**, so A1 is unblocked but not yet safe to run: there is
-  no unpatched-DH build to launch, and nothing marks a live capture as ArenaNet's rather
-  than our own. Two halves are done: every launch asserts the firewall cage
-  (`toolkit/clientpatch/cage.py`), and every launch names its account
-  (`toolkit/harness/accounts.py`) — loopback runs use a synthetic credential and the
-  primary is refused for automation, opt-in rather than blocklisted.
+  **no unpatched-DH build to launch**, which is A1's own first commit. The other four are
+  done: every launch asserts the firewall cage (`toolkit/clientpatch/cage.py`), every
+  launch names its account (`toolkit/harness/accounts.py` — loopback uses a synthetic
+  credential, and the automation flag is opt-in so the primary is refused by default),
+  uncaging costs a UAC prompt, and every capture records whose server produced it
+  (`toolkit/origin.py`, three-valued: ours, live, unknown — and a consumer that pools
+  them refuses to mix).
 - **Local and personal only.** No public shard, no PRs against upstream client-side
   projects on this project's behalf.
 - **Other people's work is a second gate, and it is not the provenance gate.** Before a
@@ -119,7 +121,9 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientpatch/test_cage.py` (the launch-time cage guard — slow, ~1 min, it
   queries the Windows Firewall once per client),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
-  refused).
+  refused),
+  `toolkit/test_origin.py` (whose server a capture came from, and that ours and
+  ArenaNet's can never be pooled).
 
   **This list is the suite.** A test in the tree but not named here is a test
   nobody runs: `test_pathmap.py`, `test_skillcast.py` and `test_textrec.py` were

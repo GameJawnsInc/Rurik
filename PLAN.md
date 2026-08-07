@@ -647,10 +647,19 @@ account-visible event happens before the patch matters.
    is accepted deliberately over leaving autofill in charge, and `redact()` keeps it out
    of both launch sites' prints and the run manifest. `test_accounts.py` proves six
    refusals including the primary one.
-5. **Live records are distinguishable from loopback ones.** Every capture is Rurik
-   talking to Rurik and nothing marks which. The moment some records are ArenaNet's, that
-   distinction is the most valuable metadata in the vault, and conflating them would be a
-   serious evidence defect.
+5. ✅ **Live records are distinguishable from loopback ones.** Done 2026-08-06.
+   `toolkit/origin.py` classifies every capture **ours / live / unknown**, and the third
+   value is the design: a two-valued scheme forces an unstamped file to be called one or
+   the other, and whichever default you pick is wrong exactly when it matters — the
+   first live capture written by a tool that forgot to stamp. `authsrv.py`'s Recorder
+   now writes an `origin` record as the first line of every session; unstamped legacy
+   files infer OURS only from all-loopback peers **plus** our own session markers, and
+   nothing ever infers LIVE, because `captures/patcher/` holds public addresses too.
+   The guard that matters is `require_single()`: `test_movement_fidelity.py` pools every
+   game-channel capture into one number, and a live file in that pool would blend two
+   oracles invisibly. **MEASURED: 424 files, 341 ours, 83 unknown (patcher and short
+   sessions), 0 live — and 113 of 113 game-channel files are ours**, so it refuses
+   nothing today and refuses the first one that appears.
 
 **And R0b's deliverable is wrong.** §3 calls it "proxy capture of a real session", which
 cannot work: the channel is DH-keyed end to end and a proxy has neither private exponent.

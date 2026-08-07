@@ -47,6 +47,7 @@ from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 import probes  # noqa: E402
 import agents  # noqa: E402
+import origin  # noqa: E402
 
 
 def _f32(x):
@@ -1114,6 +1115,15 @@ class Recorder:
         self.meta = open(base + ".jsonl", "a", encoding="utf-8")
         self.raw = open(base + ".raw", "ab")
         self.t0 = time.perf_counter()
+        # FIRST record in the file, before any frame. This server IS our server, so it
+        # can only ever produce OURS -- but stamping it is what lets a reader tell this
+        # apart from a capture of ArenaNet's, which is the one artifact the project
+        # cannot reproduce. See toolkit/origin.py for why UNKNOWN is a third value
+        # rather than a default.
+        stamped = origin.record(
+            "toolkit/authsrv/authsrv.py", origin.OURS,
+            note="a Rurik listener; the peer is the client connecting to us")
+        self.event(stamped.pop("kind"), **stamped)
 
     def event(self, kind, **kw):
         kw["kind"] = kind

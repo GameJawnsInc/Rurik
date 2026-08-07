@@ -67,6 +67,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 import vaultpath  # noqa: E402
 import checks  # noqa: E402
+import origin  # noqa: E402
 
 TURN_TO_DIRECTION = 0x003D
 DEFAULT_RUN_SPEED = 288.0
@@ -125,6 +126,13 @@ def game_channel_captures():
         for p in glob.glob(os.path.join(d, "*.jsonl")):
             if channel_of(p) == "game":
                 out.append(p)
+    # And they must all be OUR server's. This test scores our simulation against the
+    # client's, pooled over the whole corpus -- a capture of ArenaNet's server in that
+    # pool would silently blend two different oracles into one number that is about
+    # neither. There are no live captures today (MEASURED: 113 of 113 game-channel
+    # files classify as ours), so this refuses nothing yet and refuses the first one
+    # that appears, which is the only moment it could matter.
+    out = origin.require_single(out, origin.OURS, what="the movement fidelity score")
     return sorted(out, key=os.path.getmtime, reverse=True)
 
 
