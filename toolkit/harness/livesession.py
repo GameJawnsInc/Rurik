@@ -237,9 +237,20 @@ def assemble(wire_path, key, out_path):
     # none, so the key's correctness rests on the keytap having been proven on loopback and
     # on the decrypted stream framing cleanly downstream, not on anything provable here.
 
+    # DERIVE the stamp, and RECORD what it was derived from. This site hardcoded LIVE and
+    # wrote no address at all, which is the worst of both: dryrun_keycapture.py drives it
+    # against 127.0.0.1, so vault/dryrun/dryrun_decrypted.jsonl claimed to be live traffic,
+    # and because it named no endpoint the contradiction check had nothing to catch it
+    # with. Deriving without recording would have left it merely unfalsifiable; the
+    # `endpoints` record below is what lets a reader disagree with the stamp.
+    endpoints = [str(meta.get("client", "")), str(meta.get("server", ""))] if meta else []
+    addrs = [e for e in endpoints if origin.is_address(e)]
+    who = origin.OURS if addrs and all(origin.is_loopback(a) for a in addrs) else origin.LIVE
     with open(out_path, "w", encoding="utf-8") as fh:
-        fh.write(json.dumps(origin.record("toolkit/harness/livesession.py", origin.LIVE,
+        fh.write(json.dumps(origin.record("toolkit/harness/livesession.py", who,
                                           note="decrypted from an off-wire capture")) + "\n")
+        fh.write(json.dumps({"kind": "endpoints", "client": endpoints[0] if endpoints else "",
+                             "server": endpoints[1] if len(endpoints) > 1 else ""}) + "\n")
         fh.write(json.dumps({"kind": "session_key", "arc4_key": key.hex()}) + "\n")
         fh.write(json.dumps({"kind": "client_seed", "a": A.hex()}) + "\n")
         fh.write(json.dumps({"kind": "server_seed", "sent": seed.hex()}) + "\n")

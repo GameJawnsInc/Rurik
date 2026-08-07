@@ -42,7 +42,7 @@ import livesession as ls  # noqa: E402
 import wirecapture as wc  # noqa: E402
 from gwcrypto import ARC4, arc4_hash  # noqa: E402
 
-LEDGER = checks.Ledger("livesession", floor=37)
+LEDGER = checks.Ledger("livesession", floor=39)
 
 
 def real_session():
@@ -111,8 +111,8 @@ def s2c_handshake(seed):
     return struct.pack("<H", ls.SERVER_SEED_HEADER) + seed
 
 
-def write_wire(path, c2s, s2c):
-    fh, record = wc.open_capture(path, "10.0.0.9:5000", "3.65.1.1:6112", 4242, {6112},
+def write_wire(path, c2s, s2c, client="10.0.0.9:5000", server="3.65.1.1:6112"):
+    fh, record = wc.open_capture(path, client, server, 4242, {6112},
                                  lambda: 0.0)
     record(wc.C2S, 0, c2s)
     record(wc.S2C, 0, s2c)
@@ -188,6 +188,22 @@ def main():
                       "the handshake A and server seed are carried into the artifact")
             who, why = origin.origin_of(out)
             LEDGER.ok(who == origin.LIVE, "the assembled capture is stamped origin: live", why)
+            LEDGER.ok("UNCORROBORATED" not in why,
+                      "and it records the endpoints that stamp was derived from",
+                      "deriving the stamp without recording its basis is still "
+                      "unfalsifiable -- a reader must be able to disagree")
+
+            # The SAME function against loopback must not say live. dryrun_keycapture.py
+            # drives exactly this path at 127.0.0.1, and it stamped LIVE for a day.
+            lb_wire = os.path.join(tmp, "lb_wire.jsonl")
+            lb_out = os.path.join(tmp, "lb_out.jsonl")
+            write_wire(lb_wire, c2s_handshake(A) + c2s_cipher,
+                       s2c_handshake(seed) + s2c_cipher,
+                       client="127.0.0.1:51000", server="127.0.0.1:6112")
+            ls.assemble(lb_wire, key, lb_out)
+            lb_who, lb_why = origin.origin_of(lb_out)
+            LEDGER.ok(lb_who == origin.OURS,
+                      "the same assemble() against LOOPBACK stamps ours, not live", lb_why)
             recs = [json.loads(l) for l in open(out, encoding="utf-8")]
             c2s_rec = [r for r in recs if r.get("direction") == "c2s"][0]
             LEDGER.ok(bytes.fromhex(c2s_rec["plain"])[:len(first_plain)] == first_plain,
