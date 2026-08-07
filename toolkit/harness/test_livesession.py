@@ -42,7 +42,7 @@ import livesession as ls  # noqa: E402
 import wirecapture as wc  # noqa: E402
 from gwcrypto import ARC4, arc4_hash  # noqa: E402
 
-LEDGER = checks.Ledger("livesession", floor=23)
+LEDGER = checks.Ledger("livesession", floor=30)
 
 
 def real_session():
@@ -92,6 +92,21 @@ def c2s_handshake(A):
             + struct.pack("<H", ls.CLIENT_SEED_HEADER) + A)
 
 
+def game_c2s_handshake(A, acct=b"\xaa" * 16, char=b"\xbb" * 16):
+    """The GAME channel's VERSION, whose body is 60 bytes rather than the auth shape's 12.
+
+    Built from the live capture of 2026-08-07: header 0x000C0500, then build/1/id/n/n, two
+    16-byte uuid-shaped fields and eight zero bytes, and only THEN CLIENT_SEED -- at offset
+    64 instead of 16. Our own server never speaks this shape, so nothing on loopback could
+    have produced it and the first live run decrypted 1 of 7 connections because of it.
+    """
+    body = (struct.pack("<IIIII", 38797, 1, 0xE10DEFA9, 0x0202, 0x3D534856)
+            + acct + char + b"\x00" * 8)
+    assert len(body) == 60, len(body)
+    return (struct.pack("<I", ls.GAME_VERSION_HEADER) + body
+            + struct.pack("<H", ls.CLIENT_SEED_HEADER) + A)
+
+
 def s2c_handshake(seed):
     return struct.pack("<H", ls.SERVER_SEED_HEADER) + seed
 
@@ -121,6 +136,22 @@ def main():
     except ls.SplitError:
         refused = True
     LEDGER.ok(refused, "a c2s stream not starting with VERSION is refused, not decrypted")
+
+    # The GAME shape. Its body is 60 bytes, not 12, so CLIENT_SEED is at offset 64 -- and
+    # a reader that assumes the auth shape refuses every game connection in a live capture.
+    g_got, g_cipher = ls.split_c2s(game_c2s_handshake(A) + b"GAMECIPHER")
+    LEDGER.ok(g_got == A and g_cipher == b"GAMECIPHER",
+              "split_c2s parses the GAME version shape too (CLIENT_SEED at 64, not 16)",
+              "OBSERVED from the 2026-08-07 live capture: 6 of its 7 connections")
+    try:
+        ls.split_c2s(struct.pack("<I", 0x000C0600) + b"\x00" * 200)
+        unknown_ok = False
+        why = ""
+    except ls.SplitError as ex:
+        unknown_ok, why = True, str(ex)
+    LEDGER.ok(unknown_ok and "0x000c0400" in why and "0x000c0500" in why,
+              "an UNKNOWN version header is still refused, and the refusal names what it "
+              "does know", "a third shape must stop the reader, not be guessed past")
 
     # ---- 2. real bytes: split + decrypt reproduce the logged plaintext ---------
     print("\n2. on a real session's own c2s ciphertext, split+decrypt match the log")
@@ -248,6 +279,54 @@ def main():
               "channel_of names the channel from the client's own first opcode")
     LEDGER.ok(ls.channel_of(b"\x00\x00rubbish") is None and ls.channel_of(b"") is None,
               "channel_of refuses anything else, including a truncated stream")
+
+    # ---- 3c. the keyring reaches DISK, and a capture re-assembles from it -------
+    print("\n3c. the keyring is persisted per key, and re-assembly works without a client")
+    # The first live run held its keyring in memory: 7 keys tapped, 1 written (by the one
+    # connection that assembled), and 6 channels of real ArenaNet ciphertext became
+    # permanently undecryptable when the process exited. There is no recovering those --
+    # the key derives from ArenaNet's private exponent. So the keyring is written as each
+    # key appears, and a capture directory can be decoded again from its own two files.
+    with tempfile.TemporaryDirectory() as tmp:
+        kr = os.path.join(tmp, "keyring.jsonl")
+        ring = ls.KeyRing.__new__(ls.KeyRing)      # no live process to poll
+        ring.path, ring.errors = kr, 0
+        with open(kr, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(origin.record("test", origin.LIVE)) + "\n")
+        ring._persist(1.04, bytes(range(20)), auth_key)
+        ring._persist(9.10, bytes(range(20, 40)), game_key)
+        back = ls.load_keyring(kr)
+        LEDGER.ok([k for _l, k in back] == [auth_key, game_key],
+                  "every tapped key is on disk, in order, and reads back exactly",
+                  f"{len(back)} keys -- written per key, not per run")
+        LEDGER.ok(origin.origin_of(kr)[0] == origin.LIVE,
+                  "the keyring file is itself stamped origin: live")
+        raw = open(kr, encoding="utf-8").read()
+        LEDGER.ok("master_secret" in raw and "arc4_key" in raw,
+                  "it records master_secret AND the derived key, under names the scrub "
+                  "treats as secret", "so a re-derivation is possible if arc4_hash changes")
+
+        # A whole capture directory, decoded again from nothing but its own two files.
+        rd = os.path.join(tmp, "capture")
+        os.makedirs(rd)
+        fh, record = wc.open_capture(os.path.join(rd, "wire.jsonl"), "10.0.0.9:*", None,
+                                     0, {6112}, lambda: 0.0)
+        wire_conn(record, "10.0.0.9", 51000, "3.65.1.1", 6112,
+                  c2s_handshake(A1) + ARC4(auth_key).crypt(auth_plain),
+                  s2c_handshake(seed1) + ARC4(auth_key).crypt(b"auth said this"))
+        wire_conn(record, "10.0.0.9", 51001, "3.65.9.9", 6112,
+                  game_c2s_handshake(A2) + ARC4(game_key).crypt(game_plain),
+                  s2c_handshake(seed2) + ARC4(game_key).crypt(b"game said this"))
+        fh.close()
+        import shutil
+        shutil.copy(kr, os.path.join(rd, "keyring.jsonl"))
+        rc = ls.reassemble(rd)
+        LEDGER.ok(rc == 0, "reassemble() decodes a capture directory with no client, no "
+                           "network and no account", "R0b's 'byte-replayable from disk'")
+        outs = sorted(f for f in os.listdir(rd) if f.startswith(("auth-", "game-")))
+        LEDGER.ok(len(outs) == 2,
+                  "both an auth-shaped and a GAME-shaped connection come back",
+                  ", ".join(outs))
 
     # ---- 4. the guards refuse --------------------------------------------------
     print("\n4. the guards refuse the primary, a non-stock client, and no --confirm")

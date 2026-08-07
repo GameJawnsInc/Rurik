@@ -48,6 +48,7 @@ judgement itself stays with the operator.
 standard library only (the WinDivert dependency lives in wirecapture.py).
 """
 import argparse
+import json
 import os
 import sys
 import threading
@@ -65,12 +66,34 @@ import wirecapture as wc  # noqa: E402
 from gwcrypto import ARC4  # noqa: E402
 
 # Handshake framing, plaintext on the wire, from authsrv.py's own reader:
-#   c2s: VERSION (u32 header 0x000C0400 + 12-byte body) then CLIENT_SEED (u16 0x4200 + 64B A)
+#   c2s: VERSION (u32 header + body) then CLIENT_SEED (u16 0x4200 + 64B A)
 #   s2c: SERVER_SEED (u16 0x1601 + 20B)
+#
+# THE VERSION MESSAGE HAS TWO SHAPES, and we only knew one until a live session showed the
+# other. OBSERVED 2026-08-07 from the first live capture (7 connections to ArenaNet, build
+# 38797 on the wire in every one):
+#
+#   auth  header 0x000C0400, 12-byte body: <u32 build> <u32 1> <u32 4>
+#   game  header 0x000C0500, 60-byte body: <u32 build> <u32 1> <u32 id> <u32 n> <u32 n>
+#                                          <16B account uuid> <16B character uuid> <8B 0>
+#
+# so CLIENT_SEED sits at offset 16 on auth and offset 64 on game. MEASURED: `00 42` occurs
+# exactly once in the first 200 bytes of every one of the seven streams, at 16 for the auth
+# connection and at 64 for all six game connections -- there is no ambiguity to resolve.
+# The two 16-byte fields read as uuids because they are CONSTANT across connections in the
+# way uuids would be: the first is identical in all six, and the second is identical in five
+# and ZERO in the earliest one -- which is the connection made before the new character
+# existed. That reading is RECONSTRUCTION; the offsets are OBSERVED and are all this code
+# depends on.
+#
+# Our own server only ever speaks the auth shape, so no loopback capture could have shown
+# this. The first live run decrypted 1 of 7 connections because of it.
 AUTH_VERSION_HEADER = 0x000C0400
+GAME_VERSION_HEADER = 0x000C0500
+VERSION_BODY_LEN = {AUTH_VERSION_HEADER: 12, GAME_VERSION_HEADER: 60}
 CLIENT_SEED_HEADER = 0x4200
 SERVER_SEED_HEADER = 0x1601
-VERSION_LEN = 4 + 12
+VERSION_LEN = 4 + VERSION_BODY_LEN[AUTH_VERSION_HEADER]   # the auth shape, for callers
 CLIENT_SEED_LEN = 2 + 64
 SERVER_SEED_LEN = 2 + 20
 
@@ -119,17 +142,23 @@ def split_c2s(stream):
     Parses rather than trusts a fixed offset, so a stream that is not the handshake is a
     loud SplitError instead of 82 bytes of something else fed to the decryptor.
     """
-    if len(stream) < VERSION_LEN + CLIENT_SEED_LEN:
-        raise SplitError(f"c2s stream is {len(stream)} bytes, too short for the handshake")
+    if len(stream) < 4:
+        raise SplitError(f"c2s stream is {len(stream)} bytes, too short for a header")
     header = int.from_bytes(stream[0:4], "little")
-    if header != AUTH_VERSION_HEADER:
-        raise SplitError(f"c2s does not start with VERSION (got header 0x{header:08x})")
-    seed_hdr = int.from_bytes(stream[VERSION_LEN:VERSION_LEN + 2], "little")
+    if header not in VERSION_BODY_LEN:
+        raise SplitError(f"c2s does not start with VERSION (got header 0x{header:08x}; "
+                         f"known: " +
+                         ", ".join(f"0x{h:08x}" for h in sorted(VERSION_BODY_LEN)) + ")")
+    version_len = 4 + VERSION_BODY_LEN[header]
+    if len(stream) < version_len + CLIENT_SEED_LEN:
+        raise SplitError(f"c2s stream is {len(stream)} bytes, too short for the handshake")
+    seed_hdr = int.from_bytes(stream[version_len:version_len + 2], "little")
     if seed_hdr != CLIENT_SEED_HEADER:
-        raise SplitError(f"CLIENT_SEED header is 0x{seed_hdr:04x}, expected 0x4200")
-    a_off = VERSION_LEN + 2
+        raise SplitError(f"CLIENT_SEED header is 0x{seed_hdr:04x} at offset {version_len}, "
+                         f"expected 0x4200")
+    a_off = version_len + 2
     A = stream[a_off:a_off + 64]
-    return A, stream[VERSION_LEN + CLIENT_SEED_LEN:]
+    return A, stream[version_len + CLIENT_SEED_LEN:]
 
 
 def split_s2c(stream):
@@ -156,7 +185,6 @@ def assemble(wire_path, key, out_path):
     replay.py and the scrub both already understand it, and it records A / server_seed /
     arc4_key under the field names scrub_captures.py already treats as secret.
     """
-    import json
     meta, streams, gaps = wc.load_wire(wire_path)
     A, c2s_cipher = split_c2s(streams[wc.C2S])
     seed, s2c_cipher = split_s2c(streams[wc.S2C])
@@ -218,7 +246,6 @@ def assemble_live(wire_path, keyring, out_dir):
 
     Returns a report dict. Writes one file per decrypted connection into out_dir.
     """
-    import json
     meta, conns = wc.load_connections(wire_path)
     keys = [(label, k) for label, k in keyring if k]
     results = []
@@ -372,14 +399,48 @@ class KeyRing(threading.Thread):
     is a retry, never a crash: the slot is legitimately all-zero until the first handshake.
     """
 
-    def __init__(self, pid, rva, module="Gw.exe", interval=0.25):
+    def __init__(self, pid, rva, module="Gw.exe", interval=0.25, path=None):
         super().__init__(daemon=True)
         self.pid, self.rva, self.module, self.interval = pid, rva, module, interval
         self.values = []          # [(t, master_secret_bytes)] -- distinct, in order
         self.errors = 0
+        self.path = path          # persist here the INSTANT a key appears -- see _persist
         self._seen = set()
         self._stop = threading.Event()
         self.t0 = time.monotonic()
+        if self.path:
+            with open(self.path, "w", encoding="utf-8") as fh:
+                fh.write(json.dumps(origin.record("toolkit/harness/livesession.py",
+                                                  origin.LIVE,
+                                                  note="tapped session keys, one per "
+                                                       "DH-keyed channel")) + "\n")
+
+    def _persist(self, t, master, key):
+        """Append one key to disk and FLUSH, the moment it is read.
+
+        This exists because the first live run lost six of seven keys. The keyring was held
+        in memory and only the keys that survived assembly reached disk, so six connections
+        of real ArenaNet ciphertext -- already captured, gap-free -- became permanently
+        undecryptable the moment the process exited. There is no recovering them: the key
+        derives from ArenaNet's private exponent.
+
+        So: written per key, not per run, and flushed rather than buffered. A crash, a
+        Ctrl-C, a power cut or an exception anywhere downstream now costs at most the key
+        being read at that instant, and never a key already seen. Recorded under the field
+        names scrub_captures.py treats as secret.
+        """
+        if not self.path:
+            return
+        try:
+            with open(self.path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"kind": "session_key", "t": t,
+                                     "master_secret": master.hex(),
+                                     "arc4_key": key.hex()}) + "\n")
+                fh.flush()
+        except OSError:
+            # Never let a disk problem kill the poller: an in-memory key is still better
+            # than no key, and the caller's report says how many were persisted.
+            self.errors += 1
 
     def run(self):
         import keytap
@@ -404,8 +465,11 @@ class KeyRing(threading.Thread):
                 self.errors += 1
                 handle = base = None
             if got and any(got) and got not in self._seen:
+                from gwcrypto import arc4_hash
                 self._seen.add(got)
-                self.values.append((round(time.monotonic() - self.t0, 2), got))
+                t = round(time.monotonic() - self.t0, 2)
+                self.values.append((t, got))
+                self._persist(t, got, arc4_hash(got))
             self._stop.wait(self.interval)
         if handle is not None:
             keytap.kernel32.CloseHandle(handle)
@@ -422,6 +486,24 @@ class KeyRing(threading.Thread):
         """
         from gwcrypto import arc4_hash
         return [(f"tap@{t}s", arc4_hash(v)) for t, v in self.values]
+
+
+def load_keyring(path):
+    """[(label, arc4_key)] read back from a persisted keyring.jsonl.
+
+    This is what makes a capture re-assemblable from disk without a second live session --
+    the property R0b's criterion asks for and the first run did not have.
+    """
+    out = []
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            try:
+                r = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if isinstance(r, dict) and r.get("kind") == "session_key" and r.get("arc4_key"):
+                out.append((f"tap@{r.get('t', '?')}s", bytes.fromhex(r["arc4_key"])))
+    return out
 
 
 def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=None):
@@ -510,8 +592,9 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         print(f"  [ok] launched pid {client.pid}: "
               f"{os.path.basename(exe)} {' '.join(accounts.redact(args))}")
 
-        # --- 3. the keyring polls from now until the client stops.
-        ring = KeyRing(client.pid, rva)
+        # --- 3. the keyring polls from now until the client stops, writing each key to
+        # disk as it appears. See KeyRing._persist for why that is not an optimisation.
+        ring = KeyRing(client.pid, rva, path=os.path.join(outdir, "keyring.jsonl"))
         ring.start()
 
         print("\n  YOU drive from here: log in and play at human cadence. Ctrl-C to stop "
@@ -551,10 +634,15 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
             print(f"       GAPS in the wire capture: {row['gaps']} -- the keystream "
                   f"desyncs at each one")
 
-    # A SIBLING of outdir, never a child: scrub_tree walks its source, and an output
-    # directory inside that source is a directory the walk can descend into and re-scrub.
-    scrubbed = outdir + "-scrubbed"
+    # Outside the capture tree entirely, under the canonical scrubbed root. Not a child of
+    # outdir (scrub_tree walks its source, and an output inside that source is a directory
+    # the walk descends into), and not a sibling either -- a sibling lands in
+    # vault/captures/, where the TREE-WIDE scrub and every capture census then walk it as
+    # if it were more evidence. `captures-scrubbed` is already on the skip list everything
+    # else uses, so putting it there makes one rule cover both.
     import scrub_captures
+    scrubbed = os.path.join(vaultpath.vault_path("captures-scrubbed"),
+                            "live-" + stamp)
     files, records, stats, distinct, _un = scrub_captures.scrub_tree(outdir, scrubbed)
     print(f"  scrub: {files} file(s), {records} records, {distinct} distinct secrets "
           f"replaced -> {scrubbed}")
@@ -566,7 +654,6 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         print("         inside that blob. This capture is vault-only -- not shareable, "
               "scrubbed or not.")
 
-    import json
     manifest = {"stamp": stamp, "exe": exe, "account": acct["label"],
                 "args": accounts.redact_for_file(args), "ports": ports,
                 "keys_tapped": len(keys), "report": report,
@@ -617,7 +704,12 @@ def _hold(client, ring, wire, minutes):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--account", required=True, help="automation-flagged label in accounts.json")
+    ap.add_argument("--assemble", default=None, metavar="DIR",
+                    help="re-assemble an existing capture directory from its own "
+                         "wire.jsonl + keyring.jsonl and exit. No client, no network, no "
+                         "account -- this is the offline half, and it is why the keyring "
+                         "is persisted")
+    ap.add_argument("--account", default=None, help="automation-flagged label in accounts.json")
     ap.add_argument("--exe", default=None, help="the stock-DH, key-tapped live build")
     # --host is accepted only to REFUSE it by name. RUNBOOK documented `--host <auth ip>`
     # as the live command for a day, and an operator working from a printed or remembered
@@ -629,6 +721,10 @@ def main():
     ap.add_argument("--minutes", type=int, default=20, help="session-length ceiling")
     ap.add_argument("--confirm", action="store_true", help="required for a real live run")
     a = ap.parse_args()
+    if a.assemble:
+        return reassemble(a.assemble)
+    if not a.account:
+        raise LiveError("--account is required for a live run (or use --assemble DIR)")
     if not a.exe:
         raise LiveError("a live run needs --exe: the key-tapped, stock-DH build under "
                         "vault/run-live. Nothing here picks a client for you -- on "
@@ -647,6 +743,38 @@ def main():
             f"  multi-connection reader exists for.")
     ports = {int(p) for p in a.ports.split(",") if p.strip()}
     return run(a.account, a.exe, drive_client_default(), ports, a.minutes, a.confirm)
+
+
+def reassemble(outdir):
+    """Re-run the offline half over a capture directory that already exists.
+
+    The point of persisting the keyring: a capture is a THING ON DISK that can be decoded
+    again -- after a framing fix, after a new opcode is understood, months later -- without
+    a second live session. R0b's criterion says "byte-replayable from disk" and this is the
+    function that makes that true rather than aspirational.
+    """
+    wire = os.path.join(outdir, "wire.jsonl")
+    kr = os.path.join(outdir, "keyring.jsonl")
+    if not os.path.isfile(wire):
+        raise LiveError(f"no wire.jsonl in {outdir}")
+    if not os.path.isfile(kr):
+        raise LiveError(
+            f"no keyring.jsonl in {outdir}.\n"
+            f"  Captures written before 2026-08-07 held their keys in memory only, and\n"
+            f"  whatever did not decrypt at the time cannot be decrypted now -- the key\n"
+            f"  derives from ArenaNet's private exponent. The wire bytes are still there\n"
+            f"  and still worth keeping; they just have no key.")
+    keys = load_keyring(kr)
+    print(f"re-assembling {outdir}\n  keyring: {len(keys)} key(s)")
+    report = assemble_live(wire, keys, outdir)
+    for row in report["connections"]:
+        if row.get("decrypted"):
+            print(f"  [ok] {row['connection']}  {row['channel']}  "
+                  f"c2s {row['c2s_bytes']}B / s2c {row['s2c_bytes']}B  ({row['key_from']})")
+        else:
+            print(f"  [--] {row['connection']}  {row.get('why', 'undecrypted')}")
+    print(f"\n  {report['decrypted']}/{report['total']} connection(s) decrypted")
+    return 0 if report["decrypted"] else 1
 
 
 def drive_client_default():

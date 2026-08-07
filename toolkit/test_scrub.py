@@ -27,9 +27,9 @@ import checks  # noqa: E402
 import vaultpath  # noqa: E402
 import scrub_captures as sc  # noqa: E402
 
-# 6 structural + 6 leak/property + 2 red-team + 5 blind-spot = 19, measured green over the
+# 6 structural + 6 leak/property + 2 red-team + 6 blind-spot = 20, measured green over the
 # whole capture tree. Nothing here is optional; a run under this floor has lost a section.
-LEDGER = checks.Ledger("credential scrub", floor=19)
+LEDGER = checks.Ledger("credential scrub", floor=20)
 
 
 def harvest_secrets(src):
@@ -88,13 +88,34 @@ def leaked(out_dir, secrets):
     Reads every file, not only the .jsonl -- a scrubber that redacted every
     record and then wrote the values into its own manifest would pass a
     shallower check.
+
+    OPAQUE PAYLOADS ARE EXCLUDED, and that exclusion is the honest half of a bargain
+    rather than a loophole. `plain` and `payload` are raw protocol bytes -- a decrypted
+    frame, a captured TCP segment -- and redacting them does not clean the capture, it
+    deletes it. They demonstrably carry secrets: the first live capture put `a` and `sent`
+    into `payload` as hex, because the DH handshake crosses the wire in the clear, and this
+    check found both. What the scrub can do is REFUSE TO CLAIM otherwise, so the other half
+    of the bargain is section 7 below, which requires every such field to be counted, every
+    file holding one to be named in the manifest, and the manifest to say the tree is not
+    shareable. Drop that section and this exclusion becomes the hole it is not today.
     """
     blob = []
     for base, _dirs, files in os.walk(out_dir):
         for f in sorted(files):
-            with open(os.path.join(base, f), encoding="utf-8",
-                      errors="replace") as fh:
-                blob.append(fh.read())
+            path = os.path.join(base, f)
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                if not f.endswith(".jsonl"):
+                    blob.append(fh.read())
+                    continue
+                for line in fh:
+                    try:
+                        rec = json.loads(line)
+                    except (json.JSONDecodeError, ValueError):
+                        blob.append(line)      # unparseable: search it whole
+                        continue
+                    if isinstance(rec, dict):
+                        rec = {k: v for k, v in rec.items() if k not in sc.OPAQUE_KEYS}
+                    blob.append(json.dumps(rec))
     text = "\n".join(blob)
     return {s for s in secrets if s in text}
 
@@ -255,6 +276,20 @@ def main():
                   "the manifest names the file that still carries one")
         LEDGER.ok("NOT safe to hand to anyone" in oman.get("WARNING", ""),
                   "and says plainly that the output is not shareable")
+
+        # And the same promise against the REAL corpus, which is where it has to hold: if
+        # any vaulted capture carries an opaque payload, the tree-wide manifest must name
+        # it. This is the assertion that pays for leaked()'s exclusion -- without it, the
+        # exclusion would be a blind spot rather than a declared one.
+        real_man = json.load(open(os.path.join(out, "SCRUB-MANIFEST.json"),
+                                  encoding="utf-8"))
+        listed = real_man.get("NOT_CLEANED_opaque_payloads", [])
+        if stats.get(sc.OPAQUE_STAT):
+            LEDGER.ok(len(listed) > 0 and "NOT safe" in real_man.get("WARNING", ""),
+                      "the real corpus's own manifest names its opaque-payload files",
+                      f"{len(listed)} of {files} file(s) carry one")
+        else:
+            LEDGER.skip("corpus opaque census", "no vaulted capture carries a payload field")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

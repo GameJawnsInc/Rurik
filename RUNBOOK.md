@@ -350,8 +350,19 @@ in and play; the driver only instruments. That is deliberate: the loopback harne
 scripted three-Enters-and-a-Play-click is precisely the traffic pattern §6.1 warns about.
 
 **Output**, under `vault/captures/live/<stamp>/`: `wire.jsonl` (the raw off-wire capture,
-kept even if nothing decrypts), one `<channel>-<connection>.jsonl` per decrypted channel,
-`manifest.json`, and `scrubbed/`. **`scrubbed/` is not shareable.** The scrub matches JSON
+kept even if nothing decrypts), `keyring.jsonl` (**every tapped key, written and flushed
+the moment it is read** — the first run held them in memory and lost six of seven, which
+made six channels of captured ArenaNet ciphertext permanently undecryptable), one
+`<channel>-<connection>.jsonl` per decrypted channel, and `manifest.json`. The scrubbed
+copy goes to `vault/captures-scrubbed/live-<stamp>/`, outside the capture tree so censuses
+and the tree-wide scrub do not walk it as if it were more evidence.
+
+**A capture can be decoded again without a client, a network or an account** — that is
+what the keyring is for, and it is how a framing fix gets applied to bytes already on disk:
+
+```bash
+python toolkit/harness/livesession.py --assemble C:\gd\Rurik\vault\captures\live\<stamp>
+``` **`scrubbed/` is not shareable.** The scrub matches JSON
 keys and cannot see inside a `plain` hex blob, and the auth channel's first client message
 carries the account email as UTF-16 inside exactly such a blob. The scrub says so on the
 way out and `SCRUB-MANIFEST.json` names every file affected — this applies to the existing

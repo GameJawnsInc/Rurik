@@ -353,7 +353,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
-| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | 🔶 **built and proven on loopback, unrun against ArenaNet. The criterion is unmet: not one byte in the vault is ArenaNet's, and it stays the wasting asset until a session is recorded.** The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
+| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | 🔶 **the first live capture exists — 2026-08-07, `20260807T124912`, and the vault now holds ArenaNet's bytes.** 7 connections to the real service, 1.7 MB, gap-free, every one's plaintext handshake recorded; the **auth channel is decrypted both directions** (2325B c2s / 785B s2c) and its first client message is opcode `0x8001`, exactly what the loopback corpus predicted — the pairing criterion corroborated against the real service. **The criterion is not yet met**: six game-channel connections were captured but their keys were lost to a driver defect (the keyring was held in memory; fixed, and it is now written per key as it is tapped), so those bytes are ciphertext nobody can open. A second session gets all seven. The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ⬜ not started. Requires R0b, so it inherits R0b's block. |
 
 Two structural changes, both argued below in §4.
@@ -765,9 +765,12 @@ ArenaNet's bytes is code nobody has written, not a control nobody has built.
    nothing ever infers LIVE, because `captures/patcher/` holds public addresses too.
    The guard that matters is `require_single()`: `test_movement_fidelity.py` pools every
    game-channel capture into one number, and a live file in that pool would blend two
-   oracles invisibly. **MEASURED: 424 files, 341 ours, 83 unknown (patcher and short
-   sessions), 0 live — and 113 of 113 game-channel files are ours**, so it refuses
-   nothing today and refuses the first one that appears.
+   oracles invisibly. **The first live files arrived 2026-08-07 and the guard held**:
+   `test_origin` now takes its live branch — a live capture is present, and pooling it with
+   ours is refused by name. *(That test used to assert "no live capture exists yet", which
+   is a check that goes RED on success; rewritten 2026-08-07 to assert the property that
+   actually protects the corpus, so it gets stronger once a live file exists rather than
+   turning the project's biggest win into a failing suite.)*
 
 **Four defects the build turned up, all of them in the controls themselves.** Recorded
 because every one was invisible to the thing meant to catch it:
@@ -952,9 +955,34 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
    assembles per connection and scrubs. It deliberately sends **no** scripted input: the
    loopback harness's three-Enters-and-a-Play-click is exactly the traffic pattern §6.1
    says closes accounts. The stock-DH live build is key-tapped and staged.
-   **What remains is only the live run:** elevated shell, secondary account, `--confirm`,
-   human cadence. Nothing in the pipeline is unproven now; only the live launch itself has
-   not happened.
+   **The first live run happened 2026-08-07** (`vault/captures/live/20260807T124912`). It
+   worked, and it taught three things no loopback session could:
+
+   * **The VERSION message has two shapes.** Auth is header `0x000C0400` + 12-byte body;
+     the game channel is `0x000C0500` + **60**, so CLIENT_SEED sits at offset 64 rather
+     than 16. **OBSERVED**: `00 42` occurs exactly once in the first 200 bytes of all seven
+     streams — at 16 for the auth connection, 64 for all six game ones. Our server only
+     ever speaks the auth shape, so nothing on loopback could have shown it, and the first
+     run split 1 of 7 connections because of it. Now handled, and an unknown third header
+     still stops the reader rather than being guessed past. *(The 60-byte body reads as
+     build/1/id/n/n + two 16-byte uuid-shaped fields + 8 zero bytes; the second uuid is
+     identical across five connections and ZERO in the earliest — the one opened before
+     the new character existed. That reading is **RECONSTRUCTION**; only the offsets are
+     OBSERVED, and only the offsets are what the code depends on.)*
+   * **The keyring must reach disk as it is tapped, not at the end.** Seven keys were
+     tapped and one was written — by the single connection that happened to assemble — so
+     six channels of real, gap-free ArenaNet ciphertext became **permanently
+     undecryptable** when the process exited. There is no recovering them: the key derives
+     from ArenaNet's private exponent. Fixed: `keyring.jsonl`, written and flushed per key,
+     plus `--assemble DIR` to decode a capture again from its own two files. That is what
+     R0b's "byte-replayable from disk" actually requires, and the first run did not have it.
+   * **`payload` is a second field the scrub cannot clean.** The DH handshake crosses the
+     wire in the clear, so `a` and `sent` sit as hex inside `wire.jsonl` two records before
+     the fields where the scrub redacts them. `test_scrub`'s leak check found both the
+     first time a live capture entered the corpus — the check working, not failing.
+
+   **What remains is a second session** to recapture the game channels: elevated shell,
+   secondary account, `--confirm`, human cadence.
    *Two defects the wiring turned up, both in the controls rather than the pipeline.* The
    sniff could be pinned to one address by a documented flag, which silently discarded the
    game channel while reporting success (§6.2). And **`scrub_captures.py` cannot clean a

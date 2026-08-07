@@ -74,6 +74,7 @@ SECRET_KEYS = {
     "account_uuid": "acct",
     "char_uuid": "char",
     "arc4_key": "key",
+    "master_secret": "msec",   # what the key-tap cave reads; arc4_key is its hash
     "a": "dh",          # client DH public value
     "sent": "seed",     # server seed
 }
@@ -133,7 +134,12 @@ COMPOSITE_KEYS = ("who",)
 # than pretend -- the manifest names every file that still holds one, and the tool says so
 # on the way out. A live capture makes this sharper, because then the same field holds a
 # real session against ArenaNet rather than one against ourselves.
-OPAQUE_KEYS = ("plain",)
+# `payload` joined the list on 2026-08-07, put there by the first live capture rather than
+# by review: wirecapture's raw records hold the PLAINTEXT DH handshake as hex, so the same
+# `a` and `sent` values the scrub carefully redacts in their own fields sit in the clear
+# inside payload, two records earlier. test_scrub's leak check found both the first time a
+# live capture entered the corpus -- which is the check working, not failing.
+OPAQUE_KEYS = ("plain", "payload")
 OPAQUE_STAT = "NOT_CLEANED_opaque_payload"
 
 # 8-4-4-4-12 hex. Matching the shape rather than the field means a UUID picks up the same
