@@ -8,115 +8,159 @@ RECONSTRUCTION / UNVERIFIED / NOT FOUND.*
 
 ## The decision this rests on
 
-**Route: patch the real client to log its own key.** Owner's call, 2026-08-07, from the
-three candidates the recon surfaced:
+**Route: patch the real client to log its own key.** Owner's call, 2026-08-07, over a
+headless client (whose client→server bytes would be our reconstruction, not ArenaNet's) or
+a DLL reading plaintext (unlicensed technique, C, per-build). The owner also confirmed
+**both directions of ground truth matter**, which is what eliminates the headless route.
 
-| Route | c2s ground truth | Provenance | Cost |
-|---|---|---|---|
-| **Patch the real client (chosen)** | yes | clean — our own patch | a disassembly study (this doc), then a signature patch; verifiable on loopback before any live run |
-| Headless client (Headquarter-style) | **no** — c2s is our own reconstruction | ours, but leans on the protocol shape we are verifying | lower, but the c2s half is fiction |
-| DLL reading plaintext in-process | yes | technique from an unlicensed repo; reimplement clean | C, per-build signatures, closest to anti-cheat |
+The decryption half is already built and proven: `toolkit/authsrv/replay.py` decrypts a
+captured `.raw` from ONE 20-byte value — `arc4_key`, or the `master_secret` it derives from
+(it runs `arc4_hash` itself), or the client's exponent `a`. MEASURED 2026-08-07: 329 vault
+captures decrypt to exactly their logged plaintext. **So this study's job is to find where
+one such value is formed in the live client, and how to get it out.**
 
-The owner also confirmed **both directions matter** — the capture→row content pipeline and
-R1.5's tape need the real client's outbound packets, not a reconstruction — which is what
-eliminates the headless route for the parts that count.
+## Correction: the anchor this study opened with was the wrong function
 
-Why this route is safe to develop: the whole chain except the final step runs on loopback
-against our own server, where we already know the key (`test_replay.py` proves it). The
-patch is written and verified against a build we can decrypt independently; only the very
-last verification — that ArenaNet's `server_seed` behaves like ours — needs a live run,
-and that is R0b's acceptance, not its development.
+The first pass anchored the key derivation at the SHA-1 `Init` at VA `0x0090a02c`
+(`CptSha.cpp`), by its five init constants appearing once in `.text`. A disassembly
+fan-out then showed that is a **full, standard 80-round SHA-1** — `SHA1_Transform` at
+`0x0090a103` carries all four round constants (`0x5A827999 0x6ED9EBA1 0x8F1BBCDC
+0xCA62C1D6`) 20× each — reached through a general crypto-API dispatcher (`CptApi.cpp`'s
+`algorithm` switch). Our `arc4_hash`, which reproduces real keys, is **5 rounds**. They are
+distinct routines; the session key does **not** go through `CptSha.cpp`. Recorded rather
+than quietly overwritten, because verbatim-first is exactly what caught it: the constants
+were real, the identification was wrong, and disassembling the function refuted it. **[the
+80-round finding: MEASURED; the "wrong anchor" conclusion: OBSERVED]**
 
-## What is already true (the decryption half)
+## OBSERVED — the real key-derivation site
 
-`toolkit/authsrv/replay.py` derives the ARC4 key and decrypts a captured `.raw` offline.
-MEASURED 2026-08-07: 329 vault captures decrypt to exactly their logged plaintext,
-all-or-nothing across 375 keyable captures. It needs, per session, ONE of: the 20-byte
-`arc4_key`, the 20-byte `master_secret` (it runs `arc4_hash` itself), or the client's
-ephemeral exponent `a` (with the server `B` from the binary it derives the rest). **So the
-tap has to surface exactly one 20-byte value.** The engine is done; this study is about
-getting that value out of a live client.
+Two independent readers converged on it from different directions (one tracing the DH
+accessor forward, one tracing the RC4 state backward), and it is **independently
+re-verified this session** by disassembling the two functions directly:
 
-## OBSERVED — the crypto surface, named by the client's own asserts
+**`0x007DE690` — the arc4_hash + RC4 key schedule, in `MsgUtil.cpp`.** Its own assert names
+`P:\Code\Net\Msg\MsgUtil.cpp`, expression `"init"`, and its prologue checks the input
+length `arg1 (esi) <= 0x14` — a 20-byte input. It runs the 5-round pseudo-SHA-1 in place
+(matching `gwcrypto.arc4_hash`, arc4_key complete at `0x007DE787`) and immediately keys an
+RC4 state (KSA at `0x007DE78C–0x007DE7F5`). **[OBSERVED — assert string and prologue read
+directly]**
 
-The client compiled its assertion expressions, source paths and line numbers into the
-shipping image; `toolkit/clientscan/asserts.py` reads them back. This is how identity is
-established here — the client names its own code — not by pattern-guessing.
+**`0x007DC030` — its single caller, in `MsgConn.cpp`.** It gates on the connection object's
+stage field `[ebx+0x60] == 1` and an incoming message-type `== 0x16` — i.e. the
+`SMSG_SERVER_SEED` (header `0x1601`) arriving in state 1. Immediately before the call it
+forms `master_secret = server_seed XOR shared_secret` over 20 bytes (the
+`server_seed`/`recover_master_secret` operation `gwcrypto.py` models), complete in a
+20-byte stack buffer at `0x007DC0CE`. **[OBSERVED caller + gating; RECONSTRUCTION for the
+XOR being server_seed⊕shared specifically, from the surrounding structure]**
 
-`P:\Code\Base\Crypt\` holds three named units (build 38797, `221c1377…`):
+After keying, the client **duplicates the 264-byte RC4 state** (2 counters + 256-byte
+S-box) `0x108` bytes further into the connection object — one derived key seeding two
+independent per-direction ciphers, exactly as `gwcrypto`/`authsrv` model. The states live
+at `conn+0x7C` and `conn+0x184`. **[OBSERVED]**
 
-| Unit | What it is | Relevance |
+### The two clean tap values
+
+| Value | Where, when formed | Note |
 |---|---|---|
-| `CptApi.cpp` | the crypto API layer | the entry points the key exchange calls |
-| `CptRc4.cpp` | the RC4/ARC4 stream cipher | **the plaintext↔ciphertext boundary** — network-logger's tap point, and where a per-direction cipher state (256-byte sbox) persists for the whole connection |
-| `CptSha.cpp` | the SHA-1 used in key derivation | anchored below; its output feeds `arc4_hash` |
+| `master_secret` (20 B) | `[ebp-0x18]` in the `0x007DC030` frame, complete at `0x007DC0CE` | `replay.py` runs `arc4_hash` itself — this is the preferred tap |
+| `arc4_key` (20 B) | `[ebp-0x18]` in the `0x007DE690` frame, complete at `0x007DE787` | feeds `ARC4(key)` directly |
 
-### The SHA-1 anchor
+Either alone yields the full session key without reimplementing DH modexp offline.
 
-**`SHA1_Init(shsInfo* edi, digest* esi)` at VA `0x0090a02c`** — OBSERVED, disassembled
-this session. It writes the five SHA-1 init constants
-(`0x67452301 0xEFCDAB89 0x98BADCFE 0x10325476 0xC3D2E1F0`) to `[esi+0 .. esi+0x10]`, so
-`esi` is the 20-byte state, and zeroes `[edi]`/`[edi+4]`, an 8-byte length/count in the
-context. Those five constants appear **exactly once** in `.text`, which is what makes this
-the unique anchor for the whole crypto region. The function's own asserts name the file
-`P:\Code\Base\Crypt\CptSha.cpp` and the parameters `shsInfo` and `digest` — the identity
-is the client's, not ours.
+### Side finding — the client's exponent `a`
 
-The round constant `0x5A827999` follows at VA ~`0x0090a147` (file `0x509547`) and appears
-~20× across `.text` (many hash-like sites); `0x6ED9EBA1` ~21×. Only the init cluster is
-unique, so it is the signature to relocate from.
+`a` is **128-bit, not 512** (four DWORD globals at `0x00C034EC–0x00C034FB`), filled by
+`ole32!CoCreateGuid` (which is why the binary imports no `CryptGenRandom`), zero-filled on
+failure. **[OBSERVED]** We do not tap `a` — `master_secret` is downstream and cleaner — but
+it is worth recording that the ephemeral secret is GUID-derived and half the width the
+protocol's 512-bit field allows; a separate question from this study, flagged not pursued.
 
-### The reconciliation question this study must close
+## Two facts that reshape the mechanism
 
-Our own `gwcrypto.arc4_hash` — which reproduces **real** captured keys — is a **5-round**
-truncation, not full 80-round SHA-1: `A..E =` the init constants, one pass of 5
-SHA-1-style rounds, return `w[i]+state[i]`. Yet the client has a full `CptSha.cpp` with the
-Init/Update/Final shape. **UNVERIFIED:** whether the ARC4 key is derived by this full
-SHA-1 used in some specific way, or by a separate 5-round routine, and if the latter, why
-the init constants appear only once. The single-init-site fact points at reuse of one
-init; the 5-round reproduction points at a distinct finalizer. Resolving this names the
-exact instruction where `master_secret` becomes `arc4_key`. *(Under study — see the open
-questions; a disassembly fan-out is running as this is written.)*
+**ASLR is on.** The PE sets `IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE` and carries a real
+295,424-byte `.reloc`. Every tap address must be computed as `runtime_module_base + RVA`,
+resolved from the module list at read time — a fixed `image_base+RVA` will not hold across
+launches. **[MEASURED]**
 
-## The plan, end to end
+**Passive ciphertext capture is not available, which the earlier plan assumed it was.**
+`rawlisten.py` is a loopback `accept()` server — it catches what a client sends to *our*
+endpoints, not a connection the client makes outbound to ArenaNet's remote IP.
+`tcptable.py` reads per-socket state/PID only, no payload. The repo takes no packet-capture
+dependency (Npcap/WinDivert are third-party kernel drivers, excluded by the stdlib-only
+rule). **So the live ciphertext, like the key, has to come from in-process
+instrumentation.** This is the one open design decision the disassembly surfaced — see
+below. **[OBSERVED]**
 
-1. **Locate the value** (this study): the instruction where `a` / `master_secret` /
-   `arc4_key` is fully formed, and where each lives (register / stack / global / the
-   persistent RC4 sbox).
-2. **Choose the tap value by lifetime.** `a` and `master_secret` are transient; the
-   `arc4_key` and the RC4 sbox persist for the connection. A value still resident when an
-   external reader polls is worth more than one computed and discarded — UNVERIFIED which
-   wins, pending the disassembly.
-3. **Add a signature-anchored patch** to `make_custom_client.py`, in the same style as the
-   DH / updater / mutex patches: no hardcoded addresses, relocated from a byte signature so
-   it survives a rebuild the way `dump_dh_params.py` relocates the DH accessor.
-4. **Capture ciphertext passively** — `rawlisten.py` / `tcptable.py` exist.
-5. **Decrypt offline** with `replay.py`, already proven.
-6. **Stamp `origin: live`** ([toolkit/origin.py](../../toolkit/origin.py)) as the first
-   record, so `require_single` refuses to pool it with the 329 OURS captures, and **extend
-   `scrub_captures.py`**: a live session makes the session key a genuine secret, and adds
-   `a` / `master_secret` / any tap sidecar to the scrub list.
+## The tap design
 
-## Provenance
+**Mechanism — duplicate-store to a BSS slot + external `ReadProcessMemory`, not a code
+cave.** The four existing patches (DH struct, updater, mutex NOP, mutex rename) are all
+same-length in-place edits with no new code and no control-flow diversion, re-verified by
+reading the written file. A code-cave trampoline writing to a file would be this toolkit's
+first code injection — a hand-assembled `CreateFile`/`WriteFile` with no assembler on hand
+(capstone only disassembles), landing its crash risk on the single authorized live client.
+Instead: a signature-anchored patch inserts a duplicate store of the 20-byte value to a
+fixed RVA we pick in the `.data` slack (**MEASURED: ~5.54 MB of zero-init RW space beyond
+what the file backs**, so no new PE section), and a small `toolkit/harness/keytap.py` uses
+`OpenProcess(PROCESS_VM_READ)` + `ReadProcessMemory` — resolving the runtime base via the
+toolhelp module list because of ASLR — to read it. This keeps the "no new code in the
+client" idiom and is verifiable on loopback. **[RECONSTRUCTION — design, not yet built]**
+
+**Value — `master_secret`.** 20 bytes, `replay.py` derives the rest. The persistent RC4
+S-box at `conn+0x7C` is a tempting alternative (it is guaranteed addressable), but it is
+only byte-replayable-from-frame-0 as the *first* snapshot after KSA and before any PRGA
+byte is consumed; a mid-stream snapshot decrypts forward but not backward. Better used as a
+cross-check than as the source.
+
+**When the patch lands:** add its VA range to `pinned.PATCHED_TEXT` and
+`dhbuild.patch_state()`, the way the existing patches are tracked, so a future study
+pinning an address there is warned.
+
+## The gate needs no change
+
+`cage.assert_launch_safe`/`dhbuild.classify` read only the DH-struct bytes, so a key-tap
+patch near `MsgUtil.cpp`/`MsgConn.cpp` does not perturb DH classification, and the
+`stock→live` cell already passes the real launch this route makes (a stock client aimed
+straight at the live service, key logged locally). A relay through a local host is not just
+unneeded, it is **structurally unexpressible**: `drive_client.intended_target()` refuses an
+argv naming both a loopback and a routable host, and `cage.py`'s `stock→loopback` cell
+independently refuses a stock client at `127.x`. The only care needed is confirming the new
+patch does not change the binary's DH classification. **[OBSERVED across cage.py/dhbuild.py;
+the "no change needed" is the recommendation]**
+
+## Provenance and secrets
 
 Read-only analysis of the shipped client is permitted (CLAUDE.md carve-out; `capstone`/
-`pefile` for exactly this). **Zero ArenaNet bytes are committed:** this doc records VAs,
-signatures, struct layouts and behaviour — the same shape as
-[studies/handshake/PLAN.md](../handshake/PLAN.md) — never verbatim disassembly to
-transcribe. The patch we design overwrites our own copy under `vault/`, never `C:\gw`.
+`pefile` for exactly this). **Zero ArenaNet bytes are committed** — this doc records VAs,
+signatures, struct offsets and behaviour, the shape [studies/handshake](../handshake/PLAN.md)
+already uses, never verbatim disassembly to transcribe. The patch overwrites our own copy
+under `vault/`, never `C:\gw`.
 
-## Open questions (being resolved by the running disassembly fan-out)
+A live capture makes new secrets real: `scrub_captures.py` has no field for `master_secret`
+and would silently miss a non-`.jsonl` tap sidecar — so the tap should be written as a
+JSONL line inside the existing scrubbed capture file, and `master_secret`/`a` added to the
+scrub list. `origin.record()` defaults to `origin=OURS`; the live writer **must** pass
+`origin=LIVE` explicitly or the file falls to UNKNOWN by `origin.py`'s no-inference rule.
 
-- Is the ARC4 key derived by the full `CptSha` SHA-1 or a distinct 5-round routine, and at
-  which instruction is the 20-byte key fully formed?
-- Where does the client generate `a` (which RNG), and is it a strong CSPRNG or something
-  weaker? (Bears on whether `a` is even the right tap.)
-- Which single value — `a`, `master_secret`, `arc4_key`, or the live RC4 sbox — is the
-  cleanest and most persistent tap for an external `ReadProcessMemory` reader vs. a
-  patch-to-global?
-- Does `cage.assert_launch_safe` pass the actual launch this route makes (real stock client
-  aimed straight at the live service, key logged locally), or does any relay reintroduce
-  the stock→loopback refusal? What, if anything, must the gate learn — without weakening
-  the four cells?
-- Should the behavioural rule (human cadence, one client, never competitive) get any code,
-  or stay operator discipline?
+## The behavioural rule, and how much of it is code
+
+The rule — human cadence, human hours, one client, never in a competitive context — has no
+code today, and the multi-instance mutex patch is in direct tension with "one client"
+during a live run. Recommendation: encode only the cheap structural parts (a
+one-live-instance lock, a session-length ceiling, an explicit start confirmation) and leave
+the genuinely behavioural judgments as documented operator discipline — the harness has no
+view of in-game state to check them meaningfully, and a control that pretends to is worse
+than an honest note.
+
+## What remains, in order
+
+1. **Pin the exact store instruction** at `0x007DC0CE` (or `0x007DE787`) to duplicate, pick
+   the BSS RVA, and derive the byte signature — the last static-analysis step before code.
+2. **Add the key-tap patch** to `make_custom_client.py` behind its own flag, and
+   `keytap.py` (the RPM reader). **Verify on loopback:** our DH-patched client keys against
+   our server, we already know that key, `keytap.py` must read the same 20 bytes.
+3. **Resolve the in-process ciphertext capture** — the open fork above — since neither
+   loopback tools nor a passive sniffer can see the outbound connection.
+4. **The driver script**: cage + account + live launch + tap + capture + `replay.py` +
+   `origin: live`, plus the scrub extension and whatever behavioural guards are chosen.
+5. **The live verification run** — last, human-driven, on the secondary account.
