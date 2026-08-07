@@ -223,8 +223,10 @@ def main():
                 ready = True
                 break
             time.sleep(0.3)
-        if not st.ok(ready and cap.poll() is None, "the off-wire capture is live and sniffing",
-                     "died or never opened -- see dryrun_wirecapture.log (elevated?)"):
+        live_ok = ready and cap.poll() is None
+        if not st.ok(live_ok, "the off-wire capture is live and sniffing",
+                     "" if live_ok else "died or never opened -- see dryrun_wirecapture.log "
+                     "(elevated?)"):
             return 1
 
         print("\n3. bring up the stack and drive to the handshake")

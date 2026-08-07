@@ -921,11 +921,15 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
    behavioural guards). The driver's **offline assembly is proven on real bytes** — split
    the plaintext handshake off a wire stream and decrypt the rest, reproducing the server's
    logged plaintext *reached from the wire side*, both directions, self-consistent.
-   **What remains, both yours:** (a) install WinDivert (place the DLL/`.sys`, first-open
-   from an elevated shell — it loads a kernel driver, like caging); (b) put `--key-tap` on
-   the stock-DH live build and do the live run — human-driven, secondary account, behind
-   `--confirm`, on the cadence §6.1 requires. Every part it calls is proven; only the live
-   launch and the sniff have not run.
+   **Proven end to end on loopback 2026-08-07** — `dryrun_keycapture.py`, run elevated,
+   came back GREEN: WinDivert **does** capture loopback here (the one real unknown), the
+   off-wire ciphertext matched the server's own `.raw` **byte for byte** (62/62), the
+   tapped `master_secret` equalled what the server derived, and the capture decrypted to
+   the server's logged plaintext. The whole pipeline works against a key we hold, with an
+   oracle for every byte. **What remains is only the live run:** put `--key-tap` on the
+   stock-DH live build and drive it human-side — secondary account, behind `--confirm`, on
+   the cadence §6.1 requires. Nothing in the pipeline is unproven now; only the live launch
+   itself has not happened.
    *The s2c-ordering hazard this item used to raise is closed:* the keystream `seq` work
    (`b70920e`) numbers each send inside the send lock, so a capture sorts back to true wire
    order regardless of thread contention.
