@@ -42,7 +42,7 @@ import livesession as ls  # noqa: E402
 import wirecapture as wc  # noqa: E402
 from gwcrypto import ARC4, arc4_hash  # noqa: E402
 
-LEDGER = checks.Ledger("livesession", floor=35)
+LEDGER = checks.Ledger("livesession", floor=37)
 
 
 def real_session():
@@ -282,8 +282,16 @@ def main():
                   "a keyring with only a WRONG key decrypts nothing at all",
                   "ARC4 is symmetric, so 'it decrypted' is not evidence -- the first "
                   "opcode is")
-        LEDGER.ok(set(os.listdir(tmp)) == before,
-                  "and it writes no file, so a bad run cannot leave a believable artifact")
+        LEDGER.ok(not any(f.startswith(("auth-", "game-")) and f not in before
+                          for f in os.listdir(tmp)),
+                  "and it writes no NEW file, so a bad run leaves no believable artifact")
+        LEDGER.ok(bad.get("stale_kept") and not bad.get("stale_removed"),
+                  "a run that decrypts NOTHING keeps the earlier files and flags them",
+                  "deleting here would let a failed verification destroy a good decryption")
+        good = ls.assemble_live(wire, keyring, tmp)
+        LEDGER.ok(good["decrypted"] == 2 and not good.get("stale_kept"),
+                  "a run that DOES decrypt owns the directory again",
+                  "so a partial re-assemble cannot leave files that fake a full one")
 
         # prune_wire: the filter has to include port 80 to catch GW at all, and port 80
         # also carries whatever else the machine is doing. That must not reach the vault.

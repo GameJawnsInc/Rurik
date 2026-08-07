@@ -34,7 +34,7 @@ import wirecapture as wc  # noqa: E402
 
 # 26 is the measured total of a green run with WinDivert present (section 5 then declares a
 # skip); without the driver that skip becomes a check and the run scores 27.
-LEDGER = checks.Ledger("wirecapture", floor=27)
+LEDGER = checks.Ledger("wirecapture", floor=28)
 
 
 def ipv4_tcp(src, dst, sport, dport, seq, payload=b"", proto=6, ver=4):
@@ -106,7 +106,8 @@ def main():
         fh.close()
 
         who, why = origin.origin_of(path)
-        LEDGER.ok(who == origin.LIVE, "the capture classifies as LIVE by its own stamp", why)
+        LEDGER.ok(who == origin.OURS,
+                  "a sniff pinned to LOOPBACK stamps itself ours, not live", why)
 
         meta, streams, gaps = wc.load_wire(path)
         LEDGER.ok(meta and meta["pid"] == 4242 and meta["client"] == "127.0.0.1:5000",
@@ -146,7 +147,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "multi.jsonl")
         fh, record = wc.open_capture(path, "10.0.0.9:*", None, 4242, {6112, 6601},
-                                     lambda: 0.0)
+                                     lambda: 0.0)   # unpinned -> live
         # TWO connections, deliberately overlapping sequence spaces -- the auth channel and
         # then the game server on a different address, which is what a real login does.
         auth_c = ipv4_tcp("10.0.0.9", "3.65.1.1", 51000, 6112, 1000, b"AUTHc2s")
@@ -159,6 +160,9 @@ def main():
             record(d, pk["seq"], pk["payload"], pk)
         fh.close()
 
+        LEDGER.ok(origin.origin_of(path)[0] == origin.LIVE,
+                  "an UNPINNED sniff still stamps live -- that mode is the live driver's",
+                  "the stamp is derived from the endpoint, not asserted")
         _m, conns = wc.load_connections(path)
         LEDGER.ok(len(conns) == 2, "two connections are read back as two, not merged",
                   ", ".join(sorted(str(k) for k in conns)))

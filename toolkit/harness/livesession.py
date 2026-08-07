@@ -320,7 +320,14 @@ def assemble_live(wire_path, keyring, out_dir):
                                f"connection to a plausible client opcode"})
             results.append(row)
             continue
-        if len({f[0] for f in fits}) > 1:
+        # Dedup on the KEY BYTES, not the label. This tested `{f[0] for f in fits}` -- the
+        # label -- and labels are `tap@{t}s` with t rounded to 2dp, so two genuinely
+        # different keys sharing a rounded timestamp (or any entry whose `t` is missing,
+        # which load_keyring labels "tap@?s") collapsed to one and the refusal silently
+        # became "take fits[0]". Found by adversarial review 2026-08-07; not triggered by
+        # any real capture yet, and it is the one guard this module advertises as a check
+        # that can fail.
+        if len({f[1] for f in fits}) > 1:
             # More than one key passing means the criterion is not discriminating here, not
             # that either is right. Refuse rather than pick -- a wrong key writes a file
             # full of noise that reads like a capture.
@@ -348,9 +355,36 @@ def assemble_live(wire_path, keyring, out_dir):
         row.update({"decrypted": True, "channel": channel, "key_from": label,
                     "out": out_path, "c2s_bytes": len(c2s_plain), "s2c_bytes": len(s2c_plain)})
         results.append(row)
+    # Clear channel files this run did NOT write. Without this, a re-assemble that decrypts
+    # fewer connections leaves the previous run's files sitting beside the new report --
+    # MEASURED by adversarial review: re-assembling with 1 of 6 keys prints "1/6" while all
+    # six decrypted files are still on disk. Anyone checking replayability by "the six
+    # files are there" gets a false pass. That is exactly R0a's failure shape, where a row
+    # stood on artifacts that were not the thing being claimed. Deleted only AFTER the new
+    # files are written, so a failed assembly cannot destroy a good one.
+    written = {os.path.basename(r["out"]) for r in results if r.get("out")}
+    stale = sorted(f for f in os.listdir(out_dir)
+                   if f.endswith(".jsonl") and f.split("-")[0] in VERSION_CHANNEL.values()
+                   and f not in written)
+    removed, kept = [], []
+    if written and stale:
+        # This run produced a real result, so its file set is the truth and leftovers from
+        # a previous one must go.
+        for f in stale:
+            os.remove(os.path.join(out_dir, f))
+        removed = stale
+    elif stale:
+        # This run produced NOTHING. Deleting here would let a failed check destroy a good
+        # decryption -- the verification step must not be the risk. Keep them and say
+        # loudly that they do not belong to this report.
+        kept = stale
+        print(f"  WARNING: this assembly decrypted nothing, and {len(kept)} channel file(s)"
+              f" from an EARLIER run are still here.\n"
+              f"           They are NOT this report's output: {', '.join(kept)}",
+              flush=True)
     return {"wire": wire_path, "meta": meta, "connections": results,
             "decrypted": sum(1 for r in results if r.get("decrypted")),
-            "total": len(results)}
+            "total": len(results), "stale_removed": removed, "stale_kept": kept}
 
 
 # --------------------------------------------------------------- the guards ----
@@ -689,9 +723,11 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
     # --- 4. offline: assemble what the wire and the keyring hold, then scrub.
     # Prune BEFORE assembling: the filter has to be wide enough to catch GW on port 80, and
     # everything else it caught is the owner's own traffic rather than evidence.
+    pruned_records = 0
     if os.path.exists(wire):
         print("  pruning non-GW connections...", flush=True)
         kept, dropped = prune_wire(wire)
+        pruned_records = dropped
         print(f"  pruned: {dropped} record(s) from non-GW connections dropped; "
               f"{kept} GW connection(s) kept", flush=True)
 
@@ -725,12 +761,20 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
     print(f"  scrub: {files} file(s), {records} records, {distinct} distinct secrets "
           f"replaced -> {scrubbed}")
     if stats.get(scrub_captures.OPAQUE_STAT):
-        print(f"  scrub: {stats[scrub_captures.OPAQUE_STAT]} `plain` frame payload(s) "
-              f"could NOT be cleaned and were copied through.")
+        n_opaque = stats[scrub_captures.OPAQUE_STAT]
+        print(f"  scrub: {n_opaque} `plain` frame payload(s) could NOT be cleaned and were "
+              f"copied through.")
         print("         The auth channel's first client message carries the account email "
               "as UTF-16")
         print("         inside that blob. This capture is vault-only -- not shareable, "
               "scrubbed or not.")
+        # And say so where a person copying the TREE will see it. The per-session manifest
+        # records this correctly and nobody copying a directory reads one level down; the
+        # root manifest was giving an all-clear written before live captures existed.
+        marker = scrub_captures.mark_tree_unsafe(
+            os.path.dirname(scrubbed), stamp, [f for f in os.listdir(outdir)
+                                               if f.endswith(".jsonl")], n_opaque)
+        print(f"         Recorded at {marker}")
 
     exe_sha_after = sha256(exe)
     if exe_sha_before and exe_sha_after and exe_sha_before != exe_sha_after:
@@ -749,6 +793,15 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
                 "exe_unchanged": bool(exe_sha_before and exe_sha_before == exe_sha_after),
                 "args": accounts.redact_for_file(args), "ports": ports,
                 "client_endpoints": sorted(endpoints),
+                # Bind the artifact to the bytes it came from. Without these, deleting a
+                # single record from wire.jsonl still reports 6/6 and silently yields a
+                # shorter stream -- MEASURED by adversarial review 2026-08-07. A capture
+                # that cannot detect its own truncation is not replayable evidence, it is
+                # a file that happens to parse.
+                "wire_sha256": sha256(wire),
+                "wire_bytes": os.path.getsize(wire) if os.path.exists(wire) else 0,
+                "keyring_sha256": sha256(os.path.join(outdir, "keyring.jsonl")),
+                "pruned_records": pruned_records,
                 "keys_tapped": len(keys), "report": report,
                 "gw_log": open(log_path, encoding="utf-8", errors="replace").read().splitlines()
                           if os.path.exists(log_path) else []}

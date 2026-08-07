@@ -166,8 +166,20 @@ def open_capture(path, client, server, pid, server_ports, clock):
     design, so a live capture that forgets to say so is UNKNOWN forever. `clock` is passed
     in (time.perf_counter) so the pure tests can supply a deterministic one.
     """
+    # The stamp is DERIVED from the endpoint being sniffed, not asserted. It used to be a
+    # hardcoded origin.LIVE, which made every loopback dry-run capture claim to be live
+    # traffic -- vault/dryrun/dryrun_wire.jsonl says `"origin": "live"` while every address
+    # in it is 127.0.0.1. dryrun_keycapture.py's own comment shows the response to that was
+    # to move the mislabelled files outside the directory the suite scans, which makes the
+    # guard against a false LIVE stamp green by construction. Fixed at the source: a sniff
+    # pinned to loopback cannot be talking to ArenaNet, and says OURS.
+    #
+    # An unpinned (port-only) sniff still declares LIVE, because that mode exists only for
+    # the live driver -- but now the one case that was provably wrong is measured instead.
+    who = origin.OURS if (server and origin.is_loopback(str(server).rsplit(":", 1)[0])) \
+        else origin.LIVE
     fh = open(path, "w", encoding="utf-8")
-    rec = origin.record("toolkit/harness/wirecapture.py", origin.LIVE,
+    rec = origin.record("toolkit/harness/wirecapture.py", who,
                         note="off-wire ciphertext; key from keytap.py, decrypt with replay.py")
     fh.write(json.dumps(rec) + "\n")
     fh.write(json.dumps({"kind": "wire_meta", "client": client, "server": server,

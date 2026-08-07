@@ -312,6 +312,66 @@ def scrub_tree(src, out, dry_run=False, skip=()):
     return files, records, stats, names.count(), unscrubbed
 
 
+DO_NOT_SHARE = "DO-NOT-SHARE.txt"
+
+
+def mark_tree_unsafe(root, session, files, count):
+    """Invalidate a scrubbed tree's all-clear when a session lands in it uncleanable.
+
+    THE HAZARD THIS CLOSES, found by adversarial review 2026-08-07 and confirmed on disk.
+    `vault/captures-scrubbed/` carries a root SCRUB-MANIFEST.json describing the tree, and
+    RUNBOOK names that tree as the copy which may go off this machine. The live driver
+    started writing per-session scrubbed output INTO it -- and the root manifest, written
+    2026-08-06 before any live capture existed, still said `files: 421`, carried no
+    WARNING, and had no NOT_CLEANED_opaque_payloads key at all.
+
+    So a human reading the top-level report got an ALL-CLEAR on a tree that by then
+    contained the account name as UTF-16 inside a `plain` frame payload -- MEASURED in
+    live-20260807T143055's auth channel. The per-session manifest one level down said so
+    correctly; nobody copying a directory reads one level down.
+
+    A stale all-clear is worse than no report. This writes a plain-text refusal at the root
+    that any file manager shows, and stamps the same fact into the root manifest if one is
+    there, so the tree cannot look safe while it is not.
+    """
+    os.makedirs(root, exist_ok=True)
+    line = (f"{session}: {count} `plain` frame payload(s) across {len(files)} file(s) "
+            f"copied through UNCLEANED")
+    path = os.path.join(root, DO_NOT_SHARE)
+    existing = ""
+    if os.path.exists(path):
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            existing = fh.read()
+    if line not in existing:
+        with open(path, "a", encoding="utf-8") as fh:
+            if not existing:
+                fh.write(
+                    "THIS TREE IS NOT SAFE TO SHARE.\n"
+                    "\n"
+                    "The scrub matches JSON keys and cannot see inside a hex blob of\n"
+                    "protocol bytes. The auth channel's first client message carries the\n"
+                    "account email as UTF-16 INSIDE such a blob, so `plain` frame payloads\n"
+                    "are copied through verbatim and the credential travels with them.\n"
+                    "\n"
+                    "Sessions that put uncleanable payloads in this tree:\n")
+            fh.write(f"  - {line}\n")
+    man = os.path.join(root, "SCRUB-MANIFEST.json")
+    if os.path.exists(man):
+        try:
+            with open(man, encoding="utf-8") as fh:
+                data = json.load(fh)
+            data["WARNING"] = (
+                f"STALE AND SUPERSEDED. Live capture sessions were scrubbed into this tree "
+                f"after this manifest was written, and they carry `plain` frame payloads "
+                f"the scrub cannot clean. See {DO_NOT_SHARE}. Re-run "
+                f"`python toolkit/scrub_captures.py --force` to regenerate.")
+            with open(man, "w", encoding="utf-8") as fh:
+                json.dump(data, fh, indent=2)
+        except (OSError, json.JSONDecodeError):
+            pass
+    return path
+
+
 def scrub_dir(src, out, dry_run=False):
     """Scrub every .jsonl directly under `src` into `out`. One flat directory."""
     src, out = os.path.abspath(src), os.path.abspath(out)
