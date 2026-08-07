@@ -50,6 +50,9 @@ import cage  # noqa: E402
 import accounts  # noqa: E402
 
 RUN_ROOT = os.path.normcase(vault_path("run"))
+# The live-capture build is staged apart so isolate_client.ps1's bare sweep, which
+# cages every Gw.exe under vault/run, cannot cage the one binary that must not be.
+LIVE_ROOT = os.path.normcase(vault_path("run-live"))
 # Both flags must be present and both must name a 127/8 address. Any loopback
 # alias is as unreachable-from-ArenaNet as 127.0.0.1 itself, and the handoff
 # probes need a second alias (127.0.0.2) precisely so the wire can show WHICH
@@ -121,27 +124,86 @@ MOUSEEVENTF_LEFTUP = 0x0004
 
 # ---------------------------------------------------------------- safety ----
 
-def assert_safe(exe, args):
-    """Refuse anything that could reach the real service. Fail loudly, never warn."""
-    real = os.path.normcase(os.path.abspath(exe))
-    if not real.startswith(RUN_ROOT + os.sep):
-        raise SystemExit(
-            f"REFUSING to launch {exe}\n"
-            f"  Only patched copies under {RUN_ROOT} may be driven.\n"
-            f"  C:\\gw is the live install and is never a valid target for automation.")
+ARENANET_DEFAULT = "<ArenaNet, the client's compiled-in default>"
 
-    flat = [a.lower() for a in args]
+
+def intended_target(args):
+    """Where this argv actually points the client. Refuses an incoherent mix.
+
+    ABSENCE IS NOT NEUTRAL, and that is the whole reason this is a function rather
+    than a loop over REQUIRED_FLAGS. A client launched with no `-portal` does not fail
+    to have a portal -- it uses the one compiled into it, which is ArenaNet's. So a
+    MISSING flag names the live service just as surely as typing the hostname would,
+    and PLAN.md §6.2 calls that the sharpest hazard in the whole live-capture change:
+    a DH-patched client launched without `-portal` completes a REAL Stage A login with
+    the autofilled credential and only then dies at Stage B. The account-visible event
+    happens before the patch matters.
+
+    The old code read a missing flag as "refuse", which was right while loopback was
+    the only legal target and is not expressive enough now that there are two. Here it
+    resolves to the live target and the caller's DH check decides -- so the same
+    omission that used to be refused by a rule is now refused by a measurement, and a
+    live-capture build may legitimately be launched with no server flags at all.
+    """
+    flat = [str(a).lower() for a in args]
+    seen = {}
     for flag in REQUIRED_FLAGS:
         if flag not in flat:
-            raise SystemExit(f"REFUSING to launch: {flag} missing.\n"
-                             f"  Required so the client cannot reach ArenaNet: "
-                             f"{' '.join(f'{f} 127.x.x.x' for f in REQUIRED_FLAGS)}")
-        got = flat[flat.index(flag) + 1] if flat.index(flag) + 1 < len(flat) else ""
-        if not is_loopback(got):
-            raise SystemExit(f"REFUSING to launch: {flag} points at {got!r}, "
-                             f"which is not a 127/8 loopback address.\n"
-                             f"  Driving a modded client against a non-loopback server is "
-                             f"exactly what the owner's rule forbids.")
+            continue
+        i = flat.index(flag)
+        seen[flag] = flat[i + 1] if i + 1 < len(flat) else ""
+
+    if not seen:
+        return ARENANET_DEFAULT
+    loop = {f: v for f, v in seen.items() if is_loopback(v)}
+    routable = {f: v for f, v in seen.items() if not is_loopback(v)}
+    if loop and routable:
+        raise SystemExit(
+            f"REFUSING to launch: this argv points at both sides at once.\n"
+            f"  loopback: {loop}\n"
+            f"  routable: {routable}\n"
+            f"  A client has one identity. Half a session against our server and half\n"
+            f"  against ArenaNet's is not a configuration, it is two mistakes.")
+    if loop and len(seen) < len(REQUIRED_FLAGS):
+        missing = [f for f in REQUIRED_FLAGS if f not in seen]
+        raise SystemExit(
+            f"REFUSING to launch: {', '.join(missing)} missing from a LOOPBACK argv.\n"
+            f"  An absent flag is not an unset one -- the client falls back to its\n"
+            f"  compiled-in ArenaNet endpoint for it, so this argv would send part of\n"
+            f"  the login to the real service. Name every one of "
+            f"{', '.join(REQUIRED_FLAGS)}.")
+    return seen.get("-authsrv") or next(iter(seen.values()))
+
+
+def assert_safe(exe, args):
+    """Refuse a binary we do not stage, and an argv that cannot mean one thing.
+
+    Returns the host this argv points at, for the caller to hand to
+    `cage.assert_launch_safe` -- which is what decides whether THIS binary may be
+    pointed THERE. The split is deliberate: this function is about the argv, that one
+    is about the bytes, and neither can answer the other's question.
+    """
+    real = os.path.normcase(os.path.abspath(exe))
+    if not any(real.startswith(root + os.sep) for root in (RUN_ROOT, LIVE_ROOT)):
+        raise SystemExit(
+            f"REFUSING to launch {exe}\n"
+            f"  Only staged copies under {RUN_ROOT} or {LIVE_ROOT} may be driven.\n"
+            f"  C:\\gw is the live install and is never a valid target for automation.")
+
+    # An incomplete run directory. make_run_dir.py copies a 4 GB Gw.dat last, and it
+    # cannot copy it at all while a client holds the source open -- so a half-staged
+    # directory is a normal outcome of a normal interruption, not an exotic one. A
+    # client launched without Gw.dat fails somewhere far from the cause.
+    dat = os.path.join(os.path.dirname(exe), "Gw.dat")
+    if os.path.isfile(exe) and not os.path.isfile(dat):
+        raise SystemExit(
+            f"REFUSING to launch {exe}\n"
+            f"  Its run directory has no Gw.dat, so staging did not finish.\n"
+            f"  Re-run: python toolkit/clientpatch/make_run_dir.py"
+            f"{' --live' if real.startswith(LIVE_ROOT + os.sep) else ''}\n"
+            f"  (with every Guild Wars client closed -- a running one holds the\n"
+            f"  source file open exclusively).")
+    return intended_target(args)
 
 
 # ------------------------------------------------------------- sampling ----
@@ -401,11 +463,12 @@ def main():
     acct = accounts.for_target(a.authsrv, a.account)
     args += accounts.login_args(acct)
     print(f"account: {accounts.describe(acct)}")
-    assert_safe(a.exe, args)
-    # And that the firewall cage is actually up. assert_safe checks the path and the
-    # flags; a binary can pass both and still be able to reach the internet, which is
-    # exactly the state one copy sat in for a day. See toolkit/clientpatch/cage.py.
-    print(f"cage: {cage.assert_caged(a.exe)} client, caged")
+    host = assert_safe(a.exe, args)
+    # And that this BINARY may be pointed at THAT host. assert_safe checks the path and
+    # the argv; a binary can pass both and still be the wrong build for where it is
+    # aimed -- and one copy sat uncaged for a day passing exactly those two checks.
+    # See toolkit/clientpatch/cage.py.
+    print(f"cage: {cage.assert_launch_safe(a.exe, host)['dh']} build, cleared for {host}")
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
     outdir = os.path.join(a.outdir, stamp)
@@ -476,7 +539,14 @@ def main():
         gwlog = open(log_path, encoding="utf-8", errors="replace").read()
 
     report = {
-        "stamp": stamp, "exe": a.exe, "args": args, "pid": proc.pid,
+        # redact_for_file(), not args. This manifest lands in the vault beside the
+        # captures, and accounts.redact's own docstring says it exists because "a
+        # password that is merely 'not supposed to be logged' ends up logged" -- which
+        # is what this line was doing: the console print two calls below was redacted
+        # and the file was not. Found 2026-08-06, before a real automation account had
+        # ever used it. Recording the label instead is what the field was for.
+        "stamp": stamp, "exe": a.exe, "pid": proc.pid,
+        "args": accounts.redact_for_file(args), "account": acct["label"],
         "endpoints": sampler.events, "gw_log": gwlog.splitlines(),
     }
     with open(os.path.join(outdir, "report.json"), "w", encoding="utf-8") as f:

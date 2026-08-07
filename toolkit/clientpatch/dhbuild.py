@@ -45,6 +45,7 @@ Read-only, standard library only.
 """
 
 import glob
+import hashlib
 import json
 import os
 import re
@@ -65,6 +66,19 @@ SIG_KEYS_PTR_OFF = 0x0A
 OURS = "ours"
 STOCK = "stock"
 UNKNOWN = "unknown"
+
+# The non-DH patch sites. These decide NOTHING about where a client may point -- the
+# updater kill switch and both mutex patches are wanted on ours and stock alike -- and
+# they are read here so a launch can log what it let through rather than merely that it
+# let something through. `patch_state` is also how a caged run proves the updater is
+# actually off: a live updater behind the cage stalls the client forever on a blocked
+# check, which looks like a hang and not like a configuration error.
+SIG_MUTEX = bytes.fromhex("8BF885FF7411FFD63DB7")
+MUTEX_NAME_OLD = b"AN-Mutex-Window"
+MUTEX_NAME_NEW = b"AN-Futex"
+# DnSetEnabled's prologue, unpatched and patched. See studies/handshake/PLAN.md §9.
+SIG_DOWNLOAD = bytes.fromhex("558bec8b4d0833c085c90f94c0a3")
+SIG_DOWNLOAD_PATCHED = bytes.fromhex("558bec8b4d0833c085c9b00190a3")
 
 # The staging directories, and the whole point of there being two of them. These names
 # mirror the run directories one step downstream -- vault/run holds ours, vault/run-live
@@ -99,18 +113,62 @@ def read_params(exe):
 
 
 def _ours_records():
-    """Every key file we hold the private half of. (kind, label, prime, public)."""
-    out = []
+    """Every key file we hold the private half of, PROVEN. (kind, label, prime, public).
+
+    "We hold server_private for these" was asserted in this module's docstring from the
+    day it was written and checked nowhere: the original required only that `prime` and
+    `server_public` be present and parseable. A key file that was stale, hand-edited, or
+    truncated mid-write still classified a real client as `ours -- OUR parameters`, with
+    the same confidence as a good one.
+
+    That matters because `ours` is not a filing label, it is an operational claim:
+    THIS CLIENT CAN KEY AGAINST OUR SERVER. The only thing that makes it true is holding
+    the exponent, so the exponent is what gets checked -- B == g^b mod p, against the
+    file's own numbers. A matching (prime, public) pair alone proves someone wrote a
+    number down.
+
+    A file that fails is skipped rather than reported here, and `classify()` then falls
+    through to `unknown`, which every caller refuses. Silence would be wrong for the
+    common cause -- a key file for a build we no longer have -- so `key_faults()` exists
+    to say what was passed over and why, and `main()` prints it.
+
+    Imported from buildid.py, 2026-08-07, which had it from the start; the two modules
+    were written the same afternoon by sessions that could not see each other.
+    """
+    return [rec for rec, _fault in _ours_candidates() if rec is not None]
+
+
+def _ours_candidates():
+    """[(record | None, fault | None)] over rurik_dh_*.json -- the raw pass."""
+    found = []
     for path in sorted(glob.glob(vaultpath.vault_path("keys", "rurik_dh_*.json"))):
+        label = os.path.basename(path)
         try:
             with open(path) as fh:
                 d = json.load(fh)
-        except (OSError, ValueError):
-            continue                      # a truncated key file is not a stock build
-        if "prime" in d and "server_public" in d:
-            out.append((OURS, os.path.basename(path), int(d["prime"]),
-                        int(d["server_public"])))
-    return out
+        except (OSError, ValueError) as exc:
+            found.append((None, f"keys/{label}: unreadable ({exc.__class__.__name__})"))
+            continue
+        try:
+            g, p = int(d["generator"]), int(d["prime"])
+            b, B = int(d["server_private"]), int(d["server_public"])
+        except (KeyError, TypeError, ValueError):
+            missing = [k for k in ("generator", "prime", "server_private", "server_public")
+                       if k not in d]
+            found.append((None, f"keys/{label}: no usable exponent"
+                                + (f" (missing {', '.join(missing)})" if missing else "")))
+            continue
+        if pow(g, b, p) != B:
+            found.append((None, f"keys/{label}: B != g^b mod p -- the file's own numbers "
+                                f"disagree, so we do NOT hold this exponent"))
+            continue
+        found.append(((OURS, label, p, B), None))
+    return found
+
+
+def key_faults():
+    """Why any rurik_dh_*.json was not counted as ours. Printed, never silent."""
+    return [fault for rec, fault in _ours_candidates() if fault]
 
 
 def _stock_records():
@@ -163,6 +221,65 @@ def classify(exe, known=None):
 
     return UNKNOWN, (f"g={g}, {p.bit_length()}-bit prime matching no key material in "
                      f"{vaultpath.vault_path('keys')}")
+
+
+def patch_state(exe):
+    """What non-DH modifications a binary carries. Measured, never assumed.
+
+    Each value is three-valued where the bytes allow it: `updater_killed` is None when
+    both signatures are absent or both present, because neither is a state this patcher
+    produces and rounding an impossible reading to True or False is how a wrong one
+    survives. Ported from buildid.py, 2026-08-07.
+    """
+    try:
+        pe = PE(exe)
+    except (OSError, ValueError):
+        return {}
+    live = len(pe.find(SIG_DOWNLOAD, ".text"))
+    killed = len(pe.find(SIG_DOWNLOAD_PATCHED, ".text"))
+    return {
+        "updater_killed": True if (killed == 1 and live == 0)
+                          else (False if (live == 1 and killed == 0) else None),
+        "mutex_guard_nopped": not pe.find(SIG_MUTEX, ".text"),
+        "mutex_renamed": bool(pe.find(MUTEX_NAME_NEW, ".rdata"))
+                         and not pe.find(MUTEX_NAME_OLD, ".rdata"),
+    }
+
+
+def describe(exe, known=None):
+    """Everything measurable about one binary, as a dict. `dh` is the safety answer.
+
+    The launch gate's view: it wants the verdict AND enough context to say what it let
+    through. Ported from buildid.py, 2026-08-07, unchanged in shape so cage.py reads the
+    same either way.
+    """
+    out = {"path": os.path.abspath(exe), "dh": UNKNOWN, "dh_detail": "",
+           "patches": {}, "build_ok": False}
+    if not os.path.isfile(exe):
+        out["dh_detail"] = "no such file"
+        return out
+    try:
+        out["dh"], out["dh_detail"] = classify(exe, known)
+    except SystemExit as exc:
+        # classify() raises SystemExit through read_params when the accessor signature
+        # is missing -- a real finding, but not a verdict, and never a reason for a
+        # LAUNCH gate to exit the process out from under its caller.
+        out["dh_detail"] = str(exc).splitlines()[0]
+    except (OSError, ValueError) as exc:
+        # Not a PE at all, or truncated. `unknown` is already the value in `out`, and
+        # unknown is refused everywhere -- but it has to be REACHED rather than raised
+        # past, or the gate crashes instead of refusing and the traceback reads as a
+        # tool bug rather than as a rejected binary. test_cage.py hands this function a
+        # deliberately malformed file for exactly this reason.
+        out["dh_detail"] = f"could not read DH parameters: {exc}"
+    try:
+        pe = PE(exe)
+        out["patches"] = patch_state(exe)
+        out["sha256"] = hashlib.sha256(pe.data).hexdigest()
+        out["build_ok"] = True
+    except (OSError, ValueError) as exc:
+        out["dh_detail"] += f" (and the PE would not parse: {exc})"
+    return out
 
 
 def inventory(directory):
@@ -263,6 +380,16 @@ def main():
     print(f"key material: {len(known)} parameter set(s)")
     for kind, label, prime, _ in known:
         print(f"  {kind:8s} keys/{label}  ({prime.bit_length()}-bit prime)")
+    # A key file that failed the exponent proof is not a missing file, and the two look
+    # identical from here unless one of them says so: a build keyed to it drops to
+    # `unknown` and gets refused at the launch gate with a message about the BINARY,
+    # which sends the reader to the wrong artifact entirely.
+    faults = key_faults()
+    if faults:
+        print(f"\n  {len(faults)} key file(s) NOT counted as ours:")
+        for f in faults:
+            print(f"    {f}")
+        print("    A build keyed to one of these classifies as `unknown` and is refused.")
 
     bad = 0
     for subdir, expect in ((LOOPBACK_DIR, OURS), (LIVE_DIR, STOCK),
@@ -290,6 +417,17 @@ def main():
                 bad += 1
             rel = os.path.relpath(path, root)
             print(f"  [{'ok' if ok else '!!'}] {rel:46s} {kind:8s} {detail}")
+            # The non-DH patches decide nothing about placement, but RUNBOOK.md's
+            # "stuck on Connecting to ArenaNet" row sends the reader here to check
+            # exactly one of them: a client whose updater is still LIVE stalls forever
+            # behind the cage on a blocked update check, which presents as a hang.
+            # Printing it here is what makes that row's instruction true.
+            ps = patch_state(path)
+            if ps:
+                upd = {True: "killed", False: "LIVE", None: "?"}[ps["updater_killed"]]
+                print(f"       updater={upd:6s} "
+                      f"mutex={'nopped' if ps['mutex_guard_nopped'] else 'intact':6s} "
+                      f"name={'renamed' if ps['mutex_renamed'] else 'stock'}")
 
     print(f"\n{bad} build(s) in the wrong place." if bad else "\nEvery build is where it belongs.")
     return 1 if bad else 0

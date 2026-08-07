@@ -67,6 +67,28 @@ def copy_with_progress(src, dst):
     return time.time() - t0
 
 
+def root_meaning(path):
+    """(kind, root) that `path` sits under, or (None, None) if it is neither run root.
+
+    The destination decides what a build MEANS to everything downstream --
+    `drive_client.assert_safe` reads "under vault/run" as "cleared for loopback", and
+    `isolate_client.ps1`'s bare sweep cages every client under vault/run and skips
+    vault/run-live. So the directory is a safety assertion, and it has to be checked
+    against the bytes rather than against the flag that chose the default.
+
+    The prefix test is `root + os.sep`, never a bare startswith: "run-live" starts with
+    "run", so a bare prefix match would file every live build as a loopback one -- which
+    is the exact failure this function exists to catch, arriving through the check
+    itself.
+    """
+    p = os.path.normcase(os.path.abspath(path))
+    for name, kind in (("run", dhbuild.OURS), ("run-live", dhbuild.STOCK)):
+        r = os.path.normcase(os.path.abspath(vaultpath.vault_path(name)))
+        if p == r or p.startswith(r + os.sep):
+            return kind, name
+    return None, None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -110,6 +132,42 @@ def main():
     m = re.match(r"Gw\.[^.]+\.(.+)\.exe$", os.path.basename(patched), re.I)
     tag = m.group(1) if m else os.path.splitext(os.path.basename(patched))[0]
     dest = a.dest or os.path.join(run_root, tag)
+
+    # The DESTINATION is checked against the build's own bytes, not against --live.
+    # Until 2026-08-07 only the source was classified: --dest was taken on trust and was
+    # not required to fall under the run root the script had just computed. So
+    #
+    #     make_run_dir.py --dest <vault>/run-live/<tag>
+    #
+    # with no --live passed every guard in this file -- want was OURS, the source really
+    # was ours, and nothing looked at where it was going -- and assembled a DH-PATCHED
+    # client into the directory §6.2 documents as "meant to reach the real service" and
+    # "must NOT be caged". That is the account-losing configuration, reachable by a
+    # command with no dangerous-sounding flag in it. The mirror case put a stock build
+    # under vault/run/, where drive_client trusts it as a loopback target.
+    #
+    # Comparing `kind` (read from the DH struct) rather than `want` (read from argv) is
+    # what makes the flag irrelevant to safety: --live now only picks a default, and
+    # cannot authorise anything.
+    dest_kind, dest_name = root_meaning(dest)
+    if dest_kind is None:
+        raise SystemExit(
+            f"REFUSING to assemble into {dest}\n"
+            f"  A run directory must live under vault/run/ or vault/run-live/. Those\n"
+            f"  two paths are read as safety assertions downstream -- drive_client.py\n"
+            f"  accepts anything under vault/run/ as a loopback target, and\n"
+            f"  isolate_client.ps1 cages everything there and nothing under run-live.\n"
+            f"  A build somewhere else inherits neither guarantee and no sweep.")
+    if dest_kind != kind:
+        raise SystemExit(
+            f"REFUSING to assemble into vault/{dest_name}/\n"
+            f"  {os.path.basename(patched)} carries {kind} parameters: {detail}\n"
+            f"  vault/{dest_name}/ means {dest_kind} -- {dhbuild.WHERE[dest_kind][1]}.\n"
+            f"  This is checked against the binary's Diffie-Hellman struct, not against\n"
+            f"  --live, so passing or omitting that flag cannot make it true.\n"
+            f"  {'A DH-patched client reaching the real service completes a REAL Stage A'  if kind == dhbuild.OURS else 'A stock client cannot key against our server at all'}\n"
+            f"  {'login with the autofilled credential before it fails. See PLAN.md §6.2.' if kind == dhbuild.OURS else '-- the channel would never come up. See PLAN.md §6.2.'}")
+
     os.makedirs(dest, exist_ok=True)
 
     print(f"source exe  : {patched}")

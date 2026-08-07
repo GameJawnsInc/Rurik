@@ -40,16 +40,24 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
   runs are for a capture campaign. The behavioural rule is the control that matters —
   human cadence, human hours, one client, never in a competitive context — because what
   closes accounts is a traffic pattern no person could produce. **Preconditions in
-  `PLAN.md` §6.2 are not all met**, so A1 is unblocked but not yet safe to run: the
-  unpatched-DH build now exists and is reproducible (`make_custom_client.py
-  --no-dh-patch`), but **nothing may launch it yet** — `drive_client.py` refuses
-  anything outside `vault/run/` by design, and `pinned.py` does not know its hash. That
-  driver is A1's own first commit. The other four are done: every launch asserts the
-  firewall cage (`toolkit/clientpatch/cage.py`), every
-  launch names its account (`toolkit/harness/accounts.py` — loopback uses a synthetic
-  credential, and the automation flag is opt-in so the primary is refused by default),
-  uncaging costs a UAC prompt, and every capture records whose server produced it
-  (`toolkit/origin.py`, three-valued: ours, live, unknown — and a consumer that pools
+  `PLAN.md` §6.2 are met bar one 4 GB file copy**: the unpatched-DH build exists and is
+  reproducible (`make_custom_client.py --no-dh-patch`), but the run directory staged at
+  `vault/run-live/` is **incomplete** — its `Gw.dat` could not be copied while a client
+  held the source open, and the gate refuses an incomplete run directory. Close every
+  client, re-run `make_run_dir.py --live`, and A1 has a legal launch target.
+  **The launch rule is no longer "is it caged".** It is a binding, enforced from the
+  bytes by `toolkit/clientpatch/dhbuild.py` and `cage.assert_launch_safe(exe, host)`: a
+  client may only be launched at the server whose Diffie-Hellman exponent matches the
+  parameters it carries. `ours`→loopback needs a verified cage; `ours`→live is refused
+  (Stage A completes with the autofilled credential before the patch matters);
+  `stock`→loopback is refused; `stock`→live is the authorized run and must **not** be
+  caged. Never infer this from a filename, a directory or a flag — every other property
+  of the two builds is identical, and on 2026-08-06 a stock build filed under a name
+  that sorts last was picked by two tools as "the patched client". The other controls
+  stand: every launch names its account (`toolkit/harness/accounts.py` — loopback uses a
+  synthetic credential, and the automation flag is opt-in so the primary is refused by
+  default), uncaging costs a UAC prompt, and every capture records whose server produced
+  it (`toolkit/origin.py`, three-valued: ours, live, unknown — and a consumer that pools
   them refuses to mix).
 - **Local and personal only.** No public shard, no PRs against upstream client-side
   projects on this project's behalf.
@@ -128,10 +136,12 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/test_scrub.py` (the credential scrub, and that no secret survives it),
   `toolkit/test_content.py` (the content store, and that its provenance and licence
   refusals actually refuse),
-  `toolkit/clientpatch/test_cage.py` (the launch-time cage guard — slow, ~1 min, it
-  queries the Windows Firewall once per client),
-  `toolkit/clientpatch/test_dhbuild.py` (whose DH a build carries, and that hostile
-  filename order can no longer pick the wrong one),
+  `toolkit/clientpatch/test_cage.py` (the launch gate: which binary may be aimed at
+  which server, both directions — slow, ~1 min, it queries the Windows Firewall once
+  per client),
+  `toolkit/clientpatch/test_dhbuild.py` (whose DH a build carries, that hostile
+  filename order can no longer pick the wrong one, and that a build cannot be
+  assembled into the directory meant for the other kind),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
   refused),
   `toolkit/test_origin.py` (whose server a capture came from, and that ours and
@@ -140,6 +150,12 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   **This list is the suite.** A test in the tree but not named here is a test
   nobody runs: `test_pathmap.py`, `test_skillcast.py` and `test_textrec.py` were
   each missing from it for days. Add the line in the same commit as the test.
+  **And run all of it.** On 2026-08-06 this suite was reported green from a run of
+  twenty of its twenty-three entries; both omitted tests were red, and one of them
+  (`test_harness.py`) was red because `drive_client.py` could not be imported at all —
+  so the launch sites had been broken for a day behind a green-looking report. A
+  partial run reported as a full one is the same defect as a missing line, from the
+  other side. Name the count when you report it.
 - **A run that measured nothing failed.** Every test routes its verdict through
   `toolkit/checks.py`, and declares a `floor` — the number of checks a healthy run
   executes. Fewer than that, or none at all, is a FAIL naming the shortfall; a

@@ -66,6 +66,17 @@ SYNTHETIC = {
 }
 
 SECRET_KEYS = ("password",)
+# Written to a FILE, the bar is higher than written to a terminal. toolkit/scrub_captures.py
+# already counts `email` as a secret -- the scrubber exists because 206 capture records
+# carried the owner's address -- and a run manifest sitting in vault/captures is the same
+# kind of file. It is not covered by the same sweep, though: the scrubber matches JSON
+# KEYS, and in a manifest the address is a VALUE inside an argv list, so `-email
+# someone@example.com` would survive a tree-wide scrub untouched.
+#
+# The console keeps the address on purpose (test_accounts.py pins that: it is how a run
+# is identified while you are watching it), so the two audiences get two functions rather
+# than one compromise.
+FILE_SECRET_KEYS = ("password", "email")
 
 
 class AccountError(SystemExit):
@@ -178,9 +189,23 @@ def redact(argv):
     Exists because both launch sites print their argv and session.py stores it. A
     password that is merely 'not supposed to be logged' ends up logged.
     """
+    return _redact(argv, SECRET_KEYS)
+
+
+def redact_for_file(argv):
+    """A copy of argv safe to write to disk. Strictly more redacted than redact().
+
+    Use this for anything persisted. drive_client.py's report.json stored the RAW argv
+    -- password and all -- while the console print of the same list two lines later was
+    redacted; found 2026-08-06, before a real automation account had ever used it.
+    """
+    return _redact(argv, FILE_SECRET_KEYS)
+
+
+def _redact(argv, keys):
     out = list(argv)
     for i, a in enumerate(out[:-1]):
-        if isinstance(a, str) and a.lower().lstrip("-") in SECRET_KEYS:
+        if isinstance(a, str) and a.lower().lstrip("-") in keys:
             out[i + 1] = "<redacted>"
     return out
 
