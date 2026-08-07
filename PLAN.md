@@ -634,9 +634,19 @@ account-visible event happens before the patch matters.
    *The state that prompted it: two patched binaries on disk, one (`…-probe`) uncaged
    for a day, and `assert_safe` waved it through because it checks the path and the
    flags, both of which an uncaged copy passes. Both are caged as of 2026-08-06.*
-4. **The automation selects its account.** Nothing does — the client autofills the saved
-   credential, which is the owner's primary. A live run today would log in as the wrong
-   account by default.
+4. ✅ **The automation selects its account.** Done 2026-08-06.
+   `toolkit/harness/accounts.py` decides by target: **loopback gets a synthetic
+   credential and no real account at all**, because `webgate.py` says yes to anyone —
+   its own comment says so — so a real login there bought nothing and is how the owner's
+   password reached 206 capture records. A non-loopback target must name an account and
+   that account must carry `automation: true` in `vault/keys/accounts.json`. The flag is
+   **opt-in**, so an account with no flag — the primary — is refused by default rather
+   than by remembering to exclude it; forgetting is safe, which a blocklist cannot
+   promise. `-email`/`-password` are the client's own flags **[measured, argtable.py,
+   build 38797]**; passing a password in an argv is visible in the local process list and
+   is accepted deliberately over leaving autofill in charge, and `redact()` keeps it out
+   of both launch sites' prints and the run manifest. `test_accounts.py` proves six
+   refusals including the primary one.
 5. **Live records are distinguishable from loopback ones.** Every capture is Rurik
    talking to Rurik and nothing marks which. The moment some records are ArenaNet's, that
    distinction is the most valuable metadata in the vault, and conflating them would be a

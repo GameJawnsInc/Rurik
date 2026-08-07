@@ -49,6 +49,7 @@ from vaultpath import vault_path  # noqa: E402
 from livecapture import CaptureTail, by  # noqa: E402
 import drive_client as dc  # noqa: E402
 import cage  # noqa: E402
+import accounts  # noqa: E402
 
 TOOLKIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -433,6 +434,9 @@ def run_client(a, outdir):
     sampler.start()
 
     args = ["-authsrv", a.auth_host, "-portal", "127.0.0.1", "-windowed", "-log"]
+    acct = accounts.for_target(a.auth_host, getattr(a, "account", None))
+    args += accounts.login_args(acct)
+    print(f"account: {accounts.describe(acct)}")
     dc.assert_safe(a.exe, args)
     # Both launch sites assert the cage independently rather than one trusting the
     # other. A guard that only guards one of two doors is the shape of the defect it
@@ -444,7 +448,8 @@ def run_client(a, outdir):
 
     proc = subprocess.Popen([a.exe] + args, cwd=os.path.dirname(a.exe))
     sampler.pid = proc.pid
-    print(f"client pid {proc.pid}: {os.path.basename(a.exe)} {' '.join(args)}")
+    print(f"client pid {proc.pid}: {os.path.basename(a.exe)} "
+          f"{' '.join(accounts.redact(args))}")
 
     actions = a.actions or ACTIONS[a.until]
     sent, results, ok, undec = [], [], False, []
@@ -542,6 +547,10 @@ def main():
                          "-- needs this: the verdict is read at the spawn "
                          "rung, and a probe's first step lands seconds later. "
                          "Without --hold it holds until you close the client.")
+    ap.add_argument("--account", default=None,
+                    help="account label from vault/keys/accounts.json. "
+                         "Omit for a loopback run: a synthetic credential is "
+                         "used and no real account is involved.")
     ap.add_argument("--exe", default=None,
                     help="patched client exe; default: newest under vault/run")
     ap.add_argument("--actions", default=None,
