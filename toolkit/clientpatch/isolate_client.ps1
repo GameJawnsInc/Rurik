@@ -24,10 +24,21 @@
     Needs an elevated PowerShell. Reverse with -Remove.
 #>
 param(
-    [string]$Exe = "C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe",
+    [string]$Exe = "",
     [switch]$Remove,
     [switch]$List
 )
+
+# WITH NO -Exe, THIS CAGES EVERY PATCHED CLIENT IT CAN FIND, not one hardcoded path.
+#
+# The default used to be a single run directory's Gw.exe, and that is precisely how a
+# binary went uncaged: a second run directory (`...-probe`) was built for a parallel
+# session, nothing caged it, and `cage-on` kept cheerfully re-caging the one that was
+# already safe. MEASURED 2026-08-06: two patched binaries on disk, one caged.
+#
+# A default that silently protects a subset is worse than no default, because the
+# success message reads the same either way. Enumerating is the only version of this
+# that cannot leave one behind.
 
 # ONE CAGE PER RUN DIRECTORY, and that is a fix rather than a flourish.
 #
@@ -42,8 +53,7 @@ param(
 # The rule name now carries the run directory, so cages are independent and
 # re-running for the same client is still idempotent.
 $RuleBase = "Rurik - patched GW client: block outbound"
-$Tag = Split-Path -Leaf (Split-Path -Parent $Exe)
-$RuleName = "$RuleBase [$Tag]"
+$RunRoot = "C:\gd\Rurik\vault\run"
 
 if ($List) {
     $rules = @(Get-NetFirewallRule -DisplayName "$RuleBase*" -ErrorAction SilentlyContinue |
@@ -81,10 +91,27 @@ if ($Remove) {
     exit 0
 }
 
-if (-not (Test-Path -LiteralPath $Exe)) {
-    Write-Error "Not found: $Exe`nRun toolkit\clientpatch\make_run_dir.py first, or pass -Exe."
-    exit 1
+if ($Exe) {
+    if (-not (Test-Path -LiteralPath $Exe)) {
+        Write-Error "Not found: $Exe`nRun toolkit\clientpatch\make_run_dir.py first."
+        exit 1
+    }
+    $Targets = @($Exe)
+} else {
+    $Targets = @(Get-ChildItem -LiteralPath $RunRoot -Directory -ErrorAction SilentlyContinue |
+                 ForEach-Object { Join-Path $_.FullName "Gw.exe" } |
+                 Where-Object { Test-Path -LiteralPath $_ })
+    if ($Targets.Count -eq 0) {
+        Write-Error "No Gw.exe under $RunRoot. Run make_run_dir.py, or pass -Exe."
+        exit 1
+    }
+    "Found $($Targets.Count) patched client(s) under $RunRoot."
 }
+
+foreach ($Target in $Targets) {
+
+$Tag = Split-Path -Leaf (Split-Path -Parent $Target)
+$RuleName = "$RuleBase [$Tag]"
 
 # Same trailing * as above: without it the allow rule survives this cleanup and
 # a second copy is created below, stacking one more on every re-run.
@@ -98,14 +125,18 @@ Get-NetFirewallRule -DisplayName "$RuleName*" -ErrorAction SilentlyContinue |
 # rules, so the allow has to be scoped to 127.0.0.1 and the block left broad --
 # an allow-all-then-block-some ordering would silently do nothing here.
 New-NetFirewallRule -DisplayName "$RuleName (allow loopback)" `
-    -Direction Outbound -Action Allow -Program $Exe `
+    -Direction Outbound -Action Allow -Program $Target `
     -RemoteAddress 127.0.0.1 -Profile Any | Out-Null
 
 New-NetFirewallRule -DisplayName $RuleName `
-    -Direction Outbound -Action Block -Program $Exe -Profile Any | Out-Null
+    -Direction Outbound -Action Block -Program $Target -Profile Any | Out-Null
+
+"  caged: $Target"
+
+}   # foreach $Target
 
 @"
-Confined to loopback: $Exe
+Confined to loopback: the patched client(s) listed above.
 
   allow  -> 127.0.0.1 (our webgate 6601, our AuthSrv 6112)
   block  -> everything else

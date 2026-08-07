@@ -54,7 +54,18 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive, DEFAULT_DAT, ENTRY_SIZE  # noqa: E402
+import checks  # noqa: E402
+
+# FLOOR: the ten checks in sections 1-6, all of which run unconditionally on any
+# archive -- two container invariants, two allocator invariants, two extent
+# invariants, the strided crc sweep, the two self-referential rules, and the
+# summary. Measured on the run-dir Gw.dat, 2026-08-06: a green run prints exactly
+# ten [PASS] lines. --full changes how many ROWS section 4 reads, not how many
+# checks the file executes, so the floor is the same either way. If this run
+# scores nine, a section stopped running and the remaining passes mean nothing.
+LEDGER = checks.Ledger("dat checksums", floor=10)
 
 # The two rows that describe the container rather than living inside it. They are
 # excluded from the plain over-the-stored-bytes rule and checked by their own in
@@ -99,12 +110,7 @@ def main():
         print(f"[FAIL] no archive at {args.dat}")
         return 1
 
-    fails = []
-
-    def check(ok, label):
-        print(f"  [{'PASS' if ok else 'FAIL'}] {label}")
-        if not ok:
-            fails.append(label)
+    check = checks.adopt(LEDGER)
 
     with Archive(args.dat) as ar:
         print(f"{os.path.basename(args.dat)}: {ar.entry_count} entries, "
@@ -189,9 +195,7 @@ def main():
               "every row, the header and the table all verify -- a writer must "
               "maintain all three")
 
-    print("\n" + ("ALL CHECKS PASSED" if not fails
-                  else f"{len(fails)} CHECK(S) FAILED"))
-    return 1 if fails else 0
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

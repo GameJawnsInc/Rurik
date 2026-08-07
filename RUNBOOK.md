@@ -5,10 +5,14 @@ driven from. Every `python …` line works unchanged in PowerShell, `cmd.exe` an
 bash alike; the one shell-sensitive line is launching the client, which needs a
 leading `&` (step 3).
 
-**State of play (2026-08-04): R1 is done.** A real client, build 38797, reaches
-character select and displays "Test Warrior". Clicking *Play* is unimplemented —
-the client will ask for a game instance and get nothing back. That is the current
-edge, and its questions land in the vault in plaintext.
+**Where the project is: [PLAN.md](PLAN.md) §3.** This runbook deliberately does not
+say — it used to, and it was wrong for 40 hours while asserting that clicking *Play*
+was unimplemented, long after a body was standing in a map and walking into walls.
+A procedure document that also claims to know the state of play will drift from it,
+and this is the first file a cold session opens.
+
+What this file is for: driving the real client against the stack, whatever rung the
+stack is on.
 
 ---
 
@@ -275,6 +279,68 @@ beside the exe, but it **buffers and only flushes on exit** — a stuck client s
 | `PLAN.md` | Strategy, the ladder, ranked angles of attack |
 
 ---
+
+## Backing up the vault, and the one thing that blocks going off-disk
+
+The vault is the only part of this project that cannot be rebuilt. Code regenerates
+from git; two pinned ArenaNet builds do not, and ArenaNet's own updater has already
+replaced one in place mid-session. `vault/client/` alone is 8 GB of that, and its
+directory names are the sha256 prefixes of the binaries inside, so a copy verifies
+itself.
+
+**The mirror.** Same-disk, so it covers the failure with history here — an install or
+a script overwriting files — but not the disk dying:
+
+```bash
+robocopy C:\gd\Rurik\vault C:\gd\Rurik-Backups\vault /MIR /R:1 /W:1 /MT:8 /NP /NFL /NDL
+```
+
+Robocopy exit codes 0–7 all mean success; 1 is "files were copied". Check `FAILED : 0`
+in the summary rather than the exit code. Last full run: 20,855 files, 20.897 GB,
+about three minutes, both client `Gw.exe` hashes verified equal afterwards.
+
+**Off-disk is the copy that matters, and it needs the scrub first.** The client sends
+the owner's real ArenaNet credential to our own webgate on every login and we record
+it, so `vault/captures/portal/` carries the account email, the password as base64, and
+every issued session token. Nothing has ever been in git — `vault/` was gitignored in
+the first commit — but that set cannot leave the machine as it stands. It is a filter,
+not a blocker:
+
+```bash
+python toolkit/scrub_captures.py --force
+```
+
+Writes `vault/captures-scrubbed/`, mirroring the whole capture tree, and never touches
+the originals — they stay as recorded, because an original capture is evidence about the
+protocol and a scrubbed one is only evidence about a session.
+
+**This used to cover `captures/portal/` alone, and the recipe below used to say "take
+everything except `run/` and `dat_study/`."** Measured 2026-08-06, that shipped **206
+`email` records, 113 `account_uuid`, 113 `char_uuid` and 341 ARC4 keys and DH seeds**
+sitting in `authsrv/`, `gamesrv/` and `selftest/` — none of which the scrubber looked at.
+The recipe was the exposure, not the vault.
+
+Placeholders are assigned sequentially rather than hashed (the password is short; a
+hash would be brute-forceable), are the same length as what they replace so
+`Content-Length` and the base64 width stay honest, and are one-to-one so the same value
+lands on the same placeholder everywhere — correlation survives, identity does not.
+
+`toolkit/test_scrub.py` harvests every secret out of the originals with **its own** field
+list and asserts not one appears in the output. That check has now caught three fields
+nobody had listed: the reply body's `<Session>`/`<Token>`/`<UserId>`, the entire
+`authsrv/` directory, and `who` — a `login_ok` log line with an account UUID and a session
+token embedded in prose, which whole-value substitution could never have fixed. Re-run it
+after touching any list.
+
+**`.raw` files are NOT scrubbed and NOT copied — 342 of them.** They are the undecoded
+byte stream, nothing in the toolkit parses them, and the portal stage is plaintext HTTP,
+so they may hold the credential directly. Anything that leaves this machine must exclude
+them until someone does that work.
+
+For an off-disk copy: **`client/`, `mirrors/`, `keys/`, `research/`, and
+`captures-scrubbed/`** — roughly 10.5 GB, a USB stick. Not `captures/` (unscrubbed, and
+carries the `.raw` set), not `run/` or `dat_study/` (11.9 GB, both regenerate from
+`client/` plus the patcher and `Gw.dat`).
 
 ## The third copy of Gw.dat, and why it exists
 

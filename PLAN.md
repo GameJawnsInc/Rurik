@@ -337,22 +337,99 @@ mock server. Salvage: a null render device belongs on the capture-arc list next 
 
 ## 3. The revised ladder
 
-| Rung | Deliverable | Acceptance criterion | Cheapest falsifying probe |
+**This table is the project's single status authority.** `CLAUDE.md` and `RUNBOOK.md`
+point here and do not restate it. That rule exists because on 2026-08-06 the three
+documents asserted three different current positions, the newest of them 40 hours stale,
+and a cold agent session reads whichever it opens first. If you land a rung, date it and
+stamp it with a commit hash **in the same commit**; if you cannot, the rung is not landed.
+
+| Rung | Deliverable | Acceptance criterion | Status |
 |---|---|---|---|
-| **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **done this session** — gate proven both directions, client pinned and hash-verified, prior art mirrored |
-| **R0b** | Proxy capture via the WebSocket bridge | Both directions of a real session tee'd to disk | Probe 3 |
-| **R1** | Handshake against a local server | Client reaches character select | ✅ **DONE 2026-08-04.** Build 38797 rendered "Test Warrior" at character select against our portal, our DH parameters, our ARC4 channel and our five-message login burst. |
-| **R2** | Presence | Your own body standing in a real map | Probe 4 — OpenTyria may deliver this directly |
-| **R1.5** | **Tape player** *(new rung)* | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | Requires R0b only |
-| **R3** | Movement on real geometry | You walk to a wall and are stopped | `GmPaths.c` + `PathingMap` exist; this is a quarter, not a week |
-| **R4a/b/c** | Agent model, skill substrate, AI and spawns | As HANDOFF.md | — |
-| **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | — |
+| **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **2026-08-04** — gate proven both directions, client pinned and hash-verified, prior art mirrored. *Caveat: closed against three facts, none of which is the stated criterion — nothing has ever read a `.raw` back. See §3.1.* |
+| **R1** | Handshake against a local server | Client reaches character select | ✅ **2026-08-04 22:58**, `e34c417`. Build 38797 rendered "Test Warrior" against our portal, our DH parameters, our ARC4 channel and our login burst. |
+| **R2** | Presence | Your own body standing in a real map | ✅ **2026-08-05 11:15**, `aedc214`. |
+| **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. |
+| **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). **Nothing swings back and the player cannot die**, which is the half the criterion actually names. There is still no agent table — `studies/enemy/PLAN.md` §7.2. |
+| **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
+| **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
+| **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
+| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** Unblocked by §7 Q4; the remaining precondition is a build with unpatched DH (§6.2 item 1), which is this rung's own first commit. |
+| **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ⬜ not started. Requires R0b, so it inherits R0b's block. |
 
 Two structural changes, both argued below in §4.
 
-**R0b replaces R0's C++ harness.** The capture harness stops being an in-process DLL and becomes a
-proxy. Same deliverable, a fraction of the friction, and it cannot be broken by a client patch
-moving an address.
+### 3.1 What "done" is doing in the table above
+
+R0a is the honest wart and is marked rather than quietly re-worded. Its criterion is *a
+capture replays byte-identically from disk*, and nothing in `toolkit/` has ever read a
+`.raw` file back. What was actually achieved — the gate, the pinned client, the mirrors —
+is worth having and is not what the row claimed. Either build the reader or restate the
+criterion; do not leave a ✅ standing on a different fact.
+
+The lesson generalises, and it is why the status column now carries hashes: **R2 and R3
+were both landed and neither was recorded here for 40 hours**, while R3's own estimate
+in this table ("a quarter, not a week") stayed in print through the six hours it actually
+took. A ladder nobody updates stops being a control instrument in both directions at
+once — it under-reports what is done and keeps mis-estimating what is next.
+
+### 3.2 R4b and R4c, rewritten as counts
+
+The old criteria could not be evaluated. R4b's was *"one skill from each mechanical
+family resolves correctly"* and **"mechanical family" is enumerated nowhere in this
+repo**. R4c's was *"an area populates and plays like the recording"* and **there is no
+recording** — R0b has not been built, so that criterion referenced an artifact the plan
+had deprioritised.
+
+Both are now graded against an enumerated content surface:
+[studies/presearing/MANIFEST.md](studies/presearing/MANIFEST.md).
+
+- **R4b — *n* of **9**.** Pre-Searing's reachable skills span nine of the client's 21
+  player-skill `type_code` families, and R4b is met when at least one named skill id in
+  each resolves its effect correctly *against the client's own state* — not against our
+  server agreeing with itself. The manifest names an exemplar per family (Frenzy 346,
+  Flare 194, Healing Signet 1, Sever Artery 382, …). **Today n = 0.** Nine and not 21
+  because the other twelve codes have no Pre-Searing content to test against; grading
+  against 21 would grade v1 against non-v1 content.
+- **R4c — split, because half of it is blocked and reporting one number hides which.**
+  *R4c-1, capture-free*: 19 of 19 map rows with resolved file ids and arrival points that
+  pass the spawn-in-trapezoid test (today 2), ≥15 NPC templates (today 1), 2 of 2
+  mandatory quests completable, 6 of 6 quest verbs implemented, 4 of 4 services working.
+  *R4c-2, capture-gated*: 35–40 monster types with real stats and skill bars, graded on
+  **types, never on spawn instances** — spawn counts are unstatable from any source this
+  project has. R4c-2 stays at 0 and is **reported as blocked until R0b exists**, which is
+  a dependency rather than a failure and the ladder should show it as one.
+
+**Carried in the criterion rather than buried:** five real mechanical families — Shout,
+Interrupt, Well/Spirit/Trap/Ward, Block, Ritual — have **no** Pre-Searing exemplar at
+all, and five more have exactly one. A green R4b therefore does not mean the skill engine
+is general. That is the GW1 specialist's dissent from the 2026-08-06 review, now
+quantified: you can finish v1 having proven very little about whether the engine can
+drive a real Guild Wars fight. If generality matters it needs its own rung with a
+post-Searing exemplar per absent family, and that is outside the declared v1 line.
+
+*Both are proposals until the owner adopts them.* Two caveats travel with them. The
+manifest's CLIENT numbers are strong and were re-derived independently here — 19 zone
+rows at `continent == 1`, 1,333 player skills over 21 type codes. Its **WIKI numbers are
+weaker than this repo's usual bar**: the browser route was unavailable for every pass, so
+wiki figures came through search-engine prose rather than page reads, and the manifest
+says so itself. Treat any wiki-only figure as approximate until re-read. And the manifest
+raises one scope question no data can answer — whether "playable solo end to end" includes
+the Ascalon Academy mission cluster and the hand-off into post-Searing, or stops at the
+mission being completable.
+
+**R0b replaces R0's C++ harness.** The capture harness stops being an in-process DLL. It does
+**not** become a proxy — this section originally said it would, and that was wrong for a reason
+this document establishes elsewhere and then failed to apply here: §1.5 and §1.6 record that the
+auth and game channels are keyed by Diffie-Hellman between the client and the server, which is
+precisely why *our* server cannot talk to a stock client without patching its parameters. A proxy
+sits in the same position and holds neither private exponent, so it can relay ciphertext and read
+none of it.
+
+What R0b actually is: **a client we control, recording its own decrypted stream.** Headquarter's
+headless-client approach (MIT, C, tracking live builds) is the instrument named in §4-A1, and
+`gw-preservation/network-logger` is the in-client route to read for it. That keeps the property
+the proxy idea was chosen for — it is not an in-process DLL hooking addresses that move with every
+build — while being a thing that can exist.
 
 **R1.5, the tape player, is new and it is the best idea to come out of this exercise.** Before
 writing any simulating server, write a server that replays a recorded StoC stream at recorded
@@ -471,9 +548,20 @@ parse later").
 
 ## 5. Workstreams and the first 90 days
 
+> **The day-windows below are dead, kept until the owner rules on deleting them.** Measured
+> from git against this document's own commit (`1ac675c`, 2026-08-04 19:56): the Days 1–14
+> target *"a character standing in a map"* landed 15h19m later; Days 46–90's skill-table
+> extraction landed at 19h16m; §3's separate "a quarter, not a week" estimate for R3 took
+> 21h44m. The whole 90-day programme was consumed in under 46 hours — **except** the three
+> items needing a human to act against the live service or answer an open question (A1, A2,
+> Probe 3), which are still at zero. So the estimate is wrong by 15–100× in the agent-farmable
+> lane and by nothing at all in the other, which is the useful finding: *the constraint is not
+> throughput, it is the three things below that only the owner can do.* Status is §3; what to
+> do next is §8.
+
 The human is the bottleneck for exactly three things: anything that launches the game, anything
 that judges whether the game *feels* right, and the account risk decisions. Everything else is
-agent-farmable.
+agent-farmable. **That sentence is the part of this section that held.**
 
 **Human-only:** Probes 1, 2, 4. Playtesting. Deciding whether to use a secondary account.
 **Agent-farmable:** the schema translation (A3), WASM tooling and symbolization (A4), the browser
@@ -482,7 +570,7 @@ prior art.
 
 - **Days 1–14** — Probes 1 and 2. Build and run OpenTyria (A2). In parallel, agents translate
   `msgdefs.c` into the schema and stand up codegen (A3). *Target: a character standing in a map.*
-- **Days 15–45** — Probe 3. If it passes, the proxy becomes the capture harness (A1) and runs on
+- **Days 15–45** — Probe 3. If it passes, the instrumented client becomes the capture harness (A1) and runs on
   every session from then on, including sessions played for fun. Begin the WASM symbolization
   pipeline (A4, A7).
 - **Days 46–90** — Tape player (R1.5). Skill-table extraction and the referee'd data pipeline (A6).
@@ -498,13 +586,134 @@ changes is that capture is now cheap enough to leave running rather than a proje
 | Risk | Hedge | Cost |
 |---|---|---|
 | A prior-art repo disappears | **Already happening** — `gwdevhub/gw_in_browser` 404s today while `gwnative` still names it upstream **[measured]**. `toolkit/mirror_priorart.py` clones the field into `vault/mirrors/` with a manifest recording each HEAD; run it monthly. | done |
-| Service closes or changes | Leave the proxy on for every session; zero marginal cost once built | hours |
+| Service closes or changes | Record every live session from inside the instrumented client; zero marginal cost once built. *The hedge is unbuilt, so the risk is currently unhedged — and this row said "leave the proxy on", which was never a thing that could exist (§3 R0b).* | hours |
 | **Client auto-patches over ground truth, and the DH keys rotate with it** | **This happened during the session that wrote this document.** The updater replaced `Gw.exe` (10,404,032 → 10,483,904 bytes) and `Gw.dat`, moved the DH struct from RVA `0x6843e8` to `0x6910d8`, and **changed both the prime and the server's public key**. ArenaNet rotates the Diffie-Hellman parameters per build — which is why Headquarter stores 107 server keys rather than one constant. Consequences: the client patch is a permanent recurring step, not a one-time one; every capture and schema revision must carry a build id (free, per §2); and re-snapshot *before* accepting an update prompt, never after. Both builds are now vaulted. | ongoing |
 | **The client phones home when it crashes** | `Gw.exe` embeds Sentry: `SENTRY_DSN`, `sentry.native`, `getsentry`, `x-sentry-rate-limits` are all present **[measured]**. The working method here is inject, patch, malform, crash — so the client's own outbound reporting channel is a posture problem HANDOFF §9 never considered, since §9 reasons only about server-side visibility. Neutralise it before the first malformed packet: block the endpoint at the firewall or null the DSN in the patched copy. Minutes, and it belongs on the R0 checklist next to the vault snapshot. | minutes |
 | **The captures contain the owner's real ArenaNet credential** | The client sends its saved password to our own webgate on every login, and `vault/captures/portal/*.jsonl` records it as base64 — `<Password>…</Password>`, reversible in one command **[measured 2026-08-04]**. It has never been in git: `vault/` was gitignored in the first commit, before any content existed, so there is no history to rewrite and "private repo" does not bear on it either way. **Owner's decision, 2026-08-05: the repo stays private, and a credential-scrubbing / anonymising pass is a gate before any public push** — not a change to capture fidelity now, since the whole method depends on recording what the client actually sent. Until then the vault is the only copy and stays local. | deferred, by decision |
-| Account loss | Never automate on the primary account. The proxy posture — watching your own traffic — is milder than injecting a DLL, which is what the original plan required | one account |
+| Account loss | Never automate on the primary account — now enforceable rather than aspirational, because a second account exists (§7 Q4). **The old reason given here was wrong and is replaced:** it said "the proxy posture — watching your own traffic — is milder than injecting a DLL", but A1's instrument is Headquarter, a third-party client that logs into the live service. That is not a proxy. **SOURCED:** *MDY v. Blizzard* turned on unattended automation of gameplay, and Warden targeted automated play *patterns* rather than the presence of third-party code — which is why addons and injected tooling coexisted with it for years, and why `HANDOFF.md` can record that "GWToolbox is tolerated precisely because of how it has behaved". So the control is behavioural: human cadence, human hours, one client, never in a competitive context. §6.2 | one account |
 | A client update invalidates months of offset work | Choose WASM: the module bytes are the code and offsets come from the module | free, if you switch |
 | Two years with nothing playable | A2 and R1.5 both target a visible result inside 90 days | — |
+
+
+### 6.2 Live capture, and the two client configurations
+
+§7 Q4 authorizes automation against the live service. That breaks an assumption every
+safety control in this repo was built on — that **nothing ever talks to ArenaNet** — and
+the controls now have to distinguish two configurations rather than forbid one.
+
+**"Patched" is not the property the rule wants.** `make_custom_client.py` applies four
+modifications and only ONE disqualifies a client from touching the real service:
+
+| Patch | Effect on a live login |
+|---|---|
+| **Diffie-Hellman triple** (generator, prime, server public B) | **DISQUALIFYING.** The client derives the ARC4 key locally from our `B`; ArenaNet's AuthSrv keys from theirs. The result is not a clean refusal, it is **a stream of garbage frames delivered to ArenaNet's auth server** — the mirror image of the `AUTH_CMSG has no opcode 26763` failure a stock client produces against us, which RUNBOOK already calls "exactly the kind of malformed traffic worth not sending". |
+| Updater kill switch | Harmless, and **wanted** — it pins the build against an update that would replace our ground truth. |
+| `CreateMutexA` guard NOPed | Harmless, and **wanted** — multiple instances is what capture at scale needs. |
+| Mutex renamed | Harmless. A client-side fingerprint change, noted only because it is visible. |
+
+So the non-negotiable is restated as **a client carrying OUR DH parameters must never
+reach the real service** — three quarters of the patch set is fine on both sides.
+
+**The sharpest hazard is not the DH patch, because the DH patch fails late.** Login is
+three stages (§1.6). The DH substitution touches Stage B only. A patched client launched
+at the live service with no `-portal` completes a **real Stage A portal login, with the
+owner's autofilled primary credential**, and only then fails at Stage B. The
+account-visible event happens before the patch matters.
+
+**What must be true before the first live run**, none of which is true today:
+
+1. **A live-capture client is a separate build** — unpatched DH, with the updater and
+   mutex patches. There is no such build; `vault/run/` holds only DH-patched copies, and
+   the harness's `assert_safe` refuses anything outside `vault/run/`. Until one exists
+   there is no legal launch target for the authorized use, which is how someone ends up
+   forking a driver without the guards.
+2. **The cage is per-client and its removal is elevated.** `isolate_client.ps1` pins a
+   client to loopback by program path, so a live client cannot be caged — there is no
+   partial setting. `cage-off` was reachable unelevated through
+   `toolkit/harness/admin.py`, and `-Remove` takes down **every** cage on the machine;
+   removed from the allowlist 2026-08-06, so uncaging now costs a UAC prompt.
+3. ✅ **Launch sites check for a cage.** Done 2026-08-06. `toolkit/clientpatch/cage.py`
+   asks the Windows Firewall whether *this* binary has both rules — the loopback allow
+   AND the broad block, because an orphaned allow looks like cleanup and permits
+   everything — and both launch sites (`drive_client.py`, `session.py`) assert it
+   independently rather than one trusting the other. It classifies the binary through
+   `pinned.identify()` and **refuses `unknown`**, which is the case that matters next:
+   `make_custom_client` generates fresh DH parameters, so the next patched copy has a
+   hash nobody has recorded. Fail-closed throughout — an undeterminable firewall is a
+   refusal, not permission. `test_cage.py` proves all four refusals.
+   *The state that prompted it: two patched binaries on disk, one (`…-probe`) uncaged
+   for a day, and `assert_safe` waved it through because it checks the path and the
+   flags, both of which an uncaged copy passes. Both are caged as of 2026-08-06.*
+4. ✅ **The automation selects its account.** Done 2026-08-06.
+   `toolkit/harness/accounts.py` decides by target: **loopback gets a synthetic
+   credential and no real account at all**, because `webgate.py` says yes to anyone —
+   its own comment says so — so a real login there bought nothing and is how the owner's
+   password reached 206 capture records. A non-loopback target must name an account and
+   that account must carry `automation: true` in `vault/keys/accounts.json`. The flag is
+   **opt-in**, so an account with no flag — the primary — is refused by default rather
+   than by remembering to exclude it; forgetting is safe, which a blocklist cannot
+   promise. `-email`/`-password` are the client's own flags **[measured, argtable.py,
+   build 38797]**; passing a password in an argv is visible in the local process list and
+   is accepted deliberately over leaving autofill in charge, and `redact()` keeps it out
+   of both launch sites' prints and the run manifest. `test_accounts.py` proves six
+   refusals including the primary one.
+5. ✅ **Live records are distinguishable from loopback ones.** Done 2026-08-06.
+   `toolkit/origin.py` classifies every capture **ours / live / unknown**, and the third
+   value is the design: a two-valued scheme forces an unstamped file to be called one or
+   the other, and whichever default you pick is wrong exactly when it matters — the
+   first live capture written by a tool that forgot to stamp. `authsrv.py`'s Recorder
+   now writes an `origin` record as the first line of every session; unstamped legacy
+   files infer OURS only from all-loopback peers **plus** our own session markers, and
+   nothing ever infers LIVE, because `captures/patcher/` holds public addresses too.
+   The guard that matters is `require_single()`: `test_movement_fidelity.py` pools every
+   game-channel capture into one number, and a live file in that pool would blend two
+   oracles invisibly. **MEASURED: 424 files, 341 ours, 83 unknown (patcher and short
+   sessions), 0 live — and 113 of 113 game-channel files are ours**, so it refuses
+   nothing today and refuses the first one that appears.
+
+**R0b's deliverable was wrong, and is fixed.** §3 called it "proxy capture of a real
+session", which cannot work: the channel is DH-keyed end to end and a proxy holds neither
+private exponent — the same fact that forces us to patch the client to talk to our own
+server. Re-specified 2026-08-06 in §3's rung table and in §4's structural note as capture
+from inside a client we control, before the rung is started rather than after it fails.
+The property the proxy idea was chosen for survives: it is still not an in-process DLL
+hooking addresses that move with every build.
+
+### 6.1 The derivation register
+
+Which upstream each module's *code or layout* came from, and what that upstream grants.
+It exists because on 2026-08-05 `toolkit/mapdata/gwdat.py` landed declaring itself a port
+of `gw-preservation/fileserver-utils` — **the day after §1.1 wrote "never copy from them"
+about exactly that repository** — and sat in the running server's dependency chain until
+the 2026-08-06 review found it. The rule was in the plan; nothing was checking.
+
+**SOURCED:** the model is ReactOS's post-2006 contributor taint register, not a Phoenix
+clean room. A clean room is two teams, a specification wall and an audit trail; that is
+disproportionate for one owner and a 356-line decompressor. A register is a table you
+keep honest.
+
+| Module | Derived from | Upstream grants | Status |
+|---|---|---|---|
+| `toolkit/mapdata/gwdat.py` | GuildWarsMapBrowser `SourceFiles/xentax.cpp` | custom licence — permissive, but **requires a repo link and visible credit**; it is *not* MIT | ✅ re-derived 2026-08-06, attributed in `THIRD-PARTY-NOTICES.md`, and the six-table correspondence is **checked** by `test_gwdat.py` against the vaulted mirror |
+| `toolkit/mapdata/pathmap.py` | GuildWarsMapBrowser ImHex FFNA pattern | same | ✅ attributed 2026-08-06, same notice |
+| `schema/messages.json` | OpenTyria `code/msgdefs.c` | Unlicense — public domain, no obligation | ✅ credited anyway; `overrides.json` keeps our corrections separable |
+| `content/items.toml` `starter_hammer` | OpenTyria `GmDefaultArmors.c` | Unlicense | ✅ row records source `opentyria`, and records that no capture corroborates it |
+| `toolkit/mapdata/archive.py` | OpenTyria — the archive magic's byte order | Unlicense | ✅ cited in the module |
+| `content/npcs.toml` `hatcher`, `content/maps.toml` ids | gw-preservation — **all rights reserved** | nothing | ✅ verified-only: each row records what it was checked against in our own artifacts, and `toolkit/content.py` **refuses to load** one that does not |
+| `toolkit/authsrv/probes.py` ALLEGIANCE constants | four-byte tokens `'play'`, `'nonc'`, `'mons'` | — | ✅ confirmed against our own client; **JUDGEMENT:** short functional identifiers of this kind are facts about the wire, not expression |
+| `toolkit/mapdata/atex.py` | nothing — authored from our own record walk | — | ✅ checked 2026-08-06, clean |
+| `toolkit/mapdata/dxt1.py` | nothing — DXT1/BC1 is a publicly documented format | — | ✅ checked 2026-08-06, clean |
+| `toolkit/mapdata/datwrite.py`, `datplan.py` | nothing declared | — | ✅ checked 2026-08-06, no derivation statement and none needed |
+
+**The rule this table encodes:** before a module takes a layout, an algorithm or a table
+from any upstream, add its row *first*. If the upstream grants nothing, the only
+permitted use is to verify a value we derived ourselves — which is what
+`toolkit/content.py` now enforces at load rather than leaving to memory.
+
+Two things this register deliberately does **not** claim. It is not a statement that no
+contributor ever read an unlicensed repository — reading them is explicitly allowed and
+is how several of our own bugs were found. And it says nothing about ArenaNet: the
+provenance gate is separate, absolute, and covers bytes rather than derivation.
 
 ---
 
@@ -548,7 +757,13 @@ from a documented fetch of a freely downloadable client. That is a stronger and 
 formulation than a prohibition needing constant qualification, and it matches the owner's own point
 that the client is available to anyone.
 
-**Q4. A secondary account for automation?** *Recommendation: yes, before any scripted driving.*
+**Q4. A secondary account for automation?** ✅ **CLOSED 2026-08-06, by the owner.** A second
+account is bought. **Automation against the live ArenaNet service on that account is
+authorized** — and it "shouldn't be the go-to test mode". Both halves are binding: the
+default loop stays hand-driven against our own server, and live automation is a mode you
+enter deliberately for a capture campaign, never a convenience left switched on. The
+conditions and the machinery that has to change first are §6.2. **A1 is unblocked; it is
+not yet safe to run.**
 
 **Q5. Does Pre-Searing remain the finish line?** *Recommendation: yes, unchanged.*
 
@@ -556,37 +771,52 @@ that the client is available to anyone.
 
 ## 8. Immediate next actions
 
-**Done as of 2026-08-04** — kept short so the list stays a plan rather than a diary. R1 is
-complete: a real client reaches character select against our portal, our DH parameters, our ARC4
-channel and our login burst (`studies/handshake/PLAN.md`). The crash-telemetry channel is
-neutralised by `toolkit/clientpatch/isolate_client.ps1`, which cages the patched client to
-loopback. Operations are in [RUNBOOK.md](RUNBOOK.md).
+**Status lives in §3, not here.** This list is what to *do*; §3 is where the project *is*.
+Cross off an item in the same commit that lands it — on 2026-08-06 this list still opened
+with "R2 — the game server" thirty-two hours after R2 was standing in a map, and `CLAUDE.md`
+calls this the live list, so a cold session was being handed a finished task as its next one.
 
-1. **R2 — the game server.** Clicking *Play* makes the client send `CHANGE_PLAY_CHARACTER` and
-   `REQUEST_GAME_INSTANCE`, expecting `AUTH_SMSG_GAME_SERVER_INFO` pointing at a game server on
-   6113. That server repeats the same version → DH → ARC4 handshake we already have, then speaks a
-   different catalog: 194 client and 487 server messages, all already in `schema/messages.json`.
-   The acceptance criterion is your own body standing in a real map.
-   *Start by capturing what the client sends on Play — it decodes today, and unknown opcodes stop
-   the framer loudly rather than inventing anything.*
-2. **Build the capture harness (A1).** Still the hedge that lets Q1 stay open, and still required
-   under every strategic option. Start from Headquarter's headless-client approach; read
-   `gw-preservation/network-logger` for the in-client route. Note the shape of the win so far:
-   every hard question was settled by *capturing the client and reading it*, never by reasoning
-   about it — the UUID encoding, the token-vs-session semantics, and the wire count width were all
-   decided that way, and two of the three contradicted the written sources.
-3. **Dump the client's packet-template table** (§1.2), then reconcile it against the five existing
-   opcode corpora (A3). Build-stamp the result. Any disagreement with the client's own
-   `template_size` is a mechanically detectable defect, which is what makes this agent work.
-4. **Build OpenTyria** (`vault/mirrors/ldufr__OpenTyria`) and connect a *patched copy* of the
+**Done since this list was written** — kept to one line each so it stays a plan and not a diary.
+R2 (`aedc214`), movement and collision (`885d05d`, `a97c7c4`), the client's packet-format
+tables dumped and reconciled against our catalog at 477/477 (`toolkit/schema/test_catalog.py`,
+which retires old item 3), the skill table extracted and joined to the wiki by id
+(`toolkit/clientscan/skilltable.py`, which retires old item 6), a hostile NPC that can be
+attacked, killed and revived, and the content store (`content/*.toml`, `501698b`).
+
+1. **Build the capture harness (A1).** *Unchanged, unstarted, and now the oldest item on the
+   list.* Every one of the 413 captures in the vault is Rurik talking to Rurik; **not one byte
+   is ArenaNet's**, so R0b is unmet and R1.5 and R4c's original criterion are both blocked
+   behind it. §4-A1 says "build it first regardless of every other choice in this document"
+   and it has been second here since the list was written — resolve that contradiction
+   explicitly rather than by continuing to skip it. Start from Headquarter's headless-client
+   approach; read `gw-preservation/network-logger` for the in-client route. Gated on Q4.
+2. **Spec the row format before the sniffer.** The half nobody owns: even with tape, nothing
+   turns a capture into a content row. `content/*.toml` now gives that output a shape, so the
+   job is a capture→row compiler, not a parser. **SOURCED:** this is the difference between
+   WowPacketParser and a packet logger, and TrinityCore's whole 3.3.5a world database exists
+   because that pipeline ran while retail was on 3.3.5a. Target the first monster row, not a
+   complete zone.
+3. **Finish R4a.** Nothing swings back. The player cannot die. The agent table
+   `studies/enemy/PLAN.md` §7.2 asks for is the prerequisite, and it should read its NPCs from
+   `content/npcs.toml` rather than minting constants.
+4. **Enumerate Pre-Searing** — [studies/presearing/MANIFEST.md](studies/presearing/MANIFEST.md).
+   It is what makes R4b and R4c countable (§3.2). Keep it current as content rows land.
+5. **Build OpenTyria** (`vault/mirrors/ldufr__OpenTyria`) and connect a *patched copy* of the
    client. Never patch `C:\gw`. Fastest route to understanding the whole stack end to end.
-5. **Read `gw-preservation/server`'s pathing and instance definitions** — 397 maps and a real
-   `Gw.dat` navmesh. Read only: no license means all rights reserved.
-6. **Extract the skill table.** `Fournux/Tyria-Extractor` (MIT) already does `Gw.dat` →
-   skills/items/quests/NPCs; cross-check against `build-wars/gw-skilldata`. This is R4b's numeric
-   bootstrap and it needs no capture vault to exist. Agent work.
+   *Note: its value has dropped — the assumption it was hedging (that R1–R3 would be research)
+   was tested and did not hold. See §7 Q1.*
+6. **Read `gw-preservation/server`'s pathing and instance definitions** — 397 maps and a real
+   `Gw.dat` navmesh. Read only: no licence means all rights reserved, and `toolkit/content.py`
+   now refuses a row citing them that does not record what we verified it against.
 7. **Run Probe 3** (`vault/mirrors/shiburito__gw_in_browser`) for offline WASM analysis only —
-   not for live capture, per §1.3.
-8. **Install a .NET SDK** if the C# server core survives Q1/Q2 — only the 6.0 runtime is present
-   and the plan calls for 8+. Defer until the language decision is settled.
-9. **Re-run `toolkit/mirror_priorart.py`** monthly. Repos in this ecosystem vanish; one already has.
+   not for live capture, per §1.3. It is the only thing gating §7 Q2, which has been open since
+   the plan was written; give it a date and a default answer of "no" if it does not run by then.
+8. **The C# server core.** *Contested, and open.* This item used to read "install a .NET SDK if
+   the C# server core survives Q1/Q2". Since then ~18,000 lines of working server have been
+   written in Python, `CLAUDE.md` binds `toolkit/` to the standard library, and the 2026-08-06
+   review measured the transport at ~7,000 encode+encrypt messages per 50 ms tick against an R4
+   budget near 60 — so performance was never the constraint. The review's recommendation is to
+   strike this item and record a closed decision. **That is the owner's call and it has not been
+   made**; until it is, no new server code should presume either answer.
+9. **Re-run `toolkit/mirror_priorart.py`** monthly. Repos in this ecosystem vanish; one already
+   has.

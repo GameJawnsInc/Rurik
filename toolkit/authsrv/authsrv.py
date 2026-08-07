@@ -47,6 +47,7 @@ from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 import probes  # noqa: E402
 import agents  # noqa: E402
+import origin  # noqa: E402
 
 
 def _f32(x):
@@ -424,72 +425,20 @@ MANIFEST_DONE = 2
 # real map (876), meaning "no map" rather than any actual destination.
 MAP_ID_COUNT = 877
 
-# OpenTyria's GmMapsConfig.c, verbatim: map_id -> (map_file_id, (x, y), plane).
-# map_file_id is what the client opens out of Gw.dat. Sending 0 killed it on
-#   Assertion: fileId
-#   P:\Code\Base\Rtl\File.cpp(367)
-# Only six maps are configured upstream, and Ascalon City Pre-Searing (148) --
-# the one this account's character actually stands in -- is not among them.
-MAP_STATIC_CONFIG = {
-    # Pre-Searing. This is the map our test character's own record says it is
-    # standing in -- the client asks for map_id 148 on every Play -- and until
-    # now the server substituted Kamadan's geometry because the id would not
-    # resolve. It resolves: file_id_table() was doing an exact-match lookup
-    # while 25 of the archive's ids carry bit 31 (studies/mapdata/FORMAT.md).
-    #
-    # The id and the spawn point are gw-preservation's, and both are CHECKED
-    # against our own archive rather than taken on faith -- which is the middle
-    # path studies/enemy/PLAN.md section 5 describes for their unlicensed data.
-    # MEASURED here: 0x1B97D is row 7982 and parses to 58 planes and 6,120
-    # trapezoids, and (9826, 8077) is walkable on plane 0 of that mesh. A wrong
-    # map would put the spawn off-mesh, which is exactly how the parallel
-    # session told these two maps apart from Kamadan.
-    # BIT 31 STAYS ON, and that is the experiment. Sending the MASKED id
-    # (0x1B97D) reached the client and it refused the file outright:
-    #
-    #   Map file '0x01b97d' failed to load.  Attempting to re-bloat.
-    #   Map '0x01b97d' failed to load / Creating default map
-    #   Assertion: found  P:\Code\Engine\Map\Map.cpp(1762)
-    #
-    # The archive stores this id as 0x8001B97D. archive.py's own docstring flags
-    # "the client masks the bit" as NOT ESTABLISHED -- an inference from the id
-    # a pre-Reforged upstream server sends, never read out of the binary -- and
-    # the crash is the first measurement to bear on it. Our reader registers
-    # both forms, so only the client's opinion is under test here.
-    #
-    # PREDICTION: the raw stored id loads where the masked one did not. If it
-    # also fails, the bit is not the difference and Pre-Searing needs something
-    # neither session has found; revert 148 and the map falls back to Kamadan.
-    148: (0x8001B97D, (9826.0, 8077.0), 0, False),  # Ascalon City, Pre-Searing
-    # Lakeside County -- the same region FILE as Ascalon City. Row 7982 covers
-    # the whole Pre-Searing region (studies/mapdata/FORMAT.md calls it that),
-    # which is why three map ids share one file and why its extent runs
-    # x -18432..21504 against Kamadan's much smaller box.
-    #
-    # WE DO NOT KNOW WHERE LAKESIDE'S SPAWN IS, and this line says so rather
-    # than pretending. gw-preservation records no spawn point for 146. Ashford
-    # Abbey's (map 164) was tried first and rejected on the owner's correction:
-    # Ashford is its own OUTPOST, so its coordinate is a point inside a
-    # different instance, not a spot in Lakeside.
-    #
-    # What is used instead is Ascalon City's coordinate -- MEASURED walkable on
-    # plane 0 of this same file, and honest about what it is: a known-good point
-    # in the shared region, not Lakeside's real arrival point. Pre-Searing is one
-    # continuous terrain, so if this lands inside the city walls the fix is to
-    # walk out rather than to guess again.
-    #
-    # Explorable is the reason for coming here at all, and it is the CLIENT's
-    # own answer rather than a borrowed flag: AreaInfo type is 2 for maps 145,
-    # 146 and 147 and 10 for 148 and 164, which lines up exactly with
-    # gw-preservation's Explorable column. See toolkit/clientscan/areatable.py.
-    146: (0x8001B97D, (9826.0, 8077.0), 0, True),   # Lakeside County
-    449: (0x345CC, (-9067.0, 13218.0), 0, False),   # Kamadan (outpost)
-    194: (0x265F7, (0.0, 0.0), 0, False),           # Kaineng Center (outpost)
-    55:  (352808, (0.0, 0.0), 0, False),            # Lion's Arch (outpost)
-    474: (219215, (0.0, 0.0), 0, True),             # Domain of Anguish
-    558: (287493, (0.0, 0.0), 0, True),             # Sparkfly Swamp
-    90:  (46594, (0.0, 0.0), 0, True),              # Lornar's Pass
-}
+# Where the world's facts live: content/maps.toml, loaded through toolkit/content.py.
+#
+# This was a 60-line literal with its evidence in comments no tool could read. Every id,
+# every spawn point and every reason is now a row carrying its own provenance -- which
+# upstream it came from, what we checked it against, and what is still unknown. The
+# loader refuses a row citing an unlicensed upstream that does not say what we verified.
+#
+# `map_file_id` is what the client opens out of Gw.dat. Sending 0 kills it on
+#   Assertion: fileId   P:\Code\Base\Rtl\File.cpp(367)
+#
+# The shape is deliberately unchanged -- id -> (file_id, (x, y), plane, explorable) --
+# so this commit moves data and touches no consumer. Run
+# `python toolkit/content.py --explain 148` for a row's full reasoning.
+MAP_STATIC_CONFIG = agents.WORLD.map_static_config()
 # The fallback for maps we have no entry for. It used to catch map 148 as well,
 # which meant the character stood in Kamadan's geometry under Ascalon City's
 # name -- knowingly inconsistent, and accepted at the time because Ascalon's
@@ -773,11 +722,18 @@ EXPLORABLE = False
 # server overriding the destination is not a hack -- it is what map travel is.
 MAP_OVERRIDE = None
 
+# The one thing standing in the world besides the player, and where it stands:
+# content/world.toml's `spawn.test_enemy`. Its row is labelled `invented`, because
+# nothing has ever observed a body 300 units east of an arrival point in any real
+# Guild Wars map -- it exists so a hostile agent can be hit, killed and revived on
+# demand. R4c's real spawns are server-only data nobody has captured yet.
+_ENEMY = agents.WORLD.get("spawn", "test_enemy")
+
 # Whether the world contains anything besides the player. On by default: an
 # enemy standing in the map is the point of the exercise, and every packet it
 # takes is proven (studies/enemy/PLAN.md). --no-enemy gives back an empty world
 # for probes that want one.
-SPAWN_ENEMY = True
+SPAWN_ENEMY = _ENEMY["enabled"]
 
 CLICK_SWEEP = False
 CLICK_SWEEP_VARIANTS = (
@@ -797,10 +753,10 @@ CLICK_SWEEP_VARIANTS = (
 # 2, so a --probe session and the standing enemy cannot collide. That collision
 # is not cosmetic: an agent id reused for a second body would leave the client
 # with one agent's state under another's name.
-ENEMY_AGENT_ID = 10
-ENEMY_DEFINITION = 3
-ENEMY_MAX_HEALTH = 100
-ENEMY_OFFSET = (300.0, 0.0)
+ENEMY_AGENT_ID = _ENEMY["agent_id"]
+ENEMY_DEFINITION = _ENEMY["definition"]
+ENEMY_MAX_HEALTH = _ENEMY["max_health"]
+ENEMY_OFFSET = (_ENEMY["offset_x"], _ENEMY["offset_y"])
 # A PLACEHOLDER, and it has to be non-zero rather than right. WIKI (GWW,
 # "Attack speed") says a creature that wields no weapon takes its rate from its
 # creature type, and we do not know a Hatcher's -- it is a collector that has
@@ -1159,6 +1115,15 @@ class Recorder:
         self.meta = open(base + ".jsonl", "a", encoding="utf-8")
         self.raw = open(base + ".raw", "ab")
         self.t0 = time.perf_counter()
+        # FIRST record in the file, before any frame. This server IS our server, so it
+        # can only ever produce OURS -- but stamping it is what lets a reader tell this
+        # apart from a capture of ArenaNet's, which is the one artifact the project
+        # cannot reproduce. See toolkit/origin.py for why UNKNOWN is a third value
+        # rather than a default.
+        stamped = origin.record(
+            "toolkit/authsrv/authsrv.py", origin.OURS,
+            note="a Rurik listener; the peer is the client connecting to us")
+        self.event(stamped.pop("kind"), **stamped)
 
     def event(self, kind, **kw):
         kw["kind"] = kind

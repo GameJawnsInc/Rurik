@@ -23,7 +23,10 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "schema"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                ".."))
 from codec import Codec  # noqa: E402
+import checks  # noqa: E402
 
 SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                       "..", "..", "schema", "messages.json")
@@ -78,13 +81,15 @@ WIDTH = {"byte": 1, "word": 2, "dword": 4, "float": 4, "vec2": 8,
 NAMED_OFFSETS = {0x0B: "h000B", 0x1E: "h001E", 0x23: "h0023", 0x27: "h0027",
                  0x3B: "h003B", 0x4B: "h004B", 0x59: "h0059"}
 
-fails = []
-
-
-def check(cond, msg):
-    print(f"  [{'PASS' if cond else 'FAIL'}] {msg}")
-    if not cond:
-        fails.append(msg)
+# The floor is 21 because nothing here is optional and nothing varies with a
+# fixture: 9 burst messages that must encode, then 7 named struct offsets plus
+# the total closing at 0x63 plus its agreement with declared_unpack_size, then 3
+# sourced values. Measured from a green run on 2026-08-06. If this run reports
+# fewer, a section stopped executing -- most likely the section 2 field walk
+# hitting an unhandled type and breaking out early, which drops the offset
+# checks that are the whole reason this file exists.
+LEDGER = checks.Ledger("spawn burst", floor=21)
+check = checks.adopt(LEDGER)
 
 
 def main():
@@ -129,9 +134,7 @@ def main():
     check(APPEARANCE == 0x00100000 and (APPEARANCE >> 20) & 0xF == PROF_WARRIOR,
           "appearance packs Warrior into bits 20-23")
 
-    print("\n" + ("ALL CHECKS PASSED" if not fails
-                  else f"{len(fails)} CHECK(S) FAILED"))
-    return 1 if fails else 0
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

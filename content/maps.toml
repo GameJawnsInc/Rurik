@@ -1,0 +1,175 @@
+# Maps: which archive file a map id loads, and where you arrive in it.
+#
+# Moved out of authsrv.py's MAP_STATIC_CONFIG on 2026-08-06. Nothing here is new;
+# every value and every reason was already in the repo as a Python comment. What
+# changed is that the reasons are now data a tool can read, and the licence rule is
+# enforced by the loader rather than remembered by whoever edits the file next.
+#
+# The spawn test that most of these rest on: parse the map's trapezoid mesh and count
+# how many trapezoids contain the point. EXACTLY ONE is what a non-overlapping tiling
+# gives for a point on the ground. The control in studies/mapdata/FORMAT.md shows the
+# test discriminates rather than accepting anything -- Kamadan's spawn scores 1 in
+# Kamadan and 0 in row 7982, and the Pre-Searing spawns score the reverse.
+
+[map.148]
+name = "Ascalon City (Pre-Searing)"
+file_id = 0x8001B97D
+spawn_x = 9826.0
+spawn_y = 8077.0
+plane = 0
+explorable = false
+
+[map.148.provenance]
+source = "gw-preservation"
+verified = """Checked against our own archive, not taken on faith. 0x1B97D is MFT row \
+7982 and parses to 58 planes and 6,120 trapezoids with zero malformed; (9826, 8077) \
+lands in exactly 1 trapezoid on plane 0 of that mesh, and in 0 trapezoids of Kamadan's \
+(the control). studies/mapdata/FORMAT.md."""
+note = """
+BIT 31 STAYS ON, and that is the experiment. The archive stores this id as
+0x8001B97D. Sending the MASKED id (0x1B97D) reached the client and it refused the
+file outright:
+
+  Map file '0x01b97d' failed to load.  Attempting to re-bloat.
+  Map '0x01b97d' failed to load / Creating default map
+  Assertion: found  P:\\Code\\Engine\\Map\\Map.cpp(1762)
+
+archive.py's own docstring flags "the client masks the bit" as NOT ESTABLISHED -- an
+inference from the id a pre-Reforged upstream server sends, never read out of the
+binary -- and that crash is the first measurement to bear on it. Our reader registers
+both forms, so only the client's opinion is under test.
+
+This map resolving at all was a bug fix in OUR code, not a gap in theirs:
+file_id_table() did an exact-match lookup while 25 of the archive's 171,023 ids carry
+bit 31. studies/enemy/PLAN.md section 5 records that we first blamed their data and
+were wrong, which is the more useful half of that entry.
+"""
+
+[map.146]
+name = "Lakeside County"
+file_id = 0x8001B97D
+spawn_x = 9826.0
+spawn_y = 8077.0
+plane = 0
+explorable = true
+
+[map.146.provenance]
+source = "gw-preservation"
+verified = """The FILE id is verified as for map 148 -- same file, MFT row 7982. The \
+SPAWN is not Lakeside's and this row says so: gw-preservation records no spawn point \
+for 146, so Ascalon City's coordinate is reused, MEASURED walkable on plane 0 of this \
+same mesh."""
+note = """
+Three map ids share one file because row 7982 covers the whole Pre-Searing region
+(studies/mapdata/FORMAT.md calls it that) -- which is why its extent runs
+x -18432..21504 against Kamadan's much smaller box.
+
+WE DO NOT KNOW WHERE LAKESIDE'S SPAWN IS, and this row records that rather than
+pretending. Ashford Abbey's coordinate (map 164) was tried first and rejected on the
+owner's correction: Ashford is its own OUTPOST, so its coordinate is a point inside a
+different instance, not a spot in Lakeside. What is used instead is honest about what
+it is -- a known-good point in the shared region, not Lakeside's real arrival point.
+Pre-Searing is one continuous terrain, so if this lands inside the city walls the fix
+is to walk out rather than to guess again.
+
+`explorable` is the CLIENT's own answer rather than a borrowed flag: AreaInfo type is
+2 for maps 145, 146 and 147 and 10 for 148 and 164, which lines up exactly with
+gw-preservation's Explorable column. toolkit/clientscan/areatable.py.
+"""
+
+[map.449]
+name = "Kamadan, Jewel of Istan"
+file_id = 0x345CC
+spawn_x = -9067.0
+spawn_y = 13218.0
+plane = 0
+explorable = false
+
+[map.449.provenance]
+source = "opentyria"
+verified = """MEASURED in our own archive: 0x345CC resolves through the MFT file-id \
+table to row 22371, which carries the map flags, and its geometry parses. The spawn \
+lands in exactly 1 trapezoid of that mesh and 0 of row 7982's -- it is the control \
+that shows the walkability test discriminates. studies/mapdata/FORMAT.md."""
+note = """
+OpenTyria is Unlicense, i.e. public domain, so there is no licence question here --
+the verification is recorded because it is good evidence, not because the loader
+demands it. This was the first map the server could put a body in, and it remains the
+fallback when a requested map id is unknown.
+"""
+
+[map.194]
+name = "Kaineng Center"
+file_id = 0x265F7
+spawn_x = 0.0
+spawn_y = 0.0
+plane = 0
+explorable = false
+
+[map.194.provenance]
+source = "opentyria"
+verified = "MEASURED: 0x265F7 resolves to MFT row 64474, a map-flagged row."
+note = """
+NO SPAWN POINT IS KNOWN for this map. (0, 0) is a placeholder, not a coordinate, and
+it has never been walkability-tested. Zoning here would put the body wherever (0,0)
+happens to be, which for most meshes is off it. The file id is the verified part; the
+spawn is not, and the two should not be read as carrying the same weight.
+"""
+
+[map.55]
+name = "Lion's Arch"
+file_id = 352808
+spawn_x = 0.0
+spawn_y = 0.0
+plane = 0
+explorable = false
+
+[map.55.provenance]
+source = "opentyria"
+verified = "MEASURED: 352808 resolves to MFT row 157484, a map-flagged row."
+note = """
+No spawn point known -- see map 194. Worth recording: gw-preservation gives Lion's
+Arch a DIFFERENT file id (0x34fd vs OpenTyria's 0x56228) and both resolve in our
+archive, so the two upstreams genuinely disagree here and neither is uniformly better.
+studies/enemy/PLAN.md section 5. Nothing in this repo has yet established which one
+the retail client would be handed.
+"""
+
+[map.474]
+name = "Domain of Anguish"
+file_id = 219215
+spawn_x = 0.0
+spawn_y = 0.0
+plane = 0
+explorable = true
+
+[map.474.provenance]
+source = "opentyria"
+verified = "MEASURED: 219215 resolves to MFT row 102769, a map-flagged row."
+note = "No spawn point known -- see map 194."
+
+[map.558]
+name = "Sparkfly Swamp"
+file_id = 287493
+spawn_x = 0.0
+spawn_y = 0.0
+plane = 0
+explorable = true
+
+[map.558.provenance]
+source = "opentyria"
+verified = "MEASURED: 287493 resolves to MFT row 126903, a map-flagged row."
+note = "No spawn point known -- see map 194."
+
+[map.90]
+name = "Lornar's Pass"
+file_id = 46594
+spawn_x = 0.0
+spawn_y = 0.0
+plane = 0
+explorable = true
+
+[map.90.provenance]
+source = "opentyria"
+verified = "MEASURED: 46594 resolves to MFT row 34466, a map-flagged row."
+note = "No spawn point known -- see map 194."

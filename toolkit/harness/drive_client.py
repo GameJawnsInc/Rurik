@@ -35,6 +35,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
+import cage  # noqa: E402
+import accounts  # noqa: E402
 
 RUN_ROOT = os.path.normcase(vault_path("run"))
 # Both flags must be present and both must name a 127/8 address. Any loopback
@@ -353,6 +355,10 @@ def close_client(proc):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--account", default=None,
+                    help="account label from vault/keys/accounts.json. "
+                         "Omit for a loopback run: a synthetic credential is "
+                         "used and no real account is involved.")
     ap.add_argument("--exe", default=newest_run_exe())
     # The original 9/5/5 spacing was tuned when the client still ran its updater
     # on boot. With the updater patched out every screen -- load, login, EULA,
@@ -377,7 +383,18 @@ def main():
         raise SystemExit(f"No Gw.exe under {vault_path('run')} — "
                          f"run make_run_dir.py first (RUNBOOK.md, one-time setup).")
     args = ["-authsrv", a.authsrv, "-portal", "127.0.0.1", "-windowed", "-log"]
+    # Choose the account rather than inheriting whatever the client autofilled. For a
+    # loopback run that is a synthetic credential and no real one: our webgate says yes
+    # to anyone, so a real account there buys nothing and is how the owner's password
+    # reached 206 capture records. See toolkit/harness/accounts.py.
+    acct = accounts.for_target(a.authsrv, a.account)
+    args += accounts.login_args(acct)
+    print(f"account: {accounts.describe(acct)}")
     assert_safe(a.exe, args)
+    # And that the firewall cage is actually up. assert_safe checks the path and the
+    # flags; a binary can pass both and still be able to reach the internet, which is
+    # exactly the state one copy sat in for a day. See toolkit/clientpatch/cage.py.
+    print(f"cage: {cage.assert_caged(a.exe)} client, caged")
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
     outdir = os.path.join(a.outdir, stamp)
@@ -394,7 +411,8 @@ def main():
 
     proc = subprocess.Popen([a.exe] + args, cwd=os.path.dirname(a.exe))
     sampler.pid = proc.pid
-    print(f"launched pid {proc.pid}: {os.path.basename(a.exe)} {' '.join(args)}")
+    print(f"launched pid {proc.pid}: {os.path.basename(a.exe)} "
+          f"{' '.join(accounts.redact(args))}")
 
     hwnd, title = wait_window(proc.pid)
     if hwnd:

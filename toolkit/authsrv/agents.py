@@ -5,10 +5,47 @@ every field order here was proven against our own client before it was moved
 into this file -- see studies/enemy/PLAN.md for the run that established each,
 and studies/agentprops/FINDINGS.md for the ones read out of the binary.
 
-Nothing here invents anything. The one thing that is somebody else's data is
-HATCHER's file and model ids, and the licence question that raises is recorded
-at studies/enemy/PLAN.md section 5 rather than settled here.
+WHERE THE NUMBERS LIVE, changed 2026-08-06. This module keeps PROTOCOL VOCABULARY --
+what the wire MEANS, read out of the client's own code: ALLEGIANCE_ENEMY, PROP_HEALTH_MAX,
+the GV_ event ids, the class-tag bases. Those are not authorable and moving them would
+be a category error.
+
+WORLD FACTS -- the Hatcher, the starter hammer, the player's health and energy, the
+weapon swing rates -- moved to `content/*.toml` and are loaded below. They were Python
+literals with their provenance in comments no tool could read; each row now carries its
+own source and verification as data, and the loader refuses a row that cites an
+unlicensed upstream without saying what we checked it against. That is what settles the
+licence question this docstring used to defer: see `toolkit/content.py`, and
+`content/npcs.toml` for the Hatcher's own entry.
+
+The names below are unchanged and still dicts, so every call site -- including the
+eight in probes.py -- reads exactly as it did.
 """
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import content  # noqa: E402
+
+WORLD = content.load()
+
+
+def _encstring(words):
+    """GW string ids as the wire carries them: one UTF-16 code unit per id.
+
+    The content store holds them as a list of integers, because that is what they
+    are -- ids the client resolves against its own string table, not text. The wire
+    wants them packed into a string.
+    """
+    return "".join(chr(w) for w in words)
+
+
+def _row(kind, key):
+    row = dict(WORLD.get(kind, key))
+    if "enc_name" in row:
+        row["enc_name"] = _encstring(row["enc_name"])
+    return row
+
 
 INF = float("inf")
 
@@ -62,16 +99,7 @@ EFFECT_DEAD = 0x10
 # enc_name is an EncString -- references into the client's own localised text
 # resources, not characters. It cannot be invented; this one was copied whole
 # and the client resolved it to English.
-HATCHER = dict(
-    name="Hatcher [Collector]",
-    file_id=116228,
-    model_id=116703,
-    profession=3,
-    level=1,
-    enc_name="".join(chr(w) for w in (0x328A, 0xE3B9, 0xAA36, 0x2E69)),
-    scale=0x64000000,      # hue 0, saturation 0, lightness 0, scale 100%
-    flags=0x20C,
-)
+HATCHER = _row("npc", "hatcher")
 
 
 def npc_properties(definition, npc, level=None):
@@ -126,24 +154,7 @@ ITEM_TYPE_HAMMER = 15
 #
 # The name words are pre-encoded GW string ids, not text -- the same class of
 # value as the NPC EncStrings. They can be copied and cannot be invented.
-STARTER_HAMMER = dict(
-    file_id=0x80009B60,
-    item_type=ITEM_TYPE_HAMMER,
-    dye_tint=6,
-    dye_colors=0,          # DyeColor_None, GmColors.h:4
-    materials=0,
-    unk1=0,
-    flags=0x22201000,
-    value=0,
-    model_id=1699,
-    quantity=1,
-    enc_name="".join(chr(w) for w in (0x2455, 0xB7FB, 0xCA41, 0x458F)),
-    # Armour rating lives in these words for armour, and nobody in this repo has
-    # decoded a single one of them -- see studies/character/FINDINGS.md, "The
-    # modifier words: NOT DONE". Whatever a weapon's damage range is, it is in
-    # here. They go out verbatim because they came from the same table row.
-    modifiers=[0x24B80000, 0xA4880503],
-)
+STARTER_HAMMER = _row("item", "starter_hammer")
 
 
 def named_item(item_id, item):
@@ -215,9 +226,10 @@ PROP_ENERGY_MAX = 41
 # the obvious reading and is a GUESS -- it is here because it travels with the
 # pair above in a server that works, not because we know what it does.
 PROP_UNKNOWN_FLOAT_43 = 43
-PLAYER_ENERGY = 25
-PLAYER_HEALTH = 100
-PLAYER_FLOAT_43 = 0.0396
+_PLAYER = WORLD.get("player", "defaults")
+PLAYER_ENERGY = _PLAYER["energy"]
+PLAYER_HEALTH = _PLAYER["health"]
+PLAYER_FLOAT_43 = _PLAYER["float_43"]
 
 
 # ------------------------------------------------- what an agent WIELDS
@@ -284,18 +296,11 @@ WEAPON_TYPE_STAFF = 12
 # used by the game". GWCA's Agent.h:181-182 independently names the same two
 # offsets weapon_attack_speed and attack_speed_modifier and gives 1.33 for
 # axe/sword/daggers and "0.67 = 33% increase", agreeing on both.
-ATTACK_SPEED = {
-    "axe": 1.33, "daggers": 1.33, "sword": 1.33,
-    "scythe": 1.5, "spear": 1.5,
-    "hammer": 1.75, "staff": 1.75, "wand": 1.75,
-    "flatbow": 2.025, "shortbow": 2.025,
-    "longbow": 2.475, "recurve": 2.475,
-    "hornbow": 2.7,
-    "pet": 2.0, "melee_minion": 3.1, "bone_fiend": 1.86,
-}
+_RATES = dict(WORLD.get("attack_speed", "rates"))
+ATTACK_SPEED_UNMODIFIED = _RATES.pop("unmodified_modifier")
+ATTACK_SPEED = _RATES
 # No increase and no decrease. The field may not be zero -- the client asserts
 # on that at both ends -- so "unmodified" is 1.0, never 0.
-ATTACK_SPEED_UNMODIFIED = 1.0
 
 
 # ------------------------------------------------- attackable, or merely red

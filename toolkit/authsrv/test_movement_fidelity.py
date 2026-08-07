@@ -27,10 +27,33 @@ Three measurements, in decreasing order of how much they tell us:
   3. CORRECTION RATE. How often we had to overrule the client with a teleport.
      Every one of those is a visible glitch.
 
-Run it against whatever the last session recorded:
+  4. COLLISION FIRING, and 5. MESH COVERAGE. Added 2026-08-06, and they are here
+     because they are R3's acceptance criterion -- "you walk to a wall and are
+     stopped" -- which was landed at `a97c7c4` and then assumed by every run
+     afterwards rather than asserted by any of them. `clipped` is the server
+     refusing a destination the navmesh does not contain; `on_mesh` is whether the
+     client's own stop lands in our trapezoids. Mesh coverage is deliberately not
+     required to be 100%: the client stops against collision geometry we have never
+     read, so the misses are gaps in OUR data and are the ones worth studying.
+
+Scored over every game-channel capture in the vault:
 
     python toolkit/authsrv/test_movement_fidelity.py
-    python toolkit/authsrv/test_movement_fidelity.py --all
+    python toolkit/authsrv/test_movement_fidelity.py --latest   # newest session only
+
+WHY THE CORPUS AND NOT THE LAST SESSION, changed 2026-08-06. The default used to be
+the newest capture alone, and on 2026-08-06 that capture contained zero straight runs
+and two stops. The test skipped its speed section, scored its headline number over
+n=2, printed a "not measured this run" list, and then printed ALL CHECKS PASSED and
+exited 0. A fidelity score is a property of the corpus, not of whichever session
+happened to be last, and a single session is free to contain no movement at all.
+Pooled, the same vault gives n=678 speed samples and n=527 stops.
+
+Both halves of that failure are now closed: the run is scored against a declared floor
+of CHECK_FLOOR checks via `toolkit/checks.py`, so skipping a section reddens the run
+instead of being a footnote under a green banner; and captures are selected by the
+channel each file declares rather than by a filename convention that had already
+drifted twice -- see `game_channel_captures`.
 """
 
 import argparse
@@ -43,6 +66,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 import vaultpath  # noqa: E402
+import checks  # noqa: E402
+import origin  # noqa: E402
 
 TURN_TO_DIRECTION = 0x003D
 DEFAULT_RUN_SPEED = 288.0
@@ -63,14 +88,65 @@ MOVEMENT_TYPE_FORWARD = 1
 SPEED_TOLERANCE = 0.10          # p75 within 10% of DEFAULT_RUN_SPEED
 DRIFT_P50_LIMIT = 60.0          # median disagreement at a stop, in units
 ACCEPT_RATE_FLOOR = 0.75        # fraction of stops needing no teleport
+ON_MESH_FLOOR = 0.80            # fraction of stops landing in our own trapezoids
 
-fails, notes = [], []
+# Five checks: one speed, two drift, and two that gate R3 -- collision firing at all,
+# and the client's stops landing on our own mesh. Both sections must run for this test
+# to mean what its name says; it used to skip either one and still print ALL CHECKS
+# PASSED. Measured from a real green run over the whole corpus on 2026-08-06.
+CHECK_FLOOR = 5
+
+LEDGER = checks.Ledger("movement fidelity", floor=CHECK_FLOOR)
+check = checks.adopt(LEDGER)
 
 
-def check(cond, msg):
-    print(f"  [{'PASS' if cond else 'FAIL'}] {msg}")
-    if not cond:
-        fails.append(msg)
+def game_channel_captures():
+    """Every capture of the GAME channel, selected by what the file says it is.
+
+    Not by filename. The convention drifted twice and the glob never followed:
+    before the host split the game channel was the second connection on the
+    authsrv host (`-c2`), after `3e86af3` it is the first on its own host
+    (`captures/gamesrv/`, `-c1`), and the oldest captures carry no suffix at all.
+
+    Measured against the vault on 2026-08-06, the old `authsrv-*-c2.jsonl` glob
+    was wrong in both directions at once: it MISSED 36 game-channel captures (24
+    with no suffix, 12 under gamesrv/) and WRONGLY INCLUDED 8 auth-channel files
+    that happen to be named `-c2`. Every capture opens with a version record
+    carrying `"channel"`, so read that instead and the question stops depending
+    on where we happened to put the socket that month.
+    """
+    root = vaultpath.require_dir(
+        "captures",
+        why="the client's position reports -- this test has no other oracle")
+    out = []
+    for sub in ("authsrv", "gamesrv"):
+        d = os.path.join(root, sub)
+        if not os.path.isdir(d):
+            continue
+        for p in glob.glob(os.path.join(d, "*.jsonl")):
+            if channel_of(p) == "game":
+                out.append(p)
+    # And they must all be OUR server's. This test scores our simulation against the
+    # client's, pooled over the whole corpus -- a capture of ArenaNet's server in that
+    # pool would silently blend two different oracles into one number that is about
+    # neither. There are no live captures today (MEASURED: 113 of 113 game-channel
+    # files classify as ours), so this refuses nothing yet and refuses the first one
+    # that appears, which is the only moment it could matter.
+    out = origin.require_single(out, origin.OURS, what="the movement fidelity score")
+    return sorted(out, key=os.path.getmtime, reverse=True)
+
+
+def channel_of(path):
+    """The channel a capture records, read from its version line. None if absent."""
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if '"channel"' not in line:
+                continue
+            try:
+                return json.loads(line).get("channel")
+            except json.JSONDecodeError:
+                return None
+    return None
 
 
 def load(path):
@@ -117,17 +193,15 @@ def straight_run_speeds(turns):
 
 def main():
     ap = argparse.ArgumentParser()
+    ap.add_argument("--latest", action="store_true",
+                    help="only the newest session, rather than the whole corpus")
     ap.add_argument("--all", action="store_true",
-                    help="pool every capture rather than only the newest")
+                    help=argparse.SUPPRESS)  # accepted; pooling is now the default
     args = ap.parse_args()
 
-    vault = vaultpath.require_dir(
-        "captures", "authsrv",
-        why="the client's position reports -- this test has no other oracle")
-    paths = sorted(glob.glob(os.path.join(vault, "authsrv-*-c2.jsonl")),
-                   key=os.path.getmtime, reverse=True)
+    paths = game_channel_captures()
     if not paths:
-        print(f"no game-channel captures under {vault}")
+        print("no game-channel captures in the vault")
         return 1
 
     used, turns, reports = [], [], []
@@ -140,7 +214,7 @@ def main():
         used.append(os.path.basename(p))
         turns.extend(t)
         reports.extend(e for e in evs if e.get("kind") == "position_report")
-        if not args.all:
+        if args.latest:
             break
 
     if not turns:
@@ -155,8 +229,8 @@ def main():
     print("1. run speed, measured from the client's own position reports")
     speeds = straight_run_speeds(turns)
     if len(speeds) < 10:
-        print(f"  [SKIP] only {len(speeds)} straight-run samples; need 10")
-        notes.append("run speed unmeasured -- too few straight segments")
+        LEDGER.skip("run speed",
+                    f"only {len(speeds)} straight-run samples; need 10")
     else:
         p50, p75 = percentile(speeds, 0.50), percentile(speeds, 0.75)
         print(f"  n={len(speeds)}  p50={p50:.1f}  p75={p75:.1f} units/sec"
@@ -170,9 +244,9 @@ def main():
 
     print("\n2. drift between our simulation and the client's, at each stop")
     if not reports:
-        print("  [SKIP] no position_report events -- capture predates the"
-              " instrumentation")
-        notes.append("drift unmeasured -- capture predates instrumentation")
+        LEDGER.skip("drift at stops",
+                    "no position_report events -- capture predates the"
+                    " instrumentation")
     else:
         drifts = [r["drift"] for r in reports]
         p50 = percentile(drifts, 0.50)
@@ -187,6 +261,36 @@ def main():
         check(rate >= ACCEPT_RATE_FLOOR,
               f"at least {ACCEPT_RATE_FLOOR:.0%} of stops need no teleport "
               f"(got {rate:.0%}, {accepted}/{len(reports)})")
+        # R3's own acceptance criterion -- "you walk to a wall and are stopped" --
+        # had no gate anywhere until 2026-08-06. It was landed at a97c7c4 and
+        # thereafter assumed. These two checks are that gate, and they are scored
+        # from the same corpus rather than needing a walk to be driven live.
+        #
+        # `clipped` is the server refusing a destination the navmesh does not
+        # contain; `on_mesh` is whether the client's own reported stop lands in our
+        # trapezoids. Both must be read only over reports that actually recorded the
+        # field -- older captures predate it and carry None, and counting those as
+        # False would quietly turn a missing measurement into a passing one.
+        clip = [r["clipped"] for r in reports if r.get("clipped") is not None]
+        mesh = [r["on_mesh"] for r in reports if r.get("on_mesh") is not None]
+        if clip:
+            fired = sum(1 for c in clip if c)
+            check(fired > 0,
+                  f"collision fired: the navmesh refused at least one destination "
+                  f"({fired} of {len(clip)} stops clipped)")
+        else:
+            LEDGER.skip("collision", "no capture recorded the `clipped` field")
+        if mesh:
+            on = sum(1 for m in mesh if m)
+            check(on / len(mesh) >= ON_MESH_FLOOR,
+                  f"at least {ON_MESH_FLOOR:.0%} of stops land on our own mesh "
+                  f"(got {on / len(mesh):.0%}, {on}/{len(mesh)})")
+            print("     Not 100%, and it should not be: the client stops against")
+            print("     collision geometry we have never read, so the misses are")
+            print("     gaps in OUR trapezoids and are the ones worth studying.")
+        else:
+            LEDGER.skip("mesh coverage", "no capture recorded the `on_mesh` field")
+
         over = sum(1 for d in drifts if d > MAXIMUM_ALLOWED_CORRECTION)
         if over:
             print(f"     {over} stop(s) exceeded the {MAXIMUM_ALLOWED_CORRECTION:.0f}"
@@ -200,14 +304,7 @@ def main():
     print("  what ArenaNet's server did, and nothing at all about collision,")
     print("  which neither we nor OpenTyria implement.")
 
-    if notes:
-        print("\nnot measured this run:")
-        for n in notes:
-            print(f"  - {n}")
-
-    print("\n" + ("ALL CHECKS PASSED" if not fails
-                  else f"{len(fails)} CHECK(S) FAILED"))
-    return 1 if fails else 0
+    return LEDGER.verdict()
 
 
 if __name__ == "__main__":

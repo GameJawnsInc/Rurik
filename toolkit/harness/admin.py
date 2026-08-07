@@ -20,7 +20,9 @@ from vaultpath import vault_path  # noqa: E402
 # points the python half elsewhere, the runner stops seeing requests -- the
 # stale .req files this leaves behind are the visible symptom.
 QUEUE = vault_path("admin-queue")
-ACTIONS = ("cage-on", "cage-off", "launch-caged", "rules", "stop")
+# cage-off was removed from the runner 2026-08-06 -- uncaging is a deliberate elevated
+# act now, not a queue message. See admin_runner.ps1 for why.
+ACTIONS = ("cage-on", "launch-caged", "rules", "stop")
 
 
 def send(action, timeout=180.0):

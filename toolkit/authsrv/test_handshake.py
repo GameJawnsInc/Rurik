@@ -36,6 +36,7 @@ from codec import Codec  # noqa: E402
 sys.path.insert(0, os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "portal"))
 from sessionstore import SessionStore, uuid_to_wire  # noqa: E402
+import checks  # noqa: E402
 
 SELFTEST_VAULT = r"C:\gd\Rurik\vault\captures\selftest"
 SELFTEST_SESSIONS = r"C:\gd\Rurik\vault\state\selftest-sessions.json"
@@ -66,9 +67,17 @@ def read_client_params(exe):
     return g, p, B
 
 
-def check(name, cond, detail=""):
-    print(f"  [{'PASS' if cond else 'FAIL'}] {name}{(' — ' + detail) if detail else ''}")
-    return cond
+# The floor is what a completed handshake session executes. Counted BY READING
+# the code, not by running it -- this test spawns a real authsrv on 6112 and the
+# agent that added the ledger was not permitted to start one. There are 17
+# check() sites; 16 of them run in any session that gets far enough to pass (the
+# 17th is the unpatched-client negative control, which declares a skip when the
+# vault holds no stock build with different parameters). 13 is that core minus a
+# deliberate margin, because an unmeasured floor that is one too high turns the
+# suite permanently red. TIGHTEN THIS to the real count the first time a human
+# runs the test green and reads the banner's check total.
+LEDGER = checks.Ledger("handshake", floor=13)
+check = checks.adopt_named(LEDGER)
 
 
 def main():
@@ -295,7 +304,8 @@ def main():
                     stock = (build, sg, sp, sB)
                     break
         if stock is None:
-            print("  [SKIP] no unpatched client with different parameters in the vault")
+            LEDGER.skip("negative control",
+                        "no unpatched client with different parameters in the vault")
         else:
             build, sg, sp, sB = stock
             stock_shared = pow(sB, a_priv, sp).to_bytes(64, "little")
@@ -305,14 +315,16 @@ def main():
                         f"stock {stock_key.hex()[:16]} vs patched {derived.hex()[:16]}")
             print(f"         (control build: {build})")
 
-        verdict = ("HANDSHAKE VERIFIED — the real client should key up too"
-                   if ok else "FAILURES ABOVE")
-        print(f"\n{verdict}")
         print("\n--- server log ---")
         for line in out.splitlines():
             if line.strip():
                 print("   ", line)
-        return 0 if ok else 1
+        # The ledger owns the banner now: a session that fell short of its floor
+        # did not verify the handshake, however green each printed line looked.
+        code = LEDGER.verdict()
+        if code == 0:
+            print("HANDSHAKE VERIFIED — the real client should key up too")
+        return code
     finally:
         if srv.poll() is None:
             srv.kill()
