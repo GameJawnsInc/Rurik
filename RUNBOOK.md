@@ -344,7 +344,8 @@ on the only channel loopback already reproduces. The sniff filters by **port on 
 handshake is the first thing on the wire and it is the plaintext half), launches with no
 `-portal`/`-authsrv` so the client uses its own compiled-in ArenaNet endpoints, polls the
 tap for a **keyring** — each channel overwrites the one slot, so one read loses a channel —
-holds to `--minutes` (default 20), then closes the client with `WM_CLOSE` so `Gw.log`
+holds to `--minutes` (default 10 — a **ceiling, not a duration**: Ctrl-C ends the session
+at any point and still assembles and scrubs in full), then closes the client with `WM_CLOSE` so `Gw.log`
 survives, and assembles per connection. **It sends no keystrokes and no clicks.** You log
 in and play; the driver only instruments. That is deliberate: the loopback harness's
 scripted three-Enters-and-a-Play-click is precisely the traffic pattern §6.1 warns about.

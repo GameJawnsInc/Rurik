@@ -718,7 +718,9 @@ def main():
     # comment on the wirecapture launch in run().
     ap.add_argument("--host", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--ports", default=",".join(map(str, LIVE_PORTS)))
-    ap.add_argument("--minutes", type=int, default=20, help="session-length ceiling")
+    ap.add_argument("--minutes", type=int, default=10,
+                    help="session-length CEILING, not a duration -- Ctrl-C ends the run at "
+                         "any point and still assembles and scrubs in full (default: 10)")
     ap.add_argument("--confirm", action="store_true", help="required for a real live run")
     a = ap.parse_args()
     if a.assemble:
