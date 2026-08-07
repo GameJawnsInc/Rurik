@@ -201,6 +201,32 @@ def plant(data, pe):
     return bytes(out), report
 
 
+def locate_slot(data, pe):
+    """(slot_rva, slot_va) in a key-tapped client, by reading the cave itself. Raises if
+    the client is not tapped.
+
+    keytap.py reads the slot as module_base + slot_rva; this is how a reader recovers that
+    rva from the build on disk rather than being told it, so it stays correct per build.
+    """
+    from dhbuild import KEY_TAP_CAVE_SIG  # the cave prologue, through the lea opcode
+    hits = []
+    i = data.find(KEY_TAP_CAVE_SIG)
+    while i != -1:
+        hits.append(i)
+        i = data.find(KEY_TAP_CAVE_SIG, i + 1)
+    if not hits:
+        raise KeyTapError("no key-tap cave in this client -- it was not built with --key-tap")
+    if len(hits) > 1:
+        raise KeyTapError(f"{len(hits)} key-tap caves found, expected 1")
+    cave_off = hits[0]
+    cave_va = pe.image_base + pe.off_to_rva(cave_off)
+    # KEY_TAP_CAVE_SIG ends at the `8D B8` (lea edi,[eax+disp]); the disp follows it.
+    disp_off = cave_off + len(KEY_TAP_CAVE_SIG)
+    disp = struct.unpack("<i", data[disp_off:disp_off + 4])[0]
+    slot_va = (cave_va + 8) + disp        # eax = cave_va+8 at the lea
+    return slot_va - pe.image_base, slot_va
+
+
 def verify(data, pe, report):
     """Follow the displacements in the patched bytes. Raise on any inconsistency.
 
