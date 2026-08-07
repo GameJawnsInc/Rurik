@@ -165,6 +165,12 @@ def main():
                          "multi-instance on, stock DH. It CANNOT key against our server, "
                          "and it is the only configuration that may be pointed at the "
                          "real service. Defaults to vault/client-patched-live/.")
+    ap.add_argument("--key-tap", action="store_true",
+                    help="plant the R0b key-tap: a code cave that copies the session's "
+                         "master_secret to a data slot as it is formed, for keytap.py to "
+                         "read. Signature-anchored, ASLR-safe. On the loopback build it is "
+                         "verifiable against a key we already hold; on the live build it is "
+                         "how a real session is decrypted. See studies/livekey/CODECAVE.md.")
     ap.add_argument("--no-mutex-patch", action="store_true",
                     help="skip the multi-client patch")
     ap.add_argument("--no-updater-patch", action="store_true",
@@ -304,9 +310,29 @@ def main():
         if nm:
             put(nm[0], MUTEX_NAME_NEW.ljust(len(MUTEX_NAME_OLD), b"\0"), "mutex name")
 
+    key_tap_report = None
+    if a.key_tap:
+        # The one patch that adds code, and it says so. keytap_patch relocates the tap,
+        # the cave and the slot from byte signatures, refuses if the client changed, and
+        # verify() follows the three control-flow edges arithmetically before we trust it.
+        import keytap_patch  # noqa: E402
+        tapped, key_tap_report = keytap_patch.plant(bytes(data), pe)
+        keytap_patch.verify(tapped, pe, key_tap_report)
+        data = bytearray(tapped)
+        print(f"  key-tap    : tap 0x{key_tap_report['tap_va']:08x} -> cave "
+              f"0x{key_tap_report['cave_va']:08x}, slot 0x{key_tap_report['slot_va']:08x}")
+        print(f"               keytap.py reads {keytap_patch.SLOT_SIZE} bytes at "
+              f"Gw.exe + 0x{key_tap_report['slot_va'] - pe.image_base:x}")
+
     with open(out, "wb") as f:
         f.write(bytes(data))
     print(f"\nwrote {out}")
+
+    if key_tap_report is not None:
+        # Re-read from disk and re-verify, the same discipline the DH patch uses: a patch
+        # that did not survive the write is worse than one never attempted.
+        keytap_patch.verify(PE(out).data, pe, key_tap_report)
+        print("key-tap    : re-read from disk and every edge still resolves")
 
     # Verify by re-reading the written file, not by trusting the buffer we wrote.
     v = PE(out)

@@ -79,6 +79,10 @@ MUTEX_NAME_NEW = b"AN-Futex"
 # DnSetEnabled's prologue, unpatched and patched. See studies/handshake/PLAN.md §9.
 SIG_DOWNLOAD = bytes.fromhex("558bec8b4d0833c085c90f94c0a3")
 SIG_DOWNLOAD_PATCHED = bytes.fromhex("558bec8b4d0833c085c9b00190a3")
+# The fixed prologue of the R0b key-tap cave (keytap_patch.build_cave): pushfd; pushad;
+# cld; call $+5; pop eax; lea edi,[eax+... . Distinctive enough to be a positive
+# key-tapped signal. See studies/livekey/CODECAVE.md.
+KEY_TAP_CAVE_SIG = bytes.fromhex("9c60fce80000000058" "8db8")
 
 # The staging directories, and the whole point of there being two of them. These names
 # mirror the run directories one step downstream -- vault/run holds ours, vault/run-live
@@ -243,6 +247,10 @@ def patch_state(exe):
         "mutex_guard_nopped": not pe.find(SIG_MUTEX, ".text"),
         "mutex_renamed": bool(pe.find(MUTEX_NAME_NEW, ".rdata"))
                          and not pe.find(MUTEX_NAME_OLD, ".rdata"),
+        # Detected by the cave's own prologue (pushfd;pushad;cld;call $+5;pop eax;lea edi),
+        # a positive signal our patcher writes and nothing else does -- not by the ABSENCE
+        # of the tap signature, which a different client build would also lack.
+        "key_tapped": bool(pe.find(KEY_TAP_CAVE_SIG, ".text")),
     }
 
 

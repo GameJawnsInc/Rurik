@@ -64,7 +64,7 @@ round-tripped through capstone:
 0x004514E4  FC              cld                        ; movsd must increment
 0x004514E5  E8 00000000     call 0x004514EA            ; PIC: push EIP
 0x004514EA  58              pop eax                    ; eax = runtime addr of this insn
-0x004514EB  8D B8 16FF3900  lea edi, [eax+0x39FF16]    ; edi = runtime SLOT (ASLR-safe)
+0x004514EB  8D B8 B6027A00  lea edi, [eax+0x7A02B6]    ; edi = runtime SLOT (ASLR-safe)
 0x004514F1  8D 75 E8        lea esi, [ebp-0x18]        ; esi = &master_secret
 0x004514F4  B9 05000000     mov ecx, 5
 0x004514F9  F3 A5           rep movsd                  ; copy 20 bytes -> SLOT
@@ -86,18 +86,24 @@ relocation entry needed. `keytap.py` correspondingly reads the slot as
 flag save, and the `call/pop` is stack-balanced — after the cave, only the slot memory has
 changed. The stolen instructions then execute exactly as they would have.
 
-## The slot: RVA `0x3F1400` (VA `0x007F1400`)
+## The slot: found in `.data`, VA `0x00BF17A0` on build 38797
 
-The genuinely subtle choice. The "5.5 MB of `.data` slack" is the client's *own*
-zero-initialised globals, not free space, and `.data` cannot be extended (its virtual end
-rounds up to `.rsrc`'s start). So the slot goes in a **verified-unreferenced window** of a
-large `.data` zero run:
+The genuinely subtle choice, and the one my first hand-analysis got wrong: I read the
+section table's `vaddr` field (`0x7EC000`, an **RVA**) as a virtual address and placed the
+slot at `0x7F1400` — which is actually an RVA landing in `.text`, not a `.data` VA at all.
+`keytap_patch._find_slot` does it correctly, and applying the patch surfaced the slip: the
+finder returns VA **`0x00BF17A0`** (RVA `0x7F17A0`, i.e. base `0x400000` + the `.data` RVA),
+genuinely in file-backed `.data`, and the cave's `lea edi,[eax+0x7A02B6]` resolves exactly
+to it. Recorded rather than quietly fixed — it is the same RVA/VA care the rest of the
+toolkit takes, and running the patch is what caught it.
 
-- It sits inside a 2377-byte all-zero run at VA `0x7F1313`.
-- **No instruction in `.text` references any address in `[0x7F1400, 0x7F1420)`** as an
-  absolute VA (checked: the 32 candidate addresses appear nowhere in `.text`), and the
-  zero-run's base `0x7F1313` is not referenced either — so no static code path reads or
-  writes this window.
+The mechanism the finder uses, which is the real design: the "5.5 MB of `.data` slack" is
+the client's *own* zero-initialised globals, not free space, and `.data` cannot be extended
+(its virtual end rounds up to `.rsrc`'s start). So the slot is a **verified-unreferenced
+window** inside a large `.data` zero run — the finder centres a 32-byte window in a zero run
+of at least ~160 bytes and confirms **no instruction in `.text` references any address in
+it** (each candidate address appears nowhere in `.text`), so no static code path reads or
+writes it.
 
 This avoids adding a PE section (lower footprint, smaller anti-cheat surface). Its residual
 risk — that the window is the tail of a buffer whose base lives in non-zero `.data` before
@@ -110,9 +116,9 @@ the slot — collision-free by construction, at the cost of a new section header
 section count, and a corrected `SizeOfImage`. Recommended only if the loopback verify ever
 shows the `.data` window is disturbed.
 
-*(Both the slot VA and the `lea edi` displacement `0x39FF16` are provisional on the slot
-choice; if the section alternative is taken, the displacement is recomputed from the new
-RVA. The cave structure is unchanged either way.)*
+*(The exact slot VA and the `lea edi` displacement are computed per build by the finder,
+never hardcoded; `0x00BF17A0` / `0x7A02B6` are build 38797's values. The cave structure is
+unchanged whichever window or section holds the slot.)*
 
 ## The relocation signature
 

@@ -155,6 +155,9 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientpatch/test_dhbuild.py` (whose DH a build carries, that hostile
   filename order can no longer pick the wrong one, and that a build cannot be
   assembled into the directory meant for the other kind),
+  `toolkit/clientpatch/test_keytap_patch.py` (the R0b key-tap code cave: build_cave's
+  edges resolve, the planted client changes only the tap and the cave, and the patcher
+  refuses a changed or already-tapped binary),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
   refused),
   `toolkit/harness/test_keytap.py` (the ReadProcessMemory key reader — RPM round-trip,
