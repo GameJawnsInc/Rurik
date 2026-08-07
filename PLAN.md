@@ -901,16 +901,23 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
    (§6.2 preconditions, all met), and the **decryption engine is built and proven** —
    `toolkit/authsrv/replay.py` reads a `.raw` back and decrypts it offline, 329 captures
    reproduced exactly (which also closed R0a's caveat, §3.1). The route is **decided**
-   (owner, 2026-08-07): **patch the real client to log its own session key**, capture
-   ciphertext passively, decrypt with `replay.py`. The headless-client route is rejected —
+   (owner, 2026-08-07): **patch the real client to log its own session key**, capture the
+   ciphertext **off the wire** (route C, a scoped packet-capture carve-out), decrypt with
+   `replay.py`. The headless-client route is rejected —
    its client→server bytes are our reconstruction, not ArenaNet's, and both directions are
-   needed. See [studies/livekey/FINDINGS.md](studies/livekey/FINDINGS.md).
-   **Next, in order:** (a) finish the disassembly study — locate the instruction where the
-   20-byte key material is fully formed (the `CptSha.cpp` SHA-1 is anchored at VA
-   `0x0090a02c`, `CptRc4.cpp` holds the cipher); (b) add a signature-anchored key-logging
-   patch to `make_custom_client.py`, verifiable **on loopback** against a build we can
-   already decrypt; (c) the passive-capture + `origin: live` + scrub wiring; (d) the live
-   verification run, last and human-driven.
+   needed. See [studies/livekey/FINDINGS.md](studies/livekey/FINDINGS.md),
+   [CAPTURE.md](studies/livekey/CAPTURE.md), [CODECAVE.md](studies/livekey/CODECAVE.md).
+   **Done, the load-bearing part:** the key material is located (`master_secret` at
+   `0x007DC0CE`, `MsgConn.cpp`), the key-tap code cave is implemented
+   (`make_custom_client.py --key-tap`, `keytap_patch.py`), the reader is written
+   (`keytap.py`), and the whole path is **verified on a live loopback client** — the cave
+   ran during a real handshake without crashing, and `keytap.py` read the exact
+   `master_secret` our server independently derived (2026-08-07, `verify_keytap.py`). Key
+   acquisition is proven with zero trust in the live service.
+   **Next, in order:** (a) the off-wire ciphertext capture (needs a packet backend
+   installed — WinDivert/Npcap, the CLAUDE.md carve-out); (b) the driver script tying
+   cage + account + live launch + key-tap + capture + `replay.py` + `origin: live` + scrub
+   together; (c) the live run, last and human-driven on the secondary account.
    *The s2c-ordering hazard this item used to raise is closed:* the keystream `seq` work
    (`b70920e`) numbers each send inside the send lock, so a capture sorts back to true wire
    order regardless of thread contention.

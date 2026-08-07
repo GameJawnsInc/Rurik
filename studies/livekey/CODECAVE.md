@@ -154,17 +154,26 @@ A new flag (say `--key-tap`) that, on the live-capture build only:
 5. Re-reads the written file and verifies the cave and jump disassemble as intended (the
    same read-back discipline `make_custom_client` already applies to the DH patch).
 
-## The loopback verification — the check that can fail
+## The loopback verification — DONE, GREEN (2026-08-07)
 
-Before any live run, entirely on our own server:
+Run entirely on our own server, and it passed end to end:
 
-1. Build a **DH-patched** loopback client (`--key-tap` plus the usual patches) and cage it.
-2. Launch it against our server; complete a normal handshake.
-3. `keytap.py` reads 20 bytes at `Gw.exe + 0x3F1400`.
-4. **Require them to equal the `master_secret` we independently derive** from that session's
-   `client_seed` + `server_seed` + our stored exponent — MEASURED already for existing
-   captures (e.g. `e26e71c9…`). A mismatch, a client crash, or a zero read is a red result
-   naming which.
+1. Built a **DH-patched** loopback client with `--key-tap`, assembled it at the existing
+   caged run path (the cage is by program path, so no new elevation was needed), and
+   confirmed `assert_launch_safe(ours → 127.0.0.1)` accepted it with `key_tapped: True`.
+2. Ran the loopback stack (`session.py --until login --keep-open`). The client **keyed the
+   auth channel at t+9.1s and did not crash** — so it processed `SERVER_SEED`, the cave ran
+   on the path from `master_secret` to the RC4 key schedule, and the process stayed alive.
+3. `keytap.py` read 20 bytes at `Gw.exe + 0x7F17A0` out of the live 32-bit client
+   (ASLR-correct, cross-process from 64-bit Python).
+4. **They equalled the `master_secret` our server independently derived** for that session
+   (`48c3490b3661812979321628e876481c59872d52`, key
+   `rurik_dh_2026-07-29_221c13772c7a.json`) — exactly.
 
-Only when that is green does the stock-DH live build get the same patch, and only then does
-the human-driven live run happen.
+So the whole key-acquisition path is proven on a live client, against a key we hold, with
+zero trust in the live service: the PIC/ASLR-safe cave, the `.data` slot, the tap point, and
+the `keytap.py` reader are all correct end to end. The loopback client was then rebuilt
+without the tap (it is opt-in for capture), and the suite is green.
+
+The **stock-DH live build** now gets the same `--key-tap` patch when the off-wire capture
+side is ready; the live run itself stays human-driven.
