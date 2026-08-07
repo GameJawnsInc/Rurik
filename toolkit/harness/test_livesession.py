@@ -133,9 +133,12 @@ def main():
                   "the same bytes replay.py verifies, reached from the wire side")
 
         # ---- 3. full assemble() round-trips both directions --------------------
-        print("\n3. assemble() writes a LIVE, self-consistent, both-direction capture")
+        print("\n3. assemble() writes a LIVE, both-direction capture that decrypts correctly")
         # s2c has no vaulted ciphertext (the .raw is c2s only), so synthesise one the
-        # honest way: real key, known plaintext, real ARC4.
+        # honest way: real key, known plaintext, real ARC4. There is deliberately no
+        # "re-encrypt matches" assertion -- ARC4 is symmetric, so that holds for any key
+        # and would be a check that cannot fail. The real check is that assemble's output
+        # equals the KNOWN plaintext, below, which a wrong key would not reproduce.
         s2c_plain_src = b"the server said this, and it must come back out" * 3
         s2c_cipher = ARC4(key).crypt(s2c_plain_src)
         with tempfile.TemporaryDirectory() as tmp:
@@ -143,14 +146,15 @@ def main():
             out = os.path.join(tmp, "decrypted.jsonl")
             write_wire(wire, c2s_handshake(A) + c2s_cipher, s2c_handshake(seed) + s2c_cipher)
             rep = ls.assemble(wire, key, out)
-            LEDGER.ok(rep["consistent"],
-                      "re-encrypting the c2s plaintext reproduces the captured ciphertext",
-                      "the key, ciphertext and plaintext are mutually consistent")
             LEDGER.ok(rep["A"] == A.hex() and rep["server_seed"] == seed.hex(),
                       "the handshake A and server seed are carried into the artifact")
             who, why = origin.origin_of(out)
             LEDGER.ok(who == origin.LIVE, "the assembled capture is stamped origin: live", why)
             recs = [json.loads(l) for l in open(out, encoding="utf-8")]
+            c2s_rec = [r for r in recs if r.get("direction") == "c2s"][0]
+            LEDGER.ok(bytes.fromhex(c2s_rec["plain"])[:len(first_plain)] == first_plain,
+                      "the c2s direction decrypts to the server's real logged plaintext",
+                      "a wrong key could not reproduce these bytes")
             s2c = [r for r in recs if r.get("direction") == "s2c"][0]
             LEDGER.ok(bytes.fromhex(s2c["plain"]) == s2c_plain_src,
                       "the s2c direction decrypts back to the known plaintext")

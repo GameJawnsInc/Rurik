@@ -115,11 +115,12 @@ def assemble(wire_path, key, out_path):
     c2s_plain = decrypt_stream(c2s_cipher, key)
     s2c_plain = decrypt_stream(s2c_cipher, key)
 
-    # Self-consistency: re-encrypting the plaintext must reproduce the captured ciphertext.
-    # A check the artifact can refute -- if the key is wrong, this fails here, not silently
-    # downstream. (ARC4 is symmetric, so encrypt == decrypt over the same keystream.)
-    reenc = decrypt_stream(c2s_plain, key)
-    consistent = reenc == c2s_cipher
+    # There is deliberately NO "re-encrypt and compare" self-check here: ARC4 is symmetric,
+    # so decrypt(decrypt(cipher)) == cipher for EVERY key, right or wrong -- it would be a
+    # check that cannot fail. Validating the key needs an independent oracle: on loopback,
+    # our server's own logged plaintext (dryrun_keycapture.py); on a live capture there is
+    # none, so the key's correctness rests on the keytap having been proven on loopback and
+    # on the decrypted stream framing cleanly downstream, not on anything provable here.
 
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(origin.record("toolkit/harness/livesession.py", origin.LIVE,
@@ -132,7 +133,7 @@ def assemble(wire_path, key, out_path):
         fh.write(json.dumps({"kind": "frame", "direction": "s2c",
                              "plain": s2c_plain.hex()}) + "\n")
     return {"out": out_path, "c2s_bytes": len(c2s_plain), "s2c_bytes": len(s2c_plain),
-            "consistent": consistent, "gaps": {k: gaps[k] for k in gaps if gaps[k]},
+            "gaps": {k: gaps[k] for k in gaps if gaps[k]},
             "A": A.hex(), "server_seed": seed.hex()}
 
 

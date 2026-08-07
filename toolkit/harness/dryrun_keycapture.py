@@ -133,6 +133,11 @@ def stop(procs):
             p.terminate()
         except Exception:
             pass
+    for p in procs:
+        try:
+            p.wait(timeout=10)          # give each a moment to run its own cleanup
+        except Exception:
+            pass
     # And make sure no client or stack listener is left behind.
     subprocess.run(
         ["powershell", "-NoProfile", "-NonInteractive", "-Command",
@@ -177,11 +182,18 @@ def main():
                                  "--input", os.path.abspath(pinned_pristine()),
                                  "--keys", KEYFILE, "--key-tap"],
                            capture_output=True, text=True, timeout=300)
-        st.ok(b.returncode == 0, "make_custom_client --key-tap",
-              b.stdout.strip().splitlines()[-1] if b.stdout else b.stderr[-120:])
+        # Guard, don't just record: RUN_EXE would not exist after a failed build, and the
+        # next line (PE(RUN_EXE)) would crash on a first-ever run with nothing to fall back on.
+        if not st.ok(b.returncode == 0, "make_custom_client --key-tap",
+                     (b.stdout.strip().splitlines() or [""])[-1] if b.stdout
+                     else b.stderr[-120:]):
+            return 1
         r = subprocess.run(PY + [os.path.join(clientpatch, "make_run_dir.py")],
                           capture_output=True, text=True, timeout=300)
-        st.ok(r.returncode == 0, "make_run_dir (into the caged run path)")
+        if not st.ok(r.returncode == 0, "make_run_dir (into the caged run path)",
+                     (r.stdout.strip().splitlines() or [""])[-1] if r.stdout
+                     else r.stderr[-120:]):
+            return 1
         pe = PE(RUN_EXE)
         slot_rva, _ = keytap_patch.locate_slot(pe.data, pe)
         st.ok(True, "the run client is key-tapped", f"slot at Gw.exe+0x{slot_rva:x}")
@@ -198,9 +210,22 @@ def main():
                                      "--out", wire],
                                stdout=cap_log, stderr=subprocess.STDOUT, text=True)
         procs.append(cap)
-        time.sleep(2)
-        st.ok(cap.poll() is None, "wirecapture is running",
-              "" if cap.poll() is None else "died at startup -- see dryrun_wirecapture.log")
+        # Wait for a real readiness signal, not a fixed sleep: open_capture writes the
+        # wire_meta line only AFTER WinDivertOpen succeeds, so its presence proves the sniff
+        # is live before we let the client connect. A dead subprocess is caught too.
+        ready = False
+        rdl = time.time() + 20
+        while time.time() < rdl:
+            if cap.poll() is not None:
+                break
+            if os.path.exists(wire) and '"wire_meta"' in open(wire, encoding="utf-8",
+                                                              errors="replace").read():
+                ready = True
+                break
+            time.sleep(0.3)
+        if not st.ok(ready and cap.poll() is None, "the off-wire capture is live and sniffing",
+                     "died or never opened -- see dryrun_wirecapture.log (elevated?)"):
+            return 1
 
         print("\n3. bring up the stack and drive to the handshake")
         since = time.time()
@@ -229,10 +254,21 @@ def main():
         # The cave taps [ebp-0x18], which is master_secret BEFORE the key schedule -- so the
         # slot holds master_secret, and the ARC4 key is arc4_hash(master_secret). keytap
         # reads the former; we derive the latter to decrypt.
-        tapped = keytap.read_rva(pid, "Gw.exe", slot_rva, 20) if pid else None
+        #
+        # Retry: the server logs key_exchange_ok when IT finishes the handshake, but the
+        # slot is written on the CLIENT side, which may lag by a moment -- so a single read
+        # can catch an all-zero slot that is about to be filled.
+        tapped = None
+        for _ in range(20):
+            if not pid:
+                break
+            tapped = keytap.read_rva(pid, "Gw.exe", slot_rva, 20)
+            if tapped and any(tapped):
+                break
+            time.sleep(0.25)
         st.ok(tapped is not None and any(tapped),
               "keytap read a non-zero master_secret from the slot",
-              tapped.hex() if tapped else "None")
+              tapped.hex() if tapped else "None (still zero after retries)")
         master, label = derive_master(auth)
         st.ok(tapped == master, "the tapped master_secret equals what our server derived",
               f"{'match' if tapped == master else 'MISMATCH'} ({label})")
@@ -253,13 +289,18 @@ def main():
                 pass
 
     # --- offline: assemble the wire capture with the key, and check it against the server
-    if not os.path.exists(wire) or os.path.getsize(wire) == 0:
-        st.ok(False, "the wire capture recorded segments",
-              "empty -- WinDivert saw no loopback traffic on 127.0.0.1:6112")
+    if not os.path.exists(wire):
+        st.ok(False, "the wire capture file exists", "wirecapture wrote nothing at all")
         return 1
+    # open_capture writes the origin + wire_meta lines immediately, so the file is never
+    # empty -- the real question is whether any wire RECORDS were captured. If WinDivert
+    # cannot see 127/8 traffic here, this is where it surfaces, named.
     meta, streams, gaps = wc.load_wire(wire)
-    st.ok(len(streams[wc.C2S]) > 0, "the wire capture has a c2s stream",
-          f"{len(streams[wc.C2S])} bytes, gaps={gaps[wc.C2S]}")
+    if not st.ok(len(streams[wc.C2S]) > 0, "the off-wire capture recorded a c2s stream",
+                 f"{len(streams[wc.C2S])} bytes, gaps={gaps[wc.C2S]}" if streams[wc.C2S]
+                 else "0 bytes -- WinDivert saw no 127.0.0.1:6112 traffic (does it capture "
+                      "loopback on this machine?)"):
+        return 1
     if not st.ok(arc4_key is not None, "have the ARC4 key to decrypt with"):
         return 1
 
@@ -270,10 +311,9 @@ def main():
         assembled = False
         st.ok(False, "assemble split the handshake off the wire stream", str(e))
     if assembled:
-        st.ok(rep["consistent"],
-              "re-encrypting the decrypted c2s reproduces the captured ciphertext")
-        # The strong check: the wire ciphertext IS what our server recorded, and it decrypts
-        # to the plaintext our server logged.
+        # No "re-encrypt matches" check -- ARC4 is symmetric, so that is true for any key.
+        # The real checks are against the server's own bytes: the ciphertext IS what our
+        # server recorded, and it decrypts to the plaintext our server logged.
         _a, wire_cipher = ls.split_c2s(streams[wc.C2S])
         raw = auth[:-6] + ".raw"
         srv_cipher = b"".join(c for _i, d, _t, c in replay.read_raw(raw) if d == "c2s") \
@@ -289,6 +329,26 @@ def main():
         st.ok(first_plain and plain[:len(first_plain)] == first_plain,
               "the off-wire capture decrypts to the server's logged plaintext",
               "the whole live pipeline is proven on loopback")
+
+    # Restore the canonical loopback client: the key-tap is opt-in for capture, and leaving
+    # vault/run/ tapped would silently change the default a cold session launches. Rebuild
+    # plain (same caged path, path-based cage unaffected). Slow but honest.
+    print("\n6. restore the plain (non-tapped) loopback client")
+    clientpatch = os.path.join(TOOLKIT, "clientpatch")
+    b = subprocess.run(PY + [os.path.join(clientpatch, "make_custom_client.py"),
+                             "--input", os.path.abspath(pinned_pristine()),
+                             "--keys", KEYFILE], capture_output=True, text=True, timeout=300)
+    r = subprocess.run(PY + [os.path.join(clientpatch, "make_run_dir.py")],
+                       capture_output=True, text=True, timeout=300)
+    from keytap_patch import KeyTapError  # noqa: E402
+    try:
+        keytap_patch.locate_slot(PE(RUN_EXE).data, PE(RUN_EXE))
+        still_tapped = True
+    except KeyTapError:
+        still_tapped = False
+    st.ok(b.returncode == 0 and r.returncode == 0 and not still_tapped,
+          "the loopback run client is restored to plain (tap is opt-in)",
+          "still tapped -- rebuild vault/run manually" if still_tapped else "rebuilt plain")
 
     print()
     if st.failed:

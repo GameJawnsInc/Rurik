@@ -106,7 +106,11 @@ def reassemble(segments):
     """
     if not segments:
         return b"", []
-    origin_seq = segments[0][0]
+    # Anchor on the LOWEST sequence number, not the first-arrived segment: WinDivert hands
+    # us packets in arrival order, and if a later segment arrives first, anchoring on it
+    # would push every real byte to a near-2**32 offset and blow the stream up. Within a
+    # single session the seqs do not wrap, so min() is the true stream origin.
+    origin_seq = min(seq for seq, _ in segments)
     placed = {}
     for seq, payload in segments:
         if not payload:
