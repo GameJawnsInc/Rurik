@@ -652,17 +652,28 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         ring = KeyRing(client.pid, rva, path=os.path.join(outdir, "keyring.jsonl"))
         ring.start()
 
-        print("\n  YOU drive from here: log in and play at human cadence. ONE Ctrl-C stops"
-              "\n  it; the shutdown takes ~30s and pressing again discards the capture.\n")
+        stop_file = os.path.join(outdir, "STOP")
+        print("\n  YOU drive from here: log in and play at human cadence.")
+        print("  THREE WAYS TO STOP, and the first only works if THIS WINDOW has focus:")
+        print("    1. one Ctrl-C here (the shutdown takes ~30s; pressing again is absorbed)")
+        print("    2. just close the Guild Wars window -- same clean path")
+        print(f"    3. from any shell:  echo. > \"{stop_file}\"")
+        print("  Nothing is lost by killing this process either: the keyring and the wire")
+        print("  capture are flushed as they go, and `--assemble` rebuilds the rest.\n")
         _install_sigint()
-        endpoints = _hold(client, ring, wire, minutes, cap=cap)
+        endpoints = _hold(client, ring, wire, minutes, cap=cap, stop_file=stop_file)
     except KeyboardInterrupt:
         print("\n  stopping on Ctrl-C")
     finally:
+        # Narrate every step. This phase used to print nothing at all for up to half a
+        # minute, which is what made an operator press Ctrl-C again and lose the run.
         if ring:
             ring.stop()
         if client and client.poll() is None:
-            drive_client.close_client(client)     # WM_CLOSE, so Gw.log flushes
+            print("  closing the client (WM_CLOSE, up to 20s, so Gw.log survives)...",
+                  flush=True)
+            drive_client.close_client(client)
+        print("  stopping the off-wire capture...", flush=True)
         for p in procs:
             if p.poll() is None:
                 try:
@@ -672,21 +683,24 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
                     pass
         cap_log.close()
         time.sleep(1)
+        if os.path.exists(wire):
+            print(f"  wire capture: {os.path.getsize(wire) / 1e6:.1f} MB", flush=True)
 
     # --- 4. offline: assemble what the wire and the keyring hold, then scrub.
     # Prune BEFORE assembling: the filter has to be wide enough to catch GW on port 80, and
     # everything else it caught is the owner's own traffic rather than evidence.
     if os.path.exists(wire):
+        print("  pruning non-GW connections...", flush=True)
         kept, dropped = prune_wire(wire)
-        if dropped:
-            print(f"\n  pruned: {dropped} record(s) from non-GW connections dropped; "
-                  f"{kept} GW connection(s) kept")
+        print(f"  pruned: {dropped} record(s) from non-GW connections dropped; "
+              f"{kept} GW connection(s) kept", flush=True)
 
     keys = ring.keyring() if ring else []
     print(f"\n  keyring: {len(keys)} distinct session key(s) tapped")
     if not keys:
         print("  NOTE: no key was ever tapped. The wire capture is kept -- it is still the "
               "only recording of a real session -- but nothing can decrypt it.")
+    print("  assembling and decrypting...", flush=True)
     report = assemble_live(wire, keys, outdir)
     for row in report["connections"]:
         if row.get("decrypted"):
@@ -844,7 +858,7 @@ def _wait_for_sniff(cap, wire, timeout=25):
     return False
 
 
-def _hold(client, ring, wire, minutes, cap=None):
+def _hold(client, ring, wire, minutes, cap=None, stop_file=None):
     """Hold the session until the ceiling, the client exiting, or Ctrl-C.
 
     AND WATCH THE INSTRUMENTS, which this used to not do. A ten-minute live session
@@ -865,6 +879,13 @@ def _hold(client, ring, wire, minutes, cap=None):
     while time.monotonic() < ceiling and not _STOPPING.is_set():
         if client.poll() is not None:
             print("\n  the client exited")
+            break
+        # A stop that does not depend on console focus. Ctrl-C only reaches Python when the
+        # CONSOLE has focus, and the operator is by definition looking at the game window
+        # -- so "Ctrl-C once to stop" is advice that fails exactly when it is needed. Any
+        # shell, elevated or not, can now end the session:  echo. > <outdir>\STOP
+        if stop_file and os.path.exists(stop_file):
+            print("\n  STOP file seen -- ending the session")
             break
         if cap is not None and cap.poll() is not None:
             print(f"\n  *** THE OFF-WIRE CAPTURE DIED (exit {cap.poll()}) -- nothing is "
