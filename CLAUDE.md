@@ -126,6 +126,9 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
+  `toolkit/authsrv/test_replay.py` (a captured .raw decrypts back to the plaintext that
+  was logged, and does so all-or-nothing across the whole vault — the first reader of a
+  .raw, which closes R0a's standing caveat),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,

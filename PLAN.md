@@ -345,7 +345,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 
 | Rung | Deliverable | Acceptance criterion | Status |
 |---|---|---|---|
-| **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **2026-08-04** — gate proven both directions, client pinned and hash-verified, prior art mirrored. *Caveat: closed against three facts, none of which is the stated criterion — nothing has ever read a `.raw` back. See §3.1.* |
+| **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **2026-08-04**, criterion met **2026-08-07** (`toolkit/authsrv/replay.py`). Gate proven both directions, client pinned and hash-verified, prior art mirrored — and the `.raw` now decrypts back to the logged plaintext, 329 real captures reproduced exactly, all-or-nothing across 375. The stated criterion finally rests on the stated fact. See §3.1. |
 | **R1** | Handshake against a local server | Client reaches character select | ✅ **2026-08-04 22:58**, `e34c417`. Build 38797 rendered "Test Warrior" against our portal, our DH parameters, our ARC4 channel and our login burst. |
 | **R2** | Presence | Your own body standing in a real map | ✅ **2026-08-05 11:15**, `aedc214`. |
 | **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. |
@@ -360,11 +360,18 @@ Two structural changes, both argued below in §4.
 
 ### 3.1 What "done" is doing in the table above
 
-R0a is the honest wart and is marked rather than quietly re-worded. Its criterion is *a
-capture replays byte-identically from disk*, and nothing in `toolkit/` has ever read a
-`.raw` file back. What was actually achieved — the gate, the pinned client, the mirrors —
-is worth having and is not what the row claimed. Either build the reader or restate the
-criterion; do not leave a ✅ standing on a different fact.
+R0a was the honest wart. Its criterion is *a capture replays byte-identically from disk*,
+and for three days nothing in `toolkit/` had ever read a `.raw` file back — the row stood
+on the gate, the pinned client and the mirrors, none of which is that criterion.
+**Closed 2026-08-07.** `toolkit/authsrv/replay.py` reads the `.raw` ciphertext back,
+derives the session key from the capture's own handshake records plus our stored exponent,
+and decrypts it to exactly the plaintext the server logged — `test_replay.py` confirms
+329 of the vault's real captures reproduce their plaintext byte-for-byte, and that the
+375 keyable captures are all-or-nothing, never partial. The remaining 46 correctly do not
+decrypt: the 2026-08-04 bring-up sessions logged a synthetic `RURIK-HANDSHAKE` marker
+rather than real traffic, and some predate the 07-29 build whose exponent we hold. What
+this does *not* yet prove is that ArenaNet's server_seed matches ours bit-for-bit; only a
+live capture settles that, which is R0b.
 
 The lesson generalises, and it is why the status column now carries hashes: **R2 and R3
 were both landed and neither was recorded here for 40 hours**, while R3's own estimate
