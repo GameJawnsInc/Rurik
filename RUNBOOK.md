@@ -169,6 +169,20 @@ the path is build-specific.
 **Keep the key file.** The server needs `server_private` to decrypt. Lose it and
 the patched client is a brick.
 
+**There are two client builds and they are not interchangeable.** The commands above
+make the loopback one — our DH parameters — into `vault/client-patched/` and
+`vault/run/`. Adding `--no-dh-patch` (and `--live` to `make_run_dir.py`) makes the
+live-capture build instead, ArenaNet's own parameters, into `vault/client-patched-live/`
+and `vault/run-live/`. Never move a build between those directories and never pick one
+by filename: the tools decide from the DH struct, and
+
+```bash
+python toolkit/clientpatch/dhbuild.py
+```
+
+says what every build in the vault is and whether it is where it belongs. The live build
+has no launch path yet, on purpose — see `PLAN.md` §6.2 item 1.
+
 **4. Cage the patched client** (elevated PowerShell, one time per patched exe):
 
 ```bash

@@ -21,6 +21,19 @@ Two further patches, both from the same public tooling, both wanted here:
 so several clients can run at once. That is not a nicety -- capture at scale wants
 many clients, and this is what makes multiboxing possible.
 
+The two builds, and why one tool makes both
+-------------------------------------------
+Only the DH substitution decides where a client may point (PLAN.md §6.2). The updater
+kill switch and the mutex patches are wanted on BOTH configurations, so `--no-dh-patch`
+produces the live-capture build R0b/A1 needs -- ArenaNet's own parameters, everything
+else patched -- rather than leaving it to be assembled by hand. It was assembled by hand
+once, on 2026-08-06, and it landed in `vault/client-patched/` beside the DH-patched copy,
+where two tools that picked "the patched client" by filename order silently switched to
+it. Each build now has its own directory and this tool refuses to cross them:
+
+    vault/client-patched/       OUR DH.   Loopback only. `Gw.custom.<tag>.exe`
+    vault/client-patched-live/  stock DH. Live only.     `Gw.live.<tag>.exe`
+
 Safety
 ------
 Writes a COPY and refuses to write anywhere inside the live install. The live
@@ -38,8 +51,11 @@ import secrets
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from gwpe import PE  # noqa: E402
+import dhbuild  # noqa: E402
+import vaultpath  # noqa: E402
 
 # Prologue of the accessor returning the DH struct; the `mov eax, imm32` that
 # follows carries the struct's virtual address. Used identically by Headquarter's
@@ -143,6 +159,12 @@ def main():
     ap.add_argument("--output", help="default: vault/client-patched/Gw.custom.<build>.exe")
     ap.add_argument("--keys", help="reuse an existing key file instead of generating one")
     ap.add_argument("--keydir", default=r"C:\gd\Rurik\vault\keys")
+    ap.add_argument("--no-dh-patch", action="store_true",
+                    help="LEAVE ArenaNet's Diffie-Hellman parameters in place. Produces "
+                         "the live-capture build (PLAN.md §6.2 item 1): updater off, "
+                         "multi-instance on, stock DH. It CANNOT key against our server, "
+                         "and it is the only configuration that may be pointed at the "
+                         "real service. Defaults to vault/client-patched-live/.")
     ap.add_argument("--no-mutex-patch", action="store_true",
                     help="skip the multi-client patch")
     ap.add_argument("--no-updater-patch", action="store_true",
@@ -170,7 +192,17 @@ def main():
     if old_g != 4 or old_p.bit_length() != 512:
         raise SystemExit("Unexpected parameter shape at the target. Refusing to patch.")
 
-    if a.keys:
+    if a.no_dh_patch:
+        if a.keys:
+            raise SystemExit(
+                "--keys and --no-dh-patch contradict each other: one supplies OUR\n"
+                "parameters to write, the other says write none. Pick the build you\n"
+                "want -- --keys for the loopback client, --no-dh-patch for the live one.")
+        keys = None
+        print("keys       : NONE -- ArenaNet's parameters stay in place (--no-dh-patch)")
+        print("             This build CANNOT key against our server. It is the")
+        print("             live-capture configuration and nothing else.")
+    elif a.keys:
         keys = json.load(open(a.keys))
         print(f"keys       : reusing {a.keys}")
     else:
@@ -187,11 +219,28 @@ def main():
         print("             KEEP THIS. The server needs server_private to decrypt;")
         print("             lose it and the patched client is useless.")
 
-    out = a.output or os.path.join(r"C:\gd\Rurik\vault\client-patched",
-                                   f"Gw.custom.{build_tag}.exe")
+    subdir = dhbuild.LIVE_DIR if a.no_dh_patch else dhbuild.LOOPBACK_DIR
+    stem = "Gw.live" if a.no_dh_patch else "Gw.custom"
+    out = a.output or vaultpath.vault_path(subdir, f"{stem}.{build_tag}.exe")
     out_abs = os.path.normcase(os.path.abspath(out))
     if out_abs.startswith(LIVE_INSTALL):
         raise SystemExit(f"Refusing to write into the live install ({LIVE_INSTALL}).")
+
+    # The two staging directories are read as safety guarantees downstream --
+    # dhbuild.select, make_run_dir and test_handshake all take "what is in this
+    # directory" as "what kind of build this is". So writing the wrong kind into either
+    # is refused here, at the only place that knows for certain which one it just built.
+    # This is the exact mistake of 2026-08-06: a stock-DH build placed by hand into
+    # vault/client-patched/, where filename-order selection then found it.
+    wrong = dhbuild.LOOPBACK_DIR if a.no_dh_patch else dhbuild.LIVE_DIR
+    if os.path.normcase(os.sep + wrong + os.sep) in out_abs + os.sep:
+        raise SystemExit(
+            f"Refusing to write a {'stock-DH' if a.no_dh_patch else 'DH-patched'} build "
+            f"into vault/{wrong}/.\n"
+            f"  That directory means {'OUR parameters, loopback only' if a.no_dh_patch else 'stock parameters, live only'}, "
+            f"and tools read it as such.\n"
+            f"  The default for this build is vault/{subdir}/ -- drop --output, or point "
+            f"it there.")
     os.makedirs(os.path.dirname(out), exist_ok=True)
 
     data = bytearray(pe.data)
@@ -206,9 +255,12 @@ def main():
     # the same place -- copying its literals without its cursor shifts every field
     # four bytes and silently corrupts the struct. The verify step below caught
     # exactly that during development.
-    put(off + 4, keys["generator"].to_bytes(4, "little"), "generator")
-    put(off + 8, keys["prime"].to_bytes(64, "little"), "prime")
-    put(off + 72, keys["server_public"].to_bytes(64, "little"), "server public")
+    if keys is None:
+        print("  DH struct left untouched (live-capture build)")
+    else:
+        put(off + 4, keys["generator"].to_bytes(4, "little"), "generator")
+        put(off + 8, keys["prime"].to_bytes(64, "little"), "prime")
+        put(off + 72, keys["server_public"].to_bytes(64, "little"), "server public")
 
     if not a.no_updater_patch:
         # The updater kill switch. DnSetEnabled(bool) is the only writer of one BSS
@@ -262,12 +314,35 @@ def main():
     g2 = int.from_bytes(v.data[voff + 4:voff + 8], "little")
     p2 = int.from_bytes(v.data[voff + 8:voff + 72], "little")
     B2 = int.from_bytes(v.data[voff + 72:voff + 136], "little")
-    ok = (g2 == keys["generator"] and p2 == keys["prime"]
-          and B2 == keys["server_public"]
-          and pow(keys["generator"], keys["server_private"], keys["prime"]) == B2)
-    print(f"verify     : parameters read back correctly and B == g^b mod p -> {ok}")
-    if not ok:
-        raise SystemExit("VERIFICATION FAILED — do not use this binary.")
+    old_B = int.from_bytes(pe.data[off + 72:off + 136], "little")
+    if keys is None:
+        # The negative of the usual check, and it has to be asserted rather than assumed:
+        # "we did not write there" is a claim about code, and this is a claim about bytes.
+        ok = (g2, p2, B2) == (old_g, old_p, old_B)
+        print(f"verify     : DH parameters are byte-identical to the input -> {ok}")
+        if not ok:
+            raise SystemExit("VERIFICATION FAILED — the DH struct changed and this build "
+                             "was supposed to leave it alone. Do not use this binary.")
+    else:
+        ok = (g2 == keys["generator"] and p2 == keys["prime"]
+              and B2 == keys["server_public"]
+              and pow(keys["generator"], keys["server_private"], keys["prime"]) == B2)
+        print(f"verify     : parameters read back correctly and B == g^b mod p -> {ok}")
+        if not ok:
+            raise SystemExit("VERIFICATION FAILED — do not use this binary.")
+
+    # Second opinion, from key material this run did not produce: dhbuild compares the
+    # written struct against vault/keys/. For the live build that is dh_params_*.txt,
+    # dumped from ArenaNet's binary by a different tool on a different day, so agreement
+    # is evidence rather than our own arithmetic handed back to us.
+    want = dhbuild.STOCK if keys is None else dhbuild.OURS
+    kind, detail = dhbuild.classify(out)
+    print(f"classify   : {kind} -- {detail}")
+    if kind != want:
+        raise SystemExit(
+            f"VERIFICATION FAILED — this build classifies as {kind}, expected {want}.\n"
+            f"  Everything downstream picks builds by that classification, so a binary\n"
+            f"  the vault cannot place is refused here rather than filed anywhere.")
 
     # Read the updater state back out of the file too. A kill switch that silently
     # did not apply is worse than one that was never attempted: the client would
@@ -281,8 +356,16 @@ def main():
         if patched != 1 or remaining:
             raise SystemExit("Updater patch did not take — this client will stall "
                              "behind the firewall cage. Do not use it caged.")
-    print("\nNext: run toolkit/portal/webgate.py, then launch this patched copy with")
-    print("  -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed")
+    if keys is None:
+        print("\nThis is the LIVE-CAPTURE build. It carries ArenaNet's parameters, so it")
+        print("cannot key against our server and loopback is not a use for it.")
+        print("\nNext: python toolkit/clientpatch/make_run_dir.py --live")
+        print("Then read PLAN.md §6.2 -- having this build is ONE precondition, not all")
+        print("of them. Do not cage it, do not drive it with drive_client.py, and use the")
+        print("secondary account only.")
+    else:
+        print("\nNext: run toolkit/portal/webgate.py, then launch this patched copy with")
+        print("  -authsrv 127.0.0.1 -portal 127.0.0.1 -windowed")
     return 0
 
 

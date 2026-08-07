@@ -25,6 +25,13 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
   autofilled. "Patched" is the wrong word for the rule: of the four patches
   `make_custom_client.py` applies, only the DH substitution disqualifies a client; the
   updater kill switch and the multi-instance NOP are wanted on both configurations.
+  **Whose DH a build carries is what decides where it may point, so the vault is split
+  by that and nothing else** — `client-patched/` + `run/` are ours and loopback-only,
+  `client-patched-live/` + `run-live/` are ArenaNet's and live-only. Never select a
+  build by filename: `sorted(exes)[-1]` picked the wrong one the day both configurations
+  first existed. `toolkit/clientpatch/dhbuild.py` reads the struct and answers
+  `ours`/`stock`/`unknown`, the patcher refuses to write either kind into the other's
+  directory, and `python toolkit/clientpatch/dhbuild.py` audits the whole vault.
 - **Never patch or launch anything under `C:\gw`.** That install is the owner's, and
   reading bytes from it is read-only.
 - **Live automation against ArenaNet is authorized — on the secondary account, as a mode
@@ -33,9 +40,12 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
   runs are for a capture campaign. The behavioural rule is the control that matters —
   human cadence, human hours, one client, never in a competitive context — because what
   closes accounts is a traffic pattern no person could produce. **Preconditions in
-  `PLAN.md` §6.2 are not all met**, so A1 is unblocked but not yet safe to run: there is
-  **no unpatched-DH build to launch**, which is A1's own first commit. The other four are
-  done: every launch asserts the firewall cage (`toolkit/clientpatch/cage.py`), every
+  `PLAN.md` §6.2 are not all met**, so A1 is unblocked but not yet safe to run: the
+  unpatched-DH build now exists and is reproducible (`make_custom_client.py
+  --no-dh-patch`), but **nothing may launch it yet** — `drive_client.py` refuses
+  anything outside `vault/run/` by design, and `pinned.py` does not know its hash. That
+  driver is A1's own first commit. The other four are done: every launch asserts the
+  firewall cage (`toolkit/clientpatch/cage.py`), every
   launch names its account (`toolkit/harness/accounts.py` — loopback uses a synthetic
   credential, and the automation flag is opt-in so the primary is refused by default),
   uncaging costs a UAC prompt, and every capture records whose server produced it
@@ -120,6 +130,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   refusals actually refuse),
   `toolkit/clientpatch/test_cage.py` (the launch-time cage guard — slow, ~1 min, it
   queries the Windows Firewall once per client),
+  `toolkit/clientpatch/test_dhbuild.py` (whose DH a build carries, and that hostile
+  filename order can no longer pick the wrong one),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
   refused),
   `toolkit/test_origin.py` (whose server a capture came from, and that ours and
@@ -160,4 +172,4 @@ reasoning about it. Two of the three hardest questions so far were settled that 
 | `toolkit/clientscan/`, `toolkit/clientpatch/` | Read-only client analysis; patching and the firewall cage |
 | `toolkit/mapdata/` | `Gw.dat` reader, planner (`datplan`), writer (`datwrite`), textures (`atex`, `dxt1`) |
 | `studies/` | Per-arc research, labelled by confidence |
-| `vault/` | Gitignored. Snapshots, keys, captures, prior-art mirrors |
+| `vault/` | Gitignored. Snapshots, keys, captures, prior-art mirrors. Client builds are filed by whose DH they carry: `client-patched/`+`run/` ours, loopback-only; `client-patched-live/`+`run-live/` stock, live-only |

@@ -353,7 +353,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
-| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** Unblocked by §7 Q4; the remaining precondition is a build with unpatched DH (§6.2 item 1), which is this rung's own first commit. |
+| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** Unblocked by §7 Q4. **The unpatched-DH build now exists** (`vault/client-patched-live/`, assembled at `vault/run-live/`, reproducible with `make_custom_client.py --no-dh-patch`, 2026-08-06) — so §6.2 item 1's *artifact* is done, but its *launch path* is not: nothing in the toolkit may start that binary, by design. Writing the driver that can is this rung's own first commit. |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ⬜ not started. Requires R0b, so it inherits R0b's block. |
 
 Two structural changes, both argued below in §4.
@@ -622,11 +622,47 @@ account-visible event happens before the patch matters.
 
 **What must be true before the first live run**, none of which is true today:
 
-1. **A live-capture client is a separate build** — unpatched DH, with the updater and
-   mutex patches. There is no such build; `vault/run/` holds only DH-patched copies, and
-   the harness's `assert_safe` refuses anything outside `vault/run/`. Until one exists
-   there is no legal launch target for the authorized use, which is how someone ends up
-   forking a driver without the guards.
+1. 🔶 **A live-capture client is a separate build** — unpatched DH, with the updater and
+   mutex patches. **The build exists as of 2026-08-06**, and so does the filing that
+   keeps it apart from the loopback one. **The launch path does not, and that is the
+   remaining half.**
+
+   *The artifact.* `make_custom_client.py --no-dh-patch` produces it — stock DH, updater
+   off, multi-instance on — so it is reproducible after the next ArenaNet update rather
+   than assembled by hand. It verifies the negative (the DH struct is byte-identical to
+   the input) and then classifies the result against `vault/keys/dh_params_*.txt`, which
+   a different tool dumped on a different day.
+
+   *The filing, which is a safety control and not tidiness.* Whose DH a build carries
+   decides where it may point, so the vault is split on exactly that:
+
+   | | ours | stock |
+   |---|---|---|
+   | staged | `vault/client-patched/` `Gw.custom.<tag>.exe` | `vault/client-patched-live/` `Gw.live.<tag>.exe` |
+   | assembled | `vault/run/<tag>/` | `vault/run-live/<tag>/` |
+   | posture | loopback only, caged | live only, **cannot** be caged |
+
+   `toolkit/clientpatch/dhbuild.py` answers `ours`/`stock`/`unknown` from the bytes;
+   the patcher refuses to write either kind into the other's directory; `make_run_dir.py`
+   classifies even an explicitly passed `--patched`; `test_handshake.py` selects the same
+   way and refuses a wrong artifact *before* spawning a server. `python
+   toolkit/clientpatch/dhbuild.py` audits the whole vault in one command.
+
+   *Why all of that, from one afternoon.* The live build first landed **inside**
+   `vault/client-patched/`, where two tools picked "the patched client" with
+   `sorted(exes)[-1]` and `l` sorts after `c`. `test_handshake.py` went red with four
+   failures and 8-of-13 checks, none of which was a crypto regression and all of which
+   read as one; `make_run_dir.py` would have assembled a client that cannot key into
+   `vault/run/`, which `drive_client.assert_safe` treats as the set of legal loopback
+   targets. Filename order is not a safety property. `test_dhbuild.py` rebuilds that
+   directory with the stock build sorting last *and* newest, and requires the right
+   answer.
+
+   *What is still missing.* There is deliberately **no way to launch it**.
+   `drive_client.py` refuses anything outside `vault/run/`, and `cage.py` routes through
+   `pinned.identify()`, which does not know this binary's hash and refuses `unknown`.
+   Both refusals are correct today and both must be revisited on purpose, by the commit
+   that writes the live driver — not worked around. That commit is R0b's first.
 2. **The cage is per-client and its removal is elevated.** `isolate_client.ps1` pins a
    client to loopback by program path, so a live client cannot be caged — there is no
    partial setting. `cage-off` was reachable unelevated through

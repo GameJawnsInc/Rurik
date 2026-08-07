@@ -17,8 +17,21 @@ That makes the whole chain load-bearing:
 If the patcher wrote to the wrong offsets, if endianness is flipped anywhere, or
 if arc4_hash is subtly wrong, the derived keys differ and the final check fails.
 A green result here means the real client should key up too.
+
+WHICH executable, and why that is asked of the bytes. This used to take
+`sorted(exes)[-1]` out of `vault/client-patched/`. On 2026-08-06 a live-capture
+build -- ArenaNet's stock DH, correct and wanted, PLAN.md §6.2 item 1 -- was
+written into that directory as `Gw.live.<tag>.exe`, and `l` sorts after `c`. The
+test silently switched to a binary that keys against ArenaNet and reported four
+failures and a short check count, every one of which reads as a crypto
+regression in code that had not been touched. Filename order is not a safety
+property, so selection now goes through `clientpatch/dhbuild.py`, which reads
+the DH struct and compares it against the vault's own key material. A wrong or
+missing artifact is refused BEFORE the server is spawned, with a message that
+says ARTIFACT rather than leaving four key-mismatch FAILs to be misread.
 """
 
+import json
 import os
 import re
 import socket
@@ -29,8 +42,11 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "clientpatch"))
 from gwcrypto import ARC4, arc4_hash, recover_master_secret  # noqa: E402
-from gwpe import PE  # noqa: E402
+import dhbuild  # noqa: E402
+import vaultpath  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'schema'))
 from codec import Codec  # noqa: E402
 sys.path.insert(0, os.path.join(
@@ -43,7 +59,6 @@ SELFTEST_SESSIONS = r"C:\gd\Rurik\vault\state\selftest-sessions.json"
 
 codec = Codec()
 
-SIG_KEYS = bytes.fromhex("8B4508C70088000000B8")
 PORT = 6112
 BUILD = 38797
 
@@ -53,44 +68,69 @@ TEST_USER_ID = "E696B44C-04FC-DF92-9EE1-B0CC329B424A"
 TEST_TOKEN = "233B382E-3CD2-E5B6-7018-7F547D2760A7"
 
 
-def read_client_params(exe):
-    """Read (g, p, B) from a client binary the way the client itself would."""
-    pe = PE(exe)
-    hits = pe.find(SIG_KEYS, ".text")
-    if not hits:
-        raise SystemExit(f"{exe}: DH accessor signature not found")
-    va = struct.unpack_from("<I", pe.data, hits[0] + 0x0A)[0]
-    off = pe.rva_to_off(va - pe.image_base)
-    g = int.from_bytes(pe.data[off + 4:off + 8], "little")
-    p = int.from_bytes(pe.data[off + 8:off + 72], "little")
-    B = int.from_bytes(pe.data[off + 72:off + 136], "little")
-    return g, p, B
+def server_key_file():
+    """The key file authsrv.py will load, chosen by its rule, not by ours.
+
+    `authsrv.load_keys` takes `sorted(rurik_dh_*.json)[-1]`. Reproducing that here is
+    what lets the pre-flight below compare the exe against the parameters the SERVER
+    will actually hold, rather than against any key file that happens to be present.
+    """
+    kd = vaultpath.vault_path("keys")
+    cands = sorted(f for f in os.listdir(kd) if f.startswith("rurik_dh_")) \
+        if os.path.isdir(kd) else []
+    return os.path.join(kd, cands[-1]) if cands else None
 
 
-# The floor is what a completed handshake session executes. Counted BY READING
-# the code, not by running it -- this test spawns a real authsrv on 6112 and the
-# agent that added the ledger was not permitted to start one. There are 17
-# check() sites; 16 of them run in any session that gets far enough to pass (the
-# 17th is the unpatched-client negative control, which declares a skip when the
-# vault holds no stock build with different parameters). 13 is that core minus a
-# deliberate margin, because an unmeasured floor that is one too high turns the
-# suite permanently red. TIGHTEN THIS to the real count the first time a human
-# runs the test green and reads the banner's check total.
-LEDGER = checks.Ledger("handshake", floor=13)
+# The floor is what a completed handshake session executes. MEASURED 2026-08-06: a
+# green run against a real authsrv on 6112 reports 17 checks, which is every check()
+# site in the file. The floor is 16 rather than 17 because exactly one section is
+# optional -- the unpatched-client negative control declares a skip when the vault holds
+# no stock build with different parameters -- so 16 is the mandatory core, which is what
+# checks.py asks a floor to be.
+#
+# It was 13 until this measurement, a deliberate margin set by an agent that could not
+# start a server and counted the sites by reading. The margin cost more than it bought:
+# when the wrong artifact got selected the run fell to 8 checks and the banner said
+# "ONLY 8 OF A DECLARED FLOOR OF 13", which understates it -- eight of the sixteen
+# mandatory checks had not run.
+LEDGER = checks.Ledger("handshake", floor=16)
 check = checks.adopt_named(LEDGER)
 
 
 def main():
-    patched_dir = r"C:\gd\Rurik\vault\client-patched"
-    exes = [f for f in os.listdir(patched_dir) if f.endswith(".exe")]
-    if not exes:
-        raise SystemExit("no patched client in vault/client-patched — "
-                         "run toolkit/clientpatch/make_custom_client.py")
-    exe = os.path.join(patched_dir, sorted(exes)[-1])
+    # By parameters, never by name. dhbuild raises with the artifact listing if
+    # vault/client-patched/ holds no build carrying OUR parameters.
+    exe = dhbuild.select(dhbuild.OURS,
+                         why="the Stage B handshake can only be verified against a "
+                             "client keyed to this server")
+    kind, detail = dhbuild.classify(exe)
     print(f"patched client : {os.path.basename(exe)}")
+    print(f"                 {kind} -- {detail}")
 
-    g, p, B = read_client_params(exe)
+    g, p, B = dhbuild.read_params(exe)
     print(f"read from exe  : g={g}, prime {p.bit_length()} bits, B {B.bit_length()} bits")
+
+    # PRE-FLIGHT, before anything is spawned. The exe carries OUR parameters -- but the
+    # server loads ONE key file, `sorted(rurik_dh_*.json)[-1]`, and with more than one in
+    # the vault the exe can legitimately belong to a different one. That combination
+    # derives two different ARC4 keys and every downstream check fails in the shape of a
+    # crypto bug. Name it here instead, where the cause is still visible.
+    kf = server_key_file()
+    if kf is None:
+        raise SystemExit("no rurik_dh_*.json in vault/keys — the server has no private "
+                         "half to decrypt with. Run make_custom_client.py.")
+    with open(kf) as fh:
+        srv_keys = json.load(fh)
+    if (int(srv_keys["prime"]), int(srv_keys["server_public"])) != (p, B):
+        raise SystemExit(
+            f"WRONG ARTIFACT PAIR -- this is not a crypto failure.\n"
+            f"  client : {exe}\n"
+            f"  server : {kf}  (authsrv.py loads sorted(rurik_dh_*.json)[-1])\n"
+            f"  Both carry OUR parameters, but not the SAME ones, so the two ends would\n"
+            f"  derive different ARC4 keys and every check after step 3 would fail in the\n"
+            f"  shape of a crypto regression. Re-patch against this key file:\n"
+            f"      python toolkit/clientpatch/make_custom_client.py --keys \"{kf}\"")
+    print(f"server key file: {os.path.basename(kf)} (matches the exe)")
 
     # Keep the self-test's output out of the ground-truth vault. These used to
     # share vault/captures/authsrv/ and vault/state/sessions.json with real
@@ -292,12 +332,12 @@ def main():
         # the test is measuring something other than what it claims to.
         print("\n5. negative control: an unpatched client must NOT match")
         stock = None
-        cdir = r"C:\gd\Rurik\vault\client"
-        for build in sorted(os.listdir(cdir), reverse=True):
+        cdir = vaultpath.vault_path("client")
+        for build in sorted(os.listdir(cdir) if os.path.isdir(cdir) else [], reverse=True):
             cand = os.path.join(cdir, build, "Gw.exe")
             if os.path.exists(cand):
                 try:
-                    sg, sp, sB = read_client_params(cand)
+                    sg, sp, sB = dhbuild.read_params(cand)
                 except SystemExit:
                     continue
                 if sB != B:
