@@ -26,6 +26,7 @@ and we will have its words written down, which is the prerequisite for answering
 
 import argparse
 import binascii
+import itertools
 import json
 import math
 import os
@@ -1115,6 +1116,7 @@ class Recorder:
         self.meta = open(base + ".jsonl", "a", encoding="utf-8")
         self.raw = open(base + ".raw", "ab")
         self.t0 = time.perf_counter()
+        self._frame_seq = itertools.count()
         # FIRST record in the file, before any frame. This server IS our server, so it
         # can only ever produce OURS -- but stamping it is what lets a reader tell this
         # apart from a capture of ArenaNet's, which is the one artifact the project
@@ -1133,12 +1135,26 @@ class Recorder:
         self.meta.flush()
 
     def frame(self, direction, cipher: bytes, plain: bytes):
+        # Numbered like the s2c `sent` events, but NOT because it has the same
+        # defect. c2s has exactly ONE decrypt site -- the receive loop's
+        # c2s.crypt -- on exactly one thread, which both decrypts and logs before
+        # reading again, so decryption order and log order cannot come apart here
+        # the way they can for s2c. Two things earn the number anyway: it makes
+        # the .raw sidecar and the .jsonl joinable record-for-record (seq N is the
+        # Nth .raw record, because seq is taken before the write) rather than by
+        # position and hope; and if a second decrypt site is ever added, that
+        # single-thread argument breaks silently, whereas a gap or a repeat in
+        # this counter says so out loud.
+        #
+        # Not written into the .raw record itself: that format has no reader yet
+        # and changing its layout would cost more than it buys.
+        seq = next(self._frame_seq)
         # Length-prefixed so the file stays parseable when the parser is rewritten.
         self.raw.write(struct.pack("<BId", 0 if direction == "c2s" else 1,
                                    len(cipher), time.perf_counter() - self.t0))
         self.raw.write(cipher)
         self.raw.flush()
-        self.event("frame", direction=direction, n=len(cipher),
+        self.event("frame", seq=seq, direction=direction, n=len(cipher),
                    cipher=binascii.hexlify(cipher[:512]).decode(),
                    plain=binascii.hexlify(plain[:512]).decode())
 
@@ -1363,9 +1379,32 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         # could read. The lock covers crypt and sendall together, not separately.
         send_lock = threading.Lock()
 
+        # We never write s2c CIPHERTEXT anywhere: rec.frame is only ever called
+        # with 'c2s', so the .raw sidecar holds one direction. The only way to
+        # reconstruct what actually went out on the wire is to replay these
+        # plaintexts through a fresh ARC4 -- and that replay is correct ONLY in
+        # keystream order.
+        #
+        # The capture line is deliberately written OUTSIDE the lock: rec.event
+        # does file I/O, and holding the send lock across a disk write would
+        # serialise the 20 Hz position ticker against the filesystem. The cost of
+        # that choice is that the line's ARRIVAL order is not the encryption
+        # order -- three threads call send() on one connection (the receive loop,
+        # world_tick, and a probe), and whichever wins the lock can still lose the
+        # race to rec.event. Before this counter existed, the .jsonl recorded that
+        # scrambled order as if it were the wire, and a replay built from it would
+        # produce a byte stream the client never saw.
+        #
+        # So the number is taken next to the crypt call and under the same lock:
+        # it orders messages by KEYSTREAM POSITION, and survives however the lines
+        # land in the file. Sort `sent` events by seq, replay, and the result is
+        # the wire.
+        s2c_seq = itertools.count()
+
         def send(opcode, values, label, quiet=False):
             blob = codec.encode(smsg, opcode, values)
             with send_lock:
+                seq = next(s2c_seq)
                 sock.sendall(s2c.crypt(blob))
             # quiet is for the 20 Hz position tick only: it would bury every
             # other line in the console. It still goes into the capture, because
@@ -1374,7 +1413,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             if not quiet:
                 print(f"[c{conn_id}] s2c {label} (0x{opcode:04x}, {len(blob)}B)",
                       flush=True)
-            rec.event("sent", opcode=opcode, label=label,
+            # A GAP in seq means crypt advanced the keystream for a message whose
+            # plaintext never reached this file -- sendall raised in between. A
+            # replay must stop at the gap rather than carry on emitting bytes that
+            # diverge from here to the end of the session. That failure was
+            # entirely invisible before; now it leaves a hole that names itself.
+            rec.event("sent", seq=seq, opcode=opcode, label=label,
                       plain=binascii.hexlify(blob).decode())
 
         if kind == "game":

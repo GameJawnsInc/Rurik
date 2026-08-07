@@ -17,8 +17,34 @@ That makes the whole chain load-bearing:
 If the patcher wrote to the wrong offsets, if endianness is flipped anywhere, or
 if arc4_hash is subtly wrong, the derived keys differ and the final check fails.
 A green result here means the real client should key up too.
+
+WHICH executable, and why that is asked of the bytes. This used to take
+`sorted(exes)[-1]` out of `vault/client-patched/`. On 2026-08-06 a live-capture
+build -- ArenaNet's stock DH, correct and wanted, PLAN.md §6.2 item 1 -- was
+written into that directory as `Gw.live.<tag>.exe`, and `l` sorts after `c`. The
+test silently switched to a binary that keys against ArenaNet and reported four
+failures and a short check count, every one of which reads as a crypto
+regression in code that had not been touched.
+
+That directory is shared by every worktree on this machine -- `vaultpath`
+resolves to the main working tree, so a branch has code of its own but never a
+vault of its own -- which is why no amount of care on one branch could have
+prevented it, and why the fix has to be in what the code asks rather than in
+what anyone remembers. Selection goes through `clientpatch/dhbuild.py`: it reads
+the DH struct and requires the exe's prime and server public value to be the
+ones in the key file `authsrv` will load. `g` is deliberately not compared --
+generator 4 is ArenaNet's too, so every candidate agrees on it and it
+discriminates nothing. Candidates that are passed over are named and so is the
+reason. A wrong or missing artifact is refused BEFORE the server is spawned,
+with a message that says ARTIFACT rather than leaving four key-mismatch FAILs to
+be misread.
+
+The DH math below still reads (g, p, B) out of the executable, not out of the
+key file. Selection proves the two agree; the handshake still has to derive from
+what the binary actually carries, or the chain above stops being load-bearing.
 """
 
+import json
 import os
 import re
 import socket
@@ -29,8 +55,11 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "clientpatch"))
 from gwcrypto import ARC4, arc4_hash, recover_master_secret  # noqa: E402
-from gwpe import PE  # noqa: E402
+import dhbuild  # noqa: E402
+import vaultpath  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'schema'))
 from codec import Codec  # noqa: E402
 sys.path.insert(0, os.path.join(
@@ -43,7 +72,6 @@ SELFTEST_SESSIONS = r"C:\gd\Rurik\vault\state\selftest-sessions.json"
 
 codec = Codec()
 
-SIG_KEYS = bytes.fromhex("8B4508C70088000000B8")
 PORT = 6112
 BUILD = 38797
 
@@ -53,61 +81,57 @@ TEST_USER_ID = "E696B44C-04FC-DF92-9EE1-B0CC329B424A"
 TEST_TOKEN = "233B382E-3CD2-E5B6-7018-7F547D2760A7"
 
 
-def read_client_params(exe):
-    """Read (g, p, B) from a client binary the way the client itself would."""
-    pe = PE(exe)
-    hits = pe.find(SIG_KEYS, ".text")
-    if not hits:
-        raise SystemExit(f"{exe}: DH accessor signature not found")
-    va = struct.unpack_from("<I", pe.data, hits[0] + 0x0A)[0]
-    off = pe.rva_to_off(va - pe.image_base)
-    g = int.from_bytes(pe.data[off + 4:off + 8], "little")
-    p = int.from_bytes(pe.data[off + 8:off + 72], "little")
-    B = int.from_bytes(pe.data[off + 72:off + 136], "little")
-    return g, p, B
+def server_keys():
+    """The key file `authsrv.py` will load, chosen the way it chooses it.
+
+    Mirrors `authsrv.load_keys(None)` rather than importing it, because importing
+    the server to ask it a question starts a server. If the two ever diverge the
+    final check in section 5 still catches it: that one compares the key both ends
+    actually derived, and it cannot be satisfied by agreeing about the wrong file.
+    """
+    kd = vaultpath.require_dir("keys", why="the DH parameters both ends must share")
+    cands = sorted(f for f in os.listdir(kd) if f.startswith("rurik_dh_"))
+    if not cands:
+        raise SystemExit("no rurik_dh_*.json in vault/keys — "
+                         "run toolkit/clientpatch/make_custom_client.py first")
+    return json.load(open(os.path.join(kd, cands[-1]), encoding="utf-8"))
 
 
-# The floor is what a completed handshake session executes. Counted BY READING
-# the code, not by running it -- this test spawns a real authsrv on 6112 and the
-# agent that added the ledger was not permitted to start one. There are 17
-# check() sites; 16 of them run in any session that gets far enough to pass (the
-# 17th is the unpatched-client negative control, which declares a skip when the
-# vault holds no stock build with different parameters). 13 is that core minus a
-# deliberate margin, because an unmeasured floor that is one too high turns the
-# suite permanently red. TIGHTEN THIS to the real count the first time a human
-# runs the test green and reads the banner's check total.
-LEDGER = checks.Ledger("handshake", floor=13)
+# The floor is what a completed handshake session executes. MEASURED 2026-08-06:
+# a green run spawns its authsrv on 6112, completes the lifecycle and prints 17,
+# which is every check() site in the file. 16 of those are mandatory; the 17th is
+# the unpatched-client negative control, which declares a skip when the vault holds
+# no stock build with different parameters. So the floor is 16, the mandatory core.
+#
+# It was 13 until that run -- the core minus a deliberate margin, because the
+# agent that added the ledger could not start a server and would not guess high.
+# The margin is what the comment asked to have removed once someone had a real
+# total, and it cost more than it bought twice over. 13 was three checks of slack
+# in the test that proves the whole channel: a run that lost the entire login burst
+# would still have cleared it. And when the wrong artifact WAS selected, the banner
+# read "ONLY 8 OF A DECLARED FLOOR OF 13", understating the damage -- eight of the
+# SIXTEEN mandatory checks had not run.
+LEDGER = checks.Ledger("handshake", floor=16)
 check = checks.adopt_named(LEDGER)
 
 
 def main():
-    # Select by what the binary IS, not by what sorts last. This read
-    # `sorted(exes)[-1]` until 2026-08-06, when the first live-capture build landed
-    # in the same directory: "Gw.live." sorts after "Gw.custom.", so the test
-    # silently started reading ArenaNet's Diffie-Hellman parameters and then
-    # reported that the client and server derived different keys -- a true statement
-    # about the wrong binary, and it looked exactly like a broken handshake.
-    #
-    # buildid.dh_verdict asks the question this test actually needs answered: which
-    # of these clients keys against OUR server. Nothing about the filename can.
-    sys.path.insert(0, os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "clientpatch"))
-    import buildid  # noqa: E402
+    # By parameters, never by name -- and by the parameters the SERVER will load rather
+    # than merely "some key file of ours". `classify` alone answers `ours` for a build
+    # matching ANY rurik_dh_*.json, and with two in the vault the wrong one still derives
+    # a key authsrv cannot match; passing `match` requires agreement instead of assuming
+    # it. dhbuild prints every candidate it passes over and, if none qualifies, raises
+    # with the artifact listing BEFORE a server is spawned.
+    srv = server_keys()
+    exe = dhbuild.select(dhbuild.OURS,
+                         why="the Stage B handshake can only be verified against a "
+                             "client keyed to this server",
+                         match=(srv["prime"], srv["server_public"]))
+    kind, detail = dhbuild.classify(exe)
+    print(f"patched client : {os.path.basename(exe)}")
+    print(f"                 {kind} -- {detail}")
 
-    patched_dir = r"C:\gd\Rurik\vault\client-patched"
-    exes = [os.path.join(patched_dir, f) for f in sorted(os.listdir(patched_dir))
-            if f.endswith(".exe")]
-    ours = [f for f in exes if buildid.dh_verdict(f)[0] == buildid.OURS]
-    if not ours:
-        raise SystemExit(
-            f"no client in vault/client-patched carries OUR Diffie-Hellman "
-            f"parameters ({len(exes)} .exe present) —\n"
-            f"  run toolkit/clientpatch/make_custom_client.py")
-    exe = ours[-1]
-    print(f"patched client : {os.path.basename(exe)}  "
-          f"({len(exes)} in the directory, {len(ours)} keyed to us)")
-
-    g, p, B = read_client_params(exe)
+    g, p, B = dhbuild.read_params(exe)
     print(f"read from exe  : g={g}, prime {p.bit_length()} bits, B {B.bit_length()} bits")
 
     # Keep the self-test's output out of the ground-truth vault. These used to
@@ -310,12 +334,12 @@ def main():
         # the test is measuring something other than what it claims to.
         print("\n5. negative control: an unpatched client must NOT match")
         stock = None
-        cdir = r"C:\gd\Rurik\vault\client"
-        for build in sorted(os.listdir(cdir), reverse=True):
+        cdir = vaultpath.vault_path("client")
+        for build in sorted(os.listdir(cdir) if os.path.isdir(cdir) else [], reverse=True):
             cand = os.path.join(cdir, build, "Gw.exe")
             if os.path.exists(cand):
                 try:
-                    sg, sp, sB = read_client_params(cand)
+                    sg, sp, sB = dhbuild.read_params(cand)
                 except SystemExit:
                     continue
                 if sB != B:

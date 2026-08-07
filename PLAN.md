@@ -353,7 +353,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
-| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** Unblocked by §7 Q4; the remaining precondition is a build with unpatched DH (§6.2 item 1), which is this rung's own first commit. |
+| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** Unblocked by §7 Q4. **The unpatched-DH build now exists** (`vault/client-patched-live/`, assembled at `vault/run-live/`, reproducible with `make_custom_client.py --no-dh-patch`, 2026-08-06) — so §6.2 item 1's *artifact* is done, but its *launch path* is not: nothing in the toolkit may start that binary, by design. Writing the driver that can is this rung's own first commit. |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ⬜ not started. Requires R0b, so it inherits R0b's block. |
 
 Two structural changes, both argued below in §4.
@@ -622,41 +622,71 @@ account-visible event happens before the patch matters.
 
 **What must be true before the first live run**, none of which is true today:
 
-1. **A live-capture client is a separate build** — unpatched DH, with the updater and
-   mutex patches. **Built 2026-08-06** (`make_custom_client.py --live-capture`), and the
-   gate that makes it usable is the real change: launch safety is no longer "is this
-   client caged" but a **binding between the binary and the target**, read out of the
-   bytes.
-   *The one thing still open is a 4 GB file copy.* `vault/run-live/<build>/` holds the
-   exe and the DLLs; `Gw.dat` could not be copied because a running client holds the
-   source open exclusively, and `assert_safe` refuses an incomplete run directory. Close
-   every client and re-run `make_run_dir.py --live`. **Until that finishes there is still
-   no legal launch target**, so this precondition is not ticked — but nothing further has
-   to be designed for it.
+1. 🔶 **A live-capture client is a separate build** — unpatched DH, with the updater and
+   mutex patches. **The build exists as of 2026-08-06**, so does the filing that keeps it
+   apart from the loopback one, and so does the launch gate. **What is left is a 4 GB
+   file copy.**
 
-   **`toolkit/clientpatch/buildid.py`** answers `ours` / `stock` / `unknown` by reading
-   the DH parameters out of any `Gw.exe` and comparing them against our key files and
-   against the owner's own install. `ours` requires the matching key file to satisfy
-   **B == g^b mod p**, which is what makes it a check rather than a label: it proves we
-   hold the exponent, which is the operational meaning of "this client can key against
-   our server, and its traffic to anyone else is garbage."
-   This replaces whole-file hashing for the safety question. `pinned.py` knows exactly
-   one patched SHA-256, so every client the patcher builds read as `unknown` and was
-   refused — a gate you must disarm to do your job — and its single `patched` bucket
-   held four independent modifications when only the DH substitution decides anything.
+   *The artifact.* `make_custom_client.py --no-dh-patch` produces it — stock DH, updater
+   off, multi-instance on — so it is reproducible after the next ArenaNet update rather
+   than assembled by hand. It verifies the negative (the DH struct is byte-identical to
+   the input) and then classifies the result against `vault/keys/dh_params_*.txt`, which
+   a different tool dumped on a different day.
+
+   *The filing, which is a safety control and not tidiness.* Whose DH a build carries
+   decides where it may point, so the vault is split on exactly that:
+
+   | | ours | stock |
+   |---|---|---|
+   | staged | `vault/client-patched/` `Gw.custom.<tag>.exe` | `vault/client-patched-live/` `Gw.live.<tag>.exe` |
+   | assembled | `vault/run/<tag>/` | `vault/run-live/<tag>/` |
+   | posture | loopback only, caged | live only, **cannot** be caged |
+
+   `toolkit/clientpatch/dhbuild.py` answers `ours`/`stock`/`unknown` from the bytes;
+   the patcher refuses to write either kind into the other's directory; `make_run_dir.py`
+   classifies even an explicitly passed `--patched`; `test_handshake.py` selects the same
+   way and refuses a wrong artifact *before* spawning a server. `python
+   toolkit/clientpatch/dhbuild.py` audits the whole vault in one command.
+
+   *Why all of that, from one afternoon.* The live build first landed **inside**
+   `vault/client-patched/`, where two tools picked "the patched client" with
+   `sorted(exes)[-1]` and `l` sorts after `c`. `test_handshake.py` went red with four
+   failures and 8-of-13 checks, none of which was a crypto regression and all of which
+   read as one; `make_run_dir.py` would have assembled a client that cannot key into
+   `vault/run/`, which `drive_client.assert_safe` treats as the set of legal loopback
+   targets. Filename order is not a safety property. `test_dhbuild.py` rebuilds that
+   directory with the stock build sorting last *and* newest, and requires the right
+   answer.
+
+   *The launch gate.* Launch safety is no longer "is this client caged" but a **binding
+   between the binary and the target**, read out of the bytes:
    `cage.assert_launch_safe(exe, host)` enforces all four cells, and `test_cage.py`
-   proves each refusal fires: **ours→live** and **stock→loopback** are both refused, and
-   **stock→live uncaged** is allowed, because a gate that refuses everything is an
-   outage rather than a control.
-   Two more things fell out of it. A **missing** `-portal` is not neutral — the client
+   proves each fires. **ours→loopback** needs a verified cage; **ours→live** and
+   **stock→loopback** are refused; **stock→live uncaged** is *allowed*, because a gate
+   that refuses everything is an outage rather than a control — and refusing the
+   authorized run is how someone ends up forking a driver without the guards. This
+   replaces whole-file hashing for the safety question: `pinned.py` knows exactly one
+   patched SHA-256, so every client the patcher builds read as `unknown` and was refused,
+   and its single `patched` bucket held four independent modifications when only the DH
+   substitution decides anything.
+   One thing fell out of building it. A **missing** `-portal` is not neutral — the client
    falls back to its compiled-in ArenaNet endpoint — so `intended_target()` resolves an
-   absent flag to the live target, which means §6.2's sharpest hazard (a DH-patched
-   client launched with no `-portal` completing a real Stage A login) is now caught by a
-   measurement rather than by a rule about flags. And the two builds are staged in
-   separate roots, `vault/run/` and `vault/run-live/`, because `isolate_client.ps1` with
-   no arguments cages every client under `vault/run` and would otherwise cage the one
-   binary that must not be. The bytes still decide at launch; the root only decides who
-   sweeps what.
+   absent flag to the *live* target, which means §6.2's sharpest hazard (a DH-patched
+   client launched with no `-portal` completing a real Stage A login) is caught by a
+   measurement rather than by a rule about flags.
+
+   *What is still open.* `vault/run-live/<build>/` holds the exe and the DLLs but **not
+   `Gw.dat`** — a running client held the source open exclusively — and `assert_safe`
+   refuses an incomplete run directory. Close every client, re-run
+   `make_run_dir.py --live`, and A1 has a legal launch target. Nothing further has to be
+   designed for it.
+
+   *Known duplication, being resolved.* `dhbuild.py` and `buildid.py` were written the
+   same afternoon by two sessions for the same job. `dhbuild` owns selection, staging and
+   the hostile-filename regression; `buildid` proves **B == g^b mod p** before calling a
+   build ours, which is what makes `ours` a check rather than a label — `dhbuild` asserts
+   that guarantee in its docstring and never tests it. They are merged in the commit
+   after this one, `dhbuild` surviving.
 2. **The cage is per-client and its removal is elevated.** `isolate_client.ps1` pins a
    client to loopback by program path, so a live client cannot be caged — there is no
    partial setting. `cage-off` was reachable unelevated through
