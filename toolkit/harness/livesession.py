@@ -113,18 +113,33 @@ SERVER_SEED_LEN = 2 + 20
 # implies otherwise.
 LIVE_PORTS = (6112,)
 
-# OBSERVED, measured 2026-08-07 over the vault's 401 captures that carry both a channel
-# marker and a first c2s frame: the first CLIENT->server message after the handshake is
-# opcode 0x8001 on the auth channel (271 of 276; the other 5 are the 2026-08-04 synthetic
-# RURIK-HANDSHAKE markers) and 0x808a on the game channel (42 of 42).
+# WHICH CHANNEL a connection is comes from its VERSION header, which is the field that
+# actually carries it -- not from guessing at an opcode.
+VERSION_CHANNEL = {AUTH_VERSION_HEADER: "auth", GAME_VERSION_HEADER: "game"}
+
+# WHETHER A KEY IS RIGHT is a separate question, and this is the test.
 #
-# Why this is usable as a LIVE acceptance test and not just a loopback artefact: that
-# message is emitted by the CLIENT, and the client is the same binary in both places. Our
-# server never influences it. So "the decrypted stream starts with the opcode the client
-# always sends" is a property a WRONG key cannot produce -- ARC4 with the wrong key gives
-# 65535/65536 odds against those two bytes -- which makes it a check that can fail, per
-# CLAUDE.md. It is not proof of the whole stream, and assemble_live says so in its report.
-FIRST_C2S_OPCODE = {"auth": 0x8001, "game": 0x808a}
+# The first version of this listed literal opcodes -- auth 0x8001, game 0x808a -- taken
+# from our own captures. It was wrong, and the live capture of 2026-08-07 proved it: the
+# real service's game channels opened with 0x800a and 0x8091, so two connections whose keys
+# we HAD were reported undecryptable. A criterion derived from one server's flow does not
+# generalise to another's, and the fix is to test a structural property instead of a value.
+#
+# MEASURED over 534 captures (loopback plus both live ones): the first client->server u16
+# has bit 15 SET in 400 of 409 -- the nine exceptions are the 2026-08-04 synthetic
+# RURIK-HANDSHAKE markers, not real traffic -- while server->client never sets it. So bit
+# 15 is a direction flag, and the remaining 15 bits are an opcode: strip it from every
+# observed first message (0x8001, 0x800a, 0x8091, 0x808a -> 1, 10, 145, 138) and all of
+# them land inside schema/messages.json's own range, which spans 0x0000-0x01E6 across 777
+# entries.
+#
+# So a candidate key is accepted only if its plaintext starts with the direction bit set
+# AND an opcode the catalog could hold. That is 487 of 65536 values, ~1 in 135 for a wrong
+# key -- weaker per-trial than a literal match but it accepts the traffic that exists, and
+# on the live capture it picks exactly one key per connection, right every time, out of
+# three candidates each. Still a check that CAN fail, which is the requirement.
+CMSG_DIRECTION_BIT = 0x8000
+MAX_CATALOG_OPCODE = 0x01E6
 
 
 class LiveError(SystemExit):
@@ -213,19 +228,24 @@ def assemble(wire_path, key, out_path):
             "A": A.hex(), "server_seed": seed.hex()}
 
 
-def channel_of(plain):
-    """Which channel a decrypted c2s stream looks like, or None if no key fits.
+def key_fits(plain):
+    """Does this decrypted c2s stream look like real client traffic? See CMSG_DIRECTION_BIT.
 
-    The whole verdict is two bytes -- see FIRST_C2S_OPCODE for why those two bytes are
-    load-bearing and why a wrong key does not produce them.
+    Two bytes decide it: the direction bit must be set and the opcode must be one the
+    catalog could hold. Deliberately NOT a channel verdict -- the channel comes from the
+    VERSION header, which is the field that carries it.
     """
     if len(plain) < 2:
-        return None
+        return False
     op = int.from_bytes(plain[:2], "little")
-    for channel, want in FIRST_C2S_OPCODE.items():
-        if op == want:
-            return channel
-    return None
+    return bool(op & CMSG_DIRECTION_BIT) and (op & ~CMSG_DIRECTION_BIT) <= MAX_CATALOG_OPCODE
+
+
+def channel_of_stream(c2s_stream):
+    """'auth' / 'game' from a c2s stream's VERSION header, or None if it has none."""
+    if len(c2s_stream) < 4:
+        return None
+    return VERSION_CHANNEL.get(int.from_bytes(c2s_stream[0:4], "little"))
 
 
 def assemble_live(wire_path, keyring, out_dir):
@@ -263,27 +283,28 @@ def assemble_live(wire_path, keyring, out_dir):
             continue
         row["A"] = A.hex()
         row["server_seed"] = seed.hex()
+        # The channel is read from the VERSION header -- the field that carries it -- not
+        # inferred from whatever the first opcode happens to be.
+        channel = channel_of_stream(entry[wc.C2S]) or "unknown"
+        row["channel"] = channel
 
-        fits = []
-        for label, key in keys:
-            channel = channel_of(decrypt_stream(c2s_cipher, key))
-            if channel:
-                fits.append((label, key, channel))
+        fits = [(label, key) for label, key in keys
+                if key_fits(decrypt_stream(c2s_cipher, key))]
         if not fits:
             row.update({"decrypted": False,
                         "why": f"none of the {len(keys)} tapped key(s) decrypt this "
-                               f"connection to a known first opcode"})
+                               f"connection to a plausible client opcode"})
             results.append(row)
             continue
         if len({f[0] for f in fits}) > 1:
-            # Two different keys both producing a valid first opcode is a 1-in-4 billion
-            # coincidence, so it means something is wrong with the keyring, not that either
-            # is right. Refuse rather than pick.
+            # More than one key passing means the criterion is not discriminating here, not
+            # that either is right. Refuse rather than pick -- a wrong key writes a file
+            # full of noise that reads like a capture.
             row.update({"decrypted": False,
                         "why": f"{len(fits)} different keys all fit; refusing to choose"})
             results.append(row)
             continue
-        label, key, channel = fits[0]
+        label, key = fits[0]
         safe = str(key_name).replace(":", "_").replace("->", "-to-")
         out_path = os.path.join(out_dir, f"{channel}-{safe}.jsonl")
         c2s_plain = decrypt_stream(c2s_cipher, key)
@@ -546,6 +567,16 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
     print(f"  ceiling : {minutes} min")
     print(f"  output  : {outdir}")
 
+    # The live build carries a LIVE auto-updater (owner's decision 2026-08-07 -- the kill
+    # switch also disables map streaming and crashed a run on Map.cpp's `found` assert).
+    # So the client can now patch ITSELF mid-session, which would replace the binary the
+    # frames came from and take the key-tap cave with it. Hash before and after: the
+    # question "which build produced these frames" then has an answer on the artifact
+    # rather than a rule that used to forbid the situation.
+    exe_sha_before = sha256(exe)
+    print(f"  build   : sha256 {exe_sha_before[:16] if exe_sha_before else '??'}... "
+          f"(re-checked after the run)")
+
     procs, ring, client = [], None, None
     args = []                       # bound in the try; the manifest below reads it either way
     log_path = os.path.join(os.path.dirname(exe), "Gw.log")
@@ -654,7 +685,21 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         print("         inside that blob. This capture is vault-only -- not shareable, "
               "scrubbed or not.")
 
+    exe_sha_after = sha256(exe)
+    if exe_sha_before and exe_sha_after and exe_sha_before != exe_sha_after:
+        print("\n  *** THE CLIENT BINARY CHANGED DURING THIS RUN ***")
+        print(f"      before {exe_sha_before}")
+        print(f"      after  {exe_sha_after}")
+        print("      The auto-updater is live on this build (it has to be, for map")
+        print("      streaming), so ArenaNet patched the client mid-session. The frames")
+        print("      above did NOT all come from one binary, and the key-tap cave is gone")
+        print("      from the new one -- rebuild before the next run:")
+        print("        make_custom_client.py --no-dh-patch --key-tap --no-updater-patch")
+        print("        make_run_dir.py --live")
+
     manifest = {"stamp": stamp, "exe": exe, "account": acct["label"],
+                "exe_sha256_before": exe_sha_before, "exe_sha256_after": exe_sha_after,
+                "exe_unchanged": bool(exe_sha_before and exe_sha_before == exe_sha_after),
                 "args": accounts.redact_for_file(args), "ports": ports,
                 "keys_tapped": len(keys), "report": report,
                 "gw_log": open(log_path, encoding="utf-8", errors="replace").read().splitlines()
@@ -663,6 +708,19 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         json.dump(manifest, fh, indent=1)
     print(f"\n  {report['decrypted']}/{report['total']} connection(s) decrypted -> {outdir}")
     return 0 if report["decrypted"] else 1
+
+
+def sha256(path):
+    """SHA-256 of a file, or None if it cannot be read."""
+    import hashlib
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as fh:
+            for block in iter(lambda: fh.read(1 << 20), b""):
+                h.update(block)
+    except OSError:
+        return None
+    return h.hexdigest()
 
 
 def _wait_for_sniff(cap, wire, timeout=25):

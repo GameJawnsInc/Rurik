@@ -42,7 +42,7 @@ import livesession as ls  # noqa: E402
 import wirecapture as wc  # noqa: E402
 from gwcrypto import ARC4, arc4_hash  # noqa: E402
 
-LEDGER = checks.Ledger("livesession", floor=30)
+LEDGER = checks.Ledger("livesession", floor=32)
 
 
 def real_session():
@@ -204,14 +204,24 @@ def main():
     # ---- 3b. the LIVE shape: several connections, several keys -----------------
     print("\n3b. assemble_live pairs keys to connections, and refuses when none fits")
     # A real session is two DH-keyed channels on separate connections with DIFFERENT keys,
-    # plus a portal connection that is not a GW channel at all. The single tap slot is
-    # overwritten at each handshake, so the driver carries a keyring and the pairing is a
-    # search settled by FIRST_C2S_OPCODE -- which a wrong key cannot satisfy.
+    # plus one carrying no handshake. The single tap slot is overwritten at each handshake,
+    # so the driver carries a keyring; the channel comes from each connection's VERSION
+    # header and the KEY is settled by key_fits, which a wrong key rarely satisfies.
     auth_key = arc4_hash(bytes(range(20)))
     game_key = arc4_hash(bytes(range(20, 40)))
-    wrong_key = arc4_hash(b"\xff" * 20)
-    auth_plain = struct.pack("<H", ls.FIRST_C2S_OPCODE["auth"]) + b"\x05\x00hello-auth"
-    game_plain = struct.pack("<H", ls.FIRST_C2S_OPCODE["game"]) + b"\x91\x80walking"
+    auth_plain = struct.pack("<H", 0x8001) + b"\x05\x00hello-auth"     # OBSERVED live
+    game_plain = struct.pack("<H", 0x808a) + b"\x91\x80walking"        # OBSERVED loopback
+    # key_fits passes 487 of 65536 values, so a fixed "wrong" key could pass by luck and
+    # make the refusal test vacuous. Pick one that demonstrably fails BOTH connections,
+    # and fail loudly if no candidate does rather than testing nothing.
+    wrong_key = None
+    for n in range(64):
+        cand = arc4_hash(bytes([n]) * 20)
+        if cand not in (auth_key, game_key) and not any(
+                ls.key_fits(ARC4(cand).crypt(ARC4(k).crypt(p)))
+                for k, p in ((auth_key, auth_plain), (game_key, game_plain))):
+            wrong_key = cand
+            break
     A1, A2 = bytes(range(64)), bytes(range(64, 128))
     seed1, seed2 = bytes(range(20)), bytes(range(40, 60))
 
@@ -230,7 +240,7 @@ def main():
                   c2s_handshake(A1) + ARC4(auth_key).crypt(auth_plain),
                   s2c_handshake(seed1) + ARC4(auth_key).crypt(b"auth said this"))
         wire_conn(record, "10.0.0.9", 51001, "3.65.9.9", 6112,
-                  c2s_handshake(A2) + ARC4(game_key).crypt(game_plain),
+                  game_c2s_handshake(A2) + ARC4(game_key).crypt(game_plain),
                   s2c_handshake(seed2) + ARC4(game_key).crypt(b"game said this"))
         # A third connection on a sniffed port whose handshake is NOT at the front -- the
         # realistic live case is a connection the sniff joined mid-stream, or a reconnect.
@@ -263,6 +273,9 @@ def main():
 
         # And the case that matters most: a keyring that does NOT hold the right key must
         # produce NOTHING, rather than a plausible-looking file full of garbage.
+        LEDGER.ok(wrong_key is not None,
+                  "a genuinely non-fitting key was found for the refusal test below",
+                  "otherwise that assertion would pass without testing anything")
         before = set(os.listdir(tmp))
         bad = ls.assemble_live(wire, [("tap@0.0s", wrong_key)], tmp)
         LEDGER.ok(bad["decrypted"] == 0,
@@ -275,10 +288,20 @@ def main():
                       for r in bad["connections"] if r.get("A")),
                   "the refusal names how many keys were tried")
 
-    LEDGER.ok(ls.channel_of(auth_plain) == "auth" and ls.channel_of(game_plain) == "game",
-              "channel_of names the channel from the client's own first opcode")
-    LEDGER.ok(ls.channel_of(b"\x00\x00rubbish") is None and ls.channel_of(b"") is None,
-              "channel_of refuses anything else, including a truncated stream")
+    LEDGER.ok(ls.channel_of_stream(c2s_handshake(A)) == "auth"
+              and ls.channel_of_stream(game_c2s_handshake(A)) == "game",
+              "the channel is read from the VERSION header, the field that carries it",
+              "not guessed from whichever opcode the first message happens to be")
+    LEDGER.ok(all(ls.key_fits(struct.pack("<H", op))
+                  for op in (0x8001, 0x800a, 0x8091, 0x808a)),
+              "key_fits accepts every first opcode OBSERVED, live and on loopback",
+              "the old literal-value table rejected 0x800a and 0x8091 and reported two "
+              "live connections undecryptable whose keys we were holding")
+    LEDGER.ok(not ls.key_fits(struct.pack("<H", 0x0001))
+              and not ls.key_fits(struct.pack("<H", 0xcad4))
+              and not ls.key_fits(b""),
+              "and rejects a clear direction bit, an out-of-catalog opcode, and no bytes",
+              "487 of 65536 values pass, so a wrong key still has roughly 1 in 135")
 
     # ---- 3c. the keyring reaches DISK, and a capture re-assembles from it -------
     print("\n3c. the keyring is persisted per key, and re-assembly works without a client")

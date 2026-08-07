@@ -976,6 +976,29 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
      from ArenaNet's private exponent. Fixed: `keyring.jsonl`, written and flushed per key,
      plus `--assemble DIR` to decode a capture again from its own two files. That is what
      R0b's "byte-replayable from disk" actually requires, and the first run did not have it.
+   * **The updater kill switch is wrong on the live build.** `DnSetEnabled` gates the
+     whole download path, so a client that cannot patch also cannot **stream map
+     content**. The second live run died entering Pre-Searing: `Map file '0x01b97d'
+     failed to load. Attempting to re-bloat.` then `Assertion: found, Map.cpp(1762)`.
+     MEASURED: the map is present in both `Gw.dat` copies and reads identically, so it is
+     the fetch that failed, not the archive. Owner's decision 2026-08-07: the live build
+     is now built `--no-updater-patch`. The concern that justified the launch gate's
+     refusal — an update mid-capture replacing the build the frames came from, "and after
+     the fact nothing says which build produced which frames" — is answered by a
+     measurement instead: `livesession` hashes the exe before and after every run and
+     records both in the manifest. The loopback build keeps the kill switch.
+   * **The key-acceptance criterion was too narrow, and it was wrong in the expensive
+     direction.** It matched literal opcodes (`0x8001` auth, `0x808a` game) taken from our
+     own server's flow; the real service's game channels opened `0x800a` and `0x8091`, so
+     two connections whose keys we were HOLDING were reported undecryptable. Replaced with
+     a structural test — **MEASURED over 534 captures**: bit 15 of the first client u16 is
+     a direction flag (set in 400 of 409 c2s, never in s2c; the nine are the 08-04
+     synthetic markers), and stripping it puts every observed value inside
+     `schema/messages.json`'s own `0x0000-0x01E6` range. So a key is accepted when the
+     direction bit is set and the opcode is one the catalog could hold — 487 of 65536
+     values, still a check that can fail. On the live capture it picks exactly one key per
+     connection, correct every time. The **channel** now comes from the VERSION header,
+     which is the field that carries it.
    * **`payload` is a second field the scrub cannot clean.** The DH handshake crosses the
      wire in the clear, so `a` and `sent` sit as hex inside `wire.jsonl` two records before
      the fields where the scrub redacts them. `test_scrub`'s leak check found both the

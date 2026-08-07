@@ -211,16 +211,25 @@ def assert_launch_safe(exe, host, why="launch"):
                 f"  The cage belongs on the DH-patched build, not this one. Stage this\n"
                 f"  one under vault/run-live, which isolate_client.ps1 does not sweep.")
         if b["patches"].get("updater_killed") is not True:
-            raise CageError(
-                f"REFUSING to {why} {exe} at {where}\n"
-                f"  The auto-updater is still live in this build\n"
-                f"  (updater_killed={b['patches'].get('updater_killed')!r}).\n"
-                f"  PLAN.md §6.2 wants the kill switch on BOTH configurations: it pins\n"
-                f"  the build, and an update mid-capture would replace the ground truth\n"
-                f"  the capture is being taken to establish -- silently, and after the\n"
-                f"  fact nothing says which build produced which frames.\n"
-                f"  Rebuild with:\n"
-                f"      python toolkit/clientpatch/make_custom_client.py --live-capture")
+            # NOT a refusal any more. Owner's decision, 2026-08-07, after the kill switch
+            # crashed a live run: `DnSetEnabled` gates the WHOLE download path, so a client
+            # that cannot patch also cannot STREAM MAP CONTENT. Entering a map whose data
+            # is not already in the local Gw.dat logs "Attempting to re-bloat", the fetch
+            # is a no-op, and the client dies on `Assertion: found, Map.cpp(1762)`. A live
+            # capture that cannot enter a new map is not a live capture, so on the live
+            # build the kill switch costs more than it buys.
+            #
+            # The concern this check was built around is real and is NOT dropped: an update
+            # mid-capture would replace the build the frames came from, and "after the fact
+            # nothing says which build produced which frames". That is answered by a
+            # MEASUREMENT rather than by a prohibition -- livesession hashes the exe before
+            # the launch and again after the run, records both in the manifest, and says so
+            # loudly if they differ. A check that can detect the event beats a rule that
+            # forbids the only configuration that works.
+            print(f"  note: the auto-updater is LIVE in {os.path.basename(exe)} "
+                  f"(updater_killed={b['patches'].get('updater_killed')!r}).")
+            print(f"        Required for map streaming on a live run. The driver hashes "
+                  f"the binary before and after so a self-patch cannot pass unnoticed.")
         if state is None:
             print(f"  note: firewall state undeterminable for {os.path.basename(exe)}; "
                   f"proceeding -- this build carries ArenaNet's own parameters")
