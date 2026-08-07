@@ -21,6 +21,13 @@ classifier that only ever answers on well-formed input is not one. Section 4 ass
 live invariant: every build in the vault sits in the directory its parameters say it
 belongs in.
 
+Section 5 asserts the other half of that, and it is a different claim. Section 4 says
+every build is filed correctly TODAY; section 5 says the tool cannot file one wrongly
+TOMORROW. Until 2026-08-07 it could: `make_run_dir.py` classified the source exe
+byte-for-byte and accepted `--dest` on trust, so `--dest <vault>/run-live/<tag>` with no
+`--live` assembled a DH-patched client into the one directory that must not be caged --
+no flag in that command sounds dangerous, and every existing guard passed it.
+
 Read-only. Reads client binaries and key files out of the vault and launches nothing.
 """
 
@@ -36,17 +43,25 @@ import checks  # noqa: E402
 import dhbuild  # noqa: E402
 import vaultpath  # noqa: E402
 
-# MEASURED, not guessed: a green run on 2026-08-06 with every fixture present reports
-# 19 checks -- 4 + 4 + 6, plus one per build on disk in section 4, which was 5.
+# MEASURED, not guessed: a green run on 2026-08-07 with every fixture present reports
+# 24 checks -- 4 + 4 + 6, plus one per build on disk in section 4 (5 here), plus 5 in
+# section 5.
 #
-# The floor is 8, sections 1 and 2, which need only a pristine client and the vault's key
-# files. It is deliberately well below 19 because the two richer sections are genuinely
-# fixture-dependent and both declare skips: section 3 needs one build of EACH kind, and a
-# machine that has not built the live client yet is a legal state (it was this repo's
-# state until 2026-08-06), while section 4 counts whatever is on disk. checks.py asks a
-# floor to be the mandatory core for exactly this case; the skips are what keep a thin
-# run from reading as a thorough one, and the ledger prints them in the verdict.
-LEDGER = checks.Ledger("dhbuild", floor=8)
+# The floor is 13: sections 1, 2 and 5. Sections 1 and 2 need only a pristine client and
+# the vault's key files; section 5 is pure path arithmetic and needs no fixture at all,
+# so it belongs in the mandatory core rather than below it.
+#
+# It stays well below 24 because the two richer sections are genuinely fixture-dependent
+# and both declare skips: section 3 needs one build of EACH kind, and a machine that has
+# not built the live client yet is a legal state (it was this repo's state until
+# 2026-08-06), while section 4 counts whatever is on disk. checks.py asks a floor to be
+# the mandatory core for exactly this case; the skips are what keep a thin run from
+# reading as a thorough one, and the ledger prints them in the verdict.
+#
+# Section 3 is still outside the floor and that is a known weakness, not a decision this
+# comment is defending: it is the only section that proves the 2026-08-06 regression is
+# fixed, and a machine missing either build silently does not run it.
+LEDGER = checks.Ledger("dhbuild", floor=13)
 
 
 def scratch_copy(src, dst):
@@ -184,6 +199,43 @@ def main():
                       f"{kind} -- {detail}")
     if not seen:
         LEDGER.skip("vault placement", "no builds in any staging or run directory")
+
+    # ---- 5. the destination is a safety assertion, and it is checked -----------
+    # Section 4 proves every build on disk is filed correctly TODAY. This proves the
+    # tool cannot file one wrongly TOMORROW, which is a different claim: until
+    # 2026-08-07 make_run_dir.py classified the source exe byte-for-byte and took
+    # --dest entirely on trust, so `--dest <vault>/run-live/<tag>` with no --live
+    # assembled a DH-patched client into the directory that must not be caged.
+    #
+    # Pure-function checks, so no 4 GB copy is involved: the refusal happens before
+    # anything is written.
+    print("\n5. a run directory cannot be assembled into the other kind's root")
+    import make_run_dir  # noqa: E402  -- imported here; it is a CLI, not a library
+
+    for subdir, expect, why in (
+            ("run", dhbuild.OURS, "vault/run means ours"),
+            ("run-live", dhbuild.STOCK, "vault/run-live means stock"),
+    ):
+        got, _ = make_run_dir.root_meaning(vaultpath.vault_path(subdir, "2026-01-01_x"))
+        LEDGER.ok(got == expect, why, f"got {got}")
+
+    # The trap this function was written around: "run-live" starts with "run", so a
+    # bare startswith would file every live build as a loopback one -- the failure
+    # arriving through the check meant to catch it.
+    got, _ = make_run_dir.root_meaning(vaultpath.vault_path("run-live"))
+    LEDGER.ok(got == dhbuild.STOCK,
+              "the run/run-live prefix trap: run-live does not read as run",
+              f"got {got}")
+
+    got, _ = make_run_dir.root_meaning(vaultpath.vault_path("runaway"))
+    LEDGER.ok(got is None,
+              "a sibling that merely starts with 'run' belongs to neither",
+              f"got {got}")
+
+    got, _ = make_run_dir.root_meaning(os.path.join(tempfile.gettempdir(), "elsewhere"))
+    LEDGER.ok(got is None,
+              "a path outside both roots is refused rather than defaulted",
+              f"got {got} -- it would inherit no cage sweep and no assert_safe guarantee")
 
     return LEDGER.verdict()
 
