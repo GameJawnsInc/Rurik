@@ -34,7 +34,7 @@ import wirecapture as wc  # noqa: E402
 
 # 26 is the measured total of a green run with WinDivert present (section 5 then declares a
 # skip); without the driver that skip becomes a check and the run scores 27.
-LEDGER = checks.Ledger("wirecapture", floor=26)
+LEDGER = checks.Ledger("wirecapture", floor=27)
 
 
 def ipv4_tcp(src, dst, sport, dport, seq, payload=b"", proto=6, ver=4):
@@ -138,6 +138,10 @@ def main():
     LEDGER.ok(b"SrcAddr" not in wc._filter(None, PORTS)
               and b"6112" in wc._filter(None, PORTS),
               "the port-only WinDivert filter pins no address", str(wc._filter(None, PORTS)))
+    LEDGER.ok(b"ipv6" in wc._filter(None, PORTS),
+              "and it accepts IPv6 packets even though the parser is IPv4-only",
+              "dropped in the kernel they are invisible; received and rejected they show "
+              "up as recv>0 parsed==0 and name the cause")
 
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "multi.jsonl")

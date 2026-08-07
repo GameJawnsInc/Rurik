@@ -97,21 +97,33 @@ VERSION_LEN = 4 + VERSION_BODY_LEN[AUTH_VERSION_HEADER]   # the auth shape, for 
 CLIENT_SEED_LEN = 2 + 64
 SERVER_SEED_LEN = 2 + 20
 
-# The ports a LIVE login puts capturable bytes on. 6112 twice over: Stage B (auth) and
-# Stage C (game), on two different ArenaNet addresses, which is why the sniff is per-port
-# and per-connection rather than per-host.
+# The ports a LIVE session may put capturable bytes on.
 #
-# 6601 is deliberately NOT here, and the reason is a trap worth naming. Our own portal
-# listens on 6601 and every capture in the vault says "portal = 6601" -- but that is a
-# consequence of `-portal` being SET: OBSERVED (studies/handshake/PLAN.md 0.1, 192-195)
-# the flag makes the client switch to port 6601, prefix paths with /Spawned/WebGate, and
-# set its TLS flag to zero. A live run passes no `-portal`, so Stage A is HTTPS with
-# certificate validation to account.arena.net -- port 443, encrypted under a key we do not
-# hold and are not trying to get. Sniffing 6601 live would record nothing while looking
-# like coverage; sniffing 443 would record the machine's entire web traffic and still
-# decrypt to nothing. Stage A is out of scope for R0b, and saying so beats a filter that
-# implies otherwise.
-LIVE_PORTS = (6112,)
+# THIS WAS `(6112,)` AND IT COST A SESSION. Runs one and two captured fine on 6112, so the
+# third was run with the same narrow filter; it recorded ZERO bytes across ten minutes
+# while nine keys were tapped, and a WinDivert smoke test on port 443 immediately
+# afterwards returned recv=238 parsed=238 recorded=137 -- so the driver, the parser and the
+# direction logic were all healthy and the filter was simply not where the traffic was.
+# The difference from runs one and two is that the client now has its updater enabled, so
+# it streams content; the key tap fires on every DH-keyed MsgConn connection, and nothing
+# says those all live on 6112.
+#
+# THE COSTS ARE WILDLY ASYMMETRIC, which is the whole argument. A port in this list that
+# carries nothing costs a few bytes of filter. A port MISSING from it costs an authorized
+# live session, unrecoverably, because the ciphertext is never recorded and the keys that
+# were tapped decrypt nothing. So the list is now GW's whole known port range, taken from
+# this repo's own probe design (studies/handshake/PLAN.md: the probe binds 6601, 6112,
+# 6600, 6113, 80, 443, 6111 and 6114 precisely because those are the ports the client might
+# dial), minus 80/443 -- Stage A is TLS to account.arena.net under a key we do not hold,
+# and sniffing 443 would record the machine's entire web traffic to no purpose.
+#
+# The previous comment argued 6601 should be excluded because it is only used when
+# `-portal` is SET. That reasoning is still correct and is now irrelevant: being right
+# about a port that carries nothing saves nothing, and being wrong about one loses a
+# session. `_hold` samples the client's own connections and the capture's watchdog reports
+# per-stage counters, so what actually carried traffic is now MEASURED per run rather than
+# assumed here.
+LIVE_PORTS = (6111, 6112, 6113, 6114, 6600, 6601)
 
 # WHICH CHANNEL a connection is comes from its VERSION header, which is the field that
 # actually carries it -- not from guessing at an opcode.
@@ -577,7 +589,7 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
     print(f"  build   : sha256 {exe_sha_before[:16] if exe_sha_before else '??'}... "
           f"(re-checked after the run)")
 
-    procs, ring, client = [], None, None
+    procs, ring, client, endpoints = [], None, None, set()
     args = []                       # bound in the try; the manifest below reads it either way
     log_path = os.path.join(os.path.dirname(exe), "Gw.log")
     cap_log = open(os.path.join(outdir, "wirecapture.log"), "w")
@@ -628,9 +640,10 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         ring = KeyRing(client.pid, rva, path=os.path.join(outdir, "keyring.jsonl"))
         ring.start()
 
-        print("\n  YOU drive from here: log in and play at human cadence. Ctrl-C to stop "
-              "early.\n")
-        _hold(client, ring, wire, minutes)
+        print("\n  YOU drive from here: log in and play at human cadence. ONE Ctrl-C stops"
+              "\n  it; the shutdown takes ~30s and pressing again discards the capture.\n")
+        _install_sigint()
+        endpoints = _hold(client, ring, wire, minutes, cap=cap)
     except KeyboardInterrupt:
         print("\n  stopping on Ctrl-C")
     finally:
@@ -701,6 +714,7 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
                 "exe_sha256_before": exe_sha_before, "exe_sha256_after": exe_sha_after,
                 "exe_unchanged": bool(exe_sha_before and exe_sha_before == exe_sha_after),
                 "args": accounts.redact_for_file(args), "ports": ports,
+                "client_endpoints": sorted(endpoints),
                 "keys_tapped": len(keys), "report": report,
                 "gw_log": open(log_path, encoding="utf-8", errors="replace").read().splitlines()
                           if os.path.exists(log_path) else []}
@@ -721,6 +735,38 @@ def sha256(path):
     except OSError:
         return None
     return h.hexdigest()
+
+
+_STOPPING = threading.Event()
+
+
+def _install_sigint():
+    """First Ctrl-C asks the hold loop to stop; every later one is ABSORBED.
+
+    Because the obvious thing happened: the first Ctrl-C was caught, cleanup began, and
+    `close_client` sat in a silent 20-second `proc.wait` waiting for the game to shut down.
+    With nothing on screen the operator pressed Ctrl-C twice more, the second one landed
+    INSIDE that wait, and the process died before it assembled or wrote a manifest -- so a
+    ten-minute live session produced no artifact at all. The keyring survived only because
+    it is written per key.
+
+    Cleanup and assembly must not be interruptible by an impatient second press. They are
+    the part that turns a session into a capture.
+    """
+    import signal
+    def handler(_signum, _frame):
+        if _STOPPING.is_set():
+            print("\n  ...already stopping. Closing the client and assembling -- this takes"
+                  "\n     up to ~30s. Ctrl-C again will THROW AWAY the capture; the keys are"
+                  "\n     already safe on disk either way.", flush=True)
+            return
+        _STOPPING.set()
+        print("\n  stopping: closing the client cleanly (up to ~20s), then assembling."
+              "\n  Please wait -- do not press Ctrl-C again.", flush=True)
+    try:
+        signal.signal(signal.SIGINT, handler)
+    except (ValueError, OSError):
+        pass          # not the main thread, or no console; the old behaviour still applies
 
 
 def _wait_for_sniff(cap, wire, timeout=25):
@@ -744,19 +790,62 @@ def _wait_for_sniff(cap, wire, timeout=25):
     return False
 
 
-def _hold(client, ring, wire, minutes):
-    """Hold the session until the ceiling, the client exiting, or Ctrl-C."""
+def _hold(client, ring, wire, minutes, cap=None):
+    """Hold the session until the ceiling, the client exiting, or Ctrl-C.
+
+    AND WATCH THE INSTRUMENTS, which this used to not do. A ten-minute live session
+    reported `wire: 0 KiB` from the first tick to the last while nine keys were tapped,
+    and nothing said why -- the sniff could have died, or been filtering a port the client
+    was not using, and the status line looked the same either way. drive_client learned
+    this in 2026-08-05 ("an instrument that was not yet running produces absence of
+    evidence, never evidence of absence") and the live driver did not inherit it.
+
+    So: sample the client's OWN connections and show what it is really talking to, notice
+    a dead sniffer, and say something when bytes are not arriving instead of printing a
+    zero forever. Returns the set of remote endpoints observed, for the manifest.
+    """
+    import tcptable
     ceiling = time.monotonic() + minutes * 60
-    while time.monotonic() < ceiling:
+    started = time.monotonic()
+    seen, warned = set(), False
+    while time.monotonic() < ceiling and not _STOPPING.is_set():
         if client.poll() is not None:
             print("\n  the client exited")
-            return
+            break
+        if cap is not None and cap.poll() is not None:
+            print(f"\n  *** THE OFF-WIRE CAPTURE DIED (exit {cap.poll()}) -- nothing is "
+                  f"being recorded.\n      See wirecapture.log. Keys are still being "
+                  f"tapped and are safe on disk.", flush=True)
+            cap = None                      # say it once, keep the session going
+        try:
+            for c in tcptable.connections(client.pid):
+                if c["remote"] != "0.0.0.0:0":
+                    seen.add(c["remote"])
+        except Exception:
+            pass
         left = int(ceiling - time.monotonic())
         size = os.path.getsize(wire) if os.path.exists(wire) else 0
-        print(f"\r  t-{left // 60:02d}:{left % 60:02d}  keys tapped: {len(ring.values)}  "
-              f"wire: {size / 1024:.0f} KiB   ", end="", flush=True)
-        time.sleep(5)
-    print("\n  session ceiling reached -- closing the client")
+        ports = sorted({int(r.rsplit(":", 1)[1]) for r in seen if ":" in r})
+        print(f"\r  t-{left // 60:02d}:{left % 60:02d}  keys: {len(ring.values)}  "
+              f"wire: {size / 1024:.0f} KiB  client ports: "
+              f"{','.join(map(str, ports)) or 'none seen'}   ", end="", flush=True)
+        # Bytes should arrive within seconds of the first handshake. If they have not
+        # after a minute, the run is producing nothing and the operator should know while
+        # there is still time to stop rather than at the end.
+        if not warned and size < 1024 and time.monotonic() - started > 60:
+            warned = True
+            print(f"\n  *** NO WIRE BYTES after 60s, while {len(ring.values)} key(s) have "
+                  f"been tapped.\n      The sniff is filtering {LIVE_PORTS} on IPv4. The "
+                  f"client's own connections:\n      "
+                  f"{', '.join(sorted(seen)) or 'NONE VISIBLE -- tcptable is IPv4-only, so '
+                              'an IPv6 connection would look like this'}\n"
+                  f"      This capture will have no ciphertext. Ctrl-C once to stop.",
+                  flush=True)
+        _STOPPING.wait(5)
+    else:
+        if not _STOPPING.is_set():
+            print("\n  session ceiling reached -- closing the client")
+    return seen
 
 
 def main():

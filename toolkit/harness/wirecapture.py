@@ -330,7 +330,15 @@ def _filter(server_ip, server_ports):
     if server_ip is None:
         # Port-only: the live case, where the address is not knowable until the client has
         # already connected -- and by then the plaintext handshake has been and gone.
-        return f"ip and tcp and ({ports})".encode()
+        #
+        # `ip or ipv6`, deliberately, even though parse_ipv4_tcp handles only IPv4. An
+        # IPv6-only filter clause would drop those packets in the KERNEL, where nothing can
+        # see them, and the symptom is a silent zero-byte capture indistinguishable from
+        # "the client used another port" -- which is exactly the ambiguity that cost a
+        # session on 2026-08-07. Received and then rejected by the parser, they show up in
+        # the watchdog as recv > 0 with parsed == 0, which names the cause on the spot.
+        # Building the v6 parser is then a known job rather than a guess.
+        return f"(ip or ipv6) and tcp and ({ports})".encode()
     return (f"ip and tcp and (ip.SrcAddr == {server_ip} or ip.DstAddr == {server_ip}) "
             f"and ({ports})").encode()
 
@@ -370,6 +378,35 @@ def capture_session(pid, server_ip, server_ports, out_path, seconds=0, clock=tim
     addr = (ctypes.c_char * 64)()        # WINDIVERT_ADDRESS; contents unused (see docstring)
     deadline = clock() + seconds if seconds else None
     n = 0
+    stats = {"recv": 0, "parsed": 0, "directed": 0, "recorded": 0}
+
+    # A WATCHDOG, because WinDivertRecv BLOCKS with no timeout. If nothing ever matches the
+    # filter this loop parks in the kernel forever: the `seconds` deadline is only tested at
+    # the top, so it never fires either, and the process sits there looking healthy while
+    # recording nothing. That is exactly what a live session did on 2026-08-07 -- ten
+    # minutes, nine keys tapped, `wire: 0 KiB` throughout, and a post-mortem log that was
+    # COMPLETELY EMPTY because nothing here ever writes unless a packet arrives.
+    #
+    # So a separate thread reports the counters on a timer, to stderr, which the driver
+    # captures into wirecapture.log. Silence stops being ambiguous: either the log says
+    # packets are arriving, or it says none are and names the filter.
+    import threading
+    stop_watch = threading.Event()
+
+    def watch():
+        quiet = 0
+        while not stop_watch.wait(15):
+            quiet += 15
+            if stats["recv"] == 0:
+                print(f"[watchdog] {quiet}s: WinDivertRecv has returned ZERO packets. The "
+                      f"filter is {_filter(server_ip, server_ports).decode()!r} -- if the "
+                      f"client is connected, it is not matching this (IPv6 is not covered "
+                      f"by `ip and tcp`).", file=sys.stderr, flush=True)
+            else:
+                print(f"[watchdog] {quiet}s: recv={stats['recv']} parsed={stats['parsed']} "
+                      f"directed={stats['directed']} recorded={stats['recorded']}",
+                      file=sys.stderr, flush=True)
+    threading.Thread(target=watch, daemon=True).start()
     try:
         while True:
             if deadline and clock() > deadline:
@@ -377,18 +414,26 @@ def capture_session(pid, server_ip, server_ports, out_path, seconds=0, clock=tim
             if not dll.WinDivertRecv(handle, buf, 65535, ctypes.byref(recv_len),
                                      ctypes.byref(addr)):
                 continue
+            stats["recv"] += 1
             pkt = parse_ipv4_tcp(bytes(buf[:recv_len.value]))
             if not pkt:
                 continue
+            stats["parsed"] += 1
             d = direction_of(pkt, server_ip, server_ports)
             if d is None:
                 continue
+            stats["directed"] += 1
             if pkt["payload"]:
                 record(d, pkt["seq"], pkt["payload"], pkt)
+                stats["recorded"] += 1
                 n += 1
     finally:
+        stop_watch.set()
         dll.WinDivertClose(handle)
         fh.close()
+        print(f"[wirecapture] closed: recv={stats['recv']} parsed={stats['parsed']} "
+              f"directed={stats['directed']} recorded={stats['recorded']}",
+              file=sys.stderr, flush=True)
     return n, out_path
 
 
