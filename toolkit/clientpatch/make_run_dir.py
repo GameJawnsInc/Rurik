@@ -217,13 +217,18 @@ This one is the mirror image of the loopback build, in every rule that matters:
   * DO NOT cage it. isolate_client.ps1 pins a client to loopback by program path and
     has no partial setting, so a caged live client simply cannot work. It enumerates
     vault/run/ only, which is why this directory is not under it.
-  * DO NOT drive it with toolkit/harness/drive_client.py. That refuses anything outside
-    vault/run/ and requires -authsrv/-portal at 127.x, which is the opposite of this
-    build's purpose. There is no automation path for it yet, on purpose.
+  * The launch gate decides from the BYTES, not from this directory. Whatever launches
+    it goes through cage.assert_launch_safe(exe, host), which reads the Diffie-Hellman
+    struct: this build may only be pointed at the real service, the loopback build only
+    at 127.x, and neither can be argued into the other by a flag or a path. A missing
+    -portal counts as LIVE, because the client falls back to its compiled-in ArenaNet
+    endpoint.
   * The secondary account only, and it must carry `automation: true` in
-    vault/keys/accounts.json (toolkit/harness/accounts.py enforces that).
+    vault/keys/accounts.json (toolkit/harness/accounts.py enforces that). The flag is
+    opt-in, so the primary is refused by default rather than by being remembered.
   * Human cadence, human hours, one client, never in a competitive context. PLAN.md
-    §6.1's risk row is explicit that the traffic PATTERN is what closes accounts.
+    §6.1's risk row is explicit that the traffic PATTERN is what closes accounts, not
+    any single request -- so no guard in this repo can substitute for that one.
 
 Read PLAN.md §6.2 before the first live run. Having this build is one precondition,
 not all of them.

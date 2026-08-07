@@ -353,7 +353,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
-| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** Unblocked by §7 Q4. **The unpatched-DH build now exists** (`vault/client-patched-live/`, assembled at `vault/run-live/`, reproducible with `make_custom_client.py --no-dh-patch`, 2026-08-06) — so §6.2 item 1's *artifact* is done, but its *launch path* is not: nothing in the toolkit may start that binary, by design. Writing the driver that can is this rung's own first commit. |
+| **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ⬜ **not started, and it is the wasting asset.** Every capture in the vault is Rurik talking to Rurik; not one byte is ArenaNet's. **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** Unblocked by §7 Q4, and **as of 2026-08-07 all five of §6.2's preconditions are met**: the unpatched-DH build exists (`make_custom_client.py --no-dh-patch`), its run directory is assembled and verified byte-identical to the source, and `cage.assert_launch_safe` will let it through to the live service and nothing else. What is missing is now only the driver — no tool yet knows how to run a capture session — and writing it is this rung's own first commit. |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ⬜ not started. Requires R0b, so it inherits R0b's block. |
 
 Two structural changes, both argued below in §4.
@@ -620,12 +620,14 @@ at the live service with no `-portal` completes a **real Stage A portal login, w
 owner's autofilled primary credential**, and only then fails at Stage B. The
 account-visible event happens before the patch matters.
 
-**What must be true before the first live run**, none of which is true today:
+**What must be true before the first live run. All five are met as of 2026-08-07**, which
+is a change of state worth naming: from here the thing standing between this repo and
+ArenaNet's bytes is code nobody has written, not a control nobody has built.
 
-1. 🔶 **A live-capture client is a separate build** — unpatched DH, with the updater and
-   mutex patches. **The build exists as of 2026-08-06**, so does the filing that keeps it
-   apart from the loopback one, and so does the launch gate. **What is left is a 4 GB
-   file copy.**
+1. ✅ **A live-capture client is a separate build** — unpatched DH, with the updater and
+   mutex patches. **Done 2026-08-07.** The build exists, the filing that keeps it apart
+   from the loopback one exists, the launch gate exists, and the run directory is
+   assembled and complete.
 
    *The artifact.* `make_custom_client.py --no-dh-patch` produces it — stock DH, updater
    off, multi-instance on — so it is reproducible after the next ArenaNet update rather
@@ -675,13 +677,22 @@ account-visible event happens before the patch matters.
    client launched with no `-portal` completing a real Stage A login) is caught by a
    measurement rather than by a rule about flags.
 
-   *What is still open.* `vault/run-live/<build>/` holds the exe and the DLLs but **not
-   `Gw.dat`** — a running client held the source open exclusively — and `assert_safe`
-   refuses an incomplete run directory. Close every client, re-run
-   `make_run_dir.py --live`, and A1 has a legal launch target. Nothing further has to be
-   designed for it.
+   *The run directory, assembled 2026-08-07.* `vault/run-live/<build>/` was incomplete
+   for a day — `Gw.dat` could not be copied while a client held the source open
+   exclusively, and `assert_safe` refuses an incomplete run directory. Copied with every
+   client closed and **verified byte-identical to `C:\gw\Gw.dat` by SHA-256 over all
+   4.2 GB**, because "the copy reported success" and "the copy is the same file" are
+   different claims and this one is the ground truth a live capture gets replayed
+   against. `dhbuild.py` and `cage.py` both audit it clean: `stock`, and `UNCAGED` where
+   uncaged is what the row wants.
 
-   *The duplication is resolved.* `dhbuild.py` and `dhbuild.py` were written the same
+   **So all five preconditions are met, and A1 is the next thing to build rather than
+   the next thing to unblock.** What does not exist is the driver: nothing in the toolkit
+   yet knows how to run a capture session against the real service, and writing it is
+   R0b's own first commit. The gate will let it through; there is nothing to ask
+   permission for.
+
+   *The duplication is resolved.* `dhbuild.py` and `buildid.py` were written the same
    afternoon by two sessions for the same job. Merged 2026-08-07, `dhbuild` surviving:
    it keeps selection, staging and the hostile-filename regression, and gains `buildid`'s
    exponent proof, `patch_state()` and `describe()`. Before deleting `buildid`, both

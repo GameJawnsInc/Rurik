@@ -39,12 +39,13 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
   the go-to test mode: the default loop is hand-driven against our own server, and live
   runs are for a capture campaign. The behavioural rule is the control that matters —
   human cadence, human hours, one client, never in a competitive context — because what
-  closes accounts is a traffic pattern no person could produce. **Preconditions in
-  `PLAN.md` §6.2 are met bar one 4 GB file copy**: the unpatched-DH build exists and is
-  reproducible (`make_custom_client.py --no-dh-patch`), but the run directory staged at
-  `vault/run-live/` is **incomplete** — its `Gw.dat` could not be copied while a client
-  held the source open, and the gate refuses an incomplete run directory. Close every
-  client, re-run `make_run_dir.py --live`, and A1 has a legal launch target.
+  closes accounts is a traffic pattern no person could produce — and no guard in this repo
+  can substitute for that one. **All five preconditions in `PLAN.md` §6.2 are met as of
+  2026-08-07**: the unpatched-DH build exists and is reproducible
+  (`make_custom_client.py --no-dh-patch`), and its run directory is assembled at
+  `vault/run-live/` and verified byte-identical to the source. What is missing is the
+  driver — no tool yet knows how to run a capture session — which is R0b's own first
+  commit, not a gate to be opened.
   **The launch rule is no longer "is it caged".** It is a binding, enforced from the
   bytes by `toolkit/clientpatch/dhbuild.py` and `cage.assert_launch_safe(exe, host)`: a
   client may only be launched at the server whose Diffie-Hellman exponent matches the
