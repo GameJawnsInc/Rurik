@@ -41,9 +41,12 @@ run. Only the final end-to-end confirmation needs the live service.
 ### A — Instrument the client, capture ciphertext in-process, decrypt offline
 
 The literal continuation of the chosen route. Key: a signature-anchored **duplicate-store**
-of `master_secret` to a BSS slot, read by `keytap.py` via `ReadProcessMemory` (idiom-
-preserving, no new code). Ciphertext: a second in-process tap at the socket send/recv
-boundary, duplicating each buffer out.
+of `master_secret` to a BSS slot, read by `keytap.py` via `ReadProcessMemory`. *(Correction,
+2026-08-07: adding a store is new code — a small code cave — not the zero-new-code in-place
+edit the DH/updater/mutex patches are. Recorded honestly rather than sold as free. The
+reader `keytap.py` is built and tested; the store-and-cave is the remaining work.)*
+Ciphertext: a second in-process tap at the socket send/recv boundary, duplicating each
+buffer out.
 
 The catch is the ciphertext *stream*. A session is many variable-length messages, both
 directions, possibly megabytes. Getting that out of the process is where the "no new code"
@@ -139,13 +142,17 @@ the key tap is already proven.
 The key tap is common to C, A, and A-file′, and it is the decision-independent piece worth
 building first — fully verifiable on loopback:
 
-1. Pin the store instruction to duplicate (`master_secret` at `0x007DC0CE`), pick the BSS
-   RVA in the `.data` slack, derive the byte signature; add the patch to
-   `make_custom_client.py` behind a flag and register its VA in `pinned.PATCHED_TEXT` /
-   `dhbuild.patch_state()`.
-2. `toolkit/harness/keytap.py`: `OpenProcess(PROCESS_VM_READ)` + `ReadProcessMemory`,
-   resolving the runtime base from the module list (ASLR is on). Test: read the 20 bytes
+1. ✅ **The reader is built.** `toolkit/harness/keytap.py`: `OpenProcess(PROCESS_VM_READ)` +
+   `ReadProcessMemory`, resolving the runtime base from the toolhelp module list because
+   ASLR is on. `test_keytap.py` proves the RPM machinery (round-trip, base resolution,
+   cross-process, clean unmapped-read failure) against processes this machine controls — no
+   game client needed. The remaining loopback check, once a tap exists: read the 20 bytes
    off a loopback session and require them to equal the `master_secret` we independently
-   derive — a check that can fail.
+   derive.
+2. **The tap itself** (remaining): pin the store instruction to duplicate (`master_secret`
+   at `0x007DC0CE`), pick the BSS RVA in the `.data` slack, cut the small code cave, derive
+   the byte signature; add the patch to `make_custom_client.py` behind a flag and register
+   its VA in `pinned.PATCHED_TEXT` / `dhbuild.patch_state()`.
 
-Only the ciphertext half differs by option, and only the final run is live.
+Only the ciphertext half differs by option (route C: an off-wire packet-capture backend,
+carve-out recorded in CLAUDE.md), and only the final run is live.

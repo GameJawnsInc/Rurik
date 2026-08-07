@@ -100,14 +100,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
 
 - Windows, PowerShell. `python …` lines work in any shell; `.ps1` needs a leading `&`.
 - **Python 3, standard library only.** No third-party dependencies anywhere in
-  `toolkit/`. Keep it that way — with one named carve-out, decided 2026-08-06:
-  **read-only client analysis may use `capstone` and `pefile`**, because there
-  is no reasonable stdlib x86 disassembler. It covers exactly
+  `toolkit/`. Keep it that way — with two named carve-outs.
+  **(1) 2026-08-06: read-only client analysis may use `capstone` and `pefile`**,
+  because there is no reasonable stdlib x86 disassembler. It covers exactly
   `toolkit/clientscan/msghandler.py` and `toolkit/clientscan/codescan.py`.
   Nothing on the server path, and no tool whose byte patterns are fixed
   (`asserts.py`, `msgshape.py`, `areatable.py`, `genericvalue.py`), may take
   the dependency — those must keep working on a bare machine. Prefer a stdlib
   checker for any *claim* even when a disassembler produced it.
+  **(2) 2026-08-07: the live-capture driver may use a packet-capture backend**
+  (WinDivert/`pydivert` or Npcap), because the outbound connection to ArenaNet
+  cannot be seen any other way — `rawlisten` is loopback-only, `tcptable` is
+  metadata-only, and the alternative was hooking the client (owner chose off-wire
+  capture, route C, `studies/livekey/CAPTURE.md`). It is scoped to the live driver
+  **only** — never the server path, never a bare-machine requirement, never a
+  test in the suite above. `keytap.py` (the key reader) is pure `ctypes` and takes
+  no dependency; only the ciphertext capture does. Pin the exact backend and its
+  licence in `PLAN.md` §6.1's derivation register before importing it.
 - Tests are plain scripts that print `[PASS]`/`[FAIL]` and exit non-zero. Run them
   before touching the game — a red test names the broken thing, the client says
   `Code=058` thirty seconds later and tells you nothing.
@@ -148,6 +157,9 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   assembled into the directory meant for the other kind),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
   refused),
+  `toolkit/harness/test_keytap.py` (the ReadProcessMemory key reader — RPM round-trip,
+  ASLR-correct module-base resolution, cross-process, and a clean failure on an unmapped
+  address; Windows-only, skips whole otherwise),
   `toolkit/test_origin.py` (whose server a capture came from, and that ours and
   ArenaNet's can never be pooled).
 
