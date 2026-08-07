@@ -287,10 +287,55 @@ beside the exe, but it **buffers and only flushes on exit** — a stuck client s
 
 ---
 
+## Capturing a live session (R0b), and its two elevated steps
+
+The live-capture driver records a real session against ArenaNet on the **secondary
+account** and turns its wire bytes into a decrypted, `origin: live`, byte-replayable
+capture. Every part is built and proven offline; two steps need an elevated shell and are
+deliberately not automated.
+
+**How it works.** The stock-DH live build (`vault/run-live/`) carries a **key-tap** cave
+(`make_custom_client.py --no-dh-patch --key-tap`) that copies the session's `master_secret`
+to a data slot as the handshake runs; `keytap.py` reads it back. The ciphertext is captured
+**off the wire** with WinDivert (`wirecapture.py`, SNIFF mode — it observes, never alters).
+`livesession.py` assembles the two: it splits the plaintext DH handshake off each direction
+and decrypts the rest, and `replay.py`/`scrub_captures.py` verify and redact. The launch is
+bound by `cage.assert_launch_safe` (stock→live, uncaged), the account by
+`accounts.for_automation` (the primary is refused), and the run is gated behind `--confirm`.
+
+**Elevated step 1 — load WinDivert, once.** The binaries live at
+`vault/tools/windivert/` (not in git; see its `PROVENANCE.txt` — WinDivert 2.2.2, official
+`basil00` release, kernel driver signed and owner-accepted). The **first** `WinDivertOpen`
+installs and starts a kernel service, which needs admin. From an **elevated** shell:
+
+```bash
+python toolkit/harness/wirecapture.py --pid <client> --server 127.0.0.1:6112 --seconds 20 --out C:\gd\Rurik\vault\captures\live\dryrun.jsonl
+```
+
+**Do the loopback dry-run before going live.** The whole pipeline — key-tap → off-wire
+capture → assemble → decrypt — runs against our own server first, where a wrong byte is
+caught against a key we already hold. Build a key-tapped **loopback** client, run the stack
+(`session.py --until login --keep-open`), and in an elevated shell capture its
+`127.0.0.1:6112` traffic with `wirecapture.py`; then `livesession.assemble` it with the key
+`keytap.py` reads and confirm it decrypts. This is the same flow the live run uses, minus
+the live launch, and it is how you prove the driver end to end without touching ArenaNet.
+
+**Elevated step 2 — the live run itself.** Only after the dry-run is green. Owner-driven,
+one client, human cadence, human hours, never in a competitive context (`PLAN.md` §6.1 —
+the traffic *pattern* is what closes accounts, and no gate substitutes for that):
+
+```bash
+python toolkit/harness/livesession.py --account capture --exe <run-live>\Gw.exe --host <auth ip> --confirm
+```
+
 ## Where the pieces live
 
 | Path | What it is |
 |---|---|
+| `toolkit/harness/livesession.py` | The live-capture driver: launch gate + account + key-tap + off-wire capture + decrypt + `origin: live` + scrub, behind `--confirm` |
+| `toolkit/harness/wirecapture.py` | Off-wire ciphertext capture (WinDivert SNIFF); the DH handshake is plaintext on the wire, the rest is ciphertext |
+| `toolkit/harness/keytap.py` | Reads the session key out of the running client (`ReadProcessMemory`, ASLR-correct) — what the code cave stashed |
+| `vault/tools/windivert/` | WinDivert 2.2.2 (gitignored, third-party). First `WinDivertOpen` needs admin |
 | `toolkit/portal/webgate.py` | Stage A, the portal (HTTP, 6601) |
 | `toolkit/authsrv/authsrv.py` | Stage B, auth + the encrypted channel (6112) |
 | `toolkit/portal/sessionstore.py` | Shared state between the two, plus the UUID wire encoding |

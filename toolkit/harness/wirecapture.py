@@ -191,17 +191,35 @@ class WinDivertError(SystemExit):
     nothing must say why, or a live run looks like it worked and produced an empty file."""
 
 
+def _windivert_dir():
+    """The vault home for the WinDivert binaries, if present. Kept out of the repo -- a
+    third-party binary never enters git, only the vault (see tools/windivert/PROVENANCE)."""
+    try:
+        import vaultpath
+        d = vaultpath.vault_path("tools", "windivert")
+    except (ImportError, SystemExit):
+        return None
+    return d if os.path.isfile(os.path.join(d, "WinDivert.dll")) else None
+
+
 def _load_windivert():
     import ctypes
     from ctypes import wintypes
+    d = _windivert_dir()
     try:
-        dll = ctypes.WinDLL("WinDivert.dll", use_last_error=True)
+        if d:
+            # so the loader finds WinDivert64.sys sitting next to the DLL, and any deps.
+            os.add_dll_directory(d)
+            dll = ctypes.WinDLL(os.path.join(d, "WinDivert.dll"), use_last_error=True)
+        else:
+            dll = ctypes.WinDLL("WinDivert.dll", use_last_error=True)
     except OSError:
         raise WinDivertError(
-            "WinDivert.dll not found. The off-wire capture needs it (CLAUDE.md carve-out,\n"
-            "PLAN.md §6.1). Put WinDivert.dll + WinDivert64.sys beside the client's run dir\n"
-            "or on PATH, and open the capture from an ELEVATED shell -- the first open loads\n"
-            "a kernel driver. Download: https://reqrypt.org/windivert.html (LGPLv3).")
+            "WinDivert.dll not loadable. The off-wire capture needs it (CLAUDE.md carve-out,\n"
+            "PLAN.md §6.1). Expected at vault/tools/windivert/ (WinDivert.dll +\n"
+            "WinDivert64.sys), and the first capture must run from an ELEVATED shell -- the\n"
+            "first WinDivertOpen loads a kernel driver. Source: the official\n"
+            "github.com/basil00/WinDivert release (LGPLv3).")
     dll.WinDivertOpen.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_int16,
                                   ctypes.c_uint64]
     dll.WinDivertOpen.restype = wintypes.HANDLE
