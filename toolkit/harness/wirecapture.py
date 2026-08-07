@@ -248,9 +248,11 @@ def capture_session(pid, server_ip, server_ports, out_path, seconds=0, clock=tim
     `seconds` elapses.
     """
     dll, ctypes, _ = _load_windivert()
-    conns = [c for c in tcptable.connections(pid)
-             if c["remote"].rsplit(":", 1)[0] == server_ip]
-    client = conns[0]["local"] if conns else f"pid{pid}"
+    # pid is optional: the filter is by endpoint, so a capture can start BEFORE the client
+    # connects (which is how a dry-run catches the handshake). pid only labels the metadata.
+    conns = ([c for c in tcptable.connections(pid)
+              if c["remote"].rsplit(":", 1)[0] == server_ip] if pid else [])
+    client = conns[0]["local"] if conns else (f"pid{pid}" if pid else "unknown")
     server = f"{server_ip}:{sorted(server_ports)[0]}"
 
     INVALID = ctypes.c_void_p(-1).value
@@ -292,7 +294,9 @@ def capture_session(pid, server_ip, server_ports, out_path, seconds=0, clock=tim
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--pid", type=int, required=True, help="the client process to follow")
+    ap.add_argument("--pid", type=int, default=0,
+                    help="the client process (optional; only labels the metadata -- the "
+                         "filter is by endpoint, so capture can start before it connects)")
     ap.add_argument("--server", required=True, help="server ip:port (the endpoint to sniff)")
     ap.add_argument("--ports", default="", help="extra server ports, comma-separated")
     ap.add_argument("--seconds", type=int, default=0, help="stop after N seconds (0 = until closed)")
