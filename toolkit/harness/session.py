@@ -42,16 +42,21 @@ import threading
 import time
 from ctypes import wintypes
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOOLKIT = os.path.dirname(HERE)
+sys.path.insert(0, HERE)
+sys.path.insert(0, TOOLKIT)
+# See drive_client.py for the whole story: `cage.py` is in clientpatch/, not
+# here. This module got away without the line only because it imports
+# drive_client one line before it imports cage and inherited the path that
+# module inserts -- an ordering accident that breaks the day the two swap.
+sys.path.insert(0, os.path.join(TOOLKIT, "clientpatch"))
 from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 from livecapture import CaptureTail, by  # noqa: E402
 import drive_client as dc  # noqa: E402
 import cage  # noqa: E402
 import accounts  # noqa: E402
-
-TOOLKIT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 # argtypes are not optional: a HANDLE truncated to a 32-bit int silently

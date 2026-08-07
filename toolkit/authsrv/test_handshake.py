@@ -24,11 +24,24 @@ build -- ArenaNet's stock DH, correct and wanted, PLAN.md §6.2 item 1 -- was
 written into that directory as `Gw.live.<tag>.exe`, and `l` sorts after `c`. The
 test silently switched to a binary that keys against ArenaNet and reported four
 failures and a short check count, every one of which reads as a crypto
-regression in code that had not been touched. Filename order is not a safety
-property, so selection now goes through `clientpatch/dhbuild.py`, which reads
-the DH struct and compares it against the vault's own key material. A wrong or
-missing artifact is refused BEFORE the server is spawned, with a message that
-says ARTIFACT rather than leaving four key-mismatch FAILs to be misread.
+regression in code that had not been touched.
+
+That directory is shared by every worktree on this machine -- `vaultpath`
+resolves to the main working tree, so a branch has code of its own but never a
+vault of its own -- which is why no amount of care on one branch could have
+prevented it, and why the fix has to be in what the code asks rather than in
+what anyone remembers. Selection goes through `clientpatch/dhbuild.py`: it reads
+the DH struct and requires the exe's prime and server public value to be the
+ones in the key file `authsrv` will load. `g` is deliberately not compared --
+generator 4 is ArenaNet's too, so every candidate agrees on it and it
+discriminates nothing. Candidates that are passed over are named and so is the
+reason. A wrong or missing artifact is refused BEFORE the server is spawned,
+with a message that says ARTIFACT rather than leaving four key-mismatch FAILs to
+be misread.
+
+The DH math below still reads (g, p, B) out of the executable, not out of the
+key file. Selection proves the two agree; the handshake still has to derive from
+what the binary actually carries, or the chain above stops being load-bearing.
 """
 
 import json
@@ -68,69 +81,58 @@ TEST_USER_ID = "E696B44C-04FC-DF92-9EE1-B0CC329B424A"
 TEST_TOKEN = "233B382E-3CD2-E5B6-7018-7F547D2760A7"
 
 
-def server_key_file():
-    """The key file authsrv.py will load, chosen by its rule, not by ours.
+def server_keys():
+    """The key file `authsrv.py` will load, chosen the way it chooses it.
 
-    `authsrv.load_keys` takes `sorted(rurik_dh_*.json)[-1]`. Reproducing that here is
-    what lets the pre-flight below compare the exe against the parameters the SERVER
-    will actually hold, rather than against any key file that happens to be present.
+    Mirrors `authsrv.load_keys(None)` rather than importing it, because importing
+    the server to ask it a question starts a server. If the two ever diverge the
+    final check in section 5 still catches it: that one compares the key both ends
+    actually derived, and it cannot be satisfied by agreeing about the wrong file.
     """
-    kd = vaultpath.vault_path("keys")
-    cands = sorted(f for f in os.listdir(kd) if f.startswith("rurik_dh_")) \
-        if os.path.isdir(kd) else []
-    return os.path.join(kd, cands[-1]) if cands else None
+    kd = vaultpath.require_dir("keys", why="the DH parameters both ends must share")
+    cands = sorted(f for f in os.listdir(kd) if f.startswith("rurik_dh_"))
+    if not cands:
+        raise SystemExit("no rurik_dh_*.json in vault/keys — "
+                         "run toolkit/clientpatch/make_custom_client.py first")
+    return json.load(open(os.path.join(kd, cands[-1]), encoding="utf-8"))
 
 
-# The floor is what a completed handshake session executes. MEASURED 2026-08-06: a
-# green run against a real authsrv on 6112 reports 17 checks, which is every check()
-# site in the file. The floor is 16 rather than 17 because exactly one section is
-# optional -- the unpatched-client negative control declares a skip when the vault holds
-# no stock build with different parameters -- so 16 is the mandatory core, which is what
-# checks.py asks a floor to be.
+# The floor is what a completed handshake session executes. MEASURED 2026-08-06:
+# a green run spawns its authsrv on 6112, completes the lifecycle and prints 17,
+# which is every check() site in the file. 16 of those are mandatory; the 17th is
+# the unpatched-client negative control, which declares a skip when the vault holds
+# no stock build with different parameters. So the floor is 16, the mandatory core.
 #
-# It was 13 until this measurement, a deliberate margin set by an agent that could not
-# start a server and counted the sites by reading. The margin cost more than it bought:
-# when the wrong artifact got selected the run fell to 8 checks and the banner said
-# "ONLY 8 OF A DECLARED FLOOR OF 13", which understates it -- eight of the sixteen
-# mandatory checks had not run.
+# It was 13 until that run -- the core minus a deliberate margin, because the
+# agent that added the ledger could not start a server and would not guess high.
+# The margin is what the comment asked to have removed once someone had a real
+# total, and it cost more than it bought twice over. 13 was three checks of slack
+# in the test that proves the whole channel: a run that lost the entire login burst
+# would still have cleared it. And when the wrong artifact WAS selected, the banner
+# read "ONLY 8 OF A DECLARED FLOOR OF 13", understating the damage -- eight of the
+# SIXTEEN mandatory checks had not run.
 LEDGER = checks.Ledger("handshake", floor=16)
 check = checks.adopt_named(LEDGER)
 
 
 def main():
-    # By parameters, never by name. dhbuild raises with the artifact listing if
-    # vault/client-patched/ holds no build carrying OUR parameters.
+    # By parameters, never by name -- and by the parameters the SERVER will load rather
+    # than merely "some key file of ours". `classify` alone answers `ours` for a build
+    # matching ANY rurik_dh_*.json, and with two in the vault the wrong one still derives
+    # a key authsrv cannot match; passing `match` requires agreement instead of assuming
+    # it. dhbuild prints every candidate it passes over and, if none qualifies, raises
+    # with the artifact listing BEFORE a server is spawned.
+    srv = server_keys()
     exe = dhbuild.select(dhbuild.OURS,
                          why="the Stage B handshake can only be verified against a "
-                             "client keyed to this server")
+                             "client keyed to this server",
+                         match=(srv["prime"], srv["server_public"]))
     kind, detail = dhbuild.classify(exe)
     print(f"patched client : {os.path.basename(exe)}")
     print(f"                 {kind} -- {detail}")
 
     g, p, B = dhbuild.read_params(exe)
     print(f"read from exe  : g={g}, prime {p.bit_length()} bits, B {B.bit_length()} bits")
-
-    # PRE-FLIGHT, before anything is spawned. The exe carries OUR parameters -- but the
-    # server loads ONE key file, `sorted(rurik_dh_*.json)[-1]`, and with more than one in
-    # the vault the exe can legitimately belong to a different one. That combination
-    # derives two different ARC4 keys and every downstream check fails in the shape of a
-    # crypto bug. Name it here instead, where the cause is still visible.
-    kf = server_key_file()
-    if kf is None:
-        raise SystemExit("no rurik_dh_*.json in vault/keys — the server has no private "
-                         "half to decrypt with. Run make_custom_client.py.")
-    with open(kf) as fh:
-        srv_keys = json.load(fh)
-    if (int(srv_keys["prime"]), int(srv_keys["server_public"])) != (p, B):
-        raise SystemExit(
-            f"WRONG ARTIFACT PAIR -- this is not a crypto failure.\n"
-            f"  client : {exe}\n"
-            f"  server : {kf}  (authsrv.py loads sorted(rurik_dh_*.json)[-1])\n"
-            f"  Both carry OUR parameters, but not the SAME ones, so the two ends would\n"
-            f"  derive different ARC4 keys and every check after step 3 would fail in the\n"
-            f"  shape of a crypto regression. Re-patch against this key file:\n"
-            f"      python toolkit/clientpatch/make_custom_client.py --keys \"{kf}\"")
-    print(f"server key file: {os.path.basename(kf)} (matches the exe)")
 
     # Keep the self-test's output out of the ground-truth vault. These used to
     # share vault/captures/authsrv/ and vault/state/sessions.json with real

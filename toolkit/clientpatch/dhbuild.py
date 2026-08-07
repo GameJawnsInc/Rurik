@@ -185,19 +185,51 @@ def inventory(directory):
     return out
 
 
-def select(kind, directory=None, why=""):
+def select(kind, directory=None, why="", match=None, verbose=True):
     """The newest build in `directory` carrying `kind`'s parameters. Raises, never guesses.
 
-    The message is the product here. A test that picks the wrong artifact and then reports
-    a key mismatch sends whoever reads it into gwcrypto.py, and that is where the last one
-    cost an afternoon -- so this says ARTIFACT in the first line and lists what it found.
+    `match` is an optional (prime, server_public) pair, for a caller that needs more than
+    the right KIND: it needs the build keyed to one specific key file. `classify` answers
+    "ours" for any build matching any `rurik_dh_*.json`, and with two of those in the
+    vault the wrong one still derives a key the server cannot match. `test_handshake.py`
+    passes the parameters `authsrv.load_keys` will actually load, so agreement is required
+    rather than assumed. `g` is deliberately not part of the comparison -- generator 4 is
+    ArenaNet's too, so every candidate on this machine agrees on it and it discriminates
+    nothing.
+
+    Rejected candidates are printed on the way past, not only on failure. A run that
+    quietly skipped a binary and tested a different one is how the original afternoon was
+    lost; saying which and why costs one line.
+
+    The message is the product here. A caller that picks the wrong artifact and then
+    reports a key mismatch sends whoever reads it into gwcrypto.py, so this says ARTIFACT
+    in the first line and lists every candidate with the reason it was passed over.
     """
     subdir, rule = WHERE[kind]
     directory = directory or vaultpath.vault_path(subdir)
     found = inventory(directory)
-    for path, k, _ in found:
-        if k == kind:
-            return path
+
+    chosen, rejected = None, []
+    for path, k, detail in found:
+        if k != kind:
+            rejected.append((path, f"{k} -- {detail}"))
+            continue
+        if match is not None:
+            _, p, B = read_params(path)
+            wrong = ([] if p == match[0] else ["prime"]) + \
+                    ([] if B == match[1] else ["server public value"])
+            if wrong:
+                rejected.append((path, f"{kind}, but its {' and '.join(wrong)} is not "
+                                       f"the one the server will load"))
+                continue
+        if chosen is None:
+            chosen = path
+
+    if verbose:
+        for path, reason in rejected:
+            print(f"  skipped      : {os.path.basename(path)}\n                 {reason}")
+    if chosen is not None:
+        return chosen
 
     whose = "OUR" if kind == OURS else "ArenaNet's stock"
     lines = [f"WRONG ARTIFACT -- this is not a crypto failure, so do not go reading "
@@ -208,6 +240,9 @@ def select(kind, directory=None, why=""):
         lines.append("  What is there:")
         for path, k, detail in found:
             lines.append(f"    {os.path.basename(path):44s} {k:8s} {detail}")
+        if match is not None:
+            lines.append("  ...and the caller additionally required the parameters the "
+                         "server will load.")
     else:
         lines.append("  The directory is empty or absent.")
     lines.append(f"  A {kind}-DH client is {rule}.")
@@ -218,6 +253,7 @@ def select(kind, directory=None, why=""):
     else:
         lines.append("  Build one:  python toolkit/clientpatch/make_custom_client.py "
                      "--no-dh-patch")
+    lines.append("  NOTHING WAS TESTED.")
     raise SystemExit("\n".join(lines))
 
 
