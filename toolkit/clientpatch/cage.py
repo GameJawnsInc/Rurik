@@ -279,7 +279,7 @@ def main():
     """
     import vaultpath
     roots = [("run", buildid.OURS, "CAGED"), ("run-live", buildid.STOCK, "UNCAGED")]
-    bad = found = 0
+    bad = found = unknown = 0
     for root, want_dh, want_state in roots:
         base = vaultpath.vault_path(root)
         if not os.path.isdir(base):
@@ -292,16 +292,33 @@ def main():
             found += 1
             b = buildid.describe(exe)
             state = cage_state(exe)
-            ok = b["dh"] == want_dh and state == want_state
-            bad += not ok
-            print(f"  [{'ok' if ok else '!!'}] {root}/{name}")
+            # "could not ask the firewall" is not "the firewall says no". Both are
+            # non-zero exits -- undeterminable is never permission -- but a report
+            # that calls them the same thing sends someone hunting a missing rule
+            # that is in fact present, which is a morning. Same reasoning as
+            # origin.py's third value.
+            if state is None:
+                mark, unknown = "??", unknown + 1
+            elif b["dh"] == want_dh and state == want_state:
+                mark = "ok"
+            else:
+                mark, bad = "!!", bad + 1
+            print(f"  [{mark}] {root}/{name}")
             print(f"       dh:    {b['dh']} (want {want_dh}) -- {b['dh_detail']}")
-            print(f"       cage:  {state} (want {want_state})")
+            print(f"       cage:  {state if state else 'UNDETERMINABLE'} "
+                  f"(want {want_state})")
             print(f"       patch: {b['patches']}")
     if not found:
         raise SystemExit(f"no Gw.exe under {vaultpath.vault_path('run')} or run-live")
-    print(f"\n{found} client(s), {bad} in the wrong state.")
-    return 1 if bad else 0
+    tail = f", {unknown} undeterminable" if unknown else ""
+    print(f"\n{found} client(s), {bad} in the wrong state{tail}.")
+    if unknown:
+        print("  Undeterminable means the firewall query did not answer, NOT that the\n"
+              "  cage is missing. It is transient often enough to be worth retrying\n"
+              "  before hunting a rule: MEASURED 2026-08-06, one detached run returned\n"
+              "  it for both clients while five consecutive foreground queries and a\n"
+              "  later detached one all read CAGED in 1.9s.")
+    return 1 if (bad or unknown) else 0
 
 
 if __name__ == "__main__":
