@@ -98,7 +98,27 @@ WHERE = {
 
 
 def read_params(exe):
-    """(g, p, B) as the client itself would read them. Raises if the struct is not there."""
+    """(g, p, B) as the client itself would read them. Raises if the struct is not there.
+
+    The accessor is found by a 10-byte signature, and a signature can match more than
+    once: the real client carries duplicate matches (make_custom_client's own locate()
+    notes it), and bytes an adversary controls -- a code cave, alignment padding -- can
+    carry a decoy. `pe.find` returns matches in ascending file offset, so taking hits[0]
+    blindly hands the whole ours/stock verdict to whichever copy sorts first, which is
+    the exact "filename order is not a safety property" mistake one layer down in the
+    bytes. classify() then compares the result to ArenaNet's parameters, and a decoy
+    pointing at those would file an OURS build as stock -- the launch gate's worst
+    single outcome (ours->live, uncaged; PLAN.md §6.2).
+
+    So do not trust position. Resolve EVERY match and keep only the ones whose struct
+    actually has this scheme's shape -- g == 4 over a 512-bit prime, 1 < B < p -- the
+    same gate make_custom_client.py applies before it will patch. Exactly one such match
+    is the answer; zero or several is undecidable from the bytes and is refused, never
+    guessed, the same fail-closed rule the rest of this module runs on. A garbage-pointed
+    decoy is skipped because it fails the shape gate; a decoy that reproduces the shape
+    is out of scope for a bytes-only reader and would need code-reference analysis, but
+    it can no longer win merely by sorting first.
+    """
     pe = PE(exe)
     hits = pe.find(SIG_KEYS, ".text")
     if not hits:
@@ -107,13 +127,32 @@ def read_params(exe):
             f"  The client was recompiled or the scheme changed. That is a real finding,\n"
             f"  not a tool bug -- re-derive the signature (toolkit/clientscan/dump_dh_params.py)\n"
             f"  before trusting any patching tool against this build.")
-    va = struct.unpack_from("<I", pe.data, hits[0] + SIG_KEYS_PTR_OFF)[0]
-    off = pe.rva_to_off(va - pe.image_base)
-    if off is None:
-        raise SystemExit(f"{exe}: DH struct VA 0x{va:08x} is not backed by file bytes")
-    return (int.from_bytes(pe.data[off + 4:off + 8], "little"),
-            int.from_bytes(pe.data[off + 8:off + 72], "little"),
-            int.from_bytes(pe.data[off + 72:off + 136], "little"))
+    shaped = []
+    for h in hits:
+        va = struct.unpack_from("<I", pe.data, h + SIG_KEYS_PTR_OFF)[0]
+        off = pe.rva_to_off(va - pe.image_base)
+        if off is None or off + 136 > len(pe.data):
+            continue
+        g = int.from_bytes(pe.data[off + 4:off + 8], "little")
+        p = int.from_bytes(pe.data[off + 8:off + 72], "little")
+        B = int.from_bytes(pe.data[off + 72:off + 136], "little")
+        if g == 4 and p.bit_length() == 512 and 1 < B < p:
+            shaped.append((va, (g, p, B)))
+    if not shaped:
+        raise SystemExit(
+            f"{exe}: {len(hits)} accessor signature(s) in .text, none pointing at a\n"
+            f"  struct shaped like this scheme (g=4, 512-bit prime, 1 < B < p). The\n"
+            f"  build changed or the signature now matches only decoy bytes -- a real\n"
+            f"  finding, not a tool bug. Re-derive with dump_dh_params.py before trusting\n"
+            f"  any patching or launch tool against this build.")
+    if len({va for va, _ in shaped}) > 1:
+        raise SystemExit(
+            f"{exe}: {len(shaped)} accessor signatures resolve to DIFFERENT DH-shaped\n"
+            f"  structs (VAs {', '.join('0x%08x' % va for va, _ in shaped)}). Which one\n"
+            f"  the client actually reads cannot be decided from the bytes alone, so this\n"
+            f"  is REFUSED rather than guessed -- picking one could file an OURS build as\n"
+            f"  stock and clear it for the live service. Investigate before launching.")
+    return shaped[0][1]
 
 
 def _ours_records():
@@ -270,8 +309,10 @@ def describe(exe, known=None):
         out["dh"], out["dh_detail"] = classify(exe, known)
     except SystemExit as exc:
         # classify() raises SystemExit through read_params when the accessor signature
-        # is missing -- a real finding, but not a verdict, and never a reason for a
-        # LAUNCH gate to exit the process out from under its caller.
+        # is missing, when no match points at a struct of this scheme's shape, or when
+        # several point at DIFFERENT shaped structs (undecidable from bytes) -- each a
+        # real finding, but not a verdict, and never a reason for a LAUNCH gate to exit
+        # the process out from under its caller. Left as `unknown`, which is refused.
         out["dh_detail"] = str(exc).splitlines()[0]
     except (OSError, ValueError) as exc:
         # Not a PE at all, or truncated. `unknown` is already the value in `out`, and

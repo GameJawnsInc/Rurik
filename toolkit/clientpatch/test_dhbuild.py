@@ -34,6 +34,7 @@ Read-only. Reads client binaries and key files out of the vault and launches not
 import json
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -46,15 +47,16 @@ import dhbuild  # noqa: E402
 import vaultpath  # noqa: E402
 
 # MEASURED, not guessed: a green run on 2026-08-07 with every fixture present reports
-# 29 checks -- 4 + 4 (sections 1-2), 6 (section 3), one per build on disk in section 4
-# (5 here), 5 (section 5), 5 (section 6).
+# 34 checks -- 4 + 4 (sections 1-2), 6 (section 3), one per build on disk in section 4
+# (5 here), 5 (section 5), 5 (section 6), 5 (section 7).
 #
-# The floor is 18: sections 1, 2, 5 and 6. Sections 1 and 2 need only a pristine client
-# and the vault's key files; section 5 is pure path arithmetic; section 6 builds its own
-# synthetic vault under RURIK_VAULT and depends on nothing on disk. None of the four can
-# be thinned by a machine's fixtures, so all four are the mandatory core.
+# The floor is 23: sections 1, 2, 5, 6 and 7. Sections 1 and 2 need only a pristine
+# client and the vault's key files; section 5 is pure path arithmetic; section 6 builds
+# its own synthetic vault under RURIK_VAULT; section 7 builds synthetic PE fixtures in a
+# tempdir. None of the five can be thinned by a machine's fixtures, so all five are the
+# mandatory core.
 #
-# It stays below 29 because the two richer sections are genuinely fixture-dependent
+# It stays below 34 because the two richer sections are genuinely fixture-dependent
 # and both declare skips: section 3 needs one build of EACH kind, and a machine that has
 # not built the live client yet is a legal state (it was this repo's state until
 # 2026-08-06), while section 4 counts whatever is on disk. checks.py asks a floor to be
@@ -64,7 +66,7 @@ import vaultpath  # noqa: E402
 # Section 3 is still outside the floor and that is a known weakness, not a decision this
 # comment is defending: it is the only section that proves the 2026-08-06 regression is
 # fixed, and a machine missing either build silently does not run it.
-LEDGER = checks.Ledger("dhbuild", floor=18)
+LEDGER = checks.Ledger("dhbuild", floor=23)
 
 
 def scratch_copy(src, dst):
@@ -78,6 +80,65 @@ def scratch_copy(src, dst):
     """
     shutil.copy2(src, dst)
     return dst
+
+
+def _dh_struct(g, p, B):
+    """The 136-byte pinned struct as read_params reads it: word0, g, p (64B), B (64B)."""
+    return (struct.pack("<I", 1) + struct.pack("<I", g)
+            + p.to_bytes(64, "little") + B.to_bytes(64, "little"))
+
+
+def _synth_pe(structs):
+    """A minimal PE32 gwpe.PE can parse, carrying one accessor signature per entry.
+
+    `structs` is a list; each entry is a 136-byte struct or None. For each, a SIG_KEYS
+    match is planted in .text followed by a VA (at +SIG_KEYS_PTR_OFF) pointing at that
+    struct in .rdata -- or an unbacked VA for None, the "decoy that resolves nowhere"
+    case. IDENTICAL structs share ONE address, because that is what a real duplicated
+    accessor does: the same function inlined twice carries the same immediate, so
+    read_params must treat same-VA duplicates as one answer and only refuse when the
+    matches disagree. Writing each copy to its own address would test a scenario the
+    binary never produces.
+    """
+    IB = 0x400000
+    text = bytearray(b"\x90" * 0x400)
+    rdata = bytearray(0x800)
+    cur, rcur, placed = 0x10, 0x10, {}
+    for st in structs:
+        text[cur:cur + len(dhbuild.SIG_KEYS)] = dhbuild.SIG_KEYS
+        if st is None:
+            va = 0                                   # not backed by any section
+        elif bytes(st) in placed:
+            va = placed[bytes(st)]                    # real duplicate -> same VA
+        else:
+            rdata[rcur:rcur + len(st)] = st
+            va = IB + 0x2000 + rcur
+            placed[bytes(st)] = va
+            rcur += len(st) + 8
+        off = cur + dhbuild.SIG_KEYS_PTR_OFF
+        text[off:off + 4] = struct.pack("<I", va)
+        cur += 0x40
+    e, opt = 0x80, 0xE0
+    hdr = bytearray(0x400)
+    hdr[0:2] = b"MZ"
+    struct.pack_into("<I", hdr, 0x3C, e)
+    hdr[e:e + 4] = b"PE\x00\x00"
+    struct.pack_into("<H", hdr, e + 4, 0x14C)        # x86
+    struct.pack_into("<H", hdr, e + 6, 2)            # 2 sections
+    struct.pack_into("<H", hdr, e + 20, opt)
+    struct.pack_into("<H", hdr, e + 24, 0x10B)       # PE32
+    struct.pack_into("<I", hdr, e + 52, IB)          # image base
+    base = e + 24 + opt
+    for i, (name, va, vs, rp, rs) in enumerate(
+            [(".text", 0x1000, 0x400, 0x400, 0x400),
+             (".rdata", 0x2000, 0x800, 0x800, 0x800)]):
+        o = base + i * 40
+        hdr[o:o + 8] = name.encode().ljust(8, b"\0")
+        struct.pack_into("<I", hdr, o + 8, vs)
+        struct.pack_into("<I", hdr, o + 12, va)
+        struct.pack_into("<I", hdr, o + 16, rs)
+        struct.pack_into("<I", hdr, o + 20, rp)
+    return bytes(hdr) + bytes(text) + bytes(rdata)
 
 
 def main():
@@ -294,6 +355,55 @@ def main():
                       "every refusal is reported, so a bad key file is never silent",
                       f"{len(got['faults'])} faults: a build keyed to one of these drops "
                       f"to `unknown`, and the launch gate then blames the BINARY")
+
+    # ---- 7. the accessor is chosen by shape, not by file position --------------
+    # The signature can match more than once -- the real client duplicates it, and bytes
+    # an adversary or an accident controls (a code cave, alignment padding) can carry a
+    # decoy. read_params used to take the FIRST match (pe.find returns them in ascending
+    # file offset), so a decoy sorting ahead of the real accessor and pointing at
+    # ArenaNet's own parameters would make an OURS build read as stock -- and the launch
+    # gate clears stock for the live service, uncaged, which is PLAN.md §6.2's
+    # account-ending case reached through the classifier. The fix keeps only matches
+    # whose struct has this scheme's shape (g=4, 512-bit prime, 1 < B < p) and refuses
+    # when that is not exactly one. Synthetic PEs, so no vault fixture is needed and the
+    # section is mandatory core. "Filename order is not a safety property" -- one layer
+    # further down, in the bytes.
+    print("\n7. a decoy accessor cannot win by sorting first")
+    g, p = 4, (1 << 511) | (1 << 270) | 0x1234567 | 1
+    while p.bit_length() != 512:
+        p |= (1 << 511)
+    B = pow(g, 987654321, p)
+    real = _dh_struct(g, p, B)
+    bad_shape = _dh_struct(0, p, B)                       # g != 4, fails the shape gate
+    p2 = (1 << 511) | (1 << 300) | 0x55 | 1
+    while p2.bit_length() != 512:
+        p2 |= (1 << 511)
+    other = _dh_struct(g, p2, pow(g, 111, p2))            # a DIFFERENT valid struct
+
+    def reads_to(structs):
+        with tempfile.NamedTemporaryFile(suffix=".exe", delete=False) as fh:
+            fh.write(_synth_pe(structs))
+            path = fh.name
+        try:
+            return ("ok", dhbuild.read_params(path))
+        except SystemExit as exc:
+            return ("refused", str(exc).splitlines()[0])
+        finally:
+            os.unlink(path)
+
+    LEDGER.ok(reads_to([real]) == ("ok", (g, p, B)),
+              "a single well-formed accessor reads back its parameters")
+    LEDGER.ok(reads_to([bad_shape, real]) == ("ok", (g, p, B)),
+              "a shape-failing decoy sorted FIRST is skipped for the real accessor",
+              "this is the misclassification the fix closes")
+    LEDGER.ok(reads_to([None, real]) == ("ok", (g, p, B)),
+              "a decoy whose VA resolves nowhere, sorted first, is likewise skipped")
+    LEDGER.ok(reads_to([real, real]) == ("ok", (g, p, B)),
+              "a genuine duplicate (same VA twice) is one answer, not a conflict",
+              "the real client carries duplicate matches; this must not regress")
+    LEDGER.ok(reads_to([real, other])[0] == "refused",
+              "two DIFFERENT DH-shaped structs are undecidable from bytes and REFUSED",
+              "picking one could file an ours build as stock and clear it for live")
 
     return LEDGER.verdict()
 
