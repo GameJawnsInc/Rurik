@@ -25,10 +25,10 @@ sys.path.insert(0, os.path.join(HERE, "authsrv"))
 import checks  # noqa: E402
 import content  # noqa: E402
 
-# 4 load + 5 migration + 7 refusal + 3 overlay + 2 shape = 21, measured from a
+# 4 load + 5 migration + 8 refusal + 3 overlay + 2 shape = 22, measured from a
 # real green run. Every section runs unconditionally; nothing here is fixture-dependent
 # beyond content/ itself, which is tracked.
-LEDGER = checks.Ledger("content store", floor=21)
+LEDGER = checks.Ledger("content store", floor=22)
 
 
 def write(dirpath, name, text):
@@ -66,7 +66,8 @@ def main():
     unlicensed = [(k, key) for k in world.tables
                   for key, r in world.rows(k).items()
                   if r.provenance["source"] in content.UNLICENSED]
-    LEDGER.ok(all(str(world.get(k, key).provenance.get("verified") or "").strip()
+    LEDGER.ok(all(isinstance(world.get(k, key).provenance.get("verified"), str)
+                  and world.get(k, key).provenance["verified"].strip()
                   for k, key in unlicensed),
               "every row citing an unlicensed upstream records what we verified",
               f"{len(unlicensed)} such row(s)")
@@ -121,6 +122,19 @@ def main():
         ok = content.load(repo_dir=tmp, vault_dir="")
     LEDGER.ok(ok.get("thing", "a")["value"] == 1,
               "the same row WITH a verification loads normally")
+
+    # --- REFUSAL 3b: `verified` must be descriptive text, not a bare truthy value --
+    # `verified = true` is the authoring slip that most defeats the rule's purpose:
+    # it looks like "yes, verified" while recording NOTHING about what was checked,
+    # which is the entire thing the field exists to force. A truthiness test passed
+    # it -- str(True or "").strip() is "True", non-empty -- so a boolean, or a number,
+    # loaded as if it were a real verification. Only non-empty text counts now.
+    msg = refuses('[thing.a]\nvalue = 1\n[thing.a.provenance]\n'
+                  'source = "gw-preservation"\nverified = true\n',
+                  "verified = true")
+    LEDGER.ok(msg is not None,
+              "an unlicensed row whose `verified` is a bare `true` is REFUSED",
+              "a boolean records nothing about what was checked")
 
     # --- an empty store is refused, not defaulted ----------------------------
     with tempfile.TemporaryDirectory() as tmp:
