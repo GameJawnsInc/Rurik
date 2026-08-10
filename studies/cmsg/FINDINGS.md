@@ -190,14 +190,110 @@ start it.
 
 ---
 
+## 3b. Run 2 — the town script, 2026-08-10
+
+Capture `gamesrv/authsrv-20260810T160945-c1.jsonl`. Ascalon City tape `:60935`, truncated
+before its handoff ([../tape/FINDINGS.md](../tape/FINDINGS.md) T8), then 14 prompted steps.
+Movement was dead again, which cost two steps and gave a result the working case could not.
+
+**Grading, stated before the findings.** `idle_a` is **dirty**: 2 messages, `0x003D` and
+`0x0047`. The operator confirms an accidental movement, and the timing bounds it — both
+land at **+0.0 s and +0.1 s of a 12 s window**, continuing a turn that began at t=54.0 s,
+*before* the mark at t=54.5 s. `idle_b` is spotless after a dozen actions, which is the
+control that shows the clock never drifted. So: **step 1's own result (the idle floor) is
+void; steps 3–12 are unaffected**, because the contamination is confined to 0.1 s at the
+very start and touches no other window. That judgement is the reason `report` now prints
+*when* contamination landed.
+
+Two steps produced nothing usable and both are the same cause: the operator could not
+walk, so `merchant` never reached a merchant (it recorded movement attempts instead) and
+`camera` — see C11 — is the one that mattered.
+
+### C9 — `0x0039` is INTERACT, and `0x0026` is ATTACK. C4 SETTLED.
+
+```
+target_npc     ->  0x00C1 [45]   then  0x0039 [32825, 45, 0]
+interact_npc   ->  0x0039 [32825, 45, 0]  x3
+target_player  ->  0x00C1 [499]        and NOTHING ELSE
+```
+
+Clicking an **NPC** sends target-select *and* `0x0039`. Clicking a **player** sends
+target-select alone. The combat run's attack on a hostile sent `0x0026`, not `0x0039`.
+
+Three allegiances, three behaviours, two distinct opcodes — so `0x0026` is **attack
+specifically**, and C4's open question is closed. This is what the town script existed to
+ask, and it is the one thing it delivered cleanly.
+
+`0x00C1` is now CORROBORATED across worm, NPC and player: it is target-select and nothing
+more, exactly as C3 predicted.
+
+### C10 — `0x0064` field 1 is the current target, and plain chat has none. Answers C2.
+
+Six samples across both runs:
+
+| typed | field 1 | text sent |
+|---|---|---|
+| `rurik one` | **0** | `"!rurik one"` |
+| `rurik two` | **0** | `"!rurik two"` |
+| `/dance` (run 1) | 284 | `"/dance"` |
+| `/dance` (run 2) | 499 | `"/dance"` |
+| `/sit` | 499 | `"/sit"` |
+| `/me waves` | 499 | `"/me waves"` |
+
+499 is the player targeted two steps earlier; 284 was run 1's targeted worm. **Plain chat
+carries 0; every slash command carries the current target.** That is the field C2 said not
+to build on, and it now has a consistent reading across two sessions, two maps and three
+target allegiances. RECONSTRUCTION — six samples, no counterexample.
+
+`/sit` and `/dance` are byte-identical in shape, so a persistent emote is not distinguished
+on the wire. Emotes really are just chat lines.
+
+### C11 — C7 IS REFUTED. The camera is client-side after all.
+
+The `camera` step sent **nothing**. Run 1's sent ten messages, and C7 concluded from that
+one run that camera rotation reaches the server.
+
+What run 2 shows is where `0x0040` actually comes from: it appears **only in `merchant`
+and `gateway`** — the two windows where the operator was trying to *walk* — and in both it
+arrives sandwiched between `0x003D` heading updates and `0x0047` move-cancel, with the same
+pair of values each time (`inf, 1.0` then `-3.0183, 1.0`).
+
+So `0x0040` is **movement-related, not camera**, and run 1's camera step must have carried
+movement input alongside the rotation. A refutation seen once in one map was a fact about
+one map — which is exactly why the town script re-predicted TRAFFIC and asked again.
+
+**C6 stands and is reconfirmed**: the fields are floats, the second is exactly 1.0, the
+first reaches ±inf. Ten more samples, same shape. The schema still types them as dwords.
+
+### C12 — `0x003D`'s last field is NOT a direction index. TESTED AND REFUTED.
+
+Inside the `gateway` window the trailing small integer looked like a clean eight-way
+compass — 11 consecutive samples where each value sat in its own arc. Across **all 26
+samples in both runs it collapses**: value `1` spans 0.0°–359.1°, value `2` spans
+24.6°–354.4°.
+
+Recorded so it is not re-derived. Whatever that field is, it is not the absolute heading,
+and a hypothesis that survives one window is not a finding.
+
+---
+
 ## 4. The count
 
-Before this run, **15** `GAME_CMSG` opcodes had ever been witnessed from a real client.
-This run adds **five**: `0x0028`, `0x0032`, `0x0040`, `0x004F`, `0x0064`. Of the 20 now witnessed, this file names **six with evidence** (C1–C6) and
-leaves the rest witnessed-but-unexplained.
+| | witnessed | added |
+|---|---|---|
+| before 2026-08-10 | 15 | — |
+| after the combat run | 20 | `0x0028` `0x0032` `0x0040` `0x004F` `0x0064` |
+| after the town run | **23** | `0x0039` `0x0092` `0x0093` |
 
-194 opcodes have layouts. 20 have been seen. That ratio is the argument for running this
-again.
+`0x0092` and `0x0093` arrived during the instance load rather than from a prompted
+action, so they are witnessed and unlabelled.
+
+Named with evidence: **C1** `0x0046` skill id · **C3** `0x00C1` target-select ·
+**C4/C9** `0x0026` attack vs `0x0039` interact · **C5** `0x003D` heading ·
+**C6** `0x0040` floats · **C10** `0x0064` chat text + target.
+
+194 opcodes have layouts. 23 have been seen and 7 are named. That ratio is the argument
+for running this again — the two runs cost about twelve minutes of play between them.
 
 ---
 

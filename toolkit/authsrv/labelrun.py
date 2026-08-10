@@ -468,10 +468,21 @@ def report(segments, before, say=print):
         say("\nCONTROL FAILURE -- traffic in a window where the operator was told to do "
             "NOTHING:")
         for key, n, ops in failures:
+            seg = next(s for s in segments if s["step"]["key"] == key)
+            offs = [r.get("t", 0.0) - seg["step"].get("t", 0.0)
+                    for r in seg["messages"]
+                    if (int(r.get("opcode", -1)) & ~CMSG_MASK) != KEEPALIVE]
+            span = f"+{min(offs):.1f}s to +{max(offs):.1f}s of a " \
+                   f"{seg['step'].get('seconds', 0):.0f}s window" if offs else ""
             say(f"   {key}: {n} message(s)  {ops}")
+            say(f"      when: {span}")
         say("   Either they did not sit still, or the marks and the messages disagree.\n"
-            "   Do not name an opcode from this run: every attribution in it is only as\n"
-            "   good as these windows.")
+            "   WHERE it landed decides how much is lost. Traffic in the first moment\n"
+            "   of a window is usually an action from BEFORE the mark still settling,\n"
+            "   and it says nothing about later steps; traffic spread across the whole\n"
+            "   window means the operator was active and the clock cannot be trusted.\n"
+            "   Judge it, and say which you concluded -- do not name an opcode from a\n"
+            "   run you have not looked at this way.")
     else:
         say("\nControls clean: both idle windows silent. Attributions in this run stand.")
     if refuted:
