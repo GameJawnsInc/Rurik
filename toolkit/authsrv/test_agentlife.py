@@ -119,13 +119,13 @@ def main():
     print("\n5. the probe that settles what the client does with a removal")
     LEDGER.ok("agent_removal" in probes.PROBES,
               "an agent_removal probe is registered")
-    p = probes.PROBES["agent_removal"](1, (100.0, 200.0))
+    p = probes.PROBES["agent_removal"](1, (100.0, 200.0, 0))
     LEDGER.ok(bool(p.question) and bool(p.predicts),
               "and it states a question AND a prediction before it runs",
               "a probe with no stated expectation can be rationalised into "
               "agreeing with anything afterwards")
-    LEDGER.ok([s.opcode for s in p.steps] == [0x0021, 0x0020],
-              "its steps remove the hostile and then re-create it under the SAME id",
+    LEDGER.ok([s.opcode for s in p.steps] == [0x0021, 0x0056, 0x0057, 0x0020, 0x0020],
+              "its steps remove, then re-create with the FULL spawn burst, then control",
               str([hex(s.opcode) for s in p.steps]))
 
     # ---- 6. the desync close ---------------------------------------------------
