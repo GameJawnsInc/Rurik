@@ -1233,10 +1233,36 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
                 print(f"[c{conn_id}] tape {i}/{len(events)} "
                       f"({time.monotonic() - t0:.1f}s)", flush=True)
     except (ConnectionError, OSError) as ex:
-        # The client dropped, or asserted and took the socket with it. That is a
-        # RESULT for this experiment, not a crash to swallow silently.
-        print(f"[c{conn_id}] tape ended at event {sent}/{len(events)} "
+        # The client dropped, or asserted and took the socket with it. That is THE
+        # RESULT of this experiment, not a crash to swallow -- so say exactly what
+        # was in flight when it happened. The client's own assert names a source
+        # file and line; this names the bytes that provoked it, and the pair is
+        # what turns a crash into a finding.
+        #
+        # OBSERVED 2026-08-10: the client died at event 739/1209, t=22.4s, and the
+        # two events either side of that were the largest in the neighbourhood --
+        # 229B and 209B carrying WORLD_CREATE_AGENT plus equipment and property
+        # updates, i.e. another player zoning into the outpost. Without this
+        # readout that had to be reconstructed afterwards from the tape by hand.
+        print(f"\n[c{conn_id}] TAPE ENDED at event {sent}/{len(events)} "
               f"after {time.monotonic() - t0:.1f}s: {type(ex).__name__}: {ex}",
+              flush=True)
+        lo = max(0, sent - 3)
+        print(f"[c{conn_id}] what was in flight (the client asserts on one of these):",
+              flush=True)
+        for j in range(lo, min(sent + 2, len(events))):
+            et, eb = events[j]
+            try:
+                msgs, _c, _e = codec.decode_stream("GAME_SMSG", eb)
+                ops = " ".join(f"0x{op:04x}" for op, _v in msgs[:10])
+                more = "..." if len(msgs) > 10 else ""
+            except Exception:
+                ops, more = eb[:12].hex(" "), " (undecodable)"
+            flag = "  <<< LAST SENT" if j == sent - 1 else ""
+            print(f"[c{conn_id}]   ev{j} t={et:.2f}s {len(eb)}B  {ops}{more}{flag}",
+                  flush=True)
+        print(f"[c{conn_id}] re-run with --tape-speed 0.25 to spread these out, or "
+              f"copy the client's Assertion line -- it names the source file.",
               flush=True)
         return
     print(f"[c{conn_id}] tape complete: {sent}/{len(events)} events in "
