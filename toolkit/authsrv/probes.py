@@ -33,7 +33,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agents import (                                        # noqa: E402
     AGENT_KIND_NPC, AGENT_KIND_PLAYER, AGENT_TYPE_LIVING, APPEARANCE_WARRIOR,
     CHAR_CLASS_MONSTER_BASE, CHAR_CLASS_PLAYER_BASE, DEFAULT_RUN_SPEED,
-    EFFECT_DEAD, HATCHER, INF, create_agent, npc_model, npc_properties)
+    EFFECT_DEAD, HATCHER, INF, WORLD, create_agent, npc_model, npc_properties)
+
+# The hostile the normal map load spawns. Read from content, the same row
+# authsrv.py reads, so the removal probe cannot drift from what is in the world.
+ENEMY_AGENT_ID = WORLD.get("spawn", "test_enemy")["agent_id"]
 
 # Agent int-property ids (GmAgentProperties.h via studies/character/FINDINGS.md).
 PROP_LEVEL = 36
@@ -96,6 +100,32 @@ class Probe:
         self.predicts = predicts
         self.steps = steps
         self.note = note
+
+
+def _agent_removal_steps(agent_id, origin):
+    """WORLD_REMOVE_AGENT (0x0021), and then the id reuse it is supposed to unlock.
+
+    The hostile is spawned by the normal map load, so this probe removes THAT
+    agent rather than making one: the interesting question is what the client does
+    with an object it is already drawing, tracking and possibly targeting.
+    """
+    hatcher = HATCHER
+    x, y = (origin[0] + 300.0, origin[1]) if origin else (0.0, 0.0)
+    return [
+        Step(3.0, 0x0021, [ENEMY_AGENT_ID], "REMOVE the hostile",
+             "the hostile. Does it vanish cleanly -- no corpse, no nameplate, no "
+             "health bar? If you had it TARGETED, does the target frame clear or "
+             "does the UI keep a dead reference?"),
+        Step(6.0, 0x0020,
+             create_agent(ENEMY_AGENT_ID,
+                          npc_model(CHAR_CLASS_MONSTER_BASE, hatcher),
+                          AGENT_KIND_NPC, x, y, 0,
+                          speed=DEFAULT_RUN_SPEED),
+             "RE-CREATE it under the SAME id",
+             "the same spot, 300 units east. Does a fresh, healthy hostile appear? "
+             "This is the id reuse the removal is supposed to make safe -- 301 of "
+             "301 live re-creations were preceded by a removal of that id."),
+    ]
 
 
 def _level_steps(agent_id):
@@ -1464,6 +1494,30 @@ def _prop66_sweep_steps(agent_id):
 
 
 PROBES = {
+    "agent_removal": lambda a, o: Probe(
+        question="Does GAME_SMSG 0x0021 remove an agent the client is already "
+                 "drawing, and is its id then safe to reuse?",
+        predicts="The hostile vanishes cleanly on step 1 -- no corpse, no "
+                 "nameplate -- because 0x005FD2F0 walks the agent's bound objects "
+                 "and clears them rather than just hiding a model. Step 2 then "
+                 "shows a fresh healthy hostile at the SAME id. The informative "
+                 "failure is step 1 leaving a ghost (nameplate, health bar or a "
+                 "target frame that will not clear), which would mean removal is "
+                 "necessary but not sufficient and something else must precede "
+                 "it. If step 2 asserts or draws nothing, id reuse needs more "
+                 "than a removal and our respawn cannot use it.",
+        steps=_agent_removal_steps(a, o),
+        note="UNRUN. Implements studies/divergence/FINDINGS.md D1, the highest-"
+             "ranked protocol gap from the first live capture: ArenaNet sent "
+             "0x0021 416 times, we have sent it 0 times in 271,449 messages, and "
+             "301 of 301 live id re-creations were preceded by a removal of that "
+             "id. TARGET THE HOSTILE BEFORE RUNNING and watch the target frame -- "
+             "that is the case most likely to expose a stale reference, and it is "
+             "not visible if you only watch the model. This probe deliberately "
+             "does NOT touch the death/revive path: that behaviour is measured "
+             "and works, and swapping it for remove-then-recreate is a separate "
+             "decision that needs this probe's answer first.",
+    ),
     "cast_modifier_order": lambda a, o: Probe(
         question="Must the cast-time modifier (property 61) be sent AFTER the "
                  "cast-start property (60) rather than before it?",

@@ -182,6 +182,31 @@ GAME_SMSG_INSTANCE_LOAD_FINISH = 0x018E
 GAME_SMSG_WORLD_SIMULATION_TICK = 0x001E
 GAME_SMSG_WORLD_UPDATE_LOAD_TIME = 0x001F
 GAME_SMSG_WORLD_CREATE_AGENT = 0x0020
+
+# The counterpart, and until 2026-08-07 we could create an agent and never destroy
+# one. 6 bytes: header + the agent id to remove.
+#
+# OBSERVED from the first live capture (studies/divergence/FINDINGS.md D1):
+# ArenaNet sent it 416 times across four in-world instances; our server has sent
+# it 0 times in 271,449 recorded s2c messages. The dword is a previously-created
+# agent id in 416 of 416 cases keyed on WORLD_CREATE_AGENT's field 0, and in only
+# 3 of 416 keyed on field 1 -- a split no framing accident produces. Forcing other
+# sizes breaks the stream: at 2 bytes only 54,411 of 190,544 GAME_SMSG bytes
+# frame, at 10 bytes 63,911, at the catalogued 6 all 190,544.
+#
+# CORROBORATED by the client's own binary rather than by our schema alone:
+# `msgshape` reads the RECV table at 0x00a52d70 as opcode 0x0021 -> handler
+# 0x005FD2F0, one u32 field, 6 bytes on the wire, and `asserts.py --at 0x005fd2f0`
+# names `Array:587 "index < m_count"` -- the client bounds-checks the dword as an
+# index into its agent array, then walks every object bound to that agent and
+# clears the bindings. That is a teardown handler, read out of the client, not
+# inferred from a name.
+#
+# WHY IT MATTERS BEYOND TIDINESS: ArenaNet REUSES agent ids, and removal is the
+# prerequisite. OBSERVED: 301 of 301 id re-creations in the live capture are
+# preceded by a removal of that same id, and 0 of 416 removals target a
+# never-created id or double-remove without an intervening create.
+GAME_SMSG_WORLD_REMOVE_AGENT = 0x0021
 GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT = 0x0022
 GAME_SMSG_PLAYER_CREATE = 0x0059
 GAME_SMSG_PLAYER_UPDATE_PROFESSION = 0x00B7
@@ -930,7 +955,17 @@ def revive_due(send, state, conn_id):
     at 0x008183F0 where the effects setter does `fldz` into the pools.
     """
     now = time.time()
-    for agent_id, agent in state.get("agents", {}).items():
+    # Iterate a SNAPSHOT. This walked the live dict, which was safe only while
+    # nothing could ever remove an agent -- and remove_agent now can. This runs on
+    # the world-tick thread, so a removal from any other thread mid-walk would
+    # raise "dictionary changed size during iteration" inside the tick, killing the
+    # world loop for the rest of the session with a traceback nowhere near the
+    # cause. The snapshot costs one list of a handful of agents per tick.
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        # And re-check membership: an agent removed after the snapshot was taken
+        # must not be revived back into a world it has already left.
+        if agent_id not in state.get("agents", {}):
+            continue
         if not agent["dead"] or now - agent["died_at"] < REVIVE_AFTER:
             continue
         agent["dead"] = False
@@ -956,6 +991,79 @@ def revive_due(send, state, conn_id):
              f"refill bar on agent {agent_id}")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)
+
+
+def frame_pending(codec_obj, channel, pending, mask):
+    """(messages, remaining, desync) for one buffer. `desync` is None or the reason.
+
+    Extracted from the receive loop so the POLICY is testable without a socket, a
+    handshake or a client. It was inline, which meant the fix below had no test
+    covering it: the suite asserted what codec.decode_stream does, not what this
+    server does with the answer, and those are different questions -- the whole
+    defect was that the answer was correct and the caller mishandled it.
+
+    THE CONTRACT, and each clause is a thing the old code got wrong:
+
+      * whole messages are returned and their bytes consumed;
+      * an INCOMPLETE trailing message is not an error. It is the normal case --
+        a TCP read is not a message boundary -- and its bytes stay in `remaining`
+        to be completed by the next read;
+      * an UNFRAMEABLE message sets `desync` and leaves its bytes in `remaining`
+        UNTOUCHED. The old code set `pending = b""` here, which reads like
+        recovery and is not: with no length prefix nothing knows where the bad
+        message ended, so every later read was framed from a non-boundary while
+        ARC4 kept decrypting correctly and the bytes kept looking plausible.
+        Returning them unconsumed is what lets the caller report exactly what it
+        choked on instead of guessing past it.
+    """
+    msgs, consumed, err = codec_obj.decode_stream(channel, pending, mask=mask)
+    remaining = pending[consumed:]
+    if err and "incomplete" not in err:
+        return msgs, remaining, err
+    return msgs, remaining, None
+
+
+class AgentLifetimeError(Exception):
+    """A removal that the live capture proves ArenaNet never performs."""
+
+
+def remove_agent(send, state, agent_id, why, conn_id=None):
+    """Take an agent out of the world, and free its id for reuse.
+
+    The world state is the point, not the send. `state["agents"]` was a dict that
+    only ever grew: entries were added at spawn and nothing removed them, so the
+    server had no concept of an agent ceasing to exist and an id could never be
+    reused without the client holding a stale object under it.
+
+    TWO REFUSALS, both taken from what the live capture shows ArenaNet never does
+    (studies/divergence/FINDINGS.md D1) rather than from taste:
+
+      * removing an id that was never created -- 0 of 416 live;
+      * removing an id that is already removed, with no create in between --
+        0 of 416 live.
+
+    Both raise rather than sending. The client bounds-checks the dword as an index
+    into its agent array (`Array:587 "index < m_count"` at 0x005FD2F0), so a bad id
+    is an assert on the client, in its own process, thirty seconds later and
+    nowhere near the cause. Refusing here keeps the failure where the bug is.
+
+    Returns the removed bookkeeping entry, so a caller respawning the same id can
+    carry forward what it needs.
+    """
+    live = state.setdefault("agents", {})
+    if agent_id not in live:
+        raise AgentLifetimeError(
+            f"refusing to remove agent {agent_id}: it is not in the world. "
+            f"live ids: {sorted(live)}. ArenaNet removed a never-created id "
+            f"0 times in 416 -- and the client bounds-checks this dword.")
+    entry = live.pop(agent_id)
+    state.setdefault("removed_agents", []).append(agent_id)
+    send(GAME_SMSG_WORLD_REMOVE_AGENT, [agent_id],
+         f"WORLD_REMOVE_AGENT({agent_id}) — {why}")
+    if conn_id is not None:
+        print(f"[c{conn_id}] removed agent {agent_id} "
+              f"({entry.get('name', '?')}) — {why}", flush=True)
+    return entry
 
 
 def send_attack_speed(send, agent_id, base, what):
@@ -1559,6 +1667,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         sock.settimeout(1.0)
         total = 0
         pending = b""          # decrypted bytes not yet framed into whole messages
+        desynced = False       # set when an unframeable opcode ends the connection
         last = time.time()
         while not stop.is_set():
             try:
@@ -1582,9 +1691,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # catalog self-selects: run a second instance on 6113 and it decodes
             # the game channel with no extra flag. GAME_CMSG_MASK is also 0x8000,
             # so the framing is identical -- only the catalog differs.
-            msgs, consumed, err = codec.decode_stream(
-                cmsg, pending, mask=AUTH_CMSG_MASK)
-            pending = pending[consumed:]
+            msgs, pending, desync_err = frame_pending(
+                codec, cmsg, pending, AUTH_CMSG_MASK)
 
             for opcode, values in msgs:
                 # No semantic names exist for GAME_CMSG in this repo yet; the
@@ -2457,18 +2565,54 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     handle_request_game_instance(values, send, conn_id,
                                                  state, rec)
 
-            if err and "incomplete" not in err:
-                # Unknown opcode: we cannot frame past it and must not guess,
-                # because there is no length prefix to resynchronise against.
-                print(f"[c{conn_id}] {err}", flush=True)
-                print(f"[c{conn_id}] {len(pending)}B undecodable — "
-                      f"first bytes {binascii.hexlify(pending[:16]).decode()}", flush=True)
-                rec.event("undecodable", error=err,
-                          head=binascii.hexlify(pending[:64]).decode())
-                pending = b""
+            if desync_err:
+                # AN UNDECODABLE OPCODE ENDS THE CONNECTION. It used to do
+                # `pending = b""` and carry on, which reads like recovery and is
+                # not one: there is no length prefix, so nothing here knows where
+                # the bad message ended, and every LATER read is then framed from
+                # a byte that is not a message boundary. ARC4 keeps decrypting
+                # correctly the whole time, so the bytes stay plausible and the
+                # framer either emits a cascade of undecodables or -- the real
+                # hazard -- accidentally frames garbage into well-formed messages
+                # that this loop then ACTS on. codec.decode_stream already refuses
+                # to resynchronise and says why; this caller was resynchronising
+                # on its behalf, badly.
+                #
+                # OBSERVED in our own corpus, 25 events across 17 of 416 sessions,
+                # and the evidence that the old path was hiding a real bug: seven
+                # identical events carry head `01 92 80 70 ...`, in which `92 80`
+                # is a VALID GAME_CMSG 0x0092 sitting one byte later. That is an
+                # off-by-one in a preceding message's length, and swallowing the
+                # buffer turned a framing bug into background noise for a day.
+                #
+                # 4% of sessions is rare enough that closing costs little, and a
+                # closed connection is a signal the operator can act on. A
+                # silently mis-framed one is not.
+                raw = (int.from_bytes(pending[:2], "little")
+                       if len(pending) >= 2 else None)
+                which = (f" from opcode 0x{raw:04x} "
+                         f"(masked 0x{raw & ~AUTH_CMSG_MASK:04x})"
+                         if raw is not None else "")
+                print(f"[c{conn_id}] {desync_err}", flush=True)
+                print(f"[c{conn_id}] DESYNC: {len(pending)}B unframeable{which}",
+                      flush=True)
+                print(f"[c{conn_id}] first bytes "
+                      f"{binascii.hexlify(pending[:16]).decode()}", flush=True)
+                print(f"[c{conn_id}] closing: we cannot find the next message "
+                      f"boundary, and framing on from here would invent messages.",
+                      flush=True)
+                rec.event("undecodable", error=desync_err,
+                          head=binascii.hexlify(pending[:64]).decode(),
+                          unframeable_bytes=len(pending), closing=True)
+                desynced = True
+                break
 
-        print(f"[c{conn_id}] done, {total} encrypted bytes recorded", flush=True)
-        rec.event("disconnect", total_bytes=total)
+        # Say WHICH ending this was. A desync and a clean hangup produced the same
+        # "done" line, so a session that died mid-stream looked like one the client
+        # closed politely.
+        print(f"[c{conn_id}] done, {total} encrypted bytes recorded"
+              f"{' -- ENDED ON DESYNC, see above' if desynced else ''}", flush=True)
+        rec.event("disconnect", total_bytes=total, desynced=desynced)
     except (ConnectionError, socket.timeout, OSError) as ex:
         print(f"[c{conn_id}] {type(ex).__name__}: {ex}", flush=True)
         rec.event("error", error=repr(ex))
