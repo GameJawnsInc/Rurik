@@ -137,6 +137,13 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   gate, the live capture tail),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
+  `toolkit/mapdata/test_datwrite.py` (the only tool that opens the archive `r+b`,
+  against a small archive the test builds: that `--verify --replace` actually
+  mutates rather than verifying and returning, that a shrinking replace journals
+  its whole block reservation and zeroes the freed tail, that revert restores
+  byte-for-byte even after something else took the freed blocks, and that the
+  reservation refusal holds from both sides. Four defects, none of which could
+  fail a checksum -- the archive verified perfectly through all of them),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,

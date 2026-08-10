@@ -12,7 +12,10 @@ SAFETY, because this one can destroy 4 GB of somebody's game:
     read-only to this project, permanently.
   - Every byte it changes is journalled with its previous value before the
     write, so --revert restores the exact prior state without re-copying the
-    archive. A 4.2 GB re-cut per arm is otherwise the only way back.
+    archive. A 4.2 GB re-cut per arm is otherwise the only way back. A
+    --replace journals its row's WHOLE block reservation, not just the bytes it
+    puts there, because a shrinking replace frees blocks the client is free to
+    take -- see Writer.replace().
   - --verify re-checks all three checksum rules and is the thing to run before
     and after every arm. test_datcrc.py asserts the same rules against the
     corpus; this checks one archive right now.
@@ -32,7 +35,12 @@ THE THREE CHECKSUM RULES, all MEASURED (see test_datcrc.py):
     python toolkit/mapdata/datwrite.py --dat DAT --verify
     python toolkit/mapdata/datwrite.py --dat DAT --corrupt-crc 12345
     python toolkit/mapdata/datwrite.py --dat DAT --overwrite 12345 --data new.bin
+    python toolkit/mapdata/datwrite.py --dat DAT --verify --replace 12345 --data new.bin
     python toolkit/mapdata/datwrite.py --dat DAT --revert journal.json
+
+test_datwrite.py exercises all of the above against a small archive it builds
+itself. Run it before trusting a write; it exists because three defects lived
+here undetected, and none of the three could fail a checksum.
 """
 
 import argparse
@@ -144,6 +152,28 @@ class Writer:
         self.fh.close()
         self.ar.close()
 
+    def read_mft(self):
+        """The table as it stands ON DISK, through the handle that wrote it.
+
+        Deliberately not the module-level read_mft(self.ar). The Archive's handle
+        is a separate, buffered, read-only file object opened before any of our
+        writes, and a seek back inside its current 8 KB window is answered from
+        that buffer instead of from disk. It then hands back a PRE-WRITE copy of
+        the table, fix_mft_self_crc() finds the old crc matching the old bytes,
+        prints "already correct", and leaves the archive failing its own
+        self-checksum with nothing said -- the one outcome this file is supposed
+        to make impossible.
+
+        Whether it happens depends on where the buffer window happens to fall: on
+        the 4.2 GB archive the MFT is megabytes and misses it, on a small archive
+        it does not. MEASURED 2026-08-10 on the synthetic archive in
+        test_datwrite.py, where every replace left the self-crc wrong while
+        reporting it already correct. A correctness property must not rest on
+        which side of a buffer boundary the table happens to fall.
+        """
+        self.fh.seek(self.ar.mft_offset)
+        return bytearray(self.fh.read(self.ar.mft_size))
+
     def put(self, offset, data, what):
         """One journalled write. Reads the old bytes first, always."""
         self.fh.seek(offset)
@@ -178,6 +208,41 @@ class Writer:
         Writes four things: the payload, the size field, the compression field
         and the crc. Getting three of four right looks exactly like a malformed
         payload from the client's side, which is why they are done together.
+
+        THE WHOLE RESERVATION IS WRITTEN, not just the payload. That costs a
+        multi-megabyte write on a big row and it is not optional, because a
+        SHRINKING replace has two hazards that a payload-sized write cannot
+        address and that no checksum can catch:
+
+          * The journal would record only what was written. put() reads
+            len(data) as its `before`, so replacing a 1.96 MB row with 20 KB
+            captured 20 KB of history and no more. The client rederives its free
+            list from the entry table at every open, and it is OBSERVED
+            relocating and resizing live rows during ordinary play -- 8315 moved
+            and grew 92 -> 96 bytes, 8316 moved, in one caged session
+            (studies/datwrite/FINDINGS.md section 6). That study narrows it
+            honestly: relocation has only ever been watched on the client's own
+            scratch rows, never on a content row. It does not narrow it to safe.
+            The blocks a shrink frees are blocks the allocator may take, and if
+            it does, --revert puts back the first 20 KB, prints "restored",
+            leaves all three checksum rules verifying, and the original payload
+            is gone with nothing anywhere reporting a loss.
+          * The old payload's tail would still be sitting inside this row's own
+            reservation, immediately after the authored bytes. Whether any reader
+            scans past the size field is UNTESTED, so the honest move is to leave
+            nothing there to find.
+
+        One journalled write settles both, and it is the only form in which the
+        journal's `after` field can be told the truth: the reservation ends up
+        holding exactly the payload followed by zeros, which is knowable before
+        the write, so `before` and `after` describe the same range and --revert's
+        "the client wrote here" detector covers the whole of it rather than the
+        first few kilobytes.
+
+        The tail is ours to write. Every entry offset is block-aligned and no
+        extent runs into the next (test_datcrc.py sections 2 and 3), so the next
+        row cannot begin before offset + reservation. Past the end of the file it
+        is put()'s short-read guard that refuses, not this.
         """
         e = self.ar.entries[row - 1]
         block = self.ar.block_size
@@ -188,10 +253,11 @@ class Writer:
                 f"{block}-byte blocks) and the new payload is {len(new)}. "
                 f"That is a relocation, not a replacement. Pick a row with a "
                 f"bigger reservation -- datplan.py --free lists them.")
+        image = bytes(new) + b"\x00" * (reserved - len(new))
         print(f"replacing row {row}: {e.size} -> {len(new)} bytes, "
               f"compression {e.compression} -> 0, at 0x{e.offset:X} "
-              f"(reservation {reserved})")
-        self.put(e.offset, new, f"row {row} payload")
+              f"(reservation {reserved}, {reserved - len(new)} B of tail zeroed)")
+        self.put(e.offset, image, f"row {row} reservation ({reserved} B)")
         self.put(row_offset(self.ar, row) + ENTRY_SIZE_OFF,
                  struct.pack("<I", len(new)),
                  f"MFT row {row} size {e.size} -> {len(new)}")
@@ -208,7 +274,7 @@ class Writer:
         Call this after every MFT change, or the table no longer describes
         itself and we have run a different experiment than the one we meant to.
         """
-        mft = read_mft(self.ar)
+        mft = self.read_mft()
         want = mft_self_crc(mft, self.ar.entry_count)
         have = struct.unpack_from("<I", mft, SELF_ROW_START + ENTRY_CRC)[0]
         if want == have:
@@ -320,7 +386,40 @@ def revert(journal_path, force=False):
     return 0
 
 
-def main():
+# Every flag that WRITES, named in one place. --verify short-circuits and returns
+# before the Writer is ever constructed unless one of these is present, so a write
+# flag missing from this tuple turns `--verify --thatflag` into "[PASS] all rules
+# hold", exit 0, and nothing written at all -- a silent no-op wearing a green
+# banner, which is the exact failure mode toolkit/checks.py exists to refuse.
+#
+# That is not hypothetical. `--replace` was absent here from the day it was added,
+# and `--verify --replace ROW --data F` is the combination the documented procedure
+# leads with, because verifying before writing is the obvious habit. It printed
+# "[PASS] all rules hold" and did nothing, for as long as the flag existed.
+#
+# test_datwrite.py section 2 checks these two tuples against the parser's own
+# actions, so a flag added below and forgotten here goes red instead of going quiet.
+MUTATING_DESTS = ("corrupt_crc", "overwrite", "replace", "corrupt_mft_crc")
+
+# The rest: reads, or arguments to something else. Listed only so the drift check
+# can tell "deliberately read-only" from "somebody forgot".
+READONLY_DESTS = ("help", "dat", "journal", "verify", "check_rows", "data",
+                  "revert", "force")
+
+
+def is_mutating(args):
+    """Does this run intend to write? None and False both mean 'not given'.
+
+    Identity comparisons, not truthiness: a row number of 0 is a value, and
+    `if args.corrupt_crc` would read it as absent. That is the same bug as the
+    missing --replace, just waiting on a different input.
+    """
+    return any(v is not None and v is not False
+               for v in (getattr(args, d) for d in MUTATING_DESTS))
+
+
+def build_parser():
+    """The command line, factored out so a test can enumerate it."""
     ap = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -348,6 +447,11 @@ def main():
     ap.add_argument("--force", action="store_true",
                     help="with --revert, replay MFT edits even if the "
                          "table has moved. Almost always wrong.")
+    return ap
+
+
+def main():
+    ap = build_parser()
     args = ap.parse_args()
 
     if args.revert:
@@ -362,10 +466,15 @@ def main():
             bad += verify(args.dat)
         if args.check_rows:
             bad += check_rows(args.dat, args.check_rows)
-        mutating = (args.corrupt_crc or args.overwrite or args.corrupt_mft_crc)
-        if not mutating:
+        if not is_mutating(args):
             print("\n[FAIL] %d rule(s) failed" % bad if bad else "\n[PASS] all rules hold")
             return 1 if bad else 0
+        if bad:
+            # Don't drop the number on the floor on the way to the Writer: this
+            # archive was already failing its own checksums before we touched it,
+            # and whatever the write produces afterwards will not be attributable.
+            print(f"\n[WARN] {bad} rule(s) ALREADY failing before this write; "
+                  f"continuing because a write flag was given")
 
     journal = args.journal or (args.dat + ".journal.json")
     w = Writer(args.dat, journal)
@@ -402,7 +511,10 @@ def main():
             w.replace(args.replace, open(args.data, "rb").read())
 
         if args.corrupt_mft_crc:
-            mft = read_mft(w.ar)
+            # w.read_mft(), not read_mft(w.ar): combined with another write flag
+            # this runs AFTER that flag's edits, and the Archive handle would hand
+            # back the pre-write table -- corrupting a value that is already stale.
+            mft = w.read_mft()
             have = struct.unpack_from("<I", mft, SELF_ROW_START + ENTRY_CRC)[0]
             print("corrupting the MFT self-crc -- Arm C. Expect a full rescan.")
             w.put(row_offset(w.ar, MFT_SELF_ROW) + ENTRY_CRC,
