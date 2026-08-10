@@ -70,6 +70,23 @@ one witness counted twice rather than two.
 
 ---
 
+## Headquarter — ldufr
+
+**Used by:** nothing, as code. It appears here for one reason: `schema/overrides.json`
+names `GAME_CMSG 0x0040 ROTATE_PLAYER`, and Headquarter's `opcodes.h` has carried that
+same name at that same value all along. The name was *not* taken from it — it was read
+out of client build 38797's own assertion text, `(rotation >= -1.0f) && (rotation <= 1.0f)`
+at `P:\Code\Gw\Char\Cli\ChCliApi.cpp:5562`, reached from the only entry point that feeds
+the one send site for that opcode. Headquarter is a second witness, and crediting a second
+witness is cheaper than arguing about whether we needed it.
+
+**Licence: MIT** — permissive, attribution only. PLAN.md §4's A3 also quotes its
+`opcodes.h` for the 60/40/194/487 message counts. Its derivation-register row was added
+2026-08-10, at the moment the first name landed and not before; it should have existed
+when A3 was written.
+
+---
+
 ## What is deliberately NOT here
 
 **`gw-preservation/*` and `Py4GW_Reforged` carry no licence at all, which means all rights

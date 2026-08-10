@@ -126,7 +126,35 @@ with itself.
 > ArenaNet hands it **the same agent id every time**. That sharpens D1 rather than
 > softening it, and it means `WORLD_REMOVE_AGENT` is how the client is told a creature is
 > *untargetable*, not only how it is told one died. Our server has no concept of this and
-> it runs entirely through the two opcodes we already implement.
+> ~~it runs entirely through the two opcodes we already implement.~~
+
+> **CORRECTED 2026-08-10, same day, by re-reading the tape instead of the paragraph above.**
+> Three things in T3 are wrong or understated, and the last one was about to be built on.
+>
+> * **19 is not the ceiling.** Agents 283 and 285 cycle **23** times, 282 cycles 21.
+> * **"Created more than once" is not the burrow signature.** The Ascalon *outpost* tape
+>   has 53 multi-create ids and most carry the `play` allegiance — those are players
+>   walking in and out of range. The real signature is three-part: model `0x200005A2`
+>   (monster class | definition 1442), allegiance `mon1`, and `0x00F0 = 0x1000` on create.
+> * **It does NOT run entirely through `0x0020`/`0x0021`. REFUTED, 151 of 151**, across
+>   two independent Lakeside visits. Every worm re-creation is a fixed five-message burst —
+>   `0x009F[66,agent,0]`, `0x00F0[agent,0x1000]`, `0x0020`, `0x006D[agent,item,0]`,
+>   `0x0026[agent,9]` — and the visible phase carries `0x00F1[agent,0]` at exactly 2.00 s
+>   after the create and `0x00F1[agent,0x1000]` exactly 2.00 s before the remove (n=132
+>   each, every one inside ±60 ms). The removal side *is* bare, as T3 implies: 134 of 134
+>   are a lone `0x0021`. Six opcodes, not two, and `0x00F0` is D2 — the highest-count
+>   message our server has never sent.
+>
+> Every worm re-emerges at **byte-identical coordinates**, which the wiki independently
+> predicts (a submerged worm cannot move). Two period families share one model and
+> distance from the player does not separate them: 272–277 run a ~33 s cycle, 281–285 a
+> ~8–10 s one. Only the two 2.00 s windows are fixed; the rest is not a period.
+>
+> And the thing no offline reading can settle: ArenaNet sends the `0x0056` definition
+> **once for 140 creates**. Our own probe re-sent it before every re-create, so "does a
+> definition survive a removal" has never actually been asked — and `agents.py` warns that
+> an agent whose definition was never sent takes the client down on `index < m_count`.
+> That is the difference between a burrow and a client assert, and it needs the client.
 
 ### T4 — `GAME_CMSG 0x0046` field 1 is a skill id. OBSERVED, ground-truthed.
 

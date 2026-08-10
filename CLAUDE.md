@@ -149,6 +149,13 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL
   is reported and exits non-zero rather than letting a misattributed opcode be named),
+  `toolkit/authsrv/test_rotate.py` (that GAME_CMSG 0x0040 really is ROTATE_PLAYER: the
+  client's own assert text and the two ±inf constants are still at their addresses, both
+  payload fields are still `dword` and not the `float` they look like, and the finite
+  angles agree with atan2 of a nearby heading far past a null model built by shuffling
+  the same corpus. Its own first version scored zero because it paired against 0x003D's
+  POSITION vec2 instead of its DIRECTION vec2 — both are plausible angles, so the layout
+  is now pinned by a check),
   `toolkit/authsrv/test_replay.py` (a captured .raw decrypts back to the plaintext that
   was logged, and does so all-or-nothing across the whole vault — the first reader of a
   .raw, which closes R0a's standing caveat),

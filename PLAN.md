@@ -961,6 +961,7 @@ keep honest.
 | `toolkit/mapdata/dxt1.py` | nothing — DXT1/BC1 is a publicly documented format | — | ✅ checked 2026-08-06, clean |
 | `toolkit/mapdata/datwrite.py`, `datplan.py` | nothing declared | — | ✅ checked 2026-08-06, no derivation statement and none needed |
 | `toolkit/harness/wirecapture.py` | WinDivert (the packet backend, called via `ctypes`) | **LGPLv3** or a commercial licence; dynamic-linked, not vendored, used locally and never redistributed | ✅ carve-out pinned 2026-08-07 (CLAUDE.md): live driver **only**, never the server path or the suite. No WinDivert code is copied — only its documented DLL API is called. `keytap.py` takes no dependency. |
+| `schema/overrides.json` — GAME_CMSG **names** | ldufr/Headquarter `opcodes.h` | **MIT** — permissive, attribution only | ✅ row added 2026-08-10, *before* the first name landed. Headquarter is where §4's A3 got the 60/40/194/487 counts and it has carried `ROTATE_PLAYER = 0x0040` all along, with no row here — the `gwdat.py` shape exactly. **What we take is corroboration, not the name**: 0x0040 was named from the client's own assert text `(rotation >= -1.0f) && (rotation <= 1.0f)` at `ChCliApi.cpp:5562`, read out of build 38797, and Headquarter agreeing is a second witness we did not need. Any *future* name adopted from Headquarter without that independent leg is a derivation and must say so in its `why`. |
 
 **The rule this table encodes:** before a module takes a layout, an algorithm or a table
 from any upstream, add its row *first*. If the upstream grants nothing, the only
@@ -1043,31 +1044,81 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-10 (`6f17cc9`, suite 33/33 ~841 checks)
+### 8.0 Next, as of 2026-08-10 (`a5d7008`, suite 34/34 ~862 checks)
 
 The items below this section predate today and are still live; these four are what today's
-work opened, in the order they are worth taking.
+work opened. **The order has changed since they were written**, on evidence: four scouts
+read one item each and a fifth was told to refute them, and it broke a headline claim in
+three of the four. 0d turned out to be finished rather than open and is done. 0c is bigger
+than the sentence below used to claim and is where the new information is. **0a should not
+be run as written** — its premise, that a labelled run on our own server would newly show a
+completed action, rests on an experiment the repo has already run twelve times with a null
+result (`authsrv.py:831-841` records it as NOT FOUND), and the measurement that seemed to
+support it was taken off the client's VERSION frame, which is declared *before* `--map` is
+applied and is therefore blind to every `--map` run. 0b is independent and can go in
+parallel, with one safety change that is not optional — see its entry.
 
-0a. **A labelled run against our OWN server rather than a tape.** The `merchant` step is the
-    last real gap in the c2s script and it needs a server that answers. Everything recorded
-    so far is what the client ASKS for; nothing yet shows what a *completed* action looks
-    like, because a tape never replies (`studies/tape/FINDINGS.md` T6). Cheap: the script
-    and the analysis already exist and `--labelrun` works with or without `--tape`.
+0a. **A labelled run against our OWN server — RE-SPECIFIED, do not run as written.** The
+    premise stands (a tape never replies, so nothing yet shows a *completed* action —
+    `studies/tape/FINDINGS.md` T6) but the proposed experiment does not. It was going to
+    test whether the client sends `0x0026` ATTACK on our server in an explorable rather
+    than a town; `authsrv.py:831-841` already records that as tested and **NOT FOUND**,
+    "in an outpost or an explorable", and the twelve map-146 sessions of 2026-08-06 sent
+    `0x0033` 48 times and `0x0026` zero. What replaces it is sharper and came out of 0c's
+    reading: **all seven c2s `0x0026` in the entire vault target agent ids 274, 275, 276
+    and 284 — Plague Worms.** The client aims `0x0026` at agents *ArenaNet* created and
+    `0x0033` at ours, in the same map type. So the axis is something in the create burst,
+    not explorability, and 0c is the item holding that evidence. Run 0a *after* 0c has
+    changed what our create burst looks like, and fold it into the same operator session —
+    0c needs a hand-driven loopback run of its own. The merchant reply is still worth
+    doing and is **not** "cheap": it is a session, and it may fail for the same unknown
+    reason `0x0026` does.
 
-0b. **Chain the tapes across a map transition.** No longer speculative — `0x01A5` carries
-    the next instance's `sockaddr_in` and `tape.stop_before_transfer` locates it exactly
-    (T8). Rewrite the blob to a loopback address instead of cutting it, arm the next
-    connection with the next tape, and four instance tapes become one continuous session.
+0b. **Chain the tapes across a map transition.** Independent of the other three; can run in
+    a separate worktree. `0x01A5` carries the next instance's `sockaddr_in` and
+    `tape.stop_before_transfer` locates it exactly (T8) — verified, 12/12 field matches
+    against the following connection's VERSION at three transition points. Rewrite the blob
+    to a loopback address instead of cutting it, arm the next connection with the next
+    tape, and four instance tapes become one continuous session. **Two conditions.**
+    *(i) The rewrite deletes the only control that has ever caught this mistake.* Today an
+    un-truncated tape fails **closed**: the client dials ArenaNet, the cage refuses, and
+    `Code=005` says so out loud — that happened on 2026-08-10. After the rewrite a wrong
+    address is a dead connection with no signal at all. So the offline assertion that a
+    rewritten tape points at 127/8 is not hygiene, it is the *replacement* safety control,
+    and `--tape-rewrite-next` must refuse a non-loopback host — otherwise the flag is a
+    general-purpose "aim a client at an arbitrary server", written into ArenaNet's own
+    recorded plaintext. *(ii) The evidence for the 12/12 match is `world_id` / `player_id`
+    — ArenaNet session identifiers from the owner's live secondary account. `schema/` is
+    tracked and the vault is not; `scrub_captures.py` covers the portal credential set and
+    nothing treats these as sensitive. Record the **structure** and the **fact** of the
+    match. The values stay in the vault.
 
 0c. **Model burrowing.** The first Guild Wars mechanic we have direct evidence for that our
     server has no concept of: Plague Worms hide by being REMOVED and re-CREATED under the
-    same agent id, 19 cycles in 186 s for one worm (T3). It runs entirely through
-    `0x0020`/`0x0021`, both already implemented, and it makes `remove_agent` load-bearing
-    for something other than death.
+    same agent id (T3). ~~It runs entirely through `0x0020`/`0x0021`, both already
+    implemented~~ — **that was wrong and is REFUTED 151/151**: every worm re-creation in
+    both Lakeside tapes is a fixed five-message burst `0x009F`, `0x00F0`, `0x0020`,
+    `0x006D`, `0x0026`, and the visible phase carries two `0x00F1` writes at exactly
+    2.00 s from each edge. Six opcodes, not two, and one of them (`0x00F0`) is D2 — the
+    single most frequent message our server has never sent. The cycle counts were also
+    understated: 23, not 19, is the ceiling. D1 (`25701dd`) already settles the protocol
+    question — a removed id is not poisoned — so what is left is scheduling plus two sends,
+    **plus one thing no offline test can answer**: ArenaNet sends the NPC definition ONCE
+    for 140 creates and our only test of id reuse re-sent it every time. Whether a
+    definition survives a removal is the difference between a burrow and a client assert.
 
-0d. **`0x0040`'s meaning.** Floats marshalled as u32, field 2 exactly `1.0` in all 12
-    samples, field 1 reaching ±infinity, always alongside movement. A shape, not a name —
-    `MOVE_UNKNOWN_FLOATS` in the catalog says so deliberately.
+0d. ✅ **DONE 2026-08-10. `0x0040` is `ROTATE_PLAYER`** — field 1 an angle in radians,
+    field 2 a normalised turn amount in (0,1]. Settled by the **binary**, not by a run:
+    the client's own assert `(rotation >= -1.0f) && (rotation <= 1.0f)`
+    (`ChCliApi.cpp:5562`), reached from the only one of 174 send sites that carries this
+    opcode; the ±inf is a sentinel loaded from two `.rdata` constants, which is the fact
+    that kills the "±inf rules out an angle" inference that had held the name back. 559
+    wire samples agree — every finite value inside ±π, 13 matching `atan2` of a nearby
+    `0x003D` direction to float32 round-off against a shuffled null of 5.
+    `schema/overrides.json`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md) C13,
+    `toolkit/authsrv/test_rotate.py`. **The wire typing stays `u32`** — the values are
+    floats, the marshalling is not, and C6's "the schema types them as dwords" read as a
+    bug report for three days while being the correct behaviour.
 
 1. **Build the capture harness (A1).** *Started 2026-08-06, in build.* Every capture in the
    vault is Rurik talking to Rurik; **not one byte is ArenaNet's**, so R0b is unmet and R1.5

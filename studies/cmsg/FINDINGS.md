@@ -135,6 +135,13 @@ through vertical. That is a hint, not a finding: what field 1 *means* is **UNVER
 What is actionable now: `schema/messages.json` types both as `dword`, and they are
 floats. That is a concrete `overrides.json` correction with evidence behind it.
 
+> **C6 is superseded by C13 below, on both counts, and the table above is the only part
+> that survives.** The ten raw dwords are correct observations; the two sentences drawn
+> from them are not. The typing sentence is wrong — the client's own SEND table says
+> `[u32, u32]`, so `dword` was right all along and the "correction" would have been a
+> decoding bug. And "±infinity, which an angle in radians never does" is the inference
+> that kept this opcode unnamed for three days. It is exactly backwards.
+
 ### C7 — Camera movement is NOT purely client-side. OBSERVED, prediction refuted.
 
 The prediction was that rotating the camera sends nothing. It sent ten messages. Compare
@@ -265,6 +272,11 @@ one map — which is exactly why the town script re-predicted TRAFFIC and asked 
 **C6 stands and is reconfirmed**: the fields are floats, the second is exactly 1.0, the
 first reaches ±inf. Ten more samples, same shape. The schema still types them as dwords.
 
+> **That paragraph is what a small sample sounds like when it agrees with itself.** Twenty-two
+> samples, all 1.0, from two runs of the same script in the same world. The vault held 559
+> and 126 of them are not 1.0. See C13. The "movement-related, not camera" half survives and
+> is now explained rather than merely observed.
+
 ### C12 — `0x003D`'s last field is NOT a direction index. TESTED AND REFUTED.
 
 Inside the `gateway` window the trailing small integer looked like a clean eight-way
@@ -274,6 +286,78 @@ samples in both runs it collapses**: value `1` spans 0.0°–359.1°, value `2` 
 
 Recorded so it is not re-derived. Whatever that field is, it is not the absolute heading,
 and a hypothesis that survives one window is not a finding.
+
+---
+
+## 3c. `0x0040` settled, 2026-08-10, from the binary
+
+### C13 — `0x0040` is `ROTATE_PLAYER`. Field 1 is an ANGLE IN RADIANS. OBSERVED. Supersedes C6.
+
+The labelled runs could not have got here, and it is worth being precise about why. A
+labelled run tells you **when** a message is sent. It cannot tell you that an infinity is
+a sentinel constant the client stores rather than a number it computed — and the
+infinities are the whole reason an angle looked impossible. C6 reasoned "±inf rules out
+radians, but fits a slope through vertical", and that one sentence held the opcode at
+`MOVE_UNKNOWN_FLOATS` while the answer sat in the vault.
+
+**Leg 1 — the client names it.** Build 38797 has exactly **one** site that sends `0x0040`:
+the 12-byte wrapper at `0x009207B0`, found by enumerating all 174 callers of the channel
+send `0x007DCF00` and recovering the opcode immediate at each. Its public entry
+`0x008165C0` range-checks its float argument against the assert text
+
+    (rotation >= -1.0f) && (rotation <= 1.0f)      P:\Code\Gw\Char\Cli\ChCliApi.cpp:5562
+
+and then tail-calls the sender. **The client's own word for the quantity is `rotation`.**
+
+**Leg 2 — the infinities are a literal.** The sender at `0x0081BE90` loads `+inf` from
+`.rdata 0x00948654` when `rotation > 0` and `-inf` from `0x0094E538` when `rotation < 0`,
+and sets field 2 to `|rotation|`. When `rotation` is exactly `0` it sends
+`atan2(current facing)` with field 2 = `1.0` instead. So an infinity means *"turning
+continuously, sign gives the direction"* — a sentinel, not a ratio. The second sender
+(`0x0081BA80`, steering) computes `field1 = atan2(desired direction)` and
+`field2 = min(1, |wrap(target − facing)| / (π/3))`, and **refuses to send below 0.1**.
+
+**Leg 3 — the wire agrees, and had all along.** Over **559** samples in 55 game-channel
+streams: field 1 is never NaN; all **163** finite values lie inside ±π (max 3.0190) — which
+163 arbitrary dwords do not do; **13** of them equal `atan2(dir.y, dir.x)` of a nearby
+`0x003D` **direction** vector to float32 round-off and 30 fall within 0.05 rad, against a
+null model built by shuffling this same corpus whose 95th percentile is **5**. Field 2's
+minimum across all 559 is **0.10133** — just above the client's own 0.1 send gate, which is
+a number that could easily have come out wrong and did not.
+
+The cleanest single sample is the live one: `vault/captures/live/20260807T143055` conn
+`:60935` msg 52, field1 = `1.0821444988250732` rad = 62.0026°, which is exactly atan2 of
+the direction its three preceding `0x003D` messages carry. Its field 2 is `0.118851`.
+
+**What C6 got wrong, in both directions.** The typing sentence — "the schema types them as
+dwords and they are floats" — reads as a bug report and is not one: the client's own SEND
+table says `[u32, u32]`, wire 10 bytes. The values are floats; the *wire type* is `u32`.
+Acting on C6 would have broken decoding of a message we now understand.
+And "field 2 is exactly 1.0" was true of its ten samples and false as a generalisation:
+**433 of 559**, with 105 at 0.425 and a tail to 0.10133. That distribution **corroborates**
+[../divergence/FINDINGS.md](../divergence/FINDINGS.md) R3, which measured 411/536 and 105
+before these runs existed — it is not a new refutation, and R3 had it first.
+
+**Frequencies here describe our harness, not a player.** 536 of the 559 are
+`drive_client.py` clicking fixed window fractions; 22 are the 2026-08-10 loopback runs (17
+of those tape-loaded); **1** is live. The name does not rest on any of those counts — it
+rests on the binary, which is build-truth and corpus-independent.
+
+**UNVERIFIED, deliberately: which sign is a left turn.** Bracketing the infinities against
+the next heading gives 121/189 and 106/169 — real but far too weak to write down, and
+`overrides.json` makes no left/right claim. Two labelled steps ("hold turn-left for three
+seconds", then right) settle it in a minute.
+
+**UPSTREAM** ldufr/Headquarter numbers `ROTATE_PLAYER = 0x0040` and always has. That is a
+second witness we did not need and did not use; its derivation-register row was added at
+[../../PLAN.md](../../PLAN.md) §6.1 *before* the name landed, because three separate plans
+were about to import its vocabulary into a tracked schema file with no row at all — the
+`gwdat.py` shape.
+
+Pinned by `toolkit/authsrv/test_rotate.py`, whose own first version scored **0 of 163**
+because it paired against `0x003D`'s **position** vec2 instead of its **direction** vec2.
+Both are perfectly plausible angles. That is C5 being needed a second time, and the field
+index is now pinned by a check rather than by a comment.
 
 ---
 
@@ -290,10 +374,18 @@ action, so they are witnessed and unlabelled.
 
 Named with evidence: **C1** `0x0046` skill id · **C3** `0x00C1` target-select ·
 **C4/C9** `0x0026` attack vs `0x0039` interact · **C5** `0x003D` heading ·
-**C6** `0x0040` floats · **C10** `0x0064` chat text + target.
+**C13** `0x0040` ROTATE_PLAYER (was C6 "floats") · **C10** `0x0064` chat text + target.
 
 194 opcodes have layouts. 23 have been seen and 7 are named. That ratio is the argument
 for running this again — the two runs cost about twelve minutes of play between them.
+
+**And one of the seven was named by neither run.** `0x0040` came out of the client's
+binary, after the labelled runs had witnessed it twice and both times drawn the wrong
+conclusion from it. The two methods answer different questions — a run says *when*, the
+image says *what* — and the runs' own evidence had been sufficient to refute C6 since
+2026-08-04, sitting unread in 559 samples nobody had counted past twelve. Worth
+remembering the next time a shape looks unnameable: check whether the corpus is small
+before concluding the message is hard.
 
 ---
 
