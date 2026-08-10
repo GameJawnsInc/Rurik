@@ -37,7 +37,7 @@ import checks  # noqa: E402
 # all from 2026-08-06 until the same day, because drive_client.py did `import cage`
 # without clientpatch on sys.path. It is named in CLAUDE.md's suite list and was not
 # among the tests run when that suite was last reported green.
-LEDGER = checks.Ledger("harness", floor=36)
+LEDGER = checks.Ledger("harness", floor=39)
 check = checks.adopt_named(LEDGER)
 
 
@@ -243,4 +243,23 @@ if __name__ == "__main__":
     test_preflight_helpers()
     test_game_args()
     test_stack()
+
+    # --- --game-args must survive a Windows path ------------------------------
+    # shlex.split defaults to posix=True, where backslash is an ESCAPE, so it
+    # turned a tape path into "C:gdRurikvault" and killed a run on 2026-08-10.
+    # Every --probe and --tape invocation goes through this one function.
+    print("\n7. --game-args survives Windows paths")
+    import session as _sess
+    tape_path = "C:" + "\\" + "gd" + "\\" + "Rurik" + "\\" + "vault"
+    got = _sess.split_args("--tape " + tape_path)
+    LEDGER.ok(got == ["--tape", tape_path],
+              "--game-args keeps Windows backslashes intact",
+              repr(got) + " -- posix=True shlex would give C:gdRurikvault")
+    quoted = '--tape "' + "C:" + "\\" + "two words" + '" --tape-speed 2'
+    spaced = _sess.split_args(quoted)
+    LEDGER.ok(spaced == ["--tape", "C:" + "\\" + "two words", "--tape-speed", "2"],
+              "and a quoted path with spaces stays ONE argument", repr(spaced))
+    LEDGER.ok(_sess.split_args("") == [] and _sess.split_args(None) == [],
+              "and an empty --game-args yields no arguments at all")
+
     sys.exit(LEDGER.verdict())

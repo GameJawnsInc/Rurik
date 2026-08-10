@@ -72,6 +72,30 @@ PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 # ------------------------------------------------------------- pre-flight ----
 
+def split_args(text):
+    r"""Split a --game-args string WITHOUT eating Windows backslashes.
+
+    shlex.split defaults to posix=True, where a backslash is an ESCAPE character.
+    On this platform that silently destroys every path it is handed -- splitting
+    r"--tape C:\gd\Rurik\vault" yields ['--tape', 'C:gdRurikvault'].
+
+    That is what happened on 2026-08-10: the tape refused to load and named a path
+    with every separator missing. The mangling was here, one process before the
+    error, and the only reason it was diagnosable in one read is that the refusal
+    printed the path it had actually been given rather than the one it wanted.
+
+    posix=False keeps backslashes but leaves quote characters attached to the
+    token, so surrounding quotes are stripped here; that pair is what lets a quoted
+    path containing spaces survive as well.
+    """
+    out = []
+    for tok in shlex.split(text or "", posix=False):
+        if len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in ("'", '"'):
+            tok = tok[1:-1]
+        out.append(tok)
+    return out
+
+
 def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                  capture_root=None, auth_host="127.0.0.1",
                  game_host="127.0.0.3", game_args=()):
@@ -653,7 +677,7 @@ def main():
 
     specs = server_specs(game_port=a.game_port, auth_host=a.auth_host,
                          game_host=a.game_host,
-                         game_args=shlex.split(a.game_args))
+                         game_args=split_args(a.game_args))
     preflight(specs, replace=a.replace)
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
