@@ -7,8 +7,19 @@ output. So the load-bearing assertion here is the other direction -- harvest eve
 secret value out of the ORIGINALS, then assert not one of them appears anywhere in the
 scrubbed bytes, field list or no field list.
 
-That check can fail, and it is proved to fail: the last section deliberately removes
+That check can fail, and it is proved to fail: a later section deliberately removes
 Password from the element list, re-scrubs, and asserts the leak is caught.
+
+EVERY PASS READS ONE SNAPSHOT. This test reads the capture tree four times -- harvest,
+scrub, count, compare -- and on 2026-08-10 it went red twice with "326648 in, 326631
+out, 15 unparseable" for no reason but that a live authsrv was appending to the tree
+between two of those passes. The arithmetic was correct and the corpus was moving. So
+`sc.Snapshot` fixes the file list and each file's length once, up front, and every pass
+reads exactly those bytes; records written afterwards are not part of the corpus under
+test. The arithmetic itself is untouched -- it is what caught 181 values leaking through
+`response` -- and nothing here skips when a server is up, which would delete the check
+exactly when captures are being written. The last section proves the pin holds by
+growing a corpus underneath one.
 
     python toolkit/test_scrub.py
 """
@@ -26,43 +37,53 @@ import checks  # noqa: E402
 import vaultpath  # noqa: E402
 import scrub_captures as sc  # noqa: E402
 
-# 6 structural + 6 leak/property + 2 red-team = 14, measured green over the whole capture
-# tree. Nothing here is optional; a run under this floor has lost a section.
-LEDGER = checks.Ledger("credential scrub", floor=14)
+# 1 snapshot + 6 structural + 6 leak/property + 2 red-team + 4 snapshot red-team = 19,
+# counted from a real full run over the whole capture tree on 2026-08-10 -- every section
+# executed. That run was NOT green: the leak check is red on live wire captures, whose
+# `payload` hex still carries the plaintext handshake `a`/`sent`. That is a fact about the
+# scrubber, not about how many checks run, so the floor is the honest measured count and
+# not a number lowered to make the file agree with itself.
+LEDGER = checks.Ledger("credential scrub", floor=19)
+
+# Derived output of previous runs. Not evidence, and scrubbing a scrub would double-count
+# every record. Baked into the snapshot, so no pass can disagree about what was excluded.
+SKIP = ("captures-scrubbed", "portal-scrubbed")
 
 
-def harvest_secrets(src):
+def harvest_secrets(snap):
     """Every account-identifying value in the ORIGINALS, gathered independently.
 
     Deliberately does NOT reuse scrub_captures' field lists -- if it did, a field the
     scrubber forgets would also be a field this test forgets, and the whole check
     would be the scrubber grading its own homework.
+
+    Reads the snapshot, not the tree, so the values harvested here are the values the
+    scrub pass will see: a secret appended after the snapshot is in neither.
     """
     out = set()
     elem = re.compile(r"<(LoginName|Password|AccountAlias|Session|Token|ResumeToken"
                       r"|UserId|UserName|Alias)>(.*?)</\1>")
-    for path in jsonl_under(src):
-        with open(path, encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                try:
-                    rec = json.loads(line)
-                except (json.JSONDecodeError, ValueError):
-                    continue
-                for key in ("email", "token", "user_id", "account_uuid",
-                            "char_uuid", "arc4_key", "a", "sent"):
-                    v = rec.get(key)
-                    if v not in (None, "", 0):
-                        out.add(str(v))
-                auth = rec.get("authorization")
-                if isinstance(auth, str) and " " in auth:
-                    cred = auth.split(" ", 1)[1]
-                    if cred not in sc.AUTH_SENTINELS:
-                        out.add(cred)
-                body = rec.get("body")
-                if isinstance(body, str):
-                    for _, text in elem.findall(body):
-                        if text:
-                            out.add(text)
+    for rel, _size in snap.jsonl():
+        for line in snap.lines(rel):
+            try:
+                rec = json.loads(line)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            for key in ("email", "token", "user_id", "account_uuid",
+                        "char_uuid", "arc4_key", "a", "sent"):
+                v = rec.get(key)
+                if v not in (None, "", 0):
+                    out.add(str(v))
+            auth = rec.get("authorization")
+            if isinstance(auth, str) and " " in auth:
+                cred = auth.split(" ", 1)[1]
+                if cred not in sc.AUTH_SENTINELS:
+                    out.add(cred)
+            body = rec.get("body")
+            if isinstance(body, str):
+                for _, text in elem.findall(body):
+                    if text:
+                        out.add(text)
     # Values short enough to collide with ordinary text would make the leak test
     # meaningless (searching for "0" finds everything). Keep the real ones.
     return {s for s in out if len(s) >= 6}
@@ -71,14 +92,24 @@ def harvest_secrets(src):
 def jsonl_under(root):
     """Every .jsonl anywhere under root. Walks, because the credential was never
     only in captures/portal -- 206 `email`, 113 `account_uuid` and 341 ARC4 keys
-    sat in sibling directories this test used not to look at."""
+    sat in sibling directories this test used not to look at.
+
+    Only ever pointed at the SCRUBBED output now: that tree is written by this run and
+    nothing else touches it, so walking it live is safe. The originals go through the
+    snapshot instead.
+    """
     out = []
     for base, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in ("captures-scrubbed",
-                                                "portal-scrubbed")]
+        dirs[:] = [d for d in dirs if d not in SKIP]
         out.extend(os.path.join(base, f) for f in sorted(files)
                    if f.endswith(".jsonl"))
     return sorted(out)
+
+
+def count_lines(paths):
+    """Non-blank lines across a list of on-disk files."""
+    return sum(1 for p in paths for line in
+               open(p, encoding="utf-8", errors="replace") if line.strip())
 
 
 def leaked(out_dir, secrets):
@@ -98,10 +129,15 @@ def leaked(out_dir, secrets):
     return {s for s in secrets if s in text}
 
 
-def main():
-    src = vaultpath.require_dir("captures",
-                                why="the scrub test reads the real capture tree")
-    secrets = harvest_secrets(src)
+def check_corpus(src, snap):
+    """Everything that is a claim about the real capture tree, all of it read from
+    `snap` so the four passes cannot disagree about what the tree contains."""
+    LEDGER.ok(bool(snap.jsonl()) and snap.total_bytes() > 0,
+              "the run pinned a corpus before making claims about it",
+              f"{len(snap.jsonl())} .jsonl + {len(snap.raw())} .raw, "
+              f"{snap.total_bytes()} bytes, enumerated once")
+
+    secrets = harvest_secrets(snap)
     LEDGER.ok(len(secrets) >= 3,
               "the originals really do contain secrets to remove",
               f"{len(secrets)} distinct values, harvested independently")
@@ -122,7 +158,7 @@ def main():
     try:
         out = os.path.join(tmp, "scrubbed")
         files, records, stats, distinct, unscrubbed = sc.scrub_tree(
-            src, out, skip=("captures-scrubbed", "portal-scrubbed"))
+            src, out, snapshot=snap)
 
         # --- structure is preserved -------------------------------------------
         LEDGER.ok(records > 0, "records were read", f"{records} across {files} file(s)")
@@ -131,12 +167,11 @@ def main():
                   "every source file has a scrubbed counterpart",
                   f"{len(written)}/{files}")
 
-        src_lines = sum(1 for f in jsonl_under(src) for line in
-                        open(f, encoding="utf-8", errors="replace")
-                        if line.strip())
-        out_lines = sum(1 for f in written for line in
-                        open(f, encoding="utf-8", errors="replace")
-                        if line.strip())
+        # Both sides of the arithmetic are the SAME bytes: `src_lines` re-counts the
+        # snapshot the scrub read, not the tree as it stands now.
+        src_lines = sum(1 for rel, _n in snap.jsonl()
+                        for line in snap.lines(rel) if line.strip())
+        out_lines = count_lines(written)
         dropped = stats.get("UNPARSEABLE", 0)
         LEDGER.ok(src_lines - dropped == out_lines,
                   "every parseable record survives; unparseable ones are dropped",
@@ -165,12 +200,11 @@ def main():
         lengths_ok, corr_ok = True, True
         seen = {}
         elem = re.compile(r"<(LoginName|Password|AccountAlias)>(.*?)</\1>")
-        for sf in jsonl_under(src):
-            of = os.path.join(out, os.path.relpath(sf, src))
+        for rel, _n in snap.jsonl():
+            of = os.path.join(out, rel)
             if not os.path.isfile(of):
                 continue
-            a = [line for line in open(sf, encoding="utf-8-sig",
-                                       errors="replace") if line.strip()]
+            a = [line for line in snap.lines(rel, "utf-8-sig") if line.strip()]
             b = [line for line in open(of, encoding="utf-8-sig",
                                        errors="replace") if line.strip()]
             for la, lb in zip(a, b):
@@ -207,8 +241,7 @@ def main():
         try:
             sc.SECRET_ELEMENTS.pop("Password")
             broken = os.path.join(tmp, "broken")
-            sc.scrub_tree(src, broken,
-                          skip=("captures-scrubbed", "portal-scrubbed"))
+            sc.scrub_tree(src, broken, snapshot=snap)
             caught = leaked(broken, secrets)
             LEDGER.ok(bool(caught),
                       "removing Password from the list makes the leak check FAIL",
@@ -222,6 +255,96 @@ def main():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
+
+def write_records(path, start, count):
+    """Append `count` portal-shaped records, as a live authsrv would."""
+    with open(path, "a", encoding="utf-8") as fh:
+        for i in range(start, start + count):
+            fh.write(json.dumps({
+                "kind": "request", "email": f"player{i}@example.invalid",
+                "authorization": f"Arena {i:036d}",
+                "body": f"<LoginName>player{i}@example.invalid</LoginName>",
+            }) + "\n")
+
+
+def check_snapshot_pins_a_growing_corpus():
+    """Prove the pin, on a corpus that grows on purpose while the run is holding it.
+
+    This is the section that would have been red before the snapshot existed. A
+    synthetic tree, because the real failure needs a server writing during the run and
+    a test cannot start one -- but the mechanism is identical: enumerate, then append,
+    then check that the arithmetic is still about what was enumerated.
+
+    The third check is the load-bearing one. Without it this section would pass just as
+    happily if `Snapshot` were a no-op wrapper around a live walk that happened not to
+    race, so it asserts the un-snapshotted read of the SAME tree really does disagree.
+    """
+    tmp = tempfile.mkdtemp(prefix="rurik-scrub-grow-")
+    try:
+        corpus = os.path.join(tmp, "captures")
+        os.makedirs(os.path.join(corpus, "portal"))
+        live = os.path.join(corpus, "portal", "live.jsonl")
+        write_records(live, 0, 10)
+
+        snap = sc.Snapshot(corpus, skip=SKIP)
+        pinned = sum(1 for line in snap.lines(os.path.join("portal", "live.jsonl"))
+                     if line.strip())
+
+        # The server keeps going, exactly as it did on 2026-08-10.
+        write_records(live, 100, 7)
+
+        out = os.path.join(tmp, "scrubbed")
+        _files, records, stats, _distinct, _un = sc.scrub_tree(
+            corpus, out, snapshot=snap)
+        src_lines = sum(1 for rel, _n in snap.jsonl()
+                        for line in snap.lines(rel) if line.strip())
+        out_lines = count_lines(jsonl_under(out))
+        dropped = stats.get("UNPARSEABLE", 0)
+        LEDGER.ok(src_lines - dropped == out_lines,
+                  "the arithmetic still balances when the corpus grows under the run",
+                  f"{src_lines} in, {out_lines} out, {dropped} unparseable, "
+                  f"7 appended after the snapshot")
+        LEDGER.ok(records == 10,
+                  "and the claim is about the 10 snapshotted records, not the 17 "
+                  "now on disk", f"{records} read, {pinned} pinned by the snapshot")
+
+        walked = count_lines([os.path.join(base, f)
+                              for base, _d, fs in os.walk(corpus)
+                              for f in fs if f.endswith(".jsonl")])
+        LEDGER.ok(walked != records,
+                  "an un-snapshotted read of the same tree disagrees -- the bug this "
+                  "removes", f"{walked} walked now vs {records} snapshotted")
+
+        # Growth is invisible; shrinkage must never be. A short read would silently
+        # lower every count downstream, which is the failure mode this whole module
+        # exists to refuse.
+        with open(live, "w", encoding="utf-8") as fh:
+            fh.write("")
+        try:
+            snap.text(os.path.join("portal", "live.jsonl"))
+            loud = False
+        except sc.SnapshotChanged:
+            loud = True
+        LEDGER.ok(loud,
+                  "a snapshotted file that SHRINKS is a loud refusal, not a short read",
+                  "growth is invisible by design; truncation is not")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def main():
+    src = vaultpath.require_dir("captures",
+                                why="the scrub test reads the real capture tree")
+    snap = sc.Snapshot(src, skip=SKIP)
+    try:
+        check_corpus(src, snap)
+    except sc.SnapshotChanged as exc:
+        # Routed through the ledger rather than a traceback: a test that dies without
+        # printing [FAIL] has still told nobody which claim went unmeasured.
+        LEDGER.ok(False,
+                  "the snapshotted corpus stayed readable at its recorded size",
+                  str(exc))
+    check_snapshot_pins_a_growing_corpus()
     return LEDGER.verdict()
 
 

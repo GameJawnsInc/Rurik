@@ -33,6 +33,10 @@ HOW THE SUBSTITUTION WORKS, and why not a hash.
   * The mapping is held in memory and written nowhere. The manifest records COUNTS per
     field, never values.
 
+The tree is read through a `Snapshot` (below), not walked live, because a running server
+appends to `vault/captures/` while this is working and a caller that also counts records
+would otherwise be counting a moving corpus.
+
 The `Arena 0` authorization header is NOT redacted: the literal `0` is what the client
 sends before it has a token, it is documented in studies/handshake/PLAN.md, and it is
 not a secret. Only the 36-character token form is replaced.
@@ -210,47 +214,134 @@ def scrub_auth(value, names, stats):
     return f"{parts[0]} {names.get(parts[1], 'tokn')}"
 
 
-def scrub_tree(src, out, dry_run=False, skip=()):
+class SnapshotChanged(Exception):
+    """A snapshotted file no longer holds the bytes the snapshot recorded.
+
+    Growth is invisible to a snapshot by construction -- that is the whole point.
+    Truncation and deletion are not: they mean the corpus a claim is about is gone,
+    and a short read would quietly shrink every count downstream instead of saying so.
+    """
+
+
+class Snapshot:
+    """A capture tree pinned to one instant: the file list, and how long each file was.
+
+    WHY THIS EXISTS. `vault/captures/` is APPENDED TO by a running authsrv/gamesrv, and
+    anything that audits the scrub reads the tree more than once -- harvest the secrets,
+    scrub, count the lines, compare original against output. On 2026-08-10
+    `toolkit/test_scrub.py` went red twice with "326648 in, 326631 out, 15 unparseable".
+    Nothing was wrong with the scrubber: a session was live, and two records had been
+    appended between the scrub pass and the pass that counted the originals -- so the
+    "in" side counted two lines the "out" side never had the chance to write. The
+    arithmetic was right. The corpus was moving.
+
+    Neither obvious repair is acceptable. Relaxing the arithmetic gives up the check that
+    caught 181 real values leaking through `response`. Skipping while a server is up
+    deletes the check exactly when captures are being written, which is when it matters.
+
+    So instead every pass reads the SAME BYTES: enumerate once, remember each file's
+    length, and never read past it. Records appended after the snapshot are simply not
+    part of the corpus under test, and a file that appears afterwards is not in it at all.
+    The claim becomes one about a fixed corpus, which is the only kind of claim record
+    arithmetic can honestly make.
+    """
+
+    def __init__(self, root, skip=()):
+        self.root = os.path.abspath(root)
+        entries = []
+        for base, dirs, fnames in os.walk(self.root):
+            dirs[:] = [d for d in dirs if d not in skip]
+            rel = os.path.relpath(base, self.root)
+            for name in sorted(fnames):
+                try:
+                    size = os.path.getsize(os.path.join(base, name))
+                except OSError:
+                    # Gone between the walk and the stat. It was never in the snapshot,
+                    # so nothing downstream will go looking for it.
+                    continue
+                entries.append((os.path.normpath(os.path.join(rel, name)), size))
+        self.entries = sorted(entries)
+        self._size = dict(self.entries)
+
+    def jsonl(self):
+        """(relpath, size) for every .jsonl in the snapshot, in a stable order."""
+        return [(rel, n) for rel, n in self.entries if rel.endswith(".jsonl")]
+
+    def raw(self):
+        """(relpath, size) for every .raw -- recorded, never read, never copied."""
+        return [(rel, n) for rel, n in self.entries if rel.endswith(".raw")]
+
+    def total_bytes(self):
+        return sum(n for _rel, n in self.entries)
+
+    def text(self, rel, encoding="utf-8"):
+        """Exactly the bytes recorded for `rel`, decoded. Never one byte more."""
+        size = self._size[rel]
+        try:
+            with open(os.path.join(self.root, rel), "rb") as fh:
+                data = fh.read(size)
+        except OSError as exc:
+            raise SnapshotChanged(f"{rel}: gone since the snapshot ({exc})") from exc
+        if len(data) != size:
+            raise SnapshotChanged(
+                f"{rel}: the snapshot recorded {size} bytes and only {len(data)} are "
+                "there now -- the corpus shrank under the run, so counts taken before "
+                "and after would be about two different things")
+        return data.decode(encoding, "replace")
+
+    def lines(self, rel, encoding="utf-8"):
+        """The snapshotted file's lines. `split`, not `splitlines`: the only thing that
+        ends a line here is the newline text mode used to see, and a stray U+0085 inside
+        a record must not silently become two records."""
+        return self.text(rel, encoding).split("\n")
+
+
+def scrub_tree(src, out, dry_run=False, skip=(), snapshot=None):
     """Scrub every .jsonl under `src` AND its subdirectories into `out`.
 
     Walks, because the credential was never only in captures/portal. Directory
     structure is preserved so a scrubbed tree can stand in for the original.
+
+    Reads through a `Snapshot` always -- taken here when the caller does not supply one.
+    A caller whose own passes have to agree with these counts must pass the same
+    snapshot it read from; see `Snapshot` for the run that made that necessary. `skip`
+    belongs to building the snapshot, so passing both is refused rather than ignored.
     """
     src, out = os.path.abspath(src), os.path.abspath(out)
     if os.path.normcase(src) == os.path.normcase(out):
         raise SystemExit("refusing to scrub a directory into itself")
+    if snapshot is None:
+        snapshot = Snapshot(src, skip=skip)
+    else:
+        if skip:
+            raise ValueError(
+                "skip= is applied when the snapshot is built, not here -- passing it "
+                "with a snapshot would silently do nothing")
+        if os.path.normcase(snapshot.root) != os.path.normcase(src):
+            raise ValueError(
+                f"snapshot is of {snapshot.root} but the scrub was asked for {src}: the "
+                "counts would describe a different tree than the one being written")
     names, stats = Pseudonyms(), {}
     files = records = 0
-    unscrubbed = []
-    for base, dirs, fnames in os.walk(src):
-        dirs[:] = [d for d in dirs if d not in skip]
-        rel = os.path.relpath(base, src)
-        for name in sorted(fnames):
-            if name.endswith(".raw"):
-                unscrubbed.append(os.path.join(rel, name))
+    unscrubbed = [rel for rel, _n in snapshot.raw()]
+    for rel, _size in snapshot.jsonl():
+        files += 1
+        lines = []
+        for line in snapshot.lines(rel):
+            line = line.strip()
+            if not line:
                 continue
-            if not name.endswith(".jsonl"):
+            records += 1
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                stats["UNPARSEABLE"] = stats.get("UNPARSEABLE", 0) + 1
                 continue
-            files += 1
-            lines = []
-            with open(os.path.join(base, name), encoding="utf-8",
-                      errors="replace") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    records += 1
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        stats["UNPARSEABLE"] = stats.get("UNPARSEABLE", 0) + 1
-                        continue
-                    lines.append(json.dumps(scrub_record(rec, names, stats)))
-            if not dry_run:
-                dest = os.path.join(out, rel) if rel != "." else out
-                os.makedirs(dest, exist_ok=True)
-                with open(os.path.join(dest, name), "w", encoding="utf-8") as fh:
-                    fh.write("\n".join(lines) + ("\n" if lines else ""))
+            lines.append(json.dumps(scrub_record(rec, names, stats)))
+        if not dry_run:
+            os.makedirs(os.path.join(out, os.path.dirname(rel)), exist_ok=True)
+            with open(os.path.join(out, rel), "w", encoding="utf-8") as fh:
+                fh.write("\n".join(lines) + ("\n" if lines else ""))
     if not dry_run:
         os.makedirs(out, exist_ok=True)
         with open(os.path.join(out, "SCRUB-MANIFEST.json"), "w",

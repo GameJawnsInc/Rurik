@@ -146,7 +146,9 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientscan/test_codescan.py` (the attack-speed chain, and the two
   decoding traps that hid it — needs capstone),
   `toolkit/test_checks.py` (the check on the checker — see below),
-  `toolkit/test_scrub.py` (the credential scrub, and that no secret survives it),
+  `toolkit/test_scrub.py` (the credential scrub, that no secret survives it, and that
+  its record arithmetic is pinned to a snapshot so a live server appending to
+  `vault/captures/` cannot make it disagree with itself),
   `toolkit/test_content.py` (the content store, and that its provenance and licence
   refusals actually refuse),
   `toolkit/clientpatch/test_cage.py` (the launch gate: which binary may be aimed at
