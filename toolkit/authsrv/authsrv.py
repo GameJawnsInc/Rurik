@@ -1661,7 +1661,37 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             rec.event("sent", seq=seq, opcode=op, label=label,
                       plain=binascii.hexlify(blob).decode())
 
-        if kind == "game":
+        if kind == "game" and TAPE_EVENTS is not None:
+            # A TAPE IS THE WHOLE GAME CHANNEL, from the first byte after the
+            # handshake. Not the load sequence minus our preamble, and not the
+            # tape plus our world tick: the recording ALREADY CONTAINS its own
+            # INSTANCE_LOAD_HEAD / PLAYER_DATA_START / INSTANCE_LOAD_PLAYER_NAME /
+            # INSTANCE_LOAD_INFO and its own ticks, so anything we add is a second
+            # server talking over the first.
+            #
+            # THIS WAS WRONG ON THE FIRST RUN AND IT INVALIDATED THE RESULT. The
+            # c2s dispatch was gated but this setup burst and the world_tick thread
+            # were not, so the 2026-08-10 run sent 378 messages of our own -- the
+            # five-message load preamble at t=0.02s and 373 WORLD_SIMULATION_TICKs
+            # from t=2.8s to t=21.6s -- interleaved into ArenaNet's recording. The
+            # client then asserted on
+            #     !m_timeStopMovement || ((int)(m_timeStopMovement - time) >= 0)
+            #     AgAgent.cpp(978)
+            # and that assert is about the MIXTURE. It cannot be attributed to
+            # either server, which is exactly what the comment on the c2s gate
+            # claimed this design prevented. Two servers' ticks arriving at one
+            # client is a fine way to produce a movement time in the past.
+            #
+            # So: no preamble, no world tick, no probe. The tape starts here,
+            # where our own first byte would have gone.
+            print(f"[c{conn_id}] TAPE MODE: this server sends nothing of its own",
+                  flush=True)
+            threading.Thread(
+                target=play_tape,
+                args=(send_raw, conn_id, stop, TAPE_EVENTS, TAPE_INFO, TAPE_SPEED),
+                daemon=True).start()
+
+        elif kind == "game":
             # 0x31 | Prophecies(2) | Factions(4) | Nightfall(8) = 0x3F, straight
             # from OpenTyria. Unlocking everything is wrong for a level 1 pre-Searing
             # character but is the permissive choice while we are still learning
@@ -1785,7 +1815,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     # Keep integrating -- the server needs a position model for
                     # everything that is not a player -- and stop arguing.
 
-            threading.Thread(target=world_tick, daemon=True).start()
+            # NOT under a tape: our 20 Hz ticker talking over ArenaNet's recording
+            # is what made the first run's client assert un-attributable.
+            if TAPE_EVENTS is None:
+                threading.Thread(target=world_tick, daemon=True).start()
 
         sock.settimeout(1.0)
         total = 0
@@ -1830,24 +1863,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
 
                 if kind == "game":
                     if TAPE_EVENTS is not None:
-                        # A TAPE REPLACES THE WHOLE LOAD SEQUENCE. Not some of it:
-                        # our burst and ArenaNet's would interleave into a stream
-                        # neither server ever sent, and any assert it produced would
-                        # be about the mixture rather than about either. The client's
-                        # first load message is the trigger because that is where the
-                        # recorded server's own first bytes went out.
-                        if opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS:
-                            if not state.get("tape_started"):
-                                state["tape_started"] = True
-                                threading.Thread(
-                                    target=play_tape,
-                                    args=(send_raw, conn_id, stop,
-                                          TAPE_EVENTS, TAPE_INFO, TAPE_SPEED),
-                                    daemon=True).start()
-                        # Every other game c2s is still FRAMED (so a desync still
-                        # closes) and still recorded, but is answered by the tape
-                        # alone. Falling through would let the ordinary handlers
-                        # inject replies into the middle of a recording.
+                        # The tape started at connection setup and IS the whole
+                        # channel. Client c2s is still framed here -- so a desync
+                        # still closes the connection -- and still recorded, but
+                        # nothing of ours may answer it.
                         continue
                     if opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS:
                         # OpenTyria's full REQUEST_ITEMS burst, in its order.
