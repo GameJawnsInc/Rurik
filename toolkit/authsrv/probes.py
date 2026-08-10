@@ -47,6 +47,16 @@ ENEMY_DEFINITION = _ENEMY_ROW["definition"]
 # agent's state under another's name.
 FRESH_AGENT_ID = 12
 
+# How far from the player a probe puts a body it wants LOOKED AT.
+#
+# Owner's instruction, 2026-08-10, given twice: 150, not 550 and not 300. A probe
+# body is evidence only if the operator can see it without turning the camera or
+# walking -- a spawn far enough to need hunting for reads as "nothing appeared",
+# which is the exact failure this probe family is trying to distinguish from a
+# real negative. Probes that place several bodies should step by this, not scatter
+# them further apart to keep them separate.
+PROBE_SPAWN_NEAR = 150.0
+
 # Agent int-property ids (GmAgentProperties.h via studies/character/FINDINGS.md).
 PROP_LEVEL = 36
 # Property 60. SOURCED three ways: GWLP-R (2013) and GWCA both name it
@@ -139,8 +149,8 @@ def _agent_removal_steps(agent_id, origin):
                                        bug in this file, nothing more
     """
     ox, oy, plane = origin if origin else (0.0, 0.0, 0)
-    reuse = (ox + 300.0, oy)
-    fresh = (ox + 550.0, oy)
+    reuse = (ox + PROBE_SPAWN_NEAR, oy)
+    fresh = (ox + 2 * PROBE_SPAWN_NEAR, oy)
     model_id = CHAR_CLASS_MONSTER_BASE | ENEMY_DEFINITION
     return [
         Step(3.0, 0x0021, [ENEMY_AGENT_ID], "REMOVE the hostile",
@@ -158,7 +168,8 @@ def _agent_removal_steps(agent_id, origin):
                           reuse[0], reuse[1], plane,
                           allegiance=ALLEGIANCE_HOSTILE),
              f"RE-CREATE at the SAME id ({ENEMY_AGENT_ID})",
-             "300 units east. Does a fresh hostile appear? This is the id reuse "
+             f"{PROBE_SPAWN_NEAR:.0f} units east. Does a fresh hostile appear? "
+             "This is the id reuse "
              "removal is supposed to make safe -- 301 of 301 live re-creations "
              "were preceded by a removal of that id."),
         # --- step 3: the CONTROL, same burst at an id never used ---------------
@@ -167,7 +178,8 @@ def _agent_removal_steps(agent_id, origin):
                           fresh[0], fresh[1], plane,
                           allegiance=ALLEGIANCE_HOSTILE),
              f"CONTROL: the SAME create at a FRESH id ({FRESH_AGENT_ID})",
-             "550 units east. If THIS one appears and the one before it did not, "
+             f"{2 * PROBE_SPAWN_NEAR:.0f} units east. If THIS one appears and the "
+             "one before it did not, "
              "the removed id is genuinely poisoned. If neither appears, the burst "
              "is wrong and the id was never the problem."),
     ]
@@ -1552,16 +1564,20 @@ PROBES = {
                  "it. If step 2 asserts or draws nothing, id reuse needs more "
                  "than a removal and our respawn cannot use it.",
         steps=_agent_removal_steps(a, o),
-        note="RUN 2026-08-10, PARTIAL: step 1 is a clean vanish -- 0x0021 removes "
-             "an agent the client is already drawing, with no corpse, no nameplate "
-             "and no ghost. That half is OBSERVED and settled. The id-reuse half is "
-             "NOT: the first version of step 2 sent a malformed bare create (no NPC "
-             "definition first, a message payload passed where a model_id belongs, "
-             "and the wrong plane), so its negative measured a bug in this file "
-             "rather than anything about the client. Step 2 now sends the same "
-             "three-message burst spawn_enemy does and step 3 is the CONTROL at a "
-             "fresh id -- that pair is what separates a poisoned id from a bad "
-             "payload. RE-RUN NEEDED. Implements studies/divergence/FINDINGS.md D1, the highest-"
+        note="RUN 2026-08-10. POSITIVE, both halves. Step 1: 0x0021 removes an "
+             "agent the client is already DRAWING -- clean vanish, no corpse, no "
+             "nameplate, no stale target frame, exactly what reading the handler "
+             "at 0x005FD2F0 predicted. Steps 2-3: the removed id was RE-CREATED "
+             "successfully and the fresh-id control also appeared, so a removed "
+             "id is NOT poisoned and reuse needs nothing beyond the ordinary "
+             "spawn burst. This is what unblocks remove-then-recreate for "
+             "respawn, which is what ArenaNet does (301 of 301 live re-creations "
+             "preceded by a removal of that id). AN EARLIER RUN OF THIS PROBE "
+             "REPORTED THE OPPOSITE and was wrong: step 2 sent a bare 0x0020 with "
+             "no NPC definition, a message payload where a model_id belongs, and "
+             "the wrong plane, so it measured a bug in this file. The control at "
+             "a fresh id is what separated the two, and is why it is there. "
+             "Implements studies/divergence/FINDINGS.md D1, the highest-"
              "ranked protocol gap from the first live capture: ArenaNet sent "
              "0x0021 416 times, we have sent it 0 times in 271,449 messages, and "
              "301 of 301 live id re-creations were preceded by a removal of that "

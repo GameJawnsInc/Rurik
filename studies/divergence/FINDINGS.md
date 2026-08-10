@@ -111,8 +111,26 @@ into the list.
 
 ### D1 — `0x0021` agent removal: we create agents and can never destroy one
 
-**Label:** OBSERVED (counts, the id test, the client's own handler). RECONSTRUCTION only
-for the human-readable name.
+> **CLOSED 2026-08-10, and confirmed against a real client.** Implemented in `d2cfaac`
+> (`GAME_SMSG_WORLD_REMOVE_AGENT`, `remove_agent()` and its two refusals) and verified by
+> the `agent_removal` probe. **Both halves came back positive.** Step 1: the hostile
+> vanishes cleanly while the client is drawing and targeting it — no corpse, no nameplate,
+> no stale target frame, exactly what reading the handler at `0x005FD2F0` predicted, so the
+> static read and the live client now agree. Steps 2–3: the removed id was **re-created
+> successfully**, and the fresh-id control also appeared, so **a removed id is not poisoned
+> and reuse needs nothing beyond the ordinary spawn burst.** That is what unblocks
+> remove-then-recreate for respawn — what ArenaNet actually does.
+>
+> **An earlier run reported the opposite, and it was wrong.** Step 2 sent a bare `0x0020`
+> with no `NPC_UPDATE_PROPERTIES`/`NPC_UPDATE_MODEL` first, passed a message payload where
+> a `model_id` belongs, and used the wrong plane — so it measured a bug in `probes.py` and
+> would have been written up here as "id reuse is impossible". **The fresh-id control is
+> the only reason the two were told apart**, and it was added only after the bad negative.
+> A probe that places one body cannot distinguish "this id is broken" from "this payload is
+> broken"; the lesson is the control, not the opcode.
+
+**Label:** OBSERVED (counts, the id test, the client's own handler, and now the live
+probe). RECONSTRUCTION only for the human-readable name.
 
 6-byte message, `[dword]`. ArenaNet sent it **416 times** across all four in-world
 connections (160 / 87 / 6 / 163). Our server has sent it **0 times in 271,449 recorded
