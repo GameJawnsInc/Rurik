@@ -294,8 +294,11 @@ account** and turns its wire bytes into a decrypted, `origin: live`, byte-replay
 capture. Every part is built and proven offline; two steps need an elevated shell and are
 deliberately not automated.
 
-**How it works.** The stock-DH live build (`vault/run-live/`) carries a **key-tap** cave
-(`make_custom_client.py --no-dh-patch --key-tap`) that copies the session's `master_secret`
+**How it works.** The stock-DH live build (`vault/run-live/`) must carry a **key-tap** cave
+— check with `python toolkit/clientpatch/dhbuild.py`, and if `key_tapped` is false rebuild
+with `make_custom_client.py --no-dh-patch --key-tap` then `make_run_dir.py --live`
+(`Gw.dat` is not re-copied). `livesession.py` refuses an untapped build, because without
+the cave there is no key and the ciphertext is unrecoverable. The cave copies `master_secret`
 to a data slot as the handshake runs; `keytap.py` reads it back. The ciphertext is captured
 **off the wire** with WinDivert (`wirecapture.py`, SNIFF mode — it observes, never alters).
 `livesession.py` assembles the two: it splits the plaintext DH handshake off each direction
@@ -313,20 +316,58 @@ python toolkit/harness/wirecapture.py --pid <client> --server 127.0.0.1:6112 --s
 ```
 
 **Do the loopback dry-run before going live.** The whole pipeline — key-tap → off-wire
-capture → assemble → decrypt — runs against our own server first, where a wrong byte is
-caught against a key we already hold. Build a key-tapped **loopback** client, run the stack
-(`session.py --until login --keep-open`), and in an elevated shell capture its
-`127.0.0.1:6112` traffic with `wirecapture.py`; then `livesession.assemble` it with the key
-`keytap.py` reads and confirm it decrypts. This is the same flow the live run uses, minus
-the live launch, and it is how you prove the driver end to end without touching ArenaNet.
+capture → keytap → assemble → decrypt — runs against our own server first, where every byte
+has an oracle. It is one elevated command and it cleans up after itself, including
+restoring the loopback client to its untapped default:
+
+```bash
+python toolkit/harness/dryrun_keycapture.py
+```
 
 **Elevated step 2 — the live run itself.** Only after the dry-run is green. Owner-driven,
 one client, human cadence, human hours, never in a competitive context (`PLAN.md` §6.1 —
 the traffic *pattern* is what closes accounts, and no gate substitutes for that):
 
 ```bash
-python toolkit/harness/livesession.py --account capture --exe <run-live>\Gw.exe --host <auth ip> --confirm
+python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\<build>\Gw.exe --confirm
 ```
+
+**Do not pass `--host`, and it is refused if you do.** This line used to carry
+`--host <auth ip>` and that was wrong in a way that looked like success. A live login is
+three stages on three endpoints, and Stage C's game-server address arrives *inside* the
+ARC4-encrypted `AUTH_SMSG_GAME_SERVER_INFO` — so it cannot be known when the packet filter
+opens and cannot be added later. Pinning the sniff to the auth IP records the auth channel
+only, prints `1/1 connection(s) decrypted`, exits 0, and spends the one authorized session
+on the only channel loopback already reproduces. The sniff filters by **port on any host**.
+
+**What the driver does and does not do.** It starts the sniff *before* the launch (the DH
+handshake is the first thing on the wire and it is the plaintext half), launches with no
+`-portal`/`-authsrv` so the client uses its own compiled-in ArenaNet endpoints, polls the
+tap for a **keyring** — each channel overwrites the one slot, so one read loses a channel —
+holds to `--minutes` (default 10 — a **ceiling, not a duration**: Ctrl-C ends the session
+at any point and still assembles and scrubs in full), then closes the client with `WM_CLOSE` so `Gw.log`
+survives, and assembles per connection. **It sends no keystrokes and no clicks.** You log
+in and play; the driver only instruments. That is deliberate: the loopback harness's
+scripted three-Enters-and-a-Play-click is precisely the traffic pattern §6.1 warns about.
+
+**Output**, under `vault/captures/live/<stamp>/`: `wire.jsonl` (the raw off-wire capture,
+kept even if nothing decrypts), `keyring.jsonl` (**every tapped key, written and flushed
+the moment it is read** — the first run held them in memory and lost six of seven, which
+made six channels of captured ArenaNet ciphertext permanently undecryptable), one
+`<channel>-<connection>.jsonl` per decrypted channel, and `manifest.json`. The scrubbed
+copy goes to `vault/captures-scrubbed/live-<stamp>/`, outside the capture tree so censuses
+and the tree-wide scrub do not walk it as if it were more evidence.
+
+**A capture can be decoded again without a client, a network or an account** — that is
+what the keyring is for, and it is how a framing fix gets applied to bytes already on disk:
+
+```bash
+python toolkit/harness/livesession.py --assemble C:\gd\Rurik\vault\captures\live\<stamp>
+``` **`scrubbed/` is not shareable.** The scrub matches JSON
+keys and cannot see inside a `plain` hex blob, and the auth channel's first client message
+carries the account email as UTF-16 inside exactly such a blob. The scrub says so on the
+way out and `SCRUB-MANIFEST.json` names every file affected — this applies to the existing
+`captures-scrubbed/` tree too (MEASURED: 401 of 517 vaulted captures carry one).
 
 ## Where the pieces live
 
@@ -416,6 +457,165 @@ For an off-disk copy: **`client/`, `mirrors/`, `keys/`, `research/`, and
 `captures-scrubbed/`** — roughly 10.5 GB, a USB stick. Not `captures/` (unscrubbed, and
 carries the `.raw` set), not `run/` or `dat_study/` (11.9 GB, both regenerate from
 `client/` plus the patcher and `Gw.dat`).
+
+## Playing a tape
+
+A tape replays one recorded game connection's server plaintext into a fresh loopback
+session at its recorded timing. No live client, no ArenaNet, no new capture. What it
+proves and what it cannot is [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md); this
+is the procedure.
+
+**1. Pick the tape by decoding it, never by position in the session.** A capture holds
+several game connections and the interesting one is rarely the obvious one — on
+2026-08-10 the Lakeside tape with the combat in it was the operator's *second* visit, not
+the one that follows Ascalon.
+
+```bash
+python toolkit/authsrv/tape.py
+```
+
+That lists every playable connection with its event count, byte count and cadence. To
+name the maps, read each connection's own c2s `VERSION` body — `<5I>` at offset 4 is
+build, unk1, world_id, **map_id**, player_id — and resolve `map_id` through
+`vault/research/areainfo_38797.json`.
+
+**2. Pre-flight the archive.** Get the `map_file_id` out of the tape's `0x0195` and check
+both `run/Gw.dat` and `run-live/Gw.dat` resolve it, per "The two run directories drift
+apart" below. A missing id is `Map.cpp(1762)` about thirty seconds into the run.
+
+**3. Play it.**
+
+```bash
+python toolkit/harness/session.py --keep-open --game-args "--tape C:\gd\Rurik\vault\captures\live\20260807T143055 --tape-connection 10.0.0.210:64103->54.198.7.73:80"
+```
+
+`--map` is a **no-op under a tape** — `MAP_OVERRIDE` sets state that the tape path never
+reads, and the client will render whatever the tape's `0x0195` names regardless of what
+it asked for. Passing it only makes the log say something misleading.
+
+**4. Watch the gamesrv terminal, not the avatar.** This is the one that costs time if you
+get it wrong. The recorded operator stands still whenever they stood still — on the
+Lakeside tape, for the **last 146 seconds of a 186-second tape** — and from the seat that
+is indistinguishable from the tape having finished. The terminal prints `tape N/1074`
+every 200 events and `tape complete: N/N events in Xs` at the end. Nothing before that
+line means the tape is over.
+
+**5. Measure it before believing it.** The run is only interpretable if our server stayed
+silent, and that has been wrong once: count `sent` records in
+`vault/captures/gamesrv/authsrv-*-c1.jsonl` whose `label` does not start with `tape[`. It
+must be zero. Anything else and the client was hearing two servers, which is how the
+2026-08-10 `AgAgent.cpp(978)` assert got attributed to the wrong thing for a day.
+
+**What a tape cannot do:** respond. Tape mode never answers c2s, so after the recording
+runs out the client can still move (that is client-side) but attacking, casting and
+gateways do nothing. That is the instrument, not a bug.
+
+## The labelled input run
+
+Names client-to-server messages by watching a human send them. `schema/messages.json`
+carries field layouts for **194 `GAME_CMSG` opcodes and names for none of them**; our
+server names 11 by hand and 15 have ever been witnessed from a real client. This is how
+that number goes up.
+
+**Pick the script to match the world the tape leaves behind.** This is not a preference;
+it decides what can be asked at all:
+
+| script | tape | that world has |
+|---|---|---|
+| `combat` | Lakeside `:64103` | skillbar `[153, 105, 0×6]`, hostiles, 1 player |
+| `town` | Ascalon City `:60935` | 19 NPCs, 40 players, skillbar **all zeros** |
+
+Running `combat` against Ascalon gives eight silent skill steps, which reads as "the
+client sends nothing for skills" and is false.
+
+See the script first — it states a prediction per step, and two steps are idle controls:
+
+```bash
+python toolkit/authsrv/labelrun.py --script town
+```
+
+**ONE command runs the whole thing** — tape, then prompts, in the same terminal. There is
+nothing to start separately and nothing to time yourself:
+
+```bash
+python toolkit/harness/session.py --keep-open --game-args "--tape C:\gd\Rurik\vault\captures\live\20260807T143055 --tape-connection 10.0.0.210:60935->52.3.40.244:80 --labelrun town"
+```
+
+| when | what happens | you |
+|---|---|---|
+| 0:00 | client launches and logs itself in | nothing |
+| ~0:30 | the tape starts; your character walks on its own | **nothing** |
+| ~1:20 | `tape complete`, then the labelled-run banner | the steps |
+| ~4:50 | `DONE -- N steps recorded` | finished |
+
+Times above are the **town** run: Ascalon's tape is 48.6 s, against Lakeside's 186.2 s.
+Swap the `--tape-connection` and drop the script name for the `combat` run, and add two
+minutes of waiting.
+
+The first three minutes are the recording driving your client. That is not a malfunction,
+and the avatar stops moving long before the tape ends — see the tape section above.
+
+**Put the two windows side by side before you start.** The client launches `-windowed`
+and the prompts print to the gamesrv terminal; you need to read one and act in the other.
+Each step names itself, its duration and its prediction, then the next banner replaces it.
+Do the action **once** and wait — a second attempt inside the same window is
+indistinguishable from the first.
+
+Nothing will answer you. That is by design (see the tape section above), so what you are
+recording is what the client *asks for*, not what a completed action looks like.
+
+Read it back with:
+
+```bash
+python toolkit/authsrv/labelrun.py --analyse
+```
+
+**Check the two idle rows first.** `idle_a` and `idle_b` predict silence; if either shows
+traffic, the marks and the messages disagree and **no opcode from that run may be named** —
+the tool says so and exits non-zero. Everything else in the report is only as good as
+those two rows.
+
+Steps that show nothing are a result, not a failure: the action was client-side, or it
+needs a server reply to send its second message. The tool cannot tell those apart and
+says so rather than guessing.
+
+## The two run directories drift apart, and the loopback one loses
+
+**Symptom.** The client dies on `Map.cpp(1762)` with `Map file '0x...' failed to
+load. Attempting to re-bloat.` — the same assert whichever build hits it.
+
+**Cause.** `run-live/` has its updater ENABLED (it must, or a live session cannot
+stream map content), so a live run **writes new content into its own `Gw.dat`**.
+`run/`, the loopback build, has the updater killed on purpose — the cage and the
+patcher are in direct conflict — so it can never fetch anything and is frozen at
+whatever `C:\gw` held when `make_run_dir.py` copied it.
+
+The two archives therefore diverge the moment a live session visits somewhere new,
+and **the divergence is invisible until something asks for the newer content**.
+OBSERVED 2026-08-10: the R1.5 tape of Ascalon City carries `map_file_id 113021` in
+its `0x0195`, `run-live/Gw.dat` resolves that id to MFT row **177262** and
+`run/Gw.dat` resolved it to row **7982** — an older entry — so the loopback client
+asked for content it did not have, could not fetch it, and asserted. Nothing was
+wrong with the tape, the protocol or the server.
+
+**Fix.** Give the loopback build the newer archive:
+
+```bash
+Copy-Item "C:\gd\Rurik\vault\run-live\<build>\Gw.dat" "C:\gd\Rurik\vault\run\<build>\Gw.dat" -Force
+```
+
+Two seconds on a warm cache, and **safe**: whose DH a build carries is decided by
+`Gw.exe`, never by the archive, so this cannot move a build across the split that
+`dhbuild.py` enforces. Run `python toolkit/clientpatch/dhbuild.py` after it and
+expect "Every build is where it belongs."
+
+**Check it worked** by resolving the id the crash named in both archives:
+
+```bash
+python -c "import sys; sys.path[:0]=['toolkit','toolkit/mapdata']; import archive; [print(p, archive.file_id_table(archive.Archive(p)).get(113021)) for p in (r'C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.dat', r'C:\gd\Rurik\vault\run-live\2026-07-29_221c13772c7a\Gw.dat')]"
+```
+
+Same row in both means the loopback client can load what the live one recorded.
 
 ## The third copy of Gw.dat, and why it exists
 

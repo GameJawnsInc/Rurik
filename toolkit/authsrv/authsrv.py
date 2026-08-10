@@ -47,6 +47,7 @@ from codec import Codec  # noqa: E402
 from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 import probes  # noqa: E402
+import labelrun  # noqa: E402
 import agents  # noqa: E402
 import origin  # noqa: E402
 
@@ -182,6 +183,31 @@ GAME_SMSG_INSTANCE_LOAD_FINISH = 0x018E
 GAME_SMSG_WORLD_SIMULATION_TICK = 0x001E
 GAME_SMSG_WORLD_UPDATE_LOAD_TIME = 0x001F
 GAME_SMSG_WORLD_CREATE_AGENT = 0x0020
+
+# The counterpart, and until 2026-08-07 we could create an agent and never destroy
+# one. 6 bytes: header + the agent id to remove.
+#
+# OBSERVED from the first live capture (studies/divergence/FINDINGS.md D1):
+# ArenaNet sent it 416 times across four in-world instances; our server has sent
+# it 0 times in 271,449 recorded s2c messages. The dword is a previously-created
+# agent id in 416 of 416 cases keyed on WORLD_CREATE_AGENT's field 0, and in only
+# 3 of 416 keyed on field 1 -- a split no framing accident produces. Forcing other
+# sizes breaks the stream: at 2 bytes only 54,411 of 190,544 GAME_SMSG bytes
+# frame, at 10 bytes 63,911, at the catalogued 6 all 190,544.
+#
+# CORROBORATED by the client's own binary rather than by our schema alone:
+# `msgshape` reads the RECV table at 0x00a52d70 as opcode 0x0021 -> handler
+# 0x005FD2F0, one u32 field, 6 bytes on the wire, and `asserts.py --at 0x005fd2f0`
+# names `Array:587 "index < m_count"` -- the client bounds-checks the dword as an
+# index into its agent array, then walks every object bound to that agent and
+# clears the bindings. That is a teardown handler, read out of the client, not
+# inferred from a name.
+#
+# WHY IT MATTERS BEYOND TIDINESS: ArenaNet REUSES agent ids, and removal is the
+# prerequisite. OBSERVED: 301 of 301 id re-creations in the live capture are
+# preceded by a removal of that same id, and 0 of 416 removals target a
+# never-created id or double-remove without an intervening create.
+GAME_SMSG_WORLD_REMOVE_AGENT = 0x0021
 GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT = 0x0022
 GAME_SMSG_PLAYER_CREATE = 0x0059
 GAME_SMSG_PLAYER_UPDATE_PROFESSION = 0x00B7
@@ -700,6 +726,19 @@ VAULT_DEFAULT = vault_path("captures", "authsrv")
 # exactly as it does in a normal session.
 PROBE_NAME = None
 
+# Set from --tape. When armed, the GAME channel's whole load sequence is replaced
+# by a recording of ArenaNet's -- see play_tape. None means the ordinary map load.
+TAPE_EVENTS = None
+TAPE_INFO = None
+TAPE_SPEED = 1.0
+
+# Set from --labelrun to the chosen script (a list of labelrun.Step), None otherwise.
+# Walks the operator through a numbered script, marking each
+# step into the capture so a c2s message can be attributed to a named human action.
+# See labelrun.py: 194 GAME_CMSG opcodes have layouts in the schema and names in
+# neither it nor here, and this is how that gets fixed.
+LABEL_RUN = None
+
 # Set from --click-sweep. Cycles the two 16-bit fields of MOVE_TO_POINT through
 # every plausible assignment, one per click, so the CLIENT decides which is
 # right instead of us arguing from two sources that contradict each other.
@@ -930,7 +969,17 @@ def revive_due(send, state, conn_id):
     at 0x008183F0 where the effects setter does `fldz` into the pools.
     """
     now = time.time()
-    for agent_id, agent in state.get("agents", {}).items():
+    # Iterate a SNAPSHOT. This walked the live dict, which was safe only while
+    # nothing could ever remove an agent -- and remove_agent now can. This runs on
+    # the world-tick thread, so a removal from any other thread mid-walk would
+    # raise "dictionary changed size during iteration" inside the tick, killing the
+    # world loop for the rest of the session with a traceback nowhere near the
+    # cause. The snapshot costs one list of a handful of agents per tick.
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        # And re-check membership: an agent removed after the snapshot was taken
+        # must not be revived back into a world it has already left.
+        if agent_id not in state.get("agents", {}):
+            continue
         if not agent["dead"] or now - agent["died_at"] < REVIVE_AFTER:
             continue
         agent["dead"] = False
@@ -956,6 +1005,79 @@ def revive_due(send, state, conn_id):
              f"refill bar on agent {agent_id}")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)
+
+
+def frame_pending(codec_obj, channel, pending, mask):
+    """(messages, remaining, desync) for one buffer. `desync` is None or the reason.
+
+    Extracted from the receive loop so the POLICY is testable without a socket, a
+    handshake or a client. It was inline, which meant the fix below had no test
+    covering it: the suite asserted what codec.decode_stream does, not what this
+    server does with the answer, and those are different questions -- the whole
+    defect was that the answer was correct and the caller mishandled it.
+
+    THE CONTRACT, and each clause is a thing the old code got wrong:
+
+      * whole messages are returned and their bytes consumed;
+      * an INCOMPLETE trailing message is not an error. It is the normal case --
+        a TCP read is not a message boundary -- and its bytes stay in `remaining`
+        to be completed by the next read;
+      * an UNFRAMEABLE message sets `desync` and leaves its bytes in `remaining`
+        UNTOUCHED. The old code set `pending = b""` here, which reads like
+        recovery and is not: with no length prefix nothing knows where the bad
+        message ended, so every later read was framed from a non-boundary while
+        ARC4 kept decrypting correctly and the bytes kept looking plausible.
+        Returning them unconsumed is what lets the caller report exactly what it
+        choked on instead of guessing past it.
+    """
+    msgs, consumed, err = codec_obj.decode_stream(channel, pending, mask=mask)
+    remaining = pending[consumed:]
+    if err and "incomplete" not in err:
+        return msgs, remaining, err
+    return msgs, remaining, None
+
+
+class AgentLifetimeError(Exception):
+    """A removal that the live capture proves ArenaNet never performs."""
+
+
+def remove_agent(send, state, agent_id, why, conn_id=None):
+    """Take an agent out of the world, and free its id for reuse.
+
+    The world state is the point, not the send. `state["agents"]` was a dict that
+    only ever grew: entries were added at spawn and nothing removed them, so the
+    server had no concept of an agent ceasing to exist and an id could never be
+    reused without the client holding a stale object under it.
+
+    TWO REFUSALS, both taken from what the live capture shows ArenaNet never does
+    (studies/divergence/FINDINGS.md D1) rather than from taste:
+
+      * removing an id that was never created -- 0 of 416 live;
+      * removing an id that is already removed, with no create in between --
+        0 of 416 live.
+
+    Both raise rather than sending. The client bounds-checks the dword as an index
+    into its agent array (`Array:587 "index < m_count"` at 0x005FD2F0), so a bad id
+    is an assert on the client, in its own process, thirty seconds later and
+    nowhere near the cause. Refusing here keeps the failure where the bug is.
+
+    Returns the removed bookkeeping entry, so a caller respawning the same id can
+    carry forward what it needs.
+    """
+    live = state.setdefault("agents", {})
+    if agent_id not in live:
+        raise AgentLifetimeError(
+            f"refusing to remove agent {agent_id}: it is not in the world. "
+            f"live ids: {sorted(live)}. ArenaNet removed a never-created id "
+            f"0 times in 416 -- and the client bounds-checks this dword.")
+    entry = live.pop(agent_id)
+    state.setdefault("removed_agents", []).append(agent_id)
+    send(GAME_SMSG_WORLD_REMOVE_AGENT, [agent_id],
+         f"WORLD_REMOVE_AGENT({agent_id}) — {why}")
+    if conn_id is not None:
+        print(f"[c{conn_id}] removed agent {agent_id} "
+              f"({entry.get('name', '?')}) — {why}", flush=True)
+    return entry
 
 
 def send_attack_speed(send, agent_id, base, what):
@@ -1061,6 +1183,112 @@ def spawn_enemy(send, state, origin, conn_id):
           flush=True)
 
 
+def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
+    """Play a recorded server's plaintext into a live session, at recorded timing.
+
+    R1.5. Runs on its own thread for the same reason a probe does: the receive loop
+    must keep running throughout or the client times out mid-tape, and the tape is
+    48 seconds long.
+
+    THE PREDICTION IS STATED HERE rather than in a commit message, because this is
+    an experiment and the house rule is that a probe with no stated expectation can
+    be rationalised into agreeing with whatever happened:
+
+      * PREDICTED, and CONFIRMED 2026-08-10: the client loads the recorded map and
+        draws its agents. It did far more than that -- 1,209 of 1,209 events with
+        zero messages of ours on the channel, and the client skipped the cutscene,
+        walked to each quest giver in order, spoke to them, accepted quests and
+        walked to the zone exit. Chat arrived. RUN, POSITIVE.
+      * THE INFORMATIVE FAILURE, which did NOT happen and is therefore the result:
+        an assert naming a player-identity field. THE CLIENT DOES NOT CHECK. The tape
+        names the RECORDED character -- an 11-character name in 0x017D and in the
+        player's 0x0059 row, player number 26, agent 725, plus 40 other players --
+        and the client logged in as ours. Whether it cross-checks the identity it
+        SENT against the one it is TOLD about was UNVERIFIED; it is now OBSERVED
+        that it does not. Nothing was renamed for the run, so this is the honest
+        answer rather than one obtained by sneaking past a check.
+      * NOT PREDICTED, and out of scope: control. The tape's 987 move messages
+        answer the RECORDED operator's clicks, so the avatar walks the recorded path
+        whatever the new operator does, and client-side prediction will fight it. A
+        tape shows a load and a populated world; it cannot show control.
+      * RUN 2, 2026-08-10, Lakeside County (`:64103`): 1,074/1,074, zero of ours on
+        the channel, and IT RENDERED COMBAT -- the recorded operator's fight with a
+        Wolf, Vampiric Gaze and Deathly Swarm, played back into a client that had no
+        server behind it. Also OBSERVED there: the client drew map 146 while its own
+        VERSION had asked for 148, so the identity result above generalises to the
+        map id. studies/tape/FINDINGS.md is the log; read it before the next run,
+        because two of its findings are about how to READ a run rather than what one
+        found -- the recorded avatar stands still for the last 146 s of that tape and
+        looks finished, and `--map` is inert here.
+
+    Pacing is per WIRE SEGMENT, not per message, because that is the resolution the
+    capture has -- 1,209 timing points for 3,981 messages on the Ascalon tape. Drift
+    is corrected against a fixed origin rather than accumulated per sleep, so a slow
+    send cannot stretch the whole tape.
+    """
+    bar = "=" * 62
+    print(f"\n{bar}\nTAPE: {info['connection']}\n"
+          f"  {info['events']:,} events, {info['bytes']:,} B, {info['seconds']:.1f}s"
+          f"{'' if speed == 1.0 else f' at {speed}x'}\n"
+          f"  from {info['capture']} ({info['origin']})\n"
+          f"  PREDICTS: the client loads the recorded map and draws its agents.\n"
+          f"  The informative failure is an assert naming a player-identity field --\n"
+          f"  the tape names the RECORDED character, not the one that logged in.\n{bar}",
+          flush=True)
+    t0 = time.monotonic()
+    sent = 0
+    try:
+        for i, (t, blob) in enumerate(events):
+            if stop.is_set():
+                print(f"[c{conn_id}] tape stopped at event {i}/{len(events)}", flush=True)
+                return False
+            due = t0 + (t / speed if speed else 0.0)
+            now = time.monotonic()
+            if due > now:
+                time.sleep(due - now)
+            send_raw(blob, f"tape[{i}]")
+            sent += 1
+            if i and i % 200 == 0:
+                print(f"[c{conn_id}] tape {i}/{len(events)} "
+                      f"({time.monotonic() - t0:.1f}s)", flush=True)
+    except (ConnectionError, OSError) as ex:
+        # The client dropped, or asserted and took the socket with it. That is THE
+        # RESULT of this experiment, not a crash to swallow -- so say exactly what
+        # was in flight when it happened. The client's own assert names a source
+        # file and line; this names the bytes that provoked it, and the pair is
+        # what turns a crash into a finding.
+        #
+        # OBSERVED 2026-08-10: the client died at event 739/1209, t=22.4s, and the
+        # two events either side of that were the largest in the neighbourhood --
+        # 229B and 209B carrying WORLD_CREATE_AGENT plus equipment and property
+        # updates, i.e. another player zoning into the outpost. Without this
+        # readout that had to be reconstructed afterwards from the tape by hand.
+        print(f"\n[c{conn_id}] TAPE ENDED at event {sent}/{len(events)} "
+              f"after {time.monotonic() - t0:.1f}s: {type(ex).__name__}: {ex}",
+              flush=True)
+        lo = max(0, sent - 3)
+        print(f"[c{conn_id}] what was in flight (the client asserts on one of these):",
+              flush=True)
+        for j in range(lo, min(sent + 2, len(events))):
+            et, eb = events[j]
+            try:
+                msgs, _c, _e = codec.decode_stream("GAME_SMSG", eb)
+                ops = " ".join(f"0x{op:04x}" for op, _v in msgs[:10])
+                more = "..." if len(msgs) > 10 else ""
+            except Exception:
+                ops, more = eb[:12].hex(" "), " (undecodable)"
+            flag = "  <<< LAST SENT" if j == sent - 1 else ""
+            print(f"[c{conn_id}]   ev{j} t={et:.2f}s {len(eb)}B  {ops}{more}{flag}",
+                  flush=True)
+        print(f"[c{conn_id}] re-run with --tape-speed 0.25 to spread these out, or "
+              f"copy the client's Assertion line -- it names the source file.",
+              flush=True)
+        return False
+    print(f"[c{conn_id}] tape complete: {sent}/{len(events)} events in "
+          f"{time.monotonic() - t0:.1f}s", flush=True)
+    return True
+
+
 def run_probe(name, send, conn_id, stop, origin=None):
     """Fire a scripted experiment at the client, on its own thread.
 
@@ -1157,6 +1385,18 @@ class Recorder:
         self.event("frame", seq=seq, direction=direction, n=len(cipher),
                    cipher=binascii.hexlify(cipher[:512]).decode(),
                    plain=binascii.hexlify(plain[:512]).decode())
+
+    @property
+    def closed(self):
+        """Has the connection this recorder belongs to already been torn down?
+
+        Background threads (the tape player, a probe, the labelled run) outlive the
+        connection handler that owns the recorder, so they can and do reach a closed
+        file. Asking is better than catching: a thread that discovers this can say
+        what it is skipping and why, instead of dying on `I/O operation on closed
+        file` and stacking a confusing traceback on top of the real failure.
+        """
+        return self.meta.closed
 
     def close(self):
         self.meta.close()
@@ -1370,9 +1610,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         state = {}
         if kind == "game":
             if MAP_OVERRIDE is not None and MAP_OVERRIDE != map_id:
-                print(f"[c{conn_id}] client asked for map {map_id}; "
-                      f"sending it to {MAP_OVERRIDE} instead", flush=True)
-                map_id = MAP_OVERRIDE
+                if TAPE_EVENTS is not None:
+                    # --map writes state["map_id"], and under a tape NOTHING reads
+                    # it: the preamble that would is skipped entirely and the map
+                    # the client draws comes from the tape's own 0x0195
+                    # map_file_id. Saying "sending it to N instead" here would be a
+                    # lie, and on 2026-08-10 it was read as one -- the client had
+                    # asked for 148, the tape declared 146, and the disagreement
+                    # was the finding (studies/tape/FINDINGS.md T2). A log line
+                    # that claims an effect it does not have costs more than no
+                    # log line at all.
+                    print(f"[c{conn_id}] client asked for map {map_id}; --map "
+                          f"{MAP_OVERRIDE} is INERT under a tape (the tape's own "
+                          f"0x0195 decides what loads)", flush=True)
+                else:
+                    print(f"[c{conn_id}] client asked for map {map_id}; "
+                          f"sending it to {MAP_OVERRIDE} instead", flush=True)
+                    map_id = MAP_OVERRIDE
             state["map_id"] = map_id
             state["world_id"] = world_id
             state["player_id"] = player_id
@@ -1430,7 +1684,107 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             rec.event("sent", seq=seq, opcode=opcode, label=label,
                       plain=binascii.hexlify(blob).decode())
 
-        if kind == "game":
+        def send_raw(blob, label, quiet=True):
+            """Write PRE-FORMED plaintext through this session's keystream.
+
+            The tape player's only door into the socket. It shares send()'s lock and
+            keystream counter deliberately: ARC4 is one continuous keystream per
+            direction, so a tape event and an ordinary send interleaving without the
+            lock would each get half the right bytes and the client would decrypt
+            neither. It records under the same `sent` kind so a tape session's
+            capture reads back through replay.py exactly like any other.
+
+            opcode is read from the blob rather than passed, because a tape carries
+            whole messages we never encoded and may not have a name for -- which is
+            the point of a tape: it needs no semantics.
+            """
+            op = int.from_bytes(blob[:2], "little") if len(blob) >= 2 else -1
+            with send_lock:
+                seq = next(s2c_seq)
+                sock.sendall(s2c.crypt(blob))
+            if not quiet:
+                print(f"[c{conn_id}] s2c {label} ({len(blob)}B)", flush=True)
+            rec.event("sent", seq=seq, opcode=op, label=label,
+                      plain=binascii.hexlify(blob).decode())
+
+        if kind == "game" and TAPE_EVENTS is not None:
+            # A TAPE IS THE WHOLE GAME CHANNEL, from the first byte after the
+            # handshake. Not the load sequence minus our preamble, and not the
+            # tape plus our world tick: the recording ALREADY CONTAINS its own
+            # INSTANCE_LOAD_HEAD / PLAYER_DATA_START / INSTANCE_LOAD_PLAYER_NAME /
+            # INSTANCE_LOAD_INFO and its own ticks, so anything we add is a second
+            # server talking over the first.
+            #
+            # THIS WAS WRONG ON THE FIRST RUN AND IT INVALIDATED THE RESULT. The
+            # c2s dispatch was gated but this setup burst and the world_tick thread
+            # were not, so the 2026-08-10 run sent 378 messages of our own -- the
+            # five-message load preamble at t=0.02s and 373 WORLD_SIMULATION_TICKs
+            # from t=2.8s to t=21.6s -- interleaved into ArenaNet's recording. The
+            # client then asserted on
+            #     !m_timeStopMovement || ((int)(m_timeStopMovement - time) >= 0)
+            #     AgAgent.cpp(978)
+            # and that assert is about the MIXTURE. It cannot be attributed to
+            # either server, which is exactly what the comment on the c2s gate
+            # claimed this design prevented. Two servers' ticks arriving at one
+            # client is a fine way to produce a movement time in the past.
+            #
+            # So: no preamble, no world tick, no probe. The tape starts here,
+            # where our own first byte would have gone.
+            print(f"[c{conn_id}] TAPE MODE: this server sends nothing of its own",
+                  flush=True)
+
+            def _tape_then_labels():
+                # Sequential on ONE thread on purpose. A labelled run started
+                # concurrently would prompt the operator while the recording still
+                # moves their avatar, and every attribution would be against a
+                # world neither of them controls. The tape has to be over first --
+                # and note it is over 146 s AFTER it looks over on the Lakeside
+                # tape (studies/tape/FINDINGS.md T7), which is exactly why this
+                # waits on play_tape returning rather than on the operator's
+                # judgement.
+                if LABEL_RUN:
+                    # Say this BEFORE the tape, not after. The operator's first
+                    # question on 2026-08-10 was whether the client acting on its
+                    # own meant something had gone wrong, and the honest answer --
+                    # "that is the recording, sit still for three minutes" -- was
+                    # only written down in the runbook. A thing the operator has to
+                    # remember is a thing the tool failed to say.
+                    print(f"\n[c{conn_id}] The tape plays FIRST: "
+                          f"{TAPE_INFO['seconds']:.0f}s. Your character will move on "
+                          f"its own -- that is the recording, not you.\n"
+                          f"[c{conn_id}] DO NOTHING until this window says the "
+                          f"labelled run has started. It will say so clearly.\n"
+                          f"[c{conn_id}] NOTE the avatar stops moving well before the "
+                          f"tape ends, and that is not the end.\n", flush=True)
+                finished = play_tape(send_raw, conn_id, stop, TAPE_EVENTS,
+                                     TAPE_INFO, TAPE_SPEED)
+                if not LABEL_RUN or stop.is_set():
+                    return
+                if not finished:
+                    # The tape ended early: the client dropped, asserted, or the
+                    # session was torn down. Prompting a human through 18 steps
+                    # against a dead socket produces a capture that LOOKS like a
+                    # labelled run and contains nothing the operator did -- which
+                    # is worse than no run, because it would be analysed.
+                    print(f"[c{conn_id}] the tape did not finish, so the labelled "
+                          f"run is NOT starting. Nothing to label: the client is "
+                          f"gone.", flush=True)
+                    return
+                if rec.closed:
+                    # Same defence one layer down. OBSERVED 2026-08-10: a NameError
+                    # in session.py tore the stack down mid-run, the connection
+                    # handler closed this recorder, and the label run then died on
+                    # `I/O operation on closed file` -- a confusing second traceback
+                    # stacked on top of the real one.
+                    print(f"[c{conn_id}] the capture is closed, so the labelled run "
+                          f"is NOT starting -- its marks would go nowhere.",
+                          flush=True)
+                    return
+                labelrun.run(rec, conn_id, stop, steps=LABEL_RUN)
+
+            threading.Thread(target=_tape_then_labels, daemon=True).start()
+
+        elif kind == "game":
             # 0x31 | Prophecies(2) | Factions(4) | Nightfall(8) = 0x3F, straight
             # from OpenTyria. Unlocking everything is wrong for a level 1 pre-Searing
             # character but is the permissive choice while we are still learning
@@ -1554,11 +1908,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     # Keep integrating -- the server needs a position model for
                     # everything that is not a player -- and stop arguing.
 
-            threading.Thread(target=world_tick, daemon=True).start()
+            # NOT under a tape: our 20 Hz ticker talking over ArenaNet's recording
+            # is what made the first run's client assert un-attributable.
+            if TAPE_EVENTS is None:
+                threading.Thread(target=world_tick, daemon=True).start()
 
         sock.settimeout(1.0)
         total = 0
         pending = b""          # decrypted bytes not yet framed into whole messages
+        desynced = False       # set when an unframeable opcode ends the connection
         last = time.time()
         while not stop.is_set():
             try:
@@ -1582,22 +1940,44 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # catalog self-selects: run a second instance on 6113 and it decodes
             # the game channel with no extra flag. GAME_CMSG_MASK is also 0x8000,
             # so the framing is identical -- only the catalog differs.
-            msgs, consumed, err = codec.decode_stream(
-                cmsg, pending, mask=AUTH_CMSG_MASK)
-            pending = pending[consumed:]
+            msgs, pending, desync_err = frame_pending(
+                codec, cmsg, pending, AUTH_CMSG_MASK)
 
             for opcode, values in msgs:
                 # No semantic names exist for GAME_CMSG in this repo yet; the
                 # schema knows shapes only. Printing "?" is the honest answer
                 # rather than borrowing an auth name that means something else.
-                name = AUTH_CMSG_NAMES.get(opcode, "?") if kind == "auth" else "?"
-                print(f"[c{conn_id}] c2s 0x{opcode | AUTH_CMSG_MASK:04x} {name}",
-                      flush=True)
+                # GAME_CMSG names now come from schema/overrides.json, where each one
+                # sits beside the labelled run that earned it. Until 2026-08-10 this
+                # printed "?" for every game-channel message because the catalog had
+                # 194 layouts and no names -- which made every c2s log line in this
+                # project unreadable, and is why the labelled run exists at all.
+                # Anything still unnamed prints "?" rather than borrowing a name from
+                # the auth catalog, where the numbers collide and mean other things.
+                name = (AUTH_CMSG_NAMES.get(opcode, "?") if kind == "auth"
+                        else codec.name_for("GAME_CMSG", opcode))
+                if labelrun.ACTIVE:
+                    # A labelled run owns this terminal: the operator is reading a
+                    # countdown in it, and one movement step prints tens of lines a
+                    # second straight through it. Count instead of print -- the
+                    # count is better feedback anyway, because it tells them their
+                    # key press actually reached the server. The message is still
+                    # recorded below; only the echo is suppressed.
+                    labelrun.SEEN[0] += 1
+                else:
+                    print(f"[c{conn_id}] c2s 0x{opcode | AUTH_CMSG_MASK:04x} {name}",
+                          flush=True)
                 rec.event("decoded", opcode=opcode, name=name,
                           values=[v.hex() if isinstance(v, bytes) else v
                                   for v in values])
 
                 if kind == "game":
+                    if TAPE_EVENTS is not None:
+                        # The tape started at connection setup and IS the whole
+                        # channel. Client c2s is still framed here -- so a desync
+                        # still closes the connection -- and still recorded, but
+                        # nothing of ours may answer it.
+                        continue
                     if opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS:
                         # OpenTyria's full REQUEST_ITEMS burst, in its order.
                         # Sending only the tail of it made the client accept every
@@ -2349,6 +2729,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
+                        if LABEL_RUN:
+                            # The no-tape path: label against our OWN world, which
+                            # answers. That is a different experiment from labelling
+                            # after a tape -- here a completed action is visible, but
+                            # the world is one player and at most one enemy, so most
+                            # of the script has nothing to point at. Both are worth
+                            # having; neither substitutes for the other.
+                            threading.Thread(
+                                target=labelrun.run,
+                                args=(rec, conn_id, stop),
+                                kwargs={"steps": LABEL_RUN},
+                                daemon=True).start()
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
                         # map_file_id 0 is a placeholder: the real one comes from
                         # the map's static config, which we do not have yet. If the
@@ -2457,18 +2849,54 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     handle_request_game_instance(values, send, conn_id,
                                                  state, rec)
 
-            if err and "incomplete" not in err:
-                # Unknown opcode: we cannot frame past it and must not guess,
-                # because there is no length prefix to resynchronise against.
-                print(f"[c{conn_id}] {err}", flush=True)
-                print(f"[c{conn_id}] {len(pending)}B undecodable — "
-                      f"first bytes {binascii.hexlify(pending[:16]).decode()}", flush=True)
-                rec.event("undecodable", error=err,
-                          head=binascii.hexlify(pending[:64]).decode())
-                pending = b""
+            if desync_err:
+                # AN UNDECODABLE OPCODE ENDS THE CONNECTION. It used to do
+                # `pending = b""` and carry on, which reads like recovery and is
+                # not one: there is no length prefix, so nothing here knows where
+                # the bad message ended, and every LATER read is then framed from
+                # a byte that is not a message boundary. ARC4 keeps decrypting
+                # correctly the whole time, so the bytes stay plausible and the
+                # framer either emits a cascade of undecodables or -- the real
+                # hazard -- accidentally frames garbage into well-formed messages
+                # that this loop then ACTS on. codec.decode_stream already refuses
+                # to resynchronise and says why; this caller was resynchronising
+                # on its behalf, badly.
+                #
+                # OBSERVED in our own corpus, 25 events across 17 of 416 sessions,
+                # and the evidence that the old path was hiding a real bug: seven
+                # identical events carry head `01 92 80 70 ...`, in which `92 80`
+                # is a VALID GAME_CMSG 0x0092 sitting one byte later. That is an
+                # off-by-one in a preceding message's length, and swallowing the
+                # buffer turned a framing bug into background noise for a day.
+                #
+                # 4% of sessions is rare enough that closing costs little, and a
+                # closed connection is a signal the operator can act on. A
+                # silently mis-framed one is not.
+                raw = (int.from_bytes(pending[:2], "little")
+                       if len(pending) >= 2 else None)
+                which = (f" from opcode 0x{raw:04x} "
+                         f"(masked 0x{raw & ~AUTH_CMSG_MASK:04x})"
+                         if raw is not None else "")
+                print(f"[c{conn_id}] {desync_err}", flush=True)
+                print(f"[c{conn_id}] DESYNC: {len(pending)}B unframeable{which}",
+                      flush=True)
+                print(f"[c{conn_id}] first bytes "
+                      f"{binascii.hexlify(pending[:16]).decode()}", flush=True)
+                print(f"[c{conn_id}] closing: we cannot find the next message "
+                      f"boundary, and framing on from here would invent messages.",
+                      flush=True)
+                rec.event("undecodable", error=desync_err,
+                          head=binascii.hexlify(pending[:64]).decode(),
+                          unframeable_bytes=len(pending), closing=True)
+                desynced = True
+                break
 
-        print(f"[c{conn_id}] done, {total} encrypted bytes recorded", flush=True)
-        rec.event("disconnect", total_bytes=total)
+        # Say WHICH ending this was. A desync and a clean hangup produced the same
+        # "done" line, so a session that died mid-stream looked like one the client
+        # closed politely.
+        print(f"[c{conn_id}] done, {total} encrypted bytes recorded"
+              f"{' -- ENDED ON DESYNC, see above' if desynced else ''}", flush=True)
+        rec.event("disconnect", total_bytes=total, desynced=desynced)
     except (ConnectionError, socket.timeout, OSError) as ex:
         print(f"[c{conn_id}] {type(ex).__name__}: {ex}", flush=True)
         rec.event("error", error=repr(ex))
@@ -2542,6 +2970,37 @@ def main():
                          "established — the two used to share one file, and a "
                          "test run silently clobbered live state.")
     ap.add_argument("--once", action="store_true", help="exit after one connection")
+    ap.add_argument("--tape", metavar="CAPTURE_DIR",
+                    help="R1.5: replay a recorded LIVE session's server plaintext "
+                         "on the game channel instead of our own map load, at the "
+                         "timing the wire capture recorded. The auth channel stays "
+                         "ours -- a verbatim auth replay answers the wrong request "
+                         "ids. Refuses a capture that is not origin: live.")
+    ap.add_argument("--tape-connection", metavar="CLIENT->SERVER", default=None,
+                    help="which game channel of the capture to play; default is "
+                         "the one with the most server plaintext.")
+    ap.add_argument("--tape-no-transfer", action="store_true",
+                    help="Stop the tape before the messages that hand the client to "
+                         "another game server (0x01A5 + 0x0099 MAP_UPDATE_CURRENT), "
+                         "so it stays in the map instead of dialling ArenaNet and "
+                         "being refused by the cage. Implied by --labelrun, which "
+                         "cannot survive the transfer.")
+    ap.add_argument("--tape-speed", type=float, default=1.0, metavar="X",
+                    help="play faster or slower than recorded. 1.0 reproduces the "
+                         "observed cadence; anything else changes the one property "
+                         "the tape exists to reproduce, so say so when reporting.")
+    ap.add_argument("--labelrun", nargs="?", const="combat", default=None,
+                    choices=sorted(labelrun.SCRIPTS),
+                    help="After the world is up (or after --tape finishes), walk "
+                         "the operator through a numbered script printed to THIS "
+                         "terminal, marking each step into the capture. Turns c2s "
+                         "traffic into named human actions. THE SCRIPT MUST MATCH "
+                         "THE WORLD THE TAPE LEAVES: `combat` (default) needs the "
+                         "Lakeside tape, whose character has skills and whose map "
+                         "has hostiles; `town` needs Ascalon City, which has NPCs, "
+                         "merchants and 40 players but a skillbar of all zeros. "
+                         "`labelrun.py --script NAME` prints one; "
+                         "`labelrun.py --analyse` reads a result back.")
     ap.add_argument("--probe", metavar="NAME",
                     help="After the character spawns, fire a scripted experiment at "
                          "the client. See --list-probes. Only affects a session you "
@@ -2560,7 +3019,10 @@ def main():
                     help="Put the character in this map instead of the one its "
                          "character record asks for. 146 is Lakeside County, "
                          "which is explorable and therefore the first place "
-                         "combat can be tested; 148 is Ascalon City.")
+                         "combat can be tested; 148 is Ascalon City. INERT "
+                         "under --tape: the tape's own 0x0195 decides what the "
+                         "client loads, and it will happily draw a map it never "
+                         "asked for.")
     ap.add_argument("--no-enemy", action="store_true",
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
@@ -2591,6 +3053,48 @@ def main():
             print(probes.describe(n))
             print()
         return
+    if a.tape:
+        import tape as tapemod
+        global TAPE_EVENTS, TAPE_INFO, TAPE_SPEED
+        try:
+            TAPE_INFO, TAPE_EVENTS = tapemod.load_tape(a.tape, a.tape_connection)
+        except tapemod.TapeError as ex:
+            raise SystemExit(f"refusing to play this tape -- {ex}")
+        TAPE_SPEED = a.tape_speed
+        if a.labelrun or a.tape_no_transfer:
+            # A labelled run cannot survive its tape leaving the map, and three of
+            # the four tapes in the 2026-08-07 capture end by doing exactly that --
+            # the recorded operator walked into a gateway. OBSERVED 2026-08-10: the
+            # Ascalon tape played 1,209/1,209, the client obeyed its 0x01A5 handoff,
+            # dialled ArenaNet, the cage refused, and the connection died six seconds
+            # into the labelled run. Truncating is the only way to keep the client in
+            # the map, and it is LOUD because it changes what the tape is.
+            TAPE_EVENTS, dropped, why = tapemod.stop_before_transfer(
+                TAPE_EVENTS, codec)
+            if dropped:
+                print(f"  TAPE TRUNCATED: {why}")
+                print(f"  the client will stay in this map instead of zoning out.")
+                TAPE_INFO = dict(TAPE_INFO, events=len(TAPE_EVENTS),
+                                 bytes=sum(len(b) for _t, b in TAPE_EVENTS),
+                                 seconds=TAPE_EVENTS[-1][0] if TAPE_EVENTS else 0.0,
+                                 truncated=dropped)
+            else:
+                print(f"  tape needs no truncation: {why}")
+        print(f"tape armed: {TAPE_INFO['connection']} -- {TAPE_INFO['events']:,} "
+              f"events, {TAPE_INFO['bytes']:,} B, {TAPE_INFO['seconds']:.1f}s "
+              f"({TAPE_INFO['origin']})")
+        print("  the GAME channel's load sequence is REPLACED by this recording; "
+              "the auth channel is still ours.")
+    if a.labelrun:
+        global LABEL_RUN
+        LABEL_RUN = labelrun.SCRIPTS[a.labelrun]
+        total = sum(s.seconds for s in LABEL_RUN)
+        print(f"labelled run armed: {a.labelrun} script, "
+              f"{len(LABEL_RUN)} steps, {total:.0f}s"
+              + (", starting when the tape finishes" if a.tape else ""))
+        print("  WATCH THIS WINDOW. The client is -windowed so both fit on screen; "
+              "the prompts appear here, not in the game.")
+
     if a.probe:
         if a.probe not in probes.names():
             raise SystemExit(f"no probe named {a.probe!r}. "

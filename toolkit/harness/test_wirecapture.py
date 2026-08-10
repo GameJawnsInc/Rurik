@@ -10,7 +10,10 @@ would trace to, and it is fully testable here against synthetic packets:
   3. reassemble orders by TCP seq, drops duplicates, and REPORTS gaps rather than hiding
      them -- a lost segment desyncs the keystream and a decryptor must see it;
   4. a written capture reads back with the streams intact and stamped origin: LIVE, which
-     origin.py never infers, so forgetting it would make every live capture UNKNOWN.
+     origin.py never infers, so forgetting it would make every live capture UNKNOWN;
+  4b. the LIVE shape specifically -- direction decided by port when the server's address is
+     not knowable in advance, and SEVERAL connections kept on separate sequence spaces,
+     with the single-stream reader refusing rather than merging them.
 
 The driver itself is checked only for an honest refusal when WinDivert is absent.
 
@@ -29,7 +32,9 @@ import checks  # noqa: E402
 import origin  # noqa: E402
 import wirecapture as wc  # noqa: E402
 
-LEDGER = checks.Ledger("wirecapture", floor=12)
+# 26 is the measured total of a green run with WinDivert present (section 5 then declares a
+# skip); without the driver that skip becomes a check and the run scores 27.
+LEDGER = checks.Ledger("wirecapture", floor=28)
 
 
 def ipv4_tcp(src, dst, sport, dport, seq, payload=b"", proto=6, ver=4):
@@ -101,7 +106,8 @@ def main():
         fh.close()
 
         who, why = origin.origin_of(path)
-        LEDGER.ok(who == origin.LIVE, "the capture classifies as LIVE by its own stamp", why)
+        LEDGER.ok(who == origin.OURS,
+                  "a sniff pinned to LOOPBACK stamps itself ours, not live", why)
 
         meta, streams, gaps = wc.load_wire(path)
         LEDGER.ok(meta and meta["pid"] == 4242 and meta["client"] == "127.0.0.1:5000",
@@ -110,6 +116,74 @@ def main():
                   streams[wc.C2S].hex())
         LEDGER.ok(streams[wc.S2C] == b"zzzz", "s2c stream reassembles from the file",
                   streams[wc.S2C].hex())
+
+    # ---- 4b. the LIVE shape: unknown address, several connections ----------
+    print("\n4b. port-only capture: direction by port, and connections kept apart")
+    # A live sniff cannot name the server ip -- the client picks ArenaNet's address itself,
+    # and the sniff must already be running when it does. So the port decides which end is
+    # the server, on any host.
+    live_srv = wc.parse_ipv4_tcp(ipv4_tcp("10.0.0.9", "3.65.1.1", 51000, 6112, 1, b"x"))
+    live_cli = wc.parse_ipv4_tcp(ipv4_tcp("3.65.1.1", "10.0.0.9", 6112, 51000, 1, b"y"))
+    LEDGER.ok(wc.direction_of(live_srv, None, PORTS) == wc.C2S,
+              "port-only: a packet TO a server port is c2s, whatever the address",
+              "this is the case a live run is entirely made of")
+    LEDGER.ok(wc.direction_of(live_cli, None, PORTS) == wc.S2C,
+              "port-only: a packet FROM a server port is s2c")
+    both = wc.parse_ipv4_tcp(ipv4_tcp("1.1.1.1", "2.2.2.2", 6112, 6112, 1, b"?"))
+    neither = wc.parse_ipv4_tcp(ipv4_tcp("1.1.1.1", "2.2.2.2", 4000, 5000, 1, b"?"))
+    LEDGER.ok(wc.direction_of(both, None, PORTS) is None,
+              "port-only: server-port on BOTH ends is undecidable, so neither direction",
+              "a misfiled segment desyncs a keystream far from here")
+    LEDGER.ok(wc.direction_of(neither, None, PORTS) is None,
+              "port-only: server-port on neither end is neither direction")
+    LEDGER.ok(b"SrcAddr" not in wc._filter(None, PORTS)
+              and b"6112" in wc._filter(None, PORTS),
+              "the port-only WinDivert filter pins no address", str(wc._filter(None, PORTS)))
+    LEDGER.ok(b"ipv6" in wc._filter(None, PORTS),
+              "and it accepts IPv6 packets even though the parser is IPv4-only",
+              "dropped in the kernel they are invisible; received and rejected they show "
+              "up as recv>0 parsed==0 and name the cause")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "multi.jsonl")
+        fh, record = wc.open_capture(path, "10.0.0.9:*", None, 4242, {6112, 6601},
+                                     lambda: 0.0)   # unpinned -> live
+        # TWO connections, deliberately overlapping sequence spaces -- the auth channel and
+        # then the game server on a different address, which is what a real login does.
+        auth_c = ipv4_tcp("10.0.0.9", "3.65.1.1", 51000, 6112, 1000, b"AUTHc2s")
+        auth_s = ipv4_tcp("3.65.1.1", "10.0.0.9", 6112, 51000, 7000, b"AUTHs2c")
+        game_c = ipv4_tcp("10.0.0.9", "3.65.9.9", 51001, 6112, 1000, b"GAMEc2s")
+        game_s = ipv4_tcp("3.65.9.9", "10.0.0.9", 6112, 51001, 7000, b"GAMEs2c")
+        for raw, d in ((auth_c, wc.C2S), (auth_s, wc.S2C),
+                       (game_c, wc.C2S), (game_s, wc.S2C)):
+            pk = wc.parse_ipv4_tcp(raw)
+            record(d, pk["seq"], pk["payload"], pk)
+        fh.close()
+
+        LEDGER.ok(origin.origin_of(path)[0] == origin.LIVE,
+                  "an UNPINNED sniff still stamps live -- that mode is the live driver's",
+                  "the stamp is derived from the endpoint, not asserted")
+        _m, conns = wc.load_connections(path)
+        LEDGER.ok(len(conns) == 2, "two connections are read back as two, not merged",
+                  ", ".join(sorted(str(k) for k in conns)))
+        auth_key = "10.0.0.9:51000->3.65.1.1:6112"
+        game_key = "10.0.0.9:51001->3.65.9.9:6112"
+        LEDGER.ok(conns.get(auth_key, {}).get(wc.C2S) == b"AUTHc2s"
+                  and conns.get(game_key, {}).get(wc.C2S) == b"GAMEc2s",
+                  "each connection reassembles on its OWN sequence space",
+                  "both start at seq 1000; merged, one would land inside the other")
+        LEDGER.ok(conns.get(auth_key, {}).get(wc.S2C) == b"AUTHs2c"
+                  and conns.get(game_key, {}).get(wc.S2C) == b"GAMEs2c",
+                  "the s2c direction is separated per connection too")
+        refused = ""
+        try:
+            wc.load_wire(path)
+        except wc.MultiConnectionError as exc:
+            refused = str(exc)
+        LEDGER.ok("2 TCP connections" in refused,
+                  "the single-stream reader REFUSES a multi-connection capture",
+                  "silently merging them yields bytes that decrypt to nothing -- "
+                  "a crypto-shaped failure with a plumbing cause")
 
     # ---- 5. the driver refuses honestly when absent ------------------------
     print("\n5. the WinDivert layer refuses (or works) -- never a silent empty capture")

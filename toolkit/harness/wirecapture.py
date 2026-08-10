@@ -1,6 +1,7 @@
 """Capture a live session's ciphertext off the wire, so replay.py can decrypt it offline.
 
     python toolkit/harness/wirecapture.py --pid <client> --server <ip:port> [--seconds N]
+    python toolkit/harness/wirecapture.py --ports 6112,6601 --out live.jsonl   # live: any host
 
 The ciphertext half of the R0b live-capture driver (route C, studies/livekey/CAPTURE.md).
 Our own server is not in a live session, so nothing on our side sees the bytes; a network
@@ -85,7 +86,23 @@ def direction_of(pkt, server_ip, server_ports):
 
     Decided from the endpoints, not from any capture-time metadata, so a replay of the
     same packets classifies identically and the direction survives a WinDivert upgrade.
+
+    `server_ip=None` means "any host on these ports", which is what a LIVE capture needs:
+    the sniff has to be running BEFORE the client connects (the DH handshake is the first
+    thing on the wire and it is the plaintext half we cannot lose), and at that moment
+    nobody knows which of ArenaNet's addresses it will pick. The well-known port then
+    decides which end is the server, which is sound because the other end is an ephemeral
+    port -- 49152+ on Windows, never 6112 or 6601. If BOTH ends or NEITHER end holds a
+    server port the direction is genuinely undecidable, and this returns None rather than
+    picking: a misfiled segment lands in the wrong direction's stream and desyncs a
+    keystream, which surfaces far from here as "the decrypt is garbage".
     """
+    if server_ip is None:
+        to_srv = pkt["dport"] in server_ports
+        from_srv = pkt["sport"] in server_ports
+        if to_srv == from_srv:
+            return None
+        return C2S if to_srv else S2C
     if pkt["dst"] == server_ip and pkt["dport"] in server_ports:
         return C2S
     if pkt["src"] == server_ip and pkt["sport"] in server_ports:
@@ -149,8 +166,20 @@ def open_capture(path, client, server, pid, server_ports, clock):
     design, so a live capture that forgets to say so is UNKNOWN forever. `clock` is passed
     in (time.perf_counter) so the pure tests can supply a deterministic one.
     """
+    # The stamp is DERIVED from the endpoint being sniffed, not asserted. It used to be a
+    # hardcoded origin.LIVE, which made every loopback dry-run capture claim to be live
+    # traffic -- vault/dryrun/dryrun_wire.jsonl says `"origin": "live"` while every address
+    # in it is 127.0.0.1. dryrun_keycapture.py's own comment shows the response to that was
+    # to move the mislabelled files outside the directory the suite scans, which makes the
+    # guard against a false LIVE stamp green by construction. Fixed at the source: a sniff
+    # pinned to loopback cannot be talking to ArenaNet, and says OURS.
+    #
+    # An unpinned (port-only) sniff still declares LIVE, because that mode exists only for
+    # the live driver -- but now the one case that was provably wrong is measured instead.
+    who = origin.OURS if (server and origin.is_loopback(str(server).rsplit(":", 1)[0])) \
+        else origin.LIVE
     fh = open(path, "w", encoding="utf-8")
-    rec = origin.record("toolkit/harness/wirecapture.py", origin.LIVE,
+    rec = origin.record("toolkit/harness/wirecapture.py", who,
                         note="off-wire ciphertext; key from keytap.py, decrypt with replay.py")
     fh.write(json.dumps(rec) + "\n")
     fh.write(json.dumps({"kind": "wire_meta", "client": client, "server": server,
@@ -158,19 +187,57 @@ def open_capture(path, client, server, pid, server_ports, clock):
     fh.flush()
     t0 = clock()
 
-    def record(direction, seq, payload):
-        fh.write(json.dumps({"kind": "wire", "dir": direction, "seq": seq,
-                             "t": clock() - t0,
-                             "payload": payload.hex()}) + "\n")
+    def record(direction, seq, payload, pkt=None):
+        """One TCP segment. `pkt` carries the endpoints, and it is not optional for a live
+        capture: a real session opens SEVERAL connections (portal, auth, then the game
+        server on a different address), and without the 4-tuple every segment of a
+        direction reassembles into ONE stream by sequence number -- two unrelated TCP
+        streams interleaved by seq is not a stream, it is noise that decrypts to nothing.
+        It stays optional in the signature only so the pure tests can synthesise a
+        single-connection capture the way they always have."""
+        out = {"kind": "wire", "dir": direction, "seq": seq, "t": clock() - t0,
+               "payload": payload.hex()}
+        if pkt:
+            out.update({"src": pkt["src"], "sport": pkt["sport"],
+                        "dst": pkt["dst"], "dport": pkt["dport"]})
+        fh.write(json.dumps(out) + "\n")
         fh.flush()
 
     return fh, record
 
 
-def load_wire(path):
-    """Read a wire capture back into (meta, {C2S: bytes, S2C: bytes}, gaps). For replay."""
+def endpoints_of(rec):
+    """((client_ip, client_port), (server_ip, server_port)) for a wire record, or None.
+
+    None for a legacy record with no addresses. The client end is the source of a c2s
+    segment and the destination of an s2c one, so this needs no port table and cannot
+    disagree with the `dir` already recorded.
+    """
+    if "src" not in rec or "dst" not in rec:
+        return None
+    a = (rec["src"], rec["sport"])
+    b = (rec["dst"], rec["dport"])
+    return (a, b) if rec.get("dir") == C2S else (b, a)
+
+
+def conn_key(rec):
+    """A stable per-connection label, or None for a legacy addressless record."""
+    ends = endpoints_of(rec)
+    if not ends:
+        return None
+    (cip, cport), (sip, sport) = ends
+    return f"{cip}:{cport}->{sip}:{sport}"
+
+
+def load_connections(path):
+    """Read a wire capture into (meta, {conn_key: {C2S: bytes, S2C: bytes, 'gaps': ...}}).
+
+    This is the live-shaped reader: one entry per TCP connection, each reassembled on its
+    own sequence space. Addressless legacy records are grouped under the key None so an
+    older capture still reads back.
+    """
     meta = None
-    segs = {C2S: [], S2C: []}
+    segs = {}
     with open(path, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             try:
@@ -182,11 +249,44 @@ def load_wire(path):
             if r.get("kind") == "wire_meta":
                 meta = r
             elif r.get("kind") == "wire" and r.get("dir") in (C2S, S2C):
-                segs[r["dir"]].append((r["seq"], bytes.fromhex(r.get("payload", ""))))
-    streams, gaps = {}, {}
-    for d in (C2S, S2C):
-        streams[d], gaps[d] = reassemble(segs[d])
-    return meta, streams, gaps
+                key = conn_key(r)
+                bucket = segs.setdefault(key, {C2S: [], S2C: []})
+                bucket[r["dir"]].append((r["seq"], bytes.fromhex(r.get("payload", ""))))
+    conns = {}
+    for key, bucket in segs.items():
+        entry = {"gaps": {}}
+        for d in (C2S, S2C):
+            entry[d], entry["gaps"][d] = reassemble(bucket[d])
+        conns[key] = entry
+    return meta, conns
+
+
+class MultiConnectionError(Exception):
+    """A capture holds more than one TCP connection, so there is no single stream to read.
+
+    Raised rather than papered over: reassemble() anchors on the lowest sequence number it
+    sees, so merging two connections places one of them at an arbitrary offset in the
+    other's stream. The result is a plausible-looking byte string that decrypts to nothing,
+    which is the worst failure shape available -- it looks like a crypto bug.
+    """
+
+
+def load_wire(path):
+    """Read a SINGLE-connection wire capture into (meta, {C2S, S2C}, gaps). For replay.
+
+    Refuses a multi-connection capture by name; use load_connections() for those.
+    """
+    meta, conns = load_connections(path)
+    if len(conns) > 1:
+        raise MultiConnectionError(
+            f"{os.path.basename(path)} holds {len(conns)} TCP connections "
+            f"({', '.join(str(k) for k in sorted(conns, key=str))}). "
+            f"Reassembling them as one stream would interleave two sequence spaces. "
+            f"Use load_connections(), or pick one with pick_connection().")
+    entry = next(iter(conns.values()), None)
+    if entry is None:
+        return meta, {C2S: b"", S2C: b""}, {C2S: [], S2C: []}
+    return meta, {C2S: entry[C2S], S2C: entry[S2C]}, entry["gaps"]
 
 
 # ------------------------------------------------------------ WinDivert layer --
@@ -239,6 +339,18 @@ def _filter(server_ip, server_ports):
     # groups this would read as "(tcp and SrcAddr) or DstAddr" and sniff unrelated traffic.
     ports = " or ".join(f"tcp.SrcPort == {p} or tcp.DstPort == {p}"
                         for p in sorted(server_ports))
+    if server_ip is None:
+        # Port-only: the live case, where the address is not knowable until the client has
+        # already connected -- and by then the plaintext handshake has been and gone.
+        #
+        # `ip or ipv6`, deliberately, even though parse_ipv4_tcp handles only IPv4. An
+        # IPv6-only filter clause would drop those packets in the KERNEL, where nothing can
+        # see them, and the symptom is a silent zero-byte capture indistinguishable from
+        # "the client used another port" -- which is exactly the ambiguity that cost a
+        # session on 2026-08-07. Received and then rejected by the parser, they show up in
+        # the watchdog as recv > 0 with parsed == 0, which names the cause on the spot.
+        # Building the v6 parser is then a known job rather than a guess.
+        return f"(ip or ipv6) and tcp and ({ports})".encode()
     return (f"ip and tcp and (ip.SrcAddr == {server_ip} or ip.DstAddr == {server_ip}) "
             f"and ({ports})").encode()
 
@@ -248,16 +360,21 @@ def capture_session(pid, server_ip, server_ports, out_path, seconds=0, clock=tim
 
     Finds the client's own connection via tcptable to fill the capture's metadata, opens a
     WinDivert SNIFF handle filtered to the server endpoint, and records every TCP segment's
-    payload with its sequence number until the connection closes (FIN/RST both ways) or
-    `seconds` elapses.
+    payload with its sequence number and 4-tuple until `seconds` elapses.
+
+    `server_ip=None` sniffs the given ports on ANY host -- the live mode. A live session
+    opens several connections (portal, auth, and the game server on a different address),
+    so every segment carries its endpoints and load_connections() separates them again.
     """
     dll, ctypes, _ = _load_windivert()
     # pid is optional: the filter is by endpoint, so a capture can start BEFORE the client
     # connects (which is how a dry-run catches the handshake). pid only labels the metadata.
     conns = ([c for c in tcptable.connections(pid)
-              if c["remote"].rsplit(":", 1)[0] == server_ip] if pid else [])
+              if server_ip is None or c["remote"].rsplit(":", 1)[0] == server_ip]
+             if pid else [])
     client = conns[0]["local"] if conns else (f"pid{pid}" if pid else "unknown")
-    server = f"{server_ip}:{sorted(server_ports)[0]}"
+    server = (f"{server_ip}:{sorted(server_ports)[0]}" if server_ip
+              else "*:" + ",".join(str(p) for p in sorted(server_ports)))
 
     INVALID = ctypes.c_void_p(-1).value
     handle = dll.WinDivertOpen(_filter(server_ip, server_ports), 0, 0, 0x0001)  # SNIFF
@@ -273,6 +390,35 @@ def capture_session(pid, server_ip, server_ports, out_path, seconds=0, clock=tim
     addr = (ctypes.c_char * 64)()        # WINDIVERT_ADDRESS; contents unused (see docstring)
     deadline = clock() + seconds if seconds else None
     n = 0
+    stats = {"recv": 0, "parsed": 0, "directed": 0, "recorded": 0}
+
+    # A WATCHDOG, because WinDivertRecv BLOCKS with no timeout. If nothing ever matches the
+    # filter this loop parks in the kernel forever: the `seconds` deadline is only tested at
+    # the top, so it never fires either, and the process sits there looking healthy while
+    # recording nothing. That is exactly what a live session did on 2026-08-07 -- ten
+    # minutes, nine keys tapped, `wire: 0 KiB` throughout, and a post-mortem log that was
+    # COMPLETELY EMPTY because nothing here ever writes unless a packet arrives.
+    #
+    # So a separate thread reports the counters on a timer, to stderr, which the driver
+    # captures into wirecapture.log. Silence stops being ambiguous: either the log says
+    # packets are arriving, or it says none are and names the filter.
+    import threading
+    stop_watch = threading.Event()
+
+    def watch():
+        quiet = 0
+        while not stop_watch.wait(15):
+            quiet += 15
+            if stats["recv"] == 0:
+                print(f"[watchdog] {quiet}s: WinDivertRecv has returned ZERO packets. The "
+                      f"filter is {_filter(server_ip, server_ports).decode()!r} -- if the "
+                      f"client is connected, it is not matching this (IPv6 is not covered "
+                      f"by `ip and tcp`).", file=sys.stderr, flush=True)
+            else:
+                print(f"[watchdog] {quiet}s: recv={stats['recv']} parsed={stats['parsed']} "
+                      f"directed={stats['directed']} recorded={stats['recorded']}",
+                      file=sys.stderr, flush=True)
+    threading.Thread(target=watch, daemon=True).start()
     try:
         while True:
             if deadline and clock() > deadline:
@@ -280,18 +426,26 @@ def capture_session(pid, server_ip, server_ports, out_path, seconds=0, clock=tim
             if not dll.WinDivertRecv(handle, buf, 65535, ctypes.byref(recv_len),
                                      ctypes.byref(addr)):
                 continue
+            stats["recv"] += 1
             pkt = parse_ipv4_tcp(bytes(buf[:recv_len.value]))
             if not pkt:
                 continue
+            stats["parsed"] += 1
             d = direction_of(pkt, server_ip, server_ports)
             if d is None:
                 continue
+            stats["directed"] += 1
             if pkt["payload"]:
-                record(d, pkt["seq"], pkt["payload"])
+                record(d, pkt["seq"], pkt["payload"], pkt)
+                stats["recorded"] += 1
                 n += 1
     finally:
+        stop_watch.set()
         dll.WinDivertClose(handle)
         fh.close()
+        print(f"[wirecapture] closed: recv={stats['recv']} parsed={stats['parsed']} "
+              f"directed={stats['directed']} recorded={stats['recorded']}",
+              file=sys.stderr, flush=True)
     return n, out_path
 
 
@@ -301,13 +455,21 @@ def main():
     ap.add_argument("--pid", type=int, default=0,
                     help="the client process (optional; only labels the metadata -- the "
                          "filter is by endpoint, so capture can start before it connects)")
-    ap.add_argument("--server", required=True, help="server ip:port (the endpoint to sniff)")
-    ap.add_argument("--ports", default="", help="extra server ports, comma-separated")
+    ap.add_argument("--server", default=None,
+                    help="server ip:port to sniff. Omit for the LIVE case and pass --ports "
+                         "instead: the address is unknown until the client connects, and by "
+                         "then the plaintext handshake is already past")
+    ap.add_argument("--ports", default="", help="server ports, comma-separated")
     ap.add_argument("--seconds", type=int, default=0, help="stop after N seconds (0 = until closed)")
     ap.add_argument("--out", required=True, help="capture file to write")
     a = ap.parse_args()
-    ip, _, port = a.server.rpartition(":")
-    ports = {int(port)} | {int(p) for p in a.ports.split(",") if p.strip()}
+    ports = {int(p) for p in a.ports.split(",") if p.strip()}
+    ip = None
+    if a.server:
+        ip, _, port = a.server.rpartition(":")
+        ports |= {int(port)}
+    if not ports:
+        raise SystemExit("name the ports to sniff: --server <ip:port> and/or --ports 6112,6601")
     n, path = capture_session(a.pid, ip, ports, a.out, a.seconds)
     print(f"recorded {n} segments to {path}")
     return 0

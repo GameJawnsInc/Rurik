@@ -43,9 +43,14 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
   can substitute for that one. **All five preconditions in `PLAN.md` §6.2 are met as of
   2026-08-07**: the unpatched-DH build exists and is reproducible
   (`make_custom_client.py --no-dh-patch`), and its run directory is assembled at
-  `vault/run-live/` and verified byte-identical to the source. What is missing is the
-  driver — no tool yet knows how to run a capture session — which is R0b's own first
-  commit, not a gate to be opened.
+  `vault/run-live/` and verified byte-identical to the source. **The driver exists as of
+  2026-08-07** (`toolkit/harness/livesession.py`), the whole pipeline is proven end to end
+  on loopback (`dryrun_keycapture.py`, elevated, green), and the live build is key-tapped
+  and staged. What has not happened is the run, and it is human-driven on purpose: the
+  driver launches, sniffs and taps, and sends **no** keystrokes or clicks — the operator
+  logs in and plays, because the scripted input the loopback harness uses is precisely the
+  traffic pattern the rule above is about. `RUNBOOK.md` §"Capturing a live session" is the
+  procedure; do not pass `--host` (it is refused, and why is worth reading).
   **The launch rule is no longer "is it caged".** It is a binding, enforced from the
   bytes by `toolkit/clientpatch/dhbuild.py` and `cage.assert_launch_safe(exe, host)`: a
   client may only be launched at the server whose Diffie-Hellman exponent matches the
@@ -135,6 +140,15 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
+  `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
+  and that an unframeable opcode stops the framer instead of being framed past),
+  `toolkit/authsrv/test_tape.py` (R1.5's tape loader: the events ARE the recorded
+  stream whole and in order, and a tape whose wire bytes do not account for the
+  plaintext -- or that came from our own server -- is refused),
+  `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
+  opcodes from what a human was told to do: a message lands in exactly one step's
+  window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL
+  is reported and exits non-zero rather than letting a misattributed opcode be named),
   `toolkit/authsrv/test_replay.py` (a captured .raw decrypts back to the plaintext that
   was logged, and does so all-or-nothing across the whole vault — the first reader of a
   .raw, which closes R0a's standing caveat),
@@ -146,9 +160,16 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientscan/test_codescan.py` (the attack-speed chain, and the two
   decoding traps that hid it — needs capstone),
   `toolkit/test_checks.py` (the check on the checker — see below),
-  `toolkit/test_scrub.py` (the credential scrub, that no secret survives it, and that
-  its record arithmetic is pinned to a snapshot so a live server appending to
-  `vault/captures/` cannot make it disagree with itself),
+  `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
+  nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
+  a live session on 2026-08-10. It also pins the checker's own vacuity failure — the
+  first version treated every function local as a module binding and scored the real
+  defect zero),
+  `toolkit/test_scrub.py` (the credential scrub, that no secret survives it, that the
+  one field it CANNOT clean — a `plain` frame payload, which carries the account email as
+  UTF-16 and is therefore invisible to the ASCII leak check — is reported rather than
+  silently passed through, and that its record arithmetic is pinned to a snapshot so a
+  live server appending to `vault/captures/` cannot make it disagree with itself),
   `toolkit/test_content.py` (the content store, and that its provenance and licence
   refusals actually refuse),
   `toolkit/clientpatch/test_cage.py` (the launch gate: which binary may be aimed at
@@ -167,13 +188,17 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   address; Windows-only, skips whole otherwise),
   `toolkit/harness/test_wirecapture.py` (the off-wire ciphertext capture's pure half:
   IPv4/TCP parse, direction from endpoints, TCP-seq reassembly that reports gaps rather
-  than hiding them, a capture that reads back stamped `origin: live`, and an honest
-  refusal when WinDivert is absent),
+  than hiding them, a capture that reads back stamped `origin: live`, an honest
+  refusal when WinDivert is absent — and the live shape: direction decided by port when
+  the server's address cannot be known in advance, several connections kept on separate
+  sequence spaces, and the single-stream reader refusing rather than merging them),
   `toolkit/harness/test_livesession.py` (the live driver's offline half and guards:
   splitting the plaintext handshake off a wire stream and decrypting the rest — grounded
   on a real session's own ciphertext, reached from the wire side — a both-direction
-  `assemble` that self-checks and stamps `origin: live`, and that the guards refuse the
-  primary account, an ours-DH client aimed live, and a run with no `--confirm`),
+  `assemble` that self-checks and stamps `origin: live`; `assemble_live` pairing a keyring
+  to several connections and, the one that matters, decrypting nothing and writing no file
+  when the right key is absent; and that the guards refuse the primary account, an ours-DH
+  client aimed live, and a run with no `--confirm`),
   `toolkit/test_origin.py` (whose server a capture came from, and that ours and
   ArenaNet's can never be pooled).
 

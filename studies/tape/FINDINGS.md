@@ -1,0 +1,302 @@
+# Tape runs — what a recording of ArenaNet's server does to our client
+
+R1.5's instrument is `toolkit/authsrv/tape.py` (loader) plus `play_tape` in
+`authsrv.py` (player). What a tape *is*, and the three things it is not, are in
+`tape.py`'s docstring; the feasibility argument that preceded the first run is
+[../divergence/FINDINGS.md](../divergence/FINDINGS.md) §4. **This file is the log of
+what actual runs observed**, because the tape is now a standing instrument rather than
+a one-off experiment and its results will accumulate.
+
+Claim labels are the vocabulary in
+[../character/FINDINGS.md](../character/FINDINGS.md): OBSERVED, UPSTREAM,
+RECONSTRUCTION, CORROBORATED, CONTESTED, UNVERIFIED, NOT FOUND.
+
+---
+
+## 1. The runs
+
+Both from `vault/captures/live/20260807T143055`, the 2026-08-07 secondary-account
+session. Both played into a caged loopback client with the auth channel synthesised by
+our own server and the game channel replaced entirely by the recording.
+
+| # | date | connection | map | events | outcome |
+|---|---|---|---|---|---|
+| 1 | 2026-08-10 | `:60935` | 148 Ascalon City | 1,209 / 1,209 | clean. Ended at the map transition: the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). |
+| 2 | 2026-08-10 | `:64103` | 146 Lakeside County | 1,074 / 1,074 | clean, ran to completion, **combat rendered**. Operator kept the client after the tape ended and probed it. |
+
+Run 1's findings — the client does not validate identity, and the earlier
+`AgAgent.cpp(978)` assert was our own world tick talking over the recording — are in
+`PLAN.md` §3.4. Everything below is run 2.
+
+### 1.1 Which tape, and why it was nearly the wrong one
+
+The capture holds four game connections. Naming them needs the `map_id` in each
+connection's own c2s `VERSION` body (`<5I>` at offset 4: build, unk1, world_id, map_id,
+player_id), resolved through the client's `AreaInfo` table:
+
+| connection | map | first seen | events | combat |
+|---|---|---|---|---|
+| `:63158` | 0 (character select) | 7.5 s | 14 | — |
+| `:60935` | **148** Ascalon City | 17.0 s | 1,209 | — |
+| `:62994` | **146** Lakeside County | 65.9 s | 780 | attack-speed only |
+| `:64102` | **164** Ashford Abbey | 213.8 s | 118 | — |
+| `:64103` | **146** Lakeside County | 228.2 s | 1,074 | **yes** |
+
+There are *two* Lakeside tapes. The chronological successor to Ascalon is `:62994`, and
+it is the one that was nearly played; the combat is in the operator's **second** visit,
+`:64103` — 4 × `SKILL_ACTIVATED` and roughly ten times the target-property traffic
+(22 vs 3 `0x00A0`, 17 vs 2 `0x00A3`). **Pick a tape by decoding it, never by position in
+the session.**
+
+### 1.2 Pre-flight that matters
+
+All four tapes name the **same** `map_file_id 113021` in their `0x0195`
+`INSTANCE_LOAD_SPAWN_POINT`, differing only in spawn coordinates. The Gw.dat drift fix
+that run 1 needed (`RUNBOOK.md`, "The two run directories drift apart") therefore covers
+every tape in this capture — both archives now resolve 113021 to MFT row 177262.
+
+That three different pre-Searing maps share one `map_file_id` is OBSERVED and
+**UNVERIFIED as to why**. Do not build on it; it may mean the field is a region rather
+than a map, or that pre-Searing Ascalon is one terrain file. It has not been checked.
+
+---
+
+## 2. What run 2 establishes
+
+### T1 — A recording drives combat. OBSERVED.
+
+1,074 of 1,074 events, 53,544 B, 186.2 s, **0 non-tape sends** — measured from the
+gamesrv's own capture by counting `sent` records whose label is not `tape[…]`. Since our
+server contributed nothing, everything the operator saw came from the recording.
+
+The tape frames to 3,604 `GAME_SMSG` messages across **105 distinct opcodes, of which
+our server can name 42**. It included 188 `WORLD_CREATE_AGENT`, 163 `WORLD_REMOVE_AGENT`,
+351 `AGENT_MOVE_TO_POINT`, 1,511 `WORLD_SIMULATION_TICK` and 4 `SKILL_ACTIVATED`.
+
+Operator's account: *"i walk over to a Wolf enemy, attack it from range, then cast my
+Vampiric Gaze (skill 1) and Deathly Swarm (skill 2) on it and fight it until victory."*
+The tape agrees, message for message:
+
+| what was seen | in the tape |
+|---|---|
+| walking to the Wolf | agent 31 (never removed) moves, 1.7 → 39.7 s |
+| the Wolf | agent 40, created 0.7 s, removed 68.5 s |
+| Vampiric Gaze | `0x00E3 SKILL_ACTIVATED [227, 31, 153, 0]` at 10.5 s and 20.3 s |
+| Deathly Swarm | `0x00E3 SKILL_ACTIVATED [227, 31, 105, 0]` at 13.2 s and 23.0 s |
+
+**This is the first time this project has rendered combat.** No semantics were required
+to do it: 63 of the 105 opcodes involved have no name anywhere in the repo.
+
+### T2 — The client rendered a map it never asked for. OBSERVED.
+
+The client's own game `VERSION` carried **`map_id=148`** (Ascalon City — the map its
+character record held). The tape's `0x0199 INSTANCE_LOAD_INFO` declared **146**
+(Lakeside County). The client loaded and rendered Lakeside County.
+
+`--map 146` was passed but is **not** the explanation: `--game-args` reaches the gamesrv
+only, and although `MAP_OVERRIDE` does rewrite `state["map_id"]` there, tape mode never
+reads it — the whole preamble that would use it is skipped. The client genuinely asked
+for 148 and was genuinely told 146.
+
+This is the same family of result as run 1's identity finding: **the client does not
+cross-check what it requested against what it is told.** The map it draws follows the
+tape's `0x0195 map_file_id`, not its own `map_id`.
+
+### T3 — Agent-id reuse, from ArenaNet's own server, at scale. CORROBORATES D1.
+
+`../divergence/FINDINGS.md` D1 asked whether a removed agent id is poisoned. It was
+closed on 2026-08-09 with a hand-built probe against the client. This tape answers it
+again from the other direction — ArenaNet's own traffic:
+
+```
+agent 281: create@1.7s REMOVE@6.7s create@12.8s REMOVE@18.7s … create@181.5s REMOVE@186.0s
+           (19 create/remove cycles in 186 seconds)
+agent 284: 19 cycles.   agents 273/274/275/276: 5–6 cycles each.
+19 of the 45 agent ids the tape uses are created more than once.
+```
+
+The client accepted every one of them and never complained. Id reuse after
+`WORLD_REMOVE_AGENT` is not merely permitted; on ArenaNet's server it is **routine and
+high-frequency**. This is corroboration by an independent witness, not our probe agreeing
+with itself.
+
+> **EXPLAINED 2026-08-10.** The operator names the mechanic: Lakeside is full of **Plague
+> Worms, which burrow**, and Guild Wars hides a burrowed creature from targeting. So this
+> is not spawn-and-death churn — it is one creature going away and coming back, and
+> ArenaNet hands it **the same agent id every time**. That sharpens D1 rather than
+> softening it, and it means `WORLD_REMOVE_AGENT` is how the client is told a creature is
+> *untargetable*, not only how it is told one died. Our server has no concept of this and
+> it runs entirely through the two opcodes we already implement.
+
+### T4 — `GAME_CMSG 0x0046` field 1 is a skill id. OBSERVED, ground-truthed.
+
+After the tape, the operator pressed skills. The client sent:
+
+```
+149.7s  0x0046 USE_SKILL [32838, 153, 0, 281, 0]
+155.7s  0x0046 USE_SKILL [32838, 153, 0, 273, 0]
+157.3s  0x0046 USE_SKILL [32838, 153, 0, 273, 0]
+157.5s  0x0046 USE_SKILL [32838, 153, 0, 273, 0]
+158.0s  0x0046 USE_SKILL [32838, 105, 0, 273, 0]
+```
+
+The operator named the two skills independently, *before* the payloads were decoded. The
+client's own tables then confirm them:
+
+| operator said | field 1 | client skill table | client string table |
+|---|---|---|---|
+| Vampiric Gaze (slot 1) | **153** | prof 4 / attr 4, 10 energy, 1.0 s cast, 8 s recharge | name id 25126 → **'Vampiric Gaze'** |
+| Deathly Swarm (slot 2) | **105** | prof 4 / attr 5, 10 energy, 2.0 s cast, 6 s recharge | name id 25030 → **'Deathly Swarm'** |
+
+So **field 1 is the skill id, not the skillbar slot** — the values are not 0 and 1 — and
+field 3 is the target agent id. This is a labelled human action matched against two
+independent client-derived tables, which is as strong as evidence in this repo gets.
+Method note: the corroborating tables come from `skilltable.py` and `textrec.py` reading
+the client, and the operator's label came first, so this is not our decoder forcing the
+answer.
+
+### T5 — Two more c2s opcodes acquire candidate meanings. RECONSTRUCTION.
+
+Neither is confirmed; both are consistent across every occurrence in the run.
+
+* **`0x00C1 [req, agent_id, 0]`** — target select, `0` clears. 24 sends, alternating
+  between an agent id and 0, and it **precedes every `USE_SKILL` with the matching id**
+  (`[281]`@148.2 s → skill→281@149.7 s; `[273]`@155.5 s → skill→273@155.7 s).
+* **`0x0026 [req, agent_id, 0]`** — attack or interact. 6 sends, each immediately after a
+  `0x00C1` naming the same agent (`[274]`@152.5 s → `0x0026 [274]`@152.6 s).
+
+Also CORROBORATED, since the operator labelled the action: `0x003D TURN_TO_DIRECTION`
+(29 sends, carrying position + facing — what held-key movement produces) and
+`0x003E MOVE_TO_COORD` (8 sends, position only — what a click produces). Those names were
+UPSTREAM; a labelled walk now supports them.
+
+And **`0x0009 [req, 16, 0]` is a client keepalive**: 37 sends at 5.0 s intervals from
+4.6 s to 184.7 s, dead regular, independent of anything on screen. OBSERVED.
+
+> **CORRECTED 2026-08-10 by the labelled run**
+> ([../cmsg/FINDINGS.md](../cmsg/FINDINGS.md) §3). "Independent of anything on screen"
+> is right; the implied "unconditional 5 s heartbeat" is wrong. In the labelled capture
+> all 37 sends land during the tape and **zero** land in the three and a half minutes of
+> active play after it — the client stopped the moment the server went silent. It is
+> tied to server traffic, not to a free-running timer. Whether it is a reply or a timer
+> the server resets is UNVERIFIED.
+
+### T6 — A tape answers nothing, and the client tolerates it. OBSERVED.
+
+Tape mode never replies to c2s — the dispatch `continue`s. The operator's report is the
+behavioural consequence: *"gateways and attacking and casting blocked."* The client sent
+121 well-formed messages across 15 opcodes, received **no** answer to any of them, and
+neither crashed nor disconnected; it was still sending `0x00C1` and `0x000C` after the
+tape completed.
+
+This is a property of the instrument, not a defect, but it is the ceiling on what a tape
+can test and it should be stated whenever a tape run is reported: **a tape shows a load
+and a populated, animated world; it cannot show control.**
+
+### T7 — A tape's visible length and its real length are not the same. OBSERVED.
+
+The operator held all input until they believed the tape had ended, judging by their
+character standing still — and then reported input starting "after the tape ended", while
+the measurement shows their first message at 86.2 s of a 186.2 s tape. Both accounts are
+correct:
+
+```
+the recorded PLAYER agent (31) moves:  1.7s → 39.7s, then never again
+all other agents keep moving:          throughout, to 186.2s
+operator's first input:                86.2s
+tape actually completes:               186.2s
+```
+
+The recorded operator walked, fought, and then **stood still for the last 146 seconds**
+while the world carried on around them. From the seat, that is indistinguishable from the
+tape ending. Nothing is wrong with the tape.
+
+**Consequence for the procedure:** `play_tape` already prints `tape N/1074` progress and
+a `tape complete` line to the gamesrv terminal. A tape run's operator should be told to
+watch *that*, not the avatar, before treating the client as free. Recorded in
+`RUNBOOK.md`.
+
+---
+
+### T8 — `0x01A5` is the instance handoff, and the capture proves it. OBSERVED.
+
+Found while diagnosing why a third run died: the Ascalon tape ends by **leaving the map**.
+Its second-to-last message is `0x01A5` carrying a 24-byte blob, and reading that blob as a
+`sockaddr_in` — family 2, port big-endian, then IPv4 — gives an address. The message after
+it is `0x0099 MAP_UPDATE_CURRENT` naming a map id.
+
+**Checked against a witness we did not consult to make the claim** — the capture's own
+later connections:
+
+| tape | `0x01A5` decodes to | `0x0099` map | what the capture's NEXT connection actually did |
+|---|---|---|---|
+| Ascalon City (148) | `54.198.7.73:6112` | 146 | connected to `54.198.7.73`, VERSION said map 146 |
+| Lakeside #1 (146) | `52.3.40.244:6112` | 164 | connected to `52.3.40.244`, VERSION said map 164 |
+| Ashford Abbey (164) | `54.198.7.73:6112` | 146 | connected to `54.198.7.73`, VERSION said map 146 |
+| Lakeside #2 (146) | **absent** | — | nothing; the session ended here |
+
+Three for three on both fields. This is the message that made run 1 end at `Code=005`:
+the client read it, dialled ArenaNet, and the cage refused.
+
+**Two consequences.** First, `0x01A5` is exactly what tape-chaining needs — intercept it,
+substitute a loopback `sockaddr`, and hand the client the next connection's tape.
+`toolkit/authsrv/tape.py` `stop_before_transfer` already locates it precisely.
+
+Second, and this is the operational one: **only a capture's LAST connection is usable for
+anything after the tape.** Every other tape ends by zoning out, because that is why the
+recording ended. `--labelrun` therefore truncates, dropping one event of 1,209 from
+Ascalon and none from Lakeside #2.
+
+> **The trap, recorded because it produced a plausible wrong answer.** `0x0099` is NOT a
+> transfer marker. The client is also told its *current* map during the instance load,
+> with the same opcode — so cutting on `0x0099` truncated Ascalon at byte 962 of 74,319,
+> one event out of 1,209, and produced a "successfully truncated" tape with an empty
+> world. The destination reading is only correct for the copy that follows `0x01A5`.
+> `test_tape.py` now requires that `0x0099` **survives** the cut.
+
+---
+
+## 3. What run 2 did not settle
+
+* **Control.** Out of scope by construction (T6). Unchanged from `tape.py`'s docstring.
+* **Session-embedded absolute time** — `../divergence/FINDINGS.md` §4.2 item 5. Still
+  UNVERIFIED. Run 1's apparent evidence was retracted as our own contamination; run 2
+  produced no assert at all, which is consistent with the field not existing *and* with
+  it existing and being ignored. Not tested.
+* **Why three maps share `map_file_id 113021`** (§1.2).
+* **Whether `0x0026` is attack specifically** rather than a general interact — the
+  operator tested attacking and gateways in the same window, and a gateway is also an
+  interact. One labelled run separating the two would settle it.
+
+---
+
+## 4. Next, in order of value
+
+1. **Chain the tapes across a map transition.** T8 found the message that makes this
+   concrete: `0x01A5` carries the next instance's `sockaddr_in`, and
+   `tape.stop_before_transfer` already locates it exactly. Rewrite that blob to a
+   loopback address instead of cutting it, arm the next connection with the next tape,
+   and four instance tapes become one continuous session. Largest single increase in
+   what the instrument covers, and no longer speculative.
+2. **Diff our server against a tape at matching points in the load.** The tape is the
+   first oracle this project has that it did not write itself, which turns D2–D11 from a
+   list into a failing test.
+3. **A labelled input run — BUILT 2026-08-10, not yet performed.**
+   `toolkit/authsrv/labelrun.py` plus `--labelrun`; procedure in `RUNBOOK.md`. Run 2 got
+   T4 and T5 as a by-product of an unplanned five minutes, so a deliberate pass is the
+   cheapest naming instrument available: it needs no new capture and no live session.
+
+   **The size of the prize, measured:** `schema/messages.json` carries field layouts for
+   **194 `GAME_CMSG` opcodes and names for none of them** — `authsrv.py`'s own c2s print
+   site says so ("No semantic names exist for GAME_CMSG in this repo yet; the schema
+   knows shapes only"). Our server names 11 by hand. **15 have ever been witnessed
+   coming out of a real client**, all of them in run 2.
+
+   The design decision worth recording: steps are marked into the capture **by the
+   server, at the moment it prompts**, so attribution is by timestamp against a mark we
+   wrote — not by inferring boundaries from gaps in the c2s stream afterwards. Gap
+   inference silently misaligns the moment a step produces nothing, and *a step producing
+   nothing is a result here*. Two idle steps bracket the script as controls: traffic in a
+   window the operator was told to sit out means the marks and the messages disagree, and
+   the run must be discarded rather than read. `test_labelrun.py` breaks that control on
+   purpose to prove it can go red.

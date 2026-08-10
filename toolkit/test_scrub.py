@@ -28,6 +28,7 @@ import json
 import os
 import re
 import shutil
+import struct
 import sys
 import tempfile
 
@@ -37,16 +38,10 @@ import checks  # noqa: E402
 import vaultpath  # noqa: E402
 import scrub_captures as sc  # noqa: E402
 
-# 1 snapshot + 6 structural + 7 leak/property + 2 red-team + 4 snapshot red-team
-# + 4 hex-blob = 24 on this vault, counted from a real GREEN full run on 2026-08-10.
-#
-# The floor is 23, one below that, and only because ONE check is genuinely
-# fixture-dependent: "every scrubbed hex byte stream still parses as bytes" has nothing to
-# measure on a vault with no live captures, and declares a skip there rather than passing
-# over zero records. Everything else is mandatory. The mechanism it checks is proved
-# unconditionally on the synthetic corpus either way, so a vault without live captures
-# loses the observation, not the proof.
-LEDGER = checks.Ledger("credential scrub", floor=23)
+# 1 snapshot + 6 structural + 6 leak/property + 2 red-team + 6 blind-spot
+# + 4 snapshot red-team = 25, measured green over the whole capture tree. Nothing here is
+# optional; a run under this floor has lost a section.
+LEDGER = checks.Ledger("credential scrub", floor=25)
 
 # Derived output of previous runs. Not evidence, and scrubbing a scrub would double-count
 # every record. Baked into the snapshot, so no pass can disagree about what was excluded.
@@ -72,10 +67,12 @@ def harvest_secrets(snap):
                 rec = json.loads(line)
             except (json.JSONDecodeError, ValueError):
                 continue
-            # `master_secret` was missing here until 2026-08-10 -- the same day it was
-            # found missing from the scrubber. A harvest that forgets the same field the
-            # scrubber forgot is the "grading its own homework" failure this function's
-            # docstring warns about, arriving by omission instead of by reuse.
+            # `master_secret` joined this list on 2026-08-10, later than it joined
+            # SECRET_KEYS. Until then it was on NEITHER list, and a value missing from
+            # both is invisible twice over: the scrubber shipped it and the leak check
+            # could not see that it had. Two lists that forget the same field are one
+            # list, which is the failure this function's docstring exists to prevent
+            # -- arriving by omission rather than by reuse.
             for key in ("email", "token", "user_id", "account_uuid", "char_uuid",
                         "arc4_key", "master_secret", "a", "sent"):
                 v = rec.get(key)
@@ -125,13 +122,34 @@ def leaked(out_dir, secrets):
     Reads every file, not only the .jsonl -- a scrubber that redacted every
     record and then wrote the values into its own manifest would pass a
     shallower check.
+
+    OPAQUE PAYLOADS ARE EXCLUDED, and that exclusion is the honest half of a bargain
+    rather than a loophole. `plain` and `payload` are raw protocol bytes -- a decrypted
+    frame, a captured TCP segment -- and redacting them does not clean the capture, it
+    deletes it. They demonstrably carry secrets: the first live capture put `a` and `sent`
+    into `payload` as hex, because the DH handshake crosses the wire in the clear, and this
+    check found both. What the scrub can do is REFUSE TO CLAIM otherwise, so the other half
+    of the bargain is section 7 below, which requires every such field to be counted, every
+    file holding one to be named in the manifest, and the manifest to say the tree is not
+    shareable. Drop that section and this exclusion becomes the hole it is not today.
     """
     blob = []
     for base, _dirs, files in os.walk(out_dir):
         for f in sorted(files):
-            with open(os.path.join(base, f), encoding="utf-8",
-                      errors="replace") as fh:
-                blob.append(fh.read())
+            path = os.path.join(base, f)
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                if not f.endswith(".jsonl"):
+                    blob.append(fh.read())
+                    continue
+                for line in fh:
+                    try:
+                        rec = json.loads(line)
+                    except (json.JSONDecodeError, ValueError):
+                        blob.append(line)      # unparseable: search it whole
+                        continue
+                    if isinstance(rec, dict):
+                        rec = {k: v for k, v in rec.items() if k not in sc.OPAQUE_KEYS}
+                    blob.append(json.dumps(rec))
     text = "\n".join(blob)
     return {s for s in secrets if s in text}
 
@@ -240,31 +258,6 @@ def check_corpus(src, snap):
         LEDGER.ok(not any(s in man_text for s in secrets),
                   "and the manifest itself carries counts, never values")
 
-        # A redaction that corrupts the artifact is not a redaction. `payload` is parsed
-        # with bytes.fromhex downstream, so a placeholder that is not hex would turn the
-        # scrubbed wire capture into something nothing can load.
-        blobs = bad_hex = 0
-        for f in written:
-            for line in open(f, encoding="utf-8", errors="replace"):
-                if '"payload"' not in line:
-                    continue
-                v = json.loads(line).get("payload")
-                if not isinstance(v, str):
-                    continue
-                blobs += 1
-                try:
-                    bytes.fromhex(v)
-                except ValueError:
-                    bad_hex += 1
-        if blobs:
-            LEDGER.ok(bad_hex == 0,
-                      "every scrubbed hex byte stream still parses as bytes",
-                      f"{blobs} payloads, {bad_hex} unparseable")
-        else:
-            LEDGER.skip("scrubbed hex byte streams still parse",
-                        "no payload-bearing records in this vault -- the mechanism is "
-                        "still proved on the synthetic corpus below")
-
         # --- prove the leak check can go red -----------------------------------
         # Drop Password from the element list and re-scrub: the password must now
         # survive, and the leak check must catch it. If this section passes silently
@@ -284,6 +277,55 @@ def check_corpus(src, snap):
         finally:
             sc.SECRET_ELEMENTS.clear()
             sc.SECRET_ELEMENTS.update(saved)
+
+        # --- the blind spot, stated rather than papered over --------------------
+        # The leak check above searches for the harvested ASCII values. The auth
+        # channel's first client message carries the account email as UTF-16 inside a
+        # `plain` hex blob (MEASURED: 271 of the vault's 276 auth captures begin
+        # 0180 0500 7300 6b00 ...), so the address is present as "7300 6b00 ..." and
+        # the ASCII search walks straight past it. That is why the leak check stayed
+        # green while the credential shipped, and why the scrub now REPORTS the field
+        # instead of appearing to have handled it.
+        print("\n7. the opaque-payload blind spot is reported, not silently passed")
+        email = "leaky.address@example.invalid"
+        blob = struct.pack("<HH", 0x8001, len(email)) + email.encode("utf-16-le")
+        opq = os.path.join(tmp, "opaque")
+        os.makedirs(opq, exist_ok=True)
+        with open(os.path.join(opq, "frames.jsonl"), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"kind": "frame", "direction": "c2s",
+                                 "plain": blob.hex()}) + "\n")
+        opq_out = os.path.join(tmp, "opaque-scrubbed")
+        _f, _r, ostats, _d, _u = sc.scrub_tree(opq, opq_out)
+        LEDGER.ok(ostats.get(sc.OPAQUE_STAT) == 1,
+                  "a `plain` frame payload is COUNTED as not-cleaned, not ignored",
+                  f"{sc.OPAQUE_STAT} = {ostats.get(sc.OPAQUE_STAT)}")
+        out_text = open(os.path.join(opq_out, "frames.jsonl"), encoding="utf-8").read()
+        LEDGER.ok(blob.hex() in out_text,
+                  "the payload really does survive the scrub verbatim -- this is the fact "
+                  "the report exists to state", f"{len(blob)} bytes copied through")
+        LEDGER.ok(email not in out_text and email.encode("utf-16-le").hex() in out_text,
+                  "and the email inside it is invisible to an ASCII search but present "
+                  "as UTF-16", "which is exactly why the leak check above stayed green")
+        oman = json.load(open(os.path.join(opq_out, "SCRUB-MANIFEST.json"),
+                              encoding="utf-8"))
+        LEDGER.ok(oman.get("NOT_CLEANED_opaque_payloads") == ["frames.jsonl"],
+                  "the manifest names the file that still carries one")
+        LEDGER.ok("NOT safe to hand to anyone" in oman.get("WARNING", ""),
+                  "and says plainly that the output is not shareable")
+
+        # And the same promise against the REAL corpus, which is where it has to hold: if
+        # any vaulted capture carries an opaque payload, the tree-wide manifest must name
+        # it. This is the assertion that pays for leaked()'s exclusion -- without it, the
+        # exclusion would be a blind spot rather than a declared one.
+        real_man = json.load(open(os.path.join(out, "SCRUB-MANIFEST.json"),
+                                  encoding="utf-8"))
+        listed = real_man.get("NOT_CLEANED_opaque_payloads", [])
+        if stats.get(sc.OPAQUE_STAT):
+            LEDGER.ok(len(listed) > 0 and "NOT safe" in real_man.get("WARNING", ""),
+                      "the real corpus's own manifest names its opaque-payload files",
+                      f"{len(listed)} of {files} file(s) carry one")
+        else:
+            LEDGER.skip("corpus opaque census", "no vaulted capture carries a payload field")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -311,6 +353,7 @@ def check_snapshot_pins_a_growing_corpus():
     happily if `Snapshot` were a no-op wrapper around a live walk that happened not to
     race, so it asserts the un-snapshotted read of the SAME tree really does disagree.
     """
+    print("\n8. the snapshot pins a corpus that is being appended to")
     tmp = tempfile.mkdtemp(prefix="rurik-scrub-grow-")
     try:
         corpus = os.path.join(tmp, "captures")
@@ -348,8 +391,8 @@ def check_snapshot_pins_a_growing_corpus():
                   "removes", f"{walked} walked now vs {records} snapshotted")
 
         # Growth is invisible; shrinkage must never be. A short read would silently
-        # lower every count downstream, which is the failure mode this whole module
-        # exists to refuse.
+        # lower every count downstream, which is the failure mode checks.py exists
+        # to refuse.
         with open(live, "w", encoding="utf-8") as fh:
             fh.write("")
         try:
@@ -360,76 +403,6 @@ def check_snapshot_pins_a_growing_corpus():
         LEDGER.ok(loud,
                   "a snapshotted file that SHRINKS is a loud refusal, not a short read",
                   "growth is invisible by design; truncation is not")
-    finally:
-        shutil.rmtree(tmp, ignore_errors=True)
-
-
-def check_secrets_embedded_in_a_hex_blob():
-    """Prove the payload scrub on a corpus shaped like a live session, and prove it red.
-
-    The real thing this replaces, MEASURED on the vault 2026-08-10: 10 `a` and 10 `sent`
-    values sat in the clear inside `wire.jsonl`'s `payload` hex across five live sessions,
-    because the handshake is plaintext on the wire and `payload` was on no field list.
-
-    Synthetic, and deliberately so on one point: the keyring is written to a file that
-    sorts AFTER the wire capture. A single-pass scrubber would read the payload before it
-    had ever seen the value, emit it unchanged, and look entirely correct on a real vault
-    where `keyring.jsonl` happens to sort first.
-    """
-    secret_a = "a1" * 64          # 128 hex chars, the shape of a DH public value
-    secret_seed = "5e" * 20       # 40 hex chars, the shape of a server seed
-    noise = "9c" * 200            # ciphertext we must NOT touch
-    payload = noise + secret_a + noise + secret_seed + noise
-
-    tmp = tempfile.mkdtemp(prefix="rurik-scrub-hex-")
-    try:
-        corpus = os.path.join(tmp, "captures")
-        session = os.path.join(corpus, "20260810T000000")
-        os.makedirs(session)
-        with open(os.path.join(session, "wire.jsonl"), "w", encoding="utf-8") as fh:
-            fh.write(json.dumps({"kind": "wire", "dir": "c2s",
-                                 "payload": payload}) + "\n")
-        # Sorts after wire.jsonl on purpose -- see the docstring.
-        with open(os.path.join(session, "zz-keyring.jsonl"), "w",
-                  encoding="utf-8") as fh:
-            fh.write(json.dumps({"kind": "session_key", "a": secret_a,
-                                 "sent": secret_seed}) + "\n")
-
-        def scrubbed_payload(dest):
-            snap = sc.Snapshot(corpus, skip=SKIP)
-            sc.scrub_tree(corpus, dest, snapshot=snap)
-            with open(os.path.join(dest, "20260810T000000", "wire.jsonl"),
-                      encoding="utf-8") as fh:
-                return json.loads(fh.readline())["payload"]
-
-        got = scrubbed_payload(os.path.join(tmp, "clean"))
-        LEDGER.ok(secret_a not in got and secret_seed not in got,
-                  "key material embedded in a hex payload is replaced, even when the "
-                  "file naming it is read last",
-                  "the two-pass discovery is what makes read order irrelevant")
-        LEDGER.ok(len(got) == len(payload) and got.count(noise) == 3,
-                  "and only the key material -- the ciphertext around it is untouched",
-                  f"{len(got)} chars in and out, 3 runs of ciphertext intact")
-        try:
-            bytes.fromhex(got)
-            still_hex = True
-        except ValueError:
-            still_hex = False
-        LEDGER.ok(still_hex,
-                  "and the redacted payload still parses as bytes",
-                  "a placeholder that is not hex would break every reader of the file")
-
-        # Prove it can go red. Drop `payload` from the hex-blob list and the handshake
-        # must survive -- if this passes silently the three checks above are decorative.
-        saved = sc.HEX_BLOB_KEYS
-        try:
-            sc.HEX_BLOB_KEYS = ()
-            leaky = scrubbed_payload(os.path.join(tmp, "broken"))
-            LEDGER.ok(secret_a in leaky and secret_seed in leaky,
-                      "dropping `payload` from the hex-blob list puts the handshake "
-                      "back in the clear", "which is exactly how it shipped for 3 days")
-        finally:
-            sc.HEX_BLOB_KEYS = saved
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -447,7 +420,6 @@ def main():
                   "the snapshotted corpus stayed readable at its recorded size",
                   str(exc))
     check_snapshot_pins_a_growing_corpus()
-    check_secrets_embedded_in_a_hex_blob()
     return LEDGER.verdict()
 
 

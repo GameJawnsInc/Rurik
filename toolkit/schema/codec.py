@@ -36,7 +36,26 @@ import json
 import os
 import struct
 
-DEFAULT_SCHEMA = r"C:\gd\Rurik\schema\messages.json"
+def _default_schema():
+    r"""`<repo>/schema/messages.json`, for whichever checkout this file lives in.
+
+    This was the literal string `C:\gd\Rurik\schema\messages.json` until 2026-08-10, so
+    every git worktree silently decoded against the MAIN checkout's catalog. Two ways
+    that bites, and the second is the dangerous one: a schema edit made in a worktree
+    does nothing there, and the worktree's own tests pass against a file the branch does
+    not contain -- green for a change that was never loaded.
+
+    Same failure `vaultpath.py` exists to prevent, from the opposite direction: that one
+    is a relative walk that lands on nothing in a worktree, this one is an absolute path
+    that lands on the wrong repo. Resolve from THIS FILE's location, which is correct in
+    a worktree and in main.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))          # <repo>/toolkit/schema
+    return os.path.join(os.path.dirname(os.path.dirname(here)), "schema",
+                        "messages.json")
+
+
+DEFAULT_SCHEMA = _default_schema()
 
 FIXED = {"msg_header": 2, "word": 2, "byte": 1, "dword": 4,
          "float": 4, "agent_id": 4, "vec2": 8, "vec3": 12}
@@ -73,6 +92,21 @@ class Codec:
                 for key, msg in msgs.items():
                     target["messages"][key] = msg
                     self.overridden.append(f"{chan}[{key}]")
+
+    def name_for(self, channel, opcode, default="?"):
+        """The message's name, if anything has earned it one.
+
+        `messages.json` is imported from OpenTyria and carries names for no GAME_CMSG
+        opcode at all -- 194 layouts, zero names. Names live in `overrides.json`, each
+        beside the evidence that produced it, and they are added only by a labelled run
+        (studies/cmsg/FINDINGS.md). Returning "?" for the rest is the honest answer and
+        the reason this is a lookup rather than a guess: an unnamed opcode should look
+        unnamed in a log, not be given a plausible label borrowed from another channel.
+        """
+        chan = self.channels.get(channel)
+        if not chan:
+            return default
+        return (chan["messages"].get(str(opcode)) or {}).get("name") or default
 
     def fields_for(self, channel, opcode):
         chan = self.channels.get(channel)

@@ -72,6 +72,43 @@ PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 # ------------------------------------------------------------- pre-flight ----
 
+def split_args(text):
+    r"""Split a --game-args string WITHOUT eating Windows backslashes.
+
+    shlex.split defaults to posix=True, where a backslash is an ESCAPE character.
+    On this platform that silently destroys every path it is handed -- splitting
+    r"--tape C:\gd\Rurik\vault" yields ['--tape', 'C:gdRurikvault'].
+
+    That is what happened on 2026-08-10: the tape refused to load and named a path
+    with every separator missing. The mangling was here, one process before the
+    error, and the only reason it was diagnosable in one read is that the refusal
+    printed the path it had actually been given rather than the one it wanted.
+
+    posix=False keeps backslashes but leaves quote characters attached to the
+    token, so surrounding quotes are stripped here; that pair is what lets a quoted
+    path containing spaces survive as well.
+    """
+    out = []
+    for tok in shlex.split(text or "", posix=False):
+        if len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in ("'", '"'):
+            tok = tok[1:-1]
+        out.append(tok)
+    return out
+
+
+def is_labelling(a):
+    """Is --labelrun among the gamesrv flags?
+
+    A function rather than a local, because the answer is needed in main() (to route
+    the gamesrv's stdout to the screen) AND in run_client() (to silence the hold's
+    progress line). The first version computed it once in main() and read it in
+    run_client, which is a different scope: `NameError: name 'labelling' is not
+    defined`, at runtime, thirty seconds into a real session, after ast.parse and
+    every test in the suite had passed. See test_srclint.py.
+    """
+    return "--labelrun" in split_args(getattr(a, "game_args", ""))
+
+
 def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                  capture_root=None, auth_host="127.0.0.1",
                  game_host="127.0.0.3", game_args=()):
@@ -190,18 +227,34 @@ class Stack:
     """The three servers as child processes, each proven to own its port."""
 
     def __init__(self, specs, logdir, echo=False):
+        """`echo` is False, True for every server, or a set of server names.
+
+        The set exists for --labelrun, which prompts a human through the GAMESRV's
+        stdout. Without it those prompts go only to gamesrv.log and the operator
+        sees nothing but this process's own "holding" line -- which is exactly what
+        happened on 2026-08-10, and the run was unusable because the script it was
+        driving was invisible. Echoing all three servers instead would bury the
+        prompts in webgate and authsrv chatter, so the filter is per-name.
+        """
         self.specs = specs
         self.logdir = logdir
         self.echo = echo
         self.procs = {}          # name -> Popen
         self.logs = {}           # name -> path
 
+    def _echoes(self, name):
+        return self.echo is True or (bool(self.echo) and name in self.echo)
+
     def _pump(self, name, proc, logf):
         for line in proc.stdout:
             logf.write(line)
             logf.flush()
-            if self.echo:
-                print(f"[{name}] {line}", end="", flush=True)
+            if self._echoes(name):
+                # No [name] prefix when only one server is echoed: the prompts are
+                # formatted banners meant to be read at a glance, and a prefix on
+                # every line of one wrecks the alignment.
+                prefix = "" if self.echo is not True else f"[{name}] "
+                print(f"{prefix}{line}", end="", flush=True)
         logf.close()
 
     def start(self, timeout=20):
@@ -429,7 +482,7 @@ def shot_if_foreground(hwnd, pid, path):
     return dc.shot(hwnd, path)
 
 
-def hold_open(proc, seconds, tails, outdir):
+def hold_open(proc, seconds, tails, outdir, quiet=False):
     """Keep the whole session alive past the verdict, and stay instrumented.
 
     WHY THIS IS NOT `--keep-open` ON ITS OWN. `--keep-open` used to spare the
@@ -464,6 +517,12 @@ def hold_open(proc, seconds, tails, outdir):
         now = time.monotonic()
         if now - last >= 15:
             last = now
+            if quiet:
+                # A labelled run owns this terminal and prints its own progress.
+                # A "...holding" every 15s lands in the middle of a 9s step's
+                # prompt and reads, to the operator, like the thing they are
+                # supposed to be reading. Silence here is the useful output.
+                continue
             left = f"{end - now:.0f}s left" if end else "holding"
             print(f"  ...{left}", flush=True)
     if proc.poll() is not None:
@@ -545,7 +604,8 @@ def run_client(a, outdir):
             shot_if_foreground(hwnd, proc.pid, os.path.join(outdir, "final.png"))
 
         if a.keep_open:
-            hold_open(proc, a.hold, tails, outdir)
+            hold_open(proc, a.hold, tails, outdir,
+                      quiet=is_labelling(a))
     finally:
         # ALWAYS close the client, --keep-open included. The hold above is the
         # whole of what keep-open buys; once it ends the stack is about to be
@@ -653,14 +713,25 @@ def main():
 
     specs = server_specs(game_port=a.game_port, auth_host=a.auth_host,
                          game_host=a.game_host,
-                         game_args=shlex.split(a.game_args))
+                         game_args=split_args(a.game_args))
     preflight(specs, replace=a.replace)
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
     outdir = vault_path("captures", "harness", stamp)
     os.makedirs(outdir, exist_ok=True)
 
-    stack = Stack(specs, logdir=outdir, echo=a.serve)
+    # --labelrun prompts a HUMAN through the gamesrv's stdout, so that stdout has to
+    # reach this terminal. Detected from the flags rather than added as a second flag
+    # here: the operator already says --labelrun once, and a run where they said it and
+    # saw nothing is worse than useless -- it burns a client session and produces a
+    # capture whose steps nobody performed.
+    labelling = is_labelling(a)
+    stack = Stack(specs, logdir=outdir,
+                  echo=True if a.serve else ({"gamesrv"} if labelling else False))
+    if labelling:
+        print("--labelrun: the gamesrv's prompts will appear IN THIS WINDOW.\n"
+              "  Put this window beside the game. Read it by glancing -- clicking\n"
+              "  here takes focus off the game and your next action goes nowhere.")
     print("starting the stack:")
     stack.start()
     try:

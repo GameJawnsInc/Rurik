@@ -21,6 +21,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "harness"))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
 import checks  # noqa: E402
 import dhbuild  # noqa: E402
@@ -33,7 +34,7 @@ import vaultpath  # noqa: E402
 # is missing -- the vaulted pristine copy (-2), a live-capture build (-3), a firewall
 # that will not enumerate (-2) -- so the worst realistic run is 10 and the floor sits
 # just under it at 9. Every skip is printed rather than the run silently shrinking.
-LEDGER = checks.Ledger("launch gate", floor=9)
+LEDGER = checks.Ledger("launch gate", floor=10)
 
 
 def refused(fn, *a, **kw):
@@ -151,15 +152,28 @@ def main():
         cage.dhbuild.describe = lambda *_a, **_k: {
             "path": "synthetic", "dh": dhbuild.STOCK, "dh_detail": "crafted",
             "patches": {"updater_killed": False}, "build_ok": True}
-        LEDGER.ok(refused(cage.assert_launch_safe, "synthetic", "1.2.3.4"),
-                  "a live-capture build with the updater STILL LIVE is REFUSED",
-                  "an update mid-capture replaces the ground truth being captured")
+        # This used to be a REFUSAL. Owner's decision 2026-08-07: the kill switch also
+        # disables map streaming (DnSetEnabled gates the whole download path), so a live
+        # client that cannot patch cannot enter a map whose content is not already local
+        # -- it dies on Map.cpp's `found` assert, which is what happened on the second
+        # live run. The concern behind the refusal is answered by livesession hashing the
+        # binary before and after instead, so the gate must now ALLOW this and the
+        # measurement must exist.
+        LEDGER.ok(not refused(cage.assert_launch_safe, "synthetic", "1.2.3.4"),
+                  "a live-capture build with the updater LIVE is ALLOWED (map streaming)",
+                  "the kill switch crashed a live run; a gate that blocks the only "
+                  "working configuration is an outage")
         cage.dhbuild.describe = lambda *_a, **_k: {
             "path": "synthetic", "dh": dhbuild.STOCK, "dh_detail": "crafted",
             "patches": {"updater_killed": None}, "build_ok": True}
-        LEDGER.ok(refused(cage.assert_launch_safe, "synthetic", "1.2.3.4"),
+        LEDGER.ok(not refused(cage.assert_launch_safe, "synthetic", "1.2.3.4"),
                   "and so is one whose updater state cannot be determined",
-                  "None is not a synonym for killed")
+                  "the updater is no longer a launch-gate question at all")
+        import livesession  # noqa: E402
+        LEDGER.ok(callable(getattr(livesession, "sha256", None)),
+                  "and the measurement that replaced the refusal exists",
+                  "livesession.sha256 -- the driver hashes the exe before and after, so a "
+                  "self-patch mid-capture is detected rather than forbidden")
     finally:
         cage.dhbuild.describe, cage.cage_state = saved_desc, saved_state
 
