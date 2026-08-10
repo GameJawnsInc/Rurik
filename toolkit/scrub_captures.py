@@ -32,6 +32,13 @@ HOW THE SUBSTITUTION WORKS, and why not a hash.
     exactly the thing the capture exists to preserve.
   * The mapping is held in memory and written nowhere. The manifest records COUNTS per
     field, never values.
+  * A value that is a HEX BYTE STREAM keeps a hex placeholder, so a scrubbed capture
+    still parses as bytes. That matters for `wire.jsonl`, whose `payload` is raw TCP
+    bytes with the plaintext handshake -- and therefore the DH public value and the
+    server seed -- embedded in the middle of ciphertext we are keeping. Those runs are
+    replaced in place; the ciphertext around them is untouched, because it is the
+    evidence. Finding them needs the values first, so `scrub_tree` reads the tree twice:
+    `discover_hex_secrets` learns every hex secret before a single byte is written.
 
 The tree is read through a `Snapshot` (below), not walked live, because a running server
 appends to `vault/captures/` while this is working and a caller that also counts records
@@ -71,6 +78,14 @@ import vaultpath  # noqa: E402
 # nothing of ArenaNet's -- and is scrubbed anyway, because the moment a live session
 # is captured the identical fields carry a real session key and nobody should be
 # relying on remembering to change the policy on that day.
+#
+# `master_secret` was added 2026-08-10, three days after the first live capture wrote it.
+# It is the DH shared secret -- the value `arc4_key` is DERIVED FROM -- so scrubbing the
+# key while leaving it behind protected nothing at all. It leaked past both lists at once:
+# it was in neither this one nor test_scrub.py's deliberately independent harvest, so the
+# leak check could not see it either. Two lists written by the same person on the same day
+# are one list. studies/livekey/FINDINGS.md predicted exactly this ("scrub_captures.py has
+# no field for master_secret") and the prediction sat there unread while the field shipped.
 SECRET_KEYS = {
     "email": "email",
     "token": "tokn",
@@ -78,6 +93,7 @@ SECRET_KEYS = {
     "account_uuid": "acct",
     "char_uuid": "char",
     "arc4_key": "key",
+    "master_secret": "msec",   # the DH shared secret; arc4_key is derived from it
     "a": "dh",          # client DH public value
     "sent": "seed",     # server seed
 }
@@ -122,10 +138,36 @@ AUTH_SENTINELS = {"0"}
 # a field list could not, which is the argument for keeping the test built that way.
 COMPOSITE_KEYS = ("who",)
 
+# Keys whose value is a RAW BYTE STREAM as hex, with secrets EMBEDDED in it rather than
+# being one. `wire.jsonl`'s `payload` is off-wire TCP bytes, and the Guild Wars handshake
+# is plaintext on the wire -- ARC4 starts only once the key is derived -- so the client's
+# 64-byte DH public value and the 20-byte server seed sit in that hex in the clear, in the
+# same session directory as the keyring that names them. Whole-value substitution is wrong
+# here: the stream is mostly ciphertext and the capture exists to preserve it.
+#
+# MEASURED 2026-08-10: 20 values (10 `a`, 10 `sent`) survived the scrub this way across
+# the five live sessions. Nothing was misconfigured -- `payload` was on no list, and it
+# was the leak check, not any field list, that said so.
+HEX_BLOB_KEYS = ("payload",)
+
+# How long a hex run must be before it is treated as key material. 32 hex chars is 16
+# bytes; the real values are 40 and 128. The bound is what makes an accidental match
+# inside ciphertext impossible rather than merely unlikely, and a false match would be
+# silent corruption of the one thing a wire capture exists to hold.
+MIN_HEX_SECRET = 32
+
 # 8-4-4-4-12 hex. Matching the shape rather than the field means a UUID picks up the same
 # pseudonym here as it does in `account_uuid`, so correlation survives across both.
 UUID_RE = re.compile(r"\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"
                      r"-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b")
+
+_HEXDIGITS = set("0123456789abcdefABCDEF")
+
+
+def is_hex_blob(value):
+    """True for a hex run long enough to be key material rather than a coincidence."""
+    return (isinstance(value, str) and len(value) >= MIN_HEX_SECRET
+            and all(c in _HEXDIGITS for c in value))
 
 
 def scrub_composite(value, names, stats):
@@ -147,7 +189,7 @@ class Pseudonyms:
         if value in self._map:
             return self._map[value]
         self._n += 1
-        placeholder = self._make(label, self._n, len(value))
+        placeholder = self._make(value, label, self._n)
         if placeholder in self._map.values():
             raise RuntimeError(
                 f"placeholder collision on {label!r} at length {len(value)}: "
@@ -157,11 +199,26 @@ class Pseudonyms:
         return placeholder
 
     @staticmethod
-    def _make(label, index, length):
-        """A placeholder of exactly `length` characters, unique per index."""
-        core = f"{label}{index}"
+    def _make(value, label, index):
+        """A placeholder of exactly len(value) characters, unique per index.
+
+        A hex byte stream gets a HEX placeholder -- the index in hex, right-aligned in
+        zeroes. Two reasons, and neither is cosmetic. It keeps a scrubbed `wire.jsonl`
+        loadable: `payload` is parsed with `bytes.fromhex`, and dropping `dh7xxxx...`
+        into the middle of it would turn a redaction into a corrupt file. And it is
+        recognisable on sight: forty zeroes and a counter is nobody's session key.
+
+        The label is deliberately ignored for those, so the placeholder does not depend
+        on WHICH field happened to be read first -- `a` in a keyring and the same bytes
+        inside a wire payload must land on the same token either way round.
+        """
+        length = len(value)
         if length <= 0:
             return ""
+        if is_hex_blob(value):
+            core = f"{index:x}"
+            return core[-length:] if len(core) >= length else core.rjust(length, "0")
+        core = f"{label}{index}"
         if len(core) >= length:
             # Not enough room to be readable; keep the digits, they carry uniqueness.
             return core[-length:]
@@ -184,7 +241,60 @@ def scrub_xml(payload, names, stats):
     return pattern.sub(repl, payload)
 
 
-def scrub_record(rec, names, stats):
+def discover_hex_secrets(snapshot):
+    """Every hex-encoded secret in the tree, gathered BEFORE anything is written.
+
+    WHY THIS NEEDS ITS OWN PASS. Substituting key material inside `payload` means knowing
+    the values, and the record that names a value is in a different file from the payload
+    that embeds it. In a live session directory `keyring.jsonl` does sort before
+    `wire.jsonl`, so a single pass would appear to work -- and would be a control that
+    holds by alphabetical luck. One capture written under another name and the secret goes
+    out unredacted, silently. So the values are all known before the first byte is written.
+
+    Reads the same snapshot the scrub pass will read, so the two cannot disagree about
+    what is in the tree. Unparseable lines are skipped without comment here; the scrub
+    pass is what counts them, and counting them twice would double UNPARSEABLE.
+    """
+    out = {}
+    for rel, _size in snapshot.jsonl():
+        for line in snapshot.lines(rel):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            for key, label in SECRET_KEYS.items():
+                if is_hex_blob(rec.get(key)):
+                    out[rec[key]] = label
+    return out
+
+
+def hex_blob_pattern(secrets):
+    """One alternation over every known hex secret, longest first, or None if there are
+    none. Longest first because a 20-byte seed that happens to be a prefix of something
+    longer must not match inside it and leave the tail in the clear."""
+    if not secrets:
+        return None
+    return re.compile("|".join(re.escape(s) for s in
+                               sorted(secrets, key=len, reverse=True)))
+
+
+def scrub_hex_blob(value, names, stats, secrets, pattern):
+    """Replace key material embedded in a raw hex byte stream, leaving the rest alone.
+
+    The stream is mostly ciphertext and that ciphertext is the evidence; only the runs
+    that are known secrets are touched. Lengths are preserved, as everywhere else, and
+    the replacements are hex, so the result still parses as a byte stream.
+    """
+    def repl(m):
+        stats["hex_embedded"] = stats.get("hex_embedded", 0) + 1
+        return names.get(m.group(0), secrets.get(m.group(0), "hex"))
+    return pattern.sub(repl, value)
+
+
+def scrub_record(rec, names, stats, hexpat=None, hexsecrets=None):
     """One JSONL record in, one anonymised record out. Shape is never changed."""
     out = {}
     for key, value in rec.items():
@@ -201,6 +311,9 @@ def scrub_record(rec, names, stats):
             out[key] = scrub_xml(value, names, stats)
         elif key in COMPOSITE_KEYS and isinstance(value, str):
             out[key] = scrub_composite(value, names, stats)
+        elif (key in HEX_BLOB_KEYS and isinstance(value, str)
+              and hexpat is not None):
+            out[key] = scrub_hex_blob(value, names, stats, hexsecrets, hexpat)
         else:
             out[key] = value
     return out
@@ -321,6 +434,11 @@ def scrub_tree(src, out, dry_run=False, skip=(), snapshot=None):
             raise ValueError(
                 f"snapshot is of {snapshot.root} but the scrub was asked for {src}: the "
                 "counts would describe a different tree than the one being written")
+    # Pass one: learn every hex secret in the tree, so a payload can be scrubbed no
+    # matter which file named the value or which order the files are read in.
+    hexsecrets = discover_hex_secrets(snapshot)
+    hexpat = hex_blob_pattern(hexsecrets)
+
     names, stats = Pseudonyms(), {}
     files = records = 0
     unscrubbed = [rel for rel, _n in snapshot.raw()]
@@ -337,7 +455,8 @@ def scrub_tree(src, out, dry_run=False, skip=(), snapshot=None):
             except json.JSONDecodeError:
                 stats["UNPARSEABLE"] = stats.get("UNPARSEABLE", 0) + 1
                 continue
-            lines.append(json.dumps(scrub_record(rec, names, stats)))
+            lines.append(json.dumps(
+                scrub_record(rec, names, stats, hexpat, hexsecrets)))
         if not dry_run:
             os.makedirs(os.path.join(out, os.path.dirname(rel)), exist_ok=True)
             with open(os.path.join(out, rel), "w", encoding="utf-8") as fh:
@@ -349,10 +468,12 @@ def scrub_tree(src, out, dry_run=False, skip=(), snapshot=None):
             json.dump({
                 "source": src, "files": files, "records": records,
                 "distinct_secrets_replaced": names.count(),
+                "hex_secrets_known": len(hexsecrets),
                 "replacements_by_field": dict(sorted(stats.items())),
                 "NOT_SCRUBBED": unscrubbed,
                 "note": "Placeholders are sequential, not derived from the values. "
-                        "No mapping is stored anywhere. Lengths are preserved. "
+                        "No mapping is stored anywhere. Lengths are preserved, and a "
+                        "hex byte stream keeps a hex placeholder so it still parses. "
                         ".raw files are NOT scrubbed and are not copied -- they are "
                         "the undecoded byte stream and nothing here parses them.",
             }, fh, indent=2)
