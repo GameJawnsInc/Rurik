@@ -1240,7 +1240,7 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
         for i, (t, blob) in enumerate(events):
             if stop.is_set():
                 print(f"[c{conn_id}] tape stopped at event {i}/{len(events)}", flush=True)
-                return
+                return False
             due = t0 + (t / speed if speed else 0.0)
             now = time.monotonic()
             if due > now:
@@ -1282,9 +1282,10 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
         print(f"[c{conn_id}] re-run with --tape-speed 0.25 to spread these out, or "
               f"copy the client's Assertion line -- it names the source file.",
               flush=True)
-        return
+        return False
     print(f"[c{conn_id}] tape complete: {sent}/{len(events)} events in "
           f"{time.monotonic() - t0:.1f}s", flush=True)
+    return True
 
 
 def run_probe(name, send, conn_id, stop, origin=None):
@@ -1383,6 +1384,18 @@ class Recorder:
         self.event("frame", seq=seq, direction=direction, n=len(cipher),
                    cipher=binascii.hexlify(cipher[:512]).decode(),
                    plain=binascii.hexlify(plain[:512]).decode())
+
+    @property
+    def closed(self):
+        """Has the connection this recorder belongs to already been torn down?
+
+        Background threads (the tape player, a probe, the labelled run) outlive the
+        connection handler that owns the recorder, so they can and do reach a closed
+        file. Asking is better than catching: a thread that discovers this can say
+        what it is skipping and why, instead of dying on `I/O operation on closed
+        file` and stacking a confusing traceback on top of the real failure.
+        """
+        return self.meta.closed
 
     def close(self):
         self.meta.close()
@@ -1742,9 +1755,31 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                           f"labelled run has started. It will say so clearly.\n"
                           f"[c{conn_id}] NOTE the avatar stops moving well before the "
                           f"tape ends, and that is not the end.\n", flush=True)
-                play_tape(send_raw, conn_id, stop, TAPE_EVENTS, TAPE_INFO, TAPE_SPEED)
-                if LABEL_RUN and not stop.is_set():
-                    labelrun.run(rec, conn_id, stop)
+                finished = play_tape(send_raw, conn_id, stop, TAPE_EVENTS,
+                                     TAPE_INFO, TAPE_SPEED)
+                if not LABEL_RUN or stop.is_set():
+                    return
+                if not finished:
+                    # The tape ended early: the client dropped, asserted, or the
+                    # session was torn down. Prompting a human through 18 steps
+                    # against a dead socket produces a capture that LOOKS like a
+                    # labelled run and contains nothing the operator did -- which
+                    # is worse than no run, because it would be analysed.
+                    print(f"[c{conn_id}] the tape did not finish, so the labelled "
+                          f"run is NOT starting. Nothing to label: the client is "
+                          f"gone.", flush=True)
+                    return
+                if rec.closed:
+                    # Same defence one layer down. OBSERVED 2026-08-10: a NameError
+                    # in session.py tore the stack down mid-run, the connection
+                    # handler closed this recorder, and the label run then died on
+                    # `I/O operation on closed file` -- a confusing second traceback
+                    # stacked on top of the real one.
+                    print(f"[c{conn_id}] the capture is closed, so the labelled run "
+                          f"is NOT starting -- its marks would go nowhere.",
+                          flush=True)
+                    return
+                labelrun.run(rec, conn_id, stop)
 
             threading.Thread(target=_tape_then_labels, daemon=True).start()
 

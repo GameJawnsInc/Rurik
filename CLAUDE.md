@@ -160,6 +160,11 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientscan/test_codescan.py` (the attack-speed chain, and the two
   decoding traps that hid it — needs capstone),
   `toolkit/test_checks.py` (the check on the checker — see below),
+  `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
+  nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
+  a live session on 2026-08-10. It also pins the checker's own vacuity failure — the
+  first version treated every function local as a module binding and scored the real
+  defect zero),
   `toolkit/test_scrub.py` (the credential scrub, that no secret survives it, and that the
   one field it CANNOT clean — a `plain` frame payload, which carries the account email as
   UTF-16 and is therefore invisible to the ASCII leak check — is reported rather than

@@ -96,6 +96,19 @@ def split_args(text):
     return out
 
 
+def is_labelling(a):
+    """Is --labelrun among the gamesrv flags?
+
+    A function rather than a local, because the answer is needed in main() (to route
+    the gamesrv's stdout to the screen) AND in run_client() (to silence the hold's
+    progress line). The first version computed it once in main() and read it in
+    run_client, which is a different scope: `NameError: name 'labelling' is not
+    defined`, at runtime, thirty seconds into a real session, after ast.parse and
+    every test in the suite had passed. See test_srclint.py.
+    """
+    return "--labelrun" in split_args(getattr(a, "game_args", ""))
+
+
 def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                  capture_root=None, auth_host="127.0.0.1",
                  game_host="127.0.0.3", game_args=()):
@@ -591,7 +604,8 @@ def run_client(a, outdir):
             shot_if_foreground(hwnd, proc.pid, os.path.join(outdir, "final.png"))
 
         if a.keep_open:
-            hold_open(proc, a.hold, tails, outdir, quiet=labelling)
+            hold_open(proc, a.hold, tails, outdir,
+                      quiet=is_labelling(a))
     finally:
         # ALWAYS close the client, --keep-open included. The hold above is the
         # whole of what keep-open buys; once it ends the stack is about to be
@@ -711,8 +725,7 @@ def main():
     # here: the operator already says --labelrun once, and a run where they said it and
     # saw nothing is worse than useless -- it burns a client session and produces a
     # capture whose steps nobody performed.
-    game_argv = split_args(a.game_args)
-    labelling = "--labelrun" in game_argv
+    labelling = is_labelling(a)
     stack = Stack(specs, logdir=outdir,
                   echo=True if a.serve else ({"gamesrv"} if labelling else False))
     if labelling:
