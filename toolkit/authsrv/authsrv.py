@@ -725,6 +725,12 @@ VAULT_DEFAULT = vault_path("captures", "authsrv")
 # exactly as it does in a normal session.
 PROBE_NAME = None
 
+# Set from --tape. When armed, the GAME channel's whole load sequence is replaced
+# by a recording of ArenaNet's -- see play_tape. None means the ordinary map load.
+TAPE_EVENTS = None
+TAPE_INFO = None
+TAPE_SPEED = 1.0
+
 # Set from --click-sweep. Cycles the two 16-bit fields of MOVE_TO_POINT through
 # every plausible assignment, one per click, so the CLIENT decides which is
 # right instead of us arguing from two sources that contradict each other.
@@ -1169,6 +1175,74 @@ def spawn_enemy(send, state, origin, conn_id):
           flush=True)
 
 
+def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
+    """Play a recorded server's plaintext into a live session, at recorded timing.
+
+    R1.5. Runs on its own thread for the same reason a probe does: the receive loop
+    must keep running throughout or the client times out mid-tape, and the tape is
+    48 seconds long.
+
+    THE PREDICTION IS STATED HERE rather than in a commit message, because this is
+    an experiment and the house rule is that a probe with no stated expectation can
+    be rationalised into agreeing with whatever happened:
+
+      * PREDICTED: the client loads the recorded map and draws its agents. The tape
+        is 3,981 messages that this exact build already accepted once, from a server
+        whose framing, preamble and key derivation we have measured to be identical
+        to ours.
+      * THE INFORMATIVE FAILURE: an assert naming a player-identity field. The tape
+        names the RECORDED character -- an 11-character name in 0x017D and in the
+        player's 0x0059 row, player number 26, agent 725, plus 40 other players --
+        and the client logged in as ours. Whether it cross-checks the identity it
+        SENT against the one it is TOLD about is UNVERIFIED, and this is the one
+        experiment that settles it. Nothing is renamed on the first run: the point
+        is to learn whether the client checks, not to sneak past the check.
+      * NOT PREDICTED, and out of scope: control. The tape's 987 move messages
+        answer the RECORDED operator's clicks, so the avatar walks the recorded path
+        whatever the new operator does, and client-side prediction will fight it. A
+        tape shows a load and a populated world; it cannot show control.
+
+    Pacing is per WIRE SEGMENT, not per message, because that is the resolution the
+    capture has -- 1,209 timing points for 3,981 messages on the Ascalon tape. Drift
+    is corrected against a fixed origin rather than accumulated per sleep, so a slow
+    send cannot stretch the whole tape.
+    """
+    bar = "=" * 62
+    print(f"\n{bar}\nTAPE: {info['connection']}\n"
+          f"  {info['events']:,} events, {info['bytes']:,} B, {info['seconds']:.1f}s"
+          f"{'' if speed == 1.0 else f' at {speed}x'}\n"
+          f"  from {info['capture']} ({info['origin']})\n"
+          f"  PREDICTS: the client loads the recorded map and draws its agents.\n"
+          f"  The informative failure is an assert naming a player-identity field --\n"
+          f"  the tape names the RECORDED character, not the one that logged in.\n{bar}",
+          flush=True)
+    t0 = time.monotonic()
+    sent = 0
+    try:
+        for i, (t, blob) in enumerate(events):
+            if stop.is_set():
+                print(f"[c{conn_id}] tape stopped at event {i}/{len(events)}", flush=True)
+                return
+            due = t0 + (t / speed if speed else 0.0)
+            now = time.monotonic()
+            if due > now:
+                time.sleep(due - now)
+            send_raw(blob, f"tape[{i}]")
+            sent += 1
+            if i and i % 200 == 0:
+                print(f"[c{conn_id}] tape {i}/{len(events)} "
+                      f"({time.monotonic() - t0:.1f}s)", flush=True)
+    except (ConnectionError, OSError) as ex:
+        # The client dropped, or asserted and took the socket with it. That is a
+        # RESULT for this experiment, not a crash to swallow silently.
+        print(f"[c{conn_id}] tape ended at event {sent}/{len(events)} "
+              f"after {time.monotonic() - t0:.1f}s: {type(ex).__name__}: {ex}",
+              flush=True)
+        return
+    print(f"[c{conn_id}] tape complete: {sent}/{len(events)} events in "
+          f"{time.monotonic() - t0:.1f}s", flush=True)
+
+
 def run_probe(name, send, conn_id, stop, origin=None):
     """Fire a scripted experiment at the client, on its own thread.
 
@@ -1538,6 +1612,29 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             rec.event("sent", seq=seq, opcode=opcode, label=label,
                       plain=binascii.hexlify(blob).decode())
 
+        def send_raw(blob, label, quiet=True):
+            """Write PRE-FORMED plaintext through this session's keystream.
+
+            The tape player's only door into the socket. It shares send()'s lock and
+            keystream counter deliberately: ARC4 is one continuous keystream per
+            direction, so a tape event and an ordinary send interleaving without the
+            lock would each get half the right bytes and the client would decrypt
+            neither. It records under the same `sent` kind so a tape session's
+            capture reads back through replay.py exactly like any other.
+
+            opcode is read from the blob rather than passed, because a tape carries
+            whole messages we never encoded and may not have a name for -- which is
+            the point of a tape: it needs no semantics.
+            """
+            op = int.from_bytes(blob[:2], "little") if len(blob) >= 2 else -1
+            with send_lock:
+                seq = next(s2c_seq)
+                sock.sendall(s2c.crypt(blob))
+            if not quiet:
+                print(f"[c{conn_id}] s2c {label} ({len(blob)}B)", flush=True)
+            rec.event("sent", seq=seq, opcode=op, label=label,
+                      plain=binascii.hexlify(blob).decode())
+
         if kind == "game":
             # 0x31 | Prophecies(2) | Factions(4) | Nightfall(8) = 0x3F, straight
             # from OpenTyria. Unlocking everything is wrong for a level 1 pre-Searing
@@ -1706,6 +1803,26 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   for v in values])
 
                 if kind == "game":
+                    if TAPE_EVENTS is not None:
+                        # A TAPE REPLACES THE WHOLE LOAD SEQUENCE. Not some of it:
+                        # our burst and ArenaNet's would interleave into a stream
+                        # neither server ever sent, and any assert it produced would
+                        # be about the mixture rather than about either. The client's
+                        # first load message is the trigger because that is where the
+                        # recorded server's own first bytes went out.
+                        if opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS:
+                            if not state.get("tape_started"):
+                                state["tape_started"] = True
+                                threading.Thread(
+                                    target=play_tape,
+                                    args=(send_raw, conn_id, stop,
+                                          TAPE_EVENTS, TAPE_INFO, TAPE_SPEED),
+                                    daemon=True).start()
+                        # Every other game c2s is still FRAMED (so a desync still
+                        # closes) and still recorded, but is answered by the tape
+                        # alone. Falling through would let the ordinary handlers
+                        # inject replies into the middle of a recording.
+                        continue
                     if opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_ITEMS:
                         # OpenTyria's full REQUEST_ITEMS burst, in its order.
                         # Sending only the tail of it made the client accept every
@@ -2686,6 +2803,19 @@ def main():
                          "established — the two used to share one file, and a "
                          "test run silently clobbered live state.")
     ap.add_argument("--once", action="store_true", help="exit after one connection")
+    ap.add_argument("--tape", metavar="CAPTURE_DIR",
+                    help="R1.5: replay a recorded LIVE session's server plaintext "
+                         "on the game channel instead of our own map load, at the "
+                         "timing the wire capture recorded. The auth channel stays "
+                         "ours -- a verbatim auth replay answers the wrong request "
+                         "ids. Refuses a capture that is not origin: live.")
+    ap.add_argument("--tape-connection", metavar="CLIENT->SERVER", default=None,
+                    help="which game channel of the capture to play; default is "
+                         "the one with the most server plaintext.")
+    ap.add_argument("--tape-speed", type=float, default=1.0, metavar="X",
+                    help="play faster or slower than recorded. 1.0 reproduces the "
+                         "observed cadence; anything else changes the one property "
+                         "the tape exists to reproduce, so say so when reporting.")
     ap.add_argument("--probe", metavar="NAME",
                     help="After the character spawns, fire a scripted experiment at "
                          "the client. See --list-probes. Only affects a session you "
@@ -2735,6 +2865,20 @@ def main():
             print(probes.describe(n))
             print()
         return
+    if a.tape:
+        import tape as tapemod
+        global TAPE_EVENTS, TAPE_INFO, TAPE_SPEED
+        try:
+            TAPE_INFO, TAPE_EVENTS = tapemod.load_tape(a.tape, a.tape_connection)
+        except tapemod.TapeError as ex:
+            raise SystemExit(f"refusing to play this tape -- {ex}")
+        TAPE_SPEED = a.tape_speed
+        print(f"tape armed: {TAPE_INFO['connection']} -- {TAPE_INFO['events']:,} "
+              f"events, {TAPE_INFO['bytes']:,} B, {TAPE_INFO['seconds']:.1f}s "
+              f"({TAPE_INFO['origin']})")
+        print("  the GAME channel's load sequence is REPLACED by this recording; "
+              "the auth channel is still ours.")
+
     if a.probe:
         if a.probe not in probes.names():
             raise SystemExit(f"no probe named {a.probe!r}. "

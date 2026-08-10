@@ -142,6 +142,9 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
   and that an unframeable opcode stops the framer instead of being framed past),
+  `toolkit/authsrv/test_tape.py` (R1.5's tape loader: the events ARE the recorded
+  stream whole and in order, and a tape whose wire bytes do not account for the
+  plaintext -- or that came from our own server -- is refused),
   `toolkit/authsrv/test_replay.py` (a captured .raw decrypts back to the plaintext that
   was logged, and does so all-or-nothing across the whole vault — the first reader of a
   .raw, which closes R0a's standing caveat),
