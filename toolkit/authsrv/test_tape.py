@@ -33,7 +33,7 @@ import origin  # noqa: E402
 import tape  # noqa: E402
 import vaultpath  # noqa: E402
 
-LEDGER = checks.Ledger("tape", floor=8)
+LEDGER = checks.Ledger("tape", floor=13)
 
 LIVE_CAPTURE = "20260807T143055"
 
@@ -137,6 +137,59 @@ def main():
                   "and its instance load really is a burst: ~34% of bytes in 0.79s",
                   f"{burst:,} of {info['bytes']:,} = {100 * burst / info['bytes']:.1f}% "
                   f"-- a player that spaces messages evenly would get this wrong")
+
+    # ---- 4. stopping before the tape leaves the map ----------------------------
+    print("\n4. a tape can be cut before it hands the client to another server")
+    if not have:
+        LEDGER.skip("transfer truncation", f"no live capture {LIVE_CAPTURE}")
+    else:
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+        from codec import Codec  # noqa: E402
+        codec_obj = Codec()
+
+        def framed(evs):
+            blob, off, ops, alive = b"".join(b for _t, b in evs), 0, [], set()
+            while off < len(blob):
+                op, v, off = codec_obj.decode_one("GAME_SMSG", blob, off)
+                ops.append(op)
+                if op == 0x0020:
+                    alive.add(v[1])
+                elif op == 0x0021:
+                    alive.discard(v[1])
+            return ops, alive
+
+        ASCALON = "10.0.0.210:60935->52.3.40.244:80"
+        LAST = "10.0.0.210:64103->54.198.7.73:80"
+        _i, evs = tape.load_tape(cap, ASCALON)
+        keep, dropped, why = tape.stop_before_transfer(evs, codec_obj)
+        ops, alive = framed(keep)
+
+        LEDGER.ok(dropped == 1 and 0x01A5 not in ops,
+                  "the handoff is gone, and only the one event carrying it was cut",
+                  f"{len(evs):,} -> {len(keep):,} events; {why}")
+        LEDGER.ok(len(alive) == 45,
+                  "and the map is still fully populated afterwards",
+                  f"{len(alive)} agents still alive -- a client left here has "
+                  f"something to interact with, which is the whole point")
+
+        # THE TRAP, pinned. Cutting on 0x0099 MAP_UPDATE_CURRENT instead severs the
+        # tape at byte 962 of 74,319 -- one event of 1,209 -- because the client is
+        # ALSO told its current map during the instance load, with the same opcode.
+        # That truncation looks successful and produces an empty world.
+        LEDGER.ok(0x0099 in ops,
+                  "0x0099 SURVIVES the cut, because it is not the transfer marker",
+                  "it is sent during the instance load too; cutting on it truncated "
+                  "the tape to a single event and an empty map")
+        LEDGER.ok(len(keep) > len(evs) * 0.99,
+                  "so the cut is at the END, not in the load",
+                  f"kept {100 * len(keep) / len(evs):.1f}% of the events")
+
+        _i2, evs2 = tape.load_tape(cap, LAST)
+        keep2, dropped2, why2 = tape.stop_before_transfer(evs2, codec_obj)
+        LEDGER.ok(dropped2 == 0 and keep2 == evs2 and "no transfer" in why2,
+                  "a tape that never leaves its map is returned untouched, and says so",
+                  "the last connection of a capture ends because the session ended, "
+                  "not because the operator zoned")
 
     return LEDGER.verdict()
 

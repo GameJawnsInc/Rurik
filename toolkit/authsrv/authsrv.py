@@ -2971,6 +2971,12 @@ def main():
     ap.add_argument("--tape-connection", metavar="CLIENT->SERVER", default=None,
                     help="which game channel of the capture to play; default is "
                          "the one with the most server plaintext.")
+    ap.add_argument("--tape-no-transfer", action="store_true",
+                    help="Stop the tape before the messages that hand the client to "
+                         "another game server (0x01A5 + 0x0099 MAP_UPDATE_CURRENT), "
+                         "so it stays in the map instead of dialling ArenaNet and "
+                         "being refused by the cage. Implied by --labelrun, which "
+                         "cannot survive the transfer.")
     ap.add_argument("--tape-speed", type=float, default=1.0, metavar="X",
                     help="play faster or slower than recorded. 1.0 reproduces the "
                          "observed cadence; anything else changes the one property "
@@ -3047,6 +3053,25 @@ def main():
         except tapemod.TapeError as ex:
             raise SystemExit(f"refusing to play this tape -- {ex}")
         TAPE_SPEED = a.tape_speed
+        if a.labelrun or a.tape_no_transfer:
+            # A labelled run cannot survive its tape leaving the map, and three of
+            # the four tapes in the 2026-08-07 capture end by doing exactly that --
+            # the recorded operator walked into a gateway. OBSERVED 2026-08-10: the
+            # Ascalon tape played 1,209/1,209, the client obeyed its 0x01A5 handoff,
+            # dialled ArenaNet, the cage refused, and the connection died six seconds
+            # into the labelled run. Truncating is the only way to keep the client in
+            # the map, and it is LOUD because it changes what the tape is.
+            TAPE_EVENTS, dropped, why = tapemod.stop_before_transfer(
+                TAPE_EVENTS, codec)
+            if dropped:
+                print(f"  TAPE TRUNCATED: {why}")
+                print(f"  the client will stay in this map instead of zoning out.")
+                TAPE_INFO = dict(TAPE_INFO, events=len(TAPE_EVENTS),
+                                 bytes=sum(len(b) for _t, b in TAPE_EVENTS),
+                                 seconds=TAPE_EVENTS[-1][0] if TAPE_EVENTS else 0.0,
+                                 truncated=dropped)
+            else:
+                print(f"  tape needs no truncation: {why}")
         print(f"tape armed: {TAPE_INFO['connection']} -- {TAPE_INFO['events']:,} "
               f"events, {TAPE_INFO['bytes']:,} B, {TAPE_INFO['seconds']:.1f}s "
               f"({TAPE_INFO['origin']})")

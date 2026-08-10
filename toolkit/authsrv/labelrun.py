@@ -293,6 +293,17 @@ def run(rec, conn_id, stop, steps=STEPS, out=None, ready=6.0):
                 say(f"\n  stopped before step {i}/{len(steps)}")
                 rec.event("label_run_stopped", at_index=i, at_key=step.key)
                 return False
+            if getattr(rec, "closed", False):
+                # The client left. Checking ONCE before the run is not enough: on
+                # 2026-08-10 the Ascalon tape's own last act was walking into a
+                # gateway, so the client zoned out during the six-second countdown
+                # -- after every up-front check had passed -- and the first mark
+                # died on `I/O operation on closed file`. A prompt loop talking to
+                # a capture nobody is writing to is worse than useless: it would
+                # walk the operator through fourteen steps that record nothing.
+                say(f"\n  the client is gone -- stopping at step {i}/{len(steps)}, "
+                    f"{step.key}. Nothing after this could have been recorded.")
+                return False
             SEEN[0] = 0
             rec.event("label_step", index=i, key=step.key, prompt=step.prompt,
                       seconds=step.seconds, expect=step.expect,

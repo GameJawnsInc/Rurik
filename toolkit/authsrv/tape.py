@@ -187,6 +187,67 @@ def load_tape(capture_dir, connection=None):
     return info, events
 
 
+# The two messages that end a tape by taking the client OUT of the map.
+#
+#   0x01A5  a 24-byte blob that is a sockaddr_in: family 2, port 6112 big-endian,
+#           then the IPv4 address. OBSERVED 2026-08-10 and CHECKED AGAINST THE
+#           CAPTURE ITSELF -- Ascalon's names 54.198.7.73 and the capture's next
+#           connection is to 54.198.7.73; Lakeside #1's names 52.3.40.244 and the
+#           next is 52.3.40.244; Ashford's names 54.198.7.73 and so is the next.
+#           Three for three, from a witness we did not consult to make the claim.
+#   0x0099  MAP_UPDATE_CURRENT, whose field 1 is the destination map id, agreeing
+#           with the map id in the next connection's own c2s VERSION every time.
+#
+# A tape carrying these will make a real client dial ArenaNet, and the cage will
+# refuse it. That is the correct end of a replay -- but it is fatal to anything
+# meant to happen AFTER the tape, which is what a labelled run is.
+# ONLY 0x01A5. `0x0099 MAP_UPDATE_CURRENT` is NOT a transfer marker and treating it as
+# one truncated the Ascalon tape at byte 962 of 74,319 -- one event out of 1,209 -- because
+# the client is also told its CURRENT map during the instance load, with the same opcode.
+# The destination reading is only correct for the copy that follows 0x01A5. 0x01A5 itself
+# appears exactly once per tape, at message 3,979 of 3,981 / 2,629 of 2,633 / 724 of 726,
+# and not at all in the tape that does not leave its map. Cutting at it drops the trailing
+# 0x0099 as well, because that one comes after.
+TRANSFER_OPCODES = (0x01A5,)
+
+
+def stop_before_transfer(events, codec_obj):
+    """(events, dropped, why) -- the tape truncated before it leaves the map.
+
+    Deliberately opt-in. `tape.py` is otherwise semantics-free by design (see the
+    module docstring: a tape needs no semantics, which is why the 105-opcode gap does
+    not block it). This is the one place semantics are needed, and they are needed
+    only to decide where to STOP -- never to decide what to send.
+
+    Truncates at EVENT granularity, dropping the whole wire segment that carries the
+    transfer. Splitting it would be possible and is not worth it: the alternative is a
+    partial segment whose timing no longer matches anything recorded.
+    """
+    off, cut = 0, None
+    blob = b"".join(b for _t, b in events)
+    while off < len(blob):
+        try:
+            op, _vals, nxt = codec_obj.decode_one("GAME_SMSG", blob, off)
+        except Exception:
+            break
+        if op in TRANSFER_OPCODES:
+            cut = off
+            break
+        off = nxt
+    if cut is None:
+        return events, 0, "no transfer in this tape"
+    seen, keep = 0, []
+    for t, b in events:
+        if seen + len(b) > cut:
+            break
+        keep.append((t, b))
+        seen += len(b)
+    dropped = len(events) - len(keep)
+    return keep, dropped, (f"cut at byte {cut:,} of {len(blob):,}, dropping the last "
+                           f"{dropped} event(s) -- they hand the client to another "
+                           f"server and the cage will refuse the dial")
+
+
 def gaps(events):
     """[(index, seconds)] inter-event gaps, for reporting cadence honestly."""
     return [(i, round(events[i][0] - events[i - 1][0], 6))

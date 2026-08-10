@@ -218,6 +218,44 @@ watch *that*, not the avatar, before treating the client as free. Recorded in
 
 ---
 
+### T8 — `0x01A5` is the instance handoff, and the capture proves it. OBSERVED.
+
+Found while diagnosing why a third run died: the Ascalon tape ends by **leaving the map**.
+Its second-to-last message is `0x01A5` carrying a 24-byte blob, and reading that blob as a
+`sockaddr_in` — family 2, port big-endian, then IPv4 — gives an address. The message after
+it is `0x0099 MAP_UPDATE_CURRENT` naming a map id.
+
+**Checked against a witness we did not consult to make the claim** — the capture's own
+later connections:
+
+| tape | `0x01A5` decodes to | `0x0099` map | what the capture's NEXT connection actually did |
+|---|---|---|---|
+| Ascalon City (148) | `54.198.7.73:6112` | 146 | connected to `54.198.7.73`, VERSION said map 146 |
+| Lakeside #1 (146) | `52.3.40.244:6112` | 164 | connected to `52.3.40.244`, VERSION said map 164 |
+| Ashford Abbey (164) | `54.198.7.73:6112` | 146 | connected to `54.198.7.73`, VERSION said map 146 |
+| Lakeside #2 (146) | **absent** | — | nothing; the session ended here |
+
+Three for three on both fields. This is the message that made run 1 end at `Code=005`:
+the client read it, dialled ArenaNet, and the cage refused.
+
+**Two consequences.** First, `0x01A5` is exactly what tape-chaining needs — intercept it,
+substitute a loopback `sockaddr`, and hand the client the next connection's tape.
+`toolkit/authsrv/tape.py` `stop_before_transfer` already locates it precisely.
+
+Second, and this is the operational one: **only a capture's LAST connection is usable for
+anything after the tape.** Every other tape ends by zoning out, because that is why the
+recording ended. `--labelrun` therefore truncates, dropping one event of 1,209 from
+Ascalon and none from Lakeside #2.
+
+> **The trap, recorded because it produced a plausible wrong answer.** `0x0099` is NOT a
+> transfer marker. The client is also told its *current* map during the instance load,
+> with the same opcode — so cutting on `0x0099` truncated Ascalon at byte 962 of 74,319,
+> one event out of 1,209, and produced a "successfully truncated" tape with an empty
+> world. The destination reading is only correct for the copy that follows `0x01A5`.
+> `test_tape.py` now requires that `0x0099` **survives** the cut.
+
+---
+
 ## 3. What run 2 did not settle
 
 * **Control.** Out of scope by construction (T6). Unchanged from `tape.py`'s docstring.
@@ -234,10 +272,12 @@ watch *that*, not the avatar, before treating the client as free. Recorded in
 
 ## 4. Next, in order of value
 
-1. **Chain the tapes across a map transition.** Run 1 ended when the client dialled
-   ArenaNet for the next instance. Catch that dial and hand it `:62994`'s tape instead;
-   four instance tapes become one continuous session. This is the largest single increase
-   in what the instrument covers.
+1. **Chain the tapes across a map transition.** T8 found the message that makes this
+   concrete: `0x01A5` carries the next instance's `sockaddr_in`, and
+   `tape.stop_before_transfer` already locates it exactly. Rewrite that blob to a
+   loopback address instead of cutting it, arm the next connection with the next tape,
+   and four instance tapes become one continuous session. Largest single increase in
+   what the instrument covers, and no longer speculative.
 2. **Diff our server against a tape at matching points in the load.** The tape is the
    first oracle this project has that it did not write itself, which turns D2–D11 from a
    list into a failing test.
