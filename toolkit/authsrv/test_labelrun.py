@@ -37,7 +37,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import labelrun  # noqa: E402
 
-LEDGER = checks.Ledger("labelrun", floor=30)
+LEDGER = checks.Ledger("labelrun", floor=32)
 
 
 class FakeRec:
@@ -85,6 +85,34 @@ def main():
               "the step that may end the connection is LAST",
               "the client dials ArenaNet from a recorded GAME_SERVER_INFO and the "
               "cage refuses it; anything after it would be lost")
+
+    # EVERY script, not just the default. A script has to match the world its tape
+    # leaves behind -- the Lakeside character has a skillbar of [153, 105, 0*6] and
+    # the Ascalon one has [0]*8, so running the combat script against Ascalon would
+    # produce silent skill steps and read as "the client sends nothing for skills".
+    LEDGER.ok(set(labelrun.SCRIPTS) >= {"combat", "town"}
+              and labelrun.STEPS is labelrun.SCRIPTS["combat"],
+              "both scripts are registered and STEPS still means the combat one",
+              f"{sorted(labelrun.SCRIPTS)}")
+    bad = {}
+    for name, script in labelrun.SCRIPTS.items():
+        ks = [st.key for st in script]
+        ctl = [st.key for st in script if st.control]
+        problems = []
+        if len(ks) != len(set(ks)):
+            problems.append("duplicate keys")
+        if not any(st.expect == labelrun.TRAFFIC for st in script):
+            problems.append("no step predicts traffic")
+        if ctl[:1] != ["idle_a"] or ctl[-1:] != ["idle_b"]:
+            problems.append(f"controls are {ctl}, not idle_a first and idle_b last")
+        if script[-1].key != "gateway":
+            problems.append(f"last step is {script[-1].key}, not gateway")
+        if problems:
+            bad[name] = problems
+    LEDGER.ok(not bad,
+              "every registered script is well formed, bracketed by its controls",
+              str(bad) if bad else
+              ", ".join(f"{n}={len(v)} steps" for n, v in labelrun.SCRIPTS.items()))
     try:
         labelrun.Step("bad", "x", 5, "maybe")
         rejected = False

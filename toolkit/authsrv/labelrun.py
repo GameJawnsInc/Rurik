@@ -112,7 +112,7 @@ class Step:
 # Ordered: controls at both ends, no-hunting actions before ones that need something on
 # screen, and `gateway` LAST because it asks the client to leave the map -- the cage
 # refuses the dial and that may end the connection.
-STEPS = [
+COMBAT = [
     Step("idle_a", "Do nothing. Hands off the mouse and keyboard.", 12, SILENCE,
          "Establishes the idle floor. Anything but keepalives here means the "
          "timestamps are wrong and the whole run is suspect.", control=True),
@@ -174,6 +174,74 @@ STEPS = [
          "The client will dial ArenaNet from a recorded GAME_SERVER_INFO and the cage "
          "will refuse it. Last on purpose."),
 ]
+
+
+# THE TOWN SCRIPT. A script has to match the world the tape leaves behind, and the two
+# tapes leave very different ones -- which is not a detail, it decides what can be asked:
+#
+#   Lakeside #2  25 agents, 11 NPC rows, ONE player, skillbar [153, 105, 0*6]
+#   Ascalon City 45 agents, 19 NPC rows, 40 players,  skillbar [0]*8
+#
+# So skills can only be tested on the Lakeside tape (COMBAT above), and NPCs, merchants
+# and other players only on the Ascalon one. Running the combat script against Ascalon
+# would produce eight silent skill steps and read as "the client sends nothing for
+# skills", which is false.
+#
+# THE QUESTION THIS SCRIPT EXISTS FOR: is 0x0026 *attack* or *interact*? On 2026-08-10 it
+# was seen once, on a hostile worm, immediately after a target-select. Ascalon City is a
+# town -- Guild Wars forbids attacking in one -- so the same gesture aimed at a friendly
+# NPC either sends the same opcode (it is INTERACT) or a different one (it is ATTACK).
+# That is a clean discriminator and it needs no new capture.
+TOWN = [
+    Step("idle_a", "Do nothing. Hands off the mouse and keyboard.", 12, SILENCE,
+         "The idle floor, same as the combat script.", control=True),
+    Step("camera", "Rotate the camera only. Do not move your character.", 10, TRAFFIC,
+         "Predicts TRAFFIC now, not silence: the combat run refuted the client-side "
+         "guess with 8 x 0x0040. This is the reproduction -- a refutation seen once "
+         "in one map is a fact about one map."),
+    Step("target_npc", "Click on an NPC to target it. Do not interact yet.",
+         12, TRAFFIC,
+         "Isolates the select from the act, so the next step's traffic is only the "
+         "act. Expect 0x00C1 with the NPC's agent id."),
+    Step("interact_npc", "Now interact with that NPC (talk to it).", 14, TRAFFIC,
+         "THE DISCRIMINATOR. 0x0026 here means it is a general INTERACT; a different "
+         "opcode means 0x0026 was ATTACK and this is its friendly counterpart. Either "
+         "answer settles C4."),
+    Step("target_player", "Click on another PLAYER to target them.", 12, TRAFFIC,
+         "A third allegiance. If 0x00C1 is uniform across worm, NPC and player, it is "
+         "target-select and nothing more."),
+    Step("merchant", "Open a merchant or trader panel, then close it.", 20, TRAFFIC,
+         "A panel that must be server-backed: prices and stock cannot be local. "
+         "Nothing will answer, so expect the OPENING request only."),
+    Step("emote_sit", "Press Enter, type   /sit   and press Enter again.", 18, TRAFFIC,
+         "A PERSISTENT emote, unlike /dance. If both are just 0x0064 chat lines, the "
+         "server parses them and the client does not care -- which is what C2 implies "
+         "and this tests."),
+    Step("emote_dance", "Press Enter, type   /dance   and press Enter again.",
+         18, TRAFFIC,
+         "The paired comparison, in the SAME run as /sit so the two cannot differ for "
+         "some reason belonging to a different session."),
+    Step("chat_all", "Press Enter, type   rurik two   and press Enter again.",
+         20, TRAFFIC,
+         "Reproduces C2's known plaintext, and the '!' prefix the client adds itself."),
+    Step("chat_me", "Press Enter, type   /me waves   and press Enter again.",
+         20, TRAFFIC,
+         "A different chat CHANNEL. If the prefix byte changes and the opcode does "
+         "not, 0x0064's field 1 is the channel -- which would explain the 0 vs 284 "
+         "that C2 could not."),
+    Step("skills_panel", "Open the skills panel, look, then close it.", 12, SILENCE,
+         "Believed client-side, like the bags and the map were."),
+    Step("quest_log", "Open the quest log, look, then close it.", 12, SILENCE,
+         "Quests are server state, so this one is a genuine coin-toss."),
+    Step("idle_b", "Do nothing. Hands off again.", 12, SILENCE,
+         "The closing control.", control=True),
+    Step("gateway", "Walk into the zone exit. This may end the run.", 18, TRAFFIC,
+         "Ascalon City's exit, for comparison with Lakeside's -- which sent only "
+         "movement and no zone request at all."),
+]
+
+SCRIPTS = {"combat": COMBAT, "town": TOWN}
+STEPS = COMBAT          # the default, and what `--labelrun` with no name still means
 
 
 # Set while a step window is open, and read by authsrv's c2s print site. During a
@@ -413,15 +481,19 @@ def main(argv=None):
     import vaultpath
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--analyse", "--analyze", dest="analyse", action="store_true",
-                    help="analyse a capture instead of listing the script")
+                    help="analyse a capture instead of listing a script")
+    ap.add_argument("--script", default="combat", choices=sorted(SCRIPTS),
+                    help="which script to list (default: combat)")
     ap.add_argument("capture", nargs="?",
                     help="gamesrv capture .jsonl; default: the newest")
     a = ap.parse_args(argv)
 
     if not a.analyse:
-        total = sum(s.seconds for s in STEPS)
-        print(f"{len(STEPS)} steps, {total:.0f}s ({total / 60:.1f} min)\n")
-        for i, s in enumerate(STEPS, 1):
+        script = SCRIPTS[a.script]
+        total = sum(s.seconds for s in script)
+        print(f"{a.script}: {len(script)} steps, {total:.0f}s "
+              f"({total / 60:.1f} min)\n")
+        for i, s in enumerate(script, 1):
             print(f"{i:>3} {s.key:<14} {s.seconds:>4.0f}s  [{s.expect}]  {s.prompt}")
             if s.why:
                 print(f"      why: {s.why}")

@@ -517,26 +517,40 @@ carries field layouts for **194 `GAME_CMSG` opcodes and names for none of them**
 server names 11 by hand and 15 have ever been witnessed from a real client. This is how
 that number goes up.
 
-See the script first — it states a prediction per step, and two of the steps are idle
-controls:
+**Pick the script to match the world the tape leaves behind.** This is not a preference;
+it decides what can be asked at all:
+
+| script | tape | that world has |
+|---|---|---|
+| `combat` | Lakeside `:64103` | skillbar `[153, 105, 0×6]`, hostiles, 1 player |
+| `town` | Ascalon City `:60935` | 19 NPCs, 40 players, skillbar **all zeros** |
+
+Running `combat` against Ascalon gives eight silent skill steps, which reads as "the
+client sends nothing for skills" and is false.
+
+See the script first — it states a prediction per step, and two steps are idle controls:
 
 ```bash
-python toolkit/authsrv/labelrun.py
+python toolkit/authsrv/labelrun.py --script town
 ```
 
 **ONE command runs the whole thing** — tape, then prompts, in the same terminal. There is
 nothing to start separately and nothing to time yourself:
 
 ```bash
-python toolkit/harness/session.py --keep-open --game-args "--tape C:\gd\Rurik\vault\captures\live\20260807T143055 --tape-connection 10.0.0.210:64103->54.198.7.73:80 --labelrun"
+python toolkit/harness/session.py --keep-open --game-args "--tape C:\gd\Rurik\vault\captures\live\20260807T143055 --tape-connection 10.0.0.210:60935->52.3.40.244:80 --labelrun town"
 ```
 
 | when | what happens | you |
 |---|---|---|
 | 0:00 | client launches and logs itself in | nothing |
 | ~0:30 | the tape starts; your character walks on its own | **nothing** |
-| ~3:30 | `tape complete`, then the labelled-run banner | the 18 steps |
-| ~6:50 | `DONE -- 18 steps recorded` | finished |
+| ~1:20 | `tape complete`, then the labelled-run banner | the steps |
+| ~4:50 | `DONE -- N steps recorded` | finished |
+
+Times above are the **town** run: Ascalon's tape is 48.6 s, against Lakeside's 186.2 s.
+Swap the `--tape-connection` and drop the script name for the `combat` run, and add two
+minutes of waiting.
 
 The first three minutes are the recording driving your client. That is not a malfunction,
 and the avatar stops moving long before the tape ends — see the tape section above.

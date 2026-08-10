@@ -732,11 +732,12 @@ TAPE_EVENTS = None
 TAPE_INFO = None
 TAPE_SPEED = 1.0
 
-# Set from --labelrun. Walks the operator through a numbered script, marking each
+# Set from --labelrun to the chosen script (a list of labelrun.Step), None otherwise.
+# Walks the operator through a numbered script, marking each
 # step into the capture so a c2s message can be attributed to a named human action.
 # See labelrun.py: 194 GAME_CMSG opcodes have layouts in the schema and names in
 # neither it nor here, and this is how that gets fixed.
-LABEL_RUN = False
+LABEL_RUN = None
 
 # Set from --click-sweep. Cycles the two 16-bit fields of MOVE_TO_POINT through
 # every plausible assignment, one per click, so the CLIENT decides which is
@@ -1779,7 +1780,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                           f"is NOT starting -- its marks would go nowhere.",
                           flush=True)
                     return
-                labelrun.run(rec, conn_id, stop)
+                labelrun.run(rec, conn_id, stop, steps=LABEL_RUN)
 
             threading.Thread(target=_tape_then_labels, daemon=True).start()
 
@@ -2727,9 +2728,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # the world is one player and at most one enemy, so most
                             # of the script has nothing to point at. Both are worth
                             # having; neither substitutes for the other.
-                            threading.Thread(target=labelrun.run,
-                                             args=(rec, conn_id, stop),
-                                             daemon=True).start()
+                            threading.Thread(
+                                target=labelrun.run,
+                                args=(rec, conn_id, stop),
+                                kwargs={"steps": LABEL_RUN},
+                                daemon=True).start()
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
                         # map_file_id 0 is a placeholder: the real one comes from
                         # the map's static config, which we do not have yet. If the
@@ -2972,14 +2975,18 @@ def main():
                     help="play faster or slower than recorded. 1.0 reproduces the "
                          "observed cadence; anything else changes the one property "
                          "the tape exists to reproduce, so say so when reporting.")
-    ap.add_argument("--labelrun", action="store_true",
+    ap.add_argument("--labelrun", nargs="?", const="combat", default=None,
+                    choices=sorted(labelrun.SCRIPTS),
                     help="After the world is up (or after --tape finishes), walk "
                          "the operator through a numbered script printed to THIS "
                          "terminal, marking each step into the capture. Turns c2s "
-                         "traffic into named human actions -- 194 GAME_CMSG opcodes "
-                         "have field layouts and no names, and 15 have ever been "
-                         "witnessed. `labelrun.py` prints the script; "
-                         "`labelrun.py --analyse` reads the result back.")
+                         "traffic into named human actions. THE SCRIPT MUST MATCH "
+                         "THE WORLD THE TAPE LEAVES: `combat` (default) needs the "
+                         "Lakeside tape, whose character has skills and whose map "
+                         "has hostiles; `town` needs Ascalon City, which has NPCs, "
+                         "merchants and 40 players but a skillbar of all zeros. "
+                         "`labelrun.py --script NAME` prints one; "
+                         "`labelrun.py --analyse` reads a result back.")
     ap.add_argument("--probe", metavar="NAME",
                     help="After the character spawns, fire a scripted experiment at "
                          "the client. See --list-probes. Only affects a session you "
@@ -3047,9 +3054,10 @@ def main():
               "the auth channel is still ours.")
     if a.labelrun:
         global LABEL_RUN
-        LABEL_RUN = True
-        total = sum(s.seconds for s in labelrun.STEPS)
-        print(f"labelled run armed: {len(labelrun.STEPS)} steps, {total:.0f}s"
+        LABEL_RUN = labelrun.SCRIPTS[a.labelrun]
+        total = sum(s.seconds for s in LABEL_RUN)
+        print(f"labelled run armed: {a.labelrun} script, "
+              f"{len(LABEL_RUN)} steps, {total:.0f}s"
               + (", starting when the tape finishes" if a.tape else ""))
         print("  WATCH THIS WINDOW. The client is -windowed so both fit on screen; "
               "the prompts appear here, not in the game.")
