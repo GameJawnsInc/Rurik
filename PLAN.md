@@ -1039,6 +1039,35 @@ tables dumped and reconciled against our catalog at 477/477 (`toolkit/schema/tes
 which retires old item 3), the skill table extracted and joined to the wiki by id
 (`toolkit/clientscan/skilltable.py`, which retires old item 6), a hostile NPC that can be
 attacked, killed and revived, and the content store (`content/*.toml`, `501698b`).
+**2026-08-10:** R0b and R1.5 both met (§3, §3.3–§3.5), and the labelled input run built and
+run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
+— witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
+
+### 8.0 Next, as of 2026-08-10 (`6f17cc9`, suite 33/33 ~841 checks)
+
+The items below this section predate today and are still live; these four are what today's
+work opened, in the order they are worth taking.
+
+0a. **A labelled run against our OWN server rather than a tape.** The `merchant` step is the
+    last real gap in the c2s script and it needs a server that answers. Everything recorded
+    so far is what the client ASKS for; nothing yet shows what a *completed* action looks
+    like, because a tape never replies (`studies/tape/FINDINGS.md` T6). Cheap: the script
+    and the analysis already exist and `--labelrun` works with or without `--tape`.
+
+0b. **Chain the tapes across a map transition.** No longer speculative — `0x01A5` carries
+    the next instance's `sockaddr_in` and `tape.stop_before_transfer` locates it exactly
+    (T8). Rewrite the blob to a loopback address instead of cutting it, arm the next
+    connection with the next tape, and four instance tapes become one continuous session.
+
+0c. **Model burrowing.** The first Guild Wars mechanic we have direct evidence for that our
+    server has no concept of: Plague Worms hide by being REMOVED and re-CREATED under the
+    same agent id, 19 cycles in 186 s for one worm (T3). It runs entirely through
+    `0x0020`/`0x0021`, both already implemented, and it makes `remove_agent` load-bearing
+    for something other than death.
+
+0d. **`0x0040`'s meaning.** Floats marshalled as u32, field 2 exactly `1.0` in all 12
+    samples, field 1 reaching ±infinity, always alongside movement. A shape, not a name —
+    `MOVE_UNKNOWN_FLOATS` in the catalog says so deliberately.
 
 1. **Build the capture harness (A1).** *Started 2026-08-06, in build.* Every capture in the
    vault is Rurik talking to Rurik; **not one byte is ArenaNet's**, so R0b is unmet and R1.5
