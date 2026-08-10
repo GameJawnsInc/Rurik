@@ -510,6 +510,45 @@ must be zero. Anything else and the client was hearing two servers, which is how
 runs out the client can still move (that is client-side) but attacking, casting and
 gateways do nothing. That is the instrument, not a bug.
 
+## Burrowing, and the one question only the client can answer
+
+Plague Worms hide by being removed and re-created under the same agent id — 140 times in
+186 seconds on one Lakeside tape. The server can now do that (`burrow_tick`), and
+`toolkit/authsrv/test_burrow.py` checks the cycle offline against ArenaNet's own bytes.
+
+**One thing is not settled and it gates the interesting half.** ArenaNet sends the NPC
+definition (`0x0056`) **once for 140 re-creates**. Ours resends it every time, because
+whether a definition survives a removal has never been asked: the `agent_removal` probe
+that proved id reuse resent the definition on every step, so its success says nothing
+about this. If definitions do *not* survive, dropping the resend crashes the client on
+`index < m_count`. So the server resends, and this probe is what would let it stop:
+
+```bash
+python toolkit/harness/session.py --probe burrow
+```
+
+**Target the hostile before it starts, and keep watching the target frame.** Steps 3 and
+4 are the experiment — the same id and then a fresh id, both with no definition resent.
+Both drawing a *correct-looking* collector means a definition is per-instance and
+outlives its agents. A body that appears but looks wrong is as informative as no body.
+
+To watch the cycle itself rather than probe it, turn the content flag on:
+
+```bash
+python - <<'EOF'
+import re, pathlib
+p = pathlib.Path("content/world.toml")
+p.write_text(p.read_text(encoding="utf-8").replace("burrow = false", "burrow = true"), encoding="utf-8")
+EOF
+```
+
+The hostile then emerges, stands for `burrow_out_seconds`, sinks and vanishes for
+`burrow_hidden_seconds`, forever. **Its two 2.00 s transition windows are measured; the
+other two durations are invented** and the content row says so — live, they were not
+periods at all. Expect to lose your target on every submerge: `attack_tick` clears
+`state["attacking"]` when the target leaves the world, which is correct and means about
+eleven re-clicks a minute against a fast worm.
+
 ## The labelled input run
 
 Names client-to-server messages by watching a human send them. `schema/messages.json`

@@ -1044,7 +1044,7 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-10 (`a5d7008`, suite 34/34 ~862 checks)
+### 8.0 Next, as of 2026-08-10 (`6940f32`+, suite 35/35 ~881 checks)
 
 The items below this section predate today and are still live; these four are what today's
 work opened. **The order has changed since they were written**, on evidence: four scouts
@@ -1093,19 +1093,31 @@ parallel, with one safety change that is not optional — see its entry.
     nothing treats these as sensitive. Record the **structure** and the **fact** of the
     match. The values stay in the vault.
 
-0c. **Model burrowing.** The first Guild Wars mechanic we have direct evidence for that our
-    server has no concept of: Plague Worms hide by being REMOVED and re-CREATED under the
-    same agent id (T3). ~~It runs entirely through `0x0020`/`0x0021`, both already
-    implemented~~ — **that was wrong and is REFUTED 151/151**: every worm re-creation in
-    both Lakeside tapes is a fixed five-message burst `0x009F`, `0x00F0`, `0x0020`,
-    `0x006D`, `0x0026`, and the visible phase carries two `0x00F1` writes at exactly
-    2.00 s from each edge. Six opcodes, not two, and one of them (`0x00F0`) is D2 — the
-    single most frequent message our server has never sent. The cycle counts were also
-    understated: 23, not 19, is the ceiling. D1 (`25701dd`) already settles the protocol
-    question — a removed id is not poisoned — so what is left is scheduling plus two sends,
-    **plus one thing no offline test can answer**: ArenaNet sends the NPC definition ONCE
-    for 140 creates and our only test of id reuse re-sent it every time. Whether a
-    definition survives a removal is the difference between a burrow and a client assert.
+0c. 🔶 **BUILT 2026-08-10, awaiting one operator run.** Plague Worms hide by being REMOVED
+    and re-CREATED under the same agent id (T3). ~~It runs entirely through
+    `0x0020`/`0x0021`, both already implemented~~ — **that was wrong and is REFUTED
+    151/151**: every worm re-creation in both Lakeside tapes is a fixed five-message burst
+    `0x009F`, `0x00F0`, `0x0020`, `0x006D`, `0x0026`, and the visible phase carries two
+    `0x00F1` writes at exactly 2.00 s from each edge (n=132 each, all inside ±60 ms). Six
+    opcodes, not two, and `0x00F0` is D2 — the highest-count message our server has never
+    sent. The ceiling was understated too: 23 cycles, not 19.
+    **Landed:** `EFFECT_TRANSITION` and the `0x00F0` constant; `create_agent_world`, the
+    guarded create that finally makes the world model symmetric (`remove_agent` refused a
+    double-remove while the create side was a bare dict assignment — a re-create that
+    forgot the state write would have raised inside the world-tick daemon thread and
+    stopped the world for the session); `state["hidden"]`, the first place an agent can
+    exist while not being in the world; `burrow_tick` as the third tick sweep; a content
+    flag defaulting off; and `test_burrow.py`, which re-measures ArenaNet's burst from the
+    capture rather than trusting the study doc that was wrong.
+    **Not landed, and it is the whole reason this is 🔶:** ArenaNet sends the NPC
+    definition ONCE for 140 creates, so their client keeps it across a removal. Ours has
+    never been asked — `agent_removal` resent the definition every single time, so its
+    positive says nothing here. The server therefore resends, which is the side whose
+    failure mode is not a client assert. `probes.py`'s new `burrow` probe settles it with
+    a same-id/fresh-id control; **UNRUN**. Three of the burst's five messages
+    (`0x009F` property 66, `0x006D`'s item id, `0x0026`'s tail byte) are deliberately NOT
+    sent by the server — their values are unknown and filling them with guesses is what
+    made the first `agent_removal` run's negative meaningless.
 
 0d. ✅ **DONE 2026-08-10. `0x0040` is `ROTATE_PLAYER`** — field 1 an angle in radians,
     field 2 a normalised turn amount in (0,1]. Settled by the **binary**, not by a run:

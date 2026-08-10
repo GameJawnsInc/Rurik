@@ -149,6 +149,12 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL
   is reported and exits non-zero rather than letting a misattributed opcode be named),
+  `toolkit/authsrv/test_burrow.py` (burrowing, in two halves kept apart: ArenaNet's own
+  bytes re-measured from the capture — 140 worm re-creations, ONE burst shape, the two
+  2.00 s transition windows — and our own cycle driven with a fake `send`. It exists
+  because the study doc was wrong: T3 said burrowing "runs entirely through the two
+  opcodes we already implement" and it is five messages, so a test that asserted the
+  doc would have locked the error in),
   `toolkit/authsrv/test_rotate.py` (that GAME_CMSG 0x0040 really is ROTATE_PLAYER: the
   client's own assert text and the two ±inf constants are still at their addresses, both
   payload fields are still `dword` and not the `float` they look like, and the finite

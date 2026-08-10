@@ -91,6 +91,19 @@ PROP_HEALTH_MAX = 42      # int channel (0x009F). Sets the maximum AND refills.
 # dies to any scratch. Clear the bit, then set health.
 EFFECT_DEAD = 0x10
 
+# Bit 12, and the NAME is the careful part. OBSERVED on ArenaNet's own traffic: it is
+# set on 151 of 151 Plague Worm creates (via GAME_SMSG 0x00F0) and cleared exactly
+# 2.00 s later, then set again exactly 2.00 s before the agent is removed -- n=132 each
+# way, every sample inside +/-60 ms.
+#
+# So it is set during BOTH transitions and CLEAR for the whole time the worm is out and
+# targetable, which is the opposite of "hidden". Calling it EFFECT_BURROWED would name
+# it for the mechanic and be wrong; naming it for the window it actually covers keeps
+# the claim inside what was measured. It is not exclusive to worms either -- two other
+# agents in the first Lakeside tape carry it on unrelated models. What the client DOES
+# with the bit is UNVERIFIED; only its timing is observed.
+EFFECT_TRANSITION = 0x1000
+
 # One NPC definition, transcribed from gw-preservation's agent table as a lead
 # and then CONFIRMED against our own client: 'Hatcher [Collector]' rendered with
 # a collector's body and its real localised name. File id 116228 also appears in

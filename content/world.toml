@@ -17,6 +17,10 @@ max_health = 100
 offset_x = 300.0
 offset_y = 0.0
 enabled = true
+# Burrowing: the Plague Worm cycle, off by default. See [spawn.test_enemy.burrow].
+burrow = false
+burrow_out_seconds = 5.0
+burrow_hidden_seconds = 4.0
 
 [spawn.test_enemy.provenance]
 source = "invented"
@@ -34,6 +38,29 @@ that lands these two fields stop being constants and this row keeps only the pla
 max_health 100 is a placeholder matching the player's, so that damage arithmetic is
 easy to read by eye during a fight. Absolute monster health is server-only data
 (PLAN.md section 1.7) and nothing here has measured a Hatcher's.
+
+BURROWING, added 2026-08-10, and the split of what is measured from what is chosen
+matters more than the numbers.
+
+`burrow_out_seconds` and `burrow_hidden_seconds` are INVENTED, like the rest of this
+row, and they are the honest part of a mechanic whose other half is not. Live, these
+are NOT periods: a Plague Worm stayed out 0.48-7.48 s (median 1.46) and hidden 1.6-6.9 s,
+and two families sharing one model ran ~8-10 s and ~33 s cycles with distance from the
+player failing to explain the split. 5.0 and 4.0 sit inside the observed ranges and are
+otherwise ours. Do not read them as the game's.
+
+The two numbers that ARE measured -- 2.00 s to emerge and 2.00 s to submerge, n=132 each
+way with every sample inside +/-60 ms -- deliberately did NOT come here. They are not
+authorable: they are how long ArenaNet's server holds the transition effect bit before
+and after the create/remove, which is protocol timing rather than a fact about this
+particular creature, and this file's own header calls moving that kind of value here a
+category error. They live in authsrv.py beside the opcode constants, cited.
+
+A Hatcher is standing in for a worm. Nothing in Guild Wars says a collector burrows;
+this row exercises the CYCLE, not the creature. The real worms' definition (1442, file
+116366) was observed in our live capture and is deliberately not transcribed here --
+importing an ArenaNet creature into tracked content is a judgement for the owner, and
+the cycle is testable without it.
 """
 
 # ---------------------------------------------------------------- the player

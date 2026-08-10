@@ -33,8 +33,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agents import (                                        # noqa: E402
     AGENT_KIND_NPC, AGENT_KIND_PLAYER, AGENT_TYPE_LIVING, APPEARANCE_WARRIOR,
     CHAR_CLASS_MONSTER_BASE, CHAR_CLASS_PLAYER_BASE, DEFAULT_RUN_SPEED,
-    ALLEGIANCE_HOSTILE, EFFECT_DEAD, HATCHER, INF, WORLD, create_agent,
-    npc_model, npc_properties)
+    ALLEGIANCE_HOSTILE, EFFECT_DEAD, EFFECT_TRANSITION, HATCHER, INF, WORLD,
+    create_agent, npc_model, npc_properties)
 
 # The hostile the normal map load spawns. Read from content, the same row
 # authsrv.py reads, so the removal probe cannot drift from what is in the world.
@@ -1471,6 +1471,92 @@ def _cast_modifier_order_steps(agent_id):
     ]
 
 
+def _burrow_steps(agent_id, origin):
+    """Does an NPC definition survive a removal, and does 0x1000 do anything?
+
+    THE QUESTION THIS EXISTS FOR, and it is the one thing burrowing needs that no
+    offline test can reach. ArenaNet sends the NPC definition (0x0056) exactly ONCE
+    for 140 re-creates of the same Plague Worm, so their client evidently keeps a
+    definition across a removal. Ours has never been asked: `agent_removal`'s step 2
+    resends 0x0056 and 0x0057 every single time -- deliberately, because the FIRST
+    version of that probe omitted them along with two other things and produced a
+    negative that meant nothing. So its success tells us the id is reusable and says
+    nothing whatever about the definition.
+
+    That matters because the failure mode is asymmetric. `npc_properties`' own
+    docstring: an agent whose definition was never sent takes the client down on
+    `index < m_count` in Base\\rtl\\Array.h. If definitions do NOT survive, a burrow
+    that stops resending crashes the client on the first re-emergence. So the server
+    resends today and this probe is what would let it stop.
+
+    THE CONTROL IS THE DESIGN, same as D1's. Step 3 re-creates at the SAME id with no
+    definition; step 4 does it at a FRESH id, also with no definition.
+
+        3 works, 4 works  -> a definition is per-INSTANCE and outlives its agents.
+                             Burrowing can stop resending; ArenaNet's 1-for-140 is
+                             explained.
+        3 fails, 4 works  -> the id is the problem, not the definition, and that
+                             contradicts agent_removal's positive result -- look at
+                             this file before believing it.
+        both fail         -> definitions are bound to the agent that used them. Keep
+                             resending, and ArenaNet must be doing something else we
+                             have not seen.
+
+    WHAT IS DELIBERATELY NOT HERE. The clean negative control -- create an agent
+    referring to a definition that was NEVER sent, and confirm the client asserts --
+    is the experiment that would nail this down, and it is exactly the crash the
+    docstring above describes. Taking the client down to prove it goes down is not
+    worth the run; the asymmetry is recorded instead.
+
+    Steps 1-2 are cheap and ride along: EFFECT_TRANSITION (0x1000) is the bit
+    ArenaNet sets on 151 of 151 worm creates and clears exactly 2.00 s later. What the
+    client DOES with it is UNVERIFIED -- we know only its timing. Property 66, which
+    also appears in the worm burst, is NOT probed here: `prop66_sweep` already owns
+    that question and section 16.4 has already bounded it to one byte at AvChar+0x113.
+    """
+    ox, oy, plane = origin if origin else (0.0, 0.0, 0)
+    same = (ox + PROBE_SPAWN_NEAR, oy)
+    fresh = (ox + 2 * PROBE_SPAWN_NEAR, oy)
+    model_id = CHAR_CLASS_MONSTER_BASE | ENEMY_DEFINITION
+    return [
+        Step(3.0, 0x00F1, [ENEMY_AGENT_ID, EFFECT_TRANSITION],
+             "set the TRANSITION bit (0x1000) on the hostile",
+             "the hostile. Does anything change at all -- an animation, a fade, the "
+             "nameplate, whether you can still click it? ArenaNet sets this bit for "
+             "exactly 2.00 s as a worm comes up and again for 2.00 s as it goes down. "
+             "If nothing visible happens, the bit is bookkeeping and our burrow does "
+             "not need it."),
+        Step(4.0, 0x00F1, [ENEMY_AGENT_ID, 0],
+             "clear it again",
+             "whether whatever step 1 did reverses. If step 1 made it untargetable, "
+             "this should give it back."),
+        Step(3.0, 0x0021, [ENEMY_AGENT_ID],
+             "REMOVE the hostile",
+             "a clean vanish, as agent_removal already established. TARGET IT FIRST "
+             "-- the target frame is where a stale reference shows."),
+        # --- step 3: the same id, and NO definition resend ----------------------
+        Step(4.0, 0x0020,
+             create_agent(ENEMY_AGENT_ID, model_id, AGENT_KIND_NPC,
+                          same[0], same[1], plane,
+                          allegiance=ALLEGIANCE_HOSTILE),
+             f"RE-CREATE at the SAME id ({ENEMY_AGENT_ID}) with NO 0x0056/0x0057",
+             f"{PROBE_SPAWN_NEAR:.0f} units out. Does the body appear, and does it "
+             "look RIGHT -- a collector, correctly named -- or is it a default/blank "
+             "model? A wrong-looking body is as informative as no body: it would mean "
+             "the definition slot survived but its contents did not."),
+        # --- step 4: the CONTROL, a fresh id, also with no definition -----------
+        Step(6.0, 0x0020,
+             create_agent(FRESH_AGENT_ID, model_id, AGENT_KIND_NPC,
+                          fresh[0], fresh[1], plane,
+                          allegiance=ALLEGIANCE_HOSTILE),
+             f"CONTROL: a FRESH id ({FRESH_AGENT_ID}), still no definition",
+             f"{2 * PROBE_SPAWN_NEAR:.0f} units out. If this one appears and step 3 "
+             "did not, the id is the problem rather than the definition -- which "
+             "would contradict agent_removal and means this file is wrong before the "
+             "protocol is."),
+    ]
+
+
 def _prop66_sweep_steps(agent_id):
     """What is property 66? Walk the byte and watch the character.
 
@@ -1605,6 +1691,32 @@ PROBES = {
              "the run should stop there if a bare property 60 does not cast. "
              "Note 61 goes out on 0x00A2, the FLOAT channel: on 0x009F it would "
              "be discarded in silence and look like a negative result.",
+    ),
+    "burrow": lambda a, o: Probe(
+        question="Does an NPC definition survive WORLD_REMOVE_AGENT, and does the "
+                 "0x1000 effect bit do anything the player can see?",
+        predicts="Steps 3 AND 4 both draw a correct-looking collector, because "
+                 "ArenaNet sends one 0x0056 for 140 re-creates of the same worm and "
+                 "the only reading of that is a definition table which outlives the "
+                 "agents using it. If BOTH fail, definitions are bound to their agent "
+                 "and our burrow must keep resending -- which is what it does today, "
+                 "so a negative costs nothing but a resend. Steps 1-2: no prediction "
+                 "worth the name. The bit's TIMING is measured (2.00 s each way, "
+                 "n=132) and its EFFECT is unverified; the honest expectation is that "
+                 "nothing visible happens, because a client that hid an agent on this "
+                 "bit would not also need the removal ArenaNet sends 2.00 s later.",
+        steps=_burrow_steps(a, o),
+        note="UNRUN. The definition question is the one thing gating burrow_tick's "
+             "send_definition=False, and it is genuinely open: agent_removal proved "
+             "id reuse but resent the definition every time, so its positive says "
+             "nothing here. Do NOT add the clean negative control (an agent citing a "
+             "definition never sent) -- that is the `index < m_count` client assert "
+             "npc_properties warns about, and crashing the client to confirm it "
+             "crashes is not worth a run. TARGET THE HOSTILE BEFORE STEP 1 and keep "
+             "watching the target frame through step 3. Grounded on "
+             "vault/captures/live/20260807T143055 conn :64103, where 140 worm "
+             "re-creations are one five-message burst with no exceptions "
+             "(toolkit/authsrv/test_burrow.py re-measures it every run).",
     ),
     "prop66_sweep": lambda a, o: Probe(
         question="What is agent property 66, the one id past the end of "

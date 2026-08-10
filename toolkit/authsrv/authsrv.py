@@ -313,6 +313,19 @@ GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET = 0x00A3
 # family GenericValueTarget. INFERRED from the shape match; not yet observed.
 GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET = 0x00A0
 GAME_SMSG_AGENT_UPDATE_EFFECTS = 0x00F1
+# The create-time sibling of 0x00F1, and D2 in the divergence register: 472 messages
+# in the live capture, the highest count of anything ArenaNet sends that we never did.
+# OBSERVED as [agent_id, dword] carrying the effect bitfield an agent is born with --
+# 0x1000 on 151 of 151 Plague Worm creates and 0 on the ordinary ones in the same tape.
+GAME_SMSG_AGENT_INITIAL_EFFECTS = 0x00F0
+# Deliberately NOT given a meaningful name. It carries [agent_id, byte] and the whole
+# corpus holds two values: 9, on every one of 140 worm creates, and 8, exactly once --
+# on the Wolf at the instant it died, alongside EFFECT_DEAD. Two values with one of them
+# seen a single time is a shape, not a semantic, and this project's rule is to refuse
+# the guess. Note also that GAME_CMSG 0x0026 is ATTACK: 0x26 is the one value ArenaNet
+# sends on BOTH channels, and they are different messages. Do not reuse either name.
+GAME_SMSG_AGENT_UNNAMED_0026 = 0x0026
+BURROW_TAIL_0026_VALUE = 9        # what every observed worm create carried
 
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
@@ -805,6 +818,13 @@ ENEMY_OFFSET = (_ENEMY["offset_x"], _ENEMY["offset_y"])
 # the client demands of it is that it is not 0. A capture of a real fight would
 # replace it; nothing here is a claim about what a Hatcher does in retail.
 ENEMY_ATTACK_SPEED = agents.ATTACK_SPEED["axe"]
+# Burrowing, off unless the content row turns it on. A Hatcher standing in for a Plague
+# Worm exercises the CYCLE without transcribing an ArenaNet creature into tracked
+# content -- see the row's own note. The two durations here are INVENTED and the row
+# says so; the two that are measured are protocol timing and live beside the opcodes.
+ENEMY_BURROWS = bool(_ENEMY.get("burrow", False))
+ENEMY_BURROW_OUT = float(_ENEMY.get("burrow_out_seconds", 5.0))
+ENEMY_BURROW_HIDDEN = float(_ENEMY.get("burrow_hidden_seconds", 4.0))
 
 
 # ---- the combat loop -----------------------------------------------------
@@ -1071,13 +1091,192 @@ def remove_agent(send, state, agent_id, why, conn_id=None):
             f"live ids: {sorted(live)}. ArenaNet removed a never-created id "
             f"0 times in 416 -- and the client bounds-checks this dword.")
     entry = live.pop(agent_id)
-    state.setdefault("removed_agents", []).append(agent_id)
+    # An append-only audit trail, and burrowing is what makes its bound matter. Nothing
+    # reads this except test_agentlife, and until now removals happened a handful of
+    # times per session; a burrowing worm removes itself roughly every ten seconds --
+    # ArenaNet's ran 140 times in 186 s. An unbounded list fed by the world tick is a
+    # leak, so it keeps the most recent REMOVED_AGENTS_KEPT and says so here rather
+    # than being quietly trimmed somewhere a reader would not look for it.
+    log = state.setdefault("removed_agents", [])
+    log.append(agent_id)
+    if len(log) > REMOVED_AGENTS_KEPT:
+        del log[:-REMOVED_AGENTS_KEPT]
     send(GAME_SMSG_WORLD_REMOVE_AGENT, [agent_id],
          f"WORLD_REMOVE_AGENT({agent_id}) — {why}")
     if conn_id is not None:
         print(f"[c{conn_id}] removed agent {agent_id} "
               f"({entry.get('name', '?')}) — {why}", flush=True)
     return entry
+
+
+def create_agent_world(send, state, agent_id, entry, why,
+                       conn_id=None, send_definition=True):
+    """Put an agent into the world AND into `state["agents"]`, as one operation.
+
+    THE ASYMMETRY THIS EXISTS TO CLOSE. `remove_agent` guards its side: it refuses an
+    id that is not live and an id already removed, and it pops the entry. The create
+    side had no counterpart -- `spawn_enemy` writes `state["agents"][id] = {...}` as a
+    bare dict assignment with nothing checking it. That was harmless while creates
+    happened once, at map load, on the connection thread.
+
+    Burrowing makes it dangerous. A re-create that emits the wire messages and forgets
+    the state write leaves the world model believing the agent is gone, so the NEXT
+    submerge raises AgentLifetimeError -- inside the world-tick daemon thread, which
+    takes the whole tick down for the rest of the session with a traceback nowhere near
+    the cause. That is the same failure `revive_due`'s snapshot comment was written
+    about, from the other direction.
+
+    `send_definition` is the question we cannot answer offline. ArenaNet sends the NPC
+    definition (0x0056) exactly ONCE for 140 re-creates of the same worm, so their
+    client evidently keeps it across a removal. Ours has never been asked: the D1 probe
+    re-sent the definition every time, so its success says nothing about whether the
+    definition survives. `agents.npc_properties` warns that an agent whose definition
+    was never sent takes the client down on `index < m_count`. Until the `burrow` probe
+    settles it, this defaults to TRUE -- resending is what we have evidence is safe, and
+    the cost of being wrong in the other direction is a client assert.
+    """
+    live = state.setdefault("agents", {})
+    if agent_id in live:
+        raise AgentLifetimeError(
+            f"refusing to create agent {agent_id}: it is already in the world. "
+            f"live ids: {sorted(live)}. Creating over a live id leaves the client "
+            f"holding one agent's state under another's name, and nothing on the "
+            f"wire would say so.")
+
+    npc = entry["npc"]
+    definition = entry["definition"]
+    x, y = entry["pos"]
+    plane = entry["plane"]
+    if send_definition:
+        send(GAME_SMSG_NPC_UPDATE_PROPERTIES,
+             agents.npc_properties(definition, npc),
+             f"NPC_UPDATE_PROPERTIES(def {definition})")
+        send(GAME_SMSG_NPC_UPDATE_MODEL, agents.npc_model(definition, npc),
+             f"NPC_UPDATE_MODEL(def {definition})")
+
+    # The effects an agent is BORN with, which is what 0x00F0 is for. This is the one
+    # message of ArenaNet's five-message worm create burst that we can send honestly:
+    # the value is measured (0x1000 on 151 of 151) and the field shape is in the
+    # catalog. The other three are NOT here on purpose --
+    #
+    #   0x009F [66, agent, 0]   property 66 appears nowhere else in this repo and its
+    #                           meaning is NOT FOUND. Sending an unknown property is a
+    #                           probe, not a default.
+    #   0x006D [agent, item, 0] carries an ITEM id we do not have and would have to
+    #                           invent.
+    #   0x0026 [agent, 9]       two observed values, one of them seen exactly once.
+    #
+    # They are steps in the `burrow` probe instead, each with what to watch. Reproducing
+    # a burst by filling its unknown fields with guesses would make every later
+    # observation un-attributable -- which is the whole lesson of the first agent_removal
+    # probe, whose bare 0x0020 produced a negative that meant nothing.
+    if entry.get("effects"):
+        send(GAME_SMSG_AGENT_INITIAL_EFFECTS, [agent_id, int(entry["effects"])],
+             f"AGENT_INITIAL_EFFECTS({agent_id}, 0x{int(entry['effects']):04X})")
+
+    send(GAME_SMSG_WORLD_CREATE_AGENT,
+         agents.create_agent(agent_id,
+                             agents.CHAR_CLASS_MONSTER_BASE | definition,
+                             agents.AGENT_KIND_NPC, x, y, plane,
+                             allegiance=entry["allegiance"]),
+         f"WORLD_CREATE_AGENT({agent_id}) — {why}")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, agent_id, int(entry["max_health"])],
+         f"health {int(entry['max_health'])} on agent {agent_id}")
+    send_attack_speed(send, agent_id, entry["attack_speed"], entry.get("name", "npc"))
+
+    live[agent_id] = entry
+    if conn_id is not None:
+        print(f"[c{conn_id}] created agent {agent_id} ({entry.get('name', '?')}) "
+              f"— {why}", flush=True)
+    return entry
+
+
+# Burrowing. The measured cycle, from vault/captures/live/20260807T143055 -- two
+# independent Lakeside visits, 151 worm re-creations, one burst shape and no exceptions.
+#
+# Only the two transition windows are fixed at 2.00 s. How long a worm stays OUT and how
+# long it stays HIDDEN are not periods at all: out ran 0.48-7.48 s and hidden 1.6-6.9 s
+# for the fast family, and two families sharing one model ran ~8-10 s and ~33 s cycles
+# with player distance failing to explain the split. So those two numbers are ours and
+# `content/world.toml` says so; these two are theirs.
+BURROW_EMERGE_SECONDS = 2.00
+BURROW_SUBMERGE_SECONDS = 2.00
+
+# How much of the removal audit trail `remove_agent` keeps. Generous enough that no test
+# or session inspection notices, bounded so a burrowing world cannot grow it forever.
+REMOVED_AGENTS_KEPT = 512
+
+BURROW_EMERGING = "emerging"   # created, transition bit set, animating up
+BURROW_OUT = "out"             # bit cleared, targetable
+BURROW_SUBMERGING = "submerging"  # bit set again, animating down
+BURROW_HIDDEN = "hidden"       # removed from the world entirely
+
+
+def burrow_tick(send, state, conn_id):
+    """Advance every burrowing agent through emerge -> out -> submerge -> hidden.
+
+    The third sweep in the world tick, and the first one that has to reason about an
+    agent that EXISTS but is not in `state["agents"]` -- a hidden worm lives in
+    `state["hidden"]`, holding the entry `remove_agent` handed back for exactly this.
+
+    Copies `revive_due`'s two disciplines verbatim and for a stronger reason. That
+    function iterates a snapshot and re-checks membership because `remove_agent` COULD
+    mutate the dict mid-walk; after this one exists it WILL, several times a minute.
+
+    A DEAD AGENT DOES NOT BURROW, and it is asserted rather than assumed. `hit_enemy`
+    writes `dead`/`died_at` into the entry and `revive_due` only ever sees agents still
+    in `state["agents"]` -- so a body that died while out and then submerged would be
+    popped out of the dict with its revive timer still pending, and nothing would ever
+    stand it back up. It would simply never return.
+    """
+    now = time.time()
+    hidden = state.setdefault("hidden", {})
+
+    for agent_id, entry in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}):
+            continue                      # removed after the snapshot was taken
+        phase = entry.get("burrow_phase")
+        if not phase or entry.get("dead"):
+            continue                      # not a burrower, or dead -- see above
+        if now < entry.get("burrow_at", 0.0):
+            continue
+
+        if phase == BURROW_EMERGING:
+            entry["burrow_phase"] = BURROW_OUT
+            entry["burrow_at"] = now + entry["burrow_out_seconds"]
+            entry["effects"] = 0
+            send(GAME_SMSG_AGENT_UPDATE_EFFECTS, [agent_id, 0],
+                 f"agent {agent_id} is fully out")
+        elif phase == BURROW_OUT:
+            entry["burrow_phase"] = BURROW_SUBMERGING
+            entry["burrow_at"] = now + BURROW_SUBMERGE_SECONDS
+            entry["effects"] = agents.EFFECT_TRANSITION
+            send(GAME_SMSG_AGENT_UPDATE_EFFECTS,
+                 [agent_id, agents.EFFECT_TRANSITION],
+                 f"agent {agent_id} is submerging")
+        elif phase == BURROW_SUBMERGING:
+            entry["burrow_phase"] = BURROW_HIDDEN
+            entry["burrow_at"] = now + entry["burrow_hidden_seconds"]
+            # remove_agent does the state write and the refusals; we keep what it
+            # returns, which is the entry itself.
+            hidden[agent_id] = remove_agent(send, state, agent_id,
+                                            "burrowed", conn_id=conn_id)
+
+    for agent_id, entry in list(hidden.items()):
+        if now < entry.get("burrow_at", 0.0):
+            continue
+        hidden.pop(agent_id, None)
+        entry["burrow_phase"] = BURROW_EMERGING
+        entry["burrow_at"] = now + BURROW_EMERGE_SECONDS
+        entry["effects"] = agents.EFFECT_TRANSITION
+        # Re-emerge at byte-identical coordinates. OBSERVED: 13 of 13 worms in the
+        # second Lakeside tape and 6 of 6 in the first carry exactly ONE distinct
+        # (x, y) across every one of their creates, which the wiki independently
+        # predicts -- a submerged worm cannot move.
+        create_agent_world(send, state, agent_id, entry, "emerging from burrow",
+                           conn_id=conn_id,
+                           send_definition=entry.get("resend_definition", True))
 
 
 def send_attack_speed(send, agent_id, base, what):
@@ -1139,22 +1338,40 @@ def spawn_enemy(send, state, origin, conn_id):
     ORDER IS LOAD-BEARING. The definition must precede the agent that uses it:
     the definition index is a raw array index on the client, and an agent whose
     type was never defined crashes it outright. OBSERVED.
+
+    The wire order is unchanged; what moved is the STATE WRITE. This used to end
+    with `state["agents"][id] = {...}` as a bare assignment while `remove_agent`
+    guarded its own side, and burrowing turns that asymmetry into a live hazard --
+    see `create_agent_world`, which now owns both halves.
     """
     ox, oy, plane = origin
     x, y = enemy_spot(state, ox, oy)
 
-    send(GAME_SMSG_NPC_UPDATE_PROPERTIES,
-         agents.npc_properties(ENEMY_DEFINITION, agents.HATCHER),
-         f"NPC_UPDATE_PROPERTIES(def {ENEMY_DEFINITION})")
-    send(GAME_SMSG_NPC_UPDATE_MODEL,
-         agents.npc_model(ENEMY_DEFINITION, agents.HATCHER),
-         f"NPC_UPDATE_MODEL(def {ENEMY_DEFINITION})")
-    send(GAME_SMSG_WORLD_CREATE_AGENT,
-         agents.create_agent(ENEMY_AGENT_ID,
-                             agents.CHAR_CLASS_MONSTER_BASE | ENEMY_DEFINITION,
-                             agents.AGENT_KIND_NPC, x, y, plane,
-                             allegiance=agents.ALLEGIANCE_HOSTILE),
-         f"WORLD_CREATE_AGENT({ENEMY_AGENT_ID}, hostile)")
+    entry = {
+        "pos": (x, y), "plane": plane,
+        "health": float(ENEMY_MAX_HEALTH), "max_health": float(ENEMY_MAX_HEALTH),
+        "dead": False,
+        "name": agents.HATCHER["name"],
+        # What create_agent_world needs to rebuild this agent from the entry alone,
+        # which is exactly what a burrow re-create does.
+        "npc": agents.HATCHER,
+        "definition": ENEMY_DEFINITION,
+        "allegiance": agents.ALLEGIANCE_HOSTILE,
+        "attack_speed": ENEMY_ATTACK_SPEED,
+        "effects": 0,
+    }
+    if ENEMY_BURROWS:
+        entry.update({
+            "burrow_phase": BURROW_EMERGING,
+            "burrow_at": time.time() + BURROW_EMERGE_SECONDS,
+            "burrow_out_seconds": ENEMY_BURROW_OUT,
+            "burrow_hidden_seconds": ENEMY_BURROW_HIDDEN,
+            "effects": agents.EFFECT_TRANSITION,
+        })
+
+    create_agent_world(send, state, ENEMY_AGENT_ID, entry,
+                       "burrowing hostile" if ENEMY_BURROWS else "hostile",
+                       conn_id=conn_id)
     # NOT SENT, and the reason is worth keeping. 0x002F is ldufr's
     # AGENT_UPDATE_ALLEGIANCE, and it looked like the way to set the byte GWCA
     # documents at AgentLiving+h01B1 -- the one whose values are named
@@ -1167,19 +1384,14 @@ def spawn_enemy(send, state, origin, conn_id):
     # displacement scan finds, so either GWCA's offsets are for a different
     # build or the write is computed. Do not send 0x002F for this purpose again
     # without settling that first.
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.PROP_HEALTH_MAX, ENEMY_AGENT_ID, ENEMY_MAX_HEALTH],
-         f"health {ENEMY_MAX_HEALTH} on agent {ENEMY_AGENT_ID}")
-    send_attack_speed(send, ENEMY_AGENT_ID, ENEMY_ATTACK_SPEED, "enemy")
-
-    state.setdefault("agents", {})[ENEMY_AGENT_ID] = {
-        "pos": (x, y), "plane": plane,
-        "health": float(ENEMY_MAX_HEALTH), "max_health": float(ENEMY_MAX_HEALTH),
-        "dead": False,
-        "name": agents.HATCHER["name"],
-    }
+    #
+    # The health and attack-speed sends that used to sit here moved into
+    # create_agent_world, unchanged and in the same order, so that a burrow
+    # re-create issues exactly what the first create did.
     print(f"[c{conn_id}] enemy {ENEMY_AGENT_ID} ({agents.HATCHER['name']}) "
-          f"at ({x:.0f}, {y:.0f}) plane {plane}, {ENEMY_MAX_HEALTH} hp",
+          f"at ({x:.0f}, {y:.0f}) plane {plane}, {ENEMY_MAX_HEALTH} hp"
+          + (f", burrowing ({ENEMY_BURROW_OUT:.1f}s out / "
+             f"{ENEMY_BURROW_HIDDEN:.1f}s hidden)" if ENEMY_BURROWS else ""),
           flush=True)
 
 
@@ -1865,8 +2077,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     try:
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
+                        # The third sweep, and the first that mutates state["agents"]
+                        # on a schedule rather than only when the player acts. Last,
+                        # so a body that died this tick is seen dead by burrow_tick
+                        # and stays put -- a dead agent does not burrow.
+                        burrow_tick(send, state, conn_id)
                     except OSError:
                         return
+                    except AgentLifetimeError as ex:
+                        # Loud, and it does not kill the tick. This runs on a daemon
+                        # thread: an escaping exception here silently stops the world
+                        # for the rest of the session, and the client just goes still.
+                        print(f"[c{conn_id}] WORLD TICK: {ex}", flush=True)
 
                     dest = state.get("dest")
                     if not dest:
