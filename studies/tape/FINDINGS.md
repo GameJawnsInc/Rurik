@@ -120,6 +120,14 @@ The client accepted every one of them and never complained. Id reuse after
 high-frequency**. This is corroboration by an independent witness, not our probe agreeing
 with itself.
 
+> **EXPLAINED 2026-08-10.** The operator names the mechanic: Lakeside is full of **Plague
+> Worms, which burrow**, and Guild Wars hides a burrowed creature from targeting. So this
+> is not spawn-and-death churn — it is one creature going away and coming back, and
+> ArenaNet hands it **the same agent id every time**. That sharpens D1 rather than
+> softening it, and it means `WORLD_REMOVE_AGENT` is how the client is told a creature is
+> *untargetable*, not only how it is told one died. Our server has no concept of this and
+> it runs entirely through the two opcodes we already implement.
+
 ### T4 — `GAME_CMSG 0x0046` field 1 is a skill id. OBSERVED, ground-truthed.
 
 After the tape, the operator pressed skills. The client sent:
@@ -164,6 +172,14 @@ UPSTREAM; a labelled walk now supports them.
 
 And **`0x0009 [req, 16, 0]` is a client keepalive**: 37 sends at 5.0 s intervals from
 4.6 s to 184.7 s, dead regular, independent of anything on screen. OBSERVED.
+
+> **CORRECTED 2026-08-10 by the labelled run**
+> ([../cmsg/FINDINGS.md](../cmsg/FINDINGS.md) §3). "Independent of anything on screen"
+> is right; the implied "unconditional 5 s heartbeat" is wrong. In the labelled capture
+> all 37 sends land during the tape and **zero** land in the three and a half minutes of
+> active play after it — the client stopped the moment the server went silent. It is
+> tied to server traffic, not to a free-running timer. Whether it is a reply or a timer
+> the server resets is UNVERIFIED.
 
 ### T6 — A tape answers nothing, and the client tolerates it. OBSERVED.
 

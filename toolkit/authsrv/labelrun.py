@@ -53,25 +53,48 @@ sys.path.insert(0, os.path.dirname(HERE))
 # so this is defence against a future recorder that does not.
 CMSG_MASK = 0x8000
 
-# OBSERVED 2026-08-10 (studies/tape/FINDINGS.md T5): 37 sends at a dead-regular 5.0 s
-# cadence over a 186 s run, independent of anything on screen. It lands in every window
-# and means nothing about the step it lands in. It is REPORTED SEPARATELY, never dropped
-# silently -- a filter you cannot see is a filter you cannot check.
+# OBSERVED 2026-08-10: a 5.0 s cadence that has nothing to do with what the operator is
+# doing, so it means nothing about the window it lands in. It is COUNTED and reported
+# separately, never dropped silently -- a filter you cannot see is a filter you cannot
+# check, and that counting is what produced the correction below.
+#
+# CORRECTED the same day (studies/cmsg/FINDINGS.md section 3): it is NOT an unconditional
+# heartbeat. All 37 sends in the labelled capture fall during the tape and ZERO fall in
+# the three and a half minutes of play after it -- the client stops the moment the server
+# goes silent. Our server will have to send something for a real client to keep sending
+# this, which matters the day we stop replaying tapes.
 KEEPALIVE = 0x0009
 
 SILENCE, TRAFFIC = "silence", "traffic"
 
 
 class Step:
-    """One prompted action, and what we predict the client does about it."""
+    """One prompted action, and what we predict the client does about it.
 
-    def __init__(self, key, prompt, seconds, expect, why=""):
+    `control` separates the two very different reasons a step can predict SILENCE, and
+    getting this wrong cost a real run its credibility on 2026-08-10:
+
+      * A CONTROL (the idle steps) predicts silence because the operator was told to do
+        NOTHING. Traffic there means the marks and the messages disagree, and no opcode
+        from the run may be named.
+      * An ORDINARY step predicting silence is a HYPOTHESIS -- "we think the camera is
+        client-side". Traffic there REFUTES it, which is a finding and the entire point
+        of running this.
+
+    The first version reported both as "CONTROL FAILURE ... this run is suspect". The
+    operator's camera step refuted a prediction, both idle windows were spotless, and
+    the tool told them to throw the run away.
+    """
+
+    def __init__(self, key, prompt, seconds, expect, why="", control=False):
         if expect not in (SILENCE, TRAFFIC):
             raise ValueError(f"{key}: expect must be {SILENCE!r} or {TRAFFIC!r}")
         if seconds <= 0:
             raise ValueError(f"{key}: seconds must be positive")
+        if control and expect != SILENCE:
+            raise ValueError(f"{key}: a control must predict {SILENCE!r}")
         self.key, self.prompt, self.seconds = key, prompt, seconds
-        self.expect, self.why = expect, why
+        self.expect, self.why, self.control = expect, why, control
 
 
 # WRITTEN FOR THE OPERATOR, NOT FOR THE READER OF THIS FILE. The first draft put opcode
@@ -92,7 +115,7 @@ class Step:
 STEPS = [
     Step("idle_a", "Do nothing. Hands off the mouse and keyboard.", 12, SILENCE,
          "Establishes the idle floor. Anything but keepalives here means the "
-         "timestamps are wrong and the whole run is suspect."),
+         "timestamps are wrong and the whole run is suspect.", control=True),
     Step("move_click", "Click the ground far away. Let your character walk.",
          10, TRAFFIC,
          "0x003E MOVE_TO_COORD is UPSTREAM-named and was CORROBORATED once; this "
@@ -103,14 +126,21 @@ STEPS = [
          "produce if the UPSTREAM name TURN_TO_DIRECTION is right."),
     Step("camera", "Rotate the camera only. Do not move your character.", 10, SILENCE,
          "Camera is believed client-side. A message here would be a find."),
-    Step("target_tab", "Press Tab to target the nearest creature.", 9, TRAFFIC,
+    Step("target_tab", "Target the nearest creature (Tab, if that is bound).",
+         9, TRAFFIC,
          "0x00C1 is the candidate target-select, and Tab gets it without needing "
          "anything under the cursor."),
-    Step("target_clear", "Press Escape to drop the target.", 9, TRAFFIC,
-         "Predicts 0x00C1 with agent id 0 -- the clear form seen 2026-08-10."),
-    Step("attack", "Press Tab, then Space to attack it.", 10, TRAFFIC,
-         "Tab first so this does not depend on a target surviving the previous step. "
-         "0x0026 is the candidate attack/interact."),
+    Step("target_clear", "Clear your target, however you normally do it.",
+         9, TRAFFIC,
+         "Predicts 0x00C1 with agent id 0. Deliberately does NOT name a key: this "
+         "said 'press Escape' on 2026-08-10, Clear Target was UNBOUND on that "
+         "keyboard, the operator clicked the nameplate button instead, and the "
+         "window's three 0x0028 messages were very nearly attributed to a key "
+         "nobody pressed. A prompt cannot know what is bound."),
+    Step("attack", "Target something, then attack it.", 10, TRAFFIC,
+         "0x0026 is the candidate attack/interact. Re-targeting first keeps this "
+         "from depending on a target surviving the previous step -- and in a map "
+         "full of burrowing worms, targets do not survive."),
     Step("skill_1", "Press 1.", 9, TRAFFIC, "0x0046 field 1."),
     Step("skill_2", "Press 2.", 9, TRAFFIC,
          "Field 1 must CHANGE between slots if it is a skill id, and must read 0,1 "
@@ -139,7 +169,7 @@ STEPS = [
     Step("idle_b", "Do nothing. Hands off again.", 12, SILENCE,
          "The second control, and it matters more than the first: it proves the run "
          "was still quiet AFTER a dozen actions, so a late attribution is as "
-         "trustworthy as an early one."),
+         "trustworthy as an early one.", control=True),
     Step("gateway", "Walk into the zone exit. This may end the run.", 15, TRAFFIC,
          "The client will dial ArenaNet from a recorded GAME_SERVER_INFO and the cage "
          "will refuse it. Last on purpose."),
@@ -197,7 +227,8 @@ def run(rec, conn_id, stop, steps=STEPS, out=None, ready=6.0):
                 return False
             SEEN[0] = 0
             rec.event("label_step", index=i, key=step.key, prompt=step.prompt,
-                      seconds=step.seconds, expect=step.expect)
+                      seconds=step.seconds, expect=step.expect,
+                      control=step.control)
             ACTIVE = True
             nxt = steps[i].prompt if i < len(steps) else "(last step)"
             say(f"\n{bar}\n"
@@ -313,38 +344,67 @@ def segment(marks, msgs):
     return out, before
 
 
+def is_control(mark):
+    """Is this recorded step a control?
+
+    Marks written before 2026-08-10 carry no `control` field, so fall back to the
+    script's own answer for that key. Without this, re-analysing an older capture
+    would demote a dirty idle window from "this run is void" to "interesting
+    finding" -- the exact confusion the field was added to end, reintroduced by the
+    absence of the field.
+    """
+    if "control" in mark:
+        return bool(mark["control"])
+    return any(s.key == mark.get("key") and s.control for s in STEPS)
+
+
 def report(segments, before, say=print):
-    """Print the run, and return (violations, silent_steps) for a caller to act on."""
+    """Print the run, and return (control_failures, refuted, silent_steps).
+
+    The first return value is the only one that invalidates a run. `refuted` is a
+    RESULT -- a step that predicted silence and got traffic is exactly what this
+    exercise is for, and reporting it as a failure told an operator with two spotless
+    idle windows to throw a good run away.
+    """
     say(f"\n{'step':>3} {'key':<14} {'expect':<8} {'n':>4} {'ka':>3}  opcodes")
-    violations, silent = [], []
+    failures, refuted, silent = [], [], []
     for i, seg in enumerate(segments, 1):
         st = seg["step"]
         n = sum(len(v) for v in seg["opcodes"].values())
         ops = "  ".join(f"0x{op:04X}x{len(v)}"
                         for op, v in sorted(seg["opcodes"].items()))
-        say(f"{i:>3} {st['key']:<14} {st['expect']:<8} {n:>4} {seg['keepalives']:>3}  "
-            f"{ops or '--'}")
+        ctl = is_control(st)
+        tag = "CONTROL " if ctl else ""
+        say(f"{i:>3} {st['key']:<14} {tag + st['expect']:<8} {n:>4} "
+            f"{seg['keepalives']:>3}  {ops or '--'}")
         if st["expect"] == SILENCE and n:
-            violations.append((st["key"], n, ops))
+            (failures if ctl else refuted).append((st["key"], n, ops))
         if st["expect"] == TRAFFIC and not n:
             silent.append(st["key"])
 
     if before:
         say(f"\n{len(before)} message(s) arrived BEFORE the first step and belong to no "
             f"action (tape / instance load). Not attributed.")
-    if violations:
-        say(f"\nPREDICTION REFUTED -- traffic in a window predicted SILENT:")
-        for key, n, ops in violations:
+    if failures:
+        say("\nCONTROL FAILURE -- traffic in a window where the operator was told to do "
+            "NOTHING:")
+        for key, n, ops in failures:
             say(f"   {key}: {n} message(s)  {ops}")
-        say("   For the two idle steps this is a CONTROL FAILURE: the operator was told\n"
-            "   to keep their hands off, so either they did not, or the timestamps are\n"
-            "   wrong and every attribution in this run is suspect. Do not name an\n"
-            "   opcode from a run whose idle windows are dirty.")
+        say("   Either they did not sit still, or the marks and the messages disagree.\n"
+            "   Do not name an opcode from this run: every attribution in it is only as\n"
+            "   good as these windows.")
+    else:
+        say("\nControls clean: both idle windows silent. Attributions in this run stand.")
+    if refuted:
+        say("\nPREDICTION REFUTED -- this is a FINDING, not a fault. These steps were\n"
+            "predicted to be client-side only and were not:")
+        for key, n, ops in refuted:
+            say(f"   {key}: {n} message(s)  {ops}")
     if silent:
         say(f"\nNo traffic at all from: {', '.join(silent)}")
         say("   Either the action is client-side, or it needs a server reply to send,\n"
             "   or the operator did not perform it. This tool cannot tell those apart.")
-    return violations, silent
+    return failures, refuted, silent
 
 
 def main(argv=None):
@@ -369,20 +429,31 @@ def main(argv=None):
 
     cap = a.capture
     if not cap:
+        # The newest capture is NOT necessarily the labelled one. The gateway step
+        # makes the client dial out and reconnect, so a labelled run routinely
+        # leaves a LATER, empty capture behind it -- and defaulting to "newest"
+        # then reports "not a labelled run" about a run that was one. Search
+        # newest-first for a file that actually carries marks.
         root = vaultpath.require_dir("captures", "gamesrv", why="analysing a label run")
-        files = [os.path.join(root, f) for f in os.listdir(root) if f.endswith(".jsonl")]
+        files = sorted((os.path.join(root, f) for f in os.listdir(root)
+                        if f.endswith(".jsonl")), key=os.path.getmtime, reverse=True)
         if not files:
             print(f"no gamesrv captures in {root}")
             return 1
-        cap = max(files, key=os.path.getmtime)
+        cap = next((f for f in files
+                    if any(m.get("kind") == "label_step" for m in load(f)[0])), None)
+        if cap is None:
+            print(f"none of the {len(files)} gamesrv capture(s) in {root} contains a "
+                  f"labelled run -- was it run with --labelrun?")
+            return 1
     print(f"capture: {os.path.basename(cap)}")
     marks, msgs = load(cap)
     segments, before = segment(marks, msgs)
     if not segments:
         print("no label_step marks in this capture -- was it run with --labelrun?")
         return 1
-    violations, _silent = report(segments, before)
-    return 1 if violations else 0
+    failures, _refuted, _silent = report(segments, before)
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

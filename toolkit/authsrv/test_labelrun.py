@@ -15,9 +15,11 @@ BOUNDARIES, not about the script.
     out means the marks and the messages disagree, and the run must be thrown away
     rather than read. Section 4 breaks that on purpose to prove it can go red.
 
-The keepalive is counted, never silently dropped: it fires every 5 s regardless of what
-the operator does (studies/tape/FINDINGS.md T5), so it lands in most windows and means
-nothing about any of them. A filter you cannot see is a filter you cannot check.
+The keepalive is counted, never silently dropped: it has nothing to do with what the
+operator is doing, so it means nothing about the window it lands in. A filter you
+cannot see is a filter you cannot check -- and counting it rather than dropping it is
+what showed that it stops entirely once the server goes quiet
+(studies/cmsg/FINDINGS.md section 3).
 
 standard library only.
 
@@ -35,7 +37,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import labelrun  # noqa: E402
 
-LEDGER = checks.Ledger("labelrun", floor=26)
+LEDGER = checks.Ledger("labelrun", floor=30)
 
 
 class FakeRec:
@@ -174,7 +176,7 @@ def main():
                   "or after the run", f"{len(before)} + {total - len(before)} + "
                                       f"{len(after)} = {len(msgs3)}")
 
-        violations, silent_steps = labelrun.report(segs, before, say=lambda _s: None)
+        violations, _ref, silent_steps = labelrun.report(segs, before, say=lambda _s: None)
         LEDGER.ok(not violations,
                   "a clean run reports no control violation",
                   "idle_a and camera each saw only keepalives")
@@ -187,19 +189,61 @@ def main():
         path = os.path.join(tmp, "dirty.jsonl")
         write_capture(path, [
             {"kind": "label_step", "t": 10.0, "index": 1, "key": "idle_a",
-             "prompt": "", "seconds": 5, "expect": labelrun.SILENCE},
+             "prompt": "", "seconds": 5, "expect": labelrun.SILENCE,
+             "control": True},
             msg(11.0, 0x003E),                      # the operator moved. Or the marks lie.
             {"kind": "label_run_end", "t": 15.0, "steps": 1},
         ])
         marks5, msgs5 = labelrun.load(path)
         segs5, before5 = labelrun.segment(marks5, msgs5)
-        violations5, _ = labelrun.report(segs5, before5, say=lambda _s: None)
+        violations5, _r5, _s5 = labelrun.report(segs5, before5, say=lambda _s: None)
         LEDGER.ok(len(violations5) == 1 and violations5[0][0] == "idle_a",
                   "a dirty idle window is REPORTED as a refuted prediction",
                   "either the operator moved or the timestamps are wrong; both mean "
                   "no opcode from this run may be named")
         LEDGER.ok(labelrun.main(["--analyse", path]) == 1,
                   "and the CLI exits non-zero on it, so a script cannot ignore it")
+
+    # ---- 5b. a refuted PREDICTION is not a control failure ---------------------
+    print("\n5b. refuting a prediction is a finding, not a fault")
+    # 2026-08-10: the operator's `camera` step -- predicted client-side -- sent ten
+    # messages, and both idle windows were spotless. The tool reported "CONTROL
+    # FAILURE ... every attribution in this run is suspect" and told them to throw
+    # away the best run the project had produced. A step predicting SILENCE because
+    # we have a HYPOTHESIS is a different thing from one predicting silence because
+    # the operator was told to sit still, and only the second can invalidate a run.
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "refuted.jsonl")
+        write_capture(path, [
+            {"kind": "label_step", "t": 10.0, "index": 1, "key": "idle_a",
+             "prompt": "", "seconds": 5, "expect": labelrun.SILENCE,
+             "control": True},
+            {"kind": "label_step", "t": 15.0, "index": 2, "key": "camera",
+             "prompt": "", "seconds": 5, "expect": labelrun.SILENCE,
+             "control": False},
+            msg(16.0, 0x0040), msg(16.5, 0x0040),
+            {"kind": "label_run_end", "t": 20.0, "steps": 2},
+        ])
+        m5b, x5b = labelrun.load(path)
+        s5b, b5b = labelrun.segment(m5b, x5b)
+        fails, refuted, _sil = labelrun.report(s5b, b5b, say=lambda _s: None)
+        LEDGER.ok(not fails,
+                  "a clean CONTROL keeps the run valid even when a prediction falls",
+                  "idle_a was silent, so the attributions stand")
+        LEDGER.ok(len(refuted) == 1 and refuted[0][0] == "camera",
+                  "the refuted prediction is reported separately, as a FINDING",
+                  "this is what the exercise is FOR")
+        LEDGER.ok(labelrun.main(["--analyse", path]) == 0,
+                  "and the CLI exits ZERO -- a refuted hypothesis is a result, "
+                  "not an error")
+    try:
+        labelrun.Step("bad", "x", 5, labelrun.TRAFFIC, control=True)
+        ctl_rejected = False
+    except ValueError:
+        ctl_rejected = True
+    LEDGER.ok(ctl_rejected,
+              "and a control that predicts TRAFFIC is refused at construction",
+              "a control is only a control because doing nothing must produce nothing")
 
     # ---- 6. the prompts must survive a PIPE ------------------------------------
     print("\n6. the prompts reach an operator reading them through session.py")
