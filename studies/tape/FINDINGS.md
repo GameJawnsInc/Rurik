@@ -282,6 +282,60 @@ Ascalon and none from Lakeside #2.
 > world. The destination reading is only correct for the copy that follows `0x01A5`.
 > `test_tape.py` now requires that `0x0099` **survives** the cut.
 
+### T9 — `0x01A5` is `GAME_SERVER_TRANSFER`, and the four tapes are one chain. OBSERVED.
+
+T8 read the sockaddr. The message carries more than that, and the extra fields are what
+turn "the tapes probably chain" into something the capture can refute.
+
+**Fields 2, 4 and 6 are the next instance's `world_id`, `map_id` and `player_id`** — and
+every one of them equals what the *next connection* then sent in its own client-to-server
+VERSION frame. Three transitions, four fields each, **12 of 12**. The VERSION frame is
+parsed straight off `wire.jsonl`; the decrypted channel files do not carry those ids at
+all, so the witness is the client's own first bytes on a connection nothing of ours had
+touched yet. That makes `0x01A5` the game-channel twin of `AUTH_SMSG 0x0009
+GAME_SERVER_INFO`, and it is the **first name any `GAME_SMSG` opcode has ever carried** —
+the imported catalog has 487 layouts and had zero names.
+
+The values are session identifiers from a live account, so they live in the vault and not
+in `schema/`. What is recorded is the structure and the fact of the match;
+`tape.chain()` re-derives it every run and **refuses a link it cannot prove** rather than
+ordering hops by timestamp.
+
+```
+1. 10.0.0.210:60935  map 148 Ascalon City    74,319 B   48.6s  -> map 146
+2. 10.0.0.210:62994  map 146 Lakeside County 41,997 B  147.6s  -> map 164
+3. 10.0.0.210:64102  map 164 Ashford Abbey   14,896 B   14.0s  -> map 146
+4. 10.0.0.210:64103  map 146 Lakeside County 53,544 B  186.2s  (chain ends)
+                                            ---------  ------
+                                            184,756 B   396.3s
+```
+
+**The rewrite is smaller than it looked and the risk is bigger.** `0x01A5` is the first
+message of the last event in all three linking tapes, the sockaddr sits at message offset
++2, and repointing it changes **4 bytes of 74,319** — length-preserving, so the event
+partition and `load_tape`'s byte accounting are untouched, and the tape still frames 100%
+clean to its final byte.
+
+What the rewrite costs is a safety control, and this is the part worth remembering.
+Before it, an un-truncated tape failed **closed**: the client dialled ArenaNet, the cage
+refused, and `Code=005` said so out loud — which is exactly how run 1 ended on 2026-08-10.
+After a rewrite, a wrong address is a dead connection with no signal at all. So
+`rewrite_transfer` refuses any host outside 127/8 and self-checks the result offline
+before the client ever runs; that refusal *is* the replacement for `Code=005`, not
+hygiene around it.
+
+**The port is a trap and remains UNVERIFIED.** The client is OBSERVED to ignore the
+advertised port and dial `<host>:6112` — but that was measured on the **auth**-channel
+handoff, and `0x01A5` is the **game** channel. Every recorded `0x01A5` advertises 6112,
+which is also the hardcoded value, so the live capture cannot tell the two apart. Hops are
+therefore separated by 127.x **alias**, which is correct either way; `--tape-rewrite-next
+host:port` exists so one run can settle it.
+
+**NOT FOUND, and it decides nothing here but would decide a later question:** whether the
+client will re-dial an endpoint it has just been disconnected from. All three recorded
+hops changed IP, so the capture never exercised host reuse — which is the reason the
+implementation gives each hop its own alias instead of reusing one listener.
+
 ---
 
 ## 3. What run 2 did not settle

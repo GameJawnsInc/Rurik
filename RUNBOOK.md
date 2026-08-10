@@ -510,6 +510,43 @@ must be zero. Anything else and the client was hearing two servers, which is how
 runs out the client can still move (that is client-side) but attacking, casting and
 gateways do nothing. That is the instrument, not a bug.
 
+## Chaining the tapes: one recorded session, four maps
+
+A single tape ends where its recording ended — the operator walked into a gateway, the
+server sent `0x01A5 GAME_SERVER_TRANSFER`, and the client dialled the next instance.
+Chaining repoints that handoff at a loopback server of ours and arms it with the next
+tape, so the whole recorded session plays as one run:
+
+```bash
+python toolkit/harness/session.py --tape-chain vault/captures/live/20260807T143055
+```
+
+That discovers the chain rather than assuming it — each hop's handoff must match the next
+connection's own VERSION frame or it is **refused**, never ordered by timestamp — then
+starts one gamesrv per hop on `127.0.0.3`, `.4`, `.5`, `.6`, each rewriting to the next.
+The last hop is truncated. Expect **4 hops, 184,756 B, ~396 s**: Ascalon City (148) →
+Lakeside County (146) → Ashford Abbey (164) → Lakeside County (146).
+
+**Sit still for all of it.** A tape cannot show control (that is `tape.py`'s docstring, not
+a bug), and each hop's avatar stops moving well before its tape ends — on the Ascalon tape
+that gap is about 146 seconds. The only truthful progress signal is each hop's own
+`tape complete: N/N` line, and all four gamesrv instances echo into your terminal for
+exactly that reason.
+
+One archive pre-flight covers the whole chain: all four tapes declare the same
+`map_file_id` 113021.
+
+**What the rewrite costs you.** Before chaining, a tape that reached its handoff failed
+*loudly*: the client dialled ArenaNet, the cage refused, and `Code=005` appeared. A
+rewritten tape has no such signal — a wrong address is just a connection that never
+arrives. `--tape-rewrite-next` therefore refuses any host outside 127/8 and proves the
+rewrite offline before the client starts. If a hop goes quiet, read the gamesrv banner:
+it names the byte offset and both addresses.
+
+To play one hop alone, skip the chain and arm that connection directly with
+`--game-args "--tape DIR --tape-connection CLIENT->SERVER --tape-no-transfer"`. The
+Ashford hop is the cheapest thing to test a change against — 14.0 s and 726 messages.
+
 ## Burrowing, and the one question only the client can answer
 
 Plague Worms hide by being removed and re-created under the same agent id — 140 times in

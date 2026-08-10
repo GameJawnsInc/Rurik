@@ -33,7 +33,11 @@ import origin  # noqa: E402
 import tape  # noqa: E402
 import vaultpath  # noqa: E402
 
-LEDGER = checks.Ledger("tape", floor=13)
+# 20 from the green run of 2026-08-10: 13 as before, plus 7 for the chaining section
+# added with R1.5's 0b. Sections 3-5 all skip together on a machine with no vault, and
+# the floor takes them with it -- a run that never read the capture has not checked the
+# chain, whatever it printed.
+LEDGER = checks.Ledger("tape", floor=20)
 
 LIVE_CAPTURE = "20260807T143055"
 
@@ -190,6 +194,85 @@ def main():
                   "a tape that never leaves its map is returned untouched, and says so",
                   "the last connection of a capture ends because the session ended, "
                   "not because the operator zoned")
+
+    print("\n5. the chain, and the rewrite that follows it (R1.5 chaining, 0b)")
+    try:
+        cap = vaultpath.vault_path("captures", "live", LIVE_CAPTURE)
+        have = os.path.isdir(cap)
+    except Exception:
+        have = False
+    if not have:
+        LEDGER.skip("chaining", f"no live capture {LIVE_CAPTURE} in this vault")
+    else:
+        order = tape.chain(cap)
+        # A chain is only a chain if the NEXT hop's own VERSION agrees. chain()
+        # refuses to order by timestamp, so this is checking a claim rather than
+        # restating one -- the witness is the client's first bytes on the next
+        # connection, which nothing of ours wrote.
+        LEDGER.ok(len(order) == 4,
+                  "the capture's four game tapes form ONE chain, three links long",
+                  " -> ".join(c.split("->")[0].split(":")[1] for c in order))
+
+        maps = [tape.client_version(cap, c)["map_id"] for c in order]
+        LEDGER.ok(maps == [148, 146, 164, 146],
+                  "and the maps run Ascalon -> Lakeside -> Ashford -> Lakeside",
+                  f"{maps} -- read from each connection's own c2s VERSION frame in "
+                  "wire.jsonl, which the decrypted channel file does not carry")
+
+        links = 0
+        for a, b in zip(order, order[1:]):
+            _ia, eva = tape.load_tape(cap, a)
+            t = tape.transfer_of(eva, codec_obj)
+            v = tape.client_version(cap, b)
+            if (t and t["world_id"] == v["world_id"] and t["map_id"] == v["map_id"]
+                    and t["player_id"] == v["player_id"]
+                    and t["host"] == b.split("->")[1].split(":")[0]):
+                links += 1
+        LEDGER.ok(links == 3,
+                  "every handoff's world/map/player id matches the next VERSION",
+                  f"{links} of 3 links, 4 fields each -- this is what makes 0x01A5 "
+                  "the game-channel twin of AUTH_SMSG 0x0009 rather than merely an "
+                  "address. The values are session identifiers and stay in the vault.")
+
+        _i, first = tape.load_tape(cap, order[0])
+        before = [len(b) for _t, b in first]
+        out, changed, why = tape.rewrite_transfer(first, codec_obj, "127.0.0.4")
+        LEDGER.ok(changed == 4 and [len(b) for _t, b in out] == before,
+                  "the rewrite changes exactly the 4 address bytes and no lengths",
+                  f"{changed} byte(s); {len(out)} events, partition identical -- "
+                  "length-preserving is what keeps load_tape's byte accounting valid")
+
+        blob = b"".join(b for _t, b in out)
+        msgs, consumed, err = codec_obj.decode_stream("GAME_SMSG", blob)
+        got = tape.transfer_of(out, codec_obj)
+        LEDGER.ok(consumed == len(blob) and err is None
+                  and got["host"] == "127.0.0.4"
+                  and any(op == 0x0099 for op, _v in msgs),
+                  "the rewritten tape still frames 100% clean and reads back as ours",
+                  f"{consumed:,}/{len(blob):,}, handoff -> {got['host']}:{got['port']}, "
+                  f"0x0099 survives")
+
+        # THE REPLACEMENT SAFETY CONTROL. Before chaining, an un-rewritten handoff
+        # failed CLOSED: the client dialled ArenaNet and the cage refused out loud.
+        # A rewrite removes that signal, so the refusal has to live here instead.
+        refused = []
+        for host in ("54.198.7.73", "8.8.8.8", "192.168.1.1"):
+            try:
+                tape.rewrite_transfer(first, codec_obj, host)
+            except tape.TapeError:
+                refused.append(host)
+        LEDGER.ok(len(refused) == 3,
+                  "and a handoff rewritten OFF this machine is REFUSED",
+                  f"{refused} -- without this the flag is a general-purpose 'aim a "
+                  "client at an arbitrary server', written into ArenaNet's own bytes. "
+                  "It is the control that replaces the cage's Code=005, which the "
+                  "rewrite takes away.")
+
+        _il, lastev = tape.load_tape(cap, order[-1])
+        outl, changedl, whyl = tape.rewrite_transfer(lastev, codec_obj, "127.0.0.4")
+        LEDGER.ok(changedl == 0 and outl == lastev and "no transfer" in whyl,
+                  "the last hop rewrites nothing and says so, rather than inventing "
+                  "a handoff", whyl)
 
     return LEDGER.verdict()
 

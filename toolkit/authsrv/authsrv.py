@@ -3207,6 +3207,18 @@ def main():
                          "so it stays in the map instead of dialling ArenaNet and "
                          "being refused by the cage. Implied by --labelrun, which "
                          "cannot survive the transfer.")
+    ap.add_argument("--tape-rewrite-next", metavar="HOST[:PORT]", default=None,
+                    help="R1.5 chaining: instead of stopping before the handoff, "
+                         "repoint it at a loopback server we control, so the client "
+                         "walks from this tape straight into the next one. 127/8 "
+                         "only, and REFUSED otherwise -- a rewritten tape is "
+                         "ArenaNet's own bytes with a destination of our choosing. "
+                         "Mutually exclusive with --tape-no-transfer. Note the port "
+                         "is probably decorative: the client is OBSERVED to dial "
+                         "<host>:6112 regardless on the AUTH handoff, and whether "
+                         "the GAME handoff behaves the same is UNVERIFIED, because "
+                         "every recorded 0x01A5 advertises 6112 anyway. Passing an "
+                         "explicit port is how that gets settled.")
     ap.add_argument("--tape-speed", type=float, default=1.0, metavar="X",
                     help="play faster or slower than recorded. 1.0 reproduces the "
                          "observed cadence; anything else changes the one property "
@@ -3283,6 +3295,33 @@ def main():
         except tapemod.TapeError as ex:
             raise SystemExit(f"refusing to play this tape -- {ex}")
         TAPE_SPEED = a.tape_speed
+        if a.tape_rewrite_next and (a.labelrun or a.tape_no_transfer):
+            raise SystemExit(
+                "--tape-rewrite-next and --tape-no-transfer/--labelrun ask for "
+                "opposite things: one repoints the handoff at another server of "
+                "ours, the other cuts the handoff out so the client stays put. "
+                "Pick one.")
+        if a.tape_rewrite_next:
+            host, _, port = a.tape_rewrite_next.partition(":")
+            try:
+                TAPE_EVENTS, changed, why = tapemod.rewrite_transfer(
+                    TAPE_EVENTS, codec, host,
+                    int(port) if port else tapemod.TRANSFER_PORT)
+            except (tapemod.TapeError, ValueError) as ex:
+                raise SystemExit(f"refusing to rewrite this tape -- {ex}")
+            # LOUD, and for a specific reason. Truncation is loud because it changes
+            # what the tape is; a rewrite is louder because it changes where the
+            # client GOES, and it removes the only signal that has ever caught this
+            # going wrong. Before today an un-rewritten handoff failed CLOSED -- the
+            # client dialled ArenaNet and the cage said Code=005. After a rewrite, a
+            # wrong address is a dead connection and nothing says why. The banner and
+            # rewrite_transfer's offline self-checks are what replace that.
+            if changed:
+                print(f"  TAPE REWRITTEN: {why}")
+                print("  this tape is no longer verbatim. The client will dial US.")
+                TAPE_INFO = dict(TAPE_INFO, rewritten=why)
+            else:
+                print(f"  tape needs no rewrite: {why}")
         if a.labelrun or a.tape_no_transfer:
             # A labelled run cannot survive its tape leaving the map, and three of
             # the four tapes in the 2026-08-07 capture end by doing exactly that --

@@ -29,7 +29,7 @@ AUTH_CMSG_MASK = 0x8000
 # checks.py exists — it once printed ALL CHECKS PASSED with its capture glob
 # matching nothing — so the floor is what makes section 1 going quiet a failure
 # rather than a shorter list of passes.
-LEDGER = checks.Ledger("codec vs captured bytes", floor=15)
+LEDGER = checks.Ledger("codec vs captured bytes", floor=16)
 check = checks.adopt_named(LEDGER)
 
 
@@ -205,17 +205,45 @@ def main():
               "guess entering the catalog as fact")
 
     # The names must not have moved a single field, or they would change decoding.
-    base = json.load(open(os.path.join(repo, "schema", "messages.json"),
-                          encoding="utf-8"))["channels"]["GAME_CMSG"]["messages"]
-    over = json.load(open(os.path.join(repo, "schema", "overrides.json"),
-                         encoding="utf-8"))["channels"].get("GAME_CMSG", {})
-    moved = [k for k, v in over.items()
-             if "name" in v and k in base and v["fields"] != base[k]["fields"]]
+    #
+    # Scoped to every channel, not just GAME_CMSG. It checked GAME_CMSG alone until
+    # 2026-08-10, which was fine while only that channel had names -- and stopped being
+    # fine the moment GAME_SMSG 0x01A5 got one. A check whose stated principle is
+    # "a named entry changes no field" must look everywhere that principle applies, or
+    # the first exception to it arrives unnoticed.
+    #
+    # ONE entry is allowed to differ, and it is named here rather than filtered
+    # silently: GAME_SMSG 421's layout correction (38 -> 39 bytes, a trailing byte our
+    # import missed) came from the client's own cmds[] table, predates the name by
+    # days, and is now independently corroborated by ArenaNet's stream -- all three
+    # tapes put the next message exactly 39 bytes later. Adding a name did not move it.
+    LAYOUT_FIXED = {("GAME_SMSG", "421")}
+    all_base = json.load(open(os.path.join(repo, "schema", "messages.json"),
+                              encoding="utf-8"))["channels"]
+    all_over = json.load(open(os.path.join(repo, "schema", "overrides.json"),
+                              encoding="utf-8"))["channels"]
+    named_over = [(ch, k) for ch, msgs in all_over.items()
+                  for k, v in msgs.items() if "name" in v]
+    moved = [(ch, k) for ch, k in named_over
+             if (ch, k) not in LAYOUT_FIXED
+             and k in all_base.get(ch, {}).get("messages", {})
+             and all_over[ch][k]["fields"]
+             != all_base[ch]["messages"][k]["fields"]]
     LEDGER.ok(not moved,
               "a named entry copies its layout verbatim and changes no field",
               f"moved: {moved}" if moved else
-              f"{len(over)} GAME_CMSG override(s), layouts untouched -- the names "
-              f"record what a message MEANS, which its marshalling types cannot say")
+              f"{len(named_over)} named override(s) across "
+              f"{len({ch for ch, _k in named_over})} channel(s), layouts untouched "
+              f"apart from the declared exception -- the names record what a message "
+              f"MEANS, which its marshalling types cannot say")
+
+    LEDGER.ok(codec_mod.Codec().name_for("GAME_SMSG", 0x01A5)
+              == "GAME_SERVER_TRANSFER",
+              "and GAME_SMSG has its first name at all",
+              "487 layouts, 0 names until 0x01A5 -- earned the same way the GAME_CMSG "
+              "seven were, from a witness not consulted to make the claim: its three "
+              "tail ids equal the NEXT connection's own VERSION frame, 12/12 fields "
+              "across three recorded transitions")
 
     return LEDGER.verdict()
 

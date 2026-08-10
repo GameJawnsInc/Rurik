@@ -111,7 +111,7 @@ def is_labelling(a):
 
 def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                  capture_root=None, auth_host="127.0.0.1",
-                 game_host="127.0.0.3", game_args=()):
+                 game_host="127.0.0.3", game_args=(), hops=()):
     """The three server processes, as (name, host, port, argv).
 
     The game channel is served by a second authsrv.py instance: the client
@@ -155,7 +155,67 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                "--vault", cap("gamesrv"),
                "--game-host", game_host, "--game-port", str(game_port)]
          + list(game_args)),
+    ] + [
+        # R1.5 chaining (PLAN §8.0 item 0b): one gamesrv per further hop, each on its
+        # own 127.x alias. The client dials <host>:6112 and the advertised port is
+        # decorative, so hops CANNOT be separated by port -- an alias each is the only
+        # arrangement that works, and it is also the one that changes one variable:
+        # every recorded hop went to a different address, so re-dialling the SAME
+        # endpoint is a client behaviour the capture never witnessed.
+        #
+        # Distinct capture dirs are not tidiness. Every instance names its files
+        # `authsrv-<stamp>-c1.jsonl` with a conn_id that restarts at 1 per process, so
+        # two hops starting in the same second would write over each other's capture
+        # and the run would look fine.
+        (f"gamesrv{i + 2}", host, game_port,
+         py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
+               "--port", str(game_port), "--bind", host,
+               "--vault", cap(os.path.join("gamesrv", f"hop{i + 2}")),
+               "--game-host", host, "--game-port", str(game_port)]
+         + list(argv))
+        for i, (host, argv) in enumerate(hops)
     ]
+
+
+def hop_aliases(n, first="127.0.0.3"):
+    """[host] for n chained gamesrv instances, starting at `first`.
+
+    127.0.0.3, .4, .5, ... Any 127/8 address is loopback to `origin.is_loopback`, to
+    the launch gate and to authsrv's own bind refusal, so extra aliases need no new
+    safety plumbing and Windows answers on all of them without configuration.
+    """
+    head = first.rsplit(".", 1)
+    base = int(head[1])
+    if base + n - 1 > 254:
+        raise ValueError(f"{n} hops from {first} runs past the end of the octet")
+    return [f"{head[0]}.{base + i}" for i in range(n)]
+
+
+def chain_specs(capture_dir, game_args=(), first="127.0.0.3"):
+    """(game_args_for_hop1, hops, order, hosts) for a whole recorded chain.
+
+    Each hop is armed with its own tape and told to repoint its handoff at the NEXT
+    hop's alias; the last hop is truncated instead, because there is nowhere left to
+    send the client and an un-rewritten handoff would dial ArenaNet.
+    """
+    sys.path.insert(0, os.path.join(TOOLKIT, "authsrv"))
+    import tape as tapemod
+    order = tapemod.chain(capture_dir)
+    if not order:
+        raise SystemExit(
+            f"no chain in {capture_dir}: no tape there hands the client to another "
+            f"connection recorded in the same capture. Play a single tape with "
+            f"--game-args '--tape ...' instead.")
+    hosts = hop_aliases(len(order), first)
+    argvs = []
+    for i, conn in enumerate(order):
+        argv = list(game_args) + ["--tape", capture_dir, "--tape-connection", conn]
+        if i + 1 < len(order):
+            argv += ["--tape-rewrite-next", hosts[i + 1]]
+        else:
+            argv += ["--tape-no-transfer"]
+        argvs.append(argv)
+    return argvs[0], list(zip(hosts[1:], argvs[1:])), order, hosts
 
 
 def listeners_on(port, host=None):
@@ -690,6 +750,14 @@ def main():
                          "of waiting for the client to exit. What a probe needs "
                          "is its own step delays plus slack; --list-probes "
                          "prints them.")
+    ap.add_argument("--tape-chain", metavar="CAPTURE_DIR", default=None,
+                    help="R1.5 chaining (PLAN §8.0 item 0b): play a whole recorded "
+                         "session, hop by hop. Discovers the chain from the capture "
+                         "-- each tape's 0x01A5 handoff must match the next "
+                         "connection's own VERSION or it is REFUSED, never ordered "
+                         "by timestamp -- then starts one gamesrv per hop on its own "
+                         "127.x alias, each repointing its handoff at the next. The "
+                         "last hop is truncated. --game-args still reaches every hop.")
     ap.add_argument("--game-args", default="",
                     help="Extra authsrv flags for the GAMESRV only, space "
                          "separated -- e.g. --game-args '--probe attack_anim' "
@@ -711,9 +779,21 @@ def main():
             f"try to bind the authsrv's own endpoint {a.auth_host}:6112. "
             f"Give the game channel an alias of its own (default 127.0.0.3).")
 
+    game_args, hops, order, hosts = split_args(a.game_args), (), (), ()
+    if a.tape_chain:
+        game_args, hops, order, hosts = chain_specs(
+            a.tape_chain, split_args(a.game_args), a.game_host)
+        print(f"tape chain: {len(order)} hop(s) from {a.tape_chain}")
+        for i, (conn, host) in enumerate(zip(order, hosts), 1):
+            nxt = f"-> {hosts[i]}" if i < len(hosts) else "(last: truncated)"
+            print(f"  {i}. {host}:{a.game_port}  {conn.split('->')[0]}  {nxt}")
+        print(f"  the operator does NOTHING for the whole chain -- a tape cannot "
+              f"show control, and each hop's avatar stops moving well before its "
+              f"tape ends. Watch each 'tape complete: N/N' line instead.")
+
     specs = server_specs(game_port=a.game_port, auth_host=a.auth_host,
                          game_host=a.game_host,
-                         game_args=split_args(a.game_args))
+                         game_args=game_args, hops=hops)
     preflight(specs, replace=a.replace)
 
     stamp = time.strftime("%Y%m%dT%H%M%S")
@@ -726,8 +806,14 @@ def main():
     # saw nothing is worse than useless -- it burns a client session and produces a
     # capture whose steps nobody performed.
     labelling = is_labelling(a)
-    stack = Stack(specs, logdir=outdir,
-                  echo=True if a.serve else ({"gamesrv"} if labelling else False))
+    # Under a chain the operator's only truthful progress signal is each hop's own
+    # "tape complete: N/N" line, and hops 2..N are different processes -- echoing only
+    # "gamesrv" would show the first hop and then go silent for six minutes while the
+    # run was working perfectly. Same failure as the labelled run's on 2026-08-10,
+    # where the script driving the human was invisible.
+    echoing = {s[0] for s in specs if s[0].startswith("gamesrv")} if a.tape_chain \
+        else ({"gamesrv"} if labelling else False)
+    stack = Stack(specs, logdir=outdir, echo=True if a.serve else echoing)
     if labelling:
         print("--labelrun: the gamesrv's prompts will appear IN THIS WINDOW.\n"
               "  Put this window beside the game. Read it by glancing -- clicking\n"

@@ -1044,7 +1044,7 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-10 (`6940f32`+, suite 35/35 ~881 checks)
+### 8.0 Next, as of 2026-08-10 (`b950ac6`+, suite 36/36 ~920 checks)
 
 The items below this section predate today and are still live; these four are what today's
 work opened. **The order has changed since they were written**, on evidence: four scouts
@@ -1074,24 +1074,33 @@ parallel, with one safety change that is not optional — see its entry.
     doing and is **not** "cheap": it is a session, and it may fail for the same unknown
     reason `0x0026` does.
 
-0b. **Chain the tapes across a map transition.** Independent of the other three; can run in
-    a separate worktree. `0x01A5` carries the next instance's `sockaddr_in` and
-    `tape.stop_before_transfer` locates it exactly (T8) — verified, 12/12 field matches
-    against the following connection's VERSION at three transition points. Rewrite the blob
-    to a loopback address instead of cutting it, arm the next connection with the next
-    tape, and four instance tapes become one continuous session. **Two conditions.**
-    *(i) The rewrite deletes the only control that has ever caught this mistake.* Today an
-    un-truncated tape fails **closed**: the client dials ArenaNet, the cage refuses, and
-    `Code=005` says so out loud — that happened on 2026-08-10. After the rewrite a wrong
-    address is a dead connection with no signal at all. So the offline assertion that a
-    rewritten tape points at 127/8 is not hygiene, it is the *replacement* safety control,
-    and `--tape-rewrite-next` must refuse a non-loopback host — otherwise the flag is a
-    general-purpose "aim a client at an arbitrary server", written into ArenaNet's own
-    recorded plaintext. *(ii) The evidence for the 12/12 match is `world_id` / `player_id`
-    — ArenaNet session identifiers from the owner's live secondary account. `schema/` is
-    tracked and the vault is not; `scrub_captures.py` covers the portal credential set and
-    nothing treats these as sensitive. Record the **structure** and the **fact** of the
-    match. The values stay in the vault.
+0b. 🔶 **BUILT 2026-08-10, awaiting one operator run.** `0x01A5` is now
+    `GAME_SERVER_TRANSFER` — the **first named `GAME_SMSG` opcode** of 487 — because it
+    carries the next instance's `world_id`, `map_id` and `player_id` as well as its
+    `sockaddr_in`, and all four match the next connection's own c2s VERSION frame, 12/12
+    across three transitions (T9). **Landed:** `tape.chain()`, which discovers the chain
+    and **refuses a link it cannot prove** rather than ordering hops by timestamp;
+    `tape.transfer_of()` / `rewrite_transfer()`, length-preserving at **4 bytes of
+    74,319** so `load_tape`'s accounting is untouched and the tape still frames 100%
+    clean; `authsrv --tape-rewrite-next`; and `session.py --tape-chain`, which starts one
+    gamesrv per hop on its own 127.x alias — hops **cannot** be separated by port, and
+    every recorded hop changed address, so an alias each also keeps the run to one
+    variable. The measured chain is 4 tapes / 3 links, 184,756 B, **396 s** of ArenaNet
+    plaintext: 148 → 146 → 164 → 146.
+    **The safety trade is the point, not a footnote.** The rewrite deletes the only
+    control that has ever caught this: an un-truncated tape used to fail **closed** —
+    client dials ArenaNet, cage refuses, `Code=005` — and afterwards a wrong address is a
+    dead connection with no signal. So `rewrite_transfer` refuses any host outside 127/8
+    and self-checks offline before the client runs; that refusal *is* the replacement,
+    and `test_tape.py` breaks it on purpose to prove it can go red.
+    **Not landed:** the run. ~6.6 minutes during which the operator does nothing, and
+    each hop's avatar stops moving well before its tape ends — the `tape complete: N/N`
+    line is the only truthful signal. **UNVERIFIED:** whether the client honours the port
+    in a *game*-channel handoff. The "it dials 6112 regardless" observation is of the
+    **auth** channel; every recorded `0x01A5` advertises 6112, which is also the
+    hardcoded value, so the capture cannot separate them. `--tape-rewrite-next host:port`
+    exists so one run settles it. The `world_id`/`player_id` values stay in the vault —
+    `schema/` records the structure and the fact of the match, never the identifiers.
 
 0c. 🔶 **BUILT 2026-08-10, awaiting one operator run.** Plague Worms hide by being REMOVED
     and re-CREATED under the same agent id (T3). ~~It runs entirely through

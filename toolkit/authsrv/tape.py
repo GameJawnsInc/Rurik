@@ -40,6 +40,8 @@ standard library only.
 """
 import json
 import os
+import socket
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -210,6 +212,21 @@ def load_tape(capture_dir, connection=None):
 # 0x0099 as well, because that one comes after.
 TRANSFER_OPCODES = (0x01A5,)
 
+# sizeof(sockaddr), the blob 0x01A5 carries. Same field as AUTH_SMSG 0x0009's.
+SOCKADDR_LEN = 24
+# What we WRITE into a rewritten handoff. The client is OBSERVED to ignore the
+# advertised port on the auth-channel handoff and dial <host>:6112 -- three
+# discriminating loopback runs, studies/handshake/PLAN.md §10 -- and the whole harness
+# is built around that. Note what is NOT established: that observation is of the AUTH
+# channel, and 0x01A5 is the GAME channel. Every recorded 0x01A5 advertises 6112, which
+# is also the hardcoded value, so the live capture CANNOT tell the two apart. Hops are
+# therefore separated by 127.x ALIAS rather than by port, which is correct either way;
+# `--tape-rewrite-next host:port` exists so one run can settle it.
+TRANSFER_PORT = 6112
+# Bytes of a client's first game-channel frame needed to reach the VERSION fields:
+# 4-byte header + 5 dwords (build, unk, world_id, map_id, player_id).
+VERSION_HEAD = 24
+
 
 def stop_before_transfer(events, codec_obj):
     """(events, dropped, why) -- the tape truncated before it leaves the map.
@@ -246,6 +263,230 @@ def stop_before_transfer(events, codec_obj):
     return keep, dropped, (f"cut at byte {cut:,} of {len(blob):,}, dropping the last "
                            f"{dropped} event(s) -- they hand the client to another "
                            f"server and the cage will refuse the dial")
+
+
+def transfer_of(events, codec_obj):
+    """The handoff message in this tape, decoded, or None if it does not leave the map.
+
+    Returns {"offset", "host", "port", "world_id", "map_id", "player_id", "raw"}.
+
+    0x01A5 is the GAME-channel twin of `AUTH_SMSG 0x0009 GAME_SERVER_INFO`, and that
+    is a stronger claim than "it carries an address". OBSERVED: its tail carries the
+    next instance's `world_id`, `map_id` and `player_id`, and all three equal what the
+    NEXT connection then sends in its own c2s VERSION frame -- three hops, three for
+    three, twelve fields including the address. `chain()` below re-derives that rather
+    than trusting it, which is the point: the witness is the client's own next
+    handshake, and it was not consulted to make the claim.
+
+    Layout, message-relative (OBSERVED on the real bytes; the 39-byte total is
+    `schema/overrides.json` GAME_SMSG[421]'s correction to the imported 38, taken from
+    the client's own cmds[] table and now corroborated by ArenaNet's own stream --
+    every one of the three ends exactly 39 bytes later):
+
+        +0  u16   opcode
+        +2  blob[24]  sockaddr_in: family u16 LE, port u16 BE, IPv4[4], 16 zero bytes
+        +26 u32   world_id
+        +30 u8
+        +31 u16   map_id
+        +33 u8    1, 0, 1 across the three hops (dest map 146, 164, 146). UNVERIFIED.
+        +34 u32   player_id
+        +38 u8
+    """
+    blob = b"".join(b for _t, b in events)
+    off = 0
+    while off < len(blob):
+        try:
+            op, vals, nxt = codec_obj.decode_one("GAME_SMSG", blob, off)
+        except Exception:
+            break
+        if op in TRANSFER_OPCODES:
+            sock = vals[1]
+            if not isinstance(sock, bytes) or len(sock) != SOCKADDR_LEN:
+                raise TapeError(
+                    f"0x{op:04X} at byte {off} does not carry a {SOCKADDR_LEN}-byte "
+                    f"blob where the schema says one is: got {type(sock).__name__} "
+                    f"of {len(sock) if hasattr(sock, '__len__') else '?'}")
+            return {
+                "offset": off,
+                "host": socket.inet_ntoa(sock[4:8]),
+                # Family is LITTLE-endian and port is BIG-endian, in the same struct.
+                # Reading the port the other way round yields a plausible number
+                # thousands away from the real one, and the only symptom is a
+                # connection that never arrives -- test_codec.py section 4 exists
+                # because that already happened once.
+                "family": struct.unpack_from("<H", sock, 0)[0],
+                "port": struct.unpack_from(">H", sock, 2)[0],
+                "world_id": vals[2], "map_id": vals[4], "player_id": vals[6],
+                "raw": blob[off:nxt],
+            }
+        off = nxt
+    return None
+
+
+def rewrite_transfer(events, codec_obj, host, port=TRANSFER_PORT):
+    """(events, changed, why) -- the handoff repointed at a server we control.
+
+    The sibling of `stop_before_transfer`, not a replacement: truncating is still the
+    right answer for a labelled run, which needs the client to stay put.
+
+    THIS DELETES THE ONLY CONTROL THAT HAS EVER CAUGHT THIS MISTAKE, and that is why
+    the checks below are not hygiene. Today an un-truncated tape fails CLOSED: the
+    client dials ArenaNet, `cage.assert_launch_safe` refuses, and the client says
+    `Code=005` out loud -- which is exactly what happened on 2026-08-10. After a
+    rewrite, a wrong address is a dead connection and nothing says why. So the
+    assertion has to happen HERE, offline, before the run, because during the run
+    there is no signal left to read.
+
+    Refuses a non-loopback host for the same reason. Without that refusal this
+    function is a general-purpose "aim a client at an arbitrary server", written into
+    ArenaNet's own recorded plaintext, which is the one thing `CLAUDE.md`'s launch
+    rule exists to prevent.
+
+    LENGTH-PRESERVING BY CONSTRUCTION, which is what keeps the tape's accounting
+    intact. `load_tape` checks that the wire segments account for exactly the
+    plaintext, and it runs before this on the untouched capture; re-cutting on the
+    ORIGINAL event lengths is exact only because the byte count cannot change.
+    """
+    if not origin.is_loopback(host):
+        raise TapeError(
+            f"refusing to rewrite a tape's handoff to {host}: it is not a loopback "
+            f"address. A rewritten tape is ArenaNet's own recorded bytes with a "
+            f"destination of our choosing -- pointed off this machine that is a "
+            f"client aimed at an arbitrary server by a file, which is what the "
+            f"launch rule in CLAUDE.md exists to refuse. 127/8 only.")
+
+    found = transfer_of(events, codec_obj)
+    if found is None:
+        return events, 0, "no transfer in this tape"
+
+    blob = bytearray(b"".join(b for _t, b in events))
+    before = bytes(blob)
+    at = found["offset"] + 2
+    new = (struct.pack("<H", socket.AF_INET) + struct.pack(">H", port)
+           + socket.inet_aton(host) + b"\x00" * 16)
+    if len(new) != SOCKADDR_LEN:
+        raise TapeError(f"built a {len(new)}-byte sockaddr, wanted {SOCKADDR_LEN}")
+    blob[at:at + SOCKADDR_LEN] = new
+    after = bytes(blob)
+
+    # Three self-checks the artifact can refute, all of them cheap and all of them
+    # aimed at the failure that is otherwise silent.
+    if len(after) != len(before):
+        raise TapeError(
+            f"the rewrite changed the tape's length ({len(before)} -> {len(after)}), "
+            f"which would invalidate every event boundary after it")
+    differing = [i for i in range(len(before)) if before[i] != after[i]]
+    if differing and not (at <= min(differing) and max(differing) < at + SOCKADDR_LEN):
+        raise TapeError(
+            f"the rewrite touched bytes outside the sockaddr at "
+            f"[{at}, {at + SOCKADDR_LEN}): {differing[:8]}")
+    check = transfer_of([(0.0, after)], codec_obj)
+    if check is None or check["host"] != host or check["port"] != port:
+        raise TapeError(
+            f"the rewritten tape does not read back as {host}:{port} -- got "
+            f"{check and (check['host'], check['port'])}. Refusing to hand a client "
+            f"a tape whose destination we cannot prove offline.")
+
+    # Re-cut on the ORIGINAL event lengths. Exact because nothing moved.
+    out, seen = [], 0
+    for t, b in events:
+        out.append((t, after[seen:seen + len(b)]))
+        seen += len(b)
+    return out, len(differing), (
+        f"0x{TRANSFER_OPCODES[0]:04X} at byte {found['offset']:,} now names "
+        f"{host}:{port} instead of {found['host']}:{found['port']} "
+        f"({len(differing)} byte(s) changed of {len(before):,}); "
+        f"destination map {found['map_id']}")
+
+
+def client_version(capture_dir, connection):
+    """{"build", "world_id", "map_id", "player_id"} from a connection's c2s VERSION.
+
+    The decrypted `game-*.jsonl` does NOT carry these -- its `version` record holds
+    only the connection string and which tap supplied the key -- so `wire.jsonl` is
+    the only source, and this is deliberately parsed from the CLIENT's own first
+    bytes rather than from anything we wrote.
+
+    That independence is the whole value: it is what lets `chain()` confirm a link
+    instead of assuming one.
+    """
+    wire = os.path.join(capture_dir, "wire.jsonl")
+    conn = tuple(connection.split("->"))
+    if len(conn) != 2:
+        raise TapeError(f"not a connection string: {connection!r}")
+    segs = _segments(wire, conn, C2S)
+    if not segs:
+        raise TapeError(f"no client bytes recorded for {connection}")
+    head = b"".join(p for _s, _t, p in segs)[:VERSION_HEAD]
+    if len(head) < VERSION_HEAD:
+        raise TapeError(
+            f"{connection}: only {len(head)} client bytes, need {VERSION_HEAD} to "
+            f"read the VERSION frame. _segments sorts by raw TCP seq with no wrap "
+            f"handling; a stream this short should never have wrapped, so this is a "
+            f"truncated capture rather than an ordering problem.")
+    build, _unk, world_id, map_id, player_id = struct.unpack_from("<5I", head, 4)
+    return {"build": build, "world_id": world_id, "map_id": map_id,
+            "player_id": player_id}
+
+
+def chain(capture_dir):
+    """[connection] in play order -- the hops of one recorded session, PROVEN.
+
+    Follows each tape's 0x01A5 to the next connection and then REFUSES to accept the
+    link unless the next connection's own VERSION frame carries the same `world_id`,
+    `map_id` and `player_id` the handoff named. Ordering by timestamp would have been
+    easier and would have been a guess; this is a claim the capture can refute.
+
+    Raises rather than reporting, because a mis-ordered chain plays one map's
+    recording into another map's client and the symptom is an assert with no obvious
+    cause.
+    """
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+    from codec import Codec
+    codec_obj = Codec()
+
+    chans = {c["connection"]: c for c in channel_files(capture_dir)}
+    versions = {}
+    for conn in chans:
+        try:
+            versions[conn] = client_version(capture_dir, conn)
+        except TapeError:
+            versions[conn] = None
+
+    links, heads = {}, dict.fromkeys(chans, True)
+    for conn in chans:
+        _info, events = load_tape(capture_dir, conn)
+        found = transfer_of(events, codec_obj)
+        if found is None:
+            continue
+        want = (found["world_id"], found["map_id"], found["player_id"])
+        matched = [c for c, v in versions.items()
+                   if v and c != conn
+                   and (v["world_id"], v["map_id"], v["player_id"]) == want
+                   and c.split("->")[1].split(":")[0] == found["host"]]
+        if len(matched) != 1:
+            raise TapeError(
+                f"{conn}'s handoff names {found['host']} / world {found['world_id']} "
+                f"/ map {found['map_id']} / player {found['player_id']}, and "
+                f"{len(matched)} recorded connection(s) match it. A chain is only a "
+                f"chain if the next hop's own VERSION agrees -- refusing to guess an "
+                f"order from timestamps.")
+        links[conn] = matched[0]
+        heads[matched[0]] = False
+
+    starts = [c for c, is_head in heads.items() if is_head and c in links]
+    if not starts:
+        return []
+    if len(starts) != 1:
+        raise TapeError(f"{len(starts)} connections start a chain: {sorted(starts)}")
+    order, seen = [starts[0]], {starts[0]}
+    while order[-1] in links:
+        nxt = links[order[-1]]
+        if nxt in seen:
+            raise TapeError(f"the chain loops back to {nxt}")
+        order.append(nxt)
+        seen.add(nxt)
+    return order
 
 
 def gaps(events):
