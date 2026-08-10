@@ -1186,17 +1186,19 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
     an experiment and the house rule is that a probe with no stated expectation can
     be rationalised into agreeing with whatever happened:
 
-      * PREDICTED: the client loads the recorded map and draws its agents. The tape
-        is 3,981 messages that this exact build already accepted once, from a server
-        whose framing, preamble and key derivation we have measured to be identical
-        to ours.
-      * THE INFORMATIVE FAILURE: an assert naming a player-identity field. The tape
+      * PREDICTED, and CONFIRMED 2026-08-10: the client loads the recorded map and
+        draws its agents. It did far more than that -- 1,209 of 1,209 events with
+        zero messages of ours on the channel, and the client skipped the cutscene,
+        walked to each quest giver in order, spoke to them, accepted quests and
+        walked to the zone exit. Chat arrived. RUN, POSITIVE.
+      * THE INFORMATIVE FAILURE, which did NOT happen and is therefore the result:
+        an assert naming a player-identity field. THE CLIENT DOES NOT CHECK. The tape
         names the RECORDED character -- an 11-character name in 0x017D and in the
         player's 0x0059 row, player number 26, agent 725, plus 40 other players --
         and the client logged in as ours. Whether it cross-checks the identity it
-        SENT against the one it is TOLD about is UNVERIFIED, and this is the one
-        experiment that settles it. Nothing is renamed on the first run: the point
-        is to learn whether the client checks, not to sneak past the check.
+        SENT against the one it is TOLD about was UNVERIFIED; it is now OBSERVED
+        that it does not. Nothing was renamed for the run, so this is the honest
+        answer rather than one obtained by sneaking past a check.
       * NOT PREDICTED, and out of scope: control. The tape's 987 move messages
         answer the RECORDED operator's clicks, so the avatar walks the recorded path
         whatever the new operator does, and client-side prediction will fight it. A

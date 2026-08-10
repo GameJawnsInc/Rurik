@@ -354,7 +354,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
 | **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ✅ **2026-08-07**, `vault/captures/live/20260807T143055`. Six connections to ArenaNet (one auth, five game, all on **port 80**), both directions, zero TCP gaps, stamped `origin: live`, and **byte-replayable in the strong sense**: `livesession.py --assemble` regenerates all six decrypted files **sha256-identical** from `wire.jsonl` + `keyring.jsonl` alone, with no client and no network. 200,153 bytes of ArenaNet plaintext, 11,700 messages. **The independent check is the framing**: every one of the 12 streams decodes 100% clean to its final byte against `schema/messages.json`, which was built from the *client's* format tables and never from these bytes. Adversarially attacked from four angles (§3.3); three failed to refute, and the fourth's safety finding is fixed. See §3.3 for what the number does *not* mean. The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
-| **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | 🔶 **unblocked and analysed, not yet run — 2026-08-07.** R0b delivered the tape: connection `:60935` is 74,319 B / 3,981 messages of Ascalon City (map 148), framing to the exact final byte, with **1,210 timing points** and a median inter-segment gap of 24.4 ms. [studies/divergence/FINDINGS.md](studies/divergence/FINDINGS.md) is the full divergence analysis (11 ranked gaps, 3 refuted) and its §4 verdict is **feasible for one map, game channel only, auth synthesised**. A tape needs no semantics, so the 105-opcode gap does not block it. **One unknown decides it**: whether the client cross-checks the identity it sent against the tape's — UNVERIFIED, and one launch settles it. Blocked only on the `Undecodable` buffer-discard bug (D9b), which would masquerade as a tape failure. |
+| **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10, and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. |
 
 Two structural changes, both argued below in §4.
 
@@ -438,6 +438,43 @@ test. Producers derive their stamp from the endpoint instead of asserting it. ME
 not symmetric: an `ours` stamp on a file with public addresses is reported as
 uncorroborated, never overridden, because our own tooling legitimately records ArenaNet
 endpoint metadata.
+
+### 3.4 What the tape run settled, and what it did not
+
+**The client does not validate identity.** This was R1.5's one unknown — §4.2 item 2 called
+it "the unknown that decides feasibility" — and the answer is no. The tape names the
+*recorded* character: an 11-character name in `0x017D`, player number 26, agent 725, plus
+40 other players in the outpost. The client had logged in as ours. It accepted all of it,
+rendered the world, and drove a full session without a murmur. The predicted informative
+failure — an assert naming a player-identity field — never fired. (OBSERVED.)
+
+**A tape needs no semantics, demonstrated rather than argued.** 105 opcodes in that stream
+are ones our server has never sent and several have no name anywhere in this repo,
+`0x015E` among them. It did not matter. We re-emitted bytes.
+
+**The previous run's assert was our own contamination.** `AgAgent.cpp(978)`,
+`!m_timeStopMovement || ((int)(m_timeStopMovement - time) >= 0)`, looked like a stale-clock
+finding and was not: our server had sent 378 messages of its own alongside the tape — a
+five-message load preamble and 373 `WORLD_SIMULATION_TICK`s — so two independent tick
+streams were reaching one client. With the channel clean it did not recur. **§4.2 item 5,
+session-embedded absolute time, is therefore still UNVERIFIED** — it was never actually
+tested, and the run that appeared to test it was measuring our own bug.
+
+**Where it ended is the tape's boundary, not a fault.** At the zone exit the client dialled
+`54.198.7.73:6112` — ArenaNet's real game server, from the recorded `GAME_SERVER_INFO` —
+and the cage refused it (`Code=005`). One connection is one instance; a tape cannot cross a
+map transition, because the next map lives on a different recorded connection with its own
+handshake and its own key.
+
+**Still out of scope, by construction:** control. The avatar walked the *recorded*
+operator's path — to the quest givers, through the dialogues, to the exit — regardless of
+what the new operator did. `Client pathing data out of sync with server` is that, and it is
+expected. A tape shows a load and a populated, animated world. It cannot show a world that
+responds.
+
+**What this is now useful for:** a regression instrument. Any future change to our server
+can be run against a real recorded stream and compared, which is the first time this
+project has had an oracle it did not write itself.
 
 ### 3.2 R4b and R4c, rewritten as counts
 
