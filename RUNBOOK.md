@@ -458,6 +458,58 @@ For an off-disk copy: **`client/`, `mirrors/`, `keys/`, `research/`, and
 carries the `.raw` set), not `run/` or `dat_study/` (11.9 GB, both regenerate from
 `client/` plus the patcher and `Gw.dat`).
 
+## Playing a tape
+
+A tape replays one recorded game connection's server plaintext into a fresh loopback
+session at its recorded timing. No live client, no ArenaNet, no new capture. What it
+proves and what it cannot is [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md); this
+is the procedure.
+
+**1. Pick the tape by decoding it, never by position in the session.** A capture holds
+several game connections and the interesting one is rarely the obvious one — on
+2026-08-10 the Lakeside tape with the combat in it was the operator's *second* visit, not
+the one that follows Ascalon.
+
+```bash
+python toolkit/authsrv/tape.py
+```
+
+That lists every playable connection with its event count, byte count and cadence. To
+name the maps, read each connection's own c2s `VERSION` body — `<5I>` at offset 4 is
+build, unk1, world_id, **map_id**, player_id — and resolve `map_id` through
+`vault/research/areainfo_38797.json`.
+
+**2. Pre-flight the archive.** Get the `map_file_id` out of the tape's `0x0195` and check
+both `run/Gw.dat` and `run-live/Gw.dat` resolve it, per "The two run directories drift
+apart" below. A missing id is `Map.cpp(1762)` about thirty seconds into the run.
+
+**3. Play it.**
+
+```bash
+python toolkit/harness/session.py --keep-open --game-args "--tape C:\gd\Rurik\vault\captures\live\20260807T143055 --tape-connection 10.0.0.210:64103->54.198.7.73:80"
+```
+
+`--map` is a **no-op under a tape** — `MAP_OVERRIDE` sets state that the tape path never
+reads, and the client will render whatever the tape's `0x0195` names regardless of what
+it asked for. Passing it only makes the log say something misleading.
+
+**4. Watch the gamesrv terminal, not the avatar.** This is the one that costs time if you
+get it wrong. The recorded operator stands still whenever they stood still — on the
+Lakeside tape, for the **last 146 seconds of a 186-second tape** — and from the seat that
+is indistinguishable from the tape having finished. The terminal prints `tape N/1074`
+every 200 events and `tape complete: N/N events in Xs` at the end. Nothing before that
+line means the tape is over.
+
+**5. Measure it before believing it.** The run is only interpretable if our server stayed
+silent, and that has been wrong once: count `sent` records in
+`vault/captures/gamesrv/authsrv-*-c1.jsonl` whose `label` does not start with `tape[`. It
+must be zero. Anything else and the client was hearing two servers, which is how the
+2026-08-10 `AgAgent.cpp(978)` assert got attributed to the wrong thing for a day.
+
+**What a tape cannot do:** respond. Tape mode never answers c2s, so after the recording
+runs out the client can still move (that is client-side) but attacking, casting and
+gateways do nothing. That is the instrument, not a bug.
+
 ## The two run directories drift apart, and the loopback one loses
 
 **Symptom.** The client dies on `Map.cpp(1762)` with `Map file '0x...' failed to

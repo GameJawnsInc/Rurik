@@ -1203,6 +1203,15 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
         answer the RECORDED operator's clicks, so the avatar walks the recorded path
         whatever the new operator does, and client-side prediction will fight it. A
         tape shows a load and a populated world; it cannot show control.
+      * RUN 2, 2026-08-10, Lakeside County (`:64103`): 1,074/1,074, zero of ours on
+        the channel, and IT RENDERED COMBAT -- the recorded operator's fight with a
+        Wolf, Vampiric Gaze and Deathly Swarm, played back into a client that had no
+        server behind it. Also OBSERVED there: the client drew map 146 while its own
+        VERSION had asked for 148, so the identity result above generalises to the
+        map id. studies/tape/FINDINGS.md is the log; read it before the next run,
+        because two of its findings are about how to READ a run rather than what one
+        found -- the recorded avatar stands still for the last 146 s of that tape and
+        looks finished, and `--map` is inert here.
 
     Pacing is per WIRE SEGMENT, not per message, because that is the resolution the
     capture has -- 1,209 timing points for 3,981 messages on the Ascalon tape. Drift
@@ -1580,9 +1589,23 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         state = {}
         if kind == "game":
             if MAP_OVERRIDE is not None and MAP_OVERRIDE != map_id:
-                print(f"[c{conn_id}] client asked for map {map_id}; "
-                      f"sending it to {MAP_OVERRIDE} instead", flush=True)
-                map_id = MAP_OVERRIDE
+                if TAPE_EVENTS is not None:
+                    # --map writes state["map_id"], and under a tape NOTHING reads
+                    # it: the preamble that would is skipped entirely and the map
+                    # the client draws comes from the tape's own 0x0195
+                    # map_file_id. Saying "sending it to N instead" here would be a
+                    # lie, and on 2026-08-10 it was read as one -- the client had
+                    # asked for 148, the tape declared 146, and the disagreement
+                    # was the finding (studies/tape/FINDINGS.md T2). A log line
+                    # that claims an effect it does not have costs more than no
+                    # log line at all.
+                    print(f"[c{conn_id}] client asked for map {map_id}; --map "
+                          f"{MAP_OVERRIDE} is INERT under a tape (the tape's own "
+                          f"0x0195 decides what loads)", flush=True)
+                else:
+                    print(f"[c{conn_id}] client asked for map {map_id}; "
+                          f"sending it to {MAP_OVERRIDE} instead", flush=True)
+                    map_id = MAP_OVERRIDE
             state["map_id"] = map_id
             state["world_id"] = world_id
             state["player_id"] = player_id
@@ -2881,7 +2904,10 @@ def main():
                     help="Put the character in this map instead of the one its "
                          "character record asks for. 146 is Lakeside County, "
                          "which is explorable and therefore the first place "
-                         "combat can be tested; 148 is Ascalon City.")
+                         "combat can be tested; 148 is Ascalon City. INERT "
+                         "under --tape: the tape's own 0x0195 decides what the "
+                         "client loads, and it will happily draw a map it never "
+                         "asked for.")
     ap.add_argument("--no-enemy", action="store_true",
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "

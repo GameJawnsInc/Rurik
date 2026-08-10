@@ -636,6 +636,16 @@ ask for" — and that answer determines whether the correct long-run strategy is
 way: an assert names a field, and this repo has twice turned a client assert into a fact
 faster than any amount of reading.
 
+**Settled 2026-08-10, both runs positive. The section above is now history; the results
+live in [../tape/FINDINGS.md](../tape/FINDINGS.md).** The client accepts a world it did
+not ask for on every axis tested so far — a recorded character's identity (run 1) and a
+map id that disagrees with the one it requested (run 2, T2). Combat renders from a
+recording (T2's sibling, T1). Two things bear directly on the list below: **D1's agent-id
+reuse is corroborated by ArenaNet's own traffic** — 19 of 45 ids in one 186 s tape are
+created more than once, agent 281 nineteen times (T3) — and §4.2 item 5, session-embedded
+absolute time, is **still UNVERIFIED**; run 1's apparent evidence for it was retracted as
+our own world tick contaminating the channel.
+
 ---
 
 ## 5. Next actions, ordered

@@ -354,7 +354,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
 | **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ✅ **2026-08-07**, `vault/captures/live/20260807T143055`. Six connections to ArenaNet (one auth, five game, all on **port 80**), both directions, zero TCP gaps, stamped `origin: live`, and **byte-replayable in the strong sense**: `livesession.py --assemble` regenerates all six decrypted files **sha256-identical** from `wire.jsonl` + `keyring.jsonl` alone, with no client and no network. 200,153 bytes of ArenaNet plaintext, 11,700 messages. **The independent check is the framing**: every one of the 12 streams decodes 100% clean to its final byte against `schema/messages.json`, which was built from the *client's* format tables and never from these bytes. Adversarially attacked from four angles (§3.3); three failed to refute, and the fourth's safety finding is fixed. See §3.3 for what the number does *not* mean. The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
-| **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10, and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. |
+| **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10, and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. **A second run the same day played Lakeside County (`:64103`, 1,074/1,074, 0 non-tape sends) and rendered COMBAT** — plus a labelled c2s corpus, and independent corroboration of D1's agent-id reuse from ArenaNet's own traffic. See §3.5 and [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md). |
 
 Two structural changes, both argued below in §4.
 
@@ -475,6 +475,32 @@ responds.
 **What this is now useful for:** a regression instrument. Any future change to our server
 can be run against a real recorded stream and compared, which is the first time this
 project has had an oracle it did not write itself.
+
+### 3.5 The second tape run: combat, and a labelled c2s corpus
+
+Run 2 the same day played `:64103` — Lakeside County, map 146 — **1,074 of 1,074 events,
+0 non-tape sends, and it rendered combat.** Full write-up in
+[studies/tape/FINDINGS.md](studies/tape/FINDINGS.md), which is now the log of tape runs;
+`§3.4` above is run 1 and stays as written. The four results that change what we know:
+
+- **Combat renders from a recording** (T1). The operator named the fight — a Wolf, cast
+  Vampiric Gaze then Deathly Swarm — and the tape's four `SKILL_ACTIVATED` messages carry
+  skills 153 and 105 against it.
+- **The client rendered a map it never asked for** (T2). Its own `VERSION` said map 148;
+  the tape said 146; it drew 146. Same permissiveness as run 1's identity result, on a
+  second axis. Note `--map` is a **no-op under a tape** — `MAP_OVERRIDE` sets state the
+  tape path never reads.
+- **D1's agent-id reuse is corroborated by ArenaNet's own traffic** (T3): 19 of the 45
+  ids in that 186 s tape are created more than once, agent 281 nineteen times. Our probe
+  and their server now agree, independently.
+- **`GAME_CMSG 0x0046` field 1 is a skill id, not a slot** (T4) — ground-truthed by an
+  operator label given before the payloads were decoded, then matched against the
+  client's own skill and string tables. Candidate meanings for `0x00C1` and `0x0026`, and
+  a confirmed 5 s keepalive on `0x0009`, came out of the same five minutes (T5).
+
+The cheapest next thing this opens up is **a deliberately labelled input run** (T4/T5 were
+an accident of five unplanned minutes) and **chaining tapes across a map transition**,
+which is what would turn four instance tapes into one continuous session.
 
 ### 3.2 R4b and R4c, rewritten as counts
 
