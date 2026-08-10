@@ -29,7 +29,7 @@ AUTH_CMSG_MASK = 0x8000
 # checks.py exists — it once printed ALL CHECKS PASSED with its capture glob
 # matching nothing — so the floor is what makes section 1 going quiet a failure
 # rather than a shorter list of passes.
-LEDGER = checks.Ledger("codec vs captured bytes", floor=11)
+LEDGER = checks.Ledger("codec vs captured bytes", floor=15)
 check = checks.adopt_named(LEDGER)
 
 
@@ -176,6 +176,46 @@ def main():
     ok &= check("a sockaddr cast reads back the address we meant",
                 af == socket.AF_INET and port == 6113 and ip == "127.0.0.1",
                 f"af={af} {ip}:{port}")
+
+    # --- the catalog this checkout loads, and the names it now carries ----------
+    # DEFAULT_SCHEMA was a hardcoded absolute path into the MAIN checkout until
+    # 2026-08-10, so every worktree decoded against a file its own branch did not
+    # contain -- and a schema edit made in a worktree did nothing while this suite
+    # went green anyway. Same failure vaultpath.py exists to prevent, inverted.
+    import codec as codec_mod
+    repo = os.path.dirname(os.path.dirname(HERE))
+    LEDGER.ok(os.path.abspath(codec_mod.DEFAULT_SCHEMA)
+              == os.path.abspath(os.path.join(repo, "schema", "messages.json")),
+              "the codec loads THIS checkout's schema, not another one's",
+              codec_mod.DEFAULT_SCHEMA)
+
+    # GAME_CMSG had 194 layouts and zero names. Names live in overrides.json beside
+    # the evidence, and are added only by a labelled run (studies/cmsg/FINDINGS.md).
+    named = {0x0026: "ATTACK", 0x0039: "INTERACT", 0x0046: "USE_SKILL",
+             0x0064: "CHAT_SEND", 0x00C1: "TARGET_SELECT"}
+    got = {op: c.name_for("GAME_CMSG", op) for op in named}
+    LEDGER.ok(got == named,
+              "the client-to-server opcodes we have earned names for resolve",
+              ", ".join(f"0x{o:04X}={n}" for o, n in sorted(got.items())))
+    LEDGER.ok(c.name_for("GAME_CMSG", 0x0028) == "?"
+              and c.name_for("GAME_CMSG", 0x1234) == "?"
+              and c.name_for("NO_SUCH_CHANNEL", 1) == "?",
+              "and anything unnamed stays '?' rather than borrowing a label",
+              "0x0028 is witnessed but unexplained; a plausible name would be a "
+              "guess entering the catalog as fact")
+
+    # The names must not have moved a single field, or they would change decoding.
+    base = json.load(open(os.path.join(repo, "schema", "messages.json"),
+                          encoding="utf-8"))["channels"]["GAME_CMSG"]["messages"]
+    over = json.load(open(os.path.join(repo, "schema", "overrides.json"),
+                         encoding="utf-8"))["channels"].get("GAME_CMSG", {})
+    moved = [k for k, v in over.items()
+             if "name" in v and k in base and v["fields"] != base[k]["fields"]]
+    LEDGER.ok(not moved,
+              "a named entry copies its layout verbatim and changes no field",
+              f"moved: {moved}" if moved else
+              f"{len(over)} GAME_CMSG override(s), layouts untouched -- the names "
+              f"record what a message MEANS, which its marshalling types cannot say")
 
     return LEDGER.verdict()
 

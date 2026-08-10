@@ -1947,7 +1947,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 # No semantic names exist for GAME_CMSG in this repo yet; the
                 # schema knows shapes only. Printing "?" is the honest answer
                 # rather than borrowing an auth name that means something else.
-                name = AUTH_CMSG_NAMES.get(opcode, "?") if kind == "auth" else "?"
+                # GAME_CMSG names now come from schema/overrides.json, where each one
+                # sits beside the labelled run that earned it. Until 2026-08-10 this
+                # printed "?" for every game-channel message because the catalog had
+                # 194 layouts and no names -- which made every c2s log line in this
+                # project unreadable, and is why the labelled run exists at all.
+                # Anything still unnamed prints "?" rather than borrowing a name from
+                # the auth catalog, where the numbers collide and mean other things.
+                name = (AUTH_CMSG_NAMES.get(opcode, "?") if kind == "auth"
+                        else codec.name_for("GAME_CMSG", opcode))
                 if labelrun.ACTIVE:
                     # A labelled run owns this terminal: the operator is reading a
                     # countdown in it, and one movement step prints tens of lines a
