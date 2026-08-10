@@ -458,6 +458,44 @@ For an off-disk copy: **`client/`, `mirrors/`, `keys/`, `research/`, and
 carries the `.raw` set), not `run/` or `dat_study/` (11.9 GB, both regenerate from
 `client/` plus the patcher and `Gw.dat`).
 
+## The two run directories drift apart, and the loopback one loses
+
+**Symptom.** The client dies on `Map.cpp(1762)` with `Map file '0x...' failed to
+load. Attempting to re-bloat.` — the same assert whichever build hits it.
+
+**Cause.** `run-live/` has its updater ENABLED (it must, or a live session cannot
+stream map content), so a live run **writes new content into its own `Gw.dat`**.
+`run/`, the loopback build, has the updater killed on purpose — the cage and the
+patcher are in direct conflict — so it can never fetch anything and is frozen at
+whatever `C:\gw` held when `make_run_dir.py` copied it.
+
+The two archives therefore diverge the moment a live session visits somewhere new,
+and **the divergence is invisible until something asks for the newer content**.
+OBSERVED 2026-08-10: the R1.5 tape of Ascalon City carries `map_file_id 113021` in
+its `0x0195`, `run-live/Gw.dat` resolves that id to MFT row **177262** and
+`run/Gw.dat` resolved it to row **7982** — an older entry — so the loopback client
+asked for content it did not have, could not fetch it, and asserted. Nothing was
+wrong with the tape, the protocol or the server.
+
+**Fix.** Give the loopback build the newer archive:
+
+```bash
+Copy-Item "C:\gd\Rurik\vault\run-live\<build>\Gw.dat" "C:\gd\Rurik\vault\run\<build>\Gw.dat" -Force
+```
+
+Two seconds on a warm cache, and **safe**: whose DH a build carries is decided by
+`Gw.exe`, never by the archive, so this cannot move a build across the split that
+`dhbuild.py` enforces. Run `python toolkit/clientpatch/dhbuild.py` after it and
+expect "Every build is where it belongs."
+
+**Check it worked** by resolving the id the crash named in both archives:
+
+```bash
+python -c "import sys; sys.path[:0]=['toolkit','toolkit/mapdata']; import archive; [print(p, archive.file_id_table(archive.Archive(p)).get(113021)) for p in (r'C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.dat', r'C:\gd\Rurik\vault\run-live\2026-07-29_221c13772c7a\Gw.dat')]"
+```
+
+Same row in both means the loopback client can load what the live one recorded.
+
 ## The third copy of Gw.dat, and why it exists
 
 A running client holds an **exclusive lock** on the archive it was launched from.
