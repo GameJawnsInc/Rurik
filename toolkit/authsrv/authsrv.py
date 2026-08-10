@@ -47,6 +47,7 @@ from codec import Codec  # noqa: E402
 from sessionstore import SessionStore, wire_to_uuid  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 import probes  # noqa: E402
+import labelrun  # noqa: E402
 import agents  # noqa: E402
 import origin  # noqa: E402
 
@@ -730,6 +731,12 @@ PROBE_NAME = None
 TAPE_EVENTS = None
 TAPE_INFO = None
 TAPE_SPEED = 1.0
+
+# Set from --labelrun. Walks the operator through a numbered script, marking each
+# step into the capture so a c2s message can be attributed to a named human action.
+# See labelrun.py: 194 GAME_CMSG opcodes have layouts in the schema and names in
+# neither it nor here, and this is how that gets fixed.
+LABEL_RUN = False
 
 # Set from --click-sweep. Cycles the two 16-bit fields of MOVE_TO_POINT through
 # every plausible assignment, one per click, so the CLIENT decides which is
@@ -1711,10 +1718,35 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # where our own first byte would have gone.
             print(f"[c{conn_id}] TAPE MODE: this server sends nothing of its own",
                   flush=True)
-            threading.Thread(
-                target=play_tape,
-                args=(send_raw, conn_id, stop, TAPE_EVENTS, TAPE_INFO, TAPE_SPEED),
-                daemon=True).start()
+
+            def _tape_then_labels():
+                # Sequential on ONE thread on purpose. A labelled run started
+                # concurrently would prompt the operator while the recording still
+                # moves their avatar, and every attribution would be against a
+                # world neither of them controls. The tape has to be over first --
+                # and note it is over 146 s AFTER it looks over on the Lakeside
+                # tape (studies/tape/FINDINGS.md T7), which is exactly why this
+                # waits on play_tape returning rather than on the operator's
+                # judgement.
+                if LABEL_RUN:
+                    # Say this BEFORE the tape, not after. The operator's first
+                    # question on 2026-08-10 was whether the client acting on its
+                    # own meant something had gone wrong, and the honest answer --
+                    # "that is the recording, sit still for three minutes" -- was
+                    # only written down in the runbook. A thing the operator has to
+                    # remember is a thing the tool failed to say.
+                    print(f"\n[c{conn_id}] The tape plays FIRST: "
+                          f"{TAPE_INFO['seconds']:.0f}s. Your character will move on "
+                          f"its own -- that is the recording, not you.\n"
+                          f"[c{conn_id}] DO NOTHING until this window says the "
+                          f"labelled run has started. It will say so clearly.\n"
+                          f"[c{conn_id}] NOTE the avatar stops moving well before the "
+                          f"tape ends, and that is not the end.\n", flush=True)
+                play_tape(send_raw, conn_id, stop, TAPE_EVENTS, TAPE_INFO, TAPE_SPEED)
+                if LABEL_RUN and not stop.is_set():
+                    labelrun.run(rec, conn_id, stop)
+
+            threading.Thread(target=_tape_then_labels, daemon=True).start()
 
         elif kind == "game":
             # 0x31 | Prophecies(2) | Factions(4) | Nightfall(8) = 0x3F, straight
@@ -1880,8 +1912,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 # schema knows shapes only. Printing "?" is the honest answer
                 # rather than borrowing an auth name that means something else.
                 name = AUTH_CMSG_NAMES.get(opcode, "?") if kind == "auth" else "?"
-                print(f"[c{conn_id}] c2s 0x{opcode | AUTH_CMSG_MASK:04x} {name}",
-                      flush=True)
+                if labelrun.ACTIVE:
+                    # A labelled run owns this terminal: the operator is reading a
+                    # countdown in it, and one movement step prints tens of lines a
+                    # second straight through it. Count instead of print -- the
+                    # count is better feedback anyway, because it tells them their
+                    # key press actually reached the server. The message is still
+                    # recorded below; only the echo is suppressed.
+                    labelrun.SEEN[0] += 1
+                else:
+                    print(f"[c{conn_id}] c2s 0x{opcode | AUTH_CMSG_MASK:04x} {name}",
+                          flush=True)
                 rec.event("decoded", opcode=opcode, name=name,
                           values=[v.hex() if isinstance(v, bytes) else v
                                   for v in values])
@@ -2644,6 +2685,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
+                        if LABEL_RUN:
+                            # The no-tape path: label against our OWN world, which
+                            # answers. That is a different experiment from labelling
+                            # after a tape -- here a completed action is visible, but
+                            # the world is one player and at most one enemy, so most
+                            # of the script has nothing to point at. Both are worth
+                            # having; neither substitutes for the other.
+                            threading.Thread(target=labelrun.run,
+                                             args=(rec, conn_id, stop),
+                                             daemon=True).start()
                     elif opcode == GAME_CMSG_INSTANCE_LOAD_REQUEST_SPAWN:
                         # map_file_id 0 is a placeholder: the real one comes from
                         # the map's static config, which we do not have yet. If the
@@ -2886,6 +2937,14 @@ def main():
                     help="play faster or slower than recorded. 1.0 reproduces the "
                          "observed cadence; anything else changes the one property "
                          "the tape exists to reproduce, so say so when reporting.")
+    ap.add_argument("--labelrun", action="store_true",
+                    help="After the world is up (or after --tape finishes), walk "
+                         "the operator through a numbered script printed to THIS "
+                         "terminal, marking each step into the capture. Turns c2s "
+                         "traffic into named human actions -- 194 GAME_CMSG opcodes "
+                         "have field layouts and no names, and 15 have ever been "
+                         "witnessed. `labelrun.py` prints the script; "
+                         "`labelrun.py --analyse` reads the result back.")
     ap.add_argument("--probe", metavar="NAME",
                     help="After the character spawns, fire a scripted experiment at "
                          "the client. See --list-probes. Only affects a session you "
@@ -2951,6 +3010,14 @@ def main():
               f"({TAPE_INFO['origin']})")
         print("  the GAME channel's load sequence is REPLACED by this recording; "
               "the auth channel is still ours.")
+    if a.labelrun:
+        global LABEL_RUN
+        LABEL_RUN = True
+        total = sum(s.seconds for s in labelrun.STEPS)
+        print(f"labelled run armed: {len(labelrun.STEPS)} steps, {total:.0f}s"
+              + (", starting when the tape finishes" if a.tape else ""))
+        print("  WATCH THIS WINDOW. The client is -windowed so both fit on screen; "
+              "the prompts appear here, not in the game.")
 
     if a.probe:
         if a.probe not in probes.names():

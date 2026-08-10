@@ -145,6 +145,10 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/authsrv/test_tape.py` (R1.5's tape loader: the events ARE the recorded
   stream whole and in order, and a tape whose wire bytes do not account for the
   plaintext -- or that came from our own server -- is refused),
+  `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
+  opcodes from what a human was told to do: a message lands in exactly one step's
+  window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL
+  is reported and exits non-zero rather than letting a misattributed opcode be named),
   `toolkit/authsrv/test_replay.py` (a captured .raw decrypts back to the plaintext that
   was logged, and does so all-or-nothing across the whole vault — the first reader of a
   .raw, which closes R0a's standing caveat),

@@ -225,7 +225,22 @@ watch *that*, not the avatar, before treating the client as free. Recorded in
 2. **Diff our server against a tape at matching points in the load.** The tape is the
    first oracle this project has that it did not write itself, which turns D2–D11 from a
    list into a failing test.
-3. **A labelled input run.** Play any tape, then have the operator perform *named*
-   actions one at a time with pauses between. Run 2 got T4 and T5 as a by-product of an
-   unplanned five minutes; a deliberate 10-minute pass would name most of the c2s
-   catalog, and it needs no new capture and no live session.
+3. **A labelled input run — BUILT 2026-08-10, not yet performed.**
+   `toolkit/authsrv/labelrun.py` plus `--labelrun`; procedure in `RUNBOOK.md`. Run 2 got
+   T4 and T5 as a by-product of an unplanned five minutes, so a deliberate pass is the
+   cheapest naming instrument available: it needs no new capture and no live session.
+
+   **The size of the prize, measured:** `schema/messages.json` carries field layouts for
+   **194 `GAME_CMSG` opcodes and names for none of them** — `authsrv.py`'s own c2s print
+   site says so ("No semantic names exist for GAME_CMSG in this repo yet; the schema
+   knows shapes only"). Our server names 11 by hand. **15 have ever been witnessed
+   coming out of a real client**, all of them in run 2.
+
+   The design decision worth recording: steps are marked into the capture **by the
+   server, at the moment it prompts**, so attribution is by timestamp against a mark we
+   wrote — not by inferring boundaries from gaps in the c2s stream afterwards. Gap
+   inference silently misaligns the moment a step produces nothing, and *a step producing
+   nothing is a result here*. Two idle steps bracket the script as controls: traffic in a
+   window the operator was told to sit out means the marks and the messages disagree, and
+   the run must be discarded rather than read. `test_labelrun.py` breaks that control on
+   purpose to prove it can go red.

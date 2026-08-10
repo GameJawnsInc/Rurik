@@ -510,6 +510,61 @@ must be zero. Anything else and the client was hearing two servers, which is how
 runs out the client can still move (that is client-side) but attacking, casting and
 gateways do nothing. That is the instrument, not a bug.
 
+## The labelled input run
+
+Names client-to-server messages by watching a human send them. `schema/messages.json`
+carries field layouts for **194 `GAME_CMSG` opcodes and names for none of them**; our
+server names 11 by hand and 15 have ever been witnessed from a real client. This is how
+that number goes up.
+
+See the script first — it states a prediction per step, and two of the steps are idle
+controls:
+
+```bash
+python toolkit/authsrv/labelrun.py
+```
+
+**ONE command runs the whole thing** — tape, then prompts, in the same terminal. There is
+nothing to start separately and nothing to time yourself:
+
+```bash
+python toolkit/harness/session.py --keep-open --game-args "--tape C:\gd\Rurik\vault\captures\live\20260807T143055 --tape-connection 10.0.0.210:64103->54.198.7.73:80 --labelrun"
+```
+
+| when | what happens | you |
+|---|---|---|
+| 0:00 | client launches and logs itself in | nothing |
+| ~0:30 | the tape starts; your character walks on its own | **nothing** |
+| ~3:30 | `tape complete`, then the labelled-run banner | the 18 steps |
+| ~6:50 | `DONE -- 18 steps recorded` | finished |
+
+The first three minutes are the recording driving your client. That is not a malfunction,
+and the avatar stops moving long before the tape ends — see the tape section above.
+
+**Put the two windows side by side before you start.** The client launches `-windowed`
+and the prompts print to the gamesrv terminal; you need to read one and act in the other.
+Each step names itself, its duration and its prediction, then the next banner replaces it.
+Do the action **once** and wait — a second attempt inside the same window is
+indistinguishable from the first.
+
+Nothing will answer you. That is by design (see the tape section above), so what you are
+recording is what the client *asks for*, not what a completed action looks like.
+
+Read it back with:
+
+```bash
+python toolkit/authsrv/labelrun.py --analyse
+```
+
+**Check the two idle rows first.** `idle_a` and `idle_b` predict silence; if either shows
+traffic, the marks and the messages disagree and **no opcode from that run may be named** —
+the tool says so and exits non-zero. Everything else in the report is only as good as
+those two rows.
+
+Steps that show nothing are a result, not a failure: the action was client-side, or it
+needs a server reply to send its second message. The tool cannot tell those apart and
+says so rather than guessing.
+
 ## The two run directories drift apart, and the loopback one loses
 
 **Symptom.** The client dies on `Map.cpp(1762)` with `Map file '0x...' failed to
