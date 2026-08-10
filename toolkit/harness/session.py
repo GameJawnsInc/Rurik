@@ -214,18 +214,34 @@ class Stack:
     """The three servers as child processes, each proven to own its port."""
 
     def __init__(self, specs, logdir, echo=False):
+        """`echo` is False, True for every server, or a set of server names.
+
+        The set exists for --labelrun, which prompts a human through the GAMESRV's
+        stdout. Without it those prompts go only to gamesrv.log and the operator
+        sees nothing but this process's own "holding" line -- which is exactly what
+        happened on 2026-08-10, and the run was unusable because the script it was
+        driving was invisible. Echoing all three servers instead would bury the
+        prompts in webgate and authsrv chatter, so the filter is per-name.
+        """
         self.specs = specs
         self.logdir = logdir
         self.echo = echo
         self.procs = {}          # name -> Popen
         self.logs = {}           # name -> path
 
+    def _echoes(self, name):
+        return self.echo is True or (bool(self.echo) and name in self.echo)
+
     def _pump(self, name, proc, logf):
         for line in proc.stdout:
             logf.write(line)
             logf.flush()
-            if self.echo:
-                print(f"[{name}] {line}", end="", flush=True)
+            if self._echoes(name):
+                # No [name] prefix when only one server is echoed: the prompts are
+                # formatted banners meant to be read at a glance, and a prefix on
+                # every line of one wrecks the alignment.
+                prefix = "" if self.echo is not True else f"[{name}] "
+                print(f"{prefix}{line}", end="", flush=True)
         logf.close()
 
     def start(self, timeout=20):
@@ -453,7 +469,7 @@ def shot_if_foreground(hwnd, pid, path):
     return dc.shot(hwnd, path)
 
 
-def hold_open(proc, seconds, tails, outdir):
+def hold_open(proc, seconds, tails, outdir, quiet=False):
     """Keep the whole session alive past the verdict, and stay instrumented.
 
     WHY THIS IS NOT `--keep-open` ON ITS OWN. `--keep-open` used to spare the
@@ -488,6 +504,12 @@ def hold_open(proc, seconds, tails, outdir):
         now = time.monotonic()
         if now - last >= 15:
             last = now
+            if quiet:
+                # A labelled run owns this terminal and prints its own progress.
+                # A "...holding" every 15s lands in the middle of a 9s step's
+                # prompt and reads, to the operator, like the thing they are
+                # supposed to be reading. Silence here is the useful output.
+                continue
             left = f"{end - now:.0f}s left" if end else "holding"
             print(f"  ...{left}", flush=True)
     if proc.poll() is not None:
@@ -569,7 +591,7 @@ def run_client(a, outdir):
             shot_if_foreground(hwnd, proc.pid, os.path.join(outdir, "final.png"))
 
         if a.keep_open:
-            hold_open(proc, a.hold, tails, outdir)
+            hold_open(proc, a.hold, tails, outdir, quiet=labelling)
     finally:
         # ALWAYS close the client, --keep-open included. The hold above is the
         # whole of what keep-open buys; once it ends the stack is about to be
@@ -684,7 +706,19 @@ def main():
     outdir = vault_path("captures", "harness", stamp)
     os.makedirs(outdir, exist_ok=True)
 
-    stack = Stack(specs, logdir=outdir, echo=a.serve)
+    # --labelrun prompts a HUMAN through the gamesrv's stdout, so that stdout has to
+    # reach this terminal. Detected from the flags rather than added as a second flag
+    # here: the operator already says --labelrun once, and a run where they said it and
+    # saw nothing is worse than useless -- it burns a client session and produces a
+    # capture whose steps nobody performed.
+    game_argv = split_args(a.game_args)
+    labelling = "--labelrun" in game_argv
+    stack = Stack(specs, logdir=outdir,
+                  echo=True if a.serve else ({"gamesrv"} if labelling else False))
+    if labelling:
+        print("--labelrun: the gamesrv's prompts will appear IN THIS WINDOW.\n"
+              "  Put this window beside the game. Read it by glancing -- clicking\n"
+              "  here takes focus off the game and your next action goes nowhere.")
     print("starting the stack:")
     stack.start()
     try:

@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks  # noqa: E402
 import labelrun  # noqa: E402
 
-LEDGER = checks.Ledger("labelrun", floor=23)
+LEDGER = checks.Ledger("labelrun", floor=26)
 
 
 class FakeRec:
@@ -201,8 +201,34 @@ def main():
         LEDGER.ok(labelrun.main(["--analyse", path]) == 1,
                   "and the CLI exits non-zero on it, so a script cannot ignore it")
 
-    # ---- 6. a capture with no marks is refused, not analysed as empty ----------
-    print("\n6. a capture that was not a labelled run is refused")
+    # ---- 6. the prompts must survive a PIPE ------------------------------------
+    print("\n6. the prompts reach an operator reading them through session.py")
+    # THE BUG THIS EXISTS FOR. labelrun runs inside the GAMESRV, which session.py
+    # spawns as a child and reads with `for line in proc.stdout` -- a call that
+    # blocks until a newline arrives. The first version drew its countdown with
+    # carriage returns and no newline, so a real operator saw NOTHING: not a
+    # garbled countdown, nothing at all, for the entire run. Any output this
+    # module produces has to be newline-terminated or it does not exist.
+    import contextlib
+    import io as _io
+    buf = _io.StringIO()
+    rec6, stop6 = FakeRec(), threading.Event()
+    quick = [labelrun.Step("q", "do the thing", 0.05, labelrun.TRAFFIC)]
+    with contextlib.redirect_stdout(buf):
+        labelrun.run(rec6, 1, stop6, steps=quick, out=None, ready=0.05)
+    text = buf.getvalue()
+    LEDGER.ok(bool(text.strip()), "a live run writes to stdout at all", f"{len(text)}B")
+    LEDGER.ok("\r" not in text,
+              "and writes NO carriage returns -- an in-place redraw is invisible "
+              "through a line-buffered pipe",
+              "session.py reads the gamesrv with `for line in proc.stdout`, which "
+              "blocks until a newline; a \\r countdown displays nothing at all")
+    LEDGER.ok(text.endswith("\n"),
+              "every write is newline-terminated, so nothing sits in the pipe "
+              "waiting for the next step to flush it")
+
+    # ---- 7. a capture with no marks is refused, not analysed as empty ----------
+    print("\n7. a capture that was not a labelled run is refused")
     with tempfile.TemporaryDirectory() as tmp:
         path = os.path.join(tmp, "plain.jsonl")
         write_capture(path, [msg(1.0, 0x0029), msg(2.0, 0x0046)])

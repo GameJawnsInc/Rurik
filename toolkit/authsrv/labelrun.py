@@ -163,14 +163,13 @@ def run(rec, conn_id, stop, steps=STEPS, out=None, ready=6.0):
     start early relative to what the operator saw -- never late. A late mark would steal
     the first message of a step and hand it to the previous one.
 
-    `out` is for tests: pass a collector and the cursor rendering is skipped, so the
-    output is deterministic lines instead of a live countdown.
+    `out` is for tests: pass a collector and the per-second countdown lines are skipped,
+    so the output is a deterministic banner sequence instead of a wall-clock-dependent
+    one. Everything else -- banners, marks, counts -- is identical either way.
     """
     global ACTIVE
     live = out is None
-    say = out or (lambda s: print(s, flush=True))
-    if live:
-        say = lambda s: print(s, flush=True)  # noqa: E731
+    say = (lambda s: print(s, flush=True)) if live else out
     bar = "=" * 68
     total = sum(s.seconds for s in steps) + ready
     say(f"\n{bar}\n"
@@ -187,7 +186,7 @@ def run(rec, conn_id, stop, steps=STEPS, out=None, ready=6.0):
         f"{bar}")
     rec.event("label_run_start", steps=len(steps), keys=[s.key for s in steps])
     say(f"\n  starting in {ready:.0f}s -- get the game window focused now")
-    if _hold(ready, stop, live, None):
+    if _hold(ready, stop, live, None, say):
         return False
 
     try:
@@ -205,7 +204,7 @@ def run(rec, conn_id, stop, steps=STEPS, out=None, ready=6.0):
                 f"  STEP {i} of {len(steps)}\n\n"
                 f"      >>>  {step.prompt}\n\n"
                 f"  next: {nxt}\n{bar}")
-            stopped = _hold(step.seconds, stop, live, step)
+            stopped = _hold(step.seconds, stop, live, step, say)
             ACTIVE = False
             if not live:
                 say(f"  ({SEEN[0]} message(s))")
@@ -224,34 +223,36 @@ def run(rec, conn_id, stop, steps=STEPS, out=None, ready=6.0):
     return True
 
 
-def _hold(seconds, stop, live, step):
-    """Wait out one window. True if stopped. Renders a countdown when `live`.
+# How often the countdown emits a line. NOT an in-place `\r` redraw: this process is a
+# CHILD of session.py, its stdout is a PIPE, and the parent reads it with
+# `for line in proc.stdout` -- which blocks until a newline arrives. A carriage-return
+# countdown would therefore have displayed NOTHING at all, and then dumped the whole
+# step at once when the next banner's newline finally landed. Discovered the hard way on
+# 2026-08-10: the operator saw only "...holding".
+TICK = 3
+
+
+def _hold(seconds, stop, live, step, say):
+    """Wait out one window, ticking a countdown. True if stopped.
 
     Sleeps in slices so a Ctrl-C or a closed client lands within a fifth of a second
-    rather than at the end of a 22-second step.
+    rather than at the end of an 18-second step.
     """
     end = time.monotonic() + seconds
-    last = None
+    nxt = seconds - TICK
     while True:
         now = time.monotonic()
         if stop.is_set():
-            if live:
-                sys.stdout.write("\r" + " " * 46 + "\r")
-                sys.stdout.flush()
             return True
-        if now >= end:
+        left = end - now
+        if left <= 0:
             break
-        left = int(end - now) + 1
-        if live and left != last:
-            tag = f"  {left:>3}s" + (f"   messages: {SEEN[0]}" if step else "")
-            sys.stdout.write("\r" + tag.ljust(46))
-            sys.stdout.flush()
-            last = left
-        time.sleep(min(0.2, max(0.0, end - now)))
-    if live:
-        tail = f"  done   messages: {SEEN[0]}" if step else "  go"
-        sys.stdout.write("\r" + tail.ljust(46) + "\n")
-        sys.stdout.flush()
+        if live and step is not None and left <= nxt:
+            say(f"      {int(left) + 1:>2}s left   ({SEEN[0]} message(s) so far)")
+            nxt = int(left) - TICK
+        time.sleep(min(0.2, max(0.0, left)))
+    if live and step is not None:
+        say(f"      -- step over, {SEEN[0]} message(s) --")
     return stop.is_set()
 
 

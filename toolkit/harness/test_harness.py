@@ -37,7 +37,7 @@ import checks  # noqa: E402
 # all from 2026-08-06 until the same day, because drive_client.py did `import cage`
 # without clientpatch on sys.path. It is named in CLAUDE.md's suite list and was not
 # among the tests run when that suite was last reported green.
-LEDGER = checks.Ledger("harness", floor=39)
+LEDGER = checks.Ledger("harness", floor=42)
 check = checks.adopt_named(LEDGER)
 
 
@@ -261,5 +261,25 @@ if __name__ == "__main__":
               "and a quoted path with spaces stays ONE argument", repr(spaced))
     LEDGER.ok(_sess.split_args("") == [] and _sess.split_args(None) == [],
               "and an empty --game-args yields no arguments at all")
+
+    # --- --labelrun prompts must reach the operator's screen ---------------------
+    # The gamesrv is a CHILD process whose stdout session.py normally sends only to
+    # gamesrv.log. --labelrun prompts a human through that stdout, so with the flag
+    # set and no echo the operator sees nothing but this process's own "holding"
+    # line -- which is what happened on 2026-08-10. The run was unusable: a client
+    # session burned, and a capture whose steps nobody performed.
+    print("\n8. --labelrun routes the gamesrv to the operator's screen")
+    stack_all = _sess.Stack([], logdir=".", echo=True)
+    stack_off = _sess.Stack([], logdir=".", echo=False)
+    stack_lbl = _sess.Stack([], logdir=".", echo={"gamesrv"})
+    LEDGER.ok(stack_off._echoes("gamesrv") is False,
+              "by default nothing is echoed -- the ordinary loop stays quiet")
+    LEDGER.ok(stack_lbl._echoes("gamesrv") and not stack_lbl._echoes("webgate")
+              and not stack_lbl._echoes("authsrv"),
+              "a name filter echoes the GAMESRV and nothing else",
+              "echoing all three would bury a prompt banner in webgate and authsrv "
+              "chatter")
+    LEDGER.ok(all(stack_all._echoes(n) for n in ("webgate", "authsrv", "gamesrv")),
+              "and --serve still echoes every server, as it always did")
 
     sys.exit(LEDGER.verdict())
