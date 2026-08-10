@@ -72,6 +72,20 @@ RULE_BASE = "Rurik - patched GW client: block outbound"
 # bare display name leaves the allow behind -- the orphan looks like cleanup and still
 # permits traffic -- so the pair is what gets asserted, never just the block.
 #
+# Three properties of each rule are checked, not just its Action, because a cage is a
+# specific shape and anything looser than that shape is not one:
+#   * Direction must be Outbound. The cage blocks traffic LEAVING the client; an Inbound
+#     rule with the same name and program does nothing to stop a reach to ArenaNet, so it
+#     must not be allowed to satisfy either half.
+#   * the BLOCK rule's RemoteAddress must be broad ('Any'). isolate_client.ps1 creates it
+#     with no RemoteAddress, i.e. Any, precisely so it blocks everything the loopback
+#     allow does not carve out. A block scoped to some narrow address would leave the path
+#     to the real service open while still reading as the cage's block half.
+#   * the ALLOW rule's RemoteAddress must contain 127.0.0.1, as before.
+# A real cage (Outbound, block=Any, allow=127.0.0.1) still reads CAGED; a weaker
+# arrangement no longer can. This matters because cage_state is the ONLY thing that makes
+# an ours-DH client safe on loopback, and "a check that cannot fail is not a check".
+#
 # The exe path is interpolated as a single-quoted PowerShell literal rather than passed
 # as an argument: `powershell -Command <script> <arg>` does NOT bind trailing arguments
 # to $args -- it appends them to the command text -- so the first version of this hung
@@ -83,11 +97,14 @@ $exe = '%s'
 $block = $false; $allow = $false
 foreach ($r in (Get-NetFirewallRule -DisplayName '%s*' -ErrorAction SilentlyContinue)) {
     if (-not $r.Enabled) { continue }
+    if ($r.Direction -ne 'Outbound') { continue }
     $p = ($r | Get-NetFirewallApplicationFilter).Program
     if ($p -ne $exe) { continue }
-    if ($r.Action -eq 'Block') { $block = $true }
+    $a = ($r | Get-NetFirewallAddressFilter).RemoteAddress
+    if ($r.Action -eq 'Block') {
+        if ($a -contains 'Any') { $block = $true }
+    }
     if ($r.Action -eq 'Allow') {
-        $a = ($r | Get-NetFirewallAddressFilter).RemoteAddress
         if ($a -contains '127.0.0.1') { $allow = $true }
     }
 }

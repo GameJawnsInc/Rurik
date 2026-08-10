@@ -124,9 +124,13 @@ def _check_provenance(kind, key, row):
         raise ContentError(
             f"{kind} row {key!r} claims source {source!r}, which is not a known "
             f"source. One of: {', '.join(sorted(SOURCES))}")
-    if source in UNLICENSED and not str(prov.get("verified") or "").strip():
+    verified = prov.get("verified")
+    if source in UNLICENSED and not (isinstance(verified, str) and verified.strip()):
+        had = "" if verified is None else f" (it is {verified!r}, not descriptive text)"
         raise ContentError(
-            f"{kind} row {key!r} cites {source!r} with no `verified` field.\n"
+            f"{kind} row {key!r} cites {source!r} with no descriptive `verified` "
+            f"field{had}. A bare `true` or a number satisfies nothing -- the field "
+            f"exists to record WHAT was checked, so it must be non-empty text.\n"
             f"{RULE_1_1}\n"
             f"Owner's ruling 2026-08-06: verified-only. Record what this row was "
             f"checked against in OUR OWN artifacts -- an archive row, a parsed mesh, "
