@@ -208,9 +208,12 @@ def main():
               f"constant={has_const}, shared arm={shared_arm}, split arm={split_arm}. "
               f"Until 2026-08-11 only "
               f"0x0046 was handled, so every physical attack skill fell through to "
-              f"silent-ignore -- and per studies/divergence D9(b) a schema-unknown "
-              f"c2s opcode DISCARDS whatever shared its TCP read, which makes it a "
-              f"correctness bug rather than a missing feature. One arm rather than "
+              f"silent-ignore and got nothing back. That was written up as a "
+              f"correctness bug citing studies/divergence D9(b)'s buffer discard; "
+              f"corrected 2026-08-11 -- 0x0027 is schema-KNOWN (GAME_CMSG_0039), so "
+              f"it took D9(a), which ignores WITHOUT touching the buffer, and D9(b) "
+              f"covers schema-unknown opcodes only. A missing feature, not a "
+              f"correctness bug. One arm rather than "
               f"two because they are halves of one action and would otherwise drift")
 
     return LEDGER.verdict()

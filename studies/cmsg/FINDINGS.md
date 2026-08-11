@@ -452,10 +452,16 @@ messages. Field 1 is constant (the skill) and field 3 varies (the target).
 **Our server has no dispatch arm for `0x0027`.** The only mention of that number
 anywhere in `authsrv.py` is a comment about a *GAME_SMSG* of the same number in a
 different channel. So a Warrior, Ranger, Assassin, Paragon or Dervish pressing an
-attack skill against us gets silence — and per D9(b) a schema-unknown c2s opcode
+attack skill against us gets silence. ~~— and per D9(b) a schema-unknown c2s opcode
 discards whatever shared its TCP read, so it is a correctness bug, not a missing
-feature. `probes.py`'s `use_skill_capture` predicted this branch and had never been
-run; this corpus runs it.
+feature.~~ **CORRECTED 2026-08-11: it is a missing feature, and the D9(b) clause was
+backwards.** `0x0027` is schema-**known** (`GAME_CMSG_0039`, declared size 15), and
+landing on the silent-ignore path *means* schema-known — that is D9(**a**), which
+ignores without touching the buffer. D9(b) covers schema-*unknown* opcodes only, and is
+itself fixed now. Nothing was ever discarded on this path. `probes.py`'s
+`use_skill_capture` predicted this branch and had never been run; this corpus runs it.
+**The gap is closed regardless** — `authsrv.py` dispatches `0x0027` and `0x0046` through
+one arm as of 2026-08-11.
 
 ### The nine new names
 

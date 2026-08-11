@@ -2672,3 +2672,67 @@ the seam, so it never had to notice.
 - **The turn rate is one constant for every creature.** ArenaNet's is per-creature;
   we send its maximum to everything.
 - **`ENEMY_FACING_EPSILON` is ours.** The rest of the numbers are ArenaNet's.
+
+### 11.4 It fights back with a SKILL — and the corpus refused the obvious answer
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T181457-c1.jsonl`:
+
+```
+t=3.70  agent 10 casts skill 276      0x009F [60, 10, 276]
+t=4.46  skill 276 deals 25            0x00A3 [16, player, 10, -0.25]
+t=5.07  attack_started                the ordinary swing, between casts
+```
+
+0.76 s from cast to landing against ArenaNet's declared 0.75 activation. Six casts,
+six swings, two kills. **The client renders the cast**: a skill glyph appears above
+the Hatcher's health bar for the activation window, so `0x009F` value 60 from an
+NPC drives the client's casting UI and not merely our own bookkeeping.
+
+**THE OBVIOUS ANSWER WAS WRONG AND THE CORPUS SAID SO BEFORE ANY CODE WAS WRITTEN.**
+This server already had a skill message — `GAME_SMSG 0x00E3`, which it sends when
+the PLAYER casts — and reusing it for an NPC is the move a reader of `authsrv.py`
+would make. **All 6 of the `0x00E3` in the entire live corpus name the player**
+(agent 31, skills 153/105/394). `0x00E3` confirms a cast the CLIENT initiated; the
+client logs `Pending skill %u copy %d not found` when the echo is wrong, and an
+NPC's cast has nothing to confirm. A check in `test_agentlife` now fails if anyone
+routes an NPC cast through it.
+
+**What the corpus does carry is one NPC skill activation:**
+
+```
+0x009F [value 60 = GV_SKILL_ACTIVATED, agent 36, skill 83]
+```
+
+**n=1**, in `20260810T235916` connection `:62994`. That is thin and is written
+down as thin. It is still the only evidence there is, and it beat inventing a
+message — which the live run then confirmed by rendering.
+
+**A near miss, recorded so nobody re-finds it.** A census of `0x00A0` keyed on slot
+2 makes value 20 (`GV_EFFECT_ON_TARGET`) look NPC-exclusive — 5 NPC, 0 player. It
+is not an NPC casting. In context the PLAYER casts skill 153, and value 20 then
+arrives with the player's TARGET in that slot: `[20, 40, 31, 276]` while the player
+damages agent 40. **Different value ids put different roles in the same slot**,
+which is exactly what `hit_enemy`'s own comment warns about, and a census keyed on
+a slot rather than on a role will keep reproducing this.
+
+**The skill and its timings are ArenaNet's**, out of the client's own table via
+`skilltable.py`. Skill 276 is chosen because its profession (3) matches the one
+this server already declares for the Hatcher at spawn — not picked from nowhere.
+`activation=0.75` and `recharge=2.0` are the table's, which is why they are odd
+numbers. Only `ENEMY_SKILL_FRACTION` (0.25 of the player's maximum) is ours: the
+client carries every real number and we do not read it yet.
+
+**Not the player's cast path.** The skill-dispatch arm carries a standing note that
+skill COMPLETION is being built on another branch and not to add to it. None of
+this touches it — an NPC announcing its own cast is a different message on a
+different channel.
+
+### Still missing
+
+- **One skill, one creature, no bar.** Real hostiles have skill bars; this is a
+  single id on a recharge. `content/world.toml` can override it (`skill = 0` turns
+  it off) but there is no bar and no selection.
+- **No energy, no interrupt, no aftercast.** The table carries `energy`,
+  `aftercast` and `adrenaline` for every skill and none of them are read.
+- **The effect is damage and nothing else.** Skill 276's real effect is not
+  modelled; it deals a flat fraction like a harder swing.
