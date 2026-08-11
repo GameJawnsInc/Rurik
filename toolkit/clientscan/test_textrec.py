@@ -93,7 +93,7 @@ def entropy(counter):
 
 def main():
     t0 = time.perf_counter()
-    pe = PE(textrec.DEFAULT_EXE)
+    pe = PE(textrec.find_exe()[0])
 
     print("\n1. the escape table is bounded at both ends")
     off = textrec.find_escape_table(pe)
@@ -117,7 +117,7 @@ def main():
     check(struct.unpack_from("<H", pe.data, off - 2)[0] not in range(0x20, 0x7F),
           "the word below the table is not another character")
 
-    with textrec.TextIndex(textrec.DEFAULT_EXE) as ix:
+    with textrec.TextIndex(textrec.find_exe()[0]) as ix:
         print("\n2. every record satisfies the client's own file-walk gate")
         widths = collections.Counter()
         bad_width = bad_pad = 0
@@ -168,7 +168,7 @@ def main():
         eng_slots, eng_wide = survey(ix)
         shares = {"English": eng_wide}
         for lang, name in SCRIPTS:
-            with textrec.TextIndex(textrec.DEFAULT_EXE, language=lang) as other:
+            with textrec.TextIndex(textrec.find_exe()[0], language=lang) as other:
                 slots, share = survey(other)
                 shares[name] = share
                 # Which slots are encrypted is a property of the SLOT, not of

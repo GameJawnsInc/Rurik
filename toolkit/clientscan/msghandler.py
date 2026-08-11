@@ -61,12 +61,19 @@ except ImportError:                                           # pragma: no cover
     sys.exit("needs capstone and pefile: python -m pip install capstone pefile")
 
 from msgshape import TABLES                                   # noqa: E402,F401
+import pinned                                                # noqa: E402
 
-DEFAULT_EXE = r"C:\gw\Gw.exe"
+# WHICH CLIENT. `pinned.py` owns that answer for every static-analysis tool in
+# this directory, and names the copy it returned so a surprising result can be
+# diagnosed in one line. This module used to spell it `C:\gw\Gw.exe` -- the
+# owner's live install, which auto-updates and is therefore not necessarily the
+# build every address in the studies is measured against.
+find_exe = pinned.find
 
 
 class Image:
-    def __init__(self, path=DEFAULT_EXE):
+    def __init__(self, path=None):
+        path = path or find_exe()[0]
         self.path = path
         self.pe = pefile.PE(path, fast_load=True)
         self.base = self.pe.OPTIONAL_HEADER.ImageBase
@@ -243,7 +250,9 @@ def main():
     ap.add_argument("--map", action="store_true",
                     help="map every receive opcode to the ArenaNet source file "
                          "its handler asserts in")
-    ap.add_argument("--exe", default=DEFAULT_EXE)
+    ap.add_argument("--exe", default=None,
+                    help="client to read; defaults to the pinned pristine "
+                         "build, and the choice is printed")
     ap.add_argument("--table", help="dump one table by VA instead")
     ap.add_argument("--follow", action="store_true",
                     help="also disassemble the functions the handler calls, "
@@ -257,8 +266,10 @@ def main():
     ap.add_argument("--limit", type=int, default=90)
     a = ap.parse_args()
 
+    a.exe, why = (a.exe, "given on the command line") if a.exe else find_exe()
     if not os.path.exists(a.exe):
         sys.exit(f"no such file: {a.exe}")
+    print(f"client: {a.exe}\n        ({why})\n")
     img = Image(a.exe)
     print(f"{a.exe}  {len(img.blob):,} bytes, image base 0x{img.base:08x}")
     note = _annotator(img, a.exe) if a.annotate else None

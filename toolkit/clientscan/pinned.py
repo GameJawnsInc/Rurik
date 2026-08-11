@@ -21,6 +21,29 @@ tools did not agree on which copy they wanted. There were eight spellings of
 two hardcoded absolute vault paths, `("run", ...)` in three places, and
 `("client", ...)` in `srctree.py` alone.
 
+FINISHED 2026-08-10, and it was half done for four days. Writing this module
+converted five call sites and left eleven behind, so the defect it describes
+was still live in most of the directory: `asserts.py`, `avevents.py`,
+`genericvalue.py`, `msghandler.py`, `msgshape.py`, `skilltable.py`,
+`test_skilltable.py`, `argtable.py` and `protoscan.py` still defaulted to the
+live install at `C:\\gw\\Gw.exe`, which auto-updates and is therefore not
+necessarily build 38797 at all -- and `areatable.py` and `textrec.py` named an
+absolute path into `vault/run/`, our PATCHED copy, hardcoding `C:\\gd\\Rurik\\vault`
+past `vaultpath.py` so that a moved vault or a git worktree resolved to nothing.
+All eleven now call `find()`, and every one of them prints the path and the
+`why` before it reads a byte. A tool that silently picks its own client is how
+a provenance misreport happens, and the fix is only worth anything applied
+everywhere: one straggler is enough to produce a study that cites the wrong
+binary.
+
+WHAT STILL NAMES ITS OWN CLIENT, on purpose. `dump_dh_params.py` defaults to
+`C:\\gw\\Gw.exe` because its job is reading the Diffie-Hellman struct out of
+whichever client you point it at -- including the live install, which is the
+one whose parameters rotate. `make_custom_client.py`, `repoint_skill.py` and
+`datwrite.py` mention `C:\\gw` only as a refusal guard: never write into the
+owner's install. Neither is a spelling of "the pinned client" and neither
+should route through here.
+
 WHICH COPY IS CANONICAL: the **pristine** one. A study of the shipped client
 that reads our own patch is reading us, not ArenaNet, and provenance is the one
 thing this repository cannot retrofit. `run/` is accepted as a fallback because

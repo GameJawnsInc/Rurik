@@ -58,7 +58,7 @@ check = checks.adopt(LEDGER)
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dat", default=DEFAULT_DAT)
-    ap.add_argument("--exe", default=textrec.DEFAULT_EXE)
+    ap.add_argument("--exe", default=textrec.find_exe()[0])
     ap.add_argument("--sample", type=int, default=200,
                     help="stride over compressed entries in section 2")
     args = ap.parse_args()

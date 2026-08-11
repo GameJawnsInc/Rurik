@@ -42,8 +42,13 @@ from skilltable import (  # noqa: E402
     parse_record, player_corpus,
 )
 import checks  # noqa: E402
+import pinned  # noqa: E402
 
-DEFAULT_EXE = r"C:\gw\Gw.exe"
+# WHICH CLIENT. `pinned.py` owns that answer for every static-analysis tool in
+# this directory, and names the copy it returned. This module used to spell it
+# `C:\gw\Gw.exe` -- the owner's live install, which auto-updates and is
+# therefore not necessarily the build every address below is measured against.
+find_exe = pinned.find
 
 # MEASURED 2026-08-06 against Gw.exe (10,483,904 bytes). Build-specific: a new
 # client build legitimately changes these. Tyria-Extractor independently reports
@@ -105,9 +110,10 @@ check = checks.adopt(LEDGER)
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--exe", default=DEFAULT_EXE)
+    ap.add_argument("--exe", default=None)
     args = ap.parse_args()
 
+    args.exe = args.exe or find_exe()[0]
     if not os.path.exists(args.exe):
         print(f"no client binary at {args.exe}")
         print("Pass --exe, or see RUNBOOK.md. This test reads the client "
