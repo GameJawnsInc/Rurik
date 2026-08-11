@@ -1254,17 +1254,6 @@ def create_agent_world(send, state, agent_id, entry, why,
              agents.agent_set_profession(agent_id, int(npc["profession"])),
              f"AGENT_SET_PROFESSION({agent_id}, {npc['profession']})")
 
-    # The movement rate, NORMALISED against the 288 units/s reference. This is
-    # what makes the walk cycle play at the speed the agent actually travels;
-    # the Lakeside worm's 12.0 units/s is 0.0417 here, and a worm animating at
-    # a player's cadence while crawling is exactly the mismatch this fixes.
-    speed_units = float(npc.get("speed", agents.DEFAULT_RUN_SPEED))
-    send(GAME_SMSG_AGENT_UPDATE_SPEED,
-         agents.agent_update_speed(agent_id,
-                                   speed_units / agents.DEFAULT_RUN_SPEED),
-         f"AGENT_UPDATE_SPEED({agent_id}, {speed_units:g} u/s "
-         f"= {speed_units / agents.DEFAULT_RUN_SPEED:.4f})")
-
     # The create burst's tail. OBSERVED: this message's field 2 mirrors the
     # create's kind byte -- (9, 9) in 153 of 155 samples, (9, 8) in 2 -- so the
     # value is the agent kind and not a guess. It is a MERGE, and agents.py
@@ -2864,6 +2853,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             continue
                         state["dest"], state["clipped"] = (float(dest[0]),
                                                            float(dest[1])), False
+                        # ArenaNet pairs the rate with the MOVE, not with the
+                        # spawn: 303 of 309 0x002B in the two live captures are
+                        # immediately followed by 0x0029, and the median gap
+                        # from an agent's own create is 574 messages. Only 13
+                        # of 309 sit inside a create burst. This server sent it
+                        # at spawn time for one evening and the client asserted
+                        # on AgAgent.cpp:1198 !(m_flags & MOVEMENT_STALE) as the
+                        # loading screen faded -- whether that was the cause is
+                        # UNVERIFIED, but the placement was wrong either way and
+                        # the corpus said so before a line of it was written.
+                        send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                             agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
+                             "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                              [PLAYER_AGENT_ID, list(dest), plane_first, plane_second],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
@@ -3024,20 +3026,6 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                               (INF, INF),        # h0059
                               0],
                              "WORLD_CREATE_AGENT")
-                        # The player's own movement rate, NORMALISED. The create
-                        # above carries speed_base in units/s (288.0, field 9);
-                        # this message is the same quantity as a FRACTION, and
-                        # it is what the client's walk cycle plays at. We had
-                        # never sent it, so the animation ran at whatever rate
-                        # the client defaulted to while the position -- which
-                        # the server owns outright -- stayed correct. 1.0 here
-                        # is exactly 288 units/s. (This is NOT the explanation
-                        # for the tape-replay jank of 2026-08-11; see the
-                        # constant's own comment for why that attribution was
-                        # wrong and what was measured against it.)
-                        send(GAME_SMSG_AGENT_UPDATE_SPEED,
-                             agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
-                             "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
                         # Attribute state must exist BEFORE the profession
                         # update lands. Sending profession alone killed the
                         # client on
