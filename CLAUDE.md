@@ -134,7 +134,11 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/schema/test_catalog.py` (our message catalog vs. the client's own
   format tables — 477/477 GAME_SMSG agree field-for-field on build 38797),
   `toolkit/harness/test_harness.py` (the one-command stack, the launch safety
-  gate, the live capture tail),
+  gate, the live capture tail, and the crash-dialog capture — which is the ONLY
+  machine-readable evidence a client assert leaves: `Gw.log` does not record
+  asserts, no dump file is written anywhere findable, and a ConnectionResetError
+  in the gamesrv log appears on a clean teardown too. The dialog is faked in the
+  test so the extraction is checked without crashing a client),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_datwrite.py` (the only tool that opens the archive `r+b`,

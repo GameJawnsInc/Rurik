@@ -1572,8 +1572,18 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
               f"assert on one of the events below, OR the stack being shut down "
               f"(--keep-open / --hold, or a verdict target already reached).",
               flush=True)
-        print(f"[c{conn_id}] Gw.log decides it: an Assertion line means the client; no "
-              f"Assertion line means the teardown.", flush=True)
+        # CORRECTED 2026-08-11. This used to say "Gw.log decides it: an Assertion
+        # line means the client; no Assertion line means the teardown." Gw.log
+        # does NOT record asserts -- it is a perf/error log, and a run that
+        # asserted at 01:10:56 that day has no Assertion line in it. So that
+        # check could never fire, and a conclusion drawn from it on 2026-08-10
+        # (that a tape's client was healthy) rested on nothing.
+        print(f"[c{conn_id}] The client's ERROR DIALOG decides it, and nothing else "
+              f"does: Gw.log carries no asserts, no dump file is written anywhere "
+              f"findable, and a reset here happens on clean teardowns too. "
+              f"session.py captures the dialog automatically into the run "
+              f"directory as crash-dialog.txt; standalone, use "
+              f"toolkit/harness/read_error_dialog.py.", flush=True)
         for j in range(lo, min(sent + 2, len(events))):
             et, eb = events[j]
             try:

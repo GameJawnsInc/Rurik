@@ -617,8 +617,84 @@ def hold_open(proc, seconds, tails, outdir, quiet=False):
         # A client that left on its own is a result, not a timeout. The assert
         # text is in its dialog if there is one; read_error_dialog.py gets it
         # without pressing "Send report to ArenaNet".
-        print(f"  client exited with code {proc.returncode} during the hold — "
-              f"read the dialog with toolkit/harness/read_error_dialog.py")
+        print(f"  client exited with code {proc.returncode} during the hold")
+        capture_error_dialog(outdir)
+
+
+def capture_error_dialog(outdir, wait=12.0):
+    """Read the client's fatal-error dialog into the run's own report.
+
+    WHY THIS IS AUTOMATIC AND USED NOT TO BE. Until 2026-08-11 the harness
+    printed "read the dialog with read_error_dialog.py" and stopped there. That
+    is a hint aimed at a human who happens to be watching, and it fails in the
+    two cases that matter: an unattended run has nobody to read it, and by the
+    time anyone does the dialog can be gone. The cost was measured on
+    2026-08-11 -- an evening spent guessing at a client assert whose text
+    existed the whole time on the operator's screen and nowhere else.
+
+    THE THREE THINGS THAT DO NOT WORK, so nobody re-tries them: `Gw.log` does
+    NOT record asserts (it is a perf/error log -- a run that asserted at
+    01:10:56 has no Assertion line in it, and authsrv.py told sessions to use
+    exactly that as the decider); no dump file is written anywhere findable
+    despite the dialog naming one; and ConnectionResetError in the gamesrv log
+    appears on a clean teardown as readily as on a crash. This dialog is the
+    only machine-readable evidence a client assert leaves.
+
+    THE PROCESS IS ALREADY GONE when we get here -- that is what poll() told
+    us -- so any surviving dialog belongs to some other Gw process, which is why
+    this enumerates rather than reusing the handle we had.
+
+    READ ONLY, and that is a safety property rather than a style choice. The
+    dialog's default button is "Send report to ArenaNet", which would upload a
+    crash dump FROM A PATCHED CLIENT to the vendor. Nothing here may click.
+    """
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import read_error_dialog as red
+    except Exception as ex:                                    # pragma: no cover
+        print(f"  (could not load read_error_dialog: {ex})")
+        return None
+
+    deadline = time.monotonic() + wait
+    found = []
+    while time.monotonic() < deadline:
+        pids = red.gw_pids()
+        if pids:
+            found = red.dump(pids)
+            if found:
+                break
+        time.sleep(0.5)
+    if not found:
+        print(f"  no error dialog within {wait:.0f}s -- the client exited "
+              f"WITHOUT one, which is a clean exit rather than a silent crash")
+        return None
+
+    path = os.path.join(outdir, "crash-dialog.txt")
+    with open(path, "w", encoding="utf-8") as fh:
+        for hwnd, title, blocks in found:
+            fh.write(f"=== window {hwnd:#x}  title={title!r}\n")
+            for cls, text in blocks:
+                fh.write(f"--- control class={cls}  ({len(text)} chars)\n{text}\n")
+
+    # Surface the line that names the fault. The dialog's long control holds the
+    # whole report and the assert record is at the TOP of it -- which is exactly
+    # the part a screenshot of a scrolled view misses, and why screenshots gave
+    # three runs in a row nothing but the tail of Gw.log.
+    assert_line = None
+    for _hwnd, _title, blocks in found:
+        for _cls, text in blocks:
+            for ln in text.splitlines():
+                if "Assertion:" in ln or "Exception:" in ln:
+                    assert_line = ln.strip()
+                    break
+            if assert_line:
+                break
+        if assert_line:
+            break
+    print(f"  ERROR DIALOG captured -> {path}")
+    if assert_line:
+        print(f"  >>> {assert_line}")
+    return path
 
 
 def run_client(a, outdir):
