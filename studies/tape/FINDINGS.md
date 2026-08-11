@@ -429,11 +429,42 @@ still clear and it dials immediately.
   already answers. The transition is game-channel only, and the tape plays all of it
   (780/780).
 
-**Where to look next**, in order: what drives the two `PLAYER_FLAG_CONNECTED` clears at
-`0x00850ca7` and `0x00851534` — `0x008515b7` beside the second one is the third caller of
-the connect function, so that whole region is the leave-instance path. The question to
-answer is whether a *server* message reaches it, or whether it is purely client-side and
-driven by something in the instance state our tape does not reproduce.
+### T12 — The flag is cleared by an instance teardown with TWO routes, and only one of them is a message. OBSERVED.
+
+`PLAYER_FLAG_CONNECTED` (bit 1 of `+0x2a8`) is cleared at exactly two addresses, and both
+are the tail of the **same** nine-call sequence, gated on the flag being set:
+
+```
+test byte ptr [X + 0x2a8], 2      ; only if still connected
+push X;  call 0x851f70            ; then nine subsystem shutdowns
+mov ecx, X; call 0x8560b0 / 0x8043e0 / 0x828440 / 0x82cdc0
+call 0x856240 / 0x80e110 / 0x844720 / 0x83fab0 / 0x85c420
+and  [X + 0x2a8], 0xfffffffd      ; CLEAR PLAYER_FLAG_CONNECTED
+```
+
+That is the instance being torn down. The two routes into it:
+
+* **`0x00850c50`** — one caller only, `0x0084f869`, which lies inside the RECV handler for
+  **`GAME_SMSG 0x01B1`** (handler `0x0084f740`; the next handler starts at `0x00856920`).
+  So a server message *can* drive the teardown.
+* **`0x008514d0`-ish** — no message involved. It dispatches event `0x10000110` and branches
+  on a **reason code at `[esi+0xc]`**, the same field the pending-transfer consumer opens
+  with (`cmp [esi+0xc], 0`). This is the network layer's own disconnect event.
+
+**`0x01B1` is NOT the answer, and this is the check that says so.** It appears **zero
+times in all four tapes** — ArenaNet never sent it on any game connection of that session,
+yet the real client transferred three times. So the route that matters in a normal
+transfer is the second one, and it is client-side: the reason code decides everything.
+Recording this because "`0x01B1` releases the transfer, send it" is exactly the plausible
+wrong answer this trail invites, and the tapes refute it in one decode.
+
+**Where to look next.** The reason code at `[esi+0xc]`. Three events live in this family —
+`0x10000110`, `0x10000111` (dispatched by the connect at `0x850df0`) and `0x10000112` —
+and the handler at `0x00851380` treats `[esi+0xc] == 0` as success, asserts it was not
+already connected, sets the flag, and only then consumes any pending transfer. The open
+question is what reason code our close produces versus ArenaNet's, and whether the client
+distinguishes a server FIN from a reset. That is answerable offline by reading the network
+layer, and it is where the next session should start — not with another six-minute run.
 
 **Also settled, and it cost nothing:** the recon's stated blocker — "consecutive hops to
 the same endpoint were never witnessed" — is irrelevant. Every hop here had a distinct
