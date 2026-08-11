@@ -181,6 +181,28 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   passed against the defect),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
+  `toolkit/mapdata/test_pathchunk.py` (the pathing chunk's WHOLE-CHUNK codec: a
+  retail `0x20000008` decoded to typed values and re-encoded byte-identically,
+  **349 of 349** under `--all`, 8 by default. Nothing declared is stored --
+  every record size, every one of the eight plane-header counts and every
+  element count is re-derived on encode -- because a codec that replayed them
+  round-trips every file it can walk while understanding nothing. That is not a
+  hypothetical: a memcpy sabotage and a replay-the-counts sabotage were both run
+  against this file, both printed the 349/349 headline GREEN, and both were
+  caught only by the controls that mutate a decoded chunk in place until a
+  payload changes length and require the emitted size and count fields to move
+  with it — read back by a walker written in the test out of `int.from_bytes`.
+  The named control is an encoder that writes tag 11's size as its true data
+  length instead of DOUBLE it, which is what retail declares in 11,795 of 11,795
+  planes; it is run on ArenaNet's bytes as well as ours. Also: eleven decode
+  refusals including the eight-byte header (the terrain chunk's, and using it
+  here desyncs the first record), `pathmap.PathingMap` as a second parser
+  agreeing field-for-field on the same bytes, and `minimal()` — a mesh authored
+  from nothing — landing on row 46196's plane count, two-byte tag 12 and 3x3
+  obstacle grid from its rect alone. Sections 0-2 need no vault and score 40
+  against a floor of 65, so a vault-less run goes red. Default ~25 s, `--all`
+  ~9 minutes — its 349-map sweep alone was measured at 524 s, so budget for that
+  rather than for the round number),
   `toolkit/mapdata/test_trnshadow.py` (terrain tag 7 decoded rather than carried:
   that every retail shadow block's run coding closes on 272 rows of 272 samples and
   re-encodes to ArenaNet's own bytes from the bitmap alone, that the 10x10 window
@@ -270,6 +292,38 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   out of nothing and need no vault; the run reports the reconstructed/carried byte
   split, which is 34.92% / 65.07% and is the honest half of the result.
   `--all` is ~13 minutes),
+  `toolkit/mapdata/test_mapbuild.py` (the AUTHORING direction: a whole Bloated map
+  assembled from typed parameters -- dims, a height field, a tile table, a navmesh --
+  and row 46196 coming back BYTE-IDENTICAL, 8,471 B. That equality is the weaker half
+  and never appears without the census beside it: **7,814 B generated (92.24%), 657 B
+  carried (7.76%)**, every carried chunk NAMED, asserted against floors rather than
+  printed -- plus the stricter 5,502 B (64.95%) once the terrain arrays that reach the
+  encoder as opaque `bytes` are subtracted. A memcpy sabotage keeps that headline
+  GREEN and is caught by ten other checks: the controls rebuild the same row with ONE
+  parameter changed and require chunk 0x20000002 to move and nothing else, then
+  require 0x2000000C alone to move when the content id changes, then grow the tile
+  table and require the file, the terrain payload and the chunk table's size field to
+  grow with it. **Provenance is the design here.** FINDINGS 14's five mandatory chunks
+  are ArenaNet constants (232 B per map) read from the owner's archive AT RUN TIME --
+  the builder refuses (`NoConstants`) without one, section 2 reads `mapbuild.py`'s own
+  syntax tree and requires no bytes literal over two bytes in it, section 7 takes the
+  five payloads it just read from the archive and looks for them in BOTH source files
+  (raw, hex, spaced hex, `\x` escapes -- which is how a draft that quoted the Water
+  bytes in a docstring was caught, invisible to the syntax-tree scan because it was
+  prose), and sections 0-3 run the whole builder on PLACEHOLDER zero constants of our
+  own, so they need no vault.
+  It also corrects FINDINGS 14: **one of the five is not a constant.** 0x20000006
+  (Water) takes two values, so the builder VERIFIES each borrowed constant against the
+  map it is rebuilding and NAMES any substitution -- and the sabotage that trusts the
+  donor still round-trips row 46196 while breaking row 26209, which is the shape of a
+  bug that ships. `gates()` reproduces the loader's open-time rules and its control is
+  that ArenaNet's own row 46196 passes all 17 before anything we built is judged; five
+  rules are then broken on purpose and must go red ALONE. Section 2 also refuses
+  `--out` into EVERY checkout of this repo rather than the one the file sits in: a
+  git worktree's repo root is not the main checkout's, and until `working_tree_roots`
+  existed a build written to `<main>/toolkit/` was allowed straight into version
+  control. Sections 0-3 score 46 against a floor of 98, so a vault-less run goes
+  red. ~12 s),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
   and that an unframeable opcode stops the framer instead of being framed past),
