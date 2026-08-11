@@ -26,6 +26,7 @@ standard library only.
 
     python toolkit/authsrv/test_agentlife.py
 """
+import inspect
 import math
 import os
 import struct
@@ -40,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=102)
+LEDGER = checks.Ledger("agent lifetime", floor=118)
 
 
 def main():
@@ -183,6 +184,7 @@ def main():
     section_swing_back()
     section_chase()
     section_facing()
+    section_enemy_skill()
     return LEDGER.verdict()
 
 
@@ -194,7 +196,10 @@ def _world(dist=100.0, **over):
              "pos": (dist, 0.0), "plane": 0,
              "allegiance": agents.ALLEGIANCE_HOSTILE,
              "attack_speed": authsrv.ENEMY_ATTACK_SPEED,
-             "effects": 0, "attacks_back": True}
+             "effects": 0, "attacks_back": True,
+             "skill_id": authsrv.ENEMY_SKILL_ID,
+             "skill_activation": authsrv.ENEMY_SKILL_ACTIVATION,
+             "skill_recharge": authsrv.ENEMY_SKILL_RECHARGE}
     entry.update(over)
     return {"agents": {10: entry}, "pos": (0.0, 0.0)}
 
@@ -232,11 +237,21 @@ def section_swing_back():
     """
     import authsrv
 
+    # THE SKILL IS OFF THROUGHOUT THIS SECTION. `_world` carries production
+    # defaults, and in production a hostile opens with its skill -- so every
+    # fixture here would measure a cast instead of a swing. section_enemy_skill
+    # owns that path; this one owns the swing, and mixing them was how the two
+    # checks below first went red.
+    def _sworld(**kw):
+        w = _world(**kw)
+        w["agents"][10]["skill_id"] = 0
+        return w
+
     # 1. A SWING IS TWO PHASES SEPARATED BY A WINDUP, which is the shape ArenaNet
     #    uses and the shape the first version of this code got wrong: it sent all
     #    three messages in the same instant, so the damage number landed on the
     #    frame the animation started.
-    state = _world()
+    state = _sworld()
     sent = _swings(state)
     ops = [op for op, _v, _l in sent]
     LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION,
@@ -297,11 +312,11 @@ def section_swing_back():
 
     # 2. the four refusals. Each is a hostile that must NOT swing.
     for why, world in (
-            ("out of aggro range", _world(dist=authsrv.AGGRO_RANGE + 1.0)),
-            ("dead", _world(dead=True)),
-            ("attacks_back off", _world(attacks_back=False)),
-            ("mid-burrow", _world(effects=agents.EFFECT_TRANSITION)),
-            ("not hostile", _world(allegiance=agents.ALLEGIANCE_ENEMY + 100))):
+            ("out of aggro range", _sworld(dist=authsrv.AGGRO_RANGE + 1.0)),
+            ("dead", _sworld(dead=True)),
+            ("attacks_back off", _sworld(attacks_back=False)),
+            ("mid-burrow", _sworld(effects=agents.EFFECT_TRANSITION)),
+            ("not hostile", _sworld(allegiance=agents.ALLEGIANCE_ENEMY + 100))):
         LEDGER.ok(not _swings(world),
                   f"a hostile that is {why} does not swing",
                   "silence is the whole assertion here")
@@ -312,7 +327,7 @@ def section_swing_back():
     for why, kill in (("dies", lambda a: a.update(dead=True)),
                       ("leaves range",
                        lambda a: a.update(pos=(authsrv.AGGRO_RANGE + 9.0, 0.0)))):
-        mid = _world()
+        mid = _sworld()
         _swings(mid)                                    # opens a swing
         assert mid["agents"][10]["swing_lands_at"] is not None
         kill(mid["agents"][10])
@@ -331,7 +346,7 @@ def section_swing_back():
     #    that forty ticks at a 1 ms interval all landed inside one clock tick and
     #    produced a single swing. A test that has to outrun the clock to measure
     #    anything is measuring the clock.
-    state = _world()
+    state = _sworld()
     sent = []
     keep = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     needed = int(math.ceil(1.0 / authsrv.ENEMY_HIT_FRACTION))
@@ -393,7 +408,7 @@ def section_swing_back():
     # 6a. a mis-declared agent does not swing every tick. Attack speed 0 is the
     #     value that took the client down on m_attackInterval, and `or` sends it
     #     to a real interval rather than to "no wait at all".
-    zero = _world()
+    zero = _sworld()
     zero["agents"][10]["attack_speed"] = 0.0
     LEDGER.ok(len(_swings(zero, n=8)) == 2,
               "an agent declaring attack speed 0 falls back to a real interval",
@@ -405,7 +420,7 @@ def section_swing_back():
 
     # 6. the swing honours the AGENT's declared speed, not the player's. The
     #    client was told this agent's attack speed at spawn and animates to it.
-    state = _world()
+    state = _sworld()
     state["agents"][10]["attack_speed"] = 10.0
     n = len(_swings(state, n=6))
     LEDGER.ok(n == 2,
@@ -512,6 +527,7 @@ def section_chase():
               "and a huge step stops it exactly at reach, not on top of the player",
               f"{d:.1f} against a reach of {authsrv.ENEMY_MELEE_RANGE:.0f} -- "
               "uncapped, a 30 s step lands at 0 and the agent stands inside them")
+    state["agents"][10]["skill_id"] = 0      # the swing path, not the skill path
     LEDGER.ok(bool(_swings(state)),
               "and having arrived, it can swing",
               "the walk is only worth anything if the fight starts at the end of it")
@@ -707,6 +723,150 @@ def section_facing():
               f"angle=0x{raw[1]:08X}, rate=0x{raw[2]:08X} -- a dword field holding "
               "an IEEE float is the ROTATE_PLAYER trap, and a codec change that "
               "started marshalling these as real numbers would show up here")
+
+
+def section_enemy_skill():
+    """It fights back with a SKILL, announced the way ArenaNet announces one.
+
+    THE CORPUS REFUSED THE OBVIOUS ANSWER, which is why this section exists. Our
+    server already had a skill message -- GAME_SMSG 0x00E3, which it sends when
+    the PLAYER casts -- and reusing it for an NPC would have been the natural
+    move. All 6 of the 0x00E3 in the entire live corpus name the player, because
+    0x00E3 confirms a cast the CLIENT initiated; the client even logs "Pending
+    skill %u copy %d not found" when the echo is wrong, and an NPC's cast has
+    nothing to confirm.
+
+    What the corpus does carry is one NPC skill activation, on the int channel:
+    0x009F [value 60 = GV_SKILL_ACTIVATED, agent 36, skill 83]. n=1. That is thin
+    and it is stated as thin, but it is evidence and the alternative was invention.
+
+    The skill, its activation and its recharge are ArenaNet's, out of the client's
+    own table via skilltable.py: 276 matches the profession this server already
+    declares for the Hatcher. Only the damage fraction is ours.
+    """
+    import authsrv
+
+    def cast_msgs(sent):
+        return [(op, v) for op, v, _l in sent
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT
+                and v and v[0] == agents.GV_SKILL_ACTIVATED]
+
+    def dmg_floats(sent):
+        return [struct.unpack("<f", struct.pack("<I", v[-1]))[0]
+                for op, v, _l in sent
+                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+
+    # 1. the opening cast
+    state = _world()
+    sent = _swings(state)
+    casts = cast_msgs(sent)
+    LEDGER.ok(len(casts) == 1 and casts[0][1][1] == 10
+              and casts[0][1][2] == authsrv.ENEMY_SKILL_ID,
+              "a hostile opens with its SKILL, named on the int channel",
+              f"{casts} -- [GV_SKILL_ACTIVATED, agent, skill]")
+    ops = [op for op, _v, _l in sent]
+    LEDGER.ok(authsrv.GAME_SMSG_SKILL_ACTIVATED not in ops,
+              "and NOT on 0x00E3, which is the player's own cast confirmation",
+              f"{[hex(o) for o in ops]} -- all 6 0x00E3 in the live corpus name "
+              "the player. Reusing it here is the mistake this section exists to "
+              "prevent, and it is the one a reader of authsrv.py would make")
+    LEDGER.ok(not dmg_floats(sent),
+              "and the cast deals no damage until it lands",
+              f"activation is {authsrv.ENEMY_SKILL_ACTIVATION}s -- damage here is "
+              "the instant-cast bug, the same shape the swing had")
+
+    # 2. nothing else happens during the activation window
+    LEDGER.ok(not _swings(state, n=4),
+              "nothing swings while a cast is in flight",
+              "a cast in flight beats everything; otherwise a slow tick lets an "
+              "agent cast and swing on the same tick")
+
+    # 3. it lands, and it hurts more than a swing
+    state["agents"][10]["cast_lands_at"] = time.time() - 0.001
+    land = _swings(state)
+    fl = dmg_floats(land)
+    LEDGER.ok(len(fl) == 1 and abs(fl[0] + authsrv.ENEMY_SKILL_FRACTION) < 1e-6,
+              "and when it lands it deals the SKILL's fraction, not a swing's",
+              f"{fl} against skill {-authsrv.ENEMY_SKILL_FRACTION} and swing "
+              f"{-authsrv.ENEMY_HIT_FRACTION}")
+    LEDGER.ok(authsrv.ENEMY_SKILL_FRACTION > authsrv.ENEMY_HIT_FRACTION,
+              "and a skill is worth more than an auto-attack",
+              f"{authsrv.ENEMY_SKILL_FRACTION} vs {authsrv.ENEMY_HIT_FRACTION} -- "
+              "ours, both of them; the client carries every real number and we do "
+              "not read it yet")
+    land_ops = [op for op, _v, _l in land]
+    LEDGER.ok(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT not in land_ops,
+              "and a landing cast sends no MELEE_ATTACK_FINISHED",
+              f"{[hex(o) for o in land_ops]} -- that value names the end of a "
+              "SWING, and 40 of the 42 in the live corpus are followed by a "
+              "property-16 damage from the same agent. A cast is not a swing")
+
+    # 4. the recharge gates the next one, and swings fill the gap. Roll ONLY the
+    #    swing timer back: the recharge (2.0 s) is longer than the swing interval
+    #    (1.33 s), so there is a real window where an agent should be swinging
+    #    while its skill is still coming back. Rolling skill_used_at too would
+    #    make the "does not fire again" check below vacuous.
+    state["agents"][10]["last_swing"] = time.time() - 100.0
+    after = _swings(state, n=3)
+    LEDGER.ok(not cast_msgs(after),
+              "the skill does not fire again until its recharge has run",
+              f"recharge is {authsrv.ENEMY_SKILL_RECHARGE}s from the START of the "
+              "cast, which is what the client's own table means by one")
+    LEDGER.ok(any(op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                  for op, _v, _l in after),
+              "but it goes back to swinging in the meantime",
+              "a recharging agent that does nothing at all reads as a broken one")
+
+    # 5. skill 0 turns it off, and the agent is on plain swings
+    plain = _world()
+    plain["agents"][10]["skill_id"] = 0
+    p_sent = _swings(plain)
+    LEDGER.ok(not cast_msgs(p_sent),
+              "skill = 0 leaves the agent on plain swings",
+              "the content switch, so a probe can put a non-casting body in the "
+              "world without editing code")
+    LEDGER.ok(any(op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                  for op, _v, _l in p_sent),
+              "and it still swings",
+              "turning the skill off must not turn the agent off")
+
+    # 6. a cast in flight does not survive its caster, the same as a swing
+    for why, kill in (("dies", lambda a: a.update(dead=True)),
+                      ("leaves range",
+                       lambda a: a.update(pos=(authsrv.AGGRO_RANGE + 9.0, 0.0)))):
+        mid = _world()
+        _swings(mid)
+        assert mid["agents"][10]["cast_lands_at"] is not None
+        kill(mid["agents"][10])
+        mid["agents"][10]["cast_lands_at"] = time.time() - 1.0
+        before = mid["player_health"]
+        LEDGER.ok(not _swings(mid, n=3) and mid["player_health"] == before,
+                  f"a cast in flight does not land if the caster {why}",
+                  "an overdue cast plus three ticks and no damage")
+
+    # 7. the skill can kill, and the kill is still the effects bit
+    kill_state = _world()
+    sent = []
+    keep = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    needed = int(math.ceil(1.0 / authsrv.ENEMY_SKILL_FRACTION))
+    for _ in range(needed):
+        authsrv.land_skill(keep, kill_state, 10, kill_state["agents"][10], 1)
+    LEDGER.ok(kill_state["player_dead"],
+              f"{needed} skill hits kill the player",
+              f"health {kill_state['player_health']}")
+    kills = [v for op, v, _l in sent
+             if op == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+             and v == [authsrv.PLAYER_AGENT_ID, agents.EFFECT_DEAD]]
+    LEDGER.ok(len(kills) == 1,
+              "and the death is still ONE effects-bit message",
+              f"{len(kills)} -- property 16 floors at 1 and cannot kill however "
+              "it is dressed up")
+
+    # 8. the content key reaches the entry, same rule as the other two
+    LEDGER.ok("skill_id" in inspect.getsource(authsrv.spawn_enemy),
+              "and spawn_enemy carries the skill from the content row",
+              "`entry` is a closed literal; a key that is not named there never "
+              "arrives, however it is spelled in world.toml")
 
 
 def section_named_builders(codec):

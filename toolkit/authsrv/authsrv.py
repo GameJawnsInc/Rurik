@@ -1175,6 +1175,51 @@ ENEMY_TURN_RATE = 2.0943951023931953   # 2*pi/3 rad/s, ArenaNet's own maximum
 ENEMY_FACING_EPSILON = 0.15            # radians (~8.6 deg) before re-announcing.
                                        # Ours. Every tick is 20 messages a second.
 
+# AND IT CASTS. OBSERVED 2026-08-11, and the corpus answer was NOT the one this
+# server would have guessed: ArenaNet does not announce an NPC's skill on 0x00E3.
+# Every 0x00E3 in the whole live corpus -- 6 of 6 -- names the PLAYER, because
+# 0x00E3 is the confirmation of a cast the CLIENT initiated and the client says so
+# in its own log when the echo is wrong ("Pending skill %u copy %d not found").
+# An NPC's cast is not client-initiated and has nothing to confirm.
+#
+# What the corpus does carry is ONE NPC skill activation, on the int channel:
+#
+#     0x009F [value 60 = GV_SKILL_ACTIVATED, agent 36, skill 83]
+#
+# n=1, in 20260810T235916 connection :62994, and n=1 is thin enough that it is
+# written down here rather than dressed up. It is still the only evidence there
+# is, and it beats inventing a message. (A near miss worth recording so nobody
+# re-finds it: 0x00A0 value 20 GV_EFFECT_ON_TARGET looks NPC-exclusive on a census
+# keyed by slot 2, and is not -- in context the player casts, then value 20 lands
+# with the player's TARGET in that slot. Different value ids put different roles
+# in the same slot, which is the trap hit_enemy's own comment is about.)
+#
+# THE SKILL AND ITS TIMINGS ARE ARENANET'S, from the client's own table via
+# toolkit/clientscan/skilltable.py. 276 is chosen because its profession matches
+# the one this server already declares for the Hatcher (3, sent as 0x00A6 at
+# spawn) -- not picked from nowhere. Its activation and recharge are the table's,
+# not ours, which is why they are odd numbers.
+#
+# NOT THE PLAYER'S CAST PATH. The skill-dispatch arm below carries a standing note
+# that skill COMPLETION is being built on another branch and not to add to it.
+# This does not: it is an NPC announcing its own cast, and it touches nothing the
+# player's 0x0046/0x0027 handling uses.
+ENEMY_SKILL_ID = 276          # profession 3, matching the Hatcher's own
+ENEMY_SKILL_ACTIVATION = 0.75 # seconds, ArenaNet's table
+ENEMY_SKILL_RECHARGE = 2.0    # seconds, ArenaNet's table
+ENEMY_SKILL_FRACTION = 0.25   # of the player's maximum. OURS -- the client
+                              # carries every real number and we do not read it
+                              # yet (studies/skills/FINDINGS.md)
+
+# Which skill this spawn fights with, if any. `skill = 0` disables it and leaves
+# the agent on plain swings. Named here for the same reason attacks_back and
+# resend_definition are: `entry` is a closed literal and a content key reaches it
+# only by being copied. It lives HERE rather than beside the other two _ENEMY
+# reads because it defaults to a constant defined in this block -- module order
+# is not something test_srclint checks, and the first version raised NameError at
+# import, which only running the test could show.
+ENEMY_SKILL = int(_ENEMY.get("skill", ENEMY_SKILL_ID))
+
 
 def begin_attack(send, state, target_id, conn_id):
     """A click on a hostile agent starts an attack that the tick keeps up.
@@ -1381,6 +1426,7 @@ def enemy_attack_tick(send, state, conn_id):
             # own 7th swing in the Lakeside tape was truncated exactly this way,
             # 0.24 s in, when the player killed the worm.
             agent["swing_lands_at"] = None
+            agent["cast_lands_at"] = None
             continue
         if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
@@ -1395,6 +1441,7 @@ def enemy_attack_tick(send, state, conn_id):
         if math.hypot(ax - px, ay - py) > ENEMY_MELEE_RANGE:
             agent["swinging"] = False
             agent["swing_lands_at"] = None
+            agent["cast_lands_at"] = None
             continue
         # Its OWN weapon speed, not the player's. The client was told this agent's
         # attack speed at spawn (0x0035) and animates to it; swinging faster than we
@@ -1412,6 +1459,15 @@ def enemy_attack_tick(send, state, conn_id):
             agent["last_swing"] = 0.0
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) attacks the "
                   f"player", flush=True)
+        # A CAST IN FLIGHT BEATS EVERYTHING, and is resolved before a swing can
+        # start -- otherwise a slow tick lets an agent cast and swing at once.
+        cast_due = agent.get("cast_lands_at")
+        if cast_due is not None:
+            if now >= cast_due:
+                agent["cast_lands_at"] = None
+                land_skill(send, state, agent_id, agent, conn_id)
+            continue
+
         # TWO PHASES, because a swing takes time. A landing that is due is always
         # resolved before a new swing is started, so a slow tick cannot make an
         # agent start twice and land once.
@@ -1421,6 +1477,23 @@ def enemy_attack_tick(send, state, conn_id):
                 agent["swing_lands_at"] = None
                 land_swing(send, state, agent_id, agent, conn_id)
             continue
+
+        # THE SKILL GOES FIRST when it is off recharge. Its recharge starts here
+        # rather than when it lands, which is what the client's own table means by
+        # a recharge: 2.0 s from the START of the cast, not from the end of it.
+        if (agent.get("skill_id")
+                and now - agent.get("skill_used_at", -1e9) >= agent["skill_recharge"]):
+            agent["skill_used_at"] = now
+            agent["last_swing"] = now      # a cast is not a free swing
+            face_player(send, state, agent_id, agent, conn_id)
+            send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                 [agents.GV_SKILL_ACTIVATED, agent_id, agent["skill_id"]],
+                 f"agent {agent_id} casts skill {agent['skill_id']}")
+            agent["cast_lands_at"] = now + agent["skill_activation"]
+            print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) casts skill "
+                  f"{agent['skill_id']}", flush=True)
+            continue
+
         if now - agent.get("last_swing", 0.0) < interval:
             continue
         agent["last_swing"] = now
@@ -1619,6 +1692,38 @@ def land_swing(send, state, agent_id, agent, conn_id):
         # bookkeeping decides; the fractions only make the bar agree with it.
         state["player_dead"], state["player_died_at"] = True, time.time()
         state["attacking"] = None      # a corpse stops swinging back
+        send(GAME_SMSG_AGENT_UPDATE_STATUS,
+             [PLAYER_AGENT_ID, agents.EFFECT_DEAD], "KILL the player")
+        print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
+              f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
+
+
+def land_skill(send, state, agent_id, agent, conn_id):
+    """An agent's skill connecting, ENEMY_SKILL_ACTIVATION seconds after the cast.
+
+    The damage half is the SAME property-16 channel an ordinary swing uses -- the
+    corpus is unambiguous that a skill's damage is not a different mechanism, and
+    ArenaNet's own player casts in the Lakeside tape land on property 16 and 55
+    like anything else. What is different is the announcement and the size.
+
+    No MELEE_ATTACK_FINISHED here: that value names the end of a SWING, and 40 of
+    the 42 in the live corpus are immediately followed by a property-16 damage from
+    the same agent. A cast is not a swing.
+    """
+    player_pools(state)
+    dealt = float(agents.PLAYER_HEALTH) * ENEMY_SKILL_FRACTION
+    state["player_health"] = max(0.0, state["player_health"] - dealt)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id,
+          _fraction(-ENEMY_SKILL_FRACTION, agents.PROP_DAMAGE,
+                    f"skill {agent.get('skill_id')}")],
+         f"skill {agent.get('skill_id')} deals {dealt:.0f} to the player")
+    print(f"[c{conn_id}] player hit by skill {agent.get('skill_id')}: "
+          f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
+
+    if state["player_health"] <= 0.0:
+        state["player_dead"], state["player_died_at"] = True, time.time()
+        state["attacking"] = None
         send(GAME_SMSG_AGENT_UPDATE_STATUS,
              [PLAYER_AGENT_ID, agents.EFFECT_DEAD], "KILL the player")
         print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
@@ -2037,6 +2142,9 @@ def spawn_enemy(send, state, origin, conn_id):
         "effects": 0,
         "resend_definition": ENEMY_RESEND_DEFINITION,
         "attacks_back": ENEMY_ATTACKS_BACK,
+        "skill_id": ENEMY_SKILL,
+        "skill_activation": ENEMY_SKILL_ACTIVATION,
+        "skill_recharge": ENEMY_SKILL_RECHARGE,
     }
     if ENEMY_BURROWS:
         entry.update({
