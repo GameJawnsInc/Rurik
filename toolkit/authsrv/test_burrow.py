@@ -75,7 +75,7 @@ TRANSITION_TOLERANCE = 0.08      # the capture's own spread is +/-60 ms
 # 2026-08-10. Section 2 is the only one that can skip, and it takes the floor with it --
 # the same call test_rotate.py makes: a claim about ArenaNet's bytes that did not read
 # ArenaNet's bytes has not been checked, and a green exit code would say otherwise.
-LEDGER = checks.Ledger("burrowing", floor=19)
+LEDGER = checks.Ledger("burrowing", floor=21)
 
 
 class FakeSend:
@@ -405,7 +405,64 @@ def main():
     section_capture(codec)
     print("\n3. our own cycle")
     section_cycle()
+    print("\n4. a tape that hands the client on must hang up")
+    section_transfer_close(codec)
     return LEDGER.verdict()
+
+
+def section_transfer_close(codec):
+    """The close that R1.5 chaining needs, and the one it must NOT do.
+
+    OBSERVED 2026-08-10 from build 38797: the 0x01A5 handler at 0x0084f290 branches on
+    bit 0x20 of [esi+0x190] -- clear means dial now, set means stash and wait -- and the
+    connect function 0x850df0 sets that bit itself at 0x00850e56. So exactly one
+    game-channel transfer per session dials immediately and every later one defers until
+    the connection it already holds goes away. The recorded server hangs up 0.14 s after
+    each handoff; ours did not, and hop 3 of the first chained run sat on a loading
+    screen with the right address on it and never opened a socket.
+
+    Both directions matter. Hanging up on a tape that does NOT transfer would break the
+    last hop and every --tape-no-transfer run, whose entire purpose is that the client
+    keeps playing afterwards.
+    """
+    class FakeSock:
+        def __init__(self):
+            self.shutdown_called = self.closed = False
+
+        def shutdown(self, _how):
+            self.shutdown_called = True
+
+        def close(self):
+            self.closed = True
+
+    try:
+        cap = vaultpath.vault_path("captures", "live", "20260807T143055")
+        have = os.path.isdir(cap)
+    except Exception:
+        have = False
+    if not have:
+        LEDGER.skip("transfer close", "no live capture in this vault")
+        return
+
+    order = tape.chain(cap)
+    _i, linking = tape.load_tape(cap, order[0])      # ends in a handoff
+    _j, last = tape.load_tape(cap, order[-1])        # stays in its map
+
+    s1 = FakeSock()
+    closed1 = authsrv.close_after_transfer(s1, linking, codec, 1)
+    LEDGER.ok(closed1 and s1.closed and s1.shutdown_called,
+              "a tape ending in a handoff closes the connection",
+              "the client DEFERS a second transfer while it still holds a game "
+              "connection (bit 0x20 at +0x190, set by the connect at 0x850df0), so "
+              "holding the socket open is what left hop 3 on a loading screen")
+
+    s2 = FakeSock()
+    closed2 = authsrv.close_after_transfer(s2, last, codec, 1)
+    LEDGER.ok(not closed2 and not s2.closed,
+              "and a tape with NO handoff is left alone",
+              "the last hop and every --tape-no-transfer run exist so the client keeps "
+              "playing after the tape -- hanging up on those would break the labelled "
+              "run, which is the whole reason stop_before_transfer exists")
 
 
 if __name__ == "__main__":

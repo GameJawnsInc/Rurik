@@ -37,7 +37,7 @@ import checks  # noqa: E402
 # all from 2026-08-06 until the same day, because drive_client.py did `import cage`
 # without clientpatch on sys.path. It is named in CLAUDE.md's suite list and was not
 # among the tests run when that suite was last reported green.
-LEDGER = checks.Ledger("harness", floor=42)
+LEDGER = checks.Ledger("harness", floor=47)
 check = checks.adopt_named(LEDGER)
 
 
@@ -281,5 +281,56 @@ if __name__ == "__main__":
               "chatter")
     LEDGER.ok(all(stack_all._echoes(n) for n in ("webgate", "authsrv", "gamesrv")),
               "and --serve still echoes every server, as it always did")
+
+    # ---- a chained tape run must outlive its own verdict ------------------------
+    print("\n- the tape chain (R1.5 0b)")
+    import vaultpath as _vp
+    try:
+        cap = _vp.vault_path("captures", "live", "20260807T143055")
+        have_cap = os.path.isdir(cap)
+    except Exception:
+        have_cap = False
+    if not have_cap:
+        LEDGER.skip("tape chain", "no live capture 20260807T143055 in this vault")
+    else:
+        g1, hops, order, hosts = _sess.chain_specs(cap)
+        LEDGER.ok(len(hops) == 3 and len(order) == 4
+                  and hosts == ["127.0.0.3", "127.0.0.4", "127.0.0.5", "127.0.0.6"],
+                  "a chain becomes one gamesrv per hop, each on its own 127.x alias",
+                  f"{hosts} -- the client dials <host>:6112 and the advertised port "
+                  "may be decorative, so hops cannot be separated by port")
+        LEDGER.ok("--tape-rewrite-next" in g1
+                  and all("--tape-rewrite-next" in argv for _h, argv in hops[:-1])
+                  and "--tape-no-transfer" in hops[-1][1],
+                  "every hop but the last repoints its handoff; the last truncates",
+                  "an un-rewritten handoff on the final hop would dial ArenaNet")
+
+        specs = _sess.server_specs(game_args=g1, hops=hops)
+        names = [n for n, _h, _p, _a in specs]
+        vaults = [a[a.index("--vault") + 1] for _n, _h, _p, a in specs
+                  if _n.startswith("gamesrv")]
+        LEDGER.ok(len(set(vaults)) == len(vaults),
+                  "and every hop captures to its OWN directory",
+                  "each instance names files authsrv-<stamp>-c1.jsonl with a conn_id "
+                  "restarting at 1, so two hops starting in the same second would "
+                  "overwrite each other and the run would still look fine")
+
+        # THE ONE THAT MATTERS. The first chain run printed RUN VERDICT: PASS and tore
+        # the stack down 1.7s into a 396-second chain, because the verdict target
+        # ("body is in the map") is reached almost immediately under a tape. Every
+        # symptom read as crash-on-map-load; the client was fine.
+        hold, total = _sess.chain_hold(cap, order)
+        LEDGER.ok(hold > total > 390 and hold >= total + 60,
+                  "a chained run holds LONGER than the tape it is playing",
+                  f"{hold:.0f}s hold for {total:.0f}s of tape -- the verdict says "
+                  "'body is in the map', which under a tape is true in ~5s and says "
+                  "nothing about the six minutes that ARE the experiment")
+        LEDGER.ok(all(_sess.Stack(specs, logdir=".",
+                                  echo={s[0] for s in specs
+                                        if s[0].startswith("gamesrv")})._echoes(n)
+                      for n in names if n.startswith("gamesrv")),
+                  "and every hop echoes, not just the first",
+                  "hops 2..N are separate processes; echoing only 'gamesrv' would show "
+                  "hop 1 and then go silent for six minutes while the run worked")
 
     sys.exit(LEDGER.verdict())

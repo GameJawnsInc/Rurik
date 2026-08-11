@@ -1044,7 +1044,7 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-10 (`b950ac6`+, suite 36/36 ~920 checks)
+### 8.0 Next, as of 2026-08-10 (`41ba93b`+, suite 36/36 ~929 checks)
 
 The items below this section predate today and are still live; these four are what today's
 work opened. **The order has changed since they were written**, on evidence: four scouts
@@ -1093,9 +1093,29 @@ parallel, with one safety change that is not optional — see its entry.
     dead connection with no signal. So `rewrite_transfer` refuses any host outside 127/8
     and self-checks offline before the client runs; that refusal *is* the replacement,
     and `test_tape.py` breaks it on purpose to prove it can go red.
-    **Not landed:** the run. ~6.6 minutes during which the operator does nothing, and
-    each hop's avatar stops moving well before its tape ends — the `tape complete: N/N`
-    line is the only truthful signal. **UNVERIFIED:** whether the client honours the port
+    **First run, 2026-08-10: two hops played end to end and the third did not dial** —
+    1209/1209 then 780/780, then nothing (T10). The client was healthy: right map on its
+    loading screen, right alias in its overlay, auth still heartbeating, no assert, and
+    **no SYN at all**. Cause, OBSERVED from the binary: handler `0x0084f290` branches on
+    bit `0x20` at `+0x190` — clear dials immediately, set stashes and defers — and the
+    connect function `0x850df0` **sets that bit itself** (`0x00850e56`). So exactly one
+    game-channel transfer per session dials at once and every later one waits for the
+    connection it already holds to go away. ArenaNet's server hangs up 0.12–0.14 s after
+    every handoff; ours sat on the socket. `close_after_transfer` fixes that, keyed on the
+    tape's contents so a last hop or `--tape-no-transfer` run is never hung up on.
+    **Re-run 2026-08-10: the hang-up was necessary but NOT sufficient** — same two hops,
+    same stop. What releases a deferred transfer is a *player-state* transition, not a
+    socket close: the consumer at `0x00851402` clears the pending bit and dials, and it
+    lives in a handler asserting `!(context->playerFlags & PLAYER_FLAG_CONNECTED)` at
+    `MsCliGame.cpp:76` (T11). Two dead ends ruled out cheaply and recorded: all four tapes
+    declare the **same** `map_file_id` 113021, so it is not map content; and the auth
+    channel carries only two `GAME_SERVER_INFO` in the whole session, both before the
+    first hop, so it is not an auth handoff. **Next:** what drives the two
+    `PLAYER_FLAG_CONNECTED` clears (`0x00850ca7`, `0x00851534`) — and whether any server
+    message reaches them at all.
+    **Not landed:** a full four-hop run. ~6.6 minutes during which the operator does
+    nothing, and each hop's avatar stops moving well before its tape ends — the
+    `tape complete: N/N` line is the only truthful signal. **UNVERIFIED:** whether the client honours the port
     in a *game*-channel handoff. The "it dials 6112 regardless" observation is of the
     **auth** channel; every recorded `0x01A5` advertises 6112, which is also the
     hardcoded value, so the capture cannot separate them. `--tape-rewrite-next host:port`

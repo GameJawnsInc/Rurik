@@ -177,6 +177,21 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
     ]
 
 
+def chain_hold(capture_dir, order, per_hop=15.0, slack=30.0):
+    """(hold_seconds, tape_seconds) -- how long a chained run must stay up.
+
+    Derived from the tapes rather than asked of the operator, because the verdict this
+    harness prints cannot be used as the stop signal under a tape. "Body is in the map"
+    is true within about five seconds and says nothing about the six minutes that follow,
+    so a chain run that stops at its verdict target stops before the experiment starts.
+    That is not hypothetical: it is what the first chain run did, and it printed PASS.
+    """
+    sys.path.insert(0, os.path.join(TOOLKIT, "authsrv"))
+    import tape as tapemod
+    total = sum(tapemod.load_tape(capture_dir, c)[0]["seconds"] for c in order)
+    return total + per_hop * len(order) + slack, total
+
+
 def hop_aliases(n, first="127.0.0.3"):
     """[host] for n chained gamesrv instances, starting at `first`.
 
@@ -783,6 +798,28 @@ def main():
     if a.tape_chain:
         game_args, hops, order, hosts = chain_specs(
             a.tape_chain, split_args(a.game_args), a.game_host)
+        # A CHAIN IMPLIES --keep-open, and this is not a convenience.
+        #
+        # OBSERVED 2026-08-10, first run: the harness ticked all eight checkpoints at
+        # t+4.9s, printed "RUN VERDICT: PASS (target: map)" and tore the stack down
+        # 1.7 SECONDS into a 396-second chain. The gamesrv then reported
+        # "TAPE ENDED at event 59/1209" with a ConnectionResetError and helpfully
+        # listed the messages "in flight" for a client assert that never happened --
+        # the reset WAS the teardown. Every visible signal said crash-on-map-load and
+        # the run had simply been declared finished.
+        #
+        # That is the worst shape a defect can take here: a green verdict for work
+        # that did not happen. The verdict answers "did the client reach the map",
+        # which under a tape is true within five seconds and says nothing about the
+        # six minutes that are the actual experiment. So the hold is derived from the
+        # tape itself rather than asked of the operator.
+        if not a.keep_open:
+            a.keep_open = True
+        if not a.hold:
+            a.hold, total = chain_hold(a.tape_chain, order)
+            print(f"tape chain: holding {a.hold:.0f}s "
+                  f"({total:.0f}s of tape + dial gaps + slack). "
+                  f"Override with --hold.")
         print(f"tape chain: {len(order)} hop(s) from {a.tape_chain}")
         for i, (conn, host) in enumerate(zip(order, hosts), 1):
             nxt = f"-> {hosts[i]}" if i < len(hosts) else "(last: truncated)"

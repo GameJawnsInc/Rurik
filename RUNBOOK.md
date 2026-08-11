@@ -518,8 +518,16 @@ Chaining repoints that handoff at a loopback server of ours and arms it with the
 tape, so the whole recorded session plays as one run:
 
 ```bash
-python toolkit/harness/session.py --tape-chain vault/captures/live/20260807T143055
+python toolkit/harness/session.py --tape-chain 20260807T143055
 ```
+
+A bare stamp is enough — the tools find the vault themselves (`toolkit/vaultpath.py`), so
+an absolute path, a `vault/captures/live/<stamp>` path and the stamp alone all work. This
+line used to read `--tape-chain vault/captures/live/<stamp>` and that **failed from a git
+worktree**, which has no `vault/` of its own: the relative path resolved to nothing and
+the operator got a `FileNotFoundError` traceback out of `os.listdir`. Same class of bug
+`vaultpath.py` exists to prevent, through the one door it did not cover — it was used
+everywhere a path was *constructed* and nowhere a path was *accepted*.
 
 That discovers the chain rather than assuming it — each hop's handoff must match the next
 connection's own VERSION frame or it is **refused**, never ordered by timestamp — then
@@ -533,6 +541,16 @@ that gap is about 146 seconds. The only truthful progress signal is each hop's o
 `tape complete: N/N` line, and all four gamesrv instances echo into your terminal for
 exactly that reason.
 
+`--tape-chain` turns on `--keep-open` for you and sizes `--hold` from the tapes themselves
+(~7 minutes for this capture). **Do not remove it.** The first chain run printed
+`RUN VERDICT: PASS (target: map)` and tore the stack down **1.7 seconds into a 396-second
+chain**: the verdict answers "did the client reach the map", which under a tape is true
+almost immediately and says nothing about the six minutes that are the actual experiment.
+The gamesrv then reported `TAPE ENDED at event 59/1209` with a connection reset and listed
+the events "in flight" for a client assert that never happened — the reset *was* the
+teardown. If you see a tape end early, **check `Gw.log` for an `Assertion` line before
+believing it was a crash**: no Assertion means the stack went down, not the client.
+
 One archive pre-flight covers the whole chain: all four tapes declare the same
 `map_file_id` 113021.
 
@@ -542,6 +560,15 @@ rewritten tape has no such signal — a wrong address is just a connection that 
 arrives. `--tape-rewrite-next` therefore refuses any host outside 127/8 and proves the
 rewrite offline before the client starts. If a hop goes quiet, read the gamesrv banner:
 it names the byte offset and both addresses.
+
+**If a hop loads its map and then sits at "Connecting" forever**, that is the deferred
+transfer, not a crash. The client only dials a game-server handoff immediately the *first*
+time in a session; after that it stashes the address and waits for the connection it
+already holds to end (bit `0x20` at `+0x190`, set by the connect itself — T10). Our server
+now hangs up when a tape ends in a handoff, which is what the recorded server does 0.14 s
+after every transition. Check the gamesrv for `tape ended in a handoff -- closing`; if it
+is there and the client still does not dial, the release needs something else and the run
+is worth reporting rather than repeating.
 
 To play one hop alone, skip the chain and arm that connection directly with
 `--game-args "--tape DIR --tape-connection CLIENT->SERVER --tape-no-transfer"`. The

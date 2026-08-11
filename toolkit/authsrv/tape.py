@@ -95,8 +95,52 @@ def _segments(wire_path, conn, direction):
     return out
 
 
+def resolve_capture(capture_dir):
+    """A capture directory, found wherever the caller meant it.
+
+    Accepts an absolute path, a path relative to the CWD, a path relative to the VAULT
+    (`vault/captures/live/<stamp>` or `captures/live/<stamp>`), or a bare stamp
+    (`20260807T143055`). Raises TapeError naming the real vault and what is in it.
+
+    THIS EXISTS BECAUSE THE OBVIOUS COMMAND FAILED. `RUNBOOK.md` said
+    `--tape-chain vault/captures/live/<stamp>`, which is how the repo root looks -- and a
+    git worktree HAS NO VAULT OF ITS OWN, so that relative path resolved to nothing and
+    the operator got a bare FileNotFoundError traceback out of os.listdir. That is the
+    same failure `vaultpath.py` was written for, arriving through a door it did not
+    cover: vaultpath was used everywhere a path was CONSTRUCTED and nowhere a path was
+    ACCEPTED. A tool that knows where the vault is should not make the operator know too.
+    """
+    tried = [capture_dir]
+    if os.path.isdir(capture_dir):
+        return os.path.abspath(capture_dir)
+    sys.path.insert(0, os.path.dirname(HERE))
+    import vaultpath
+    try:
+        root = vaultpath.require_dir(why="a tape lives in the capture vault")
+    except Exception as ex:
+        raise TapeError(f"{capture_dir!r} is not a directory, and no vault to look in: "
+                        f"{ex}")
+    parts = capture_dir.replace("\\", "/").strip("/").split("/")
+    if parts and parts[0] == "vault":
+        parts = parts[1:]
+    for cand in (os.path.join(root, *parts) if parts else None,
+                 os.path.join(root, "captures", "live", *parts) if parts else None):
+        if cand and os.path.isdir(cand):
+            return os.path.abspath(cand)
+        if cand:
+            tried.append(cand)
+    live = os.path.join(root, "captures", "live")
+    have = sorted(d for d in os.listdir(live)) if os.path.isdir(live) else []
+    raise TapeError(
+        f"no capture directory at any of {tried}. The vault is {root} (override with "
+        f"RURIK_VAULT) -- note a git worktree has no vault of its own, so a relative "
+        f"`vault/...` path lands on nothing there. Captures available: "
+        f"{have or '(none)'}")
+
+
 def channel_files(capture_dir):
     """The decrypted game-channel files in a capture, largest s2c first."""
+    capture_dir = resolve_capture(capture_dir)
     out = []
     for f in sorted(os.listdir(capture_dir)):
         if not f.startswith("game-") or not f.endswith(".jsonl"):
@@ -133,6 +177,7 @@ def load_tape(capture_dir, connection=None):
     frames into plausible nonsense. That is a failure this refuses rather than
     reports at the end.
     """
+    capture_dir = resolve_capture(capture_dir)
     who, why = origin.origin_of(os.path.join(capture_dir, "wire.jsonl"))
     if who != origin.LIVE:
         raise TapeError(
@@ -410,6 +455,7 @@ def client_version(capture_dir, connection):
     That independence is the whole value: it is what lets `chain()` confirm a link
     instead of assuming one.
     """
+    capture_dir = resolve_capture(capture_dir)
     wire = os.path.join(capture_dir, "wire.jsonl")
     conn = tuple(connection.split("->"))
     if len(conn) != 2:
@@ -441,6 +487,7 @@ def chain(capture_dir):
     recording into another map's client and the symptom is an assert with no obvious
     cause.
     """
+    capture_dir = resolve_capture(capture_dir)
     sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
     from codec import Codec
     codec_obj = Codec()

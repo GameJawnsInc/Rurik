@@ -1479,8 +1479,22 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
               f"after {time.monotonic() - t0:.1f}s: {type(ex).__name__}: {ex}",
               flush=True)
         lo = max(0, sent - 3)
-        print(f"[c{conn_id}] what was in flight (the client asserts on one of these):",
+        # DO NOT CALL THIS A CLIENT ASSERT. This banner used to open "the client
+        # asserts on one of these", and on 2026-08-10 it said that about a tape whose
+        # client was in perfect health: the HARNESS had reached its verdict target and
+        # torn the stack down 1.7s into a 396-second chain, so the socket died under a
+        # tape that had barely started. Everything on screen read as crash-on-map-load,
+        # and the only thing that contradicted it was the absence of an Assertion line
+        # in the client's own log.
+        #
+        # This end of the socket cannot tell a client assert from a shutdown, so it
+        # says both and names the one check that separates them.
+        print(f"[c{conn_id}] the client's connection went away. That is EITHER a client "
+              f"assert on one of the events below, OR the stack being shut down "
+              f"(--keep-open / --hold, or a verdict target already reached).",
               flush=True)
+        print(f"[c{conn_id}] Gw.log decides it: an Assertion line means the client; no "
+              f"Assertion line means the teardown.", flush=True)
         for j in range(lo, min(sent + 2, len(events))):
             et, eb = events[j]
             try:
@@ -1499,6 +1513,66 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
     print(f"[c{conn_id}] tape complete: {sent}/{len(events)} events in "
           f"{time.monotonic() - t0:.1f}s", flush=True)
     return True
+
+
+# A tape that ends in a handoff must end the CONNECTION too, and this is not tidiness.
+#
+# MEASURED in the recording: the server closes immediately after sending 0x01A5 --
+# connection :62994 closes at t=213.70 and :64102 opens at t=213.84, a 0.140 s gap, and
+# the same shape at every transition (0.137 s, 0.118 s). The recorded server hangs up.
+# Our player did not: it ran out of events and sat on the socket.
+#
+# WHY THAT MATTERS, from the client's own code (build 38797). The 0x01A5 handler at
+# 0x0084f290 branches on bit 0x20 of a flags dword at +0x190:
+#
+#     mov  eax, [esi + 0x190]
+#     test al, 0x20
+#     je   0x84f359          <- clear: call 0x850df0 and DIAL NOW
+#     or   eax, 0x10         <- set:   stash the sockaddr, mark pending, RETURN
+#
+# and the connect function 0x850df0 SETS that bit itself (`or [ebx+0x190], 0x20` at
+# 0x00850e56, same function body, no ret in between). So the FIRST game-channel
+# transfer of a session dials immediately and every LATER one defers, waiting for the
+# connection it already has to go away.
+#
+# OBSERVED 2026-08-10, and it is exactly that shape: hop 1 -> hop 2 dialled at once
+# (hop 1's own connection came from the AUTH handoff, so bit 0x20 was still clear), and
+# hop 2 -> hop 3 never dialled at all -- correct destination on screen, correct alias in
+# the client's overlay, no SYN, auth channel still heartbeating. One transfer per
+# session worked and the next hung, which is the signature of a deferred dial whose
+# trigger never fired.
+def close_after_transfer(sock, events, codec_obj, conn_id):
+    """Hang up if this tape ended by handing the client somewhere else.
+
+    Returns True if the socket was closed. Deliberately keyed on the tape CONTAINING a
+    transfer rather than on a flag: a tape that stays in its map (the last hop, or any
+    --tape-no-transfer run) must NOT be hung up on, because the whole point of those is
+    that the client keeps playing afterwards.
+    """
+    if tape_transfer_present(events, codec_obj) is None:
+        return False
+    print(f"[c{conn_id}] tape ended in a handoff -- closing the connection, which is "
+          f"what the recorded server did (0.14s before the client re-dialled). The "
+          f"client defers a transfer while it still holds a game connection.",
+          flush=True)
+    try:
+        sock.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+    try:
+        sock.close()
+    except OSError:
+        pass
+    return True
+
+
+def tape_transfer_present(events, codec_obj):
+    """The handoff in this tape, or None. Thin wrapper so authsrv owns no tape logic."""
+    import tape as tapemod
+    try:
+        return tapemod.transfer_of(events, codec_obj)
+    except Exception:
+        return None
 
 
 def run_probe(name, send, conn_id, stop, origin=None):
@@ -1970,6 +2044,13 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                           f"tape ends, and that is not the end.\n", flush=True)
                 finished = play_tape(send_raw, conn_id, stop, TAPE_EVENTS,
                                      TAPE_INFO, TAPE_SPEED)
+                # Hang up if the tape handed the client somewhere else. See
+                # close_after_transfer: the client DEFERS a second transfer while it
+                # still holds a game connection, so holding the socket open is what
+                # left hop 3 on a loading screen with the right address on it.
+                if finished and not LABEL_RUN and close_after_transfer(
+                        sock, TAPE_EVENTS, codec, conn_id):
+                    return
                 if not LABEL_RUN or stop.is_set():
                     return
                 if not finished:

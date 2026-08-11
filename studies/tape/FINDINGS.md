@@ -336,6 +336,110 @@ client will re-dial an endpoint it has just been disconnected from. All three re
 hops changed IP, so the capture never exercised host reuse — which is the reason the
 implementation gives each hop its own alias instead of reusing one listener.
 
+### T10 — The client defers every transfer after the first, and the recorded server's HANG-UP is what releases it. OBSERVED, from the binary.
+
+The first chained run, 2026-08-10. Two hops played end to end and the third never dialled:
+
+```
+hop 1  127.0.0.3  Ascalon City     tape complete: 1209/1209 in  48.6s   -> dialled hop 2
+hop 2  127.0.0.4  Lakeside County  tape complete:  780/780  in 147.6s   -> never dialled
+hop 3  127.0.0.5  Ashford Abbey    no connection ever arrived
+```
+
+The client was **healthy**: correct destination on its loading screen (Ashford Abbey),
+correct alias in its overlay (`127.0.0.5`), auth channel still heartbeating three minutes
+later, no `Assertion` in `Gw.log`, and **no SYN at all** in `netstat` — it never opened a
+socket. `gamesrv3` was listening the whole time.
+
+**The client has two transfer paths.** Handler `0x0084f290` branches on bit `0x20` of a
+flags dword at `+0x190`:
+
+```
+mov  eax, [esi + 0x190]
+test al, 0x20
+je   0x84f359      ; CLEAR -> call 0x850df0, dial immediately
+or   eax, 0x10     ; SET   -> stash the sockaddr + ids at +0x1c8, mark pending, return
+```
+
+and **the connect function sets that bit itself** — `or [ebx+0x190], 0x20` at `0x00850e56`,
+inside `0x850df0`, no `ret` between them. So **exactly one game-channel transfer per
+session dials immediately; every later one defers.**
+
+That is precisely the observed shape. Hop 1's connection came from the *auth* handoff
+(`AUTH_SMSG 0x0009`), a different path, so bit `0x20` was still clear when its `0x01A5`
+arrived — immediate dial, 140 ms, worked. Connecting to hop 2 went through `0x850df0` and
+set the bit, so hop 2's `0x01A5` stashed and waited.
+
+**What it waits for is the connection it already holds going away, and the recording says
+so.** ArenaNet's server hangs up immediately after each handoff — `:62994` closes at
+t=213.70 and `:64102` opens at t=213.84, and the same 0.12–0.14 s shape at all three
+transitions. Our player ran out of events and sat on the socket.
+
+`authsrv.close_after_transfer` now hangs up when a tape contains a transfer — keyed on the
+tape's *contents*, never a flag, because the last hop and every `--tape-no-transfer` run
+exist so the client keeps playing afterwards. Pinned in `test_burrow.py` §4, both
+directions, and both mutations go red.
+
+> **The hang-up was NECESSARY BUT NOT SUFFICIENT — settled by the re-run, 2026-08-10.**
+> With `close_after_transfer` in place the chain still stops at the same place: hop 1
+> played 1209/1209, we hung up, the client dialled hop 2 and played 780/780, we hung up
+> again, and hop 3 was never dialled. Identical treatment at both transitions, different
+> outcome, twice. Keep the close — it is what the recorded server does — but it is not
+> the release.
+
+### T11 — What releases a deferred transfer is a player-state transition, not a socket close. OBSERVED.
+
+Following T10's pending bit `0x10` to its consumer, at `0x00851402`:
+
+```
+mov  eax, [edi + 0x190]
+test al, 0x10
+je   0x85145e            ; nothing pending -> done
+and  eax, 0xffffffef     ; clear pending
+mov  [edi + 0x190], eax
+push [edi + 0x1f8] ... [edi + 0x1c8]    ; the stashed sockaddr and ids
+call 0x850df0                            ; DIAL
+```
+
+That code lives in a handler whose own assertion names the module and the condition:
+
+```
+!(context->playerFlags & PLAYER_FLAG_CONNECTED)
+        P:\Code\Gw\Mission\Cli\MsCliGame.cpp:76
+```
+
+`playerFlags` is `+0x2a8`; `PLAYER_FLAG_CONNECTED` is **bit 1**, set at `0x008513a7` and
+cleared at exactly two sites, `0x00850ca7` and `0x00851534`. The handler also dispatches
+event `0x10000112` (the connect path dispatches `0x10000111`).
+
+So the dial is released when the client's **mission/player state** says it is no longer
+connected — a game-level transition inside `MsCliGame`, not the TCP socket going away.
+That is why hanging up twice changed nothing, and it is consistent with everything else
+observed: the first transfer of a session never needs the release because bit `0x20` is
+still clear and it dials immediately.
+
+**Two dead ends, ruled out cheaply and recorded so they are not re-run.**
+
+* *Map content.* All four tapes declare the **same** `map_file_id` 113021 in their
+  `0x0195`, so Ashford streams what Ascalon and Lakeside already streamed. The loopback
+  build's updater kill switch is not implicated.
+* *The auth channel.* It carries exactly two `GAME_SERVER_INFO` in the whole 411-second
+  session — map 0 and map 148 — both before the first game hop. The three map transitions
+  get nothing from it; the remaining auth traffic is `REQUEST_RESPONSE` acks our server
+  already answers. The transition is game-channel only, and the tape plays all of it
+  (780/780).
+
+**Where to look next**, in order: what drives the two `PLAYER_FLAG_CONNECTED` clears at
+`0x00850ca7` and `0x00851534` — `0x008515b7` beside the second one is the third caller of
+the connect function, so that whole region is the leave-instance path. The question to
+answer is whether a *server* message reaches it, or whether it is purely client-side and
+driven by something in the instance state our tape does not reproduce.
+
+**Also settled, and it cost nothing:** the recon's stated blocker — "consecutive hops to
+the same endpoint were never witnessed" — is irrelevant. Every hop here had a distinct
+alias and hop 2→3 failed anyway. And the port question is still open: the client never got
+far enough to reveal one.
+
 ---
 
 ## 3. What run 2 did not settle
