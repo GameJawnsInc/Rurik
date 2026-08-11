@@ -1044,7 +1044,7 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-10 (`41ba93b`+, suite 36/36 ~929 checks)
+### 8.0 Next, as of 2026-08-10 (`b185bce`+, suite 37/37 ~960 checks)
 
 The items below this section predate today and are still live; these four are what today's
 work opened. **The order has changed since they were written**, on evidence: four scouts
@@ -1103,10 +1103,35 @@ parallel, with one safety change that is not optional — see its entry.
     connection it already holds to go away. ArenaNet's server hangs up 0.12–0.14 s after
     every handoff; ours sat on the socket. `close_after_transfer` fixes that, keyed on the
     tape's contents so a last hop or `--tape-no-transfer` run is never hung up on.
-    **The re-run is the test, and it is cheap.** The mechanism is proven; that the missing
-    hang-up is the *whole* cause is CONTESTED — the client did reset the socket ~10 s later
-    and still did not dial. If hop 3 still hangs, the deferred consumer wants a message we
-    never send and `0x850f67`'s chain on the same flags word is where to look.
+    **SETTLED 2026-08-10 by a discriminating run: exactly ONE game-channel transfer per
+    session dials** (T14). `--tape-chain-from 62994` made the failing Lakeside -> Ashford
+    transition the FIRST one and it worked, 118/118, with Ashford rendering; the NEXT
+    transfer then stalled. Same transition, opposite outcome, decided by its ordinal --
+    so it is not the map, the tape, the address or the shutdown. Three fixes aimed at the
+    close were all correct-and-irrelevant. **And the mechanism is now read out whole (T15):**
+    `0x00851380` has no callers because it is a **switch case**. The function at
+    `0x00851340` dispatches on an event **type** and handles exactly three —
+    `0x1D` and `0x1E` both **dial**, and `0x1E` is also the only thing that clears bit
+    `0x20`; `0x1F` tears the instance down and **never dials**. A peer that merely goes
+    away raises `0x1F`, which is what our close produces however politely, so no shutdown
+    fix could ever have worked. **The open question is whether a server can provoke `0x1E`
+    at all** — those events come from the client's own connection layer, not from any
+    message. If it cannot, chaining past one hop needs a lever other than a tape, and
+    R1.5's chained form should be re-scoped rather than retried.
+    **Superseded:** *Re-run 2026-08-10: the hang-up was necessary but NOT sufficient* — same two hops,
+    same stop. What releases a deferred transfer is a *player-state* transition, not a
+    socket close: the consumer at `0x00851402` clears the pending bit and dials, and it
+    lives in a handler asserting `!(context->playerFlags & PLAYER_FLAG_CONNECTED)` at
+    `MsCliGame.cpp:76` (T11). Two dead ends ruled out cheaply and recorded: all four tapes
+    declare the **same** `map_file_id` 113021, so it is not map content; and the auth
+    channel carries only two `GAME_SERVER_INFO` in the whole session, both before the
+    first hop, so it is not an auth handoff. Both flag-clears turn out to be
+    the tail of one nine-call instance teardown with two routes in (T12): `GAME_SMSG
+    0x01B1`'s handler, and the network layer's own disconnect event, which branches on a
+    **reason code**. `0x01B1` is ruled out — it appears **zero times in all four tapes**
+    while the real client transferred three times, so the live route is the reason code.
+    **Next, and it is offline:** what reason code our close produces versus ArenaNet's,
+    and whether the client distinguishes a server FIN from a reset.
     **Not landed:** a full four-hop run. ~6.6 minutes during which the operator does
     nothing, and each hop's avatar stops moving well before its tape ends — the
     `tape complete: N/N` line is the only truthful signal. **UNVERIFIED:** whether the client honours the port
