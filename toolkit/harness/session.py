@@ -559,6 +559,69 @@ def _play(tails, proc, outdir, warn=3.0):
     return delivered
 
 
+# Keyboard movement, and why it is its own phase rather than another --actions
+# entry. Actions run BEFORE the verdict, on a fixed delay from launch; a walk has
+# to start once the character is actually standing in the map, which is what the
+# spawn checkpoint establishes and what no delay can promise.
+#
+# WHY KEYBOARD AND NOT A CLICK. Both move the character and they are not
+# interchangeable as instruments. A click sends GAME_CMSG 0x003E and the client
+# then waits to be granted a destination -- so what it does next is a fact about
+# OUR server's clip. A held key sends 0x003D, our server answers with a
+# DIRECTION and nothing else, and the client walks itself until it hits
+# something (authsrv.py, GAME_CMSG_TURN_TO_DIRECTION: "there is nothing to clip
+# -- we are not naming a point"). The server's own integrator broadcasts nothing
+# at all. So where a keyboard walk stops is the client's own collision, measured
+# through the position the client reports back four times a second.
+def parse_walk(text):
+    """"W:6 S:12" -> [('W', 6.0), ('S', 12.0)]. One leg per key hold."""
+    legs = []
+    for spec in str(text).split():
+        key, _, secs = spec.partition(":")
+        if len(key) != 1 or not secs:
+            raise SystemExit(f"walk leg wants ONE key and a duration: {spec!r}")
+        seconds = float(secs)
+        if seconds <= 0:
+            raise SystemExit(f"walk leg {spec!r} holds for {seconds}s")
+        legs.append((key.upper(), seconds))
+    return legs
+
+
+def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5):
+    """Hold each movement key in turn, and record when each leg ran.
+
+    The wall clock is the join between this and the capture: every recorded
+    event carries one, so a leg's window selects the position reports the client
+    sent while that key was down. `held` is what actually happened rather than
+    what was asked for -- dc.hold_key cuts a leg short if the client loses the
+    foreground, and a short leg that is read as a full one turns "the character
+    stopped" into a measurement of the operator's alt-tab.
+    """
+    dc.warn_hands_off(warn)
+    out = []
+    for i, (key, seconds) in enumerate(legs):
+        hwnd, _ = dc.wait_window(proc.pid, timeout=5)
+        if not hwnd:
+            out.append({"key": key, "asked": seconds, "held": 0.0,
+                        "note": "no window"})
+            print(f"  walk {key} for {seconds}s: NO WINDOW", flush=True)
+            continue
+        started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        held = dc.hold_key(hwnd, proc.pid, ord(key), seconds)
+        ended = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        # Let the client come to rest and send its stop before the next leg
+        # starts, so two legs cannot share one deceleration.
+        time.sleep(settle)
+        settled = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        out.append({"key": key, "asked": seconds, "held": round(held, 2),
+                    "started": started, "ended": ended, "settled": settled})
+        print(f"  walk {key}: held {held:.1f}s of {seconds:.1f}s "
+              f"({started} -> {ended})", flush=True)
+        shot_if_foreground(hwnd, proc.pid,
+                           os.path.join(outdir, f"walk{i + 1}-{key}.png"))
+    return out
+
+
 def shot_if_foreground(hwnd, pid, path):
     """Screenshot only when the client actually owns the foreground.
 
@@ -754,7 +817,7 @@ def run_client(a, outdir):
           f"{' '.join(accounts.redact(args))}")
 
     actions = a.actions or ACTIONS[a.until]
-    sent, results, ok, undec = [], [], False, []
+    sent, results, ok, undec, walked = [], [], False, [], []
     try:
         for i, spec in enumerate(actions.split()):
             parts = spec.split(":")
@@ -808,6 +871,17 @@ def run_client(a, outdir):
         if hwnd:
             shot_if_foreground(hwnd, proc.pid, os.path.join(outdir, "final.png"))
 
+        # After the verdict, because a walk is only meaningful once the client
+        # says the character is standing in the map -- and only if it is. Walking
+        # a client that never spawned would fill the capture with nothing and
+        # read as "the character could not move".
+        if a.walk:
+            if ok:
+                walked = walk_legs(proc, parse_walk(a.walk), outdir, warn=a.warn)
+            else:
+                print("  walk: SKIPPED -- the run did not reach the map, so "
+                      "there is nothing to walk", flush=True)
+
         if a.keep_open:
             hold_open(proc, a.hold, tails, outdir,
                       quiet=is_labelling(a))
@@ -827,7 +901,7 @@ def run_client(a, outdir):
     if os.path.exists(log_path):
         gwlog = open(log_path, encoding="utf-8", errors="replace").read()
     report = {
-        "exe": a.exe, "until": a.until, "actions": sent,
+        "exe": a.exe, "until": a.until, "actions": sent, "walk": walked,
         "checkpoints": results, "passed": ok,
         "captures": sorted(f for t in tails.values() for f in t.files()),
         "endpoints": sampler.events,
@@ -897,6 +971,15 @@ def main():
                          "fail for a reason unrelated to what was being tested, "
                          "and the transcript still looks like evidence. "
                          "0 for unattended runs.")
+    ap.add_argument("--walk", metavar="LEGS",
+                    help="After the spawn verdict, hold movement keys: "
+                         "\"W:6 S:12 W:6\" holds W for 6s, S for 12s, W for 6s. "
+                         "Keyboard rather than a click on purpose -- the server "
+                         "answers a held key with a DIRECTION and broadcasts no "
+                         "position, so where the client stops is the client's "
+                         "own collision and not our clip. The client reports "
+                         "where it is four times a second, so the capture "
+                         "carries the whole trace.")
     ap.add_argument("--hold", type=float, default=0.0, metavar="SECONDS",
                     help="With --keep-open, stop holding after SECONDS instead "
                          "of waiting for the client to exit. What a probe needs "
@@ -969,6 +1052,14 @@ def main():
         print(f"  the operator does NOTHING for the whole chain -- a tape cannot "
               f"show control, and each hop's avatar stops moving well before its "
               f"tape ends. Watch each 'tape complete: N/N' line instead.")
+
+    # Before the stack starts and long before a client launches: a typo in
+    # --walk would otherwise be found after the map has loaded, which costs the
+    # whole run and a client session.
+    if a.walk:
+        legs = parse_walk(a.walk)
+        print(f"walk plan: {len(legs)} leg(s), "
+              f"{sum(s for _, s in legs):.1f}s of held keys")
 
     specs = server_specs(game_port=a.game_port, auth_host=a.auth_host,
                          game_host=a.game_host,

@@ -38,7 +38,10 @@ import checks  # noqa: E402
 # all from 2026-08-06 until the same day, because drive_client.py did `import cage`
 # without clientpatch on sys.path. It is named in CLAUDE.md's suite list and was not
 # among the tests run when that suite was last reported green.
-LEDGER = checks.Ledger("harness", floor=50)
+# 2026-08-11: +9 for hold_key and --walk (sections 9 and 10), added with the
+# rung that needed them. hold_key earned its own section the hard way -- see the
+# comment in it.
+LEDGER = checks.Ledger("harness", floor=59)
 check = checks.adopt_named(LEDGER)
 
 
@@ -395,4 +398,126 @@ def section_error_dialog():
 
 
 section_error_dialog()
+
+
+# ------------------------------------------------------------ held keys ----
+
+class FakeUser32:
+    """Records what would have gone to the keyboard, and who owns the foreground.
+
+    `owner` is the pid the foreground window belongs to. Setting it to something
+    else mid-run is how the "operator alt-tabbed away" case is reproduced without
+    an operator.
+    """
+
+    def __init__(self, owner=4321, scan=0x11):
+        self.owner, self.scan, self.events = owner, scan, []
+        self.raise_on_nth = None
+
+    # -- the parts hold_key uses
+    def SetForegroundWindow(self, hwnd):
+        return 1
+
+    def GetForegroundWindow(self):
+        return 99
+
+    def GetWindowThreadProcessId(self, hwnd, out):
+        out._obj.value = self.owner
+        return 1
+
+    def MapVirtualKeyW(self, vk, kind):
+        return self.scan
+
+    def keybd_event(self, vk, scan, flags, extra):
+        self.events.append((vk, scan, flags))
+        if self.raise_on_nth is not None and len(self.events) == self.raise_on_nth:
+            raise RuntimeError("something blew up mid-hold")
+
+
+def section_hold_key():
+    print("\n9. hold_key: a real hold, always released, and it carries a scan code")
+    real_u32, real_fg = dc.user32, dc._force_foreground
+    try:
+        # THE DEFECT THIS SECTION EXISTS FOR. MEASURED 2026-08-11: the first
+        # version passed bScan=0, held W for 8 s into a foregrounded client that
+        # was fully in the world, and the client sent NOTHING -- no movement, no
+        # turn, not even a character into the open chat box. A DirectX client
+        # reads the raw input path, which carries the hardware scan code; an
+        # event with bScan=0 carries no key at all as far as that path is
+        # concerned. The harness reported `held 8.0s of 8.0s` either way, so
+        # nothing short of the capture could tell a working run from a dead one.
+        fake = FakeUser32(scan=0x11)
+        dc.user32 = fake
+        dc._force_foreground = lambda hwnd: True
+        held = dc.hold_key(1, 4321, ord("W"), 0.3, check_every=0.1)
+        downs = [e for e in fake.events if not e[2] & dc.KEYEVENTF_KEYUP]
+        ups = [e for e in fake.events if e[2] & dc.KEYEVENTF_KEYUP]
+        LEDGER.ok(downs and all(e[1] != 0 for e in fake.events),
+                  "every key event carries a NON-ZERO scan code",
+                  f"events {fake.events} -- bScan=0 is what a UI reader accepts "
+                  f"and the raw input path silently drops")
+        LEDGER.ok(len(downs) == 1 and len(ups) == 1
+                  and downs[0][0] == ups[0][0] == ord("W"),
+                  "one keydown, one keyup, same key",
+                  f"{len(downs)} down / {len(ups)} up")
+        LEDGER.ok(0.3 <= held < 0.9, "it holds for as long as it was asked",
+                  f"{held:.2f}s for 0.3s -- a tap is not a hold, and GW moves "
+                  f"the character only while the key is down")
+
+        # The key is released even when the hold dies mid-flight. keybd_event
+        # sets GLOBAL keyboard state: an unpaired keydown is a physically stuck
+        # key for the whole desktop, and it outlives this process.
+        fake = FakeUser32(scan=0x11)
+        fake.raise_on_nth = 1                   # blow up ON the keydown's return
+        dc.user32 = fake
+        try:
+            dc.hold_key(1, 4321, ord("S"), 0.2, check_every=0.05)
+            blew = False
+        except RuntimeError:
+            blew = True
+        LEDGER.ok(blew and any(e[2] & dc.KEYEVENTF_KEYUP for e in fake.events),
+                  "an exception mid-hold still releases the key",
+                  f"raised={blew}, events {fake.events}")
+
+        # Focus is re-checked DURING the hold, not only at the start.
+        fake = FakeUser32(scan=0x11)
+        dc.user32 = fake
+        alt_tabbed = {"n": 0}
+        real_get = fake.GetWindowThreadProcessId
+
+        def steal(hwnd, out):
+            alt_tabbed["n"] += 1
+            real_get(hwnd, out)
+            if alt_tabbed["n"] >= 2:            # the first call is the entry check
+                out._obj.value = 9999
+            return 1
+        fake.GetWindowThreadProcessId = steal
+        held = dc.hold_key(1, 4321, ord("D"), 5.0, check_every=0.05)
+        LEDGER.ok(held < 1.0, "losing the foreground cuts the leg short",
+                  f"{held:.2f}s of 5.0s -- otherwise five seconds of 'D' go into "
+                  f"whatever the operator switched to")
+        LEDGER.ok(any(e[2] & dc.KEYEVENTF_KEYUP for e in fake.events),
+                  "and the key is released on that path too")
+
+        # And it sends NOTHING at all when the client never had focus.
+        fake = FakeUser32(owner=1111, scan=0x11)
+        dc.user32 = fake
+        held = dc.hold_key(1, 4321, ord("W"), 1.0)
+        LEDGER.ok(held == 0.0 and not fake.events,
+                  "a client that does not own the foreground gets no key at all",
+                  f"{len(fake.events)} event(s) -- never send blind")
+    finally:
+        dc.user32, dc._force_foreground = real_u32, real_fg
+
+    print("\n10. --walk parses into legs, and refuses the rest")
+    LEDGER.ok(session.parse_walk("W:6 S:12.5") == [("W", 6.0), ("S", 12.5)],
+              "a plan is (key, seconds) pairs in order")
+    LEDGER.ok(all(refused(session.parse_walk, bad)
+                  for bad in ("W", "WW:3", "W:0", "W:-1")),
+              "no duration, a two-character key, and a non-positive hold refuse",
+              "a typo would otherwise be found after the map has loaded, which "
+              "costs the whole run and a client session")
+
+
+section_hold_key()
 sys.exit(LEDGER.verdict())

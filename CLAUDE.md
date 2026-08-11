@@ -174,7 +174,16 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   machine-readable evidence a client assert leaves: `Gw.log` does not record
   asserts, no dump file is written anywhere findable, and a ConnectionResetError
   in the gamesrv log appears on a clean teardown too. The dialog is faked in the
-  test so the extraction is checked without crashing a client),
+  test so the extraction is checked without crashing a client. Also `hold_key`,
+  the held movement key `--walk` drives, against a fake `user32`: that every
+  event carries a NON-ZERO scan code, that the key is released on every exit
+  path including an exception mid-hold, that losing the foreground cuts the leg
+  short, and that a client without focus gets nothing at all. The scan code is
+  the one that earned the section — a synthetic keydown with `bScan=0` is
+  accepted by a UI reader and silently dropped by the raw input path the client
+  reads movement through, so the first version held W for 65 seconds into a
+  live client that ignored every one of them while the harness reported
+  `held 8.0s of 8.0s` six times. Only the capture could tell the two apart),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_datwrite.py` (the only tool that opens the archive `r+b`,

@@ -3369,3 +3369,157 @@ pristine snapshots (`--diff` exit 0 on each). `dat_study` and `C:\gw` were never
 targets. The other session's run directory was never touched. Artifacts are in
 `vault/research/c2-delivery-2026-08-11/` and the payload in
 `vault/research/d1-mapbuild-2026-08-11/ours_head.bin`.
+
+---
+
+## 23. OBSERVED: the client collides against geometry we authored (2026-08-11)
+
+§22.3's first open item, in full: *"The client's own collision was never tested. The
+character stood at the spawn; nothing walked it into the boundary of a one-trapezoid
+mesh. Whether the client agrees with our navmesh is the obvious next question and it
+needs input, not bytes."*
+
+Run sheet, predictions and artifacts: `vault/research/e1-collision-2026-08-11/`.
+
+### 23.1 Why one map could not have answered it
+
+D1's map puts the mesh over exactly the terrain rect, 0..3072. Walk into the edge and
+stop, and three explanations fit the same number: the client read our pathing chunk; the
+client stopped on the terrain's own extent, or the borrowed Collision chunk, or the
+obstacle grid, and never looked at our trapezoids; or the walk ended for some other
+reason. So E1 runs **two maps whose only difference is where the mesh ends.**
+
+| | mesh rect | boundary from the spawn (1536, 1536) |
+|---|---|---|
+| **FULL** | 0..3072 — D1's delivered bytes, unchanged | 1536 units |
+| **INNER** | 1024..2048 | 512 units |
+
+Built by decoding D1's own delivered payload and swapping ONE chunk, so "everything else
+is identical" is a property of the procedure rather than a hope. Measured, not asserted:
+**33 of 7,841 bytes differ**, both files are **7,841 B**, the other eight chunks compare
+equal by id, form and payload, and both pass **16 of 16** open-time gates. The obstacle
+grid stays 3×3 over the full rect in both — it is an open-time rule, and moving it too
+would have spoiled the control.
+
+### 23.2 The instrument, and why it is the keyboard
+
+A click cannot measure this. It sends GAME_CMSG 0x003E and the client then waits to be
+granted a destination, so where it goes is a fact about **our** `clip_to_walkable` — two
+of our own components agreeing, which proves nothing.
+
+A held key can. It sends 0x003D; our server answers with `AGENT_MOVE_DIRECTION`, a
+direction and nothing else, and its own integrator broadcasts no position at all
+(`authsrv.py`: *"NOTHING IS BROADCAST FROM HERE"*, and on this path *"there is nothing to
+clip — we are not naming a point"*). The client walks itself and **reports where it is in
+slot 1 of every 0x003D**. Every number below is a byte the client transmitted.
+
+New this rung: `dc.hold_key` and `session.py --walk`, which runs after the spawn verdict
+because a walk before the character is standing in the map measures nothing. Plan,
+identical in all three runs: `W:8 S:20 W:8 A:1 W:8 S:20`.
+
+**The first control run measured nothing, and that is recorded because the failure is
+invisible.** `hold_key` was written like `press_key` and `press_enter`, which pass
+`bScan=0`. Held into a client that was foreground and fully in the world, for 65 seconds,
+it produced **zero** client messages: the character did not move, did not turn, and
+nothing appeared in the open chat box either. `press_enter`'s own docstring names the
+reason without following it through — this is a DirectX client reading the **raw input**
+path, which carries the hardware scan code, and a synthetic event with `bScan=0` carries
+no key at all as far as that path is concerned. A UI-level reader takes the virtual key
+and is happy, which is why Enter at login and the skill-slot keys always worked. With
+`MapVirtualKey(vk, MAPVK_VK_TO_VSC)` supplied, the same run walked 2,545 units. **Every
+leg reported `held 8.0s of 8.0s` in both runs**, so the harness's own report could not
+tell the two apart — only the capture could.
+
+### 23.3 The result
+
+| | control (Kamadan, untouched) | **FULL** | **INNER** |
+|---|---|---|---|
+| position reports | 29 | 50 | 44 |
+| bounding box | 2125 × 2902 | **3072.0 × 3072.0** | **1024.0 × 1024.5** |
+| box corners | — | (0.0, 0.0)..(3072.0, 3072.0) | (1024.0, 1024.0)..(2048.0, 2048.5) |
+| farthest from spawn | — | 2124.1 | 724.1 (= 512√2) |
+| reports outside the mesh rect | — | **0 of 50** | 1 of 44, by **0.5 units** |
+| server-side off-mesh stops | — | 0 | 0 |
+
+**The two boxes stand in the ratio 3.00 to 1, which is the ratio of the two rectangles,
+and 33 bytes inside one chunk are the whole difference between the files.** The terrain
+chunk is byte-identical across the two runs, so the character walked on the same ground
+and stopped in different places.
+
+The trace is not merely bounded, it is **pinned**. On FULL the client hits `x = 3072.0`
+and then reports 3072.0 exactly for five consecutive samples while `y` climbs — a wall
+slide — and does the same at `x = 0.0`, `y = 3072.0` and `y = 0.0`. On INNER it does the
+identical thing at 1024.0 and 2048.0, and all four of its stops are the two corners
+(2048, 2048) and (1024, 2048). There is no inset: the client treats our trapezoid's edge
+as the walkable limit to the bit.
+
+**So the retail client's collision comes from the pathing chunk we wrote.** §21's
+`PathChunk.minimal` carried the standing label *"UNVERIFIED against a client: nothing
+here has been loaded"*; it is verified now, in the only way that could have verified it.
+
+Both arms are clean by C2's discriminators: no `Attempting to re-bloat.` in `Gw.log`, row
+71496 unchanged and still reading the arm's own payload after the client exited, the
+server copy showing only our own in-place write, and only the client's scratch rows
+8315/8316 moving. The gamesrv read `1 planes, 1 trapezoids` in both.
+
+### 23.4 What it settles, and what it does not
+
+**Settled.** The authoring loop closes on geometry as well as bytes: a rectangle chosen in
+Python became a wall the retail client will not let a character through. §22.3's first
+open item is retired.
+
+Also settled in passing: **the loading overlay does clear** — §22.3 could only report a
+crossfade frame. The INNER run's mid-walk screenshots show our terrain rendered from
+inside the world: a flat tiled plain, an empty horizon, and a minimap that is a
+featureless brown disc where Kamadan's is a detailed city. That is our terrain being
+drawn, which §22.3 listed as attested only by the server's trapezoid count. It is not a
+pixel-by-pixel verification and is not offered as one.
+
+**Not settled, and the limit is worth stating exactly:**
+
+- **This does not isolate WHICH part of the pathing chunk the client read.**
+  `PathChunk.minimal` shrinks the plane's boundary polygon, its trapezoid and its
+  point-location DAG together, so all three moved at once. The result is a fact about the
+  chunk's walkable geometry, not about the trapezoid list specifically. Separating them —
+  shrink the trapezoid while leaving the boundary polygon at full extent, and the reverse
+  — is one more pair of 33-byte edits and is the natural next rung.
+- **The 0.5-unit excursion is real and is not rounded away.** One report of 44 landed at
+  y = 2048.5, and our own server's `clip_to_walkable` printed `standing at (1535, 2049),
+  which the navmesh does not cover`. Whether that is the client's collision radius, an
+  interpolation artefact, or a genuine half-unit of tolerance is NOT FOUND.
+- **Nothing here tests portals, multiple planes, or elevation.** One plane, one trapezoid,
+  no neighbours. `minimal`'s DAG remains INFERRED for every shape other than the one
+  tested: both branches of its single y-node reach the same sink, so the split test still
+  never has to mean anything.
+- **The client's collision model is not measured** — radius, step height and how it slides
+  are all out of scope. Only the question of whether our trapezoids feed it.
+
+### 23.5 The courtyard, and one soft observation
+
+A third map was built for the operator to walk by hand:
+`vault/research/e1-collision-2026-08-11/build_courtyard.py`. It swaps **two** chunks of
+the delivered payload rather than one — terrain and path — raising the height field 613
+units everywhere outside a 1,920-unit square and putting the mesh rect on that square, so
+the boundary sits at the foot of a bank you can see. Still 7,841 B, still 16 of 16 gates,
+and the FINDINGS 14 constants, map parameters and texture dependencies are the delivered
+map's own bytes. The agreement is asserted before it ships: over all 1,024 cells,
+*walkable* equals *every one of the cell's four corner samples is floor* — zero
+disagreements, 400 walkable cells. The first version of that check compared against the
+single cell a point falls in and reported 164 disagreements that were the check's fault:
+samples sit at cell CORNERS, so the cells at the courtyard's edge are the ramp.
+
+**This map is a demo and not an experiment**, and the distinction matters enough to write
+down: with the bank and the mesh agreeing, a character that stops has two reasons to and
+the run cannot say which stopped it. §23.3's pair is what separates them.
+
+The operator walked it and reported that it **"felt like stock"**. That is a subjective
+report from one person and it is recorded as one — it is not a measurement and nothing
+above rests on it. It is worth keeping anyway, because the failure modes it would have
+caught are ones no assertion here looks for: a floor you sink into, a bank you slide down,
+a camera that clips, movement that stutters at the boundary. None were reported.
+
+Also worth recording from the same session: the terrain height field reached the client
+correctly on the first attempt, which is the first time anything but a flat plain has been
+built here. §8 item 10(c) — "a height field that is not flat, walked" — is met for a
+two-level field; slopes, step height and the z the client places a character at remain
+untested, since a 613-unit bank is a wall rather than a slope.

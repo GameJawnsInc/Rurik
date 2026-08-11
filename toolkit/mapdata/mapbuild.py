@@ -812,7 +812,9 @@ def build_flat(dim_x=CHUNK_SIZE, dim_y=CHUNK_SIZE, height=0.0, archive=None,
     imitate, and every byte outside the 232 borrowed ones computed from the
     arguments. The navmesh is `pathchunk.PathChunk.minimal` -- one plane, one
     rectangular trapezoid, no portals -- whose point-location DAG is labelled
-    INFERRED at its own call site and has never been loaded by a client.
+    INFERRED at its own call site. What this function produces HAS been loaded
+    by the retail client, which walks on its terrain and collides against its
+    mesh (FINDINGS 22, 23).
 
     `tiles` is the size of the tile table; `tile` is the index every cell uses.
     The default `tiles=1` is the smallest legal table.
@@ -845,9 +847,13 @@ def gates(mf, reference_order=None):
     not the map's defect, so `test_mapbuild.py` runs this against row 46196's
     own bytes before it runs it against anything we built.
 
-    UNVERIFIED end to end: no map built here has been loaded by a client. These
-    are the rules the disassembly says the loader applies, not observations of
-    it applying them.
+    These are the rules the disassembly says the loader applies. They are no
+    longer UNVERIFIED end to end -- FINDINGS 22 and 23 loaded three maps built
+    here into the retail client, each passing 16 of 16 -- but that is evidence
+    the set is SUFFICIENT, not that it is complete or that any individual rule
+    is the one the loader checks. A gate a shipped retail map fails is still our
+    misreading, which is why `test_mapbuild.py` runs this against row 46196's
+    own bytes first.
     """
     out = []
 

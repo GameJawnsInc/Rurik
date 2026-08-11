@@ -559,7 +559,16 @@ class PathChunk:
         branches therefore land in the only trapezoid there is, whatever the
         split test decides, so the split's `edge` never has to mean anything --
         which is as well, since what an edge vector is geometrically is NOT
-        FOUND. UNVERIFIED against a client: nothing here has been loaded.
+        FOUND.
+
+        OBSERVED 2026-08-11 (FINDINGS 23), and this replaces the standing
+        "UNVERIFIED against a client" on this docstring: the retail client
+        COLLIDES against what this returns. Two maps identical but for 33 bytes
+        in this chunk -- `rect` 0..3072 against 1024..2048 -- confined the
+        character to bounding boxes of 3072.0 and 1024.0 units, pinned to the
+        rect's own edges to the bit. What is verified is the walkable geometry
+        as a whole; the boundary polygon, the trapezoid and the DAG were shrunk
+        together, so which of the three the client reads is still open.
         """
         if planes < 1:
             raise ValueError("a pathing chunk with no plane has no geometry")

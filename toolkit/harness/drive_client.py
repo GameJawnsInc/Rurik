@@ -84,6 +84,7 @@ def newest_run_exe():
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 VK_RETURN = 0x0D
 KEYEVENTF_KEYUP = 0x0002
+MAPVK_VK_TO_VSC = 0
 WM_CLOSE = 0x0010
 
 # Declaring argtypes is not optional here. Without them ctypes marshals a Python
@@ -417,6 +418,71 @@ def press_key(hwnd, pid, vk):
     time.sleep(0.06)
     user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
     return True
+
+
+def hold_key(hwnd, pid, vk, seconds, check_every=0.5):
+    """Hold one key DOWN for `seconds`, then release it. Returns seconds held.
+
+    Guild Wars moves the character while a movement key is held; `press_key`'s
+    60 ms tap produces at most one stride and usually none. A walk long enough to
+    reach a wall has to be a real hold, which means a keydown that is not paired
+    with its keyup for several seconds -- and that is the dangerous part.
+
+    THE KEY IS ALWAYS RELEASED. `keybd_event` sets global keyboard state, so a
+    keydown left unpaired does not stay inside the client: it is a physically
+    stuck key for the whole desktop, surviving this process's death. Every exit
+    path from here, exception included, goes through the keyup in the `finally`.
+
+    Focus is re-verified DURING the hold, not only at the start, and the hold is
+    cut short the moment the client stops owning the foreground. Without that,
+    an operator alt-tabbing away mid-walk would have several seconds of 'W'
+    typed into whatever they switched to. Cutting short is reported by the
+    return value -- a leg that ran for 1.2 of its 6.0 seconds is not the leg the
+    caller asked for and the caller must be able to see that.
+    """
+    if not _force_foreground(hwnd):
+        return 0.0
+    fg = user32.GetForegroundWindow()
+    owner = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(fg, ctypes.byref(owner))
+    if owner.value != pid:
+        return 0.0                        # someone else has focus - stay silent
+
+    # WITH THE SCAN CODE, and that is the whole difference between this working
+    # and not. MEASURED 2026-08-11: the first version passed bScan=0 the way
+    # press_key and press_enter do, held W for 8 s into a client that was
+    # foreground and fully in the world, and the client sent not one message --
+    # the character did not move, did not turn, and nothing was typed into the
+    # open chat box either. The keys reached the window and the client ignored
+    # them.
+    #
+    # press_enter's docstring already names the reason without following it
+    # through: this is a DirectX client reading the RAW INPUT path. That path
+    # carries the hardware scan code, and a synthetic event with bScan=0 carries
+    # no key at all as far as it is concerned. A UI-level reader takes the
+    # virtual key and is happy; movement is not a UI-level reader.
+    #
+    # MapVirtualKey(vk, MAPVK_VK_TO_VSC) is the layout's own answer, so this
+    # stays correct on a non-US keyboard where 'W' is not where it is here.
+    scan = user32.MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)
+    started = time.perf_counter()
+    # The keydown is INSIDE the try. It was outside it in the first version, and
+    # the one path that leaves a key physically stuck for the whole desktop is a
+    # keydown whose failure skips the finally. Releasing a key that was never
+    # pressed is a no-op; the reverse is not.
+    try:
+        user32.keybd_event(vk, scan, 0, 0)
+        while True:
+            held = time.perf_counter() - started
+            if held >= seconds:
+                return held
+            time.sleep(min(check_every, seconds - held))
+            fg = user32.GetForegroundWindow()
+            user32.GetWindowThreadProcessId(fg, ctypes.byref(owner))
+            if owner.value != pid:
+                return time.perf_counter() - started
+    finally:
+        user32.keybd_event(vk, scan, KEYEVENTF_KEYUP, 0)
 
 
 def press_enter(hwnd, pid):
