@@ -639,11 +639,16 @@ def section_facing():
     LEDGER.ok(len(r) == 1 and r[0][0] == 10,
               "setting off, the agent announces a facing for itself",
               f"{len(r)} rotation(s)")
-    LEDGER.ok(abs(abs(angle_of(r[0])) - math.pi) < 1e-5,
-              "and the angle is atan2(dy, dx) of the player from the agent",
+    LEDGER.ok(abs(angle_of(r[0])) < 1e-5,
+              "the emitted angle is the bearing to the player PLUS pi",
               f"{angle_of(r[0]):.5f} rad = {math.degrees(angle_of(r[0])):.0f} deg. "
-              "The agent is due EAST of the player, so it must look due WEST: "
-              "+/-pi. Swapping atan2's arguments gives +/-pi/2 and fails here")
+              "The agent is due EAST of the player, so the bearing TO the player "
+              "is +/-pi and the emitted value is 0. THE PLUS PI IS MEASURED, not "
+              "derived: atan2(dy, dx) is correct by every derivation available "
+              "(test_rotate scores the client's own 0x0040 sends against exactly "
+              "that) and sending it turned the agent to face AWAY, observed by the "
+              "owner watching the screen. Which is the only instrument that sees "
+              "it -- the wire cannot tell a facing from its opposite")
     # THE BOUND HAS TO BE FLOAT32's pi, NOT float64's. Due west is exactly +pi,
     # and float32(pi) = 3.14159274 is GREATER than math.pi = 3.14159265 by 9e-8 --
     # so the obvious `-math.pi <= a <= math.pi` marks a legitimate facing
@@ -663,10 +668,11 @@ def section_facing():
     north = _world(dist=600.0)
     north["agents"][10]["pos"] = (0.0, -600.0)
     r = rots(_walk(north))
-    LEDGER.ok(abs(angle_of(r[0]) - math.pi / 2.0) < 1e-5,
-              "a player due north of the agent reads as +pi/2, not -pi/2 or 0",
-              f"{angle_of(r[0]):.5f} -- this is the check that separates atan2(y, x) "
-              "from atan2(x, y), which the +/-pi case above cannot")
+    LEDGER.ok(abs(angle_of(r[0]) + math.pi / 2.0) < 1e-5,
+              "a player due north of the agent emits -pi/2, not +pi/2 or 0",
+              f"{angle_of(r[0]):.5f} -- bearing +pi/2, emitted -pi/2. This is the "
+              "check that separates atan2(y, x) from atan2(x, y), which the "
+              "due-east case above cannot: swapping the arguments emits +pi here")
 
     # 2. it is NOT re-announced when nothing has changed
     quiet = rots(_walk(state, n=5, elapsed=0.02))
@@ -716,7 +722,12 @@ def section_facing():
 
     # 6. the fields are FLOAT BITS in dword slots. Read raw, the angle check
     #    above compares garbage to pi -- the exact failure test_smsgnames records.
-    raw = rots(_walk(_world(dist=600.0)))[0]
+    # a NORTH fixture, not the due-east one: due east emits exactly 0.0, whose
+    # float bits are 0x00000000, and a bit-pattern check against zero proves
+    # nothing about marshalling either way.
+    bits_world = _world(dist=600.0)
+    bits_world["agents"][10]["pos"] = (0.0, -600.0)
+    raw = rots(_walk(bits_world))[0]
     LEDGER.ok(raw[1] > (1 << 30) and raw[2] > (1 << 29),
               "and both fields go out as float BITS, not as small integers",
               f"angle=0x{raw[1]:08X}, rate=0x{raw[2]:08X} -- a dword field holding "
