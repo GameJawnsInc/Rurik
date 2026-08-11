@@ -161,6 +161,58 @@ source = "opentyria"
 verified = "MEASURED: 287493 resolves to MFT row 126903, a map-flagged row."
 note = "No spawn point known -- see map 194."
 
+[map.143]
+name = "Rung C2 delivery test (Ascalon Academy slot)"
+file_id = 0x287D3
+spawn_x = 1536.0
+spawn_y = 1536.0
+plane = 0
+explorable = false
+
+[map.143.provenance]
+source = "measured"
+verified = """MEASURED in our own archive copies. 0x287D3 is one of the two file ids \
+the archive's own id table stores for MFT row 71496; the other is 0x5CF20 and both \
+resolve to the same row, so either would open the same file. The spawn is the one \
+thing here that had to be derived rather than copied: it is the centre of the \
+DELIVERED map's rect, and (1536, 1536) lands in exactly 1 trapezoid of the mesh in \
+the arm-1 payload bytes -- the same test every other row in this file carries -- \
+against 0 for Kamadan's spawn and 0 for Ascalon City's, which are the controls."""
+note = """
+THIS IS AN EXPERIMENT ROW AND IT IS ONLY TRUE OF THE C2 ARCHIVE COPIES.
+
+Rung C2 (studies/customarea/FINDINGS.md 18.11) is the zero-authored-bytes delivery
+test: it writes row 46196's own map payload into a DIFFERENT row of two archive
+copies and asks whether the client loads it. The target is MFT row 71496 with its
+Stripped partner 71497, and file id 0x287D3 is how the server names it.
+
+So this row points at DIFFERENT CONTENT depending on which archive is open. In
+`vault/dat_study/Gw.dat` and in `C:\\gw` -- neither of which C2 touches -- 0x287D3
+is whatever retail area row 71496 has always been: a one-plane map, 64x64 cells,
+rect -3072..3072 on both axes, 33,021 B Bloated over 18 chunks. In
+`vault/dat_c2/Gw.dat` and `vault/run/2026-07-29_221c13772c7a-c2/Gw.dat` it is a copy
+of row 46196's map: one plane, 32x32 cells, rect 0..3072 on both axes, 8,471 B over
+18 chunks. The spawn below is inside the SECOND of those and outside the first, so
+if this row is ever read against an untouched archive the arrival is off-mesh and
+the failure is loud rather than subtle.
+
+WHAT WE ARE OVERWRITING, STATED PLAINLY. FINDINGS 16-P7 is binding: there are ZERO
+provably-dead rows in the archive. The "unclaimed" 98-of-349 split comes from one
+unlicensed mirror's table, cannot be derived from anything we may rely on, and is
+not what selected row 71496. What selected it is arithmetic: it is the SMALLEST
+reservation that will hold both arm payloads written stored (head 9,728 B for 8,471;
+partner 4,608 B for 2,951), so it displaces less than any other candidate of the 348
+that fit. It is a live retail area in the owner's own copy and we do not know which
+one -- the client's own area table names no map file (studies/mapdata/FORMAT.md), so
+the id cannot be joined to a name by anything in this repo. The recovery mechanism is
+`datwrite.py --revert`, which journals the whole block reservation.
+
+The map id 143 is Ascalon Academy in the client's own area table -- an outpost,
+max_party 1 -- and it is used here only because it is a map id the client knows and
+no other row claims. The client will show that name over row 46196's terrain. The
+name is not a claim about the content.
+"""
+
 [map.90]
 name = "Lornar's Pass"
 file_id = 46594

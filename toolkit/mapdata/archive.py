@@ -67,7 +67,19 @@ COMPRESSION_HUFFMAN = 8
 FILE_ID_HIGH_BIT = 0x80000000
 
 # The study copy, which nothing ever locks. See RUNBOOK.md.
-DEFAULT_DAT = r"C:\gd\Rurik\vault\dat_study\Gw.dat"
+#
+# `RURIK_DAT` overrides it, and the reason is a hard constraint rather than a
+# convenience: **a running client holds an EXCLUSIVE lock on the archive it was
+# launched from**, so the server and the client can never read the same file.
+# Any experiment that writes an archive therefore needs TWO copies with the same
+# content -- one the client launches from, one the server reads -- and without
+# this override the server would go on reading `dat_study` and answer questions
+# about a map the client is not looking at. Same shape as `RURIK_VAULT` in
+# `toolkit/vaultpath.py`.
+#
+# Set it to a copy, never to `dat_study` itself (which is the reference every
+# measurement in `studies/` was taken against) and never to `C:\gw`.
+DEFAULT_DAT = os.environ.get("RURIK_DAT") or r"C:\gd\Rurik\vault\dat_study\Gw.dat"
 
 
 class Entry:

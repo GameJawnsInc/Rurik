@@ -523,18 +523,24 @@ ACTIONS = {
 PLAY_FX, PLAY_FY = 0.834, 0.972
 
 
-def _play(tails, proc, outdir):
+def _play(tails, proc, outdir, warn=3.0):
     """Wait for login, then click the Play button until the client enters the world.
 
     Event-driven: it starts once login completes (character select is up, -character
     already selected) and STOPS the instant the client requests its game instance, so it
     never clicks into the map. dc.click raises the client foreground first.
+
+    The countdown fires AFTER login completes rather than at launch, because that
+    is when the clicking actually starts -- a warning at launch would expire
+    during the load screen and tell the operator nothing about the moment that
+    matters.
     """
     login = by_any(by(kind="login_ok"), by(kind="login_rejected"))
     ev, idx = tails["auth"].wait_for(login, timeout=90)
     if not ev:
         print("  play: login never completed", flush=True)
         return False
+    dc.warn_hands_off(warn)
     delivered = False
     for attempt in range(6):
         hwnd, _ = dc.wait_window(proc.pid, timeout=5)
@@ -742,7 +748,7 @@ def run_client(a, outdir):
             elif kind == "enter":
                 delivered = dc.press_enter(hwnd, proc.pid)
             elif kind == "play":
-                delivered = _play(tails, proc, outdir)
+                delivered = _play(tails, proc, outdir, warn=a.warn)
             elif kind == "key":
                 # "key:1" presses skill slot 1. Added 2026-08-11 so the harness
                 # can provoke a GAME_CMSG 0x0027 -- ArenaNet's attack-skill
@@ -861,6 +867,13 @@ def main():
                          "client's -authsrv flag. 127/8 only. A second alias "
                          "(127.0.0.2) ran the probe that showed -authsrv plays "
                          "no part in the game dial (handshake PLAN §10).")
+    ap.add_argument("--warn", type=float, default=3.0, metavar="SECONDS",
+                    help="Countdown printed before the harness sends its first "
+                         "click, so a human at the machine can take their hands "
+                         "off the keyboard and mouse. Competing input makes a run "
+                         "fail for a reason unrelated to what was being tested, "
+                         "and the transcript still looks like evidence. "
+                         "0 for unattended runs.")
     ap.add_argument("--hold", type=float, default=0.0, metavar="SECONDS",
                     help="With --keep-open, stop holding after SECONDS instead "
                          "of waiting for the client to exit. What a probe needs "

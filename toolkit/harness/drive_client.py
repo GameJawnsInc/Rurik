@@ -329,6 +329,42 @@ def _force_foreground(hwnd):
     return user32.GetForegroundWindow() == hwnd
 
 
+def warn_hands_off(seconds=3.0):
+    """Count down before any synthetic input, loudly enough to react to.
+
+    This harness synthesises clicks and keypresses into the client's window. A
+    human touching the mouse or keyboard while it fires competes with it, and the
+    run then fails for a reason that has nothing to do with what was being
+    tested -- which is worse than a plain failure, because the transcript still
+    looks like evidence.
+
+    OBSERVED 2026-08-11, during rung C2: the operator had no way to tell when
+    input was about to start and no warning to react to, and said so. There is no
+    cleverness available here -- the client cannot be asked to ignore real input
+    while accepting ours, because ours IS real input as far as Windows is
+    concerned (SendInput/PostMessage into the same queue). A countdown is the
+    whole fix, and it costs `seconds` once per run against a run tens of seconds
+    long.
+
+    Pass 0 for unattended runs.
+    """
+    if seconds <= 0:
+        return
+    print()
+    print("  " + "=" * 56)
+    print("  ==  EXECUTING HARNESS -- HANDS OFF KEYBOARD AND MOUSE  ==")
+    print("  " + "=" * 56, flush=True)
+    whole = int(seconds)
+    for remaining in range(whole, 0, -1):
+        print(f"  ==  synthetic input begins in {remaining}...", flush=True)
+        time.sleep(1.0)
+    frac = seconds - whole
+    if frac > 0:
+        time.sleep(frac)
+    print("  ==  firing now", flush=True)
+    print()
+
+
 def click(hwnd, pid, fx, fy):
     """Click at a fractional position inside the client window.
 
@@ -483,6 +519,12 @@ def main():
                          "the window, so scripts survive a resize.")
     ap.add_argument("--linger", type=int, default=25,
                     help="Seconds to keep sampling after the last Enter.")
+    ap.add_argument("--warn", type=float, default=3.0, metavar="SECONDS",
+                    help="Countdown printed before any synthetic input, so a "
+                         "human at the machine can take their hands off the "
+                         "keyboard and mouse. Competing input makes a run fail "
+                         "for a reason unrelated to what was being tested. "
+                         "0 disables it (for unattended runs).")
     ap.add_argument("--outdir", default=vault_path("captures", "harness"))
     ap.add_argument("--keep-open", action="store_true",
                     help="Leave the client running at the end instead of closing it.")
@@ -534,6 +576,19 @@ def main():
         print(f"window up: {title!r}")
     else:
         print("no window appeared - is the patcher stuck?")
+
+    # HANDS OFF THE KEYBOARD AND MOUSE, and say so loudly enough to react to.
+    #
+    # This harness synthesises clicks and keypresses into the client's window. A
+    # human touching the mouse or keyboard while it fires competes with it, and
+    # the run can then fail for a reason that has nothing to do with what was
+    # being tested -- which is worse than a plain failure, because the transcript
+    # looks like evidence. OBSERVED 2026-08-11 during rung C2: the operator could
+    # not tell when input was about to start, and there was no warning to react to.
+    #
+    # A countdown is enough. It costs `warn` seconds once per run, and the run is
+    # already tens of seconds long.
+    warn_hands_off(a.warn)
 
     # Scripted actions rather than three hardcoded Enters, because which input the
     # client accepts at each screen turned out not to be guessable: the login

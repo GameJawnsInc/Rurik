@@ -25,10 +25,12 @@ sys.path.insert(0, os.path.join(HERE, "authsrv"))
 import checks  # noqa: E402
 import content  # noqa: E402
 
-# 4 load + 5 migration + 8 refusal + 3 overlay + 2 shape = 22, measured from a
+# 4 load + 7 migration + 8 refusal + 3 overlay + 2 shape = 24, measured from a
 # real green run. Every section runs unconditionally; nothing here is fixture-dependent
-# beyond content/ itself, which is tracked.
-LEDGER = checks.Ledger("content store", floor=22)
+# beyond content/ itself, which is tracked. It was 22 until rung C2 added a ninth map
+# row: the migration section now names the addition instead of pinning a length, so a
+# new row is a decision somebody wrote down rather than a number that drifted.
+LEDGER = checks.Ledger("content store", floor=24)
 
 
 def write(dirpath, name, text):
@@ -55,8 +57,8 @@ def main():
     world = content.load()
 
     # --- it loads, and it loaded the tables we expect ------------------------
-    LEDGER.ok(world.census().get("map", 0) == 8,
-              "eight maps load", f"{world.census().get('map')}")
+    LEDGER.ok(world.census().get("map", 0) == 9,
+              "nine maps load", f"{world.census().get('map')}")
     LEDGER.ok(all(world.census().get(k) for k in
                   ("npc", "item", "spawn", "player", "attack_speed")),
               "every table has at least one row", str(world.census()))
@@ -79,8 +81,22 @@ def main():
               "map 148 is byte-for-byte what MAP_STATIC_CONFIG held", str(msc[148]))
     LEDGER.ok(msc[449] == (0x345CC, (-9067.0, 13218.0), 0, False),
               "map 449 (the fallback) is unchanged", str(msc[449]))
-    LEDGER.ok(len(msc) == 8 and set(msc) == {148, 146, 449, 194, 55, 474, 558, 90},
-              "the same eight map ids, no more and no fewer")
+    MIGRATED = {148, 146, 449, 194, 55, 474, 558, 90}
+    LEDGER.ok(MIGRATED <= set(msc),
+              "all eight migrated map ids are still present",
+              f"missing {sorted(MIGRATED - set(msc))}")
+    # Rows added since the migration are named here rather than absorbed into a
+    # count, because "the table grew" and "a row changed meaning" look identical
+    # to a length check. 143 is rung C2's experiment row (studies/customarea
+    # FINDINGS 18.11): it points at MFT row 71496, which holds DIFFERENT content
+    # in the C2 archive copies than in `vault/dat_study/Gw.dat`.
+    ADDED = {143}
+    LEDGER.ok(set(msc) == MIGRATED | ADDED,
+              "and the only additions are the ones this test names",
+              f"unnamed: {sorted(set(msc) - MIGRATED - ADDED)}")
+    LEDGER.ok(msc.get(143) == (0x287D3, (1536.0, 1536.0), 0, False),
+              "map 143 is C2's target row, spawned at the centre of the "
+              "DELIVERED map's rect", str(msc.get(143)))
 
     hatcher = world.get("npc", "hatcher")
     LEDGER.ok((hatcher["file_id"], hatcher["model_id"], hatcher["flags"],

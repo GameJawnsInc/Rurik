@@ -148,6 +148,26 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   byte-for-byte even after something else took the freed blocks, and that the
   reservation refusal holds from both sides. Four defects, none of which could
   fail a checksum -- the archive verified perfectly through all of them),
+  `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
+  5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
+  the ten open-time rules the client itself applies is broken on purpose and must
+  go red ALONE, because a gate that reddens at everything is as useless as one
+  that reddens at nothing. The isolation half is what earns the run: the fixture
+  was relaid twice to make it possible, and it caught the first sabotage of the
+  reserved-row rule tripping two unrelated items. It also pins the four shapes of
+  FINDINGS 18.5's Tier 1 table -- relocation, recycle, delete, sibling relink --
+  plus a fifth, UNCLASSIFIED, because a shape the table does not name must be
+  reported and not dropped; that the MFT is located from a header read in the
+  same call, since the table MOVES and a reader seeking to a remembered offset
+  diffs the wrong bytes against themselves and looks green; and `archive.py`'s
+  `RURIK_DAT` override, checked by opening `Archive()` with NO path -- reading
+  the constant would pass against a module that never uses it. The lever exists
+  because a running client holds an exclusive lock on its own archive, so the
+  server and the client can never share one file. Last, the three exit codes are
+  held apart through the CLI: `--diff` exits 1 to mean the archive CHANGED, which
+  is a result, so an archive too broken to have findings must exit 2 -- it exited
+  1 from an uncaught traceback, and a reader of the code would have reported the
+  crash as "the row moved"),
   `toolkit/mapdata/test_datplan.py` (where a new file may be PUT, against an
   archive the test builds with two shadow containers in it: that placement is
   best fit rather than the head of the largest run, that a run carrying a live

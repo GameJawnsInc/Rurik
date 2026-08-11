@@ -3016,3 +3016,142 @@ python toolkit/mapdata/mapexport.py --row 7982 --out <dir>
     --python-exit-code 66 --python tools/blender/import_gwmap.py -- \
     <dir>/row_7982.gwmap.json --dump <dir>/mesh.json
 ```
+
+---
+
+## 20. Rung C2 — OBSERVED: the client loaded a map from a row it did not come from (2026-08-11)
+
+The first rung in this arc to write an archive and launch a client. Owner-authorised.
+Four arms, each with a pre-flight, a per-arm snapshot and a post-flight diff. Both copies
+were re-cut from `dat_study` afterwards and verified byte-identical to their pristine
+snapshots.
+
+### 20.1 The answer
+
+**Yes. Delivery works, and a custom area is ONE payload.**
+
+Arms 1 and 2 both loaded. Row 46196's map payload — ArenaNet's own bytes, re-emitted
+through `mapfile.MapFile.encode()` and required to equal the archive's own bytes before
+being written — was placed **stored** over row 71496, a live retail area, and the retail
+client loaded it, rendered it, and put a character in it.
+
+| arm | partner | result |
+|---|---|---|
+| **2 — stale partner** | left as the original area's 12,495 B Stripped stream | **loaded**, no re-bloat, no row change |
+| **1 — matched** | written to the copied map's own 2,951 B Stripped stream | **loaded**, no re-bloat, no row change |
+| 3 — chunk-table size +4 | as arm 1 | **loaded anyway — the control did not control** |
+| **3b — terrain signature, one bit** | as arm 1 | **REFUSED by name, then crashed** |
+
+Three things follow, and the first is the one that shrinks the authoring job:
+
+- **The Stripped partner is not consulted on a successful load.** Arm 2 ran first, when the
+  partner was genuinely stale, and the map still loaded — with all three of the run sheet's
+  discriminators holding: `check_target` after the client exited still read 8,471 B / 18
+  chunks / 1 plane / 2 trapezoids rather than the original's ~33,021 B / 27; the post-flight
+  showed rows 71496 and 71497 **unchanged**; and `Gw.log` carried no
+  `failed to load. Attempting to re-bloat.` So **an authoring tool emits one Bloated map
+  file**, and §17.5's "author the Bloated chunk if you want the client to load it as-is" is
+  now OBSERVED rather than inferred.
+- **A map file may ship STORED.** §8 measured that **0 of 38,621 stored rows begins with an
+  `ffna` type-3 payload** — no map has ever shipped uncompressed. Both arms wrote
+  `compression 8 -> 0` and the client read them. The Huffman encoder is not needed for maps.
+- **The server agreed it was reading the delivered map**, not the pristine occupant:
+  `[map] navmesh 0x287D3: 1 planes, 2 trapezoids` on every arm, against the original's 27.
+
+### 20.2 Arm 3 did not control anything, and that is a finding
+
+Arm 3 changed the **chunk table's** last size field, 17 → 21, so the final chunk claims four
+bytes that are not in the file. Our own walker refuses it (`archive.ffna_chunks` raises).
+**The client loaded it** — no failure line, no re-bloat, rows unchanged.
+
+**So the client's FFNA chunk walk does not validate that the last chunk's declared size fits
+the file.** §17.4 had already measured that terrain's per-record sizes are advisory to the
+client and that "our own walkers are stricter than the client, which is the right way
+round"; this extends the same asymmetry to the container's own chunk table. It also means
+an arm designed around *our* strictness tests nothing, which is exactly what happened.
+
+### 20.3 Arm 3b — the control that fired, and it corrects §6
+
+Arm 3b flips **one bit** of the Bloated terrain chunk's signature (`0x87821134` →
+`0x87821135`), which §17.4 measured as a hard `jne`→fail gate. The container still walks 18
+chunks, so this isolates the content gate from the framing. Prediction was stated first.
+
+The client's own words, from `Gw.log`:
+
+```
+Error: Terrain: Failed to import data.
+Error: Map '0x0287d3' corrupt chunk 'Terrain Bloated Data'
+```
+
+Our file id, our chunk, named in ArenaNet's own vocabulary — `Terrain` + stage `Bloated` +
+type `Data`, which is exactly §3's decomposition of `0x20000002` read back to us by the
+client. That is the strongest confirmation of §3's chunk-naming the corpus could give.
+
+Then **it crashed**: `c0000005`, "Memory at address 00000017 could not be read", one second
+into the map, with the crash's own Error Logs carrying the same two lines.
+
+**This corrects §6 and §17.3.** Both say the loader "logs `Creating default map` and
+synthesises an empty map rather than crashing. Only if *that* fails does it assert."
+MEASURED: a map whose terrain chunk fails its hard gate produces **no `Creating default map`
+line at all**, **no re-bloat attempt**, and an access violation — not an assert, and not a
+graceful fallback. The failure path is less forgiving than the disassembly suggested.
+
+Two consequences for authoring: a structurally-plausible map with one wrong magic **kills
+the client**, so the authoring pipeline's own validators are the safety net rather than the
+loader's; and the re-bloat path did **not** fire for a corrupt chunk, which narrows §17.1's
+model of when the client compiles a map — E3 cannot assume a bad Bloated chunk is enough to
+provoke it.
+
+### 20.4 What the archive did, and the baseline that made it readable
+
+**The positive control earned its place.** Run against untouched copies before any write, it
+loaded Kamadan *and* showed the client relocating rows **8315, 8316, 8317** — the known
+scratch rows — with the descriptor counter moving 26881 → 26885. Every subsequent arm moved
+the same rows and nothing else, so the baseline is what makes "our rows did not change"
+mean anything. Without it, the first arm's diff would have shown three relocations and been
+unreadable.
+
+**No arm relocated 71496 or 71497.** The client wrote to its archive on every run — it
+always does — but never to the rows under test.
+
+**No checksum could have told us any of this.** §18.5 predicted it and it held: `--verify`
+passed after every arm regardless. The 24-byte MFT diff is the only detector.
+
+### 20.5 §16-P7, honoured rather than argued away
+
+Row 71496 is **a live retail area and we still do not know which one** — 64×64 cells, 27
+trapezoids, rect −3072..3072. It was chosen by arithmetic as the smallest reservation of
+348 candidates that holds both payloads, so it displaced less than any other choice would
+have. Everything happened on two dedicated copies; `dat_study` and `C:\gw` were never write
+targets, and both copies were re-cut afterwards and verified byte-identical to their
+pristine snapshots (`--diff` exit 0 on each).
+
+### 20.6 A harness change the run forced
+
+The operator could not tell when the harness was about to synthesise input, and competing
+mouse or keyboard input makes a run fail for a reason unrelated to what was being tested —
+worse than a plain failure, because the transcript still looks like evidence.
+`drive_client.warn_hands_off()` now prints a countdown before any click or keypress, wired
+into both `drive_client.py`'s action loop and `session.py`'s `_play`, with `--warn SECONDS`
+(default 3, `0` for unattended runs). In `session.py` it fires **after login completes**
+rather than at launch, because that is when the clicking starts — a warning at launch would
+expire during the load screen.
+
+There is no cleverer fix available: our input *is* real input as far as Windows is
+concerned, so the client cannot be asked to ignore the human's while accepting ours.
+
+*None of C2's conclusions depends on input timing.* The verdicts come from the capture, the
+archive diffs, the server's navmesh line and `Gw.log` — no keystroke can write
+`corrupt chunk 'Terrain Bloated Data'`.
+
+### 20.7 What C2 leaves
+
+**D1 is now the next rung and its criterion is unchanged**: author a map from our own
+builder rather than copying one of ArenaNet's, byte-identically to row 46196's payload, and
+report generated-versus-carried with a floor. C2 removed delivery from the risk list —
+what remains is entirely about *bytes we write*.
+
+**E3 is weakened as specified.** It assumed a failed Bloated load provokes the compiler;
+arm 3b failed a Bloated load and got a crash instead. The re-bloat's trigger is narrower
+than §17.1 modelled, and the cheapest remaining probe for it is the **zero-length** stream-1
+payload §17.1 names, which is a different failure mode from a corrupt chunk.
