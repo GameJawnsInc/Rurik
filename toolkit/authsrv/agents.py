@@ -177,7 +177,10 @@ def agent_update_speed(agent_id, speed, facing=FACING_FORWARD):
 
     This drives the WALK CYCLE's playback rate. An agent that moves without it
     animates at whatever default the client is holding, which reads as smooth
-    movement carrying a wrong-cadence, sliding-feet animation.
+    movement carrying a wrong-cadence, sliding-feet animation. CONFIRMED by eye
+    on our own server 2026-08-11. It is NOT an explanation for jank seen during
+    a TAPE REPLAY -- there the tape is the whole channel, this server sends
+    nothing of its own, and ArenaNet's tapes carry 163 of these themselves.
 
     UPSTREAM's gloss was "SpeedModifier -> agent, modifier, type" and it is
     REFUTED: a field capped at 1.0 cannot carry a movement buff, and the third

@@ -713,10 +713,19 @@ GAME_SMSG_AGENT_MOVE_DIRECTION = 0x0025
 # carries the evidence for each.
 #
 # 0x002B is the one to understand first. It is a NORMALISED movement rate --
-# 1.0 == 288 units/s -- and it drives the client's walk-cycle playback. Without
-# it an agent moves correctly and animates at whatever rate the client is
-# holding, which reads as smooth motion with a sliding-feet animation. That is
-# the symptom the owner reported on 2026-08-11 while replaying a tape.
+# 1.0 == 288 units/s -- and it drives the client's walk-cycle playback rate.
+#
+# DO NOT repeat the attribution this comment originally carried. It said this
+# explained a "smooth movement, janky animation" report from 2026-08-11, and
+# that was wrong twice over: the report came from a TAPE REPLAY, and in tape
+# mode this server sends nothing of its own -- the tape is the whole channel,
+# and ArenaNet's own tapes carry 163 of these. The client was receiving movement
+# rates throughout. A second hypothesis (Windows sleep granularity smearing the
+# replay) was also measured and refuted: play_tape schedules against an absolute
+# t0 so drift cannot accumulate, and sleep overshoot on this machine is
+# 0.1-0.7 ms. What 0x002B is actually worth is stated above and is about OUR
+# server's own sessions, where it is now sent and where the walk cycle was
+# confirmed by eye on 2026-08-11.
 GAME_SMSG_AGENT_UPDATE_SPEED = 0x002B
 # Absolute facing angle in radians + a turn rate in rad/s, BOTH marshalled u32.
 # Upstream called them rotation_cos/rotation_sin; sin^2+cos^2 over the live
@@ -3021,9 +3030,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # it is what the client's walk cycle plays at. We had
                         # never sent it, so the animation ran at whatever rate
                         # the client defaulted to while the position -- which
-                        # the server owns outright -- stayed correct. That is
-                        # the "movement smooth, animation janky" report of
-                        # 2026-08-11, and 1.0 here is exactly 288 units/s.
+                        # the server owns outright -- stayed correct. 1.0 here
+                        # is exactly 288 units/s. (This is NOT the explanation
+                        # for the tape-replay jank of 2026-08-11; see the
+                        # constant's own comment for why that attribution was
+                        # wrong and what was measured against it.)
                         send(GAME_SMSG_AGENT_UPDATE_SPEED,
                              agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
                              "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
