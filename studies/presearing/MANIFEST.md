@@ -375,6 +375,74 @@ so under Reforged the recruitable-companion surface is **not** zero.
 `Category:Reforged Mode content` (17 carry `Guild Wars Reforged content`). Revision §5 found
 the contamination qualitatively in one zone; this is its size.
 
+### 12. Forsaken Tunnels — from "zero names retrieved" to a full roster, and it is a different game
+
+§Monsters recorded *"Forsaken Tunnels ×3 — **UNKNOWN — zero names retrieved**"*, and #10's
+reason (c) named that hole. `Category:Forsaken Tunnels NPCs` holds **42 pages, 36 of them
+foes**, of which **18 appear nowhere else in the region**. Every one of the 18 is **Charr**:
+
+> Charr Ash Walker · Charr Ashen Lord · Charr Axe Lord · Charr Blade Lord · Charr Blade Warrior
+> · Charr Fire Caller · Charr Flame Keeper · Charr Martyr · Charr Mind Lord · Charr Mind Spark
+> · Charr Overseer · Charr Patrol Leader · Charr Patrol Stalker · Charr Shaman Lord · Charr
+> Stalker · Charr Stalker Lord · **Maz Scourgeheart** · **Wyle Brimscourge**
+
+Three carry a boss category: **Charr Patrol Leader, Maz Scourgeheart, Wyle Brimscourge**.
+
+**The region's hostile-type count therefore becomes 109** — the 91 of Revision §11 plus these
+18. Revision §11's 91 reproduced exactly on an independent recompute, which is worth stating
+because both numbers came from the same method and a silent drift would have been invisible.
+
+#### The level tier is the finding, not the roster
+
+| | Classic Pre-Searing | Forsaken Tunnels |
+|---|---|---|
+| Levels | **0–5** (Diseased Devourer 0, Restless Corpse 1, Ice Elemental 3, Raging Cadaver 3, **Skullreaver, the boss, 5**) | **6–24** (Grawl Fighter 6, Charr Overseer 6, Cave Elemental 7/9, Ironheart 8, Wyle Brimscourge 14, **Charr Ashen Lord 24**) |
+| Typical base skill bar | **0–1**, usually at attribute rank 0 | **2–4** |
+| Deepest bar | Undead Necromancer 7 (quest-only) | **Maz Scourgeheart 23**, across six level tiers (12/14/16/18/20/22) |
+| Sample armor | 8–32, boss 43 | Charr Overseer **20** (60 in Hard Mode) |
+
+**This is not the same difficulty tier wearing a new hat — it is post-Searing-grade content
+inside the Pre-Searing map graph.** A level-24 Charr in a region whose own boss is level 5 is a
+five-fold jump, and the skill bars jump with it.
+
+#### What that does to the scope decision
+
+§"One scope decision the owner has to make" asks whether v1 stops at the Academy mission. **It
+now has a second axis with real consequences, and this is the sharpest form of the Revision §1
+question:**
+
+- **Normal-mode v1** is levels 0–5, where **6 of 9** Catacombs residents have no skills at all
+  and the three that do cast at rank 0. The review specialist's complaint — that Pre-Searing
+  proves little about a skill engine — is *strongest* against exactly this scope.
+- **Reforged v1** adds a 36-foe Charr dungeon at levels 6–24 with real multi-skill bars, which
+  would exercise R4b properly — at the cost of taking a dependency on **opt-in Beta content
+  ArenaNet is still changing**, and of roughly doubling the monster surface.
+
+Neither is obviously right and no data settles it, which is why it stays the owner's call. But
+the choice is no longer "4 zones in or out"; it is "does v1 contain any content that would
+stress the combat engine at all".
+
+#### A method correction: the Reforged category is not a mode discriminator
+
+Only **14 foes** region-wide carry `Reforged Mode content` / `Guild Wars Reforged content`,
+yet the **entire 36-foe Forsaken Tunnels roster is Reforged-gated** by Revision §1's own
+evidence. The category is applied inconsistently on the wiki. **Use zone membership to decide
+mode, never the Reforged category** — which also means Revision §11's "16 of 206 pages are
+Reforged-flagged" is a floor on the contamination, not a measurement of it.
+
+#### Two dungeons, confirmed from the category side
+
+`Category:Forsaken Tunnels NPCs` (42) and `Category:Tunnels of the Forsaken NPCs` (47) both
+exist and share only **10** pages. §"Four things the zone table settles" claimed these are
+different dungeons from the CLIENT row ids; the wiki's own taxonomy agrees independently.
+
+#### Ice Elemental (pre-Searing), the other named gap
+
+**Level 3, armor 10 against blunt, one skill — Frozen Burst at 0 Water Magic.** §Monsters had
+it as "lvl 3" with the roster "UNKNOWN — almost certainly incomplete". The level is confirmed;
+the creature fits the classic-tier pattern exactly (one skill, rank 0), and Wizard's Folly's
+real roster is **18 foes**, not the 2 recorded.
+
 ### What this pass did not reach
 
 Unchanged from item 3's priority list, and still open: skill bars for the Catacombs'
@@ -413,7 +481,7 @@ Exactness markers used in the count columns: **EXACT** = cannot move without the
 | 7 | Full-service town rows (`type 13`) in the region | **0** | EXACT | CLIENT |
 | 8 | Zones where hostiles spawn | **9–10** | APPROX | CLIENT types + WIKI |
 | 9 | One-way exits out of the region | **1** | EXACT | WIKI |
-| 10 | Distinct hostile creature type names | ~~35–40~~ → **91** (83 base mode · 8 Reforged · 15 Vanguard) | **EXACT-as-categorised**, Revision §11 — the old figure was low by 2.3× | WIKI, all 206 region NPC pages read |
+| 10 | Distinct hostile creature type names | ~~35–40~~ → **109** = 91 classic + **18 Forsaken-Tunnels-exclusive** (all Charr) | **EXACT-as-categorised**, Revision §11 and §12 — the old figure was low by ~3× | WIKI, all 225 region NPC pages read |
 | 11 | …with a documented ≥2-skill bar | **31** of 91 — 16 ambient, 13 Vanguard, 2 Reforged | EXACT-as-categorised; the `≥9` floor **holds**, but it is **zone-dependent** — see Revision §11, which supersedes §10 | WIKI, pages read |
 | 12 | …confirmed non-combatant | **2** (Aloe Husk, Aloe Seed) | EXACT-as-found — but they **do** carry skills (Healing Breeze, Shielding Hands at rank 0); non-combatant ≠ skill-less, Revision §11 | WIKI |
 | 13 | Named bosses, non-Vanguard | **6** → **7 Charr bosses**, all named, Revision §11 | Jaw Smokeskin · Scarl the Slicer · Red Eye the Unholy · **Blaze Bloodbane** · Blazefiend Griefblade · Vatlaaw Doomtooth · **Ghast Ashpyre**. The fourth altar name is resolved; the "conflation" theory is refuted. §4's misattributed citation stands as a separate defect | WIKI, category read |
