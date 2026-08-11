@@ -218,6 +218,58 @@ of enumerating rosters one category per zone will silently under-return rather t
 `Category:Pre-Searing bestiary` returning 0 members is the same hazard from the other side.
 **Find the convention from a page's own category tags before spending requests guessing names.**
 
+### 10. The Catacombs undead, read in full — and #11's floor does not survive them
+
+§Monsters said of this zone: *"The permanent residents returned no skill-bar page at all —
+**UNKNOWN, not zero**."* All eight named residents plus the boss have now been read. It is
+**zero**, and the distinction matters because UNKNOWN invites a capture and zero does not.
+
+| Creature | Level | Prof | Base skill bar | Armor |
+|---|---|---|---|---|
+| Restless Corpse | 1 (22), 15 | W | **`*''None''`** | 30 @ L1 |
+| Raging Cadaver | 3 (22), 15 | N | **`*''None''`** | 32 @ L3 |
+| Deadly Crypt Spider | 2 | R | **`''None''`** | — |
+| Diseased Devourer | **0** | — | **`''none''`** | 10 |
+| Snapping Devourer | 2 | W | **`''None''`** | 10 |
+| Crypt Fiend | 3 | N | **1** — Chilblains, at **0 Curses** | — |
+| Tomb Nightmare | 4 | N | **1** — Chilblains, at **0 Curses** | — |
+| Shatter Gargoyle | 3, 4 (22), 8 (23), 15 | Me | **1** — Backfire, at 3 Domination | 8 @ L3 |
+| **Skullreaver** (boss) | 5 | W | **no `==Skills==` section** | 43 |
+
+**Six of nine have no skills at all; the other three have exactly one; not one has a bar of
+two.** Two of the three single-skill cases cast at **attribute rank 0**, so even that one skill
+resolves at its floor value.
+
+**#11 — "≥9 creature types with a documented ≥2-skill bar, FLOOR" — is not supported by this
+zone**, which §Monsters' own roster makes the most skill-dense ambient area in the region. The
+floor is carried entirely by **quest-only** content. The one pillar that *does* hold up is the
+Undead Necromancer, confirmed verbatim: **7 skills** — Animate Bone Horror, Blood Renewal,
+Deathly Swarm, Faintheartedness, Soul Barbs, Vampiric Gaze, Vampiric Touch — across **three
+tiers** (L9/12/16) with a distinct attribute spread each. #11 should be restated as
+*"≥N quest-only creature types"*, with N re-counted, because "the region contains creatures
+with real bars" and "the region's ambient population has bars" are different claims and only
+the first is true.
+
+**The cleanest single piece of evidence in this whole question is the Shatter Gargoyle**, whose
+page splits its bar by region on one page: **`===Pre-Searing===` gives it one skill (Backfire
+at 3 Domination); `===Post-Searing===` gives it four** (Conjure Phantasm, Crippling Anguish,
+Energy Tap, Imagined Burden). Same creature, same wiki page, same editors — so the comparison
+controls for documentation quality, which is the objection that could otherwise be raised
+against the whole table above. **The review specialist's recommendation to pick a post-Searing
+encounter as the R4b/R4c oracle is supported by ArenaNet's own creature, documented both ways.**
+
+**Armor, as a seeding range** (per Revision §8): the ambient Pre-Searing tier runs **8–32**
+across every damage type, with the region's only non-Charr boss at **43**. Devourers sit at 10
+and the Shatter Gargoyle at 8, so armor tracks type rather than level. Note *Diseased Devourer*
+is **level 0** — a real value on the page, not a parse failure, and worth knowing before a
+level field is validated as `>= 1`.
+
+**A capture-side corroboration nobody was looking for.** The Undead Necromancer's bar contains
+**Deathly Swarm and Vampiric Gaze** — the exact two skills the operator cast in tape run 2
+(`studies/tape/FINDINGS.md` T1, skills 153 and 105). That is ArenaNet's own creature sharing a
+skill set with our recorded session, and it means R4b's Hex exemplar **Faintheartedness 135**
+is on a monster bar in the very zone R4c would populate.
+
 ### What this pass did not reach
 
 Unchanged from item 3's priority list, and still open: skill bars for the Catacombs'
@@ -257,7 +309,7 @@ Exactness markers used in the count columns: **EXACT** = cannot move without the
 | 8 | Zones where hostiles spawn | **9–10** | APPROX | CLIENT types + WIKI |
 | 9 | One-way exits out of the region | **1** | EXACT | WIKI |
 | 10 | Distinct hostile creature type names | **35–40** | APPROX, likely undercount | WIKI |
-| 11 | …with a documented ≥2-skill bar | **≥9** | FLOOR | WIKI |
+| 11 | …with a documented ≥2-skill bar | **≥9** → **not supported as stated**, Revision §10 | FLOOR, but of **quest-only** types — 0 of the Catacombs' 9 permanent residents has a ≥2-skill bar | WIKI, pages read |
 | 12 | …confirmed non-combatant | **2** (Aloe Husk, Aloe Seed) | EXACT-as-found | WIKI |
 | 13 | Named bosses, non-Vanguard | **6** | APPROX → **UNVERIFIED**, see Revision §4 — the citation this row rests on is not on the page it names | WIKI |
 | 14 | Vanguard-quest bosses | ~~3 named of ~9~~ → **3 of 3, all named** | EXACT; Revision §3 — the "~9" was the *quest* count, and only the 3 Bounty quests name a boss | WIKI |
