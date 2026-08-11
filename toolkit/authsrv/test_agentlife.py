@@ -26,17 +26,20 @@ standard library only.
 
     python toolkit/authsrv/test_agentlife.py
 """
+import math
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=26)
+LEDGER = checks.Ledger("agent lifetime", floor=38)
 
 
 def main():
@@ -174,7 +177,94 @@ def main():
               "and a clean buffer of whole messages consumes exactly, with no desync",
               f"{len(m3)} msgs, {len(rest3)}B left")
 
+    section_named_builders(codec)
     return LEDGER.verdict()
+
+
+def section_named_builders(codec):
+    """The five messages named 2026-08-10 and first sent 2026-08-11.
+
+    Each builder enforces a bound the CLIENT asserts on itself, so what these
+    guard against is an assert dialog mid-session rather than a wrong pixel.
+    The refusals are checked one by one: a guard nothing exercises rots into a
+    comment, and every one of these is a mistake a caller can plausibly make.
+    """
+    built = {
+        0x002B: agents.agent_update_speed(7, 0.5),
+        0x002E: agents.agent_update_rotation(7, math.pi / 2, 2.0943952),
+        0x0026: agents.agent_update_flags(7, agents.AGENT_KIND_NPC),
+        0x00A6: agents.agent_set_profession(7, 4),
+        0x0048: agents.agent_set_tabard_visible(7, False),
+    }
+    bad = []
+    for op, vals in built.items():
+        raw = codec.encode("GAME_SMSG", op, vals)
+        msgs, used, _rest = codec.decode_stream("GAME_SMSG", raw)
+        if used != len(raw) or len(msgs) != 1 or list(msgs[0][1][1:]) != list(vals):
+            bad.append(f"0x{op:04X}")
+    LEDGER.ok(not bad,
+              "the five newly-sendable messages encode and read back unchanged",
+              f"mismatched: {bad}" if bad else
+              "0x002B, 0x002E, 0x0026, 0x00A6, 0x0048 -- each through the real "
+              "catalog, consuming exactly its own bytes. Before 2026-08-11 this "
+              "server could not send any of them: 0x0026 had a constant and no "
+              "send site, the other four were not even defined")
+
+    # 0x002E's payload is two u32s carrying float32 bits. If someone "fixes" the
+    # catalog to float -- which the values invite, and which nearly happened to
+    # GAME_CMSG 0x0040 -- this goes red instead of the wire silently changing.
+    ang = agents.agent_update_rotation(7, math.pi / 2, 2.0943952)
+    back = struct.unpack("<f", struct.pack("<I", ang[1]))[0]
+    LEDGER.ok(all(isinstance(v, int) for v in ang[1:])
+              and abs(back - math.pi / 2) < 1e-6,
+              "0x002E marshals its two floats as u32 and the bits survive",
+              f"angle bits {ang[1]:#010x} decode to {back:.6f} rad -- the values "
+              f"are floats and the marshalling is not, exactly as for GAME_CMSG "
+              f"0x0040 ROTATE_PLAYER, where 'correcting' the type would have "
+              f"broken a message we understand")
+
+    refusals = [
+        ("a speed in units/s, which is the obvious caller error",
+         agents.agent_update_speed, (7, 288.0)),
+        ("a speed under the client's own floor",
+         agents.agent_update_speed, (7, 0.001)),
+        ("a facing outside AGENT_FACING_MASK",
+         agents.agent_update_speed, (7, 0.5, 0x10)),
+        ("an angle outside +/-pi",
+         agents.agent_update_rotation, (7, 10.0, 1.0)),
+        ("an angle of NaN, which is not the sentinel",
+         agents.agent_update_rotation, (7, float("nan"), 1.0)),
+        ("a turn rate of zero",
+         agents.agent_update_rotation, (7, 0.0, 0.0)),
+        ("flags inside the mask the client keeps for itself",
+         agents.agent_update_flags, (7, 0x10000)),
+        ("a primary profession of 0, which does NOT mean 'none'",
+         agents.agent_set_profession, (7, 0)),
+        ("a secondary profession equal to the primary",
+         agents.agent_set_profession, (7, 4, 4)),
+    ]
+    for label, fn, args in refusals:
+        try:
+            fn(*args)
+            ok = False
+        except ValueError:
+            ok = True
+        LEDGER.ok(ok, f"and it refuses {label}",
+                  "raised ValueError" if ok else
+                  "ACCEPTED -- the client would have asserted instead")
+
+    # The sentinel is a real value and must NOT be caught by the angle guard.
+    spin = None
+    try:
+        spin = agents.agent_update_rotation(7, float("inf"), 1.0)
+        ok = spin[1] == 0x7F800000
+    except ValueError:
+        ok = False
+    LEDGER.ok(ok,
+              "but +inf passes, because it is the client's own free-spin sentinel",
+              f"angle bits {spin[1]:#010x} == +inf" if ok else
+              "the guard swallowed the sentinel, which would make the message "
+              "unusable for the one case it is most needed")
 
 
 if __name__ == "__main__":

@@ -678,10 +678,28 @@ t=23.20  0x00F1 status=0x0010                         <- CHAR_STATUS_DEAD
 t=23.20  0x0026 AGENT_UPDATE_FLAGS    flags=0x8
 ```
 
-So T3's two 2.00 s windows now have **names on both ends**: `0x00F1` status `0x1000`
-is hidden/burrowed and `0x0000` is surfaced, and the windows are create -> surface
-and burrow -> remove. This is `CHAR_STATUS_*` in the client's own vocabulary
-(`ChCliInt.h:254`, `studies/smsg/FINDINGS.md`), not an effects field.
+**CORRECTED 2026-08-11, same day, before anything was built on it.** The paragraph
+here first read "`0x1000` is hidden/burrowed and `0x0000` is surfaced". That is wrong,
+and `agents.py`'s existing comment already had it right: the bit is set during **both
+transitions**, not for the hidden state. The measurement that settles it, over every
+status interval in both captures:
+
+| bit `0x1000` | n | median | stdev | max |
+|---|---|---|---|---|
+| **set** | 373 | **2.000 s** | 0.136 | 2.037 |
+| clear | 655 | 1.086 s | 18.270 | 197.8 |
+
+A **fixed** 2.00 s duration is a transition animation; a state would vary with what the
+creature is doing, and the clear intervals do exactly that (0.11 s to 197.8 s). So the
+bit marks the two-second emerge and submerge animations, and T3's two windows are
+create -> (2.00 s) -> targetable and burrow -> (2.00 s) -> removed. The status field
+itself is `CHAR_STATUS_*` in the client's own vocabulary (`ChCliInt.h:254`,
+`studies/smsg/FINDINGS.md`), not an effects field -- that part stands.
+
+The error is worth keeping visible: it was produced by reading one agent's trace and
+naming what the values looked like, when the repo had already done the harder version
+of the same work from 132 samples. A single legible example is exactly the evidence
+that makes a wrong name feel settled.
 
 **Death is not a burrow, and that is a distinction the model could have got wrong.**
 The kill interrupts the cycle: status goes to `0x0010` (DEAD) while the worm is

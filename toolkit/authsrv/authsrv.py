@@ -215,7 +215,7 @@ GAME_SMSG_WORLD_CREATE_AGENT = 0x0020
 # never-created id or double-remove without an intervening create.
 GAME_SMSG_WORLD_REMOVE_AGENT = 0x0021
 GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT = 0x0022
-GAME_SMSG_PLAYER_CREATE = 0x0059
+GAME_SMSG_PLAYER_INFO = 0x0059
 GAME_SMSG_PLAYER_UPDATE_PROFESSION = 0x00B7
 
 # The 15-dword player attribute set. OBSERVED 2026-08-05: sending this with
@@ -311,26 +311,26 @@ except Exception as _exc:                                     # noqa: BLE001
 # Non-player agents. Shapes agree with the client's own message-format tables
 # (studies/msgtable); what each field MEANS is in studies/enemy/PLAN.md.
 GAME_SMSG_NPC_UPDATE_PROPERTIES = 0x0056
-GAME_SMSG_NPC_UPDATE_MODEL = 0x0057
+GAME_SMSG_MONSTER_COMPOSITE = 0x0057
 GAME_SMSG_AGENT_PROPERTY_UPDATE_INT = 0x009F
 GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET = 0x00A3
 # The int-with-target variant. Same field shape as 0x00A3 (prop, target, cause,
 # value) but the value is a plain int rather than IEEE bits. GWCA calls this
 # family GenericValueTarget. INFERRED from the shape match; not yet observed.
 GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET = 0x00A0
-GAME_SMSG_AGENT_UPDATE_EFFECTS = 0x00F1
+GAME_SMSG_AGENT_UPDATE_STATUS = 0x00F1
 # The create-time sibling of 0x00F1, and D2 in the divergence register: 472 messages
 # in the live capture, the highest count of anything ArenaNet sends that we never did.
 # OBSERVED as [agent_id, dword] carrying the effect bitfield an agent is born with --
 # 0x1000 on 151 of 151 Plague Worm creates and 0 on the ordinary ones in the same tape.
-GAME_SMSG_AGENT_INITIAL_EFFECTS = 0x00F0
+GAME_SMSG_AGENT_INITIAL_STATUS = 0x00F0
 # Deliberately NOT given a meaningful name. It carries [agent_id, byte] and the whole
 # corpus holds two values: 9, on every one of 140 worm creates, and 8, exactly once --
 # on the Wolf at the instant it died, alongside EFFECT_DEAD. Two values with one of them
 # seen a single time is a shape, not a semantic, and this project's rule is to refuse
 # the guess. Note also that GAME_CMSG 0x0026 is ATTACK: 0x26 is the one value ArenaNet
 # sends on BOTH channels, and they are different messages. Do not reuse either name.
-GAME_SMSG_AGENT_UNNAMED_0026 = 0x0026
+GAME_SMSG_AGENT_UPDATE_FLAGS = 0x0026
 BURROW_TAIL_0026_VALUE = 9        # what every observed worm create carried
 
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
@@ -707,6 +707,28 @@ GAME_SMSG_AGENT_UPDATE_POSITION = 0x002C
 # until a playtest says the walking looks right.
 GAME_SMSG_AGENT_MOVE_DIRECTION = 0x0025
 
+# The four this server could not send until 2026-08-11, all named on 2026-08-10
+# from the client's own asserts joined to two live captures. Builders and the
+# bounds the client asserts on itself are in agents.py; studies/smsg/FINDINGS.md
+# carries the evidence for each.
+#
+# 0x002B is the one to understand first. It is a NORMALISED movement rate --
+# 1.0 == 288 units/s -- and it drives the client's walk-cycle playback. Without
+# it an agent moves correctly and animates at whatever rate the client is
+# holding, which reads as smooth motion with a sliding-feet animation. That is
+# the symptom the owner reported on 2026-08-11 while replaying a tape.
+GAME_SMSG_AGENT_UPDATE_SPEED = 0x002B
+# Absolute facing angle in radians + a turn rate in rad/s, BOTH marshalled u32.
+# Upstream called them rotation_cos/rotation_sin; sin^2+cos^2 over the live
+# corpus ranges 1.23-4.87 and is never 1, so that reading is refuted.
+GAME_SMSG_AGENT_UPDATE_ROTATION = 0x002E
+# ArenaNet sends this after EVERY 0x006E, 366 of 366 across both captures. Zero
+# makes the client skip a guild lookup on an id we never populated.
+GAME_SMSG_AGENT_SET_TABARD_VISIBLE = 0x0048
+# The profession pair. The client's own invariant is primary != secondary, and
+# across 387 live samples the primary is 1..6 and NEVER 0.
+GAME_SMSG_AGENT_SET_PROFESSION = 0x00A6
+
 GAME_SRV_HOST = "127.0.0.1"
 # How GAME_SERVER_INFO fills its 24-byte host field. "sockaddr" is what both
 # reference implementations do; "string" is the competing reading, kept only
@@ -994,7 +1016,7 @@ def hit_enemy(send, state, target_id, conn_id):
         # death message failed before this was read out of the client
         # (studies/agentprops/FINDINGS.md 1c).
         agent["dead"], agent["died_at"] = True, now
-        send(GAME_SMSG_AGENT_UPDATE_EFFECTS, [target_id, agents.EFFECT_DEAD],
+        send(GAME_SMSG_AGENT_UPDATE_STATUS, [target_id, agents.EFFECT_DEAD],
              f"KILL agent {target_id}")
         print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
               f"back up in {REVIVE_AFTER:.0f}s", flush=True)
@@ -1025,7 +1047,7 @@ def revive_due(send, state, conn_id):
         agent["dead"] = False
         agent["health"] = agent["max_health"]
         agent["last_hit"] = 0.0
-        send(GAME_SMSG_AGENT_UPDATE_EFFECTS, [agent_id, 0],
+        send(GAME_SMSG_AGENT_UPDATE_STATUS, [agent_id, 0],
              f"revive agent {agent_id}")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
@@ -1178,7 +1200,7 @@ def create_agent_world(send, state, agent_id, entry, why,
         # it. That guess is what made the first agent_removal run's negative
         # meaningless. OBSERVED; studies/smsg/FINDINGS.md.
         if npc.get("model_id") is not None:
-            send(GAME_SMSG_NPC_UPDATE_MODEL, agents.npc_model(definition, npc),
+            send(GAME_SMSG_MONSTER_COMPOSITE, agents.npc_model(definition, npc),
                  f"NPC_UPDATE_MODEL(def {definition})")
 
     # The effects an agent is BORN with, which is what 0x00F0 is for. This is the one
@@ -1198,7 +1220,7 @@ def create_agent_world(send, state, agent_id, entry, why,
     # observation un-attributable -- which is the whole lesson of the first agent_removal
     # probe, whose bare 0x0020 produced a negative that meant nothing.
     if entry.get("effects"):
-        send(GAME_SMSG_AGENT_INITIAL_EFFECTS, [agent_id, int(entry["effects"])],
+        send(GAME_SMSG_AGENT_INITIAL_STATUS, [agent_id, int(entry["effects"])],
              f"AGENT_INITIAL_EFFECTS({agent_id}, 0x{int(entry['effects']):04X})")
 
     send(GAME_SMSG_WORLD_CREATE_AGENT,
@@ -1210,6 +1232,38 @@ def create_agent_world(send, state, agent_id, entry, why,
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, agent_id, int(entry["max_health"])],
          f"health {int(entry['max_health'])} on agent {agent_id}")
+
+    # --- three of the four named on 2026-08-10, sent here for the first time ---
+    #
+    # The profession pair. Ours have always rendered with no profession at all,
+    # because we never sent this: no icon on the nameplate, nothing in the
+    # roster. The content row carries it, and agents.py refuses a primary of 0
+    # because 0 never occurs in 387 live samples and does NOT mean "none".
+    # `npc` is already bound at the top of this function.
+    if npc.get("profession"):
+        send(GAME_SMSG_AGENT_SET_PROFESSION,
+             agents.agent_set_profession(agent_id, int(npc["profession"])),
+             f"AGENT_SET_PROFESSION({agent_id}, {npc['profession']})")
+
+    # The movement rate, NORMALISED against the 288 units/s reference. This is
+    # what makes the walk cycle play at the speed the agent actually travels;
+    # the Lakeside worm's 12.0 units/s is 0.0417 here, and a worm animating at
+    # a player's cadence while crawling is exactly the mismatch this fixes.
+    speed_units = float(npc.get("speed", agents.DEFAULT_RUN_SPEED))
+    send(GAME_SMSG_AGENT_UPDATE_SPEED,
+         agents.agent_update_speed(agent_id,
+                                   speed_units / agents.DEFAULT_RUN_SPEED),
+         f"AGENT_UPDATE_SPEED({agent_id}, {speed_units:g} u/s "
+         f"= {speed_units / agents.DEFAULT_RUN_SPEED:.4f})")
+
+    # The create burst's tail. OBSERVED: this message's field 2 mirrors the
+    # create's kind byte -- (9, 9) in 153 of 155 samples, (9, 8) in 2 -- so the
+    # value is the agent kind and not a guess. It is a MERGE, and agents.py
+    # refuses anything inside the mask the client keeps for itself.
+    send(GAME_SMSG_AGENT_UPDATE_FLAGS,
+         agents.agent_update_flags(agent_id, agents.AGENT_KIND_NPC),
+         f"AGENT_UPDATE_FLAGS({agent_id}, kind {agents.AGENT_KIND_NPC})")
+
     send_attack_speed(send, agent_id, entry["attack_speed"], entry.get("name", "npc"))
 
     live[agent_id] = entry
@@ -1273,13 +1327,13 @@ def burrow_tick(send, state, conn_id):
             entry["burrow_phase"] = BURROW_OUT
             entry["burrow_at"] = now + entry["burrow_out_seconds"]
             entry["effects"] = 0
-            send(GAME_SMSG_AGENT_UPDATE_EFFECTS, [agent_id, 0],
+            send(GAME_SMSG_AGENT_UPDATE_STATUS, [agent_id, 0],
                  f"agent {agent_id} is fully out")
         elif phase == BURROW_OUT:
             entry["burrow_phase"] = BURROW_SUBMERGING
             entry["burrow_at"] = now + BURROW_SUBMERGE_SECONDS
             entry["effects"] = agents.EFFECT_TRANSITION
-            send(GAME_SMSG_AGENT_UPDATE_EFFECTS,
+            send(GAME_SMSG_AGENT_UPDATE_STATUS,
                  [agent_id, agents.EFFECT_TRANSITION],
                  f"agent {agent_id} is submerging")
         elif phase == BURROW_SUBMERGING:
@@ -2933,7 +2987,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                              "INSTANCE_LOADED")
                         send(GAME_SMSG_WORLD_UPDATE_LOAD_TIME, [0],
                              "WORLD_UPDATE_LOAD_TIME")
-                        send(GAME_SMSG_PLAYER_CREATE,
+                        send(GAME_SMSG_PLAYER_INFO,
                              [PLAYER_NUMBER, PLAYER_AGENT_ID, APPEARANCE,
                               0, 0, 0, TEST_CHAR_NAME], "PLAYER_CREATE")
                         # Field names carrying hex offsets (h000B, h001E, h0023,
@@ -2961,6 +3015,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                               (INF, INF),        # h0059
                               0],
                              "WORLD_CREATE_AGENT")
+                        # The player's own movement rate, NORMALISED. The create
+                        # above carries speed_base in units/s (288.0, field 9);
+                        # this message is the same quantity as a FRACTION, and
+                        # it is what the client's walk cycle plays at. We had
+                        # never sent it, so the animation ran at whatever rate
+                        # the client defaulted to while the position -- which
+                        # the server owns outright -- stayed correct. That is
+                        # the "movement smooth, animation janky" report of
+                        # 2026-08-11, and 1.0 here is exactly 288 units/s.
+                        send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                             agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
+                             "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
                         # Attribute state must exist BEFORE the profession
                         # update lands. Sending profession alone killed the
                         # client on
@@ -3050,6 +3116,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  [PLAYER_AGENT_ID, WEAPON_ITEM_ID,
                                   0, 0, 0, 0, 0, 0, 0, 0],
                                  "UPDATE_AGENT_VISUAL_EQUIPMENT(weapon)")
+                            # ArenaNet sends this after EVERY 0x006E, 366 of
+                            # 366 across both live captures. Zero because we
+                            # have never populated a guild id, and 0 is what
+                            # makes the client skip the lookup rather than
+                            # resolve one that does not exist.
+                            send(GAME_SMSG_AGENT_SET_TABARD_VISIBLE,
+                                 agents.agent_set_tabard_visible(
+                                     PLAYER_AGENT_ID, False),
+                                 "AGENT_SET_TABARD_VISIBLE(player, 0)")
                             # And separately, what the agent WIELDS.
                             #
                             # These are ITEM IDS, not weapon types, and the

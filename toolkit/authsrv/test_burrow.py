@@ -126,7 +126,7 @@ def section_guard():
 
     ops = send.opcodes()
     LEDGER.ok(ops[:3] == [authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES,
-                          authsrv.GAME_SMSG_NPC_UPDATE_MODEL,
+                          authsrv.GAME_SMSG_MONSTER_COMPOSITE,
                           authsrv.GAME_SMSG_WORLD_CREATE_AGENT],
               "the definition still precedes the agent that uses it",
               f"{[hex(o) for o in ops]} -- the definition index is a raw array index "
