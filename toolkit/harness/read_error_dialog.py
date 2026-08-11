@@ -11,6 +11,26 @@ clicks. The dialog's default action is "Send report to ArenaNet", which would
 upload a crash dump from a patched client to the vendor -- exactly what the
 owner's standing rule forbids -- so nothing here is allowed to press a button.
 
+READ THE TRACE REBASED, OR IT DECODES TO GARBAGE THAT LOOKS LIKE CODE. Every
+address in the dump -- `Pc:`, `Rt:`, the DllList, the `*--> Code <--*` block -- is
+a RUNTIME address, and the client is loaded wherever ASLR put it. The dump states
+the base twice: `BaseAddr:` in the header and the first `DllList` row. Build
+38797's PE `ImageBase` is 0x00400000, so a dump reporting `BaseAddr: 007A0000`
+needs **0x3A0000 subtracted** before anything in it can be looked up in the file
+or handed to `codescan.py --dis`:
+
+    file_va = trace_addr - BaseAddr + 0x00400000
+
+The failure mode is what makes this worth a docstring rather than a comment. Feeding
+`codescan.py --dis` an un-rebased address does not error and does not return
+nothing -- it disassembles whatever bytes are there and prints confident-looking
+instructions (`int1`, `aas`, `xchg ebp, eax`, immediates like 0x9895a912). On
+2026-08-11 that cost a read of four crash frames before the base was noticed, and
+the rebased addresses then landed exactly on documented ground: `0x00BB829D` became
+`0x0081829D`, four bytes past a call, inside the agent-property dispatcher this repo
+had already written about at `0x0081823C`. Landing on known code is also the CHECK
+that the rebase is right -- do that before trusting a frame.
+
     python toolkit/harness/read_error_dialog.py            # wait for it, then dump
     python toolkit/harness/read_error_dialog.py --once     # dump now or exit 1
 """

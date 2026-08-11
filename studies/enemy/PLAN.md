@@ -1615,6 +1615,18 @@ server answers none of them.** There is no handler for `0x0033` anywhere in
 `authsrv.py`. That is the same shape as every movement bug this project has had:
 the client asks, we say nothing, and the symptom looks like the client refusing.
 
+> **STRUCK 2026-08-11 — both sentences above are false. See §10.6.**
+> `authsrv.py:2636` has dispatched `0x0033` to `begin_attack` for days: the click
+> reaches us and does start a fight. And `0x0033` is not an "interaction request"
+> — it is **arm 1 of the six-arm world-action switch** at `0x00514840`, the one
+> where ArenaNet's agents get arm 0 (`0x0026` ATTACK). The client is neither
+> refusing nor asking; it resolved the click to a different action and sent it.
+> The table survives as data; its framing does not. Those two rows are 2 of the
+> **ten** `is_explorable = 1` sessions §10.6 measures, which together produced
+> 80 × `0x0033` and zero `0x0026` — the town-versus-field gate was open and
+> changed nothing, so `--explorable` is REFUTED as the lever rather than merely
+> "tried and did not unlock attacking".
+
 Two candidate causes remain, and this narrows rather than settles:
 
 1. The client never sends `ATTACK_AGENT` at all — possibly the town, possibly
@@ -1757,3 +1769,652 @@ Each states its prediction first, per house rule. All fit
   ArenaNet-derived on top of that.
 - **Do not start on combat before E1.** Every combat message is addressed to an
   agent id, and we have one agent and nowhere to put a second.
+
+## 10. What draws the "cannot attack" marker — the refusal, read out of the binary
+
+**OBSERVED 2026-08-11**, from build 38797, `codescan.py --dis` and `asserts.py`.
+For a year of sessions this question was answered by absence: the client "has never
+once sent ATTACK_AGENT to us" and what stopped it was NOT FOUND after testing the
+weapon, the pools, the explorable flag, the team token and `0x002F`. The harness now
+shows the client drawing a **prohibited marker on the target's own health bar**, so
+the refusal is a decision, and decisions have code.
+
+### The chain
+
+`GmCoreAction`'s available-actions builder at **`0x005144F0`** fills a mask (`ebx`)
+of what the player may do to the current target. Its own asserts name it:
+`GmCoreAction:240 actionsList`, `:349 displayOrderIndex != arrsize(displayOrder)`.
+
+```
+005144F8  esi = actionsList          ; assert GmCoreAction:240 if null
+00514541  call 0x7e1460  (AvPrefs)   ; -> je 0x5147af : bail, EMPTY list
+00514551  call 0x84df60              ; -> jne 0x5147af : bail, EMPTY list
+0051455E  cmp edi, [ebx+4]           ; target == self -> skip
+00514570  test al, 0x10              ; a flag on SELF -> skip
+0051457B  call 0x7e0da0 (AvApi:193)  ; -> reads AgentView +0x9C
+00514583  cmp eax, 0xDB              ; TYPE TAG. not 0xDB -> ebx = 2, no attack
+0051458D  call 0x7df870              ; -> the ALLEGIANCE enum
+005145AD  lea eax,[edi-1]
+005145B0  cmp eax, 5
+005145B3  ja  0x514614               ; NOT 1..6 -> ebx = 2, no attack
+005145B5  jmp [eax*4 + 0x5147b8]     ; six-arm switch, one arm per allegiance
+```
+
+**The six arms are our own `ALLEGIANCE_*` constants**, 1..6 — `agents.py` already
+carries exactly that enum, and five separate readers of the byte compare it against
+**3**, which is `ALLEGIANCE_ENEMY`.
+
+### The two facts that matter, and they are new
+
+**1. A lookup MISS returns 7, which is out of range.** The allegiance getter is
+four instructions:
+
+```
+007DF876  call 0x802160                      ; a DIFFERENT list from the +0x9C one
+007DF87E  test eax,eax / je
+007DF882  movzx eax, byte ptr [eax + 0x1b5]  ; the allegiance byte
+007DF88B  mov eax, 7                         ; NOT FOUND -> 7
+```
+
+7 fails `cmp eax,5 / ja` and drops straight to the minimal mask. So an agent that
+renders, carries a nameplate and can be TARGETED — all of which our Hatcher does,
+because those come off the AgentView list at `0x802160`'s sibling `0x802140` — still
+offers no attack action if it is absent from the *character* list. Being visible and
+being attackable are two different registrations.
+
+**2. The allegiance byte is WRITE-ONCE, at construction.** `+0x1B5` has exactly two
+writers in the whole image, `0x007F2419` (`mov al, [ebp+0x14]` — a constructor
+parameter) and `0x007FA261` (`mov al, [edi+0x1c]`). **Nothing updates it afterwards.**
+
+That is why `0x002F` was tested and did nothing, and it retires that line of
+attempts: there is no post-construction setter to reach. Whatever decides an agent's
+allegiance is decided **when the agent is created**, from the create burst, and a
+later message cannot correct it.
+
+### What this does NOT establish, said plainly
+
+Which of the two gates our Hatcher actually fails. The `+0x9C == 0xDB` type tag and
+the allegiance enum are separate, and this reading has not measured either value for
+a live agent of ours. Our create sends field 3 = 1 and field 4 = 9 — **identical to
+ArenaNet's worm**, an agent the client does attack — so the type tag is unlikely to
+be the difference, but "unlikely" is not "measured".
+
+**The cheapest next step is a read, not a run**: `keytap.py` already reads client
+memory cross-process, so resolving our agent's object and printing `+0x9C` and
+`+0x1B5` answers in one shot which gate fails, and turns this from a mechanism into
+a diagnosis.
+
+**Ruled out this session, so it is not re-tried:** the allegiance FourCC. Our create
+sends `'mons'` where ArenaNet sends `'mon1'`, and that is the ONLY field differing
+between our Hatcher's create and ArenaNet's worm's beyond ids, position and speed.
+It looked decisive. It is not: **neither token appears anywhere in the image**, as a
+dword or as text, so the client cannot be recognising either. `nonc` and `nonn` do
+appear, exactly as §6e recorded. The team token is compared to the PLAYER's at
+runtime (`ChCliBase.cpp:326`), which is why an unrecognised token reads red — and
+red was always what §6e measured. Colour is not attackability, and the old comment
+generalised from one to the other.
+
+### 10.1 The read — and it REFUTES the chain above
+
+**OBSERVED 2026-08-11**, `toolkit/clientscan/agentprobe.py`, reading the live
+client's own memory while our Hatcher stood in the map:
+
+| agent | `+0x9C` | `+0x1B5` | `+0x13C` bit 0x10 |
+|---|---|---|---|
+| player (1) | `0xDB` — CHARACTER | 1 `ALLY_NONATTACKABLE` | clear |
+| **Hatcher (10)** | **`0xDB` — CHARACTER** | **3 `ALLEGIANCE_ENEMY`** | **clear** |
+
+**Every gate in §10 passes.** Our agent is registered as a character, the client
+has resolved its allegiance to ENEMY, and the flag that would skip the switch is
+clear — so `GmCoreAction`'s six-arm switch runs its ENEMY arm and the mask is
+built. The refusal is NOT in that function, and §10's chain, though correctly
+read, is not the blocker.
+
+**What that eliminates is worth more than what it found.** Every previous attempt
+at this problem — §6e's team-token work, the `0x002F` attempts, the hostile-token
+experiments — was aimed at convincing the client our agent is an enemy. **It
+already is one, and now that is measured rather than assumed.** That whole family
+of hypotheses is closed.
+
+**A claim of mine that has to come back: the prohibited marker on the target's
+health bar is NOT known to mean "cannot attack".** I read a small icon and
+asserted a meaning for it. The read says the client considers the agent an
+attackable-class enemy, so whatever that marker is, it is not the refusal. It may
+be a range indicator, a line-of-sight marker, or something else entirely.
+Screenshot-reading is not evidence, and this is the second time in two days that
+inferring a mechanism from a picture has cost a detour.
+
+**Where this leaves the question.** The agent's STATE is right, so the block is in
+the path between "the mask says attack is available" and "the client transmits".
+Candidates not yet read, in the order they gate:
+
+- `0x007E1460` (AvPrefs) at `0x00514541` — returns 0 and the list is dropped whole
+- `0x0084DF60` at `0x00514551` — nonzero and the list is dropped whole
+- whatever consumes the mask and decides to send `0x0026`/`0x0027`
+
+`agentprobe.py` makes each of these a read rather than a run, which is the loop
+that just worked: three hypotheses eliminated in one 30-second measurement where
+each would previously have cost a session.
+
+### 10.2 The remaining gates, read — and a caveat about the whole section
+
+**OBSERVED 2026-08-11.** Both bail-out gates in `0x005144F0` are now read.
+
+**`0x0084DF60` — the player-flags gate.** Four instructions:
+
+```
+0084DF60  call 0x47f660            ; the thread-local game context
+0084DF65  mov eax, [eax + 0x44]
+0084DF68  mov eax, [eax + 0x2a8]   ; the PLAYER FLAGS dword
+0084DF6E  shr eax, 4 / and eax, 1  ; returns bit 0x10
+```
+
+and the call site drops the action list **whole** when it returns nonzero. `+0x2A8`
+is the same `context->playerFlags` the transfer work already named (bit 2 is
+`PLAYER_FLAG_CONNECTED`, `MsCliGame.cpp:76`).
+
+**Bit `0x10` is set in exactly two places and cleared in NONE.** Compare bit 2,
+which has one setter (`0x008513A7`) and two clearers (`0x00850CA7`, `0x00851534`).
+Both setters have the same shape and both are gated on a message field:
+
+```
+cmp dword ptr [msg + 0x18], 0
+je  <skip>
+or  dword ptr [ctx + 0x2a8], 0x10
+```
+
+`0x0084EE83` sits inside the handler for **`GAME_SMSG 0x0195`
+INSTANCE_LOAD_SPAWN_POINT** (handler `0x0084ED00`), which our server DOES send. So
+this was a live candidate for shooting ourselves in the foot. **It is not:** our
+`0x0195` carries `[file_id, vec2, 0, 0, 0, 8 zero bytes]` — every trailing scalar
+is zero, so the `je` is taken and the bit stays clear. Set-once-never-cleared is
+worth keeping in view for the day we do put something there.
+
+**`0x007E1460`** is a three-line wrapper: look the agent up in the plain
+`0x00802140` array, return 0 if absent, else tail-jump to `0x005FCAE0`. Our agent
+IS in that array — §10.1 read its object through it — so this gate is passed.
+
+### The caveat, and it applies to all of §10
+
+**`0x005144F0` may not be on the send path at all.** Its own asserts call it an
+`actionsList` with a `displayOrder`, which reads like the UI's available-actions
+menu rather than the code that decides to transmit `0x0026`. The genuine send site
+is the six-arm `action` switch at `GmCoreAction:933`/`:997`, guarded by
+`AvValidate(targetAgentId)`. Everything in §10 and §10.1 is correctly read and may
+still be beside the point, and saying so is cheaper than someone else re-reading it
+to find that out.
+
+**What is established regardless, and it is the durable part:** our agent's state
+is right. It is a CHARACTER, its allegiance is ENEMY, its skip flag is clear, and
+the player flag that would empty the action list is clear. Four properties that
+every previous attempt at this problem was trying to arrange, now measured rather
+than assumed — and `agentprobe.py` measures them in thirty seconds.
+
+### 10.3 THE GATE IS OUR WEAPON, not our enemy — bit 25 of the equipped item
+
+**OBSERVED 2026-08-11.** Read from `GmCoreAction:997`'s classifier down to the leaf.
+§10 chased the target for three sections. The target was never the problem.
+
+**The chain, end to end.** `0x005149A0` (assert `GmCoreAction:997
+AvValidate(targetAgentId)`) classifies a candidate target and its caller at
+`0x004E22D5` **skips the target when it returns nonzero**. For the CHARACTER tag
+`0xDB` it checks the flags bit, then switches on allegiance through the table at
+`0x00514A60`. The table's dwords are `514A2A, 514A1C, 514A1C, 514A2A, ...`, so
+**allegiance 3 (ENEMY) lands on `0x00514A1C`**:
+
+```
+00514A1C  call 0x5147f0
+00514A21  test eax,eax
+00514A23  je  0x514a56      ; ZERO -> not an eligible target
+00514A25  xor eax,eax / ret ; NONZERO -> eligible
+```
+
+so for an enemy, eligibility is `0x005147F0` and nothing else. And that function
+never looks at the target:
+
+```
+005147F9  push 0 / lea eax,[ebp-4] / push eax
+005147FB  call 0x845890          ; equipment slot 0
+00514801  call 0x845470          ; -> esi, the ITEM
+0051480B  test esi,esi
+0051480D  je  0x514838           ; NO ITEM -> return 0
+0051480F  call 0x80d3e0          ; the player's own agent
+00514815  call 0x80cee0          ; a predicate on the player
+0051481F  jne 0x514838           ; -> return 0
+00514821  push esi
+00514822  call 0x8451e0          ; the ItCliApi item lookup
+0051482A  mov eax, [eax + 0xc]   ; the item record's +0xC
+0051482D  shr eax, 0x19
+00514830  and eax, 1             ; BIT 25
+00514833  ret
+```
+
+`0x00514838` is `xor eax,eax / ret`.
+
+**So whether the client will attack an enemy is decided by BIT 25 of the player's
+own equipped weapon record.** Three ways to fail it: no item in the slot, the
+player-side predicate at `0x0080CEE0`, or the bit being clear.
+
+**Why every previous attempt missed it.** They were all aimed at the target — the
+team token, `0x002F`, the hostile allegiance, §6e's colour experiments. The
+`ATTACK_AGENT` note does say "after testing the weapon (item and body)", and that
+is true: it tested whether a weapon EXISTS. It could not have tested this, because
+nothing had read the leaf. Our character carries the starter hammer and the client
+draws it, so the item exists; what is unmeasured is bit 25 of its record.
+
+**This also finally explains the `m_attackInterval` assert** recorded next to the
+`EQUIP_WEAPON` code: "the weapon it was drawing had no attack speed". A weapon
+record the client renders but does not consider a usable weapon is exactly the
+state both symptoms describe.
+
+**What is NOT established, and it is one step:** the value of bit 25 on our item,
+and what sets it. That is a read of the same kind §10.1 did — `agentprobe.py`
+already reaches the client's memory read-only, and the item is reachable through
+`0x845890(slot 0)` -> `0x845470` -> `0x8451e0`. Do that before changing anything:
+the whole point of this section is that four sessions were spent adjusting the
+wrong side of the interaction.
+
+---
+
+### 10.4 The read — bit 25 is SET, and §10.3 is REFUTED
+
+**OBSERVED 2026-08-11**, `toolkit/clientscan/itemprobe.py` against a live loopback
+client, plus ArenaNet's own bytes in both live captures. §10.3 ended by naming one
+step and telling the next reader to take it before changing anything. Taken:
+
+```
+context 0x01BB8988  manager 0x049BEFA0  inventory[0] = 0x00000001
+
+handle     object  +0x28 flags  bit 25
+     1 0x1CDC2040  0x22201000  SET
+
+  1 bag(s) in the container map:
+    key 0x00000001 at 0x1CFBEB28, 9 slot(s), 1 filled: [(0, 1)]
+
+  BRANCH 1 PASSES: slot 0 holds item 1, gate dword 0x22201000, bit 25 SET.
+```
+
+**All three branches of `0x005147F0` pass on our own client.** There is an item in
+equipment slot 0; its gate dword has bit 25 set; and the middle predicate is a
+narrow special case (below). So the gate returns 1, the ENEMY arm returns 0, and
+`0x004E22D5` **adopts** our agent rather than skipping it:
+
+```
+004E22D6  call 0x5149a0
+004E22DE  test eax, eax
+004E22E0  jne 0x4e22e4      ; NONZERO -> skip this agent
+004E22E2  mov esi, edi      ; ZERO    -> ADOPT it as the target
+```
+
+§10.3's hypothesis is dead. It is the third chain in this section to be killed by
+a read after being derived from the disassembly — §10.1 killed §10's, §10.2 killed
+its own remaining gates, and this kills §10.3's. **That is now the pattern worth
+naming: reading a decision tree out of the binary tells you what the client
+CHECKS, and never what the answer IS on our data.** Only the probe does that.
+
+**The field mapping is confirmed, not assumed.** `0x8451e0` returns `obj+0x1c` and
+the gate reads `+0xc` of that, i.e. `obj+0x28`. The live object's bytes put our own
+known values exactly where `0x0161 CREATE_NAMED_ITEM`'s wire order says they land:
+
+| record | object | live bytes | wire field, and the value WE sent |
+|---|---|---|---|
+| `+0x00` | `+0x1C` | `60 9b 00 00` | `file_id`, we sent `0x80009B60` |
+| `+0x04` | `+0x20` | `0f 06 00 00` | `item_type` **15 = hammer**, `dye_tint` 6 |
+| `+0x0C` | `+0x28` | `00 10 20 22` | `flags` = `0x22201000` |
+
+A one-to-one landing of four independently-chosen values is a check the artifact
+could have refuted. `record+0xC` IS the wire `flags` word.
+
+**ArenaNet sets the same bit, which is why ours was never the problem.** Read out
+of both live captures by joining `0x013F CREATE_BAG` (type 2 = equipped) to
+`0x013E ITEM_MOVED_TO_LOCATION` slot 0 and thence to `0x0161`:
+
+```
+20260807T143055  slot 0 item -> flags 0x22001000  bit25=1   (Necromancer, staff)
+20260810T235916  slot 0 item -> flags 0x22201000  bit25=1   (Ranger, bow)
+```
+
+and all four weapon-set leadhand items in each session are the same item. **Our
+starter hammer's `0x22201000` is byte-identical to the Ranger's own equipped bow.**
+33 of 123 items in that session carry bit 25 — so it is not a constant, and the
+equipped weapons having it is a fact about weapons rather than about all items.
+
+**The middle predicate, named.** `0x0080D3E0` is ChCliApi's local-player-id getter
+(`ChCliApi:4809 !(playerId & CHAR_CLASS_BASE_MASK)`, matching its own
+`test esi, 0xf0000000`), reading `+0x2AC` of the mission context at `[G+0x44]`
+(`MsCliApi`). `0x0080CEE0` looks that id up through `0x005FC380` (`AgApi`) and
+returns nonzero only when one field equals 1 AND another equals 6 — two specific
+equalities, so a narrow special case rather than the common path. NOT measured
+live; it is the only branch of the three still resting on reading rather than on a
+probe, and it is the least likely of them.
+
+**Corrections to §10.3, both from re-reading the same bytes:**
+
+* The jump table has **six** entries, not four: `0x00514A60` holds
+  `514A2A, 514A1C, 514A1C, 514A2A, 514A2A, 514A46`. The index is
+  `allegiance - 1` (`0x00514A0C: dec eax`), bounded `<= 5`, so allegiance 7 — the
+  lookup-miss value §10 built its original chain on — falls out to `0x514A4E`.
+  **Allegiance 2 (NEUTRAL) takes the same arm as 3 (ENEMY).**
+* §10.3 wrote "eligibility is `0x005147F0` and nothing else" as though the
+  classifier were the action path. It is not. **All three callers of the
+  classifier are view or UI** — `GmView` at `0x004E22D6` (preference-gated: the
+  two calls before it are `AvPrefs`), `GmView:2611` at `0x004E6BEF`, and
+  `UiCtlInstance` at `0x00516AAD`. The gate `0x005147F0` itself has two further
+  callers inside `GmCoreAction` (`0x005145BC`, `0x005146A8`), which is the action
+  layer — and both use the same "0 means eligible" convention
+  (`0x005146AD: neg eax / sbb eax,eax / inc eax`). This does not change the
+  verdict: the gate passes, so **every one of the five consumers gets "eligible"**.
+
+**Where this leaves the arc.** The refusal is not the target's allegiance (§10.1),
+not the target's flags or type tag (§10.2), and not our own weapon (here). Four
+properties of the interaction have now been measured and are all correct. The
+`m_attackInterval` assert at `AvChar.cpp(4791)` remains the one hard observation
+nobody has explained, and §6p's reading of it — that the field lives on the view
+layer `AvChar` rather than on the agent — is now the only surviving lead. §10.3's
+claim that bit 25 "finally explains" that assert is withdrawn.
+
+**A standing instruction, earned three times over.** Do not derive another chain
+from the disassembly and act on it. Derive it, then read the values it depends on
+out of a running client — `agentprobe.py` for agents, `itemprobe.py` for items,
+both read-only. Each of those two probes took under an hour and each one killed a
+hypothesis that had already survived a session of reasoning.
+
+---
+
+### 10.5 The A/B nobody realised they had run — and its evidence is five days stale
+
+**OBSERVED 2026-08-11**, measured over the whole capture tree (862 `.jsonl` logs, of which
+**175 carry a game-channel VERSION**; 430 are auth and 257 have no VERSION record). §8.0
+item 0a stated this as "the client aims `0x0026` at agents ArenaNet created and `0x0033` at
+ours, in the same map type". That is right in substance and understates the design.
+
+| sessions | `0x0026` ATTACK | `0x0033` | who created the agents |
+|---|---|---|---|
+| 19 × 2026-08-06, hand-driven | **0** | 206 | **our server** (2–5 `0x0020` each) |
+| 2 × 2026-08-10, tape replay | **7** | **0** | **ArenaNet's tape** (0 of our creates, 1074 tape sends) |
+
+**Zero overlap in either direction.** Same client binary, same `authsrv.py` process, same
+map — the only variable is whose create burst produced the agents. That is not a comparison
+across session types; it is an A/B with the create burst as the manipulated variable, and
+it is the strongest evidence in this arc that the difference is IN THE CREATE BURST.
+
+`0x0033`'s first field is **10** in 147 of the 206, and `authsrv-20260806T120212-c2` logs
+its own creates as `WORLD_CREATE_AGENT` and `WORLD_CREATE_AGENT(10, hostile)` — so field 1
+is an agent id and the operator clicked our Hatcher 147 times without once producing an
+attack. In the tape sessions the same client sent `0x0026` at 274, 275, 276 and 284.
+
+**THE PART THAT MATTERS MOST: the 0x0033 side is from 2026-08-06 and nothing has re-tested
+it since.** Everything the client reads about our agent has changed in between — the
+allegiance and type tag are now MEASURED correct (§10.1), the skip flag is clear (§10.2),
+the weapon gate passes (§10.4), and `0x0048`, `0x00A6` and `0x0026` are now sent (§8.0 0g).
+The 206-to-0 split is a fact about a **five-day-old server**.
+
+**And no labelled run has ever been pointed at one of our own agents.** `labelrun.py` has an
+`attack` step. All three label runs in the vault (`20260810T142912`, `144215`, `151946`) are
+**tape** sessions — 1074 sends and zero `0x0020` of our own in every one. The only one that
+produced anything is the tape run, where `attack` yielded `0x0026` at agent 284 and
+`target_tab` yielded `0x00C1` at 273/274/276. So the instrument that would settle this
+exists, is proven to work, and has never been aimed at the question.
+
+**THE CHEAPEST DECISIVE EXPERIMENT IN THE ARC, and it is one operator session.** Run
+`labelrun.py` against our OWN server with the Hatcher spawned, and read which opcode the
+`attack` step produces. `0x0026` means the blocker is gone and R4a's refusal died to work
+already landed; `0x0033` again means it survives every property measured so far and the
+create-burst differential is the next place to look. Either outcome is worth more than more
+static analysis, and §8.0 0a already says to fold it into the same session as 0c's burrow
+probe. **Do not read the 206-to-0 table as current.**
+
+---
+
+### 10.6 It was never a refusal — `0x0033` is a DIFFERENT ARM of the same switch
+
+**OBSERVED 2026-08-11.** Every section of §10 has asked what *withholds* the attack
+action. The question was wrong. The client is not withholding anything: it evaluates a
+switch, picks an action, and sends it. It picks **arm 1** (`0x0033`) where ArenaNet's
+agents get **arm 0** (`0x0026` ATTACK). Same function, same click, same target field.
+
+**The switch, verified here byte by byte.** `0x00514840` takes `(action, targetAgentId,
+arg3)`, asserts `action < 6` (`GmCoreAction:933 action < WORLD_ACTIONS`, compiled as
+`cmp ebx,6 / jl`) and `AvValidate(targetAgentId)` (`:934`, via `0x007E1460`), then
+dispatches through the table at `0x00514984`. The action index arrives from
+`0x004E6B20` — `0x004E2172 call 0x4e6b20 / mov ebx, eax` — whose own asserts name it
+the click path: `GmView:2229 !(selectFlags & UiMsgGameSelect::FLAG_NO_INTERACT)` and
+`GmView:2234 !((selectFlags & FLAG_DBL_CLICK) && !(selectFlags & FLAG_DUE_TO_CLICK))`.
+
+So `0x0033` is not "interact". **It is what the client sends when the world-action switch
+resolves a click to arm 1 instead of arm 0.** REPORTED (workflow, not re-verified here):
+the arms carry ArenaNet's own menu string ids, arm 0 "Attack", arm 1 "Follow"/"Move To",
+arm 2 "Talk To" — which would make `INTERACT_PLAYER` the wrong name for `0x0033` and the
+right name for `0x0039`. Treat the id→arm mapping as ours and the labels as UPSTREAM until
+someone re-reads them.
+
+**Our server already treats `0x0033` as an attack order — VERIFIED, and §7.3a is wrong.**
+`authsrv.py:2636` is `elif opcode == GAME_CMSG_INTERACT_PLAYER: begin_attack(send, state,
+values[1], conn_id)`. §7.3a's line "There is no handler for `0x0033` anywhere in
+`authsrv.py`" (line 1614 of this file) is false and should be struck. The consequence is
+the opposite of what that section assumed: the click IS reaching us and IS starting a
+fight; what never happens is the client running its own attack.
+
+**`is_explorable` is EXCLUDED as the cause — and by more than the workflow found.**
+`GAME_SMSG 0x0199`'s field is byte offset 8 of a 15-byte message (schema:
+`msg_header, agent_id, word, byte, dword, byte, byte`). Swept over every game-channel
+session in the vault:
+
+```
+2026-08-06  is_explorable=0   48 sessions   0x0033 x126, 0x0039 x16
+2026-08-06  is_explorable=1   13 sessions   0x0033 x 80, 0x0039 x 6      <-- gate OPEN
+2026-08-10  (tape's own)      11 sessions   0x0026 x  7, 0x0039 x 4
+2026-08-11  is_explorable=0   21 sessions   NO WORLD ACTION AT ALL
+```
+
+**Ten of the nineteen zero-attack sessions had `is_explorable = 1`** and still produced
+only arm 1. The town-versus-field gate at `0x00816090` was open and the classifier still
+returned 1, so the transmit leaf is not the cause. (The workflow reached this from one
+session; the sweep makes it ten.) `authsrv.py:2316`'s comment — "this one field may be all
+that stands between us and testing combat" — is REFUTED by our own wire.
+
+**And the 2026-08-11 row is the operational finding.** Twenty-one game sessions today,
+zero world actions of any kind. Nothing has been clicked since 2026-08-06, which is what
+§10.5 said and this now measures directly.
+
+**REPORTED and NOT re-verified here** (workflow's readers, each passed through a skeptic):
+
+* `GAME_SMSG 0x0056` field 6 bit `0x200` — **REFUTED.** One session created four agents on
+  one definition (field 6 held at `0x20C`) differing only in agent id, position and the
+  allegiance FourCC; the client answered `0x0039` for `play`/`nonc`/`nonn` and `0x0033` for
+  `mons`. Another session sent no `0x0056` at all and the split still appeared. Field held
+  constant, then absent, answer changed. **Do not retune `content/npcs.toml`'s `0x20C`.**
+* `0x00F0` / `0x006D` as the gate — **REFUTED.** They are ArenaNet's universal create
+  bracket (`0x00F0` before 951/951 team-bearing creates, `0x006D` after 546/546 non-`play`
+  creates), including 313 agents nobody ever attacked. Send them as hygiene, not as an
+  experiment.
+* The equipped-bag story — **CONTESTED, and honestly so.** All 19 zero-attack sessions have
+  zero `0x013F`; both attack-producing sessions have bags. But bag presence is perfectly
+  collinear with date, driver, and agent provenance, and no session ever mixed them — so
+  its `could_have_failed` is unsatisfiable. It is the best-supported candidate and it is
+  not established.
+
+**THE INSTRUMENT DEFECT THIS TURNED UP, and it is ours — OBSERVED, verified.**
+`asserts.py` self-reported 19,758 readable sites + 3 it named as unreadable. An
+independent sweep of `.text` (5,471,232 B) for `call rel32` landing on the assert routine
+finds **20,131**. The tool was short by **370 sites it did not know it was missing**: all
+three shapes are contiguous byte patterns, and anything the compiler schedules into them
+breaks the match. Worked example: `AgAgent:2366` (`AGENT_MIN_MOVE_SPEED`) at `0x006029BC`
+carries an `fstp st(0)` and is invisible, while its twin `:2367` three instructions later
+at `0x006029D4` is read — which is exactly why nobody noticed. `--grep AGENT_MIN_MOVE_SPEED`
+returns 0 sites for an assert that is provably there.
+
+**Every "no assert names X" claim in this arc is therefore a floor, not a census** — and
+`codescan.py --in <module>` takes its bounds from the same tool. `coverage_lines()` now
+prints the shortfall under every query, measured against the image rather than against the
+scanner's own idea of what it missed.
+
+### 10.7 `0x0026` IS ON THE WIRE — the blocker is dead
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T134205-c1.jsonl`, the `worldaction`
+labelled run on loopback. Both idle controls silent, so the attributions stand.
+
+```
+step key            expect     n  opcodes
+  1 idle_a         CONTROL     0  --
+  2 target_click   traffic     1  0x0026 x1     values=[32806, 10, 0]
+  3 menu_open      silence     0  --
+  4 dbl_click      traffic     2  0x0026 x2
+  5 menu_attack    traffic     0  --
+  6 attack_other   traffic     1  0x0026 x1
+  7 skill_attack   traffic     1  0x0027 x1     values=[32807, 320, 0, 10, 0]
+  8 skill_nonattack traffic    1  0x0046 x1
+  9 idle_b         CONTROL     0  --
+ 10 gateway        traffic     1  0x003E x1
+```
+
+**Four `0x0026` and ZERO `0x0033`.** `values[0]` is the client's OR'd opcode (`0x8026`)
+and `values[1]` is the target: **10**, our Hatcher. The year-long "the client has never
+once sent `ATTACK_AGENT` to us" is over, and it did not take a code change to end it —
+§10.6 called it right. `0x0026` is arm 0, `0x0033` is arm 1, the client picks the arm,
+and given a correctly-stated agent it picks arm 0. A single left-click is enough (step 2:
+one click, one ATTACK); double-click sends two.
+
+**The 206-to-0 split was a fact about a five-day-old server.** Every property §10 chased
+was already right; nothing in §10.1–§10.4 was the lever, because by the time they were
+measured there was nothing left to lever.
+
+**What now blocks a fight is OURS.** `authsrv.py` has no `GAME_CMSG_ATTACK_AGENT`
+constant and no dispatch arm — the client asked to attack four times and got silence, the
+same shape as every other bug in this project. `0x0027` does work end to end (step 7:
+skill 320 → the server swung → 15 damage → 85/100), so the arm landed for `0x0027` is the
+template.
+
+**TWO CLAIMS OF MINE DIE HERE, and both are the same error.**
+
+**1. There is no right-click context menu on a world agent.** `0x005144F0` is real and
+really does build an `actionsList` with a `displayOrder` — that is read from its own
+assert strings. **Nothing anywhere says it is opened by right-clicking an agent**, and
+nothing says it surfaces in the world at all. §10's own caveat had it as "reads like the
+UI's available-actions menu", a RECONSTRUCTION; `PLAN.md` §8.0 0k hardened that into "the
+menu IS the gate's answer", and `labelrun.py` restated it to an operator as fact. Steps 3
+and 5 produced zero messages, and 20 s of frame grabs at 1 fps show no menu at any point.
+Cost: two of ten steps. **A gesture is not in the disassembly.**
+
+**2. The "prohibited marker" is a button that clears the selected target.** SOURCED
+2026-08-11, owner. §10 was *founded* on that icon — "the client draws a prohibited marker
+… so the refusal is a decision, and decisions have code" — and the icon is a standard
+control present on every target frame, saying nothing about anything. §10.1 already walked
+the claim back to "not known to mean cannot attack, may be range or line of sight"; it is
+now closed, and the honest summary is that a whole section's premise was a misread UI
+widget. Third time in three days that inferring a mechanism from a picture cost a detour.
+
+### 10.8 The burrow probe, RUN — definitions are per-instance, and `0x1000` is an animation
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T135809-c1.jsonl`, probe `burrow` on
+loopback. Watched live by the owner; frame grabs at 2 fps corroborate. The wire is the
+control that makes it mean anything: `0x0056`/`0x0057` were sent **once, at t=2.73 s**,
+and never again — so both re-creates below were bare `0x0020`.
+
+| t | sent | seen |
+|---|---|---|
+| 5.74 | `0x00F1` [10, `0x1000`] | the Hatcher plays a **fall** animation and lies prone |
+| 9.75 | `0x00F1` [10, 0] | it plays a **get-up** animation and stands |
+| 12.76 | `0x0021` [10] | clean vanish |
+| 16.78 | `0x0020` same id 10, **no definition** | **a correct-looking collector, back** |
+| 22.78 | `0x0020` fresh id 12, **no definition** | **a second correct-looking collector** |
+
+**Both re-creates worked, which is the probe's `3 works, 4 works` arm: a definition is
+per-INSTANCE and outlives the agents using it.** Declare once at map load, re-create
+freely. This is our own client answering the question that §0c had answered only by
+inference from ArenaNet's 1-declaration-to-140-creates — and inference was not enough,
+because what was untested was OUR create path, not their client. `burrow_tick` now passes
+`send_definition=False` and a content row can still opt back in.
+
+**THE PREDICTION THAT WAS REFUTED, and it is the more interesting half.** The probe's
+stated honest expectation for `0x1000` was *"nothing visible happens, because a client
+that hid an agent on this bit would not also need the removal ArenaNet sends 2.00 s
+later."* The reasoning was sound and the conclusion was wrong. **`EFFECT_TRANSITION` is
+an ANIMATION, not bookkeeping and not a visibility flag** — set it and the agent goes
+down, clear it and the agent gets up. The agent stays rendered and keeps its nameplate
+the whole time (my first read of the frame said the body was gone; it is prone behind
+the player — SOURCED, owner, who was watching at full resolution).
+
+That resolves the apparent contradiction instead of being contradicted by it: the bit
+animates, the **removal** hides. ArenaNet's two 2.00 s windows are exactly the length of
+the down and up animations, with `0x0021` landing at the end of the first and `0x0020`
+at the start of the second. Our `burrow_tick` already holds the bit for 2.00 s each way,
+which was copied from measured timing without knowing what it bought; it buys the
+animation, and dropping it would make worms teleport in and out.
+
+**UNVERIFIED, and worth saying:** whether the down animation is burrow-specific or a
+generic knockdown. One agent, one model, one probe — a Plague Worm would settle it.
+
+### 10.9 One click, a whole fight — and the client asserted on the revive
+
+**OBSERVED 2026-08-11**, three loopback runs, captures `authsrv-20260811T1406*`,
+`T141120`, `T141339`. Driven with a single scripted left-click on the Hatcher at a
+window fraction measured off the frame grabs, so no operator hands were involved. A
+missed click would have shown as `0x003E` MOVE_TO_COORD; all three sent `0x0026`.
+
+```
+t=14.56  c2s 0x0026 ATTACK [agent 10]        <- one click
+t=14.57  attack_started + damage 15 + melee_attack_finished
+         ... 7 swings, 1.77 s apart (ATTACK_SPEED said 1.75), 15 each = 105
+t=25.20  the 7th lands; a 100 hp agent is dead
+t=26.10  c2s 0x00C1 TARGET_SELECT [0]        <- the CLIENT drops the dead target
+t=33.24  revive + restore max health + refill bar
+t=33.28  c2s 0x00C1 TARGET_SELECT [10]       <- and re-acquires it, 40 ms later
+```
+
+Both `TARGET_SELECT`s are unprompted client behaviour and neither is something our
+decoder can force, which is what makes the death and the revive facts about the client
+rather than about our bookkeeping. **`0x0026` → `begin_attack` works end to end.** The
+animation renders too: mid-fight frames show the player mid-swing with the hammer up, a
+floating `-15`, and a partly-drained bar.
+
+**IT IS STILL NOT A FIGHT IN THE TWO-WAY SENSE.** Nothing swung back and the player took
+no damage, exactly as §3's R4a row has said since 2026-08-06. There is no enemy AI; this
+rung is the client asking and us answering, not combat.
+
+### THE CRASH, and why twenty sessions of damage testing could not have found it
+
+The first run of this went down two seconds after the kill:
+
+```
+Assertion: fraction <= 1.0f
+P:\Code\Gw\Char\CharPool.cpp(84)          Build: 38797
+```
+
+The trace carries our own message three frames below the assert —
+`Arg:00000022 0000000a 0000000a 42c80000`, i.e. property **34**, agent **10**, agent
+**10**, and `42c80000` = **100.0f**. That is `revive_due`'s "refill bar" send, which
+passed `max_health` where the client wanted a FRACTION of a pool.
+
+**The assert is `<=`, so it can only fire in the POSITIVE direction.** Every value this
+project had ever put on the `0x00A3` float channel was damage — `-HIT_FRACTION`, and the
+`-50.0` that `GV_HEALTH`'s own comment is built on. A negative number passes
+`fraction <= 1.0f` however absurd it is, so the entire damage side of this arc tested that
+bound **vacuously**. It took the first kill driven all the way to a revive — the first
+positive value ever sent — to reach it.
+
+Fixed by sending `1.0`, and by routing both float-channel sends through `_fraction()`,
+which **refuses** out-of-range rather than clamping: a clamp turns a wrong number into a
+plausible one and the next caller never learns. Re-run confirms no crash (the session ran
+45 s past the revive and exited clean) and that the bar refills — the post-revive frame
+shows a full bar against a mid-fight frame showing a drained one, which is the control
+that makes "full" mean anything.
+
+**SETTLED the same day, from the client's own dispatcher — `studies/agentprops/FINDINGS.md`
+§1d.** Both properties are FRACTIONS and the difference is only who multiplies: `0x00818210`
+switches on the property id, sends **16** to an arm that `fmul`s by the max, and sends **34**
+to an arm that passes the value through RAW into `0x009215F0` — the CharPool method whose
+line 84 is the assert. So `1.0` is a full pool for a reason rather than by luck. What is
+still contested is the *old* note: "-50.0 measured as -50 health" cannot be read off an arm
+that applies no scaling, and one probe settles it — send `-0.5` at a 100-max agent and see
+whether 50 comes off.
+
+### The instrument defect this turned up, and it is ours
+
+**The harness printed `RUN VERDICT: PASS` on the run that crashed.** A Guild Wars assert
+puts up a modal dialog and **keeps the process alive** waiting for a click, so
+`proc.poll()` stayed `None`, the hold expired on its timer, and `capture_error_dialog` —
+which existed, was tested, and was written precisely for this — was called only from the
+`proc.poll() is not None` branch. The crash text sat on screen for the rest of the run and
+the report said green. `hold_open` now checks on both exits. Same shape as every other
+defect in this file: the check was right and the caller never reached it.

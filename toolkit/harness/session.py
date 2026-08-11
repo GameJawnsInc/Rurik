@@ -625,9 +625,24 @@ def hold_open(proc, seconds, tails, outdir, quiet=False):
         # without pressing "Send report to ArenaNet".
         print(f"  client exited with code {proc.returncode} during the hold")
         capture_error_dialog(outdir)
+    else:
+        # AND THE HOLD RUNNING OUT IS NOT PROOF OF LIFE. This branch is here
+        # because on 2026-08-11 the harness printed RUN VERDICT: PASS on a run
+        # where the client had asserted -- `CharPool.cpp:84 fraction <= 1.0f`,
+        # two seconds after the first kill this server ever drove to a revive.
+        # A Guild Wars assert puts up a MODAL DIALOG AND KEEPS THE PROCESS
+        # ALIVE waiting for a click, so `poll()` stays None, the hold expires on
+        # its timer, and the only branch that looks for the dialog never runs.
+        # The crash text existed on screen the whole time and the run reported
+        # green -- the exact failure the docstring below was written about, from
+        # the one direction it did not cover.
+        #
+        # Short wait: we are not expecting a dialog here, only checking. Silent
+        # when there is none, because most holds end this way.
+        capture_error_dialog(outdir, wait=1.0, quiet=True)
 
 
-def capture_error_dialog(outdir, wait=12.0):
+def capture_error_dialog(outdir, wait=12.0, quiet=False):
     """Read the client's fatal-error dialog into the run's own report.
 
     WHY THIS IS AUTOMATIC AND USED NOT TO BE. Until 2026-08-11 the harness
@@ -646,9 +661,16 @@ def capture_error_dialog(outdir, wait=12.0):
     appears on a clean teardown as readily as on a crash. This dialog is the
     only machine-readable evidence a client assert leaves.
 
-    THE PROCESS IS ALREADY GONE when we get here -- that is what poll() told
-    us -- so any surviving dialog belongs to some other Gw process, which is why
-    this enumerates rather than reusing the handle we had.
+    THE PROCESS IS NOT NECESSARILY GONE. This used to be called only after
+    poll() reported an exit, and said so -- but a Guild Wars assert keeps the
+    process ALIVE behind a modal dialog, so that call site could not see the
+    case it most needed to. It is now called on both exits from the hold, which
+    is also why it enumerates rather than reusing the handle we had: on the
+    crashed-but-running path the dialog belongs to the client we launched, and
+    on the exited path it belongs to some other Gw process.
+
+    `quiet` suppresses the no-dialog line for the polling call, where finding
+    nothing is the normal case rather than a result.
 
     READ ONLY, and that is a safety property rather than a style choice. The
     dialog's default button is "Send report to ArenaNet", which would upload a
@@ -671,8 +693,9 @@ def capture_error_dialog(outdir, wait=12.0):
                 break
         time.sleep(0.5)
     if not found:
-        print(f"  no error dialog within {wait:.0f}s -- the client exited "
-              f"WITHOUT one, which is a clean exit rather than a silent crash")
+        if not quiet:
+            print(f"  no error dialog within {wait:.0f}s -- the client exited "
+                  f"WITHOUT one, which is a clean exit rather than a silent crash")
         return None
 
     path = os.path.join(outdir, "crash-dialog.txt")

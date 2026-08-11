@@ -376,3 +376,66 @@ wrong reading before it was caught: `read_table()` masked opcodes with `0xFF`,
 and 229 of the 477 receive opcodes are above `0xFF`. Lookups for those returned
 whichever table entry the walk reached first, with nothing in the output to say
 so. See `studies/enemy/PLAN.md` §6i.
+
+## 1d. Property 34 is a FRACTION too — OBSERVED, from a crash and then from the code
+
+**2026-08-11.** §1's reading had property 16 a fraction of maximum health and property
+34 an absolute quantity. **Both are fractions.** The difference is only who multiplies,
+and the client says so in three instructions.
+
+**How it surfaced.** `revive_due` sent property 34 with `max_health` — 100.0 — and the
+client asserted two seconds after the first kill this server drove to a revive:
+
+```
+Assertion: fraction <= 1.0f      P:\Code\Gw\Char\CharPool.cpp(84)     Build: 38797
+```
+
+**Reading a crash trace at all needs one step nothing here had recorded: it is
+ASLR-rebased.** The dump's `BaseAddr: 007A0000` against the PE's `ImageBase 0x00400000`
+makes every address in it **+0x3A0000** from the file. Disassembling the raw trace
+addresses yields plausible-looking garbage — `int1`, `aas`, `xchg ebp, eax` — rather than
+an error, which is the failure mode worth naming. Subtract 0x3A0000 first.
+
+**The dispatcher, at `0x00818210`:**
+
+```
+00818216  mov   esi, ecx                          ; this
+0081821D  mov   edx, [ebp+8]                      ; the PROPERTY ID
+00818222  add   edx, -0x10                        ; ids start at 16
+00818225  cmp   edx, 0x2e
+00818228  ja    0x81838b                          ; 16..62 or the client ignores it
+0081822E  movzx edx, byte ptr [edx+0x8183b8]      ; index byte, one per id
+00818235  jmp   dword ptr [edx*4+0x818394]        ; nine arms
+```
+
+| property | index | arm | what it does |
+|---|---|---|---|
+| **16** `PROP_DAMAGE` | 0 | `0x0081823C` | `fld [esi+0x24]` (the MAX) / **`fmul [ebp+0xc]`** / → `0x00921510` |
+| 33 (unnamed by us) | 1 | `0x00818276` | raw value → `0x009215F0`, pool at `esi` |
+| **34** `GV_HEALTH` | 2 | `0x0081828D` | raw value, **no fmul** → `0x009215F0`, pool at `esi+0x20` |
+| 43 (unnamed by us) | 3 | `0x008182A5` | `fld [esi+4]` / `fmul` |
+| 44 `GV_CHANGE_HEALTH_REGEN` | 4 | `0x008182C5` | |
+| 52 `GV_ENERGY_GAIN` | 5 | `0x008182E6` | |
+| 55 `GV_ARMOR_IGNORING` | 6 | `0x0081830B` | |
+| 62 `GV_ENERGY_SPENT` | 7 | `0x00818345` | |
+| 42, 61 | 8 | `0x0081838B` | the `ja` default — 42 is an INT-channel property, correctly absent here |
+
+`0x009215F0 + 0x23 = 0x00921613`, which is the crash's own return address, so
+**`0x009215F0` is the CharPool method whose line 84 asserts `fraction <= 1.0f`** and
+property 34 is what it range-checks.
+
+**The decode is checked rather than fitted.** Every property this repo had already named
+independently — 16, 44, 52, 55, 62 — lands on a *distinct* arm, and the two that land on
+the default (42, 61) include one we know is int-channel. A mis-derived table would not
+sort our own constants that way.
+
+**Why nothing found this in twenty sessions: the bound is `<=`, so it only fires
+positive.** Every value ever put on this channel was damage — `-HIT_FRACTION`, and the
+`-50.0` behind `GV_HEALTH`'s note. A negative passes however absurd it is. The whole
+damage side of the arc tested that bound vacuously.
+
+**CONTESTED, and left that way on purpose.** `GV_HEALTH`'s old note — "a DELTA, we
+measured -50.0 as -50 health" (§1b) — cannot be read off arm 2, which applies no scaling
+and hands the value to something that calls it a fraction; -50.0 as a fraction is -50× the
+pool, which empties it, and that is not "50 off a 100 max". **One probe settles it: send
+-0.5 at a 100-max agent and see whether 50 comes off.** Not run — the harness was in use.

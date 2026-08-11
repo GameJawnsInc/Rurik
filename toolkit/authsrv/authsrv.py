@@ -63,6 +63,39 @@ def _f32(x):
     return struct.unpack("<I", struct.pack("<f", x))[0]
 
 
+def _fraction(x, prop, what):
+    """A pool fraction for the 0x00A3 float channel, refused loudly if out of range.
+
+    THE CRASH THIS EXISTS FOR, and it is the first client assert this project has
+    captured from a real fight. OBSERVED 2026-08-11: two seconds after the Hatcher
+    died, the client went down on
+
+        Assertion: fraction <= 1.0f    P:\\Code\\Gw\\Char\\CharPool.cpp(84)
+
+    and the crash trace carries our own message three frames below the assert --
+    `Arg:00000022 0000000a 0000000a 42c80000`, which is property 34, agent 10,
+    agent 10, and 42c80000 = 100.0f. That is `revive_due`'s "refill bar" send,
+    which passed `max_health` where the client wanted a FRACTION of it.
+
+    WHY EVERY EARLIER MEASUREMENT MISSED IT. The assert is `<=`, so it can only
+    fire in the POSITIVE direction, and every value we had ever put on this channel
+    was damage: `-HIT_FRACTION`, and the `-50.0` that `GV_HEALTH`'s comment is
+    built on. A negative number passes `fraction <= 1.0f` no matter how absurd, so
+    the whole damage side of the arc tested this bound VACUOUSLY. It took a kill
+    and a revive -- the first positive value ever sent -- to reach it.
+
+    Refusing here rather than clamping is deliberate: a clamp would turn a wrong
+    number into a plausible one, and the next caller would never learn.
+    """
+    if not -1.0 <= x <= 1.0:
+        raise ValueError(
+            f"refusing to send {x!r} as property {prop} ({what}) on the 0x00A3 "
+            f"float channel: values there are FRACTIONS of a pool, and the client "
+            f"asserts `fraction <= 1.0f` at CharPool.cpp:84 -- it does not clamp, "
+            f"it dies, two seconds later and with no server-side symptom.")
+    return _f32(x)
+
+
 AUTH_CMSG_VERSION_HEADER = 0x000C0400
 # 0x000C0700 came from the reference sources. 0x000C0500 is what build 38797
 # actually sends to a game server -- measured on the wire 2026-08-05, from a raw
@@ -622,12 +655,23 @@ GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS = 0x008A
 #           PLAN.md recording a 0x003C -> 0x003E drift across builds.
 # Keying movement on 0x003D was the reason the character turned to face every
 # input and never took a step: we were answering the turn and ignoring the move.
+# THE REAL ATTACK ORDER, and as of 2026-08-11 the client SENDS IT TO US.
+# OBSERVED (studies/enemy/PLAN.md 10.7, the `worldaction` labelled run): four of
+# these at our own Hatcher across three separate steps -- one on a single
+# left-click, two on a double-click -- and ZERO 0x0033 in the same run. Payload
+# is [agent_id, dword]; the target was agent 10, ours.
+#
+# For a year this opcode was defined by its absence and 0x0033 was pressed into
+# service as "the only attack intent we have ever seen the client express". That
+# sentence was true when written and is now false, and what changed was not a
+# code change: 0x00514840 is a six-arm switch, 0x0026 is arm 0 and 0x0033 is arm
+# 1, and given a correctly-stated agent the client picks arm 0 by itself.
+GAME_CMSG_ATTACK_AGENT = 0x0026
+
 # What the client sends when the player clicks an agent meaning to do something
 # to it. MEASURED: it arrives at a hostile agent 11 times in one session and 32
 # in another, in a TOWN, while this server answered none of them
-# (studies/enemy/PLAN.md 7.3a). It is the only attack intent we have ever seen
-# the client express -- GAME_CMSG_ATTACK_AGENT (0x0026) was never sent on the
-# game channel in either session.
+# (studies/enemy/PLAN.md 7.3a).
 #
 # Driving combat from this message rather than from 0x0026 is deliberate, and it
 # is what makes a fight possible in an outpost at all: Guild Wars forbids
@@ -927,16 +971,27 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 
 # SERVER-DRIVEN ATTACKING, and it is a workaround rather than the mechanism.
 #
-# The client has never once sent ATTACK_AGENT (0x0026) to us -- not on click,
-# not on space, armed or unarmed, in an outpost or an explorable, with the
-# target red and damageable. It answers a click on our enemy with
-# INTERACT_PLAYER (0x0033) and nothing else. OBSERVED every session.
+# READ THE DATE ON EVERYTHING BELOW. As of 2026-08-11 THE CLIENT SENDS US
+# ATTACK_AGENT (0x0026) -- four of them at our own Hatcher in one labelled run,
+# one on a plain left-click, and zero 0x0033 in the same run
+# (studies/enemy/PLAN.md 10.7). The block described in the rest of this comment
+# is GONE, and it died to work already landed rather than to any fix aimed at
+# it. What survives is the workaround itself: begin_attack and ATTACK_INTERVAL
+# still drive the swinging from our tick, and that is still not the mechanism.
+# The history is kept because three sections of a study doc were spent on it.
+#
+# WHAT WAS TRUE UNTIL 2026-08-11, and no longer is:
+# The client had never once sent ATTACK_AGENT to us -- not on click, not on
+# space, armed or unarmed, in an outpost or an explorable, with the target red
+# and damageable. It answered a click on our enemy with INTERACT_PLAYER (0x0033)
+# and nothing else, 206 times to 0.
 #
 # The opcode is registered in this build's own send table with two fields, so
-# the capability is compiled in and something about our world stops the client
-# choosing it. What that is remains NOT FOUND after testing the weapon (item
-# and body), energy and health pools, the explorable flag, the hostile team
-# token and 0x002F.
+# the capability was never in doubt; what stopped the client choosing it was
+# NOT FOUND after testing the weapon (item and body), energy and health pools,
+# the explorable flag, the hostile team token and 0x002F -- and the answer, per
+# 10.6/10.7, is that 0x0033 was never a refusal at all. It is arm 1 of a
+# six-arm world-action switch and 0x0026 is arm 0. The client picks the arm.
 #
 # AND IT STOPS 0x0027 TOO, which is the same refusal reaching a second opcode.
 # OBSERVED 2026-08-11: with the attack-skill arm newly in place, the harness
@@ -945,13 +1000,71 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 # type_code 14 Warrior attack skills, the same class as the Ranger's Power Shot
 # that revealed 0x0027. Not one message left the client.
 #
-# THE NEW EVIDENCE IS THAT THE REFUSAL IS VISIBLE. Every earlier session
-# reasoned from an ABSENT message; the screenshots now show the client drawing a
-# prohibited marker on the target's own health bar while the nameplate is red.
-# So the client is not failing to notice our enemy, it is deciding against it and
-# saying so on screen. That decision is drawn by some code path that can be found
-# -- which is a better lead than "nothing happens", and it is where the next
-# attempt at this should start rather than testing another world property.
+# THE "VISIBLE REFUSAL" WAS A BUTTON. Section 10 was founded on a small icon at
+# the end of the target's health bar, which I read as a prohibited marker and
+# called proof that "the refusal is a decision, and decisions have code". It is
+# the control that CLEARS THE SELECTED TARGET (SOURCED 2026-08-11, owner), it is
+# on every target frame, and it never meant anything. The chain below was read
+# correctly and answered a question nothing had asked. studies/enemy/PLAN.md
+# section 10 has it; the
+# two facts that change what to try next are:
+#
+#   1. The available-actions builder (GmCoreAction, 0x005144F0) switches on an
+#      ALLEGIANCE ENUM and accepts only 1..6 -- which is exactly the
+#      ALLEGIANCE_* enum agents.py already carries, and five readers compare the
+#      byte against 3, ALLEGIANCE_ENEMY. The getter returns **7 on a lookup
+#      miss**, and 7 fails the range check. So an agent that renders, has a
+#      nameplate and can be TARGETED can still offer no attack action: visible
+#      and attackable are two different registrations, off two different lists.
+#
+#   2. The allegiance byte (+0x1B5) has exactly TWO writers in the whole image
+#      and both are constructors. **Nothing updates it afterwards.** That is why
+#      0x002F was tested and did nothing, and it retires that whole line: there
+#      is no post-construction setter to reach, so allegiance is decided when the
+#      agent is CREATED and no later message can correct it.
+#
+# AND THE READ SAYS BOTH GATES PASS (agentprobe.py, 2026-08-11): our Hatcher
+# carries +0x9C == 0xDB (a CHARACTER) and +0x1B5 == 3 (ALLEGIANCE_ENEMY), with
+# the skip flag clear. So the client HAS resolved our agent to an enemy and runs
+# the switch's enemy arm. That refutes the chain above as the blocker -- and it
+# closes the whole family of attempts aimed at convincing the client our agent is
+# hostile (the team token, 0x002F, section 6e): it already is, measured rather
+# than assumed. The block is downstream of the action mask.
+#
+# WALK BACK ONE CLAIM OF MINE: the prohibited marker on the target's health bar
+# is NOT known to mean "cannot attack". I read a small icon and asserted a
+# meaning. The client considers this agent an attackable-class enemy, so the
+# marker is something else -- range, line of sight, or another thing entirely.
+#
+# NOR IS IT OUR WEAPON, AND THAT ONE WAS MEASURED (studies/enemy/PLAN.md 10.3,
+# refuted by 10.4). The chain read out of the binary was right about what the
+# client CHECKS: GmCoreAction:997's classifier sends allegiance 3 (ENEMY) to an
+# arm whose entire test is 0x005147F0, and that function never looks at the
+# target -- it fetches OUR equipment slot 0 and returns BIT 25 of the item
+# record's +0xC. It was wrong about the answer. itemprobe.py read a live client
+# on 2026-08-11: slot 0 of the bag holds our hammer and its gate dword is
+# 0x22201000, bit 25 SET. The gate PASSES, so 0x004E22D5 adopts the agent as a
+# target rather than skipping it.
+#
+# ArenaNet sets the same bit -- every equipped weapon in both live captures has
+# it, and the Ranger's bow carries 0x22201000, byte-identical to the hammer we
+# send. test_smsgnames.py pins that against the corpus so it cannot rot.
+#
+# The lesson, now three for three (10.1, 10.2, 10.4): a decision tree read out of
+# the disassembly tells you what the client TESTS and never what the answer is on
+# our data. Derive the chain, then probe the values -- agentprobe.py for agents,
+# itemprobe.py for items, both read-only, each one killing a hypothesis that had
+# already survived a session of reasoning.
+#
+# Withdrawn with it: 10.3's claim that bit 25 explains the m_attackInterval
+# assert at EQUIP_WEAPON below. That assert is still unexplained, and section 6p
+# -- the field living on the view-layer AvChar rather than on the agent -- is now
+# the only surviving lead.
+#
+# Ruled out on the way, so it is not re-tried: the allegiance FourCC. We send
+# 'mons' where ArenaNet sends 'mon1', the only create field that differs from an
+# agent the client DOES attack -- and neither token appears anywhere in the
+# image, so the client cannot be recognising either.
 #
 # So a click now STARTS an attack instead of being one, and the server swings
 # on a timer. That is closer to how Guild Wars actually works -- combat is
@@ -1053,7 +1166,7 @@ def hit_enemy(send, state, target_id, conn_id):
     # fraction is at 0x0081823C in the client.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID,
-          _f32(-HIT_FRACTION)],
+          _fraction(-HIT_FRACTION, agents.PROP_DAMAGE, "one swing")],
          f"damage {dealt:.0f} to agent {target_id}")
     # And close the swing. Harmless if the client ignores it; without it the
     # attack has a beginning and no end.
@@ -1109,13 +1222,23 @@ def revive_due(send, state, conn_id):
         # so it still took a full seven swings to drop, and the bar never moved.
         # OBSERVED 2026-08-06.
         #
-        # Property 34 is a DELTA on the health pool, not a setter: we measured
-        # -50.0 taking exactly 50 health off (studies/agentprops/FINDINGS.md 1b),
-        # and GWCA independently calls it `health`. A full maximum in the
-        # positive direction fills a bar the death path had zeroed.
+        # Property 34 is a FRACTION of the pool, and sending `max_health` here
+        # CRASHED THE CLIENT -- CharPool.cpp:84, `fraction <= 1.0f`, two seconds
+        # after the first kill this server ever drove to a revive (see `_fraction`,
+        # which now refuses the whole class). 1.0 is a full pool.
+        #
+        # SETTLED 2026-08-11 from the client's own dispatcher, and 1.0 is right for
+        # a reason rather than by luck. 0x00818210 switches on the property id and
+        # sends 34 to arm 2 (0x0081828D), which passes our value through with NO
+        # multiply into 0x009215F0 -- the CharPool method that asserts
+        # `fraction <= 1.0f`. Property 16 goes to arm 0 (0x0081823C), which DOES
+        # fmul by the max first. Both are fractions; the client scales 16 for us and
+        # does not scale 34. So 1.0 here is a full pool, and the refill was OBSERVED:
+        # the post-revive frame shows a full bar against a mid-fight frame showing a
+        # drained one. studies/agentprops/FINDINGS.md 1d.
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_HEALTH, agent_id, agent_id,
-              _f32(agent["max_health"])],
+              _fraction(1.0, agents.GV_HEALTH, "refill to a full pool")],
              f"refill bar on agent {agent_id}")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)
@@ -1220,14 +1343,20 @@ def create_agent_world(send, state, agent_id, entry, why,
     the cause. That is the same failure `revive_due`'s snapshot comment was written
     about, from the other direction.
 
-    `send_definition` is the question we cannot answer offline. ArenaNet sends the NPC
-    definition (0x0056) exactly ONCE for 140 re-creates of the same worm, so their
-    client evidently keeps it across a removal. Ours has never been asked: the D1 probe
-    re-sent the definition every time, so its success says nothing about whether the
-    definition survives. `agents.npc_properties` warns that an agent whose definition
-    was never sent takes the client down on `index < m_count`. Until the `burrow` probe
-    settles it, this defaults to TRUE -- resending is what we have evidence is safe, and
-    the cost of being wrong in the other direction is a client assert.
+    `send_definition` is SETTLED as of 2026-08-11, and by our own client rather than by
+    inference. ArenaNet sends the NPC definition (0x0056) exactly ONCE for 140 re-creates
+    of the same worm; that told us THEIR client keeps it, and ours had never been asked,
+    because the D1 probe re-sent the definition every time and so its success said
+    nothing. The `burrow` probe asked: after a WORLD_REMOVE_AGENT, it re-created at the
+    SAME id and then at a FRESH id, both with NO 0x0056/0x0057, and BOTH drew a correct
+    collector (studies/enemy/PLAN.md 10.8, capture authsrv-20260811T135809). A definition
+    is per-INSTANCE and outlives the agents using it.
+
+    This still defaults to TRUE and should: the first create of an agent must declare it.
+    What the probe unlocked is the RE-create -- `burrow_tick` no longer resends.
+    `agents.npc_properties` warns that an agent whose definition was never sent takes the
+    client down on `index < m_count`, and that asymmetry has not changed: declare once
+    per instance, then re-create freely, and never skip the first one.
     """
     live = state.setdefault("agents", {})
     if agent_id in live:
@@ -1396,9 +1525,19 @@ def burrow_tick(send, state, conn_id):
         # second Lakeside tape and 6 of 6 in the first carry exactly ONE distinct
         # (x, y) across every one of their creates, which the wiki independently
         # predicts -- a submerged worm cannot move.
+        # NO DEFINITION RESEND, measured 2026-08-11 (10.8). The `burrow` probe removed
+        # our Hatcher and re-created it twice with no 0x0056/0x0057 -- once at the same
+        # id, once at a fresh one -- and both drew a correct collector. So a definition
+        # is per-INSTANCE, the declaration at map load covers every later create, and
+        # this matches what ArenaNet does: 1 declaration to 140 worm creates.
+        #
+        # The escape hatch stays. A content row may set `resend_definition = true` and
+        # get the old behaviour, because the failure mode is asymmetric -- resending
+        # costs 2 messages, and being wrong the other way is a client assert on
+        # Array.h's `index < m_count`, which takes the client down with no log line.
         create_agent_world(send, state, agent_id, entry, "emerging from burrow",
                            conn_id=conn_id,
-                           send_definition=entry.get("resend_definition", True))
+                           send_definition=entry.get("resend_definition", False))
 
 
 def send_attack_speed(send, agent_id, base, what):
@@ -2259,12 +2398,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                  "INSTANCE_LOAD_PLAYER_NAME")
             send(GAME_SMSG_INSTANCE_PLAYER_DATA_DONE, [], "PLAYER_DATA_DONE")
             # is_explorable is the client's own town-versus-field switch, and
-            # Guild Wars refuses to let you attack anything in a town. So this
-            # one field may be all that stands between us and testing combat --
+            # Guild Wars refuses to let you attack anything in a town. It is
             # cheaper to flip than to recover a real explorable's map file id,
             # which is what studies/enemy/PLAN.md section 7.3 would otherwise
             # require. Off by default because a town is what map 148 IS, and a
             # server that lies about its own map should do so only when asked.
+            #
+            # "This one field may be all that stands between us and testing
+            # combat" used to end that paragraph. REFUTED 2026-08-11 by our own
+            # wire (PLAN.md 10.6): TEN of the nineteen sessions in which the
+            # client never sent ATTACK had is_explorable = 1 here, and together
+            # they produced 80 x 0x0033 and zero 0x0026. The transmit gate this
+            # field feeds -- 0x00816090, which refuses unless MissionCliGetMap()
+            # == MISSION_MAP_GAME -- was OPEN in all ten and changed nothing, so
+            # the client's world-action switch chose a non-attack arm on its own.
+            # Still worth setting for any combat test, but only so a silent drop
+            # at the send leaf cannot be confused with the switch's choice.
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
                  [1,          # agent_id -- the player's own agent, 1 for the first
                   map_id,     # echoed from the version frame, not guessed
@@ -2578,11 +2727,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # (studies/skills/FINDINGS.md) and we do not read it yet.
                         if target:
                             hit_enemy(send, state, target, conn_id)
-                    elif opcode == GAME_CMSG_INTERACT_PLAYER:
+                    elif opcode in (GAME_CMSG_ATTACK_AGENT,
+                                    GAME_CMSG_INTERACT_PLAYER):
                         # The player clicked something. Clicking a hostile
                         # agent ORDERS an attack; the tick does the swinging.
                         # See ATTACK_INTERVAL for why this is server-driven and
                         # why that is a workaround, not the mechanism.
+                        #
+                        # ONE ARM FOR BOTH, and the two are NOT synonyms -- they
+                        # are arms 0 and 1 of the client's own world-action
+                        # switch, and which one arrives says what the client
+                        # resolved the click to. Sharing an arm is honest only
+                        # because our answer to both is currently the same one
+                        # (swing at it); the day interaction means anything
+                        # other than combat, 0x0033 has to split back out.
+                        # values[1] is the target agent id in both layouts.
                         begin_attack(send, state, values[1], conn_id)
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through

@@ -349,7 +349,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R1** | Handshake against a local server | Client reaches character select | ✅ **2026-08-04 22:58**, `e34c417`. Build 38797 rendered "Test Warrior" against our portal, our DH parameters, our ARC4 channel and our login burst. |
 | **R2** | Presence | Your own body standing in a real map | ✅ **2026-08-05 11:15**, `aedc214`. |
 | **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. |
-| **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). **Nothing swings back and the player cannot die**, which is the half the criterion actually names. There is still no agent table — `studies/enemy/PLAN.md` §7.2. |
+| **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). **Nothing swings back and the player cannot die**, which is the half the criterion actually names. There is still no agent table — `studies/enemy/PLAN.md` §7.2. **2026-08-11: one click now drives a whole fight** — `0x0026` ATTACK_AGENT arrives (four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it), the server dispatches it, seven swings at 1.77 s kill the agent, and it revives; the client drops the dead target and re-acquires the revived one unprompted (§10.9). **The first revive crashed the client** — `CharPool.cpp:84`, `fraction <= 1.0f` — because we sent `max_health` where a fraction belonged, on the one side of a `<=` bound that no damage test could ever reach. Fixed and re-verified. **2026-08-11 (earlier): the click arrives as `0x0026` ATTACK_AGENT** — four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it (§10.7). The server now dispatches both arms. |
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
@@ -1046,7 +1046,71 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-11 (`e54df3c`+, suite 39/39 ~1036 checks)
+### 8.0 Next, as of 2026-08-11 (`7b24cd6`+, suite 45/45, ~1393 checks)
+
+0k. **DONE 2026-08-11 — `0x0026` IS ON THE WIRE and the attack blocker is dead.**
+    The `worldaction` labelled run on loopback drew **four `ATTACK_AGENT` at our own
+    Hatcher across three steps** — one on a plain left-click, two on a double-click —
+    and **zero `0x0033`** in the same run, both idle controls silent. Per the outcome
+    table below, that is "the blocker died to work already landed": no fix aimed at it
+    ever worked, and none was needed once the agent was correctly stated. **What blocks
+    a fight now is ours** — the server had no dispatch arm for `0x0026` and answered all
+    four with silence; the arm is added in the same commit. Two claims of mine died with
+    it: there is **no right-click context menu on a world agent** (I invented the
+    gesture; `0x005144F0`'s actions list is real, its route to the screen was not), and
+    the **"prohibited marker" is the button that clears the selected target** — which was
+    §10's founding observation. Full result and both retractions: `studies/enemy/PLAN.md`
+    §10.7. **Still un-run from this item: 0c's burrow probe.** The original text follows.
+
+    **THE NEXT ACTION IS ONE OPERATOR SESSION, and the design changed today.** §10.6
+    reframed the whole attack arc: `0x0033` is not a refusal and not an "interaction" —
+    it is **arm 1 of the six-arm world-action switch** at `0x00514840`, where ArenaNet's
+    agents get arm 0 (`0x0026` ATTACK). The client resolves a click to an action and
+    sends it; ours resolves to the wrong arm. Four target properties and our own weapon
+    are all measured correct (§10.1, §10.2, §10.4), and `is_explorable` is now REFUTED as
+    the lever — **ten** of the nineteen zero-attack sessions had it set and produced
+    80 × `0x0033` with zero `0x0026`.
+    **Nothing has been clicked since 2026-08-06.** All 21 game sessions on 2026-08-11
+    produced no world action at all, and every property above was measured after the last
+    click. The 206-to-0 split is a fact about a five-day-old server.
+    **The run.** Loopback, Hatcher spawned, `--explorable` (not because it unlocks
+    anything — it does not — but so a silent drop at the send leaf cannot be confused with
+    the switch's choice). Then, in one session: **(a)** right-click the agent and read the
+    context menu, which `0x005144F0` builds from the same gate, so the menu IS the gate's
+    answer as the live client computes it; **(b)** double-click it — `0x00C1` alone is
+    "selected, no action attempted", which is all today's sessions did; **(c)** run
+    `labelrun.py`, whose `attack` step **has never been aimed at one of our own agents**
+    (all three labelled runs in the vault are tape sessions).
+    **What each outcome means.** `0x0026` on the wire → the blocker died to work already
+    landed. `0x0033` again → it survives every measured property, and the create-burst
+    differential is next. Menu offering Attack but nothing on the wire → the send leaf.
+    Menu showing "Talk To" → allegiance is not 3 today and §10.1 needs re-measuring.
+    Fold 0c's burrow probe into the same session, as 0a already says.
+
+
+0j. ✅ **DONE 2026-08-11. The attack refusal is NOT on our side of the interaction, and
+    that is now measured rather than argued.** §10.3 read the refusal down to one bit —
+    for an ENEMY target the client's eligibility test is `0x005147F0`, which never looks
+    at the target and instead returns **bit 25 of the PLAYER's own equipped weapon**. It
+    ended by naming one step and telling the next reader to take it before changing
+    anything. Taken, with a new read-only probe (`toolkit/clientscan/itemprobe.py`, which
+    walks the thread-local `ItCliApi` context to the item manager and its container hash):
+    **slot 0 holds our hammer, gate dword `0x22201000`, bit 25 SET.** All three branches
+    pass, so the ENEMY arm returns 0 and `0x004E22D5` **adopts** our agent as a target.
+    ArenaNet sets the same bit — every equipped weapon in both live captures has it, and
+    the Ranger's bow is byte-identical to the hammer we send. `test_smsgnames.py` +3
+    checks (floor 23 → 26) pins it, because the gate is on the side we control.
+    **So four properties of the interaction have now been measured and all four are
+    correct**: the target's type tag, its allegiance, its skip flag (§10.1, §10.2) and our
+    own weapon (§10.4). The `m_attackInterval` assert at `AvChar.cpp(4791)` is the one
+    hard observation still unexplained, and §6p — the field living on the view-layer
+    `AvChar` rather than on the agent — is the only surviving lead.
+    **THE METHODOLOGICAL RESULT IS THE BIGGER ONE, and it is now three for three.** §10.1,
+    §10.2 and §10.4 each killed a chain that had been derived confidently from the
+    disassembly and had already survived a session of reasoning. *A decision tree read out
+    of the binary tells you what the client TESTS and never what the answer IS on our
+    data.* Derive the chain, then probe the values. Both probes took under an hour.
+    `studies/enemy/PLAN.md` §10.4.
 
 0i. ✅ **DONE 2026-08-11. The CLIENT half of the protocol is readable, and GAME_CMSG
     goes from 7 names of 194 to 16.** Two obstacles, both now gone: the client ORs
@@ -1250,7 +1314,9 @@ parallel, with one safety change that is not optional — see its entry.
     exists so one run settles it. The `world_id`/`player_id` values stay in the vault —
     `schema/` records the structure and the fact of the match, never the identifiers.
 
-0c. ✅ **ANSWERED 2026-08-11 by the second live capture, and not by the probe built
+0c. ✅ **RUN 2026-08-11, and it confirmed the inference AND refuted its own side prediction.** The probe removed our Hatcher and re-created it twice with **no `0x0056`/`0x0057`** — once at the same id, once at a fresh one — and **both drew a correct collector**. That is what the live-capture inference below could not reach: ArenaNet's 1-to-140 proved THEIR client keeps a definition, not that OUR create path is right without one. `burrow_tick` now passes `send_definition=False`, and `test_burrow.py`'s check flipped with it — it had asserted the resend and named this probe as what would settle it. **The refuted half: `0x1000` is an ANIMATION.** The probe's honest expectation was that nothing visible would happen; set the bit and the agent falls prone, clear it and it gets up, staying rendered and nameplated the whole time. The bit animates, the removal hides — which is why ArenaNet needs both. `studies/enemy/PLAN.md` §10.8. **Prior reasoning follows.**
+
+    ✅ **ANSWERED 2026-08-11 by the second live capture, and not by the probe built
     for it.** The blocking question was whether the client keeps an NPC definition
     across a removal, since `agent_removal` resent it every time and so its positive
     said nothing. ArenaNet's own traffic settles it: **1 `0x0056` declaration, 32

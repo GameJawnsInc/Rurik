@@ -70,14 +70,15 @@ SHARED = ["Base", "Engine", "Net", "Gw" + SEP + "Const"]
 # Every string in the image containing "mock", as (encoding, text).
 MOCK_STRINGS = {("ascii", "mockDevice"), ("utf16", "mock"), ("utf16", "MockDevice")}
 
-# The floor counts a measured green run of 2026-08-06: 26 checks. That is 2 for the
+# The floor counts a measured green run of 2026-08-11: 30 checks. That is 2 for the
 # detector self-test in section 1, then 9 per vaulted build (5 census + 4 shared
 # trees) across the two builds = 18, then 5 for the srctree/asserts containment in
-# 3b, and 1 for the -mock closeout. Nothing here is optional: every fixture arrives
-# through `vaultpath.require_dir`, which raises rather than yielding an empty scan,
-# so a run that reaches the banner having done fewer than 26 checks has lost a
-# section -- most likely one of the per-build loops -- rather than found less data.
-LEDGER = checks.Ledger("srctree", floor=26)
+# 3b, 4 for the assert-scan blind-spot disclosure in 3c, and 1 for the -mock
+# closeout. Nothing here is optional: every fixture arrives through
+# `vaultpath.require_dir`, which raises rather than yielding an empty scan, so a run
+# that reaches the banner having done fewer than 30 checks has lost a section --
+# most likely one of the per-build loops -- rather than found less data.
+LEDGER = checks.Ledger("srctree", floor=30)
 check = checks.adopt(LEDGER)
 
 
@@ -180,6 +181,40 @@ check(len(_st - _az) == 72, "and 72 paths no assert references",
       "%d" % len(_st - _az))
 check(any(p.lower().endswith(".pdb") for p in _st - _az),
       "including the linker's PDB path, which names the build target")
+
+# --- 3c. and asserts.py must keep DISCLOSING what its pattern scan misses ----
+# Added 2026-08-11 (studies/enemy/PLAN.md 10.6). The tool self-reported 19,758
+# readable sites plus 3 it named unreadable, and an independent `call rel32`
+# sweep of .text finds 20,131 -- so it was short by 370 it did not know about,
+# because all three shapes are contiguous byte patterns and the compiler
+# schedules other instructions into them. `AgAgent:2366` at 0x006029BC carries
+# an `fstp st(0)` and is invisible while its twin :2367 three instructions later
+# IS read, which is exactly why nobody noticed for two weeks.
+#
+# The NUMBER is not what this pins -- another build would move it. What it pins
+# is that the DISCLOSURE survives: every "no assert names X" answer from this
+# tool is a floor, and `codescan.py --in <module>` takes its bounds from here.
+# An edit that dropped the shortfall line would quietly restore the false
+# census, and nothing else in the suite would notice.
+print()
+print("3c. asserts.py discloses its own blind spot")
+_azo = Asserts(_P.find()[0])
+_cov = _azo.coverage()
+check(_cov["call_sites"] > _cov["total"] + _cov["unreadable"],
+      "the independent call sweep exceeds what the pattern scan read",
+      "%d call sites vs %d read + %d named unreadable"
+      % (_cov["call_sites"], _cov["total"], _cov["unreadable"]))
+check(_cov["missed"] == _cov["call_sites"] - _cov["total"] - _cov["unreadable"],
+      "and `missed` is that difference, not the tool's own estimate",
+      "missed=%d -- the old `unreadable` counted only the misses the scan can "
+      "SEE, and said 3" % _cov["missed"])
+check(any("SHORT BY" in ln for ln in _azo.coverage_lines()),
+      "and every query prints the shortfall rather than a bare count",
+      "the line that stops a floor being read as a census")
+check(not _azo.grep("AGENT_MIN_MOVE_SPEED"),
+      "worked example: AgAgent:2366 is provably there and unreadable",
+      "0 sites for an assert whose twin :2367 at 0x006029D4 IS read -- a "
+      "demonstrated miss, not a hypothetical one")
 
 # --- 4. -mock is a graphics device, not a mock server ------------------------
 print()

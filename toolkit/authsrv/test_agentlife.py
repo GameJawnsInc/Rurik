@@ -39,7 +39,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=38)
+LEDGER = checks.Ledger("agent lifetime", floor=49)
 
 
 def main():
@@ -178,6 +178,7 @@ def main():
               f"{len(m3)} msgs, {len(rest3)}B left")
 
     section_named_builders(codec)
+    section_pool_fraction()
     return LEDGER.verdict()
 
 
@@ -265,6 +266,92 @@ def section_named_builders(codec):
               f"angle bits {spin[1]:#010x} == +inf" if ok else
               "the guard swallowed the sentinel, which would make the message "
               "unusable for the one case it is most needed")
+
+
+def section_pool_fraction():
+    """The 0x00A3 float channel, and the crash that hid behind a `<=`.
+
+    OBSERVED 2026-08-11: the client asserted `fraction <= 1.0f` at
+    `CharPool.cpp:84` two seconds after the first kill this server drove all the
+    way to a revive. `revive_due` had sent property 34 with `max_health` --
+    100.0 -- where the client wanted a FRACTION of a pool. The crash trace
+    carries our own message three frames under the assert.
+
+    WHY NOTHING CAUGHT IT, and it is the reason this section is worth its
+    checks: the client's bound is `<=`, so it can only fire on a POSITIVE value,
+    and every number this server had ever put on that channel was damage --
+    `-HIT_FRACTION`, and the -50.0 behind `GV_HEALTH`'s comment. A negative
+    passes `fraction <= 1.0f` however absurd it is. Twenty sessions of damage
+    testing exercised that bound VACUOUSLY. So the checks below deliberately
+    push on the positive side, which is the side no earlier test could reach.
+
+    The last two are the ones that would have caught it: they drive the REAL
+    `revive_due` and `hit_enemy` and read the float back off the wire, rather
+    than asking `_fraction` about itself. Putting `max_health` back where 1.0
+    now sits turns them red.
+    """
+    import authsrv
+
+    # 1. the exact value that crashed the client, and its neighbours
+    for bad in (100.0, 1.5, -1.0001, float("inf")):
+        try:
+            authsrv._fraction(bad, agents.GV_HEALTH, "test")
+            refused = None
+        except ValueError as ex:
+            refused = str(ex)
+        LEDGER.ok(refused is not None and "CharPool" in refused,
+                  f"{bad!r} on the float channel is REFUSED, and the refusal "
+                  f"names the client assert",
+                  refused.split(":")[0] if refused else
+                  "ACCEPTED -- this is the shape that took the client down")
+
+    # 2. and the legitimate range still passes, unchanged. A guard that CLAMPED
+    #    would also stop the crash and would be worse: it turns a wrong number
+    #    into a plausible one and the next caller never learns. So the accepted
+    #    values must come back as the same bits _f32 would give.
+    for good in (1.0, 0.0, -authsrv.HIT_FRACTION, -1.0):
+        LEDGER.ok(authsrv._fraction(good, agents.GV_HEALTH, "t") ==
+                  authsrv._f32(good),
+                  f"{good!r} passes through with its bits untouched",
+                  f"0x{authsrv._f32(good):08X} -- a guard, not a transform")
+
+    # 3. THE CHECK THAT WOULD HAVE CAUGHT IT. Drive the real revive and read the
+    #    emitted float back off the wire.
+    sent = []
+    state = {"agents": {10: {"name": "hatcher", "dead": True, "died_at": 0.0,
+                             "health": 0.0, "max_health": 100.0,
+                             "last_hit": 0.0}}}
+    authsrv.revive_due(lambda op, vals, label="": sent.append((op, vals, label)),
+                       state, 1)
+    floats = [struct.unpack("<f", struct.pack("<I", v[-1]))[0]
+              for op, v, _l in sent
+              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    LEDGER.ok(bool(floats),
+              "a real revive puts a value on the 0x00A3 float channel",
+              f"{len(sent)} message(s): "
+              f"{[hex(op) for op, _v, _l in sent]}")
+    LEDGER.ok(floats and all(-1.0 <= f <= 1.0 for f in floats),
+              "and every one of them satisfies the client's own bound",
+              f"{floats} -- this read 100.0 until 2026-08-11 and crashed the "
+              f"client on CharPool.cpp:84. max_health here is 100.0 on purpose, "
+              f"so restoring the old code makes this red rather than merely "
+              f"different")
+
+    # 4. the damage side too -- same channel, and the side that was always safe.
+    #    Worth a check anyway: it is the one that pinned HIT_FRACTION as a
+    #    fraction in the first place, and it now shares the guard.
+    sent2 = []
+    state2 = {"agents": {10: {"name": "hatcher", "dead": False, "died_at": 0.0,
+                              "health": 100.0, "max_health": 100.0,
+                              "last_hit": 0.0}}}
+    authsrv.hit_enemy(lambda op, vals, label="": sent2.append((op, vals, label)),
+                      state2, 10, 1)
+    dmg = [struct.unpack("<f", struct.pack("<I", v[-1]))[0]
+           for op, v, _l in sent2
+           if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    LEDGER.ok(dmg and all(-1.0 <= f <= 1.0 for f in dmg),
+              "and so does the damage a real swing sends",
+              f"{dmg} against HIT_FRACTION={authsrv.HIT_FRACTION}")
 
 
 if __name__ == "__main__":
