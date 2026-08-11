@@ -622,12 +622,23 @@ GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS = 0x008A
 #           PLAN.md recording a 0x003C -> 0x003E drift across builds.
 # Keying movement on 0x003D was the reason the character turned to face every
 # input and never took a step: we were answering the turn and ignoring the move.
+# THE REAL ATTACK ORDER, and as of 2026-08-11 the client SENDS IT TO US.
+# OBSERVED (studies/enemy/PLAN.md 10.7, the `worldaction` labelled run): four of
+# these at our own Hatcher across three separate steps -- one on a single
+# left-click, two on a double-click -- and ZERO 0x0033 in the same run. Payload
+# is [agent_id, dword]; the target was agent 10, ours.
+#
+# For a year this opcode was defined by its absence and 0x0033 was pressed into
+# service as "the only attack intent we have ever seen the client express". That
+# sentence was true when written and is now false, and what changed was not a
+# code change: 0x00514840 is a six-arm switch, 0x0026 is arm 0 and 0x0033 is arm
+# 1, and given a correctly-stated agent the client picks arm 0 by itself.
+GAME_CMSG_ATTACK_AGENT = 0x0026
+
 # What the client sends when the player clicks an agent meaning to do something
 # to it. MEASURED: it arrives at a hostile agent 11 times in one session and 32
 # in another, in a TOWN, while this server answered none of them
-# (studies/enemy/PLAN.md 7.3a). It is the only attack intent we have ever seen
-# the client express -- GAME_CMSG_ATTACK_AGENT (0x0026) was never sent on the
-# game channel in either session.
+# (studies/enemy/PLAN.md 7.3a).
 #
 # Driving combat from this message rather than from 0x0026 is deliberate, and it
 # is what makes a fight possible in an outpost at all: Guild Wars forbids
@@ -927,16 +938,27 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 
 # SERVER-DRIVEN ATTACKING, and it is a workaround rather than the mechanism.
 #
-# The client has never once sent ATTACK_AGENT (0x0026) to us -- not on click,
-# not on space, armed or unarmed, in an outpost or an explorable, with the
-# target red and damageable. It answers a click on our enemy with
-# INTERACT_PLAYER (0x0033) and nothing else. OBSERVED every session.
+# READ THE DATE ON EVERYTHING BELOW. As of 2026-08-11 THE CLIENT SENDS US
+# ATTACK_AGENT (0x0026) -- four of them at our own Hatcher in one labelled run,
+# one on a plain left-click, and zero 0x0033 in the same run
+# (studies/enemy/PLAN.md 10.7). The block described in the rest of this comment
+# is GONE, and it died to work already landed rather than to any fix aimed at
+# it. What survives is the workaround itself: begin_attack and ATTACK_INTERVAL
+# still drive the swinging from our tick, and that is still not the mechanism.
+# The history is kept because three sections of a study doc were spent on it.
+#
+# WHAT WAS TRUE UNTIL 2026-08-11, and no longer is:
+# The client had never once sent ATTACK_AGENT to us -- not on click, not on
+# space, armed or unarmed, in an outpost or an explorable, with the target red
+# and damageable. It answered a click on our enemy with INTERACT_PLAYER (0x0033)
+# and nothing else, 206 times to 0.
 #
 # The opcode is registered in this build's own send table with two fields, so
-# the capability is compiled in and something about our world stops the client
-# choosing it. What that is remains NOT FOUND after testing the weapon (item
-# and body), energy and health pools, the explorable flag, the hostile team
-# token and 0x002F.
+# the capability was never in doubt; what stopped the client choosing it was
+# NOT FOUND after testing the weapon (item and body), energy and health pools,
+# the explorable flag, the hostile team token and 0x002F -- and the answer, per
+# 10.6/10.7, is that 0x0033 was never a refusal at all. It is arm 1 of a
+# six-arm world-action switch and 0x0026 is arm 0. The client picks the arm.
 #
 # AND IT STOPS 0x0027 TOO, which is the same refusal reaching a second opcode.
 # OBSERVED 2026-08-11: with the attack-skill arm newly in place, the harness
@@ -945,10 +967,13 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 # type_code 14 Warrior attack skills, the same class as the Ranger's Power Shot
 # that revealed 0x0027. Not one message left the client.
 #
-# THE REFUSAL IS VISIBLE, AND IT HAS NOW BEEN READ OUT. Every earlier session
-# reasoned from an ABSENT message; the screenshots show the client drawing a
-# prohibited marker on the target's own health bar while the nameplate is red, so
-# the refusal is a decision. studies/enemy/PLAN.md section 10 has the chain; the
+# THE "VISIBLE REFUSAL" WAS A BUTTON. Section 10 was founded on a small icon at
+# the end of the target's health bar, which I read as a prohibited marker and
+# called proof that "the refusal is a decision, and decisions have code". It is
+# the control that CLEARS THE SELECTED TARGET (SOURCED 2026-08-11, owner), it is
+# on every target frame, and it never meant anything. The chain below was read
+# correctly and answered a question nothing had asked. studies/enemy/PLAN.md
+# section 10 has it; the
 # two facts that change what to try next are:
 #
 #   1. The available-actions builder (GmCoreAction, 0x005144F0) switches on an
@@ -2643,11 +2668,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # (studies/skills/FINDINGS.md) and we do not read it yet.
                         if target:
                             hit_enemy(send, state, target, conn_id)
-                    elif opcode == GAME_CMSG_INTERACT_PLAYER:
+                    elif opcode in (GAME_CMSG_ATTACK_AGENT,
+                                    GAME_CMSG_INTERACT_PLAYER):
                         # The player clicked something. Clicking a hostile
                         # agent ORDERS an attack; the tick does the swinging.
                         # See ATTACK_INTERVAL for why this is server-driven and
                         # why that is a workaround, not the mechanism.
+                        #
+                        # ONE ARM FOR BOTH, and the two are NOT synonyms -- they
+                        # are arms 0 and 1 of the client's own world-action
+                        # switch, and which one arrives says what the client
+                        # resolved the click to. Sharing an arm is honest only
+                        # because our answer to both is currently the same one
+                        # (swing at it); the day interaction means anything
+                        # other than combat, 0x0033 has to split back out.
+                        # values[1] is the target agent id in both layouts.
                         begin_attack(send, state, values[1], conn_id)
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through

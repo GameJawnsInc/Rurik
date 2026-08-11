@@ -349,7 +349,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R1** | Handshake against a local server | Client reaches character select | ✅ **2026-08-04 22:58**, `e34c417`. Build 38797 rendered "Test Warrior" against our portal, our DH parameters, our ARC4 channel and our login burst. |
 | **R2** | Presence | Your own body standing in a real map | ✅ **2026-08-05 11:15**, `aedc214`. |
 | **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. |
-| **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). **Nothing swings back and the player cannot die**, which is the half the criterion actually names. There is still no agent table — `studies/enemy/PLAN.md` §7.2. |
+| **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). **Nothing swings back and the player cannot die**, which is the half the criterion actually names. There is still no agent table — `studies/enemy/PLAN.md` §7.2. **2026-08-11: the click now arrives as `0x0026` ATTACK_AGENT** — four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it (§10.7). The server now dispatches both arms. |
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. |
@@ -1048,7 +1048,21 @@ run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cms
 
 ### 8.0 Next, as of 2026-08-11 (`7b24cd6`+, suite 45/45, ~1393 checks)
 
-0k. **THE NEXT ACTION IS ONE OPERATOR SESSION, and the design changed today.** §10.6
+0k. **DONE 2026-08-11 — `0x0026` IS ON THE WIRE and the attack blocker is dead.**
+    The `worldaction` labelled run on loopback drew **four `ATTACK_AGENT` at our own
+    Hatcher across three steps** — one on a plain left-click, two on a double-click —
+    and **zero `0x0033`** in the same run, both idle controls silent. Per the outcome
+    table below, that is "the blocker died to work already landed": no fix aimed at it
+    ever worked, and none was needed once the agent was correctly stated. **What blocks
+    a fight now is ours** — the server had no dispatch arm for `0x0026` and answered all
+    four with silence; the arm is added in the same commit. Two claims of mine died with
+    it: there is **no right-click context menu on a world agent** (I invented the
+    gesture; `0x005144F0`'s actions list is real, its route to the screen was not), and
+    the **"prohibited marker" is the button that clears the selected target** — which was
+    §10's founding observation. Full result and both retractions: `studies/enemy/PLAN.md`
+    §10.7. **Still un-run from this item: 0c's burrow probe.** The original text follows.
+
+    **THE NEXT ACTION IS ONE OPERATOR SESSION, and the design changed today.** §10.6
     reframed the whole attack arc: `0x0033` is not a refusal and not an "interaction" —
     it is **arm 1 of the six-arm world-action switch** at `0x00514840`, where ArenaNet's
     agents get arm 0 (`0x0026` ATTACK). The client resolves a click to an action and

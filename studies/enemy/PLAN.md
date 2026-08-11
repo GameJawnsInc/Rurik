@@ -2248,3 +2248,58 @@ returns 0 sites for an assert that is provably there.
 `codescan.py --in <module>` takes its bounds from the same tool. `coverage_lines()` now
 prints the shortfall under every query, measured against the image rather than against the
 scanner's own idea of what it missed.
+
+### 10.7 `0x0026` IS ON THE WIRE — the blocker is dead
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T134205-c1.jsonl`, the `worldaction`
+labelled run on loopback. Both idle controls silent, so the attributions stand.
+
+```
+step key            expect     n  opcodes
+  1 idle_a         CONTROL     0  --
+  2 target_click   traffic     1  0x0026 x1     values=[32806, 10, 0]
+  3 menu_open      silence     0  --
+  4 dbl_click      traffic     2  0x0026 x2
+  5 menu_attack    traffic     0  --
+  6 attack_other   traffic     1  0x0026 x1
+  7 skill_attack   traffic     1  0x0027 x1     values=[32807, 320, 0, 10, 0]
+  8 skill_nonattack traffic    1  0x0046 x1
+  9 idle_b         CONTROL     0  --
+ 10 gateway        traffic     1  0x003E x1
+```
+
+**Four `0x0026` and ZERO `0x0033`.** `values[0]` is the client's OR'd opcode (`0x8026`)
+and `values[1]` is the target: **10**, our Hatcher. The year-long "the client has never
+once sent `ATTACK_AGENT` to us" is over, and it did not take a code change to end it —
+§10.6 called it right. `0x0026` is arm 0, `0x0033` is arm 1, the client picks the arm,
+and given a correctly-stated agent it picks arm 0. A single left-click is enough (step 2:
+one click, one ATTACK); double-click sends two.
+
+**The 206-to-0 split was a fact about a five-day-old server.** Every property §10 chased
+was already right; nothing in §10.1–§10.4 was the lever, because by the time they were
+measured there was nothing left to lever.
+
+**What now blocks a fight is OURS.** `authsrv.py` has no `GAME_CMSG_ATTACK_AGENT`
+constant and no dispatch arm — the client asked to attack four times and got silence, the
+same shape as every other bug in this project. `0x0027` does work end to end (step 7:
+skill 320 → the server swung → 15 damage → 85/100), so the arm landed for `0x0027` is the
+template.
+
+**TWO CLAIMS OF MINE DIE HERE, and both are the same error.**
+
+**1. There is no right-click context menu on a world agent.** `0x005144F0` is real and
+really does build an `actionsList` with a `displayOrder` — that is read from its own
+assert strings. **Nothing anywhere says it is opened by right-clicking an agent**, and
+nothing says it surfaces in the world at all. §10's own caveat had it as "reads like the
+UI's available-actions menu", a RECONSTRUCTION; `PLAN.md` §8.0 0k hardened that into "the
+menu IS the gate's answer", and `labelrun.py` restated it to an operator as fact. Steps 3
+and 5 produced zero messages, and 20 s of frame grabs at 1 fps show no menu at any point.
+Cost: two of ten steps. **A gesture is not in the disassembly.**
+
+**2. The "prohibited marker" is a button that clears the selected target.** SOURCED
+2026-08-11, owner. §10 was *founded* on that icon — "the client draws a prohibited marker
+… so the refusal is a decision, and decisions have code" — and the icon is a standard
+control present on every target frame, saying nothing about anything. §10.1 already walked
+the claim back to "not known to mean cannot attack, may be range or line of sight"; it is
+now closed, and the honest summary is that a whole section's premise was a misread UI
+widget. Third time in three days that inferring a mechanism from a picture cost a detour.

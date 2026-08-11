@@ -240,7 +240,97 @@ TOWN = [
          "movement and no zone request at all."),
 ]
 
-SCRIPTS = {"combat": COMBAT, "town": TOWN}
+# THE WORLD-ACTION SCRIPT, and it is the only one of the three aimed at OUR OWN world.
+# `combat` and `town` both need a tape, so all three labelled runs in the vault are
+# ArenaNet's agents. That is exactly the gap: studies/enemy/PLAN.md 10.5 measured a
+# 206-to-0 split -- nineteen hand-driven sessions on our server sent GAME_CMSG 0x0033
+# 206 times and 0x0026 never, while two tape sessions sent 0x0026 seven times and 0x0033
+# never -- with zero overlap, the same client and the same authsrv.py. The `attack` step
+# of `combat` has never once been aimed at an agent WE created.
+#
+# WHAT CHANGED THE QUESTION (PLAN.md 8.0 item 0k, studies/enemy/PLAN.md 10.6). 0x0033 is
+# not a refusal and not "interact": 0x00514840 is a SIX-ARM world-action switch, 0x0026
+# is arm 0 and 0x0033 is arm 1, and the client picks the arm. Four target properties and
+# our own weapon are all now measured CORRECT (10.1, 10.2, 10.4) and `is_explorable` is
+# REFUTED as the lever -- ten of the nineteen zero-attack sessions had it set. So this
+# script does not test another hypothesis about the agent. It reads the answer off the
+# client:
+#
+#   * `menu_open` and `menu_attack` are RETIRED IN PLACE -- kept as keys so the run of
+#     2026-08-11 stays reproducible, but they ask for something that does not exist.
+#     THERE IS NO RIGHT-CLICK CONTEXT MENU ON A WORLD AGENT. 0x005144F0 really does
+#     build an `actionsList` with a `displayOrder` (its own asserts say so), but nothing
+#     anywhere says that list is opened by right-clicking an agent, or that it surfaces
+#     in the world at all -- I supplied the gesture, and A GESTURE IS NOT IN THE
+#     DISASSEMBLY. Both steps drew zero messages and 20 s of frame grabs show no menu.
+#     Left standing as the negative result rather than deleted.
+#   * `dbl_click` is the discriminator, and it does not need a menu to be one: the
+#     client resolves the gesture to an action itself and sends that arm.
+#   * `skill_attack` is the second face of the same refusal: with the attack-skill arm in
+#     place the harness pressed slots 5-7 (skills 320-323, Warrior attack skills) at a
+#     taken target on 2026-08-11 and NOT ONE message left the client, which is 0x0027
+#     going the same way 0x0026 does.
+#
+# NOTHING HERE PREDICTS 0x0026. It is the outcome we want and predicting it would be
+# wishing; each step predicts only that the client says SOMETHING, and `analyse` reports
+# which opcode it was. What the run cannot do is tell 0x0026's absence apart from a
+# gesture the operator did not manage -- which is what the two controls and the
+# per-step message count are for.
+WORLDACTION = [
+    Step("idle_a", "Do nothing. Hands off the mouse and keyboard.", 12, SILENCE,
+         "The idle floor. Our server ANSWERS, unlike a tape, so this window is also "
+         "the only measurement of what our own traffic looks like with the operator "
+         "still -- if it is not silent, every count below is against a moving floor.",
+         control=True),
+    Step("target_click", "Left-click the Hatcher once to target it. Do not attack yet.",
+         10, TRAFFIC,
+         "Isolates the select from the act. Predicts 0x00C1 with the Hatcher's agent "
+         "id and nothing else -- which is all every session of 2026-08-11 produced, "
+         "so this step is also the check that the world is in the state we think."),
+    Step("menu_open",
+         "Right-click the Hatcher and hold for a moment, then release. (There is no "
+         "menu -- this step is kept only as the control that says so.)",
+         20, SILENCE,
+         "REFUTED 2026-08-11 and kept as the negative result. It was written to read "
+         "an available-actions menu off the screen; there is no such menu on a world "
+         "agent, and the step's real content is that right-click produces NO wire "
+         "traffic at all. Silence remains the prediction, now for a different reason."),
+    Step("dbl_click", "Double-click the Hatcher.", 10, TRAFFIC,
+         "THE DISCRIMINATOR. The client resolves a double-click to an action itself "
+         "and sends that arm: 0x0026 means the blocker died to work already landed, "
+         "0x0033 again means it survives every property measured in 10.1-10.4."),
+    Step("menu_attack",
+         "Skip this one -- hands off. (It asked for a menu item that does not exist.)",
+         15, SILENCE,
+         "RETIRED with menu_open, same error, kept as its second control. It asked the "
+         "operator to pick Attack out of a menu there is no evidence exists, to compare "
+         "a PICKED action against a RESOLVED gesture. The comparison was worth wanting; "
+         "the route into it was invented."),
+    Step("attack_other",
+         "Attack it once more, however you normally would -- not by double-clicking.",
+         12, TRAFFIC,
+         "Deliberately does NOT name a key. The 2026-08-10 run nearly attributed "
+         "three messages to a key nobody pressed because the prompt assumed a "
+         "binding; a prompt cannot know what is bound."),
+    Step("skill_attack", "With the Hatcher targeted, press 5.", 10, TRAFFIC,
+         "Slot 5 is skill 320, a Warrior ATTACK skill. On 2026-08-11 slots 5-7 sent "
+         "nothing at all at a taken target, so this is 0x0027 refused the same way "
+         "0x0026 is. Traffic here would separate the two refusals."),
+    Step("skill_nonattack", "Now press 1.", 10, TRAFFIC,
+         "Slot 1 is skill 316, and the PAIRED CONTROL for the step above: if 1 sends "
+         "0x0046 and 5 sends nothing, the refusal belongs to attack skills rather "
+         "than to our skillbar, our unlocks or the client's idea of the target."),
+    Step("idle_b", "Do nothing. Hands off again.", 12, SILENCE,
+         "The closing control, and it matters more than the first -- it proves the "
+         "run was still quiet after the actions, so a late attribution is as good as "
+         "an early one.", control=True),
+    Step("gateway", "Walk into the zone exit. This may end the run.", 15, TRAFFIC,
+         "Last on purpose, as in the other two scripts. Unlike them this is OUR "
+         "handoff rather than a recorded one, so what it does is unknown rather "
+         "than refused-by-the-cage."),
+]
+
+SCRIPTS = {"combat": COMBAT, "town": TOWN, "worldaction": WORLDACTION}
 STEPS = COMBAT          # the default, and what `--labelrun` with no name still means
 
 
