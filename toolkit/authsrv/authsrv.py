@@ -978,23 +978,30 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 # meaning. The client considers this agent an attackable-class enemy, so the
 # marker is something else -- range, line of sight, or another thing entirely.
 #
-# AND THE GATE IS OUR WEAPON, NOT OUR ENEMY (studies/enemy/PLAN.md 10.3). Read to
-# the leaf: GmCoreAction:997's classifier sends allegiance 3 (ENEMY) to one arm,
-# whose entire test is 0x005147F0 -- and that function never looks at the target.
-# It fetches equipment slot 0, returns 0 if there is no item, returns 0 on a
-# player-side predicate, and otherwise returns BIT 25 of the item record's +0xC.
-# The caller skips the target when the result is zero.
+# NOR IS IT OUR WEAPON, AND THAT ONE WAS MEASURED (studies/enemy/PLAN.md 10.3,
+# refuted by 10.4). The chain read out of the binary was right about what the
+# client CHECKS: GmCoreAction:997's classifier sends allegiance 3 (ENEMY) to an
+# arm whose entire test is 0x005147F0, and that function never looks at the
+# target -- it fetches OUR equipment slot 0 and returns BIT 25 of the item
+# record's +0xC. It was wrong about the answer. itemprobe.py read a live client
+# on 2026-08-11: slot 0 of the bag holds our hammer and its gate dword is
+# 0x22201000, bit 25 SET. The gate PASSES, so 0x004E22D5 adopts the agent as a
+# target rather than skipping it.
 #
-# So four sessions of adjusting the target -- the team token, 0x002F, the hostile
-# allegiance, section 6e's colour work -- were on the wrong side of the
-# interaction. The note above is honest that it "tested the weapon (item and
-# body)": it tested whether a weapon EXISTS, which is not this. It also explains
-# the m_attackInterval assert recorded at EQUIP_WEAPON below -- a weapon the
-# client draws but does not count as a usable weapon is exactly that symptom.
+# ArenaNet sets the same bit -- every equipped weapon in both live captures has
+# it, and the Ranger's bow carries 0x22201000, byte-identical to the hammer we
+# send. test_smsgnames.py pins that against the corpus so it cannot rot.
 #
-# UNMEASURED: the value of bit 25 on our item, and what sets it. Read it before
-# changing anything; agentprobe.py already reaches client memory read-only and
-# the item is reachable via 0x845890(slot 0) -> 0x845470 -> 0x8451e0.
+# The lesson, now three for three (10.1, 10.2, 10.4): a decision tree read out of
+# the disassembly tells you what the client TESTS and never what the answer is on
+# our data. Derive the chain, then probe the values -- agentprobe.py for agents,
+# itemprobe.py for items, both read-only, each one killing a hypothesis that had
+# already survived a session of reasoning.
+#
+# Withdrawn with it: 10.3's claim that bit 25 explains the m_attackInterval
+# assert at EQUIP_WEAPON below. That assert is still unexplained, and section 6p
+# -- the field living on the view-layer AvChar rather than on the agent -- is now
+# the only surviving lead.
 #
 # Ruled out on the way, so it is not re-tried: the allegiance FourCC. We send
 # 'mons' where ArenaNet sends 'mon1', the only create field that differs from an

@@ -2001,3 +2001,108 @@ already reaches the client's memory read-only, and the item is reachable through
 `0x845890(slot 0)` -> `0x845470` -> `0x8451e0`. Do that before changing anything:
 the whole point of this section is that four sessions were spent adjusting the
 wrong side of the interaction.
+
+---
+
+### 10.4 The read — bit 25 is SET, and §10.3 is REFUTED
+
+**OBSERVED 2026-08-11**, `toolkit/clientscan/itemprobe.py` against a live loopback
+client, plus ArenaNet's own bytes in both live captures. §10.3 ended by naming one
+step and telling the next reader to take it before changing anything. Taken:
+
+```
+context 0x01BB8988  manager 0x049BEFA0  inventory[0] = 0x00000001
+
+handle     object  +0x28 flags  bit 25
+     1 0x1CDC2040  0x22201000  SET
+
+  1 bag(s) in the container map:
+    key 0x00000001 at 0x1CFBEB28, 9 slot(s), 1 filled: [(0, 1)]
+
+  BRANCH 1 PASSES: slot 0 holds item 1, gate dword 0x22201000, bit 25 SET.
+```
+
+**All three branches of `0x005147F0` pass on our own client.** There is an item in
+equipment slot 0; its gate dword has bit 25 set; and the middle predicate is a
+narrow special case (below). So the gate returns 1, the ENEMY arm returns 0, and
+`0x004E22D5` **adopts** our agent rather than skipping it:
+
+```
+004E22D6  call 0x5149a0
+004E22DE  test eax, eax
+004E22E0  jne 0x4e22e4      ; NONZERO -> skip this agent
+004E22E2  mov esi, edi      ; ZERO    -> ADOPT it as the target
+```
+
+§10.3's hypothesis is dead. It is the third chain in this section to be killed by
+a read after being derived from the disassembly — §10.1 killed §10's, §10.2 killed
+its own remaining gates, and this kills §10.3's. **That is now the pattern worth
+naming: reading a decision tree out of the binary tells you what the client
+CHECKS, and never what the answer IS on our data.** Only the probe does that.
+
+**The field mapping is confirmed, not assumed.** `0x8451e0` returns `obj+0x1c` and
+the gate reads `+0xc` of that, i.e. `obj+0x28`. The live object's bytes put our own
+known values exactly where `0x0161 CREATE_NAMED_ITEM`'s wire order says they land:
+
+| record | object | live bytes | wire field, and the value WE sent |
+|---|---|---|---|
+| `+0x00` | `+0x1C` | `60 9b 00 00` | `file_id`, we sent `0x80009B60` |
+| `+0x04` | `+0x20` | `0f 06 00 00` | `item_type` **15 = hammer**, `dye_tint` 6 |
+| `+0x0C` | `+0x28` | `00 10 20 22` | `flags` = `0x22201000` |
+
+A one-to-one landing of four independently-chosen values is a check the artifact
+could have refuted. `record+0xC` IS the wire `flags` word.
+
+**ArenaNet sets the same bit, which is why ours was never the problem.** Read out
+of both live captures by joining `0x013F CREATE_BAG` (type 2 = equipped) to
+`0x013E ITEM_MOVED_TO_LOCATION` slot 0 and thence to `0x0161`:
+
+```
+20260807T143055  slot 0 item -> flags 0x22001000  bit25=1   (Necromancer, staff)
+20260810T235916  slot 0 item -> flags 0x22201000  bit25=1   (Ranger, bow)
+```
+
+and all four weapon-set leadhand items in each session are the same item. **Our
+starter hammer's `0x22201000` is byte-identical to the Ranger's own equipped bow.**
+33 of 123 items in that session carry bit 25 — so it is not a constant, and the
+equipped weapons having it is a fact about weapons rather than about all items.
+
+**The middle predicate, named.** `0x0080D3E0` is ChCliApi's local-player-id getter
+(`ChCliApi:4809 !(playerId & CHAR_CLASS_BASE_MASK)`, matching its own
+`test esi, 0xf0000000`), reading `+0x2AC` of the mission context at `[G+0x44]`
+(`MsCliApi`). `0x0080CEE0` looks that id up through `0x005FC380` (`AgApi`) and
+returns nonzero only when one field equals 1 AND another equals 6 — two specific
+equalities, so a narrow special case rather than the common path. NOT measured
+live; it is the only branch of the three still resting on reading rather than on a
+probe, and it is the least likely of them.
+
+**Corrections to §10.3, both from re-reading the same bytes:**
+
+* The jump table has **six** entries, not four: `0x00514A60` holds
+  `514A2A, 514A1C, 514A1C, 514A2A, 514A2A, 514A46`. The index is
+  `allegiance - 1` (`0x00514A0C: dec eax`), bounded `<= 5`, so allegiance 7 — the
+  lookup-miss value §10 built its original chain on — falls out to `0x514A4E`.
+  **Allegiance 2 (NEUTRAL) takes the same arm as 3 (ENEMY).**
+* §10.3 wrote "eligibility is `0x005147F0` and nothing else" as though the
+  classifier were the action path. It is not. **All three callers of the
+  classifier are view or UI** — `GmView` at `0x004E22D6` (preference-gated: the
+  two calls before it are `AvPrefs`), `GmView:2611` at `0x004E6BEF`, and
+  `UiCtlInstance` at `0x00516AAD`. The gate `0x005147F0` itself has two further
+  callers inside `GmCoreAction` (`0x005145BC`, `0x005146A8`), which is the action
+  layer — and both use the same "0 means eligible" convention
+  (`0x005146AD: neg eax / sbb eax,eax / inc eax`). This does not change the
+  verdict: the gate passes, so **every one of the five consumers gets "eligible"**.
+
+**Where this leaves the arc.** The refusal is not the target's allegiance (§10.1),
+not the target's flags or type tag (§10.2), and not our own weapon (here). Four
+properties of the interaction have now been measured and are all correct. The
+`m_attackInterval` assert at `AvChar.cpp(4791)` remains the one hard observation
+nobody has explained, and §6p's reading of it — that the field lives on the view
+layer `AvChar` rather than on the agent — is now the only surviving lead. §10.3's
+claim that bit 25 "finally explains" that assert is withdrawn.
+
+**A standing instruction, earned three times over.** Do not derive another chain
+from the disassembly and act on it. Derive it, then read the values it depends on
+out of a running client — `agentprobe.py` for agents, `itemprobe.py` for items,
+both read-only. Each of those two probes took under an hour and each one killed a
+hypothesis that had already survived a session of reasoning.

@@ -53,6 +53,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import checks  # noqa: E402
+import content  # noqa: E402
 import tape as tapemod  # noqa: E402
 import vaultpath  # noqa: E402
 from codec import Codec  # noqa: E402
@@ -77,9 +78,19 @@ PROFESSION = 0x00A6
 INITIAL_STATUS = 0x00F0
 UPDATE_STATUS = 0x00F1
 CREATE_BAG = 0x013F
+ITEM_MOVED = 0x013E
+NAMED_ITEM = 0x0161
+
+# The bit GmCoreAction's target gate reads off the player's OWN equipped weapon
+# (studies/enemy/PLAN.md 10.4). 0x005147F0 fetches equipment slot 0 and returns
+# `(*(uint32 *)(record + 0xc) >> 25) & 1`; a zero withholds the target entirely.
+# itemprobe.py measured record+0xc to be the wire `flags` word of 0x0161.
+GATE_BIT = 1 << 25
+BAG_TYPE_EQUIPPED = 2
+EQUIP_SLOT_WEAPON = 0
 
 # Set from a real green run of the sections below, never from a guess.
-LEDGER = checks.Ledger("GAME_SMSG names vs ArenaNet's own wire", floor=23)
+LEDGER = checks.Ledger("GAME_SMSG names vs ArenaNet's own wire", floor=26)
 
 
 def load(stamp):
@@ -371,8 +382,9 @@ def main():
     LEDGER.ok(len(set(rowcounts)) == 1 and rowcounts[0] == 9,
               "0x013F arrives exactly nine times per instance",
               f"per tape: {rowcounts}. Nine of these is the entire reason the client "
-              f"has an inventory to draw, and we send none -- so no item message we "
-              f"send can land anywhere")
+              f"has an inventory to draw, and we send ONE of the nine -- the equipped "
+              f"bag, which is enough for the attack gate below to find slot 0 but not "
+              f"for anything a backpack or a belt pouch would hold")
     # ---- 8. a definition is declared ONCE and reused across every create ----
     # This is the question 0c was blocked on -- whether the client keeps an NPC
     # definition across a removal -- and ArenaNet's own traffic answers it, which
@@ -398,6 +410,65 @@ def main():
               f"agent removal -- 0c's open question, settled from ArenaNet's own "
               f"traffic rather than from our probe, because it is the same client on "
               f"both ends. A server may declare once and re-create freely")
+
+    # ---- 9. the bit the client gates attacking on, on ArenaNet's own weapon ----
+    # studies/enemy/PLAN.md 10.4. The gate is on OUR side of the interaction, so
+    # this is a claim about a value we CONTROL -- which makes it exactly the kind
+    # of thing that rots silently when someone tunes content/items.toml. Joined
+    # the long way (equipped bag -> slot 0 -> the item's own declaration) rather
+    # than by trusting the weapon-set message, so the check follows the same path
+    # 0x845890 -> 0x845470 -> 0x8451e0 the client walks.
+    # v[0] is the OPCODE and the fields follow it -- the same convention section 7
+    # above relies on for its (r[2], r[3], r[5]) triple. Getting this off by one
+    # is not a crash: it silently reads a neighbouring field and answers
+    # confidently, which is how a first pass over this corpus produced two
+    # GAME_CMSG opcodes that do not exist.
+    #   CREATE_BAG  [op, stream, bagType, model, bagId, slots, ?]
+    #   ITEM_MOVED  [op, stream, itemId, bagId, slot]
+    #   NAMED_ITEM  [op, itemId, fileId, type, dyeTint, dyeColors, materials,
+    #                unk1, FLAGS, value, modelId, quantity, encName, modifiers]
+    equipped, gated, checked_caps = [], 0, 0
+    for _stamp, group in per_capture.items():
+        seq = [m for tape, _carry in group for m in tape]
+        bags = {v[4] for _t, op, v in seq
+                if op == CREATE_BAG and len(v) > 5 and v[2] == BAG_TYPE_EQUIPPED}
+        slot0 = {v[2] for _t, op, v in seq
+                 if op == ITEM_MOVED and len(v) > 4
+                 and v[3] in bags and v[4] == EQUIP_SLOT_WEAPON}
+        decl = {v[1]: v for _t, op, v in seq if op == NAMED_ITEM and len(v) > 8}
+        found = [decl[i] for i in slot0 if i in decl]
+        if found:
+            checked_caps += 1
+        equipped += found
+        gated += sum(1 for v in found if v[8] & GATE_BIT)
+    LEDGER.ok(checked_caps == 2 and equipped and gated == len(equipped),
+              "every weapon ArenaNet equips in slot 0 carries the gate bit",
+              f"{gated}/{len(equipped)} slot-0 items across {checked_caps} capture(s) "
+              f"carry bit 25 of their 0x0161 flags word. That bit is the WHOLE test "
+              f"0x005147F0 applies before the client will offer an enemy as a target, "
+              f"and it reads it off the PLAYER's weapon, never off the target")
+
+    allflags = [v[8] for _t, op, v in allm if op == NAMED_ITEM and len(v) > 8]
+    setflags = sum(1 for f in allflags if f & GATE_BIT)
+    LEDGER.ok(allflags and 0 < setflags < len(allflags),
+              "and it is not simply set on everything",
+              f"{setflags} of {len(allflags)} declared items carry it. A bit that was "
+              f"always set, or never, would make the check above vacuous -- the "
+              f"equipped weapons having it is then a fact about WEAPONS")
+
+    theirs = {v[8] for v in equipped}
+    try:
+        ourflags = int(content.load().get("item", "starter_hammer")["flags"])
+    except Exception as ex:                                    # pragma: no cover
+        LEDGER.skip("our own weapon vs theirs", f"content unreadable: {ex}")
+    else:
+        LEDGER.ok(bool(ourflags & GATE_BIT) and ourflags in theirs,
+                  "and the weapon WE send carries it, with a word they also send",
+                  f"content/items.toml starter_hammer flags 0x{ourflags:08X}, bit 25 "
+                  f"{'set' if ourflags & GATE_BIT else 'CLEAR'}; ArenaNet's own slot-0 "
+                  f"words are {sorted(hex(f) for f in theirs)}. Measured live on "
+                  f"2026-08-11: the client stores this word at item+0x28 and the gate "
+                  f"PASSES, which is what refuted studies/enemy/PLAN.md 10.3")
 
     LEDGER.ok(len(triples) == 1,
               "and its (bagType, slot, capacity) triples are identical across tapes",
