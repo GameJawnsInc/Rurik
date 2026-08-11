@@ -1103,10 +1103,16 @@ parallel, with one safety change that is not optional — see its entry.
     connection it already holds to go away. ArenaNet's server hangs up 0.12–0.14 s after
     every handoff; ours sat on the socket. `close_after_transfer` fixes that, keyed on the
     tape's contents so a last hop or `--tape-no-transfer` run is never hung up on.
-    **The re-run is the test, and it is cheap.** The mechanism is proven; that the missing
-    hang-up is the *whole* cause is CONTESTED — the client did reset the socket ~10 s later
-    and still did not dial. If hop 3 still hangs, the deferred consumer wants a message we
-    never send and `0x850f67`'s chain on the same flags word is where to look.
+    **Re-run 2026-08-10: the hang-up was necessary but NOT sufficient** — same two hops,
+    same stop. What releases a deferred transfer is a *player-state* transition, not a
+    socket close: the consumer at `0x00851402` clears the pending bit and dials, and it
+    lives in a handler asserting `!(context->playerFlags & PLAYER_FLAG_CONNECTED)` at
+    `MsCliGame.cpp:76` (T11). Two dead ends ruled out cheaply and recorded: all four tapes
+    declare the **same** `map_file_id` 113021, so it is not map content; and the auth
+    channel carries only two `GAME_SERVER_INFO` in the whole session, both before the
+    first hop, so it is not an auth handoff. **Next:** what drives the two
+    `PLAYER_FLAG_CONNECTED` clears (`0x00850ca7`, `0x00851534`) — and whether any server
+    message reaches them at all.
     **Not landed:** a full four-hop run. ~6.6 minutes during which the operator does
     nothing, and each hop's avatar stops moving well before its tape ends — the
     `tape complete: N/N` line is the only truthful signal. **UNVERIFIED:** whether the client honours the port

@@ -380,12 +380,60 @@ tape's *contents*, never a flag, because the last hop and every `--tape-no-trans
 exist so the client keeps playing afterwards. Pinned in `test_burrow.py` §4, both
 directions, and both mutations go red.
 
-> **CONTESTED, and the next run decides it.** The mechanism above is OBSERVED. That the
-> missing hang-up is the *whole* cause is not: the client did eventually reset the socket
-> about ten seconds after the tape ended and still did not dial. Close-ordering explains
-> that (the release is a teardown step, not merely "the socket is gone"), but it is not
-> proven. If a re-run still hangs at hop 3, the deferred consumer wants a message we never
-> send, and `0x850f67`'s bit-2/bit-4/`0x200` chain on the same flags word is where to look.
+> **The hang-up was NECESSARY BUT NOT SUFFICIENT — settled by the re-run, 2026-08-10.**
+> With `close_after_transfer` in place the chain still stops at the same place: hop 1
+> played 1209/1209, we hung up, the client dialled hop 2 and played 780/780, we hung up
+> again, and hop 3 was never dialled. Identical treatment at both transitions, different
+> outcome, twice. Keep the close — it is what the recorded server does — but it is not
+> the release.
+
+### T11 — What releases a deferred transfer is a player-state transition, not a socket close. OBSERVED.
+
+Following T10's pending bit `0x10` to its consumer, at `0x00851402`:
+
+```
+mov  eax, [edi + 0x190]
+test al, 0x10
+je   0x85145e            ; nothing pending -> done
+and  eax, 0xffffffef     ; clear pending
+mov  [edi + 0x190], eax
+push [edi + 0x1f8] ... [edi + 0x1c8]    ; the stashed sockaddr and ids
+call 0x850df0                            ; DIAL
+```
+
+That code lives in a handler whose own assertion names the module and the condition:
+
+```
+!(context->playerFlags & PLAYER_FLAG_CONNECTED)
+        P:\Code\Gw\Mission\Cli\MsCliGame.cpp:76
+```
+
+`playerFlags` is `+0x2a8`; `PLAYER_FLAG_CONNECTED` is **bit 1**, set at `0x008513a7` and
+cleared at exactly two sites, `0x00850ca7` and `0x00851534`. The handler also dispatches
+event `0x10000112` (the connect path dispatches `0x10000111`).
+
+So the dial is released when the client's **mission/player state** says it is no longer
+connected — a game-level transition inside `MsCliGame`, not the TCP socket going away.
+That is why hanging up twice changed nothing, and it is consistent with everything else
+observed: the first transfer of a session never needs the release because bit `0x20` is
+still clear and it dials immediately.
+
+**Two dead ends, ruled out cheaply and recorded so they are not re-run.**
+
+* *Map content.* All four tapes declare the **same** `map_file_id` 113021 in their
+  `0x0195`, so Ashford streams what Ascalon and Lakeside already streamed. The loopback
+  build's updater kill switch is not implicated.
+* *The auth channel.* It carries exactly two `GAME_SERVER_INFO` in the whole 411-second
+  session — map 0 and map 148 — both before the first game hop. The three map transitions
+  get nothing from it; the remaining auth traffic is `REQUEST_RESPONSE` acks our server
+  already answers. The transition is game-channel only, and the tape plays all of it
+  (780/780).
+
+**Where to look next**, in order: what drives the two `PLAYER_FLAG_CONNECTED` clears at
+`0x00850ca7` and `0x00851534` — `0x008515b7` beside the second one is the third caller of
+the connect function, so that whole region is the leave-instance path. The question to
+answer is whether a *server* message reaches it, or whether it is purely client-side and
+driven by something in the instance state our tape does not reproduce.
 
 **Also settled, and it cost nothing:** the recon's stated blocker — "consecutive hops to
 the same endpoint were never witnessed" — is irrelevant. Every hop here had a distinct
