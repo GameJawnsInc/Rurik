@@ -2606,3 +2606,69 @@ would be a `ValueError` the tick has to swallow.
 - **`ENEMY_MELEE_RANGE`, `ENEMY_MOVE_RATE` and `ENEMY_DEST_RESEND` are ours.**
   Nothing measured them, and the wiki's aggro-bubble numbers describe a mechanic
   (a moving circle, a leash, a call-to-arms radius) that none of this implements.
+
+### 11.3 It faces you — on an angle nobody here invented
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T175949-c1.jsonl`:
+
+```
+2e00 0a000000 db0f4940 920a0640
+  |      |        |        `-- 0x40060a92 = 2.0943951 = 2*pi/3 rad/s
+  |      |        `----------- 0x40490fdb = 3.14159274 = pi, due west
+  |      `-------------------- agent 10
+  `--------------------------- GAME_SMSG_AGENT_UPDATE_ROTATION
+```
+
+The agent stands due EAST of the player and is told to look due WEST. On film it
+is turned toward the player mid-swing instead of showing its back.
+
+**`0x002E` had been defined, documented and never sent** — it sat in `authsrv.py`
+for days with a comment describing exactly what it carries. This rung needed no
+new discovery at all, because everything about how to fill it was already measured
+off ArenaNet's own traffic by work that was not trying to solve this problem:
+
+| what | where it came from |
+|---|---|
+| `atan2(y, x)` | `test_rotate.py` scores the client's OWN `0x0040` sends against `atan2` of a nearby `0x003D` **direction** vector, beating a null model from the same corpus |
+| absolute, in ±π, ±inf as free-spin sentinels | `test_smsgnames.py`, every finite live sample in range |
+| turn rate is per-CREATURE and quantised, max `2π/3` to the bit | `test_smsgnames.py` |
+| both fields are `dword` holding **float32** | the ROTATE_PLAYER trap; reading them raw made an early `test_smsgnames` compare garbage to π |
+
+`test_rotate.py`'s first version paired against `0x003D`'s POSITION vec2 instead of
+its DIRECTION vec2 and scored 0 of 163 — a position has a perfectly plausible
+`atan2` too, which is why that failure was silent. The check here that separates
+`atan2(y, x)` from `atan2(x, y)` is a player due NORTH reading `+π/2`; the due-west
+case cannot tell them apart, since both give ±π.
+
+**What is NOT depended on: which sign is a left turn.** `test_rotate.py` refuses to
+pin that on 121/189 and 106/169, which is real and far too weak to write down. An
+absolute facing needs no such claim.
+
+**Three defects found in this rung's own first draft, all by sabotage:**
+
+1. **The facing was nested under the destination re-announce**, so it could not
+   change until the player had moved 120 units. The 0.15 rad epsilon was
+   decorative and an agent tracking a player circling it at constant distance
+   never turned. It is called every chasing tick now, gated by the epsilon.
+2. **`force=True` on every swing bypassed that epsilon** — 15 of the 16 rotations
+   in the first live run were byte-identical to the one before. Dropped: in melee
+   the swing is the ONLY call site, so the epsilon is also what tracks a player
+   walking around the agent, at one message instead of one per swing. 16 → 1.
+3. **Two of the new checks could not fail.** The seam-wrap case moved the player a
+   hair NORTH, which does not cross ±π, so both the wrapped and unwrapped versions
+   were silent; and the zero-distance guard was tested through `enemy_move_tick`,
+   which returns before facing is considered when the agent is inside melee range.
+   Fixed by moving south and by calling `face_player` directly.
+
+**A float32 detail worth keeping.** Due west is exactly `+π`, and
+`float32(π) = 3.14159274` is GREATER than `math.pi = 3.14159265` by 9e-8 — so the
+obvious `-math.pi <= a <= math.pi` bound marks a legitimate facing out of range.
+`test_smsgnames`' version of that check is over live samples, none of which land on
+the seam, so it never had to notice.
+
+### Still not there
+
+- **It does not turn while dead**, and nothing resets `facing_told` on revive.
+- **The turn rate is one constant for every creature.** ArenaNet's is per-creature;
+  we send its maximum to everything.
+- **`ENEMY_FACING_EPSILON` is ours.** The rest of the numbers are ArenaNet's.
