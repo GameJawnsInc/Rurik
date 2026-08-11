@@ -351,13 +351,31 @@ be wrong.
 
 Two behaviours, and conflating them is the trap.
 
-**(a) A schema-known opcode with no handler is silently ignored.** `authsrv.py:1589-2458`
-is one dispatch loop and **neither** chain has an `else`. The message is printed and
-recorded, then falls off the end: nothing sent, nothing logged as a miss, socket healthy.
-Measured against our own corpus, this is **19 distinct GAME_CMSG opcodes, 1,126 of 11,502
-game-channel messages (9.8%)**. Against live traffic shapes it would be worse — `0x8009`
-alone is 19.3% of live game c2s. `elif kind != "auth": pass` at 2369-2374 is unreachable
-dead code.
+**(a) A schema-known opcode with no handler is silently ignored.** ✅ **FIXED 2026-08-11.**
+As written: `authsrv.py` is one dispatch loop and **neither** chain had an `else`. The
+message was printed and recorded, then fell off the end — nothing sent, nothing logged as a
+miss, socket healthy. Measured against our own corpus, **19 distinct GAME_CMSG opcodes,
+1,126 of 11,502 game-channel messages (9.8%)**. Against live traffic shapes it is worse —
+`0x8009` alone is 19.3% of live game c2s. `elif kind != "auth": pass` was unreachable dead
+code (`kind` is two-valued from one binding site).
+
+**What replaced it.** Both chains now end in an `else` calling `note_unhandled`, and the
+dead branch is gone — it sat directly above where the real catch-all now lives, which is
+the worst place for something that reads like a catch-all and never runs.
+
+**The `else` is the small part; the design is the fix.** Printing every miss would have
+been worse than silence: at 19.3% of live c2s, `0x8009` alone would scroll the log. So the
+first occurrence of each opcode prints, the rest are counted, and the tally lands once at
+disconnect (`report_unhandled`) — in the terminal *and* in the capture. It is deliberately
+**not** an error and **not** a disconnect: unhandled-but-known is the normal state of most
+of the catalog today (194 layouts, nine handlers), so treating it as a fault would make
+every session look broken and train the operator to ignore the loudest line in the log.
+That is the opposite of D9(b), where ending the connection *is* right, because an opcode
+outside the schema cannot be framed past safely.
+
+**The trap inside the fix**, pinned by `test_dispatch.py`: a labelled run suppresses the
+echo, and must still **count**. Suppressing both would silently disable the whole thing in
+exactly the sessions where someone is watching for it.
 
 **(b) A schema-unknown opcode discards the pending buffer.** ✅ **FIXED 2026-08-11.** As
 written, the `Undecodable` path was loud in the log and silent to the client, kept the
@@ -389,10 +407,13 @@ length, turned into background noise for a day.
 > was *predicted in this section's own opening line* and the prediction did not prevent it —
 > naming a hazard in the finding is not a control on the citations of that finding.
 
-**Impact.** With (b) fixed, the tape-player hazard it posed (§4) is closed: a schema-unknown
-opcode can no longer take out its neighbours, because it takes out the connection instead —
-loudly, and at a point the operator can act on. **(a) is still open**: 19 distinct GAME_CMSG
-opcodes, 9.8% of our corpus, are still silently ignored with no `else` on either chain.
+**Impact.** Both halves are now closed, 2026-08-11. (b): a schema-unknown opcode can no
+longer take out its neighbours, because it takes out the connection instead — loudly, and at
+a point the operator can act on. (a): a schema-known opcode with no handler is now named on
+its first arrival and totalled at disconnect, so **"the client did nothing" and "we ignored
+what the client did" no longer look identical in the log** — which was the real cost, rather
+than any one missing feature. Checked by `toolkit/authsrv/test_dispatch.py` (21 checks, four
+negative controls).
 
 ---
 
@@ -697,8 +718,12 @@ our own world tick contaminating the channel.
    `0x006E` sends are incomplete on that evidence. One line at the existing send site.
 4. **The `0x000C`/`0x000D` ping loop — small.** A 5 s timer, one 2-byte send, one
    `0x000D` with the measured RTT, and a handler for `GAME_CMSG 0x8009` that does nothing
-   but does it *loudly*. Also give the game dispatch chain an `else` (D9(a)) so
-   unhandled-but-known stops being invisible.
+   but does it *loudly*. ~~Also give the game dispatch chain an `else` (D9(a)) so
+   unhandled-but-known stops being invisible.~~ **The `else` half is DONE (2026-08-11,
+   both chains) — so `0x8009` is already loud on its first arrival and counted after,
+   which is most of what "does nothing loudly" was asking for.** What remains here is the
+   ping loop itself: the 5 s `0x000C` and the `0x000D` RTT reply that make the client's
+   net graph work. Still small, and now purely additive.
 5. **Split the player-number and agent-id spaces — small.** Fix the comment and the value
    at `authsrv.py:1456`, stop reusing `PLAYER_AGENT_ID` for both, and correct the schema's
    `agent_id` typing of `GAME_SMSG 0x0199` field 1 via `schema/overrides.json` with this
