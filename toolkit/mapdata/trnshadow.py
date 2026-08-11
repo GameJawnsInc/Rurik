@@ -90,8 +90,18 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from terrain import Terrain, CHUNK_SIZE, SHADOW_TAIL      # noqa: E402
 from archive import DEFAULT_DAT                           # noqa: E402
+
+# This module is the LOW-level half of the pair and must not import `terrain`
+# at module scope: `terrain` imports this one to decode tag 7, so a top-level
+# `from terrain import ...` here is a circular import that fails at load. The
+# two constants below were imported from `terrain` when this module was written
+# standalone; they are the client's own CHUNK_SIZE (MEASURED from the binary
+# twice, TrnCodecHeight:166/167 and TrnChunkBox:150) and the tail width. They
+# are declared here and `terrain` is checked against them by `test_trnshadow`,
+# so the two cannot drift apart silently.
+CHUNK_SIZE = 32
+SHADOW_TAIL = 128
 
 SAMPLES_PER_CELL = 8
 BORDER_CELLS = 1
@@ -101,6 +111,9 @@ CELL_BITS = CHUNK_SIZE * CHUNK_SIZE                                 # 1,024
 
 RLE_CONTINUE = 0xFF
 RLE_STEP = 0xFE                     # what one 0xFF byte is worth
+
+ROW_MASK = (1 << BLOCK_EDGE) - 1    # for complementing a row without Python's
+                                    # infinite sign extension
 
 # The tail's window: the cell's 8x8 samples plus one sample of skirt on each
 # side. MEASURED -- see `tail_disagreement` for the controls that fail.
@@ -160,6 +173,14 @@ def encode_rows(rows):
     emitter and both exercised by real maps: a row whose first sample is set
     opens with a zero-length run, and a run of exactly 254 is one 0xFE byte
     rather than 0xFF followed by 0.
+
+    This walks RUNS, not samples. The obvious loop over all `BLOCK_EDGE` bits of
+    each row costs 73,984 iterations per block and 5.2 ms on a real map, which is
+    ~6 minutes of pure encoding across the corpus's 59,051 blocks -- enough to
+    make the whole-archive check the kind nobody runs. Shadow rows are long
+    uniform stretches, so stepping transition to transition is the natural shape:
+    `rem & -rem` isolates the lowest set bit and its `bit_length` is the distance
+    to the next transition. Output is byte-for-byte what the sample loop produced.
     """
     if len(rows) != BLOCK_EDGE:
         raise ValueError(f"{len(rows)} rows, expected {BLOCK_EDGE}")
@@ -167,19 +188,18 @@ def encode_rows(rows):
     for y, row in enumerate(rows):
         if row >> BLOCK_EDGE:
             raise ValueError(f"row {y} has bits past sample {BLOCK_EDGE - 1}")
-        if row & 1:
-            out.append(0)                       # a zero-length run of 0s
         value = row & 1
-        run = 0
-        for x in range(BLOCK_EDGE):
-            bit = (row >> x) & 1
-            if bit == value:
-                run += 1
-                continue
+        if value:
+            out.append(0)                       # a zero-length run of 0s
+        inverse = row ^ ROW_MASK
+        pos = 0
+        while pos < BLOCK_EDGE:
+            rest = (inverse if value else row) >> pos
+            # the next transition, or the end of the row if there is none
+            run = ((rest & -rest).bit_length() - 1) if rest else BLOCK_EDGE - pos
             _emit(out, run)
-            value = bit
-            run = 1
-        _emit(out, run)
+            pos += run
+            value ^= 1
     return bytes(out)
 
 
@@ -295,13 +315,16 @@ def _main():
     ap.add_argument("--blocks", type=int, default=3)
     args = ap.parse_args()
 
+    # Imported HERE, not at module scope: `terrain` imports this module, so a
+    # top-level import would be circular. The CLI is the only thing that needs it.
+    from archive import Archive
+    from terrain import Terrain
+
     if args.row is not None:
-        from archive import Archive
         with Archive(args.dat) as ar:
             trn = Terrain.from_row(args.row, ar)
     else:
         fid = int(args.file_id, 0) if args.file_id else 0x345CC
-        from archive import Archive
         with Archive(args.dat) as ar:
             trn = Terrain.load(fid, archive=ar)
 

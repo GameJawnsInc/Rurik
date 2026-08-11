@@ -60,6 +60,7 @@ from archive import Archive, ffna_chunks, file_id_table, ffna_type  # noqa: E402
 from terrain import (Terrain, ShadowBlock, TERRAIN_CHUNK,  # noqa: E402
                      STRIPPED_TERRAIN_CHUNK, SIGNATURE, VERSION, CELL_PITCH,
                      CHUNK_SIZE, SHADOW_TAIL, SEQUENCE_SHORT, SEQUENCE_LONG)
+import trnshadow  # noqa: E402  -- tag 7 is decoded now, not carried
 import checks  # noqa: E402
 import vaultpath  # noqa: E402
 
@@ -495,11 +496,44 @@ def main():
         t6 = Terrain.decode(blob)
         t6.tiles = bytes((len(t6.table_a),)) + t6.tiles[1:]
         t7 = Terrain.decode(blob)
-        t7.shadow = t7.shadow + [ShadowBlock(b"", bytes(SHADOW_TAIL))]
+        t7.shadow = t7.shadow + [ShadowBlock([0] * trnshadow.BLOCK_EDGE)]
         check(raises(t5.encode) and raises(t6.encode) and raises(t7.encode),
               "a bit-7 tag-5 byte, an out-of-range tile and a spare tag-7 "
               "block are all refused",
               "0 of 17,089 corpus tag-5 bytes set bit 7")
+
+        # (e) tag 7's tail is DERIVED from its bitmap, so a stored tail that
+        # disagrees means our reading of the run coding or the 10x10 window rule
+        # is wrong for that block -- and the decoder must say so rather than
+        # keeping the stored bytes, which would re-encode byte-identically and
+        # hide it. This check exists because the refusal shipped broken: it
+        # called len() on a count and raised TypeError instead of refusing.
+        # NOT via raises(): it swallows every exception, so it would have scored
+        # the TypeError as a pass and left the defect in place. The exception
+        # TYPE is the thing under test.
+        blk = Terrain.decode(blob).shadow[0]
+        wrong = bytearray(blk.tail)
+        wrong[0] ^= 0x01
+        why = ""
+        try:
+            ShadowBlock.from_bytes(blk.payload, bytes(wrong))
+            refused = False
+            why = "accepted a tail its bitmap disproves"
+        except ValueError as exc:
+            refused = True
+            why = str(exc)
+        except Exception as exc:                               # noqa: BLE001
+            refused = False
+            why = f"raised {type(exc).__name__}, not ValueError: {exc}"
+        try:
+            ShadowBlock.from_bytes(blk.payload, blk.tail)
+            accepted = True
+        except Exception as exc:                               # noqa: BLE001
+            accepted = False
+            why = f"refused a CLEAN tail: {type(exc).__name__}: {exc}"
+        check(refused and accepted,
+              "a tag-7 tail its own bitmap disproves is refused with a "
+              "ValueError, and a clean one is accepted", why)
 
         # -- 7. the corpus -----------------------------------------------
         rows = [e for e in ar.entries if e.flags == MAP_FLAGS]

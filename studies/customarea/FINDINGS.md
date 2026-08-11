@@ -2805,3 +2805,49 @@ we did not author.
 **Reproduce.** `python toolkit/mapdata/test_terrain.py --all` (440 s), plus
 `test_mapchunks.py` and `test_trnshadow.py`. Full suite at the time of this section:
 **40 of 40 green**, the list derived from `CLAUDE.md` rather than hand-maintained.
+
+### 19.8 trnshadow wired in — tag 7 is decoded, not carried (2026-08-11)
+
+§19.1 reported the round-trip resting on **48.4% carried bytes**, and named wiring
+`trnshadow` into `terrain.py` as the cheapest way to shrink that. Done.
+
+**Carried is now 28.9%**, measured over Kamadan, Pre-Searing and row 46196 (3,119,778 B
+of chunk, 901,092 B carried). What remains carried is tag 2's tile indices, tag 3's bits,
+tag 9's shade bytes and the two table bodies — every one of them a record whose *meaning*
+§19.5 could not settle, which is the right place for the line to sit. **The 349/349
+byte-identical round-trip still holds** with tag 7 reconstructed rather than copied.
+
+`ShadowBlock`'s authoritative member is now `rows`, a 272×272 bitmap; `payload` and `tail`
+are properties that regenerate from it, so **neither stored field survives the decode**.
+
+**The decoder refuses a block whose stored tail its own bitmap disproves.** That is the
+point of the exercise rather than a nicety: keeping the stored tail would re-encode
+byte-identically and hide the disagreement — a round-trip comparing a value with itself,
+which is the trap §19.2 caught twice already.
+
+Three things worth recording because they were not free:
+
+- **A circular import.** `trnshadow` imported `Terrain` at module scope, so `terrain`
+  importing `trnshadow` failed at load. Fixed by making the low-level module standalone:
+  it now declares `CHUNK_SIZE` and `SHADOW_TAIL` itself and imports `Terrain` inside its
+  CLI. The dependency runs one way, low to high.
+- **`encode_rows` was 13× too slow to leave alone.** It walked all 73,984 bits of every
+  block — 5.21 ms on a real map, about 6 minutes of pure encoding across 59,051 blocks,
+  which is how a whole-archive check becomes one nobody runs. It now steps transition to
+  transition (`rest & -rest` isolates the next one), **0.39 ms/block, byte-identical to
+  the sample loop on 391 blocks and to the archive on the same 391.** The full corpus run
+  went from 440 s to 559 s rather than to ~800 s.
+- **The refusal shipped broken and a test now covers it.** The first version called
+  `len()` on `tail_disagreement`'s return, which is a count, turning a clean refusal into
+  a `TypeError` — an error path nothing exercised. The new check asserts the exception
+  **type**, and deliberately does not use the file's `raises()` helper, because that
+  helper swallows every exception and would have scored the `TypeError` as a pass.
+  Sabotaged (`if False and ...`), the check goes red; restored, green.
+
+**A pleasant confirmation nobody set out to make.** `Terrain.blank()` used to carry the
+caveat NOT CLIENT-LOADABLE because its tag-7 blocks had a zero-length payload while
+`k == 0` occurs in 0 of 59,051 retail blocks. Its blocks now hold a real all-clear bitmap,
+which the run coder emits as 272 rows of `0xFF 0x12` — **`k == 544`, and 544 is exactly
+the corpus minimum.** An all-clear tile is what a flat unshadowed grid should have, and
+retail's smallest block agrees with it to the byte. That caveat is gone; `blank()` is
+still not a loadable *map*, but its terrain chunk is no longer the reason.
