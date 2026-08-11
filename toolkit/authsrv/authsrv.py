@@ -63,6 +63,39 @@ def _f32(x):
     return struct.unpack("<I", struct.pack("<f", x))[0]
 
 
+def _fraction(x, prop, what):
+    """A pool fraction for the 0x00A3 float channel, refused loudly if out of range.
+
+    THE CRASH THIS EXISTS FOR, and it is the first client assert this project has
+    captured from a real fight. OBSERVED 2026-08-11: two seconds after the Hatcher
+    died, the client went down on
+
+        Assertion: fraction <= 1.0f    P:\\Code\\Gw\\Char\\CharPool.cpp(84)
+
+    and the crash trace carries our own message three frames below the assert --
+    `Arg:00000022 0000000a 0000000a 42c80000`, which is property 34, agent 10,
+    agent 10, and 42c80000 = 100.0f. That is `revive_due`'s "refill bar" send,
+    which passed `max_health` where the client wanted a FRACTION of it.
+
+    WHY EVERY EARLIER MEASUREMENT MISSED IT. The assert is `<=`, so it can only
+    fire in the POSITIVE direction, and every value we had ever put on this channel
+    was damage: `-HIT_FRACTION`, and the `-50.0` that `GV_HEALTH`'s comment is
+    built on. A negative number passes `fraction <= 1.0f` no matter how absurd, so
+    the whole damage side of the arc tested this bound VACUOUSLY. It took a kill
+    and a revive -- the first positive value ever sent -- to reach it.
+
+    Refusing here rather than clamping is deliberate: a clamp would turn a wrong
+    number into a plausible one, and the next caller would never learn.
+    """
+    if not -1.0 <= x <= 1.0:
+        raise ValueError(
+            f"refusing to send {x!r} as property {prop} ({what}) on the 0x00A3 "
+            f"float channel: values there are FRACTIONS of a pool, and the client "
+            f"asserts `fraction <= 1.0f` at CharPool.cpp:84 -- it does not clamp, "
+            f"it dies, two seconds later and with no server-side symptom.")
+    return _f32(x)
+
+
 AUTH_CMSG_VERSION_HEADER = 0x000C0400
 # 0x000C0700 came from the reference sources. 0x000C0500 is what build 38797
 # actually sends to a game server -- measured on the wire 2026-08-05, from a raw
@@ -1133,7 +1166,7 @@ def hit_enemy(send, state, target_id, conn_id):
     # fraction is at 0x0081823C in the client.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID,
-          _f32(-HIT_FRACTION)],
+          _fraction(-HIT_FRACTION, agents.PROP_DAMAGE, "one swing")],
          f"damage {dealt:.0f} to agent {target_id}")
     # And close the swing. Harmless if the client ignores it; without it the
     # attack has a beginning and no end.
@@ -1189,13 +1222,23 @@ def revive_due(send, state, conn_id):
         # so it still took a full seven swings to drop, and the bar never moved.
         # OBSERVED 2026-08-06.
         #
-        # Property 34 is a DELTA on the health pool, not a setter: we measured
-        # -50.0 taking exactly 50 health off (studies/agentprops/FINDINGS.md 1b),
-        # and GWCA independently calls it `health`. A full maximum in the
-        # positive direction fills a bar the death path had zeroed.
+        # Property 34 is a FRACTION of the pool, and sending `max_health` here
+        # CRASHED THE CLIENT -- CharPool.cpp:84, `fraction <= 1.0f`, two seconds
+        # after the first kill this server ever drove to a revive (see `_fraction`,
+        # which now refuses the whole class). 1.0 is a full pool.
+        #
+        # WHAT IS STILL UNVERIFIED, and it is the interesting part: `GV_HEALTH`'s
+        # comment says property 34 is an absolute DELTA, from -50.0 measured as
+        # exactly 50 health off. Property 16 one table over is documented a
+        # FRACTION with the client's own fmul cited at 0x0081823C. Both cannot be
+        # plainly true of a channel the client calls `fraction`, and the crash only
+        # proves the POSITIVE side is bounded by 1.0 -- the assert is `<=` and
+        # cannot fire on a negative. Whether 1.0 refills the bar is a PREDICTION
+        # this run tests, not a fact; if the body stands up empty, 34 is a delta
+        # with a one-sided guard and the refill needs the int channel instead.
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_HEALTH, agent_id, agent_id,
-              _f32(agent["max_health"])],
+              _fraction(1.0, agents.GV_HEALTH, "refill to a full pool")],
              f"refill bar on agent {agent_id}")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)

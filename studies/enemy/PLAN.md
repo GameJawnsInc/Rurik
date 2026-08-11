@@ -2344,3 +2344,74 @@ animation, and dropping it would make worms teleport in and out.
 
 **UNVERIFIED, and worth saying:** whether the down animation is burrow-specific or a
 generic knockdown. One agent, one model, one probe — a Plague Worm would settle it.
+
+### 10.9 One click, a whole fight — and the client asserted on the revive
+
+**OBSERVED 2026-08-11**, three loopback runs, captures `authsrv-20260811T1406*`,
+`T141120`, `T141339`. Driven with a single scripted left-click on the Hatcher at a
+window fraction measured off the frame grabs, so no operator hands were involved. A
+missed click would have shown as `0x003E` MOVE_TO_COORD; all three sent `0x0026`.
+
+```
+t=14.56  c2s 0x0026 ATTACK [agent 10]        <- one click
+t=14.57  attack_started + damage 15 + melee_attack_finished
+         ... 7 swings, 1.77 s apart (ATTACK_SPEED said 1.75), 15 each = 105
+t=25.20  the 7th lands; a 100 hp agent is dead
+t=26.10  c2s 0x00C1 TARGET_SELECT [0]        <- the CLIENT drops the dead target
+t=33.24  revive + restore max health + refill bar
+t=33.28  c2s 0x00C1 TARGET_SELECT [10]       <- and re-acquires it, 40 ms later
+```
+
+Both `TARGET_SELECT`s are unprompted client behaviour and neither is something our
+decoder can force, which is what makes the death and the revive facts about the client
+rather than about our bookkeeping. **`0x0026` → `begin_attack` works end to end.** The
+animation renders too: mid-fight frames show the player mid-swing with the hammer up, a
+floating `-15`, and a partly-drained bar.
+
+**IT IS STILL NOT A FIGHT IN THE TWO-WAY SENSE.** Nothing swung back and the player took
+no damage, exactly as §3's R4a row has said since 2026-08-06. There is no enemy AI; this
+rung is the client asking and us answering, not combat.
+
+### THE CRASH, and why twenty sessions of damage testing could not have found it
+
+The first run of this went down two seconds after the kill:
+
+```
+Assertion: fraction <= 1.0f
+P:\Code\Gw\Char\CharPool.cpp(84)          Build: 38797
+```
+
+The trace carries our own message three frames below the assert —
+`Arg:00000022 0000000a 0000000a 42c80000`, i.e. property **34**, agent **10**, agent
+**10**, and `42c80000` = **100.0f**. That is `revive_due`'s "refill bar" send, which
+passed `max_health` where the client wanted a FRACTION of a pool.
+
+**The assert is `<=`, so it can only fire in the POSITIVE direction.** Every value this
+project had ever put on the `0x00A3` float channel was damage — `-HIT_FRACTION`, and the
+`-50.0` that `GV_HEALTH`'s own comment is built on. A negative number passes
+`fraction <= 1.0f` however absurd it is, so the entire damage side of this arc tested that
+bound **vacuously**. It took the first kill driven all the way to a revive — the first
+positive value ever sent — to reach it.
+
+Fixed by sending `1.0`, and by routing both float-channel sends through `_fraction()`,
+which **refuses** out-of-range rather than clamping: a clamp turns a wrong number into a
+plausible one and the next caller never learns. Re-run confirms no crash (the session ran
+45 s past the revive and exited clean) and that the bar refills — the post-revive frame
+shows a full bar against a mid-fight frame showing a drained one, which is the control
+that makes "full" mean anything.
+
+**STILL CONTESTED and now flagged in the code:** `GV_HEALTH`'s comment calls property 34
+an absolute DELTA, from `-50.0` measured as exactly 50 health off; `PROP_DAMAGE` (16) one
+table over is documented a FRACTION with the client's own `fmul` cited at `0x0081823C`.
+Both cannot be plainly true of a channel the client itself calls `fraction`. The crash
+proves only that the positive side is bounded by 1.0.
+
+### The instrument defect this turned up, and it is ours
+
+**The harness printed `RUN VERDICT: PASS` on the run that crashed.** A Guild Wars assert
+puts up a modal dialog and **keeps the process alive** waiting for a click, so
+`proc.poll()` stayed `None`, the hold expired on its timer, and `capture_error_dialog` —
+which existed, was tested, and was written precisely for this — was called only from the
+`proc.poll() is not None` branch. The crash text sat on screen for the rest of the run and
+the report said green. `hold_open` now checks on both exits. Same shape as every other
+defect in this file: the check was right and the caller never reached it.
