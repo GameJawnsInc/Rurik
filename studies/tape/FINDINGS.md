@@ -336,6 +336,62 @@ client will re-dial an endpoint it has just been disconnected from. All three re
 hops changed IP, so the capture never exercised host reuse — which is the reason the
 implementation gives each hop its own alias instead of reusing one listener.
 
+### T10 — The client defers every transfer after the first, and the recorded server's HANG-UP is what releases it. OBSERVED, from the binary.
+
+The first chained run, 2026-08-10. Two hops played end to end and the third never dialled:
+
+```
+hop 1  127.0.0.3  Ascalon City     tape complete: 1209/1209 in  48.6s   -> dialled hop 2
+hop 2  127.0.0.4  Lakeside County  tape complete:  780/780  in 147.6s   -> never dialled
+hop 3  127.0.0.5  Ashford Abbey    no connection ever arrived
+```
+
+The client was **healthy**: correct destination on its loading screen (Ashford Abbey),
+correct alias in its overlay (`127.0.0.5`), auth channel still heartbeating three minutes
+later, no `Assertion` in `Gw.log`, and **no SYN at all** in `netstat` — it never opened a
+socket. `gamesrv3` was listening the whole time.
+
+**The client has two transfer paths.** Handler `0x0084f290` branches on bit `0x20` of a
+flags dword at `+0x190`:
+
+```
+mov  eax, [esi + 0x190]
+test al, 0x20
+je   0x84f359      ; CLEAR -> call 0x850df0, dial immediately
+or   eax, 0x10     ; SET   -> stash the sockaddr + ids at +0x1c8, mark pending, return
+```
+
+and **the connect function sets that bit itself** — `or [ebx+0x190], 0x20` at `0x00850e56`,
+inside `0x850df0`, no `ret` between them. So **exactly one game-channel transfer per
+session dials immediately; every later one defers.**
+
+That is precisely the observed shape. Hop 1's connection came from the *auth* handoff
+(`AUTH_SMSG 0x0009`), a different path, so bit `0x20` was still clear when its `0x01A5`
+arrived — immediate dial, 140 ms, worked. Connecting to hop 2 went through `0x850df0` and
+set the bit, so hop 2's `0x01A5` stashed and waited.
+
+**What it waits for is the connection it already holds going away, and the recording says
+so.** ArenaNet's server hangs up immediately after each handoff — `:62994` closes at
+t=213.70 and `:64102` opens at t=213.84, and the same 0.12–0.14 s shape at all three
+transitions. Our player ran out of events and sat on the socket.
+
+`authsrv.close_after_transfer` now hangs up when a tape contains a transfer — keyed on the
+tape's *contents*, never a flag, because the last hop and every `--tape-no-transfer` run
+exist so the client keeps playing afterwards. Pinned in `test_burrow.py` §4, both
+directions, and both mutations go red.
+
+> **CONTESTED, and the next run decides it.** The mechanism above is OBSERVED. That the
+> missing hang-up is the *whole* cause is not: the client did eventually reset the socket
+> about ten seconds after the tape ended and still did not dial. Close-ordering explains
+> that (the release is a teardown step, not merely "the socket is gone"), but it is not
+> proven. If a re-run still hangs at hop 3, the deferred consumer wants a message we never
+> send, and `0x850f67`'s bit-2/bit-4/`0x200` chain on the same flags word is where to look.
+
+**Also settled, and it cost nothing:** the recon's stated blocker — "consecutive hops to
+the same endpoint were never witnessed" — is irrelevant. Every hop here had a distinct
+alias and hop 2→3 failed anyway. And the port question is still open: the client never got
+far enough to reveal one.
+
 ---
 
 ## 3. What run 2 did not settle

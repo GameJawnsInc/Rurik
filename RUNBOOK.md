@@ -561,6 +561,15 @@ arrives. `--tape-rewrite-next` therefore refuses any host outside 127/8 and prov
 rewrite offline before the client starts. If a hop goes quiet, read the gamesrv banner:
 it names the byte offset and both addresses.
 
+**If a hop loads its map and then sits at "Connecting" forever**, that is the deferred
+transfer, not a crash. The client only dials a game-server handoff immediately the *first*
+time in a session; after that it stashes the address and waits for the connection it
+already holds to end (bit `0x20` at `+0x190`, set by the connect itself — T10). Our server
+now hangs up when a tape ends in a handoff, which is what the recorded server does 0.14 s
+after every transition. Check the gamesrv for `tape ended in a handoff -- closing`; if it
+is there and the client still does not dial, the release needs something else and the run
+is worth reporting rather than repeating.
+
 To play one hop alone, skip the chain and arm that connection directly with
 `--game-args "--tape DIR --tape-connection CLIENT->SERVER --tape-no-transfer"`. The
 Ashford hop is the cheapest thing to test a change against — 14.0 s and 726 messages.
