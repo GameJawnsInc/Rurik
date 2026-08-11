@@ -137,10 +137,16 @@ EQUIPPED_SLOT_COUNT = 9
 # opposed to CREATE_NAMED_ITEM which only declares an item's bytes and
 # ITEM_WEAPON_SET which fills the weapon-swap UI.
 GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT = 0x006E
-# agent_id + leadhand + offhand, as WEAPON TYPES rather than item ids. This is
-# the one that decides whether the agent can attack at all; 0x006E only decides
-# what it looks like. Upstream's name says NPC because an NPC has no inventory
-# to point at, but the field it sets is on every living agent.
+# agent_id + two ids. CONTESTED as of 2026-08-10, and the comment that used to
+# sit here said "WEAPON TYPES rather than item ids" while the call site 2,900
+# lines below said the opposite -- studies/smsg's naming pass proposed renaming
+# it on that basis and its own refutation pass rejected the rename, because the
+# repo had already settled the question OBSERVED on 2026-08-06 by crashing a real
+# client on the assert in question (studies/enemy/PLAN.md). What IS established:
+# 291/291 of its non-zero values in a tape were declared by an earlier
+# 0x015E/0x0161 in that same tape, so whatever the ids mean, they are not free
+# -- a server must declare before it references. The noun stays unsettled; see
+# studies/smsg/FINDINGS.md section 2.
 GAME_SMSG_NPC_UPDATE_WEAPONS = 0x006D
 # agent_id + allegiance byte. The field that decides whether a click is an
 # attack or a conversation; the team token only decides colour.
@@ -209,7 +215,7 @@ GAME_SMSG_WORLD_CREATE_AGENT = 0x0020
 # never-created id or double-remove without an intervening create.
 GAME_SMSG_WORLD_REMOVE_AGENT = 0x0021
 GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT = 0x0022
-GAME_SMSG_PLAYER_CREATE = 0x0059
+GAME_SMSG_PLAYER_INFO = 0x0059
 GAME_SMSG_PLAYER_UPDATE_PROFESSION = 0x00B7
 
 # The 15-dword player attribute set. OBSERVED 2026-08-05: sending this with
@@ -305,26 +311,26 @@ except Exception as _exc:                                     # noqa: BLE001
 # Non-player agents. Shapes agree with the client's own message-format tables
 # (studies/msgtable); what each field MEANS is in studies/enemy/PLAN.md.
 GAME_SMSG_NPC_UPDATE_PROPERTIES = 0x0056
-GAME_SMSG_NPC_UPDATE_MODEL = 0x0057
+GAME_SMSG_MONSTER_COMPOSITE = 0x0057
 GAME_SMSG_AGENT_PROPERTY_UPDATE_INT = 0x009F
 GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET = 0x00A3
 # The int-with-target variant. Same field shape as 0x00A3 (prop, target, cause,
 # value) but the value is a plain int rather than IEEE bits. GWCA calls this
 # family GenericValueTarget. INFERRED from the shape match; not yet observed.
 GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET = 0x00A0
-GAME_SMSG_AGENT_UPDATE_EFFECTS = 0x00F1
+GAME_SMSG_AGENT_UPDATE_STATUS = 0x00F1
 # The create-time sibling of 0x00F1, and D2 in the divergence register: 472 messages
 # in the live capture, the highest count of anything ArenaNet sends that we never did.
 # OBSERVED as [agent_id, dword] carrying the effect bitfield an agent is born with --
 # 0x1000 on 151 of 151 Plague Worm creates and 0 on the ordinary ones in the same tape.
-GAME_SMSG_AGENT_INITIAL_EFFECTS = 0x00F0
+GAME_SMSG_AGENT_INITIAL_STATUS = 0x00F0
 # Deliberately NOT given a meaningful name. It carries [agent_id, byte] and the whole
 # corpus holds two values: 9, on every one of 140 worm creates, and 8, exactly once --
 # on the Wolf at the instant it died, alongside EFFECT_DEAD. Two values with one of them
 # seen a single time is a shape, not a semantic, and this project's rule is to refuse
 # the guess. Note also that GAME_CMSG 0x0026 is ATTACK: 0x26 is the one value ArenaNet
 # sends on BOTH channels, and they are different messages. Do not reuse either name.
-GAME_SMSG_AGENT_UNNAMED_0026 = 0x0026
+GAME_SMSG_AGENT_UPDATE_FLAGS = 0x0026
 BURROW_TAIL_0026_VALUE = 9        # what every observed worm create carried
 
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
@@ -639,6 +645,34 @@ GAME_CMSG_INTERACT_PLAYER = 0x0033
 # nothing was selected at the time.
 GAME_CMSG_USE_SKILL = 0x0046
 
+# THE OTHER HALF, and without it the entire physical side of the game is unhandled.
+# OBSERVED 2026-08-11 (studies/cmsg/FINDINGS.md C14): a whole narrated live session
+# of a Ranger casting Power Shot sent ZERO 0x0046. Attack skills leave on 0x0027
+# instead, and the server answers both with the same GAME_SMSG 0x00E3 -- which is
+# what makes them two halves of one thing rather than unrelated messages.
+#
+#   Necromancer session:  4x 0x0046, 0x 0x0027    skills 105, 153 -- type_code 5
+#   Ranger session:       0x 0x0046, 3x 0x0027    skill 394       -- type_code 14
+#
+# The client's own s_skill table types 394 as profession 2 (Ranger), 10 energy,
+# 3 s recharge -- Power Shot -- and 311 of its 3443 rows carry type_code 14.
+#
+# THE DISCRIMINATOR IS INFERRED, not proven: three distinct skills over two
+# sessions is thin, and what is actually established is that the two casters used
+# different opcodes and their skills differ by type_code. "type_code 14 goes on
+# 0x0027" is the reading that fits; a rival that fits equally well on this evidence
+# is "the PROFESSION decides", and only a session mixing skill types on one
+# character separates them. Nothing below depends on which is right.
+#
+# FIELD MEANINGS ARE POSITIONAL AND MATCH 0x0046, which the catalog's TYPES hide:
+# 0x0046 is [dword, dword, agent_id, byte] and 0x0027 is [agent_id, dword, dword,
+# byte], but both are 15 bytes and the VALUES line up slot for slot -- field 1 is
+# the skill (394 constant across all three sends), field 3 the target (276/278,
+# both of which 0x0026 ATTACK also targeted in the same fight). agent_id and dword
+# are the same four bytes on the wire; the marshalling type is not the meaning.
+# This is the ROTATE_PLAYER trap and it is the third time it has come up.
+GAME_CMSG_ATTACK_SKILL = 0x0027
+
 # The reply, and its field meanings are the CLIENT'S OWN WORDS. 0x00823090 builds
 # a lookup key from the two payload fields and, when it misses, logs
 #
@@ -682,10 +716,55 @@ GAME_SMSG_AGENT_UPDATE_POSITION = 0x002C
 #   P032 SpeedModifier -> 0x002B  dword, float, byte   agent, modifier, type
 #   P035 AgentRotate   -> 0x002E  dword, dword, dword  agent, cos, sin
 #
+# THREE OF THOSE GLOSSES ARE NOW REFUTED from the client's own binary and the
+# live corpus (2026-08-10, studies/smsg/FINDINGS.md):
+#   0x002B is NOT a "SpeedModifier": the client asserts the float into
+#     [AGENT_MIN_MOVE_SPEED, AGENT_MAX_MOVE_SPEED] = [0.01, 1.0] and 163/163 wire
+#     samples obey it, so a movement buff has nowhere to ride. Its byte is
+#     `facing` (AgAgent.cpp:2368 "!(facing & ~AGENT_FACING_MASK)"), not a "type".
+#   0x002E is NOT "cos, sin": sin^2+cos^2 over the corpus ranges 1.23..4.87 and
+#     is never 1. Field 2 is an absolute angle (55/55 finite values inside +/-pi,
+#     the only non-finite ones being the two +/-inf sentinels) and field 3 is a
+#     turn rate in rad/s. This gloss is why 0x002E went unsent for weeks.
+#   0x0029's "planes" is not from the binary and remains UNVERIFIED.
+# The typing stays dword for 0x002E's two fields -- the VALUES are floats, the
+# MARSHALLING is not, exactly as for GAME_CMSG 0x0040 ROTATE_PLAYER.
+#
 # What is borrowed is the SEMANTICS -- that keyboard movement belongs on this
 # message. That rests on GWLP-R alone, and is UNVERIFIED against our client
 # until a playtest says the walking looks right.
 GAME_SMSG_AGENT_MOVE_DIRECTION = 0x0025
+
+# The four this server could not send until 2026-08-11, all named on 2026-08-10
+# from the client's own asserts joined to two live captures. Builders and the
+# bounds the client asserts on itself are in agents.py; studies/smsg/FINDINGS.md
+# carries the evidence for each.
+#
+# 0x002B is the one to understand first. It is a NORMALISED movement rate --
+# 1.0 == 288 units/s -- and it drives the client's walk-cycle playback rate.
+#
+# DO NOT repeat the attribution this comment originally carried. It said this
+# explained a "smooth movement, janky animation" report from 2026-08-11, and
+# that was wrong twice over: the report came from a TAPE REPLAY, and in tape
+# mode this server sends nothing of its own -- the tape is the whole channel,
+# and ArenaNet's own tapes carry 163 of these. The client was receiving movement
+# rates throughout. A second hypothesis (Windows sleep granularity smearing the
+# replay) was also measured and refuted: play_tape schedules against an absolute
+# t0 so drift cannot accumulate, and sleep overshoot on this machine is
+# 0.1-0.7 ms. What 0x002B is actually worth is stated above and is about OUR
+# server's own sessions, where it is now sent and where the walk cycle was
+# confirmed by eye on 2026-08-11.
+GAME_SMSG_AGENT_UPDATE_SPEED = 0x002B
+# Absolute facing angle in radians + a turn rate in rad/s, BOTH marshalled u32.
+# Upstream called them rotation_cos/rotation_sin; sin^2+cos^2 over the live
+# corpus ranges 1.23-4.87 and is never 1, so that reading is refuted.
+GAME_SMSG_AGENT_UPDATE_ROTATION = 0x002E
+# ArenaNet sends this after EVERY 0x006E, 366 of 366 across both captures. Zero
+# makes the client skip a guild lookup on an id we never populated.
+GAME_SMSG_AGENT_SET_TABARD_VISIBLE = 0x0048
+# The profession pair. The client's own invariant is primary != secondary, and
+# across 387 live samples the primary is 1..6 and NEVER 0.
+GAME_SMSG_AGENT_SET_PROFESSION = 0x00A6
 
 GAME_SRV_HOST = "127.0.0.1"
 # How GAME_SERVER_INFO fills its 24-byte host field. "sockaddr" is what both
@@ -859,6 +938,21 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 # and body), energy and health pools, the explorable flag, the hostile team
 # token and 0x002F.
 #
+# AND IT STOPS 0x0027 TOO, which is the same refusal reaching a second opcode.
+# OBSERVED 2026-08-11: with the attack-skill arm newly in place, the harness
+# clicked our enemy (TARGET_SELECT went out, so the target WAS taken) and pressed
+# skill slots 5, 6 and 7 -- which our own bar fills with skills 320-323, all
+# type_code 14 Warrior attack skills, the same class as the Ranger's Power Shot
+# that revealed 0x0027. Not one message left the client.
+#
+# THE NEW EVIDENCE IS THAT THE REFUSAL IS VISIBLE. Every earlier session
+# reasoned from an ABSENT message; the screenshots now show the client drawing a
+# prohibited marker on the target's own health bar while the nameplate is red.
+# So the client is not failing to notice our enemy, it is deciding against it and
+# saying so on screen. That decision is drawn by some code path that can be found
+# -- which is a better lead than "nothing happens", and it is where the next
+# attempt at this should start rather than testing another world property.
+#
 # So a click now STARTS an attack instead of being one, and the server swings
 # on a timer. That is closer to how Guild Wars actually works -- combat is
 # server-authoritative and the client renders what it is told -- but the client
@@ -974,7 +1068,7 @@ def hit_enemy(send, state, target_id, conn_id):
         # death message failed before this was read out of the client
         # (studies/agentprops/FINDINGS.md 1c).
         agent["dead"], agent["died_at"] = True, now
-        send(GAME_SMSG_AGENT_UPDATE_EFFECTS, [target_id, agents.EFFECT_DEAD],
+        send(GAME_SMSG_AGENT_UPDATE_STATUS, [target_id, agents.EFFECT_DEAD],
              f"KILL agent {target_id}")
         print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
               f"back up in {REVIVE_AFTER:.0f}s", flush=True)
@@ -1005,7 +1099,7 @@ def revive_due(send, state, conn_id):
         agent["dead"] = False
         agent["health"] = agent["max_health"]
         agent["last_hit"] = 0.0
-        send(GAME_SMSG_AGENT_UPDATE_EFFECTS, [agent_id, 0],
+        send(GAME_SMSG_AGENT_UPDATE_STATUS, [agent_id, 0],
              f"revive agent {agent_id}")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
@@ -1151,8 +1245,15 @@ def create_agent_world(send, state, agent_id, entry, why,
         send(GAME_SMSG_NPC_UPDATE_PROPERTIES,
              agents.npc_properties(definition, npc),
              f"NPC_UPDATE_PROPERTIES(def {definition})")
-        send(GAME_SMSG_NPC_UPDATE_MODEL, agents.npc_model(definition, npc),
-             f"NPC_UPDATE_MODEL(def {definition})")
+        # A definition need not have a model row. ArenaNet declares 8 of the 44
+        # definitions in capture 20260807T143055 with 0x0056 and NO 0x0057 at
+        # all, and the Lakeside worm is one of them -- so a content row may
+        # honestly lack `model_id`, and sending one anyway would mean inventing
+        # it. That guess is what made the first agent_removal run's negative
+        # meaningless. OBSERVED; studies/smsg/FINDINGS.md.
+        if npc.get("model_id") is not None:
+            send(GAME_SMSG_MONSTER_COMPOSITE, agents.npc_model(definition, npc),
+                 f"NPC_UPDATE_MODEL(def {definition})")
 
     # The effects an agent is BORN with, which is what 0x00F0 is for. This is the one
     # message of ArenaNet's five-message worm create burst that we can send honestly:
@@ -1171,7 +1272,7 @@ def create_agent_world(send, state, agent_id, entry, why,
     # observation un-attributable -- which is the whole lesson of the first agent_removal
     # probe, whose bare 0x0020 produced a negative that meant nothing.
     if entry.get("effects"):
-        send(GAME_SMSG_AGENT_INITIAL_EFFECTS, [agent_id, int(entry["effects"])],
+        send(GAME_SMSG_AGENT_INITIAL_STATUS, [agent_id, int(entry["effects"])],
              f"AGENT_INITIAL_EFFECTS({agent_id}, 0x{int(entry['effects']):04X})")
 
     send(GAME_SMSG_WORLD_CREATE_AGENT,
@@ -1183,6 +1284,27 @@ def create_agent_world(send, state, agent_id, entry, why,
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, agent_id, int(entry["max_health"])],
          f"health {int(entry['max_health'])} on agent {agent_id}")
+
+    # --- three of the four named on 2026-08-10, sent here for the first time ---
+    #
+    # The profession pair. Ours have always rendered with no profession at all,
+    # because we never sent this: no icon on the nameplate, nothing in the
+    # roster. The content row carries it, and agents.py refuses a primary of 0
+    # because 0 never occurs in 387 live samples and does NOT mean "none".
+    # `npc` is already bound at the top of this function.
+    if npc.get("profession"):
+        send(GAME_SMSG_AGENT_SET_PROFESSION,
+             agents.agent_set_profession(agent_id, int(npc["profession"])),
+             f"AGENT_SET_PROFESSION({agent_id}, {npc['profession']})")
+
+    # The create burst's tail. OBSERVED: this message's field 2 mirrors the
+    # create's kind byte -- (9, 9) in 153 of 155 samples, (9, 8) in 2 -- so the
+    # value is the agent kind and not a guess. It is a MERGE, and agents.py
+    # refuses anything inside the mask the client keeps for itself.
+    send(GAME_SMSG_AGENT_UPDATE_FLAGS,
+         agents.agent_update_flags(agent_id, agents.AGENT_KIND_NPC),
+         f"AGENT_UPDATE_FLAGS({agent_id}, kind {agents.AGENT_KIND_NPC})")
+
     send_attack_speed(send, agent_id, entry["attack_speed"], entry.get("name", "npc"))
 
     live[agent_id] = entry
@@ -1246,13 +1368,13 @@ def burrow_tick(send, state, conn_id):
             entry["burrow_phase"] = BURROW_OUT
             entry["burrow_at"] = now + entry["burrow_out_seconds"]
             entry["effects"] = 0
-            send(GAME_SMSG_AGENT_UPDATE_EFFECTS, [agent_id, 0],
+            send(GAME_SMSG_AGENT_UPDATE_STATUS, [agent_id, 0],
                  f"agent {agent_id} is fully out")
         elif phase == BURROW_OUT:
             entry["burrow_phase"] = BURROW_SUBMERGING
             entry["burrow_at"] = now + BURROW_SUBMERGE_SECONDS
             entry["effects"] = agents.EFFECT_TRANSITION
-            send(GAME_SMSG_AGENT_UPDATE_EFFECTS,
+            send(GAME_SMSG_AGENT_UPDATE_STATUS,
                  [agent_id, agents.EFFECT_TRANSITION],
                  f"agent {agent_id} is submerging")
         elif phase == BURROW_SUBMERGING:
@@ -1493,8 +1615,18 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
               f"assert on one of the events below, OR the stack being shut down "
               f"(--keep-open / --hold, or a verdict target already reached).",
               flush=True)
-        print(f"[c{conn_id}] Gw.log decides it: an Assertion line means the client; no "
-              f"Assertion line means the teardown.", flush=True)
+        # CORRECTED 2026-08-11. This used to say "Gw.log decides it: an Assertion
+        # line means the client; no Assertion line means the teardown." Gw.log
+        # does NOT record asserts -- it is a perf/error log, and a run that
+        # asserted at 01:10:56 that day has no Assertion line in it. So that
+        # check could never fire, and a conclusion drawn from it on 2026-08-10
+        # (that a tape's client was healthy) rested on nothing.
+        print(f"[c{conn_id}] The client's ERROR DIALOG decides it, and nothing else "
+              f"does: Gw.log carries no asserts, no dump file is written anywhere "
+              f"findable, and a reset here happens on clean teardowns too. "
+              f"session.py captures the dialog automatically into the run "
+              f"directory as crash-dialog.txt; standalone, use "
+              f"toolkit/harness/read_error_dialog.py.", flush=True)
         for j in range(lo, min(sent + 2, len(events))):
             et, eb = events[j]
             try:
@@ -2403,16 +2535,30 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_INSTANCE_MANIFEST_DONE,
                                  [phase_arg, map_arg, 0],
                                  f"MANIFEST_DONE[{phase_arg}, map {map_arg}]")
-                    elif opcode == GAME_CMSG_USE_SKILL:
+                    elif opcode in (GAME_CMSG_USE_SKILL, GAME_CMSG_ATTACK_SKILL):
+                        # ONE ARM FOR BOTH, deliberately. 0x0046 and 0x0027 are the
+                        # caster and attack-skill halves of the same action: their
+                        # payloads line up slot for slot and ArenaNet's own server
+                        # answers both with GAME_SMSG 0x00E3 (see the constants).
+                        # Two arms would drift, and until 2026-08-11 this server
+                        # had only the caster half -- so every physical attack
+                        # skill fell through to the silent-ignore path, where per
+                        # studies/divergence D9(b) a schema-unknown c2s opcode also
+                        # DISCARDS whatever shared its TCP read. That made it a
+                        # correctness bug and not just a missing feature.
+                        #
                         # Confirm the cast by echoing the key the client is
                         # waiting on. If the echo is wrong the client says so in
                         # its own log -- 'Pending skill %u copy %d not found' --
                         # which makes this one of the few things in the project
                         # that reports its own failure.
+                        which = ("USE_SKILL" if opcode == GAME_CMSG_USE_SKILL
+                                 else "ATTACK_SKILL")
                         skill_id, copy, target = values[1], values[2], values[3]
                         send(GAME_SMSG_SKILL_ACTIVATED,
                              [PLAYER_AGENT_ID, skill_id, copy],
-                             f"SKILL_ACTIVATED(skill {skill_id}, copy {copy})")
+                             f"SKILL_ACTIVATED(skill {skill_id}, copy {copy}"
+                             f" via {which})")
                         print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
                               f"agent {target or 'nothing'}", flush=True)
                         # TRIED AND IT DID NOT WORK, recorded so it is not
@@ -2774,6 +2920,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             continue
                         state["dest"], state["clipped"] = (float(dest[0]),
                                                            float(dest[1])), False
+                        # ArenaNet pairs the rate with the MOVE, not with the
+                        # spawn: 303 of 309 0x002B in the two live captures are
+                        # immediately followed by 0x0029, and the median gap
+                        # from an agent's own create is 574 messages. Only 13
+                        # of 309 sit inside a create burst. This server sent it
+                        # at spawn time for one evening and the client asserted
+                        # on AgAgent.cpp:1198 !(m_flags & MOVEMENT_STALE) as the
+                        # loading screen faded -- whether that was the cause is
+                        # UNVERIFIED, but the placement was wrong either way and
+                        # the corpus said so before a line of it was written.
+                        send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                             agents.agent_update_speed(PLAYER_AGENT_ID, 1.0),
+                             "AGENT_UPDATE_SPEED(player, 1.0 = 288 u/s)")
                         send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                              [PLAYER_AGENT_ID, list(dest), plane_first, plane_second],
                              f"AGENT_MOVE_TO_POINT({dest[0]:.0f},{dest[1]:.0f}"
@@ -2906,7 +3065,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                              "INSTANCE_LOADED")
                         send(GAME_SMSG_WORLD_UPDATE_LOAD_TIME, [0],
                              "WORLD_UPDATE_LOAD_TIME")
-                        send(GAME_SMSG_PLAYER_CREATE,
+                        send(GAME_SMSG_PLAYER_INFO,
                              [PLAYER_NUMBER, PLAYER_AGENT_ID, APPEARANCE,
                               0, 0, 0, TEST_CHAR_NAME], "PLAYER_CREATE")
                         # Field names carrying hex offsets (h000B, h001E, h0023,
@@ -3023,6 +3182,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  [PLAYER_AGENT_ID, WEAPON_ITEM_ID,
                                   0, 0, 0, 0, 0, 0, 0, 0],
                                  "UPDATE_AGENT_VISUAL_EQUIPMENT(weapon)")
+                            # ArenaNet sends this after EVERY 0x006E, 366 of
+                            # 366 across both live captures. Zero because we
+                            # have never populated a guild id, and 0 is what
+                            # makes the client skip the lookup rather than
+                            # resolve one that does not exist.
+                            send(GAME_SMSG_AGENT_SET_TABARD_VISIBLE,
+                                 agents.agent_set_tabard_visible(
+                                     PLAYER_AGENT_ID, False),
+                                 "AGENT_SET_TABARD_VISIBLE(player, 0)")
                             # And separately, what the agent WIELDS.
                             #
                             # These are ITEM IDS, not weapon types, and the

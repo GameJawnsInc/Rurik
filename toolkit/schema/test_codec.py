@@ -29,7 +29,7 @@ AUTH_CMSG_MASK = 0x8000
 # checks.py exists — it once printed ALL CHECKS PASSED with its capture glob
 # matching nothing — so the floor is what makes section 1 going quiet a failure
 # rather than a shorter list of passes.
-LEDGER = checks.Ledger("codec vs captured bytes", floor=16)
+LEDGER = checks.Ledger("codec vs captured bytes", floor=18)
 check = checks.adopt_named(LEDGER)
 
 
@@ -237,13 +237,41 @@ def main():
               f"apart from the declared exception -- the names record what a message "
               f"MEANS, which its marshalling types cannot say")
 
-    LEDGER.ok(codec_mod.Codec().name_for("GAME_SMSG", 0x01A5)
-              == "GAME_SERVER_TRANSFER",
+    codec_named = codec_mod.Codec()
+    LEDGER.ok(codec_named.name_for("GAME_SMSG", 0x01A5) == "GAME_SERVER_TRANSFER",
               "and GAME_SMSG has its first name at all",
               "487 layouts, 0 names until 0x01A5 -- earned the same way the GAME_CMSG "
               "seven were, from a witness not consulted to make the claim: its three "
               "tail ids equal the NEXT connection's own VERSION frame, 12/12 fields "
               "across three recorded transitions")
+
+    # The 2026-08-10 naming pass. Spot-check the load-bearing ones resolve rather
+    # than the whole set: this check is that the entries are wired into the codec,
+    # not that any particular reading is right -- test_smsgnames.py is where the
+    # claims themselves are put at risk against the wire.
+    SMSG_NAMED = {0x001E: "WORLD_SIMULATION_TICK", 0x0020: "WORLD_CREATE_AGENT",
+                  0x0021: "WORLD_REMOVE_AGENT", 0x0029: "AGENT_MOVE_TO_POINT",
+                  0x00F0: "AGENT_INITIAL_STATUS", 0x00F1: "AGENT_UPDATE_STATUS"}
+    wrong = {f"0x{op:04X}": codec_named.name_for("GAME_SMSG", op)
+             for op, want in SMSG_NAMED.items()
+             if codec_named.name_for("GAME_SMSG", op) != want}
+    LEDGER.ok(not wrong,
+              "and the 2026-08-10 GAME_SMSG names resolve through the codec",
+              f"mismatched: {wrong}" if wrong else
+              f"{len(SMSG_NAMED)} spot-checked of 20 added; the catalog went from 1 "
+              f"named GAME_SMSG opcode to 21, and 0x00F0/0x00F1 changed their NOUN "
+              f"from 'effects' to the client's own m_status")
+
+    over_smsg = all_over.get("GAME_SMSG", {})
+    unconfident = [k for k, v in over_smsg.items()
+                   if "name" in v and k != "421"
+                   and v.get("name_confidence") not in ("high", "medium")]
+    LEDGER.ok(not unconfident,
+              "every GAME_SMSG name declares the confidence it earned",
+              f"missing/!={unconfident}" if unconfident else
+              "each carries name_confidence, and it is the POST-refutation value -- "
+              "a second reader re-derived each proposal and struck four headline "
+              "citations and two verdicts, so filing confidence is not self-assessed")
 
     return LEDGER.verdict()
 

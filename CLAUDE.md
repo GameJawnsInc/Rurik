@@ -134,7 +134,11 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/schema/test_catalog.py` (our message catalog vs. the client's own
   format tables — 477/477 GAME_SMSG agree field-for-field on build 38797),
   `toolkit/harness/test_harness.py` (the one-command stack, the launch safety
-  gate, the live capture tail),
+  gate, the live capture tail, and the crash-dialog capture — which is the ONLY
+  machine-readable evidence a client assert leaves: `Gw.log` does not record
+  asserts, no dump file is written anywhere findable, and a ConnectionResetError
+  in the gamesrv log appears on a clean teardown too. The dialog is faked in the
+  test so the extraction is checked without crashing a client),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_datwrite.py` (the only tool that opens the archive `r+b`,
@@ -272,6 +276,30 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/authsrv/test_replay.py` (a captured .raw decrypts back to the plaintext that
   was logged, and does so all-or-nothing across the whole vault — the first reader of a
   .raw, which closes R0a's standing caveat),
+  `toolkit/authsrv/test_cmsgnames.py` (the GAME_CMSG names of 2026-08-11, against
+  ArenaNet's own CLIENT traffic — the direction nobody had read, because the client ORs
+  0x8000 into every game-channel opcode it sends and without masking that off not one
+  message decodes. The seven names it inherited all came from labelled runs on OUR server;
+  this corpus is ArenaNet's and is narrated, so it can refute them, and it did: 0x0046
+  USE_SKILL was named from a caster, and a whole Ranger session casting Power Shot sent
+  ZERO of it — attack skills leave on 0x0027, which our server has no dispatch arm for.
+  It also pins the bug that produced two fictitious opcodes: decoding the AUTH channel
+  against the GAME_CMSG tables does not error, it invents),
+  `toolkit/authsrv/test_smsgnames.py` (the twenty GAME_SMSG names of 2026-08-10, against
+  ArenaNet's own recorded traffic rather than against our server — 23 invariants the
+  corpus could have violated, pooled over BOTH live captures: two characters of different
+  professions walking the same three maps, so the character is the variable and the map
+  content is not. That cross-character run is what retired the file's own shipped caveat,
+  and nothing needed changing to make it pass. The headline one is that summing 0x001E's
+  payload across a tape reconstructs that tape's own wall clock to +18 ms worst case over
+  13–185 s, which is what kills the heartbeat reading of the opcode that is a third of all
+  server traffic. A second settles 0c from ArenaNet's own behaviour rather than our probe:
+  one definition, 140 creates, so the client keeps an NPC definition across a removal.
+  Its first version had three red checks and every one was worth having: two were the
+  ROTATE_PLAYER trap again — 0x002E's fields are marshalled u32 and hold floats, and read
+  raw they make the angle check compare garbage to pi AND make the turn-rate check pass
+  vacuously — and the third conflated "arrives before its create" with "names an agent
+  never created", which are different facts),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,

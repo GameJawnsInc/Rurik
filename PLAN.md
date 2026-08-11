@@ -1046,7 +1046,114 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-10 (`b185bce`+, suite 37/37 ~960 checks)
+### 8.0 Next, as of 2026-08-11 (`e54df3c`+, suite 39/39 ~1036 checks)
+
+0i. ✅ **DONE 2026-08-11. The CLIENT half of the protocol is readable, and GAME_CMSG
+    goes from 7 names of 194 to 16.** Two obstacles, both now gone: the client ORs
+    `0x8000` into every game-channel opcode it sends (so nothing decoded at all until
+    it was masked — `codec` already took the parameter, nobody had passed it), and the
+    assembled captures carry no per-message time (`cmsgstream.py` rebuilds it from the
+    wire log's segment stamps). That turns a **narrated** session into a labelled run
+    against ArenaNet's own server — the map transfers, both kills and both skill casts
+    are all visible in the server's own messages, so client messages can be matched to
+    what a human actually did.
+    **THE HEADLINE IS A HOLE IN OUR SERVER.** `0x0046` USE_SKILL was named from a
+    Necromancer on our own server. A whole Ranger session casting Power Shot sent
+    **zero** of it: attack skills go out on **`0x0027`**, which `authsrv.py` has no
+    dispatch arm for — its only mention of that number is a comment about a GAME_SMSG
+    of the same number in a different channel. Every physical attack skill lands on the
+    silent-ignore path, and per D9(b) a schema-unknown c2s opcode discards whatever
+    shared its TCP read, so it is a correctness bug. **This is the next code change.**
+    **12 NAMED · 6 PARTIAL · 2 that were never GAME_CMSG** — the last two were our own
+    reader decoding the AUTH connection against the GAME_CMSG tables, which does not
+    error, it invents. Pinned now.
+    `studies/cmsg/FINDINGS.md` C14, `toolkit/authsrv/cmsgstream.py`,
+    `toolkit/authsrv/test_cmsgnames.py`.
+
+0g. 🔶 **THE FIVE NAMED MESSAGES ARE PARTLY LANDED, and the honest state matters.**
+    `0x0048`, `0x00A6` and `0x0026` are wired and confirmed going out on a real
+    loopback session with the client accepting them and no assert. `0x002B` is wired
+    to the MOVEMENT path -- 303 of 309 in the live corpus are immediately followed by
+    `0x0029`, median 574 messages from their agent's own create, so the spawn-time
+    placement it shipped with for one evening was wrong on ArenaNet's own evidence --
+    but it has NOT been seen to fire, because the harness's clicks land outside the
+    server's 1-second position-freshness guard. `0x002E` has a tested builder and NO
+    send site: nothing in our server yet knows what angle to turn an NPC to, and
+    inventing a caller to tick the box is the guess this repo keeps paying for.
+    **OPEN: the client asserts `!(m_flags & INTERNAL_FLAG_MOVEMENT_STALE)` at
+    AgAgent.cpp:1198 as the loading screen fades.** Three causes were proposed and all
+    three were refuted by experiment (`0x002B` for a tape-replay symptom, Windows sleep
+    granularity, then `0x0026` -- which reproduced with it disabled). No fourth cause is
+    claimed. The owner saw no crash after the `0x002B` move, which is one run and not
+    proof. **The harness now captures the crash dialog itself** (`crash-dialog.txt` in
+    the run directory), which is the only machine-readable evidence a client assert
+    leaves -- `Gw.log` does not record asserts, no dump file is written anywhere
+    findable, and a ConnectionResetError appears on clean teardowns too.
+
+0h. **The measured gap list, and it is the best next-actions source this project has
+    had.** `toolkit/authsrv/msgmix.py`, `studies/divergence/FINDINGS.md` D12. Where our
+    server sends a message at all it sends it at **3-13% of ArenaNet's rate**: we
+    declare once at spawn, they update continuously. Eight NAMED opcodes we never send,
+    ranked by their rate. And `0x001E` is the one we OVER-send at 1.82x, which corrects
+    the naming pass's claim that we "have never sent it correctly" -- the payload was
+    always a measured delta, the divergence is cadence.
+
+0f. ✅ **DONE 2026-08-11. A second live capture, on a different character.** This was
+    the naming pass's own cheapest open test and it came back clean: every invariant in
+    `test_smsgnames.py` held on a Ranger where they were derived from a Necromancer,
+    with nothing changed, and the checks now run pooled over both (8 tapes, 21,543
+    messages). The file's shipped caveat is retired. Two structural results: the opcode
+    vocabularies are **nearly identical** (146 distinct each, **148 in union**, 2 in and
+    2 out), so an ordinary session's surface is stable across characters; and the
+    `0x013F` bag table's (bagType, slot, capacity) triples are **byte-identical across
+    characters**, which was the sharpest character-versus-protocol question in the pass
+    and the answer is protocol. The session also answered 0c and named the burrow status
+    values -- see there and `studies/tape/FINDINGS.md` T16.
+    **T17, and it is the biggest thing this capture opened:** the **client-to-server**
+    direction decodes cleanly as GAME_CMSG once bit `0x8000` is masked off (419 and 500
+    messages, 0 B unconsumed both). The naming pass had already read that bit out of the
+    binary -- `MsgConn`'s send computes `((conn+0x54) ? 0x8000 : 0) | msg[0]` -- without
+    connecting it to decoding this side. So both captures are **labelled runs against
+    ArenaNet's own server**, with a narrated session, which is what `labelrun.py` does on
+    ours. 194 GAME_CMSG opcodes have layouts and seven have names.
+
+0e. ✅ **DONE 2026-08-10. Twenty GAME_SMSG opcodes named — the catalog goes from 1 of
+    487 to 21.** This is the item that was not on the list, and it is where the leverage
+    turned out to be: §8.0's four items were all written from one session's leftovers,
+    while the four live tapes were a **10,944-message behavioural corpus that nothing in
+    this plan was mining**. Framed and counted: **146 distinct GAME_SMSG opcodes**, of
+    which the top 30 are **92%** of the stream, and exactly one had a name.
+    **Method** — two witnesses neither of which was consulted to produce the other: the
+    client's dispatch handlers plus its **19,620 compiled assert expressions**, against
+    the wire. Every proposal was then handed to a second reader told to refute it, and
+    that pass earned its cost: it struck four headline citations and two verdicts, and
+    caught a **fabricated quote** (an agent reported the client's log string as
+    `item name=%s` and built an argument on the `%s`; it is `%d`).
+    **The headline result.** `0x001E` is **36.3% of all server traffic** — more than the
+    next five opcodes combined — and is *not* a heartbeat. Its payload is elapsed
+    milliseconds: summing it across a tape reconstructs that tape's own wall clock to
+    **−1.2 ms over 48 s and +18 ms worst case**, and the client names the field twice
+    (`message.time` at AgMsg.cpp:208, `elapsedMs` at AgTimer.cpp:32). We send it on a
+    fixed 0.05 s sleep, which is our single largest divergence from ArenaNet's traffic.
+    **Three upstream/incumbent glosses refuted**, all of which had cost us something:
+    `0x002E` as `cos, sin` (sin²+cos² over the corpus ranges 1.23–4.87 and is never 1 —
+    this is why `0x002E` went unsent for weeks), `0x002B` as a `SpeedModifier` (the
+    client asserts the field into [0.01, 1.0], so no buff can ride it), and
+    `0x00F0`/`0x00F1` as *effects* (the client's word is `m_status`; the "effects" noun
+    is traceable to OpenTyria's struct member — one witness, and not the client).
+    **Landed:** `schema/overrides.json` +20 entries each carrying a `name_confidence`
+    that is the POST-refutation value; `studies/smsg/FINDINGS.md`;
+    `toolkit/authsrv/test_smsgnames.py` (21 invariants ArenaNet's own traffic could have
+    violated, mutation-tested — a constant tick payload drifts 155 s and is rejected).
+    **10 came back PARTIAL and are deliberately NOT named**, with what would settle each.
+    **The number to distrust: 0 UNRESOLVED of 30.** Recorded in the findings as a warning
+    rather than a triumph — the 30 were chosen by corpus frequency, and frequent messages
+    have the most wire evidence and the most reachable handlers. It does not extrapolate
+    to the other 116 corpus opcodes, let alone the 341 that never appeared.
+    **The cheapest open test in the whole pass: a second live capture on a different
+    character.** Every count rests on four tapes of ONE session, one character, one
+    account — "4/4 tapes" is four samples sharing a character record — and one decode
+    separates protocol from character.
 
 The items below this section predate today and are still live; these four are what today's
 work opened. **The order has changed since they were written**, on evidence: four scouts
@@ -1143,7 +1250,22 @@ parallel, with one safety change that is not optional — see its entry.
     exists so one run settles it. The `world_id`/`player_id` values stay in the vault —
     `schema/` records the structure and the fact of the match, never the identifiers.
 
-0c. 🔶 **BUILT 2026-08-10, awaiting one operator run.** Plague Worms hide by being REMOVED
+0c. ✅ **ANSWERED 2026-08-11 by the second live capture, and not by the probe built
+    for it.** The blocking question was whether the client keeps an NPC definition
+    across a removal, since `agent_removal` resent it every time and so its positive
+    said nothing. ArenaNet's own traffic settles it: **1 `0x0056` declaration, 32
+    creates** for the Lakeside worm in capture `20260810T235916`, and 1 declaration to
+    **140** creates pooled across both captures. It is the *same client* on both ends,
+    so the client keeps the definition -- otherwise 31 of those 32 creates would name a
+    slot it no longer holds and it would go down on `Array.h`'s `index < m_count`. A
+    server may declare once and re-create freely. `probes.py`'s `burrow` probe is now
+    confirmatory rather than necessary; what it still uniquely tests is whether OUR
+    create path is right once it stops resending. **And the burrow status values are
+    named** (T16): `0x00F1` status `0x1000` is burrowed, `0x0000` is surfaced, the two
+    2.00 s windows are create->surface and burrow->remove, and **death is not a burrow**
+    -- a kill sets `0x0010` while the agent is surfaced and never removes it.
+    Original entry follows.
+    🔶 **BUILT 2026-08-10, awaiting one operator run.** Plague Worms hide by being REMOVED
     and re-CREATED under the same agent id (T3). ~~It runs entirely through
     `0x0020`/`0x0021`, both already implemented~~ — **that was wrong and is REFUTED
     151/151**: every worm re-creation in both Lakeside tapes is a fixed five-message burst

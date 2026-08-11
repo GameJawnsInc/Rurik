@@ -38,3 +38,62 @@ would lead you to expect.
 This is a borrowed Ascalon collector standing in for a monster. It is not a Pre-Searing
 enemy and nothing about it has been checked against what actually spawns there.
 """
+
+# ---------------------------------------------------------------------------
+# The burrowing worm of Lakeside County. Every value below was read off
+# ArenaNet's own server talking to ArenaNet's own client, in the owner's own
+# capture -- not from any upstream table, and not from Gw.dat.
+#
+# PROVENANCE RULING, owner, 2026-08-10. This row was deliberately withheld when
+# the burrow cycle landed, because copying a real ArenaNet creature out of a
+# live capture sat close to the provenance gate. The owner's decision is that an
+# NPC definition of this kind is DOCUMENTATION OF AN OBSERVED FACT -- the same
+# character as a wiki entry recording a monster's name and level -- rather than
+# a reproduction of binary data. It is nine integers describing what the service
+# sent us, not an extracted asset. The gate itself is unchanged and unweakened:
+# no client files, no Gw.dat, no extracted assets, no decompiled code.
+#
+# `enc_name` is FOUR OPAQUE STRING IDS, which is the clearest illustration of
+# why this row is a description and not an asset: the words carry no text. The
+# client resolves them against its own string table and renders the result in
+# whatever language it runs. We cannot read them and did not need to.
+
+[npc.lakeside_worm]
+name = "burrowing worm (Lakeside County)"
+file_id = 116366
+profession = 1
+level = 0
+enc_name = [0x0F41, 0xBE66, 0xF22A, 0x04D4]
+scale = 0x64000000          # identical to the hatcher's -- hue/sat/light 0, scale 100%
+flags = 0x8
+speed = 12.0                # its burrow-crawl speed, 151 of 151 creates
+# NO model_id ON PURPOSE. ArenaNet declares this definition with 0x0056 and
+# sends NO 0x0057 MONSTER_COMPOSITE for it at all -- 8 of the 44 definitions in
+# the capture are 0x0056-only. Inventing a model id here is exactly the guess
+# that made the first agent_removal run's negative meaningless, so the field is
+# absent and the server skips the model message rather than filling it.
+
+[npc.lakeside_worm.provenance]
+source = "capture"
+verified = """OBSERVED, capture 20260807T143055, four chained live tapes of the owner's \
+own session against the live service. Definition slot 1442 is declared by GAME_SMSG \
+0x0056 NPC_UPDATE_PROPERTIES twice in the capture and the two declarations are \
+byte-identical. 151 of the 166 mon1-class creates in the corpus name this definition \
+through the create's tagged model field (tag 0x2, low 28 bits 1442), and those are the \
+same agents that drive the burrow cycle measured in studies/tape/FINDINGS.md T3 -- the \
+five-message create burst and the two 2.00 s +/-0.06 s transition windows, 148/148 and \
+141/141. The field mapping is our own agents.npc_properties() read back against the \
+wire, not a reconstruction: [definition, file_id, 0, scale, 0, flags, profession, \
+level, enc_name] lines up field for field."""
+note = """
+THE NAME IS OURS AND IS UNVERIFIED. "burrowing worm" is a label for a creature we have
+only ever seen as an agent id and a definition slot; unlike the hatcher, this one has
+never been rendered by a client we control, so nothing has resolved its EncString into
+readable text. Do not promote it to a real name until a client renders it -- the hatcher
+row is named the way it is because its four words came back as "Hatcher [Collector]" in
+English, which is a thing that was watched happen.
+
+`level = 0` is what the wire carries in the slot our sender calls level. That is recorded
+rather than corrected: the field name is ours, and a worm whose level reads 0 is at least
+as likely to mean the field is not a level as it is to mean the worm has none.
+"""

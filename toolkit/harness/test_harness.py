@@ -10,6 +10,7 @@ silent seconds and a Code=058.
     python toolkit/harness/test_harness.py
 """
 
+import inspect
 import os
 import socket
 import sys
@@ -37,7 +38,7 @@ import checks  # noqa: E402
 # all from 2026-08-06 until the same day, because drive_client.py did `import cage`
 # without clientpatch on sys.path. It is named in CLAUDE.md's suite list and was not
 # among the tests run when that suite was last reported green.
-LEDGER = checks.Ledger("harness", floor=47)
+LEDGER = checks.Ledger("harness", floor=50)
 check = checks.adopt_named(LEDGER)
 
 
@@ -333,4 +334,65 @@ if __name__ == "__main__":
                   "hops 2..N are separate processes; echoing only 'gamesrv' would show "
                   "hop 1 and then go silent for six minutes while the run worked")
 
-    sys.exit(LEDGER.verdict())
+
+
+def section_error_dialog():
+    """The crash-dialog capture, which is the only evidence a client assert leaves.
+
+    Gw.log does not record asserts, no dump file is written anywhere findable,
+    and a ConnectionResetError in the gamesrv log appears on clean teardowns
+    too. So if this path breaks, a crashing client becomes indistinguishable
+    from a tidy exit -- which is precisely what happened on 2026-08-11 and cost
+    an evening. The dialog is faked here so the extraction is checked without
+    needing to crash a client.
+    """
+    import tempfile
+    import types
+
+    src = inspect.getsource(session.hold_open)
+    LEDGER.ok("capture_error_dialog" in src,
+              "hold_open actually calls the dialog capture",
+              "the harness used to only PRINT 'read the dialog with ...', which is "
+              "a hint aimed at a human who is watching -- useless unattended, and "
+              "the dialog can be gone by the time anyone looks")
+
+    real = sys.modules.get("read_error_dialog")
+    try:
+        fake = types.ModuleType("read_error_dialog")
+        fake.gw_pids = lambda: set()
+        fake.dump = lambda pids: []
+        sys.modules["read_error_dialog"] = fake
+        with tempfile.TemporaryDirectory() as d:
+            got = session.capture_error_dialog(d, wait=0.2)
+            LEDGER.ok(got is None and not os.listdir(d),
+                      "no dialog present -> reports a CLEAN exit and writes nothing",
+                      f"returned {got!r}, wrote {os.listdir(d)}; inventing a "
+                      f"crash file when there was no crash would be worse than "
+                      f"silence")
+
+        body = "\n".join([
+            "*--> Crash <--*",
+            "Assertion: !(m_flags & INTERNAL_FLAG_MOVEMENT_STALE)",
+            r"P:\Code\Engine\Agent\AgAgent.cpp(1198)",
+            "App: Gw.exe",
+        ])
+        fake.gw_pids = lambda: {4321}
+        fake.dump = lambda pids: [(0x1234, "Gw.exe", [("Static", body)])]
+        with tempfile.TemporaryDirectory() as d:
+            got = session.capture_error_dialog(d, wait=0.2)
+            wrote = os.path.isfile(os.path.join(d, "crash-dialog.txt"))
+            text = open(os.path.join(d, "crash-dialog.txt"), encoding="utf-8").read() if wrote else ""
+            LEDGER.ok(got is not None and wrote and "AgAgent.cpp(1198)" in text,
+                      "a dialog IS captured whole, source file and line included",
+                      f"wrote={wrote}, has the source line={'AgAgent.cpp(1198)' in text}. "
+                      f"The line naming the fault sits at the TOP of a scrolled "
+                      f"control, which is the part a screenshot always misses")
+    finally:
+        if real is not None:
+            sys.modules["read_error_dialog"] = real
+        else:
+            sys.modules.pop("read_error_dialog", None)
+
+
+section_error_dialog()
+sys.exit(LEDGER.verdict())

@@ -21,7 +21,9 @@ licence question this docstring used to defer: see `toolkit/content.py`, and
 The names below are unchanged and still dicts, so every call site -- including the
 eight in probes.py -- reads exactly as it did.
 """
+import math
 import os
+import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -130,6 +132,146 @@ def npc_properties(definition, npc, level=None):
 def npc_model(definition, npc):
     """GAME_SMSG 0x0057 -- the model files for an NPC type."""
     return [definition, [npc["model_id"]]]
+
+
+# --- the four messages named on 2026-08-10 that this server could not send ----
+#
+# Each enforces a bound the CLIENT asserts on itself. That is the point: every
+# one of these values is out of range for some argument a caller might
+# reasonably pass, and the client's answer to an out-of-range value is an assert
+# dialog mid-session, not a wrong pixel. Raising here names the caller instead.
+# See studies/smsg/FINDINGS.md.
+
+AGENT_MIN_MOVE_SPEED = 0.01     # AgAgent.cpp:2366; the .rdata constant is the
+AGENT_MAX_MOVE_SPEED = 1.0      # float32 of 0.01.  AgAgent.cpp:2367
+AGENT_FACING_MASK = 0xF         # AgAgent.cpp:2368 "!(facing & ~AGENT_FACING_MASK)"
+MAX_TURN_RATE = 20.0 * math.pi  # rad/s. Observed: 0.24892, 0.89012, 2.0943952
+FACING_FORWARD = 1              # 119 of 163 samples, and every varied speed
+CHAR_PROFESSIONS_MAX = 6        # observed primaries are 1..6; 0 NEVER occurs
+
+# GAME_SMSG 0x0026's setter is ((old ^ new) & 0x3f0000) ^ new -- it KEEPS the old
+# bits inside this mask and takes the new bits everywhere else. A server cannot
+# write these through this message at all.
+FLAGS_CLIENT_OWNED_MASK = 0x3F0000
+
+
+def _as_u32(f):
+    """A float32's bits, as the u32 the wire actually carries.
+
+    0x002E's two payload fields are typed `dword` in the client's own tables and
+    hold IEEE-754 floats. The typing is CORRECT and must not be "fixed" to
+    float -- the values are floats, the marshalling is not. Same split as
+    GAME_CMSG 0x0040 ROTATE_PLAYER, where the same confusion cost days.
+    """
+    return struct.unpack("<I", struct.pack("<f", float(f)))[0]
+
+
+def agent_update_speed(agent_id, speed, facing=FACING_FORWARD):
+    """GAME_SMSG 0x002B -- an agent's NORMALISED movement rate, and its facing.
+
+    `speed` is a fraction of the reference run speed, NOT a distance: 1.0 is 288
+    units/s, and 7 of the 15 distinct values ArenaNet sent are exact multiples
+    of 1/288. The client asserts both bounds on itself, so a caller passing
+    288.0 -- the obvious mistake, since create_agent's field 9 IS in units/s --
+    is named here rather than by a dialog thirty seconds later.
+
+    This drives the WALK CYCLE's playback rate. An agent that moves without it
+    animates at whatever default the client is holding, which reads as smooth
+    movement carrying a wrong-cadence, sliding-feet animation. CONFIRMED by eye
+    on our own server 2026-08-11. It is NOT an explanation for jank seen during
+    a TAPE REPLAY -- there the tape is the whole channel, this server sends
+    nothing of its own, and ArenaNet's tapes carry 163 of these themselves.
+
+    UPSTREAM's gloss was "SpeedModifier -> agent, modifier, type" and it is
+    REFUTED: a field capped at 1.0 cannot carry a movement buff, and the third
+    field is `facing` in the client's own assert.
+    """
+    speed = float(speed)
+    if not AGENT_MIN_MOVE_SPEED <= speed <= AGENT_MAX_MOVE_SPEED:
+        raise ValueError(
+            f"speed {speed!r} is outside the client's own asserted "
+            f"[{AGENT_MIN_MOVE_SPEED}, {AGENT_MAX_MOVE_SPEED}] "
+            f"(AgAgent.cpp:2366-2367). This field is a FRACTION of the run "
+            f"speed, not units/s -- {speed} units/s would be "
+            f"{speed / DEFAULT_RUN_SPEED:.4f} here")
+    if facing & ~AGENT_FACING_MASK:
+        raise ValueError(f"facing {facing:#x} sets bits outside "
+                         f"AGENT_FACING_MASK ({AGENT_FACING_MASK:#x}) -- "
+                         f"AgAgent.cpp:2368")
+    return [agent_id, speed, facing]
+
+
+def agent_update_rotation(agent_id, angle, rate):
+    """GAME_SMSG 0x002E -- absolute facing angle, and how fast to turn to it.
+
+    `angle` is absolute radians in [-pi, pi], or +/-inf to spin freely: the
+    infinities are a real sentinel the client loads from two .rdata constants,
+    not garbage. `rate` is rad/s and is per-CREATURE rather than per-message --
+    29 of the 31 agents that sent this never changed it, and 28 of 31 used
+    2.0943952 = 2*pi/3 exactly (120 deg/s).
+
+    UPSTREAM called the fields rotation_cos and rotation_sin. REFUTED:
+    sin^2+cos^2 over the live corpus ranges 1.23-4.87 and is never 1. That gloss
+    is the reason this message went unsent for weeks.
+    """
+    angle = float(angle)
+    if math.isnan(angle):
+        raise ValueError("angle is NaN; use +/-inf for the free-spin sentinel")
+    if math.isfinite(angle) and not -math.pi <= angle <= math.pi:
+        raise ValueError(f"angle {angle!r} rad is outside +/-pi -- every finite "
+                         f"value in the live corpus is inside it. Wrap first")
+    rate = float(rate)
+    if not 0.0 < rate <= MAX_TURN_RATE:
+        raise ValueError(f"turn rate {rate!r} rad/s is not in "
+                         f"(0, {MAX_TURN_RATE:.3f}]")
+    return [agent_id, _as_u32(angle), _as_u32(rate)]
+
+
+def agent_update_flags(agent_id, flags):
+    """GAME_SMSG 0x0026 -- MERGE into the agent's m_flags (offset 0x20).
+
+    Not an assignment. The client's setter computes ((old ^ new) & 0x3f0000) ^ new,
+    keeping the old bits inside that mask and taking the new bits elsewhere. A
+    server cannot set or clear anything in the mask through this message, and a
+    caller that tries gets silence rather than an error -- so this refuses.
+
+    OBSERVED as the tail of ArenaNet's five-message create burst (151 of 155
+    immediately follow 0x006D), and again at the instant of death.
+    """
+    if flags & FLAGS_CLIENT_OWNED_MASK:
+        raise ValueError(
+            f"flags {flags:#x} sets bits inside {FLAGS_CLIENT_OWNED_MASK:#x}, "
+            f"which the client's own merge KEEPS FROM THE OLD VALUE -- they "
+            f"would be silently ignored rather than applied")
+    return [agent_id, flags]
+
+
+def agent_set_profession(agent_id, primary, secondary=0):
+    """GAME_SMSG 0x00A6 -- the profession pair: icons, roster, nameplate.
+
+    The client's own invariant is GmDeckBuilder:2321
+    `agentPrimaryProf != agentSecondaryProf`, and across 387 live samples the
+    primary is 1..6 and NEVER 0 while the secondary is 0 about half the time.
+    A primary of 0 is therefore not "no profession"; it is out of band.
+    """
+    if not 1 <= primary <= CHAR_PROFESSIONS_MAX:
+        raise ValueError(f"primary profession {primary} outside "
+                         f"1..{CHAR_PROFESSIONS_MAX}; 0 never occurs in the "
+                         f"live corpus and does not mean 'none'")
+    if secondary and secondary == primary:
+        raise ValueError(f"primary == secondary == {primary} violates the "
+                         f"client's own assert (GmDeckBuilder:2321)")
+    return [agent_id, primary, secondary]
+
+
+def agent_set_tabard_visible(agent_id, visible):
+    """GAME_SMSG 0x0048 -- gate the guild cape/tabard composite for one agent.
+
+    Send 0 for any agent whose guild id we never populated, which is all of
+    ours: it makes the client skip a guild lookup on an id that does not exist.
+    ArenaNet sends this after EVERY 0x006E -- 366 of 366 across both captures.
+    """
+    return [agent_id, 1 if visible else 0]
 
 
 def create_agent(agent_id, model_id, kind, x, y, plane,
