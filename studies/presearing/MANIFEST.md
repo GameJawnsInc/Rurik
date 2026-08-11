@@ -270,6 +270,111 @@ level field is validated as `>= 1`.
 skill set with our recorded session, and it means R4b's Hex exemplar **Faintheartedness 135**
 is on a monster bar in the very zone R4c would populate.
 
+### 11. The browser route opened — the whole region's NPC set, read at once
+
+The Chrome extension connected on the eighth attempt (**a full Chrome restart after logging
+out was the fix** — logging out and back in was not enough, the extension kept serving the old
+account; recorded in `browse-gw-wiki/references/access.md`). That turns one page per request
+into 50, and the region was read whole: **206 distinct NPC pages** across the 15 zone
+categories, every page's wikitext and every page's category set.
+
+**The category convention, which §9 said to find before guessing.** Zones with a post-Searing
+counterpart use `Category:<Zone> (pre-Searing) NPCs` (Regent Valley, Fort Ranik, Ascalon City,
+Piken Square); pre-Searing-only zones use plain `Category:<Zone> NPCs` (Lakeside County, The
+Catacombs, The Northlands, Wizard's Folly, Green Hills County, Ashford Abbey, The Barradin
+Estate, Foible's Fair, Ascalon Academy). There is also a region-wide
+`Category:Ascalon (pre-Searing) wildlife` (40) that no pass found. `Category:Ascalon
+(pre-Searing) NPCs` holds **only subcategories**, which is why a ns-0 query returns 0.
+
+#### #10 is an undercount by more than double: **91 hostile types, not 35–40**
+
+Classifying the 206 by the wiki's own faction categories (wildlife, Charr, Grawl, Elementals,
+Undead, Skeletons, Devourers, Plants, Skale, Bandits, Arachnids, Beasts, Worms, Nightmares,
+Gargoyles, Vanguard foes, …) and subtracting the friendly ones (quest givers, merchants,
+collectors, henchmen, Ascalon Army, Ascalon Vanguard, royalty):
+
+| | Count |
+|---|---|
+| **Distinct hostile creature types** | **91** |
+| …in base mode | **83** |
+| …Reforged-gated | 8 |
+| …Vanguard-quest-only | 15 |
+| Non-foe NPC pages | 175 |
+
+**#10's "35–40, APPROX, likely undercount" was right to hedge and still low by 2.3×.** Its
+three stated reasons all hold up, and the per-zone comparison shows exactly where:
+
+| Zone | §Monsters roster | Actual foe pages |
+|---|---|---|
+| Wizard's Folly | 2 — *"almost certainly incomplete"* | **18** |
+| Lakeside County | 6 | **30** |
+| The Northlands | 7 | **26** |
+| Regent Valley | 9 | **23** |
+| Green Hills County | 9 | **18** |
+| The Catacombs | ~13 | **16** |
+| Ascalon Academy | 2 | 5 |
+
+**A corroboration nobody was looking for:** all seven **outposts** — Fort Ranik, Ascalon City,
+Piken Square, Ashford Abbey, The Barradin Estate, Foible's Fair — contribute **zero** foes.
+§Monsters asserts "the seven outposts have no hostile spawns, by the rule every GW1 outpost
+follows" from CLIENT type-code reasoning; the wiki's own rosters agree independently.
+
+#### Correcting Revision §10: #11's floor **does** hold, region-wide
+
+**§10 above over-generalised from one zone and this supersedes it.** Of the 91 foes,
+**49 have no base skill bar, 11 have exactly one, and 31 have two or more** (deepest bar: 10).
+Splitting those 31:
+
+- **13 are Vanguard-quest-only**, **2 are Reforged-gated**, and **16 are ambient base-mode
+  content** — Carrion Devourer (6), Grawl Crone (10), Alain (7), Plague Devourer (4), Bandit
+  Firestarter (4), Charr Chaot (4), River Drake (3), Grawl Shaman (3), Charr Blade Storm (3),
+  Charr Hunter (3), Vatlaaw Doomtooth (3), and the Aloes.
+
+So **#11's `≥9` floor is met by ambient content at 16**, and my §10 sentence "#11's floor is
+not supported as stated" was **wrong as a region-wide claim**. What survives from §10 is
+narrower and still true: *the Catacombs specifically* has no resident with a ≥2-skill bar, and
+the Grawl bar §7 refuted really is absent from *Grawl (pre-Searing)*. The specialist's claim is
+therefore neither cleanly supported nor cleanly refuted — **it is zone-dependent**, and the
+Catacombs is the worst zone to build an R4b oracle in while the Northlands and Green Hills are
+much better. That is a more useful answer than either verdict, and the headline table's #11 is
+restored with a scope note rather than downgraded.
+
+**Non-combatant does not mean skill-less.** #12's two confirmed non-combatants both carry
+bars: *Aloe Husk* and *Aloe Seed* cast **Healing Breeze and Shielding Hands** at 0 Healing
+Prayers / 0 Protection Prayers. They never attack — #12 stands — but "non-combatant" and "no
+skills" are different properties and this manifest used them interchangeably.
+
+#### #13 is closed: the fourth Charr boss is real, and there are seven
+
+`Category:Charr bosses` over the region returns **7**: **Jaw Smokeskin, Scarl the Slicer, Red
+Eye the Unholy, Blaze Bloodbane**, Blazefiend Griefblade, Vatlaaw Doomtooth, and **Ghast
+Ashpyre** — the last a name no pass recorded at all.
+
+**"Blaze Bloodbane" is a real, distinct page.** §Bosses guessed it "may be a conflation with
+Blazefiend Griefblade" and **left the fourth name unresolved rather than picked**. The
+conflation theory is refuted — both exist separately — so the pass that returned Blaze
+Bloodbane was right, and the manifest's caution was still correct procedure: it declined to
+guess and the guess it declined to make would have been right. Recorded because the lesson is
+about method, not luck.
+
+#### Service NPCs: #29's floor and ceiling both need restating
+
+Of the 175 non-foes: **43 quest givers, 13 collectors, 10 merchants**. #30's "13 named or
+role-confirmed service NPCs" lands **exactly** on the collector count, which suggests that row
+was really counting collectors. #29's "≥15, plausibly 60–100 template rows" now has a measured
+frame: 175 non-foe pages is the true ceiling for named NPCs, though many are one-off quest
+characters rather than reusable archetypes.
+
+**#35 needs a Reforged caveat.** Six pages in the region carry `Category:Prophecies henchmen` —
+Devona, Cynn, Aidan, Orion, Mhenlo, Little Thom. That does **not** refute "henchmen: 0": these
+are the same *characters* appearing pre-Searing as quest NPCs and trainers, not as hirable
+henchmen. But Revision §1 records that Reforged Mode adds "**Devona** as a pre-searing hero",
+so under Reforged the recruitable-companion surface is **not** zero.
+
+**Reforged contamination, quantified:** **16 of the 206** region NPC pages carry
+`Category:Reforged Mode content` (17 carry `Guild Wars Reforged content`). Revision §5 found
+the contamination qualitatively in one zone; this is its size.
+
 ### What this pass did not reach
 
 Unchanged from item 3's priority list, and still open: skill bars for the Catacombs'
@@ -308,10 +413,10 @@ Exactness markers used in the count columns: **EXACT** = cannot move without the
 | 7 | Full-service town rows (`type 13`) in the region | **0** | EXACT | CLIENT |
 | 8 | Zones where hostiles spawn | **9–10** | APPROX | CLIENT types + WIKI |
 | 9 | One-way exits out of the region | **1** | EXACT | WIKI |
-| 10 | Distinct hostile creature type names | **35–40** | APPROX, likely undercount | WIKI |
-| 11 | …with a documented ≥2-skill bar | **≥9** → **not supported as stated**, Revision §10 | FLOOR, but of **quest-only** types — 0 of the Catacombs' 9 permanent residents has a ≥2-skill bar | WIKI, pages read |
-| 12 | …confirmed non-combatant | **2** (Aloe Husk, Aloe Seed) | EXACT-as-found | WIKI |
-| 13 | Named bosses, non-Vanguard | **6** | APPROX → **UNVERIFIED**, see Revision §4 — the citation this row rests on is not on the page it names | WIKI |
+| 10 | Distinct hostile creature type names | ~~35–40~~ → **91** (83 base mode · 8 Reforged · 15 Vanguard) | **EXACT-as-categorised**, Revision §11 — the old figure was low by 2.3× | WIKI, all 206 region NPC pages read |
+| 11 | …with a documented ≥2-skill bar | **31** of 91 — 16 ambient, 13 Vanguard, 2 Reforged | EXACT-as-categorised; the `≥9` floor **holds**, but it is **zone-dependent** — see Revision §11, which supersedes §10 | WIKI, pages read |
+| 12 | …confirmed non-combatant | **2** (Aloe Husk, Aloe Seed) | EXACT-as-found — but they **do** carry skills (Healing Breeze, Shielding Hands at rank 0); non-combatant ≠ skill-less, Revision §11 | WIKI |
+| 13 | Named bosses, non-Vanguard | **6** → **7 Charr bosses**, all named, Revision §11 | Jaw Smokeskin · Scarl the Slicer · Red Eye the Unholy · **Blaze Bloodbane** · Blazefiend Griefblade · Vatlaaw Doomtooth · **Ghast Ashpyre**. The fourth altar name is resolved; the "conflation" theory is refuted. §4's misattributed citation stands as a separate defect | WIKI, category read |
 | 14 | Vanguard-quest bosses | ~~3 named of ~9~~ → **3 of 3, all named** | EXACT; Revision §3 — the "~9" was the *quest* count, and only the 3 Bounty quests name a boss | WIKI |
 | 15 | Monster **AI archetypes** | **UNKNOWN** | — | server-only |
 | 16 | Pages in `Category:Ascalon (pre-Searing) quests` | ~~≤70~~ → **70** | **EXACT** — 70 ns-0 articles + 1 subcategory, composition verified, Revision §3 | WIKI, member list read |

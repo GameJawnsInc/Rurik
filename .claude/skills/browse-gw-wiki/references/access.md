@@ -146,6 +146,18 @@ consequence below.
    tools report "Claude in Chrome is not connected", the extension needs
    installing from the Chrome Web Store and signing in with the same account;
    `list_connected_browsers` returning `[]` means exactly that.
+
+   **If the extension is installed and you are still getting `[]`, it is
+   probably signed in to a different account than this app — and RESTARTING
+   CHROME is what fixes it.** Measured 2026-08-11: the extension kept serving
+   the previous account through a sign-out, an account switch **and** toggling
+   Browser Tools on in the app. Seven `list_connected_browsers` calls returned
+   `[]` across those attempts; the eighth, after a full Chrome restart,
+   returned the browser. So the sequence that works is **sign out → switch
+   account → restart Chrome**, and the diagnostic is that the Chrome side
+   panel shows a different account from the one this app is running as. Do not
+   read repeated `[]` as "the extension is broken" — check the account first,
+   then restart. An hour went into this before the restart was tried.
    - `https://wiki.guildwars.com/index.php?title=X&action=raw` gives raw
      wikitext in the browser, which feeds straight into
      `gwwiki.py infobox --from-file`. Chain several with `browser_batch`.
