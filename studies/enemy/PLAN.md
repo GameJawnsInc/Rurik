@@ -2400,11 +2400,14 @@ plausible one and the next caller never learns. Re-run confirms no crash (the se
 shows a full bar against a mid-fight frame showing a drained one, which is the control
 that makes "full" mean anything.
 
-**STILL CONTESTED and now flagged in the code:** `GV_HEALTH`'s comment calls property 34
-an absolute DELTA, from `-50.0` measured as exactly 50 health off; `PROP_DAMAGE` (16) one
-table over is documented a FRACTION with the client's own `fmul` cited at `0x0081823C`.
-Both cannot be plainly true of a channel the client itself calls `fraction`. The crash
-proves only that the positive side is bounded by 1.0.
+**SETTLED the same day, from the client's own dispatcher — `studies/agentprops/FINDINGS.md`
+§1d.** Both properties are FRACTIONS and the difference is only who multiplies: `0x00818210`
+switches on the property id, sends **16** to an arm that `fmul`s by the max, and sends **34**
+to an arm that passes the value through RAW into `0x009215F0` — the CharPool method whose
+line 84 is the assert. So `1.0` is a full pool for a reason rather than by luck. What is
+still contested is the *old* note: "-50.0 measured as -50 health" cannot be read off an arm
+that applies no scaling, and one probe settles it — send `-0.5` at a 100-max agent and see
+whether 50 comes off.
 
 ### The instrument defect this turned up, and it is ours
 

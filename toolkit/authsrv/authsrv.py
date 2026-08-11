@@ -1227,15 +1227,15 @@ def revive_due(send, state, conn_id):
         # after the first kill this server ever drove to a revive (see `_fraction`,
         # which now refuses the whole class). 1.0 is a full pool.
         #
-        # WHAT IS STILL UNVERIFIED, and it is the interesting part: `GV_HEALTH`'s
-        # comment says property 34 is an absolute DELTA, from -50.0 measured as
-        # exactly 50 health off. Property 16 one table over is documented a
-        # FRACTION with the client's own fmul cited at 0x0081823C. Both cannot be
-        # plainly true of a channel the client calls `fraction`, and the crash only
-        # proves the POSITIVE side is bounded by 1.0 -- the assert is `<=` and
-        # cannot fire on a negative. Whether 1.0 refills the bar is a PREDICTION
-        # this run tests, not a fact; if the body stands up empty, 34 is a delta
-        # with a one-sided guard and the refill needs the int channel instead.
+        # SETTLED 2026-08-11 from the client's own dispatcher, and 1.0 is right for
+        # a reason rather than by luck. 0x00818210 switches on the property id and
+        # sends 34 to arm 2 (0x0081828D), which passes our value through with NO
+        # multiply into 0x009215F0 -- the CharPool method that asserts
+        # `fraction <= 1.0f`. Property 16 goes to arm 0 (0x0081823C), which DOES
+        # fmul by the max first. Both are fractions; the client scales 16 for us and
+        # does not scale 34. So 1.0 here is a full pool, and the refill was OBSERVED:
+        # the post-revive frame shows a full bar against a mid-fight frame showing a
+        # drained one. studies/agentprops/FINDINGS.md 1d.
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_HEALTH, agent_id, agent_id,
               _fraction(1.0, agents.GV_HEALTH, "refill to a full pool")],

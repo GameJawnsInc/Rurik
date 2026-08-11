@@ -81,8 +81,19 @@ ALLEGIANCE_HOSTILE = 0x6D6F6E73       # 'mons'  -- any UNRECOGNISED value is an
 # Agent property ids (float channel, GAME_SMSG 0x00A3 -- prop_id, target, cause,
 # value). Which ones the client acts on is SOURCED from its own jump tables;
 # see studies/agentprops/FINDINGS.md.
-PROP_DAMAGE = 16          # a FRACTION of maximum health. Floors at 1: cannot kill.
-PROP_HEALTH_ABSOLUTE = 34 # an ABSOLUTE quantity, and SILENT -- no damage number.
+# BOTH OF THESE ARE FRACTIONS, and the difference is only WHO MULTIPLIES.
+# OBSERVED 2026-08-11 from the dispatcher at 0x00818210, a switch over property
+# ids 16..62 (index bytes at 0x008183B8, arm pointers at 0x00818394):
+#   16 -> arm 0, 0x0081823C:  fld [esi+0x24] (the MAX) / fmul [ebp+0xc] (our
+#                             value) -> call 0x00921510. The CLIENT scales it.
+#   34 -> arm 2, 0x0081828D:  fld [ebp+0xc] / fstp [esp] -> call 0x009215F0.
+#                             NO fmul. The value goes through RAW, and
+#                             0x009215F0 is the CharPool method that asserts
+#                             `fraction <= 1.0f` (CharPool.cpp:84) -- which is
+#                             how we found this: sending 100.0 here took the
+#                             client down (studies/agentprops/FINDINGS.md 1d).
+PROP_DAMAGE = 16          # a fraction of max health; the client multiplies. Floors at 1: cannot kill.
+PROP_HEALTH_ABSOLUTE = 34 # NOT absolute -- a fraction the client does NOT scale, and the one it range-checks. SILENT: no damage number.
 PROP_HEALTH_MAX = 42      # int channel (0x009F). Sets the maximum AND refills.
 
 # The agent effects bitfield, carried by GAME_SMSG 0x00F1. Bit 4 is death:
@@ -518,7 +529,14 @@ GV_EFFECT_ON_AGENT = 21
 GV_ANIMATION = 22
 GV_ANIMATION_SPECIAL = 23
 GV_ANIMATION_LOOP = 28
-GV_HEALTH = 34             # a DELTA, not a setter -- we measured -50.0 as -50 health
+# Same wire property as PROP_HEALTH_ABSOLUTE above -- read that comment first.
+# ITS OLD NOTE IS NOW CONTESTED BY THE CLIENT'S OWN CODE and is left here to be
+# re-measured, not trusted: it said "a DELTA, not a setter -- we measured -50.0
+# as -50 health", and arm 2 applies no scaling and hands the value to a function
+# that calls its argument a fraction. -50.0 as a fraction is -50x the pool, which
+# empties it; that is not "50 off a 100 max". One probe settles it next time the
+# harness is free: send -0.5 at a 100-max agent and see whether 50 comes off.
+GV_HEALTH = 34
 GV_CHANGE_HEALTH_REGEN = 44
 GV_ENERGY_GAIN = 52
 GV_ARMOR_IGNORING = 55
