@@ -137,10 +137,16 @@ EQUIPPED_SLOT_COUNT = 9
 # opposed to CREATE_NAMED_ITEM which only declares an item's bytes and
 # ITEM_WEAPON_SET which fills the weapon-swap UI.
 GAME_SMSG_UPDATE_AGENT_VISUAL_EQUIPMENT = 0x006E
-# agent_id + leadhand + offhand, as WEAPON TYPES rather than item ids. This is
-# the one that decides whether the agent can attack at all; 0x006E only decides
-# what it looks like. Upstream's name says NPC because an NPC has no inventory
-# to point at, but the field it sets is on every living agent.
+# agent_id + two ids. CONTESTED as of 2026-08-10, and the comment that used to
+# sit here said "WEAPON TYPES rather than item ids" while the call site 2,900
+# lines below said the opposite -- studies/smsg's naming pass proposed renaming
+# it on that basis and its own refutation pass rejected the rename, because the
+# repo had already settled the question OBSERVED on 2026-08-06 by crashing a real
+# client on the assert in question (studies/enemy/PLAN.md). What IS established:
+# 291/291 of its non-zero values in a tape were declared by an earlier
+# 0x015E/0x0161 in that same tape, so whatever the ids mean, they are not free
+# -- a server must declare before it references. The noun stays unsettled; see
+# studies/smsg/FINDINGS.md section 2.
 GAME_SMSG_NPC_UPDATE_WEAPONS = 0x006D
 # agent_id + allegiance byte. The field that decides whether a click is an
 # attack or a conversation; the team token only decides colour.
@@ -681,6 +687,20 @@ GAME_SMSG_AGENT_UPDATE_POSITION = 0x002C
 #   P030 MoveToPoint   -> 0x0029  dword, vec2, 2x word agent, point, planes
 #   P032 SpeedModifier -> 0x002B  dword, float, byte   agent, modifier, type
 #   P035 AgentRotate   -> 0x002E  dword, dword, dword  agent, cos, sin
+#
+# THREE OF THOSE GLOSSES ARE NOW REFUTED from the client's own binary and the
+# live corpus (2026-08-10, studies/smsg/FINDINGS.md):
+#   0x002B is NOT a "SpeedModifier": the client asserts the float into
+#     [AGENT_MIN_MOVE_SPEED, AGENT_MAX_MOVE_SPEED] = [0.01, 1.0] and 163/163 wire
+#     samples obey it, so a movement buff has nowhere to ride. Its byte is
+#     `facing` (AgAgent.cpp:2368 "!(facing & ~AGENT_FACING_MASK)"), not a "type".
+#   0x002E is NOT "cos, sin": sin^2+cos^2 over the corpus ranges 1.23..4.87 and
+#     is never 1. Field 2 is an absolute angle (55/55 finite values inside +/-pi,
+#     the only non-finite ones being the two +/-inf sentinels) and field 3 is a
+#     turn rate in rad/s. This gloss is why 0x002E went unsent for weeks.
+#   0x0029's "planes" is not from the binary and remains UNVERIFIED.
+# The typing stays dword for 0x002E's two fields -- the VALUES are floats, the
+# MARSHALLING is not, exactly as for GAME_CMSG 0x0040 ROTATE_PLAYER.
 #
 # What is borrowed is the SEMANTICS -- that keyboard movement belongs on this
 # message. That rests on GWLP-R alone, and is UNVERIFIED against our client

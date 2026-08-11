@@ -1,5 +1,5 @@
 {
- "provenance": "Corrections to the imported OpenTyria tables in messages.json, from the two sources that can actually arbitrate: our own captures of client build 38797, and the client's own message-format tables recovered from Gw.exe (see studies/msgtable/FINDINGS.md). Kept beside messages.json rather than inside it so that regenerating the imported catalog cannot silently revert a verdict the client already gave us. Applying every entry here leaves zero residual disagreement between our catalog and build 38797's tables. NOTE ON RISK: the codec reads only `fields`; `declared_unpack_size`, `variable_length` and msg_header `length` are metadata it never consults. Of these entries, only GAME_SMSG 140, 146 and 421 change a field list, and Rurik sends none of those three -- so adopting this file changed no behaviour. Its value is that the catalog stops disagreeing with the binary, so later work is not built on a wrong flag. ADDED 2026-08-10: seven GAME_CMSG entries carrying `name` and the evidence for it, from two labelled input runs (toolkit/authsrv/labelrun.py, studies/cmsg/FINDINGS.md). The catalog had field layouts for 194 GAME_CMSG opcodes and names for NONE of them. These change NO field list -- the layouts are copied verbatim from messages.json and already agree with the client's own tables -- so they cannot affect decoding; they record what a message MEANS, which the binary's marshalling types cannot say. In particular 0x0040's u32 typing is correct and was nearly 'fixed' to float: the values are floats, the wire type is not, and the client's own SEND table says u32. ALSO 2026-08-10, later the same day: 0x0040 MOVE_UNKNOWN_FLOATS became ROTATE_PLAYER. That one was settled by the BINARY rather than by a labelled run -- the client's own assertion text names the quantity `rotation` -- and it is worth noting why the labelled runs could not have got there. A labelled run shows you WHEN a message is sent; it cannot show you that an infinity is a sentinel constant loaded from .rdata, and it was the infinities that made an angle look impossible. The wire evidence had been sitting in the vault since 2026-08-04 saying otherwise (every finite value inside +/-pi) and nobody had counted more than twelve of them.",
+ "provenance": "Corrections to the imported OpenTyria tables in messages.json, from the two sources that can actually arbitrate: our own captures of client build 38797, and the client's own message-format tables recovered from Gw.exe (see studies/msgtable/FINDINGS.md). Kept beside messages.json rather than inside it so that regenerating the imported catalog cannot silently revert a verdict the client already gave us. Applying every entry here leaves zero residual disagreement between our catalog and build 38797's tables. NOTE ON RISK: the codec reads only `fields`; `declared_unpack_size`, `variable_length` and msg_header `length` are metadata it never consults. Of these entries, only GAME_SMSG 140, 146 and 421 change a field list, and Rurik sends none of those three -- so adopting this file changed no behaviour. Its value is that the catalog stops disagreeing with the binary, so later work is not built on a wrong flag. ADDED 2026-08-10: seven GAME_CMSG entries carrying `name` and the evidence for it, from two labelled input runs (toolkit/authsrv/labelrun.py, studies/cmsg/FINDINGS.md). The catalog had field layouts for 194 GAME_CMSG opcodes and names for NONE of them. These change NO field list -- the layouts are copied verbatim from messages.json and already agree with the client's own tables -- so they cannot affect decoding; they record what a message MEANS, which the binary's marshalling types cannot say. In particular 0x0040's u32 typing is correct and was nearly 'fixed' to float: the values are floats, the wire type is not, and the client's own SEND table says u32. ALSO 2026-08-10, later the same day: 0x0040 MOVE_UNKNOWN_FLOATS became ROTATE_PLAYER. That one was settled by the BINARY rather than by a labelled run -- the client's own assertion text names the quantity `rotation` -- and it is worth noting why the labelled runs could not have got there. A labelled run shows you WHEN a message is sent; it cannot show you that an infinity is a sentinel constant loaded from .rdata, and it was the infinities that made an angle look impossible. The wire evidence had been sitting in the vault since 2026-08-04 saying otherwise (every finite value inside +/-pi) and nobody had counted more than twelve of them. ADDED 2026-08-10 (second pass): twenty GAME_SMSG entries carrying `name`, `name_confidence` and the evidence, from a 30-opcode naming pass over the four live tapes of capture 20260807T143055 (10,944 real ArenaNet GAME_SMSG messages, 146 distinct opcodes, framing 100% clean) joined to the client's own dispatch handlers and its 19,620 compiled assert sites. Before this file had ONE named GAME_SMSG opcode of 487; it now has 21. Every entry changes NO field list -- the layouts are copied verbatim from messages.json and already agree with the client's own tables -- so none of them can affect decoding; they record what a message MEANS. `name_confidence` is the POST-REFUTATION value: each proposal was re-derived by a second reader told to refute it, which struck four headline citations and two verdicts. Ten further opcodes came back PARTIAL and are deliberately NOT named here; see studies/smsg/FINDINGS.md for those and for what was killed.",
  "channels": {
   "AUTH_CMSG": {
    "2": {
@@ -830,6 +830,650 @@
     ],
     "name": "GAME_SERVER_TRANSFER",
     "why": "Our table stops one field short AND mismarks the message variable. Binary cmds[] @VA 0x00c01b70 (file 0x800b70) is [0x000001a5, 0x00001805, 0x00000404, 0x00000104, 0x00000204, 0x00000104, 0x00000404, 0x00000104]; MsgFormatRecv entry @VA 0x00bcb36c (file 0x7ca36c) statically holds count=8 and the next cmds[] array begins exactly 8 dwords later. Initializer at VA 0x004661d0-0x00466216 copies the statically-present constants [0x00c015a8]=0x1805, [0x00c015ac]=0x404, [0x00c01668]=0x104, [0x00c015dc]=0x204, [0x00c015e4]=0x104, [0x00c01520]=0x404, [0x00c0152c]=0x104. The final 0x104 = type 4, count 1 = a trailing `byte` we do not have: 39 bytes, not 38. No type 7/11/12 field is present, so the message is FIXED, not variable_length.NAMED 2026-08-10, and it is the FIRST name any GAME_SMSG opcode has carried -- the imported catalog has field layouts for 487 of them and names for none. This one is earned the same way the seven GAME_CMSG names were: from a witness that was not consulted to make the claim. It is the GAME-channel twin of AUTH_SMSG 0x0009 GAME_SERVER_INFO. Field 1 is a sockaddr_in for the next instance (family u16 LE, port u16 BE, IPv4 -- the mixed endianness is the client's, and reading the port the other way round is a documented past failure), and fields 2, 4 and 6 are the next instance's world_id, map_id and player_id. EVIDENCE: across the three transitions in one recorded session, every one of those four values equals what the NEXT connection then sent in its own client-to-server VERSION frame -- 12 of 12 fields, parsed straight off wire.jsonl, which the decrypted channel files do not even carry. toolkit/authsrv/tape.py's chain() re-derives that every run and REFUSES a link it cannot prove, rather than ordering hops by timestamp. THE VALUES THEMSELVES ARE NOT RECORDED HERE and must not be: world_id and player_id are live session identifiers from the owner's own account, schema/ is tracked and the vault is not. Field 5 (offset +33) was 1, 0, 1 across the three hops, correlating with destination map 146/164/146 -- possibly an is-explorable flag, UNVERIFIED at n=3 with two of the three being the same map, so it stays unnamed. The 39-byte length this entry corrects is now CORROBORATED by ArenaNet's own stream as well as by the client's tables: in all three tapes the next message begins exactly 39 bytes later."
+   },
+   "12": {
+    "opcode": 12,
+    "table": "GAME_SMSG_0012",
+    "declared_unpack_size": 2,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 12
+     }
+    ],
+    "name": "CLIENT_PERF_REQUEST",
+    "name_confidence": "medium",
+    "why": "OBSERVED -- named for what the handler DOES, since the message carries nothing but its header. Its entire body: query GrPerf(counter=4, period=3) under GrPerf.cpp:291/292 'counter < GR_COUNTERS' and 'period < GR_PERIODS', derive a rate, read a global, and send 3 dwords back through MsgConn.cpp:1186. That send computes its wire opcode as '((conn+0x54) ? 0x8000 : 0) | msg[0]' -- which is where studies/divergence D4's mysterious client reply '0x8009' comes from. 79 in the corpus, exactly equal to 0x000D's 79, per connection. PING/KEEPALIVE is not refuted and is recorded as the live rival."
+   },
+   "13": {
+    "opcode": 13,
+    "table": "GAME_SMSG_0013",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 13
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "LATENCY_REPORT",
+    "name_confidence": "high",
+    "why": "OBSERVED. The store at 0x0048DA40 discards the value unless it is <= 5000 ('cmp esi,0x1388 / ja'), then memmoves a 36-byte ring and writes the newest sample at its head; the accessor walks up to 10 non-zero samples and returns (latest, mean). A current-and-average pair over a 10-deep ring is a latency graph and little else, and the UiRoot.cpp assert string 's_netGraph' sits immediately before one of that accessor's only two callers. 79 messages, exactly equal to 0x000C's 79 per connection (10/10, 29/29, 2/2, 3/3, 37/37)."
+   },
+   "30": {
+    "opcode": 30,
+    "table": "GAME_SMSG_0030",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 30
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "WORLD_SIMULATION_TICK",
+    "name_confidence": "high",
+    "why": "OBSERVED. The single largest opcode in the live corpus (3971 of 10944, 36.3%) and it is a clock, not a heartbeat. The client names the one payload dword twice: 'message.time' where it arrives (AgMsg.cpp:208, VA 0x005fcf8b) and 'elapsedMs' where it is consumed (AgTimer.cpp:32, VA 0x00603ff2), and 0x00603fe0 walks a world-scoped timer queue firing everything now due. The wire then agrees on a check it could have failed: summing field 1 across a tape reconstructs that tape's own wall clock, first tick to last, at -1.2 ms over 48 s, -1.5 ms over 147 s, +18 ms over 13 s and +10 ms over 185 s. 445 distinct deltas, 1..520 ms. Rival rejected: HEARTBEAT/PING, which 36% of a corpus invites -- refuted because the payload is CONSUMED to drive a timer queue, not echoed or ignored."
+   },
+   "32": {
+    "opcode": 32,
+    "table": "GAME_SMSG_0032",
+    "declared_unpack_size": 99,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 32
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "float",
+      "length": 0
+     },
+     {
+      "type": "float",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     }
+    ],
+    "name": "WORLD_CREATE_AGENT",
+    "name_confidence": "high",
+    "why": "OBSERVED. The handler ALLOCATES rather than looks up -- 'mov ecx,0x134; call 0x0047F490' with AgMsg.cpp and line 270 in the operand registers, building a fresh 308-byte object, then asserts AgMsg.cpp:295 'ptr->IsInWorld()' on it. agint.h:929 bounds-checks fields 5/7 as a world position ('pos.x >= worldDims.x0' and its three siblings). AgAgent.cpp:180 'agentDef < arrsize(context->def)' puts field 3 into the class factory, and the client's own enum names its values: ChCliApi.cpp:4047 GW_AGENTDEF_CHAR, GdCliApi.cpp:430 GW_AGENTDEF_GADGET, ItCliApi.cpp:614 GW_AGENTDEF_ITEM. The body runs twice with the array base advanced 0x64, which AgAgent.cpp:312 names as m_world 0 and 1. 527 on the wire. Rival rejected: a state refresh, which has no allocation site and would resolve an existing pointer; this handler never does. Supersedes the OpenTyria name, which was UPSTREAM."
+   },
+   "33": {
+    "opcode": 33,
+    "table": "GAME_SMSG_0033",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 33
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "WORLD_REMOVE_AGENT",
+    "name_confidence": "high",
+    "why": "OBSERVED. AgMsg.cpp:316 'ptr' requires the slot named by field 1 to be non-null -- the agent must ALREADY exist, which is the create's mirror image. AgAgent.cpp:804 '(*curr)->m_bindTarget == this' sits in the per-world routine the handler calls, which walks every object bound to the agent. Same twice-with-base-advanced-0x64 world pair as 0x0020. On the wire: 416 messages, 416/416 naming an id 0x0020 created earlier in the same tape, 0 naming a never-created id and 0 double-removing without an intervening create -- an all-or-nothing check across the whole corpus."
+   },
+   "37": {
+    "opcode": 37,
+    "table": "GAME_SMSG_0037",
+    "declared_unpack_size": 15,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 37
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_MOVE_DIRECTION",
+    "name_confidence": "medium",
+    "why": "OBSERVED, and the discriminator against 0x0029 is the cleanest structural fact in the corpus: this message's vec2 is UNIT LENGTH in 201 of 201 samples (|v| in [0.99655, 1.00000]) while 0x0029's is 1119..21551 world units in 0 of 987. A direction and a destination, not two of the same thing. AgMsg.cpp:412 'syncPtr' and :418 'asyncPtr' show it applied twice, to the authoritative agent and the client's predicted copy. CONFIDENCE IS MEDIUM ON PURPOSE: no assert in this handler names field 1 or field 2; the byte's name comes from the sibling setter 0x002B uses (AgAgent.cpp:2368 '!(facing & ~AGENT_FACING_MASK)'), not from here."
+   },
+   "38": {
+    "opcode": 38,
+    "table": "GAME_SMSG_0038",
+    "declared_unpack_size": 7,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 38
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_UPDATE_FLAGS",
+    "name_confidence": "high",
+    "why": "OBSERVED. AgAgent.cpp:2301 'm_flags & INTERNAL_FLAG_IN_WORLD' is asserted on entry to the setter the handler calls with field 2, and it tests dword [agent+0x20] -- naming that offset as m_flags. The setter's write is ((old ^ new) & 0x3f0000) ^ new: it KEEPS the old bits inside mask 0x3f0000 and takes the new bits everywhere else, so a server cannot set anything in that mask through this message. AgMsg.cpp:438/443 'syncPtr'/'asyncPtr' put it on the same two agent arrays as 0x0020 and 0x0021. 155 on the wire, 155/155 naming an agent created earlier in the same tape, 151 of them immediately after 0x006D as the create burst's tail."
+   },
+   "41": {
+    "opcode": 41,
+    "table": "GAME_SMSG_0041",
+    "declared_unpack_size": 18,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 41
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_MOVE_TO_POINT",
+    "name_confidence": "high",
+    "why": "OBSERVED, and this CORROBORATES a name the server already shipped as a RECONSTRUCTION rather than resting on it. agint.h:929's four worldDims asserts are applied to field 2 before anything else happens, which settles position over direction -- the exact confusion that makes a rival plausible. AgMsg.cpp:513 'ptr' bounds-checks field 1 against the agent array; the handler builds {x,y,plane,0} and hands it to setter 0x00602a40, which writes the point into the agent's goal slots. 987 on the wire, none unit-length. Rival named and rejected: 0x002A, whose handler calls the SAME setter and differs by one push -- 0x0029 hardcodes 0 where 0x002A supplies a fifth wire field."
+   },
+   "43": {
+    "opcode": 43,
+    "table": "GAME_SMSG_0043",
+    "declared_unpack_size": 11,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 43
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "float",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_UPDATE_SPEED",
+    "name_confidence": "high",
+    "why": "OBSERVED. The client asserts its own bounds on the float the handler pushes from field 2: AgAgent.cpp:2366 'moveSpeed >= AGENT_MIN_MOVE_SPEED' and :2367 'moveSpeed <= AGENT_MAX_MOVE_SPEED', and :2368 '!(facing & ~AGENT_FACING_MASK)' on the byte from field 3. 163 wire samples land inside those bounds 163/163 (0.2778..1.0000) -- a check the corpus could have failed. 7 of the 15 distinct speeds are exact multiples of 1/288, which is Guild Wars' documented player run speed. REFUTES the server's own 'SpeedModifier / modifier, type' gloss: the field is CAPPED at 1.0, so no buff can ride it, and the third field is facing, not a type."
+   },
+   "46": {
+    "opcode": 46,
+    "table": "GAME_SMSG_0046",
+    "declared_unpack_size": 14,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 46
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_UPDATE_ROTATION",
+    "name_confidence": "high",
+    "why": "OBSERVED, and it REFUTES the upstream rotation_cos/rotation_sin reading outright: sin^2+cos^2 over the corpus ranges 1.23..4.87 and is never 1. Field 2 is an absolute angle -- 55 finite values, ALL inside [-pi, pi], and the only non-finite values are exactly +inf (4) and -inf (5), the same two .rdata sentinels that named GAME_CMSG 0x0040. Field 3 is a turn rate in rad/s with exactly three distinct values (0.24892, 0.89012, 2.0943952 = 14.26, 51.00, 120.00 deg/s; the last is 2*pi/3 to the bit), per-agent constant in 29 of 31 agents. AgMsg.cpp:629/635 syncPtr/asyncPtr, setter 0x00602cc0 asserting AgAgent.cpp:2438. Keep both fields typed dword -- the values are floats, the marshalling is not, exactly as for ROTATE_PLAYER."
+   },
+   "72": {
+    "opcode": 72,
+    "table": "GAME_SMSG_0072",
+    "declared_unpack_size": 7,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 72
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_SET_TABARD_VISIBLE",
+    "name_confidence": "medium",
+    "why": "INFERRED from the call it gates, not from an assert naming the bit -- hence medium. The flag gates 0x0082dbb0, whose arguments the client asserts as CpsApi:520 'composite', CpsApi:504 'teamColorId' and :505 'composite', and CpsTex:459 pairs 'teamColorId || tabard'. On the wire: 130 messages over 58 agents, field 2 only ever 0 or 1, no agent ever receiving both; the agent set is EXACTLY 0x006E's (58/58) and it immediately follows 0x006E 130/130 times."
+   },
+   "86": {
+    "opcode": 86,
+    "table": "GAME_SMSG_0086",
+    "declared_unpack_size": 48,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 86
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 8
+     }
+    ],
+    "name": "NPC_UPDATE_PROPERTIES",
+    "name_confidence": "high",
+    "why": "OBSERVED, and it closes to the exact byte, which is the check this repo prefers over one our own decoder forces true: the handler memsets a 0x20-byte local and fills it from wire fields 2..8, but the record has a HOLE at +0x18 -- so the seventh wire field lands LAST, not seventh, and a server packing seven fields contiguously puts it one slot early. Field 1 is a raw array index (the worker grows the array to index+1 and asserts 'index < m_count'), so it is a definition slot, not a handle. ChCliApi.cpp:6312 'baseClass == CHAR_CLASS_MONSTER_BASE' names the id space. 62 on the wire, 50 of them immediately followed by 0x0057."
+   },
+   "87": {
+    "opcode": 87,
+    "table": "GAME_SMSG_0087",
+    "declared_unpack_size": 42,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 87
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "array32",
+      "length": 8
+     }
+    ],
+    "name": "MONSTER_COMPOSITE",
+    "name_confidence": "high",
+    "why": "SOURCED, from an assert inside this very handler: CharMsg.cpp:4438 'message.compositeCount <= MONSTER_COMPOSITE_MAX_DWORDS' at VA 0x0091de1f, guarding field 2's element count before the rep movsd that copies it. The client's own word for the message, in the message's own handler. On the wire: 50 messages, every one immediately preceded by an 0x0056, field 1 matching that 0x0056's field 1 in 50/50 with 0 orphans; element counts 1 and 2, both under the asserted bound of 8."
+   },
+   "89": {
+    "opcode": 89,
+    "table": "GAME_SMSG_0089",
+    "declared_unpack_size": 91,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 89
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 32
+     }
+    ],
+    "name": "PLAYER_INFO",
+    "name_confidence": "high",
+    "why": "OBSERVED. CharData:178 'slot < arrsize(s_appearanceSlot)' and :180 'data.slot == slot' are hit with slot=3 and field 3 as the packed value, so field 3 is an appearance slot payload; ChCliApi:4966 '!(playerId & CHAR_CLASS_BASE_MASK)' names field 1's id space, and the function indexes the same 80-byte-stride array the name-plate module addresses by playerId. 61 on the wire; field 1 shares an id space with 0x00B0/0x00B1 field 1, and field 2 was created by an 0x0020 in the same tape 58/61."
+   },
+   "110": {
+    "opcode": 110,
+    "table": "GAME_SMSG_0110",
+    "declared_unpack_size": 42,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 110
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_UPDATE_VISUAL_EQUIPMENT",
+    "name_confidence": "high",
+    "why": "SOURCED. ChCliApi.cpp:51 'No valid case for switch variable \\'prop\\'' IS the default arm of this worker's own 9-way jump table ('cmp ebx,8 / ja / jmp [ebx*4+0x8110c4]'), and the payload is exactly 9 dwords after the agent id -- the wire shape and the jump table agree without either producing the other. Two arms name themselves: ConstCostume.cpp:1188 'set - 1 < COSTUME_BODY_COUNT' on the prop-7 arm and :1217 'set - 1 < COSTUME_HAT_COUNT' on prop-8. 130 messages, 55 agents, followed by 0x0048 130/130. PRECONDITION for a server: every id here must have been declared by a prior 0x015E/0x0161 (621/621 on ArenaNet's own traffic)."
+   },
+   "166": {
+    "opcode": 166,
+    "table": "GAME_SMSG_0166",
+    "declared_unpack_size": 8,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 166
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_SET_PROFESSION",
+    "name_confidence": "high",
+    "why": "OBSERVED. GmDeckBuilder:2321 'agentPrimaryProf != agentSecondaryProf' gives the client's own name for the pair AND its own invariant; AcctTemplate:411/412 bound both against CHAR_PROFESSIONS. The wire obeys the invariant it was not told about: 136 messages, field 2 in 1..6 with value 0 NEVER occurring, field 3 in 0..8 with 0 as the mode -- a primary that must exist and a secondary that need not."
+   },
+   "177": {
+    "opcode": 177,
+    "table": "GAME_SMSG_0177",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 177
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     }
+    ],
+    "name": "PLAYER_SET_PARTY",
+    "name_confidence": "medium",
+    "why": "INFERRED -- the mechanism is exact but the noun 'party' is our reading, hence medium. ChCliApi:4966 '!(playerId & CHAR_CLASS_BASE_MASK)' is asserted on the register that three instructions later indexes the array this handler writes; PtUtil:221 'leader' is the party module's word for the role field 2 points at. 162 on the wire: field 1 is a playerId the same tape created via 0x0059 in 161/162 and field 2 in 150/162, NEVER a value the tape did not create. TRAP: the subject link runs from 0x00B0's field 1 to this message's SECOND word, so the pair reads [new, old] -- an assumption that both are the same field gets it backwards."
+   },
+   "240": {
+    "opcode": 240,
+    "table": "GAME_SMSG_0240",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 240
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_INITIAL_STATUS",
+    "name_confidence": "high",
+    "why": "OBSERVED, and it renames rather than discovers: our server called this AGENT_INITIAL_EFFECTS from a RECONSTRUCTION, and the client's word is m_status, not effects. ChCliInt.h:254 'IS_TRUE(m_status & CHAR_STATUS_DEAD)' compiles to 'test byte ptr [edi+0x10c], 0x10' -- that assert names the field the payload lands in. The effect subsystem is never reached. The 'effects' noun is traceable to OpenTyria's struct having a 'uint32 effects' member: one witness, and not the client. INITIAL vs UPDATE is settled by an asymmetry the wire could have refused: this message precedes its agent's own 0x0020 create 187/472 times and is the message IMMEDIATELY before it every time; 0x00F1 does this 0 times in 312. Filtering out 0x001E ticks, 472/472 of these are followed by their own create -- it is a create PREFIX."
+   },
+   "241": {
+    "opcode": 241,
+    "table": "GAME_SMSG_0241",
+    "declared_unpack_size": 10,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 241
+     },
+     {
+      "type": "agent_id",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "AGENT_UPDATE_STATUS",
+    "name_confidence": "high",
+    "why": "OBSERVED. Same field and same bit as 0x00F0 (ChCliInt.h:254), reached through the sibling setter AvApi.cpp:1423 twelve source lines after 0x00F0's at :1411. 0 of 312 arrive before their agent's create, against 0x00F0's 187 -- narrow and deep (34 distinct agents, one of them 42 times) where 0x00F0 is broad and shallow (187 agents, mostly once). Carries the burrow cycle's two 2.00 s windows: payload 0x0000 at 2.00 +/-0.06 s after create (148/148) and 0x1000 at 2.00 +/-0.06 s before remove (141/141), both exclusively for one creature class. REFUTES gw-preservation's INSTANCE_LOADED reading -- the handler takes an agent id and indexes a per-agent array."
+   },
+   "319": {
+    "opcode": 319,
+    "table": "GAME_SMSG_0319",
+    "declared_unpack_size": 13,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 319
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "word",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "ITEM_CREATE_BAG",
+    "name_confidence": "high",
+    "why": "OBSERVED. ItCliInv:38 'No valid case for switch variable \\'bagType\\'' is the client's own name for field 2; ItCliApi:1942 'inventory' guards the hash lookup keyed by field 1; ItCliBag:167 'slot != m_bagArray.Count()' is the remove-then-insert path keyed on field 4. Exactly 9 per tape in all four tapes, and the nine (bagType, field 3, capacity) triples are identical across all four: (1,0,20), (2,21,9), (3,6,12), (4,7..11,25) five times, (5,5,42). NOT a shippable constant table -- fields 1 and 4 are session-scoped ids a server must allocate itself."
    }
   }
  }
