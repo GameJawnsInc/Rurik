@@ -18,10 +18,13 @@ same number in a different channel. So every physical attack skill a player
 presses lands on the silent-ignore path. The name USE_SKILL is not wrong; it is
 half the story, and the missing half is the entire physical side of the game.
 
-WHAT THIS FILE ASSERTS. Properties of ArenaNet's recorded traffic, so no change
-to `authsrv.py` can make it pass or fail. Claims resting on the binary (send-site
-addresses, assert text) are NOT re-checked here -- that is `asserts.py`'s ground
-and needs the vaulted build.
+WHAT THIS FILE ASSERTS. Properties of ArenaNet's recorded traffic, with ONE
+deliberate exception at the end: that our server actually dispatches both halves.
+That check is here rather than elsewhere because it is the change this corpus
+forced, and separating a finding from the fix it demanded is how a fix gets
+quietly reverted. Claims resting on the binary (send-site addresses, assert text)
+are NOT re-checked here -- that is `asserts.py`'s ground and needs the vaulted
+build.
 
 A BUG THIS FILE EXISTS PARTLY TO PIN. The first reader of this corpus fed the
 AUTH connection through the GAME_CMSG tables and produced two confident
@@ -54,10 +57,10 @@ EQUIP_COLOR = 0x0084
 SKILL_ACTIVATED = 0x00E3          # GAME_SMSG
 STATUS = 0x00F1                   # GAME_SMSG; bit 0x10 is CHAR_STATUS_DEAD
 
-# MEASURED from a real green run, not guessed: the first version declared 12
+# MEASURED from real green runs, never guessed: the first version declared 12
 # and ran 10, and the floor guard caught it rather than letting a short run
-# print as a pass.
-LEDGER = checks.Ledger("GAME_CMSG names vs ArenaNet's own client", floor=10)
+# print as a pass. 11 since the server-dispatch check was added.
+LEDGER = checks.Ledger("GAME_CMSG names vs ArenaNet's own client", floor=11)
 
 
 def main():
@@ -184,6 +187,19 @@ def main():
               f"n={len(mags)}, |v| in [{min(mags):.2f}, {max(mags):.2f}] -- a spread of "
               f"{max(mags) - min(mags):.2f} over the whole session while the position "
               f"field ranges over the map. A heading, not a destination")
+
+    # ---- 6. the exception: our server must dispatch BOTH halves -------------
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    has_const = "GAME_CMSG_ATTACK_SKILL = 0x0027" in src
+    shared_arm = ("opcode in (GAME_CMSG_USE_SKILL, GAME_CMSG_ATTACK_SKILL)" in src)
+    LEDGER.ok(has_const and shared_arm,
+              "our server dispatches the attack-skill half too, in the SAME arm",
+              f"constant={has_const}, shared arm={shared_arm}. Until 2026-08-11 only "
+              f"0x0046 was handled, so every physical attack skill fell through to "
+              f"silent-ignore -- and per studies/divergence D9(b) a schema-unknown "
+              f"c2s opcode DISCARDS whatever shared its TCP read, which makes it a "
+              f"correctness bug rather than a missing feature. One arm rather than "
+              f"two because they are halves of one action and would otherwise drift")
 
     return LEDGER.verdict()
 

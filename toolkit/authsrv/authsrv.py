@@ -645,6 +645,34 @@ GAME_CMSG_INTERACT_PLAYER = 0x0033
 # nothing was selected at the time.
 GAME_CMSG_USE_SKILL = 0x0046
 
+# THE OTHER HALF, and without it the entire physical side of the game is unhandled.
+# OBSERVED 2026-08-11 (studies/cmsg/FINDINGS.md C14): a whole narrated live session
+# of a Ranger casting Power Shot sent ZERO 0x0046. Attack skills leave on 0x0027
+# instead, and the server answers both with the same GAME_SMSG 0x00E3 -- which is
+# what makes them two halves of one thing rather than unrelated messages.
+#
+#   Necromancer session:  4x 0x0046, 0x 0x0027    skills 105, 153 -- type_code 5
+#   Ranger session:       0x 0x0046, 3x 0x0027    skill 394       -- type_code 14
+#
+# The client's own s_skill table types 394 as profession 2 (Ranger), 10 energy,
+# 3 s recharge -- Power Shot -- and 311 of its 3443 rows carry type_code 14.
+#
+# THE DISCRIMINATOR IS INFERRED, not proven: three distinct skills over two
+# sessions is thin, and what is actually established is that the two casters used
+# different opcodes and their skills differ by type_code. "type_code 14 goes on
+# 0x0027" is the reading that fits; a rival that fits equally well on this evidence
+# is "the PROFESSION decides", and only a session mixing skill types on one
+# character separates them. Nothing below depends on which is right.
+#
+# FIELD MEANINGS ARE POSITIONAL AND MATCH 0x0046, which the catalog's TYPES hide:
+# 0x0046 is [dword, dword, agent_id, byte] and 0x0027 is [agent_id, dword, dword,
+# byte], but both are 15 bytes and the VALUES line up slot for slot -- field 1 is
+# the skill (394 constant across all three sends), field 3 the target (276/278,
+# both of which 0x0026 ATTACK also targeted in the same fight). agent_id and dword
+# are the same four bytes on the wire; the marshalling type is not the meaning.
+# This is the ROTATE_PLAYER trap and it is the third time it has come up.
+GAME_CMSG_ATTACK_SKILL = 0x0027
+
 # The reply, and its field meanings are the CLIENT'S OWN WORDS. 0x00823090 builds
 # a lookup key from the two payload fields and, when it misses, logs
 #
@@ -2492,16 +2520,30 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_INSTANCE_MANIFEST_DONE,
                                  [phase_arg, map_arg, 0],
                                  f"MANIFEST_DONE[{phase_arg}, map {map_arg}]")
-                    elif opcode == GAME_CMSG_USE_SKILL:
+                    elif opcode in (GAME_CMSG_USE_SKILL, GAME_CMSG_ATTACK_SKILL):
+                        # ONE ARM FOR BOTH, deliberately. 0x0046 and 0x0027 are the
+                        # caster and attack-skill halves of the same action: their
+                        # payloads line up slot for slot and ArenaNet's own server
+                        # answers both with GAME_SMSG 0x00E3 (see the constants).
+                        # Two arms would drift, and until 2026-08-11 this server
+                        # had only the caster half -- so every physical attack
+                        # skill fell through to the silent-ignore path, where per
+                        # studies/divergence D9(b) a schema-unknown c2s opcode also
+                        # DISCARDS whatever shared its TCP read. That made it a
+                        # correctness bug and not just a missing feature.
+                        #
                         # Confirm the cast by echoing the key the client is
                         # waiting on. If the echo is wrong the client says so in
                         # its own log -- 'Pending skill %u copy %d not found' --
                         # which makes this one of the few things in the project
                         # that reports its own failure.
+                        which = ("USE_SKILL" if opcode == GAME_CMSG_USE_SKILL
+                                 else "ATTACK_SKILL")
                         skill_id, copy, target = values[1], values[2], values[3]
                         send(GAME_SMSG_SKILL_ACTIVATED,
                              [PLAYER_AGENT_ID, skill_id, copy],
-                             f"SKILL_ACTIVATED(skill {skill_id}, copy {copy})")
+                             f"SKILL_ACTIVATED(skill {skill_id}, copy {copy}"
+                             f" via {which})")
                         print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
                               f"agent {target or 'nothing'}", flush=True)
                         # TRIED AND IT DID NOT WORK, recorded so it is not
