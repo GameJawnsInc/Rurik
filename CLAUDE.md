@@ -104,6 +104,34 @@ reasoning about it. Two of the three hardest questions so far were settled that 
 ## Working in this repo
 
 - Windows, PowerShell. `python …` lines work in any shell; `.ps1` needs a leading `&`.
+- **Which tree you are in decides which code runs. Establish it before anything else.**
+  The repo proper is `C:\gd\Rurik` on `main`; parallel arcs get worktrees under
+  `.claude/worktrees/`. These are not copies of each other and the drift is not small
+  — on 2026-08-11 the packet-arc worktree was **33 commits and 42 `toolkit/` files**
+  behind `main`, missing `cmsgstream.py`, `agentprobe.py` and `itemprobe.py` outright.
+  A relative `python toolkit/…` runs **that tree's** copy, so a stale worktree does not
+  error; it returns a confident number from an old scanner.
+
+  ```bash
+  git rev-parse --show-toplevel
+  ```
+
+  A session whose shell starts in a worktree can still work on `main` — prefix every
+  command with `cd C:/gd/Rurik &&` — but then say so, because the worktree's name will
+  imply otherwise for the rest of the session. Land an arc by merging to `main`; a
+  worktree sitting 0-ahead holds nothing and is only a trap. (The vault is a separate
+  hazard with its own answer: `toolkit/vaultpath.py`, never `../../vault`.)
+- **Pin subagents to a tree, and make them prove they are in it.** A subagent inherits
+  the session's cwd, which in a worktree session is the worktree. Naming the repo in the
+  prompt does **not** move it: on 2026-08-11 two of five workflow agents read the stale
+  tree while being told they were in `C:\gd\Rurik`, and one skeptic's refutation rested
+  on a file that does not exist in the tree it read. So give the absolute path, require
+  every command to begin `cd <tree> &&`, show the tool examples that way rather than as
+  bare relative paths, and have the agent run the check above **first** and refuse if
+  the answer is wrong. Same principle as `vaultpath.require_dir()` — a fixture that
+  silently resolves to the wrong thing turns every assertion behind it into a no-op.
+  For read-only fan-out, `isolation: "worktree"` gives each agent a fresh tree at
+  current HEAD and sidesteps the question.
 - **Python 3, standard library only.** No third-party dependencies anywhere in
   `toolkit/`. Keep it that way — with two named carve-outs.
   **(1) 2026-08-06: read-only client analysis may use `capstone` and `pefile`**,
