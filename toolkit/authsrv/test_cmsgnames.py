@@ -190,11 +190,23 @@ def main():
 
     # ---- 6. the exception: our server must dispatch BOTH halves -------------
     src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
-    has_const = "GAME_CMSG_ATTACK_SKILL = 0x0027" in src
-    shared_arm = ("opcode in (GAME_CMSG_USE_SKILL, GAME_CMSG_ATTACK_SKILL)" in src)
-    LEDGER.ok(has_const and shared_arm,
+    # Match on the source with its whitespace COLLAPSED. This grep read the raw text
+    # until 2026-08-11, so it asserted the arm's FORMATTING and not its content: the
+    # day the arm grew a `player_dead` guard it wrapped across two lines, the literal
+    # stopped matching, and this went red while the thing it claims to check was
+    # untouched and still true. A check that fails on a line break is not checking the
+    # server. Collapsing whitespace makes it fail only when the two opcodes actually
+    # stop sharing an arm, which is the drift it was written to catch.
+    flat = " ".join(src.split())
+    has_const = "GAME_CMSG_ATTACK_SKILL = 0x0027" in flat
+    shared_arm = "opcode in (GAME_CMSG_USE_SKILL, GAME_CMSG_ATTACK_SKILL)" in flat
+    # And the other way the claim could fail: a SECOND arm testing the attack half on
+    # its own is exactly the split this forbids, and the substring above cannot see it.
+    split_arm = "opcode == GAME_CMSG_ATTACK_SKILL" in flat
+    LEDGER.ok(has_const and shared_arm and not split_arm,
               "our server dispatches the attack-skill half too, in the SAME arm",
-              f"constant={has_const}, shared arm={shared_arm}. Until 2026-08-11 only "
+              f"constant={has_const}, shared arm={shared_arm}, split arm={split_arm}. "
+              f"Until 2026-08-11 only "
               f"0x0046 was handled, so every physical attack skill fell through to "
               f"silent-ignore -- and per studies/divergence D9(b) a schema-unknown "
               f"c2s opcode DISCARDS whatever shared its TCP read, which makes it a "
