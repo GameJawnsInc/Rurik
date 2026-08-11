@@ -2106,3 +2106,48 @@ from the disassembly and act on it. Derive it, then read the values it depends o
 out of a running client — `agentprobe.py` for agents, `itemprobe.py` for items,
 both read-only. Each of those two probes took under an hour and each one killed a
 hypothesis that had already survived a session of reasoning.
+
+---
+
+### 10.5 The A/B nobody realised they had run — and its evidence is five days stale
+
+**OBSERVED 2026-08-11**, measured over the whole capture tree (862 `.jsonl` logs, of which
+**175 carry a game-channel VERSION**; 430 are auth and 257 have no VERSION record). §8.0
+item 0a stated this as "the client aims `0x0026` at agents ArenaNet created and `0x0033` at
+ours, in the same map type". That is right in substance and understates the design.
+
+| sessions | `0x0026` ATTACK | `0x0033` | who created the agents |
+|---|---|---|---|
+| 19 × 2026-08-06, hand-driven | **0** | 206 | **our server** (2–5 `0x0020` each) |
+| 2 × 2026-08-10, tape replay | **7** | **0** | **ArenaNet's tape** (0 of our creates, 1074 tape sends) |
+
+**Zero overlap in either direction.** Same client binary, same `authsrv.py` process, same
+map — the only variable is whose create burst produced the agents. That is not a comparison
+across session types; it is an A/B with the create burst as the manipulated variable, and
+it is the strongest evidence in this arc that the difference is IN THE CREATE BURST.
+
+`0x0033`'s first field is **10** in 147 of the 206, and `authsrv-20260806T120212-c2` logs
+its own creates as `WORLD_CREATE_AGENT` and `WORLD_CREATE_AGENT(10, hostile)` — so field 1
+is an agent id and the operator clicked our Hatcher 147 times without once producing an
+attack. In the tape sessions the same client sent `0x0026` at 274, 275, 276 and 284.
+
+**THE PART THAT MATTERS MOST: the 0x0033 side is from 2026-08-06 and nothing has re-tested
+it since.** Everything the client reads about our agent has changed in between — the
+allegiance and type tag are now MEASURED correct (§10.1), the skip flag is clear (§10.2),
+the weapon gate passes (§10.4), and `0x0048`, `0x00A6` and `0x0026` are now sent (§8.0 0g).
+The 206-to-0 split is a fact about a **five-day-old server**.
+
+**And no labelled run has ever been pointed at one of our own agents.** `labelrun.py` has an
+`attack` step. All three label runs in the vault (`20260810T142912`, `144215`, `151946`) are
+**tape** sessions — 1074 sends and zero `0x0020` of our own in every one. The only one that
+produced anything is the tape run, where `attack` yielded `0x0026` at agent 284 and
+`target_tab` yielded `0x00C1` at 273/274/276. So the instrument that would settle this
+exists, is proven to work, and has never been aimed at the question.
+
+**THE CHEAPEST DECISIVE EXPERIMENT IN THE ARC, and it is one operator session.** Run
+`labelrun.py` against our OWN server with the Hatcher spawned, and read which opcode the
+`attack` step produces. `0x0026` means the blocker is gone and R4a's refusal died to work
+already landed; `0x0033` again means it survives every property measured so far and the
+create-burst differential is the next place to look. Either outcome is worth more than more
+static analysis, and §8.0 0a already says to fold it into the same session as 0c's burrow
+probe. **Do not read the 206-to-0 table as current.**
