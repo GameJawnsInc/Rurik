@@ -1046,7 +1046,31 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-11 (`e54df3c`+, suite 39/39 ~1036 checks)
+### 8.0 Next, as of 2026-08-11 (`f7ed554`, suite 45/45, ~1393 checks)
+
+0j. ✅ **DONE 2026-08-11. The attack refusal is NOT on our side of the interaction, and
+    that is now measured rather than argued.** §10.3 read the refusal down to one bit —
+    for an ENEMY target the client's eligibility test is `0x005147F0`, which never looks
+    at the target and instead returns **bit 25 of the PLAYER's own equipped weapon**. It
+    ended by naming one step and telling the next reader to take it before changing
+    anything. Taken, with a new read-only probe (`toolkit/clientscan/itemprobe.py`, which
+    walks the thread-local `ItCliApi` context to the item manager and its container hash):
+    **slot 0 holds our hammer, gate dword `0x22201000`, bit 25 SET.** All three branches
+    pass, so the ENEMY arm returns 0 and `0x004E22D5` **adopts** our agent as a target.
+    ArenaNet sets the same bit — every equipped weapon in both live captures has it, and
+    the Ranger's bow is byte-identical to the hammer we send. `test_smsgnames.py` +3
+    checks (floor 23 → 26) pins it, because the gate is on the side we control.
+    **So four properties of the interaction have now been measured and all four are
+    correct**: the target's type tag, its allegiance, its skip flag (§10.1, §10.2) and our
+    own weapon (§10.4). The `m_attackInterval` assert at `AvChar.cpp(4791)` is the one
+    hard observation still unexplained, and §6p — the field living on the view-layer
+    `AvChar` rather than on the agent — is the only surviving lead.
+    **THE METHODOLOGICAL RESULT IS THE BIGGER ONE, and it is now three for three.** §10.1,
+    §10.2 and §10.4 each killed a chain that had been derived confidently from the
+    disassembly and had already survived a session of reasoning. *A decision tree read out
+    of the binary tells you what the client TESTS and never what the answer IS on our
+    data.* Derive the chain, then probe the values. Both probes took under an hour.
+    `studies/enemy/PLAN.md` §10.4.
 
 0i. ✅ **DONE 2026-08-11. The CLIENT half of the protocol is readable, and GAME_CMSG
     goes from 7 names of 194 to 16.** Two obstacles, both now gone: the client ORs
