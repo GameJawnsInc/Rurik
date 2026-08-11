@@ -662,7 +662,7 @@ Reached: `GcGameCmd.cpp (handler block, bracketed)`, `GrPerf.cpp`, `FrApi.cpp`, 
 
 **Still open:** What GrPerf counter 4 / period 3 actually counts. 1000/n with a 40 fallback is frame-rate shaped, but GR_COUNTERS' enum was not recovered — the names are not in the assert strings.; What the FrApi global at 0xC1100C means (the reply's second dword, a 0/1).; Whether the server ever sends 0x000A, 0x000B or 0x000E — none appeared in 10,944 messages, but their handlers now have addresses (0x00491E30, 0x00491E10, 0x00491EF0) and 0x000B's is a one-shot latch of its dword into a global.
 
-**For our server:** A 5 s timer sending a 2-byte 0x000C, plus a GAME_CMSG opcode-9 handler that at minimum fails loudly instead of silently — today all of the client's replies land on our silent-ignore path, and per D9(b) a schema-unknown c2s opcode discards whatever shared its TCP read.
+**For our server:** A 5 s timer sending a 2-byte 0x000C, plus a GAME_CMSG opcode-9 handler that at minimum fails loudly instead of silently — today all of the client's replies land on our silent-ignore path. ~~and per D9(b) a schema-unknown c2s opcode discards whatever shared its TCP read.~~ **CORRECTED 2026-08-11:** `0x0009` is schema-**known** (`GAME_CMSG_0009`), so it takes D9(**a**)'s silent-ignore path, which does not touch the buffer; D9(b) covers schema-*unknown* opcodes and is itself fixed. The replies are ignored, not destructive — worth handling for tidiness and for the net graph, not as a correctness fix.
 
 
 > **Refutation pass.** The structural find is CONFIRMED and I can now close it harder than they did; the name is defensible but it is an inference from what the handler does, and the PING co-reading is not excluded. RAN: msghandler.py 0x000C --follow --annotate; read read_table in msghandler.py and _enumerate in msgshape.py; a raw stdlib descriptor walk of all 25 tables; a scratch .text scan for the load-time stores into every 0x00BEC384/0x00BEC394 count field; scratch disassembly of 0x00491e50, 0x007dcb10, 0x00631aa0; asserts.py --grep GR_COUNTERS / GR_PERIODS. CONFIRMED, THE TOOL BUG IS REAL: msghandler.read_table builds `cmds = [...for k in range(n)]` then `if not cmds: continue`, and msgshape._enumerate has `i
@@ -1319,14 +1319,31 @@ currently sends about a dozen opcode types.
 
 ### Tier 1 — buildable today, largest effect per line of code
 
+> **Status re-checked against the code 2026-08-11 — most of this list has landed.** It was
+> written 2026-08-10 and read as a to-do list for a day after it stopped being one. Send
+> sites now exist for **`0x00F0`, `0x0026`, `0x002B`, `0x0029`, `0x002E`, `0x0021` and
+> `0x0048`**. Item **4 is built and verified at its send site**; items **2 and 3 have send
+> sites**, which is weaker — each also carries an *ordering* rule (`0x00F0` before every
+> `0x0020`, `0x002B` before `0x0029`) that a grep cannot confirm, so they are marked
+> PARTIAL rather than done. Item 1 is **half** built; item 5 is **not started**.
+> `authsrv.py` is the authority; this list is not.
+
 1. **`0x001E` with a real elapsed-ms delta, emitted per flush rather than on a timer.**
    *The single most common message on the wire and we have never sent it correctly.*
-   It drives every client-side timer and interpolation between movement legs. We send
-   it on a fixed 0.05 s sleep (CV ~ 0); ArenaNet stamps it per world-update flush (CV
+   It drives every client-side timer and interpolation between movement legs. ~~We send
+   it on a fixed 0.05 s sleep (CV ~ 0)~~; ArenaNet stamps it per world-update flush (CV
    0.80-0.88, 445 distinct deltas, up to 520 ms). Change: stamp the true delta at
    flush time. **No new message needed — this is a fix to one we already send.**
+   **HALF DONE 2026-08-11:** the delta is now *measured* — `delta_ms` comes from a
+   `time.perf_counter()` difference and the send is skipped when it rounds to 0 — so it is
+   no longer a constant. But it is still emitted from a `time.sleep(TICK_SECONDS)` loop
+   rather than per world-update flush, so the cadence is still ours and not the client's
+   work pattern. **The item's actual ask stands; only its "we send a constant" premise is
+   retired.**
 
-2. **`0x00F0` immediately before every `0x0020`, and `0x0026` after.** 472/472 of
+2. 🔶 **PARTIAL — both messages now have send sites** (`AGENT_INITIAL_STATUS`,
+   `AGENT_UPDATE_FLAGS`); whether the *ordering* rule below holds at every create is
+   unverified. **`0x00F0` immediately before every `0x0020`, and `0x0026` after.** 472/472 of
    ArenaNet's creates carry the status preamble; only 5 of 527 are a bare create — and
    the bare form is what we send. This is what lets us **spawn an agent already in a
    state** (already burrowed, already dead) instead of creating it clean and
@@ -1335,22 +1352,30 @@ currently sends about a dozen opcode types.
    creation. Guard: `0x0026`'s merge **clears every set bit above bit 7 outside
    0x3f0000**.
 
-3. **`0x002B` before `0x0029`, with a bounded speed and a real facing byte.** NPC
+3. 🔶 **PARTIAL — both have send sites** (`AGENT_UPDATE_SPEED` ×2, `AGENT_MOVE_TO_POINT`
+   ×3); the ordering and the bounds check are unverified from here. **`0x002B` before
+   `0x0029`, with a bounded speed and a real facing byte.** NPC
    patrol and chase pacing has no other driver. Speed must be in `[0.01, 1.0]` — a
    value above 1.0 trips the client's own assert — and the third field is `facing`,
    not the "type" our comment claims. **Hazard, flagged in §0x0025:** do not emit
    `0x0025`'s vector as intended movement with facing != 1 until the facing-vs-
    movement question is settled, or the client will be 26.57–180° off.
 
-4. **`0x002E` for NPC facing.** Previously never sent because nobody knew what went in
-   it. Now: field 2 = absolute target angle in radians (or ±inf to spin), field 3 =
-   turn rate in rad/s, inside `[pi/100, 20pi]`. Keep both typed `dword` in the catalog.
+4. **`0x002E` for NPC facing.** ✅ **BUILT 2026-08-11** (`b37db6f`, `authsrv.py:1467`).
+   ~~Previously never sent because nobody knew what went in~~ it. Field 2 = absolute
+   target angle in radians (or ±inf to spin), field 3 = turn rate in rad/s, inside
+   `[pi/100, 20pi]`. Keep both typed `dword` in the catalog — and note the commit records
+   that our turn rate is one constant where **ArenaNet's is per-creature**, so this is
+   built but not yet faithful.
 
 5. **The tick/ping loop: a 5 s `0x000C` and a `GAME_CMSG 0x0009` handler.** Today every
-   one of the client's replies lands on our silent-ignore path, and per D9(b) a
+   one of the client's replies lands on our silent-ignore path. ~~and per D9(b) a
    schema-unknown c2s opcode **discards whatever shared its TCP read** — so this is a
-   correctness fix, not a cosmetic one. Then `0x000D` with a measured RTT makes the
-   client's net graph and connection meter work.
+   correctness fix, not a cosmetic one.~~ **CORRECTED 2026-08-11 — it *is* the cosmetic
+   one.** `0x0009` is schema-**known** (`GAME_CMSG_0009`); the silent-ignore path is
+   D9(**a**) and leaves the buffer alone. D9(b) applies to schema-*unknown* opcodes only
+   and is now fixed. Then `0x000D` with a measured RTT makes the client's net graph and
+   connection meter work — which is the real reason to build it.
 
 ### Tier 2 — buildable, unlocks visible content
 

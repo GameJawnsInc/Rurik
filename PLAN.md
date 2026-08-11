@@ -1127,8 +1127,14 @@ run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cms
     **zero** of it: attack skills go out on **`0x0027`**, which `authsrv.py` has no
     dispatch arm for — its only mention of that number is a comment about a GAME_SMSG
     of the same number in a different channel. Every physical attack skill lands on the
-    silent-ignore path, and per D9(b) a schema-unknown c2s opcode discards whatever
-    shared its TCP read, so it is a correctness bug. **This is the next code change.**
+    silent-ignore path. ~~and per D9(b) a schema-unknown c2s opcode discards whatever
+    shared its TCP read, so it is a correctness bug. **This is the next code change.**~~
+    **BOTH HALVES CORRECTED 2026-08-11.** The D9(b) clause was a mis-attribution: `0x0027`
+    is schema-**known** (`GAME_CMSG_0039`), so it took D9(a)'s silent-ignore path and never
+    discarded a neighbour — a missing feature, not a correctness bug (`studies/divergence`
+    D9, which now records the trap). And it is **no longer the next code change**: the arm
+    landed the same day — `authsrv.py:722` defines `GAME_CMSG_ATTACK_SKILL`, and one
+    dispatch arm serves both halves, which §3's R4a row records.
     **12 NAMED · 6 PARTIAL · 2 that were never GAME_CMSG** — the last two were our own
     reader decoding the AUTH connection against the GAME_CMSG tables, which does not
     error, it invents. Pinned now.
