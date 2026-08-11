@@ -184,10 +184,15 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   was logged, and does so all-or-nothing across the whole vault — the first reader of a
   .raw, which closes R0a's standing caveat),
   `toolkit/authsrv/test_smsgnames.py` (the twenty GAME_SMSG names of 2026-08-10, against
-  ArenaNet's own recorded traffic rather than against our server — 21 invariants the
-  corpus could have violated. The headline one is that summing 0x001E's payload across a
-  tape reconstructs that tape's own wall clock to +18 ms worst case over 13–185 s, which
-  is what kills the heartbeat reading of the opcode that is 36% of all server traffic.
+  ArenaNet's own recorded traffic rather than against our server — 23 invariants the
+  corpus could have violated, pooled over BOTH live captures: two characters of different
+  professions walking the same three maps, so the character is the variable and the map
+  content is not. That cross-character run is what retired the file's own shipped caveat,
+  and nothing needed changing to make it pass. The headline one is that summing 0x001E's
+  payload across a tape reconstructs that tape's own wall clock to +18 ms worst case over
+  13–185 s, which is what kills the heartbeat reading of the opcode that is a third of all
+  server traffic. A second settles 0c from ArenaNet's own behaviour rather than our probe:
+  one definition, 140 creates, so the client keeps an NPC definition across a removal.
   Its first version had three red checks and every one was worth having: two were the
   ROTATE_PLAYER trap again — 0x002E's fields are marshalled u32 and hold floats, and read
   raw they make the angle check compare garbage to pi AND make the turn-rate check pass

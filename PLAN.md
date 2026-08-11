@@ -1044,7 +1044,26 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-10 (`9166a50`+, suite 38/38 ~983 checks)
+### 8.0 Next, as of 2026-08-11 (`a177d3b`+, suite 38/38 ~1011 checks)
+
+0f. ✅ **DONE 2026-08-11. A second live capture, on a different character.** This was
+    the naming pass's own cheapest open test and it came back clean: every invariant in
+    `test_smsgnames.py` held on a Ranger where they were derived from a Necromancer,
+    with nothing changed, and the checks now run pooled over both (8 tapes, 21,543
+    messages). The file's shipped caveat is retired. Two structural results: the opcode
+    vocabularies are **nearly identical** (146 distinct each, **148 in union**, 2 in and
+    2 out), so an ordinary session's surface is stable across characters; and the
+    `0x013F` bag table's (bagType, slot, capacity) triples are **byte-identical across
+    characters**, which was the sharpest character-versus-protocol question in the pass
+    and the answer is protocol. The session also answered 0c and named the burrow status
+    values -- see there and `studies/tape/FINDINGS.md` T16.
+    **T17, and it is the biggest thing this capture opened:** the **client-to-server**
+    direction decodes cleanly as GAME_CMSG once bit `0x8000` is masked off (419 and 500
+    messages, 0 B unconsumed both). The naming pass had already read that bit out of the
+    binary -- `MsgConn`'s send computes `((conn+0x54) ? 0x8000 : 0) | msg[0]` -- without
+    connecting it to decoding this side. So both captures are **labelled runs against
+    ArenaNet's own server**, with a narrated session, which is what `labelrun.py` does on
+    ours. 194 GAME_CMSG opcodes have layouts and seven have names.
 
 0e. ✅ **DONE 2026-08-10. Twenty GAME_SMSG opcodes named — the catalog goes from 1 of
     487 to 21.** This is the item that was not on the list, and it is where the leverage
@@ -1179,7 +1198,22 @@ parallel, with one safety change that is not optional — see its entry.
     exists so one run settles it. The `world_id`/`player_id` values stay in the vault —
     `schema/` records the structure and the fact of the match, never the identifiers.
 
-0c. 🔶 **BUILT 2026-08-10, awaiting one operator run.** Plague Worms hide by being REMOVED
+0c. ✅ **ANSWERED 2026-08-11 by the second live capture, and not by the probe built
+    for it.** The blocking question was whether the client keeps an NPC definition
+    across a removal, since `agent_removal` resent it every time and so its positive
+    said nothing. ArenaNet's own traffic settles it: **1 `0x0056` declaration, 32
+    creates** for the Lakeside worm in capture `20260810T235916`, and 1 declaration to
+    **140** creates pooled across both captures. It is the *same client* on both ends,
+    so the client keeps the definition -- otherwise 31 of those 32 creates would name a
+    slot it no longer holds and it would go down on `Array.h`'s `index < m_count`. A
+    server may declare once and re-create freely. `probes.py`'s `burrow` probe is now
+    confirmatory rather than necessary; what it still uniquely tests is whether OUR
+    create path is right once it stops resending. **And the burrow status values are
+    named** (T16): `0x00F1` status `0x1000` is burrowed, `0x0000` is surfaced, the two
+    2.00 s windows are create->surface and burrow->remove, and **death is not a burrow**
+    -- a kill sets `0x0010` while the agent is surfaced and never removes it.
+    Original entry follows.
+    🔶 **BUILT 2026-08-10, awaiting one operator run.** Plague Worms hide by being REMOVED
     and re-CREATED under the same agent id (T3). ~~It runs entirely through
     `0x0020`/`0x0021`, both already implemented~~ — **that was wrong and is REFUTED
     151/151**: every worm re-creation in both Lakeside tapes is a fixed five-message burst

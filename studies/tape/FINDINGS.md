@@ -632,3 +632,114 @@ side at all, in which case chaining beyond one hop needs a different lever than 
 this handler and is not -- it is `push 0x8513`, an immediate whose bytes matched the
 pointer scan. A byte-pattern search over `.text` finds instruction operands as readily as
 data, and this one wasted a query.
+
+
+## T16 — the second character, and what the burrow status values actually are
+
+**OBSERVED**, capture `20260810T235916` (2026-08-11): a second live session on a
+deliberately different character — a Ranger, where the first was a Necromancer —
+walking the **same three maps** (Ascalon City 148 -> Lakeside County 146 -> Ashford
+Abbey 164 -> 146). Character and profession are the variables; map content is not.
+10,599 GAME_SMSG messages over 4 chained tapes, framing 100% clean, 0 B unconsumed.
+6/6 connections decrypted, stamped `origin: live`.
+
+**Every invariant in `test_smsgnames.py` held on the new character with nothing
+changed.** The file's own shipped caveat — "4/4 tapes is four samples sharing a
+character record" — is retired, and the checks now run pooled over both captures
+(8 tapes, 21,543 messages). Two results worth stating separately:
+
+- The **opcode vocabularies are nearly identical**: 146 distinct each, **148 in
+  union**, 2 in and 2 out. The surface an ordinary session touches is stable across
+  characters.
+- The **`0x013F` bag table's (bagType, slot, capacity) triples are byte-identical**
+  across both characters. That was the sharpest character-versus-protocol question
+  in the naming pass and the answer is protocol. The surrounding ids stay
+  session-scoped, so it is a fixed SHAPE, not a shippable constant table.
+
+### The burrow status values are named, and death is not a burrow
+
+The session included a deliberate experiment: the operator targeted a worm above
+ground, hit it with a skill, watched it burrow, **kept it targeted**, and the
+nameplate re-attached when it resurfaced. The server-side trace of that agent
+(definition 1442, the Lakeside worm) is the whole cycle three times over, then a kill:
+
+```
+t= 1.90  0x00F0 AGENT_INITIAL_STATUS  status=0x1000   <- created ALREADY hidden
+t= 1.90  0x0020 WORLD_CREATE_AGENT    def=1442 speed=12.0
+t= 1.90  0x006D
+t= 1.90  0x0026 AGENT_UPDATE_FLAGS    flags=0x9
+t= 3.91  0x00F1 AGENT_UPDATE_STATUS   status=0x0000   <- surfaces, +2.01 s
+t= 4.58  0x00F1 AGENT_UPDATE_STATUS   status=0x1000   <- burrows
+t= 6.60  0x0021 WORLD_REMOVE_AGENT                    <- +2.02 s after burrowing
+   ... repeats at t=11.39 and t=17.98, same agent id each time ...
+t=19.98  0x00F1 status=0x0000                         <- surfaces, +2.00 s
+t=21.13  0x0035 / t=21.90 0x00A4 / t=22.49 0x00A7     <- the fight
+t=23.20  0x00F1 status=0x0010                         <- CHAR_STATUS_DEAD
+t=23.20  0x0026 AGENT_UPDATE_FLAGS    flags=0x8
+```
+
+So T3's two 2.00 s windows now have **names on both ends**: `0x00F1` status `0x1000`
+is hidden/burrowed and `0x0000` is surfaced, and the windows are create -> surface
+and burrow -> remove. This is `CHAR_STATUS_*` in the client's own vocabulary
+(`ChCliInt.h:254`, `studies/smsg/FINDINGS.md`), not an effects field.
+
+**Death is not a burrow, and that is a distinction the model could have got wrong.**
+The kill interrupts the cycle: status goes to `0x0010` (DEAD) while the worm is
+*surfaced*, and there is no `0x1000` and no remove afterwards. A burrow always removes;
+a death does not.
+
+**The DEAD bit is one per death, n=2, and both name what was killed.** The corpus
+had 3 observations in 10,944 messages before this; the new session adds exactly two,
+and they are definition 1434 at speed 288.0 (the River Skale Queen) and definition
+1442 at speed 12.0 (the worm). Both are followed by `0x0026` at +0.00 s. An earlier
+reading of this file called two observations a shortfall — it is not, it is one per
+kill, and the operator killed two things.
+
+### 0c is answered, and not by the probe built for it
+
+**The definition is sent ONCE and referenced by every create.** For the worm in the
+new capture: **1 `0x0056` declaration, 32 creates**. Pooled across both captures the
+most-reused definition is declared once and referenced by **140** creates. Since it
+is the *same client* on both ends, this settles what `probes.py`'s `burrow` probe was
+built to ask: **the client keeps an NPC definition across agent removal.** If it did
+not, 31 of those 32 creates would name a definition slot the client no longer holds,
+and a create against an undeclared slot takes it down on `Array.h`'s `index < m_count`.
+It does not go down.
+
+A server may therefore declare once and re-create freely. The probe becomes
+confirmatory rather than necessary; what it still uniquely tests is whether OUR create
+path is correct when it stops resending, which is a much safer change to make now.
+
+### Still open from this session
+
+- `0x0035`, `0x00A4`, `0x00A7` fired during the fight in the 2.1 s before the kill and
+  are **unnamed**. They are the most promising combat opcodes in the corpus and this
+  is the first capture that has them next to a known, narrated kill.
+- The skill cycle is still thin: `0x00E3`/`0x00E5` are 2 each here against 4 each
+  before. A session built around casting rather than around movement would settle it.
+- The **client-to-server** direction is decodable and barely mined — see T17.
+
+## T17 — the c2s stream decodes, and the opcodes carry bit 0x8000
+
+**OBSERVED.** Both live captures store a `c2s` frame per connection alongside the
+`s2c` one, and it decodes cleanly as GAME_CMSG **once bit `0x8000` is masked off**:
+419 messages / 27 opcodes (Necromancer) and 500 / 25 (Ranger), **0 B unconsumed** in
+both. Without the mask nothing decodes at all.
+
+The mechanism was already read out of the binary by the naming pass without anyone
+connecting it to this: `0x000C`'s handler replies through `MsgConn`'s send, which
+computes the wire opcode as `((conn+0x54) != 0 ? 0x8000 : 0) | msg[0]`. So the game
+channel sets the high bit on everything the client transmits. `studies/divergence` D4
+recorded a mysterious client reply of `0x8009`; it is GAME_CMSG `0x0009` with this bit.
+`codec.decode_stream` already takes a `mask` parameter, so no code change was needed.
+
+**Why this matters more than the count suggests.** The labelled-run programme
+(`labelrun.py`, `studies/cmsg/FINDINGS.md`) names GAME_CMSG opcodes by telling an
+operator to do one thing at a time on OUR server. These captures are the same
+experiment against **ArenaNet's** server, with a narrated session: two quests taken and
+turned in, a gate transition, a skill cast at a named target, two kills. The top c2s
+opcodes are already suggestive — `0x003D` MOVE_SET_HEADING dominates both (161 and
+269), and `0x0009` (81 / 59), `0x0084` (35 / 35 — *identical across sessions*),
+`0x003B` (11 / 11), `0x0092` (10 / 10), `0x0012` (8 / 8), `0x0008` (5 / 5),
+`0x0060` (5 / 5), `0x0091`/`0x0088`/`0x0090` (4 / 4 each) look like a fixed login
+handshake rather than anything the player did.

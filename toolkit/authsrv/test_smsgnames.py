@@ -27,12 +27,22 @@ elapsed milliseconds, and summing it across a tape reconstructs that tape's own 
 clock to within 18 ms over 13-185 seconds. Our server has never sent this correctly.
 No heartbeat reading survives that check, which is why it is the first one.
 
-A CAVEAT THE COUNTS CANNOT CARRY, stated here so a green run is not read as more than
-it is: every number below comes from four tapes of ONE live session, one character,
-one account, two starting areas. "4/4 tapes" is four samples sharing a character
-record. A second live capture on a different character separates protocol from
-character in one decode and is the cheapest open test in the naming pass.
+THE CAVEAT THIS FILE SHIPPED WITH IS RETIRED, and how is worth keeping. On 2026-08-10
+every number here came from four tapes of ONE session, one character -- "4/4 tapes" was
+four samples sharing a character record, and a name that was really a fact about one
+Necromancer would have passed. On 2026-08-11 a second session was captured on a
+deliberately different character (a Ranger) walking the SAME three maps, so the
+character was the variable and the map content was not. Every invariant below now runs
+over both, pooled: 8 tapes, 21,543 messages. Nothing needed changing to make that pass,
+which is the result -- and the two sessions' opcode vocabularies turn out to be nearly
+identical (146 distinct each, 148 in union, 2 in and 2 out), so the surface an ordinary
+session touches is stable across characters.
+
+WHAT A GREEN RUN STILL DOES NOT COVER: two characters, one account, one campaign's
+starting area. It does not speak for other campaigns, for post-Searing, for parties
+larger than one, or for the 339 GAME_SMSG opcodes neither session ever used.
 """
+import collections
 import math
 import os
 import struct
@@ -47,7 +57,9 @@ import tape as tapemod  # noqa: E402
 import vaultpath  # noqa: E402
 from codec import Codec  # noqa: E402
 
-CAPTURE = "20260807T143055"
+# Two live sessions, two characters of different professions, same three maps.
+CAPTURES = ("20260807T143055",      # Necromancer
+            "20260810T235916")      # Ranger, and it killed two things
 
 TICK = 0x001E
 CREATE = 0x0020
@@ -67,22 +79,19 @@ UPDATE_STATUS = 0x00F1
 CREATE_BAG = 0x013F
 
 # Set from a real green run of the sections below, never from a guess.
-LEDGER = checks.Ledger("GAME_SMSG names vs ArenaNet's own wire", floor=21)
+LEDGER = checks.Ledger("GAME_SMSG names vs ArenaNet's own wire", floor=23)
 
 
-def load():
-    """Return [[(t, opcode, values), ...], ...], one list per tape, in chain order.
+def load(stamp):
+    """Return [(tape, carry), ...], one entry per chained tape, in chain order.
 
     Frames across segment boundaries: a wire segment is a TCP write, not a message,
     and a message can straddle two of them. Carrying the remainder is what makes the
     'zero unconsumed bytes' claim meaningful rather than an artifact of truncation.
     """
-    codec = Codec(overrides=os.path.join(vaultpath.repo_root(), "schema",
-                                         "overrides.json")
-                  if hasattr(vaultpath, "repo_root") else
-                  os.path.join(os.path.dirname(os.path.dirname(HERE)),
-                               "schema", "overrides.json"))
-    cap = tapemod.resolve_capture(CAPTURE)
+    codec = Codec(overrides=os.path.join(os.path.dirname(os.path.dirname(HERE)),
+                                         "schema", "overrides.json"))
+    cap = tapemod.resolve_capture(stamp)
     tapes = []
     for conn in tapemod.chain(cap):
         _meta, events = tapemod.load_tape(cap, conn)
@@ -103,17 +112,41 @@ def main():
         LEDGER.skip("the whole file", f"no vault: {ex}")
         return LEDGER.verdict()
 
-    try:
-        loaded = load()
-    except Exception as ex:                                    # pragma: no cover
-        LEDGER.skip("the whole file", f"capture {CAPTURE} unreadable: {ex}")
+    # Pool BOTH live captures. Every invariant below is asserted over two
+    # sessions on two DIFFERENT characters of different professions, walking the
+    # same three maps -- which is what retires the caveat this file shipped with
+    # on 2026-08-10 ("4/4 tapes is four samples sharing a character record").
+    # Anything that survives here survived a change of character; anything that
+    # is really a character property had its chance to break the run.
+    loaded, per_capture = [], {}
+    for stamp in CAPTURES:
+        try:
+            got = load(stamp)
+        except Exception as ex:                                # pragma: no cover
+            LEDGER.skip(f"capture {stamp}", f"unreadable: {ex}")
+            continue
+        per_capture[stamp] = got
+        loaded += got
+    if len(per_capture) < 2:                                   # pragma: no cover
+        LEDGER.skip("the cross-character half",
+                    f"only {len(per_capture)} of {len(CAPTURES)} captures readable "
+                    f"-- the invariants below still run, but on one character")
+    if not loaded:                                             # pragma: no cover
         return LEDGER.verdict()
+
+    LEDGER.ok(len(per_capture) == 2,
+              "the corpus is TWO live sessions on two different characters",
+              f"{len(per_capture)} captures, "
+              f"{', '.join(f'{s}={sum(len(t) for t, _c in g)} msgs' for s, g in per_capture.items())}. "
+              f"Different professions, same three maps (Ascalon City -> Lakeside "
+              f"County -> Ashford Abbey), so the character is the variable that "
+              f"changed and the map content is not")
 
     tapes = [seq for seq, _carry in loaded]
     leftover = sum(len(carry) for _seq, carry in loaded)
     allm = [m for seq in tapes for m in seq]
-    LEDGER.ok(len(tapes) == 4 and len(allm) >= 10000,
-              "the corpus is the four chained live tapes",
+    LEDGER.ok(len(tapes) == 8 and len(allm) >= 20000,
+              "and it frames to eight chained tapes",
               f"{len(tapes)} tapes, {len(allm)} GAME_SMSG messages, "
               f"{len({op for _t, op, _v in allm})} distinct opcodes -- a floor, so a "
               f"capture tree that quietly shrinks is noticed rather than making every "
@@ -121,7 +154,7 @@ def main():
     LEDGER.ok(leftover == 0,
               "and every byte of it frames",
               f"{leftover} B unconsumed" if leftover else
-              "0 B unconsumed across all four tapes -- the counts below are over the "
+              "0 B unconsumed across all eight tapes -- the counts below are over the "
               "WHOLE recorded stream, not the part our decoder happened to like")
 
     def of(op):
@@ -340,6 +373,32 @@ def main():
               f"per tape: {rowcounts}. Nine of these is the entire reason the client "
               f"has an inventory to draw, and we send none -- so no item message we "
               f"send can land anywhere")
+    # ---- 8. a definition is declared ONCE and reused across every create ----
+    # This is the question 0c was blocked on -- whether the client keeps an NPC
+    # definition across a removal -- and ArenaNet's own traffic answers it, which
+    # is better than the probe we built for it: the SAME client is on both ends.
+    # If the client dropped the definition when the agent went away, 31 of the
+    # worm's 32 creates would reference a definition slot it no longer holds, and
+    # a create against an undeclared slot takes the client down on Array.h's
+    # `index < m_count`. It does not go down. So the client keeps it.
+    worst_ratio_def, worst_slot = 0, None
+    for seq in tapes:
+        declared = collections.Counter(v[1] for _t, op, v in seq if op == NPC_PROPS)
+        used = collections.Counter((v[2] & 0x0FFFFFFF) for _t, op, v in seq
+                                   if op == CREATE)
+        for slot, n_used in used.items():
+            n_dec = declared.get(slot, 0)
+            if n_dec and n_used // max(n_dec, 1) > worst_ratio_def:
+                worst_ratio_def, worst_slot = n_used // n_dec, (slot, n_dec, n_used)
+    LEDGER.ok(worst_ratio_def >= 10,
+              "an NPC definition is declared ONCE and reused by many creates",
+              f"the most-reused definition in the corpus was declared "
+              f"{worst_slot[1]} time(s) and referenced by {worst_slot[2]} creates "
+              f"({worst_ratio_def}x). The client therefore KEEPS a definition across "
+              f"agent removal -- 0c's open question, settled from ArenaNet's own "
+              f"traffic rather than from our probe, because it is the same client on "
+              f"both ends. A server may declare once and re-create freely")
+
     LEDGER.ok(len(triples) == 1,
               "and its (bagType, slot, capacity) triples are identical across tapes",
               f"{len(triples)} distinct table(s) across {len(rowcounts)} tapes. NOTE "
