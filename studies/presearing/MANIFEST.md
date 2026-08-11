@@ -145,6 +145,79 @@ row 44202** — but it is still two documents agreeing offline. **It does not mo
 our Hatcher" verdict one inch**, for the reason given there: neither witness observed our
 client standing anywhere.
 
+### 7. The CONTESTED verdict on monster skill bars is itself refuted — in the reverse direction
+
+§Monsters' subsection *"On 'Pre-Searing's monsters barely use skill bars'"* marks the review
+panel specialist's claim **CONTESTED** and rests that on one load-bearing example: *"including
+the melee baseline: plain Grawl, the most common early encounter, runs **Hammer Bash fuelled
+by Frenzy**."*
+
+**Neither skill is on the page.** GWW's *Grawl (pre-Searing)*, read in full, has a `==Skills==`
+section containing **only** an event bar — "*During [[Annihilator 2: Searing Day]]*: Belly
+Smash, Counter Blow, Endure Pain" — and no base bar at all. Hammer Bash and Frenzy appear
+nowhere on it.
+
+Three creature pages were read and **all three have no base skill bar**:
+
+| Creature | Level | Base skills | Armor (all types) | Health |
+|---|---|---|---|---|
+| Restless Corpse | 1 (22), 15 | **`*''None''`**, explicitly | 30 @ L1 | **80** @ L1 |
+| Grawl (pre-Searing) | 1, 18 | **none listed** (event bar only) | — | **80** @ L1, flagged as unusual |
+| Skullreaver (boss) | 5 | **no `==Skills==` section at all** | 43 | — (+1 pip regen) |
+
+Skullreaver is the region's **only non-Charr boss**, so this is not a sample of trash mobs. On
+this evidence the specialist is **supported, not contested**, and the manifest's contrary
+verdict was built on a Grawl bar that does not exist. The `≥9 creature types with a documented
+≥2-skill bar` floor (#11) is **not** thereby refuted — the Undead Necromancer's seven skills
+are quest-only content and were not re-read — but #11 and the CONTESTED verdict must now be
+stated separately, because the quest-only undead were never the specialist's point. **Revert
+the CONTESTED marking to the specialist's original claim** unless a page read produces the
+melee baseline bar.
+
+**A second contamination axis, alongside Reforged Mode.** Both creature pages carry bars that
+apply *only during* **Annihilator 2: Searing Day**, an event. A roster assembled from prose
+summary cannot tell an event bar from a base bar — which is very likely where "Hammer Bash
+fuelled by Frenzy" came from. Treat any skill bar in §Monsters as mode- **and** event-ambiguous
+until read from the page.
+
+**One citation that does check out.** *Skullreaver*'s bounding quote is verbatim on the page:
+"Skullreaver is the only non-Charr boss foe in pre-Searing, excluding bosses spawned by
+Vanguard quests." (The giver's page title is *Lieutenant Langmar*, not "Lieutenant Samantha
+Langmar" as §NPCs has it.)
+
+### 8. Monster health and armor are published — R4c-2 is not wholly blocked on R0b
+
+PLAN.md §1.7's **first** server-only item is "absolute monster HP, energy and armor", and
+§"Capture-only" above inherits it: R4c-2 "stays at 0 and is reported as blocked until R0b
+exists". **GWW publishes both numbers for Pre-Searing creatures.** Measured on three pages:
+Restless Corpse L1 — 80 health, armor 30 against every damage type; Skullreaver L5 — armor 43
+against every damage type; Grawl L1 — 80 health, with the page noting this is *unusual* for a
+level 1 creature, which incidentally bounds the rest of the tier from above.
+
+This does **not** refute §1.7. The client genuinely cannot read these — GWCA marks
+`AgentLiving.hp` a percentage — and WIKI armor is player-inferred from damage, so by
+`labeling.md`'s test it is mid-strength, not strong. What it changes is the **sequencing
+claim**: monster stat rows can be *seeded* from WIKI today and verified against capture later,
+which is exactly PLAN.md §A6's pattern ("seed from the dataset, cross-check every numeric
+field, a row counts as verified only when the numbers agree"). The honest restatement is that
+R4c-2's monster-stat rows are **capture-*verified*, not capture-*sourced***, and only spawn
+placement and AI policy are truly capture-gated. §"Sequencing consequence"'s "R0b blocks
+roughly one third of R4c" should be re-derived on that basis.
+
+Drop *tables* are likewise published per-creature (Restless Corpse: Bone, Pile of Glittering
+Dust, Skeletal Limb in the Catacombs; Skullreaver: Dead Bow, Sephis Axe, Skeletal Limb) while
+drop *rates* remain absent everywhere — which is #33 exactly as written, and is the one row in
+this area that survives untouched.
+
+### 9. The per-zone NPC category convention is not universal
+
+*Restless Corpse* carries only `[[Category:Drops bone]]` and `[[Category:Drops dust]]` — **no
+zone category at all**, despite living in the Catacombs. So the `Category:<Zone> (pre-Searing)
+NPCs` shape that worked for Regent Valley cannot be assumed for the other zones, and the plan
+of enumerating rosters one category per zone will silently under-return rather than error.
+`Category:Pre-Searing bestiary` returning 0 members is the same hazard from the other side.
+**Find the convention from a page's own category tags before spending requests guessing names.**
+
 ### What this pass did not reach
 
 Unchanged from item 3's priority list, and still open: skill bars for the Catacombs'
@@ -303,6 +376,15 @@ WIKI (*Skullreaver*), quoted directly because it bounds the whole roster: *"Skul
 **Quest-only creature types: 6** — Plague Worm, Undead Necromancer, Undead Illusionist, Blood Fanatic, Catacombs Charr, plus every Vanguard boss.
 
 ### On "Pre-Searing's monsters barely use skill bars"
+
+> ⚠️ **This whole subsection is REFUTED as of 2026-08-11 — see Revision §7.** Its
+> load-bearing example, the Grawl's "Hammer Bash fuelled by Frenzy", **is not on the Grawl's
+> page**; three creature pages read in full (Restless Corpse, Grawl, and Skullreaver — the
+> region's only non-Charr boss) have **no base skill bar between them**. The specialist is
+> supported rather than contested. The original text is kept below unedited, because how it
+> went wrong is the more useful artifact: every sentence in it is plausible, specific, and
+> derived from search-engine prose that could not distinguish an event-only bar from a base
+> bar.
 
 The review panel's specialist raised this (`studies/review/FINDINGS.md:474`, `:500`) as a reason to pick a post-Searing encounter as the R4b/R4c oracle. **The evidence gathered here leans against it, and the claim should be marked CONTESTED.** At least nine creature types have a wiki-documented bar of two or more skills, including the *melee baseline*: plain Grawl, the most common early encounter, runs Hammer Bash fuelled by Frenzy. Undead Necromancer carries seven skills across three tiers. The genuinely skill-less cases (Aloe Husk, Aloe Seed) are ones the wiki explicitly calls out as non-combatants, not a silent default.
 
