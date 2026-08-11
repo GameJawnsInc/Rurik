@@ -945,13 +945,34 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 # type_code 14 Warrior attack skills, the same class as the Ranger's Power Shot
 # that revealed 0x0027. Not one message left the client.
 #
-# THE NEW EVIDENCE IS THAT THE REFUSAL IS VISIBLE. Every earlier session
-# reasoned from an ABSENT message; the screenshots now show the client drawing a
-# prohibited marker on the target's own health bar while the nameplate is red.
-# So the client is not failing to notice our enemy, it is deciding against it and
-# saying so on screen. That decision is drawn by some code path that can be found
-# -- which is a better lead than "nothing happens", and it is where the next
-# attempt at this should start rather than testing another world property.
+# THE REFUSAL IS VISIBLE, AND IT HAS NOW BEEN READ OUT. Every earlier session
+# reasoned from an ABSENT message; the screenshots show the client drawing a
+# prohibited marker on the target's own health bar while the nameplate is red, so
+# the refusal is a decision. studies/enemy/PLAN.md section 10 has the chain; the
+# two facts that change what to try next are:
+#
+#   1. The available-actions builder (GmCoreAction, 0x005144F0) switches on an
+#      ALLEGIANCE ENUM and accepts only 1..6 -- which is exactly the
+#      ALLEGIANCE_* enum agents.py already carries, and five readers compare the
+#      byte against 3, ALLEGIANCE_ENEMY. The getter returns **7 on a lookup
+#      miss**, and 7 fails the range check. So an agent that renders, has a
+#      nameplate and can be TARGETED can still offer no attack action: visible
+#      and attackable are two different registrations, off two different lists.
+#
+#   2. The allegiance byte (+0x1B5) has exactly TWO writers in the whole image
+#      and both are constructors. **Nothing updates it afterwards.** That is why
+#      0x002F was tested and did nothing, and it retires that whole line: there
+#      is no post-construction setter to reach, so allegiance is decided when the
+#      agent is CREATED and no later message can correct it.
+#
+# NOT established: which gate our own agent fails. The cheapest next step is a
+# READ rather than a run -- keytap.py already reads client memory cross-process,
+# so printing our agent's +0x9C and +0x1B5 says which one in a single shot.
+#
+# Ruled out on the way, so it is not re-tried: the allegiance FourCC. We send
+# 'mons' where ArenaNet sends 'mon1', the only create field that differs from an
+# agent the client DOES attack -- and neither token appears anywhere in the
+# image, so the client cannot be recognising either.
 #
 # So a click now STARTS an attack instead of being one, and the server swings
 # on a timer. That is closer to how Guild Wars actually works -- combat is

@@ -1757,3 +1757,87 @@ Each states its prediction first, per house rule. All fit
   ArenaNet-derived on top of that.
 - **Do not start on combat before E1.** Every combat message is addressed to an
   agent id, and we have one agent and nowhere to put a second.
+
+## 10. What draws the "cannot attack" marker — the refusal, read out of the binary
+
+**OBSERVED 2026-08-11**, from build 38797, `codescan.py --dis` and `asserts.py`.
+For a year of sessions this question was answered by absence: the client "has never
+once sent ATTACK_AGENT to us" and what stopped it was NOT FOUND after testing the
+weapon, the pools, the explorable flag, the team token and `0x002F`. The harness now
+shows the client drawing a **prohibited marker on the target's own health bar**, so
+the refusal is a decision, and decisions have code.
+
+### The chain
+
+`GmCoreAction`'s available-actions builder at **`0x005144F0`** fills a mask (`ebx`)
+of what the player may do to the current target. Its own asserts name it:
+`GmCoreAction:240 actionsList`, `:349 displayOrderIndex != arrsize(displayOrder)`.
+
+```
+005144F8  esi = actionsList          ; assert GmCoreAction:240 if null
+00514541  call 0x7e1460  (AvPrefs)   ; -> je 0x5147af : bail, EMPTY list
+00514551  call 0x84df60              ; -> jne 0x5147af : bail, EMPTY list
+0051455E  cmp edi, [ebx+4]           ; target == self -> skip
+00514570  test al, 0x10              ; a flag on SELF -> skip
+0051457B  call 0x7e0da0 (AvApi:193)  ; -> reads AgentView +0x9C
+00514583  cmp eax, 0xDB              ; TYPE TAG. not 0xDB -> ebx = 2, no attack
+0051458D  call 0x7df870              ; -> the ALLEGIANCE enum
+005145AD  lea eax,[edi-1]
+005145B0  cmp eax, 5
+005145B3  ja  0x514614               ; NOT 1..6 -> ebx = 2, no attack
+005145B5  jmp [eax*4 + 0x5147b8]     ; six-arm switch, one arm per allegiance
+```
+
+**The six arms are our own `ALLEGIANCE_*` constants**, 1..6 — `agents.py` already
+carries exactly that enum, and five separate readers of the byte compare it against
+**3**, which is `ALLEGIANCE_ENEMY`.
+
+### The two facts that matter, and they are new
+
+**1. A lookup MISS returns 7, which is out of range.** The allegiance getter is
+four instructions:
+
+```
+007DF876  call 0x802160                      ; a DIFFERENT list from the +0x9C one
+007DF87E  test eax,eax / je
+007DF882  movzx eax, byte ptr [eax + 0x1b5]  ; the allegiance byte
+007DF88B  mov eax, 7                         ; NOT FOUND -> 7
+```
+
+7 fails `cmp eax,5 / ja` and drops straight to the minimal mask. So an agent that
+renders, carries a nameplate and can be TARGETED — all of which our Hatcher does,
+because those come off the AgentView list at `0x802160`'s sibling `0x802140` — still
+offers no attack action if it is absent from the *character* list. Being visible and
+being attackable are two different registrations.
+
+**2. The allegiance byte is WRITE-ONCE, at construction.** `+0x1B5` has exactly two
+writers in the whole image, `0x007F2419` (`mov al, [ebp+0x14]` — a constructor
+parameter) and `0x007FA261` (`mov al, [edi+0x1c]`). **Nothing updates it afterwards.**
+
+That is why `0x002F` was tested and did nothing, and it retires that line of
+attempts: there is no post-construction setter to reach. Whatever decides an agent's
+allegiance is decided **when the agent is created**, from the create burst, and a
+later message cannot correct it.
+
+### What this does NOT establish, said plainly
+
+Which of the two gates our Hatcher actually fails. The `+0x9C == 0xDB` type tag and
+the allegiance enum are separate, and this reading has not measured either value for
+a live agent of ours. Our create sends field 3 = 1 and field 4 = 9 — **identical to
+ArenaNet's worm**, an agent the client does attack — so the type tag is unlikely to
+be the difference, but "unlikely" is not "measured".
+
+**The cheapest next step is a read, not a run**: `keytap.py` already reads client
+memory cross-process, so resolving our agent's object and printing `+0x9C` and
+`+0x1B5` answers in one shot which gate fails, and turns this from a mechanism into
+a diagnosis.
+
+**Ruled out this session, so it is not re-tried:** the allegiance FourCC. Our create
+sends `'mons'` where ArenaNet sends `'mon1'`, and that is the ONLY field differing
+between our Hatcher's create and ArenaNet's worm's beyond ids, position and speed.
+It looked decisive. It is not: **neither token appears anywhere in the image**, as a
+dword or as text, so the client cannot be recognising either. `nonc` and `nonn` do
+appear, exactly as §6e recorded. The team token is compared to the PLAYER's at
+runtime (`ChCliBase.cpp:326`), which is why an unrecognised token reads red — and
+red was always what §6e measured. Colour is not attackability, and the old comment
+generalised from one to the other.
