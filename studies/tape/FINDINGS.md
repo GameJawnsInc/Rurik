@@ -458,7 +458,35 @@ transfer is the second one, and it is client-side: the reason code decides every
 Recording this because "`0x01B1` releases the transfer, send it" is exactly the plausible
 wrong answer this trail invites, and the tapes refute it in one decode.
 
-**Where to look next.** The reason code at `[esi+0xc]`. Three events live in this family —
+### T13 — The reason code is a real dispatch, and our close produced the wrong one. OBSERVED.
+
+Read straight out of the disconnect path:
+
+| `[esi+0xc]` | what the client does |
+|---|---|
+| **0** | falls through to `0x008515b7` — **`call 0x850df0`, re-dials the stashed address** |
+| **< 3** | `jl 0x851695`, continuing toward that path |
+| **≥ 3** | `pop`/`ret` — nothing; the pending transfer is simply dropped |
+| **7** | special-cased against flag bit 8 → `0x851870` |
+
+So a deferred transfer is released **only by the disconnect the client considers clean**,
+and `close_after_transfer`'s first version could not produce it. It called
+`shutdown(SHUT_RDWR)` and then `close()` with bytes still unread — and the client always
+has bytes in flight after a tape ends, it keeps sending `0x8008`/`0x800c`. Closing a
+socket with an unread receive buffer makes Windows send an **RST rather than a FIN**,
+which is a different reason code. That is why hanging up twice released nothing while
+looking exactly like the right fix.
+
+Now: half-close (`SHUT_WR`, our FIN), drain what the client is still sending until it
+closes its half or a 2 s deadline passes, then `close()`. An ordinary graceful shutdown,
+which is what the recording shows. `test_burrow.py` §4 asserts the half-close specifically
+rather than "close was called", and reverting it to `SHUT_RDWR` goes red.
+
+**UNVERIFIED:** that reason 0 is what a graceful FIN actually produces here. The mapping
+from wire event to reason code has not been read — only the branch on it has. The next
+chained run is the test, and it is the cheapest one available.
+
+**Where to look next if that fails.** The reason code at `[esi+0xc]`. Three events live in this family —
 `0x10000110`, `0x10000111` (dispatched by the connect at `0x850df0`) and `0x10000112` —
 and the handler at `0x00851380` treats `[esi+0xc] == 0` as success, asserts it was not
 already connected, sets the flag, and only then consumes any pending transfer. The open
