@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=122)
+LEDGER = checks.Ledger("agent lifetime", floor=125)
 
 
 def main():
@@ -892,6 +892,61 @@ def section_enemy_skill():
     LEDGER.ok(authsrv.pick_skill(a, time.time()) is None,
               "and when every slot is recharging, nothing is picked",
               "None rather than slot 0 -- the agent falls through to swinging")
+
+    # 7b-ii. ROUND ROBIN, and this is the check that separates it from the
+    #        first-ready-in-order version it replaced. With EVERY slot ready, a
+    #        first-ready selector returns slot 0 forever; round robin advances.
+    rr = _world()
+    r = rr["agents"][10]
+    n = len(r["skills"])
+    r["skill_ready"] = [0.0] * n
+    order = []
+    for _ in range(n + 1):
+        slot = authsrv.pick_skill(r, time.time())
+        order.append(slot)
+        r["last_slot"] = slot            # what the cast site does
+    LEDGER.ok(order == list(range(n)) + [0],
+              "with every slot ready the cursor advances and wraps",
+              f"{order} -- first-ready-in-order gives {[0] * (n + 1)} here, and "
+              "that is the version this replaced")
+
+    # and the WRAP specifically: the only ready slot sits BEHIND the cursor. The
+    # modulo on `start` alone does not cover this -- every check above is
+    # satisfied by a selector that sweeps from the cursor to the end of the bar
+    # and gives up, which would strand a ready slot 1 whenever the cursor is
+    # past it and everything after is recharging.
+    wr = _world()
+    w = wr["agents"][10]
+    later = time.time() + 999.0
+    w["skill_ready"] = [0.0] + [later] * (len(w["skills"]) - 1)
+    w["last_slot"] = len(w["skills"]) - 2      # cursor points at the last slot
+    LEDGER.ok(authsrv.pick_skill(w, time.time()) == 0,
+              "and the scan wraps to reach a ready slot behind the cursor",
+              "cursor at the end of the bar, only slot 1 ready -- a sweep that "
+              "stops at the end returns None here and the agent swings instead "
+              "of casting a skill that is up")
+
+    # 7b-iii. THE DEFECT ITSELF, as a regression. 11.5 measured a live run where
+    #         slot 4 NEVER fired: recharges of 2, 5, 8, 2 mean a priority list
+    #         never walks past slot 3, because slot 1 is back every 2.0 s. Drive
+    #         the real bar against a clock and require every slot to get a turn.
+    sim = _world()
+    sm = sim["agents"][10]
+    sm["skill_ready"] = [0.0] * len(sm["skills"])
+    clock, fired = 0.0, set()
+    for _ in range(400):
+        slot = authsrv.pick_skill(sm, clock)
+        if slot is not None:
+            fired.add(slot)
+            sm["skill_ready"][slot] = clock + sm["skills"][slot][2]
+            sm["last_slot"] = slot
+            clock += sm["skills"][slot][1]     # the activation
+        clock += 0.05
+    LEDGER.ok(fired == set(range(len(sm["skills"]))),
+              "and over a simulated fight EVERY slot on the bar gets used",
+              f"fired {sorted(fired)} of {len(sm['skills'])} slots. The live run "
+              "in 11.5 produced {276: 6, 253: 3, 312: 3, 289: 0} -- one slot never "
+              "used at all -- and this is that defect as a regression check")
 
     # 7c. RECHARGE IS PER SLOT, not per agent and not per skill id. A bar may
     #     legitimately carry the same skill twice and the second copy must not

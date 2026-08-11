@@ -2737,7 +2737,7 @@ different channel.
 - **The effect is damage and nothing else.** Skill 276's real effect is not
   modelled; it deals a flat fraction like a harder swing.
 
-### 11.5 A bar, not a skill — and one slot on it is unreachable
+### 11.5 A bar, not a skill — and one slot on it was unreachable (FIXED, 11.6)
 
 **OBSERVED 2026-08-11**, capture `authsrv-20260811T182359-c1.jsonl`:
 
@@ -2758,11 +2758,9 @@ and reaching slot 4 needs 2.0 + 5.0 + 8.0 seconds of everything above it being
 busy, which never happens. **A four-slot bar is really a three-slot bar here**, and
 the fourth is dead weight until selection changes.
 
-Recorded rather than fixed by reordering, because reordering to make the number
-look better would hide the property. The choices, none of them taken yet: round
-robin, least-recently-used, or ordering the bar by descending recharge. **Nothing
-in this project has measured how a Guild Wars monster picks**, so all three would
-be equally invented and the honest one is the simplest, stated.
+Recorded rather than quietly reordered, because reordering to make the number look
+better would have hidden the property. **Fixed in §11.6 with round robin**, on the
+owner's call; the paragraph above is kept as the measurement that motivated it.
 
 **The test proves the selector, not the schedule.** `section_enemy_skill` rolls
 each slot's recharge forward by hand and requires the picks to be `[0, 1, 2, 3]`,
@@ -2789,3 +2787,43 @@ inventions instead of one.
 **Recharge is per SLOT, not per id** — a bar may carry the same skill twice, and
 keying by id would make the second copy share the first's cooldown and the bar
 quietly one shorter. Pinned by a check.
+
+
+### 11.6 Round robin, and every slot fires
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T183716-c1.jsonl`. Owner's call.
+
+```
+t=3.30  casts 276      casts by skill: {276: 3, 253: 3, 312: 3, 289: 3}
+t=4.11  casts 253
+t=5.17  casts 312
+t=5.98  casts 289      <- the slot that never fired before
+t=16.76 casts 276      (the 10.8 s gap is the player's death and 10.0 s revive,
+t=17.57 casts 253       not a selection stall -- nothing casts at a corpse)
+```
+
+**Three of each, exactly even**, against `{276: 6, 253: 3, 312: 3, 289: 0}` before.
+
+The change is one line and no new numbers: the scan starts **after the last slot
+cast** instead of at slot 1, and wraps. Every ready slot gets a turn before any
+slot gets a second one. `last_slot` is written by the cast site rather than by
+`pick_skill`, so the selector stays a pure read and a test can drive the cursor.
+
+**STILL NOT MEASURED, and this does not change it:** nothing in this project knows
+how a Guild Wars monster actually chooses. Round robin, least-recently-used and
+priority order are all inventions. This is the invention that reaches every slot,
+which was the property actually wanted.
+
+**Three checks, because the first two did not cover the wrap.** The existing suite
+passed the round-robin change unchanged — 122 green before and after — which
+means nothing in it could tell the two selectors apart. Added:
+
+1. every slot ready, cursor advanced by hand → picks must be `[0,1,2,3,0]`;
+   first-ready gives `[0,0,0,0,0]` and goes red.
+2. **the wrap specifically**: cursor at the end of the bar, only slot 1 ready →
+   must return 0. A sweep that stops at the end returns `None` and the agent
+   swings instead of casting a skill that is up. This one is the reason to write
+   it out: the modulo on `start` alone satisfies check 1, so check 1 passes
+   against a selector with no wrap at all.
+3. **the defect as a regression**: the real bar driven against a simulated clock,
+   requiring every slot to be used.
