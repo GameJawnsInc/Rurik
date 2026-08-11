@@ -2827,3 +2827,51 @@ means nothing in it could tell the two selectors apart. Added:
    against a selector with no wrap at all.
 3. **the defect as a regression**: the real bar driven against a simulated clock,
    requiring every slot to be used.
+
+### 11.7 Two corrections from the owner, and one of them is about method
+
+**OWNER'S OBSERVATION 2026-08-11: the agent faced AWAY from the player.** §11.3
+claimed "on film it is turned toward the player mid-swing instead of showing its
+back". That was me reading a 1 fps JPEG and finding what I expected; the owner was
+at the machine. **The wire cannot tell a facing from its opposite** — every angle
+in the capture is inside ±π, the rate is ArenaNet's, the value round-trips, and
+all of it is equally true of a body pointing the wrong way. A person looking at
+the screen is the only instrument for this, and I substituted my own frame-reading
+for it and reported the result as confirmation.
+
+**The fix is `+ π`, and the `+ π` is measured rather than derived.**
+`atan2(dy, dx)` is the bearing from the agent to the player and it is correct by
+every derivation available — `test_rotate.py` scores the client's own `0x0040`
+sends against exactly that and beats a null model. Sending it turns the agent
+around. So **the client's `0x002E` facing is not the same convention as the
+heading it reports in `0x003D`**, and *why* is not established: it could be the
+zero direction, the sign, or the model's own forward axis. The offset is what is
+established, from the one observation that could refute it.
+
+This is §10's lesson for the fourth time, from a new angle: **a derivation tells
+you what the client TESTS and never what the answer looks like on screen.**
+`test_rotate`'s scoring, `test_smsgnames`' range, the float32 seam, the byte
+layout — all correct, all consistent with a backwards agent.
+
+**OWNER'S RULING: casting AI is not being decided here.** §11.4–11.6 built a bar
+and then a selection policy for it, and the policy is invented — round robin
+reaches every slot, which was the property wanted, but nothing measured it and
+nothing should read it as a claim. **A deeper dive into monster AI comes first.**
+Until then the bar is a TESTING FIXTURE whose job is to exercise the mechanism —
+the message shape, the per-slot recharge, the activation window, the reachability
+of every slot — so the parts that *are* evidenced can be tested. `pick_skill` and
+the bar constants now say this at the call site. When the AI study lands, the
+policy gets replaced rather than extended.
+
+**What in §11.4–11.6 survives that ruling**, because it is measurement rather
+than invention:
+
+- `0x00E3` is the player's cast confirmation and NOT how an NPC's cast is
+  announced — 6 of 6 in the corpus, and the client's own "Pending skill not
+  found" log explains why.
+- `0x009F` value 60 with `[agent, skill]` is what the corpus carries for an NPC
+  cast (n=1), and the client renders a cast glyph for it.
+- Activation times are ArenaNet's and the client honours them: 0.76 / 1.01 / 0.76
+  measured against table values 0.75 / 1.00 / 0.75.
+- Recharge must be per SLOT, not per skill id.
+- `0x00A0` value 20 is not an NPC casting; slot 2 there is the target.

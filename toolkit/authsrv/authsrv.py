@@ -1204,8 +1204,14 @@ ENEMY_FACING_EPSILON = 0.15            # radians (~8.6 deg) before re-announcing
 # that skill COMPLETION is being built on another branch and not to add to it.
 # This does not: it is an NPC announcing its own cast, and it touches nothing the
 # player's 0x0046/0x0027 handling uses.
-# THE BAR. Four skills rather than one, each with its OWN recharge, so which one
-# comes next is a decision rather than a constant.
+# THE BAR. Four skills rather than one, each with its OWN recharge.
+#
+# A TESTING FIXTURE, AND THE POLICY THAT USES IT IS TOO. Owner's ruling
+# 2026-08-11: we are not deciding casting AI by whatever is convenient here, and a
+# deeper dive into monster AI comes first. The bar exists so the MECHANISM can be
+# exercised and tested -- the message shape, per-slot recharge, the activation
+# window, the reachability of every slot. Which skills, in what order, on what
+# selection policy, are all placeholders and are marked as such in pick_skill.
 #
 # WHOSE BAR THIS IS, and the answer is: OURS, and it has to be said plainly.
 # studies/presearing/MANIFEST.md 7 read three Pre-Searing creature pages in full
@@ -1564,7 +1570,23 @@ def face_player(send, state, agent_id, agent, conn_id, force=False):
         # Standing exactly on the player has no direction. atan2(0, 0) is 0.0
         # rather than an error, so this would silently mean "face east".
         return
-    angle = math.atan2(dy, dx)
+    # PLUS PI, AND THE PLUS PI IS MEASURED RATHER THAN DERIVED. atan2(dy, dx) is
+    # the angle FROM the agent TO the player, and it is the right angle by every
+    # derivation available: test_rotate.py scores the client's own 0x0040 sends
+    # against atan2 of a 0x003D DIRECTION vector and beats a null model. Sending
+    # it turned the agent to face AWAY -- OBSERVED 2026-08-11 by the owner watching
+    # the screen, which is the only instrument that can see this.
+    #
+    # So the client's 0x002E facing is NOT the same convention as the heading it
+    # reports in 0x003D, and WHY is not established: it could be the zero
+    # direction, the sign, or the model's own forward axis. What is established is
+    # the offset, from the one observation that could refute it. A derivation that
+    # produced a correct-looking number and a backwards agent is exactly the trap
+    # this arc keeps hitting -- the disassembly tells you what the client TESTS,
+    # never what the answer looks like on screen.
+    angle = math.atan2(dy, dx) + math.pi
+    if angle > math.pi:
+        angle -= 2.0 * math.pi          # back into the [-pi, pi] the client uses
     told = agent.get("facing_told")
     if not force and told is not None:
         # Shortest way round: a turn from +3.1 to -3.1 is 0.08 radians, not 6.2,
@@ -1736,6 +1758,14 @@ def land_swing(send, state, agent_id, agent, conn_id):
 
 def pick_skill(agent, now):
     """The next ready slot on the bar, round robin from the last one cast.
+
+    THIS IS A TESTING FUNCTION, NOT A DECISION ABOUT AI. Owner's ruling
+    2026-08-11: casting AI is not settled here and will not be settled by
+    whichever policy happens to be in this function. What this exists for is to
+    exercise the bar mechanism -- the message, the per-slot recharge, the
+    activation window -- so that the parts which ARE evidenced can be tested. When
+    the AI study lands, this gets replaced rather than extended, and nothing
+    downstream should read the current policy as a claim.
 
     ROUND ROBIN, and the version before it was FIRST-READY-IN-BAR-ORDER, which
     left slot 4 unreachable. OBSERVED (11.5): a run produced
