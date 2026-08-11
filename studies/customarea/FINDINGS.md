@@ -2323,6 +2323,14 @@ it. The fix is to exclude runs whose first bytes carry a container signature (`M
 or a plausible file-id table), or to prefer the *smallest* qualifying run, which is also
 what the client itself does.
 
+> **FIXED 2026-08-10, `ae96f28`** — "The largest free run holds a live MFT, and the
+> planner aimed every insert at it." `datplan.py` no longer aims at the rotation slot,
+> and `toolkit/mapdata/test_datplan.py` (new, in `CLAUDE.md`'s suite) pins it. The
+> paragraph above is kept as written because it is the finding; this note is its
+> disposition. **The measurement it rests on still stands and still constrains C2/E3:**
+> usable space is 3,742,720 B in 209 runs, largest 953,856 B — below the median map head
+> reservation of 961,536 B — not the 32.5 MB in 214 runs that counting gaps suggests.
+
 ---
 
 ### 18.8 What would still have to be true for the archive to be damaged
@@ -2449,6 +2457,14 @@ high half) nor `0x1C` (the modification flag).
 
 Three, all found this pass, all in tools whose entire purpose is preventing false absence
 claims. Every past absence claim leaning on them needs re-reading.
+
+> **FIXED 2026-08-10, `27c30a9`** — "asserts.py knew one of the idiom's three shapes, and
+> --field one encoding of two" — with `c8e5884` following up on the call sites. The three
+> defects below are kept as written; this note is their disposition. **The consequence
+> does not go away with the fix:** every absence claim made in this repo *before* those
+> commits was produced by the broken scanners, and this section's point was never the
+> three bugs but that class of claim. §18.10's own example is the warning — the
+> conclusion happened to hold **by luck of alignment, not by the discipline claimed**.
 
 1. **`codescan.py --xrefs`'s data-word sweep is 4-byte-aligned only** (`if p % 4 == 0` in
    `xrefs()`), so three of four alignments are invisible. Demonstrated inside this very
