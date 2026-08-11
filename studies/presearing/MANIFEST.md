@@ -12,6 +12,151 @@ This document is the count. It enumerates what Pre-Searing Ascalon actually cont
 
 ---
 
+## Revision, 2026-08-11 — the WIKI half re-read from real pages
+
+*Item 3 of "What this manifest does not know" said every WIKI claim here came through
+`WebSearch` prose rather than a page read, and named what to re-read first. This section is
+that pass. **It is partial** — 7 pages/categories, not the whole list — and it is recorded
+here rather than folded silently into the tables above, because three of the corrections
+below are corrections to *method*, not just to numbers.*
+
+**How the bytes were got, and why that is not the documented route.** The browser MCP is
+still down (`list_connected_browsers` → `[]`, twice, and `tabs_context_mcp` reports the
+extension not installed/signed in). But the **scripted route worked** — 7 live requests,
+**zero 403s**, where `browse-gw-wiki`'s `access.md` measures "the first five consecutively,
+then hard 403 for the rest". That is a real disagreement with a five-day-old measurement and
+it is logged as such: **UNVERIFIED whether the quota lifted or the bucket merely happened to
+be full.** Do not plan a campaign on it; access.md's "a handful of requests may succeed,
+which is worse than none succeeding" still stands. `gwwiki.py` gained a `category`
+subcommand for this pass (one request per 500 members, reports `truncated` rather than
+silently short-listing).
+
+### 1. The #1 ranked unknown is SETTLED: the four new zones are opt-in content
+
+WIKI (GWW, *Reforged Mode*, read 2026-08-11): Reforged Mode is "an experimental optional
+game mode currently in Beta testing", opted into at character creation and toggleable
+afterwards at a Shrine to Godly Accoutrements. Under **§Pre-Searing Ascalon** it grants
+"Access to the *A Bastion In the North* quest chain in the Northlands, **which unlocks: the
+Piken Square outpost, the Forsaken Tunnels dungeon**, Devona as a pre-searing hero."
+
+So rows **779, 780, 877, 878 are gated behind an opt-in mode.** Their *existence* was already
+CLIENT-settled; their *availability* now is too. The competing readings in the old item 1 are
+both resolved: the pass that asserted from WebSearch prose that Reforged Mode is "only an
+opt-in XP/gold buff and the zones are ordinary content" is **REFUTED on both halves**, and
+`vault/research/2026-08-04/presearing-scope.md` §0's "opt-in alpha" is **confirmed as to
+opt-in and updated as to status** — alpha 2025-12-18, **beta 2026-05-27**.
+
+**Scope consequence, for the owner's decision in §"One scope decision":** if v1 means
+Pre-Searing playable in *normal* mode, the region is **15 rows, not 19**, and #1–#6 all move.
+If v1 includes Reforged, it inherits a Beta whose content ArenaNet is still changing.
+
+### 2. A capture-campaign hazard nobody has recorded
+
+WIKI (GWW, *Reforged Mode* §Pre-Searing Ascalon): "**Enemy health is reduced by 20%** for all
+enemies, including hostile charmable animals. **Enemy armor is reduced by roughly 20%** for
+most foes."
+
+PLAN.md §1.7 puts absolute monster HP/armor in the four genuinely server-only things, and
+R4c-2 grades on them. **The same monster has two stat blocks depending on a mode flag the
+capture does not record.** A live capture taken in Reforged Mode yields HP numbers 20% off
+base and perfectly self-consistent — the failure shape this repo keeps paying for. **Any
+monster-stat capture must record the character's Reforged Mode state**, and `toolkit/origin.py`
+stamping *whose server* is not enough to disambiguate it. Flagged here; it belongs in R0b's
+procedure, not only in this manifest.
+
+### 3. #16 is no longer a BOUND: 70 EXACT, with the roster
+
+`Category:Ascalon (pre-Searing) quests` holds **71 members: 70 in ns 0, plus one
+subcategory** (`Category:Vanguard quests`). The old entry's reasoning — "includes list pages,
+redirects and talk pages alongside real quests, so 70 is an upper bound" — is **REFUTED**:
+there are no talk pages (ns 1 absent), no list pages, and every ns-0 title is a quest article.
+**#16 becomes 70, EXACT**, and the delta row "Quests 0 → 2 mandatory / ≤70 total" becomes
+2 / 70.
+
+Two counts fall out of the roster, both previously APPROX:
+
+- **Profession Test quests: 6 of 6 confirmed by name** — Warrior, Ranger, Monk, Necromancer,
+  Mesmer, Elementalist Test. #19 was EXACT on WebSearch prose; it is now EXACT on a member
+  list. There is also a parallel set of six *A New \<Profession\> Trainer* quests that no pass
+  saw and that this manifest cannot yet place in the chain — **do not assume they are the
+  *A Second Profession* branches**; the old §Quests names only two branch titles by name
+  (*The Elementalist Experiment*, *A Mesmer's Burden*), both present in the roster, and
+  guessing the other four from title shape is exactly what this repo's method forbids.
+- **Vanguard quests: exactly 9**, and all nine named — Annihilation ×3 (Bandits, Charr,
+  Undead), Bounty ×3 (Blazefiend Griefblade, Countess Nadya, Utini Wupwup), Rescue ×3
+  (Farmer Hamnet, Footman Tate, Save the Ascalonian Noble). **#14 conflated two things**: it
+  reads "Vanguard-quest bosses: 3 named of ~9", but the ~9 is the *quest* count and only the
+  three **Bounty** quests name a boss. On this evidence Vanguard bosses are **3 of 3, all
+  named** — not 3 of 9. The remaining Vanguard quests are kill-count and rescue content with
+  no boss to miss.
+
+### 4. A misattributed citation, caught by reading the page
+
+#13 cites *"WIKI (The Searing): 'the altar is guarded by 30 Charr (including Smokeskin and
+three other bosses)'"* and builds the four-Charr-boss row on it. **That sentence is not on
+that page.** GWW's *The Searing* is 27 lines of pure lore — zero occurrences of "Smokeskin",
+"guarded by", or "30 Charr"; it names only *Vatlaaw Doomtooth* and the shaman *Bonfaaz
+Burntfur*, the latter a name no pass recorded.
+
+The quote may well exist on some page — a mission or bestiary article — but **the citation as
+written is wrong**, so #13's "6 named bosses, one unresolved" now rests on an unverified
+source rather than on a weak one. The fourth name stays unresolved, and **Jaw Smokeskin,
+Scarl the Slicer and Red Eye the Unholy drop from "confirmed"/"agreed across two searches"
+to UNVERIFIED pending a page that actually contains them.** This is the manifest's own
+warning about WebSearch prose ("It can drop or paraphrase a number") landing on it.
+
+### 5. The Northlands roster is contaminated with Reforged-only content
+
+WIKI (GWW, *Reforged Mode*): "**Additional enemies appear in the Northlands**: Groups of grawl
+including the stronger **Grawl Crones and Grawl Fighters**; Groups of Oakhearts including the
+stronger **Ironhearts**; Two groups of Charr at each of the two gates of the Great Wall. The
+gates are also closed now."
+
+§Monsters' per-zone roster lists "Grawl Crone, Grawl Fighter, … Charr" for The Northlands as
+though they were base content. **They are Reforged-mode additions**, and *Ironheart* is a
+creature the passes never recorded at all. The faction-conditional aggro note kept for AI
+design ("Crones/Fighters hostile to other Grawl and Oakhearts") therefore describes
+**Reforged** content. Every per-zone roster in §Monsters should be assumed mode-ambiguous
+until re-read; this is the one case measured.
+
+### 6. The NPC categories do fold roles together — measured, and the hostile rosters are worse than feared
+
+`Category:Regent Valley (pre-Searing) NPCs` holds **39 members** (ns 0), against the old
+"~40 reported by the search backend" — the estimate was good. What it settles is the
+*composition* question #29 raised as a hypothesis: the category mixes **~23 hostile creatures
+with ~16 service and quest NPCs**, exactly as suspected, so **the ~40/~23 category counts
+cannot be read as service-NPC template counts** and the "plausible ceiling 60–100 template
+rows" keeps its reasoning but loses these two numbers as support.
+
+The sharper result is against §Monsters. This manifest lists **9** creatures for Regent Valley;
+the category carries roughly **23** — adding Bandit Blood Sworn / Firestarter / Raider /
+Ringleader, Carrion Devourer, Lash Devourer, Melandru's Stalker, Grawl (pre-Searing), Grawl
+Longspear, Grawl Shaman, Skale Broodcaller, Aloe Husk and Aloe Seed. **#10's "35–40, likely an
+undercount" is confirmed as an undercount from the one zone that has been checked**, and the
+true figure is plausibly well above 40. Note also that *Bandit Raider* and *Bandit Raider
+(Vanguard quest)* are **separate articles** — Vanguard variants are distinct creature entries,
+which matters because each distinct definition needs its own row under the client's
+`index < m_count` constraint.
+
+**One thing this does not settle.** *Hatcher* and *Varis* are categorised under **Regent
+Valley**, while §NPCs places both in Fort Ranik. That is consistent rather than contradictory
+— the zone table already records 162 (Regent Valley) and 166 (Fort Ranik) **sharing archive
+row 44202** — but it is still two documents agreeing offline. **It does not move §NPCs' "On
+our Hatcher" verdict one inch**, for the reason given there: neither witness observed our
+client standing anywhere.
+
+### What this pass did not reach
+
+Unchanged from item 3's priority list, and still open: skill bars for the Catacombs'
+permanent-resident undead; *Skullreaver* and *Ice Elemental (pre-Searing)*; any creature at
+all in Forsaken Tunnels; the bestiary category for Wizard's Folly and The Northlands
+(`Category:Pre-Searing bestiary` returned **0 members — the name is wrong**, and a
+zero-member category is indistinguishable from a nonexistent one, which is why the
+`category` command reports the count rather than an empty list); and the correct source for
+#13's boss quote.
+
+---
+
 ## Labels
 
 Matching `studies/character/FINDINGS.md`'s vocabulary, narrowed to the four this manifest needs:
@@ -41,10 +186,10 @@ Exactness markers used in the count columns: **EXACT** = cannot move without the
 | 10 | Distinct hostile creature type names | **35–40** | APPROX, likely undercount | WIKI |
 | 11 | …with a documented ≥2-skill bar | **≥9** | FLOOR | WIKI |
 | 12 | …confirmed non-combatant | **2** (Aloe Husk, Aloe Seed) | EXACT-as-found | WIKI |
-| 13 | Named bosses, non-Vanguard | **6** | APPROX (one name unresolved) | WIKI |
-| 14 | Vanguard-quest bosses | **3 named of ~9** | APPROX | WIKI |
+| 13 | Named bosses, non-Vanguard | **6** | APPROX → **UNVERIFIED**, see Revision §4 — the citation this row rests on is not on the page it names | WIKI |
+| 14 | Vanguard-quest bosses | ~~3 named of ~9~~ → **3 of 3, all named** | EXACT; Revision §3 — the "~9" was the *quest* count, and only the 3 Bounty quests name a boss | WIKI |
 | 15 | Monster **AI archetypes** | **UNKNOWN** | — | server-only |
-| 16 | Pages in `Category:Ascalon (pre-Searing) quests` | **≤70** | BOUND | WIKI, composition unverified |
+| 16 | Pages in `Category:Ascalon (pre-Searing) quests` | ~~≤70~~ → **70** | **EXACT** — 70 ns-0 articles + 1 subcategory, composition verified, Revision §3 | WIKI, member list read |
 | 17 | Quests strictly required to leave the region | **2** | EXACT | WIKI |
 | 18 | Skill quests | **36–43** | APPROX, client-bounded | CLIENT + WIKI |
 | 19 | Profession-choice branches | **6** | EXACT | WIKI |
@@ -519,9 +664,9 @@ Does "Pre-Searing playable solo end to end" include resolving the Ascalon Academ
 
 Ranked by how much scope each moves.
 
-1. **Whether the four new rows (779 Piken Square pre-Searing, 780/877/878 Forsaken Tunnels) are gated behind an opt-in mode.** Their *existence* is CLIENT-settled and not in doubt. Their *availability* is not: one pass asserted from WebSearch prose that Reforged Mode is only an opt-in XP/gold buff and the zones are ordinary content; our own prior note (`vault/research/2026-08-04/presearing-scope.md §0`) calls the mode opt-in alpha. **This decides whether 4 of 19 zones are in v1** — do not close it on a search summary. **Settled by:** one direct page read of *Reforged Mode* and `Feedback:Game updates/20260401` through the browser route.
+1. ✅ **SETTLED 2026-08-11 — they are gated. See Revision §1.** *Reforged Mode* was read directly: it is an opt-in experimental **Beta** (alpha 2025-12-18, beta 2026-05-27), and *A Bastion In the North* is what unlocks Piken Square and the Forsaken Tunnels. The "only an opt-in XP/gold buff, zones are ordinary content" reading is REFUTED. **4 of 19 zones are opt-in content**, so a normal-mode v1 is a 15-row region — which turns this from an unknown into the owner's scope decision below. Still unread: `Feedback:Game updates/20260401`.
 2. **File ids for 10 of 19 map rows** — 143, 149, 150, 151, 160, 161, 779, 780, 877, 878. **Settled by:** for the six legacy rows, a further bit-31 scan of the archive's 171,023-entry file-id table for candidates landing on unclaimed `flags==259` rows — the same method `studies/mapdata/FORMAT.md` used for the original two. For the four new rows, no mirror we hold predates them, so the only route is watching a live client load them (owner go-ahead required per CLAUDE.md).
-3. **Every WIKI claim in this document came through WebSearch, not the browse-gw-wiki skill's browser route.** The Chrome MCP was down for all six passes. **Settled by:** re-running the WIKI-only sections once the extension reconnects, prioritising — skill bars for the Catacombs' permanent-resident undead (Restless Corpse, Raging Cadaver, Crypt Fiend, Deadly Crypt Spider, Diseased Devourer, Snapping Devourer, Tomb Nightmare, Shatter Gargoyle) and for Skullreaver and Ice Elemental (pre-Searing); the fourth Searing-altar Charr boss's name; the bestiary category pages for Wizard's Folly and The Northlands; any creature at all in Forsaken Tunnels; and the raw member list of `Category:Ascalon (pre-Searing) quests` so ≤70 becomes a real number.
+3. 🔶 **PARTLY CLOSED 2026-08-11 — 7 pages/categories re-read, see the Revision section.** The Chrome MCP is *still* down, but the scripted route unexpectedly worked (7 requests, 0 blocks, against a documented allowance of ~5). That pass settled item 1, turned #16 into an EXACT roster, corrected #14, moved #13 to UNVERIFIED after catching a misattributed citation, and found §Monsters' Northlands roster contaminated with Reforged-only content. **Do not read the scripted route's success as the block lifting** — `access.md` measures a refilling bucket, and one good session is what that looks like. Still to re-read, unchanged in priority — skill bars for the Catacombs' permanent-resident undead (Restless Corpse, Raging Cadaver, Crypt Fiend, Deadly Crypt Spider, Diseased Devourer, Snapping Devourer, Tomb Nightmare, Shatter Gargoyle) and for Skullreaver and Ice Elemental (pre-Searing); the fourth Searing-altar Charr boss's name; the bestiary category pages for Wizard's Folly and The Northlands; any creature at all in Forsaken Tunnels; and the raw member list of `Category:Ascalon (pre-Searing) quests` so ≤70 becomes a real number.
 4. **Whether `Gw.dat` carries quest text extractably.** If it does, the largest WIKI-dependent table in this manifest becomes a CLIENT table dump. **Settled by:** one probe against the archive, following Tyria-Extractor's claim.
 5. **Whether Green Hills County (160) and Wizard's Folly (161) have their own archive files or live as unwalked planes inside row 7982.** Row 7982 already carries an unusually high 58 planes for one file. **Settled by:** the spawn-in-trapezoid check `content/maps.toml` already ran for Lakeside — testable today, blocked only on finding a plausible spawn coordinate for either zone.
 6. **Whether Regent Valley (162) and Fort Ranik (166) genuinely share `0x1BB1D`, or that is upstream copy-paste.** `studies/mapdata/FORMAT.md` flags 101 file ids game-wide claimed by more than one map id as an open class; this is one instance. **Settled by:** the same spawn-in-trapezoid check against both zones' known spawns.
