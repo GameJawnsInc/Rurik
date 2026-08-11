@@ -1151,6 +1151,30 @@ ENEMY_DEST_RESEND = 120.0  # how far the player must move before the destination
                            # re-announced. Every tick would be 20 messages a second
                            # at a client that only needs the endpoint.
 
+# AND IT TURNS TO FACE YOU. GAME_SMSG_AGENT_UPDATE_ROTATION (0x002E) has been
+# defined and documented in this file for days and never once sent: an absolute
+# facing angle in radians and a turn rate, both marshalled u32 and both holding
+# float32 -- the ROTATE_PLAYER trap, and reading them raw is what made an earlier
+# draft of test_smsgnames compare garbage against pi.
+#
+# EVERY NUMBER BELOW EXCEPT THE EPSILON IS ARENANET'S.
+#   * The angle convention is atan2(y, x). Not assumed: test_rotate.py scores the
+#     client's own 0x0040 sends against atan2 of a nearby 0x003D DIRECTION vector
+#     and beats a null model built from the same corpus. (Its first version paired
+#     against the POSITION vec2 instead and scored 0 of 163 -- a position has a
+#     perfectly plausible atan2 too, which is why that failure was silent.)
+#   * The angle is absolute and lives in [-pi, pi]; +/-inf are the client's own
+#     free-spin sentinels (test_smsgnames, every finite sample in range).
+#   * The turn rate is bounded, quantised, and PER-CREATURE rather than
+#     per-message. 2*pi/3 is the largest ArenaNet was seen to use, to the bit.
+#
+# WHAT IS NOT ESTABLISHED, and this code does not depend on it: which SIGN is a
+# left turn. test_rotate.py refuses to pin that on 121/189 and 106/169, which is
+# real and far too weak to write down. An absolute facing needs no such claim.
+ENEMY_TURN_RATE = 2.0943951023931953   # 2*pi/3 rad/s, ArenaNet's own maximum
+ENEMY_FACING_EPSILON = 0.15            # radians (~8.6 deg) before re-announcing.
+                                       # Ours. Every tick is 20 messages a second.
+
 
 def begin_attack(send, state, target_id, conn_id):
     """A click on a hostile agent starts an attack that the tick keeps up.
@@ -1400,8 +1424,50 @@ def enemy_attack_tick(send, state, conn_id):
         if now - agent.get("last_swing", 0.0) < interval:
             continue
         agent["last_swing"] = now
+        # Turn first, then swing. An agent that lands a hit with its back to you
+        # is the one thing here a person would call broken without being told.
+        #
+        # NOT forced, and the first version was: force bypasses the epsilon, so a
+        # stationary fight re-sent the SAME angle once per swing -- 15 of the 16
+        # rotations in the first live run were byte-identical to the one before.
+        # The epsilon already guarantees the facing is within 8.6 degrees, and in
+        # melee this is the ONLY call site (the chase does not run inside reach),
+        # so it is also what keeps the facing current when the player walks around
+        # the agent. Gating it here is what makes that tracking cost one message
+        # instead of one per swing.
+        face_player(send, state, agent_id, agent, conn_id)
         start_swing(send, agent_id, conn_id)
         agent["swing_lands_at"] = now + SWING_WINDUP
+
+
+def face_player(send, state, agent_id, agent, conn_id, force=False):
+    """Turn an agent to look at the player, if it is not looking there already.
+
+    Gated on a change rather than sent per tick: at 20 ticks a second an ungated
+    version is 20 rotation messages a second for an agent that is already facing
+    the right way. `force` is for the moment a swing opens, where being turned the
+    wrong way is the whole thing anyone would notice.
+    """
+    px, py = state.get("pos", (0.0, 0.0))
+    ax, ay = agent["pos"]
+    dx, dy = px - ax, py - ay
+    if not dx and not dy:
+        # Standing exactly on the player has no direction. atan2(0, 0) is 0.0
+        # rather than an error, so this would silently mean "face east".
+        return
+    angle = math.atan2(dy, dx)
+    told = agent.get("facing_told")
+    if not force and told is not None:
+        # Shortest way round: a turn from +3.1 to -3.1 is 0.08 radians, not 6.2,
+        # and without the wrap an agent near due west re-announces every tick.
+        delta = (angle - told + math.pi) % (2.0 * math.pi) - math.pi
+        if abs(delta) < ENEMY_FACING_EPSILON:
+            return
+    agent["facing_told"] = angle
+    send(GAME_SMSG_AGENT_UPDATE_ROTATION,
+         [agent_id, _f32(angle), _f32(ENEMY_TURN_RATE)],
+         f"agent {agent_id} faces {math.degrees(angle):.0f} deg "
+         f"at {ENEMY_TURN_RATE:.3f} rad/s")
 
 
 def enemy_move_tick(send, state, conn_id):
@@ -1464,6 +1530,7 @@ def enemy_move_tick(send, state, conn_id):
                  f"({ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s)")
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is coming for "
                   f"the player, {dist:.0f} units out", flush=True)
+            face_player(send, state, agent_id, agent, conn_id)
 
         told = agent.get("dest_told")
         if told is None or math.hypot(px - told[0], py - told[1]) > ENEMY_DEST_RESEND:
@@ -1471,6 +1538,15 @@ def enemy_move_tick(send, state, conn_id):
             send(GAME_SMSG_AGENT_MOVE_TO_POINT,
                  [agent_id, [px, py], agent.get("plane", 0), agent.get("plane", 0)],
                  f"agent {agent_id} walks to ({px:.0f},{py:.0f})")
+
+        # EVERY CHASING TICK, not only when the destination is re-announced. This
+        # was nested under the re-announce, which meant the facing could not change
+        # until the player had moved ENEMY_DEST_RESEND (120) units -- so the 0.15
+        # rad epsilon inside face_player was decorative, and an agent tracking a
+        # player who circles it at a constant distance never turned at all. It also
+        # made the seam-wrap untestable, because the branch was unreachable.
+        # face_player has its own gate; this is where it is supposed to do the work.
+        face_player(send, state, agent_id, agent, conn_id)
 
         # Advance our own copy. Cap the step at the distance that still leaves the
         # agent at its melee range, so it stops beside the player rather than

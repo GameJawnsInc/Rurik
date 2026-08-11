@@ -40,7 +40,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=92)
+LEDGER = checks.Ledger("agent lifetime", floor=102)
 
 
 def main():
@@ -182,6 +182,7 @@ def main():
     section_pool_fraction()
     section_swing_back()
     section_chase()
+    section_facing()
     return LEDGER.verdict()
 
 
@@ -238,11 +239,14 @@ def section_swing_back():
     state = _world()
     sent = _swings(state)
     ops = [op for op, _v, _l in sent]
-    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET],
-              "the opening of a swing is ATTACK_STARTED and nothing else",
+    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION,
+                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET],
+              "a swing opens by TURNING and then ATTACK_STARTED, with no damage",
               f"{[hex(o) for o in ops]} -- damage arriving here is the "
               "instant-swing bug: 0.899 s of animation with the number already on "
-              "screen")
+              "screen. The turn is forced on every swing because an agent landing "
+              "a hit with its back to you is the one thing here a person would "
+              "call broken without being told")
     LEDGER.ok(not _swings(state, n=4),
               "and nothing lands while the windup is still running",
               f"swing_lands_at is {state['agents'][10].get('swing_lands_at')!r} "
@@ -391,9 +395,10 @@ def section_swing_back():
     #     to a real interval rather than to "no wait at all".
     zero = _world()
     zero["agents"][10]["attack_speed"] = 0.0
-    LEDGER.ok(len(_swings(zero, n=8)) == 1,
+    LEDGER.ok(len(_swings(zero, n=8)) == 2,
               "an agent declaring attack speed 0 falls back to a real interval",
-              "8 ticks, ONE attack_started -- 0.0 is falsy, and treating it as "
+              "8 ticks, ONE swing opening (a turn and an attack_started) -- 0.0 "
+              "is falsy, and treating it as "
               "'unset' is deliberate: it is the value behind the "
               "m_attackInterval assert. One message rather than three because a "
               "swing now opens and lands separately")
@@ -403,10 +408,11 @@ def section_swing_back():
     state = _world()
     state["agents"][10]["attack_speed"] = 10.0
     n = len(_swings(state, n=6))
-    LEDGER.ok(n == 1,
+    LEDGER.ok(n == 2,
               "and a slow weapon swings once, not once per tick",
-              f"{n} message(s) over 6 ticks at a 10 s interval -- an opening is 1 "
-              "message, so anything above 1 means the timer is not being read")
+              f"{n} message(s) over 6 ticks at a 10 s interval -- an opening is a "
+              "turn plus an attack_started, so anything above 2 means the timer is "
+              "not being read")
 
 
 def _walk(state, n=1, elapsed=1.0):
@@ -460,8 +466,9 @@ def section_chase():
     sent = _walk(state)
     ops = [op for op, _v, _l in sent]
     LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_UPDATE_SPEED,
+                      authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION,
                       authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT],
-              "a hostile out of reach announces a rate and a destination",
+              "a hostile out of reach announces a rate, a facing and a destination",
               f"{[hex(o) for o in ops]}")
     rate = [v for op, v, _l in sent
             if op == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED][0]
@@ -570,6 +577,136 @@ def section_chase():
               "a hostile is stopped by the pathmap rather than walking through it",
               f"x={x:.0f} against a wall at 400, clip asked "
               f"{state['pathmap'].asked} time(s)")
+
+
+def section_facing():
+    """It turns to look at you, on an angle nobody in this repo invented.
+
+    `GAME_SMSG_AGENT_UPDATE_ROTATION` (0x002E) sat defined and documented in
+    authsrv.py for days without ever being sent. Everything about how to fill it
+    was already measured off ArenaNet's own traffic, which is why this rung needed
+    no new discovery:
+
+      * atan2(y, x) -- test_rotate.py scores the client's OWN 0x0040 sends against
+        atan2 of a nearby 0x003D direction vector, beating a null model built from
+        the same corpus. Its first version paired against the POSITION vec2 and
+        scored 0 of 163, because a position has a plausible atan2 too.
+      * absolute, in [-pi, pi], with +/-inf as the client's free-spin sentinels.
+      * a turn rate that is per-CREATURE and quantised; 2*pi/3 is ArenaNet's
+        largest, to the bit.
+
+    Both payload fields are marshalled `dword` and hold float32 -- the same trap
+    that made an early test_smsgnames compare garbage against pi and pass a
+    turn-rate check vacuously. Every check here reinterprets before asserting, and
+    the last one fails if the code stops doing so.
+    """
+    import authsrv
+
+    # INDEX FROM THE SENT PAYLOAD, NOT FROM A DECODED ONE. test_smsgnames reads
+    # 0x002E's angle at values[2] because a DECODED list carries the raw header at
+    # index 0; what `send` is handed has no header, so the same field is at index
+    # 1. Getting this wrong is silent in the usual way -- the first version of
+    # this section read index 2 and got 2.0944, the TURN RATE, which is a
+    # perfectly plausible angle (120 degrees) and would have been asserted as one.
+    def angle_of(vals):
+        return struct.unpack("<f", struct.pack("<I", vals[1]))[0]
+
+    def rate_of(vals):
+        return struct.unpack("<f", struct.pack("<I", vals[2]))[0]
+
+    def rots(sent):
+        return [v for op, v, _l in sent
+                if op == authsrv.GAME_SMSG_AGENT_UPDATE_ROTATION]
+
+    # the fixture puts the agent due EAST of the player, so it must look WEST
+    state = _world(dist=600.0)
+    r = rots(_walk(state))
+    LEDGER.ok(len(r) == 1 and r[0][0] == 10,
+              "setting off, the agent announces a facing for itself",
+              f"{len(r)} rotation(s)")
+    LEDGER.ok(abs(abs(angle_of(r[0])) - math.pi) < 1e-5,
+              "and the angle is atan2(dy, dx) of the player from the agent",
+              f"{angle_of(r[0]):.5f} rad = {math.degrees(angle_of(r[0])):.0f} deg. "
+              "The agent is due EAST of the player, so it must look due WEST: "
+              "+/-pi. Swapping atan2's arguments gives +/-pi/2 and fails here")
+    # THE BOUND HAS TO BE FLOAT32's pi, NOT float64's. Due west is exactly +pi,
+    # and float32(pi) = 3.14159274 is GREATER than math.pi = 3.14159265 by 9e-8 --
+    # so the obvious `-math.pi <= a <= math.pi` marks a legitimate facing
+    # out-of-range. test_smsgnames' version of this check is over LIVE samples,
+    # none of which land exactly on the seam, so it never had to notice.
+    f32_pi = struct.unpack("<f", struct.pack("<f", math.pi))[0]
+    LEDGER.ok(-f32_pi <= angle_of(r[0]) <= f32_pi,
+              "and it is inside the range every live sample sits in",
+              f"{angle_of(r[0]):.8f} against float32 pi {f32_pi:.8f} (float64 pi "
+              f"is {math.pi:.8f}, which due west overshoots by 9e-8)")
+    LEDGER.ok(abs(rate_of(r[0]) - 2.0 * math.pi / 3.0) < 1e-6,
+              "and the turn rate is ArenaNet's own quantised maximum, 2*pi/3",
+              f"{rate_of(r[0]):.7f} -- a per-creature constant, not a per-message "
+              "value")
+
+    # a quarter turn: player due NORTH of the agent must give +pi/2
+    north = _world(dist=600.0)
+    north["agents"][10]["pos"] = (0.0, -600.0)
+    r = rots(_walk(north))
+    LEDGER.ok(abs(angle_of(r[0]) - math.pi / 2.0) < 1e-5,
+              "a player due north of the agent reads as +pi/2, not -pi/2 or 0",
+              f"{angle_of(r[0]):.5f} -- this is the check that separates atan2(y, x) "
+              "from atan2(x, y), which the +/-pi case above cannot")
+
+    # 2. it is NOT re-announced when nothing has changed
+    quiet = rots(_walk(state, n=5, elapsed=0.02))
+    LEDGER.ok(not quiet,
+              "a facing that has not changed is not re-announced",
+              f"{len(quiet)} over five ticks -- ungated this is 20 rotation "
+              "messages a second at an agent already looking the right way")
+
+    # 3. THE WRAP. An agent looking near due west is the case where a naive
+    #    difference reads 6.2 radians instead of 0.08 and re-announces forever.
+    # SOUTH, not north. The agent is looking at +pi and the seam is crossed only
+    # when the angle goes NEGATIVE -- a hair north gives +3.139, which an unwrapped
+    # difference reads as 0.003 and stays quiet about anyway. This check passed
+    # against a sabotaged (unwrapped) server until that was noticed: it was
+    # asserting silence in a case where both versions are silent.
+    state["pos"] = (0.0, -1.0)                    # a hair SOUTH: angle flips to -pi
+    wrapped = rots(_walk(state, n=3, elapsed=0.02))
+    LEDGER.ok(not wrapped,
+              "and a facing that crosses the +/-pi seam is still 'unchanged'",
+              f"{len(wrapped)} -- the shortest way round from +3.1416 to -3.1383 "
+              "is 0.003 rad, not 6.28. Unwrapped, this agent re-announces on every "
+              "tick forever, and this check goes red when the wrap is removed")
+
+    # 4. a real turn IS announced
+    state["pos"] = (0.0, 900.0)
+    turned = rots(_walk(state, n=1, elapsed=0.02))
+    LEDGER.ok(len(turned) == 1,
+              "but a player who has actually moved round does get a new facing",
+              f"{len(turned)}")
+
+    # 5. standing exactly on the player has no direction, and atan2(0, 0) is 0.0
+    #    rather than an error -- so an ungurded version silently means "face east"
+    # CALLED DIRECTLY, because enemy_move_tick never gets there: an agent standing
+    # on the player is inside melee range, so the chase returns before facing is
+    # considered and the check passed without executing the code it names.
+    on_top = _world(dist=600.0)
+    on_top["agents"][10]["pos"] = (0.0, 0.0)
+    direct = []
+    authsrv.face_player(
+        lambda op, v, label="", quiet=False: direct.append((op, v, label)),
+        on_top, 10, on_top["agents"][10], 1, force=True)
+    LEDGER.ok(not direct,
+              "and an agent standing exactly on the player announces no facing",
+              "atan2(0, 0) returns 0.0 rather than raising, so the unguarded "
+              "version silently turns to face due east. force=True here, so the "
+              "epsilon cannot be what produces the silence")
+
+    # 6. the fields are FLOAT BITS in dword slots. Read raw, the angle check
+    #    above compares garbage to pi -- the exact failure test_smsgnames records.
+    raw = rots(_walk(_world(dist=600.0)))[0]
+    LEDGER.ok(raw[1] > (1 << 30) and raw[2] > (1 << 29),
+              "and both fields go out as float BITS, not as small integers",
+              f"angle=0x{raw[1]:08X}, rate=0x{raw[2]:08X} -- a dword field holding "
+              "an IEEE float is the ROTATE_PLAYER trap, and a codec change that "
+              "started marshalling these as real numbers would show up here")
 
 
 def section_named_builders(codec):
