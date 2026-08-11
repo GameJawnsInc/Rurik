@@ -2556,3 +2556,53 @@ It happened to catch real defects in the in-flight code — a corpse that could
 still cast, and `ValueError` uncaught on the world tick, both now fixed — but that
 is luck, not method. Read-only fan-out over a moving tree should use
 `isolation: "worktree"`.
+
+### 11.2 It walks now — and `AGGRO_RANGE` was doing two jobs
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T174346-c1.jsonl`.
+
+```
+t=2.62  agent 10 speed 0.75 (216 u/s)        0x002B
+t=2.62  agent 10 walks to (9826,8077)        0x0029  <- the player's position
+t=3.33  attack_started: agent 10 swings
+t=3.38  agent 10 stops at (9976,8077)        0x0029  <- exactly 150 units out
+```
+
+150.0 units of travel in 0.71 s at a declared 216 u/s is 0.69 s of walking, so the
+server's own copy of the agent's position and the rate it told the client agree.
+Then 20 swings and 2 kills.
+
+**THE DEFECT THIS FIXES IS OURS AND §11 SHIPPED IT.** `AGGRO_RANGE` decided both
+when a hostile NOTICES the player and when it can REACH them. A Hatcher rooted to
+its spawn point therefore swung at anything within 1200 units — it hit people
+across a courtyard it never crossed, and §11's own run is an example: the agent
+stood 300 units away for three death cycles and never moved. Reach is now
+`ENEMY_MELEE_RANGE` (150) and `AGGRO_RANGE` is the notice and the leash. The walk
+is what makes that separation survivable rather than a way of making combat
+impossible.
+
+**Two clocks have to agree.** The client is told a DESTINATION and animates its own
+way there; the server advances `agent["pos"]` at the same rate, because that is
+what every range check reads. The destination is re-announced only when the player
+has moved `ENEMY_DEST_RESEND` (120) units, because a tick-rate destination stream
+is 20 messages a second at a client that needs one endpoint.
+
+**Stopping is an ARRIVAL, not a zero rate** — `agent_update_speed` refuses anything
+below `AGENT_MIN_MOVE_SPEED` (0.01, the client's own assert at `AgAgent.cpp:2366`),
+so "speed 0" is not available to say this with, and on the world tick that refusal
+would be a `ValueError` the tick has to swallow.
+
+### What is still not there
+
+- **No pathfinding.** `pathmap.route` is an A* and is NOT wired in. This walks a
+  straight line and uses `pathmap.clip` to stop at the first thing it cannot cross,
+  so an agent meets a wall and waits rather than sliding through it. A hostile on
+  the far side of a building will stand against that wall for as long as you stay
+  where you are.
+- **No leash home.** Walk out past `AGGRO_RANGE` and it stops where it stands; it
+  does not return to its spawn anchor.
+- **It does not face you.** `agent_update_speed` carries a `facing` field and this
+  passes the default.
+- **`ENEMY_MELEE_RANGE`, `ENEMY_MOVE_RATE` and `ENEMY_DEST_RESEND` are ours.**
+  Nothing measured them, and the wiki's aggro-bubble numbers describe a mechanic
+  (a moving circle, a leash, a call-to-arms radius) that none of this implements.

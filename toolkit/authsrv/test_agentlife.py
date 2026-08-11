@@ -40,7 +40,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=74)
+LEDGER = checks.Ledger("agent lifetime", floor=92)
 
 
 def main():
@@ -181,6 +181,7 @@ def main():
     section_named_builders(codec)
     section_pool_fraction()
     section_swing_back()
+    section_chase()
     return LEDGER.verdict()
 
 
@@ -406,6 +407,169 @@ def section_swing_back():
               "and a slow weapon swings once, not once per tick",
               f"{n} message(s) over 6 ticks at a 10 s interval -- an opening is 1 "
               "message, so anything above 1 means the timer is not being read")
+
+
+def _walk(state, n=1, elapsed=1.0):
+    """Run enemy_move_tick n times, each pretending `elapsed` seconds passed."""
+    import authsrv
+    sent = []
+    for _ in range(n):
+        for a in state.get("agents", {}).values():
+            a["moved_at"] = time.time() - elapsed
+        authsrv.enemy_move_tick(
+            lambda op, vals, label="", quiet=False: sent.append((op, vals, label)),
+            state, 1)
+    return sent
+
+
+class _Wall:
+    """A pathmap that refuses to let anything WEST of x = 400.
+
+    The agent starts east of the player and walks toward the origin, so the wall
+    clamps from below. The first version clamped from above and never blocked
+    anything -- a fixture that cannot fail is the same defect as a check that
+    cannot fail, one layer down.
+    """
+
+    def __init__(self):
+        self.asked = 0
+
+    def clip(self, x0, y0, x1, y1, step=16.0):
+        self.asked += 1
+        return (max(x1, 400.0), y1)
+
+
+def section_chase():
+    """It walks toward the player, and stops where it can reach them.
+
+    THE BUG THIS RUNG FIXES IS ONE OF OURS. `AGGRO_RANGE` was doing two jobs --
+    when a hostile NOTICES the player and when it can REACH them -- so a Hatcher
+    rooted to its spawn point swung at anything within 1200 units. It hit people
+    across a courtyard it never crossed. Splitting reach from notice is what makes
+    the chase necessary rather than decorative: without the walk, raising the reach
+    to a melee distance would simply mean nothing could ever hit anybody.
+
+    All three constants are ours and the docstring at the call site says so.
+    """
+    import authsrv
+
+    far = authsrv.ENEMY_MELEE_RANGE + 450.0
+
+    # 1. it starts moving, announces a rate and a destination, and does NOT swing
+    state = _world(dist=far)
+    sent = _walk(state)
+    ops = [op for op, _v, _l in sent]
+    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_UPDATE_SPEED,
+                      authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT],
+              "a hostile out of reach announces a rate and a destination",
+              f"{[hex(o) for o in ops]}")
+    rate = [v for op, v, _l in sent
+            if op == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED][0]
+    LEDGER.ok(rate[0] == 10 and 0.0 < rate[1] <= agents.AGENT_MAX_MOVE_SPEED,
+              "and the rate is a FRACTION inside the client's own asserted bounds",
+              f"{rate} -- units/s here is the named mistake; "
+              f"{authsrv.ENEMY_MOVE_RATE} x {agents.DEFAULT_RUN_SPEED} = "
+              f"{authsrv.ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s")
+    dest = [v for op, v, _l in sent
+            if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT][0]
+    LEDGER.ok(dest[0] == 10 and dest[1] == [0.0, 0.0],
+              "and the destination is where the player is standing",
+              f"{dest}")
+    LEDGER.ok(not _swings(state),
+              "and it does not swing from out there",
+              f"{far:.0f} units, reach is {authsrv.ENEMY_MELEE_RANGE:.0f} -- this "
+              "is the courtyard bug, and it read AGGRO_RANGE until today")
+
+    # 2. it actually closes the distance
+    state = _world(dist=far)
+    before = math.hypot(*state["agents"][10]["pos"])
+    _walk(state, n=3, elapsed=0.5)
+    after = math.hypot(*state["agents"][10]["pos"])
+    LEDGER.ok(after < before - 100.0,
+              "and over three half-seconds it closes real ground",
+              f"{before:.0f} -> {after:.0f} units at "
+              f"{authsrv.ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s")
+
+    # 3. IT STOPS AT REACH RATHER THAN WALKING THROUGH THE PLAYER. A long step is
+    #    the interesting case: without the cap the agent overshoots to distance 0
+    #    and stands inside them.
+    state = _world(dist=far)
+    _walk(state)                       # tick one only announces the intent
+    LEDGER.ok(math.hypot(*state["agents"][10]["pos"]) == far,
+              "the tick that starts the walk does not also move the agent",
+              "moved_at is stamped when the walk begins, so the first step is "
+              "measured from then -- an agent cannot have travelled before it set off")
+    _walk(state, n=1, elapsed=30.0)
+    d = math.hypot(*state["agents"][10]["pos"])
+    LEDGER.ok(abs(d - authsrv.ENEMY_MELEE_RANGE) < 1.0,
+              "and a huge step stops it exactly at reach, not on top of the player",
+              f"{d:.1f} against a reach of {authsrv.ENEMY_MELEE_RANGE:.0f} -- "
+              "uncapped, a 30 s step lands at 0 and the agent stands inside them")
+    LEDGER.ok(bool(_swings(state)),
+              "and having arrived, it can swing",
+              "the walk is only worth anything if the fight starts at the end of it")
+
+    # 4. the stop is an ARRIVAL, never a zero rate -- agent_update_speed refuses
+    #    anything under AGENT_MIN_MOVE_SPEED and that refusal is a ValueError on
+    #    the world tick.
+    stop = _walk(state, n=2)
+    stop_ops = [op for op, _v, _l in stop]
+    LEDGER.ok(authsrv.GAME_SMSG_AGENT_UPDATE_SPEED not in stop_ops,
+              "stopping never sends a speed message",
+              f"{[hex(o) for o in stop_ops]} -- speed 0.0 is below the client's own "
+              f"floor of {agents.AGENT_MIN_MOVE_SPEED} (AgAgent.cpp:2366) and "
+              "agent_update_speed raises on it")
+    LEDGER.ok(len([o for o in stop_ops
+                   if o == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT]) == 1,
+              "and it announces its arrival exactly once, not every tick",
+              f"{len(stop_ops)} message(s) over two ticks standing still")
+
+    # 5. the destination is not re-announced every tick while chasing
+    state = _world(dist=far)
+    _walk(state)                                   # first announcement
+    quiet = _walk(state, n=4, elapsed=0.05)
+    LEDGER.ok(not [op for op, _v, _l in quiet
+                   if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT],
+              "a stationary player is not re-announced on every tick",
+              f"{len(quiet)} message(s) over four ticks -- 20 a second is what "
+              "'tell the client where to go' becomes if this is not gated")
+    state["pos"] = (0.0, authsrv.ENEMY_DEST_RESEND + 50.0)
+    moved = _walk(state, elapsed=0.05)
+    LEDGER.ok(bool([op for op, _v, _l in moved
+                    if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT]),
+              "but a player who has walked far enough IS re-announced",
+              f"moved {authsrv.ENEMY_DEST_RESEND + 50.0:.0f} units, threshold is "
+              f"{authsrv.ENEMY_DEST_RESEND:.0f}")
+
+    # 6. the refusals
+    for why, world in (("past the leash", _world(dist=authsrv.AGGRO_RANGE + 50.0)),
+                       ("dead", _world(dist=far, dead=True)),
+                       ("passive", _world(dist=far, attacks_back=False)),
+                       ("mid-burrow",
+                        _world(dist=far, effects=agents.EFFECT_TRANSITION))):
+        LEDGER.ok(not _walk(world),
+                  f"a hostile that is {why} does not give chase",
+                  "silence is the whole assertion")
+    dead_player = _world(dist=far)
+    dead_player["player_dead"] = True
+    dead_player["player_health"] = 0.0
+    LEDGER.ok(not _walk(dead_player),
+              "and nothing chases a corpse",
+              "the player is face-down; walking to them is the wrong picture "
+              "and the swing that follows is worse")
+
+    # 7. A WALL STOPS IT. pathmap.clip is sampled rather than solved, and it is
+    #    the whole of our collision story -- pathmap.route is an A* and is NOT
+    #    wired in, so an agent meets a wall and waits there.
+    state = _world(dist=900.0)
+    state["pathmap"] = _Wall()
+    _walk(state)                       # announce, then walk
+    _walk(state, n=4, elapsed=1.0)
+    x = state["agents"][10]["pos"][0]
+    LEDGER.ok(state["pathmap"].asked >= 1 and x >= 400.0,
+              "a hostile is stopped by the pathmap rather than walking through it",
+              f"x={x:.0f} against a wall at 400, clip asked "
+              f"{state['pathmap'].asked} time(s)")
 
 
 def section_named_builders(codec):

@@ -1135,6 +1135,22 @@ PLAYER_REVIVE_AFTER = 10.0 # seconds face-down. Longer than an agent's 8.0 on
 # Taking the constant is the smaller claim.
 SWING_WINDUP = 0.899       # seconds between ATTACK_STARTED and the landing
 
+# IT WALKS NOW. Until this, `AGGRO_RANGE` was doing two jobs -- deciding both when
+# a hostile notices the player and when it can reach them -- so a Hatcher rooted to
+# its spawn point swung at anything within 1200 units, hitting people across a
+# courtyard it never crossed. The two are separated here: AGGRO_RANGE is the notice
+# and the leash, ENEMY_MELEE_RANGE is the reach.
+#
+# ALL THREE NUMBERS ARE OURS. Nothing measured them, and the wiki's aggro-bubble
+# figures are about a mechanic (a moving circle, a leash back to a spawn anchor,
+# a call-to-arms radius) that none of this implements.
+ENEMY_MELEE_RANGE = 150.0  # close enough to swing. Ours.
+ENEMY_MOVE_RATE = 0.75     # fraction of the 288 u/s reference, so 216 u/s -- slower
+                           # than the player on purpose, so you can walk away
+ENEMY_DEST_RESEND = 120.0  # how far the player must move before the destination is
+                           # re-announced. Every tick would be 20 messages a second
+                           # at a client that only needs the endpoint.
+
 
 def begin_attack(send, state, target_id, conn_id):
     """A click on a hostile agent starts an attack that the tick keeps up.
@@ -1350,7 +1366,9 @@ def enemy_attack_tick(send, state, conn_id):
         if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
             continue
         ax, ay = agent["pos"]
-        if math.hypot(ax - px, ay - py) > AGGRO_RANGE:
+        # REACH, not notice. This read AGGRO_RANGE until the chase existed, which
+        # let a rooted agent hit the player from 1200 units away.
+        if math.hypot(ax - px, ay - py) > ENEMY_MELEE_RANGE:
             agent["swinging"] = False
             agent["swing_lands_at"] = None
             continue
@@ -1384,6 +1402,92 @@ def enemy_attack_tick(send, state, conn_id):
         agent["last_swing"] = now
         start_swing(send, agent_id, conn_id)
         agent["swing_lands_at"] = now + SWING_WINDUP
+
+
+def enemy_move_tick(send, state, conn_id):
+    """Hostile agents walk toward the player until they are close enough to swing.
+
+    TWO CLOCKS HAVE TO AGREE. The client is told a DESTINATION and animates its own
+    way there; the server advances `agent["pos"]` itself at the same rate, because
+    that is what every range check in here reads. If they drift, the agent swings
+    from where the server thinks it is while the player watches it swing from
+    somewhere else -- so the step below is deliberately the same arithmetic the
+    player's own movement uses, and the destination is re-announced whenever the
+    player has moved far enough for the client's version to be wrong.
+
+    THERE IS NO PATHFINDING. `pathmap.route` is an A* and it is NOT wired in here:
+    this walks a straight line and uses `pathmap.clip` to stop at the first thing
+    it cannot cross, so an agent meets a wall and waits rather than sliding through
+    it. That is honest but it is not clever -- a hostile on the far side of a
+    building will stand against the wall for as long as you stay there.
+    """
+    player_pools(state)
+    px, py = state.get("pos", (0.0, 0.0))
+    now = time.time()
+    pm = state.get("pathmap")
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}):
+            continue
+        if agent["dead"] or not agent.get("attacks_back"):
+            agent["moving"] = False
+            continue
+        if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+            continue
+        if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
+            continue
+        ax, ay = agent["pos"]
+        dist = math.hypot(px - ax, py - ay)
+        chasing = (not state["player_dead"]
+                   and ENEMY_MELEE_RANGE < dist <= AGGRO_RANGE)
+        if not chasing:
+            if agent.get("moving"):
+                # STOPPING IS AN ARRIVAL, not a zero rate. agent_update_speed
+                # refuses anything under AGENT_MIN_MOVE_SPEED (0.01, the client's
+                # own assert at AgAgent.cpp:2366), so "speed 0" is not available
+                # to say this with -- and on the world tick that refusal would be
+                # a ValueError the tick has to swallow.
+                agent["moving"] = False
+                agent["dest_told"] = None
+                send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                     [agent_id, [ax, ay], agent.get("plane", 0),
+                      agent.get("plane", 0)],
+                     f"agent {agent_id} stops at ({ax:.0f},{ay:.0f})")
+            agent["moved_at"] = now
+            continue
+
+        if not agent.get("moving"):
+            agent["moving"] = True
+            agent["moved_at"] = now
+            send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                 agents.agent_update_speed(agent_id, ENEMY_MOVE_RATE),
+                 f"agent {agent_id} speed {ENEMY_MOVE_RATE} "
+                 f"({ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s)")
+            print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is coming for "
+                  f"the player, {dist:.0f} units out", flush=True)
+
+        told = agent.get("dest_told")
+        if told is None or math.hypot(px - told[0], py - told[1]) > ENEMY_DEST_RESEND:
+            agent["dest_told"] = (px, py)
+            send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                 [agent_id, [px, py], agent.get("plane", 0), agent.get("plane", 0)],
+                 f"agent {agent_id} walks to ({px:.0f},{py:.0f})")
+
+        # Advance our own copy. Cap the step at the distance that still leaves the
+        # agent at its melee range, so it stops beside the player rather than
+        # walking through them.
+        elapsed = max(0.0, now - agent.get("moved_at", now))
+        agent["moved_at"] = now
+        step = min(ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED * elapsed,
+                   dist - ENEMY_MELEE_RANGE)
+        if step <= 0.0:
+            continue
+        nx = ax + (px - ax) / dist * step
+        ny = ay + (py - ay) / dist * step
+        if pm is not None:
+            # Sampling, not solving -- clip returns the last walkable point along
+            # the way, so a wall stops the agent instead of being walked through.
+            nx, ny = pm.clip(ax, ay, nx, ny)
+        agent["pos"] = (nx, ny)
 
 
 def start_swing(send, agent_id, conn_id):
@@ -2748,6 +2852,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # state["player_dead"], which player_revive_due is the
                         # only thing that clears.
                         player_revive_due(send, state, conn_id)
+                        # Walk BEFORE swinging, so an agent that arrives on this
+                        # tick can open its swing on the same tick rather than
+                        # standing in reach for one interval doing nothing.
+                        enemy_move_tick(send, state, conn_id)
                         enemy_attack_tick(send, state, conn_id)
                         # The third sweep, and the first that mutates state["agents"]
                         # on a schedule rather than only when the player acts. Last,
