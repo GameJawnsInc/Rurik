@@ -291,7 +291,12 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   and that an unframeable opcode stops the framer instead of being framed past),
   `toolkit/authsrv/test_tape.py` (R1.5's tape loader: the events ARE the recorded
   stream whole and in order, and a tape whose wire bytes do not account for the
-  plaintext -- or that came from our own server -- is refused),
+  plaintext -- or that came from our own server -- is refused. Section 6 is the
+  straddle: a tape event is a TCP segment, so it builds a capture that splits one
+  message across two of them and requires `decode_all` to recover all three while the
+  per-EVENT idiom it replaced loses two and INVENTS two more. That idiom cost the
+  corpus 4,251 of 22,137 messages and invented 117 (studies/tape T18). It needs no
+  vault -- a segmentation defect is not a property of any one capture),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL
@@ -301,7 +306,9 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   2.00 s transition windows — and our own cycle driven with a fake `send`. It exists
   because the study doc was wrong: T3 said burrowing "runs entirely through the two
   opcodes we already implement" and it is five messages, so a test that asserted the
-  doc would have locked the error in),
+  doc would have locked the error in. Its capture half decodes the tape WHOLE via
+  `tape.decode_all` and asserts the byte accounting first, so every count beneath it is
+  of all 3,604 messages rather than the 3,500 the per-event idiom read),
   `toolkit/authsrv/test_rotate.py` (that GAME_CMSG 0x0040 really is ROTATE_PLAYER: the
   client's own assert text and the two ±inf constants are still at their addresses, both
   payload fields are still `dword` and not the `float` they look like, and the finite

@@ -33,11 +33,13 @@ import origin  # noqa: E402
 import tape  # noqa: E402
 import vaultpath  # noqa: E402
 
-# 20 from the green run of 2026-08-10: 13 as before, plus 7 for the chaining section
-# added with R1.5's 0b. Sections 3-5 all skip together on a machine with no vault, and
-# the floor takes them with it -- a run that never read the capture has not checked the
-# chain, whatever it printed.
-LEDGER = checks.Ledger("tape", floor=22)
+# 28 from the green run of 2026-08-11: 22 as before, plus 6 for section 6's straddle.
+# Sections 3-5 all skip together on a machine with no vault, and the floor takes them
+# with it -- a run that never read the capture has not checked the chain, whatever it
+# printed. Sections 1, 2 and 6 build their own captures and need no vault; 6 is
+# deliberately on that side, because a segmentation defect is not a property of any
+# particular capture and should be refutable on a bare machine.
+LEDGER = checks.Ledger("tape", floor=28)
 
 LIVE_CAPTURE = "20260807T143055"
 
@@ -300,7 +302,97 @@ def main():
                   "the last hop rewrites nothing and says so, rather than inventing "
                   "a handoff", whyl)
 
+    section_decode_all()
     return LEDGER.verdict()
+
+
+def section_decode_all():
+    """A message that straddles a segment boundary, built on purpose.
+
+    NO VAULT NEEDED, which is the point: the defect this pins is a property of TCP
+    segmentation and not of any particular capture, so it can be built out of nothing
+    and must go red on a bare machine too. The live corpus is where the SIZE of it was
+    measured (4,251 of 22,137 messages lost, 117 invented, all ten tapes); this is
+    where the mechanism is demonstrated small enough to see.
+    """
+    print("\n6. a tape is decoded WHOLE, because a message can straddle a segment")
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
+    from codec import Codec  # noqa: E402
+    codec_obj = Codec()
+
+    # Three 6-byte WORLD_REMOVE_AGENTs, cut 9 bytes in -- so the SECOND one has three
+    # bytes in each segment and neither segment alone can frame it.
+    ids = [111, 222, 333]
+    msgs = [codec_obj.encode("GAME_SMSG", 0x0021, [i]) for i in ids]
+    blob = b"".join(msgs)
+    cut = 9
+    LEDGER.ok(all(len(m) == 6 for m in msgs) and 6 < cut < 12,
+              "the fixture really does split a message, rather than landing on a seam",
+              f"{len(blob)}B in {len(msgs)} messages, cut at {cut} -- message 2 spans "
+              f"[6, 12) and so has bytes on both sides of the boundary")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "straddle")
+        write_capture(root, s2c_pieces=[blob[:cut], blob[cut:]])
+        _info, events = tape.load_tape(root)
+
+        got, receipt = tape.decode_all(events, codec_obj, "GAME_SMSG")
+        LEDGER.ok([v[1] for _t, _op, v in got] == ids
+                  and receipt.err is None and receipt.consumed == receipt.total,
+                  "decode_all recovers all three, in order, consuming every byte",
+                  f"{[v[1] for _t, _op, v in got]} from "
+                  f"{receipt.consumed}/{receipt.total}B, err={receipt.err!r}")
+
+        # THE OLD IDIOM, run side by side so the claim is a comparison and not an
+        # assertion about code that is no longer there.
+        per = []
+        for _t, seg in events:
+            m, _c, _e = codec_obj.decode_stream("GAME_SMSG", seg)
+            per += [(op, v) for op, v in m]
+        per_ids = [v[1] for _op, v in per if _op == 0x0021]
+        invented = [op for op, _v in per if op != 0x0021]
+        LEDGER.ok(per_ids != ids,
+                  "and per-EVENT decoding does not -- it is wrong on the same bytes",
+                  f"per-event saw remove-ids {per_ids} and {len(invented)} non-0x0021 "
+                  f"message(s) {[hex(o) for o in invented]}; the stream holds {ids} and "
+                  f"nothing else. Losing 222 is the straddle; anything in that second "
+                  f"list is INVENTED out of its tail, which is the half that is worse "
+                  f"than loss -- it is a message the wire never carried")
+
+        # Which segment a straddled message belongs to is a choice, and it is the one
+        # load_tape already makes for the segment itself: stamped when it began to
+        # arrive. Without this the fixture would pass under either convention.
+        stamps = [t for t, _op, _v in got]
+        LEDGER.ok(stamps == [0.0, 0.0, 0.25],
+                  "the straddled message is stamped where it STARTED, not where it ended",
+                  f"{stamps} -- message 2 begins at byte 6 in the t=0.0 segment and "
+                  f"finishes in the t=0.25 one; message 3 begins at byte 12 and is the "
+                  f"only one that belongs to the second segment")
+
+    # THE REFUSAL. A tape whose last message is cut short must not come back short and
+    # silent -- that is the exact failure the old idiom shipped, from the other side.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = os.path.join(tmp, "short")
+        short = blob[:-2]
+        write_capture(root, s2c_pieces=[short[:cut], short[cut:]])
+        _info, events = tape.load_tape(root)
+        try:
+            tape.decode_all(events, codec_obj, "GAME_SMSG")
+            why = ""
+        except tape.TapeError as ex:
+            why = str(ex)
+        LEDGER.ok(bool(why) and "12" in why and "16" in why,
+                  "a tape that does not frame end to end is REFUSED, not truncated",
+                  why or "decode_all returned a short decode without saying so")
+
+        loose, rec = tape.decode_all(events, codec_obj, "GAME_SMSG", strict=False)
+        LEDGER.ok(len(loose) == 2 and rec.consumed == 12 and rec.total == 16
+                  and rec.err is not None,
+                  "and strict=False hands back the receipt rather than hiding it",
+                  f"{len(loose)} message(s), {rec.consumed}/{rec.total}B, "
+                  f"err={rec.err!r} -- this is what a caller asserts on when it wants "
+                  f"the shortfall to be a red check instead of an exception, which is "
+                  f"what test_burrow.py's section 2 now does")
 
 
 if __name__ == "__main__":

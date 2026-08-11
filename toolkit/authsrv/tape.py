@@ -38,6 +38,8 @@ burst is exactly where evenly-spaced would look wrong.
 
 standard library only.
 """
+import bisect
+import collections
 import json
 import os
 import socket
@@ -232,6 +234,79 @@ def load_tape(capture_dir, connection=None):
         "origin": who,
     }
     return info, events
+
+
+# What decode_all hands back beside the messages. A plain 3-tuple by design -- it
+# unpacks as (consumed, total, err) at a call site that just wants the numbers, and
+# names its fields at one that wants to assert on them.
+Receipt = collections.namedtuple("Receipt", "consumed total err")
+
+
+def decode_all(events, codec_obj, channel="GAME_SMSG", mask=0, strict=True):
+    """[(t, opcode, values)] for a WHOLE tape, plus a (consumed, total, err) receipt.
+
+    THE THING THIS EXISTS TO STOP. Every consumer of a tape used to decode it one
+    event at a time:
+
+        for t, blob in events:
+            msgs, consumed, err = codec.decode_stream("GAME_SMSG", blob)
+
+    A tape event is one TCP segment, and a segment is a write, not a message. A
+    message that straddles a boundary cannot be framed from the first segment, so
+    `decode_stream` stops there and takes every message behind it in that segment
+    with it -- and NOTHING SAID SO, because the error it returned was assigned to
+    `_err` at every call site in the repo.
+
+    The half that is worse than loss: the NEXT segment then starts in the middle of
+    that straddled message, and its leading bytes frame as whatever opcode they
+    happen to spell. Per-event decoding does not merely drop messages, it INVENTS
+    them -- the same defect `test_cmsgnames.py` pins for decoding the AUTH channel
+    against the GAME tables, arriving through a different door.
+
+    MEASURED 2026-08-11 over all ten tapes of the two live captures: per-event
+    decoding yielded 17,886 messages where the stream holds 22,137 -- 4,251 lost,
+    19.2% -- and 117 of the 17,886 were fictitious, 75 of them opcode 0x0000. On
+    Lakeside County (20260807T143055, 10.0.0.210:64103) the loss is not uniform
+    across opcodes: 0x009F 181 -> 190, 0x00A2 14 -> 15, and 0x0059 PLAYER_INFO
+    0 -> 1. That last one is why this is not a cosmetic count: PLAYER_INFO is how
+    you learn the player's own agent id, and per-event decoding says that tape does
+    not contain one.
+
+    HOW THE TIMESTAMPS SURVIVE. Concatenate the payloads, frame the buffer once, and
+    put each message back on the segment that carried its FIRST byte -- a bisect over
+    the segment start offsets. A straddled message is therefore stamped when it began
+    to arrive rather than when it finished, which is the same convention `load_tape`
+    already uses for the segment itself. All ten tapes frame to consumed == total,
+    err == None, so there is no framing gap for this to hide behind.
+
+    REFUSES BY DEFAULT. `strict=True` raises rather than handing back a truncated
+    decode, because a short read is exactly the failure the old idiom made invisible;
+    pass `strict=False` when the receipt is the thing you want to assert on.
+    """
+    blob = b"".join(b for _t, b in events)
+    starts, times = [], []
+    off = 0
+    for t, b in events:
+        if b:                       # a zero-length segment carries no first byte, so
+            starts.append(off)      # attributing a message to it would be a coin flip
+            times.append(t)
+        off += len(b)
+
+    msgs, consumed, err = codec_obj.decode_stream_at(channel, blob, mask)
+    receipt = Receipt(consumed, len(blob), err)
+    if strict and (err is not None or consumed != len(blob)):
+        raise TapeError(
+            f"{channel}: framed {consumed:,} of {len(blob):,} tape bytes ({err}). "
+            f"{len(msgs):,} message(s) decoded and the rest of the stream is "
+            f"unaccounted for -- refusing to hand back a decode that stops in the "
+            f"middle, because a caller that ignores the error gets a plausible, "
+            f"short, silently wrong tape. Pass strict=False to inspect the receipt.")
+
+    out = []
+    for at, op, vals in msgs:
+        i = bisect.bisect_right(starts, at) - 1
+        out.append((times[i] if i >= 0 else (times[0] if times else 0.0), op, vals))
+    return out, receipt
 
 
 # The two messages that end a tape by taking the client OUT of the map.

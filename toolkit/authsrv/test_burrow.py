@@ -80,11 +80,12 @@ MIN_WORM_CREATES = 120
 TRANSITION_SECONDS = 2.00
 TRANSITION_TOLERANCE = 0.08      # the capture's own spread is +/-60 ms
 
-# 19 = 6 (the guard) + 7 (ArenaNet's bytes) + 6 (our cycle), from the green run of
-# 2026-08-10. Section 2 is the only one that can skip, and it takes the floor with it --
-# the same call test_rotate.py makes: a claim about ArenaNet's bytes that did not read
-# ArenaNet's bytes has not been checked, and a green exit code would say otherwise.
-LEDGER = checks.Ledger("burrowing", floor=24)
+# 25 from the green run of 2026-08-11: 24 as before, plus the byte-accounting check
+# section 2 gained when it moved onto tape.decode_all. Section 2 is the only one that
+# can skip, and it takes the floor with it -- the same call test_rotate.py makes: a
+# claim about ArenaNet's bytes that did not read ArenaNet's bytes has not been checked,
+# and a green exit code would say otherwise.
+LEDGER = checks.Ledger("burrowing", floor=25)
 
 
 class FakeSend:
@@ -181,7 +182,25 @@ def section_guard():
 
 # ------------------------------------------------------- 2. ArenaNet's own bytes
 def worm_events(codec):
-    """[(t, opcode, values)] for the Lakeside tape, or None if the capture is absent."""
+    """([(t, opcode, values)], receipt) for the Lakeside tape, or None if it is absent.
+
+    DECODES THE TAPE WHOLE. Until 2026-08-11 this framed each event separately, which
+    is wrong for the reason `tape.decode_all` documents at length: a tape event is one
+    TCP segment, a message can straddle two, and the old idiom both dropped the rest of
+    the segment behind a straddle and invented opcodes out of the next segment's
+    mid-message head. On THIS tape it read 3,500 messages where the stream holds 3,604,
+    among them five fictitious 0x0000s and a missing 0x0059 PLAYER_INFO.
+
+    The worm counts happen not to move -- 140 creates across 13 ids either way, because
+    the 0x0020s it lost were players rather than worms -- and that is worth stating
+    rather than leaving implied: this file's headline numbers were never wrong, they
+    were right by luck, and the surrounding census could have gone either way.
+
+    Hands the receipt back rather than swallowing it. `strict=False` so a tape that
+    stops framing becomes a RED CHECK naming the shortfall instead of an exception, and
+    never a skip -- a skip here would say "no capture on this machine", which would be
+    a lie about a capture that is right there and no longer parses.
+    """
     try:
         root = vaultpath.vault_path("captures", "live", LIVE_CAPTURE)
     except Exception:
@@ -200,12 +219,7 @@ def worm_events(codec):
         _info, events = tape.load_tape(root, matches[0])
     except Exception:
         return None
-    out = []
-    for t, blob in events:
-        msgs, _consumed, _err = codec.decode_stream("GAME_SMSG", blob)
-        for op, vals in msgs:
-            out.append((t, op, vals))
-    return out
+    return tape.decode_all(events, codec, "GAME_SMSG", strict=False)
 
 
 def section_capture(codec):
@@ -221,12 +235,24 @@ def section_capture(codec):
               f"0x0020[{V_AGENT},{V_MODEL},{V_POS}] of {len(c20)} fields, "
               f"0x00F0 {cf0} -- index 0 is the raw header on every message")
 
-    events = worm_events(codec)
-    if not events:
+    loaded = worm_events(codec)
+    if not loaded:
         LEDGER.skip("ArenaNet's own burrow bytes",
                     f"no live capture {LIVE_CAPTURE} / {LAKESIDE} on this machine -- "
                     "the burst shape and the 2.00 s windows went unmeasured")
         return
+    events, receipt = loaded
+
+    # Everything below counts messages, so the first claim has to be that the count is
+    # of the whole tape. This is the check the old per-event idiom could never fail: it
+    # threw the error away, so a tape framed 97% of the way through looked complete and
+    # every census beneath it was quietly short.
+    LEDGER.ok(receipt.err is None and receipt.consumed == receipt.total,
+              "the tape frames end to end, so the counts below are of ALL of it",
+              f"{receipt.consumed:,}/{receipt.total:,} bytes, err={receipt.err!r}, "
+              f"{len(events):,} messages -- per-EVENT decoding read 3,500 of these "
+              f"3,604 and invented five 0x0000s, because a message can straddle a TCP "
+              f"segment boundary and the segment after one starts mid-message")
 
     # Which agent ids are worms: the three-part signature, not "created more than once".
     # That distinction is load-bearing -- the Ascalon OUTPOST tape has 53 multi-create

@@ -26,16 +26,28 @@ import json
 import os
 import sys
 
-ROOT = r"C:\gd\Rurik"
+# Resolve the tree from THIS FILE, never from a hardcoded path. It used to say
+# `ROOT = r"C:\gd\Rurik"` and chdir there, so a copy of this script running in a
+# worktree imported MAIN's toolkit and measured main's code while sitting in a
+# branch -- the failure CLAUDE.md's "establish which tree you are actually in" rule
+# is about, in its worst form, because an absolute path does not even have the
+# decency to be relative to the shell. It surfaced on 2026-08-11 only because a
+# function added in the worktree was missing from the module this imported.
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(ROOT, "toolkit"))
 sys.path.insert(0, os.path.join(ROOT, "toolkit", "authsrv"))
 sys.path.insert(0, os.path.join(ROOT, "toolkit", "schema"))
-os.chdir(ROOT)
 import tape
 import codec
+import vaultpath
 
-C = codec.Codec(overrides="schema/overrides.json")
-OV = json.load(open("schema/overrides.json", encoding="utf-8"))["channels"]["GAME_SMSG"]
+# No chdir either. Every path below is absolute: one resolved from this file for the
+# tree, one resolved by vaultpath for the vault. Those are two different questions and
+# a chdir answered both with the same wrong guess.
+OVERRIDES = os.path.join(ROOT, "schema", "overrides.json")
+C = codec.Codec(overrides=OVERRIDES)
+OV = json.load(open(OVERRIDES, encoding="utf-8"))["channels"]["GAME_SMSG"]
 
 
 def name(op):
@@ -50,20 +62,27 @@ for stamp in ("20260807T143055", "20260810T235916"):
     for conn in tape.chain(cap):
         meta, events = tape.load_tape(cap, conn)
         their_secs += meta["seconds"]
-        carry = b""
-        for _t, blob in events:
-            buf = carry + blob
-            msgs, used, _r = C.decode_stream("GAME_SMSG", buf)
-            carry = buf[used:]
-            theirs.update(op for op, _v in msgs)
+        # decode_all rather than a hand-rolled carry across events. The carry version
+        # this replaces was CORRECT -- measured 2026-08-11, it yields the same message
+        # sequence as framing the stream whole on all ten live tapes -- but it was
+        # unguarded: it discarded the framing error, so a tape that stopped framing
+        # would have quietly lowered every rate printed below. strict=True refuses
+        # instead, which is the point of a script whose output gets quoted.
+        msgs, _receipt = tape.decode_all(events, C, "GAME_SMSG")
+        theirs.update(op for _t, op, _v in msgs)
 
 # ---- ours ----------------------------------------------------------------
 # The gamesrv capture logs one record per message with its opcode already
 # decoded, so this reads the log rather than re-framing a stream.
 ours, our_secs = collections.Counter(), 0.0
+# vaultpath, not a relative `vault/...` walk: a worktree has no vault of its own, so
+# the relative form resolved to nothing and died inside os.listdir. require_dir raises
+# and names the vault instead -- the same door tape.resolve_capture already covers.
+GAMESRV = vaultpath.require_dir("captures", "gamesrv",
+                                why="our own server's half of this comparison")
 files = sorted(
-    (os.path.join("vault", "captures", "gamesrv", f)
-     for f in os.listdir(os.path.join("vault", "captures", "gamesrv"))
+    (os.path.join(GAMESRV, f)
+     for f in os.listdir(GAMESRV)
      if f.endswith(".jsonl")),
     key=os.path.getmtime)[-6:]
 used_files = []
