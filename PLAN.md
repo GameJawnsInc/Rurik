@@ -1108,8 +1108,16 @@ parallel, with one safety change that is not optional — see its entry.
     transition the FIRST one and it worked, 118/118, with Ashford rendering; the NEXT
     transfer then stalled. Same transition, opposite outcome, decided by its ordinal --
     so it is not the map, the tape, the address or the shutdown. Three fixes aimed at the
-    close were all correct-and-irrelevant. What remains is one question: what makes the
-    client consume a DEFERRED transfer.
+    close were all correct-and-irrelevant. **And the mechanism is now read out whole (T15):**
+    `0x00851380` has no callers because it is a **switch case**. The function at
+    `0x00851340` dispatches on an event **type** and handles exactly three —
+    `0x1D` and `0x1E` both **dial**, and `0x1E` is also the only thing that clears bit
+    `0x20`; `0x1F` tears the instance down and **never dials**. A peer that merely goes
+    away raises `0x1F`, which is what our close produces however politely, so no shutdown
+    fix could ever have worked. **The open question is whether a server can provoke `0x1E`
+    at all** — those events come from the client's own connection layer, not from any
+    message. If it cannot, chaining past one hop needs a lever other than a tape, and
+    R1.5's chained form should be re-scoped rather than retried.
     **Superseded:** *Re-run 2026-08-10: the hang-up was necessary but NOT sufficient* — same two hops,
     same stop. What releases a deferred transfer is a *player-state* transition, not a
     socket close: the consumer at `0x00851402` clears the pending bit and dials, and it
