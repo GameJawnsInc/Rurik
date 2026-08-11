@@ -44,12 +44,26 @@ has to guess:
      never holds that last column -- `corner_heights()` below is the replication,
      and it is labelled as the client's behaviour, not as stored data.
   3. **Grid row 0 is world maxY.** `gx = int((wx-x0)/96)`, `gy = int((y1-wy)/96)`.
-  4. **Heights are NOT negated.** The load path applies no transform at all --
-     tag 1 reaches the client's buffers through `memcpy` and nothing else
-     (FINDINGS 17.4). GuildWarsMapBrowser's `Terrain.cpp::GenerateTerrainMesh`
-     negates every height; that is ITS renderer's convention and FINDINGS 16-P5
-     records it as such. 86.4% of corpus samples are negative and every one of
-     the 60,468,224 of them is an exact integer.
+  4. **Heights are emitted AS STORED, and a greater stored value is LOWER in
+     the world.** This rule used to read "heights are NOT negated" and cited
+     the load path applying no transform -- tag 1 reaches the client's buffers
+     through `memcpy` and nothing else (FINDINGS 17.4). That part is still true
+     and it is about BYTES, not about which way is up; the headline drawn from
+     it was wrong. MEASURED 2026-08-11 (FINDINGS 25) by two client runs
+     differing in one sign: a courtyard authored with its floor at -13 and its
+     surround at +600 was drawn by the retail client as a MESA, the floor
+     standing 613 above the surround; the same map with the surround at -626
+     was drawn as a walled enclosure, the surround standing 613 above the floor.
+     **So GuildWarsMapBrowser's `Terrain.cpp::GenerateTerrainMesh`, which
+     negates every height, agrees with the client, and FINDINGS 16-P5's filing
+     of that as "ITS renderer's convention" is CORRECTED.**
+     Nothing in this file changes: an interchange format is entitled to carry
+     the stored value, and every consumer here is told which it is. What it
+     means is that a consumer building a mesh a HUMAN will look at must negate
+     z -- `tools/blender/import_gwmap.py` does not, and its mesh is upside down
+     relative to what the player sees. 86.4% of corpus samples are negative and
+     every one of the 60,468,224 of them is an exact integer, which now reads as
+     "most of the world is above the origin" rather than below it.
 
 THE THING MOST LIKELY TO BE WRONG IS THE DE-TILING, so it is the thing checked
 hardest. Tag 1's storage order is 32x32 tiles:

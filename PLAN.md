@@ -1521,6 +1521,13 @@ parallel, with one safety change that is not optional — see its entry.
     tested slope, step height or the z the client places a character at.
     **(d)** Blender → `.blend`, and the round trip out of it. §22 exports an interchange a
     script imports; nobody has authored terrain *in* Blender and brought it back.
+    **(f)** Flip the height sign in the exporter and the Blender importer TOGETHER
+    (FINDINGS 25): a greater stored value is LOWER in the world, so the Blender mesh is
+    upside down. Props and terrain share the stored convention, so
+    `test_blenderimport`'s prop-z oracle has to move with them and its 0.7338 be
+    re-measured. Until it lands, a map in Blender is a height FIELD and not a picture.
+    **(g)** The courtyard rendering fault (FINDINGS 25.5): models stop drawing five
+    seconds before the terrain does, and nothing explains the ordering.
     **(e)** E3 (provoking the client's own map compiler) is weakened but not dead — arm 3b
     showed a corrupt Bloated chunk crashes rather than re-bloating, so the zero-length
     stream-1 payload of §17.1 is the cheapest remaining probe.

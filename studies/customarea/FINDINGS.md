@@ -3518,8 +3518,216 @@ above rests on it. It is worth keeping anyway, because the failure modes it woul
 caught are ones no assertion here looks for: a floor you sink into, a bank you slide down,
 a camera that clips, movement that stutters at the boundary. None were reported.
 
-Also worth recording from the same session: the terrain height field reached the client
-correctly on the first attempt, which is the first time anything but a flat plain has been
-built here. §8 item 10(c) — "a height field that is not flat, walked" — is met for a
-two-level field; slopes, step height and the z the client places a character at remain
-untested, since a 613-unit bank is a wall rather than a slope.
+~~Also worth recording from the same session: the terrain height field reached the client
+correctly on the first attempt.~~ **RETRACTED the same day — §25. It did not. The client
+drew that map inside out**, the walkable square standing 613 units ABOVE its surround
+instead of below it, and the sentence above was written from the operator's "felt like
+stock" without anyone looking at a frame. The map WAS non-flat and it WAS walked, so §8
+item 10(c) is met in the narrow sense; what is not true is that it came out right.
+
+---
+
+## 24. OBSERVED: the collision is the TRAPEZOID, and tag 7 is not a boundary (2026-08-11)
+
+§23.4's first open item: E1 moved `polyData` and the trapezoid together, so its result
+named the pathing chunk's walkable geometry and no part of it. Two more arms, each moving
+exactly one. Prediction, outcome table and prior are in
+`vault/research/e1-collision-2026-08-11/E1-RUNSHEET.md`, written before either ran.
+
+### 24.1 Tag 7 is not a boundary polygon, and reading said so before any client did
+
+`TAG_BOUNDARY` is **our** name for tag 7. `polyData` is the client's own header field
+name and asserts nothing about what the points are. MEASURED over 117 planes of 8 maps:
+
+| polyData points per plane | planes |
+|---|---|
+| **1** | **102** |
+| 2 | 11 |
+| 3, 7, 16, 35 | 1 each |
+
+Row 71496's single plane has **27 trapezoids and one polyData point**; row 26209's has 26
+and one. **One point cannot bound 26 trapezoids.** Whatever tag 7 is, it is not an outline
+of the walkable region, and the name should not have implied it was. What it IS remains
+**NOT FOUND**. §23.4 and `pathchunk.minimal`'s docstring both said "the boundary polygon"
+and are corrected at their call sites.
+
+`minimal` writes **four** points where every retail one-plane map writes one. That
+deviation is in all five maps loaded so far and has never been refused.
+
+### 24.2 The two arms
+
+Each moves one structure and nothing else. Both 7,841 B, **33 bytes apart**, 16 of 16
+gates, every other chunk byte-identical to §23's FULL. The control that makes them
+one-variable arms: **`split_chunk(FULL, FULL)` reproduces the delivered chunk EXACTLY**,
+so a hand-built plane merely resembling `minimal`'s cannot be the difference.
+
+| | polyData | trapezoid | **reported bounding box** | farthest from spawn |
+|---|---|---|---|---|
+| §23 FULL | 0..3072 | 0..3072 | 3072.0 × 3072.0 | 2124.1 |
+| §23 INNER | 1024..2048 | 1024..2048 | 1024.0 × 1024.5 | 724.1 |
+| **TRAP** | 0..3072 | **1024..2048** | **1024.0 × 1024.5** | **724.1** |
+| **POLY** | **1024..2048** | 0..3072 | **3072.0 × 3072.0** | 2130.1 |
+
+**The box follows the trapezoid in all four maps and polyData in none.** TRAP reproduces
+INNER to the tenth of a unit — same box, same 724.1, same single 0.5-unit excursion —
+while its polyData covers the whole map. POLY walks the full 3072 square with **44 of its
+50 reports outside the polyData rect, up to 1,024 units past it**.
+
+Of the five outcomes the run sheet named in advance, this is the first: **collision reads
+the trapezoid, and polyData plays no part in it.** Intersection is refuted by POLY, union
+by TRAP, and the polyData reading by both.
+
+A by-product worth its own line: **POLY's geometry is impossible and the client did not
+care.** Its trapezoid extends 1,024 units past its own polyData on every side, which no
+retail map does — and it loaded, ran, and let the character walk the whole trapezoid.
+So the loader does not validate the trapezoid against tag 7. Both arms are clean by C2's
+discriminators: no re-bloat line, no crash dialog, row 71496 still holding its own arm's
+payload after the client exited.
+
+### 24.3 What this fixes, and what it does not
+
+**It licenses the model our own server already uses.** `pathmap.PathingMap` reads
+trapezoids and portals and ignores tag 7 entirely. That was an implementation choice made
+before anything had tested it; the arms say it models the field the client actually uses.
+Had POLY been the confining arm, the server would have been reading the wrong structure
+for a year.
+
+**It narrows `minimal`'s INFERRED parts.** The trapezoid's spans are now OBSERVED as
+collision geometry. The DAG is untouched by this: `minimal`'s single y-node splits at 0
+and sends both children to the same sink, so no branch of it depends on a coordinate, and
+these arms could not have tested it. Portals, neighbours, multiple planes and elevation
+remain untested — E1b, like E1, is one plane and one trapezoid.
+
+**And §17.4 said so first, from the other side.** Its table of the Bloated load path has
+tag 7 marked ✗ — *"Skipped by size. The tag is not checked; only the size field matters,
+because tag 8 must land at the next offset"* — and its own summary calls the tag **"dead
+weight for a Bloated map — never read, only its size field matters."** That was read out
+of the disassembly and written down before any of this ran, and POLY is the behavioural
+confirmation of it: the client walked 1,024 units past a polygon it never loaded. Two
+independent methods, and it is worth saying plainly that **I did not connect them until
+after the run** — the prior in the run sheet was argued from retail's point counts, not
+from our own disassembly of the loader, which had already answered it.
+
+It also explains the point counts. §17.4 continues: tag 7 *"is the input to the bloat
+handler, so a map that ever gets re-bloated is rebuilt from whatever polygon is in the
+Stripped stream."* The Bloated copy is a vestige of the compile that produced it, which is
+why one point satisfies a plane with 27 trapezoids. **Nothing here tests the STRIPPED
+stream's tag 7**, where the polygon is the real input, and E3 is the rung that would.
+
+**Neither arm tests the DAG's point location**, which is the obvious next thing: a plane
+with two trapezoids and a y-node that actually splits between them would make the split
+value mean something for the first time.
+
+---
+
+## 25. OBSERVED: a greater stored height is LOWER in the world (2026-08-11)
+
+Found by accident, from an operator's bug report, against a claim this repository had
+written down twice and tested three times without ever being able to see it.
+
+### 25.1 How it surfaced
+
+The operator walked §23.5's courtyard by hand and reported that the floor and the
+character models sometimes stopped being drawn when backing into a corner. Chasing that
+produced a screenshot — and then, on re-reading the run's own auto-captured frames, this:
+
+**The walkable square is drawn as a MESA.** `vault/captures/harness/20260811T161925/hold007.png`
+shows the character standing on a brick-topped plateau with sheer cliffs falling away on
+two sides and a lower brick shelf beyond. The map was authored **floor −13 inside
+576..2496, rim +600 outside**. The client drew the floor 613 units **above** the rim.
+
+### 25.2 The experiment, one variable
+
+Same map, one number changed: the rim from **+600** to **−626** — still 613 units from
+the floor, the other sign. Everything else byte-for-byte identical, 7,841 B, 16 of 16
+gates.
+
+| stored | floor | surround | **drawn** |
+|---|---|---|---|
+| courtyard | −13 | **+600** | a mesa: the floor 613 **above** the surround |
+| courtyard2 | −13 | **−626** | a walled enclosure: the surround 613 **above** the floor |
+
+The operator's words on the second: *"the walls are up now and the camera acts accordingly
+being constrained by them."*
+
+**So rendered up is the NEGATIVE of the stored value.** Two runs, one sign, opposite
+pictures. This is the only property of the terrain chunk that no amount of round-tripping
+could have caught: every map built in this arc before the courtyard was **flat**, and a
+flat field has no sign.
+
+### 25.3 What is corrected, and it is ours
+
+`mapexport.py`'s conventions block, rule 4, read: *"**Heights are NOT negated.** The load
+path applies no transform at all — tag 1 reaches the client's buffers through `memcpy` and
+nothing else (FINDINGS 17.4). GuildWarsMapBrowser's `Terrain.cpp::GenerateTerrainMesh`
+negates every height; that is ITS renderer's convention and FINDINGS 16-P5 records it as
+such."* `tools/blender/import_gwmap.py` carried the same paragraph.
+
+The `memcpy` observation is **true and was never the point**. It is a fact about bytes
+reaching a buffer; it says nothing about which way that buffer's axis points. The headline
+drawn from it was wrong, and the dismissal of the one upstream that had it right was
+wrong with it.
+
+**GWMB negates every height and agrees with the client.** §16-P5's filing of that as "ITS
+renderer's convention" is CORRECTED — it is the client's convention, and upstream had it
+before we did. Same shape as §24's tag-7 result from the opposite direction: there we had
+the answer in our own notes and did not connect it; here somebody else had it and we
+argued it away.
+
+**What is NOT corrected**, because it was never wrong:
+
+- The prop-z orientation oracle (§4, `test_mapexport`, `test_blenderimport`, scoring 0.304
+  / 0.734 against three rival layouts) compares **stored** prop z from chunk `0x20000004`
+  against **stored** terrain height. Both are in the same convention, so the oracle
+  measures LAYOUT — which cell a sample belongs to — and is unaffected by the sign of the
+  axis. It remains correct and its numbers stand.
+- The terrain codec. Nothing in encode/decode touches the sign; 349/349 byte-identical is
+  a statement about bytes and stays true.
+- `mapexport`'s output. An interchange is entitled to carry the stored value as long as it
+  says which it is, and it does.
+
+**What IS now known to be wrong: the Blender mesh is upside down.**
+`tools/blender/import_gwmap.py` puts the stored float in z, so a retail map imported there
+shows every valley as a hill. It is left that way ON PURPOSE for now and labelled at the
+call site: `test_blenderimport`'s oracle looks up prop z in Blender's own vertex buffer,
+props and terrain share the stored convention, and negating one without the other would
+break an oracle that is currently right. Both sides have to move together and the 0.7338
+has to be re-measured. `PLAN.md` §8 item 10(f).
+
+### 25.4 A second observation, from the same sentence
+
+*"the camera acts accordingly being constrained by them"* — **the client's camera collides
+against terrain.** OBSERVED, from one operator report on one map, so it is not a
+measurement of the rule; but it retroactively explains the mesa map's behaviour, where a
+camera trailing a character standing on a plateau had nothing at all to stop it leaving
+the world.
+
+### 25.5 The rendering fault is NOT settled by this
+
+The bug report that started it is still open, and the mesa reading explains only part of
+it. What the investigation established, all OBSERVED from the run's own frames joined to
+the position trace:
+
+- **It is not the corner.** The character stood on the EXACT south-east corner at
+  20:20:09Z and both bracketing frames draw normally; it also stood on the exact north-west
+  and south-west corners earlier, all normal. Three of four corners touched precisely, only
+  the fourth visit degraded.
+- **It is two-staged, five seconds apart.** Character models stop drawing at 20:20:12Z
+  while the floor is still drawn; the floor stops at 20:20:17Z. **No position predicate
+  produces that ordering**, and nothing yet explains it. The surviving candidate is two
+  different cull radii, models shorter than terrain — UNVERIFIED, and no per-pass radius
+  has been found in the client.
+- **It did not recover within the run.** Every frame from 20:20:17Z to the end is degraded
+  and the session disconnects at 20:20:31Z. The operator's reported recovery is real but is
+  not in this capture.
+- **The dark-teal expanse is the map's own background**, present in the correctly-drawn
+  frames with geometry on top of it. Not water.
+- Killed with reasons: the terrain chunk's draw-distance field (tag 0 +0x08 = 24576.0
+  drives a chunk window of radius ≥ 3 chunks about the camera, and this map is ONE 32×32
+  chunk, so its floor is inside the window at every possible value); `MapVis`'s
+  camera-block asserts at `0x00710057`–`0x007100AB`, arithmetically unreachable; and the
+  water plane.
+
+`--shots` was added to `session.py` for this: it screenshots during the hold so an operator
+can provoke a fault with both hands. The frames it caught are what dated the fault and what
+refuted the corner story — including the operator's own description of a recovery.

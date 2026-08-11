@@ -639,7 +639,7 @@ def shot_if_foreground(hwnd, pid, path):
     return dc.shot(hwnd, path)
 
 
-def hold_open(proc, seconds, tails, outdir, quiet=False):
+def hold_open(proc, seconds, tails, outdir, quiet=False, shot_every=0.0):
     """Keep the whole session alive past the verdict, and stay instrumented.
 
     WHY THIS IS NOT `--keep-open` ON ITS OWN. `--keep-open` used to spare the
@@ -666,12 +666,26 @@ def hold_open(proc, seconds, tails, outdir, quiet=False):
     where = f"{seconds:.0f}s" if seconds else "until the client exits"
     print(f"\n--keep-open: stack and client stay up ({where}). "
           f"Ctrl-C stops both.")
-    last = 0.0
+    if shot_every > 0:
+        print(f"  --shots: a screenshot every {shot_every:.0f}s into {outdir}")
+    last, last_shot, shots = 0.0, 0.0, 0
     while proc.poll() is None and (end is None or time.monotonic() < end):
         time.sleep(0.5)
         for t in tails.values():
             t.poll()                 # keep the capture flowing during the hold
         now = time.monotonic()
+        # OBSERVED 2026-08-11: the operator saw the floor and the character
+        # models vanish while backing into a wall, and did not photograph it
+        # because reaching for a screenshot key means letting go of the input
+        # that produces it. An intermittent visual fault that only a human can
+        # provoke needs a camera the human is not holding.
+        if shot_every > 0 and now - last_shot >= shot_every:
+            last_shot = now
+            hwnd, _ = dc.find_window(proc.pid)
+            if hwnd:
+                shots += 1
+                shot_if_foreground(hwnd, proc.pid,
+                                   os.path.join(outdir, f"hold{shots:03d}.png"))
         if now - last >= 15:
             last = now
             if quiet:
@@ -884,7 +898,7 @@ def run_client(a, outdir):
 
         if a.keep_open:
             hold_open(proc, a.hold, tails, outdir,
-                      quiet=is_labelling(a))
+                      quiet=is_labelling(a), shot_every=a.shots)
     finally:
         # ALWAYS close the client, --keep-open included. The hold above is the
         # whole of what keep-open buys; once it ends the stack is about to be
@@ -980,6 +994,11 @@ def main():
                          "own collision and not our clip. The client reports "
                          "where it is four times a second, so the capture "
                          "carries the whole trace.")
+    ap.add_argument("--shots", type=float, default=0.0, metavar="SECONDS",
+                    help="With --keep-open, screenshot the client every SECONDS "
+                         "during the hold. For faults only a human can provoke: "
+                         "reaching for a screenshot key means letting go of the "
+                         "input that produces them.")
     ap.add_argument("--hold", type=float, default=0.0, metavar="SECONDS",
                     help="With --keep-open, stop holding after SECONDS instead "
                          "of waiting for the client to exit. What a probe needs "

@@ -566,9 +566,23 @@ class PathChunk:
         COLLIDES against what this returns. Two maps identical but for 33 bytes
         in this chunk -- `rect` 0..3072 against 1024..2048 -- confined the
         character to bounding boxes of 3072.0 and 1024.0 units, pinned to the
-        rect's own edges to the bit. What is verified is the walkable geometry
-        as a whole; the boundary polygon, the trapezoid and the DAG were shrunk
-        together, so which of the three the client reads is still open.
+        rect's own edges to the bit.
+
+        NARROWED the same day (FINDINGS 24) by moving the two structures
+        SEPARATELY: **the collision is the TRAPEZOID.** With `polyData` left at
+        0..3072 and the trapezoid alone at 1024..2048 the box is 1024.0; the
+        other way round it is 3072.0, with 44 of 50 reports up to 1,024 units
+        OUTSIDE the polyData rect. So what `rect` controls, as far as a client is
+        concerned, is the trapezoid and nothing else. The DAG is untested either
+        way -- the y-node below sends both children to one sink, so no branch of
+        it depends on a coordinate.
+
+        The four polyData points are NOT a boundary, and an earlier version of
+        this docstring called them one. Retail writes ONE point on 102 of 117
+        measured planes, including a plane with 27 trapezoids -- one point cannot
+        bound 27. Ours writes four corners, which has now loaded five times
+        without complaint. What the points are is NOT FOUND, and `TAG_BOUNDARY`
+        is our name for tag 7, not the client's.
         """
         if planes < 1:
             raise ValueError("a pathing chunk with no plane has no geometry")
