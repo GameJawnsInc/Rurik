@@ -1044,7 +1044,29 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-11 (`30919aa`+, suite 38/38 ~1026 checks)
+### 8.0 Next, as of 2026-08-11 (`e54df3c`+, suite 39/39 ~1036 checks)
+
+0i. ✅ **DONE 2026-08-11. The CLIENT half of the protocol is readable, and GAME_CMSG
+    goes from 7 names of 194 to 16.** Two obstacles, both now gone: the client ORs
+    `0x8000` into every game-channel opcode it sends (so nothing decoded at all until
+    it was masked — `codec` already took the parameter, nobody had passed it), and the
+    assembled captures carry no per-message time (`cmsgstream.py` rebuilds it from the
+    wire log's segment stamps). That turns a **narrated** session into a labelled run
+    against ArenaNet's own server — the map transfers, both kills and both skill casts
+    are all visible in the server's own messages, so client messages can be matched to
+    what a human actually did.
+    **THE HEADLINE IS A HOLE IN OUR SERVER.** `0x0046` USE_SKILL was named from a
+    Necromancer on our own server. A whole Ranger session casting Power Shot sent
+    **zero** of it: attack skills go out on **`0x0027`**, which `authsrv.py` has no
+    dispatch arm for — its only mention of that number is a comment about a GAME_SMSG
+    of the same number in a different channel. Every physical attack skill lands on the
+    silent-ignore path, and per D9(b) a schema-unknown c2s opcode discards whatever
+    shared its TCP read, so it is a correctness bug. **This is the next code change.**
+    **12 NAMED · 6 PARTIAL · 2 that were never GAME_CMSG** — the last two were our own
+    reader decoding the AUTH connection against the GAME_CMSG tables, which does not
+    error, it invents. Pinned now.
+    `studies/cmsg/FINDINGS.md` C14, `toolkit/authsrv/cmsgstream.py`,
+    `toolkit/authsrv/test_cmsgnames.py`.
 
 0g. 🔶 **THE FIVE NAMED MESSAGES ARE PARTLY LANDED, and the honest state matters.**
     `0x0048`, `0x00A6` and `0x0026` are wired and confirmed going out on a real

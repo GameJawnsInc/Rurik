@@ -187,6 +187,15 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/authsrv/test_replay.py` (a captured .raw decrypts back to the plaintext that
   was logged, and does so all-or-nothing across the whole vault — the first reader of a
   .raw, which closes R0a's standing caveat),
+  `toolkit/authsrv/test_cmsgnames.py` (the GAME_CMSG names of 2026-08-11, against
+  ArenaNet's own CLIENT traffic — the direction nobody had read, because the client ORs
+  0x8000 into every game-channel opcode it sends and without masking that off not one
+  message decodes. The seven names it inherited all came from labelled runs on OUR server;
+  this corpus is ArenaNet's and is narrated, so it can refute them, and it did: 0x0046
+  USE_SKILL was named from a caster, and a whole Ranger session casting Power Shot sent
+  ZERO of it — attack skills leave on 0x0027, which our server has no dispatch arm for.
+  It also pins the bug that produced two fictitious opcodes: decoding the AUTH channel
+  against the GAME_CMSG tables does not error, it invents),
   `toolkit/authsrv/test_smsgnames.py` (the twenty GAME_SMSG names of 2026-08-10, against
   ArenaNet's own recorded traffic rather than against our server — 23 invariants the
   corpus could have violated, pooled over BOTH live captures: two characters of different

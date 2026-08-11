@@ -400,3 +400,98 @@ before concluding the message is hard.
 3. **Model burrowing** (§3). It is the first GW mechanic we have direct evidence for that
    our server has no concept of, and it runs entirely through `0x0020`/`0x0021`, which are
    already implemented.
+
+## C14 — the CLIENT half, read for the first time, from ArenaNet's own traffic
+
+**OBSERVED, 2026-08-11.** GAME_CMSG goes from **7 names of 194 to 16**. The seven it
+had were all earned by labelled runs against OUR OWN server (`labelrun.py`); this
+corpus is ArenaNet's, and it is an independent witness that can refute them. One of
+them did not survive.
+
+**Two things had to be true before a single message could be read.**
+
+1. **The client ORs `0x8000` into every game-channel opcode it sends.** `MsgConn`'s
+   send computes `((conn+0x54) != 0 ? 0x8000 : 0) | msg[0]`. Without masking that off,
+   *nothing* decodes — not one message. With it, both captures frame to their exact
+   byte count. `codec.decode_stream` already took a `mask` parameter, so no code
+   change was needed; nobody had passed it. This is also where `studies/divergence`
+   D4's unexplained client reply `0x8009` came from: it is GAME_CMSG `0x0009`.
+2. **Timing had to be rebuilt.** `livesession.assemble` writes one c2s blob per
+   connection, so order survives and time does not. `toolkit/authsrv/cmsgstream.py`
+   recovers it: the wire log stamps every TCP segment, segments reassemble in seq
+   order, ARC4 runs continuously, so plaintext offset P sits at stream offset
+   P + len(handshake) and the segment covering it carries the time.
+
+**That turns a narrated session into a labelled run against ArenaNet's server** —
+which is what `labelrun.py` does on ours, except with real traffic. The operator
+wrote down what they did; the server's own messages date the anchors:
+
+| t | anchor, from the server's own messages | narrated action |
+|---|---|---|
+| 18.7 s | map 148 | Ascalon City — Town Crier, Sir Tydus |
+| 62.9 s | GAME_SERVER_TRANSFER → map 146 | "left to Lakeside County" |
+| **99.5 s** | CHAR_STATUS_DEAD | the River Skale Queen |
+| 261.7 s | → map 164 | "gatewayed to Ashford Abbey" |
+| 271.5 s | → map 146 | back to Lakeside |
+| 285.8, 294.4 s | skill activated ×2 | Power Shot |
+| **294.9 s** | CHAR_STATUS_DEAD | the worm |
+
+### THE HEADLINE: `0x0046` USE_SKILL is half a story, and the other half is unhandled
+
+| | `0x0046` USE_SKILL | `0x0027` | server skill-activated |
+|---|---|---|---|
+| Necromancer | **4** | 0 | 4 |
+| Ranger | **0** | **3** | 2 |
+
+A whole narrated session of a Ranger casting Power Shot sent **zero** `0x0046`.
+Attack skills leave on **`0x0027`**, and two of its three sends are followed by the
+server's own skill-activated at **1.19 s and 1.17 s** — the same response `0x0046`
+gets, which is what makes them two halves of one thing rather than unrelated
+messages. Field 1 is constant (the skill) and field 3 varies (the target).
+
+**Our server has no dispatch arm for `0x0027`.** The only mention of that number
+anywhere in `authsrv.py` is a comment about a *GAME_SMSG* of the same number in a
+different channel. So a Warrior, Ranger, Assassin, Paragon or Dervish pressing an
+attack skill against us gets silence — and per D9(b) a schema-unknown c2s opcode
+discards whatever shared its TCP read, so it is a correctness bug, not a missing
+feature. `probes.py`'s `use_skill_capture` predicted this branch and had never been
+run; this corpus runs it.
+
+### The nine new names
+
+`0x000A` SEND_MACHINE_SPEC · `0x0012` REQUEST_QUEST_INFO · `0x003B`
+NPC_SERVICE_SELECT · `0x003E` MOVE_TO_COORD · `0x0047` MOVE_CANCEL_REPORT_POSITION ·
+`0x0060` CHAR_CREATE_SET_CHAPTER_PROFESSION · `0x0084` CHAR_CREATE_SET_EQUIP_COLOR ·
+`0x0088` INSTANCE_LOAD_REQUEST_SPAWN_POINT · `0x0092` MISSION_MASK_REPORT.
+`0x0026`, `0x003D` and `0x00C1` were re-derived and now stand on the client's own
+words rather than on our own labelled runs.
+
+Two worth calling out for the *kind* of evidence:
+
+- **`0x0092` MISSION_MASK_REPORT.** Its sender's only assert is
+  `missionMaskBytes <= MISSION_MASK_BYTES` (MsCliMsg.cpp:181), and the bit setter's
+  is `mission < MISSIONS` (MsCliMan.cpp:368) — so MISSIONS = 888. **Our own stdlib
+  `areatable.py` independently reads exactly 888 AreaInfo records out of the same
+  build.** Two instruments that know nothing about each other, agreeing on a number.
+- **`0x0047` vs `0x003E`** have a byte-identical layout (vec2 + u32), so only values
+  tell them apart: `0x0047`'s vec2 is within 200 units of the player's own reported
+  position **9/9**, `0x003E`'s **0/3**. A report and a destination are opposite
+  meanings and the wire separates them cleanly.
+
+### The ledger, and a defect it exposed in our own reader
+
+**12 NAMED · 6 PARTIAL · 2 that were never GAME_CMSG at all.**
+
+The last two are ours. The first reader of this corpus fed the **auth** connection
+through the GAME_CMSG tables and produced two confident "opcodes", `0x0001` and
+`0x0005`, which reached the naming pass as real findings. They are the first four
+bytes of the auth c2s plaintext — one auth message's header and a field — read as
+two game messages. **Decoding the wrong channel does not error, it invents.**
+`cmsgstream.py` now files connections by channel from the capture's own file names
+and refuses to guess, and `test_cmsgnames.py` pins it.
+
+The six PARTIALs are all the same shape and it is worth naming: the mechanism is
+solid and the NOUN is ours. `INSTANCE_LOAD_READY`, `LEAVE_GAME_SERVER`,
+`CLIENT_PERF_REPORT` are role labels with no client word behind them, and the
+refutation pass struck them on the same standard the proposals themselves had used
+to reject rivals. That is the standard working in both directions.

@@ -1,5 +1,5 @@
 {
- "provenance": "Corrections to the imported OpenTyria tables in messages.json, from the two sources that can actually arbitrate: our own captures of client build 38797, and the client's own message-format tables recovered from Gw.exe (see studies/msgtable/FINDINGS.md). Kept beside messages.json rather than inside it so that regenerating the imported catalog cannot silently revert a verdict the client already gave us. Applying every entry here leaves zero residual disagreement between our catalog and build 38797's tables. NOTE ON RISK: the codec reads only `fields`; `declared_unpack_size`, `variable_length` and msg_header `length` are metadata it never consults. Of these entries, only GAME_SMSG 140, 146 and 421 change a field list, and Rurik sends none of those three -- so adopting this file changed no behaviour. Its value is that the catalog stops disagreeing with the binary, so later work is not built on a wrong flag. ADDED 2026-08-10: seven GAME_CMSG entries carrying `name` and the evidence for it, from two labelled input runs (toolkit/authsrv/labelrun.py, studies/cmsg/FINDINGS.md). The catalog had field layouts for 194 GAME_CMSG opcodes and names for NONE of them. These change NO field list -- the layouts are copied verbatim from messages.json and already agree with the client's own tables -- so they cannot affect decoding; they record what a message MEANS, which the binary's marshalling types cannot say. In particular 0x0040's u32 typing is correct and was nearly 'fixed' to float: the values are floats, the wire type is not, and the client's own SEND table says u32. ALSO 2026-08-10, later the same day: 0x0040 MOVE_UNKNOWN_FLOATS became ROTATE_PLAYER. That one was settled by the BINARY rather than by a labelled run -- the client's own assertion text names the quantity `rotation` -- and it is worth noting why the labelled runs could not have got there. A labelled run shows you WHEN a message is sent; it cannot show you that an infinity is a sentinel constant loaded from .rdata, and it was the infinities that made an angle look impossible. The wire evidence had been sitting in the vault since 2026-08-04 saying otherwise (every finite value inside +/-pi) and nobody had counted more than twelve of them. ADDED 2026-08-10 (second pass): twenty GAME_SMSG entries carrying `name`, `name_confidence` and the evidence, from a 30-opcode naming pass over the four live tapes of capture 20260807T143055 (10,944 real ArenaNet GAME_SMSG messages, 146 distinct opcodes, framing 100% clean) joined to the client's own dispatch handlers and its 19,620 compiled assert sites. Before this file had ONE named GAME_SMSG opcode of 487; it now has 21. Every entry changes NO field list -- the layouts are copied verbatim from messages.json and already agree with the client's own tables -- so none of them can affect decoding; they record what a message MEANS. `name_confidence` is the POST-REFUTATION value: each proposal was re-derived by a second reader told to refute it, which struck four headline citations and two verdicts. Ten further opcodes came back PARTIAL and are deliberately NOT named here; see studies/smsg/FINDINGS.md for those and for what was killed.",
+ "provenance": "Corrections to the imported OpenTyria tables in messages.json, from the two sources that can actually arbitrate: our own captures of client build 38797, and the client's own message-format tables recovered from Gw.exe (see studies/msgtable/FINDINGS.md). Kept beside messages.json rather than inside it so that regenerating the imported catalog cannot silently revert a verdict the client already gave us. Applying every entry here leaves zero residual disagreement between our catalog and build 38797's tables. NOTE ON RISK: the codec reads only `fields`; `declared_unpack_size`, `variable_length` and msg_header `length` are metadata it never consults. Of these entries, only GAME_SMSG 140, 146 and 421 change a field list, and Rurik sends none of those three -- so adopting this file changed no behaviour. Its value is that the catalog stops disagreeing with the binary, so later work is not built on a wrong flag. ADDED 2026-08-10: seven GAME_CMSG entries carrying `name` and the evidence for it, from two labelled input runs (toolkit/authsrv/labelrun.py, studies/cmsg/FINDINGS.md). The catalog had field layouts for 194 GAME_CMSG opcodes and names for NONE of them. These change NO field list -- the layouts are copied verbatim from messages.json and already agree with the client's own tables -- so they cannot affect decoding; they record what a message MEANS, which the binary's marshalling types cannot say. In particular 0x0040's u32 typing is correct and was nearly 'fixed' to float: the values are floats, the wire type is not, and the client's own SEND table says u32. ALSO 2026-08-10, later the same day: 0x0040 MOVE_UNKNOWN_FLOATS became ROTATE_PLAYER. That one was settled by the BINARY rather than by a labelled run -- the client's own assertion text names the quantity `rotation` -- and it is worth noting why the labelled runs could not have got there. A labelled run shows you WHEN a message is sent; it cannot show you that an infinity is a sentinel constant loaded from .rdata, and it was the infinities that made an angle look impossible. The wire evidence had been sitting in the vault since 2026-08-04 saying otherwise (every finite value inside +/-pi) and nobody had counted more than twelve of them. ADDED 2026-08-10 (second pass): twenty GAME_SMSG entries carrying `name`, `name_confidence` and the evidence, from a 30-opcode naming pass over the four live tapes of capture 20260807T143055 (10,944 real ArenaNet GAME_SMSG messages, 146 distinct opcodes, framing 100% clean) joined to the client's own dispatch handlers and its 19,620 compiled assert sites. Before this file had ONE named GAME_SMSG opcode of 487; it now has 21. Every entry changes NO field list -- the layouts are copied verbatim from messages.json and already agree with the client's own tables -- so none of them can affect decoding; they record what a message MEANS. `name_confidence` is the POST-REFUTATION value: each proposal was re-derived by a second reader told to refute it, which struck four headline citations and two verdicts. Ten further opcodes came back PARTIAL and are deliberately NOT named here; see studies/smsg/FINDINGS.md for those and for what was killed. ADDED 2026-08-11: GAME_CMSG names from a 20-opcode pass over the CLIENT-TO-SERVER half of the same two live captures. That direction decodes as GAME_CMSG once bit 0x8000 is masked off -- the client ORs it in MsgConn's send -- and it had never been read. GAME_CMSG has no receive handler to disassemble, so the evidence is the SEND SITE plus its asserts, the server's reply within 300 ms (21 GAME_SMSG opcodes are named, so a reply signature is now readable), and a NARRATED session: the operator wrote down what they did, and the map transfers, two kills and two skill casts are all visible in the server's own messages, so the times can be matched to actions. That is a labelled run against ArenaNet's own server. Every proposal was re-derived by a second reader told to refute it, which renamed four and downgraded six. NO field list changes -- layouts are verbatim from messages.json.",
  "channels": {
   "AUTH_CMSG": {
    "2": {
@@ -458,7 +458,8 @@
      }
     ],
     "name": "ATTACK",
-    "why": "OBSERVED, studies/cmsg/FINDINGS.md C4 and C9. The operator was prompted to attack a targeted hostile and the client sent this with that agent's id, immediately after 0x00C1 selected it. It is ATTACK and not a general interact: prompted to TALK TO a friendly NPC the same client sent 0x0039 instead, and clicking a player sent neither. Evidence: vault/captures/gamesrv/authsrv-20260810T151946-c1.jsonl step `attack`, vault/captures/gamesrv/authsrv-20260810T160945-c1.jsonl steps `target_npc`/`interact_npc`/`target_player`."
+    "why": "Two producers 0x005148B3/0x00514B37 in GmCoreAction.cpp, both containing GmCoreAction.cpp:933 'action < WORLD_ACTIONS' and :934 'AvValidate(targetAgentId)' -- so field 1 is the client's targetAgentId. The six-arm jump table at 0x00514984 sends 0x0026 / 0x0033 / 0x0039 / 0x003F from arms 0-3: four c2s opcodes, ONE switch, ONE targetAgentId, so attack and interact cannot be the same intent. Arm 0 alone is gated on MsCliApiGetMap()==MISSION_MAP_GAME (call 0x0084D9B0 @0x0081668C), fed by the third dword of GAME_SMSG 0x0199. FALSIFIABLE SEPARATION on ArenaNet's traffic: 4 of 5 distinct 0x0026 targets enter a GAME_SMSG 0x00A0 kind-4 auto-attack exchange; 0 of 10 distinct 0x0039 targets ever do; streams with 0x0039 and no 0x0026 contain no combat. Timeline: 17 firings, all inside the two narrated fights, none at any transfer or in either outpost. No assert says 'attack' -- the name rests on switch position plus server behaviour.",
+    "name_confidence": "high"
    },
    "57": {
     "opcode": 57,
@@ -510,7 +511,8 @@
      }
     ],
     "name": "MOVE_SET_HEADING",
-    "why": "OBSERVED, studies/cmsg/FINDINGS.md C5. Field 3 (the second vec2) is a DIRECTION, not a position: across 8 samples in a session where the character COULD NOT MOVE -- so field 1 never changed -- its magnitude held at 766.8 +/- 0.4% while its angle swept the compass. A fixed-length rotating vector is a heading. This corroborates OpenTyria's TURN_TO_DIRECTION from a property the schema itself does not state. Field 4 is a small integer 1..8 whose meaning is UNVERIFIED -- it looked like an eight-way compass across 11 consecutive samples in one window and collapsed across all 26 (value 1 spans 0.0-359.1 deg), so it is NOT the absolute heading. Evidence: vault/captures/gamesrv/authsrv-20260810T151946-c1.jsonl, vault/captures/gamesrv/authsrv-20260810T160945-c1.jsonl."
+    "why": "Producer 0x008163A0, sole caller 0x0053547B in the keyboard-walk module (GmWalk.cpp:106 'evt.code < KEYSTATES' @0x0053513E brackets it -- proximity, not containment). The payload is assembled by the AgApi agent-position getter 0x005FC400 (AgApi.cpp:499 'ptr' @0x005FC43F) plus a direction the sender scales by a caller float. The caller dedups: at 0x0053541F-0x00535447 it returns WITHOUT sending when the direction is unchanged -- send-on-heading-change. OBSERVED 430 samples on ArenaNet: |field 3| = 765.0175..768.0000 (sd 1.27) while field 1 wanders -12276..11688, so field 3 is a fixed-length rotating vector and field 1 is a real position. Confirms C5's magnitude constancy, which had only been measured on a harness that could not move.",
+    "name_confidence": "high"
    },
    "64": {
     "opcode": 64,
@@ -606,7 +608,243 @@
      }
     ],
     "name": "TARGET_SELECT",
-    "why": "OBSERVED, studies/cmsg/FINDINGS.md C3, CORROBORATED across three allegiances. Field 1 is the agent to select and 0 CLEARS the selection. Three Tab presses cycled 276 -> 273 -> 274; clearing sent 0; and it preceded every USE_SKILL, every ATTACK and every INTERACT with the matching id. Seen for a hostile, a friendly NPC and another player with no difference, so it is target-select and nothing more. Evidence: vault/captures/gamesrv/authsrv-20260810T151946-c1.jsonl `target_tab`/`target_clear`/`attack`, vault/captures/gamesrv/authsrv-20260810T160945-c1.jsonl `target_npc`/`target_player`."
+    "why": "Sole producer image-wide is fn 0x007E6AF0 (two call sites 0x007E6D11/0x007E6D26 -> thunk 0x00816DD0 -> wrapper 0x0091FA30). Its two arguments are named by asserts INSIDE that function: AvSelect.cpp:780 '!(manualAgentId && !ManagerFindAgent(manualAgentId))' @0x007E6B21 and AvSelect.cpp:781 '!(autoAgentId && !ManagerFindAgent(autoAgentId))' @0x007E6B46. Field 1 is the effective selection (manual if nonzero else auto, [ebp-0x20]); 0 clears it. OBSERVED on ArenaNet's own traffic: 75 sends, and every subsequent target-bearing message (0x0039 x29, 0x0026 x17, 0x0046 x4, 0x0027 x3 = 53 of 53) names field 1 of the most recent 0x00C1, never field 2. field1==field2 nonzero occurs 0 of 75, which the je->xor ebx,ebx branch predicts. Nothing target-shaped replies within 300 ms over 75 sends: the server is told, not asked.",
+    "name_confidence": "high"
+   },
+   "10": {
+    "opcode": 10,
+    "table": "GAME_CMSG_0010",
+    "declared_unpack_size": 246,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 10
+     },
+     {
+      "type": "blob",
+      "length": 16
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "blob",
+      "length": 12
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     },
+     {
+      "type": "string16",
+      "length": 64
+     },
+     {
+      "type": "string16",
+      "length": 20
+     }
+    ],
+    "name": "SEND_MACHINE_SPEC",
+    "name_confidence": "high",
+    "why": "Builder 0x00491820 has ZERO call sites: it is registered as a connection-established CALLBACK ('push 0x491820' at 0x00491BD9 into the connection factory), guarded to run at most once per process by a four-dword zero test. Every field traces to a Windows API: ole32!CoCreateGuid (resolved by name) for the blob, KERNEL32!GetSystemInfo dwNumberOfProcessors, CPUID leaves 0 and 1 (vendor string; 'and ecx,0xfff' signature), ntdll!RtlGetVersion major/minor/build, GlobalMemoryStatusEx >>20 for MB, and a literal 0x9020 stored when d3d9.dll loads. The frame arithmetic closes to the byte: base -0x238, last field ends at base+0xF0 = 240, matching 'push 0xf0'. Wire checks that could have failed: field 9 == 36896 == 0x9020 exactly; field 5 decodes to a valid 12-byte CPUID vendor string in both sessions; the blob is a structurally valid RFC4122 v4 UUID in both draws and DIFFERS between sessions on the same machine, which kills the machine-fingerprint reading. Fire-and-forget: the client sends its next message in the same TCP flush without waiting. Fields 10/11 (adapter PCI vendor/device) are INFERRED, field 12 UNVERIFIED. Prior art: authsrv.py:111-114 already reads 0x000A/0x000B as the computer-info pair -- that is OUR reconstruction and corroborates nothing; what is new is the per-field API trace."
+   },
+   "18": {
+    "opcode": 18,
+    "table": "GAME_CMSG_0018",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 18
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "REQUEST_QUEST_INFO",
+    "name_confidence": "high",
+    "why": "Thunk 0x0091FC00, one caller 0x0080DE09 inside 0x0080DDD0, whose assert ChCliApi.cpp:4253 'context->challengeSortArray.Find(challenge)' sits 18 bytes before the send call IN THE SAME FUNCTION -- the client's word for the argument is 'challenge'. It is a FETCH, not a push: both callers (QuestTaskTracker, QuestChallenge) reach the sender only on the FAILURE branch of a description lookup (0x0080DBE0 = 'test byte [esi+4],1; jne; xor eax,eax; ret'), and the alternative branch is assert(false) at QuestTaskTracker.cpp:299. Reply seals it: GAME_SMSG 0x004C on the same connection in 30.7-61.5 ms with field 1 equal to the requested id, 16 of 16, carrying two encoded strings. Cross-check the corpus could have failed: every 0x003B with code 0x01 is followed by exactly one 0x0012 carrying that id and no other code ever is -- 5 for 5 in each session, both directions. Consider REQUEST_QUEST_DESCRIPTION as the narrower alternative; the reply is a description."
+   },
+   "59": {
+    "opcode": 59,
+    "table": "GAME_CMSG_0059",
+    "declared_unpack_size": 6,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 59
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "NPC_SERVICE_SELECT",
+    "name_confidence": "high",
+    "why": "Builder 0x00920670 ({0x3B, arg}), sole entry 0x00816340 with 8 callers across GmNpc.cpp, VnLearnSkill.cpp, VnUnlockSkill.cpp, VnUnlockItem.cpp, VnUnlockHero.cpp -- a bank of NPC service windows, not just quests. The argument is a tagged selection id: five call sites OR in distinct high tags (0x0A000000, 0x0E000000, 0x0F000000, 0x10000000, 0x1000<<16) and VnUnlockItem masks with 0xFFFFFF first, which proves the low 24 bits are the parameter. OBSERVED: all 22 wire samples are the 0x00800000 family decoding as 0x800000|(quest_id<<8)|code, and 11 of 11 firings in the narrated session match a narrated NPC action in order, with phase alignment checked at all three map-transfer boundaries. The single code-0x04 in the whole corpus lands strictly between the two Abbey transfers, on the only narrated mid-quest step. Named SELECT rather than DIALOG because 'dialog' is our word and five of the eight call sites are service windows. NOTE: the five OR-ed high tags never appear on the wire, so 'tag+parameter' is established for the code and only the quest family is OBSERVED."
+   },
+   "62": {
+    "opcode": 62,
+    "table": "GAME_CMSG_0062",
+    "declared_unpack_size": 14,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 62
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "MOVE_TO_COORD",
+    "name_confidence": "high",
+    "why": "Thunk 0x00920720 <- entry 0x008164C0 <- the tail of the walk-module function 0x00535490, which caches a commanded destination in statics 0xC07C2C/30/34 and sends only when it CHANGES. Its counterpart 0x00535570 writes +inf (0x00948654) into those statics and calls the 0x0047 sender instead: cancel the destination, then report position. The asymmetry that settles it: 0x008164C0 passes its own ARGUMENT pointer to the sender, while the 0x0047 entry 0x008167F0 fills its buffer from playerControlledChar via 0x005FC400 -- so this vec2 cannot be the player's position. On the wire the server agrees: 6 of 15 draw an AGENT_MOVE_TO_POINT for the player's own agent 33-65 ms later whose destination is bit-identical to the sent vec2. Was UPSTREAM-only in authsrv.py:664; now confirmed from the client. Field 2 (plane) is 0 in 15/15 live and remains UNVERIFIED on this corpus."
+   },
+   "71": {
+    "opcode": 71,
+    "table": "GAME_CMSG_0071",
+    "declared_unpack_size": 14,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 71
+     },
+     {
+      "type": "vec2",
+      "length": 0
+     },
+     {
+      "type": "dword",
+      "length": 0
+     }
+    ],
+    "name": "MOVE_CANCEL_REPORT_POSITION",
+    "name_confidence": "high",
+    "why": "Sender 0x008167F0 carries ChCliApi.cpp:5692 'character == context->playerControlledChar' @0x00816878, 0x34 bytes before the send call -- on the send path. It fetches the player character, fills a quad from it via 0x005FC400, and dedupes with a 1.0 float tolerance on x/y but an INTEGER compare on the third slot (which is what an index wants). Exactly two callers; the other (0x004E0DA0) emits payload-free 0x0028 one instruction earlier and 0x0028 appears ZERO times c2s in both sessions, and both sends share the same [char+0x10C] bit-4 gate, so all 15 samples came through the walk module's destination-clear helper. Wire: 15/15 within 200 units of the player's own position (median 14.9) against 0/3 for the byte-identical 0x003E. Server-side: 8 of 15 draw a move grant at distance 0.0 -- an acknowledged stop. Practical note: one arrives ~1 s after EVERY instance load, before the player has moved. 'CANCEL' overstates -- the common cause is 'the commanded destination was cleared', which covers the load case where nothing was running."
+   },
+   "96": {
+    "opcode": 96,
+    "table": "GAME_CMSG_0096",
+    "declared_unpack_size": 4,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 96
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "CHAR_CREATE_SET_CHAPTER_PROFESSION",
+    "name_confidence": "high",
+    "why": "One send site image-wide (0x009212AF in fn 0x00921280), reached only via thunk 0x00816D00 from 0x004DAF1A inside CrContext. Field 1 = CrContext+0x238, the value guarded by CrContext.cpp:104 'chapter != CHAPTER_4' @0x004DA626; field 2 = CrContext+0x23C, the value passed to 0x005AB810 behind ConstChar.cpp:1296 'profession < arrsize(s_profChapter)' @0x005AB821. s_profChapter at VA 0x00A384F0 reads [0,0,0,0,0,0,0,2,2,3,3] -- 11 professions, 7 core. REFUTABLE PREDICTION PASSED: field 2 of the last 0x0060 predicts the server's own later AGENT_SET_PROFESSION (0x00A6) primary for that character, in both sessions, on two different professions. The client's noun is 'chapter', never 'campaign'."
+   },
+   "132": {
+    "opcode": 132,
+    "table": "GAME_CMSG_0132",
+    "declared_unpack_size": 4,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 132
+     },
+     {
+      "type": "byte",
+      "length": 0
+     },
+     {
+      "type": "byte",
+      "length": 0
+     }
+    ],
+    "name": "CHAR_CREATE_SET_EQUIP_COLOR",
+    "name_confidence": "high",
+    "why": "Public entry 0x00847D40 range-checks both arguments behind the client's own asserts -- ItCliApi.cpp:1175 'equipSlot < ITEM_EQUIP_SLOTS' @0x00847D4E (cmp 9) and ItCliApi.cpp:1176 'color < ITEM_COLORS' @0x00847D68 (cmp 0xE) -- then tail-jumps to the builder 0x0084C810. Field order pinned by disassembly: [ebp+8] (equipSlot) -> field 1, [ebp+0xC] (color) -> field 2. The entry has exactly two callers, both in CrContext.cpp (character creation), so ITEM_ misplaces it. Caller 0x004DAF30 walks the 9-entry table at VA 0x0094B6B0 = (4,2,3,6,5,0,1,9,9), skipping entries == 9: predicted seven sends per group in that order, MEASURED exactly on the wire, 10 groups / 70 messages, both sessions."
+   },
+   "136": {
+    "opcode": 136,
+    "table": "GAME_CMSG_0136",
+    "declared_unpack_size": 2,
+    "variable_length": false,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 136
+     }
+    ],
+    "name": "INSTANCE_LOAD_REQUEST_SPAWN_POINT",
+    "name_confidence": "high",
+    "why": "Zero payload (client SEND descriptor: 0 fields, 2 bytes). Send site 0x008526B0 reached only from fn 0x00852560, which is taken as a function pointer at three MsCliMan.cpp sites and reaches the send only on the phase==0 arm, then sets phase=4 -- one transition, once per load. CLEANEST REPLY IN THE CORPUS: 8 of 8 instance loads, the 300 ms window after it contains EXACTLY ONE message and it is GAME_SMSG 0x0195, at +32 to +47 ms, on a connection that is otherwise silent for half a second. 0x0195's handler 0x0084ED00 stores a vec2 + plane, converts a u8 to a heading by v*2*pi/255, and keeps (blob8 - Now64()) as a clock offset. THE CONSUMPTION TEST: in 6 of 8 loads the client's first position message on that connection carries 0x0195's vec2 bit-identically. In the 2 login loads it does not -- and those are exactly the two where 0x0195's second u8 is 1 rather than 0, 8/8. Corroborates authsrv.py:607's existing reconstruction from ArenaNet's own traffic; the send site is not itself a manifest request, only lives in the manifest module."
+   },
+   "146": {
+    "opcode": 146,
+    "table": "GAME_CMSG_0146",
+    "declared_unpack_size": 118,
+    "variable_length": true,
+    "fields": [
+     {
+      "type": "msg_header",
+      "length": 146
+     },
+     {
+      "type": "array8",
+      "length": 112
+     }
+    ],
+    "name": "MISSION_MASK_REPORT",
+    "name_confidence": "high",
+    "why": "Sender 0x00852930, whose only assert is the client's own MsCliMsg.cpp:181 'missionMaskBytes <= MISSION_MASK_BYTES' @0x00852952 (cmp esi,0x70) -- MISSION_MASK_BYTES = 112, and all 20 wire samples are exactly 112 bytes. The bit setter is idiv 8 / 1<<(i%8), bounded by MsCliMan.cpp:368 'mission < MISSIONS' @0x008524B9 (cmp 0x378) = 888. Independent stdlib corroboration: areatable.py reads 888 consecutive AreaInfo records from the same build via two agreeing locators -- two instruments, one number. REFUTABLE AND EXACT: at every one of the nine steps in BOTH sessions the mask's set-bit SET equals the cumulative set of ids the server named in GAME_SMSG 0x019F, 18 of 18 set equalities. Not progress: the nine masks are byte-identical for two different characters of different professions three days apart. The per-mission u32's meaning and whether a bit means 'equal' or merely 'received' are open (0x0093 naming 146 while bit 146 is set contradicts the 'queue instead of set' reading)."
    }
   },
   "GAME_SMSG": {
