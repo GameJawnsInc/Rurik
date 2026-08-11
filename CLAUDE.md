@@ -177,8 +177,14 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first),
-  `toolkit/clientscan/test_codescan.py` (the attack-speed chain, and the two
-  decoding traps that hid it — needs capstone),
+  `toolkit/clientscan/test_codescan.py` (the attack-speed chain, the two
+  decoding traps that hid it, and §7's three under-reporting defects — a
+  `--field` that knew one displacement encoding of two, a `--xrefs` that swept
+  one alignment of four, and an assert scan that knew one of the idiom's three
+  shapes. Each pinned at a named address with the reason it was missed, because
+  all three answered a clean confident zero. Its stdlib half runs without
+  capstone: `asserts.py` takes no disassembler on purpose, and its under-count
+  silently narrows every `--in <module>` range on the capstone side),
   `toolkit/test_checks.py` (the check on the checker — see below),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into

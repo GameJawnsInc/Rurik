@@ -62,7 +62,9 @@ prove the negative result below can go red — see §2.
 
 MSVC compiles `assert()` with the file path in `.rdata`, handed to the assert
 routine in a register; `toolkit/clientscan/asserts.py` already exploits this and
-finds **19,620 sites on this build, all calling one routine**. A few other macros
+finds **19,758 sites on this build, all calling one routine** (19,620 until
+2026-08-10, when the scan learned the two shapes it had been walking past —
+see `studies/skillcast/FINDINGS.md` §1). A few other macros
 emit paths the same way, which is why the path census (937) runs a little ahead
 of the set of files carrying asserts (855).
 
@@ -257,8 +259,9 @@ and the file service. Not actionable; it sets the scale of the tree.
 3. **Whether the server built the same `Engine\` and `Base\`, or forked
    variants.** `ExeHeapCliRelease.cpp` proves per-target specialization exists
    inside `Base\`, so "shared" is a default rather than a guarantee.
-4. **The assert corpus on the older build.** `asserts.py` reports 19,544 sites
-   with `single-routine=False` and its own warning on
+4. **The assert corpus on the older build.** `asserts.py` reports 19,680 sites
+   (19,544 edx-first + 74 ecx-first + 62 shared-tail, so all three shapes are
+   present on both builds) with `single-routine=False` and its own warning on
    `2026-04-30_b174de1f2d8d`, because its callee VA is pinned to the newer image.
    Nothing in this study depends on it — `srctree.py` does not use the assert
    idiom at all — but the older build's assert corpus is not currently

@@ -1533,14 +1533,14 @@ and neither placement failure was visible from the server side at all.
 ### A note on method, since §6o's search was reported as exhaustive
 
 §6o recorded "no `mov` and no `fstp` writes either offset by displacement
-anywhere in the image". There are 233 instructions touching `+0xEC` image-wide,
+anywhere in the image". There are 238 instructions touching `+0xEC` image-wide,
 and two of them write it from inside `AvChar`.
 
 Two things were wrong with that search, and the second is the one worth
 carrying forward.
 
 **It was scoped to the wrong place and reported as a global absence.** Bounding
-AgentView by its own assert sites turns 233 unreadable hits into 5, two of them
+AgentView by its own assert sites turns 238 unreadable hits into 5, two of them
 stores, in under a minute — and the range §6p had already established was
 sitting there unused.
 
@@ -1555,6 +1555,19 @@ blind to precisely the fields most worth chasing.**
 Both traps are now in `toolkit/clientscan/codescan.py`, and both are pinned by
 `test_codescan.py` with the counts they produce when the rules are removed
 (18 instead of 11; 0 stores instead of 2), so neither can quietly come back.
+
+**A third trap, found 2026-08-10 inside the tool this section describes.** The
+image-wide figure above reads 238 and not 233 because `--field` was searching
+one displacement encoding of two, and `--xrefs` one byte alignment of four. Both
+produced the same clean confident zero §6o's sentence did — `--field 0xE --in
+ExeArchive` answered "0 instructions" over a range containing `0x00478FB8 mov
+byte [edi+0xe], al`, which is disp8 and so was never a candidate. The scans now
+cover every encoding and every alignment, and both entry points print which ones
+they searched, so a zero carries the discipline that produced it. `test_codescan.py`
+§7 pins each at a named address. **Any absence claim in this study that came out
+of `--field` with an offset under `0x80`, or out of `--xrefs`, was made by a
+narrower search than its wording implies and should be re-run before it is
+leaned on.**
 
 ```bash
 python toolkit/clientscan/codescan.py --field 0xEC --in AvChar

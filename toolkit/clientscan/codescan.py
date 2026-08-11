@@ -10,9 +10,11 @@ WHY THIS EXISTS, and it is a specific failure rather than a general wish.
 studies/enemy/PLAN.md §6o recorded that nothing in the image writes the agent
 field at +0xEC: "No `mov` and no `fstp` writes either offset by displacement
 anywhere in the image." Four separate attempts to find the write had failed, and
-that sentence closed the question for a session. It is false. There are 233
-instructions touching +0xEC on build 38797, **two of which write it from inside
-AvChar**, and one of those two is the setter the whole combat arc was blocked on
+that sentence closed the question for a session. It is false. There are 238
+instructions touching +0xEC on build 38797 (233 until the anchoring below was
+made exact, which added five `A1 <moffs32>` absolute forms outside AvChar),
+**two of which write it from inside AvChar**, and one of those two is the setter
+the whole combat arc was blocked on
 (§6q). The earlier scan was not lying about its own results -- it was scoped to
 the wrong place and reported as a global absence.
 
@@ -39,6 +41,43 @@ decode an instruction *ending on them* from several candidate starts, and keep
 the ones whose decoded operand really carries that displacement. Exhaustive over
 the section, and it cannot desync because it never assumes an instruction
 boundary.
+
+WHAT THE SCAN COVERS, STATED IN THE OUTPUT. "Absence is reported as a range"
+was not enough. On 2026-08-10 a reservation-safety pass found this module
+under-reporting in two ways, both of which produce a clean confident zero -- the
+same shape as the §6o failure above, from inside the tool written to prevent it:
+
+  * **`--xrefs` swept data words at 4-byte alignment only** (`if p % 4 == 0`),
+    so three of four alignments were never examined. `--xrefs 0x00479280`
+    answered "0 direct rel32 reference(s), 0 data word(s)" while
+    `0x00478CF5 push 0x479280` sits in `.text` with its operand at 0x00478CF6
+    -- two off aligned. Fixed: every alignment, in every section, and a `.text`
+    hit is now decoded back to the instruction that carries it, so the answer
+    reads `push 0x479280` rather than "a word, somewhere".
+  * **`--field` knew one displacement encoding.** It searched for the
+    displacement's four bytes, which is the disp32 form (mod=10) only. Every
+    displacement under 0x80 is normally emitted as disp8 (mod=01, ONE byte),
+    and `--field 0xE --in ExeArchive` therefore reported "0 instructions, 0
+    stores" with `0x00478FB8 mov byte [edi+0xe], al` inside the range. Fixed:
+    both encodings, anchored exactly (see below).
+
+So the range is no longer the only thing said out loud. `--field` prints which
+ENCODINGS it searched and which it provably cannot reach; `--xrefs` prints which
+alignments and sections. A zero now carries the discipline that produced it,
+because a reader cannot otherwise tell "not encoded that way" from "not there."
+
+The one encoding no anchored scan can reach is mod=00 `[reg]` -- displacement
+zero, written as no bytes at all. `--field 0x0` says so rather than implying its
+count is complete; finding those needs a linear sweep, and a linear sweep is the
+thing this module refuses (see above).
+
+ANCHORING IS EXACT, not a window. A candidate decode is kept only when
+capstone's own encoding record puts the displacement on the bytes we found it
+at -- `start + insn.encoding.disp_offset == p` and `disp_size` equal to the
+width searched. The previous rule ("the instruction must END within four bytes
+of the displacement") was a proxy for that, and it is both looser and, for the
+`A1 <disp32>` forms whose displacement starts one byte in, tighter than the
+truth: the candidate-start loop began at 2 and could not see them.
 
 Two decoding traps it handles, both of which produce confident duplicates:
 
@@ -181,48 +220,95 @@ class Image:
         return best
 
     # -- field accesses -------------------------------------------------
+    @staticmethod
+    def field_encodings(disp):
+        """(searched, blind) for `[reg + disp]`, each [(name, detail)].
+
+        The scope statement `--field` prints. An anchored scan can only find a
+        displacement that is written into the instruction stream, so which
+        encodings exist for THIS displacement decides what a zero can mean --
+        and that is a property of the number, not of the image.
+        """
+        searched = [("disp32", "mod=10, the four-byte form")]
+        blind = []
+        if 0 <= disp <= 0x7F:
+            searched.append(("disp8", "mod=01, the one-byte form -- how a "
+                                      "compiler normally emits this offset"))
+        else:
+            blind.append(("disp8", f"0x{disp:X} does not fit a signed byte, so "
+                                   f"no disp8 encoding of it can exist"))
+        if disp == 0:
+            blind.append(("no displacement", "mod=00 `[reg]` writes NO "
+                          "displacement bytes, so there is nothing to anchor "
+                          "on. Accesses to +0x0 through a plain `[reg]` are "
+                          "absent from the rows above and this scan cannot "
+                          "count them"))
+        blind.append(("disp16", "needs a 0x67 address-size prefix, which "
+                                "32-bit compiled code does not emit"))
+        return searched, blind
+
     def field_access(self, disp, lo=None, hi=None):
         """Every instruction whose memory operand is [reg + disp].
 
         Returns [(va, is_write, base_reg, index_reg, text, hexbytes)], sorted.
+
+        SEARCHES EVERY ENCODING THE DISPLACEMENT CAN HAVE -- see
+        `field_encodings`, which is what `--field` prints alongside the count.
+        Searching disp32 alone reported zero for `+0xE` in ExeArchive with a
+        `mov byte [edi+0xe], al` sitting inside the range.
         """
         out, seen = [], set()
         blob, tva = self.tdata, self.tva
-        needle = struct.pack("<I", disp)
 
-        spots, p = [], blob.find(needle)
-        while p != -1:
-            spots.append(p)
-            p = blob.find(needle, p + 1)
+        # One anchor per encoding: the displacement's own bytes, as written.
+        anchors = [(struct.pack("<I", disp), 4)]
+        if 0 <= disp <= 0x7F:
+            anchors.append((bytes([disp]), 1))
 
-        for p in spots:
-            for back in range(2, 12):
-                start = p - back
-                if start < 0:
-                    continue
-                ins = next(iter(self.md.disasm(blob[start:start + 16],
-                                               tva + start, 1)), None)
-                if ins is None:
-                    continue
-                # The instruction must END on the displacement bytes (a trailing
-                # immediate may follow), or we are looking at an unrelated
-                # decode that happens to span them.
-                if not (p + 4 <= start + ins.size <= p + 8):
-                    continue
-                for op in ins.operands:
-                    if op.type != capstone.x86.X86_OP_MEM:
+        # Restrict the sweep to the requested range when there is one. An
+        # instruction inside [lo, hi] carries its displacement after its own
+        # first byte, so the anchor cannot lie before `lo` nor more than one
+        # instruction past `hi`. This is what keeps the one-byte disp8 anchor
+        # -- which matches roughly every 256th byte of a 5 MB section -- cheap
+        # on the `--in <module>` path that is the flagship entry point.
+        blo = 0 if lo is None else max(0, lo - tva)
+        bhi = len(blob) if hi is None else min(len(blob), hi - tva + 16)
+
+        for needle, ndisp in anchors:
+            p = blob.find(needle, blo, bhi)
+            while p != -1:
+                # `back` starts at 1: `A1 <disp32>` and friends put the
+                # displacement one byte in, and a loop starting at 2 could not
+                # see them.
+                for back in range(1, 12):
+                    start = p - back
+                    if start < 0:
                         continue
-                    if op.mem.disp != disp:
+                    ins = next(iter(self.md.disasm(blob[start:start + 24],
+                                                   tva + start, 1)), None)
+                    if ins is None:
                         continue
-                    if ins.address in seen:
+                    # EXACT, from capstone's own encoding record: this
+                    # instruction's displacement field must BE the bytes we
+                    # found, at the width we searched. No window, no proxy.
+                    enc = ins.encoding
+                    if enc.disp_size != ndisp or start + enc.disp_offset != p:
                         continue
-                    seen.add(ins.address)
-                    is_w = (bool(op.access & capstone.CS_AC_WRITE)
-                            or ins.mnemonic in _FPU_STORES)
-                    out.append((ins.address, is_w,
-                                ins.reg_name(op.mem.base) if op.mem.base else "-",
-                                ins.reg_name(op.mem.index) if op.mem.index else "",
-                                f"{ins.mnemonic} {ins.op_str}", ins.bytes.hex()))
+                    for op in ins.operands:
+                        if op.type != capstone.x86.X86_OP_MEM:
+                            continue
+                        if op.mem.disp != disp:
+                            continue
+                        if ins.address in seen:
+                            continue
+                        seen.add(ins.address)
+                        is_w = (bool(op.access & capstone.CS_AC_WRITE)
+                                or ins.mnemonic in _FPU_STORES)
+                        out.append((ins.address, is_w,
+                                    ins.reg_name(op.mem.base) if op.mem.base else "-",
+                                    ins.reg_name(op.mem.index) if op.mem.index else "",
+                                    f"{ins.mnemonic} {ins.op_str}", ins.bytes.hex()))
+                p = blob.find(needle, p + 1, bhi)
 
         # Drop the prefix-shadow duplicate: same displacement, address one byte
         # after a real hit whose first byte is a legacy prefix.
@@ -237,12 +323,64 @@ class Image:
         return sorted(out)
 
     # -- cross references -----------------------------------------------
+    def carrier(self, va, value):
+        """The .text instruction whose own operand is the four bytes at `va`.
+
+        A VA held in the instruction stream is a reference exactly as much as
+        one held in a table -- `push 0x479280` is how the archive allocator's
+        comparator reaches its caller -- and naming the instruction is the
+        difference between an answer and a coordinate. Anchored the same way
+        `field_access` is: candidate starts, kept only when capstone's encoding
+        record puts an immediate or an absolute displacement precisely on those
+        four bytes. Returns None outside .text or when nothing decodes.
+        """
+        if not (self.tva <= va < self.tva + len(self.tdata)):
+            return None
+        blob, p = self.tdata, va - self.tva
+        for back in range(1, 12):
+            start = p - back
+            if start < 0:
+                continue
+            ins = next(iter(self.md.disasm(blob[start:start + 24],
+                                           self.tva + start, 1)), None)
+            if ins is None:
+                continue
+            enc = ins.encoding
+            if not ((enc.imm_size == 4 and start + enc.imm_offset == p)
+                    or (enc.disp_size == 4 and start + enc.disp_offset == p)):
+                continue
+            # Placement says these four bytes are the operand field; this says
+            # capstone decoded them to the value we searched for. Implied, and
+            # checked anyway -- an operand printed next to an address the reader
+            # will trust should not rest on the two agreeing by construction.
+            if not any(
+                    (op.type == capstone.x86.X86_OP_IMM
+                     and op.imm & 0xFFFFFFFF == value)
+                    or (op.type == capstone.x86.X86_OP_MEM
+                        and op.mem.disp & 0xFFFFFFFF == value)
+                    for op in ins.operands):
+                continue
+            return (ins.address, f"{ins.mnemonic} {ins.op_str}")
+        return None
+
     def xrefs(self, target):
-        """(rel32 call/jmp sites, data words holding the VA).
+        """(rel32 call/jmp sites, four-byte windows holding the VA).
 
         BOTH, because either alone misses real callers: the client reaches
         plenty of code through tables and callbacks, and §6o's four failed
         searches for a send site were all rel32-only.
+
+        EVERY ALIGNMENT. This swept `if p % 4 == 0` until 2026-08-10, which
+        examined one alignment in four and answered a clean "0 data word(s)"
+        for `0x00479280` -- whose only reference in the image is the immediate
+        of a `push` at 0x00478CF5, landing two bytes off aligned. Nothing
+        requires a pointer to be aligned, least of all one baked into an
+        instruction, and the filter was reporting an absence it had not looked
+        for. Each hit now carries whether it is aligned and, in .text, the
+        instruction that carries it, so a table entry and an immediate stay
+        distinguishable without the filter that was hiding one of them.
+
+        Words are [(va, section, aligned, carrier_or_None)].
         """
         calls = []
         blob, tva = self.tdata, self.tva
@@ -255,16 +393,16 @@ class Image:
                         calls.append((tva + p, kind))
                 p = blob.find(bytes([opcode]), p + 1)
 
-        data, needle = [], struct.pack("<I", target)
+        words, needle = [], struct.pack("<I", target)
         for s in self.pe.sections:
             d, sbase = s.get_data(), self.base + s.VirtualAddress
+            name = s.Name.rstrip(b"\x00").decode(errors="replace") or "?"
             p = d.find(needle)
             while p != -1:
-                if p % 4 == 0:
-                    data.append((sbase + p,
-                                 s.Name.rstrip(b"\x00").decode() or "?"))
+                va = sbase + p
+                words.append((va, name, va % 4 == 0, self.carrier(va, target)))
                 p = d.find(needle, p + 1)
-        return sorted(set(calls)), data
+        return sorted(set(calls)), sorted(words)
 
 
 def module_bounds(name, exe):
@@ -328,8 +466,12 @@ def main():
         rows = img.field_access(disp, lo, hi)
         if a.writes:
             rows = [r for r in rows if r[1]]
-        # Say WHERE we looked, always. "Nothing writes it" is only a finding
-        # when the range is stated with it.
+        # Say WHERE we looked and HOW, always. "Nothing writes it" is only a
+        # finding when the range is stated with it -- and only an honest one
+        # when the encodings searched are stated too, because a scan that knew
+        # one encoding reported a confident zero over a range containing the
+        # instruction it was looking for.
+        searched, blind = Image.field_encodings(disp)
         print(f"[reg + 0x{disp:X}] in {where}\n"
               f"{len(rows)} instruction(s)"
               + (" (stores only)" if a.writes else
@@ -338,19 +480,42 @@ def main():
             print(f"  {va:08X}  {'W' if w else 'R'}  base={base:<4} "
                   f"{idx:<4} {txt:<40} {hx}")
         if not rows:
-            print("  -- none. That is a statement about the range above and "
-                  "nothing wider.")
+            print("  -- none. That is a statement about the range and the "
+                  "encodings below, and nothing wider.")
+        # A row with no base register is `[0xdisp]`, an absolute address that
+        # happens to equal the displacement -- not a struct field. Counted and
+        # named rather than filtered out, because a quiet filter is the defect
+        # this module was rewritten to stop making.
+        noreg = sum(1 for r in rows if r[2] == "-")
+        if noreg:
+            print(f"\n{noreg} of the above have no base register: those are "
+                  f"absolute address 0x{disp:X}, not a field at +0x{disp:X}.")
+        print("\nencodings searched: "
+              + ", ".join(f"{n} ({d})" for n, d in searched))
+        for n, d in blind:
+            print(f"NOT searched: {n} -- {d}")
         return 0
 
     if a.xrefs:
         t = int(a.xrefs, 0)
-        calls, data = img.xrefs(t)
+        calls, words = img.xrefs(t)
+        naligned = sum(1 for w in words if w[2])
         print(f"0x{t:08X}: {len(calls)} direct rel32 reference(s), "
-              f"{len(data)} data word(s)")
+              f"{len(words)} word(s) holding the VA "
+              f"({naligned} aligned, {len(words) - naligned} not)")
         for va, kind in calls:
             print(f"  {va:08X}  {kind}")
-        for va, sec in data:
-            print(f"  {va:08X}  in {sec}")
+        for va, sec, aligned, carried in words:
+            note = f"  <- {carried[0]:08X}  {carried[1]}" if carried else ""
+            print(f"  {va:08X}  in {sec:<8} "
+                  f"{'aligned' if aligned else f'+{va % 4} off':<9}{note}")
+        print(f"\nsearched: `call rel32` and `jmp rel32` over .text; the four "
+              f"bytes of 0x{t:08X} at EVERY alignment across all "
+              f"{len(img.pe.sections)} sections.")
+        print("NOT searched: indirect calls through a register or vtable, and "
+              "any address the image computes rather than stores. An empty "
+              "result is 'nothing stores or directly branches to it', not "
+              "'nothing reaches it'.")
         return 0
 
     if a.dis:
