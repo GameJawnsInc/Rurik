@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=118)
+LEDGER = checks.Ledger("agent lifetime", floor=125)
 
 
 def main():
@@ -197,9 +197,8 @@ def _world(dist=100.0, **over):
              "allegiance": agents.ALLEGIANCE_HOSTILE,
              "attack_speed": authsrv.ENEMY_ATTACK_SPEED,
              "effects": 0, "attacks_back": True,
-             "skill_id": authsrv.ENEMY_SKILL_ID,
-             "skill_activation": authsrv.ENEMY_SKILL_ACTIVATION,
-             "skill_recharge": authsrv.ENEMY_SKILL_RECHARGE}
+             "skills": authsrv.ENEMY_SKILL_BAR,
+             "skill_ready": [0.0] * len(authsrv.ENEMY_SKILL_BAR)}
     entry.update(over)
     return {"agents": {10: entry}, "pos": (0.0, 0.0)}
 
@@ -244,7 +243,7 @@ def section_swing_back():
     # checks below first went red.
     def _sworld(**kw):
         w = _world(**kw)
-        w["agents"][10]["skill_id"] = 0
+        w["agents"][10]["skills"] = ()
         return w
 
     # 1. A SWING IS TWO PHASES SEPARATED BY A WINDUP, which is the shape ArenaNet
@@ -527,7 +526,7 @@ def section_chase():
               "and a huge step stops it exactly at reach, not on top of the player",
               f"{d:.1f} against a reach of {authsrv.ENEMY_MELEE_RANGE:.0f} -- "
               "uncapped, a 30 s step lands at 0 and the agent stands inside them")
-    state["agents"][10]["skill_id"] = 0      # the swing path, not the skill path
+    state["agents"][10]["skills"] = ()       # the swing path, not the skill path
     LEDGER.ok(bool(_swings(state)),
               "and having arrived, it can swing",
               "the walk is only worth anything if the fight starts at the end of it")
@@ -640,11 +639,16 @@ def section_facing():
     LEDGER.ok(len(r) == 1 and r[0][0] == 10,
               "setting off, the agent announces a facing for itself",
               f"{len(r)} rotation(s)")
-    LEDGER.ok(abs(abs(angle_of(r[0])) - math.pi) < 1e-5,
-              "and the angle is atan2(dy, dx) of the player from the agent",
+    LEDGER.ok(abs(angle_of(r[0])) < 1e-5,
+              "the emitted angle is the bearing to the player PLUS pi",
               f"{angle_of(r[0]):.5f} rad = {math.degrees(angle_of(r[0])):.0f} deg. "
-              "The agent is due EAST of the player, so it must look due WEST: "
-              "+/-pi. Swapping atan2's arguments gives +/-pi/2 and fails here")
+              "The agent is due EAST of the player, so the bearing TO the player "
+              "is +/-pi and the emitted value is 0. THE PLUS PI IS MEASURED, not "
+              "derived: atan2(dy, dx) is correct by every derivation available "
+              "(test_rotate scores the client's own 0x0040 sends against exactly "
+              "that) and sending it turned the agent to face AWAY, observed by the "
+              "owner watching the screen. Which is the only instrument that sees "
+              "it -- the wire cannot tell a facing from its opposite")
     # THE BOUND HAS TO BE FLOAT32's pi, NOT float64's. Due west is exactly +pi,
     # and float32(pi) = 3.14159274 is GREATER than math.pi = 3.14159265 by 9e-8 --
     # so the obvious `-math.pi <= a <= math.pi` marks a legitimate facing
@@ -664,10 +668,11 @@ def section_facing():
     north = _world(dist=600.0)
     north["agents"][10]["pos"] = (0.0, -600.0)
     r = rots(_walk(north))
-    LEDGER.ok(abs(angle_of(r[0]) - math.pi / 2.0) < 1e-5,
-              "a player due north of the agent reads as +pi/2, not -pi/2 or 0",
-              f"{angle_of(r[0]):.5f} -- this is the check that separates atan2(y, x) "
-              "from atan2(x, y), which the +/-pi case above cannot")
+    LEDGER.ok(abs(angle_of(r[0]) + math.pi / 2.0) < 1e-5,
+              "a player due north of the agent emits -pi/2, not +pi/2 or 0",
+              f"{angle_of(r[0]):.5f} -- bearing +pi/2, emitted -pi/2. This is the "
+              "check that separates atan2(y, x) from atan2(x, y), which the "
+              "due-east case above cannot: swapping the arguments emits +pi here")
 
     # 2. it is NOT re-announced when nothing has changed
     quiet = rots(_walk(state, n=5, elapsed=0.02))
@@ -717,7 +722,12 @@ def section_facing():
 
     # 6. the fields are FLOAT BITS in dword slots. Read raw, the angle check
     #    above compares garbage to pi -- the exact failure test_smsgnames records.
-    raw = rots(_walk(_world(dist=600.0)))[0]
+    # a NORTH fixture, not the due-east one: due east emits exactly 0.0, whose
+    # float bits are 0x00000000, and a bit-pattern check against zero proves
+    # nothing about marshalling either way.
+    bits_world = _world(dist=600.0)
+    bits_world["agents"][10]["pos"] = (0.0, -600.0)
+    raw = rots(_walk(bits_world))[0]
     LEDGER.ok(raw[1] > (1 << 30) and raw[2] > (1 << 29),
               "and both fields go out as float BITS, not as small integers",
               f"angle=0x{raw[1]:08X}, rate=0x{raw[2]:08X} -- a dword field holding "
@@ -761,7 +771,7 @@ def section_enemy_skill():
     sent = _swings(state)
     casts = cast_msgs(sent)
     LEDGER.ok(len(casts) == 1 and casts[0][1][1] == 10
-              and casts[0][1][2] == authsrv.ENEMY_SKILL_ID,
+              and casts[0][1][2] == authsrv.ENEMY_SKILL_BAR[0][0],
               "a hostile opens with its SKILL, named on the int channel",
               f"{casts} -- [GV_SKILL_ACTIVATED, agent, skill]")
     ops = [op for op, _v, _l in sent]
@@ -772,7 +782,7 @@ def section_enemy_skill():
               "prevent, and it is the one a reader of authsrv.py would make")
     LEDGER.ok(not dmg_floats(sent),
               "and the cast deals no damage until it lands",
-              f"activation is {authsrv.ENEMY_SKILL_ACTIVATION}s -- damage here is "
+              f"activation is {authsrv.ENEMY_SKILL_BAR[0][1]}s -- damage here is "
               "the instant-cast bug, the same shape the swing had")
 
     # 2. nothing else happens during the activation window
@@ -801,28 +811,39 @@ def section_enemy_skill():
               "SWING, and 40 of the 42 in the live corpus are followed by a "
               "property-16 damage from the same agent. A cast is not a swing")
 
-    # 4. the recharge gates the next one, and swings fill the gap. Roll ONLY the
-    #    swing timer back: the recharge (2.0 s) is longer than the swing interval
-    #    (1.33 s), so there is a real window where an agent should be swinging
-    #    while its skill is still coming back. Rolling skill_used_at too would
-    #    make the "does not fire again" check below vacuous.
+    # 4. THE NEXT CAST IS A DIFFERENT SKILL, not slot 1 again. This is where the
+    #    bar stops being decorative: with one skill the agent would fall back to
+    #    swinging here, and the two checks that used to sit in this spot asserted
+    #    exactly that. They were correct for a single skill and wrong for a bar.
     state["agents"][10]["last_swing"] = time.time() - 100.0
-    after = _swings(state, n=3)
-    LEDGER.ok(not cast_msgs(after),
-              "the skill does not fire again until its recharge has run",
-              f"recharge is {authsrv.ENEMY_SKILL_RECHARGE}s from the START of the "
-              "cast, which is what the client's own table means by one")
-    LEDGER.ok(any(op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
-                  for op, _v, _l in after),
-              "but it goes back to swinging in the meantime",
-              "a recharging agent that does nothing at all reads as a broken one")
+    after = _swings(state, n=1)
+    second = cast_msgs(after)
+    LEDGER.ok(len(second) == 1
+              and second[0][1][2] == authsrv.ENEMY_SKILL_BAR[1][0],
+              "with slot 1 recharging it casts slot 2, not slot 1 again",
+              f"{second} -- expected skill {authsrv.ENEMY_SKILL_BAR[1][0]}. "
+              "Repeating the first skill is what a bar-shaped constant looks like "
+              "when the selector is not really reading the bar")
+
+    # and only when the WHOLE bar is down does it swing
+    busy = _world()
+    busy["agents"][10]["skill_ready"] = [time.time() + 999.0] * len(
+        busy["agents"][10]["skills"])
+    busy["agents"][10]["last_swing"] = time.time() - 100.0
+    dry = _swings(busy, n=1)
+    LEDGER.ok(not cast_msgs(dry)
+              and any(op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
+                      for op, _v, _l in dry),
+              "and with the whole bar recharging it goes back to swinging",
+              "an agent with nothing ready that also stops swinging reads as a "
+              "broken one")
 
     # 5. skill 0 turns it off, and the agent is on plain swings
     plain = _world()
-    plain["agents"][10]["skill_id"] = 0
+    plain["agents"][10]["skills"] = ()
     p_sent = _swings(plain)
     LEDGER.ok(not cast_msgs(p_sent),
-              "skill = 0 leaves the agent on plain swings",
+              "an empty bar leaves the agent on plain swings",
               "the content switch, so a probe can put a non-casting body in the "
               "world without editing code")
     LEDGER.ok(any(op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET
@@ -862,8 +883,111 @@ def section_enemy_skill():
               f"{len(kills)} -- property 16 floors at 1 and cannot kill however "
               "it is dressed up")
 
+    # 7b. THE BAR IS A BAR: it works down the slots rather than repeating slot 1.
+    #     Every recharge is rolled back except the one under test, so what is
+    #     being measured is the ORDER and not the clock.
+    bar = _world()
+    a = bar["agents"][10]
+    picked = []
+    for _ in range(len(a["skills"])):
+        slot = authsrv.pick_skill(a, time.time())
+        if slot is None:
+            break
+        picked.append(slot)
+        a["skill_ready"][slot] = time.time() + 999.0      # "just cast it"
+    LEDGER.ok(picked == list(range(len(a["skills"]))),
+              "the bar is worked in order, one slot at a time",
+              f"{picked} of {len(a['skills'])} slots -- a selector that always "
+              "returned the first ready slot without the recharge moving would "
+              "give [0, 0, 0, 0], and one that scanned backwards would reverse it")
+    LEDGER.ok(authsrv.pick_skill(a, time.time()) is None,
+              "and when every slot is recharging, nothing is picked",
+              "None rather than slot 0 -- the agent falls through to swinging")
+
+    # 7b-ii. ROUND ROBIN, and this is the check that separates it from the
+    #        first-ready-in-order version it replaced. With EVERY slot ready, a
+    #        first-ready selector returns slot 0 forever; round robin advances.
+    rr = _world()
+    r = rr["agents"][10]
+    n = len(r["skills"])
+    r["skill_ready"] = [0.0] * n
+    order = []
+    for _ in range(n + 1):
+        slot = authsrv.pick_skill(r, time.time())
+        order.append(slot)
+        r["last_slot"] = slot            # what the cast site does
+    LEDGER.ok(order == list(range(n)) + [0],
+              "with every slot ready the cursor advances and wraps",
+              f"{order} -- first-ready-in-order gives {[0] * (n + 1)} here, and "
+              "that is the version this replaced")
+
+    # and the WRAP specifically: the only ready slot sits BEHIND the cursor. The
+    # modulo on `start` alone does not cover this -- every check above is
+    # satisfied by a selector that sweeps from the cursor to the end of the bar
+    # and gives up, which would strand a ready slot 1 whenever the cursor is
+    # past it and everything after is recharging.
+    wr = _world()
+    w = wr["agents"][10]
+    later = time.time() + 999.0
+    w["skill_ready"] = [0.0] + [later] * (len(w["skills"]) - 1)
+    w["last_slot"] = len(w["skills"]) - 2      # cursor points at the last slot
+    LEDGER.ok(authsrv.pick_skill(w, time.time()) == 0,
+              "and the scan wraps to reach a ready slot behind the cursor",
+              "cursor at the end of the bar, only slot 1 ready -- a sweep that "
+              "stops at the end returns None here and the agent swings instead "
+              "of casting a skill that is up")
+
+    # 7b-iii. THE DEFECT ITSELF, as a regression. 11.5 measured a live run where
+    #         slot 4 NEVER fired: recharges of 2, 5, 8, 2 mean a priority list
+    #         never walks past slot 3, because slot 1 is back every 2.0 s. Drive
+    #         the real bar against a clock and require every slot to get a turn.
+    sim = _world()
+    sm = sim["agents"][10]
+    sm["skill_ready"] = [0.0] * len(sm["skills"])
+    clock, fired = 0.0, set()
+    for _ in range(400):
+        slot = authsrv.pick_skill(sm, clock)
+        if slot is not None:
+            fired.add(slot)
+            sm["skill_ready"][slot] = clock + sm["skills"][slot][2]
+            sm["last_slot"] = slot
+            clock += sm["skills"][slot][1]     # the activation
+        clock += 0.05
+    LEDGER.ok(fired == set(range(len(sm["skills"]))),
+              "and over a simulated fight EVERY slot on the bar gets used",
+              f"fired {sorted(fired)} of {len(sm['skills'])} slots. The live run "
+              "in 11.5 produced {276: 6, 253: 3, 312: 3, 289: 0} -- one slot never "
+              "used at all -- and this is that defect as a regression check")
+
+    # 7c. RECHARGE IS PER SLOT, not per agent and not per skill id. A bar may
+    #     legitimately carry the same skill twice and the second copy must not
+    #     inherit the first's cooldown.
+    dup = _world()
+    d = dup["agents"][10]
+    d["skills"] = (authsrv.ENEMY_SKILL_BAR[0], authsrv.ENEMY_SKILL_BAR[0])
+    d["skill_ready"] = [0.0, 0.0]
+    first = authsrv.pick_skill(d, time.time())
+    d["skill_ready"][first] = time.time() + 999.0
+    LEDGER.ok(first == 0 and authsrv.pick_skill(d, time.time()) == 1,
+              "a bar carrying the same skill twice recharges the two separately",
+              "keyed by SLOT, not by id -- keying by id makes the second copy "
+              "share the first's cooldown and the bar quietly one shorter")
+
+    # 7d. the ids and timings are the client's, not ours
+    LEDGER.ok(len(authsrv.ENEMY_SKILL_BAR) >= 2
+              and len({r[0] for r in authsrv.ENEMY_SKILL_BAR})
+                  == len(authsrv.ENEMY_SKILL_BAR)
+              and len({r[2] for r in authsrv.ENEMY_SKILL_BAR}) > 1,
+              "the bar holds several DISTINCT skills with DIFFERENT recharges",
+              f"{authsrv.ENEMY_SKILL_BAR} -- varied recharges are what make the "
+              "order observable rather than decorative. Ids and timings are "
+              "ArenaNet's from skilltable.py; WHICH four, and the priority order, "
+              "are ours, and studies/presearing MANIFEST 7 found no base skill bar "
+              "on any Pre-Searing creature page it read, so this bar is a fixture "
+              "and not a claim about a Hatcher")
+
     # 8. the content key reaches the entry, same rule as the other two
-    LEDGER.ok("skill_id" in inspect.getsource(authsrv.spawn_enemy),
+    LEDGER.ok("skills" in inspect.getsource(authsrv.spawn_enemy),
               "and spawn_enemy carries the skill from the content row",
               "`entry` is a closed literal; a key that is not named there never "
               "arrives, however it is spelled in world.toml")

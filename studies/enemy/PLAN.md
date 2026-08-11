@@ -2609,6 +2609,12 @@ would be a `ValueError` the tick has to swallow.
 
 ### 11.3 It faces you — on an angle nobody here invented
 
+> **CORRECTED by §11.7.** The angle in this section was 180° out and the agent
+> faced AWAY. Everything below about the field layout, the range, the float32
+> seam and the turn rate stands; the claim that it was "turned toward the player"
+> does not, and it was based on my reading of a frame rather than on anyone
+> looking at the screen. The offset is applied and confirmed in §11.7.
+
 **OBSERVED 2026-08-11**, capture `authsrv-20260811T175949-c1.jsonl`:
 
 ```
@@ -2668,7 +2674,16 @@ the seam, so it never had to notice.
 
 ### Still not there
 
-- **It does not turn while dead**, and nothing resets `facing_told` on revive.
+- **It does not turn while dead**, and nothing resets `facing_told` on revive. I
+  predicted the facing would therefore be stale after a revive. **OBSERVED
+  2026-08-11, owner: it still faces the player after the revive**, and the reason
+  is that the stale value is still the CORRECT value — nothing that could
+  invalidate it can happen while the player is dead. The player cannot move (they
+  are face-down), and the agent neither chases nor turns toward a corpse, so the
+  geometry at revive is the geometry at death. The missing reset is real; the
+  symptom is **unreachable today**. It becomes reachable the moment a dead player
+  can be moved — a resurrection-shrine walk is exactly that, and is the change
+  that would need this looked at again.
 - **The turn rate is one constant for every creature.** ArenaNet's is per-creature;
   we send its maximum to everything.
 - **`ENEMY_FACING_EPSILON` is ours.** The rest of the numbers are ArenaNet's.
@@ -2736,3 +2751,148 @@ different channel.
   `aftercast` and `adrenaline` for every skill and none of them are read.
 - **The effect is damage and nothing else.** Skill 276's real effect is not
   modelled; it deals a flat fraction like a harder swing.
+
+### 11.5 A bar, not a skill — and one slot on it was unreachable (FIXED, 11.6)
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T182359-c1.jsonl`:
+
+```
+t=4.15  casts 276    t=4.91  deals 25     activation 0.76 vs table 0.75
+t=4.96  casts 253    t=5.97  deals 25     activation 1.01 vs table 1.00
+t=6.02  casts 312    t=6.78  deals 25     activation 0.76 vs table 0.75
+t=6.83  casts 276    ...
+```
+
+Four skills, each with its own recharge, selected **first-ready-in-bar-order**.
+Three activations measured against three different table values, all within 10 ms.
+
+**AND SLOT 4 NEVER FIRED.** Counts for the run were `{276: 6, 253: 3, 312: 3, 289: 0}`.
+This is not a defect in the selector — it is what a strict priority list does when
+slot 1 recharges faster than the bar takes to walk. 276 comes back every 2.0 s,
+and reaching slot 4 needs 2.0 + 5.0 + 8.0 seconds of everything above it being
+busy, which never happens. **A four-slot bar is really a three-slot bar here**, and
+the fourth is dead weight until selection changes.
+
+Recorded rather than quietly reordered, because reordering to make the number look
+better would have hidden the property. **Fixed in §11.6 with round robin**, on the
+owner's call; the paragraph above is kept as the measurement that motivated it.
+
+**The test proves the selector, not the schedule.** `section_enemy_skill` rolls
+each slot's recharge forward by hand and requires the picks to be `[0, 1, 2, 3]`,
+so it catches a selector that always returns slot 1 or scans backwards. It cannot
+catch the reachability problem above, and the two facts are different: the
+selector walks the whole bar; the live schedule does not reach the end of it.
+
+**WHOSE BAR THIS IS: ours.** `studies/presearing/MANIFEST.md` §7 read three
+Pre-Searing creature pages in full and found **no base skill bar on any of them** —
+the Restless Corpse's is explicitly "None", the region's only non-Charr boss has no
+`==Skills==` section, and the Grawl bar an earlier pass relied on turned out to be
+**invented**. Our Hatcher is a Lakeside creature, so this bar is a fixture that
+exercises the mechanism and **not a claim about what a Hatcher does in retail**.
+A content row is where a sourced bar goes the day there is one.
+
+**What IS ArenaNet's:** every id, activation and recharge, out of the client's own
+table via `skilltable.py` on build 38797. All four are profession 3 — the
+profession this server already declares for the Hatcher at spawn — campaign 1,
+non-elite, and each has a different `type_code`. **What is ours:** which four of
+the 21 that qualify, the priority order, and the flat 0.25 damage. Per-skill
+effects are not modelled; giving each slot its own number would be four
+inventions instead of one.
+
+**Recharge is per SLOT, not per id** — a bar may carry the same skill twice, and
+keying by id would make the second copy share the first's cooldown and the bar
+quietly one shorter. Pinned by a check.
+
+
+### 11.6 Round robin, and every slot fires
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T183716-c1.jsonl`. Owner's call.
+
+```
+t=3.30  casts 276      casts by skill: {276: 3, 253: 3, 312: 3, 289: 3}
+t=4.11  casts 253
+t=5.17  casts 312
+t=5.98  casts 289      <- the slot that never fired before
+t=16.76 casts 276      (the 10.8 s gap is the player's death and 10.0 s revive,
+t=17.57 casts 253       not a selection stall -- nothing casts at a corpse)
+```
+
+**Three of each, exactly even**, against `{276: 6, 253: 3, 312: 3, 289: 0}` before.
+
+The change is one line and no new numbers: the scan starts **after the last slot
+cast** instead of at slot 1, and wraps. Every ready slot gets a turn before any
+slot gets a second one. `last_slot` is written by the cast site rather than by
+`pick_skill`, so the selector stays a pure read and a test can drive the cursor.
+
+**STILL NOT MEASURED, and this does not change it:** nothing in this project knows
+how a Guild Wars monster actually chooses. Round robin, least-recently-used and
+priority order are all inventions. This is the invention that reaches every slot,
+which was the property actually wanted.
+
+**Three checks, because the first two did not cover the wrap.** The existing suite
+passed the round-robin change unchanged — 122 green before and after — which
+means nothing in it could tell the two selectors apart. Added:
+
+1. every slot ready, cursor advanced by hand → picks must be `[0,1,2,3,0]`;
+   first-ready gives `[0,0,0,0,0]` and goes red.
+2. **the wrap specifically**: cursor at the end of the bar, only slot 1 ready →
+   must return 0. A sweep that stops at the end returns `None` and the agent
+   swings instead of casting a skill that is up. This one is the reason to write
+   it out: the modulo on `start` alone satisfies check 1, so check 1 passes
+   against a selector with no wrap at all.
+3. **the defect as a regression**: the real bar driven against a simulated clock,
+   requiring every slot to be used.
+
+### 11.7 Two corrections from the owner, and one of them is about method
+
+**OWNER'S OBSERVATION 2026-08-11: the agent faced AWAY from the player.** §11.3
+claimed "on film it is turned toward the player mid-swing instead of showing its
+back". That was me reading a 1 fps JPEG and finding what I expected; the owner was
+at the machine. **The wire cannot tell a facing from its opposite** — every angle
+in the capture is inside ±π, the rate is ArenaNet's, the value round-trips, and
+all of it is equally true of a body pointing the wrong way. A person looking at
+the screen is the only instrument for this, and I substituted my own frame-reading
+for it and reported the result as confirmation.
+
+**CONFIRMED 2026-08-11, owner, on the run after the change: the facing is now
+correct.** Emitted 0° for the geometry that previously emitted 180°, and the agent
+faces the player. That confirmation is the whole evidence base for the offset —
+there is no wire-side check that could have produced it, and none has been
+invented to look like one.
+
+**The fix is `+ π`, and the `+ π` is measured rather than derived.**
+`atan2(dy, dx)` is the bearing from the agent to the player and it is correct by
+every derivation available — `test_rotate.py` scores the client's own `0x0040`
+sends against exactly that and beats a null model. Sending it turns the agent
+around. So **the client's `0x002E` facing is not the same convention as the
+heading it reports in `0x003D`**, and *why* is not established: it could be the
+zero direction, the sign, or the model's own forward axis. The offset is what is
+established, from the one observation that could refute it.
+
+This is §10's lesson for the fourth time, from a new angle: **a derivation tells
+you what the client TESTS and never what the answer looks like on screen.**
+`test_rotate`'s scoring, `test_smsgnames`' range, the float32 seam, the byte
+layout — all correct, all consistent with a backwards agent.
+
+**OWNER'S RULING: casting AI is not being decided here.** §11.4–11.6 built a bar
+and then a selection policy for it, and the policy is invented — round robin
+reaches every slot, which was the property wanted, but nothing measured it and
+nothing should read it as a claim. **A deeper dive into monster AI comes first.**
+Until then the bar is a TESTING FIXTURE whose job is to exercise the mechanism —
+the message shape, the per-slot recharge, the activation window, the reachability
+of every slot — so the parts that *are* evidenced can be tested. `pick_skill` and
+the bar constants now say this at the call site. When the AI study lands, the
+policy gets replaced rather than extended.
+
+**What in §11.4–11.6 survives that ruling**, because it is measurement rather
+than invention:
+
+- `0x00E3` is the player's cast confirmation and NOT how an NPC's cast is
+  announced — 6 of 6 in the corpus, and the client's own "Pending skill not
+  found" log explains why.
+- `0x009F` value 60 with `[agent, skill]` is what the corpus carries for an NPC
+  cast (n=1), and the client renders a cast glyph for it.
+- Activation times are ArenaNet's and the client honours them: 0.76 / 1.01 / 0.76
+  measured against table values 0.75 / 1.00 / 0.75.
+- Recharge must be per SLOT, not per skill id.
+- `0x00A0` value 20 is not an NPC casting; slot 2 there is the target.

@@ -372,6 +372,20 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
   and that an unframeable opcode stops the framer instead of being framed past),
+  `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
+  no handler is now VISIBLE rather than falling off the end of the chain --
+  19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
+  behaviour half is the design, not the `else`: first occurrence prints, the
+  rest are counted, the tally lands at disconnect, and a labelled run
+  suppresses the ECHO while still COUNTING -- which is the one that would
+  silently disable the fix in exactly the sessions an operator is watching.
+  The structural half asks the SYNTAX TREE whether both chains end in a real
+  `else`, because an `elif` is a lone `If` inside `orelse` and a text grep
+  cannot tell them apart -- `test_cmsgnames.py` had a grep that asserted its
+  arm's formatting and went red on a line break. Four negative controls must
+  go red, including an `elif` in the else's place and an `else` that calls
+  something else, since `else: pass` satisfies "has an else" while restoring
+  the exact silence D9(a) is about. No vault, no socket, no client),
   `toolkit/authsrv/test_tape.py` (R1.5's tape loader: the events ARE the recorded
   stream whole and in order, and a tape whose wire bytes do not account for the
   plaintext -- or that came from our own server -- is refused. Section 6 is the
