@@ -418,16 +418,22 @@ an error, which is the failure mode worth naming. Subtract 0x3A0000 first.
 | 52 `GV_ENERGY_GAIN` | 5 | `0x008182E6` | |
 | 55 `GV_ARMOR_IGNORING` | 6 | `0x0081830B` | |
 | 62 `GV_ENERGY_SPENT` | 7 | `0x00818345` | |
-| 42, 61 | 8 | `0x0081838B` | the `ja` default — 42 is an INT-channel property, correctly absent here |
+| **39 of the 47 ids**, incl. 42 and 61 | 8 | `0x0081838B` | the `ja` default. Ids 17–32, 35–41, 45–51, 53–54 and 56–61 all land here — the client acts on only **8** of the 47 it accepts. 42 is an INT-channel property, correctly absent |
 
 `0x009215F0 + 0x23 = 0x00921613`, which is the crash's own return address, so
 **`0x009215F0` is the CharPool method whose line 84 asserts `fraction <= 1.0f`** and
 property 34 is what it range-checks.
 
 **The decode is checked rather than fitted.** Every property this repo had already named
-independently — 16, 44, 52, 55, 62 — lands on a *distinct* arm, and the two that land on
-the default (42, 61) include one we know is int-channel. A mis-derived table would not
+independently — 16, 44, 52, 55, 62 — lands on a *distinct* arm, and the ones we named that
+land on the default include 42, which we know is int-channel. A mis-derived table would not
 sort our own constants that way.
+
+**The default is the common case, and the first version of this table hid that** by listing
+only the ids we happen to have names for: **39 of the 47 accepted ids fall to arm 8**. The
+client accepts the range 16..62 and acts on eight values in it. So "property N is in range"
+says almost nothing, and an unnamed id is far more likely to be silently ignored than
+handled.
 
 **Why nothing found this in twenty sessions: the bound is `<=`, so it only fires
 positive.** Every value ever put on this channel was damage — `-HIT_FRACTION`, and the

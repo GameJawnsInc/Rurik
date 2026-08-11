@@ -17,15 +17,24 @@ the world-tick daemon thread and stops the world for the rest of the session, wi
 traceback nowhere near the cause. That is why `create_agent_world` owns both halves and
 why the guard is checked from both directions here.
 
-WHAT THIS FILE CANNOT SETTLE, and it is the load-bearing unknown. ArenaNet sends the NPC
-definition (0x0056) exactly ONCE for 140 re-creates of the same worm, so their client
-keeps a definition across a removal. Ours has never been asked -- the D1 probe re-sent
-the definition every single time, which is precisely why its success proves nothing
-about this. `agents.npc_properties` warns that an agent whose definition was never sent
-takes the client down on `index < m_count`. Only the `burrow` probe, with a person
-watching, can answer it; until then the server resends and this file asserts that it
-resends.
+WHAT THIS FILE USED TO SAY IT COULD NOT SETTLE -- SETTLED 2026-08-11. ArenaNet sends the
+NPC definition (0x0056) exactly ONCE for 140 re-creates of the same worm, so their client
+keeps a definition across a removal. Ours had never been asked -- the D1 probe re-sent the
+definition every single time, which is precisely why its success proved nothing about
+this -- and `agents.npc_properties` warns that an agent whose definition was never sent
+takes the client down on `index < m_count`, with no server-side symptom.
+
+The `burrow` probe ran (studies/enemy/PLAN.md 10.8, capture authsrv-20260811T135809): our
+Hatcher was removed and re-created twice with no 0x0056/0x0057 -- once at the same id, once
+at a fresh one -- and both drew a correct collector. A definition is per-INSTANCE.
+`burrow_tick` now passes send_definition=False and THIS FILE ASSERTS THAT NO RE-CREATE
+RESENDS. The first create still declares; only re-creates skip it.
+
+This paragraph is dated because its predecessor was not: the commit that flipped the check
+below rewrote the check's own message, create_agent_world's docstring, burrow_tick's
+comment and the probe note, and left this header saying the opposite of all four.
 """
+import inspect
 import os
 import sys
 import time
@@ -75,7 +84,7 @@ TRANSITION_TOLERANCE = 0.08      # the capture's own spread is +/-60 ms
 # 2026-08-10. Section 2 is the only one that can skip, and it takes the floor with it --
 # the same call test_rotate.py makes: a claim about ArenaNet's bytes that did not read
 # ArenaNet's bytes has not been checked, and a green exit code would say otherwise.
-LEDGER = checks.Ledger("burrowing", floor=22)
+LEDGER = checks.Ledger("burrowing", floor=24)
 
 
 class FakeSend:
@@ -381,6 +390,38 @@ def _drive_cycle():
               "id, then a fresh id -- and both drew a correct collector. A definition is "
               "per-INSTANCE. The FIRST create still declares; only re-creates skip it, "
               "and this cycle starts from an already-declared agent.")
+
+    # AND THE ESCAPE HATCH IS REAL, which it was not when the comment promising it
+    # shipped. `burrow_tick` reads entry.get("resend_definition", False), and `entry`
+    # is a closed literal built in spawn_enemy -- so until ENEMY_RESEND_DEFINITION was
+    # added, a `resend_definition = true` in content/world.toml loaded silently, never
+    # reached `entry`, and left the operator believing they had restored the old
+    # behaviour while the client still died on Array.h's `index < m_count`. The
+    # documented mitigation for a SILENT client assert must not itself be silent.
+    sendh = FakeSend()
+    stateh = {"agents": {}}
+    hatch = make_entry(out=0.0, hidden=0.02)
+    hatch["resend_definition"] = True
+    authsrv.create_agent_world(sendh, stateh, 12, hatch, "spawn")
+    sendh.clear()
+    for _ in range(12):
+        authsrv.burrow_tick(sendh, stateh, None)
+        time.sleep(0.005)
+    ops_h = sendh.opcodes()
+    h_def = ops_h.count(authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES)
+    h_new = ops_h.count(CREATE)
+    LEDGER.ok(h_new >= 1 and h_def == h_new,
+              "but resend_definition=True on the entry brings the definition back",
+              f"{h_def} definitions for {h_new} creates with the hatch set, against "
+              f"{n_def} for {n_new} without it -- the two runs differ only in that key")
+
+    # And the key has to be able to GET there from content, which is the half that was
+    # missing: spawn_enemy builds `entry` and only names it copies survive.
+    LEDGER.ok("resend_definition" in inspect.getsource(authsrv.spawn_enemy),
+              "and spawn_enemy carries the key from the content row into the entry",
+              "without that line the hatch is unreachable from content/world.toml no "
+              "matter what an operator writes there -- the key loads, and stops at a "
+              "dict literal that never names it")
 
     # A dead agent does not burrow. If it did, remove_agent would pop the corpse out of
     # state['agents'] and revive_due -- which only ever walks that dict -- could never
