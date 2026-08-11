@@ -111,8 +111,14 @@ sys.path.insert(0, os.path.dirname(HERE))
 
 from gwpe import PE                                            # noqa: E402
 import genericvalue as GV                                      # noqa: E402
+import pinned                                                  # noqa: E402
 
-DEFAULT_EXE = r"C:\gw\Gw.exe"
+# WHICH CLIENT. `pinned.py` owns that answer for every static-analysis tool in
+# this directory, and names the copy it returned so a surprising result can be
+# diagnosed in one line. This module used to spell it `C:\gw\Gw.exe` -- the
+# owner's live install, which auto-updates and is therefore not necessarily the
+# build every address in the studies is measured against.
+find_exe = pinned.find
 
 # Build 38797. MEASURED: the two AgentView event allocators. See the docstring
 # for the asserts that name what each one allocates.
@@ -208,7 +214,8 @@ def insn_len(data, i):
 
 
 class Image:
-    def __init__(self, path=DEFAULT_EXE):
+    def __init__(self, path=None):
+        path = path or find_exe()[0]
         self.path = path
         self._az = None                        # asserts.Asserts, built on demand
         self.pe = PE(path)
@@ -398,13 +405,17 @@ def by_property(img):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--exe", default=DEFAULT_EXE)
+    ap.add_argument("--exe", default=None,
+                    help="client to read; defaults to the pinned pristine "
+                         "build, and the choice is printed")
     ap.add_argument("--id", type=lambda s: int(s, 0), help="one property id")
     ap.add_argument("--census", action="store_true",
                     help="every allocator call site and the kind it pushes")
     a = ap.parse_args()
+    a.exe, why = (a.exe, "given on the command line") if a.exe else find_exe()
     if not os.path.exists(a.exe):
         sys.exit(f"no such file: {a.exe}")
+    print(f"client: {a.exe}\n        ({why})\n")
     img = Image(a.exe)
 
     if a.census:

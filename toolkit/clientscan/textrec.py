@@ -102,10 +102,12 @@ import struct
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "mapdata"))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "authsrv"))
 from gwpe import PE  # noqa: E402
+import pinned  # noqa: E402
 from archive import Archive, file_id_table, DEFAULT_DAT  # noqa: E402
 # The text records and the game channel use the SAME two primitives. Not a
 # guess: the five folded round constants at Gw.exe 0x909db8 are exactly what
@@ -138,7 +140,14 @@ ESCAPE_COUNT = 0x20
 # table is found this way and not at a build-specific address.
 TEXTDECODE_CPP = rb"P:\Code\Engine\Text\TextDecode.cpp"
 
-DEFAULT_EXE = r"C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe"
+# WHICH CLIENT. `pinned.py` owns that answer for every static-analysis tool in
+# this directory. This module used to name an absolute path into `vault/run/`,
+# which was wrong twice over: it hardcoded `C:\gd\Rurik\vault` past
+# `vaultpath.py` (so a moved vault or a git worktree resolved to nothing), and
+# `run/` is OUR PATCHED copy -- `pinned.py` makes the pristine one canonical
+# precisely because a study of the shipped client that reads our own patch is
+# reading us. The two differ in nine `.text` bytes and the DH modulus.
+find_exe = pinned.find
 
 
 def combine(packed: int) -> int:
@@ -342,7 +351,8 @@ def decode(bits: int, base: int, payload: bytes, escape, key_pair=None):
 class TextIndex:
     """string id -> text, for one language."""
 
-    def __init__(self, exe=DEFAULT_EXE, dat=DEFAULT_DAT, language=0):
+    def __init__(self, exe=None, dat=DEFAULT_DAT, language=0):
+        exe = exe or find_exe()[0]
         self.pe = PE(exe)
         self.language = language
         table = find_pointer_table(self.pe)
@@ -434,11 +444,16 @@ class TextIndex:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--exe", default=DEFAULT_EXE)
+    ap.add_argument("--exe", default=None,
+                    help="client to read; defaults to the pinned pristine "
+                         "build, and the choice is printed")
     ap.add_argument("--dat", default=DEFAULT_DAT)
     ap.add_argument("--language", type=int, default=0)
     ap.add_argument("ids", nargs="*", help="string ids to resolve")
     args = ap.parse_args()
+    args.exe, why = ((args.exe, "given on the command line") if args.exe
+                     else find_exe())
+    print(f"client: {args.exe}\n        ({why})\n")
 
     with TextIndex(args.exe, args.dat, args.language) as ix:
         print(f"pointer array at VA 0x{ix.table_va:08x} "

@@ -63,7 +63,7 @@ check = checks.adopt(LEDGER)
 
 def main():
     t0 = time.perf_counter()
-    pe = PE(at.DEFAULT_EXE)
+    pe = PE(at.find_exe()[0])
 
     print("\n1. two independent locators agree on the array base")
     struct_hits = {h["va"] for h in at.locate_structural(pe)}
@@ -118,7 +118,7 @@ def main():
             check(k < good, f"beats the '{name}' reading", f"{k}/{len(refs)}")
 
         print("\n4. text files tile exactly")
-        with textrec.TextIndex(at.DEFAULT_EXE) as ix:
+        with textrec.TextIndex(at.find_exe()[0]) as ix:
             tiled = sum(1 for fi in range(textrec.FILES_PER_LANGUAGE)
                         if len(ix.records(fi)) == textrec.RECORDS_PER_FILE)
             check(tiled == TEXT_FILES_TILING,

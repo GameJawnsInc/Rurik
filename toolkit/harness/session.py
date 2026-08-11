@@ -206,7 +206,7 @@ def hop_aliases(n, first="127.0.0.3"):
     return [f"{head[0]}.{base + i}" for i in range(n)]
 
 
-def chain_specs(capture_dir, game_args=(), first="127.0.0.3"):
+def chain_specs(capture_dir, game_args=(), first="127.0.0.3", start_at=None):
     """(game_args_for_hop1, hops, order, hosts) for a whole recorded chain.
 
     Each hop is armed with its own tape and told to repoint its handoff at the NEXT
@@ -216,6 +216,19 @@ def chain_specs(capture_dir, game_args=(), first="127.0.0.3"):
     sys.path.insert(0, os.path.join(TOOLKIT, "authsrv"))
     import tape as tapemod
     order = tapemod.chain(capture_dir)
+    if start_at:
+        # Start the chain partway in. This exists for ONE experiment and it is worth
+        # naming: hop 1 -> hop 2 has worked on every run and hop 2 -> hop 3 has failed on
+        # every run, and two explanations fit equally well -- "only the FIRST transfer of
+        # a session ever dials" or "that particular transition is broken". Starting the
+        # chain at hop 2 makes the failing transition the FIRST one, which tells the two
+        # apart in a single short run instead of by argument.
+        match = [c for c in order if c.startswith(start_at) or start_at in c]
+        if len(match) != 1:
+            raise SystemExit(
+                f"--tape-chain-from {start_at!r} matches {len(match)} of "
+                f"{len(order)} connections: {[c.split('->')[0] for c in order]}")
+        order = order[order.index(match[0]):]
     if not order:
         raise SystemExit(
             f"no chain in {capture_dir}: no tape there hands the client to another "
@@ -773,6 +786,11 @@ def main():
                          "by timestamp -- then starts one gamesrv per hop on its own "
                          "127.x alias, each repointing its handoff at the next. The "
                          "last hop is truncated. --game-args still reaches every hop.")
+    ap.add_argument("--tape-chain-from", metavar="CONNECTION", default=None,
+                    help="Start a --tape-chain partway in, e.g. --tape-chain-from 62994. "
+                         "The discriminating experiment for a transition that never "
+                         "dials: make it the FIRST transfer of the session instead of "
+                         "the second.")
     ap.add_argument("--game-args", default="",
                     help="Extra authsrv flags for the GAMESRV only, space "
                          "separated -- e.g. --game-args '--probe attack_anim' "
@@ -797,7 +815,7 @@ def main():
     game_args, hops, order, hosts = split_args(a.game_args), (), (), ()
     if a.tape_chain:
         game_args, hops, order, hosts = chain_specs(
-            a.tape_chain, split_args(a.game_args), a.game_host)
+            a.tape_chain, split_args(a.game_args), a.game_host, a.tape_chain_from)
         # A CHAIN IMPLIES --keep-open, and this is not a convenience.
         #
         # OBSERVED 2026-08-10, first run: the harness ticked all eight checkpoints at

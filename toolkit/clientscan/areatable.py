@@ -61,8 +61,10 @@ import struct
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gwpe import PE  # noqa: E402
+import pinned  # noqa: E402
 
 RECORD_SIZE = 0x7C  # 124
 
@@ -99,7 +101,14 @@ PAIRS = ((OFF_MIN_PARTY, OFF_MAX_PARTY),
          (OFF_MIN_PLAYERS, OFF_MAX_PLAYERS),
          (OFF_MIN_LEVEL, OFF_MAX_LEVEL))
 
-DEFAULT_EXE = r"C:\gd\Rurik\vault\run\2026-07-29_221c13772c7a\Gw.exe"
+# WHICH CLIENT. `pinned.py` owns that answer for every static-analysis tool in
+# this directory. This module used to name an absolute path into `vault/run/`,
+# which was wrong twice over: it hardcoded `C:\gd\Rurik\vault` past
+# `vaultpath.py` (so a moved vault or a git worktree resolved to nothing), and
+# `run/` is OUR PATCHED copy -- `pinned.py` makes the pristine one canonical
+# precisely because a study of the shipped client that reads our own patch is
+# reading us. The two differ in nine `.text` bytes and the DH modulus.
+find_exe = pinned.find
 PROBE_ROWS = 64      # rows a candidate must satisfy to be scored at all
 IMUL_WINDOW = 24     # bytes after an imul to look in for the array base
 
@@ -224,7 +233,9 @@ def extent(blob: bytes, base: int, limit: int = 4096) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--exe", default=DEFAULT_EXE)
+    ap.add_argument("--exe", default=None,
+                    help="client to read; defaults to the pinned pristine "
+                         "build, and the choice is printed")
     ap.add_argument("--out", help="write the decoded table here (use vault/)")
     ap.add_argument("--rows", type=int, default=12,
                     help="how many records to print")
@@ -232,9 +243,11 @@ def main() -> int:
                     help="resolve name ids to text through Gw.dat (textrec)")
     ap.add_argument("--dat", default=None, help="archive, with --names")
     args = ap.parse_args()
+    args.exe, why = ((args.exe, "given on the command line") if args.exe
+                     else find_exe())
 
     pe = PE(args.exe)
-    print(f"{args.exe}")
+    print(f"{args.exe}\n  ({why})")
     print(f"  {pe.arch}, image base 0x{pe.image_base:08x}, "
           f"{os.path.getsize(args.exe)} bytes")
 

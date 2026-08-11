@@ -1,9 +1,15 @@
 """Locate the wide-string 'authsrv' in Gw.exe and dump the contiguous wide-string
 neighbourhood around it. Command-line argument name tables are almost always laid
 out contiguously by the compiler, so the neighbours ARE the flag list. Read-only."""
-import re, sys
+import os, re, sys
 
-PATH = r"C:\gw\Gw.exe"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pinned  # noqa: E402
+
+# WHICH CLIENT. `pinned.py` owns that answer for every static-analysis tool
+# in this directory. This used to be `C:\gw\Gw.exe`, the live install.
+PATH, WHY = pinned.find()
+print(f"client: {PATH}\n        ({WHY})\n")
 blob = open(PATH, "rb").read()
 
 needle = "authsrv".encode("utf-16-le")

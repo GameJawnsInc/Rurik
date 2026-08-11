@@ -1541,6 +1541,12 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
 # the client's overlay, no SYN, auth channel still heartbeating. One transfer per
 # session worked and the next hung, which is the signature of a deferred dial whose
 # trigger never fired.
+# How long to keep reading after our FIN before giving up on a clean two-way close.
+# The client answers within milliseconds when it is healthy; this only bounds the
+# case where it does not.
+GRACEFUL_CLOSE_SECONDS = 2.0
+
+
 def close_after_transfer(sock, events, codec_obj, conn_id):
     """Hang up if this tape ended by handing the client somewhere else.
 
@@ -1551,18 +1557,45 @@ def close_after_transfer(sock, events, codec_obj, conn_id):
     """
     if tape_transfer_present(events, codec_obj) is None:
         return False
-    print(f"[c{conn_id}] tape ended in a handoff -- closing the connection, which is "
-          f"what the recorded server did (0.14s before the client re-dialled). The "
-          f"client defers a transfer while it still holds a game connection.",
+    print(f"[c{conn_id}] tape ended in a handoff -- closing the connection GRACEFULLY, "
+          f"which is what the recorded server did (0.14s before the client re-dialled).",
           flush=True)
+    # HOW we close decides whether the client reconnects, and the first version of this
+    # got it wrong. The client's disconnect path branches on a reason code at [esi+0xc]:
+    # reason 0 falls through to `call 0x850df0` at 0x008515b7 and RE-DIALS the stashed
+    # address; reason >= 3 pops and returns, doing nothing; reason 7 is special-cased.
+    # So a deferred transfer is only released by the disconnect the client considers
+    # clean.
+    #
+    # shutdown(SHUT_RDWR) followed by close() is NOT that. With bytes still unread in the
+    # receive buffer -- and there always are, the client keeps sending 0x8008/0x800c
+    # after the tape ends -- Windows answers with an RST rather than a FIN. That is a
+    # different reason code, and it is why hanging up twice released nothing.
+    #
+    # So: half-close (send FIN, keep reading), drain what the client is still sending
+    # until it closes its half or a short deadline passes, and only then close. That is
+    # an ordinary graceful shutdown and it is what the recording shows.
     try:
-        sock.shutdown(socket.SHUT_RDWR)
+        sock.shutdown(socket.SHUT_WR)
     except OSError:
+        pass
+    drained, deadline = 0, time.monotonic() + GRACEFUL_CLOSE_SECONDS
+    try:
+        sock.settimeout(0.25)
+        while time.monotonic() < deadline:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break               # the client closed its half: a clean FIN both ways
+            drained += len(chunk)
+    except (OSError, socket.timeout):
         pass
     try:
         sock.close()
     except OSError:
         pass
+    print(f"[c{conn_id}] closed after draining {drained} B -- an unread receive buffer "
+          f"turns close() into an RST, and the client only re-dials on the reason code "
+          f"a clean shutdown produces.", flush=True)
     return True
 
 

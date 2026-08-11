@@ -7,10 +7,20 @@ of the message namespace, and that is worth far more than a hex dump.
 
 Read-only. Reports NAMES and COUNTS only; copies no code and no asset bytes.
 """
+import os
 import re
+import sys
 from collections import defaultdict
 
-FILES = [r"C:\gw\Gw.exe", r"C:\gw\GwLoginClient.dll"]
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pinned  # noqa: E402
+
+# WHICH CLIENT. `pinned.py` owns that answer for every static-analysis tool
+# in this directory; the login DLL is taken from the same snapshot rather
+# than from a second hardcoded path, so both files are always the same build.
+EXE, WHY = pinned.find()
+FILES = [EXE, os.path.join(os.path.dirname(EXE), "GwLoginClient.dll")]
+print(f"client: {EXE}\n        ({WHY})\n")
 
 # Patterns for things that look like engine/protocol identifiers.
 PATTERNS = {

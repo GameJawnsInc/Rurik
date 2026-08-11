@@ -39,6 +39,15 @@ import struct
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import pinned  # noqa: E402
+
+# WHICH CLIENT. `pinned.py` owns that answer for every static-analysis tool in
+# this directory, and names the copy it returned. This module used to spell it
+# `C:\gw\Gw.exe` -- the owner's live install, which auto-updates and is
+# therefore not necessarily the build every address below is measured against.
+find_exe = pinned.find
+
 RECORD_SIZE = 0xA4  # 164
 
 # Flag bits at +0x10 that we rely on.
@@ -234,12 +243,15 @@ def player_corpus(rows: list[dict]) -> list[int]:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--exe", default=r"C:\gw\Gw.exe",
-                   help="client binary to read (read-only)")
+    p.add_argument("--exe", default=None,
+                   help="client binary to read (read-only); defaults to the "
+                        "pinned pristine build")
     p.add_argument("--out", help="write JSON here (keep it out of the repo)")
     p.add_argument("--summary", action="store_true",
                    help="print a summary instead of the full dump")
     a = p.parse_args(argv)
+    a.exe, why = (a.exe, "given on the command line") if a.exe else find_exe()
+    print(f"client: {a.exe}\n        ({why})\n", file=sys.stderr)
 
     data = Path(a.exe).read_bytes()
     base, count, score = locate_table(data)

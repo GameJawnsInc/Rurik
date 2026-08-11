@@ -458,7 +458,37 @@ transfer is the second one, and it is client-side: the reason code decides every
 Recording this because "`0x01B1` releases the transfer, send it" is exactly the plausible
 wrong answer this trail invites, and the tapes refute it in one decode.
 
-**Where to look next.** The reason code at `[esi+0xc]`. Three events live in this family —
+### T13 — The reason code is a real dispatch, and our close produced the wrong one. OBSERVED.
+
+Read straight out of the disconnect path:
+
+| `[esi+0xc]` | what the client does |
+|---|---|
+| **0** | falls through to `0x008515b7` — **`call 0x850df0`, re-dials the stashed address** |
+| **< 3** | `jl 0x851695`, continuing toward that path |
+| **≥ 3** | `pop`/`ret` — nothing; the pending transfer is simply dropped |
+| **7** | special-cased against flag bit 8 → `0x851870` |
+
+So a deferred transfer is released **only by the disconnect the client considers clean**,
+and `close_after_transfer`'s first version could not produce it. It called
+`shutdown(SHUT_RDWR)` and then `close()` with bytes still unread — and the client always
+has bytes in flight after a tape ends, it keeps sending `0x8008`/`0x800c`. Closing a
+socket with an unread receive buffer makes Windows send an **RST rather than a FIN**,
+which is a different reason code. That is why hanging up twice released nothing while
+looking exactly like the right fix.
+
+Now: half-close (`SHUT_WR`, our FIN), drain what the client is still sending until it
+closes its half or a 2 s deadline passes, then `close()`. An ordinary graceful shutdown,
+which is what the recording shows. `test_burrow.py` §4 asserts the half-close specifically
+rather than "close was called", and reverting it to `SHUT_RDWR` goes red.
+
+**SUPERSEDED by T14: the close is not the release at all, graceful or not.**
+
+**UNVERIFIED:** that reason 0 is what a graceful FIN actually produces here. The mapping
+from wire event to reason code has not been read — only the branch on it has. The next
+chained run is the test, and it is the cheapest one available.
+
+**Where to look next if that fails.** The reason code at `[esi+0xc]`. Three events live in this family —
 `0x10000110`, `0x10000111` (dispatched by the connect at `0x850df0`) and `0x10000112` —
 and the handler at `0x00851380` treats `[esi+0xc] == 0` as success, asserts it was not
 already connected, sets the flag, and only then consumes any pending transfer. The open
@@ -517,3 +547,88 @@ far enough to reveal one.
    window the operator was told to sit out means the marks and the messages disagree, and
    the run must be discarded rather than read. `test_labelrun.py` breaks that control on
    purpose to prove it can go red.
+
+
+### T14 — Exactly ONE game-channel transfer per session dials. OBSERVED, by a discriminating run.
+
+Three chained runs stalled at the second hop and each time the fix addressed the close.
+None of them was the cause. `--tape-chain-from` settled it in one 6-minute run by making
+the *failing* transition the *first* one:
+
+| run | transfer #1 | transfer #2 |
+|---|---|---|
+| full chain | Ascalon (148) -> Lakeside (146) **worked** | Lakeside -> Ashford (164) **stalled** |
+| `--tape-chain-from 62994` | Lakeside -> Ashford **worked, 118/118** | Ashford -> Lakeside **stalled** |
+
+The same Lakeside -> Ashford transition **works as the first transfer and fails as the
+second**. So it is not the transition, the map, the tape, the destination address or the
+shutdown: it is the **ordinal**. That is exactly what T10's reading of the binary
+predicted -- bit `0x20` at `+0x190` is clear for the first transfer (immediate dial via
+`0x850df0`, which then sets it) and set for every one after (stash + pending, deferred).
+
+Two things this also confirms in passing, both live rather than by decode:
+
+* The client echoes the handoff's ids verbatim in its next VERSION frame -- hop 2 opened
+  with `world_id=3775625635 map_id=164 player_id=4145270229`, the exact values hop 1's
+  `0x01A5` carried. T9's 12/12 match, observed in flight.
+* Ashford Abbey renders. The 118-event tape is the cheapest full instance load we have,
+  and it is now a 14-second test loop for anything touching transfers.
+
+**What is dead:** that the close matters. Both closes drained **0 B** and the graceful
+half-close changed nothing. Keep it -- it matches the recording -- but it is not the
+release, and T13's fix should be read as correct-and-irrelevant.
+
+**What is left, and it is now a single question:** what makes the client consume a
+*deferred* transfer. The consumer at `0x00851402` sits in a handler that treats
+`[esi+0xc] == 0` as success, asserts `!(playerFlags & PLAYER_FLAG_CONNECTED)`, SETS that
+flag, and only then dials the stashed address -- i.e. it looks like a
+**connection-established** handler that dials a pending transfer once the new connection
+is up. If that reading is right the deferral is waiting on a connection the client is not
+making, and the next thing to read is what drives `0x00851380` at all, since it has no
+direct callers.
+
+
+### T15 — The deferral is released by network event 0x1E, and our close raises 0x1F. OBSERVED.
+
+`0x00851380` has no callers because it is a **switch case**. The function starts at
+`0x00851340`, takes an event struct in `[ebp+0xc]`, and dispatches on the event **type**
+at `[esi]`:
+
+```
+mov   esi, [ebp+0xc]
+mov   eax, [esi]          ; event type
+add   eax, -0x1d          ; table is based at 0x1D
+cmp   eax, 0xbb
+ja    0x851696            ; default: do nothing
+movzx eax, byte ptr [eax + 0x8516c4]
+jmp   dword ptr [eax*4 + 0x8516a8]
+```
+
+The index map at `0x8516c4` is `[0,1,2,6,6,6,...]`, so **exactly three** event types are
+handled and everything else falls to the default:
+
+| event | case | what it does |
+|---|---|---|
+| **`0x1D`** | `0x0085155f` | `and [edi+0x190], 0xfffffdfb`; if reason `0` -> **dials** at `0x008515b7` |
+| **`0x1E`** | `0x00851373` | **`and [edi+0x190], 0xffffffdd` — clears bit `0x20`** — then the `0x851380` body: on reason `0` marks connected, dispatches `0x10000112`, consumes pending `0x10` and **dials** at `0x00851446` |
+| **`0x1F`** | `0x00851480` | dispatches `0x10000110`, tears the instance down, clears `PLAYER_FLAG_CONNECTED`, and on reason `>= 3` returns. **Never dials.** |
+
+That is the whole mechanism, and it explains every run:
+
+* The **first** transfer never needs an event: bit `0x20` is clear, so the `0x01A5`
+  handler dials inline.
+* Every **later** transfer stashes and waits for `0x1E` (or `0x1D`), which is also the only
+  thing that clears bit `0x20` and would let a *third* transfer work.
+* A peer that simply goes away produces `0x1F` -- teardown, no dial. Which is what our
+  close produces however politely we do it, and why three shutdown fixes changed nothing.
+
+**Where `0x1D`/`0x1E`/`0x1F` come from is the remaining unknown**, and it is now a small
+one: they are raised by the client's own connection layer, not by any message. The
+question is what distinguishes them -- most likely who initiated the close and whether the
+client was expecting it. Worth noting we may not be able to produce `0x1E` from the server
+side at all, in which case chaining beyond one hop needs a different lever than a tape.
+
+**Correction to a step on the way here:** `0x006f4254` looked like a reference installing
+this handler and is not -- it is `push 0x8513`, an immediate whose bytes matched the
+pointer scan. A byte-pattern search over `.text` finds instruction operands as readily as
+data, and this one wasted a query.

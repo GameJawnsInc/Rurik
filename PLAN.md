@@ -1044,7 +1044,7 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-10 (`41ba93b`+, suite 36/36 ~929 checks)
+### 8.0 Next, as of 2026-08-10 (`b185bce`+, suite 37/37 ~960 checks)
 
 The items below this section predate today and are still live; these four are what today's
 work opened. **The order has changed since they were written**, on evidence: four scouts
@@ -1103,7 +1103,22 @@ parallel, with one safety change that is not optional — see its entry.
     connection it already holds to go away. ArenaNet's server hangs up 0.12–0.14 s after
     every handoff; ours sat on the socket. `close_after_transfer` fixes that, keyed on the
     tape's contents so a last hop or `--tape-no-transfer` run is never hung up on.
-    **Re-run 2026-08-10: the hang-up was necessary but NOT sufficient** — same two hops,
+    **SETTLED 2026-08-10 by a discriminating run: exactly ONE game-channel transfer per
+    session dials** (T14). `--tape-chain-from 62994` made the failing Lakeside -> Ashford
+    transition the FIRST one and it worked, 118/118, with Ashford rendering; the NEXT
+    transfer then stalled. Same transition, opposite outcome, decided by its ordinal --
+    so it is not the map, the tape, the address or the shutdown. Three fixes aimed at the
+    close were all correct-and-irrelevant. **And the mechanism is now read out whole (T15):**
+    `0x00851380` has no callers because it is a **switch case**. The function at
+    `0x00851340` dispatches on an event **type** and handles exactly three —
+    `0x1D` and `0x1E` both **dial**, and `0x1E` is also the only thing that clears bit
+    `0x20`; `0x1F` tears the instance down and **never dials**. A peer that merely goes
+    away raises `0x1F`, which is what our close produces however politely, so no shutdown
+    fix could ever have worked. **The open question is whether a server can provoke `0x1E`
+    at all** — those events come from the client's own connection layer, not from any
+    message. If it cannot, chaining past one hop needs a lever other than a tape, and
+    R1.5's chained form should be re-scoped rather than retried.
+    **Superseded:** *Re-run 2026-08-10: the hang-up was necessary but NOT sufficient* — same two hops,
     same stop. What releases a deferred transfer is a *player-state* transition, not a
     socket close: the consumer at `0x00851402` clears the pending bit and dials, and it
     lives in a handler asserting `!(context->playerFlags & PLAYER_FLAG_CONNECTED)` at

@@ -144,6 +144,17 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   byte-for-byte even after something else took the freed blocks, and that the
   reservation refusal holds from both sides. Four defects, none of which could
   fail a checksum -- the archive verified perfectly through all of them),
+  `toolkit/mapdata/test_datplan.py` (where a new file may be PUT, against an
+  archive the test builds with two shadow containers in it: that placement is
+  best fit rather than the head of the largest run, that a run carrying a live
+  container generation is withheld whether the signature is at its head or 428
+  blocks in, and that the plan names what it withheld instead of dropping it. It
+  exists because "free" was measured as the gap between reservations, and by that
+  measure 88.5% of `Gw.dat`'s free space is live container generations the client
+  rotates through -- so the planner aimed every insert at a complete shadow MFT.
+  Its own fixture had to be relaid: the first version's runs ran largest-first
+  down the file, which is what the broken code produced, so the ordering check
+  passed against the defect),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
@@ -177,8 +188,14 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first),
-  `toolkit/clientscan/test_codescan.py` (the attack-speed chain, and the two
-  decoding traps that hid it — needs capstone),
+  `toolkit/clientscan/test_codescan.py` (the attack-speed chain, the two
+  decoding traps that hid it, and §7's three under-reporting defects — a
+  `--field` that knew one displacement encoding of two, a `--xrefs` that swept
+  one alignment of four, and an assert scan that knew one of the idiom's three
+  shapes. Each pinned at a named address with the reason it was missed, because
+  all three answered a clean confident zero. Its stdlib half runs without
+  capstone: `asserts.py` takes no disassembler on purpose, and its under-count
+  silently narrows every `--in <module>` range on the capstone side),
   `toolkit/test_checks.py` (the check on the checker — see below),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into

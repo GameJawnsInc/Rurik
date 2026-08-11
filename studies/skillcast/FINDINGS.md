@@ -123,7 +123,7 @@ expressions into the shipping image as ASCII, and they are written in
 ArenaNet's identifiers.
 
 `toolkit/clientscan/asserts.py` (new, stdlib only) enumerates them. MSVC
-compiled every assertion to the same four instructions:
+compiled every assertion from the same four operations:
 
 ```
 push  <line>            6A ll                 or  68 ll ll ll ll
@@ -132,12 +132,28 @@ mov   ecx, <expr>       B9 <va of "skill->skillId != 0">
 call  <assert>          E8 <rel32>
 ```
 
-MEASURED: **19,620 sites on build 38797, and every single one calls the same
+**CORRECTED 2026-08-10, and the correction is this paragraph's own subject.**
+The block above is one of *three* shapes, not the shape. The two movs also
+occur in the opposite order (75 sites), and a site whose check has two branches
+compiles to `push`/`mov ecx`/`jmp` into another site's shared `mov edx`/`call`
+tail (63 sites) — where the fifteen-byte pattern above cannot reach it at all.
+`asserts.py` now scans all three; `toolkit/clientscan/codescan.py`'s module
+docstring carries the worked example.
+
+MEASURED: **19,758 sites on build 38797, and every single one calls the same
 routine at VA `0x00487BC0`.** That unanimity is the check — a fifteen-byte
 pattern would otherwise be expected to collide with unrelated code, and
-19620/19620 agreeing on one callee says the matches are real. `asserts.py`
-asserts it, so a build that changes the idiom fails loudly instead of returning
-a thinner list that still looks plausible.
+19758/19758 agreeing on one callee says the matches are real, *including* the
+138 the single-shape scan could not see. `asserts.py` asserts it, so a build
+that changes the idiom fails loudly instead of returning a thinner list that
+still looks plausible.
+
+The number this document carried until 2026-08-10 was **19,620** — the
+edx-first shape alone, printed as the census with nothing marking it as a
+floor. Every count in this study that came out of `--file` or `--grep` is
+therefore a lower bound as written; re-run before quoting one. The three sites
+whose expression pointer no fixed pattern can read are listed by
+`asserts.py --unreadable` and are in none of the module lists.
 
 937 distinct `P:\Code\...` paths exist in the image. The ones this study lives
 in:

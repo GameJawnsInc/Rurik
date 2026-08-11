@@ -1159,8 +1159,64 @@ meaningless — a check that could not fail, which is the exact failure mode
 
 **Count free space in blocks, not bytes.** By bytes the archive looks like it has
 85,261,813 free. It does not: 52,733,429 of that is dead space *inside* entries'
-own block reservations and cannot hold a new file. The real figure is **32,528,384
-bytes in 214 runs**, of which 12 runs are 64 KB or larger, totalling 30,822,912.
+own block reservations and cannot hold a new file. Counted in whole blocks the
+gap between reservations is **32,528,384 bytes in 214 runs**, of which 12 runs are
+64 KB or larger, totalling 30,822,912.
+
+**And that figure is still nine times too big — CORRECTED 2026-08-10.** The
+paragraph above called 32,528,384 "the real figure". It is not: it is the same
+mistake one level down. The gap-between-reservations measure asks only whether an
+MFT row points at a block, and the client's **containers do not answer to that
+question**. It rotates its MFT and its file-id table between a small set of
+recurring slots — writing the new generation into one, leaving the previous
+generation intact in the other — and the previous generation is pointed at by no
+row, so it reads as free.
+
+MEASURED on `vault/dat_study/Gw.dat`. **Six of the 214 runs carry a container
+signature, and they hold 29,160,448 of the 32,528,384 bytes — 89.6%.** Each of
+the five largest begins with one: three shadow MFTs (`0xF8FFF000`, `0xF57D5000`,
+`0xF8699A00`), a **byte-for-byte** copy of the live file-id table (`0xF77B6000`,
+zero bytes differing over 1,368,200), and a near-copy (`0xF8290400`, 171 bytes
+differing). 58.2% of the bytes inside the 214 runs are non-zero.
+
+Two details that a head-of-run check would miss, and both are load-bearing:
+
+- **The largest run is a container arena, not a container.** `0xF8FFF000` is
+  14,718,976 bytes holding *three whole MFT generations laid end to end* followed
+  by file-id table generations — and the tiling is exact, not approximate. Each
+  header declares 177,342 entries = 8,313 blocks, and the next header sits at
+  precisely +8313, the third at +16626, and the id-table stretch begins at
+  +24939 = 3 × 8313. Three predictions that could each have missed and did not.
+  This slot is not incidentally occupied; it is where the table lives.
+- **One container hides 428 blocks into its run.** `0xF6772800` (374,784 bytes)
+  opens with ordinary stale data and only then a file-id table generation, so a
+  head-only test hands the run to a writer. It is the sixth run, and the reason
+  `scan_run()` checks every block boundary rather than the first.
+
+Genuinely unclaimed space is **3,367,936 bytes in 208 runs, largest 953,856** —
+and that is the number that changes what a writer can plan, because the median
+reservation of the 349 map-flagged (`flags == 259`) rows is **961,536**, just
+above it. **176 of the 349 map heads are larger than the largest run a writer
+could now place them in.** Relocating a map is therefore not a matter of finding
+room; for half the maps in the archive there is no room, and an insert has to
+grow the file or reclaim genuinely dead extents.
+
+`datplan.py` placed every insert at the head of the largest run, so it aimed at
+the shadow MFT at `0xF8FFF000` every time; it applies nothing, so nothing was
+damaged. It is best fit over withheld-run classification now, and
+`toolkit/mapdata/test_datplan.py` pins both.
+
+**And `0xF8FFF000` is not hypothetical — the rotation is visible across the three
+copies of the archive on this machine.** `vault/dat_study/Gw.dat` (177,342 rows)
+and `vault/run/2026-07-29_221c13772c7a/Gw.dat` (177,476) both keep the live MFT at
+`0xF8BEFE00`; `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat` (177,335) keeps it
+at `0xF8FFF000`. Two slots, three copies, and whichever one is not in use holds
+the previous generation and reads as free.
+
+The same measure is wrong in a second place, and it was worth chasing: the plan's
+"the MFT can grow in place" note bounded itself by the next *allocated* entry and
+reported **613,292 rows** of headroom for `dat_study`. The next 14 MB past the
+table is the container arena, so the honest figure is **2 rows** — 48 bytes.
 
 **Rows 4–15 are reserved, not available.** They are erased in *both* archives and
 stayed that way, while the client — needing a slot — took **row 35301**, the only
