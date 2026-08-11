@@ -2421,3 +2421,188 @@ which existed, was tested, and was written precisely for this — was called onl
 `proc.poll() is not None` branch. The crash text sat on screen for the rest of the run and
 the report said green. `hold_open` now checks on both exits. Same shape as every other
 defect in this file: the check was right and the caller never reached it.
+
+## 11. Something swings back — R4a's other half, met
+
+**OBSERVED 2026-08-11.** Capture `authsrv-20260811T160502-c1.jsonl`, frames
+`frames-20260811T160449`, one 65 s loopback run.
+
+**What the operator did, because "no operator input" is what this first said and it
+was wrong.** The owner moved the camera while watching, and camera movement is not
+free: the capture's client half is one `ROTATE_PLAYER` (0x0040) and one
+`TARGET_SELECT` (0x00C1), plus instance-load traffic. What is NOT there is the
+part that matters — no `0x0026`, no `0x0033`, no `0x003E`, no skill. **The player
+never attacked, never moved and never struck back**, so the fight is entirely the
+server's proximity sweep acting on an idle target, which is a stronger
+demonstration than the one originally claimed rather than a weaker one. (It also
+corroborates §10.7 from the other side: a right-CLICK produced no traffic, and a
+right-DRAG that actually turns the camera produces `ROTATE_PLAYER`.)
+
+```
+30 x attack_started            agent 10 -> the player
+30 x damage 10 to the player   0x00A3 property 16, -0.10
+30 x melee_attack_finished
+ 3 x KILL the player           0x00F1 bit 4 on PLAYER_AGENT_ID
+ 2 x revive the player         t=15.36 kill, 25.39 revive, 37.66, 47.67, 59.97
+```
+
+Ten swings to a death at the Hatcher's own 1.33 s axe speed, and the revive
+exactly 10.0 s behind each kill. The frames show the player face-down with both
+orbs at zero, then standing at 80 health with a floating red `-10` over their
+head as the next swing lands.
+
+**The mechanism was already proven, by an accident.** `hit_enemy` carries a
+comment about an early version that put the ENEMY in slot 1 of
+`GV_ATTACK_STARTED`: the client animated the enemy and then asserted on
+`m_attackInterval`, which is how slot 1 was identified as the swinger and why the
+attacker must have a non-zero declared attack speed. `hit_player` is that mistake
+made on purpose. Nothing new about the wire had to be discovered to build this —
+the three-message swing, the damage fraction and the death bit were all already
+known, and what was missing was a sweep that pointed them the other way and a
+server that remembered the player's health.
+
+**Two things this run settles that were open.**
+
+**The client accepts `EFFECT_DEAD` on its OWN agent.** This was the one part shipped
+UNVERIFIED: no player death was found in either live capture, so the death message
+is our agent path aimed at `PLAYER_AGENT_ID` rather than a replication of
+ArenaNet's. It works, and it produces the real death pose and zeroed pools rather
+than an agent-shaped approximation of one.
+
+**Property 16 drives the player's bar and the floating damage number.** Same
+opcode, same property, same fraction semantics as against an agent, with the
+target and cause slots swapped.
+
+### What this is NOT, said plainly
+
+- **There is no AI.** The Hatcher stands exactly where it spawned and swings at
+  anything inside 1200 units. It does not chase, it does not leash, it does not
+  stop when the player walks away except by falling out of range. `AGGRO_RANGE`
+  and `ENEMY_HIT_FRACTION` are ours; nothing measured them.
+- **The revive is a timer**, not a resurrection shrine, not a party wipe, and not
+  whatever retail actually does. `player_revive_due`'s docstring says so at the
+  call site.
+- **Energy is not restored.** The client's death path zeroes BOTH pools and the
+  revive only refills health — the post-revive frame shows the energy orb at 0
+  and it stays there. Re-asserting a maximum is documented not to refill
+  (`revive_due`), so the fix is not simply another `PROP_ENERGY_MAX`, and the
+  energy equivalent of property 34's setter is not known. **Open.**
+- **One player, one enemy, one instance.** Nothing here has been tried with two
+  hostiles or with an agent that moves.
+
+### 11.1 What ArenaNet's own combat traffic says — and where §11 was wrong
+
+**OBSERVED 2026-08-11**, from the live corpus rather than from our own server: a
+five-question fan-out over `vault/captures/live/`, every code-driving claim then
+handed to an independent skeptic. **47 verifications, 16 refuted.** The refutations
+are the useful half and most take the shape "the arithmetic reproduces exactly,
+the inference does not" — recorded here so nobody re-derives a killed claim.
+
+**The corpus.** `20260807T143055` connection `:64103` — a Warrior in Lakeside
+County. NPC agent `0x28` attacked player agent `0x1F` seven times between
+t=10.266 and t=23.268. Six landed; the seventh was cut off when the player killed
+the NPC 0.243 s into it. The player's own agent id was established five
+independent ways, including a four-char tag in the create (`play` against `mon1`
+on 142 others) — a field that reads as garbage decoded as a number, the
+marshalling-type trap again.
+
+**CONFIRMED, and it independently re-derives what §11 built from an accident:**
+
+| claim | strength |
+|---|---|
+| `0x00A0` value 4: slot 1 is the ATTACKER, slot 2 the target | the set of agents ever given an attack speed is EXACTLY the set ever in slot 1 — **11 to 0** against the rival |
+| `0x00A3` property 16: slot 1 is DAMAGED, slot 2 the CAUSE, value is a fraction of the DAMAGED agent's maximum | `|frac| x maxHealth(slot 1)` is a whole number **13 of 13**; against slot 2's maximum, **0 of 13** |
+| the player takes damage through the same channel as an NPC | 26 hp of 100 over six swings |
+
+Both were already right in `hit_player`. The `m_attackInterval` accident had them
+correct, and this is the first evidence that could have said otherwise.
+
+**REFUTED BY THE RUN — a swing is not instant, and §11 sent it as one.** The
+opening is `ATTACK_STARTED`; the landing arrives **0.880–0.919 s later** (mean
+0.899, n=6) as `MELEE_ATTACK_FINISHED` **then** the damage, adjacent in one TCP
+payload — verified by byte offset rather than by timestamp, 6 of 6. §11 sent all
+three messages in the same instant and in the other order, so the damage number
+appeared on the frame the animation began. Now two-phase (`start_swing` /
+`land_swing`) and a pending landing is DROPPED if its swinger dies or leaves
+range, which is what ArenaNet's truncated seventh swing shows.
+
+**`hit_enemy` is deliberately NOT reordered.** The claim about how ArenaNet marks
+the CONTROLLED agent's own landings (`0x00A7` rather than `0x009F` value 1) was
+**refuted** on review, so the player's swing has no verified model to copy and
+guessing at one trades a known shape for an unverified one.
+
+**Claims that did NOT survive — do not rebuild these:**
+
+- **"The declared attack speed is a floor, not the period."** Refuted: the
+  measurement reproduces, the inference is contradicted by the claimant's own
+  numbers, by an omitted counterexample in the same tape, and by the tape's
+  measurable timing noise.
+- **"`0x0035` is sent lazily at first swing, never at spawn."** The count
+  reproduces; the generalisation collapses once the sample widens past one agent.
+- **"ArenaNet never sends `0x009F` value 1 for the controlled agent."** The
+  arithmetic reproduces; the mechanism is refuted by a counterexample in the same
+  corpus and the operational advice was drawn from the wrong axis.
+
+**NOT FOUND, and it stays not found: no player death anywhere in the corpus.**
+"The player can take damage" is OBSERVED; "the player can die" is not. So §11's
+death path remains ours rather than ArenaNet's — what the live run settled is
+that the client *accepts* it, not that it is what retail sends.
+
+**A METHOD FAULT THAT IS MINE.** The tree moved under the readers: two agents
+reported the implementation arriving uncommitted mid-run and `HEAD` moving from
+`0421806` to `1d3530f` beneath them. I was editing the tree the research was
+reading, which is exactly the hazard `CLAUDE.md` names about pinning subagents.
+It happened to catch real defects in the in-flight code — a corpse that could
+still cast, and `ValueError` uncaught on the world tick, both now fixed — but that
+is luck, not method. Read-only fan-out over a moving tree should use
+`isolation: "worktree"`.
+
+### 11.2 It walks now — and `AGGRO_RANGE` was doing two jobs
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T174346-c1.jsonl`.
+
+```
+t=2.62  agent 10 speed 0.75 (216 u/s)        0x002B
+t=2.62  agent 10 walks to (9826,8077)        0x0029  <- the player's position
+t=3.33  attack_started: agent 10 swings
+t=3.38  agent 10 stops at (9976,8077)        0x0029  <- exactly 150 units out
+```
+
+150.0 units of travel in 0.71 s at a declared 216 u/s is 0.69 s of walking, so the
+server's own copy of the agent's position and the rate it told the client agree.
+Then 20 swings and 2 kills.
+
+**THE DEFECT THIS FIXES IS OURS AND §11 SHIPPED IT.** `AGGRO_RANGE` decided both
+when a hostile NOTICES the player and when it can REACH them. A Hatcher rooted to
+its spawn point therefore swung at anything within 1200 units — it hit people
+across a courtyard it never crossed, and §11's own run is an example: the agent
+stood 300 units away for three death cycles and never moved. Reach is now
+`ENEMY_MELEE_RANGE` (150) and `AGGRO_RANGE` is the notice and the leash. The walk
+is what makes that separation survivable rather than a way of making combat
+impossible.
+
+**Two clocks have to agree.** The client is told a DESTINATION and animates its own
+way there; the server advances `agent["pos"]` at the same rate, because that is
+what every range check reads. The destination is re-announced only when the player
+has moved `ENEMY_DEST_RESEND` (120) units, because a tick-rate destination stream
+is 20 messages a second at a client that needs one endpoint.
+
+**Stopping is an ARRIVAL, not a zero rate** — `agent_update_speed` refuses anything
+below `AGENT_MIN_MOVE_SPEED` (0.01, the client's own assert at `AgAgent.cpp:2366`),
+so "speed 0" is not available to say this with, and on the world tick that refusal
+would be a `ValueError` the tick has to swallow.
+
+### What is still not there
+
+- **No pathfinding.** `pathmap.route` is an A* and is NOT wired in. This walks a
+  straight line and uses `pathmap.clip` to stop at the first thing it cannot cross,
+  so an agent meets a wall and waits rather than sliding through it. A hostile on
+  the far side of a building will stand against that wall for as long as you stay
+  where you are.
+- **No leash home.** Walk out past `AGGRO_RANGE` and it stops where it stands; it
+  does not return to its spawn anchor.
+- **It does not face you.** `agent_update_speed` carries a `facing` field and this
+  passes the default.
+- **`ENEMY_MELEE_RANGE`, `ENEMY_MOVE_RATE` and `ENEMY_DEST_RESEND` are ours.**
+  Nothing measured them, and the wiki's aggro-bubble numbers describe a mechanic
+  (a moving circle, a leash, a call-to-arms radius) that none of this implements.

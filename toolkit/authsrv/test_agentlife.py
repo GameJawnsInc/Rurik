@@ -29,6 +29,7 @@ standard library only.
 import math
 import os
 import struct
+import time
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -39,7 +40,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=49)
+LEDGER = checks.Ledger("agent lifetime", floor=92)
 
 
 def main():
@@ -179,7 +180,396 @@ def main():
 
     section_named_builders(codec)
     section_pool_fraction()
+    section_swing_back()
+    section_chase()
     return LEDGER.verdict()
+
+
+def _world(dist=100.0, **over):
+    """A player at the origin and one hostile `dist` units away."""
+    import authsrv
+    entry = {"name": "hatcher", "dead": False, "died_at": 0.0,
+             "health": 100.0, "max_health": 100.0, "last_hit": 0.0,
+             "pos": (dist, 0.0), "plane": 0,
+             "allegiance": agents.ALLEGIANCE_HOSTILE,
+             "attack_speed": authsrv.ENEMY_ATTACK_SPEED,
+             "effects": 0, "attacks_back": True}
+    entry.update(over)
+    return {"agents": {10: entry}, "pos": (0.0, 0.0)}
+
+
+def _swings(state, n=1, gap=0.0):
+    """Run enemy_attack_tick n times and return everything it sent."""
+    import authsrv
+    sent = []
+    for _ in range(n):
+        if gap:
+            time.sleep(gap)
+        authsrv.enemy_attack_tick(
+            lambda op, vals, label="", quiet=False: sent.append((op, vals, label)),
+            state, 1)
+    return sent
+
+
+def section_swing_back():
+    """R4a's other half: a hostile agent attacks the player, and the player dies.
+
+    Until 2026-08-11 every combat message this server sent flowed one way. PLAN.md
+    3's R4a row has said "nothing swings back and the player cannot die" since
+    2026-08-06, and both clauses were properties of the code: no sweep aimed a
+    swing at the player, and the server did not track the player's health at all
+    after telling the client about it once at spawn.
+
+    THE CHECK THAT MATTERS IS THE ROLE CHECK. `hit_enemy` carries a comment about
+    an early version that put the ENEMY in slot 1 of GV_ATTACK_STARTED -- the
+    client animated the enemy and then asserted on `m_attackInterval`, which is how
+    slot 1 was identified as the swinger. `hit_player` is that mistake made
+    deliberately, so the one way to get it wrong now is to write it the way
+    `hit_enemy` is written and animate the PLAYER attacking themselves. Two checks
+    below fail on exactly that, and they are the reason this section exists rather
+    than a count of messages.
+    """
+    import authsrv
+
+    # 1. A SWING IS TWO PHASES SEPARATED BY A WINDUP, which is the shape ArenaNet
+    #    uses and the shape the first version of this code got wrong: it sent all
+    #    three messages in the same instant, so the damage number landed on the
+    #    frame the animation started.
+    state = _world()
+    sent = _swings(state)
+    ops = [op for op, _v, _l in sent]
+    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET],
+              "the opening of a swing is ATTACK_STARTED and nothing else",
+              f"{[hex(o) for o in ops]} -- damage arriving here is the "
+              "instant-swing bug: 0.899 s of animation with the number already on "
+              "screen")
+    LEDGER.ok(not _swings(state, n=4),
+              "and nothing lands while the windup is still running",
+              f"swing_lands_at is {state['agents'][10].get('swing_lands_at')!r} "
+              "-- four more ticks inside the window must stay silent")
+
+    # now let the windup elapse, and the landing must be FINISHED then DAMAGE
+    state["agents"][10]["swing_lands_at"] = time.time() - 0.001
+    land = _swings(state)
+    ops = [op for op, _v, _l in land]
+    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET],
+              "and the landing is MELEE_ATTACK_FINISHED and then the damage",
+              f"{[hex(o) for o in ops]} -- ArenaNet sends finished BEFORE damage, "
+              "adjacent in one payload, 6 of 6 swings checked by byte offset. "
+              "hit_enemy sends them the other way round and is left alone: the "
+              "claim about how the CONTROLLED agent's landings are marked was "
+              "refuted under review, so there is no verified model to copy")
+    sent = sent + land
+
+    started = [v for op, v, _l in sent
+               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET][0]
+    LEDGER.ok(started[0] == agents.GV_ATTACK_STARTED and started[1] == 10,
+              "and slot 1 of attack_started is the AGENT, not the player",
+              f"{started} -- slot 1 is the body the client animates. Writing this "
+              "the way hit_enemy is written puts PLAYER_AGENT_ID here and animates "
+              "the player swinging at themselves, which is the mirror of the bug "
+              "hit_enemy's own comment records")
+    LEDGER.ok(started[2] == authsrv.PLAYER_AGENT_ID,
+              "and slot 2 is the player, who is being swung at",
+              f"{started}")
+
+    dmg = [v for op, v, _l in sent
+           if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET][0]
+    LEDGER.ok(dmg[0] == agents.PROP_DAMAGE and dmg[1] == authsrv.PLAYER_AGENT_ID
+              and dmg[2] == 10,
+              "and the damage names the player as DAMAGED and the agent as CAUSE",
+              f"{dmg[:3]} -- 0x00A3 is [prop, target, cause, value], the opposite "
+              "order to attack_started, which is why both are checked here")
+
+    val = struct.unpack("<f", struct.pack("<I", dmg[-1]))[0]
+    LEDGER.ok(-1.0 <= val < 0.0,
+              "and the value is a negative fraction inside the client's bound",
+              f"{val!r} -- positive would trip CharPool.cpp:84 `fraction <= 1.0f`")
+    LEDGER.ok(state["player_health"] < agents.PLAYER_HEALTH,
+              "and the server's own bookkeeping went down with it",
+              f"{state['player_health']} of {agents.PLAYER_HEALTH} -- nothing "
+              "tracked this at all before this rung")
+
+    # 2. the four refusals. Each is a hostile that must NOT swing.
+    for why, world in (
+            ("out of aggro range", _world(dist=authsrv.AGGRO_RANGE + 1.0)),
+            ("dead", _world(dead=True)),
+            ("attacks_back off", _world(attacks_back=False)),
+            ("mid-burrow", _world(effects=agents.EFFECT_TRANSITION)),
+            ("not hostile", _world(allegiance=agents.ALLEGIANCE_ENEMY + 100))):
+        LEDGER.ok(not _swings(world),
+                  f"a hostile that is {why} does not swing",
+                  "silence is the whole assertion here")
+
+    # AND A PENDING LANDING DOES NOT SURVIVE ITS SWINGER. ArenaNet's own seventh
+    # swing in the Lakeside tape was truncated exactly this way -- the player
+    # killed the worm 0.24 s into a 0.899 s windup and no damage followed.
+    for why, kill in (("dies", lambda a: a.update(dead=True)),
+                      ("leaves range",
+                       lambda a: a.update(pos=(authsrv.AGGRO_RANGE + 9.0, 0.0)))):
+        mid = _world()
+        _swings(mid)                                    # opens a swing
+        assert mid["agents"][10]["swing_lands_at"] is not None
+        kill(mid["agents"][10])
+        mid["agents"][10]["swing_lands_at"] = time.time() - 1.0   # long overdue
+        before = mid["player_health"]
+        LEDGER.ok(not _swings(mid, n=3) and mid["player_health"] == before,
+                  f"a swing in flight does not land if the swinger {why}",
+                  "an overdue landing plus three ticks, and no damage -- the "
+                  "pending swing has to be dropped, not merely postponed")
+
+    # 3. enough swings kill the player -- and the KILL is the effects bit, because
+    #    property 16 floors at 1 and cannot do it. Drive it with the interval
+    #    forced to zero rather than by sleeping through ten real swings.
+    #    Driven through hit_player directly rather than by ticking: the swing
+    #    timer reads time.time(), whose resolution on Windows is coarse enough
+    #    that forty ticks at a 1 ms interval all landed inside one clock tick and
+    #    produced a single swing. A test that has to outrun the clock to measure
+    #    anything is measuring the clock.
+    state = _world()
+    sent = []
+    keep = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    needed = int(math.ceil(1.0 / authsrv.ENEMY_HIT_FRACTION))
+    for _ in range(needed):
+        authsrv.land_swing(keep, state, 10, state["agents"][10], 1)
+    LEDGER.ok(state["player_dead"] and state["player_health"] == 0.0,
+              f"{needed} swings at {authsrv.ENEMY_HIT_FRACTION} of the pool kill "
+              "the player",
+              f"health {state['player_health']}, dead {state['player_dead']}")
+    kills = [v for op, v, _l in sent
+             if op == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+             and v == [authsrv.PLAYER_AGENT_ID, agents.EFFECT_DEAD]]
+    LEDGER.ok(len(kills) == 1,
+              "and the death is ONE effects-bit message on the player",
+              f"{len(kills)} -- damage cannot kill (PROP_DAMAGE floors at 1), so "
+              "the bit is the death; more than one means the corpse is being "
+              "re-killed every interval")
+
+    # 4. and a corpse is left alone, in both directions
+    before = len(sent)
+    LEDGER.ok(not _swings(state, n=5),
+              "nothing swings at a dead player",
+              f"{before} messages before, none after")
+    swung = []
+    state["attacking"] = 10
+    authsrv.attack_tick(lambda op, v, label="", quiet=False: swung.append(op),
+                        state, 1)
+    LEDGER.ok(not swung,
+              "and a dead player stops swinging back",
+              "attack_tick reads state['player_dead'] -- without it the corpse "
+              "keeps hitting the thing that killed it")
+
+    # 5. the revive, and that it does not fire early
+    authsrv.player_revive_due(lambda *a, **k: None, state, 1)
+    LEDGER.ok(state["player_dead"],
+              "the revive does not fire before its timer",
+              f"died_at {state['player_died_at']}, needs "
+              f"{authsrv.PLAYER_REVIVE_AFTER}s")
+
+    state["player_died_at"] = time.time() - authsrv.PLAYER_REVIVE_AFTER - 1.0
+    rev = []
+    authsrv.player_revive_due(
+        lambda op, v, label="", quiet=False: rev.append((op, v)), state, 1)
+    LEDGER.ok(not state["player_dead"]
+              and state["player_health"] == float(agents.PLAYER_HEALTH),
+              "and then it stands the player back up at full health",
+              f"{state['player_health']}")
+    cleared = [v for op, v in rev if op == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS]
+    LEDGER.ok(cleared == [[authsrv.PLAYER_AGENT_ID, 0]],
+              "clearing the effects bit it set",
+              f"{cleared}")
+    refill = [struct.unpack("<f", struct.pack("<I", v[-1]))[0] for op, v in rev
+              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    LEDGER.ok(refill == [1.0],
+              "and refilling the pool with 1.0, the SETTER's full-bar value",
+              f"{refill} -- max_health here is what crashed the client on "
+              "2026-08-11, and the same guard covers this call site")
+
+    # 6a. a mis-declared agent does not swing every tick. Attack speed 0 is the
+    #     value that took the client down on m_attackInterval, and `or` sends it
+    #     to a real interval rather than to "no wait at all".
+    zero = _world()
+    zero["agents"][10]["attack_speed"] = 0.0
+    LEDGER.ok(len(_swings(zero, n=8)) == 1,
+              "an agent declaring attack speed 0 falls back to a real interval",
+              "8 ticks, ONE attack_started -- 0.0 is falsy, and treating it as "
+              "'unset' is deliberate: it is the value behind the "
+              "m_attackInterval assert. One message rather than three because a "
+              "swing now opens and lands separately")
+
+    # 6. the swing honours the AGENT's declared speed, not the player's. The
+    #    client was told this agent's attack speed at spawn and animates to it.
+    state = _world()
+    state["agents"][10]["attack_speed"] = 10.0
+    n = len(_swings(state, n=6))
+    LEDGER.ok(n == 1,
+              "and a slow weapon swings once, not once per tick",
+              f"{n} message(s) over 6 ticks at a 10 s interval -- an opening is 1 "
+              "message, so anything above 1 means the timer is not being read")
+
+
+def _walk(state, n=1, elapsed=1.0):
+    """Run enemy_move_tick n times, each pretending `elapsed` seconds passed."""
+    import authsrv
+    sent = []
+    for _ in range(n):
+        for a in state.get("agents", {}).values():
+            a["moved_at"] = time.time() - elapsed
+        authsrv.enemy_move_tick(
+            lambda op, vals, label="", quiet=False: sent.append((op, vals, label)),
+            state, 1)
+    return sent
+
+
+class _Wall:
+    """A pathmap that refuses to let anything WEST of x = 400.
+
+    The agent starts east of the player and walks toward the origin, so the wall
+    clamps from below. The first version clamped from above and never blocked
+    anything -- a fixture that cannot fail is the same defect as a check that
+    cannot fail, one layer down.
+    """
+
+    def __init__(self):
+        self.asked = 0
+
+    def clip(self, x0, y0, x1, y1, step=16.0):
+        self.asked += 1
+        return (max(x1, 400.0), y1)
+
+
+def section_chase():
+    """It walks toward the player, and stops where it can reach them.
+
+    THE BUG THIS RUNG FIXES IS ONE OF OURS. `AGGRO_RANGE` was doing two jobs --
+    when a hostile NOTICES the player and when it can REACH them -- so a Hatcher
+    rooted to its spawn point swung at anything within 1200 units. It hit people
+    across a courtyard it never crossed. Splitting reach from notice is what makes
+    the chase necessary rather than decorative: without the walk, raising the reach
+    to a melee distance would simply mean nothing could ever hit anybody.
+
+    All three constants are ours and the docstring at the call site says so.
+    """
+    import authsrv
+
+    far = authsrv.ENEMY_MELEE_RANGE + 450.0
+
+    # 1. it starts moving, announces a rate and a destination, and does NOT swing
+    state = _world(dist=far)
+    sent = _walk(state)
+    ops = [op for op, _v, _l in sent]
+    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_UPDATE_SPEED,
+                      authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT],
+              "a hostile out of reach announces a rate and a destination",
+              f"{[hex(o) for o in ops]}")
+    rate = [v for op, v, _l in sent
+            if op == authsrv.GAME_SMSG_AGENT_UPDATE_SPEED][0]
+    LEDGER.ok(rate[0] == 10 and 0.0 < rate[1] <= agents.AGENT_MAX_MOVE_SPEED,
+              "and the rate is a FRACTION inside the client's own asserted bounds",
+              f"{rate} -- units/s here is the named mistake; "
+              f"{authsrv.ENEMY_MOVE_RATE} x {agents.DEFAULT_RUN_SPEED} = "
+              f"{authsrv.ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s")
+    dest = [v for op, v, _l in sent
+            if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT][0]
+    LEDGER.ok(dest[0] == 10 and dest[1] == [0.0, 0.0],
+              "and the destination is where the player is standing",
+              f"{dest}")
+    LEDGER.ok(not _swings(state),
+              "and it does not swing from out there",
+              f"{far:.0f} units, reach is {authsrv.ENEMY_MELEE_RANGE:.0f} -- this "
+              "is the courtyard bug, and it read AGGRO_RANGE until today")
+
+    # 2. it actually closes the distance
+    state = _world(dist=far)
+    before = math.hypot(*state["agents"][10]["pos"])
+    _walk(state, n=3, elapsed=0.5)
+    after = math.hypot(*state["agents"][10]["pos"])
+    LEDGER.ok(after < before - 100.0,
+              "and over three half-seconds it closes real ground",
+              f"{before:.0f} -> {after:.0f} units at "
+              f"{authsrv.ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s")
+
+    # 3. IT STOPS AT REACH RATHER THAN WALKING THROUGH THE PLAYER. A long step is
+    #    the interesting case: without the cap the agent overshoots to distance 0
+    #    and stands inside them.
+    state = _world(dist=far)
+    _walk(state)                       # tick one only announces the intent
+    LEDGER.ok(math.hypot(*state["agents"][10]["pos"]) == far,
+              "the tick that starts the walk does not also move the agent",
+              "moved_at is stamped when the walk begins, so the first step is "
+              "measured from then -- an agent cannot have travelled before it set off")
+    _walk(state, n=1, elapsed=30.0)
+    d = math.hypot(*state["agents"][10]["pos"])
+    LEDGER.ok(abs(d - authsrv.ENEMY_MELEE_RANGE) < 1.0,
+              "and a huge step stops it exactly at reach, not on top of the player",
+              f"{d:.1f} against a reach of {authsrv.ENEMY_MELEE_RANGE:.0f} -- "
+              "uncapped, a 30 s step lands at 0 and the agent stands inside them")
+    LEDGER.ok(bool(_swings(state)),
+              "and having arrived, it can swing",
+              "the walk is only worth anything if the fight starts at the end of it")
+
+    # 4. the stop is an ARRIVAL, never a zero rate -- agent_update_speed refuses
+    #    anything under AGENT_MIN_MOVE_SPEED and that refusal is a ValueError on
+    #    the world tick.
+    stop = _walk(state, n=2)
+    stop_ops = [op for op, _v, _l in stop]
+    LEDGER.ok(authsrv.GAME_SMSG_AGENT_UPDATE_SPEED not in stop_ops,
+              "stopping never sends a speed message",
+              f"{[hex(o) for o in stop_ops]} -- speed 0.0 is below the client's own "
+              f"floor of {agents.AGENT_MIN_MOVE_SPEED} (AgAgent.cpp:2366) and "
+              "agent_update_speed raises on it")
+    LEDGER.ok(len([o for o in stop_ops
+                   if o == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT]) == 1,
+              "and it announces its arrival exactly once, not every tick",
+              f"{len(stop_ops)} message(s) over two ticks standing still")
+
+    # 5. the destination is not re-announced every tick while chasing
+    state = _world(dist=far)
+    _walk(state)                                   # first announcement
+    quiet = _walk(state, n=4, elapsed=0.05)
+    LEDGER.ok(not [op for op, _v, _l in quiet
+                   if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT],
+              "a stationary player is not re-announced on every tick",
+              f"{len(quiet)} message(s) over four ticks -- 20 a second is what "
+              "'tell the client where to go' becomes if this is not gated")
+    state["pos"] = (0.0, authsrv.ENEMY_DEST_RESEND + 50.0)
+    moved = _walk(state, elapsed=0.05)
+    LEDGER.ok(bool([op for op, _v, _l in moved
+                    if op == authsrv.GAME_SMSG_AGENT_MOVE_TO_POINT]),
+              "but a player who has walked far enough IS re-announced",
+              f"moved {authsrv.ENEMY_DEST_RESEND + 50.0:.0f} units, threshold is "
+              f"{authsrv.ENEMY_DEST_RESEND:.0f}")
+
+    # 6. the refusals
+    for why, world in (("past the leash", _world(dist=authsrv.AGGRO_RANGE + 50.0)),
+                       ("dead", _world(dist=far, dead=True)),
+                       ("passive", _world(dist=far, attacks_back=False)),
+                       ("mid-burrow",
+                        _world(dist=far, effects=agents.EFFECT_TRANSITION))):
+        LEDGER.ok(not _walk(world),
+                  f"a hostile that is {why} does not give chase",
+                  "silence is the whole assertion")
+    dead_player = _world(dist=far)
+    dead_player["player_dead"] = True
+    dead_player["player_health"] = 0.0
+    LEDGER.ok(not _walk(dead_player),
+              "and nothing chases a corpse",
+              "the player is face-down; walking to them is the wrong picture "
+              "and the swing that follows is worse")
+
+    # 7. A WALL STOPS IT. pathmap.clip is sampled rather than solved, and it is
+    #    the whole of our collision story -- pathmap.route is an A* and is NOT
+    #    wired in, so an agent meets a wall and waits there.
+    state = _world(dist=900.0)
+    state["pathmap"] = _Wall()
+    _walk(state)                       # announce, then walk
+    _walk(state, n=4, elapsed=1.0)
+    x = state["agents"][10]["pos"][0]
+    LEDGER.ok(state["pathmap"].asked >= 1 and x >= 400.0,
+              "a hostile is stopped by the pathmap rather than walking through it",
+              f"x={x:.0f} against a wall at 400, clip asked "
+              f"{state['pathmap'].asked} time(s)")
 
 
 def section_named_builders(codec):

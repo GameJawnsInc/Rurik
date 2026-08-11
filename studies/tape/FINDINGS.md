@@ -761,3 +761,64 @@ opcodes are already suggestive — `0x003D` MOVE_SET_HEADING dominates both (161
 `0x003B` (11 / 11), `0x0092` (10 / 10), `0x0012` (8 / 8), `0x0008` (5 / 5),
 `0x0060` (5 / 5), `0x0091`/`0x0088`/`0x0090` (4 / 4 each) look like a fixed login
 handshake rather than anything the player did.
+
+## T18 — a tape decoded per EVENT loses a fifth of itself and invents the rest
+
+**OBSERVED, 2026-08-11.** Every consumer that decoded a live tape did it one event at
+a time:
+
+```python
+for t, blob in events:
+    msgs, consumed, err = codec.decode_stream("GAME_SMSG", blob)
+```
+
+A tape event is one TCP segment, and a segment is a write, not a message. A message
+that straddles a boundary cannot be framed from the first segment, so `decode_stream`
+stops there and takes **every message behind it in that segment** with it. Nothing
+reported this: `decode_stream` returned the error and every call site in the repo
+assigned it to `_err`.
+
+**The half that is worse than loss.** The next segment then begins in the middle of
+that straddled message, and its leading bytes frame as whatever opcode they happen to
+spell. Per-event decoding does not merely drop messages, it **invents** them — the
+same defect `test_cmsgnames.py` pins for decoding the AUTH channel against the GAME
+tables, arriving through a different door.
+
+**Measured over all ten tapes of the two live captures**: per-event decoding yielded
+**17,886 messages where the stream holds 22,137** — 4,251 lost, 19.2% — and **117 of
+the 17,886 were fictitious**, 75 of them opcode `0x0000`. Loss per tape ranges from
+3% to 39%; the worst is the 111 KB Kamadan tape, 3,552 of 5,797.
+
+The loss is **not uniform across opcodes**, which is what makes it more than a count.
+On Lakeside County (`20260807T143055`, `10.0.0.210:64103`): `0x009F` 181 → 190,
+`0x00A2` 14 → 15, and **`0x0059` PLAYER_INFO 0 → 1**. That last one is the reason this
+is filed as a finding rather than a tidy-up — PLAYER_INFO is how you learn the player's
+own agent id, and per-event decoding says that tape does not contain one.
+
+**All ten tapes frame end to end when decoded whole**: `consumed == total`, `err is
+None`. There is no framing gap for any of this to hide behind, which is what makes the
+count above a clean measurement of the idiom rather than of the schema.
+
+**What changed.** `tape.decode_all(events, codec, channel)` concatenates the payloads,
+frames the buffer once, and maps each message back onto the segment carrying its FIRST
+byte (bisect over the segment start offsets), returning `[(t, opcode, values)]` plus a
+`(consumed, total, err)` receipt. It **refuses** by default rather than handing back a
+short decode. `codec.decode_stream_at` is the one framing loop underneath, and
+`decode_stream` is now a projection of it — two loops would be two chances to disagree
+about where a message ends.
+
+**What this did NOT change, and it is worth stating.** `test_burrow.py`'s headline
+numbers are identical either way — 140 worm creates across 13 ids, one burst shape, the
+two 2.00 s windows — because the `0x0020`s the old idiom lost on that tape were players
+rather than worms. Those numbers were never wrong; they were right by luck. Two callers
+were already correct and are unchanged: `test_smsgnames.py` and (formerly) `msgmix.py`
+carried the remainder across events, which yields the same message sequence as framing
+whole, with zero carry left over.
+
+**One consumer was wrong in the place it cost most.** The tape player's crash readout
+(`authsrv.py`) prints the messages in the events around a client drop — it exists to
+name the bytes that killed the client. It decoded per event, so on the Ascalon tape it
+was naming 2,814 messages out of 3,981, and any opcode it printed at the head of a
+post-straddle event was one the wire never carried. It now groups a single whole-stream
+framing by event, and labels an event with no message of its own as either a straddle
+tail or UNFRAMED, because those are not the same news.

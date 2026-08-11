@@ -224,6 +224,47 @@ def get_sections(page: str) -> list:
     ]
 
 
+def category(page: str, *, namespace: str | None = None,
+             max_requests: int = 4) -> dict:
+    """Members of a category, with the namespace breakdown.
+
+    A category page's *wikitext* does not contain its members -- MediaWiki
+    renders those server-side from the link tables -- so `get` on a
+    `Category:` page returns the description text and nothing else. That is
+    the trap this command exists to avoid: it looks like an empty category
+    rather than the wrong query.
+
+    Returns `truncated: True` rather than silently short-listing when the
+    members outrun `max_requests`, because a partial roster reported as a
+    whole one is how a BOUND becomes a fake EXACT.
+    """
+    if not page.lower().startswith("category:"):
+        page = "Category:" + page
+    members, cont, requests = [], None, 0
+    while requests < max_requests:
+        params = {"action": "query", "list": "categorymembers",
+                  "cmtitle": page, "cmlimit": "500", "cmprop": "ids|title|type"}
+        if namespace is not None:
+            params["cmnamespace"] = namespace
+        if cont:
+            params["cmcontinue"] = cont
+        d = api(params)
+        requests += 1
+        if "error" in d:
+            raise KeyError(f"{page}: {d['error'].get('info', d['error'])}")
+        for m in d.get("query", {}).get("categorymembers", []):
+            members.append({"title": m["title"], "ns": m.get("ns"),
+                            "type": m.get("type")})
+        cont = d.get("continue", {}).get("cmcontinue")
+        if not cont:
+            break
+    by_ns: dict = {}
+    for m in members:
+        by_ns[m["ns"]] = by_ns.get(m["ns"], 0) + 1
+    return {"category": page, "total": len(members), "by_namespace": by_ns,
+            "requests": requests, "truncated": bool(cont), "members": members}
+
+
 def search(query: str, limit: int = 10) -> list:
     d = api({"action": "query", "list": "search", "srsearch": query,
              "srlimit": str(limit), "srprop": "snippet|wordcount"})
@@ -414,6 +455,12 @@ def main(argv=None) -> int:
     s = sub.add_parser("search")
     s.add_argument("query")
     s.add_argument("--limit", type=int, default=10)
+    s = sub.add_parser("category", help="list category members (one request per "
+                                        "500), with the namespace breakdown")
+    s.add_argument("page")
+    s.add_argument("--namespace", help="restrict to a namespace id, e.g. 0 for "
+                                       "articles only")
+    s.add_argument("--max-requests", type=int, default=4)
     s = sub.add_parser("infobox")
     s.add_argument("skill")
     s.add_argument("--from-file", metavar="PATH",
@@ -452,6 +499,19 @@ def main(argv=None) -> int:
                     print(f"* {hit['title']}" + (f"  ({wc} words)" if wc else ""))
                     if hit["snippet"]:
                         print(f"    {hit['snippet']}")
+        elif a.cmd == "category":
+            out = category(a.page, namespace=a.namespace,
+                           max_requests=a.max_requests)
+            if a.json:
+                print(json.dumps(out, indent=2))
+            else:
+                print(f"{out['category']}: {out['total']} members "
+                      f"in {out['requests']} request(s)"
+                      + ("  *** TRUNCATED ***" if out["truncated"] else ""))
+                for ns, n in sorted(out["by_namespace"].items()):
+                    print(f"  ns {ns}: {n}")
+                for m in out["members"]:
+                    print(f"  [{m['ns']}] {m['title']}")
         elif a.cmd == "infobox":
             if getattr(a, "from_file", None):
                 wt = Path(a.from_file).read_text(encoding="utf-8")

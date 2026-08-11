@@ -26,6 +26,7 @@ and we will have its words written down, which is the prerequisite for answering
 
 import argparse
 import binascii
+import bisect
 import itertools
 import json
 import math
@@ -941,6 +942,12 @@ ENEMY_DEFINITION = _ENEMY["definition"]
 # comment promising this hatch shipped before the wire did, so the documented
 # mitigation for a silent client assert was unreachable.
 ENEMY_RESEND_DEFINITION = bool(_ENEMY.get("resend_definition", False))
+# Whether this spawn fights back. Default TRUE -- the point of the rung -- but a
+# row may turn it off, and it is read here rather than assumed so that a probe
+# session can put a passive body in the world without editing code. Same wiring
+# rule as above: `entry` is a closed literal, so a key reaches it only by being
+# named here and in spawn_enemy.
+ENEMY_ATTACKS_BACK = bool(_ENEMY.get("attacks_back", True))
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
 ENEMY_OFFSET = (_ENEMY["offset_x"], _ENEMY["offset_y"])
 # A PLACEHOLDER, and it has to be non-zero rather than right. WIKI (GWW,
@@ -1092,6 +1099,58 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 ATTACK_INTERVAL = WEAPON_ATTACK_SPEED
 ATTACK_RANGE = 1500.0      # units. Ours entirely; nothing measured it.
 
+# THE OTHER HALF OF R4a: something swings back. Until 2026-08-11 every combat
+# message this server sent flowed one way -- the player hit things and nothing
+# could hit the player, which is the half PLAN.md 3's R4a row has named as missing
+# since 2026-08-06 ("an ettin swings at you and you die").
+#
+# THE MECHANISM IS ALREADY PROVEN, and by an accident rather than by a design. Read
+# hit_enemy's comment on GV_ATTACK_STARTED: an early version put the ENEMY in slot
+# 1, and the client animated the enemy and then asserted on m_attackInterval -- it
+# could only assert on an agent whose attack speed was zero. So slot 1 is the
+# swinger, and a non-player agent in it swings, PROVIDED it has been given an
+# attack speed. Our Hatcher has one (0x0035, ENEMY_ATTACK_SPEED). This code is that
+# accident aimed on purpose.
+#
+# WHAT IS OURS RATHER THAN MEASURED: both numbers below, and the proximity rule.
+# Real Guild Wars aggro is a leash with a pull radius and a give-up distance, and
+# an NPC walks to its target; ours stands still and swings when the player is
+# close enough. Nothing here is a claim about retail.
+AGGRO_RANGE = 1200.0       # units. Ours. Inside ATTACK_RANGE so a fight is mutual.
+ENEMY_HIT_FRACTION = 0.10  # of the PLAYER's maximum, so ~10 swings to drop them
+PLAYER_REVIVE_AFTER = 10.0 # seconds face-down. Longer than an agent's 8.0 on
+                           # purpose: this one interrupts a person.
+
+# A SWING IS NOT INSTANT, and the first version of this code made it one.
+# OBSERVED 2026-08-11 from ArenaNet's own traffic (studies/enemy/PLAN.md 11.1,
+# capture 20260807T143055 connection :64103): a Plague Worm's swing is
+# ATTACK_STARTED, then 0.880-0.919 s of nothing, then the landing. Six complete
+# swings, mean 0.899. We sent all three messages in the same instant, so the
+# damage number appeared on the same frame the animation began.
+#
+# WHAT IS NOT KNOWN, and the reason this is a constant rather than a ratio: all
+# six swings came from ONE agent at ONE declared attack speed (2.00 s), so
+# whether the windup scales with the weapon or is fixed cannot be told from this
+# corpus. 0.899/2.00 = 0.449 and 0.899 are equally consistent with n=1 speeds.
+# Taking the constant is the smaller claim.
+SWING_WINDUP = 0.899       # seconds between ATTACK_STARTED and the landing
+
+# IT WALKS NOW. Until this, `AGGRO_RANGE` was doing two jobs -- deciding both when
+# a hostile notices the player and when it can reach them -- so a Hatcher rooted to
+# its spawn point swung at anything within 1200 units, hitting people across a
+# courtyard it never crossed. The two are separated here: AGGRO_RANGE is the notice
+# and the leash, ENEMY_MELEE_RANGE is the reach.
+#
+# ALL THREE NUMBERS ARE OURS. Nothing measured them, and the wiki's aggro-bubble
+# figures are about a mechanic (a moving circle, a leash back to a spawn anchor,
+# a call-to-arms radius) that none of this implements.
+ENEMY_MELEE_RANGE = 150.0  # close enough to swing. Ours.
+ENEMY_MOVE_RATE = 0.75     # fraction of the 288 u/s reference, so 216 u/s -- slower
+                           # than the player on purpose, so you can walk away
+ENEMY_DEST_RESEND = 120.0  # how far the player must move before the destination is
+                           # re-announced. Every tick would be 20 messages a second
+                           # at a client that only needs the endpoint.
+
 
 def begin_attack(send, state, target_id, conn_id):
     """A click on a hostile agent starts an attack that the tick keeps up.
@@ -1117,6 +1176,10 @@ def begin_attack(send, state, target_id, conn_id):
 
 def attack_tick(send, state, conn_id):
     """Keep swinging at whatever the player last clicked."""
+    if state.get("player_dead"):
+        # A dead player does not keep hitting things. Cheap, but it is the
+        # difference between a death and a pause in the animation.
+        return
     target_id = state.get("attacking")
     if not target_id:
         return
@@ -1255,6 +1318,266 @@ def revive_due(send, state, conn_id):
              f"refill bar on agent {agent_id}")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)
+
+
+def player_pools(state):
+    """The player's live health, lazily. Nothing tracked it before this rung.
+
+    The client was told PLAYER_HEALTH once at spawn and the server then forgot the
+    number, which was fine while nothing could damage the player and is exactly the
+    gap that made "you cannot die" a property of the code rather than a decision.
+    """
+    state.setdefault("player_health", float(agents.PLAYER_HEALTH))
+    state.setdefault("player_dead", False)
+    state.setdefault("player_died_at", 0.0)
+    return state
+
+
+def enemy_attack_tick(send, state, conn_id):
+    """Hostile agents swing at the player. The other half of R4a.
+
+    A SNAPSHOT, for the reason revive_due takes one: this runs on the world-tick
+    daemon thread and burrow_tick can remove an agent in the same tick. Walking the
+    live dict raises "dictionary changed size during iteration" INSIDE the tick,
+    which stops the world for the rest of the session with a traceback nowhere near
+    the cause.
+    """
+    player_pools(state)
+    if state["player_dead"]:
+        # Nothing swings at a corpse. Without this the player is re-killed every
+        # interval while face-down and the revive never gets a clean window.
+        return
+    px, py = state.get("pos", (0.0, 0.0))
+    now = time.time()
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}):
+            continue
+        if agent["dead"] or not agent.get("attacks_back"):
+            # A corpse does not land the swing it was mid-way through. ArenaNet's
+            # own 7th swing in the Lakeside tape was truncated exactly this way,
+            # 0.24 s in, when the player killed the worm.
+            agent["swing_lands_at"] = None
+            continue
+        if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+            continue
+        # A body mid-burrow is half in the world and must not swing out of it. The
+        # hidden ones are not in state["agents"] at all, so this covers only the
+        # 2.00 s transitions either side.
+        if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
+            continue
+        ax, ay = agent["pos"]
+        # REACH, not notice. This read AGGRO_RANGE until the chase existed, which
+        # let a rooted agent hit the player from 1200 units away.
+        if math.hypot(ax - px, ay - py) > ENEMY_MELEE_RANGE:
+            agent["swinging"] = False
+            agent["swing_lands_at"] = None
+            continue
+        # Its OWN weapon speed, not the player's. The client was told this agent's
+        # attack speed at spawn (0x0035) and animates to it; swinging faster than we
+        # declared is how the animation and the damage numbers come apart.
+        # `or` rather than a default, and the zero case is the point: an agent
+        # whose declared attack speed is 0 is exactly what took the client down on
+        # m_attackInterval (hit_enemy's comment). Falling back to a real interval
+        # keeps a mis-declared agent from swinging every tick forever.
+        interval = agent.get("attack_speed") or ENEMY_ATTACK_SPEED
+        if not agent.get("swinging"):
+            agent["swinging"] = True
+            # Swing on arrival rather than after a full interval -- the same call
+            # begin_attack makes for the player. A fight that opens with a second
+            # and a half of nothing reads as a fight that did not start.
+            agent["last_swing"] = 0.0
+            print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) attacks the "
+                  f"player", flush=True)
+        # TWO PHASES, because a swing takes time. A landing that is due is always
+        # resolved before a new swing is started, so a slow tick cannot make an
+        # agent start twice and land once.
+        due = agent.get("swing_lands_at")
+        if due is not None:
+            if now >= due:
+                agent["swing_lands_at"] = None
+                land_swing(send, state, agent_id, agent, conn_id)
+            continue
+        if now - agent.get("last_swing", 0.0) < interval:
+            continue
+        agent["last_swing"] = now
+        start_swing(send, agent_id, conn_id)
+        agent["swing_lands_at"] = now + SWING_WINDUP
+
+
+def enemy_move_tick(send, state, conn_id):
+    """Hostile agents walk toward the player until they are close enough to swing.
+
+    TWO CLOCKS HAVE TO AGREE. The client is told a DESTINATION and animates its own
+    way there; the server advances `agent["pos"]` itself at the same rate, because
+    that is what every range check in here reads. If they drift, the agent swings
+    from where the server thinks it is while the player watches it swing from
+    somewhere else -- so the step below is deliberately the same arithmetic the
+    player's own movement uses, and the destination is re-announced whenever the
+    player has moved far enough for the client's version to be wrong.
+
+    THERE IS NO PATHFINDING. `pathmap.route` is an A* and it is NOT wired in here:
+    this walks a straight line and uses `pathmap.clip` to stop at the first thing
+    it cannot cross, so an agent meets a wall and waits rather than sliding through
+    it. That is honest but it is not clever -- a hostile on the far side of a
+    building will stand against the wall for as long as you stay there.
+    """
+    player_pools(state)
+    px, py = state.get("pos", (0.0, 0.0))
+    now = time.time()
+    pm = state.get("pathmap")
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}):
+            continue
+        if agent["dead"] or not agent.get("attacks_back"):
+            agent["moving"] = False
+            continue
+        if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+            continue
+        if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
+            continue
+        ax, ay = agent["pos"]
+        dist = math.hypot(px - ax, py - ay)
+        chasing = (not state["player_dead"]
+                   and ENEMY_MELEE_RANGE < dist <= AGGRO_RANGE)
+        if not chasing:
+            if agent.get("moving"):
+                # STOPPING IS AN ARRIVAL, not a zero rate. agent_update_speed
+                # refuses anything under AGENT_MIN_MOVE_SPEED (0.01, the client's
+                # own assert at AgAgent.cpp:2366), so "speed 0" is not available
+                # to say this with -- and on the world tick that refusal would be
+                # a ValueError the tick has to swallow.
+                agent["moving"] = False
+                agent["dest_told"] = None
+                send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                     [agent_id, [ax, ay], agent.get("plane", 0),
+                      agent.get("plane", 0)],
+                     f"agent {agent_id} stops at ({ax:.0f},{ay:.0f})")
+            agent["moved_at"] = now
+            continue
+
+        if not agent.get("moving"):
+            agent["moving"] = True
+            agent["moved_at"] = now
+            send(GAME_SMSG_AGENT_UPDATE_SPEED,
+                 agents.agent_update_speed(agent_id, ENEMY_MOVE_RATE),
+                 f"agent {agent_id} speed {ENEMY_MOVE_RATE} "
+                 f"({ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED:.0f} u/s)")
+            print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is coming for "
+                  f"the player, {dist:.0f} units out", flush=True)
+
+        told = agent.get("dest_told")
+        if told is None or math.hypot(px - told[0], py - told[1]) > ENEMY_DEST_RESEND:
+            agent["dest_told"] = (px, py)
+            send(GAME_SMSG_AGENT_MOVE_TO_POINT,
+                 [agent_id, [px, py], agent.get("plane", 0), agent.get("plane", 0)],
+                 f"agent {agent_id} walks to ({px:.0f},{py:.0f})")
+
+        # Advance our own copy. Cap the step at the distance that still leaves the
+        # agent at its melee range, so it stops beside the player rather than
+        # walking through them.
+        elapsed = max(0.0, now - agent.get("moved_at", now))
+        agent["moved_at"] = now
+        step = min(ENEMY_MOVE_RATE * agents.DEFAULT_RUN_SPEED * elapsed,
+                   dist - ENEMY_MELEE_RANGE)
+        if step <= 0.0:
+            continue
+        nx = ax + (px - ax) / dist * step
+        ny = ay + (py - ay) / dist * step
+        if pm is not None:
+            # Sampling, not solving -- clip returns the last walkable point along
+            # the way, so a wall stops the agent instead of being walked through.
+            nx, ny = pm.clip(ax, ay, nx, ny)
+        agent["pos"] = (nx, ny)
+
+
+def start_swing(send, agent_id, conn_id):
+    """The opening half of an agent's swing: the animation, and nothing else.
+
+    SLOT 1 IS THE AGENT SWINGING. hit_enemy's comment records how that was found
+    -- an early version put the enemy there by mistake, the client animated the
+    enemy and then asserted on m_attackInterval -- and ArenaNet's own traffic now
+    confirms it independently and far more strongly: across the whole live corpus
+    the set of agents that ever receive an attack-speed declaration is EXACTLY the
+    set that ever appears in slot 1 of ATTACK_STARTED, 11 to 0 against the rival
+    reading (studies/enemy/PLAN.md 11.1).
+    """
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+         [agents.GV_ATTACK_STARTED, agent_id, PLAYER_AGENT_ID, 0],
+         f"attack_started: agent {agent_id} swings at the player")
+
+
+def land_swing(send, state, agent_id, agent, conn_id):
+    """The closing half: the swing connects, SWING_WINDUP seconds later.
+
+    THE ORDER IS ARENANET'S, and it is the opposite of hit_enemy's. OBSERVED in
+    the Lakeside tape: the landing is GV_MELEE_ATTACK_FINISHED and then the
+    damage, adjacent in the same TCP payload, 6 of 6 swings, checked by byte
+    offset rather than by timestamp. hit_enemy sends damage first and is
+    deliberately NOT changed here -- the corresponding claim about how ArenaNet
+    marks the CONTROLLED agent's own landings was refuted under review, so the
+    player's swing has no verified model to copy and guessing at one would be
+    trading a known shape for an unverified one.
+    """
+    # Its own lazy init rather than the caller's: this runs on the world-tick
+    # daemon thread and a KeyError here would stop the world for the rest of the
+    # session with a traceback nowhere near the cause.
+    player_pools(state)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
+         "melee_attack_finished")
+
+    dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
+    state["player_health"] = max(0.0, state["player_health"] - dealt)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id,
+          _fraction(-ENEMY_HIT_FRACTION, agents.PROP_DAMAGE, "an enemy swing")],
+         f"damage {dealt:.0f} to the player")
+    print(f"[c{conn_id}] player hit by {agent_id}: "
+          f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
+
+    if state["player_health"] <= 0.0:
+        # PROPERTY 16 CANNOT DO THIS PART. It floors at 1 and cannot kill
+        # (agents.PROP_DAMAGE), which is a fact about the client rather than a
+        # choice of ours -- so damage drives the bar down to a sliver and the last
+        # step has to be the effects bit, exactly as it is for an agent. Our own
+        # bookkeeping decides; the fractions only make the bar agree with it.
+        state["player_dead"], state["player_died_at"] = True, time.time()
+        state["attacking"] = None      # a corpse stops swinging back
+        send(GAME_SMSG_AGENT_UPDATE_STATUS,
+             [PLAYER_AGENT_ID, agents.EFFECT_DEAD], "KILL the player")
+        print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
+              f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
+
+
+def player_revive_due(send, state, conn_id):
+    """Stand the player back up, on the same two operations an agent needs.
+
+    UNVERIFIED, and shipped that way on purpose: no PLAYER death was found in
+    either live capture, so this is our agent-death path pointed at
+    PLAYER_AGENT_ID rather than a replication of ArenaNet's. What retail does on
+    death -- a defeated overlay, a party wipe, a walk back from a resurrection
+    shrine -- is not modelled here at all. Getting back up on a timer is the least
+    wrong thing that keeps a session usable, and it is a placeholder.
+    """
+    player_pools(state)
+    if not state["player_dead"]:
+        return
+    if time.time() - state["player_died_at"] < PLAYER_REVIVE_AFTER:
+        return
+    state["player_dead"] = False
+    state["player_health"] = float(agents.PLAYER_HEALTH)
+    send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
+         "restore the player's maximum")
+    # Property 34 SETS the pool to fraction x maximum (studies/agentprops 1e), so
+    # 1.0 is a full bar and not a doubled one. The client's own death path zeroes
+    # the pools, so clearing the bit alone returns a body at nothing.
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
+          _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
+         "refill the player's bar")
+    print(f"[c{conn_id}] the player is back up", flush=True)
 
 
 def frame_pending(codec_obj, channel, pending, mask):
@@ -1637,6 +1960,7 @@ def spawn_enemy(send, state, origin, conn_id):
         "attack_speed": ENEMY_ATTACK_SPEED,
         "effects": 0,
         "resend_definition": ENEMY_RESEND_DEFINITION,
+        "attacks_back": ENEMY_ATTACKS_BACK,
     }
     if ENEMY_BURROWS:
         entry.update({
@@ -1783,14 +2107,45 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
               f"session.py captures the dialog automatically into the run "
               f"directory as crash-dialog.txt; standalone, use "
               f"toolkit/harness/read_error_dialog.py.", flush=True)
+        # Frame the tape ONCE, then group each message under the event its FIRST byte
+        # falls in. This used to decode each event on its own, which is wrong in the one
+        # place a wrong answer costs the most: a tape event is a TCP segment, a message
+        # can straddle two, and the event after a straddle begins mid-message -- so its
+        # leading bytes framed as whatever opcode they happened to spell. This readout
+        # exists to name the bytes that killed the client, and naming an opcode the wire
+        # never carried is worse than naming none. Corpus-wide the old idiom lost 19% of
+        # messages and invented 117; `tape.decode_all` carries the measurement.
+        ends, at = [], 0
+        for _t, b in events:
+            at += len(b)
+            ends.append(at)
+        per_event, framed_to = {}, 0
+        try:
+            framed, framed_to, _e = codec.decode_stream_at(
+                "GAME_SMSG", b"".join(b for _t, b in events))
+        except Exception:
+            framed = []
+        for off, op, _v in framed:
+            per_event.setdefault(bisect.bisect_right(ends, off), []).append(op)
+
         for j in range(lo, min(sent + 2, len(events))):
             et, eb = events[j]
-            try:
-                msgs, _c, _e = codec.decode_stream("GAME_SMSG", eb)
-                ops = " ".join(f"0x{op:04x}" for op, _v in msgs[:10])
-                more = "..." if len(msgs) > 10 else ""
-            except Exception:
-                ops, more = eb[:12].hex(" "), " (undecodable)"
+            here = per_event.get(j, [])
+            ops = " ".join(f"0x{op:04x}" for op in here[:10])
+            more = "..." if len(here) > 10 else ""
+            if not here:
+                # An event with no message of its own has two possible causes and they
+                # are not the same news, so do not print one label for both. Either it
+                # holds only the tail of a message that began earlier, or the stream
+                # stopped framing before reaching it -- and the second is a finding.
+                # MEASURED 2026-08-11: the first case happens in NONE of the ten
+                # recorded tapes, because it needs a message longer than a whole
+                # segment and these do not have one. The branch is for a tape whose
+                # segmentation is not ArenaNet's, not for the ordinary case.
+                ops = eb[:12].hex(" ")
+                more = (" (continues the previous event)"
+                        if ends[j] <= framed_to else
+                        f" (UNFRAMED -- the tape stopped framing at byte {framed_to:,})")
             flag = "  <<< LAST SENT" if j == sent - 1 else ""
             print(f"[c{conn_id}]   ev{j} t={et:.2f}s {len(eb)}B  {ops}{more}{flag}",
                   flush=True)
@@ -2489,6 +2844,19 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     try:
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
+                        # Both halves of the fight, and the order matters. The
+                        # player's revive runs BEFORE the enemies swing, so a
+                        # player whose timer expired this tick stands up and can
+                        # be hit again in the same tick rather than getting one
+                        # free interval; and enemy_attack_tick reads
+                        # state["player_dead"], which player_revive_due is the
+                        # only thing that clears.
+                        player_revive_due(send, state, conn_id)
+                        # Walk BEFORE swinging, so an agent that arrives on this
+                        # tick can open its swing on the same tick rather than
+                        # standing in reach for one interval doing nothing.
+                        enemy_move_tick(send, state, conn_id)
+                        enemy_attack_tick(send, state, conn_id)
                         # The third sweep, and the first that mutates state["agents"]
                         # on a schedule rather than only when the player acts. Last,
                         # so a body that died this tick is seen dead by burrow_tick
@@ -2496,6 +2864,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         burrow_tick(send, state, conn_id)
                     except OSError:
                         return
+                    except ValueError as ex:
+                        # _fraction raises ValueError, and so does every
+                        # validator in agents.py. The tick caught OSError and
+                        # AgentLifetimeError only, so a single out-of-range
+                        # fraction would stop the world for the rest of the
+                        # session -- silently, on a daemon thread, with the
+                        # traceback nowhere near the cause. Loud, and survivable,
+                        # exactly as the case below.
+                        print(f"[c{conn_id}] world tick REFUSED a value: {ex}",
+                              flush=True)
                     except AgentLifetimeError as ex:
                         # Loud, and it does not kill the tick. This runs on a daemon
                         # thread: an escaping exception here silently stops the world
@@ -2701,7 +3079,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_INSTANCE_MANIFEST_DONE,
                                  [phase_arg, map_arg, 0],
                                  f"MANIFEST_DONE[{phase_arg}, map {map_arg}]")
-                    elif opcode in (GAME_CMSG_USE_SKILL, GAME_CMSG_ATTACK_SKILL):
+                    elif (opcode in (GAME_CMSG_USE_SKILL,
+                                     GAME_CMSG_ATTACK_SKILL)
+                          and not state.get("player_dead")):
+                        # THE SAME GUARD attack_tick got, and it was missed here.
+                        # A dead player pressing a skill still damaged the thing
+                        # that killed them -- the corpse could cast. Found by
+                        # review rather than by the run, because a person watching
+                        # the screen sees a body on the ground either way.
                         # ONE ARM FOR BOTH, deliberately. 0x0046 and 0x0027 are the
                         # caster and attack-skill halves of the same action: their
                         # payloads line up slot for slot and ArenaNet's own server
