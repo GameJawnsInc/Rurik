@@ -482,6 +482,8 @@ closes its half or a 2 s deadline passes, then `close()`. An ordinary graceful s
 which is what the recording shows. `test_burrow.py` §4 asserts the half-close specifically
 rather than "close was called", and reverting it to `SHUT_RDWR` goes red.
 
+**SUPERSEDED by T14: the close is not the release at all, graceful or not.**
+
 **UNVERIFIED:** that reason 0 is what a graceful FIN actually produces here. The mapping
 from wire event to reason code has not been read — only the branch on it has. The next
 chained run is the test, and it is the cheapest one available.
@@ -545,3 +547,42 @@ far enough to reveal one.
    window the operator was told to sit out means the marks and the messages disagree, and
    the run must be discarded rather than read. `test_labelrun.py` breaks that control on
    purpose to prove it can go red.
+
+
+### T14 — Exactly ONE game-channel transfer per session dials. OBSERVED, by a discriminating run.
+
+Three chained runs stalled at the second hop and each time the fix addressed the close.
+None of them was the cause. `--tape-chain-from` settled it in one 6-minute run by making
+the *failing* transition the *first* one:
+
+| run | transfer #1 | transfer #2 |
+|---|---|---|
+| full chain | Ascalon (148) -> Lakeside (146) **worked** | Lakeside -> Ashford (164) **stalled** |
+| `--tape-chain-from 62994` | Lakeside -> Ashford **worked, 118/118** | Ashford -> Lakeside **stalled** |
+
+The same Lakeside -> Ashford transition **works as the first transfer and fails as the
+second**. So it is not the transition, the map, the tape, the destination address or the
+shutdown: it is the **ordinal**. That is exactly what T10's reading of the binary
+predicted -- bit `0x20` at `+0x190` is clear for the first transfer (immediate dial via
+`0x850df0`, which then sets it) and set for every one after (stash + pending, deferred).
+
+Two things this also confirms in passing, both live rather than by decode:
+
+* The client echoes the handoff's ids verbatim in its next VERSION frame -- hop 2 opened
+  with `world_id=3775625635 map_id=164 player_id=4145270229`, the exact values hop 1's
+  `0x01A5` carried. T9's 12/12 match, observed in flight.
+* Ashford Abbey renders. The 118-event tape is the cheapest full instance load we have,
+  and it is now a 14-second test loop for anything touching transfers.
+
+**What is dead:** that the close matters. Both closes drained **0 B** and the graceful
+half-close changed nothing. Keep it -- it matches the recording -- but it is not the
+release, and T13's fix should be read as correct-and-irrelevant.
+
+**What is left, and it is now a single question:** what makes the client consume a
+*deferred* transfer. The consumer at `0x00851402` sits in a handler that treats
+`[esi+0xc] == 0` as success, asserts `!(playerFlags & PLAYER_FLAG_CONNECTED)`, SETS that
+flag, and only then dials the stashed address -- i.e. it looks like a
+**connection-established** handler that dials a pending transfer once the new connection
+is up. If that reading is right the deferral is waiting on a connection the client is not
+making, and the next thing to read is what drives `0x00851380` at all, since it has no
+direct callers.

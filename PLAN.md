@@ -1103,7 +1103,14 @@ parallel, with one safety change that is not optional — see its entry.
     connection it already holds to go away. ArenaNet's server hangs up 0.12–0.14 s after
     every handoff; ours sat on the socket. `close_after_transfer` fixes that, keyed on the
     tape's contents so a last hop or `--tape-no-transfer` run is never hung up on.
-    **Re-run 2026-08-10: the hang-up was necessary but NOT sufficient** — same two hops,
+    **SETTLED 2026-08-10 by a discriminating run: exactly ONE game-channel transfer per
+    session dials** (T14). `--tape-chain-from 62994` made the failing Lakeside -> Ashford
+    transition the FIRST one and it worked, 118/118, with Ashford rendering; the NEXT
+    transfer then stalled. Same transition, opposite outcome, decided by its ordinal --
+    so it is not the map, the tape, the address or the shutdown. Three fixes aimed at the
+    close were all correct-and-irrelevant. What remains is one question: what makes the
+    client consume a DEFERRED transfer.
+    **Superseded:** *Re-run 2026-08-10: the hang-up was necessary but NOT sufficient* — same two hops,
     same stop. What releases a deferred transfer is a *player-state* transition, not a
     socket close: the consumer at `0x00851402` clears the pending bit and dials, and it
     lives in a handler asserting `!(context->playerFlags & PLAYER_FLAG_CONNECTED)` at
