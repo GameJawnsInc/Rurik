@@ -1171,8 +1171,15 @@ def create_agent_world(send, state, agent_id, entry, why,
         send(GAME_SMSG_NPC_UPDATE_PROPERTIES,
              agents.npc_properties(definition, npc),
              f"NPC_UPDATE_PROPERTIES(def {definition})")
-        send(GAME_SMSG_NPC_UPDATE_MODEL, agents.npc_model(definition, npc),
-             f"NPC_UPDATE_MODEL(def {definition})")
+        # A definition need not have a model row. ArenaNet declares 8 of the 44
+        # definitions in capture 20260807T143055 with 0x0056 and NO 0x0057 at
+        # all, and the Lakeside worm is one of them -- so a content row may
+        # honestly lack `model_id`, and sending one anyway would mean inventing
+        # it. That guess is what made the first agent_removal run's negative
+        # meaningless. OBSERVED; studies/smsg/FINDINGS.md.
+        if npc.get("model_id") is not None:
+            send(GAME_SMSG_NPC_UPDATE_MODEL, agents.npc_model(definition, npc),
+                 f"NPC_UPDATE_MODEL(def {definition})")
 
     # The effects an agent is BORN with, which is what 0x00F0 is for. This is the one
     # message of ArenaNet's five-message worm create burst that we can send honestly:
