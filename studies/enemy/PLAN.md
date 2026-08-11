@@ -2609,6 +2609,12 @@ would be a `ValueError` the tick has to swallow.
 
 ### 11.3 It faces you — on an angle nobody here invented
 
+> **CORRECTED by §11.7.** The angle in this section was 180° out and the agent
+> faced AWAY. Everything below about the field layout, the range, the float32
+> seam and the turn rate stands; the claim that it was "turned toward the player"
+> does not, and it was based on my reading of a frame rather than on anyone
+> looking at the screen. The offset is applied and confirmed in §11.7.
+
 **OBSERVED 2026-08-11**, capture `authsrv-20260811T175949-c1.jsonl`:
 
 ```
@@ -2668,7 +2674,16 @@ the seam, so it never had to notice.
 
 ### Still not there
 
-- **It does not turn while dead**, and nothing resets `facing_told` on revive.
+- **It does not turn while dead**, and nothing resets `facing_told` on revive. I
+  predicted the facing would therefore be stale after a revive. **OBSERVED
+  2026-08-11, owner: it still faces the player after the revive**, and the reason
+  is that the stale value is still the CORRECT value — nothing that could
+  invalidate it can happen while the player is dead. The player cannot move (they
+  are face-down), and the agent neither chases nor turns toward a corpse, so the
+  geometry at revive is the geometry at death. The missing reset is real; the
+  symptom is **unreachable today**. It becomes reachable the moment a dead player
+  can be moved — a resurrection-shrine walk is exactly that, and is the change
+  that would need this looked at again.
 - **The turn rate is one constant for every creature.** ArenaNet's is per-creature;
   we send its maximum to everything.
 - **`ENEMY_FACING_EPSILON` is ours.** The rest of the numbers are ArenaNet's.
@@ -2838,6 +2853,12 @@ in the capture is inside ±π, the rate is ArenaNet's, the value round-trips, an
 all of it is equally true of a body pointing the wrong way. A person looking at
 the screen is the only instrument for this, and I substituted my own frame-reading
 for it and reported the result as confirmation.
+
+**CONFIRMED 2026-08-11, owner, on the run after the change: the facing is now
+correct.** Emitted 0° for the geometry that previously emitted 180°, and the agent
+faces the player. That confirmation is the whole evidence base for the offset —
+there is no wire-side check that could have produced it, and none has been
+invented to look like one.
 
 **The fix is `+ π`, and the `+ π` is measured rather than derived.**
 `atan2(dy, dx)` is the bearing from the agent to the player and it is correct by
