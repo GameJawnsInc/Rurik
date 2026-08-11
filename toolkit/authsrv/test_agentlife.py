@@ -29,6 +29,7 @@ standard library only.
 import math
 import os
 import struct
+import time
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -39,7 +40,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=49)
+LEDGER = checks.Ledger("agent lifetime", floor=70)
 
 
 def main():
@@ -179,7 +180,192 @@ def main():
 
     section_named_builders(codec)
     section_pool_fraction()
+    section_swing_back()
     return LEDGER.verdict()
+
+
+def _world(dist=100.0, **over):
+    """A player at the origin and one hostile `dist` units away."""
+    import authsrv
+    entry = {"name": "hatcher", "dead": False, "died_at": 0.0,
+             "health": 100.0, "max_health": 100.0, "last_hit": 0.0,
+             "pos": (dist, 0.0), "plane": 0,
+             "allegiance": agents.ALLEGIANCE_HOSTILE,
+             "attack_speed": authsrv.ENEMY_ATTACK_SPEED,
+             "effects": 0, "attacks_back": True}
+    entry.update(over)
+    return {"agents": {10: entry}, "pos": (0.0, 0.0)}
+
+
+def _swings(state, n=1, gap=0.0):
+    """Run enemy_attack_tick n times and return everything it sent."""
+    import authsrv
+    sent = []
+    for _ in range(n):
+        if gap:
+            time.sleep(gap)
+        authsrv.enemy_attack_tick(
+            lambda op, vals, label="", quiet=False: sent.append((op, vals, label)),
+            state, 1)
+    return sent
+
+
+def section_swing_back():
+    """R4a's other half: a hostile agent attacks the player, and the player dies.
+
+    Until 2026-08-11 every combat message this server sent flowed one way. PLAN.md
+    3's R4a row has said "nothing swings back and the player cannot die" since
+    2026-08-06, and both clauses were properties of the code: no sweep aimed a
+    swing at the player, and the server did not track the player's health at all
+    after telling the client about it once at spawn.
+
+    THE CHECK THAT MATTERS IS THE ROLE CHECK. `hit_enemy` carries a comment about
+    an early version that put the ENEMY in slot 1 of GV_ATTACK_STARTED -- the
+    client animated the enemy and then asserted on `m_attackInterval`, which is how
+    slot 1 was identified as the swinger. `hit_player` is that mistake made
+    deliberately, so the one way to get it wrong now is to write it the way
+    `hit_enemy` is written and animate the PLAYER attacking themselves. Two checks
+    below fail on exactly that, and they are the reason this section exists rather
+    than a count of messages.
+    """
+    import authsrv
+
+    # 1. a hostile in range swings, and the three messages are the swing
+    state = _world()
+    sent = _swings(state)
+    ops = [op for op, _v, _l in sent]
+    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT],
+              "a hostile in range swings: started, damage, finished",
+              f"{[hex(o) for o in ops]} -- hit_enemy's shape, reversed")
+
+    started = [v for op, v, _l in sent
+               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET][0]
+    LEDGER.ok(started[0] == agents.GV_ATTACK_STARTED and started[1] == 10,
+              "and slot 1 of attack_started is the AGENT, not the player",
+              f"{started} -- slot 1 is the body the client animates. Writing this "
+              "the way hit_enemy is written puts PLAYER_AGENT_ID here and animates "
+              "the player swinging at themselves, which is the mirror of the bug "
+              "hit_enemy's own comment records")
+    LEDGER.ok(started[2] == authsrv.PLAYER_AGENT_ID,
+              "and slot 2 is the player, who is being swung at",
+              f"{started}")
+
+    dmg = [v for op, v, _l in sent
+           if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET][0]
+    LEDGER.ok(dmg[0] == agents.PROP_DAMAGE and dmg[1] == authsrv.PLAYER_AGENT_ID
+              and dmg[2] == 10,
+              "and the damage names the player as DAMAGED and the agent as CAUSE",
+              f"{dmg[:3]} -- 0x00A3 is [prop, target, cause, value], the opposite "
+              "order to attack_started, which is why both are checked here")
+
+    val = struct.unpack("<f", struct.pack("<I", dmg[-1]))[0]
+    LEDGER.ok(-1.0 <= val < 0.0,
+              "and the value is a negative fraction inside the client's bound",
+              f"{val!r} -- positive would trip CharPool.cpp:84 `fraction <= 1.0f`")
+    LEDGER.ok(state["player_health"] < agents.PLAYER_HEALTH,
+              "and the server's own bookkeeping went down with it",
+              f"{state['player_health']} of {agents.PLAYER_HEALTH} -- nothing "
+              "tracked this at all before this rung")
+
+    # 2. the four refusals. Each is a hostile that must NOT swing.
+    for why, world in (
+            ("out of aggro range", _world(dist=authsrv.AGGRO_RANGE + 1.0)),
+            ("dead", _world(dead=True)),
+            ("attacks_back off", _world(attacks_back=False)),
+            ("mid-burrow", _world(effects=agents.EFFECT_TRANSITION)),
+            ("not hostile", _world(allegiance=agents.ALLEGIANCE_ENEMY + 100))):
+        LEDGER.ok(not _swings(world),
+                  f"a hostile that is {why} does not swing",
+                  "silence is the whole assertion here")
+
+    # 3. enough swings kill the player -- and the KILL is the effects bit, because
+    #    property 16 floors at 1 and cannot do it. Drive it with the interval
+    #    forced to zero rather than by sleeping through ten real swings.
+    #    Driven through hit_player directly rather than by ticking: the swing
+    #    timer reads time.time(), whose resolution on Windows is coarse enough
+    #    that forty ticks at a 1 ms interval all landed inside one clock tick and
+    #    produced a single swing. A test that has to outrun the clock to measure
+    #    anything is measuring the clock.
+    state = _world()
+    sent = []
+    keep = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    needed = int(math.ceil(1.0 / authsrv.ENEMY_HIT_FRACTION))
+    for _ in range(needed):
+        authsrv.hit_player(keep, state, 10, state["agents"][10], 1)
+    LEDGER.ok(state["player_dead"] and state["player_health"] == 0.0,
+              f"{needed} swings at {authsrv.ENEMY_HIT_FRACTION} of the pool kill "
+              "the player",
+              f"health {state['player_health']}, dead {state['player_dead']}")
+    kills = [v for op, v, _l in sent
+             if op == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+             and v == [authsrv.PLAYER_AGENT_ID, agents.EFFECT_DEAD]]
+    LEDGER.ok(len(kills) == 1,
+              "and the death is ONE effects-bit message on the player",
+              f"{len(kills)} -- damage cannot kill (PROP_DAMAGE floors at 1), so "
+              "the bit is the death; more than one means the corpse is being "
+              "re-killed every interval")
+
+    # 4. and a corpse is left alone, in both directions
+    before = len(sent)
+    LEDGER.ok(not _swings(state, n=5),
+              "nothing swings at a dead player",
+              f"{before} messages before, none after")
+    swung = []
+    state["attacking"] = 10
+    authsrv.attack_tick(lambda op, v, label="", quiet=False: swung.append(op),
+                        state, 1)
+    LEDGER.ok(not swung,
+              "and a dead player stops swinging back",
+              "attack_tick reads state['player_dead'] -- without it the corpse "
+              "keeps hitting the thing that killed it")
+
+    # 5. the revive, and that it does not fire early
+    authsrv.player_revive_due(lambda *a, **k: None, state, 1)
+    LEDGER.ok(state["player_dead"],
+              "the revive does not fire before its timer",
+              f"died_at {state['player_died_at']}, needs "
+              f"{authsrv.PLAYER_REVIVE_AFTER}s")
+
+    state["player_died_at"] = time.time() - authsrv.PLAYER_REVIVE_AFTER - 1.0
+    rev = []
+    authsrv.player_revive_due(
+        lambda op, v, label="", quiet=False: rev.append((op, v)), state, 1)
+    LEDGER.ok(not state["player_dead"]
+              and state["player_health"] == float(agents.PLAYER_HEALTH),
+              "and then it stands the player back up at full health",
+              f"{state['player_health']}")
+    cleared = [v for op, v in rev if op == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS]
+    LEDGER.ok(cleared == [[authsrv.PLAYER_AGENT_ID, 0]],
+              "clearing the effects bit it set",
+              f"{cleared}")
+    refill = [struct.unpack("<f", struct.pack("<I", v[-1]))[0] for op, v in rev
+              if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    LEDGER.ok(refill == [1.0],
+              "and refilling the pool with 1.0, the SETTER's full-bar value",
+              f"{refill} -- max_health here is what crashed the client on "
+              "2026-08-11, and the same guard covers this call site")
+
+    # 6a. a mis-declared agent does not swing every tick. Attack speed 0 is the
+    #     value that took the client down on m_attackInterval, and `or` sends it
+    #     to a real interval rather than to "no wait at all".
+    zero = _world()
+    zero["agents"][10]["attack_speed"] = 0.0
+    LEDGER.ok(len(_swings(zero, n=8)) == 3,
+              "an agent declaring attack speed 0 falls back to a real interval",
+              "8 ticks, one swing -- 0.0 is falsy, and treating it as 'unset' is "
+              "deliberate: it is the value behind the m_attackInterval assert")
+
+    # 6. the swing honours the AGENT's declared speed, not the player's. The
+    #    client was told this agent's attack speed at spawn and animates to it.
+    state = _world()
+    state["agents"][10]["attack_speed"] = 10.0
+    n = len(_swings(state, n=6))
+    LEDGER.ok(n == 3,
+              "and a slow weapon swings once, not once per tick",
+              f"{n} messages over 6 ticks at a 10 s interval -- one swing is 3 "
+              "messages, so anything above 3 means the timer is not being read")
 
 
 def section_named_builders(codec):
