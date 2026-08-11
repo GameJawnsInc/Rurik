@@ -418,16 +418,22 @@ an error, which is the failure mode worth naming. Subtract 0x3A0000 first.
 | 52 `GV_ENERGY_GAIN` | 5 | `0x008182E6` | |
 | 55 `GV_ARMOR_IGNORING` | 6 | `0x0081830B` | |
 | 62 `GV_ENERGY_SPENT` | 7 | `0x00818345` | |
-| 42, 61 | 8 | `0x0081838B` | the `ja` default — 42 is an INT-channel property, correctly absent here |
+| **39 of the 47 ids**, incl. 42 and 61 | 8 | `0x0081838B` | the `ja` default. Ids 17–32, 35–41, 45–51, 53–54 and 56–61 all land here — the client acts on only **8** of the 47 it accepts. 42 is an INT-channel property, correctly absent |
 
 `0x009215F0 + 0x23 = 0x00921613`, which is the crash's own return address, so
 **`0x009215F0` is the CharPool method whose line 84 asserts `fraction <= 1.0f`** and
 property 34 is what it range-checks.
 
 **The decode is checked rather than fitted.** Every property this repo had already named
-independently — 16, 44, 52, 55, 62 — lands on a *distinct* arm, and the two that land on
-the default (42, 61) include one we know is int-channel. A mis-derived table would not
+independently — 16, 44, 52, 55, 62 — lands on a *distinct* arm, and the ones we named that
+land on the default include 42, which we know is int-channel. A mis-derived table would not
 sort our own constants that way.
+
+**The default is the common case, and the first version of this table hid that** by listing
+only the ids we happen to have names for: **39 of the 47 accepted ids fall to arm 8**. The
+client accepts the range 16..62 and acts on eight values in it. So "property N is in range"
+says almost nothing, and an unnamed id is far more likely to be silently ignored than
+handled.
 
 **Why nothing found this in twenty sessions: the bound is `<=`, so it only fires
 positive.** Every value ever put on this channel was damage — `-HIT_FRACTION`, and the
@@ -439,3 +445,54 @@ measured -50.0 as -50 health" (§1b) — cannot be read off arm 2, which applies
 and hands the value to something that calls it a fraction; -50.0 as a fraction is -50× the
 pool, which empties it, and that is not "50 off a 100 max". **One probe settles it: send
 -0.5 at a 100-max agent and see whether 50 comes off.** Not run — the harness was in use.
+
+## 1e. Property 34 is a SETTER — OBSERVED, and it refutes §1b, §1d *and* the probe's own prediction
+
+**2026-08-11**, probe `pool_fraction`, build 38797, capture
+`authsrv-20260811T144527`. Read off the **player's health orb**, which shows a number
+rather than a bar — the probe is handed `PLAYER_AGENT_ID`, which §1d's write-up had
+wrong when it said to watch the hostile.
+
+| step | sent | orb |
+|---|---|---|
+| baseline | max health 100 (int property 42) | **100** |
+| control | property 16 = **-0.10** | **90** |
+| the question | property 34 = **-0.50** | **1** |
+| again | property 34 = **-0.50** | **1** |
+
+**Property 34 sets the pool to `fraction × maximum`.** `-0.5` sets it to `-50`, which
+clamps to the floor of 1 — and does so *again* on the second send, because a setter is
+idempotent where a delta is not.
+
+**Every rival dies on the third row.** A delta of `0.5 × 100` from 90 predicts **40**.
+An absolute delta of `0.5` predicts **89.5**. The floor is what happened.
+
+**Three claims are corrected here, and one of them is this probe's own.**
+
+**§1b — "a DELTA, not a setter" — is exactly backwards.** Its measurement sent `-50.0`
+at a bar *already down to 50*, and read the resulting empty bar as "it arrived as exactly
+50". Both hypotheses predict an empty bar there, so the row could not discriminate; §1b's
+own next line records the follow-up doing nothing because "the bar was already at the
+floor", which is the floor being observed twice and read as a subtraction once. §1b's
+*other* rows are unaffected and remain good: property 16 at `-0.5` gave exactly 50 on a
+full bar, and property 55 at `-1.0` gave exactly 100.
+
+**§1d had the arithmetic right and the meaning wrong.** Arm 2 really does apply no `fmul`
+— but that is because `0x009215F0` does the scaling itself as part of setting, not
+because the value reaches the pool unscaled. "A fraction the client does not scale" was a
+conclusion drawn one frame too early.
+
+**And the prediction stated in `probes.py` before the run was refuted.** It said FRACTION,
+meaning "the bar drops to about half". The argument *is* a fraction, so the label was
+right and the behaviour it predicted was wrong — which is the failure mode a probe with a
+written prediction exists to catch, and it is left in the file rather than tidied away.
+
+**It also explains the crash, better than §1d did.** `CharPool.cpp:84` asserts
+`fraction <= 1.0f` because **a setter cannot exceed the maximum**. `revive_due`'s
+`max_health` was not merely a number too large; it was the wrong *kind* of number. And
+`1.0` is right for the strongest possible reason: it sets the pool full, which is what a
+revive means, from a pool the client's death path had zeroed.
+
+**Still not established:** whether the floor of 1 is the pool's own clamp (as §1's
+`PROP_DAMAGE` note says: "Floors at 1: cannot kill") or something in this path
+specifically. Both sends landed there, so this run cannot separate them.

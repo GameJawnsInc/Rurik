@@ -1471,6 +1471,75 @@ def _cast_modifier_order_steps(agent_id):
     ]
 
 
+def _pool_fraction_steps(agent_id, origin):
+    """Is property 34 an ABSOLUTE amount or a FRACTION of the pool?
+
+    THE TWO WITNESSES DISAGREE, and that is why this exists.
+
+    SECTION 1b (OBSERVED 2026-08-06) says absolute: property 34 = -50.0 against a
+    100-max agent took the bar from 50 to ~0, and 1b reads that as "it arrived as
+    exactly 50". THE DISASSEMBLY (OBSERVED 2026-08-11, section 1d) says the client
+    calls it a fraction: arm 2 at 0x0081828D passes our value through with NO fmul
+    into 0x009215F0, whose line 84 asserts `fraction <= 1.0f` -- which is how the
+    revive crash was found.
+
+    1b'S STEP COULD NOT HAVE REFUTED THE FRACTION READING, and that is the flaw
+    rather than a quibble. The bar was ALREADY at 50 when -50.0 landed. Absolute
+    predicts 50 - 50 = 0. Fraction predicts 50 - (50 x 100) = 0. Both predict an
+    empty bar, and 1b's own next row records that the follow-up did nothing
+    because "the bar was already at the floor". A measurement whose two rival
+    hypotheses make the same prediction is not evidence for either.
+
+    1b's OTHER rows are unaffected and are the calibration this probe leans on:
+    property 16 = -0.5 gave exactly 50 damage on a 100 bar, and property 55 = -1.0
+    gave exactly 100. Both are the fraction reading landing on the nose, and both
+    were read off a FULL bar, which is what makes them refutable.
+
+    SO: the discriminator is -0.5 on property 34 against a FULL bar, which nobody
+    has ever sent. The two readings differ by a factor of 100 there.
+
+        step 2 (control, property 16 = -0.10)  ->  10 off, a known fraction
+        step 3 (the question, property 34 = -0.50):
+              FRACTION -> ~50 off, the bar drops to about half
+              ABSOLUTE -> 0.5 off, the bar does not visibly move
+        step 4 (the same again) separates fraction-of-MAX (bar empties) from
+              fraction-of-CURRENT (bar halves again)
+
+    PREDICTION, stated before the run: FRACTION. The client's own assert names the
+    parameter, and a function that meant "absolute health" has no reason to bound
+    its argument at 1.0. If the bar instead does not move, the disassembly is
+    right about the arithmetic and wrong about the meaning, section 1d needs its
+    headline changed, and `_fraction`'s range check is guarding the wrong thing.
+
+    NOT SENT HERE: a positive value larger than 1.0. That is the CharPool.cpp:84
+    crash, it is already OBSERVED, and re-running a known client-killer to watch it
+    kill the client again buys nothing.
+    """
+    return [
+        Step(2.0, 0x009F, [42, agent_id, 100],
+             "max health -> 100 on the PLAYER (int property 42)",
+             "the PLAYER's health orb, bottom centre -- it shows a NUMBER, which is a better readout than any bar. It should be 100. Every reading below "
+             "is against this baseline, so if it is not full, stop -- the rest of "
+             "the run measures nothing."),
+        Step(5.0, 0x00A3, [16, agent_id, agent_id, _f32(-0.10)],
+             "CONTROL: property 16 = -0.10, a known fraction",
+             "the orb number and the floating number. 1b measured this channel at "
+             "exactly fraction x max, so this should read 10 and leave the orb at "
+             "90. This is the ruler for step 3 -- without it, 'about half' is an "
+             "impression rather than a measurement."),
+        Step(6.0, 0x00A3, [34, agent_id, agent_id, _f32(-0.50)],
+             "THE QUESTION: property 34 = -0.50",
+             "the bar, and ONLY the bar -- 1b established 34 is silent, so expect "
+             "no floating number either way. Bar drops to about HALF => FRACTION. "
+             "Bar stays at 90% => ABSOLUTE, and 0.5 of 100 was too small to see."),
+        Step(6.0, 0x00A3, [34, agent_id, agent_id, _f32(-0.50)],
+             "the same value again",
+             "the bar. EMPTY means the fraction is of MAXIMUM (another 50 off a "
+             "bar holding 40). About HALF OF WHAT WAS LEFT means it is of CURRENT. "
+             "Still 90% means step 3 was absolute after all and this is 0.5 more."),
+    ]
+
+
 def _burrow_steps(agent_id, origin):
     """Does an NPC definition survive a removal, and does 0x1000 do anything?
 
@@ -1691,6 +1760,31 @@ PROBES = {
              "the run should stop there if a bare property 60 does not cast. "
              "Note 61 goes out on 0x00A2, the FLOAT channel: on 0x009F it would "
              "be discarded in silence and look like a negative result.",
+    ),
+    "pool_fraction": lambda a, o: Probe(
+        question="Is agent property 34 an ABSOLUTE amount or a FRACTION of the "
+                 "pool? Section 1b says absolute; the client's own assert calls it "
+                 "a fraction.",
+        predicts="FRACTION -- the bar drops to about half on step 3. The client "
+                 "asserts `fraction <= 1.0f` on this exact argument "
+                 "(CharPool.cpp:84, reached from arm 2 at 0x0081828D), and a "
+                 "function meaning 'absolute health' has no reason to bound its "
+                 "input at 1.0. The rival prediction is a bar that does not "
+                 "visibly move, which would mean section 1d is right about the "
+                 "arithmetic and wrong about the meaning. Step 2 is a known-good "
+                 "fraction on property 16 and exists so that 'about half' is read "
+                 "against a measured 10% rather than guessed.",
+        steps=_pool_fraction_steps(a, o),
+        note="RUN 2026-08-11, AND BOTH EARLIER READINGS ARE WRONG -- including the prediction above, which is left standing because it was. Observed on the player orb: 100 -> (property 16 = -0.10) -> 90 -> (property 34 = -0.50) -> 1 -> (again) -> 1. A DELTA of 0.5 x 100 from 90 predicts 40; the prediction above said 'about half'; the floor is what happened. "
+             "PROPERTY 34 IS A SETTER: it sets the pool to fraction x maximum. -0.5 sets it to -50, which clamps to the floor of 1, and does so again on a second send because a setter is idempotent. That is also why revive's 1.0 refilled a bar sitting at zero all the way to full, and why the client asserts fraction <= 1.0f -- a setter cannot exceed the maximum. studies/agentprops/FINDINGS.md 1e. "
+             "Section 1b's own step for this question could not have refuted the "
+             "fraction reading: it sent -50.0 at a bar ALREADY down to 50, where "
+             "absolute predicts 0 and fraction predicts 0. This sends -0.5 at a "
+             "FULL bar, where the two readings differ by a factor of 100. Watch "
+             "the HOSTILE's floating bar, not the player's orb. Nothing here can "
+             "crash the client: every value is inside the asserted range, and the "
+             "one known killer (a positive value above 1.0) is deliberately "
+             "absent.",
     ),
     "burrow": lambda a, o: Probe(
         question="Does an NPC definition survive WORLD_REMOVE_AGENT, and does the "
