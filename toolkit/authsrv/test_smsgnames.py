@@ -99,6 +99,15 @@ def load(stamp):
     Frames across segment boundaries: a wire segment is a TCP write, not a message,
     and a message can straddle two of them. Carrying the remainder is what makes the
     'zero unconsumed bytes' claim meaningful rather than an artifact of truncation.
+
+    KEPT, not overlooked, when `tape.decode_all` landed on 2026-08-11. That helper
+    exists because most consumers framed each event on its own and lost 19% of the
+    corpus; this loop never did. Measured across all ten live tapes, it yields the
+    same message sequence as framing the stream whole, with zero carry left over --
+    so there is nothing here to fix, and the one behavioural difference is a
+    deliberate reason not to touch it: a straddled message is stamped where it
+    COMPLETES here and where it STARTS in decode_all, and this file's headline is a
+    timing claim measured under this convention.
     """
     codec = Codec(overrides=os.path.join(os.path.dirname(os.path.dirname(HERE)),
                                          "schema", "overrides.json"))

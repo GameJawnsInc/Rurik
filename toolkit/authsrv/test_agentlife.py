@@ -40,7 +40,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=70)
+LEDGER = checks.Ledger("agent lifetime", floor=74)
 
 
 def main():
@@ -230,15 +230,36 @@ def section_swing_back():
     """
     import authsrv
 
-    # 1. a hostile in range swings, and the three messages are the swing
+    # 1. A SWING IS TWO PHASES SEPARATED BY A WINDUP, which is the shape ArenaNet
+    #    uses and the shape the first version of this code got wrong: it sent all
+    #    three messages in the same instant, so the damage number landed on the
+    #    frame the animation started.
     state = _world()
     sent = _swings(state)
     ops = [op for op, _v, _l in sent]
-    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
-                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT],
-              "a hostile in range swings: started, damage, finished",
-              f"{[hex(o) for o in ops]} -- hit_enemy's shape, reversed")
+    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET],
+              "the opening of a swing is ATTACK_STARTED and nothing else",
+              f"{[hex(o) for o in ops]} -- damage arriving here is the "
+              "instant-swing bug: 0.899 s of animation with the number already on "
+              "screen")
+    LEDGER.ok(not _swings(state, n=4),
+              "and nothing lands while the windup is still running",
+              f"swing_lands_at is {state['agents'][10].get('swing_lands_at')!r} "
+              "-- four more ticks inside the window must stay silent")
+
+    # now let the windup elapse, and the landing must be FINISHED then DAMAGE
+    state["agents"][10]["swing_lands_at"] = time.time() - 0.001
+    land = _swings(state)
+    ops = [op for op, _v, _l in land]
+    LEDGER.ok(ops == [authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET],
+              "and the landing is MELEE_ATTACK_FINISHED and then the damage",
+              f"{[hex(o) for o in ops]} -- ArenaNet sends finished BEFORE damage, "
+              "adjacent in one payload, 6 of 6 swings checked by byte offset. "
+              "hit_enemy sends them the other way round and is left alone: the "
+              "claim about how the CONTROLLED agent's landings are marked was "
+              "refuted under review, so there is no verified model to copy")
+    sent = sent + land
 
     started = [v for op, v, _l in sent
                if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET][0]
@@ -280,6 +301,23 @@ def section_swing_back():
                   f"a hostile that is {why} does not swing",
                   "silence is the whole assertion here")
 
+    # AND A PENDING LANDING DOES NOT SURVIVE ITS SWINGER. ArenaNet's own seventh
+    # swing in the Lakeside tape was truncated exactly this way -- the player
+    # killed the worm 0.24 s into a 0.899 s windup and no damage followed.
+    for why, kill in (("dies", lambda a: a.update(dead=True)),
+                      ("leaves range",
+                       lambda a: a.update(pos=(authsrv.AGGRO_RANGE + 9.0, 0.0)))):
+        mid = _world()
+        _swings(mid)                                    # opens a swing
+        assert mid["agents"][10]["swing_lands_at"] is not None
+        kill(mid["agents"][10])
+        mid["agents"][10]["swing_lands_at"] = time.time() - 1.0   # long overdue
+        before = mid["player_health"]
+        LEDGER.ok(not _swings(mid, n=3) and mid["player_health"] == before,
+                  f"a swing in flight does not land if the swinger {why}",
+                  "an overdue landing plus three ticks, and no damage -- the "
+                  "pending swing has to be dropped, not merely postponed")
+
     # 3. enough swings kill the player -- and the KILL is the effects bit, because
     #    property 16 floors at 1 and cannot do it. Drive it with the interval
     #    forced to zero rather than by sleeping through ten real swings.
@@ -293,7 +331,7 @@ def section_swing_back():
     keep = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     needed = int(math.ceil(1.0 / authsrv.ENEMY_HIT_FRACTION))
     for _ in range(needed):
-        authsrv.hit_player(keep, state, 10, state["agents"][10], 1)
+        authsrv.land_swing(keep, state, 10, state["agents"][10], 1)
     LEDGER.ok(state["player_dead"] and state["player_health"] == 0.0,
               f"{needed} swings at {authsrv.ENEMY_HIT_FRACTION} of the pool kill "
               "the player",
@@ -352,20 +390,22 @@ def section_swing_back():
     #     to a real interval rather than to "no wait at all".
     zero = _world()
     zero["agents"][10]["attack_speed"] = 0.0
-    LEDGER.ok(len(_swings(zero, n=8)) == 3,
+    LEDGER.ok(len(_swings(zero, n=8)) == 1,
               "an agent declaring attack speed 0 falls back to a real interval",
-              "8 ticks, one swing -- 0.0 is falsy, and treating it as 'unset' is "
-              "deliberate: it is the value behind the m_attackInterval assert")
+              "8 ticks, ONE attack_started -- 0.0 is falsy, and treating it as "
+              "'unset' is deliberate: it is the value behind the "
+              "m_attackInterval assert. One message rather than three because a "
+              "swing now opens and lands separately")
 
     # 6. the swing honours the AGENT's declared speed, not the player's. The
     #    client was told this agent's attack speed at spawn and animates to it.
     state = _world()
     state["agents"][10]["attack_speed"] = 10.0
     n = len(_swings(state, n=6))
-    LEDGER.ok(n == 3,
+    LEDGER.ok(n == 1,
               "and a slow weapon swings once, not once per tick",
-              f"{n} messages over 6 ticks at a 10 s interval -- one swing is 3 "
-              "messages, so anything above 3 means the timer is not being read")
+              f"{n} message(s) over 6 ticks at a 10 s interval -- an opening is 1 "
+              "message, so anything above 1 means the timer is not being read")
 
 
 def section_named_builders(codec):

@@ -26,6 +26,7 @@ and we will have its words written down, which is the prerequisite for answering
 
 import argparse
 import binascii
+import bisect
 import itertools
 import json
 import math
@@ -1120,6 +1121,20 @@ ENEMY_HIT_FRACTION = 0.10  # of the PLAYER's maximum, so ~10 swings to drop them
 PLAYER_REVIVE_AFTER = 10.0 # seconds face-down. Longer than an agent's 8.0 on
                            # purpose: this one interrupts a person.
 
+# A SWING IS NOT INSTANT, and the first version of this code made it one.
+# OBSERVED 2026-08-11 from ArenaNet's own traffic (studies/enemy/PLAN.md 11.1,
+# capture 20260807T143055 connection :64103): a Plague Worm's swing is
+# ATTACK_STARTED, then 0.880-0.919 s of nothing, then the landing. Six complete
+# swings, mean 0.899. We sent all three messages in the same instant, so the
+# damage number appeared on the same frame the animation began.
+#
+# WHAT IS NOT KNOWN, and the reason this is a constant rather than a ratio: all
+# six swings came from ONE agent at ONE declared attack speed (2.00 s), so
+# whether the windup scales with the weapon or is fixed cannot be told from this
+# corpus. 0.899/2.00 = 0.449 and 0.899 are equally consistent with n=1 speeds.
+# Taking the constant is the smaller claim.
+SWING_WINDUP = 0.899       # seconds between ATTACK_STARTED and the landing
+
 
 def begin_attack(send, state, target_id, conn_id):
     """A click on a hostile agent starts an attack that the tick keeps up.
@@ -1322,6 +1337,10 @@ def enemy_attack_tick(send, state, conn_id):
         if agent_id not in state.get("agents", {}):
             continue
         if agent["dead"] or not agent.get("attacks_back"):
+            # A corpse does not land the swing it was mid-way through. ArenaNet's
+            # own 7th swing in the Lakeside tape was truncated exactly this way,
+            # 0.24 s in, when the player killed the worm.
+            agent["swing_lands_at"] = None
             continue
         if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
@@ -1333,6 +1352,7 @@ def enemy_attack_tick(send, state, conn_id):
         ax, ay = agent["pos"]
         if math.hypot(ax - px, ay - py) > AGGRO_RANGE:
             agent["swinging"] = False
+            agent["swing_lands_at"] = None
             continue
         # Its OWN weapon speed, not the player's. The client was told this agent's
         # attack speed at spawn (0x0035) and animates to it; swinging faster than we
@@ -1350,30 +1370,57 @@ def enemy_attack_tick(send, state, conn_id):
             agent["last_swing"] = 0.0
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) attacks the "
                   f"player", flush=True)
+        # TWO PHASES, because a swing takes time. A landing that is due is always
+        # resolved before a new swing is started, so a slow tick cannot make an
+        # agent start twice and land once.
+        due = agent.get("swing_lands_at")
+        if due is not None:
+            if now >= due:
+                agent["swing_lands_at"] = None
+                land_swing(send, state, agent_id, agent, conn_id)
+            continue
         if now - agent.get("last_swing", 0.0) < interval:
             continue
         agent["last_swing"] = now
-        hit_player(send, state, agent_id, agent, conn_id)
+        start_swing(send, agent_id, conn_id)
+        agent["swing_lands_at"] = now + SWING_WINDUP
 
 
-def hit_player(send, state, agent_id, agent, conn_id):
-    """One agent's swing landing on the player.
+def start_swing(send, agent_id, conn_id):
+    """The opening half of an agent's swing: the animation, and nothing else.
 
-    hit_enemy's three messages with the roles reversed, and the reversal is the
-    whole content: slot 1 of GV_ATTACK_STARTED is the AGENT SWINGING (measured --
-    see hit_enemy, where an early version put the enemy there by mistake and the
-    client obligingly animated the enemy), and 0x00A3's first slot after the
-    property is the agent being DAMAGED. Same shape, opposite occupants.
+    SLOT 1 IS THE AGENT SWINGING. hit_enemy's comment records how that was found
+    -- an early version put the enemy there by mistake, the client animated the
+    enemy and then asserted on m_attackInterval -- and ArenaNet's own traffic now
+    confirms it independently and far more strongly: across the whole live corpus
+    the set of agents that ever receive an attack-speed declaration is EXACTLY the
+    set that ever appears in slot 1 of ATTACK_STARTED, 11 to 0 against the rival
+    reading (studies/enemy/PLAN.md 11.1).
     """
-    # Its own lazy init rather than the caller's. enemy_attack_tick already calls
-    # player_pools, but this runs on the world-tick daemon thread and a KeyError
-    # here would stop the world for the rest of the session with a traceback
-    # nowhere near the cause -- the exact failure the tick's own comments are
-    # about. A function that can be called is a function that will be.
-    player_pools(state)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
          [agents.GV_ATTACK_STARTED, agent_id, PLAYER_AGENT_ID, 0],
          f"attack_started: agent {agent_id} swings at the player")
+
+
+def land_swing(send, state, agent_id, agent, conn_id):
+    """The closing half: the swing connects, SWING_WINDUP seconds later.
+
+    THE ORDER IS ARENANET'S, and it is the opposite of hit_enemy's. OBSERVED in
+    the Lakeside tape: the landing is GV_MELEE_ATTACK_FINISHED and then the
+    damage, adjacent in the same TCP payload, 6 of 6 swings, checked by byte
+    offset rather than by timestamp. hit_enemy sends damage first and is
+    deliberately NOT changed here -- the corresponding claim about how ArenaNet
+    marks the CONTROLLED agent's own landings was refuted under review, so the
+    player's swing has no verified model to copy and guessing at one would be
+    trading a known shape for an unverified one.
+    """
+    # Its own lazy init rather than the caller's: this runs on the world-tick
+    # daemon thread and a KeyError here would stop the world for the rest of the
+    # session with a traceback nowhere near the cause.
+    player_pools(state)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
+         "melee_attack_finished")
 
     dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
     state["player_health"] = max(0.0, state["player_health"] - dealt)
@@ -1381,9 +1428,6 @@ def hit_player(send, state, agent_id, agent, conn_id):
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id,
           _fraction(-ENEMY_HIT_FRACTION, agents.PROP_DAMAGE, "an enemy swing")],
          f"damage {dealt:.0f} to the player")
-    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-         [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
-         "melee_attack_finished")
     print(f"[c{conn_id}] player hit by {agent_id}: "
           f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
 
@@ -1959,14 +2003,45 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
               f"session.py captures the dialog automatically into the run "
               f"directory as crash-dialog.txt; standalone, use "
               f"toolkit/harness/read_error_dialog.py.", flush=True)
+        # Frame the tape ONCE, then group each message under the event its FIRST byte
+        # falls in. This used to decode each event on its own, which is wrong in the one
+        # place a wrong answer costs the most: a tape event is a TCP segment, a message
+        # can straddle two, and the event after a straddle begins mid-message -- so its
+        # leading bytes framed as whatever opcode they happened to spell. This readout
+        # exists to name the bytes that killed the client, and naming an opcode the wire
+        # never carried is worse than naming none. Corpus-wide the old idiom lost 19% of
+        # messages and invented 117; `tape.decode_all` carries the measurement.
+        ends, at = [], 0
+        for _t, b in events:
+            at += len(b)
+            ends.append(at)
+        per_event, framed_to = {}, 0
+        try:
+            framed, framed_to, _e = codec.decode_stream_at(
+                "GAME_SMSG", b"".join(b for _t, b in events))
+        except Exception:
+            framed = []
+        for off, op, _v in framed:
+            per_event.setdefault(bisect.bisect_right(ends, off), []).append(op)
+
         for j in range(lo, min(sent + 2, len(events))):
             et, eb = events[j]
-            try:
-                msgs, _c, _e = codec.decode_stream("GAME_SMSG", eb)
-                ops = " ".join(f"0x{op:04x}" for op, _v in msgs[:10])
-                more = "..." if len(msgs) > 10 else ""
-            except Exception:
-                ops, more = eb[:12].hex(" "), " (undecodable)"
+            here = per_event.get(j, [])
+            ops = " ".join(f"0x{op:04x}" for op in here[:10])
+            more = "..." if len(here) > 10 else ""
+            if not here:
+                # An event with no message of its own has two possible causes and they
+                # are not the same news, so do not print one label for both. Either it
+                # holds only the tail of a message that began earlier, or the stream
+                # stopped framing before reaching it -- and the second is a finding.
+                # MEASURED 2026-08-11: the first case happens in NONE of the ten
+                # recorded tapes, because it needs a message longer than a whole
+                # segment and these do not have one. The branch is for a tape whose
+                # segmentation is not ArenaNet's, not for the ordinary case.
+                ops = eb[:12].hex(" ")
+                more = (" (continues the previous event)"
+                        if ends[j] <= framed_to else
+                        f" (UNFRAMED -- the tape stopped framing at byte {framed_to:,})")
             flag = "  <<< LAST SENT" if j == sent - 1 else ""
             print(f"[c{conn_id}]   ev{j} t={et:.2f}s {len(eb)}B  {ops}{more}{flag}",
                   flush=True)
@@ -2681,6 +2756,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         burrow_tick(send, state, conn_id)
                     except OSError:
                         return
+                    except ValueError as ex:
+                        # _fraction raises ValueError, and so does every
+                        # validator in agents.py. The tick caught OSError and
+                        # AgentLifetimeError only, so a single out-of-range
+                        # fraction would stop the world for the rest of the
+                        # session -- silently, on a daemon thread, with the
+                        # traceback nowhere near the cause. Loud, and survivable,
+                        # exactly as the case below.
+                        print(f"[c{conn_id}] world tick REFUSED a value: {ex}",
+                              flush=True)
                     except AgentLifetimeError as ex:
                         # Loud, and it does not kill the tick. This runs on a daemon
                         # thread: an escaping exception here silently stops the world
@@ -2886,7 +2971,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_INSTANCE_MANIFEST_DONE,
                                  [phase_arg, map_arg, 0],
                                  f"MANIFEST_DONE[{phase_arg}, map {map_arg}]")
-                    elif opcode in (GAME_CMSG_USE_SKILL, GAME_CMSG_ATTACK_SKILL):
+                    elif (opcode in (GAME_CMSG_USE_SKILL,
+                                     GAME_CMSG_ATTACK_SKILL)
+                          and not state.get("player_dead")):
+                        # THE SAME GUARD attack_tick got, and it was missed here.
+                        # A dead player pressing a skill still damaged the thing
+                        # that killed them -- the corpse could cast. Found by
+                        # review rather than by the run, because a person watching
+                        # the screen sees a body on the ground either way.
                         # ONE ARM FOR BOTH, deliberately. 0x0046 and 0x0027 are the
                         # caster and attack-skill halves of the same action: their
                         # payloads line up slot for slot and ArenaNet's own server

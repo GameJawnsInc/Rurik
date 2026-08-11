@@ -2425,7 +2425,18 @@ defect in this file: the check was right and the caller never reached it.
 ## 11. Something swings back — R4a's other half, met
 
 **OBSERVED 2026-08-11.** Capture `authsrv-20260811T160502-c1.jsonl`, frames
-`frames-20260811T160449`, one 65 s loopback run with no operator input at all.
+`frames-20260811T160449`, one 65 s loopback run.
+
+**What the operator did, because "no operator input" is what this first said and it
+was wrong.** The owner moved the camera while watching, and camera movement is not
+free: the capture's client half is one `ROTATE_PLAYER` (0x0040) and one
+`TARGET_SELECT` (0x00C1), plus instance-load traffic. What is NOT there is the
+part that matters — no `0x0026`, no `0x0033`, no `0x003E`, no skill. **The player
+never attacked, never moved and never struck back**, so the fight is entirely the
+server's proximity sweep acting on an idle target, which is a stronger
+demonstration than the one originally claimed rather than a weaker one. (It also
+corroborates §10.7 from the other side: a right-CLICK produced no traffic, and a
+right-DRAG that actually turns the camera produces `ROTATE_PLAYER`.)
 
 ```
 30 x attack_started            agent 10 -> the player
@@ -2478,3 +2489,70 @@ target and cause slots swapped.
   energy equivalent of property 34's setter is not known. **Open.**
 - **One player, one enemy, one instance.** Nothing here has been tried with two
   hostiles or with an agent that moves.
+
+### 11.1 What ArenaNet's own combat traffic says — and where §11 was wrong
+
+**OBSERVED 2026-08-11**, from the live corpus rather than from our own server: a
+five-question fan-out over `vault/captures/live/`, every code-driving claim then
+handed to an independent skeptic. **47 verifications, 16 refuted.** The refutations
+are the useful half and most take the shape "the arithmetic reproduces exactly,
+the inference does not" — recorded here so nobody re-derives a killed claim.
+
+**The corpus.** `20260807T143055` connection `:64103` — a Warrior in Lakeside
+County. NPC agent `0x28` attacked player agent `0x1F` seven times between
+t=10.266 and t=23.268. Six landed; the seventh was cut off when the player killed
+the NPC 0.243 s into it. The player's own agent id was established five
+independent ways, including a four-char tag in the create (`play` against `mon1`
+on 142 others) — a field that reads as garbage decoded as a number, the
+marshalling-type trap again.
+
+**CONFIRMED, and it independently re-derives what §11 built from an accident:**
+
+| claim | strength |
+|---|---|
+| `0x00A0` value 4: slot 1 is the ATTACKER, slot 2 the target | the set of agents ever given an attack speed is EXACTLY the set ever in slot 1 — **11 to 0** against the rival |
+| `0x00A3` property 16: slot 1 is DAMAGED, slot 2 the CAUSE, value is a fraction of the DAMAGED agent's maximum | `|frac| x maxHealth(slot 1)` is a whole number **13 of 13**; against slot 2's maximum, **0 of 13** |
+| the player takes damage through the same channel as an NPC | 26 hp of 100 over six swings |
+
+Both were already right in `hit_player`. The `m_attackInterval` accident had them
+correct, and this is the first evidence that could have said otherwise.
+
+**REFUTED BY THE RUN — a swing is not instant, and §11 sent it as one.** The
+opening is `ATTACK_STARTED`; the landing arrives **0.880–0.919 s later** (mean
+0.899, n=6) as `MELEE_ATTACK_FINISHED` **then** the damage, adjacent in one TCP
+payload — verified by byte offset rather than by timestamp, 6 of 6. §11 sent all
+three messages in the same instant and in the other order, so the damage number
+appeared on the frame the animation began. Now two-phase (`start_swing` /
+`land_swing`) and a pending landing is DROPPED if its swinger dies or leaves
+range, which is what ArenaNet's truncated seventh swing shows.
+
+**`hit_enemy` is deliberately NOT reordered.** The claim about how ArenaNet marks
+the CONTROLLED agent's own landings (`0x00A7` rather than `0x009F` value 1) was
+**refuted** on review, so the player's swing has no verified model to copy and
+guessing at one trades a known shape for an unverified one.
+
+**Claims that did NOT survive — do not rebuild these:**
+
+- **"The declared attack speed is a floor, not the period."** Refuted: the
+  measurement reproduces, the inference is contradicted by the claimant's own
+  numbers, by an omitted counterexample in the same tape, and by the tape's
+  measurable timing noise.
+- **"`0x0035` is sent lazily at first swing, never at spawn."** The count
+  reproduces; the generalisation collapses once the sample widens past one agent.
+- **"ArenaNet never sends `0x009F` value 1 for the controlled agent."** The
+  arithmetic reproduces; the mechanism is refuted by a counterexample in the same
+  corpus and the operational advice was drawn from the wrong axis.
+
+**NOT FOUND, and it stays not found: no player death anywhere in the corpus.**
+"The player can take damage" is OBSERVED; "the player can die" is not. So §11's
+death path remains ours rather than ArenaNet's — what the live run settled is
+that the client *accepts* it, not that it is what retail sends.
+
+**A METHOD FAULT THAT IS MINE.** The tree moved under the readers: two agents
+reported the implementation arriving uncommitted mid-run and `HEAD` moving from
+`0421806` to `1d3530f` beneath them. I was editing the tree the research was
+reading, which is exactly the hazard `CLAUDE.md` names about pinning subagents.
+It happened to catch real defects in the in-flight code — a corpse that could
+still cast, and `ValueError` uncaught on the world tick, both now fixed — but that
+is luck, not method. Read-only fan-out over a moving tree should use
+`isolation: "worktree"`.
