@@ -2569,6 +2569,63 @@ def handle_portal_login(values, send, store, conn_id, allow_any, rec):
     send(AUTH_SMSG_REQUEST_RESPONSE, [req_id, 0], "REQUEST_RESPONSE(OK)")
 
 
+def note_unhandled(state, conn_id, channel, opcode, name, rec=None):
+    """Record a c2s opcode the schema KNOWS and this server has no arm for.
+
+    studies/divergence D9(a). Both dispatch chains used to end without an
+    `else`, so a schema-known opcode with no handler was printed as received
+    and then fell off the end of the chain: nothing sent, NOTHING LOGGED AS A
+    MISS, socket healthy. Measured over our own corpus that is 19 distinct
+    GAME_CMSG opcodes and 1,126 of 11,502 game-channel messages -- 9.8% --
+    and against live-shaped traffic it is worse, since `0x8009` alone is 19.3%
+    of live game c2s. The cost of the silence is not the missing feature; it
+    is that the missing feature is INVISIBLE, so "the client did nothing" and
+    "we ignored what the client did" look identical in the log.
+
+    Deliberately NOT an error and NOT a disconnect. Unhandled-but-known is the
+    normal state of most of the catalog today -- 194 layouts against nine
+    handlers -- so treating it as a fault would make every session look broken
+    and train the operator to ignore the loudest thing in the log. D9(b) is the
+    one that ends connections, and it is a different case: an opcode the schema
+    does not contain at all cannot be framed past safely.
+
+    First occurrence per connection prints; the rest are counted and reported
+    once at disconnect. That split is the point -- printing every one buries
+    the log (0x8009 arrives every 5 s, and movement opcodes far faster than
+    that), while printing none is the defect being fixed. A labelled run
+    suppresses the echo for the same reason the decoded line does: the operator
+    is reading a countdown in that terminal.
+    """
+    seen = state.setdefault("unhandled", {})
+    key = (channel, opcode)
+    first = key not in seen
+    seen[key] = seen.get(key, 0) + 1
+    if first:
+        if not labelrun.ACTIVE:
+            print(f"[c{conn_id}] UNHANDLED {channel} "
+                  f"0x{opcode | AUTH_CMSG_MASK:04x} {name} -- schema knows it, "
+                  f"this server has no arm for it (D9(a); first occurrence, "
+                  f"further ones counted)", flush=True)
+        if rec is not None:
+            rec.event("unhandled", channel=channel, opcode=opcode, name=name)
+
+
+def report_unhandled(state, conn_id, rec=None):
+    """Print the D9(a) tally once, at disconnect. Silent when there is none."""
+    seen = state.get("unhandled") or {}
+    if not seen:
+        return
+    total = sum(seen.values())
+    parts = ", ".join(
+        f"0x{op | AUTH_CMSG_MASK:04x}x{n}"
+        for (_ch, op), n in sorted(seen.items(), key=lambda kv: -kv[1]))
+    print(f"[c{conn_id}] unhandled-but-known c2s this session: {total} messages "
+          f"over {len(seen)} opcodes -- {parts}", flush=True)
+    if rec is not None:
+        rec.event("unhandled_summary", total=total, opcodes=len(seen),
+                  counts={f"{ch}:0x{op:04x}": n for (ch, op), n in seen.items()})
+
+
 def recv_exact(sock, n, rec=None):
     buf = b""
     while len(buf) < n:
@@ -3907,12 +3964,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # The load bar reaches 100% without this and stops there.
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
-                elif kind != "auth":
-                    # Game channel: capture only. Every handler below is keyed to
-                    # AUTH_CMSG opcodes, and the two catalogs collide numerically
-                    # — GAME_CMSG 0x0002 is TRADE_ADD_ITEM, not SEND_COMPUTER_HASH.
-                    # Answering one as the other would be worse than silence.
-                    pass
+                    else:
+                        # D9(a), game half. Nine arms against 194 schema layouts,
+                        # so this is the common path and not an exception.
+                        note_unhandled(state, conn_id, "GAME_CMSG", opcode,
+                                       name, rec)
                 elif opcode == AUTH_CMSG_SEND_COMPUTER_INFO:
                     state["username"] = values[1]
                     state["pcname"] = values[2]
@@ -3997,6 +4053,26 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                 elif opcode == AUTH_CMSG_REQUEST_GAME_INSTANCE:
                     handle_request_game_instance(values, send, conn_id,
                                                  state, rec)
+                else:
+                    # D9(a), auth half. Reached only when kind == "auth": the
+                    # `if kind == "game"` arm above owns the whole game channel
+                    # and ends in its own else.
+                    #
+                    # An `elif kind != "auth": pass` used to sit at the head of
+                    # this chain, from before the game channel had a chain of its
+                    # own. It was UNREACHABLE -- `kind` is two-valued
+                    # (`"auth" if header == AUTH_CMSG_VERSION_HEADER else "game"`,
+                    # one site), so game took the first arm and auth made the test
+                    # false. Removed 2026-08-11: dead code that reads like a
+                    # catch-all, sitting directly above a real catch-all, is worse
+                    # than no code. Its one real insight is kept here, because it
+                    # is why this else must not try to be clever: THE TWO CATALOGS
+                    # COLLIDE NUMERICALLY -- GAME_CMSG 0x0002 is TRADE_ADD_ITEM,
+                    # not SEND_COMPUTER_HASH -- so answering an opcode from the
+                    # wrong catalog is worse than silence. Naming the channel in
+                    # the log is the whole job here.
+                    note_unhandled(state, conn_id, "AUTH_CMSG", opcode,
+                                   name, rec)
 
             if desync_err:
                 # AN UNDECODABLE OPCODE ENDS THE CONNECTION. It used to do
@@ -4045,6 +4121,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         # closed politely.
         print(f"[c{conn_id}] done, {total} encrypted bytes recorded"
               f"{' -- ENDED ON DESYNC, see above' if desynced else ''}", flush=True)
+        # D9(a)'s tally, once, where the operator will actually read it. A
+        # per-message print buries the log; a per-session line is a real number.
+        report_unhandled(state, conn_id, rec)
         rec.event("disconnect", total_bytes=total, desynced=desynced)
     except (ConnectionError, socket.timeout, OSError) as ex:
         print(f"[c{conn_id}] {type(ex).__name__}: {ex}", flush=True)
