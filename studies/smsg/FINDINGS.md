@@ -1526,3 +1526,42 @@ entire dispatch tables invisible.*
    they are named. The named next step is UiGame's summary code at `0x004a8c66`.
 5. **The 116 corpus opcodes this pass did not touch**, and the 341 that never appeared
    in the capture at all.
+
+---
+
+# 7. CORRECTION, 2026-08-11 — section 4 was not verified and is partly wrong
+
+Section 4 ("What this changes for the server") was written by the synthesis agent
+and, unlike every claim about ArenaNet's binary and wire, **it never went through the
+refutation pass**. Those claims are about OUR repo, and they were checked against the
+code on 2026-08-11. Two of its headline items are wrong:
+
+| section 4 said | the code says |
+|---|---|
+| "`0x001E` … We send it on a fixed 0.05 s sleep (CV ~ 0)" and "we have never sent it correctly" | **We already send a measured delta**: `delta_ms = int((now - prev_tick) * 1000)` (`authsrv.py`, the world-tick daemon). The *cadence* is a fixed 20 Hz, so our deltas cluster near 50 ms where ArenaNet's spread to 520 ms — a real but much smaller difference than claimed. |
+| "`0x013F` x9 at login. *We send none, so the bag UI is empty by construction*" | `GAME_SMSG_INVENTORY_CREATE_BAG` **exists and has a send site.** Whether it sends all nine is a separate question the claim did not ask. |
+
+**The verified gap is five opcodes**, reconciled by walking every named opcode against
+the server's own constants and send sites:
+
+| opcode | name | state in our server |
+|---|---|---|
+| `0x0026` | AGENT_UPDATE_FLAGS | constant defined (`..._AGENT_UNNAMED_0026`), **never sent** |
+| `0x002B` | AGENT_UPDATE_SPEED | **not even defined** |
+| `0x002E` | AGENT_UPDATE_ROTATION | **not even defined** |
+| `0x0048` | AGENT_SET_TABARD_VISIBLE | **not even defined** |
+| `0x00A6` | AGENT_SET_PROFESSION | **not even defined** |
+
+And **five server constants carry names this pass refuted**, which is worse than no
+name because they read as settled: `GAME_SMSG_AGENT_INITIAL_EFFECTS` and
+`GAME_SMSG_AGENT_UPDATE_EFFECTS` (the client's word is `m_status`, not effects),
+`GAME_SMSG_NPC_UPDATE_MODEL` (`0x0057` is MONSTER_COMPOSITE), `GAME_SMSG_PLAYER_CREATE`
+(`0x0059` is PLAYER_INFO), and `GAME_SMSG_AGENT_UNNAMED_0026`.
+
+**The lesson, and it generalises past this document.** The naming pass was structurally
+sound where it had two independent witnesses that were adversarially checked — the
+client's binary and the wire. It had neither for claims about this repository, and
+nobody was assigned to refute that half. A fan-out that verifies its findings about the
+*subject* and not about *itself* will produce exactly this: a reliable body of work with
+an unreliable "so what" section bolted to the end. Any future pass that ends in a
+recommendations section needs that section refuted too.
