@@ -2736,3 +2736,56 @@ different channel.
   `aftercast` and `adrenaline` for every skill and none of them are read.
 - **The effect is damage and nothing else.** Skill 276's real effect is not
   modelled; it deals a flat fraction like a harder swing.
+
+### 11.5 A bar, not a skill — and one slot on it is unreachable
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T182359-c1.jsonl`:
+
+```
+t=4.15  casts 276    t=4.91  deals 25     activation 0.76 vs table 0.75
+t=4.96  casts 253    t=5.97  deals 25     activation 1.01 vs table 1.00
+t=6.02  casts 312    t=6.78  deals 25     activation 0.76 vs table 0.75
+t=6.83  casts 276    ...
+```
+
+Four skills, each with its own recharge, selected **first-ready-in-bar-order**.
+Three activations measured against three different table values, all within 10 ms.
+
+**AND SLOT 4 NEVER FIRED.** Counts for the run were `{276: 6, 253: 3, 312: 3, 289: 0}`.
+This is not a defect in the selector — it is what a strict priority list does when
+slot 1 recharges faster than the bar takes to walk. 276 comes back every 2.0 s,
+and reaching slot 4 needs 2.0 + 5.0 + 8.0 seconds of everything above it being
+busy, which never happens. **A four-slot bar is really a three-slot bar here**, and
+the fourth is dead weight until selection changes.
+
+Recorded rather than fixed by reordering, because reordering to make the number
+look better would hide the property. The choices, none of them taken yet: round
+robin, least-recently-used, or ordering the bar by descending recharge. **Nothing
+in this project has measured how a Guild Wars monster picks**, so all three would
+be equally invented and the honest one is the simplest, stated.
+
+**The test proves the selector, not the schedule.** `section_enemy_skill` rolls
+each slot's recharge forward by hand and requires the picks to be `[0, 1, 2, 3]`,
+so it catches a selector that always returns slot 1 or scans backwards. It cannot
+catch the reachability problem above, and the two facts are different: the
+selector walks the whole bar; the live schedule does not reach the end of it.
+
+**WHOSE BAR THIS IS: ours.** `studies/presearing/MANIFEST.md` §7 read three
+Pre-Searing creature pages in full and found **no base skill bar on any of them** —
+the Restless Corpse's is explicitly "None", the region's only non-Charr boss has no
+`==Skills==` section, and the Grawl bar an earlier pass relied on turned out to be
+**invented**. Our Hatcher is a Lakeside creature, so this bar is a fixture that
+exercises the mechanism and **not a claim about what a Hatcher does in retail**.
+A content row is where a sourced bar goes the day there is one.
+
+**What IS ArenaNet's:** every id, activation and recharge, out of the client's own
+table via `skilltable.py` on build 38797. All four are profession 3 — the
+profession this server already declares for the Hatcher at spawn — campaign 1,
+non-elite, and each has a different `type_code`. **What is ours:** which four of
+the 21 that qualify, the priority order, and the flat 0.25 damage. Per-skill
+effects are not modelled; giving each slot its own number would be four
+inventions instead of one.
+
+**Recharge is per SLOT, not per id** — a bar may carry the same skill twice, and
+keying by id would make the second copy share the first's cooldown and the bar
+quietly one shorter. Pinned by a check.
