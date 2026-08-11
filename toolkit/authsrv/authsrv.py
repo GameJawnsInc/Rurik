@@ -1204,21 +1204,50 @@ ENEMY_FACING_EPSILON = 0.15            # radians (~8.6 deg) before re-announcing
 # that skill COMPLETION is being built on another branch and not to add to it.
 # This does not: it is an NPC announcing its own cast, and it touches nothing the
 # player's 0x0046/0x0027 handling uses.
-ENEMY_SKILL_ID = 276          # profession 3, matching the Hatcher's own
-ENEMY_SKILL_ACTIVATION = 0.75 # seconds, ArenaNet's table
-ENEMY_SKILL_RECHARGE = 2.0    # seconds, ArenaNet's table
-ENEMY_SKILL_FRACTION = 0.25   # of the player's maximum. OURS -- the client
-                              # carries every real number and we do not read it
-                              # yet (studies/skills/FINDINGS.md)
+# THE BAR. Four skills rather than one, each with its OWN recharge, so which one
+# comes next is a decision rather than a constant.
+#
+# WHOSE BAR THIS IS, and the answer is: OURS, and it has to be said plainly.
+# studies/presearing/MANIFEST.md 7 read three Pre-Searing creature pages in full
+# and found NO base skill bar on any of them -- the Restless Corpse's is
+# explicitly "None", the Grawl's turned out to be INVENTED by an earlier pass, and
+# the region's only non-Charr boss has no Skills section at all. Our Hatcher is a
+# Lakeside creature. So this is a test fixture that exercises the mechanism, NOT a
+# claim about what a Hatcher does in retail, and a content row is the place to put
+# a real bar the day one is sourced.
+#
+# WHAT IS ARENANET'S: every id, activation and recharge below, out of the client's
+# own table via toolkit/clientscan/skilltable.py on build 38797. All four are
+# profession 3 -- the profession this server already declares for the Hatcher at
+# spawn (0x00A6) -- campaign 1, non-elite, and each has a different type_code, so
+# the bar is four different kinds of thing rather than one skill four times.
+#
+# WHAT IS OURS: the selection of these four from the 21 that qualify, the priority
+# order, and the damage. Recharges of 2, 5, 8 and 2 are the table's and are what
+# makes the order observable: the 8 s skill fires once and the 2 s ones cycle.
+#
+#                  id  activation  recharge   type_code
+ENEMY_SKILL_BAR = ((276, 0.75, 2.0),   # 5
+                   (253, 1.00, 5.0),   # 4
+                   (312, 0.75, 8.0),   # 10
+                   (289, 0.75, 2.0))   # 6
+ENEMY_SKILL_FRACTION = 0.25   # of the player's maximum, for EVERY skill on the
+                              # bar. OURS, and flat on purpose: per-skill effects
+                              # are not modelled and giving each one a different
+                              # number would be four inventions instead of one.
+                              # The client carries every real number and we do not
+                              # read it yet (studies/skills/FINDINGS.md)
 
-# Which skill this spawn fights with, if any. `skill = 0` disables it and leaves
-# the agent on plain swings. Named here for the same reason attacks_back and
-# resend_definition are: `entry` is a closed literal and a content key reaches it
-# only by being copied. It lives HERE rather than beside the other two _ENEMY
-# reads because it defaults to a constant defined in this block -- module order
-# is not something test_srclint checks, and the first version raised NameError at
-# import, which only running the test could show.
-ENEMY_SKILL = int(_ENEMY.get("skill", ENEMY_SKILL_ID))
+# The bar this spawn fights with. A content row may give `skills = [[id, act,
+# recharge], ...]`, and an EMPTY list leaves the agent on plain swings. Named here
+# for the same reason attacks_back and resend_definition are: `entry` is a closed
+# literal and a content key reaches it only by being copied. It lives HERE rather
+# than beside the other two _ENEMY reads because it defaults to a constant defined
+# in this block -- module order is not something test_srclint checks, and the
+# first version of the single-skill form raised NameError at import, which only
+# running the test could show.
+ENEMY_SKILLS = tuple(tuple(row) for row in
+                     _ENEMY.get("skills", ENEMY_SKILL_BAR))
 
 
 def begin_attack(send, state, target_id, conn_id):
@@ -1427,6 +1456,7 @@ def enemy_attack_tick(send, state, conn_id):
             # 0.24 s in, when the player killed the worm.
             agent["swing_lands_at"] = None
             agent["cast_lands_at"] = None
+            agent["casting"] = None
             continue
         if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
             continue
@@ -1442,6 +1472,7 @@ def enemy_attack_tick(send, state, conn_id):
             agent["swinging"] = False
             agent["swing_lands_at"] = None
             agent["cast_lands_at"] = None
+            agent["casting"] = None
             continue
         # Its OWN weapon speed, not the player's. The client was told this agent's
         # attack speed at spawn (0x0035) and animates to it; swinging faster than we
@@ -1478,20 +1509,24 @@ def enemy_attack_tick(send, state, conn_id):
                 land_swing(send, state, agent_id, agent, conn_id)
             continue
 
-        # THE SKILL GOES FIRST when it is off recharge. Its recharge starts here
-        # rather than when it lands, which is what the client's own table means by
-        # a recharge: 2.0 s from the START of the cast, not from the end of it.
-        if (agent.get("skill_id")
-                and now - agent.get("skill_used_at", -1e9) >= agent["skill_recharge"]):
-            agent["skill_used_at"] = now
+        # A SKILL GOES FIRST when the bar has one ready. FIRST READY IN BAR ORDER,
+        # which makes the bar a priority list -- roughly what a Guild Wars monster
+        # does, and stated as roughly rather than measured. A recharge runs from
+        # the START of the cast, which is what the client's table means by one.
+        slot = pick_skill(agent, now)
+        if slot is not None:
+            skill_id, activation, recharge = agent["skills"][slot]
+            agent["skill_ready"][slot] = now + recharge
+            agent["casting"] = slot
             agent["last_swing"] = now      # a cast is not a free swing
             face_player(send, state, agent_id, agent, conn_id)
             send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
-                 [agents.GV_SKILL_ACTIVATED, agent_id, agent["skill_id"]],
-                 f"agent {agent_id} casts skill {agent['skill_id']}")
-            agent["cast_lands_at"] = now + agent["skill_activation"]
+                 [agents.GV_SKILL_ACTIVATED, agent_id, skill_id],
+                 f"agent {agent_id} casts skill {skill_id}")
+            agent["cast_lands_at"] = now + activation
             print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) casts skill "
-                  f"{agent['skill_id']}", flush=True)
+                  f"{skill_id} (slot {slot + 1} of "
+                  f"{len(agent['skills'])})", flush=True)
             continue
 
         if now - agent.get("last_swing", 0.0) < interval:
@@ -1698,6 +1733,21 @@ def land_swing(send, state, agent_id, agent, conn_id):
               f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
 
 
+def pick_skill(agent, now):
+    """The first slot on the bar whose recharge has run, or None.
+
+    FIRST READY IN BAR ORDER, so the bar is a priority list. That is roughly what
+    a Guild Wars monster does and it is stated as roughly: nothing in this project
+    has measured monster skill selection, and a bar of four with recharges of 2,
+    5, 8 and 2 makes the ORDER observable either way -- the 8 s skill fires once
+    and the short ones cycle underneath it.
+    """
+    for slot, (_skill_id, _activation, _recharge) in enumerate(agent.get("skills") or ()):
+        if now >= agent["skill_ready"][slot]:
+            return slot
+    return None
+
+
 def land_skill(send, state, agent_id, agent, conn_id):
     """An agent's skill connecting, ENEMY_SKILL_ACTIVATION seconds after the cast.
 
@@ -1711,14 +1761,24 @@ def land_skill(send, state, agent_id, agent, conn_id):
     the same agent. A cast is not a swing.
     """
     player_pools(state)
+    slot = agent.get("casting")
+    skills = agent.get("skills") or ()
+    skill_id = skills[slot][0] if slot is not None and slot < len(skills) else 0
+    # Tidiness, and NOTHING TODAY CAN OBSERVE IT -- said here rather than left to
+    # look load-bearing. `casting` is read only from this function, which runs only
+    # when `cast_lands_at` fires, which is only ever set alongside a fresh
+    # `casting`. Removing this line breaks no check, and that was verified by
+    # removing it. It stays because a stale slot index is a bad thing to leave
+    # lying around for the next person who reads `casting` from somewhere else.
+    agent["casting"] = None
     dealt = float(agents.PLAYER_HEALTH) * ENEMY_SKILL_FRACTION
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id,
           _fraction(-ENEMY_SKILL_FRACTION, agents.PROP_DAMAGE,
-                    f"skill {agent.get('skill_id')}")],
-         f"skill {agent.get('skill_id')} deals {dealt:.0f} to the player")
-    print(f"[c{conn_id}] player hit by skill {agent.get('skill_id')}: "
+                    f"skill {skill_id}")],
+         f"skill {skill_id} deals {dealt:.0f} to the player")
+    print(f"[c{conn_id}] player hit by skill {skill_id}: "
           f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
 
     if state["player_health"] <= 0.0:
@@ -2142,9 +2202,11 @@ def spawn_enemy(send, state, origin, conn_id):
         "effects": 0,
         "resend_definition": ENEMY_RESEND_DEFINITION,
         "attacks_back": ENEMY_ATTACKS_BACK,
-        "skill_id": ENEMY_SKILL,
-        "skill_activation": ENEMY_SKILL_ACTIVATION,
-        "skill_recharge": ENEMY_SKILL_RECHARGE,
+        "skills": ENEMY_SKILLS,
+        # Per-SLOT rather than per-id: a bar may legitimately carry the same skill
+        # twice, and keying recharge by id would make the second copy share the
+        # first's cooldown.
+        "skill_ready": [0.0] * len(ENEMY_SKILLS),
     }
     if ENEMY_BURROWS:
         entry.update({
