@@ -965,9 +965,18 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 #      is no post-construction setter to reach, so allegiance is decided when the
 #      agent is CREATED and no later message can correct it.
 #
-# NOT established: which gate our own agent fails. The cheapest next step is a
-# READ rather than a run -- keytap.py already reads client memory cross-process,
-# so printing our agent's +0x9C and +0x1B5 says which one in a single shot.
+# AND THE READ SAYS BOTH GATES PASS (agentprobe.py, 2026-08-11): our Hatcher
+# carries +0x9C == 0xDB (a CHARACTER) and +0x1B5 == 3 (ALLEGIANCE_ENEMY), with
+# the skip flag clear. So the client HAS resolved our agent to an enemy and runs
+# the switch's enemy arm. That refutes the chain above as the blocker -- and it
+# closes the whole family of attempts aimed at convincing the client our agent is
+# hostile (the team token, 0x002F, section 6e): it already is, measured rather
+# than assumed. The block is downstream of the action mask.
+#
+# WALK BACK ONE CLAIM OF MINE: the prohibited marker on the target's health bar
+# is NOT known to mean "cannot attack". I read a small icon and asserted a
+# meaning. The client considers this agent an attackable-class enemy, so the
+# marker is something else -- range, line of sight, or another thing entirely.
 #
 # Ruled out on the way, so it is not re-tried: the allegiance FourCC. We send
 # 'mons' where ArenaNet sends 'mon1', the only create field that differs from an

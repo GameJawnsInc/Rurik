@@ -1841,3 +1841,45 @@ appear, exactly as §6e recorded. The team token is compared to the PLAYER's at
 runtime (`ChCliBase.cpp:326`), which is why an unrecognised token reads red — and
 red was always what §6e measured. Colour is not attackability, and the old comment
 generalised from one to the other.
+
+### 10.1 The read — and it REFUTES the chain above
+
+**OBSERVED 2026-08-11**, `toolkit/clientscan/agentprobe.py`, reading the live
+client's own memory while our Hatcher stood in the map:
+
+| agent | `+0x9C` | `+0x1B5` | `+0x13C` bit 0x10 |
+|---|---|---|---|
+| player (1) | `0xDB` — CHARACTER | 1 `ALLY_NONATTACKABLE` | clear |
+| **Hatcher (10)** | **`0xDB` — CHARACTER** | **3 `ALLEGIANCE_ENEMY`** | **clear** |
+
+**Every gate in §10 passes.** Our agent is registered as a character, the client
+has resolved its allegiance to ENEMY, and the flag that would skip the switch is
+clear — so `GmCoreAction`'s six-arm switch runs its ENEMY arm and the mask is
+built. The refusal is NOT in that function, and §10's chain, though correctly
+read, is not the blocker.
+
+**What that eliminates is worth more than what it found.** Every previous attempt
+at this problem — §6e's team-token work, the `0x002F` attempts, the hostile-token
+experiments — was aimed at convincing the client our agent is an enemy. **It
+already is one, and now that is measured rather than assumed.** That whole family
+of hypotheses is closed.
+
+**A claim of mine that has to come back: the prohibited marker on the target's
+health bar is NOT known to mean "cannot attack".** I read a small icon and
+asserted a meaning for it. The read says the client considers the agent an
+attackable-class enemy, so whatever that marker is, it is not the refusal. It may
+be a range indicator, a line-of-sight marker, or something else entirely.
+Screenshot-reading is not evidence, and this is the second time in two days that
+inferring a mechanism from a picture has cost a detour.
+
+**Where this leaves the question.** The agent's STATE is right, so the block is in
+the path between "the mask says attack is available" and "the client transmits".
+Candidates not yet read, in the order they gate:
+
+- `0x007E1460` (AvPrefs) at `0x00514541` — returns 0 and the list is dropped whole
+- `0x0084DF60` at `0x00514551` — nonzero and the list is dropped whole
+- whatever consumes the mask and decides to send `0x0026`/`0x0027`
+
+`agentprobe.py` makes each of these a read rather than a run, which is the loop
+that just worked: three hypotheses eliminated in one 30-second measurement where
+each would previously have cost a session.
