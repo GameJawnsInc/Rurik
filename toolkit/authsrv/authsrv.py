@@ -659,7 +659,10 @@ GAME_CMSG_CHAR_CREATION_REQUEST_ARMORS = 0x008A
 # OBSERVED (studies/enemy/PLAN.md 10.7, the `worldaction` labelled run): four of
 # these at our own Hatcher across three separate steps -- one on a single
 # left-click, two on a double-click -- and ZERO 0x0033 in the same run. Payload
-# is [agent_id, dword]; the target was agent 10, ours.
+# is [agent_id, byte] -- SEVEN bytes, not ten: schema/overrides.json gives
+# GAME_CMSG 38 as [msg_header, agent_id, byte] with declared_unpack_size 7, and
+# the capture above framed clean at values=[32806, 10, 0]. A dword there would
+# have desynced the stream. The target was agent 10, ours.
 #
 # For a year this opcode was defined by its absence and 0x0033 was pressed into
 # service as "the only attack intent we have ever seen the client express". That
@@ -931,6 +934,13 @@ CLICK_SWEEP_VARIANTS = (
 # with one agent's state under another's name.
 ENEMY_AGENT_ID = _ENEMY["agent_id"]
 ENEMY_DEFINITION = _ENEMY["definition"]
+# The burrow re-create skips the NPC definition (measured per-instance, 10.8).
+# This is the way back, and it has to be READ FROM THE ROW to exist at all:
+# `burrow_tick` reads entry.get("resend_definition"), `entry` is a closed literal
+# built in spawn_enemy, and content fields reach it only by being named here. The
+# comment promising this hatch shipped before the wire did, so the documented
+# mitigation for a silent client assert was unreachable.
+ENEMY_RESEND_DEFINITION = bool(_ENEMY.get("resend_definition", False))
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
 ENEMY_OFFSET = (_ENEMY["offset_x"], _ENEMY["offset_y"])
 # A PLACEHOLDER, and it has to be non-zero rather than right. WIKI (GWW,
@@ -1227,15 +1237,18 @@ def revive_due(send, state, conn_id):
         # after the first kill this server ever drove to a revive (see `_fraction`,
         # which now refuses the whole class). 1.0 is a full pool.
         #
-        # SETTLED 2026-08-11 from the client's own dispatcher, and 1.0 is right for
-        # a reason rather than by luck. 0x00818210 switches on the property id and
-        # sends 34 to arm 2 (0x0081828D), which passes our value through with NO
-        # multiply into 0x009215F0 -- the CharPool method that asserts
-        # `fraction <= 1.0f`. Property 16 goes to arm 0 (0x0081823C), which DOES
-        # fmul by the max first. Both are fractions; the client scales 16 for us and
-        # does not scale 34. So 1.0 here is a full pool, and the refill was OBSERVED:
-        # the post-revive frame shows a full bar against a mid-fight frame showing a
-        # drained one. studies/agentprops/FINDINGS.md 1d.
+        # PROPERTY 34 IS A SETTER: it sets the pool to `fraction x maximum`. So 1.0
+        # here does not ADD a full bar, it SETS the bar full, which is exactly what
+        # a revive wants and is why this works from a pool the death path zeroed.
+        # OBSERVED 2026-08-11 twice over -- the post-revive frame shows a full bar
+        # against a mid-fight frame showing a drained one, and the `pool_fraction`
+        # probe pinned the semantics directly (studies/agentprops/FINDINGS.md 1e:
+        # the orb went 100 -> 90 on property 16 at -0.10, then to the floor of 1 on
+        # property 34 at -0.50, where a delta predicts 40).
+        #
+        # It is also why the client asserts `fraction <= 1.0f`: a setter cannot
+        # exceed the maximum, so `max_health` here was never merely too large, it
+        # was the wrong KIND of number.
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_HEALTH, agent_id, agent_id,
               _fraction(1.0, agents.GV_HEALTH, "refill to a full pool")],
@@ -1531,10 +1544,13 @@ def burrow_tick(send, state, conn_id):
         # is per-INSTANCE, the declaration at map load covers every later create, and
         # this matches what ArenaNet does: 1 declaration to 140 worm creates.
         #
-        # The escape hatch stays. A content row may set `resend_definition = true` and
-        # get the old behaviour, because the failure mode is asymmetric -- resending
-        # costs 2 messages, and being wrong the other way is a client assert on
-        # Array.h's `index < m_count`, which takes the client down with no log line.
+        # The escape hatch: `resend_definition = true` under [spawn.test_enemy] in
+        # content/world.toml restores the old behaviour. It is carried into `entry` by
+        # spawn_enemy via ENEMY_RESEND_DEFINITION -- without that line the key would
+        # load silently, never reach `entry`, and this .get would stay False while the
+        # operator believed otherwise. The hatch exists because the failure mode is
+        # asymmetric: resending costs 2 messages, and being wrong the other way is a
+        # client assert on Array.h's `index < m_count`, with no log line either side.
         create_agent_world(send, state, agent_id, entry, "emerging from burrow",
                            conn_id=conn_id,
                            send_definition=entry.get("resend_definition", False))
@@ -1620,6 +1636,7 @@ def spawn_enemy(send, state, origin, conn_id):
         "allegiance": agents.ALLEGIANCE_HOSTILE,
         "attack_speed": ENEMY_ATTACK_SPEED,
         "effects": 0,
+        "resend_definition": ENEMY_RESEND_DEFINITION,
     }
     if ENEMY_BURROWS:
         entry.update({

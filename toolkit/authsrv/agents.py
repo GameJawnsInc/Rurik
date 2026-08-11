@@ -87,13 +87,18 @@ ALLEGIANCE_HOSTILE = 0x6D6F6E73       # 'mons'  -- any UNRECOGNISED value is an
 #   16 -> arm 0, 0x0081823C:  fld [esi+0x24] (the MAX) / fmul [ebp+0xc] (our
 #                             value) -> call 0x00921510. The CLIENT scales it.
 #   34 -> arm 2, 0x0081828D:  fld [ebp+0xc] / fstp [esp] -> call 0x009215F0.
-#                             NO fmul. The value goes through RAW, and
-#                             0x009215F0 is the CharPool method that asserts
-#                             `fraction <= 1.0f` (CharPool.cpp:84) -- which is
-#                             how we found this: sending 100.0 here took the
-#                             client down (studies/agentprops/FINDINGS.md 1d).
-PROP_DAMAGE = 16          # a fraction of max health; the client multiplies. Floors at 1: cannot kill.
-PROP_HEALTH_ABSOLUTE = 34 # NOT absolute -- a fraction the client does NOT scale, and the one it range-checks. SILENT: no damage number.
+#                             No fmul in the ARM -- 0x009215F0 does the scaling
+#                             itself, because 34 is a SETTER rather than a
+#                             subtraction. It sets the pool to fraction x max.
+#                             OBSERVED 2026-08-11 (FINDINGS 1e): the player orb
+#                             went 100 -> 90 (property 16, -0.10) -> 1 (property
+#                             34, -0.50). A delta predicts 40. -0.5 SETS it to
+#                             -50, which clamps to the floor of 1.
+#                             That is why 0x009215F0 asserts `fraction <= 1.0f`
+#                             at CharPool.cpp:84 -- a setter cannot exceed the
+#                             maximum -- and why sending 100.0 killed the client.
+PROP_DAMAGE = 16          # SUBTRACTS fraction x max. Floors at 1: cannot kill.
+PROP_HEALTH_ABSOLUTE = 34 # badly named: it SETS health to fraction x max, and is the one the client range-checks. SILENT: no damage number.
 PROP_HEALTH_MAX = 42      # int channel (0x009F). Sets the maximum AND refills.
 
 # The agent effects bitfield, carried by GAME_SMSG 0x00F1. Bit 4 is death:
@@ -530,12 +535,12 @@ GV_ANIMATION = 22
 GV_ANIMATION_SPECIAL = 23
 GV_ANIMATION_LOOP = 28
 # Same wire property as PROP_HEALTH_ABSOLUTE above -- read that comment first.
-# ITS OLD NOTE IS NOW CONTESTED BY THE CLIENT'S OWN CODE and is left here to be
-# re-measured, not trusted: it said "a DELTA, not a setter -- we measured -50.0
-# as -50 health", and arm 2 applies no scaling and hands the value to a function
-# that calls its argument a fraction. -50.0 as a fraction is -50x the pool, which
-# empties it; that is not "50 off a 100 max". One probe settles it next time the
-# harness is free: send -0.5 at a 100-max agent and see whether 50 comes off.
+# ITS OLD NOTE WAS EXACTLY BACKWARDS and is recorded here because the mistake is
+# instructive. It said "a DELTA, not a setter -- we measured -50.0 as -50 health";
+# 34 is a SETTER and nothing else, and the -50.0 measurement was reading the pool's
+# FLOOR rather than a subtraction (the bar was already at 50, where a delta and a
+# setter both predict empty). The `pool_fraction` probe sent -0.5 at a FULL bar,
+# where the two differ by a factor of 100, and the orb went to 1.
 GV_HEALTH = 34
 GV_CHANGE_HEALTH_REGEN = 44
 GV_ENERGY_GAIN = 52

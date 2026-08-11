@@ -27,8 +27,9 @@ nothing -- it disassembles whatever bytes are there and prints confident-looking
 instructions (`int1`, `aas`, `xchg ebp, eax`, immediates like 0x9895a912). On
 2026-08-11 that cost a read of four crash frames before the base was noticed, and
 the rebased addresses then landed exactly on documented ground: `0x00BB829D` became
-`0x0081829D`, four bytes past a call, inside the agent-property dispatcher this repo
-had already written about at `0x0081823C`. Landing on known code is also the CHECK
+`0x0081829D`, which is the instruction after a five-byte `call rel32` at
+`0x00818298`, inside the agent-property dispatcher this repo had already written
+about at `0x0081823C`. Landing on known code is also the CHECK
 that the rebase is right -- do that before trusting a frame.
 
     python toolkit/harness/read_error_dialog.py            # wait for it, then dump

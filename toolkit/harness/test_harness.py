@@ -352,12 +352,32 @@ def section_error_dialog():
     import tempfile
     import types
 
-    src = inspect.getsource(session.hold_open)
-    LEDGER.ok("capture_error_dialog" in src,
-              "hold_open actually calls the dialog capture",
-              "the harness used to only PRINT 'read the dialog with ...', which is "
-              "a hint aimed at a human who is watching -- useless unattended, and "
-              "the dialog can be gone by the time anyone looks")
+    import ast
+    import textwrap
+
+    # BOTH EXITS, and a substring test cannot say that. This asserted
+    # `"capture_error_dialog" in src` until 2026-08-11, which was already true when
+    # hold_open called it from ONE branch -- so the guard passed identically before
+    # and after the fix it was supposed to be protecting, and the run that crashed a
+    # client still printed PASS. A check that cannot tell the defect from the fix is
+    # not a check. This walks the function instead and requires a call on the
+    # process-exited path AND on the hold-expired path, because a Guild Wars assert
+    # keeps the process ALIVE behind a modal dialog and only the second path sees it.
+    tree = ast.parse(textwrap.dedent(inspect.getsource(session.hold_open)))
+
+    def calls_capture(nodes):
+        return any(isinstance(n, ast.Call) and getattr(n.func, "id", None) ==
+                   "capture_error_dialog"
+                   for stmt in nodes for n in ast.walk(stmt))
+
+    branches = [(calls_capture(n.body), calls_capture(n.orelse))
+                for n in ast.walk(tree) if isinstance(n, ast.If) and n.orelse
+                and "poll" in ast.dump(n.test)]
+    LEDGER.ok(any(a and b for a, b in branches),
+              "hold_open captures the dialog on BOTH exits, not just on client exit",
+              f"poll()-guarded if/else branches (exited, expired): {branches} -- a GW "
+              "assert leaves the process alive, so the timer path is the one that sees "
+              "a real crash. The old substring form of this check passed either way")
 
     real = sys.modules.get("read_error_dialog")
     try:
