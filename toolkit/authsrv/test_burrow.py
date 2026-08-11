@@ -75,7 +75,7 @@ TRANSITION_TOLERANCE = 0.08      # the capture's own spread is +/-60 ms
 # 2026-08-10. Section 2 is the only one that can skip, and it takes the floor with it --
 # the same call test_rotate.py makes: a claim about ArenaNet's bytes that did not read
 # ArenaNet's bytes has not been checked, and a green exit code would say otherwise.
-LEDGER = checks.Ledger("burrowing", floor=21)
+LEDGER = checks.Ledger("burrowing", floor=22)
 
 
 class FakeSend:
@@ -425,12 +425,32 @@ def section_transfer_close(codec):
     last hop and every --tape-no-transfer run, whose entire purpose is that the client
     keeps playing afterwards.
     """
-    class FakeSock:
-        def __init__(self):
-            self.shutdown_called = self.closed = False
+    import socket as _socket
 
-        def shutdown(self, _how):
-            self.shutdown_called = True
+    class FakeSock:
+        """Records HOW it was closed, because that is the part that matters.
+
+        A deferred transfer is released only by the reason code a clean shutdown
+        produces (the client's own dispatch: reason 0 re-dials at 0x008515b7, reason >= 3
+        does nothing). shutdown(SHUT_RDWR) with bytes still unread makes Windows send an
+        RST instead of a FIN, which is a different reason code -- so this fake asserts the
+        half-close and the drain rather than merely that close() happened.
+        """
+
+        def __init__(self, pending=(b"\x80\x08", b"")):
+            self.how = None
+            self.closed = False
+            self.timeout = None
+            self._pending = list(pending)
+
+        def shutdown(self, how):
+            self.how = how
+
+        def settimeout(self, t):
+            self.timeout = t
+
+        def recv(self, _n):
+            return self._pending.pop(0) if self._pending else b""
 
         def close(self):
             self.closed = True
@@ -450,11 +470,17 @@ def section_transfer_close(codec):
 
     s1 = FakeSock()
     closed1 = authsrv.close_after_transfer(s1, linking, codec, 1)
-    LEDGER.ok(closed1 and s1.closed and s1.shutdown_called,
+    LEDGER.ok(closed1 and s1.closed,
               "a tape ending in a handoff closes the connection",
               "the client DEFERS a second transfer while it still holds a game "
               "connection (bit 0x20 at +0x190, set by the connect at 0x850df0), so "
               "holding the socket open is what left hop 3 on a loading screen")
+    LEDGER.ok(s1.how == _socket.SHUT_WR and s1.timeout is not None,
+              "and it HALF-closes and drains, rather than shutting both ways",
+              f"how={s1.how} (SHUT_WR={_socket.SHUT_WR}) -- SHUT_RDWR with bytes still "
+              "unread makes Windows send an RST, and the client only re-dials on the "
+              "reason code a clean FIN produces: reason 0 reaches the connect at "
+              "0x008515b7, reason >= 3 returns and does nothing")
 
     s2 = FakeSock()
     closed2 = authsrv.close_after_transfer(s2, last, codec, 1)
