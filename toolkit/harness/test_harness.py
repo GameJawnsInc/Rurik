@@ -38,10 +38,12 @@ import checks  # noqa: E402
 # all from 2026-08-06 until the same day, because drive_client.py did `import cage`
 # without clientpatch on sys.path. It is named in CLAUDE.md's suite list and was not
 # among the tests run when that suite was last reported green.
-# 2026-08-11: +9 for hold_key and --walk (sections 9 and 10), added with the
-# rung that needed them. hold_key earned its own section the hard way -- see the
-# comment in it.
-LEDGER = checks.Ledger("harness", floor=59)
+# 2026-08-11: 50 -> 59, +9 for hold_key and --walk (sections 9 and 10); then
+# 59 -> 66, +7 for the camera verbs (section 11). Each landed with the rung that
+# needed it. hold_key earned its own section the hard way -- see the comment in
+# it -- and the camera floor was declared as 67 from a miscount and reddened the
+# run at 65 until it was measured, which is what the floor is for.
+LEDGER = checks.Ledger("harness", floor=66)
 check = checks.adopt_named(LEDGER)
 
 
@@ -432,7 +434,27 @@ class FakeUser32:
 
     def __init__(self, owner=4321, scan=0x11):
         self.owner, self.scan, self.events = owner, scan, []
+        self.wheel, self.buttons, self.cursor = [], [], []
         self.raise_on_nth = None
+
+    # -- the parts scroll() and orbit() use
+    def GetWindowRect(self, hwnd, out):
+        out._obj.left, out._obj.top = 0, 0
+        out._obj.right, out._obj.bottom = 1920, 1080
+        return 1
+
+    def SetCursorPos(self, x, y):
+        self.cursor.append((x, y))
+        return 1
+
+    def mouse_event(self, flags, dx, dy, data, extra):
+        if flags == 0x0800:                       # MOUSEEVENTF_WHEEL
+            self.wheel.append(data)
+        else:
+            self.buttons.append(flags)
+        if self.raise_on_nth is not None \
+                and len(self.buttons) + len(self.wheel) == self.raise_on_nth:
+            raise RuntimeError("something blew up mid-drag")
 
     # -- the parts hold_key uses
     def SetForegroundWindow(self, hwnd):
@@ -529,12 +551,74 @@ def section_hold_key():
     finally:
         dc.user32, dc._force_foreground = real_u32, real_fg
 
-    print("\n10. --walk parses into legs, and refuses the rest")
-    LEDGER.ok(session.parse_walk("W:6 S:12.5") == [("W", 6.0), ("S", 12.5)],
-              "a plan is (key, seconds) pairs in order")
+    print("\n11. the camera verbs, which nothing could reach until 2026-08-11")
+    real_u32, real_fg = dc.user32, dc._force_foreground
+    try:
+        fake = FakeUser32(scan=0x11)
+        dc.user32 = fake
+        dc._force_foreground = lambda hwnd: True
+        ok = dc.scroll(1, 4321, -3)
+        LEDGER.ok(ok and len(fake.wheel) == 3 and all(d < 0 for d in fake.wheel),
+                  "zoom out sends one wheel event PER NOTCH, all negative",
+                  f"{fake.wheel} -- a single 3-notch event is legal and the "
+                  f"client coalesces it into one jump; a hand does not")
+
+        fake = FakeUser32(scan=0x11)
+        dc.user32 = fake
+        ok = dc.orbit(1, 4321, 0, -300, steps=6)
+        downs = [f for f in fake.buttons if f == dc.MOUSEEVENTF_RIGHTDOWN]
+        ups = [f for f in fake.buttons if f == dc.MOUSEEVENTF_RIGHTUP]
+        LEDGER.ok(ok and len(downs) == 1 and len(ups) == 1,
+                  "an orbit presses the right button once and RELEASES it",
+                  f"{len(downs)} down / {len(ups)} up -- a button left down is "
+                  f"stuck for the whole desktop and outlives this process")
+        moves = [f for f in fake.buttons if f == dc.MOUSEEVENTF_MOVE]
+        LEDGER.ok(len(moves) >= 6,
+                  "the drag MOVES through mouse_event, in steps",
+                  f"{len(moves)} relative move events -- the first version used "
+                  f"SetCursorPos, which WARPS the pointer and synthesises no "
+                  f"input event at all, so a client on the raw input path saw "
+                  f"nothing. Measured: terrain 78.8%% before the pitch step and "
+                  f"79.1%% after. This check pins the API; only a client can say "
+                  f"the view turned")
+        LEDGER.ok(len(fake.cursor) == 1,
+                  "and SetCursorPos is used ONCE, only to place the drag",
+                  f"{len(fake.cursor)} call(s)")
+
+        fake = FakeUser32(scan=0x11)
+        fake.raise_on_nth = 2
+        dc.user32 = fake
+        try:
+            dc.orbit(1, 4321, 0, -300, steps=6)
+            blew = False
+        except RuntimeError:
+            blew = True
+        LEDGER.ok(blew and dc.MOUSEEVENTF_RIGHTUP in fake.buttons,
+                  "a failure mid-drag still releases the button",
+                  f"raised={blew}, buttons={fake.buttons}")
+
+        for verb, args in (("scroll", (1, 4321, -3)), ("orbit", (1, 4321, 0, -300))):
+            fake = FakeUser32(owner=1111, scan=0x11)
+            dc.user32 = fake
+            got = getattr(dc, verb)(*args)
+            LEDGER.ok(got is False and not fake.wheel and not fake.buttons,
+                      f"{verb} sends NOTHING when the client lacks focus",
+                      f"wheel={fake.wheel} buttons={fake.buttons}")
+    finally:
+        dc.user32, dc._force_foreground = real_u32, real_fg
+
+    print("\n10. --walk parses movement AND camera, and refuses the rest")
+    LEDGER.ok(session.parse_walk("zoom:-14 pitch:300 S:8 wait:5")
+              == [("zoom", "", -14.0), ("pitch", "", 300.0),
+                  ("key", "S", 8.0), ("wait", "", 5.0)],
+              "one ordered plan of typed steps",
+              "zoom out, THEN pitch up, THEN back into a corner -- two flags "
+              "could not express that sequence, and FINDINGS 25.5 needs it")
     LEDGER.ok(all(refused(session.parse_walk, bad)
-                  for bad in ("W", "WW:3", "W:0", "W:-1")),
-              "no duration, a two-character key, and a non-positive hold refuse",
+                  for bad in ("W", "WW:3", "W:0", "W:-1", "zoom:0", "wait:0",
+                              "wibble:3", "W:x")),
+              "no argument, a two-character key, a non-positive hold, a camera "
+              "move of zero, an unknown verb and a non-number all refuse",
               "a typo would otherwise be found after the map has loaded, which "
               "costs the whole run and a client session")
 

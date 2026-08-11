@@ -574,20 +574,48 @@ def _play(tails, proc, outdir, warn=3.0):
 # at all. So where a keyboard walk stops is the client's own collision, measured
 # through the position the client reports back four times a second.
 def parse_walk(text):
-    """"W:6 S:12" -> [('W', 6.0), ('S', 12.0)]. One leg per key hold."""
-    legs = []
+    """A plan of ordered steps. Movement and CAMERA in one script, because order matters.
+
+        W:6         hold the W key for 6 seconds
+        zoom:-14    turn the mouse wheel 14 notches; negative pulls the camera OUT
+        pitch:300   right-drag 300 px; positive raises the camera's angle
+        wait:3      do nothing for 3 seconds
+
+    -> [('key', 'W', 6.0), ('zoom', '', -14.0), ...]
+
+    One plan rather than a --walk and a separate --camera: reproducing
+    FINDINGS 25.5's fault means zooming out, THEN pitching up, THEN backing into
+    a corner, and two flags cannot express that sequence.
+    """
+    steps = []
     for spec in str(text).split():
-        key, _, secs = spec.partition(":")
-        if len(key) != 1 or not secs:
-            raise SystemExit(f"walk leg wants ONE key and a duration: {spec!r}")
-        seconds = float(secs)
-        if seconds <= 0:
-            raise SystemExit(f"walk leg {spec!r} holds for {seconds}s")
-        legs.append((key.upper(), seconds))
-    return legs
+        head, _, arg = spec.partition(":")
+        head = head.lower()
+        if not arg:
+            raise SystemExit(f"walk step wants an argument: {spec!r}")
+        try:
+            value = float(arg)
+        except ValueError:
+            raise SystemExit(f"walk step {spec!r}: {arg!r} is not a number")
+        if head in ("zoom", "pitch"):
+            if value == 0:
+                raise SystemExit(f"walk step {spec!r} moves the camera nowhere")
+            steps.append((head, "", value))
+        elif head == "wait":
+            if value <= 0:
+                raise SystemExit(f"walk step {spec!r} waits {value}s")
+            steps.append(("wait", "", value))
+        elif len(head) == 1:
+            if value <= 0:
+                raise SystemExit(f"walk step {spec!r} holds for {value}s")
+            steps.append(("key", head.upper(), value))
+        else:
+            raise SystemExit(f"walk step {spec!r}: {head!r} is not a key, "
+                             f"zoom, pitch or wait")
+    return steps
 
 
-def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5):
+def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
     """Hold each movement key in turn, and record when each leg ran.
 
     The wall clock is the join between this and the capture: every recorded
@@ -598,27 +626,63 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5):
     stopped" into a measurement of the operator's alt-tab.
     """
     dc.warn_hands_off(warn)
+    # A CAMERA THAT RUNS THROUGH THE STEPS, not only between them. FINDINGS
+    # 25.5's fault appeared and finished INSIDE one leg -- models stopped
+    # drawing five seconds before the terrain did -- so a screenshot per leg
+    # boundary cannot resolve it and could miss it entirely. shot_if_foreground
+    # only READS the foreground, it never raises a window, so this cannot steal
+    # focus from the input the plan is delivering.
+    stop_shots = threading.Event()
+    shot_n = [0]
+
+    def shoot():
+        while not stop_shots.wait(shot_every):
+            hwnd, _ = dc.find_window(proc.pid)
+            if hwnd:
+                shot_n[0] += 1
+                shot_if_foreground(hwnd, proc.pid,
+                                   os.path.join(outdir, f"w{shot_n[0]:03d}.png"))
+    if shot_every > 0:
+        threading.Thread(target=shoot, daemon=True).start()
+        print(f"  walk: a screenshot every {shot_every:g}s for the whole plan",
+              flush=True)
+
     out = []
-    for i, (key, seconds) in enumerate(legs):
+    for i, (kind, key, value) in enumerate(legs):
         hwnd, _ = dc.wait_window(proc.pid, timeout=5)
+        label = f"{key or kind}:{value:g}"
         if not hwnd:
-            out.append({"key": key, "asked": seconds, "held": 0.0,
+            out.append({"kind": kind, "key": key, "asked": value, "did": 0.0,
                         "note": "no window"})
-            print(f"  walk {key} for {seconds}s: NO WINDOW", flush=True)
+            print(f"  walk {label}: NO WINDOW", flush=True)
             continue
         started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        held = dc.hold_key(hwnd, proc.pid, ord(key), seconds)
+        if kind == "key":
+            did = dc.hold_key(hwnd, proc.pid, ord(key), value)
+        elif kind == "zoom":
+            did = value if dc.scroll(hwnd, proc.pid, value) else 0.0
+        elif kind == "pitch":
+            # dy is NEGATED: dragging the mouse DOWN raises the camera's angle,
+            # so "pitch:300" reads as "raise it" rather than as a screen delta.
+            did = value if dc.orbit(hwnd, proc.pid, 0, -value) else 0.0
+        elif kind == "wait":
+            time.sleep(value)
+            did = value
+        else:
+            raise SystemExit(f"unknown walk step kind {kind!r}")
         ended = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        # Let the client come to rest and send its stop before the next leg
-        # starts, so two legs cannot share one deceleration.
+        # Let the client come to rest and send its stop before the next step
+        # starts, so two steps cannot share one deceleration.
         time.sleep(settle)
         settled = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        out.append({"key": key, "asked": seconds, "held": round(held, 2),
-                    "started": started, "ended": ended, "settled": settled})
-        print(f"  walk {key}: held {held:.1f}s of {seconds:.1f}s "
+        out.append({"kind": kind, "key": key, "asked": value,
+                    "did": round(did, 2), "started": started, "ended": ended,
+                    "settled": settled})
+        print(f"  walk {label}: {did:g} of {value:g} "
               f"({started} -> {ended})", flush=True)
         shot_if_foreground(hwnd, proc.pid,
-                           os.path.join(outdir, f"walk{i + 1}-{key}.png"))
+                           os.path.join(outdir, f"walk{i + 1}-{kind}{key}.png"))
+    stop_shots.set()
     return out
 
 
@@ -891,7 +955,8 @@ def run_client(a, outdir):
         # read as "the character could not move".
         if a.walk:
             if ok:
-                walked = walk_legs(proc, parse_walk(a.walk), outdir, warn=a.warn)
+                walked = walk_legs(proc, parse_walk(a.walk), outdir, warn=a.warn,
+                                   shot_every=a.shots)
             else:
                 print("  walk: SKIPPED -- the run did not reach the map, so "
                       "there is nothing to walk", flush=True)
@@ -986,8 +1051,11 @@ def main():
                          "and the transcript still looks like evidence. "
                          "0 for unattended runs.")
     ap.add_argument("--walk", metavar="LEGS",
-                    help="After the spawn verdict, hold movement keys: "
-                         "\"W:6 S:12 W:6\" holds W for 6s, S for 12s, W for 6s. "
+                    help="After the spawn verdict, run an ordered plan of "
+                         "movement and CAMERA steps: \"zoom:-14 pitch:300 S:8\" "
+                         "pulls the camera out 14 notches, raises its angle, "
+                         "then backs up for 8s. Steps are W:6 (hold a key), "
+                         "zoom:N, pitch:N and wait:N. "
                          "Keyboard rather than a click on purpose -- the server "
                          "answers a held key with a DIRECTION and broadcasts no "
                          "position, so where the client stops is the client's "
@@ -1077,8 +1145,10 @@ def main():
     # whole run and a client session.
     if a.walk:
         legs = parse_walk(a.walk)
-        print(f"walk plan: {len(legs)} leg(s), "
-              f"{sum(s for _, s in legs):.1f}s of held keys")
+        held = sum(v for k, _, v in legs if k in ("key", "wait"))
+        cam = sum(1 for k, _, _ in legs if k in ("zoom", "pitch"))
+        print(f"walk plan: {len(legs)} step(s), {held:.1f}s of keys and waits, "
+              f"{cam} camera move(s)")
 
     specs = server_specs(game_port=a.game_port, auth_host=a.auth_host,
                          game_host=a.game_host,

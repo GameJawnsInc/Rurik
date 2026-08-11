@@ -3731,3 +3731,93 @@ the position trace:
 `--shots` was added to `session.py` for this: it screenshots during the hold so an operator
 can provoke a fault with both hands. The frames it caught are what dated the fault and what
 refuted the corner story — including the operator's own description of a recovery.
+
+---
+
+## 26. The terrain cull is reproducible, recovers, and is NOT about our relief (2026-08-11)
+
+§25.5 left the fault with no mechanism. It is now scriptable, and three arms
+narrow it. Run sheet and predictions: `vault/research/e1-collision-2026-08-11/`.
+
+### 26.1 What had to be built first, and what it cost
+
+Two input verbs, both of which emitted bytes and did nothing:
+
+- `hold_key` with `bScan=0` — held W for 65 s into a live client that ignored
+  every keystroke (§23.2).
+- `orbit` with `SetCursorPos` — **MEASURED: terrain 78.8% before the pitch step
+  and 79.1% after.** The pointer warps; no input event is synthesised; a client
+  on the raw input path sees nothing.
+
+Both were caught by the operator watching a screen, not by a test — and a test
+cannot catch the second on its own, since both versions emit a button down, a
+sequence of moves and a button up. **Every "zoomed out and pitched up" claim
+made before this was measured is void**: only `zoom` ever did anything, so the
+condition that reproduces the fault is zoom plus movement and does NOT include
+any camera pitch.
+
+`framestat.py` is the measure, calibrated against real pixels: background is
+`rgb ~ (32,64,64)`, terrain is grey/brown with `r >= b`. Its first version
+counted the teal background AS terrain and reported 95–99% terrain on frames
+with none in them — a measure that cannot separate the two states says the fault
+did not happen.
+
+### 26.2 The bisection
+
+One plan, `zoom:-16 wait:2 W:8 S:20 W:8 A:1 W:8 S:20`, `--no-enemy`,
+`--shots 1`. Terrain is 70–79% in a normal frame and 0.1–0.4% in a degraded one.
+
+| arm | terrain | TERRAIN GONE | MODELS GONE | BOTH |
+|---|---|---:|---:|---:|
+| **mesa** | walkable square drawn HIGH | **12 of 70** | 0 | 0 |
+| **walls** | walkable square drawn LOW | **0 of 66** | 17 | 0 |
+| **flat** | −13 everywhere, no relief | **12 of 70** | 1 | **5** |
+
+**The relief is refuted.** Flat has none and degrades exactly as much as the
+mesa — so the mesa reading in §25, which explained the fault by a camera falling
+off a plateau, does not survive its own test.
+
+**Walls is clean for a reason that is not a fix.** Its frames show the camera
+jammed against a wall with the whole viewport filled by wall texture; the
+character is occluded to a sliver. That is the constraint the operator reported
+("the camera acts accordingly being constrained by them"), and it means the
+camera never got far from the character in that arm. Its 17 MODELS GONE are
+**occlusion, not a culling failure** — the skin measure cannot tell those apart
+and is not offered as evidence here.
+
+**Flat is the only arm reproducing BOTH stages together**, which is the closest
+anything has come to the operator's original ordering.
+
+### 26.3 Where that leaves it
+
+**The operator's judgement, and it is the one to record.** With the height sign
+corrected the map is what it was meant to be — a plateau with a square dug out —
+and the camera pulling back over the plateau when you stand near a wall is
+*"stock enough"*. That is the reading of someone who has played this game, on the
+map as designed, and it fits every arm above: the two arms that degrade are the
+ones where the camera can get out over nothing, and neither is a shape a playable
+map has.
+
+**A follow-up of mine died immediately and is recorded so nobody retries it.**
+The obvious next idea was "retail leaves an unwalkable margin around the playable
+area and we do not". MEASURED against the archive: row 46196 — the ladder's own
+template, a shipped map — has walkable geometry spanning its **entire** map rect,
+margin **0**, exactly like our flat map. So do 7982 and Kamadan. Only 26209/71496
+(768) and 116610 (4,457) have one. **Retail has no such rule.**
+
+So this is filed as a **cosmetic artefact of a test map missing ten chunk kinds**
+— Environment and Light among them, so there is no sky, no fog and nothing to
+draw when the camera looks at empty space — and NOT as a defect in anything the
+authoring path produces. Reopening it needs a map that has those chunks, which is
+a different rung. What is now OBSERVED and was not before:
+
+- the fault is **reproducible under script**, 12 of 70 frames, twice on the same
+  map with the same plan;
+- it **recovers** — terrain returns the moment the walk turns away;
+- **it is not combat.** The operator's original run had 0 damage and 0 revives;
+  two of this session's runs had 11 and 6, because main's newest commits made
+  the Hatcher lethal mid-session. Those two runs are discarded and every arm
+  above is `--no-enemy` with 0 combat events. **The operator caught that too.**
+
+Still NOT FOUND: any per-pass cull radius in the client, and any explanation of
+why the two passes cross five seconds apart.

@@ -126,6 +126,11 @@ kernel32.GetCurrentThreadId.restype = wintypes.DWORD
 SW_RESTORE = 9
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_RIGHTDOWN = 0x0008
+MOUSEEVENTF_RIGHTUP = 0x0010
+MOUSEEVENTF_MOVE = 0x0001         # RELATIVE motion, and it generates an event
+MOUSEEVENTF_WHEEL = 0x0800
+WHEEL_DELTA = 120                 # one notch, as the API defines it
 
 
 # ---------------------------------------------------------------- safety ----
@@ -391,6 +396,100 @@ def click(hwnd, pid, fx, fy):
     user32.mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, None)
     time.sleep(0.06)
     user32.mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, None)
+    return True
+
+
+def _own_foreground(hwnd, pid):
+    """Raise the client and confirm it really owns the foreground. Never send blind.
+
+    Factored out of press_key/press_enter/hold_key when the camera verbs were
+    added, because four copies of a safety check is four places for one of them
+    to drift. The property it protects is the one press_enter's docstring is
+    about: keybd_event and mouse_event are GLOBAL, and an input aimed at the
+    client while something else has focus lands in whatever the owner is doing.
+    """
+    if not _force_foreground(hwnd):
+        return False
+    fg = user32.GetForegroundWindow()
+    owner = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(fg, ctypes.byref(owner))
+    return owner.value == pid
+
+
+def scroll(hwnd, pid, notches):
+    """Turn the mouse wheel `notches` clicks. Negative zooms the camera OUT.
+
+    Guild Wars binds the wheel to camera distance, which is the one axis the
+    harness could not reach and the one the operator was using when a rendering
+    fault appeared (FINDINGS 25.5). A fault that only a human can provoke cannot
+    be bisected, so this exists to make that camera state scriptable.
+
+    The sign is the Windows convention -- away from the user is positive -- and
+    on this client away/positive zooms IN. Verified by watching the frame, not
+    assumed: `--walk "zoom:-14"` from the spawn visibly pulls the camera back.
+    """
+    if not _own_foreground(hwnd, pid):
+        return False
+    # One notch at a time. A single 14-notch event is legal and the client
+    # coalesces it into one jump; separate events give the camera the same
+    # rhythm a hand does, which is what the fault was provoked with.
+    for _ in range(abs(int(notches))):
+        user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0,
+                           WHEEL_DELTA if notches > 0 else -WHEEL_DELTA, None)
+        time.sleep(0.04)
+    return True
+
+
+def orbit(hwnd, pid, dx, dy, steps=12):
+    """Right-drag the camera by (dx, dy) pixels. Positive dy pitches the view UP.
+
+    Guild Wars orbits on a held right button. The drag is broken into `steps`
+    because the client reads mouse MOVEMENT, and one teleporting jump from start
+    to finish is a single huge delta that the camera clamps -- the same reason
+    hold_key exists rather than a tap.
+
+    THE BUTTON IS ALWAYS RELEASED, for the reason hold_key's is: mouse_event
+    sets global button state, and a right button left down is stuck for the
+    whole desktop and outlives this process.
+    """
+    if not _own_foreground(hwnd, pid):
+        return False
+    rect = wintypes.RECT()
+    if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
+        return False
+    # Park the pointer in the middle first. SetCursorPos is fine for THIS --
+    # it only decides where the drag starts.
+    user32.SetCursorPos(int((rect.left + rect.right) / 2),
+                        int((rect.top + rect.bottom) / 2))
+    time.sleep(0.05)
+    # RELATIVE MOVE EVENTS, not SetCursorPos, and this is the whole reason the
+    # first version did nothing. MEASURED 2026-08-11: the operator reported
+    # "weird mouse movement with no camera shift", and the frames agreed --
+    # terrain 78.8% before the pitch step and 79.1% after, i.e. the view did not
+    # move at all. SetCursorPos WARPS the pointer; it does not synthesise an
+    # input event, so a client reading the raw input path sees no motion. It is
+    # the same defect as hold_key's bScan=0, in the same file, on the same day:
+    # the verb emitted something, a test confirmed it emitted something, and the
+    # client ignored all of it.
+    #
+    # A test cannot catch this on its own -- both versions emit a button down, a
+    # sequence of moves and a button up, and only the client can say whether the
+    # view turned. What the test CAN pin is that the movement goes through the
+    # API that generates input events, which is why section 11 asserts on the
+    # flags rather than only on the cursor positions.
+    steps = max(1, int(steps))
+    try:
+        user32.mouse_event(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, None)
+        time.sleep(0.05)
+        sent_x = sent_y = 0
+        for i in range(1, steps + 1):
+            want_x, want_y = int(dx * i / steps), int(dy * i / steps)
+            user32.mouse_event(MOUSEEVENTF_MOVE, want_x - sent_x,
+                               want_y - sent_y, 0, None)
+            sent_x, sent_y = want_x, want_y
+            time.sleep(0.02)
+    finally:
+        user32.mouse_event(MOUSEEVENTF_RIGHTUP, 0, 0, 0, None)
     return True
 
 

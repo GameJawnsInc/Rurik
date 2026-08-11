@@ -1532,8 +1532,12 @@ parallel, with one safety change that is not optional — see its entry.
     upside down. Props and terrain share the stored convention, so
     `test_blenderimport`'s prop-z oracle has to move with them and its 0.7338 be
     re-measured. Until it lands, a map in Blender is a height FIELD and not a picture.
-    **(g)** The courtyard rendering fault (FINDINGS 25.5): models stop drawing five
-    seconds before the terrain does, and nothing explains the ordering.
+    **(g)** CLOSED as a cosmetic artefact (FINDINGS 26): the rendering fault is
+    reproducible, recovers, and happens only where the camera can get out over
+    empty space -- which no playable map shape allows. On the map as designed the
+    operator calls the camera stock. Our test maps carry none of the ten chunk
+    kinds that would draw a sky, so there is nothing to see out there. Reopen only
+    with a map that has an Environment chunk.
     **(e)** E3 (provoking the client's own map compiler) is weakened but not dead — arm 3b
     showed a corrupt Bloated chunk crashes rather than re-bloating, so the zero-length
     stream-1 payload of §17.1 is the cheapest remaining probe.
