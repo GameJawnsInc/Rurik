@@ -183,6 +183,16 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/authsrv/test_replay.py` (a captured .raw decrypts back to the plaintext that
   was logged, and does so all-or-nothing across the whole vault — the first reader of a
   .raw, which closes R0a's standing caveat),
+  `toolkit/authsrv/test_smsgnames.py` (the twenty GAME_SMSG names of 2026-08-10, against
+  ArenaNet's own recorded traffic rather than against our server — 21 invariants the
+  corpus could have violated. The headline one is that summing 0x001E's payload across a
+  tape reconstructs that tape's own wall clock to +18 ms worst case over 13–185 s, which
+  is what kills the heartbeat reading of the opcode that is 36% of all server traffic.
+  Its first version had three red checks and every one was worth having: two were the
+  ROTATE_PLAYER trap again — 0x002E's fields are marshalled u32 and hold floats, and read
+  raw they make the angle check compare garbage to pi AND make the turn-rate check pass
+  vacuously — and the third conflated "arrives before its create" with "names an agent
+  never created", which are different facts),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,

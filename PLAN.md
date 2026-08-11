@@ -1044,7 +1044,45 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-10 (`b185bce`+, suite 37/37 ~960 checks)
+### 8.0 Next, as of 2026-08-10 (`9166a50`+, suite 38/38 ~983 checks)
+
+0e. ✅ **DONE 2026-08-10. Twenty GAME_SMSG opcodes named — the catalog goes from 1 of
+    487 to 21.** This is the item that was not on the list, and it is where the leverage
+    turned out to be: §8.0's four items were all written from one session's leftovers,
+    while the four live tapes were a **10,944-message behavioural corpus that nothing in
+    this plan was mining**. Framed and counted: **146 distinct GAME_SMSG opcodes**, of
+    which the top 30 are **92%** of the stream, and exactly one had a name.
+    **Method** — two witnesses neither of which was consulted to produce the other: the
+    client's dispatch handlers plus its **19,620 compiled assert expressions**, against
+    the wire. Every proposal was then handed to a second reader told to refute it, and
+    that pass earned its cost: it struck four headline citations and two verdicts, and
+    caught a **fabricated quote** (an agent reported the client's log string as
+    `item name=%s` and built an argument on the `%s`; it is `%d`).
+    **The headline result.** `0x001E` is **36.3% of all server traffic** — more than the
+    next five opcodes combined — and is *not* a heartbeat. Its payload is elapsed
+    milliseconds: summing it across a tape reconstructs that tape's own wall clock to
+    **−1.2 ms over 48 s and +18 ms worst case**, and the client names the field twice
+    (`message.time` at AgMsg.cpp:208, `elapsedMs` at AgTimer.cpp:32). We send it on a
+    fixed 0.05 s sleep, which is our single largest divergence from ArenaNet's traffic.
+    **Three upstream/incumbent glosses refuted**, all of which had cost us something:
+    `0x002E` as `cos, sin` (sin²+cos² over the corpus ranges 1.23–4.87 and is never 1 —
+    this is why `0x002E` went unsent for weeks), `0x002B` as a `SpeedModifier` (the
+    client asserts the field into [0.01, 1.0], so no buff can ride it), and
+    `0x00F0`/`0x00F1` as *effects* (the client's word is `m_status`; the "effects" noun
+    is traceable to OpenTyria's struct member — one witness, and not the client).
+    **Landed:** `schema/overrides.json` +20 entries each carrying a `name_confidence`
+    that is the POST-refutation value; `studies/smsg/FINDINGS.md`;
+    `toolkit/authsrv/test_smsgnames.py` (21 invariants ArenaNet's own traffic could have
+    violated, mutation-tested — a constant tick payload drifts 155 s and is rejected).
+    **10 came back PARTIAL and are deliberately NOT named**, with what would settle each.
+    **The number to distrust: 0 UNRESOLVED of 30.** Recorded in the findings as a warning
+    rather than a triumph — the 30 were chosen by corpus frequency, and frequent messages
+    have the most wire evidence and the most reachable handlers. It does not extrapolate
+    to the other 116 corpus opcodes, let alone the 341 that never appeared.
+    **The cheapest open test in the whole pass: a second live capture on a different
+    character.** Every count rests on four tapes of ONE session, one character, one
+    account — "4/4 tapes" is four samples sharing a character record — and one decode
+    separates protocol from character.
 
 The items below this section predate today and are still live; these four are what today's
 work opened. **The order has changed since they were written**, on evidence: four scouts
