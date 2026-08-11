@@ -1517,6 +1517,7 @@ def enemy_attack_tick(send, state, conn_id):
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
             agent["skill_ready"][slot] = now + recharge
+            agent["last_slot"] = slot          # the round-robin cursor
             agent["casting"] = slot
             agent["last_swing"] = now      # a cast is not a free swing
             face_player(send, state, agent_id, agent, conn_id)
@@ -1734,15 +1735,34 @@ def land_swing(send, state, agent_id, agent, conn_id):
 
 
 def pick_skill(agent, now):
-    """The first slot on the bar whose recharge has run, or None.
+    """The next ready slot on the bar, round robin from the last one cast.
 
-    FIRST READY IN BAR ORDER, so the bar is a priority list. That is roughly what
-    a Guild Wars monster does and it is stated as roughly: nothing in this project
-    has measured monster skill selection, and a bar of four with recharges of 2,
-    5, 8 and 2 makes the ORDER observable either way -- the 8 s skill fires once
-    and the short ones cycle underneath it.
+    ROUND ROBIN, and the version before it was FIRST-READY-IN-BAR-ORDER, which
+    left slot 4 unreachable. OBSERVED (11.5): a run produced
+    {276: 6, 253: 3, 312: 3, 289: 0} -- skill 289 never fired once. That was not a
+    selector bug but a property of a strict priority list, because slot 1 recharges
+    every 2.0 s and reaching slot 4 needs 2 + 5 + 8 seconds of everything above it
+    being busy, which never happens. A four-slot bar was really a three-slot bar.
+
+    Starting the scan AFTER the last slot cast fixes it without any new numbers:
+    every ready slot gets a turn before any slot gets a second one. The wrap is
+    what makes it a cycle rather than a sweep that stalls at the end.
+
+    STILL NOT MEASURED, and this is the honest part: nothing in this project knows
+    how a Guild Wars monster actually chooses. Round robin, least-recently-used
+    and priority order are all inventions; this one is the invention that reaches
+    every slot, which is the property that was actually wanted.
+
+    `last_slot` is written by the CAST SITE, not here, so this stays a pure read
+    and a test can drive the cursor by hand.
     """
-    for slot, (_skill_id, _activation, _recharge) in enumerate(agent.get("skills") or ()):
+    skills = agent.get("skills") or ()
+    n = len(skills)
+    if not n:
+        return None
+    start = (agent.get("last_slot", -1) + 1) % n
+    for i in range(n):
+        slot = (start + i) % n
         if now >= agent["skill_ready"][slot]:
             return slot
     return None
