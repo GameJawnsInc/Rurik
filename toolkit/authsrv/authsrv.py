@@ -1479,8 +1479,22 @@ def play_tape(send_raw, conn_id, stop, events, info, speed=1.0):
               f"after {time.monotonic() - t0:.1f}s: {type(ex).__name__}: {ex}",
               flush=True)
         lo = max(0, sent - 3)
-        print(f"[c{conn_id}] what was in flight (the client asserts on one of these):",
+        # DO NOT CALL THIS A CLIENT ASSERT. This banner used to open "the client
+        # asserts on one of these", and on 2026-08-10 it said that about a tape whose
+        # client was in perfect health: the HARNESS had reached its verdict target and
+        # torn the stack down 1.7s into a 396-second chain, so the socket died under a
+        # tape that had barely started. Everything on screen read as crash-on-map-load,
+        # and the only thing that contradicted it was the absence of an Assertion line
+        # in the client's own log.
+        #
+        # This end of the socket cannot tell a client assert from a shutdown, so it
+        # says both and names the one check that separates them.
+        print(f"[c{conn_id}] the client's connection went away. That is EITHER a client "
+              f"assert on one of the events below, OR the stack being shut down "
+              f"(--keep-open / --hold, or a verdict target already reached).",
               flush=True)
+        print(f"[c{conn_id}] Gw.log decides it: an Assertion line means the client; no "
+              f"Assertion line means the teardown.", flush=True)
         for j in range(lo, min(sent + 2, len(events))):
             et, eb = events[j]
             try:

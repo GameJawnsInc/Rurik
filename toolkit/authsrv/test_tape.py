@@ -37,7 +37,7 @@ import vaultpath  # noqa: E402
 # added with R1.5's 0b. Sections 3-5 all skip together on a machine with no vault, and
 # the floor takes them with it -- a run that never read the capture has not checked the
 # chain, whatever it printed.
-LEDGER = checks.Ledger("tape", floor=20)
+LEDGER = checks.Ledger("tape", floor=22)
 
 LIVE_CAPTURE = "20260807T143055"
 
@@ -267,6 +267,32 @@ def main():
                   "client at an arbitrary server', written into ArenaNet's own bytes. "
                   "It is the control that replaces the cage's Code=005, which the "
                   "rewrite takes away.")
+
+        # The operator ran the RUNBOOK's own command from a worktree and got a
+        # FileNotFoundError traceback: `vault/captures/live/<stamp>` is relative, and a
+        # git worktree has no vault. Every form an operator could reasonably type must
+        # land on the same directory, and a wrong one must name the vault rather than
+        # dying inside os.listdir.
+        forms = [LIVE_CAPTURE,
+                 os.path.join("captures", "live", LIVE_CAPTURE),
+                 os.path.join("vault", "captures", "live", LIVE_CAPTURE),
+                 "vault/captures/live/" + LIVE_CAPTURE,
+                 cap]
+        landed = {tape.resolve_capture(f) for f in forms}
+        LEDGER.ok(landed == {os.path.abspath(cap)},
+                  "every path form an operator might type finds the same capture",
+                  f"{len(forms)} forms -> {len(landed)} directory; a bare stamp, a "
+                  "vault-relative path and an absolute one all work, because the tool "
+                  "knows where the vault is and the operator should not have to")
+        try:
+            tape.resolve_capture("no-such-capture")
+            named = False
+        except tape.TapeError as ex:
+            named = "vault" in str(ex).lower() and LIVE_CAPTURE in str(ex)
+        LEDGER.ok(named,
+                  "and a path that resolves nowhere names the vault and its captures",
+                  "rather than raising FileNotFoundError from inside os.listdir, which "
+                  "is what the operator actually got on 2026-08-10")
 
         _il, lastev = tape.load_tape(cap, order[-1])
         outl, changedl, whyl = tape.rewrite_transfer(lastev, codec_obj, "127.0.0.4")

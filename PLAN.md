@@ -1044,7 +1044,7 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-10 (`b950ac6`+, suite 36/36 ~920 checks)
+### 8.0 Next, as of 2026-08-10 (`71c8fce`+, suite 36/36 ~927 checks)
 
 The items below this section predate today and are still live; these four are what today's
 work opened. **The order has changed since they were written**, on evidence: four scouts
