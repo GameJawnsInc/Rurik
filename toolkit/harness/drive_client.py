@@ -357,6 +357,32 @@ def click(hwnd, pid, fx, fy):
     return True
 
 
+def press_key(hwnd, pid, vk):
+    """Send one virtual key to the client, and ONLY ever to the client.
+
+    Generalised out of press_enter on 2026-08-11 so the harness can press a skill
+    slot. It keeps press_enter's safety property verbatim, because that property
+    is the whole reason this function is shaped the way it is -- see below.
+
+    Skill slots 1..8 are VK 0x31..0x38 ('1'..'8'), which is what makes an attack
+    skill reachable from a script: GAME_CMSG 0x0027 exists in ArenaNet's traffic
+    and our server had no arm for it until today, and nothing in this harness
+    could provoke one to check the fix.
+    """
+    if not _force_foreground(hwnd):
+        return False
+    fg = user32.GetForegroundWindow()
+    owner = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(fg, ctypes.byref(owner))
+    if owner.value != pid:
+        return False                      # someone else has focus - stay silent
+
+    user32.keybd_event(vk, 0, 0, 0)
+    time.sleep(0.06)
+    user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
+    return True
+
+
 def press_enter(hwnd, pid):
     """Send Enter to the client, and ONLY ever to the client.
 
@@ -453,7 +479,7 @@ def main():
     # character select -- comes up fast, and the old delays just sat idle.
     ap.add_argument("--actions", default="5:enter 4:enter 4:enter",
                     help="Whitespace-separated '<delay>:<kind>[:args]' steps. "
-                         "kind is enter | click:<fx>,<fy> | shot. Fractions are of "
+                         "kind is enter | key:<char> | click:<fx>,<fy> | shot. Fractions are of "
                          "the window, so scripts survive a resize.")
     ap.add_argument("--linger", type=int, default=25,
                     help="Seconds to keep sampling after the last Enter.")
@@ -527,6 +553,13 @@ def main():
             ok = click(hwnd, proc.pid, fx, fy)
         elif kind == "enter":
             ok = press_enter(hwnd, proc.pid)
+        elif kind == "key":
+            # "key:1" presses skill slot 1. Single characters only, mapped by
+            # ord(), which covers 0-9 and A-Z -- the slots and the hotkeys.
+            ch = parts[2]
+            if len(ch) != 1:
+                print(f"  key action wants ONE character, got {ch!r}"); continue
+            ok = press_key(hwnd, proc.pid, ord(ch.upper()))
         elif kind == "shot":
             ok = True
         else:

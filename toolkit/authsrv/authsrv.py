@@ -938,6 +938,21 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 # and body), energy and health pools, the explorable flag, the hostile team
 # token and 0x002F.
 #
+# AND IT STOPS 0x0027 TOO, which is the same refusal reaching a second opcode.
+# OBSERVED 2026-08-11: with the attack-skill arm newly in place, the harness
+# clicked our enemy (TARGET_SELECT went out, so the target WAS taken) and pressed
+# skill slots 5, 6 and 7 -- which our own bar fills with skills 320-323, all
+# type_code 14 Warrior attack skills, the same class as the Ranger's Power Shot
+# that revealed 0x0027. Not one message left the client.
+#
+# THE NEW EVIDENCE IS THAT THE REFUSAL IS VISIBLE. Every earlier session
+# reasoned from an ABSENT message; the screenshots now show the client drawing a
+# prohibited marker on the target's own health bar while the nameplate is red.
+# So the client is not failing to notice our enemy, it is deciding against it and
+# saying so on screen. That decision is drawn by some code path that can be found
+# -- which is a better lead than "nothing happens", and it is where the next
+# attempt at this should start rather than testing another world property.
+#
 # So a click now STARTS an attack instead of being one, and the server swings
 # on a timer. That is closer to how Guild Wars actually works -- combat is
 # server-authoritative and the client renders what it is told -- but the client

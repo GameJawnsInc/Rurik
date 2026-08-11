@@ -743,6 +743,18 @@ def run_client(a, outdir):
                 delivered = dc.press_enter(hwnd, proc.pid)
             elif kind == "play":
                 delivered = _play(tails, proc, outdir)
+            elif kind == "key":
+                # "key:1" presses skill slot 1. Added 2026-08-11 so the harness
+                # can provoke a GAME_CMSG 0x0027 -- ArenaNet's attack-skill
+                # message, which this server had no arm for until that day and
+                # which nothing here could produce to check the fix with. The
+                # loopback character is a Warrior, whose attack skills carry the
+                # same s_skill type_code (14) as the Ranger's Power Shot that
+                # revealed the opcode.
+                ch = parts[2]
+                if len(ch) != 1:
+                    raise SystemExit(f"key action wants ONE character: {spec!r}")
+                delivered = dc.press_key(hwnd, proc.pid, ord(ch.upper()))
             else:
                 raise SystemExit(f"unknown action kind {kind!r} in {spec!r}")
             sent.append({"spec": spec, "sent": delivered})
