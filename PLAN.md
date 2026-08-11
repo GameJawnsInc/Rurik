@@ -1046,7 +1046,33 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-11 (`f7ed554`, suite 45/45, ~1393 checks)
+### 8.0 Next, as of 2026-08-11 (`7b24cd6`+, suite 45/45, ~1393 checks)
+
+0k. **THE NEXT ACTION IS ONE OPERATOR SESSION, and the design changed today.** §10.6
+    reframed the whole attack arc: `0x0033` is not a refusal and not an "interaction" —
+    it is **arm 1 of the six-arm world-action switch** at `0x00514840`, where ArenaNet's
+    agents get arm 0 (`0x0026` ATTACK). The client resolves a click to an action and
+    sends it; ours resolves to the wrong arm. Four target properties and our own weapon
+    are all measured correct (§10.1, §10.2, §10.4), and `is_explorable` is now REFUTED as
+    the lever — **ten** of the nineteen zero-attack sessions had it set and produced
+    80 × `0x0033` with zero `0x0026`.
+    **Nothing has been clicked since 2026-08-06.** All 21 game sessions on 2026-08-11
+    produced no world action at all, and every property above was measured after the last
+    click. The 206-to-0 split is a fact about a five-day-old server.
+    **The run.** Loopback, Hatcher spawned, `--explorable` (not because it unlocks
+    anything — it does not — but so a silent drop at the send leaf cannot be confused with
+    the switch's choice). Then, in one session: **(a)** right-click the agent and read the
+    context menu, which `0x005144F0` builds from the same gate, so the menu IS the gate's
+    answer as the live client computes it; **(b)** double-click it — `0x00C1` alone is
+    "selected, no action attempted", which is all today's sessions did; **(c)** run
+    `labelrun.py`, whose `attack` step **has never been aimed at one of our own agents**
+    (all three labelled runs in the vault are tape sessions).
+    **What each outcome means.** `0x0026` on the wire → the blocker died to work already
+    landed. `0x0033` again → it survives every measured property, and the create-burst
+    differential is next. Menu offering Attack but nothing on the wire → the send leaf.
+    Menu showing "Talk To" → allegiance is not 3 today and §10.1 needs re-measuring.
+    Fold 0c's burrow probe into the same session, as 0a already says.
+
 
 0j. ✅ **DONE 2026-08-11. The attack refusal is NOT on our side of the interaction, and
     that is now measured rather than argued.** §10.3 read the refusal down to one bit —

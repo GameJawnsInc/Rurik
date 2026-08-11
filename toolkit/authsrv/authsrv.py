@@ -2314,12 +2314,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                  "INSTANCE_LOAD_PLAYER_NAME")
             send(GAME_SMSG_INSTANCE_PLAYER_DATA_DONE, [], "PLAYER_DATA_DONE")
             # is_explorable is the client's own town-versus-field switch, and
-            # Guild Wars refuses to let you attack anything in a town. So this
-            # one field may be all that stands between us and testing combat --
+            # Guild Wars refuses to let you attack anything in a town. It is
             # cheaper to flip than to recover a real explorable's map file id,
             # which is what studies/enemy/PLAN.md section 7.3 would otherwise
             # require. Off by default because a town is what map 148 IS, and a
             # server that lies about its own map should do so only when asked.
+            #
+            # "This one field may be all that stands between us and testing
+            # combat" used to end that paragraph. REFUTED 2026-08-11 by our own
+            # wire (PLAN.md 10.6): TEN of the nineteen sessions in which the
+            # client never sent ATTACK had is_explorable = 1 here, and together
+            # they produced 80 x 0x0033 and zero 0x0026. The transmit gate this
+            # field feeds -- 0x00816090, which refuses unless MissionCliGetMap()
+            # == MISSION_MAP_GAME -- was OPEN in all ten and changed nothing, so
+            # the client's world-action switch chose a non-attack arm on its own.
+            # Still worth setting for any combat test, but only so a silent drop
+            # at the send leaf cannot be confused with the switch's choice.
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
                  [1,          # agent_id -- the player's own agent, 1 for the first
                   map_id,     # echoed from the version frame, not guessed

@@ -1615,6 +1615,18 @@ server answers none of them.** There is no handler for `0x0033` anywhere in
 `authsrv.py`. That is the same shape as every movement bug this project has had:
 the client asks, we say nothing, and the symptom looks like the client refusing.
 
+> **STRUCK 2026-08-11 — both sentences above are false. See §10.6.**
+> `authsrv.py:2636` has dispatched `0x0033` to `begin_attack` for days: the click
+> reaches us and does start a fight. And `0x0033` is not an "interaction request"
+> — it is **arm 1 of the six-arm world-action switch** at `0x00514840`, the one
+> where ArenaNet's agents get arm 0 (`0x0026` ATTACK). The client is neither
+> refusing nor asking; it resolved the click to a different action and sent it.
+> The table survives as data; its framing does not. Those two rows are 2 of the
+> **ten** `is_explorable = 1` sessions §10.6 measures, which together produced
+> 80 × `0x0033` and zero `0x0026` — the town-versus-field gate was open and
+> changed nothing, so `--explorable` is REFUTED as the lever rather than merely
+> "tried and did not unlock attacking".
+
 Two candidate causes remain, and this narrows rather than settles:
 
 1. The client never sends `ATTACK_AGENT` at all — possibly the town, possibly
@@ -2151,3 +2163,88 @@ already landed; `0x0033` again means it survives every property measured so far 
 create-burst differential is the next place to look. Either outcome is worth more than more
 static analysis, and §8.0 0a already says to fold it into the same session as 0c's burrow
 probe. **Do not read the 206-to-0 table as current.**
+
+---
+
+### 10.6 It was never a refusal — `0x0033` is a DIFFERENT ARM of the same switch
+
+**OBSERVED 2026-08-11.** Every section of §10 has asked what *withholds* the attack
+action. The question was wrong. The client is not withholding anything: it evaluates a
+switch, picks an action, and sends it. It picks **arm 1** (`0x0033`) where ArenaNet's
+agents get **arm 0** (`0x0026` ATTACK). Same function, same click, same target field.
+
+**The switch, verified here byte by byte.** `0x00514840` takes `(action, targetAgentId,
+arg3)`, asserts `action < 6` (`GmCoreAction:933 action < WORLD_ACTIONS`, compiled as
+`cmp ebx,6 / jl`) and `AvValidate(targetAgentId)` (`:934`, via `0x007E1460`), then
+dispatches through the table at `0x00514984`. The action index arrives from
+`0x004E6B20` — `0x004E2172 call 0x4e6b20 / mov ebx, eax` — whose own asserts name it
+the click path: `GmView:2229 !(selectFlags & UiMsgGameSelect::FLAG_NO_INTERACT)` and
+`GmView:2234 !((selectFlags & FLAG_DBL_CLICK) && !(selectFlags & FLAG_DUE_TO_CLICK))`.
+
+So `0x0033` is not "interact". **It is what the client sends when the world-action switch
+resolves a click to arm 1 instead of arm 0.** REPORTED (workflow, not re-verified here):
+the arms carry ArenaNet's own menu string ids, arm 0 "Attack", arm 1 "Follow"/"Move To",
+arm 2 "Talk To" — which would make `INTERACT_PLAYER` the wrong name for `0x0033` and the
+right name for `0x0039`. Treat the id→arm mapping as ours and the labels as UPSTREAM until
+someone re-reads them.
+
+**Our server already treats `0x0033` as an attack order — VERIFIED, and §7.3a is wrong.**
+`authsrv.py:2636` is `elif opcode == GAME_CMSG_INTERACT_PLAYER: begin_attack(send, state,
+values[1], conn_id)`. §7.3a's line "There is no handler for `0x0033` anywhere in
+`authsrv.py`" (line 1614 of this file) is false and should be struck. The consequence is
+the opposite of what that section assumed: the click IS reaching us and IS starting a
+fight; what never happens is the client running its own attack.
+
+**`is_explorable` is EXCLUDED as the cause — and by more than the workflow found.**
+`GAME_SMSG 0x0199`'s field is byte offset 8 of a 15-byte message (schema:
+`msg_header, agent_id, word, byte, dword, byte, byte`). Swept over every game-channel
+session in the vault:
+
+```
+2026-08-06  is_explorable=0   48 sessions   0x0033 x126, 0x0039 x16
+2026-08-06  is_explorable=1   13 sessions   0x0033 x 80, 0x0039 x 6      <-- gate OPEN
+2026-08-10  (tape's own)      11 sessions   0x0026 x  7, 0x0039 x 4
+2026-08-11  is_explorable=0   21 sessions   NO WORLD ACTION AT ALL
+```
+
+**Ten of the nineteen zero-attack sessions had `is_explorable = 1`** and still produced
+only arm 1. The town-versus-field gate at `0x00816090` was open and the classifier still
+returned 1, so the transmit leaf is not the cause. (The workflow reached this from one
+session; the sweep makes it ten.) `authsrv.py:2316`'s comment — "this one field may be all
+that stands between us and testing combat" — is REFUTED by our own wire.
+
+**And the 2026-08-11 row is the operational finding.** Twenty-one game sessions today,
+zero world actions of any kind. Nothing has been clicked since 2026-08-06, which is what
+§10.5 said and this now measures directly.
+
+**REPORTED and NOT re-verified here** (workflow's readers, each passed through a skeptic):
+
+* `GAME_SMSG 0x0056` field 6 bit `0x200` — **REFUTED.** One session created four agents on
+  one definition (field 6 held at `0x20C`) differing only in agent id, position and the
+  allegiance FourCC; the client answered `0x0039` for `play`/`nonc`/`nonn` and `0x0033` for
+  `mons`. Another session sent no `0x0056` at all and the split still appeared. Field held
+  constant, then absent, answer changed. **Do not retune `content/npcs.toml`'s `0x20C`.**
+* `0x00F0` / `0x006D` as the gate — **REFUTED.** They are ArenaNet's universal create
+  bracket (`0x00F0` before 951/951 team-bearing creates, `0x006D` after 546/546 non-`play`
+  creates), including 313 agents nobody ever attacked. Send them as hygiene, not as an
+  experiment.
+* The equipped-bag story — **CONTESTED, and honestly so.** All 19 zero-attack sessions have
+  zero `0x013F`; both attack-producing sessions have bags. But bag presence is perfectly
+  collinear with date, driver, and agent provenance, and no session ever mixed them — so
+  its `could_have_failed` is unsatisfiable. It is the best-supported candidate and it is
+  not established.
+
+**THE INSTRUMENT DEFECT THIS TURNED UP, and it is ours — OBSERVED, verified.**
+`asserts.py` self-reported 19,758 readable sites + 3 it named as unreadable. An
+independent sweep of `.text` (5,471,232 B) for `call rel32` landing on the assert routine
+finds **20,131**. The tool was short by **370 sites it did not know it was missing**: all
+three shapes are contiguous byte patterns, and anything the compiler schedules into them
+breaks the match. Worked example: `AgAgent:2366` (`AGENT_MIN_MOVE_SPEED`) at `0x006029BC`
+carries an `fstp st(0)` and is invisible, while its twin `:2367` three instructions later
+at `0x006029D4` is read — which is exactly why nobody noticed. `--grep AGENT_MIN_MOVE_SPEED`
+returns 0 sites for an assert that is provably there.
+
+**Every "no assert names X" claim in this arc is therefore a floor, not a census** — and
+`codescan.py --in <module>` takes its bounds from the same tool. `coverage_lines()` now
+prints the shortfall under every query, measured against the image rather than against the
+scanner's own idea of what it missed.

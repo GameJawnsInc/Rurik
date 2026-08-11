@@ -282,6 +282,54 @@ class Asserts:
         callees = {a.callee for a in self.items}
         return len(self.items), len(callees), callees == {expect_callee}
 
+    def call_sites(self, callee=None):
+        """Every `call rel32` in .text that lands on the assert routine.
+
+        THE INDEPENDENT CENSUS, added 2026-08-11, and it exists because
+        `unreadable` was wrong by two orders of magnitude. That counter reports
+        only the ONE miss the pattern scan can recognise (`mov edx, <file>`
+        straight into the call). It said 3. This sweep says the scan is short
+        by 370.
+
+        The cause is that all three shapes are CONTIGUOUS byte patterns, so
+        anything the compiler schedules between the operand loads and the call
+        breaks them. `0x006029BC` is a worked example: it is AgAgent:2366,
+        the AGENT_MIN_MOVE_SPEED bound `test_smsgnames.py` quotes, and it carries
+        an `fstp st(0)` between the operand loads and the call. Its twin 2367 at
+        `0x006029D4` IS read, so the two sit three instructions apart with one
+        visible and one invisible -- which is why the shortfall was never noticed.
+
+        This sweep cannot read a single expression, which is exactly the point:
+        it does not need to. It counts CALLS, so it is a hard bound the pattern
+        scan can be measured against, and it cannot desync because a call to a
+        known address is self-anchoring. What it buys is that "no assert names
+        X" is now a claim with a stated shortfall instead of a census.
+        """
+        if callee is None:
+            callee = self.base + (ASSERT_VA_38797 - 0x00400000)
+        # Cached: coverage_lines() runs under every query, and the suite builds
+        # this object dozens of times. Sweeping 5.4 MB per call took the whole
+        # test run past ten minutes.
+        cached = getattr(self, "_call_sites", None)
+        if cached is not None and cached[0] == callee:
+            return cached[1]
+        sec = self.pe.section(".text")
+        data = self.pe.data
+        lo, hi = sec["rawptr"], sec["rawptr"] + sec["rawsize"]
+        out = []
+        p = lo
+        while True:
+            p = data.find(b"\xe8", p, hi - 5)
+            if p == -1:
+                break
+            rel = struct.unpack_from("<i", data, p + 1)[0]
+            va = self.base + sec["vaddr"] + (p - lo)
+            if (va + 5 + rel) & 0xFFFFFFFF == callee:
+                out.append(va)
+            p += 1
+        self._call_sites = (callee, out)
+        return out
+
     def coverage(self):
         """What the scan found, per shape, and what it knows it could not read.
 
@@ -289,11 +337,19 @@ class Asserts:
         "96 sites" cannot tell a census from a floor, and for two weeks this
         tool printed a floor. Anything non-zero in `unreadable` means the list
         is short by that much and the shortfall has a name.
+
+        `missed` is the honest version of that. `unreadable` counted only the
+        misses the pattern scan can SEE, and a scanner's own estimate of what
+        it missed is worth nothing -- `call_sites()` measures against the image
+        instead, which is what turned a self-reported 3 into a real 370.
         """
+        sites = len(self.call_sites())
         return {"shapes": dict(self.shapes),
                 "total": len(self.items),
                 "unreadable": len(self.unreadable),
-                "unmatched": self.unmatched}
+                "unmatched": self.unmatched,
+                "call_sites": sites,
+                "missed": max(0, sites - len(self.items) - len(self.unreadable))}
 
     def coverage_lines(self):
         """`coverage()` as the lines every entry point prints under its count."""
@@ -307,6 +363,17 @@ class Asserts:
                 f"fixed pattern. They are real asserts this tool cannot read, "
                 f"so every module list below is short by however many of them "
                 f"fall in it. `--unreadable` lists them.")
+        if cov["missed"]:
+            out.append(
+                f"AND SHORT BY {cov['missed']} MORE: an independent sweep finds "
+                f"{cov['call_sites']} `call rel32` sites landing on the assert "
+                f"routine, against {cov['total']} read + {cov['unreadable']} "
+                f"named unreadable. The shapes are contiguous byte patterns and "
+                f"the compiler schedules other instructions into them (e.g. an "
+                f"`fstp` at 0x006029BC, which is AgAgent:2366). SO EVERY "
+                f"\"no assert names X\" ANSWER FROM THIS TOOL IS A FLOOR, NOT A "
+                f"CENSUS -- including the module counts below, and including "
+                f"`codescan.py --in <module>`, which takes its bounds from here.")
         return out
 
     def modules(self):
