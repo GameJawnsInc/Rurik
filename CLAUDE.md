@@ -188,6 +188,47 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   must go red, including one flipped height byte in a real chunk. It also builds a
   32x32 map out of nothing, which needs no vault. Slow-ish: 25 maps is ~55 s,
   `--all` is ~7 minutes),
+  `toolkit/mapdata/test_mapexport.py` (the neutral terrain interchange, and the
+  orientation checked against a chunk the exporter never reads: prop `z` from
+  `0x20000004` sampled against the exported height field, with three rival layouts
+  that must collapse — on Kamadan the fraction of props within 100 units is 0.304
+  against 0.070 for the y-flip, 0.033 for the x-flip and **0.085 for not de-tiling
+  at all**, which reproduces FINDINGS §4's 0.089 for the flat row-major rival from
+  the other side; Pre-Searing is 0.734 against 0.078/0.139/0.137. Kamadan sits below
+  FINDINGS' 0.504 corpus median and is reported at its real value rather than
+  dropped. Every prop of both maps lands inside the grid under all four layouts, so
+  no control loses on sample size. Also: `detile` checked cell-for-cell against
+  `terrain.Terrain.index`, a different implementation in a module this rung does not
+  own; a sha256 manifest whose negative control flips one mantissa bit of one height
+  and must be caught; and a refusal that keeps derived ArenaNet bytes out of the
+  working tree — which shipped broken, one `dirname` short, and wrote a 745 KB height
+  field into the repo before the test pinned the resolved root. Sections 0-4 need no
+  vault and score 65 against a floor of 108, so a vault-less run goes red. ~31 s),
+  `toolkit/mapdata/test_blenderimport.py` (the Blender half: it runs
+  `tools/blender/import_gwmap.py` headless as a SUBPROCESS — the test is stdlib-only
+  and never imports `bpy`, which is why the importer may live outside `toolkit/` —
+  and checks the mesh Blender actually built. 213,921 vertices and 212,992 quads for
+  Pre-Searing, every face a quad, every normal +Z, and the bounding box equal to the
+  Map Parameters rect to the bit. The oracle is again a chunk neither tool reads:
+  prop `z` looked up in Blender's own vertex buffer **by world coordinate rather than
+  by lattice index**, scoring 0.7338 — identical to `test_mapexport`'s figure for the
+  same map, which was the stated prediction — against 0.078 y-flip and 0.139 x-flip.
+  Looking up by index is what the first version did, and an upside-down-map sabotage
+  scored the baseline unchanged. The oracle's LIMIT is measured and stated too: a
+  one-cell shift of the whole height field scores 0.7477/0.6806/0.7292/0.6944, i.e.
+  inside the spread, so it resolves layout and not registration and must not be
+  quoted as doing the latter. Three controls: a changed pitch must move the bbox
+  off the rect (which is why the importer reads the pitch from the file instead of
+  hard-coding the measured 96.0), a reversed row order must change the z digest while
+  leaving the bbox identical, and a corrupted sidecar must make Blender exit 66 and
+  write nothing — 66 rather than "non-zero" because `blender --background --python`
+  exits 0 even when the script raises unless `--python-exit-code` is passed. No
+  Blender means every section skips and the run goes red, the way `test_keytap.py`
+  does off Windows; `RURIK_BLENDER` and `--blender` override the install path, and
+  section 0 is that selector — an explicit path that does not exist is REFUSED
+  rather than fallen through to the known install, because it fell through, and a
+  run that asked for one Blender measured another and printed green. Sections 0-2
+  need no vault and score 39 against a floor of 74. ~13 s),
   `toolkit/mapdata/test_mapfile.py` (the WHOLE-FILE codec: a retail `ffna` map
   payload decoded to a typed container and re-encoded byte-identically — **349 of
   349 Bloated and 349 of 349 Stripped** under `--all`, 6 of each by default. The

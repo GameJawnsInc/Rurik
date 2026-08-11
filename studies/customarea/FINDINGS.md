@@ -2918,3 +2918,101 @@ encoding from file ids would have silently rewritten them into canonical form.
 
 Sections 1–2 (25 checks) build a whole map file from nothing and need no vault; a
 vault-less run correctly fails on the floor rather than going green.
+
+### 19.10 Rung B3 — a retail map in Blender, the right way up (2026-08-11)
+
+`toolkit/mapdata/mapexport.py` writes a map's terrain to a neutral interchange —
+`<name>.gwmap.json` plus de-tiled `.heights.f32` / `.tiles.u8` / `.shade.u8` sidecars, each
+sha256'd in the manifest — and `tools/blender/import_gwmap.py` builds it as a Blender mesh.
+The JSON carries its own `conventions` block, so a file states the rules it was written
+under rather than relying on a reader to remember them.
+
+**Blender 5.1.1 ran, headless, on Pre-Searing (row 7982, 416×512 cells):
+213,921 vertices, 212,992 quads, every face 4-sided.** Bounding box
+`[-18432, -24576, -4966] .. [21504, 24576, 799]` — x/y equal the Map Parameters chunk's
+rect **to the bit**, z equal to the stored heights' min/max. Reproduced by the orchestrator
+from a fresh export.
+
+`tools/` is a new directory and the **only** place `bpy` is permitted; `CLAUDE.md`'s
+stdlib rule binds `toolkit/`, and `test_blenderimport.py` lives under `toolkit/`, never
+imports the importer, and drives Blender as a subprocess.
+
+#### The orientation is established, not assumed
+
+This rung's whole risk is a confidently upside-down mesh, and our exporter agreeing with
+our importer would prove nothing. The oracle is a **different chunk**: sample the exported
+height field at each prop's `(x, y)` from `0x20000004` and compare with that prop's stored
+`z`. Prediction stated first, then measured — and re-measured by the orchestrator with an
+independent prop reader and independent indexing, touching no export code:
+
+| layout | frac \|dz\| < 100 | median \|dz\| | outside grid |
+|---|---|---|---|
+| **baseline** | **0.7338** | **29.96** | 0 |
+| y-flip | 0.0775 | 667.20 | 0 |
+| x-flip | 0.1389 | 571.53 | 0 |
+
+Both controls collapse, on identical sample sizes (864 props, 0 outside under every
+layout, so no control loses on population). The independent walk also closed the prop array
+exactly — 43,490 of 43,490 declared bytes — which re-confirms §5's record layout from
+outside the module that uses it.
+
+Two results nobody arranged:
+
+- **Kamadan scores 0.3043, well below §4's 0.504 corpus median, and is reported at its real
+  value.** It is a dense city whose props sit on roofs — exactly where a single-valued
+  heightmap has nothing to say (§2's standing negative). Its controls collapse just as hard,
+  which is the claim actually under test.
+- **The not-de-tiled control scores 0.0853 on Kamadan** — reproducing §4's 0.089 for the
+  flat row-major rival, from the opposite direction and by a different route.
+
+#### Three defects that only running could have found
+
+1. **The first Blender-side oracle could not see the defect it was named for.** It indexed
+   the dumped buffer as `(gy*(dimX+1)+gx)*3+2`, sharing its row convention with the code
+   under test. Sabotage — `wy = y0 + j*pitch`, the whole map upside down — left the
+   baseline *unchanged*: the z values had not moved within the buffer, only the vertices
+   they belonged to had. Rewritten to look each vertex up **by the world coordinates Blender
+   stored**. Under the restored sabotage the baseline now collapses to 0.0822 and the y-flip
+   control rises to 0.7292 — the mesh is measurably upside down.
+2. **`blender --background --python x.py` exits 0 even when the script raises.** MEASURED on
+   5.1.1: traceback printed, process reports success. A pipeline trusting the bare exit code
+   reads a refused import as a completed one. `--python-exit-code 66` is passed now and the
+   test asserts that exact value rather than "non-zero" — its first version asserted
+   `rc != 0` and went red against a *working* importer.
+3. **The exporter wrote 745 KB of derived ArenaNet data into the working tree.** `REPO_ROOT`
+   was one `dirname` short, so it named `toolkit/` and the guard meant to keep exports out
+   of the repo pointed at the wrong place. Fixed, and the resolved root is now pinned
+   against a tree the test finds independently, so the refusal targets cannot move with the
+   bug. Exports default to `vault/exports/`.
+
+Also caught: the floor was left at a placeholder 46, so a vault-less run printed
+`ALL CHECKS PASSED (65 checks)` — the `test_codec.py` failure exactly. Floor is 108 from a
+real green run; sections 0–4 score 65 and go red without an archive.
+
+#### Two honest limits
+
+- **The mesh bounding box is a weaker check than it looks, and the test says so**: a mesh
+  whose rows run bottom-to-top has the *same* bounding box. That is measured rather than
+  asserted — a control reverses the row order, fixes the digest so the file verifies
+  perfectly, and requires the bbox to be unchanged. It is precisely why the prop oracle
+  exists.
+- **The GWMB comparison in this rung's original acceptance criterion was NOT done.** Its
+  prebuilt `.exe` is not in the vault and §12 records downloading it as an owner decision.
+  The rung stands on the prop-z oracle instead, which has the advantage of being a chunk we
+  decode ourselves rather than another reader of the same lineage. If the GWMB export is
+  ever wanted as a second witness, §16-P5 still applies: it negates height and flips row
+  order, and the transform must be declared before the comparison runs.
+
+**Not exported, deliberately:** tag 3, whose bit-pair position inside a byte is not
+established by anything measured — unpacking it would be a convention we invented and could
+never refute. Tags 2 and 9 are transported as arrays with their meanings labelled unsettled;
+moving bytes is transport, not understanding.
+
+**Reproduce.**
+
+```
+python toolkit/mapdata/mapexport.py --row 7982 --out <dir>
+"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" --background \
+    --python-exit-code 66 --python tools/blender/import_gwmap.py -- \
+    <dir>/row_7982.gwmap.json --dump <dir>/mesh.json
+```
