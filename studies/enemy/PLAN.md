@@ -2303,3 +2303,44 @@ control present on every target frame, saying nothing about anything. §10.1 alr
 the claim back to "not known to mean cannot attack, may be range or line of sight"; it is
 now closed, and the honest summary is that a whole section's premise was a misread UI
 widget. Third time in three days that inferring a mechanism from a picture cost a detour.
+
+### 10.8 The burrow probe, RUN — definitions are per-instance, and `0x1000` is an animation
+
+**OBSERVED 2026-08-11**, capture `authsrv-20260811T135809-c1.jsonl`, probe `burrow` on
+loopback. Watched live by the owner; frame grabs at 2 fps corroborate. The wire is the
+control that makes it mean anything: `0x0056`/`0x0057` were sent **once, at t=2.73 s**,
+and never again — so both re-creates below were bare `0x0020`.
+
+| t | sent | seen |
+|---|---|---|
+| 5.74 | `0x00F1` [10, `0x1000`] | the Hatcher plays a **fall** animation and lies prone |
+| 9.75 | `0x00F1` [10, 0] | it plays a **get-up** animation and stands |
+| 12.76 | `0x0021` [10] | clean vanish |
+| 16.78 | `0x0020` same id 10, **no definition** | **a correct-looking collector, back** |
+| 22.78 | `0x0020` fresh id 12, **no definition** | **a second correct-looking collector** |
+
+**Both re-creates worked, which is the probe's `3 works, 4 works` arm: a definition is
+per-INSTANCE and outlives the agents using it.** Declare once at map load, re-create
+freely. This is our own client answering the question that §0c had answered only by
+inference from ArenaNet's 1-declaration-to-140-creates — and inference was not enough,
+because what was untested was OUR create path, not their client. `burrow_tick` now passes
+`send_definition=False` and a content row can still opt back in.
+
+**THE PREDICTION THAT WAS REFUTED, and it is the more interesting half.** The probe's
+stated honest expectation for `0x1000` was *"nothing visible happens, because a client
+that hid an agent on this bit would not also need the removal ArenaNet sends 2.00 s
+later."* The reasoning was sound and the conclusion was wrong. **`EFFECT_TRANSITION` is
+an ANIMATION, not bookkeeping and not a visibility flag** — set it and the agent goes
+down, clear it and the agent gets up. The agent stays rendered and keeps its nameplate
+the whole time (my first read of the frame said the body was gone; it is prone behind
+the player — SOURCED, owner, who was watching at full resolution).
+
+That resolves the apparent contradiction instead of being contradicted by it: the bit
+animates, the **removal** hides. ArenaNet's two 2.00 s windows are exactly the length of
+the down and up animations, with `0x0021` landing at the end of the first and `0x0020`
+at the start of the second. Our `burrow_tick` already holds the bit for 2.00 s each way,
+which was copied from measured timing without knowing what it bought; it buys the
+animation, and dropping it would make worms teleport in and out.
+
+**UNVERIFIED, and worth saying:** whether the down animation is burrow-specific or a
+generic knockdown. One agent, one model, one probe — a Plague Worm would settle it.

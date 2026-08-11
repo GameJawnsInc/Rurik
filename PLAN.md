@@ -1314,7 +1314,9 @@ parallel, with one safety change that is not optional — see its entry.
     exists so one run settles it. The `world_id`/`player_id` values stay in the vault —
     `schema/` records the structure and the fact of the match, never the identifiers.
 
-0c. ✅ **ANSWERED 2026-08-11 by the second live capture, and not by the probe built
+0c. ✅ **RUN 2026-08-11, and it confirmed the inference AND refuted its own side prediction.** The probe removed our Hatcher and re-created it twice with **no `0x0056`/`0x0057`** — once at the same id, once at a fresh one — and **both drew a correct collector**. That is what the live-capture inference below could not reach: ArenaNet's 1-to-140 proved THEIR client keeps a definition, not that OUR create path is right without one. `burrow_tick` now passes `send_definition=False`, and `test_burrow.py`'s check flipped with it — it had asserted the resend and named this probe as what would settle it. **The refuted half: `0x1000` is an ANIMATION.** The probe's honest expectation was that nothing visible would happen; set the bit and the agent falls prone, clear it and it gets up, staying rendered and nameplated the whole time. The bit animates, the removal hides — which is why ArenaNet needs both. `studies/enemy/PLAN.md` §10.8. **Prior reasoning follows.**
+
+    ✅ **ANSWERED 2026-08-11 by the second live capture, and not by the probe built
     for it.** The blocking question was whether the client keeps an NPC definition
     across a removal, since `agent_removal` resent it every time and so its positive
     said nothing. ArenaNet's own traffic settles it: **1 `0x0056` declaration, 32

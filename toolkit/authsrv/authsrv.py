@@ -1300,14 +1300,20 @@ def create_agent_world(send, state, agent_id, entry, why,
     the cause. That is the same failure `revive_due`'s snapshot comment was written
     about, from the other direction.
 
-    `send_definition` is the question we cannot answer offline. ArenaNet sends the NPC
-    definition (0x0056) exactly ONCE for 140 re-creates of the same worm, so their
-    client evidently keeps it across a removal. Ours has never been asked: the D1 probe
-    re-sent the definition every time, so its success says nothing about whether the
-    definition survives. `agents.npc_properties` warns that an agent whose definition
-    was never sent takes the client down on `index < m_count`. Until the `burrow` probe
-    settles it, this defaults to TRUE -- resending is what we have evidence is safe, and
-    the cost of being wrong in the other direction is a client assert.
+    `send_definition` is SETTLED as of 2026-08-11, and by our own client rather than by
+    inference. ArenaNet sends the NPC definition (0x0056) exactly ONCE for 140 re-creates
+    of the same worm; that told us THEIR client keeps it, and ours had never been asked,
+    because the D1 probe re-sent the definition every time and so its success said
+    nothing. The `burrow` probe asked: after a WORLD_REMOVE_AGENT, it re-created at the
+    SAME id and then at a FRESH id, both with NO 0x0056/0x0057, and BOTH drew a correct
+    collector (studies/enemy/PLAN.md 10.8, capture authsrv-20260811T135809). A definition
+    is per-INSTANCE and outlives the agents using it.
+
+    This still defaults to TRUE and should: the first create of an agent must declare it.
+    What the probe unlocked is the RE-create -- `burrow_tick` no longer resends.
+    `agents.npc_properties` warns that an agent whose definition was never sent takes the
+    client down on `index < m_count`, and that asymmetry has not changed: declare once
+    per instance, then re-create freely, and never skip the first one.
     """
     live = state.setdefault("agents", {})
     if agent_id in live:
@@ -1476,9 +1482,19 @@ def burrow_tick(send, state, conn_id):
         # second Lakeside tape and 6 of 6 in the first carry exactly ONE distinct
         # (x, y) across every one of their creates, which the wiki independently
         # predicts -- a submerged worm cannot move.
+        # NO DEFINITION RESEND, measured 2026-08-11 (10.8). The `burrow` probe removed
+        # our Hatcher and re-created it twice with no 0x0056/0x0057 -- once at the same
+        # id, once at a fresh one -- and both drew a correct collector. So a definition
+        # is per-INSTANCE, the declaration at map load covers every later create, and
+        # this matches what ArenaNet does: 1 declaration to 140 worm creates.
+        #
+        # The escape hatch stays. A content row may set `resend_definition = true` and
+        # get the old behaviour, because the failure mode is asymmetric -- resending
+        # costs 2 messages, and being wrong the other way is a client assert on
+        # Array.h's `index < m_count`, which takes the client down with no log line.
         create_agent_world(send, state, agent_id, entry, "emerging from burrow",
                            conn_id=conn_id,
-                           send_definition=entry.get("resend_definition", True))
+                           send_definition=entry.get("resend_definition", False))
 
 
 def send_attack_speed(send, agent_id, base, what):

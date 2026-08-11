@@ -371,12 +371,16 @@ def _drive_cycle():
     # re-create to have actually happened before comparing the counts.
     n_def = ops.count(authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES)
     n_new = ops.count(CREATE)
-    LEDGER.ok(n_new >= 1 and n_def == n_new,
-              "every re-create resends the NPC definition",
-              f"{n_def} definitions for {n_new} creates. ArenaNet sends ONE for 140 -- "
-              "so their client keeps a definition across a removal and ours has never "
-              "been asked. Resending is the side whose failure mode is not a client "
-              "assert; the `burrow` probe is what settles it.")
+    LEDGER.ok(n_new >= 1 and n_def == 0,
+              "and NO re-create resends the NPC definition",
+              f"{n_def} definitions for {n_new} creates. This check asserted the "
+              "OPPOSITE until 2026-08-11 and said so in its own message: resending was "
+              "the side whose failure mode is not a client assert, and the `burrow` "
+              "probe was what would settle it. It ran (studies/enemy/PLAN.md 10.8): our "
+              "Hatcher was removed and re-created twice with no 0x0056/0x0057 -- same "
+              "id, then a fresh id -- and both drew a correct collector. A definition is "
+              "per-INSTANCE. The FIRST create still declares; only re-creates skip it, "
+              "and this cycle starts from an already-declared agent.")
 
     # A dead agent does not burrow. If it did, remove_agent would pop the corpse out of
     # state['agents'] and revive_due -- which only ever walks that dict -- could never
