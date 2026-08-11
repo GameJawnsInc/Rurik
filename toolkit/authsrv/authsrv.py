@@ -3169,10 +3169,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # answers both with GAME_SMSG 0x00E3 (see the constants).
                         # Two arms would drift, and until 2026-08-11 this server
                         # had only the caster half -- so every physical attack
-                        # skill fell through to the silent-ignore path, where per
-                        # studies/divergence D9(b) a schema-unknown c2s opcode also
-                        # DISCARDS whatever shared its TCP read. That made it a
-                        # correctness bug and not just a missing feature.
+                        # skill fell through to the silent-ignore path and got
+                        # nothing back.
+                        #
+                        # That WAS written up as a correctness bug, citing
+                        # studies/divergence D9(b)'s buffer discard. Wrong, and
+                        # corrected 2026-08-11: 0x0027 is schema-KNOWN
+                        # (GAME_CMSG_0039 in schema/messages.json), and landing on
+                        # the silent-ignore path is what schema-known MEANS -- that
+                        # is D9(a), which ignores and leaves the buffer alone.
+                        # D9(b) covers opcodes the schema does not contain, and it
+                        # no longer discards anything either. So this was a missing
+                        # feature, which is reason enough to fix it.
                         #
                         # Confirm the cast by echoing the key the client is
                         # waiting on. If the echo is wrong the client says so in

@@ -359,14 +359,40 @@ game-channel messages (9.8%)**. Against live traffic shapes it would be worse �
 alone is 19.3% of live game c2s. `elif kind != "auth": pass` at 2369-2374 is unreachable
 dead code.
 
-**(b) A schema-unknown opcode discards the pending buffer.** The `Undecodable` path at
-2460-2468 is loud in the log and silent to the client, keeps the connection open, sends no
-error, and sets `pending = b""` — which measurably swallows already-decodable handled
-messages that arrived in the same TCP read.
+**(b) A schema-unknown opcode discards the pending buffer.** ✅ **FIXED 2026-08-11.** As
+written, the `Undecodable` path was loud in the log and silent to the client, kept the
+connection open, sent no error, and set `pending = b""` — which measurably swallowed
+already-decodable handled messages that arrived in the same TCP read.
 
-**Impact.** (b) is the one that will bite a tape-player run (§4): any live-shaped client
-sends message classes we have never seen, and one of them landing outside the schema takes
-out its neighbours too.
+**What replaced it:** an undecodable opcode now **ends the connection**, and the bytes stay
+in `remaining` untouched (`authsrv.py:1672-1678`, `3993-4015`). The reasoning recorded at the
+fix site is stronger than the original finding: with no length prefix nothing knows where the
+bad message ended, so clearing the buffer was not recovery — every later read was framed from
+a non-boundary while ARC4 kept decrypting correctly, so the bytes stayed *plausible* and the
+framer could accidentally frame garbage into well-formed messages the dispatch loop then acted
+on. OBSERVED at 25 events across 17 of 416 sessions, and the buffer-clear had been hiding a
+real framing bug: seven identical events carry head `01 92 80 70 …` in which `92 80` is a
+valid GAME_CMSG `0x0092` sitting one byte later — an off-by-one in a preceding message's
+length, turned into background noise for a day.
+
+> ⚠️ **The conflation trap this section opens by naming was then fallen into, in five places,
+> for a month.** Between 2026-08-10 and 2026-08-11, `PLAN.md`, `studies/cmsg/FINDINGS.md`,
+> `studies/smsg/FINDINGS.md` (×2) and a code comment in `authsrv.py` all wrote some form of
+> *"lands on our silent-ignore path, and per D9(b) a schema-unknown c2s opcode discards
+> whatever shared its TCP read, so it is a correctness bug."* **That sentence contradicts
+> itself.** Landing on the silent-ignore path *means* the opcode is schema-**known**, which is
+> (a); (b) applies only to opcodes the schema does not contain. The three opcodes actually
+> cited — `0x0009`, `0x0027`, `0x0046` — are **all present in `schema/messages.json`**
+> (`GAME_CMSG_0009`, `_0039`, `_0070`), so none of them ever took the (b) path and none ever
+> discarded a neighbour. Each was a **missing feature, not a correctness bug**. All five sites
+> are corrected as of 2026-08-11. Recorded here rather than silently fixed because the trap
+> was *predicted in this section's own opening line* and the prediction did not prevent it —
+> naming a hazard in the finding is not a control on the citations of that finding.
+
+**Impact.** With (b) fixed, the tape-player hazard it posed (§4) is closed: a schema-unknown
+opcode can no longer take out its neighbours, because it takes out the connection instead —
+loudly, and at a point the operator can act on. **(a) is still open**: 19 distinct GAME_CMSG
+opcodes, 9.8% of our corpus, are still silently ignored with no `else` on either chain.
 
 ---
 
@@ -614,8 +640,12 @@ works, which one experiment settles.**
    triple `0x8091 → 0x8088 → 0x8090` inside 0.6 s), so the tape can be gated on the
    client's `0x8090` rather than free-running — good. But if the tape includes the 81
    `0x000C` pings, the client will pong `0x8009` at 5 s intervals into our silent-ignore
-   path, and per D9(b) any *schema-unknown* c2s opcode will discard whatever decodable
-   messages shared its TCP read. Fix D9(b) before the run or accept a confusing failure.
+   path. ~~and per D9(b) any *schema-unknown* c2s opcode will discard whatever decodable
+   messages shared its TCP read. Fix D9(b) before the run or accept a confusing failure.~~
+   **CORRECTED 2026-08-11 — the D9(b) half was wrong twice over.** `0x0009` is
+   schema-**known** (`GAME_CMSG_0009`), so the pong takes the (a) path and never took (b);
+   and (b) itself is now fixed. The pong is silently ignored, which is untidy but harmless
+   to its neighbours, so **this is not a prerequisite for a tape run** and never was.
 5. **Session-embedded absolute time.** `0x0195 INSTANCE_LOAD_SPAWN_POINT` carries an
    8-byte Windows FILETIME from 2026-08-07 (e.g. `0x01DD269AED0B6C6B`). Replayed verbatim
    it is stale. Whether the client cares is UNVERIFIED.
@@ -656,8 +686,10 @@ our own world tick contaminating the channel.
    per the house rule:** the client reaches the Ascalon City load screen and draws agents;
    the failure prediction is an assert naming a player-identity field. **Change no
    identity field on the first run** — the point is to learn whether the client checks.
-   Prerequisite: fix D9(b)'s buffer discard so a stray c2s opcode cannot masquerade as a
-   tape failure.
+   ~~Prerequisite: fix D9(b)'s buffer discard so a stray c2s opcode cannot masquerade as a
+   tape failure.~~ **Prerequisite met 2026-08-11** — D9(b) is fixed (an undecodable opcode
+   now ends the connection rather than clearing the buffer), and the tape run has since been
+   done twice: `PLAN.md` §3.4 and §3.5.
 2. **`0x0021` agent removal — small.** One send site plus an agent-lifetime owner in the
    world state. Already verified against the client's own teardown handler. Highest-value
    protocol gap and the one that unblocks safe agent-id reuse.
