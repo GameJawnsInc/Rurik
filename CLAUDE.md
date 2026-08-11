@@ -144,6 +144,17 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   byte-for-byte even after something else took the freed blocks, and that the
   reservation refusal holds from both sides. Four defects, none of which could
   fail a checksum -- the archive verified perfectly through all of them),
+  `toolkit/mapdata/test_datplan.py` (where a new file may be PUT, against an
+  archive the test builds with two shadow containers in it: that placement is
+  best fit rather than the head of the largest run, that a run carrying a live
+  container generation is withheld whether the signature is at its head or 428
+  blocks in, and that the plan names what it withheld instead of dropping it. It
+  exists because "free" was measured as the gap between reservations, and by that
+  measure 88.5% of `Gw.dat`'s free space is live container generations the client
+  rotates through -- so the planner aimed every insert at a complete shadow MFT.
+  Its own fixture had to be relaid: the first version's runs ran largest-first
+  down the file, which is what the broken code produced, so the ordering check
+  passed against the defect),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
