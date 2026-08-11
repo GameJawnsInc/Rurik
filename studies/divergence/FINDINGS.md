@@ -691,3 +691,62 @@ our own world tick contaminating the channel.
     total. Every frequency in this document is provisional until a second session with a
     different shape exists. Same behavioural rule as R0b: human cadence, human hours, one
     client, secondary account.
+
+## D12 — the message mix, measured against ArenaNet's own, per NAMED opcode
+
+**OBSERVED, 2026-08-11.** `toolkit/authsrv/msgmix.py`. Until the naming pass this
+comparison could not be *read* — one GAME_SMSG opcode of 487 had a name, so a table
+of counts was a table of numbers. With 21 named it is a ranked list of what our
+server does not do. Both sides are real captures: ours is six loopback runs
+(4,978 s2c messages over 243 s, 47 opcodes), ArenaNet's is the two live sessions
+(21,543 messages over 684 s, 148 opcodes). Rates are per 100 s because the two
+differ by an order of magnitude in length.
+
+| opcode | name | ArenaNet /100s | ours /100s | |
+|---|---|---:|---:|---|
+| `0x001E` | WORLD_SIMULATION_TICK | 1012.6 | **1844.7** | **1.82x** |
+| `0x0029` | AGENT_MOVE_TO_POINT | 291.9 | 0.0 | never |
+| `0x009F` | *(unnamed)* | 178.5 | 7.4 | 0.04x |
+| `0x0020` | WORLD_CREATE_AGENT | 156.1 | 4.9 | 0.03x |
+| `0x00F0` | AGENT_INITIAL_STATUS | 139.0 | 0.0 | never |
+| `0x0021` | WORLD_REMOVE_AGENT | 118.7 | 0.0 | never |
+| `0x0025` | AGENT_MOVE_DIRECTION | 86.7 | 10.7 | 0.12x |
+| `0x00A6` | AGENT_SET_PROFESSION | 56.6 | 1.6 | 0.03x |
+| `0x0048` | AGENT_SET_TABARD_VISIBLE | 53.5 | 1.6 | 0.03x |
+| `0x006E` | AGENT_UPDATE_VISUAL_EQUIPMENT | 53.5 | 2.5 | 0.05x |
+| `0x002B` | AGENT_UPDATE_SPEED | 45.2 | 2.5 | 0.05x |
+| `0x0026` | AGENT_UPDATE_FLAGS | 29.8 | 1.2 | 0.04x |
+| `0x0059` | PLAYER_INFO | 20.5 | 2.5 | 0.12x |
+| `0x0056` | NPC_UPDATE_PROPERTIES | 18.4 | 2.5 | 0.13x |
+
+**The shape of the gap is one sentence: where we send a message at all, we send it
+at 3–13% of ArenaNet's rate.** That is not a tuning difference, it is a difference in
+kind. We send these things ONCE, at spawn, as declarations. ArenaNet sends them
+CONTINUOUSLY, as state changes. A server that declares an agent and then goes quiet
+is not a slower version of theirs; it is a different thing that happens to open the
+same way.
+
+**`0x001E` is the one we over-send, and it is the correction to an earlier claim.**
+The naming pass's synthesis said we "have never sent this correctly" and that we send
+a constant on a fixed sleep. Both halves were wrong: the payload is a measured delta
+(`authsrv.py`'s world-tick daemon), and the real divergence is **rate** — we tick at a
+fixed 20 Hz where ArenaNet averages 10.1/s, so we send 1.82x as many ticks each
+carrying a smaller delta. ArenaNet stamps one per world-update flush, which is why
+their deltas spread to 520 ms and ours cluster near 50.
+
+**Eight NAMED opcodes we never send at all**, ranked: `0x0029` (291.9/100s),
+`0x00F0` (139.0), `0x0021` (118.7), `0x00F1` (60.5), `0x00B1` (59.8), `0x000C`
+(19.9), `0x000D` (19.9), `0x002E` (16.2).
+
+**Read the zeroes carefully, and this is not a formality.** `0x0029` reads 0 because
+our clicks land outside the server's 1-second position-freshness window — the guard at
+`authsrv.py`'s click handler declines to steer from a position it no longer trusts, and
+its comment records the measurement behind that choice ("the client sends no position
+at all while click-moving"). So the 0 is a true statement about these runs and NOT a
+claim that the server cannot move anyone. `0x0021` reads 0 because nothing died in
+them. A zero here means "did not happen", and the reason has to be looked up before it
+means anything.
+
+**Ours is also a narrower corpus in a way no rate corrects for**: 47 opcodes against
+148. Two of ArenaNet's sessions used three maps, quests, combat and two kills; ours is
+one map with one standing NPC.

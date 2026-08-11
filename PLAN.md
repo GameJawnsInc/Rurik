@@ -1044,7 +1044,35 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-11 (`a177d3b`+, suite 38/38 ~1011 checks)
+### 8.0 Next, as of 2026-08-11 (`30919aa`+, suite 38/38 ~1026 checks)
+
+0g. 🔶 **THE FIVE NAMED MESSAGES ARE PARTLY LANDED, and the honest state matters.**
+    `0x0048`, `0x00A6` and `0x0026` are wired and confirmed going out on a real
+    loopback session with the client accepting them and no assert. `0x002B` is wired
+    to the MOVEMENT path -- 303 of 309 in the live corpus are immediately followed by
+    `0x0029`, median 574 messages from their agent's own create, so the spawn-time
+    placement it shipped with for one evening was wrong on ArenaNet's own evidence --
+    but it has NOT been seen to fire, because the harness's clicks land outside the
+    server's 1-second position-freshness guard. `0x002E` has a tested builder and NO
+    send site: nothing in our server yet knows what angle to turn an NPC to, and
+    inventing a caller to tick the box is the guess this repo keeps paying for.
+    **OPEN: the client asserts `!(m_flags & INTERNAL_FLAG_MOVEMENT_STALE)` at
+    AgAgent.cpp:1198 as the loading screen fades.** Three causes were proposed and all
+    three were refuted by experiment (`0x002B` for a tape-replay symptom, Windows sleep
+    granularity, then `0x0026` -- which reproduced with it disabled). No fourth cause is
+    claimed. The owner saw no crash after the `0x002B` move, which is one run and not
+    proof. **The harness now captures the crash dialog itself** (`crash-dialog.txt` in
+    the run directory), which is the only machine-readable evidence a client assert
+    leaves -- `Gw.log` does not record asserts, no dump file is written anywhere
+    findable, and a ConnectionResetError appears on clean teardowns too.
+
+0h. **The measured gap list, and it is the best next-actions source this project has
+    had.** `toolkit/authsrv/msgmix.py`, `studies/divergence/FINDINGS.md` D12. Where our
+    server sends a message at all it sends it at **3-13% of ArenaNet's rate**: we
+    declare once at spawn, they update continuously. Eight NAMED opcodes we never send,
+    ranked by their rate. And `0x001E` is the one we OVER-send at 1.82x, which corrects
+    the naming pass's claim that we "have never sent it correctly" -- the payload was
+    always a measured delta, the divergence is cadence.
 
 0f. ✅ **DONE 2026-08-11. A second live capture, on a different character.** This was
     the naming pass's own cheapest open test and it came back clean: every invariant in
