@@ -1937,3 +1937,67 @@ is right. It is a CHARACTER, its allegiance is ENEMY, its skip flag is clear, an
 the player flag that would empty the action list is clear. Four properties that
 every previous attempt at this problem was trying to arrange, now measured rather
 than assumed — and `agentprobe.py` measures them in thirty seconds.
+
+### 10.3 THE GATE IS OUR WEAPON, not our enemy — bit 25 of the equipped item
+
+**OBSERVED 2026-08-11.** Read from `GmCoreAction:997`'s classifier down to the leaf.
+§10 chased the target for three sections. The target was never the problem.
+
+**The chain, end to end.** `0x005149A0` (assert `GmCoreAction:997
+AvValidate(targetAgentId)`) classifies a candidate target and its caller at
+`0x004E22D5` **skips the target when it returns nonzero**. For the CHARACTER tag
+`0xDB` it checks the flags bit, then switches on allegiance through the table at
+`0x00514A60`. The table's dwords are `514A2A, 514A1C, 514A1C, 514A2A, ...`, so
+**allegiance 3 (ENEMY) lands on `0x00514A1C`**:
+
+```
+00514A1C  call 0x5147f0
+00514A21  test eax,eax
+00514A23  je  0x514a56      ; ZERO -> not an eligible target
+00514A25  xor eax,eax / ret ; NONZERO -> eligible
+```
+
+so for an enemy, eligibility is `0x005147F0` and nothing else. And that function
+never looks at the target:
+
+```
+005147F9  push 0 / lea eax,[ebp-4] / push eax
+005147FB  call 0x845890          ; equipment slot 0
+00514801  call 0x845470          ; -> esi, the ITEM
+0051480B  test esi,esi
+0051480D  je  0x514838           ; NO ITEM -> return 0
+0051480F  call 0x80d3e0          ; the player's own agent
+00514815  call 0x80cee0          ; a predicate on the player
+0051481F  jne 0x514838           ; -> return 0
+00514821  push esi
+00514822  call 0x8451e0          ; the ItCliApi item lookup
+0051482A  mov eax, [eax + 0xc]   ; the item record's +0xC
+0051482D  shr eax, 0x19
+00514830  and eax, 1             ; BIT 25
+00514833  ret
+```
+
+`0x00514838` is `xor eax,eax / ret`.
+
+**So whether the client will attack an enemy is decided by BIT 25 of the player's
+own equipped weapon record.** Three ways to fail it: no item in the slot, the
+player-side predicate at `0x0080CEE0`, or the bit being clear.
+
+**Why every previous attempt missed it.** They were all aimed at the target — the
+team token, `0x002F`, the hostile allegiance, §6e's colour experiments. The
+`ATTACK_AGENT` note does say "after testing the weapon (item and body)", and that
+is true: it tested whether a weapon EXISTS. It could not have tested this, because
+nothing had read the leaf. Our character carries the starter hammer and the client
+draws it, so the item exists; what is unmeasured is bit 25 of its record.
+
+**This also finally explains the `m_attackInterval` assert** recorded next to the
+`EQUIP_WEAPON` code: "the weapon it was drawing had no attack speed". A weapon
+record the client renders but does not consider a usable weapon is exactly the
+state both symptoms describe.
+
+**What is NOT established, and it is one step:** the value of bit 25 on our item,
+and what sets it. That is a read of the same kind §10.1 did — `agentprobe.py`
+already reaches the client's memory read-only, and the item is reachable through
+`0x845890(slot 0)` -> `0x845470` -> `0x8451e0`. Do that before changing anything:
+the whole point of this section is that four sessions were spent adjusting the
+wrong side of the interaction.
