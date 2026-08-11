@@ -17,7 +17,10 @@ nothing if we are casual about the ones that do grant a licence.
 **Used by:** `toolkit/mapdata/gwdat.py` (the `Gw.dat` huffman/LZ77 decompressor and its
 six constant tables, derived from `SourceFiles/xentax.cpp`) and
 `toolkit/mapdata/pathmap.py` (the FFNA pathing-chunk struct layout and field names,
-derived from `FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat`).
+derived from `FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat`) and
+`toolkit/mapdata/mapchunks.py` (the Dependencies record `{u16 id0, u16 id1, u16 pad}`
+and the pair→file-id formula `(id0 - 0xff00ff) + (id1 * 0xff00)`, from the same pattern
+file's `MapFileRef`/`MapFileRefPadded` and from `SourceFiles/animation_state.cpp`).
 
 **Credit, as clause 2 requires:** this software incorporates work by **Jonathan Bjørn
 Greve**, from **GuildWarsMapBrowser**, <https://github.com/Jonathan-Greve/GuildWarsMapBrowser>.

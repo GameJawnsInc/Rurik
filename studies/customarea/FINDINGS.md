@@ -2628,3 +2628,180 @@ flush            0x00479C90   (row 2 at 0x00479D34, row 3 at 0x00479DE2, self-cr
 BeginModification 0x0047B470  (file offset 0x1C bit 0; called on first write from 0x00479BB0)
 assert reporter  0x00488210   (167 instructions, zero rets, terminates)
 ```
+
+---
+
+## 19. Rung B1 — the terrain round-trip, and where the Bloated streams come from (2026-08-11)
+
+The first rung in this arc that produced code, and the first claim it could have failed.
+Three modules, three tests, two adversarial verifications, two digs. Everything offline:
+no client launched, no archive written, every open `'rb'`.
+
+### 19.1 B1 landed: 349 of 349
+
+`python toolkit/mapdata/test_terrain.py --all` decodes every retail terrain chunk in
+`vault/dat_study/Gw.dat` to typed values, **drops the original**, re-encodes, and gets the
+archive's bytes back. 58 checks, 440 s, and the count is the headline: **349 of 349
+byte-identical**, both tag sequences (325 nine-record, 24 ten-record), 59,051/59,051 tag-7
+blocks walked, 60,468,224/60,468,224 height samples finite and exact integers.
+
+**What it proves versus what it carries, because the difference is the whole point.** The
+verifier classified every byte of four real chunks rather than trusting the docstring:
+**1,824,846 of 3,535,277 B (51.6%) are reconstructed from typed values; 1,710,431 B
+(48.4%) are carried through.** Reconstructed: the 8-byte header, every `{u8 tag, u32 size}`
+record header with its size re-derived rather than stored, tag 0's seven fields, all
+heights, the tag 4/5 count bytes, tag 7's per-block `k`, tag 3'. Carried: tag 2 tiles,
+tag 3 bits, tag 9 shade, both table bodies, tag 7 payloads and tails. **A round-trip over
+carried bytes proves framing, not meaning**, and this document says so rather than
+rounding 349/349 up to "we understand the terrain chunk".
+
+`trnshadow.py` then moved the largest carried block out of that category — tag 7 now
+decodes and re-encodes from the bitmap alone, 59,051/59,051 — but **it is not yet wired
+into `terrain.py`**, so 48.4% is what today's 349/349 actually rests on. Wiring it in is
+the cheapest next improvement and drops the carried fraction toward ~20%.
+
+### 19.2 What the verifiers broke
+
+Both builds shipped a check that could not fail. That is two for two, in a pass whose
+brief named that defect explicitly — the failure mode is not rare and is not going away.
+
+**`mapchunks` — OVERSTATED, four major defects, all fixed.**
+
+1. **The headline cache check could not fail in the mode the test normally runs.** With a
+   warm cache three sections all read the cache and nothing re-ran `index_file`. Sabotage
+   — every chunk offset `+4` — produced `ALL CHECKS PASSED (64 checks)`, exit 0, including
+   `[PASS] the cached index equals a fresh ffna_chunks walk`. The same sabotage now
+   produces 3 FAILs.
+2. **The dependency-alias claim was checked per chunk, not per record**, excusing every
+   byte difference in any chunk holding one aliased pair — **84 of 2,252 chunks excused
+   wholesale.** The claim was true; the test did not establish it.
+3. **The rule asked the module under test whether the module was right.**
+   `is_canonical_pair` was defined through the same function that produced the re-encode,
+   so a consistent encoder error cancels. The test now states `canonical = a < 0xFF00`
+   itself.
+4. **The derivation-register gate was skipped** — the module took GWMB's Dependencies
+   record and pair-to-file-id formula, its own docstring said UPSTREAM, and there was no
+   §6.1 row and no `THIRD-PARTY-NOTICES.md` entry. **The `gwdat.py` shape exactly**, in
+   the same session that added a register row for terrain to avoid precisely this. Fixed
+   in both files.
+
+**`terrain` — SOUND, one major defect fixed.** The "349 of 349" rested on
+`ok == len(picks)` over a row filter **whose size nothing checked**. `CORPUS_MAPS = 349`
+was declared with a MEASURED comment and used by **zero** checks; a wrong `MAP_FLAGS`
+would have selected three rows and printed "3 of 3", green. That is `test_codec.py`'s
+glob-matching-nothing failure at one remove, in the rung built to be falsifiable. The
+population is now asserted and an empty sample cannot pass.
+
+Four independent sabotages (cell pitch, shadow-tail stride, angle recomputation, swapped
+tag-0 fields) all went red, and the orchestrator reproduced one: pitch 96.0 -> 95.0 gives
+4 failed checks, restore gives green.
+
+### 19.3 Corrections — the document was wrong here
+
+| § | Was | Now |
+|---|---|---|
+| §4, §17.4 | terrain angles "land exactly on that lattice" | **Within 1 ULP, not bit-exact.** `float32(b*90pi/45720)` reproduces 39/55 patterns and 286/349 maps; `float32(1.5707963705062866*b/254)` reproduces 53/55 and 347/349. **Consequence for an author: store the decoded float32 verbatim, never recompute from `b`.** |
+| §17.4 | "54 distinct" angle values | **55** — §4 already said 55; §17.4 was the wrong one |
+| §4 | "the last three tag-3' floats are byte-identical across different maps" | **Refuted.** 24 records, 22 distinct 4-tuples, 20 distinct last-three |
+| §4 | tag 3 all-zero in "~155 maps" | **168 of 349** |
+| §4 | "3,151 records" (recon) | **3,165** = 325x9 + 24x10 |
+| §3 | the dependency pair encoding, decode only | **It aliases and is not one-to-one.** The radix is `0xFF00`, so `id0 >= 0xFF00` names the same file as `(id0-0xFF00, id1+1)` — and **ArenaNet's own writer uses both forms: 85 entries in 84 of 2,252 chunks across 76 maps.** A byte-preserving writer must encode from the stored triples, not from ids. No upstream records this. |
+
+### 19.4 Dig A — the Bloated streams are generated locally, on the download path
+
+**Settled from the write path, not from comparing archives** — and the archive comparison
+is reported as the near-null it was. `FcArchive`'s download-commit `0x007D75E0` is the only
+caller of the `DnBloat` dispatcher; for `ffna` type 3 the map handler receives a **NULL**
+output array, so FcArchive writes the downloaded bytes **verbatim into stream 0** while the
+same handler runs the stage converter with `mapStage = 2` and writes stream 1.
+
+The falsification test passed: **the stage converter has exactly one caller image-wide on
+both builds and is never invoked with stage 1 — nothing in the client can produce a
+Stripped stream.** Archive checks it was asked to refute: stream 1 carries stage-2 chunk
+ids 8,047/8,047 over 349/349; stream 0 carries stage-1 ids 8,047/8,047 over 349/349; head
+row index < partner row index 348/349 across all seven copies, and the one exception is
+itself evidence — map `0x46547`, a Bloated row re-created with its Stripped partner
+unmoved, the corpus's only Bloated-only rewrite, and the source of §18.6's 1,368,064 B gap.
+
+**The null kept:** cross-archive comparison was nearly powerless. All seven vault copies
+are one install lineage, 349/349 map pairs are byte-identical across all 21 pairings but
+one, and only 307 of 170,695 file ids changed across a three-month build gap — **zero
+maps**. On archive comparison alone this dig reports NOT FOUND.
+
+**What this changes, and the caveat that limits it.** Because the client compiles Bloated
+itself, an authoring tool needs to emit only a **Stripped** map: Sight (9-byte stub to
+29.9 MB) and Path (19+8n boundary polygon to 156 MB of trapezoid mesh) never need to be
+authored. That is the largest practical result of the session. **But we do not control
+downloads**, so the only trigger we can reach is still the failed-load re-bloat — rung E3,
+which needs an archive write and a launch. And it stays **UNVERIFIED** whether re-bloating
+a Stripped stream today reproduces bytes stored by a build we did not download under; that
+is D1's criterion, and until it is measured, "the client generates it" does not yet mean
+"the client will generate ours."
+
+### 19.5 Dig B — three terrain records solved, two refused
+
+- **tag 7 = a shadow bitmap. SOLVED.** 272x272 one-bit samples per 32x32 tile (8 per cell,
+  one-cell skirt), RLE **per row, each row restarting at 0**, `0xFF` = "+254 and continue"
+  (SOURCE-CODE, `0x00761210`, assert `TrnCodecShadow:245 run`). The 128-byte tail is 1024
+  bits MSB-first, set if and only if all 100 samples of the **10x10** window are set.
+  **59,051/59,051 blocks re-encode byte-identically; 60,468,224/60,468,224 tail bits
+  reproduced.** Controls fail as required — 8x8 misses 1,562,798 bits, 12x12 misses
+  611,928. A set bit means IN SHADOW, checked against tag 9 (186.0 vs 236.6 mean shade)
+  rather than assumed. **NOT established: what casts the shadow.** A terrain-only raycast
+  predicts the flag only weakly (41.9% against a 33.6% base rate), consistent with props
+  baked in, but INFERRED.
+- **tag 9 = a baked directional lightmap. SOLVED.** `255*max(0, N.L)` from the tag-1
+  heightfield gives **median Pearson r = 0.887 over 345 maps**; the best-fit elevation
+  tracks tag 0 `+0x0C` with Spearman **0.9352**, and +x-with-zero-y is the argmax on
+  **343 of 345** — matching the client's own `TrnTexIntensity:342 lightDir.y == 0`.
+  **So tag 0's angle is the sun elevation.** The transfer curve is *not* settled (348/349
+  saturate at 255), so `terrain.py` stores bytes and invents no formula.
+- **tag 4 = `tileTypes` (`TrnTex:218`), shape solved, meaning NOT FOUND.** `n <= 63` is
+  `MAP_TILE_MAX_COUNT`, SOURCE-CODE. It is **not a permutation — it is a staircase**:
+  `A[0] == 0`, every step 0 or +1, **349/349**, and `max(A) < len(terrain deps)` 349/349.
+- **tag 5 = a property of the texture, its 7 bits NOT FOUND.** Slot `i` pairs with the
+  map's `i`-th Terrain Dependencies file and the value is a function of that file on
+  **17,083 of 17,089 slot uses across 1,648 files**, against a shuffle null of about
+  6,180. Bit 0 is set 17,089/17,089 and bit 7 in 0 — which is why the client's `& 0x7F` is
+  unexercised.
+- **tag 3 — layout tightened, meaning NOT FOUND, four hypotheses killed and recorded.**
+  The de-tiler at `0x0074AC50` copies 32 iterations of 8 bytes striding `dx/4`, so a byte
+  covers four consecutive **x** cells of one row — **"one byte per 2x2 block" is refuted
+  from the client's own code.** All-zero on 168/349; where present, a median 0.10% of bytes
+  are non-zero and the three values are near-uniform (840/805/816), i.e. a random 3-way
+  choice rather than a flag. It does **not** mark steep ground (0.9635 vs 0.9627), is not a
+  tile-type property, not the map edge, does not follow height, and does **not** track the
+  tag-7 shadow (lift 1.20 / 0.78 / 0.59, inconsistent in sign). Whatever selects it is not
+  in this chunk.
+- **A new cross-chunk law.** The 24 ten-record maps are **exactly** the 24 whose terrain
+  dependency list is one longer than `n` (24/24 both ways), and the extra file is the
+  **first** entry — realigning slot `i` to dependency `i+1` there makes tag 5's texture
+  function exact, **880/880**.
+
+### 19.6 Open questions closed
+
+- **§17.7, "what is `Bloating mismatch %#x type %u` comparing?"** — after a successful
+  bloat, if `newData.Bytes() != 0` it requires `newData.Bytes() >= inputLen` and
+  `memcmp(newData.Data(), input, inputLen) == 0`. Bloat is a **verbatim extension** of its
+  input for ATEX/ATTX and types 4-5. **It never runs for maps** — the map handler gets a
+  NULL output array.
+- **§18.12, "what does `alloc.stream 0xFF` mean?"** — `0x007D9FE7` passes literal `0xFF`
+  as the stream argument to both `ArchiveFilePrepare` and `ArchiveWriteFile`, confirming
+  arg0 is the stream index.
+- **§18.6's 1,368,064 B gap** behind row 169666 — the abandoned Bloated extent of map
+  `0x46547`.
+
+### 19.7 What is next
+
+Cheap and offline: wire `trnshadow` into `terrain.py` so tag 7 stops being carried; then
+B2 (the whole-file round-trip) and B3 (the Blender importer), which are now unblocked and
+whose hardest conventions §17.4 already settled.
+
+Everything past that needs the two gates this arc has deliberately not crossed — **an
+archive write and a client launch**. Rung C2 remains specified in §18.11 with its
+pre-flight and post-flight; E3 is the one that would prove the client compiles a navmesh
+we did not author.
+
+**Reproduce.** `python toolkit/mapdata/test_terrain.py --all` (440 s), plus
+`test_mapchunks.py` and `test_trnshadow.py`. Full suite at the time of this section:
+**40 of 40 green**, the list derived from `CLAUDE.md` rather than hand-maintained.

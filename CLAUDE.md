@@ -157,6 +157,37 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   passed against the defect),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
+  `toolkit/mapdata/test_trnshadow.py` (terrain tag 7 decoded rather than carried:
+  that every retail shadow block's run coding closes on 272 rows of 272 samples and
+  re-encodes to ArenaNet's own bytes from the bitmap alone, that the 10x10 window
+  rule reproduces the stored 128-byte tail while the 8x8 and 12x12 controls do not,
+  and that a set bit means IN SHADOW -- checked against tag 9's lightmap, not
+  assumed. Sections 2-4 need `vault/dat_study/Gw.dat`; without it the run scores 14
+  against a floor of 24 and goes red, because the synthetic half cannot refute
+  anything about ArenaNet's format),
+  `toolkit/mapdata/test_mapchunks.py` (the map container: that a map is two MFT rows
+  and the archive says so -- 349 heads, 349 partners resolved through
+  `alloc.nextStream`, all distinct, chain depth exactly 1, and ZERO partners named
+  by the file-id table, none of which our decoder can force; that every chunk id in
+  every map decomposes into a stage, a chunkType and one of `s_chunkInfo`'s 23
+  slots, and never one of the four whose load pointer is NULL and which the client
+  would jump through; that a Dependencies chunk re-encodes to ArenaNet's own bytes,
+  which is how the pair encoding was found to ALIAS -- `id0 >= 0xFF00` names the
+  same file as `(id0 - 0xFF00, id1 + 1)`, retail uses both forms, and no upstream
+  says so; and that the vault-side chunk-index cache is DROPPED rather than trusted
+  when its stamp disagrees. Sections 1-4 need no vault at all),
+  `toolkit/mapdata/test_terrain.py` (the terrain codec, decode and encode: a retail
+  terrain chunk decoded to typed values and re-encoded BYTE-IDENTICALLY — 349 of 349
+  maps and both tag sequences under `--all`, 27 in a default run. The headline is
+  only worth its exit code because of
+  what sits around it -- the record framing is re-derived by a second walker that
+  imports nothing from the module under test, the record lengths are predicted by
+  two u32s read out of a different record, the cell pitch is cross-checked against
+  the Map Parameters chunk (rect/dims is exactly 96.0 and nothing else, with the
+  (dim-1) divisor as the control that must not be), and thirteen negative controls
+  must go red, including one flipped height byte in a real chunk. It also builds a
+  32x32 map out of nothing, which needs no vault. Slow-ish: 25 maps is ~55 s,
+  `--all` is ~7 minutes),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
   and that an unframeable opcode stops the framer instead of being framed past),
