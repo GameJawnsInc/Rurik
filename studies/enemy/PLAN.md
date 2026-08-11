@@ -2421,3 +2421,60 @@ which existed, was tested, and was written precisely for this — was called onl
 `proc.poll() is not None` branch. The crash text sat on screen for the rest of the run and
 the report said green. `hold_open` now checks on both exits. Same shape as every other
 defect in this file: the check was right and the caller never reached it.
+
+## 11. Something swings back — R4a's other half, met
+
+**OBSERVED 2026-08-11.** Capture `authsrv-20260811T160502-c1.jsonl`, frames
+`frames-20260811T160449`, one 65 s loopback run with no operator input at all.
+
+```
+30 x attack_started            agent 10 -> the player
+30 x damage 10 to the player   0x00A3 property 16, -0.10
+30 x melee_attack_finished
+ 3 x KILL the player           0x00F1 bit 4 on PLAYER_AGENT_ID
+ 2 x revive the player         t=15.36 kill, 25.39 revive, 37.66, 47.67, 59.97
+```
+
+Ten swings to a death at the Hatcher's own 1.33 s axe speed, and the revive
+exactly 10.0 s behind each kill. The frames show the player face-down with both
+orbs at zero, then standing at 80 health with a floating red `-10` over their
+head as the next swing lands.
+
+**The mechanism was already proven, by an accident.** `hit_enemy` carries a
+comment about an early version that put the ENEMY in slot 1 of
+`GV_ATTACK_STARTED`: the client animated the enemy and then asserted on
+`m_attackInterval`, which is how slot 1 was identified as the swinger and why the
+attacker must have a non-zero declared attack speed. `hit_player` is that mistake
+made on purpose. Nothing new about the wire had to be discovered to build this —
+the three-message swing, the damage fraction and the death bit were all already
+known, and what was missing was a sweep that pointed them the other way and a
+server that remembered the player's health.
+
+**Two things this run settles that were open.**
+
+**The client accepts `EFFECT_DEAD` on its OWN agent.** This was the one part shipped
+UNVERIFIED: no player death was found in either live capture, so the death message
+is our agent path aimed at `PLAYER_AGENT_ID` rather than a replication of
+ArenaNet's. It works, and it produces the real death pose and zeroed pools rather
+than an agent-shaped approximation of one.
+
+**Property 16 drives the player's bar and the floating damage number.** Same
+opcode, same property, same fraction semantics as against an agent, with the
+target and cause slots swapped.
+
+### What this is NOT, said plainly
+
+- **There is no AI.** The Hatcher stands exactly where it spawned and swings at
+  anything inside 1200 units. It does not chase, it does not leash, it does not
+  stop when the player walks away except by falling out of range. `AGGRO_RANGE`
+  and `ENEMY_HIT_FRACTION` are ours; nothing measured them.
+- **The revive is a timer**, not a resurrection shrine, not a party wipe, and not
+  whatever retail actually does. `player_revive_due`'s docstring says so at the
+  call site.
+- **Energy is not restored.** The client's death path zeroes BOTH pools and the
+  revive only refills health — the post-revive frame shows the energy orb at 0
+  and it stays there. Re-asserting a maximum is documented not to refill
+  (`revive_due`), so the fix is not simply another `PROP_ENERGY_MAX`, and the
+  energy equivalent of property 34's setter is not known. **Open.**
+- **One player, one enemy, one instance.** Nothing here has been tried with two
+  hostiles or with an agent that moves.

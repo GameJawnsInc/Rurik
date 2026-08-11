@@ -941,6 +941,12 @@ ENEMY_DEFINITION = _ENEMY["definition"]
 # comment promising this hatch shipped before the wire did, so the documented
 # mitigation for a silent client assert was unreachable.
 ENEMY_RESEND_DEFINITION = bool(_ENEMY.get("resend_definition", False))
+# Whether this spawn fights back. Default TRUE -- the point of the rung -- but a
+# row may turn it off, and it is read here rather than assumed so that a probe
+# session can put a passive body in the world without editing code. Same wiring
+# rule as above: `entry` is a closed literal, so a key reaches it only by being
+# named here and in spawn_enemy.
+ENEMY_ATTACKS_BACK = bool(_ENEMY.get("attacks_back", True))
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
 ENEMY_OFFSET = (_ENEMY["offset_x"], _ENEMY["offset_y"])
 # A PLACEHOLDER, and it has to be non-zero rather than right. WIKI (GWW,
@@ -1092,6 +1098,28 @@ REVIVE_AFTER = 8.0         # seconds face-down before it gets back up
 ATTACK_INTERVAL = WEAPON_ATTACK_SPEED
 ATTACK_RANGE = 1500.0      # units. Ours entirely; nothing measured it.
 
+# THE OTHER HALF OF R4a: something swings back. Until 2026-08-11 every combat
+# message this server sent flowed one way -- the player hit things and nothing
+# could hit the player, which is the half PLAN.md 3's R4a row has named as missing
+# since 2026-08-06 ("an ettin swings at you and you die").
+#
+# THE MECHANISM IS ALREADY PROVEN, and by an accident rather than by a design. Read
+# hit_enemy's comment on GV_ATTACK_STARTED: an early version put the ENEMY in slot
+# 1, and the client animated the enemy and then asserted on m_attackInterval -- it
+# could only assert on an agent whose attack speed was zero. So slot 1 is the
+# swinger, and a non-player agent in it swings, PROVIDED it has been given an
+# attack speed. Our Hatcher has one (0x0035, ENEMY_ATTACK_SPEED). This code is that
+# accident aimed on purpose.
+#
+# WHAT IS OURS RATHER THAN MEASURED: both numbers below, and the proximity rule.
+# Real Guild Wars aggro is a leash with a pull radius and a give-up distance, and
+# an NPC walks to its target; ours stands still and swings when the player is
+# close enough. Nothing here is a claim about retail.
+AGGRO_RANGE = 1200.0       # units. Ours. Inside ATTACK_RANGE so a fight is mutual.
+ENEMY_HIT_FRACTION = 0.10  # of the PLAYER's maximum, so ~10 swings to drop them
+PLAYER_REVIVE_AFTER = 10.0 # seconds face-down. Longer than an agent's 8.0 on
+                           # purpose: this one interrupts a person.
+
 
 def begin_attack(send, state, target_id, conn_id):
     """A click on a hostile agent starts an attack that the tick keeps up.
@@ -1117,6 +1145,10 @@ def begin_attack(send, state, target_id, conn_id):
 
 def attack_tick(send, state, conn_id):
     """Keep swinging at whatever the player last clicked."""
+    if state.get("player_dead"):
+        # A dead player does not keep hitting things. Cheap, but it is the
+        # difference between a death and a pause in the animation.
+        return
     target_id = state.get("attacking")
     if not target_id:
         return
@@ -1255,6 +1287,149 @@ def revive_due(send, state, conn_id):
              f"refill bar on agent {agent_id}")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)
+
+
+def player_pools(state):
+    """The player's live health, lazily. Nothing tracked it before this rung.
+
+    The client was told PLAYER_HEALTH once at spawn and the server then forgot the
+    number, which was fine while nothing could damage the player and is exactly the
+    gap that made "you cannot die" a property of the code rather than a decision.
+    """
+    state.setdefault("player_health", float(agents.PLAYER_HEALTH))
+    state.setdefault("player_dead", False)
+    state.setdefault("player_died_at", 0.0)
+    return state
+
+
+def enemy_attack_tick(send, state, conn_id):
+    """Hostile agents swing at the player. The other half of R4a.
+
+    A SNAPSHOT, for the reason revive_due takes one: this runs on the world-tick
+    daemon thread and burrow_tick can remove an agent in the same tick. Walking the
+    live dict raises "dictionary changed size during iteration" INSIDE the tick,
+    which stops the world for the rest of the session with a traceback nowhere near
+    the cause.
+    """
+    player_pools(state)
+    if state["player_dead"]:
+        # Nothing swings at a corpse. Without this the player is re-killed every
+        # interval while face-down and the revive never gets a clean window.
+        return
+    px, py = state.get("pos", (0.0, 0.0))
+    now = time.time()
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}):
+            continue
+        if agent["dead"] or not agent.get("attacks_back"):
+            continue
+        if agent.get("allegiance") != agents.ALLEGIANCE_HOSTILE:
+            continue
+        # A body mid-burrow is half in the world and must not swing out of it. The
+        # hidden ones are not in state["agents"] at all, so this covers only the
+        # 2.00 s transitions either side.
+        if agent.get("effects", 0) & agents.EFFECT_TRANSITION:
+            continue
+        ax, ay = agent["pos"]
+        if math.hypot(ax - px, ay - py) > AGGRO_RANGE:
+            agent["swinging"] = False
+            continue
+        # Its OWN weapon speed, not the player's. The client was told this agent's
+        # attack speed at spawn (0x0035) and animates to it; swinging faster than we
+        # declared is how the animation and the damage numbers come apart.
+        # `or` rather than a default, and the zero case is the point: an agent
+        # whose declared attack speed is 0 is exactly what took the client down on
+        # m_attackInterval (hit_enemy's comment). Falling back to a real interval
+        # keeps a mis-declared agent from swinging every tick forever.
+        interval = agent.get("attack_speed") or ENEMY_ATTACK_SPEED
+        if not agent.get("swinging"):
+            agent["swinging"] = True
+            # Swing on arrival rather than after a full interval -- the same call
+            # begin_attack makes for the player. A fight that opens with a second
+            # and a half of nothing reads as a fight that did not start.
+            agent["last_swing"] = 0.0
+            print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) attacks the "
+                  f"player", flush=True)
+        if now - agent.get("last_swing", 0.0) < interval:
+            continue
+        agent["last_swing"] = now
+        hit_player(send, state, agent_id, agent, conn_id)
+
+
+def hit_player(send, state, agent_id, agent, conn_id):
+    """One agent's swing landing on the player.
+
+    hit_enemy's three messages with the roles reversed, and the reversal is the
+    whole content: slot 1 of GV_ATTACK_STARTED is the AGENT SWINGING (measured --
+    see hit_enemy, where an early version put the enemy there by mistake and the
+    client obligingly animated the enemy), and 0x00A3's first slot after the
+    property is the agent being DAMAGED. Same shape, opposite occupants.
+    """
+    # Its own lazy init rather than the caller's. enemy_attack_tick already calls
+    # player_pools, but this runs on the world-tick daemon thread and a KeyError
+    # here would stop the world for the rest of the session with a traceback
+    # nowhere near the cause -- the exact failure the tick's own comments are
+    # about. A function that can be called is a function that will be.
+    player_pools(state)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+         [agents.GV_ATTACK_STARTED, agent_id, PLAYER_AGENT_ID, 0],
+         f"attack_started: agent {agent_id} swings at the player")
+
+    dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
+    state["player_health"] = max(0.0, state["player_health"] - dealt)
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id,
+          _fraction(-ENEMY_HIT_FRACTION, agents.PROP_DAMAGE, "an enemy swing")],
+         f"damage {dealt:.0f} to the player")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
+         "melee_attack_finished")
+    print(f"[c{conn_id}] player hit by {agent_id}: "
+          f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
+
+    if state["player_health"] <= 0.0:
+        # PROPERTY 16 CANNOT DO THIS PART. It floors at 1 and cannot kill
+        # (agents.PROP_DAMAGE), which is a fact about the client rather than a
+        # choice of ours -- so damage drives the bar down to a sliver and the last
+        # step has to be the effects bit, exactly as it is for an agent. Our own
+        # bookkeeping decides; the fractions only make the bar agree with it.
+        state["player_dead"], state["player_died_at"] = True, time.time()
+        state["attacking"] = None      # a corpse stops swinging back
+        send(GAME_SMSG_AGENT_UPDATE_STATUS,
+             [PLAYER_AGENT_ID, agents.EFFECT_DEAD], "KILL the player")
+        print(f"[c{conn_id}] THE PLAYER IS DEAD -- back up in "
+              f"{PLAYER_REVIVE_AFTER:.0f}s", flush=True)
+
+
+def player_revive_due(send, state, conn_id):
+    """Stand the player back up, on the same two operations an agent needs.
+
+    UNVERIFIED, and shipped that way on purpose: no PLAYER death was found in
+    either live capture, so this is our agent-death path pointed at
+    PLAYER_AGENT_ID rather than a replication of ArenaNet's. What retail does on
+    death -- a defeated overlay, a party wipe, a walk back from a resurrection
+    shrine -- is not modelled here at all. Getting back up on a timer is the least
+    wrong thing that keeps a session usable, and it is a placeholder.
+    """
+    player_pools(state)
+    if not state["player_dead"]:
+        return
+    if time.time() - state["player_died_at"] < PLAYER_REVIVE_AFTER:
+        return
+    state["player_dead"] = False
+    state["player_health"] = float(agents.PLAYER_HEALTH)
+    send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
+         "restore the player's maximum")
+    # Property 34 SETS the pool to fraction x maximum (studies/agentprops 1e), so
+    # 1.0 is a full bar and not a doubled one. The client's own death path zeroes
+    # the pools, so clearing the bit alone returns a body at nothing.
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
+          _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
+         "refill the player's bar")
+    print(f"[c{conn_id}] the player is back up", flush=True)
 
 
 def frame_pending(codec_obj, channel, pending, mask):
@@ -1637,6 +1812,7 @@ def spawn_enemy(send, state, origin, conn_id):
         "attack_speed": ENEMY_ATTACK_SPEED,
         "effects": 0,
         "resend_definition": ENEMY_RESEND_DEFINITION,
+        "attacks_back": ENEMY_ATTACKS_BACK,
     }
     if ENEMY_BURROWS:
         entry.update({
@@ -2489,6 +2665,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     try:
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
+                        # Both halves of the fight, and the order matters. The
+                        # player's revive runs BEFORE the enemies swing, so a
+                        # player whose timer expired this tick stands up and can
+                        # be hit again in the same tick rather than getting one
+                        # free interval; and enemy_attack_tick reads
+                        # state["player_dead"], which player_revive_due is the
+                        # only thing that clears.
+                        player_revive_due(send, state, conn_id)
+                        enemy_attack_tick(send, state, conn_id)
                         # The third sweep, and the first that mutates state["agents"]
                         # on a schedule rather than only when the player acts. Last,
                         # so a body that died this tick is seen dead by burrow_tick
