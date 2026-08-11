@@ -1575,7 +1575,8 @@ def face_player(send, state, agent_id, agent, conn_id, force=False):
     # derivation available: test_rotate.py scores the client's own 0x0040 sends
     # against atan2 of a 0x003D DIRECTION vector and beats a null model. Sending
     # it turned the agent to face AWAY -- OBSERVED 2026-08-11 by the owner watching
-    # the screen, which is the only instrument that can see this.
+    # the screen, which is the only instrument that can see this. CONFIRMED the
+    # same day, same way: with the offset applied the agent faces the player.
     #
     # So the client's 0x002E facing is NOT the same convention as the heading it
     # reports in 0x003D, and WHY is not established: it could be the zero
@@ -1855,6 +1856,13 @@ def player_revive_due(send, state, conn_id):
         return
     if time.time() - state["player_died_at"] < PLAYER_REVIVE_AFTER:
         return
+    # NOTHING RESETS THE AGENTS' `facing_told` HERE, and that is deliberate rather
+    # than forgotten. The stale value is still the correct one: a dead player
+    # cannot move and nothing chases or turns toward a corpse, so the geometry at
+    # revive is the geometry at death. OBSERVED 2026-08-11 (owner): the agent still
+    # faces the player after a revive. The day a dead player CAN be moved -- a
+    # resurrection-shrine walk is exactly that -- this stops being true and the
+    # reset has to go in.
     state["player_dead"] = False
     state["player_health"] = float(agents.PLAYER_HEALTH)
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
