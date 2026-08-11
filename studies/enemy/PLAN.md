@@ -2404,10 +2404,13 @@ that makes "full" mean anything.
 §1d.** Both properties are FRACTIONS and the difference is only who multiplies: `0x00818210`
 switches on the property id, sends **16** to an arm that `fmul`s by the max, and sends **34**
 to an arm that passes the value through RAW into `0x009215F0` — the CharPool method whose
-line 84 is the assert. So `1.0` is a full pool for a reason rather than by luck. What is
-still contested is the *old* note: "-50.0 measured as -50 health" cannot be read off an arm
-that applies no scaling, and one probe settles it — send `-0.5` at a 100-max agent and see
-whether 50 comes off.
+line 84 is the assert. So `1.0` is a full pool for a reason rather than by luck. **And the probe ran the same
+day (§1e): property 34 is a SETTER** — it sets the pool to `fraction × maximum`. The orb
+went 100 → 90 on property 16 at -0.10, then to the floor of **1** on property 34 at -0.50,
+where a delta predicts 40. So `1.0` on the revive sets the bar full rather than adding to
+it, which is why it works from a pool the death path zeroed, and `max_health` was the wrong
+*kind* of number rather than merely too large a one. Both the old §1b reading and §1d's own
+headline were wrong, and so was the prediction the probe stated before running.
 
 ### The instrument defect this turned up, and it is ours
 

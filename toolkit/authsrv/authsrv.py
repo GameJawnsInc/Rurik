@@ -1227,15 +1227,18 @@ def revive_due(send, state, conn_id):
         # after the first kill this server ever drove to a revive (see `_fraction`,
         # which now refuses the whole class). 1.0 is a full pool.
         #
-        # SETTLED 2026-08-11 from the client's own dispatcher, and 1.0 is right for
-        # a reason rather than by luck. 0x00818210 switches on the property id and
-        # sends 34 to arm 2 (0x0081828D), which passes our value through with NO
-        # multiply into 0x009215F0 -- the CharPool method that asserts
-        # `fraction <= 1.0f`. Property 16 goes to arm 0 (0x0081823C), which DOES
-        # fmul by the max first. Both are fractions; the client scales 16 for us and
-        # does not scale 34. So 1.0 here is a full pool, and the refill was OBSERVED:
-        # the post-revive frame shows a full bar against a mid-fight frame showing a
-        # drained one. studies/agentprops/FINDINGS.md 1d.
+        # PROPERTY 34 IS A SETTER: it sets the pool to `fraction x maximum`. So 1.0
+        # here does not ADD a full bar, it SETS the bar full, which is exactly what
+        # a revive wants and is why this works from a pool the death path zeroed.
+        # OBSERVED 2026-08-11 twice over -- the post-revive frame shows a full bar
+        # against a mid-fight frame showing a drained one, and the `pool_fraction`
+        # probe pinned the semantics directly (studies/agentprops/FINDINGS.md 1e:
+        # the orb went 100 -> 90 on property 16 at -0.10, then to the floor of 1 on
+        # property 34 at -0.50, where a delta predicts 40).
+        #
+        # It is also why the client asserts `fraction <= 1.0f`: a setter cannot
+        # exceed the maximum, so `max_health` here was never merely too large, it
+        # was the wrong KIND of number.
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
              [agents.GV_HEALTH, agent_id, agent_id,
               _fraction(1.0, agents.GV_HEALTH, "refill to a full pool")],
