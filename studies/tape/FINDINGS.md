@@ -586,3 +586,49 @@ flag, and only then dials the stashed address -- i.e. it looks like a
 is up. If that reading is right the deferral is waiting on a connection the client is not
 making, and the next thing to read is what drives `0x00851380` at all, since it has no
 direct callers.
+
+
+### T15 — The deferral is released by network event 0x1E, and our close raises 0x1F. OBSERVED.
+
+`0x00851380` has no callers because it is a **switch case**. The function starts at
+`0x00851340`, takes an event struct in `[ebp+0xc]`, and dispatches on the event **type**
+at `[esi]`:
+
+```
+mov   esi, [ebp+0xc]
+mov   eax, [esi]          ; event type
+add   eax, -0x1d          ; table is based at 0x1D
+cmp   eax, 0xbb
+ja    0x851696            ; default: do nothing
+movzx eax, byte ptr [eax + 0x8516c4]
+jmp   dword ptr [eax*4 + 0x8516a8]
+```
+
+The index map at `0x8516c4` is `[0,1,2,6,6,6,...]`, so **exactly three** event types are
+handled and everything else falls to the default:
+
+| event | case | what it does |
+|---|---|---|
+| **`0x1D`** | `0x0085155f` | `and [edi+0x190], 0xfffffdfb`; if reason `0` -> **dials** at `0x008515b7` |
+| **`0x1E`** | `0x00851373` | **`and [edi+0x190], 0xffffffdd` — clears bit `0x20`** — then the `0x851380` body: on reason `0` marks connected, dispatches `0x10000112`, consumes pending `0x10` and **dials** at `0x00851446` |
+| **`0x1F`** | `0x00851480` | dispatches `0x10000110`, tears the instance down, clears `PLAYER_FLAG_CONNECTED`, and on reason `>= 3` returns. **Never dials.** |
+
+That is the whole mechanism, and it explains every run:
+
+* The **first** transfer never needs an event: bit `0x20` is clear, so the `0x01A5`
+  handler dials inline.
+* Every **later** transfer stashes and waits for `0x1E` (or `0x1D`), which is also the only
+  thing that clears bit `0x20` and would let a *third* transfer work.
+* A peer that simply goes away produces `0x1F` -- teardown, no dial. Which is what our
+  close produces however politely we do it, and why three shutdown fixes changed nothing.
+
+**Where `0x1D`/`0x1E`/`0x1F` come from is the remaining unknown**, and it is now a small
+one: they are raised by the client's own connection layer, not by any message. The
+question is what distinguishes them -- most likely who initiated the close and whether the
+client was expecting it. Worth noting we may not be able to produce `0x1E` from the server
+side at all, in which case chaining beyond one hop needs a different lever than a tape.
+
+**Correction to a step on the way here:** `0x006f4254` looked like a reference installing
+this handler and is not -- it is `push 0x8513`, an immediate whose bytes matched the
+pointer scan. A byte-pattern search over `.text` finds instruction operands as readily as
+data, and this one wasted a query.
