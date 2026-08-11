@@ -188,6 +188,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   must go red, including one flipped height byte in a real chunk. It also builds a
   32x32 map out of nothing, which needs no vault. Slow-ish: 25 maps is ~55 s,
   `--all` is ~7 minutes),
+  `toolkit/mapdata/test_mapfile.py` (the WHOLE-FILE codec: a retail `ffna` map
+  payload decoded to a typed container and re-encoded byte-identically — **349 of
+  349 Bloated and 349 of 349 Stripped** under `--all`, 6 of each by default. The
+  count is only worth its exit code because the chunk table's `size` is RE-DERIVED
+  from the encoded payload and never stored: a codec that replayed a stored size
+  round-trips every file it can walk, including the seventeen chunk kinds this one
+  carries opaquely, and would print 698 of 698 while being a memcpy. So the control
+  that matters mutates a decoded chunk IN PLACE until its payload changes length and
+  requires the emitted size field to move with it — mutating in place is the whole
+  design, because the first version replaced the chunk object and a sabotaged
+  stored-size encoder passed it 22 checks to 0. Both stored-size shapes go red now,
+  as do a dict-keyed encoder that loses file order and a tolerant chunk walk. The
+  Stripped stage is measured, not assumed: its terrain chunk `0x10000002` is a
+  different encoding and must come back CARRIED. Sections 1-2 build a whole map file
+  out of nothing and need no vault; the run reports the reconstructed/carried byte
+  split, which is 34.92% / 65.07% and is the honest half of the result.
+  `--all` is ~13 minutes),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
   and that an unframeable opcode stops the framer instead of being framed past),

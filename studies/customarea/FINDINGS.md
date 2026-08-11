@@ -2851,3 +2851,70 @@ which the run coder emits as 272 rows of `0xFF 0x12` — **`k == 544`, and 544 i
 the corpus minimum.** An all-clear tile is what a flat unshadowed grid should have, and
 retail's smallest block agrees with it to the byte. That caveat is gone; `blank()` is
 still not a loadable *map*, but its terrain chunk is no longer the reason.
+
+### 19.9 Rung B2 — the whole-file codec, and the number it makes impossible to hide (2026-08-11)
+
+`toolkit/mapdata/mapfile.py` decodes a decompressed `ffna` map payload into a typed
+container — magic, type byte, and an ordered list of chunks — and re-encodes it.
+
+**349 of 349 Bloated and 349 of 349 Stripped, byte-identical.** 8,047 chunks per stage,
+964,291,436 bytes, 0 refusals, 0 misdispatched chunks. Bloated 604 s, Stripped 149 s.
+This is the first time anything in the toolkit has **emitted** an FFNA container;
+`archive.ffna_chunks` only ever walked one.
+
+**The count is worth its exit code only because of what sits under it.** A whole-file
+round-trip is the most fakeable check in this arc: a codec that stores each chunk's `size`
+and writes it back round-trips every file it can walk — including all seventeen kinds it
+carries opaquely — and would print 698 of 698 while being a memcpy with extra steps.
+
+Three things make it real:
+
+- **`Chunk` has no size attribute and `MapFile` has no size list.** Verified structurally
+  by the orchestrator: the slots are `chunk_id, form, note, value` and `magic, ffna_type,
+  chunks`. There is nothing to replay. `encode()` produces the payload first and writes
+  `len(payload)` second.
+- **The control mutates a decoded chunk IN PLACE** until its payload changes length, and
+  requires the emitted size field to move with it. Reproduced independently against
+  ArenaNet's own bytes on row 46196: shortening chunk 1 by four bytes moved its table entry
+  41 → 37, the file shrank by exactly 4, and the table still closed to the byte.
+- **The builder found a defect in its own control**, which is the instructive part. The
+  first version *replaced* `mf.chunks[idx]` with a freshly built `Chunk` — so a sabotaged
+  encoder that stamps a stored size at decode time carried no stale size into the
+  replacement and **passed the entire section, 22 checks to 0**. Mutating the object the
+  decoder built is the whole design. Four sabotages now go red: a per-`Chunk` stored size
+  (3 red), a per-`MapFile` stored size list (3 red), a dict-keyed encoder that loses file
+  order (6 red), and a tolerant chunk walk (2 red).
+
+**The byte census, which the test prints and asserts rather than leaving to a docstring:**
+
+| | Bloated (723,597,618 B) | Stripped (240,693,818 B) |
+|---|---|---|
+| container framing | 66,121 B (0.01%) | 66,121 B (0.03%) |
+| Terrain, reconstructed | 335,105,844 B (46.31%) | 0 |
+| Terrain, carried inside `terrain.py` | 136,087,682 B (18.81%) | 0 |
+| Dependencies | 817,000 B (0.11%) | 817,000 B (0.34%) |
+| other chunks, carried | 251,520,971 B (34.76%) | 239,810,697 B (99.63%) |
+
+**Corpus-wide: 34.92% reconstructed, 65.07% carried.** The test asserts that sentence as a
+check — *"MOST OF THE CORPUS BY WEIGHT IS CARRIED, and this says so"* — because a 698-of-698
+headline with no such line beside it would read as far more understanding than we have.
+
+**The Stripped stream is 99.63% bytes this module does not read**, and that is the honest
+reading of its 349/349: it establishes the container framing and nothing about content.
+Stripped terrain is bit-packed through `TrnCodecHeight` and is still undecoded; the pathing
+chunk is 156 MB corpus-wide and `pathmap.py` has no encoder, so both are carried.
+
+**Two totals land that our decoder cannot force**, which is the kind of corroboration this
+arc keeps looking for. Terrain's 335,105,844 + 136,087,682 = 471.2 MB is exactly §3's
+Bloated Terrain figure, measured in a different pass by a different walker. And the
+Dependencies total is exactly `134,290 × 6 + 2,252 × 5 = 817,000` — §3's reference and
+chunk counts, arrived at from the other side.
+
+**The Stripped carry is a decision, not a fall-through**, and is checked as one: the
+Stripped terrain chunk `0x10000002` comes back carried in 349/349, **0 of 349 Bloated files
+carry it**, and `Terrain.from_chunk` refuses that id outright. Dependencies are encoded from
+the stored `(id0, id1, pad)` triples, so the 85 aliased entries across 76 maps survive —
+encoding from file ids would have silently rewritten them into canonical form.
+
+Sections 1–2 (25 checks) build a whole map file from nothing and need no vault; a
+vault-less run correctly fails on the floor rather than going green.
