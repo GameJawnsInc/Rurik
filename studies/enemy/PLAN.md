@@ -1883,3 +1883,57 @@ Candidates not yet read, in the order they gate:
 `agentprobe.py` makes each of these a read rather than a run, which is the loop
 that just worked: three hypotheses eliminated in one 30-second measurement where
 each would previously have cost a session.
+
+### 10.2 The remaining gates, read — and a caveat about the whole section
+
+**OBSERVED 2026-08-11.** Both bail-out gates in `0x005144F0` are now read.
+
+**`0x0084DF60` — the player-flags gate.** Four instructions:
+
+```
+0084DF60  call 0x47f660            ; the thread-local game context
+0084DF65  mov eax, [eax + 0x44]
+0084DF68  mov eax, [eax + 0x2a8]   ; the PLAYER FLAGS dword
+0084DF6E  shr eax, 4 / and eax, 1  ; returns bit 0x10
+```
+
+and the call site drops the action list **whole** when it returns nonzero. `+0x2A8`
+is the same `context->playerFlags` the transfer work already named (bit 2 is
+`PLAYER_FLAG_CONNECTED`, `MsCliGame.cpp:76`).
+
+**Bit `0x10` is set in exactly two places and cleared in NONE.** Compare bit 2,
+which has one setter (`0x008513A7`) and two clearers (`0x00850CA7`, `0x00851534`).
+Both setters have the same shape and both are gated on a message field:
+
+```
+cmp dword ptr [msg + 0x18], 0
+je  <skip>
+or  dword ptr [ctx + 0x2a8], 0x10
+```
+
+`0x0084EE83` sits inside the handler for **`GAME_SMSG 0x0195`
+INSTANCE_LOAD_SPAWN_POINT** (handler `0x0084ED00`), which our server DOES send. So
+this was a live candidate for shooting ourselves in the foot. **It is not:** our
+`0x0195` carries `[file_id, vec2, 0, 0, 0, 8 zero bytes]` — every trailing scalar
+is zero, so the `je` is taken and the bit stays clear. Set-once-never-cleared is
+worth keeping in view for the day we do put something there.
+
+**`0x007E1460`** is a three-line wrapper: look the agent up in the plain
+`0x00802140` array, return 0 if absent, else tail-jump to `0x005FCAE0`. Our agent
+IS in that array — §10.1 read its object through it — so this gate is passed.
+
+### The caveat, and it applies to all of §10
+
+**`0x005144F0` may not be on the send path at all.** Its own asserts call it an
+`actionsList` with a `displayOrder`, which reads like the UI's available-actions
+menu rather than the code that decides to transmit `0x0026`. The genuine send site
+is the six-arm `action` switch at `GmCoreAction:933`/`:997`, guarded by
+`AvValidate(targetAgentId)`. Everything in §10 and §10.1 is correctly read and may
+still be beside the point, and saying so is cheaper than someone else re-reading it
+to find that out.
+
+**What is established regardless, and it is the durable part:** our agent's state
+is right. It is a CHARACTER, its allegiance is ENEMY, its skip flag is clear, and
+the player flag that would empty the action list is clear. Four properties that
+every previous attempt at this problem was trying to arrange, now measured rather
+than assumed — and `agentprobe.py` measures them in thirty seconds.
