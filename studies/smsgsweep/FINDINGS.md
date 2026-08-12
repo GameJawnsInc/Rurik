@@ -134,6 +134,39 @@ table* does not imply *dangerous* — the family splits 4 to 6, and the earlier 
 that all ten were channel-killers was wrong. `0x000B`, which ended the pilot, is the odd
 one out of an otherwise benign low block.
 
+## 2d. 174 of 477 handlers are a shim over ONE event bus
+
+Found by following `0x0166`'s handler and noticing it was three instructions. Swept over
+the whole receive table: **174 of 477 handlers do nothing but push a `0x1000xxxx` id and
+call `0x00633d70`.** Event ids run `0x10000006`..`0x10000169`, 149 distinct, 15 shared by
+more than one opcode. The map is at `vault/probes/smsgsweep-eventids.json`.
+
+    0x0017 -> 0x100000BE     0x0033 -> 0x10000028
+    0x0166 -> 0x10000100     0x0167 -> 0x10000101
+
+Those four were disassembled by hand first and the sweep reproduces all four exactly,
+which is the only reason to believe the other 170.
+
+So a third of the GAME_SMSG table is not "message handling" at all — it is a **thin
+adapter posting a UI event**, and the real behaviour lives in whatever consumes the id.
+Adjacent opcodes post adjacent ids (`0x0166`/`0x0167`), so the id space is itself ordered.
+
+**AND THE OBVIOUS PREDICTION IS WRONG, which is why it is worth writing down.** A shim
+that posts an event with an empty payload ought to be more likely to do nothing visible.
+It is not:
+
+| | shim (138 measured) | not a shim (196) |
+|---|---|---|
+| SILENT | 73.9% | 69.9% |
+| ASSERTED | 23.9% | 25.0% |
+
+Essentially identical. Being a shim predicts nothing about what the wire does — the guard
+that asserts lives *below* the dispatcher, in the consumer, and fires just as often.
+
+A weaker observation, recorded as weak: all three REPLIED opcodes are shims (3 of 138
+against 0 of 196), and no shim ever faulted or ended a session. With three replies in
+total that is a lean, not a result, and it needs the other 153 opcodes to test.
+
 ## 3. The replies
 
 ### 3.1 `0x0166` and `0x0167` → c2s `0x0079` — the first clean binding
