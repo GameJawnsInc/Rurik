@@ -4,7 +4,7 @@
 
 ---
 
-**The result.** Monster AI as a *mechanism* — the decision function, its inputs, its internal state, its tick — cannot be recovered from the client binary, cannot be recovered from the wire, and cannot be recovered by any capture campaign of any length, because it is never shipped and never transmitted. That is a firm negative and it holds up: zero of 937 embedded source paths in the shipped client lie under any `\Srv\` directory, from a detector proven able to catch 6 of 6 planted ones, and 33 AI-adjacent keyword searches across two structurally independent routes (the compiled-assert corpus and a raw-string scan of every section including `.rsrc`) return zero. What *can* be recovered is the observable **envelope** — what a monster does, when, at what range, at what speed, per creature model — and a surprising amount of it was already sitting in the vault, mis-measured. The single largest finding of this dive is negative and self-inflicted: `SWING_WINDUP = 0.899` was adopted as a fixed constant on n=6 swings from one agent, and the second live capture, already in the vault when that constant was written, refutes it (n=42 across four attackers at two declared speeds, two non-overlapping clusters 86 ms apart). The second largest is that **twelve of fourteen combat constants in `authsrv.py` can be changed to a wrong value and all 125 checks in the suite stay green** — so the honest comment at each call site is currently the only thing standing between an invented number and a claim. Confidence: high on the binary negative, high on the per-model spread of reach and windup, **low to nil on aggro range, leash and skill-selection policy**, none of which this corpus can answer.
+**The result.** Monster AI as a *mechanism* — the decision function, its inputs, its internal state, its tick — cannot be recovered from the client binary, cannot be recovered from the wire, and cannot be recovered by any capture campaign of any length, because it is never shipped and never transmitted. That is a firm negative and it holds up: zero of 937 embedded source paths in the shipped client lie under any `\Srv\` directory, from a detector proven able to catch 6 of 6 planted ones, and 33 AI-adjacent keyword searches across two structurally independent routes (the compiled-assert corpus and a raw-string scan of every section including `.rsrc`) return zero. What *can* be recovered is the observable **envelope** — what a monster does, when, at what range, at what speed, per creature model — and a surprising amount of it was already sitting in the vault, mis-measured. The single largest finding of this dive is negative and self-inflicted: `SWING_WINDUP = 0.899` was adopted as a fixed constant on n=6 swings from one agent, and the second live capture, already in the vault when that constant was written, refutes it (n=42 across four attackers at two declared speeds, two non-overlapping clusters 86 ms apart). The second largest is that **twelve of fourteen combat constants in `authsrv.py` can be changed to a wrong value and all 125 checks in the suite stay green** — so the honest comment at each call site is currently the only thing standing between an invented number and a claim. Confidence: high on the binary negative, high on the per-model spread of reach and windup, **low to nil on aggro range, leash and skill-selection policy**, none of which this corpus can answer. **UPDATE 2026-08-11, after the study's own cheapest follow-up ran: the binary negative is now TOTAL.** `CHAR_AI_MODES` — the one named server-shaped AI concept anywhere in the shipped image, and the one lead §2.2 explicitly declined to call refuted — reads **3**, and its three modes resolve through the client's own text system to **Fight / Guard / Avoid Combat**. It is the player's hero-and-pet stance widget. Nothing about monster decision-making survives in the client. §2.2.1.
 
 **Notation.** Captures are named by timestamp stamp only: **capture A** = `20260807T143055`, **capture B** = `20260810T235916`. Connections are `A/2`, `B/4` etc. — capture stamp plus connection index in chain order. No ports, accounts, characters or session ids appear here or should appear in anything derived from this. Agent ids are per-connection wire ids and are not identifying.
 
@@ -47,7 +47,13 @@ The srctree zero is worth more than the others because its detector is proven ab
 
 Two scope corrections that were missed and matter. "No `Srv` translation unit" is **not** "no server code in the image": `srctree.py`'s own output ends with *"shared trees: no Cli/Srv split, so the server built these too — Base 79, Engine 297, Net 18, Gw\Const 37"*, i.e. **431 shipped files the server also compiled**. Among them is an eleven-file `Engine\Map\Path` subsystem — `PathFind`, `PathFlood`, `PathObstacle`, `PathDir`, `PathBsp`, `PathBuild`, `PathApi`, `PathData` and more. Six of those were read in full for this dive: their asserts are trapezoids, portals, barriers, `SINK_NODE`/`X_NODE`, edge tables, `blockMap`/`mapDims`. **Pure geometry, zero AI vocabulary.** One positive fell out that nobody had: `PathObstacle:176` asserts `radius >= 0` — the shipped pathing library models **dynamic obstacles with a radius**, which is the mechanism behind the wiki's body-blocking and melee-surround behaviour, and `toolkit/mapdata/pathmap.py` has no dynamic obstacle at all.
 
-### 2.2 The one crack: `CHAR_AI_MODES`
+### 2.2 The one crack: `CHAR_AI_MODES` — **CLOSED 2026-08-11, as UI**
+
+**READ THE RESOLUTION IN §2.2.1 FIRST.** What follows is the lead as this study first
+reported it, kept because the *reasoning* about it was sound and the outcome was not
+foregone. The immediate has now been read. It is 3, the three modes are **Fight**,
+**Guard** and **Avoid Combat**, and the rival this section declined to refute is the
+one that survived.
 
 **Label: SOURCE-CODE. n:** 9 `AI_MODE` assert sites + 10 `aiMode` sites, run against the pinned build.
 
@@ -66,6 +72,112 @@ Two scope corrections that were missed and matter. "No `Srv` translation unit" i
 None of the 19 original keywords would have caught any of this; it surfaced from a one-letter change (`aggro` → `aggress`). **That is the shape of every confident zero in this section.**
 
 **The rival is not refuted and I am not claiming it is:** `CHAR_AI_MODES` may be a pure UI enum for the compass Guard/Fight/Avoid-Combat stance. **Refuted if** its cardinality — readable as the immediate operand of the comparison at `0x0080dfae` — is exactly 3 and matches the three stances. That immediate has not been read. **It is the single cheapest open question in this whole study: one capstone pass, no capture, no client launch.**
+
+### 2.2.1 The read, 2026-08-11 — and it closes
+
+**The prediction was stated before the disassembler ran and it is confirmed on every
+axis: `CHAR_AI_MODES = 3`, and the three modes are `Fight`, `Guard`, `Avoid Combat`.**
+This is the player's own hero/pet/henchman stance control. It is not a monster-AI
+concept, and with it the binary negative of §2.1 becomes **total**: there is now no
+named server-shaped AI concept anywhere in the shipped image.
+
+**Label: SOURCE-CODE. n:** 9 bound sites + 2 switch statements + 1 string triple, all
+on the pinned build (38797).
+
+**The bound, five times.** Every `CHAR_AI_MODES` comparison in the image reads 3:
+
+```
+0x0080DFA3  cmp dword ptr [ebp + 0xc], 3   ChCliApi:4331          mode < CHAR_AI_MODES
+0x004FBA6A  cmp edi, 3                     GmAgentCommander:328   aiMode < CHAR_AI_MODES
+0x0050D806  cmp ecx, 3                     GmPetCommander:161     petAiMode != CHAR_AI_MODES
+0x0050D94E  cmp eax, 3                     GmPetCommander:254     m_aiMode < CHAR_AI_MODES
+0x0050E0CA  cmp edi, 3                     GmPetCommander:368     petAiMode != CHAR_AI_MODES
+```
+
+The three `AI_MODE_ICONS` sites read 3 as well, and the AGGRESSIVE site reads 0:
+
+```
+0x0050D833  cmp edx, 3                     GmPetCommander:166     m_aiMode < AI_MODE_ICONS
+0x0050E590  cmp eax, 3                     GmPetCommander:515     m_aiMode < AI_MODE_ICONS
+0x0050E744  cmp dword ptr [edi + 0x20], 3  GmPetCommander:515     m_aiMode < AI_MODE_ICONS
+0x0050DB16  cmp dword ptr [edi + 0x20], 0  GmPetCommander:127     m_aiMode == CHAR_AI_MODE_AGGRESSIVE
+```
+
+**And the read validates itself, which is why it is worth more than a pattern match.**
+An MSVC assert compiles to `cmp` / `j<cc>` / `push <LINE>` / `mov edx,<expr>` /
+`mov ecx,<file>` / `call`. So the instruction stream carries the **source line number**
+as an immediate, and it must equal the line `asserts.py` reports for that address from
+an entirely different mechanism. **All nine sites agree** — `push 0x10eb` = 4331 at
+`ChCliApi:4331`, and so on down. A window that had landed on a lookalike site would
+have produced a mismatched line and been thrown out.
+
+**Two independent switches, three arms each.** `GmAgentCommander:150` and `GmView:6743`
+are both `No valid case for switch variable` defaults, and both switches compile to a
+`sub`/`je` chain rather than a jump table — so the arm count is readable directly and
+owes nothing to any `cmp`:
+
+```
+GmAgentCommander @ 0x004FCA00          GmView @ 0x004E4B33
+  mov eax, [edi + 8]                     mov eax, [edi + 0xc]
+  sub eax, 0 ; je -> case 0              sub eax, 0 ; je -> case 0
+  sub eax, 1 ; je -> case 1              sub eax, 1 ; je -> case 1
+  sub eax, 1 ; je -> case 2              sub eax, 1 ; je -> case 2
+  push 0x96   (= 150)  -> default        push 0x1a57 (= 6743) -> default
+```
+
+**And the switch names them.** `GmAgentCommander`'s three arms are a mode → string-id
+map to three consecutive ids, resolved through the client's own text system by
+`toolkit/clientscan/textrec.py`:
+
+| mode | id | `textrec.py` | file:record |
+|---|---|---|---|
+| 0 | 44156 (`0xAC7C`) | **Fight** | 43:124 |
+| 1 | 44157 (`0xAC7D`) | **Guard** | 43:125 |
+| 2 | 44158 (`0xAC7E`) | **Avoid Combat** | 43:126 |
+
+`CHAR_AI_MODE_AGGRESSIVE` reads **0** (`cmp dword ptr [edi + 0x20], 0` at
+`GmPetCommander:127`), i.e. the mode labelled *Fight* — internally consistent, and a
+fact nobody arranged. `m_aiMode` lives at struct offset **+0x20**, agreed by two sites.
+
+**`AI_MODE_ICONS` is also 3.** A second symbol, a parallel array, sized to the mode
+count. An icon per stance is a UI structure and nothing else — this is corroboration
+*for* the surviving rival rather than merely consistency with it.
+
+**What this does and does not say.** It says the client's only AI-mode concept is the
+three-button stance widget the player sets on their own party. It says nothing about
+whether ArenaNet's *server* has a richer notion — it cannot, because §2.1 is exactly
+the finding that the server's code is not here. The `HeroActivate (hero %d, agent %d,
+inventoryId %d, aiMode %d)` format string still shows an aiMode crossing a wire-shaped
+boundary; it now reads as the client *telling the server which stance the player
+picked*, which is the direction that was always more likely and is now the only one
+left standing.
+
+**No test was added, and the reason is proportionality rather than laziness.** Every
+address above is build-specific — `pinned.py` exists because addresses are not part of
+any file format and must not be carried between builds — and nothing in this repo
+depends on this finding; it closed a lead rather than opening a code path. A check here
+would go red on ArenaNet's next update for a reason unrelated to anything of ours, which
+is the failure mode that trains people to ignore red runs. The reproduction is the four
+commands in §2.2.2, and the string ids are the stable part if it ever needs re-running.
+
+### 2.2.2 Reproducing it
+
+```bash
+python toolkit/clientscan/asserts.py --grep "(?i)ai.?mode|AI_MODE"
+python toolkit/clientscan/codescan.py --dis 0x0080dfa0 --count 8
+python toolkit/clientscan/codescan.py --dis 0x004fca00 --count 12
+python toolkit/clientscan/textrec.py 0xAC7C 0xAC7D 0xAC7E
+```
+
+A methodological note worth keeping, because it is the same shape as three other
+defects in this study. The scratch reader that swept all nine bound sites first took
+the **first** backward alignment that landed on the assert address, and reported
+`<none in window>` for `ChCliApi:4331` — the one site whose listing had already been
+read by hand and demonstrably has a `cmp` 11 bytes up. A shallow start decodes a few
+bytes of garbage that happen to land on the target and carries no `cmp`. Taking the
+**deepest** consistent alignment fixed all four false negatives at once. A confident
+zero from a reader that knew one alignment of many: §6 has three more of those, and
+this one was caught only because a hand-read listing contradicted it.
 
 ### 2.3 What else the binary was asked and answered
 
@@ -464,7 +576,7 @@ Scripted keystrokes or clicks against ArenaNet in any form, including a "gentle"
 
 ### 7.9 Four desk follow-ups that need no capture at all
 
-1. **Read the immediate at `0x0080dfae`** — the cardinality of `CHAR_AI_MODES`. One capstone pass. If it is 3 and matches the compass stances, the only named server-side AI concept in the shipped image closes as UI.
+1. ~~**Read the immediate at `0x0080dfae`** — the cardinality of `CHAR_AI_MODES`.~~ **DONE 2026-08-11, and it closed as UI.** 3, across five bound sites; two independent three-arm switches; `AI_MODE_ICONS` also 3; `CHAR_AI_MODE_AGGRESSIVE` = 0; and the modes resolve to **Fight / Guard / Avoid Combat**. Every step could have refuted the prediction and none did. §2.2.1.
 2. **Read the remaining `Engine\Map\Path` modules** — could move movement policy out of the impossible tier.
 3. **Histogram Props-chunk model ids for one map** — closes the last of Gw.dat's 23 slots.
 4. **Run `msghandler.py` on opcode `0x0056`** — settles what the definition `flags` bits mean, from the client's own use.
@@ -529,7 +641,7 @@ Play the R1.5 tape of ArenaNet's own recorded monster behaviour into our client 
 
 | # | Question | Cost | What settles it |
 |---|---|---|---|
-| 1 | Is `CHAR_AI_MODES` a UI enum or a server-side AI concept? | **One capstone read.** No capture, no client launch. | The immediate at `0x0080dfae`. If it is 3 and matches Guard/Fight/Avoid-Combat, the lead closes. |
+| 1 | ~~Is `CHAR_AI_MODES` a UI enum or a server-side AI concept?~~ **ANSWERED 2026-08-11: UI.** | *was:* one capstone read | 3 at five sites, two three-arm switches, `AI_MODE_ICONS` = 3, `AGGRESSIVE` = 0, and the labels are **Fight / Guard / Avoid Combat**. The lead closed and the binary negative is total. §2.2.1. |
 | 2 | What do the definition `flags` bits mean? | **One `msghandler.py` run** on opcode `0x0056`. | The client's own use of the field. The `0x100`/`0x200` partition is 585/585 but nothing has read the consumer. |
 | 3 | Does `Engine\Map\Path` contain steering or pursuit? | **Reading five more modules' asserts.** | Six of eleven are read and are pure geometry; `PathObstacle`'s `radius >= 0` says dynamic obstacles are modelled. |
 | 4 | Do monster spawn placements live in the Props chunk? | **One prop model-id histogram** for one map, off code `mapexport` already has. | Whether any id lands in the `0x20000000` creature-class range. Closes Gw.dat's last unmeasured slot. |
