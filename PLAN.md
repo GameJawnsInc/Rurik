@@ -1100,12 +1100,43 @@ run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cms
        direct caller — it is installed as a callback — so `--xrefs` demonstrably
        under-reports inside this very result, and "every reader" means every reader
        that method can reach.
-    3. **Read the remaining five `Engine\Map\Path` modules' asserts.** Six of eleven
-       are read and are pure geometry — but `PathObstacle:176` asserts `radius >= 0`,
-       so the shipped pathing library models **dynamic obstacles with a radius**,
-       which is the mechanism under body-blocking and the melee surround, and
-       `toolkit/mapdata/pathmap.py` has none. A steering or pursuit routine in the
-       remaining five would move movement policy out of the "cannot be settled" tier.
+    3. ✅ **DONE 2026-08-11 — IT IS A SPATIAL QUERY LIBRARY, NO STEERING.**
+       All 88 asserts across the subsystem read. The vocabulary is exhaustively
+       geometric — trapezoids and their above/below links, portals, barriers,
+       SINK_NODE/X_NODE/Y_NODE, segments, flood fill, blockMap/mapDims,
+       tileMap/tileDims — and there is no follow, arrival, desired-velocity or
+       repath concept anywhere. It answers WHERE CAN I GO and never WHERE SHOULD
+       I GO, so **movement policy stays in the "cannot be settled" tier.** This
+       one mattered because `Engine\Map\Path` is in the SHARED tree, so
+       ArenaNet's server compiled these same files — it was the one place
+       server-side movement logic could have been visible.
+       **Three corrections to the study's own accounting**: the directory is NINE
+       files, not eleven; `PathBsp.cpp` carries zero asserts and was listed as
+       though read; and a separate `Engine\Map\PathEngine\` (`PeApi`,
+       `PeObject`) exists that nobody mentioned and that also has zero asserts.
+       **Three files remain unread because no tool here can see them.**
+       **A new search axis closed the negative's own named hole.** The study ran
+       33 keyword searches over assert TEXT and never over the 936 embedded
+       source FILE NAMES. Scanned: no name contains steer, pursu, chase, follow,
+       seek, flee, wander, patrol, roam, brain, behav, tactic, decis, aggro,
+       threat, navig, flock, herd, goal or waypoint. Three names did hit and
+       their DIRECTORIES dispose of all three — and one is
+       `Gw\Ui\Game\Compass\CompassAIControl.cpp`, the "AI Control" file the
+       study flagged as structurally unsearchable. Its path answers it,
+       corroborating task 1's Fight/Guard/Avoid-Combat result from an angle that
+       shares no evidence with it. (`AtAvoid.cpp` is `Ui\Game\AgentText` —
+       floating-label overlap avoidance; `GmWalk.cpp` asserts
+       `evt.code < KEYSTATES`, the player's own walk keys.)
+       **Kept**: `PathApi:753/754 obstacleCenter`/`obstacleRadius` is a second
+       and STRONGER dynamic-obstacle witness than `PathObstacle:176` — a public
+       API parameter rather than an internal invariant, so the shipped interface
+       accepts moving circular obstacles, and `pathmap.py` has none.
+       `MsPathPack:115 !m_charIndex.Count()` is a path pack keyed by CHARACTER
+       and is unread. `PathData:34` bounds world y to ±131071.0 (2^17−1).
+       **And a reading of mine was refuted by our own decoder**: I took
+       `PathBuild:2297 def->trapezoidCount < 1024` for a per-plane cap, and 40 of
+       1,805 planes across 60 retail maps exceed it, the largest 6,577. `def` is
+       a build-time input. `studies/monsterai/FINDINGS.md` §2.1.1.
     4. **Histogram Props-chunk model ids for one map**, off code `mapexport` already
        has. Closes the last unmeasured slot of `Gw.dat`'s 23 — no chunk in any of 349
        maps carries spawn or patrol data, but Props is carried opaquely and is where
