@@ -80,8 +80,20 @@ strongest structural hint in the table: a family of four attribute messages.
 
 ## 2b. The constraint census — 86 crash rows, and it maps the catalogue
 
-Grouped by the constraint each opcode's guard enforces. **Our words; ArenaNet's assert
-text stays in the vault.** The clustering is the finding: these are not scattered.
+Grouped by the constraint each opcode's guard enforces, **in our words**. The clustering
+is the finding: these are not scattered.
+
+*Why paraphrased, corrected 2026-08-12 — and not for the reason first written here.* This
+table originally said the assert text "stays in the vault" as though citing it were
+refused. It is not: `PLAN.md` §7 Q3 was refined the same day to rule that **a single
+assert cited as evidence is a MEASUREMENT**, that the refusal targets bulk dumps and
+decompiled bodies, and that the crash dialog — text the retail client shows any player
+who crashes — is not extraction at all. What actually governs 86 rows is the
+ACCUMULATION tripwire `toolkit/test_provlint.py` enforces: 10 citations for a new
+document, 200 tree-wide against 136 used. Eighty-six is the bulk the rule still means,
+so the paraphrase stands — by that limit, not by a prohibition that does not exist. The
+raw text is in `vault/captures/harness/*/crash-dialog.txt`, and citing a few of these
+individually as evidence is permitted if a later argument needs them.
 
 | n | what must exist / hold | opcodes |
 |---|---|---|
