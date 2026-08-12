@@ -2056,14 +2056,23 @@ parallel, with one safety change that is not optional — see its entry.
     `rebloat.py --verify` prints, and is worth remembering about §35 and §36 too.
     **(e8)** ⬜ Nothing in FINDINGS 34 is covered by a test, and none of it is in the
     suite. (FINDINGS 37 is: `test_strippedterrain.py`.)
-    **(e9)** ⬜ **THE WALL THAT NOW BOUNDS AUTHORING, and it is not the compiler.**
-    `datwrite --replace` writes UNCOMPRESSED and refuses to relocate, so an authored
-    stream only fits where it is smaller than its row's existing reservation. Map 143's
-    own 64x64 file is 12,495 B uncompressed against a 4,608-byte reservation — which
-    killed this experiment's first design (recorded in its `PREDICTION.md`) and forced
-    it onto a 32x32 map. Either a compressor for the archive's format, or a relocation
-    verb built on `datplan.py`. **Until one exists, authoring is confined to maps that
-    shrink**, and nothing about the client is in the way.
+    **(e9)** 🟡 **HALF DONE 2026-08-12 — the relocation verb exists and no client has
+    read a row it moved.** The wall was never the compiler: `datwrite --replace` writes
+    UNCOMPRESSED and refuses to relocate, so an authored stream only fits where it is
+    smaller than its row's existing reservation. Map 143's own 64x64 file is 12,495 B
+    against a 4,608-byte reservation, which killed FINDINGS 38's first design and forced
+    it onto a 32x32 map. `toolkit/mapdata/datmove.py` is the relocation half:
+    placement from `datplan.classify_runs` (never `free_runs` — 89.6% of the gap
+    measure is live container generations), best fit, old reservation zeroed after the
+    MFT is repointed, overlapping destinations refused. **46 checks, five sabotages all
+    red, no vault** — but every claim is about the archive's own rules, and **whether
+    the client accepts a relocated row is one caged run away and unmade**. The capacity
+    limit is real and reported: 176 of 349 map rows are larger than the largest run
+    `datplan` will hand over, so for half the archive "nowhere" is the true answer —
+    which is what the OTHER half, a compressor for the archive's format, would fix.
+    That half is deliberately not attempted: its only strong oracle is a client
+    accepting the stream, since agreement with our own `gwdat.py` decompressor is two
+    of our own components agreeing.
     **(e10)** ⬜ Only the TERRAIN is ours. Props, zones, collision and Map Parameters in
     FINDINGS 38's map are ArenaNet's, so FINDINGS 34's props hard gate was satisfied by
     their data. An end-to-end authored map — §32's Blender pipeline through
