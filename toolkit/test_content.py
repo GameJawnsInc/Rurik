@@ -28,13 +28,14 @@ import content  # noqa: E402
 # 4 load + 7 migration + 8 refusal + 4 extracted-source (the 2026-08-11 loosening,
 # PLAN.md section 7 Q3: three refusals and one positive) + 4 source-condition (the
 # hole that ruling left on its first day: measured/capture/wiki had no conditions --
-# three refusals and one positive for the measured/build asymmetry)
-# + 3 overlay + 2 shape = 32, measured from a
+# three refusals and one positive for the measured/build asymmetry) + 4 game-mode
+# (Reforged scales health/armour ~20% and cannot be recovered afterwards)
+# + 3 overlay + 2 shape = 36, measured from a
 # real green run. Every section runs unconditionally; nothing here is fixture-dependent
 # beyond content/ itself, which is tracked. It was 22 until rung C2 added a ninth map
 # row: the migration section now names the addition instead of pinning a length, so a
 # new row is a decision somebody wrote down rather than a number that drifted.
-LEDGER = checks.Ledger("content store", floor=32)
+LEDGER = checks.Ledger("content store", floor=36)
 
 
 def write(dirpath, name, text):
@@ -244,6 +245,51 @@ def main():
               "a `capture` row that does not name its capture is REFUSED",
               "it had NO conditions at all until 2026-08-11 -- the source whose value "
               "depends most on the session was the one asked least about it")
+
+    # --- REFUSAL 6b: a captured combat stat must name the game mode -----------
+    # Reforged Mode scales enemy health and armour ~20%, leaves no mark on the recorded
+    # stream, and cannot be recovered afterwards -- so an unstamped stat is base or
+    # base x 0.8 forever, at a size that reads as a plausible base value rather than an
+    # obvious error. `livesession.py --mode` has been required since 2026-08-11, so a
+    # capture taken from now on can answer this.
+    CAP = 'source = "capture"\ncapture = "20260807T143055"\norigin = "live"\n'
+    msg = refuses('[thing.a]\nmax_health = 8\n[thing.a.provenance]\n' + CAP,
+                  "capture health, no mode")
+    LEDGER.ok(msg is not None and "mode" in (msg or ""),
+              "a capture row carrying health with no `mode` is REFUSED",
+              "an unstamped health number can never be graded")
+
+    msg = refuses('[thing.a]\nmax_health = 8\n[thing.a.provenance]\n' + CAP +
+                  'mode = "yes"\n', "capture health, junk mode")
+    LEDGER.ok(msg is not None,
+              "and a `mode` outside base|reforged|unrecorded is REFUSED",
+              "a free string would let 'Base' or 'reforge' stamp a capture with a value "
+              "nothing downstream knows how to read")
+
+    # "unrecorded" LOADS, and that is the point rather than a leak. Every capture taken
+    # before the flag existed genuinely cannot answer, and origin.py's three-valued
+    # ours/live/unknown is the precedent: `unknown` exists so a file is never forced into
+    # a claim it cannot support. What is refused is SILENCE, not ignorance -- and the
+    # three health readings in the vault are exactly this case.
+    with tempfile.TemporaryDirectory() as tmp:
+        write(tmp, "t.toml", '[thing.a]\nmax_health = 8\n[thing.a.provenance]\n' + CAP +
+                             'mode = "unrecorded"\n')
+        unrec = content.load(repo_dir=tmp, vault_dir="")
+    LEDGER.ok(unrec.get("thing", "a")["max_health"] == 8,
+              "but `mode = \"unrecorded\"` LOADS -- silence is refused, ignorance is not",
+              "the pre-2026-08-11 captures cannot answer and must not be forced to")
+
+    # CONTROL: the gate is on the mode-SENSITIVE fields, not on capture rows generally.
+    # Without this, requiring `mode` everywhere would look identical from the checks above
+    # while making every non-combat capture row carry a meaningless field -- and the
+    # shipped `lakeside_worm` row, whose `speed` Reforged does not touch, would have to
+    # claim a mode it has no reason to know.
+    with tempfile.TemporaryDirectory() as tmp:
+        write(tmp, "t.toml", '[thing.a]\nspeed = 12.0\n[thing.a.provenance]\n' + CAP)
+        nonstat = content.load(repo_dir=tmp, vault_dir="")
+    LEDGER.ok(nonstat.get("thing", "a")["speed"] == 12.0,
+              "CONTROL: a capture row with no mode-sensitive field needs no `mode`",
+              f"the gated fields are {', '.join(content.MODE_SENSITIVE)}")
 
     # --- REFUSAL 7: a wiki row must say where ---------------------------------
     # This is the cheapest possible fake green: 35 rows of plausible numbers with

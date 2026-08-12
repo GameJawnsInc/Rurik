@@ -121,13 +121,22 @@ EXTRACTED = {"client-table", "measured"}
 NEEDS_BUILD = {"client-table"}
 
 # A capture row's value depends on session properties that no later reader can recover, so
-# the row must name the session. Reforged Mode is the one that bites: it scales enemy health
-# ~20%, nothing records it, and it is unrecoverable afterwards (studies/reconstruction
-# FINDINGS.md 7.6) -- so a health row from a capture is base or base x 0.8 with nothing able
-# to say which. `mode` is NOT required yet because nothing can supply it truthfully; making
-# it required before `livesession.py` records it would only buy invented values. That is
-# tracked, not forgotten.
+# the row must name the session.
 NEEDS_CAPTURE = {"capture"}
+
+# ...and for the fields Reforged Mode moves, it must name the MODE. That mode scales enemy
+# health and armour ~20%, leaves no mark on the recorded stream, and is unrecoverable
+# afterwards, so an unstamped stat is base or base x 0.8 forever -- at a size that reads as
+# a plausible base value rather than an obvious error, which is why it is caught here rather
+# than left to a reader's judgement.
+#
+# `livesession.py --mode base|reforged` has been REQUIRED since 2026-08-11, so a capture
+# taken from now on can answer this. Captures taken before it cannot, and the honest value
+# for those is the literal string "unrecorded" -- which this check ACCEPTS. That is
+# deliberate and is `origin.py`'s three-valued precedent: `unknown` exists so a file is
+# never forced into a claim it cannot support. What is refused is SILENCE, not ignorance.
+MODE_SENSITIVE = ("health", "max_health", "armor", "armour", "energy", "max_energy")
+KNOWN_MODES = ("base", "reforged", "unrecorded")
 
 # GWW is a fine source for a published constant and a terrible one for an unsourced number,
 # and the difference is whether the row says WHERE. Until this check existed, a row with
@@ -161,6 +170,25 @@ class Row(dict):
         if p.get("note"):
             out.append("  " + p["note"].strip().replace("\n", "\n  "))
         return "\n".join(out)
+
+
+def _check_mode(kind, key, row, prov):
+    """A capture row carrying a Reforged-sensitive stat must say which mode produced it."""
+    moved = sorted(f for f in row if f in MODE_SENSITIVE)
+    if not moved:
+        return
+    mode = prov.get("mode")
+    if mode not in KNOWN_MODES:
+        raise ContentError(
+            f"{kind} row {key!r} is a capture row carrying {', '.join(moved)} and its "
+            f"`mode` is {mode!r}, not one of {', '.join(KNOWN_MODES)}.\n"
+            f"Reforged Mode scales enemy health and armour by roughly 20% and leaves no "
+            f"mark on the recorded stream, so an unstamped stat is base or base x 0.8 "
+            f"and nothing can ever say which -- at a size that reads as a plausible base "
+            f"value rather than an obvious error.\n"
+            f"`livesession.py --mode` has been required since 2026-08-11, so a capture "
+            f"taken since then can answer this. For an older one the honest value is "
+            f"\"unrecorded\", which loads: what is refused here is SILENCE, not ignorance.")
 
 
 def _check_provenance(kind, key, row):
@@ -200,6 +228,7 @@ def _check_provenance(kind, key, row):
               "three-valued and refuses to pool them, and a statistic about ArenaNet's "
               "behaviour computed over our own server's traffic is not weaker evidence, "
               "it is different evidence.")
+        _check_mode(kind, key, row, prov)
     if source in NEEDS_PAGE:
         _need(kind, key, prov, "page",
               "the wiki page and section the value came from, and when it was read. "

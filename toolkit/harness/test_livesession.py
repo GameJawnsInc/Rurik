@@ -20,8 +20,13 @@ here against REAL captured bytes:
      crash on it, and -- the one that matters most -- decrypt NOTHING and write NO FILE
      when the right key is absent. ARC4 is symmetric, so "it decrypted" is never evidence;
      the client's own first opcode is;
-  4. the guards refuse: the primary account, a non-stock (loopback) launch client, and a
-     live run with no --confirm.
+  4. the guards refuse: the primary account, a non-stock (loopback) launch client, a
+     live run with no --confirm, and -- since 2026-08-11 -- one with no --mode.
+     Reforged Mode changes enemy health and armour ~20% and leaves no mark on the
+     recorded stream, so an unstamped capture's stats can never be graded; the
+     refusal has to land before the client launches because it cannot be asked
+     afterwards. Its CONTROL is that a VALID mode gets past the gate and fails
+     later, which is what separates a check from a wall.
 
 standard library only.
 """
@@ -42,7 +47,7 @@ import livesession as ls  # noqa: E402
 import wirecapture as wc  # noqa: E402
 from gwcrypto import ARC4, arc4_hash  # noqa: E402
 
-LEDGER = checks.Ledger("livesession", floor=39)
+LEDGER = checks.Ledger("livesession", floor=42)
 
 
 def real_session():
@@ -408,6 +413,53 @@ def main():
     except ls.LiveError as e:
         no_confirm = "--confirm" in str(e)
     LEDGER.ok(no_confirm, "a live run with no --confirm is refused, naming --confirm")
+
+    # --mode, and it is refused for the same reason --confirm is: a value the operator
+    # must state, never guessed. Reforged Mode changes enemy health and armour ~20% and
+    # leaves NO mark on the recorded stream, so an unstamped capture's stats can never be
+    # graded -- base or base x 0.8, forever, at a size that reads as a plausible base
+    # value rather than an obvious error. The refusal must land BEFORE the client
+    # launches, because it cannot be asked afterwards.
+    try:
+        ls.run("capture", "x", "3.65.1.1", {6112}, 20, confirm=True)
+        no_mode = False
+    except ls.LiveError as e:
+        no_mode = "--mode" in str(e)
+    except SystemExit:
+        no_mode = False          # got past the mode gate into preflight: the gate is late
+    LEDGER.ok(no_mode, "a live run with no --mode is refused, naming --mode",
+              "and it refuses BEFORE preflight -- a SystemExit here would mean the run "
+              "reached the launch path with the mode unstated")
+
+    # An invented mode must be refused too. A free-string flag would let `--mode reforge`
+    # or `--mode Base` through to the manifest and stamp a capture with a value nothing
+    # downstream knows how to read; `choices` catches it at the CLI and this catches it
+    # at the API, which is the half a caller can reach.
+    try:
+        ls.run("capture", "x", "3.65.1.1", {6112}, 20, confirm=True, mode="reforge")
+        bad_mode = False
+    except ls.LiveError as e:
+        bad_mode = "--mode" in str(e)
+    except SystemExit:
+        bad_mode = False
+    LEDGER.ok(bad_mode, "and a mode outside base|reforged is refused rather than stamped",
+              f"the vocabulary is {'|'.join(ls.GAME_MODES)}")
+
+    # THE CONTROL, and without it the two checks above pass for a run() that refuses
+    # everything. A VALID mode must get past the mode gate -- it then fails later, in
+    # preflight, on the fake exe, which is a different failure and is what proves the gate
+    # is specific rather than a wall.
+    try:
+        ls.run("capture", "x", "3.65.1.1", {6112}, 20, confirm=True, mode="base")
+        valid_passed = False                      # unreachable: preflight must object
+    except ls.LiveError as e:
+        valid_passed = "--mode" not in str(e)     # a LiveError, but not the mode one
+    except SystemExit:
+        valid_passed = True                       # preflight's own refusal: past the gate
+    LEDGER.ok(valid_passed,
+              "CONTROL: a VALID mode passes the gate and fails later on the fake client",
+              "otherwise both refusals above are satisfied by a run() that refuses "
+              "everything, which is a wall rather than a check")
 
     # A loopback (ours-DH) client aimed live must be refused by preflight's stock check.
     try:

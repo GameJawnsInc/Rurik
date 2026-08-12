@@ -329,8 +329,22 @@ one client, human cadence, human hours, never in a competitive context (`PLAN.md
 the traffic *pattern* is what closes accounts, and no gate substitutes for that):
 
 ```bash
-python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\<build>\Gw.exe --confirm
+python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\<build>\Gw.exe --confirm --mode base
 ```
+
+**`--mode base|reforged` is REQUIRED and has no default — check the account before you
+type it.** Reforged Mode changes enemy health and armour by roughly 20%, and **nothing in
+the recorded stream says which mode produced it**, so it cannot be recovered afterwards:
+every health number from an unstamped capture is base or base × 0.8 forever, and ~20% is
+exactly the size that reads as a plausible base value rather than an obvious error. The
+driver refuses before it launches anything, because this is the one question that cannot
+be asked after the fact. **State what the account is actually set to, not what you meant
+to set it to** — a wrong answer is worse than the refusal, since it stamps a number that
+then looks trustworthy. The value lands in `manifest.json` as `game_mode`, labelled
+`game_mode_source: operator-declared`: it is the only field there that is not derived from
+an artifact, and nothing checks it, because Reforged Mode leaves no mark we have measured.
+The three monster health readings already in the vault predate the flag and are
+`mode = "unrecorded"` — kept, never promoted.
 
 **Do not pass `--host`, and it is refused if you do.** This line used to carry
 `--host <auth ip>` and that was wrong in a way that looked like success. A live login is
