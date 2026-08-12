@@ -57,6 +57,7 @@ from mapchunks import MapIndex  # noqa: E402
 from pathmap import PathingMap  # noqa: E402
 import pathchunk  # noqa: E402
 from pathchunk import (Obstacles, PathChunk, Plane, PATHING_CHUNK,  # noqa: E402
+                       StrippedPath, STRIPPED_PATHING_CHUNK,
                        child_kind, child_ref)
 import checks  # noqa: E402
 import vaultpath  # noqa: E402
@@ -69,6 +70,24 @@ CORPUS_PLANES = 11795
 CORPUS_TRAPS = 1032259
 CORPUS_CHILDREN = {"xnode": 4462623, "null": 2784573,
                    "ynode": 2125005, "sink": 1457371}
+
+# The STRIPPED population, MEASURED by a full 349-map sweep 2026-08-12. The
+# winding split is the load-bearing one: it refutes the claim that retail has a
+# boundary winding convention, which `StrippedPath.rect` asserted before anyone
+# measured it. 29 boundaries are degenerate (2 points or fewer) and score zero
+# area, which is why the three numbers do not sum the way a reader expects.
+STRIPPED_CCW = 169
+STRIPPED_CW = 151
+STRIPPED_MIN_PTS = 1
+STRIPPED_MAX_PTS = 131
+
+# The map that refutes E3's input contract, pinned by file id (row 33833 on this
+# archive, reported not required). Its whole Stripped pathing chunk is 27 bytes
+# holding the single point (-4380.0, -1860.0); its Bloated partner carries 3,437
+# trapezoids over 24 planes. 27 bytes cannot encode that mesh.
+DEGENERATE_ID = 0x9F5E
+DEGENERATE_BYTES = 27
+DEGENERATE_TRAPS = 3437
 
 # Kamadan and the smallest complete map in the archive. File ids are content
 # keys and travel between copies of the archive; row numbers do not, so the
@@ -88,7 +107,11 @@ SMALL_GRID = (3, 3)
 # on purpose -- sections 0-2 measure the codec against bytes this file wrote and
 # nothing about ArenaNet's format, so a vault-less run is a failure that names
 # its shortfall, not a pass. --all adds three sweep-population checks, for 68.
-LEDGER = checks.Ledger("pathing chunk codec", floor=65)
+#
+# 65 -> 92 on 2026-08-12 with sections 7-9, the STRIPPED chunk 0x10000008 -- the
+# compiler's INPUT side, which rung E3 needs authorable and which nothing in this
+# tree could read. Section 7 is 16 checks and needs no vault.
+LEDGER = checks.Ledger("pathing chunk codec", floor=92)
 check = checks.adopt(LEDGER)
 
 
@@ -697,6 +720,239 @@ def pinned(ar, mi):
           "from the rect alone -- no archive consulted")
 
 
+def section7():
+    """The STRIPPED codec against bytes this file wrote. No vault.
+
+    Everything here is ours against ours and it is the cheap half; section 8 is
+    where ArenaNet's archive gets a say. What this section IS good for is the
+    framing, because the Stripped and Bloated chunks share a signature and a tag
+    vocabulary and differ in their framing, so the failure mode is a plausible
+    desync rather than an error.
+    """
+    print("\n-- 7. the Stripped pathing chunk, 0x10000008 (no vault)")
+    sp = StrippedPath.rect(rect=(-3072.0, -1024.0, 3072.0, 5120.0), sequence=7,
+                           sync_hash=0xDEADBEEF)
+    blob = sp.encode()
+
+    # Against the LITERAL 51, not against `encoded_size`, which is the property
+    # under test -- and `encoded_size` is then required to agree with the bytes.
+    check(len(blob) == 51 and sp.encoded_size == 51,
+          "a 4-point boundary encodes to 19 + 8*4 = 51 bytes",
+          f"{len(blob)} B, encoded_size says {sp.encoded_size}")
+    back = StrippedPath.from_chunk(blob)
+    check(back.encode() == blob and back.boundary == sp.boundary
+          and back.sequence == 7 and back.sync_hash == 0xDEADBEEF,
+          "and it decodes back to the same values and re-encodes identically")
+
+    # THE HEADER IS NINE BYTES, NOT TWELVE, and the version is a BYTE. Asserted
+    # against literals read off the wire rather than through the module's own
+    # Structs, because a test that packed with `_STRIPPED_HEADER` would agree
+    # with any header the module chose to write.
+    check(blob[:4] == b"\x4c\x70\xfe\xee",
+          "the signature is 0xEEFE704C, little-endian, at offset 0",
+          blob[:4].hex())
+    check(blob[4] == 12 and blob[5:9] == b"\x07\x00\x00\x00",
+          "the version is the single BYTE 12, and the u32 sequence follows it "
+          "at offset 5 -- NOT the Bloated chunk's u32 version",
+          blob[4:9].hex())
+    check(blob[9] == 7 and blob[10:12] == b"\x04\x00",
+          "tag 7 is followed IMMEDIATELY by its u16 count -- there is no u32 "
+          "size field, which is the Bloated framing and would desync here",
+          blob[9:12].hex())
+    check(blob[-1] == 255 and blob[-7] == 14,
+          "and the tail is tag 14's six bytes then the 255 terminator",
+          blob[-7:].hex())
+
+    # THE MUTATION CONTROL. An encoder that replayed a decoded count instead of
+    # re-deriving it round-trips every file it can walk, so the only thing that
+    # can catch it is changing the payload's length in place and requiring the
+    # emitted count to move with it. Same shape as test_mapfile's stored-size
+    # control, and it exists for the same reason.
+    grown = StrippedPath.from_chunk(blob)
+    grown.boundary.append((99.0, -99.0))
+    out = grown.encode()
+    check(len(out) == len(blob) + 8 and out[10:12] == b"\x05\x00",
+          "MUTATION CONTROL: appending one point grows the file by 8 AND moves "
+          "the emitted count to 5 -- a replayed count fails only here",
+          f"{len(out)} B, count field {out[10:12].hex()}")
+    shrunk = StrippedPath.from_chunk(blob)
+    del shrunk.boundary[0]
+    out = shrunk.encode()
+    check(len(out) == len(blob) - 8 and out[10:12] == b"\x03\x00",
+          "MUTATION CONTROL: and removing one shrinks it and moves the count "
+          "down", f"{len(out)} B, count field {out[10:12].hex()}")
+
+    # THE CROSS-FRAMING CONTROL, both directions. Neither codec may accept the
+    # other's bytes: they share a signature, so a reader that only gated on that
+    # would happily produce nonsense.
+    check(refuses(PathChunk.from_chunk, blob),
+          "the BLOATED codec refuses a Stripped chunk (it shares the signature "
+          "-- only the framing differs)")
+    bloated = PathChunk.minimal(rect=(0.0, 0.0, 3072.0, 3072.0)).encode()
+    check(refuses(StrippedPath.from_chunk, bloated),
+          "and the STRIPPED codec refuses a Bloated one")
+
+    # The refusals, each a thing stage 0 of the bloat pipeline hard-gates.
+    bad_sig = bytearray(blob)
+    bad_sig[0] ^= 0xFF
+    check(refuses(StrippedPath.from_chunk, bytes(bad_sig)),
+          "a wrong signature is refused")
+    bad_ver = bytearray(blob)
+    bad_ver[4] = 11
+    check(refuses(StrippedPath.from_chunk, bytes(bad_ver)),
+          "a wrong version byte is refused")
+    bad_tag = bytearray(blob)
+    bad_tag[9] = 8
+    check(refuses(StrippedPath.from_chunk, bytes(bad_tag)),
+          "a wrong first tag is refused")
+    check(refuses(StrippedPath.from_chunk, blob + b"\x00"),
+          "a trailing byte is refused -- the walk must close on the exact end")
+    check(refuses(StrippedPath.from_chunk, blob[:-1]),
+          "and a truncated chunk is refused rather than half-decoded")
+    over = bytearray(blob)
+    over[10:12] = b"\xff\x00"
+    check(refuses(StrippedPath.from_chunk, bytes(over)),
+          "a count larger than the bytes present is refused, not trusted",
+          "255 points declared in a 51-byte chunk")
+    return sp
+
+
+def section8(ar, mi, picks, want_all):
+    """The Stripped codec against ArenaNet's archive, and what it revealed."""
+    print(f"\n-- 8. the Stripped chunk over {len(picks)} retail maps")
+    ok = files = 0
+    npts, areas, flags, hashes = [], [], {}, set()
+    law = carried = seq_same = 0
+    degenerate_traps = []
+    t0 = time.perf_counter()
+    for head in picks:
+        partner = mi.partner(head)
+        if partner is None:
+            continue
+        data = ar.read(partner)
+        found = [bytes(data[o:o + s]) for c, o, s in ffna_chunks(data)
+                 if c == STRIPPED_PATHING_CHUNK]
+        if not found:
+            continue
+        files += 1
+        blob = found[0]
+        sp = StrippedPath.from_chunk(blob)
+        if sp.encode() == blob:
+            ok += 1
+        if len(blob) == 19 + 8 * len(sp.boundary):
+            law += 1
+        npts.append(len(sp.boundary))
+        areas.append(sp.signed_area())
+        flags[sp.sync_flag] = flags.get(sp.sync_flag, 0) + 1
+        hashes.add(sp.sync_hash)
+        # THE ORACLE FOR SECTION 9: the same polygon out of the OTHER stream.
+        pc = PathChunk.from_map(ar.read(head))
+        if sp.boundary == pc.boundary:
+            carried += 1
+        if sp.sequence == pc.sequence:
+            seq_same += 1
+        if len(sp.boundary) <= 2:
+            degenerate_traps.append(len(pc.trapezoids))
+    dt = time.perf_counter() - t0
+
+    check(files == len(picks) and files > 0,
+          "every sampled map has a Stripped pathing chunk",
+          f"{files} of {len(picks)}")
+    check(ok == files and files > 0,
+          "retail Stripped pathing chunks re-encode BYTE-IDENTICALLY",
+          f"{ok} of {files} in {dt:.0f}s")
+    check(law == files,
+          "and every one of them is exactly 19 + 8n bytes",
+          f"{law} of {files}")
+    check(set(flags) == {0},
+          "sync_flag is 0 in every map -- so the one carried byte we do not "
+          "understand is at least constant", f"{flags}")
+    check(len(hashes) == files,
+          "and sync_hash is DISTINCT in every map, which is what a per-map "
+          "hash looks like and why it is carried rather than derived",
+          f"{len(hashes)} distinct over {files}")
+
+    # THE WINDING, measured rather than assumed. `StrippedPath.rect`'s docstring
+    # first claimed retail had a convention here; it does not, and this is the
+    # check that keeps that correction from drifting back.
+    pos = sum(1 for a in areas if a > 0)
+    neg = sum(1 for a in areas if a < 0)
+    check(pos > 0 and neg > 0,
+          "retail uses BOTH windings, so the one we author is OURS and not a "
+          "convention copied from ArenaNet",
+          f"{pos} counter-clockwise, {neg} clockwise, "
+          f"{len(areas) - pos - neg} degenerate")
+
+    if want_all:
+        check(files == CORPUS_MAPS,
+              "--all really did sweep every map", f"{files} of {CORPUS_MAPS}")
+        check(pos == STRIPPED_CCW and neg == STRIPPED_CW,
+              "and the winding split is the measured population",
+              f"{pos}/{neg}, want {STRIPPED_CCW}/{STRIPPED_CW}")
+        check(sorted(npts)[0] == STRIPPED_MIN_PTS
+              and sorted(npts)[-1] == STRIPPED_MAX_PTS,
+              "and the boundary sizes span the measured range",
+              f"{min(npts)}..{max(npts)}, want {STRIPPED_MIN_PTS}.."
+              f"{STRIPPED_MAX_PTS}")
+    else:
+        LEDGER.skip("the full 349-map Stripped population figures",
+                    f"sampled {files}; run with --all")
+
+    # ---- 9. THE CORRECTION, and it is the reason this rung got built --------
+    print("\n-- 9. is the boundary polygon COMPILED, or just carried?")
+    check(carried == files and files > 0,
+          "the Stripped boundary is IDENTICAL to the Bloated one, point for "
+          "point, in every map", f"{carried} of {files}")
+    check(seq_same == files,
+          "and so is the sequence number", f"{seq_same} of {files}")
+    # THE DECISIVE CASE, PINNED BY FILE ID so it runs in a DEFAULT run. The
+    # first version of this section only had the sweep, and a default sample of
+    # 8 contains no degenerate boundary -- so the one finding the whole rung
+    # exists for was reachable only under --all. Evidence that skips by default
+    # is evidence nobody sees. File ids travel between copies of the archive;
+    # rows do not, so the row is reported and never required.
+    from archive import file_id_table
+    row = file_id_table(ar).get(DEGENERATE_ID)
+    head = next((e for e in ar.entries if e.index == row), None)
+    if head is None:
+        LEDGER.skip("the pinned degenerate boundary",
+                    f"this archive does not carry file id 0x{DEGENERATE_ID:X}")
+    else:
+        partner = mi.partner(head)
+        sdata = ar.read(partner)
+        sblob = [bytes(sdata[o:o + s]) for c, o, s in ffna_chunks(sdata)
+                 if c == STRIPPED_PATHING_CHUNK][0]
+        sp = StrippedPath.from_chunk(sblob)
+        pc = PathChunk.from_map(ar.read(head))
+        check(len(sblob) == DEGENERATE_BYTES and len(sp.boundary) == 1,
+              f"file id 0x{DEGENERATE_ID:X} (row {row}) ships a "
+              f"{DEGENERATE_BYTES}-byte Stripped pathing chunk holding ONE "
+              f"point", f"{len(sblob)} B, {len(sp.boundary)} point(s), "
+                        f"{sp.boundary}")
+        check(len(pc.trapezoids) == DEGENERATE_TRAPS,
+              "and its Bloated partner carries a navmesh of "
+              f"{DEGENERATE_TRAPS} trapezoids",
+              f"{len(pc.trapezoids)} trapezoids over {len(pc.planes)} planes")
+        check(sp.boundary == pc.boundary,
+              "THE POLYGON IS CARRIED, NOT COMPILED: 27 bytes cannot encode "
+              f"{DEGENERATE_TRAPS} trapezoids, and the one point arrives in the "
+              "Bloated chunk unchanged. Whatever the compiler builds the mesh "
+              "from, it is NOT tag 7 -- which is what FINDINGS 17.2's E3 input "
+              "contract assumed", f"{sp.boundary} vs {pc.boundary}")
+
+    if degenerate_traps:
+        check(max(degenerate_traps) > 100,
+              "and the same holds across the sweep: a boundary of 2 points or "
+              "fewer coexists with hundreds of trapezoids",
+              f"{len(degenerate_traps)} degenerate boundaries, up to "
+              f"{max(degenerate_traps)} trapezoids")
+    else:
+        LEDGER.skip("the degenerate boundary ACROSS THE SWEEP",
+                    f"no map in this sample of {files} has a boundary of 2 "
+                    f"points or fewer; 28 of the 349 do -- run with --all. The "
+                    f"pinned case above carries the finding either way.")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description=__doc__.strip().splitlines()[0],
@@ -712,16 +968,17 @@ def main(argv=None):
     guarded(section0)
     pc = guarded(section1) or PathChunk.minimal(planes=3)
     guarded(section2, pc)
+    guarded(section7)
 
     dat = args.dat
     if dat is None:
         dat = os.path.join(vaultpath.vault_path("dat_study"), "Gw.dat")
     if not os.path.isfile(dat):
-        LEDGER.skip("everything that needs the archive (sections 3-6)",
+        LEDGER.skip("everything that needs the archive (sections 3-6 and 8-9)",
                     f"no Gw.dat at {dat}; vault resolved to "
                     f"{vaultpath.vault_root()} ({vaultpath.vault_why()}). "
-                    f"Sections 0-2 measured the codec against a chunk this "
-                    f"test wrote and NOTHING about ArenaNet's format.")
+                    f"Sections 0-2 and 7 measured both codecs against chunks "
+                    f"this test wrote and NOTHING about ArenaNet's format.")
         return LEDGER.verdict()
 
     with Archive(dat) as ar:
@@ -735,6 +992,7 @@ def main(argv=None):
             picks = heads[::step][:args.sample]
         guarded(section34, ar, mi, picks, args.all)
         guarded(section56, ar, mi, picks)
+        guarded(section8, ar, mi, picks, args.all)
     return LEDGER.verdict()
 
 

@@ -284,10 +284,28 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   here desyncs the first record), `pathmap.PathingMap` as a second parser
   agreeing field-for-field on the same bytes, and `minimal()` — a mesh authored
   from nothing — landing on row 46196's plane count, two-byte tag 12 and 3x3
-  obstacle grid from its rect alone. Sections 0-2 need no vault and score 40
-  against a floor of 65, so a vault-less run goes red. Default ~25 s, `--all`
-  ~9 minutes — its 349-map sweep alone was measured at 524 s, so budget for that
-  rather than for the round number),
+  obstacle grid from its rect alone. **Sections 7-9 (2026-08-12) are the OTHER
+  stage**: chunk `0x10000008`, the compiler's INPUT, which nothing in this tree
+  could read until then — **349/349 byte-identical and 349/349 exactly `19 + 8n`
+  bytes**, with the memcpy caught by a mutation control that appends a boundary
+  point and requires the emitted u16 count to move (a stashed-blob sabotage keeps
+  BOTH round-trip headlines green and reddens only those two). Its framing is NOT
+  the Bloated chunk's despite the shared signature — 9-byte header with a `u8`
+  version, records with no size field — so each codec is required to REFUSE the
+  other's bytes, the failure otherwise being a plausible desync rather than an
+  error. Section 9 is the correction it found: the boundary polygon is **carried,
+  not compiled** — identical to the Bloated one in 349/349 — and file id `0x9F5E`
+  ships a **27-byte** Stripped chunk holding ONE point whose Bloated partner has
+  **3,437 trapezoids**, so tag 7 cannot be what the compiler builds a mesh from,
+  which is what FINDINGS 17.2's E3 input contract assumed. That case is pinned by
+  file id rather than left to the sweep, because a default sample of 8 contains
+  no degenerate boundary and the one finding the rung exists for was reachable
+  only under `--all` — evidence that skips by default is evidence nobody sees.
+  Sections 0-2 and 7 need no vault and score 56 against a floor of 92, so a
+  vault-less run goes red. Default ~40 s and 92 checks; `--all` is 99 checks and
+  ~17 minutes — MEASURED 2026-08-12 at 434 s for the Bloated sweep and 565 s for
+  the Stripped one, which reads BOTH streams of every map, so budget for those
+  two numbers rather than for a round one),
   `toolkit/mapdata/test_trnshadow.py` (terrain tag 7 decoded rather than carried:
   that every retail shadow block's run coding closes on 272 rows of 272 samples and
   re-encodes to ArenaNet's own bytes from the bitmap alone, that the 10x10 window

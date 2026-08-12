@@ -1,4 +1,13 @@
-"""The pathing chunk `0x20000008`, decoded to typed values and encoded back.
+"""The pathing chunks, `0x20000008` and `0x10000008`, decoded and encoded back.
+
+TWO CHUNKS, TWO STAGES, ONE SUBSYSTEM. `PathChunk` is the Bloated chunk
+`0x20000008` -- stage 2, the navmesh the client READS on a normal load, and the
+bulk of this file. `StrippedPath` at the bottom is `0x10000008` -- stage 1, what
+the client's own compiler is handed. They share a signature and a tag vocabulary
+and DO NOT share their framing, which is written up at `StrippedPath`'s
+docstring; the two live together so that difference is visible rather than
+scattered, and each refuses the other's bytes as a checked control.
+
 
 `pathmap.py` reads this chunk to answer "is this walkable" and throws the rest
 away: it skips the boundary polygon, the point-location DAG, the plane map and
@@ -103,8 +112,15 @@ from pathmap import Portal, Trapezoid  # noqa: E402
 from archive import Archive, ffna_chunks, file_id_table  # noqa: E402
 
 PATHING_CHUNK = 0x20000008
+# The Stripped partner's pathing chunk -- the COMPILER'S INPUT. Same signature
+# and tag vocabulary as the Bloated one above, different framing; `StrippedPath`
+# is the codec and its docstring is where the difference is written down.
+STRIPPED_PATHING_CHUNK = 0x10000008
 SIGNATURE = 0xEEFE704C
 VERSION = 12
+# 9 header + 3 (tag 7 and its u16 count) + 6 (tag 14) + 1 (terminator). The
+# whole stripped chunk is this plus 8 per boundary point.
+STRIPPED_FIXED = 19
 
 TAG_BOUNDARY = 7
 TAG_PLANES = 8
@@ -137,6 +153,9 @@ CHILD_SINK_BASE = 0x80000000
 CHILD_Y_BASE = 0x40000000
 
 _HEADER = struct.Struct("<III")
+# The STRIPPED header: the version is a BYTE here, so this is 9 bytes where the
+# Bloated header is 12. Using the wrong one desyncs the first record.
+_STRIPPED_HEADER = struct.Struct("<IBI")
 _REC = struct.Struct("<BI")
 _U16 = struct.Struct("<H")
 _U32 = struct.Struct("<I")
@@ -630,6 +649,173 @@ class PathChunk:
         return (f"<PathChunk {len(self.planes)} plane(s), "
                 f"{len(self.trapezoids)} trapezoid(s), "
                 f"seq {self.sequence}>")
+
+
+# ------------------------------------------------- the COMPILER'S INPUT side
+
+class StrippedPath:
+    """Chunk `0x10000008` -- a boundary polygon, and nothing else.
+
+    This is the other end of the same subsystem. `PathChunk` above is stage 2,
+    the navmesh the client READS on a normal load; this is stage 1, the polygon
+    the client's own compiler turns INTO one. FINDINGS §17.1: bloat is
+    unreachable on a normal load and runs only as a post-failure repair, which
+    reads the Stripped partner row (`alloc.stream 0`), converts stage 1 -> 2 and
+    writes the result back into stream 1. Authoring one of these is what rung E3
+    needs, and it is why a class that only ever decodes would be useless here.
+
+    **THE FRAMING IS NOT `PathChunk`'S, AND THAT IS THE TRAP.** The two share a
+    signature, a tag vocabulary and a point encoding, so a reader reaches for the
+    wrong one and gets a plausible desync rather than an error:
+
+        |                | Bloated `0x20000008` | Stripped `0x10000008` |
+        |----------------|----------------------|-----------------------|
+        | header         | 12 bytes, `<III>`    | **9 bytes, `<IBI>`**  |
+        | version field  | `u32` 12             | **`u8` 12**           |
+        | records        | `u8 tag, u32 size`   | **`u8 tag`, UNSIZED** |
+
+    So tag 7 here is `u8 7, u16 n, n x Vec2f` with no size field in front of it,
+    where the Bloated tag 7 is `u8 7, u32 size, u16 n, n x Vec2f`. Read this
+    chunk with `_header()` and the u16 count is consumed as the low half of a
+    u32 size; the walk then runs off the end or, worse, lands somewhere that
+    parses. `from_chunk` below therefore does its own framing and shares only
+    the primitives that genuinely are common.
+
+    **THE WHOLE FILE IS 19 + 8n BYTES** -- 9 header, 3 for tag 7 and its count,
+    8n for the points, 6 for tag 14, 1 for the terminator. MEASURED on 349 of
+    349 maps by `test_pathchunk.py` section 6, which is the only thing that
+    makes that arithmetic a fact about ArenaNet's archive rather than about this
+    docstring.
+
+    `sync_hash` is carried, not understood: 349 distinct values with no pattern
+    we have measured, and `sync_flag` is 0 in every map read so far. Neither is
+    re-derived on encode because we do not know what would derive them -- which
+    is the honest position and also a limit on E3, since a compiler that
+    validates the hash would reject anything we author. NOT FOUND.
+    """
+
+    __slots__ = ("sequence", "boundary", "sync_hash", "sync_flag", "version")
+
+    def __init__(self, sequence=0, boundary=(), sync_hash=0, sync_flag=0,
+                 version=VERSION):
+        self.sequence = int(sequence)
+        self.boundary = [(float(x), float(y)) for x, y in boundary]
+        self.sync_hash = int(sync_hash)
+        self.sync_flag = int(sync_flag)
+        self.version = int(version)
+
+    @property
+    def encoded_size(self):
+        """`19 + 8n`. The law, stated once and asserted against the corpus."""
+        return STRIPPED_FIXED + 8 * len(self.boundary)
+
+    def encode(self):
+        """The chunk payload. Nothing declared is stored -- `n` is re-derived.
+
+        The point count is `len(self.boundary)` and never a remembered field,
+        so an encoder that replayed a decoded count round-trips every file it
+        can walk and cannot survive `test_pathchunk`'s mutation control.
+        """
+        out = bytearray()
+        out += _STRIPPED_HEADER.pack(SIGNATURE, self.version, self.sequence)
+        out += bytes((TAG_BOUNDARY,))
+        out += _U16.pack(len(self.boundary))
+        out += _pack_vec2s(self.boundary)
+        out += bytes((TAG_SYNC,))
+        out += _SYNC.pack(self.sync_hash, self.sync_flag)
+        out += bytes((TERMINATOR,))
+        return bytes(out)
+
+    @classmethod
+    def from_chunk(cls, blob):
+        """Decode a `0x10000008` payload. Raises ValueError on anything odd.
+
+        Strict for the same reason `PathChunk.from_chunk` is: stage 0 of the
+        bloat pipeline hard-gates the signature and the version, so an
+        unexpected tag is a broken chunk and not a variant to skip past.
+        """
+        buf = bytes(blob)
+        if len(buf) < _STRIPPED_HEADER.size:
+            raise ValueError(f"stripped pathing chunk is {len(buf)} bytes, "
+                             f"under the {_STRIPPED_HEADER.size}-byte header")
+        sig, version, sequence = _STRIPPED_HEADER.unpack_from(buf, 0)
+        if sig != SIGNATURE:
+            raise ValueError(f"stripped pathing signature 0x{sig:08X} != "
+                             f"0x{SIGNATURE:08X}")
+        if version != VERSION:
+            raise ValueError(f"stripped pathing version {version} != {VERSION}")
+
+        p = _STRIPPED_HEADER.size
+        if buf[p] != TAG_BOUNDARY:
+            raise ValueError(f"expected tag {TAG_BOUNDARY} at {p}, "
+                             f"found {buf[p]}")
+        p += 1
+        if p + 2 > len(buf):
+            raise ValueError(f"tag 7: no room for the u16 count at {p}")
+        count, = _U16.unpack_from(buf, p)
+        p += 2
+        if p + 8 * count > len(buf):
+            raise ValueError(f"tag 7: {count} points need {8 * count} bytes, "
+                             f"only {len(buf) - p} remain")
+        boundary = _vec2s(buf, p, count)
+        p += 8 * count
+
+        if p >= len(buf) or buf[p] != TAG_SYNC:
+            raise ValueError(f"expected tag {TAG_SYNC} at {p}")
+        p += 1
+        if p + _SYNC.size > len(buf):
+            raise ValueError(f"tag 14: needs {_SYNC.size} bytes at {p}")
+        sync_hash, sync_flag = _SYNC.unpack_from(buf, p)
+        p += _SYNC.size
+
+        if p >= len(buf) or buf[p] != TERMINATOR:
+            raise ValueError(f"expected the tag {TERMINATOR} terminator at {p}")
+        p += 1
+        if p != len(buf):
+            raise ValueError(f"tag walk ended at {p} of {len(buf)} bytes")
+        return cls(sequence=sequence, boundary=boundary, sync_hash=sync_hash,
+                   sync_flag=sync_flag, version=version)
+
+    @classmethod
+    def from_map(cls, data):
+        """Decode the stripped pathing chunk out of a whole Stripped payload."""
+        for chunk_id, off, size in ffna_chunks(data):
+            if chunk_id == STRIPPED_PATHING_CHUNK:
+                return cls.from_chunk(bytes(data[off:off + size]))
+        raise ValueError(f"this map file has no 0x{STRIPPED_PATHING_CHUNK:08X} "
+                         f"stripped pathing chunk")
+
+    @classmethod
+    def rect(cls, rect=(0.0, 0.0, 3072.0, 3072.0), sequence=0, sync_hash=0,
+             sync_flag=0):
+        """A four-point rectangular boundary -- the cheapest authorable input.
+
+        **THE WINDING IS OURS, AND THE CORPUS SAYS SO.** This docstring first
+        claimed the winding was "the one retail uses, not a free choice"; that
+        was written before it was measured and it is FALSE. MEASURED over the
+        shipped boundaries: both signs occur, in comparable numbers, so there is
+        no retail convention to copy and this counterclockwise rect is a choice
+        we are making. `test_pathchunk.py` pins the split so the claim cannot
+        drift back. Which winding the COMPILER wants is a separate question that
+        only rung E3 can answer -- it is plausible it does not care, and equally
+        plausible it fills the wrong side.
+        """
+        x0, y0, x1, y1 = rect
+        return cls(sequence=sequence,
+                   boundary=[(x0, y0), (x0, y1), (x1, y1), (x1, y0)],
+                   sync_hash=sync_hash, sync_flag=sync_flag)
+
+    def signed_area(self):
+        """Twice the signed area of the boundary. Sign is the winding."""
+        pts = self.boundary
+        return sum(pts[i][0] * pts[(i + 1) % len(pts)][1]
+                   - pts[(i + 1) % len(pts)][0] * pts[i][1]
+                   for i in range(len(pts))) if len(pts) > 2 else 0.0
+
+    def __repr__(self):
+        return (f"<StrippedPath {len(self.boundary)} boundary pts, "
+                f"{self.encoded_size} B, seq {self.sequence}, "
+                f"sync 0x{self.sync_hash:08X}/{self.sync_flag}>")
 
 
 def _decode_points(buf, off, size, where):

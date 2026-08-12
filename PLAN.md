@@ -1840,3 +1840,23 @@ parallel, with one safety change that is not optional — see its entry.
     **(e)** E3 (provoking the client's own map compiler) is weakened but not dead — arm 3b
     showed a corrupt Bloated chunk crashes rather than re-bloating, so the zero-length
     stream-1 payload of §17.1 is the cheapest remaining probe.
+    **(e1)** ✅ **DONE 2026-08-12 (FINDINGS 33).** The compiler's INPUT side is now
+    readable and authorable: `pathchunk.StrippedPath` decodes and encodes chunk
+    `0x10000008`, **349/349 byte-identical** and **349/349 exactly `19 + 8n` bytes**.
+    Nothing in the tree could read it before, so §17.2's contract rested on one
+    unreproducible sweep. Its framing is NOT the Bloated chunk's despite a shared
+    signature — 9-byte header with a `u8` version, unsized records — and each codec now
+    refuses the other's bytes.
+    **(e2)** ⚠️ **E3's INPUT CONTRACT IS WRONG AND MUST BE RESPECIFIED BEFORE IT RUNS.**
+    §17.2 reads the boundary polygon as what the compiler turns into a navmesh. MEASURED:
+    the Stripped boundary is identical to the Bloated one, point for point, in **349 of
+    349** maps — it is *carried*, not consumed — and **28 maps ship a boundary of ≤2
+    points**. File id `0x9F5E`'s entire Stripped pathing chunk is **27 bytes holding one
+    point**, and its Bloated partner has **3,437 trapezoids**. So tag 7 is not the mesh
+    input, and E3's "fewest authored bytes" economy conflated *this chunk is tiny* with
+    *the input is tiny*. The trigger is still cheap; the input is a whole Stripped map
+    (~900 KB for Pre-Searing). Likely source is terrain + collision — `PathFlood.cpp` is
+    on the builder's closure and a flood fill is a terrain operation.
+    **(e3)** NEXT, and it needs no client: read `PathBuild.cpp`/`PathFlood.cpp`'s closure
+    for which chunks the compiler actually touches. That answers what E3 must author, and
+    it is a `clientscan` question rather than a launch.

@@ -4326,3 +4326,75 @@ open-time gates. Terrain authored in Blender is now a thing the loader accepts.
 - **No client run.** Nothing here was loaded by the retail client. The strongest
   claim is `gates()`, which is our reading of the loader's rules, not the loader.
 - The `0.0`/`-0.0` finding is about our transform, not about ArenaNet's format.
+
+## 33. The compiler's input side, and E3's contract is wrong (2026-08-12)
+
+**OBSERVED.** Chunk `0x10000008` — the Stripped partner's pathing chunk, the
+thing §17.2 specified as rung E3's authored input — now has a codec
+(`pathchunk.StrippedPath`). **349 of 349 retail chunks re-encode byte-identically**
+and **349 of 349 are exactly `19 + 8n` bytes**, which confirms §17.2's arithmetic
+against the archive rather than against a disassembly pass.
+
+Nothing in the tree could read this chunk before today. The contract had been
+read out of the client and measured once; there was no encoder, no decoder and
+no test, so authoring one was not possible and the 349/349 figure rested on a
+single unreproducible sweep.
+
+### The framing is NOT the Bloated chunk's, and they share a signature
+
+|  | Bloated `0x20000008` | Stripped `0x10000008` |
+|---|---|---|
+| header | 12 bytes, `<III>` | **9 bytes, `<IBI>`** |
+| version | `u32` 12 | **`u8` 12** |
+| records | `u8 tag, u32 size` | **`u8 tag`, unsized** |
+
+So Bloated tag 7 is `u8 7, u32 size, u16 n, n × Vec2f` and Stripped tag 7 is
+`u8 7, u16 n, n × Vec2f`. Read either with the other's reader and the u16 count
+is consumed as the low half of a u32 size — a **plausible desync, not an error**.
+Both codecs now refuse the other's bytes and that is a checked control.
+
+### THE CORRECTION: the boundary polygon is CARRIED, not compiled
+
+§17.2 specified E3 as *"publish a stream-0 payload holding the boundary polygon;
+the client compiles stage 1 → 2"*. That reads the polygon as the compiler's
+geometric input. **MEASURED, and it is not.**
+
+- The Stripped boundary is **identical to the Bloated boundary, point for point,
+  in 349 of 349 maps.** So is the sequence number. It survives compilation
+  unchanged.
+- **28 maps ship a boundary of two points or fewer** — 15 of them a *single
+  point*. Pinned case, file id `0x9F5E`: its entire Stripped pathing chunk is
+  **27 bytes** holding the one point `(-4380.0, -1860.0)`, and its Bloated
+  partner carries **3,437 trapezoids over 24 planes**.
+
+27 bytes cannot encode 3,437 trapezoids. **Whatever the compiler builds the
+navmesh from, it is not tag 7.** The existing check that Bloated tag 7 is a copy
+of plane 0's `polyData` fits: the boundary is a small per-plane polygon carried
+through, not the map outline.
+
+**What this costs E3.** Its headline economy — *"cheapest trigger, fewest
+authored bytes"* — conflated *the Stripped pathing chunk is tiny* with *the
+compiler's input is tiny*. The trigger is still cheap (a zero-length stream-1
+payload); the **input** is not. Pre-Searing's Stripped stream is ~900 KB, and the
+mesh presumably comes from the terrain and collision chunks — consistent with the
+module names `PathBuild.cpp` and **`PathFlood.cpp`** on the builder's closure
+(§17.1, Track C), a flood fill being a terrain operation and not a polygon one.
+
+E3 is not dead and is arguably now **more** valuable: if the compiler floods our
+terrain, it closes the gap §32 left open, where a Blender-authored hill changes
+what is drawn and moves no trapezoid. But it must be respecified before it is
+run, and the cost is a whole Stripped map rather than 19 + 8n bytes.
+
+### What is still NOT FOUND
+
+- **`sync_hash`.** 349 distinct values, one per map, no pattern measured. It is
+  carried, never derived — the honest position, and a limit on E3, since a
+  compiler that validates it would reject anything we author.
+- **`sync_flag`** is 0 in all 349. Constant, meaning unknown.
+- **The winding is ours.** `StrippedPath.rect`'s docstring first claimed retail
+  had a convention; the corpus refutes it — **169 counter-clockwise, 151
+  clockwise, 29 degenerate**. Whether the compiler cares is unknown and only E3
+  can say.
+- **What the compiler actually reads** is now the open question, and it is
+  answerable offline by reading `PathBuild.cpp`/`PathFlood.cpp`'s closure for the
+  chunks it touches — no client needed.
