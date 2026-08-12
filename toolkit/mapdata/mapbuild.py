@@ -100,10 +100,13 @@ archive -- that is `datplan.py` and `datwrite.py`. The CLI's `--out` writes a
 built payload to disk and REFUSES any path inside the working tree, because a
 `build_like` output is derived ArenaNet data.
 
-UNVERIFIED against a client: nothing built here has been loaded. `gates()`
-reproduces every open-time rule FINDINGS 17.4/17.5 states, and its control is
-that a shipped retail map must pass all of them -- a gate a real map fails is our
-bug, not the map's.
+`gates()` reproduces every open-time rule FINDINGS 17.4/17.5 states, and its
+control is that a shipped retail map must pass all of them -- a gate a real map
+fails is our bug, not the map's. Maps built here HAVE been loaded by the retail
+client (FINDINGS 22, 23, 27), so the old "UNVERIFIED, nothing built here has been
+loaded" is retired -- but passing every gate is not a guarantee, and FINDINGS 30
+is why: a map that passed all 16 crashed a client twice, and the seventeenth gate
+was written afterwards from the disassembly of that crash.
 
     python toolkit/mapdata/mapbuild.py                    # row 46196, reported
     python toolkit/mapdata/mapbuild.py --row 46196 --verbose
@@ -145,6 +148,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 
 HEADER_CHUNK = 0x20000000
 WATER_CHUNK = 0x20000006
+PROPS_CHUNK = 0x20000004
 LOCATIONS_CHUNK = 0x2000000A
 MAP_PARAMS_CHUNK = 0x2000000C
 COLLISION_CHUNK = 0x2000000E
@@ -950,6 +954,58 @@ def gates(mf, reference_order=None):
               pc.obstacles.width * pathchunk.OBSTACLE_CELL == ex
               and pc.obstacles.height * pathchunk.OBSTACLE_CELL == ey,
               f"{pc.obstacles.width}x{pc.obstacles.height} cells")
+
+        # FINDINGS 30. Tag 12 is a per-plane PROP INDEX, not a plane index.
+        # `PathDataImport`'s tag-12 handler at 0x007254B0 forces map[0] to
+        # (-1, -1) -- plane 0 IS the terrain -- and stores plane_map[i] into
+        # map[i].propIndex for every i >= 1. So a plane above 0 is mounted on a
+        # prop, and `MapQueryAltitude` subscripts props->propArray with that
+        # index every frame the avatar stands on such a plane, bounds-checking
+        # only the PLANE index and never the prop one.
+        #
+        # This gate exists because we shipped plane_map=[0, 0] on a map with no
+        # props chunk and crashed a client TWICE: propArray.Count() is 0, so
+        # `0 < 0` fails at Array.h:587, RVA 0x33c57f, ~17 s in during walking.
+        # The two no-portal controls survived only because a plane above 0 that
+        # nothing can REACH is never stood on -- `MapQueryAltitude` at
+        # 0x0070A433 short-circuits when the position's zplane is 0. So the
+        # gate has to be about reachability, not about the mere presence of a
+        # second plane, and it is the reachability that makes it more than
+        # "does this file have a portal".
+        reach, frontier = {0}, [0]
+        while frontier:
+            here = frontier.pop()
+            if here >= len(pc.planes):
+                continue
+            for p in pc.planes[here].portals:
+                if p.neighbour not in reach:
+                    reach.add(p.neighbour)
+                    frontier.append(p.neighbour)
+        props = mf.find(PROPS_CHUNK)
+        prop_count = 0
+        if props is not None:
+            payload = props.payload()
+            if len(payload) >= 12:
+                prop_count = int.from_bytes(payload[10:12], "little")
+        bad_planes = []
+        for i in sorted(reach):
+            if i == 0:
+                continue
+            if i >= len(pc.plane_map):
+                bad_planes.append(f"plane {i} is reachable but tag 12 has no "
+                                  f"entry for it ({len(pc.plane_map)} entries)")
+            elif props is None:
+                bad_planes.append(f"plane {i} is reachable and names prop "
+                                  f"{pc.plane_map[i]}, but the file has no "
+                                  f"0x20000004 -- propArray.Count() is 0")
+            elif pc.plane_map[i] >= prop_count:
+                bad_planes.append(f"plane {i} names prop {pc.plane_map[i]} of "
+                                  f"{prop_count}")
+        g("every REACHABLE plane above 0 names a prop that exists",
+          not bad_planes,
+          "; ".join(bad_planes) or
+          (f"{len(reach)} reachable plane(s) of {len(pc.planes)}"
+           + (f", {prop_count} prop(s)" if props is not None else ", no props")))
 
     if reference_order is not None:
         g("chunk order is a subsequence of a real map's order",

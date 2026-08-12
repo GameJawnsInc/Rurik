@@ -649,6 +649,26 @@ def walk_legs(proc, legs, outdir, warn=3.0, settle=1.5, shot_every=0.0):
 
     out = []
     for i, (kind, key, value) in enumerate(legs):
+        # THE CLIENT MAY HAVE DIED SINCE THE LAST STEP, and until 2026-08-11
+        # nothing here noticed. OBSERVED: a portal chunk with a bad index
+        # crashed the client 17 s into a run -- `Assertion: index < m_count,
+        # Array.h(587)` -- and the harness printed RUN VERDICT: PASS, because
+        # judge() runs BEFORE the walk and had already passed on the spawn.
+        # Every later step then failed to find a window and was logged as
+        # "NO WINDOW", which reads like a focus problem rather than a corpse.
+        if proc.poll() is not None:
+            out.append({"kind": kind, "key": key, "asked": value, "did": 0.0,
+                        "note": f"client exited (code {proc.returncode}) "
+                                f"before this step"})
+            print(f"\n  *** THE CLIENT IS GONE (exit code {proc.returncode}). "
+                  f"It died before step {i + 1} of {len(legs)}.\n"
+                  f"  *** A Guild Wars assert leaves a crash dialog and writes "
+                  f"the reason to the\n"
+                  f"  *** client's own error log; the run verdict above was "
+                  f"read before the walk\n"
+                  f"  *** and says nothing about it. Stopping the plan.",
+                  flush=True)
+            break
         hwnd, _ = dc.wait_window(proc.pid, timeout=5)
         label = f"{key or kind}:{value:g}"
         if not hwnd:
@@ -957,6 +977,14 @@ def run_client(a, outdir):
             if ok:
                 walked = walk_legs(proc, parse_walk(a.walk), outdir, warn=a.warn,
                                    shot_every=a.shots)
+                # A client that died mid-plan RETRACTS the verdict. It was read
+                # before the walk, so it is true about the spawn and silent
+                # about everything after -- and "PASS" is the wrong word for a
+                # run whose client crashed 17 s in.
+                if any("client exited" in str(w.get("note", "")) for w in walked):
+                    ok = False
+                    print("  RUN VERDICT RETRACTED: the spawn checkpoints passed, "
+                          "then the client died during the walk.", flush=True)
             else:
                 print("  walk: SKIPPED -- the run did not reach the map, so "
                       "there is nothing to walk", flush=True)

@@ -3821,3 +3821,307 @@ a different rung. What is now OBSERVED and was not before:
 
 Still NOT FOUND: any per-pass cull radius in the client, and any explanation of
 why the two passes cross five seconds apart.
+
+---
+
+## 27. OBSERVED: the neighbour graph is collision, and it is 8 bytes (2026-08-11)
+
+`PathChunk.minimal` emits one trapezoid per plane and no neighbours, so nothing
+in this arc had ever asked the client to cross from one trapezoid into another.
+"The client honours the trapezoid list" and "the client walks the neighbour
+graph" predicted the same thing on every map built so far.
+
+### 27.1 No DAG was invented
+
+MFT row 46196 — the ladder's own template — ships a plane with exactly **two**
+trapezoids over the rect 0..3072, which is our map's rect, so its 419-byte
+pathing chunk drops into our map unchanged and re-encodes byte-identically.
+What was delivered is ArenaNet's own geometry in our file.
+
+    trap 1   y    0..2976     <- the spawn (1536, 1536)
+    trap 0   y 2976..3072
+    linked   trap0.neighbours = (-, -, 1, -),  trap1.neighbours = (0, -, -, -)
+
+The control clears those two entries to `NO_NEIGHBOUR` and touches nothing else.
+Both arms are **7,957 B and differ in 8 bytes**; same trapezoids, same DAG, same
+edges, same polyData, same every other chunk, 16 of 16 gates on both. **`pathmap`
+reports them identically** — it reads trapezoids and ignores neighbours — so our
+own reader cannot tell them apart and only the client can.
+
+### 27.2 The result
+
+| | position reports | pinned at y = 2976 | crossings of the split | min y |
+|---|---:|---:|---:|---:|
+| **LINKED** | 49 | **0** | **2** | 0 |
+| **CUT** | 79 | **39 of 79** | 1 | 1536 |
+
+**With the link cut, the character spends half the run stuck on the internal
+edge**, reporting y = 2976.0 exactly for 39 consecutive samples while x slides
+along it — the same wall-slide signature §23 measured at the mesh boundary. With
+the link intact it never touches the edge and crosses twice.
+
+So the neighbour graph is **collision data the client enforces**, not routing
+metadata it merely carries. Two trapezoids that both exist, both decode, both
+contain walkable points and share an edge are still not connected unless the
+edge is named.
+
+### 27.3 One asymmetry, unexplained
+
+The CUT arm crossed the split **once, northward**, before getting stuck. Entry
+into trapezoid 0 succeeded; every later attempt to leave it southward failed.
+Whether that is the client resolving entry differently from exit, or a diagonal
+step overshooting the edge, is **NOT FOUND**. It is recorded rather than smoothed
+over: a clean reading would have had zero crossings in the CUT arm.
+
+Also not settled: the DAG. Both arms carry row 46196's, unmodified, so nothing
+here says what an x-node or a y-node tests — only that the neighbour slots on the
+trapezoid records are load-bearing. Authoring a plane whose geometry is not row
+46196's still needs that, and `PathChunk.minimal` still cannot express two
+trapezoids.
+
+---
+
+## 28. OBSERVED: the point-location DAG, and the portal record (2026-08-11)
+
+`edgeVectors` was NOT FOUND for the whole arc, and `PathChunk.minimal` sidesteps
+the DAG by sending both children of its one y-node to the same sink. Both are
+settled here, from the archive, by two independent implementations.
+
+### 28.1 The DAG
+
+**`edges` is a POINT POOL, not vectors.** A y-node compares the query's y
+against `edges[edge].y`; **`child0` is taken when ABOVE**. An x-node names a
+SEGMENT by its two endpoints `edges[edgeA] -> edges[edgeB]`, evaluates that
+segment's x at the query's y, and compares; **`child0` is LEFT**. `root_type`
+names the kind of node 0. A sink's payload is a trapezoid index.
+
+Measured by walking the DAG and comparing against brute-force
+`Trapezoid.contains` over the corpus:
+
+| | queries | agreement |
+|---|---:|---:|
+| reader, 47 maps / 1,061 planes | 974,951 | **0.999875** |
+| refuter, **289 maps the reader never used** | 2,964,320 | **0.999931** |
+| whole corpus, 349 maps / 11,795 planes | 3,613,537 | **0.999935** |
+
+Every disagreement lies within **0.010 world units** of an edge, and of the
+uniformly-sampled points **zero** disagree. The rivals are not close:
+
+| rival | interior agreement |
+|---|---:|
+| y-node children swapped | **0.000000** |
+| x-node children swapped | **0.000000** |
+| y-node compares `edges[e].x` | 0.091 |
+| x-node as a vertical line at an endpoint | 0.683 |
+
+A second method that samples no points at all: propagating the y-constraint down
+the DAG, **every sink is reached on exactly one contiguous y range, 123,152 of
+123,152**, and that range equals its trapezoid's own y span. Under the swapped
+reading **122,972 of 123,152 sinks become unreachable**. And over all 349 maps,
+`sorted(sinks) == range(n_traps)` — **a bijection on 11,795 of 11,795 planes**.
+
+Two supporting corpus laws, both exceptionless: `edges[edgeA].y >= edges[edgeB].y`
+on **3,872,385 of 3,872,385** x-nodes, so a segment is always stored top-to-bottom;
+and trapezoids do not overlap — 17 hairline pairs of 2,824,893, none more than
+0.01 units in both dimensions.
+
+**Not settled:** the tie convention at exact float equality (nothing in the data
+decides it, and brute force's own closed interval is equally arbitrary); what
+~60% of `edges` entries are, since only 989,728 of 2,488,209 coincide with a
+trapezoid corner; and 95,761 x-nodes with a horizontal segment, which the model
+cannot evaluate and which no query in 3.9M ever reached. **UNVERIFIED against the
+client**: this is the archive's bytes agreeing with themselves under a model, not
+the client's own query code.
+
+**Do not switch `PathingMap.containing()` to the DAG.** It is slower in Python
+(~2.5 µs against ~1.1 µs) and the two structures disagree within 0.011 units of
+an edge — exactly where the 5.5% off-mesh player positions live.
+
+### 28.2 The portal record
+
+`<4HB` = `(traps u16, offset u16, neighbour u16, pair_id u16, flag u8)`, tag 9.
+Each field is pinned by a corpus law AND by the client's own machine code:
+
+| field | meaning | evidence |
+|---|---|---|
+| `traps` | COUNT of this plane's trapezoids on the crossing | `sum(traps) == len(portalTraps)` on **11,792/11,792** planes; reading `offset` as the count scores 140/11,792 |
+| `offset` | start index into tag 10 `portalTraps` | the `[offset, offset+traps)` slices PARTITION portalTraps, 11,792/11,792; swapped scores 1/11,792 |
+| `neighbour` | the OTHER plane's index | equals the partner's own plane **42,847/42,847**; never its own |
+| `pair_id` | the crossing id, shared by exactly two ends, **1-based** | group sizes `{2: 42847}` — no singleton, no triple; value 0 unused by 346 of 346 maps |
+| `flag` | write **0** | 0 on all 85,694 retail portals. Meaning NOT FOUND, but it is not padding — the import copies it to runtime +4 |
+
+**What a wrong portal costs, which is why none of this was guessed:** a trapezoid
+naming a portal whose pair never resolved hits `PathDir:1496/1532`, and FINDINGS
+records that the client asserts and then **dereferences anyway**. `offset+traps`
+running past `portalTraps` is checked by nothing at all — the client indexes
+straight off `pathMap+0x38` and reads whatever follows.
+
+### 28.3 What this unblocks
+
+`PathChunk.minimal` can now be given a real sibling: a plane whose two trapezoids
+are chosen rather than copied from row 46196, with a DAG derived from the split
+rather than inherited. §27 put ArenaNet's own two-trapezoid plane in front of a
+client; this is what it takes to author one.
+
+---
+
+## 29. Two planes load. A portal whose ends do not coincide crashes. (2026-08-11)
+
+The first authored two-plane map: two planes side by side, x 0..2048 and
+2048..3072, two trapezoids each, a DAG derived from §28's semantics rather than
+copied. Built by `build_portal.py`, which asserts §28's five portal rules before
+writing anything.
+
+### 29.1 What the two arms did
+
+| arm | portals | result |
+|---|---|---|
+| **PORTAL-CUT** | 0 | **loads, and the whole walk completes** |
+| **PORTAL-JOINED** | 2, one pair | **CRASHES: `Assertion: index < m_count`, `Base\rtl\Array.h(587)`, 17 s in** |
+
+**So two planes are fine and the portal record is the fault** — the arms are the
+same file but for the portal, and the cut one survives 65 s of walking.
+
+**And the cut arm is a result in its own right: planes are NOT joined by
+adjacency.** The character's reported bounding box is
+**(0.0, 63.9) .. (2048.0, 3072.0)** — pinned at x = 2048.0 exactly, 0 of 76
+reports outside plane 0 — even though plane 1's trapezoid begins at that very
+coordinate and the terrain is continuous across it. Two planes that touch are two
+worlds. Only a portal can join them, which is what §28 said the record is for.
+
+### 29.2 Which field is wrong, and it is none of them
+
+Every field of the emitted portal is inside the range retail uses, measured
+after the crash rather than assumed before it: `portal_left`/`portal_right` are
+plane-local (1,391 of 1,391 retail entries are `< len(plane.portals)`),
+`portalTraps` holds plane-local trapezoid indices, and `pair_id` runs 1..189.
+§28's five rules all passed. **The rule set was incomplete, and it was shipped to
+a client on the strength of being complete.**
+
+The one property that distinguishes our portal from all 85,694 retail ones was
+recorded as UNVERIFIED by the study that produced the recipe: *"Whether the
+client REQUIRES the two ends to coincide geometrically. Retail does so to
+float32 precision, but nothing in the load path validates it... A non-coincident
+pair would most likely load and produce wrong movement rather than refuse, but
+that is UNVERIFIED and I did not build one."*
+
+**CORRECTED, before the follow-up arm ran.** The first version of this section
+said our pair was disjoint and therefore in a category retail never uses. It is
+not. Measured on the emitted bytes rather than assumed from the design: our two
+ends' bounding boxes are `(0,0,2048,3072)` and `(2048,0,3072,3072)`, so the
+x overlap is **exactly 0** — **edge-touch**, which is **16.5% of retail (48 of
+291 pairs)** and not the 0% category at all. The claim was wrong and the
+hypothesis it supported is much weaker than stated: retail ships edge-touching
+pairs and ours crashed.
+
+So **what makes our portal different from all 85,694 retail ones is still NOT
+FOUND.** Every field is in range, `traps = 2` occurs 184 times, and edge-touch
+occurs 48 times. Candidates not yet eliminated include `plane_map`, whose values
+this arc has always recorded as NOT FOUND and which we wrote as `[0, 0]` — retail
+is non-decreasing with values that are plainly not plane indices (row 7982 with
+58 planes begins `[0, 6, 8, 9, 10, 15, 16, 22, ...]`).
+
+### 29.3 The harness said PASS
+
+`judge()` runs before the walk, so the verdict was read from the spawn
+checkpoints twelve seconds before the client died, and every later step logged
+`NO WINDOW` — which reads like a focus problem rather than a corpse. Fixed:
+`walk_legs` checks `proc.poll()` before each step and stops loudly, and a client
+that dies mid-plan **retracts the verdict**. Discovered by the operator reading a
+crash log, not by anything here.
+
+### 29.4 Next
+
+An arm with two planes that OVERLAP in x and y, joined at a coincident pair —
+which is the shape every retail portal has, and the shape this one did not.
+
+---
+
+## 30. OBSERVED: `plane_map` is a per-plane PROP INDEX (2026-08-12)
+
+Two client crashes, identical: `Assertion: index < m_count`,
+`P:\Code\Base\rtl\Array.h(587)`. Read out of the client rather than guessed at,
+after two hypotheses that measured well and were wrong.
+
+### 30.1 The mechanism
+
+The two runs relocated to different bases (`0x490000`, `0x680000`), so every RVA
+in the 21-frame chain is unambiguous. With `ImageBase 0x400000` (pefile,
+`DllCharacteristics 0x8140` = ASLR):
+
+| VA | what |
+|---|---|
+| `0x00487BDB` | the generic assert reporter's own eip-capture — 20,144 callers, not a bounds helper |
+| `0x0073C57F` | **the site.** `props->propArray[propIndex]`, one caller in the image |
+| `0x00738D82` | `PrApi.cpp:573/574` |
+| `0x0070A4B0` | `MapQueryAltitude()` |
+| … | the per-frame avatar path — which is why it fires 17 s in and not at load |
+
+The array is `props->propArray`, `m_data` at `props+0x194` and `m_count` at
+`props+0x19C` — named by ArenaNet's own assert at `PrIntersect.cpp:135`,
+*"propIndex < props->propArray.Count()"*, which emits the byte-identical
+`cmp edi, dword ptr [esi+0x19c]`.
+
+The index comes from **`PathGetProp`** (`0x00721C40`, self-named by its log
+string), which does `imul ecx, esi, 0x54` / `add ecx, [edi+0x18]` — indexing the
+plane array by the query point's **zplane** — and returns that plane's stored
+prop index **unvalidated**. Only the plane index is bounds-checked
+(`PathApi:510`); the prop index never is.
+
+And that stored value is ours. `PathDataImport`'s tag-12 handler at `0x007254B0`
+forces `map[0] = (-1, -1)` — **plane 0 IS the terrain** — starts its loop at
+`i = 1`, and stores `plane_map[i]` into `map[i].propIndex`. **So every plane
+above 0 is mounted on a prop, and tag 12 is a per-plane PROP INDEX.** It is not
+a plane index, and it has been NOT FOUND for this whole arc.
+
+We wrote `plane_map = [0, 0]` into a map carrying no props chunk at all, so
+`propArray.Count()` is 0 and `0 < 0` fails.
+
+**Why the two no-portal controls lived**, which is the part that makes this
+explanation load-bearing rather than plausible: `MapQueryAltitude` at
+`0x0070A433` does `cmp dword ptr [ecx], 0; je 0x70A4D7` — **if the position's
+zplane is 0 the prop lookup is skipped entirely.** Without a portal the character
+can never leave plane 0, so the crashing code is never reached. The portal is
+what lets zplane become 1. That also explains why the ends' geometry made no
+difference: edge-touch and a 1,024-unit overlap crash identically because
+neither is what the client objected to.
+
+### 30.2 The gate, and its real control
+
+`mapbuild.gates()` gains a seventeenth rule: **every REACHABLE plane above 0
+must name a prop that exists.** Reachability is the closure of `{0}` under "plane
+i has a portal whose neighbour is j", and it is what makes the rule more than
+"does this file have a portal".
+
+| | our gate | naive "has a portal" |
+|---|---:|---:|
+| the 2 crashing payloads | **RED 2/2** | RED 2/2 |
+| the 10 loading payloads | GREEN 10/10 | GREEN 10/10 |
+| **150 retail maps, 4,756 planes, 148 multi-plane** | **RED 0** | **RED 148** |
+
+**The twelve payloads cannot discriminate and are not offered as if they could**
+— crashers and controls differ only in the portal, so any portal-keyed predicate
+separates them identically. The corpus is the evidence: our rule is red on none
+of 150 retail maps where the rival is red on 148.
+
+### 30.3 What this does and does not license
+
+**Settled:** tag 12's meaning, the reason both portal arms crashed, and why both
+cut arms survived. A gate that would have refused the payload before it reached
+a client.
+
+**Not settled:**
+
+- **The zplane transition is RECONSTRUCTION.** Nobody has watched the position's
+  third field go from 0 to 1. It is cheap to refute — our server sees agent
+  positions — and it should be.
+- **A legal two-plane map is not yet authorable.** It needs chunk `0x20000004`
+  with `propCount > max(plane_map[1:])`, and that record's layout is NOT FOUND in
+  this toolkit. Whether a dummy prop suffices, or the prop's model must actually
+  carry the surface the plane describes, is untested.
+- **Collapsing to one plane would be a VACUOUS fix.** zplane is then permanently
+  0, the short-circuit fires, and the assert is unreachable by construction —
+  which is exactly why the cut arms walked clean for 65 s. A green single-plane
+  run says the map is walkable and says nothing about `plane_map`.
+- The gate is a static check against the crash we understand. **A map passing all
+  17 gates is not a map a client will accept** — this one passed 16.
