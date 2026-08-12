@@ -4,7 +4,7 @@
 
 ---
 
-**The result.** Monster AI as a *mechanism* — the decision function, its inputs, its internal state, its tick — cannot be recovered from the client binary, cannot be recovered from the wire, and cannot be recovered by any capture campaign of any length, because it is never shipped and never transmitted. That is a firm negative and it holds up: zero of 937 embedded source paths in the shipped client lie under any `\Srv\` directory, from a detector proven able to catch 6 of 6 planted ones, and 33 AI-adjacent keyword searches across two structurally independent routes (the compiled-assert corpus and a raw-string scan of every section including `.rsrc`) return zero. What *can* be recovered is the observable **envelope** — what a monster does, when, at what range, at what speed, per creature model — and a surprising amount of it was already sitting in the vault, mis-measured. The single largest finding of this dive is negative and self-inflicted: `SWING_WINDUP = 0.899` was adopted as a fixed constant on n=6 swings from one agent, and the second live capture, already in the vault when that constant was written, refutes it (n=42 across four attackers at two declared speeds, two non-overlapping clusters 86 ms apart). The second largest is that **twelve of fourteen combat constants in `authsrv.py` can be changed to a wrong value and all 125 checks in the suite stay green** — so the honest comment at each call site is currently the only thing standing between an invented number and a claim. Confidence: high on the binary negative, high on the per-model spread of reach and windup, **low to nil on aggro range, leash and skill-selection policy**, none of which this corpus can answer. **UPDATE 2026-08-11, after the study's own cheapest follow-up ran: the binary negative is now TOTAL.** `CHAR_AI_MODES` — the one named server-shaped AI concept anywhere in the shipped image, and the one lead §2.2 explicitly declined to call refuted — reads **3**, and its three modes resolve through the client's own text system to **Fight / Guard / Avoid Combat**. It is the player's hero-and-pet stance widget. Nothing about monster decision-making survives in the client. §2.2.1.
+**The result.** Monster AI as a *mechanism* — the decision function, its inputs, its internal state, its tick — cannot be recovered from the client binary, cannot be recovered from the wire, and cannot be recovered by any capture campaign of any length, because it is never shipped and never transmitted. That is a firm negative and it holds up: zero of 937 embedded source paths in the shipped client lie under any `\Srv\` directory, from a detector proven able to catch 6 of 6 planted ones, and 33 AI-adjacent keyword searches across two structurally independent routes (the compiled-assert corpus and a raw-string scan of every section including `.rsrc`) return zero. What *can* be recovered is the observable **envelope** — what a monster does, when, at what range, at what speed, per creature model — and a surprising amount of it was already sitting in the vault, mis-measured. The single largest finding of this dive is negative and self-inflicted: `SWING_WINDUP = 0.899` was adopted as a fixed constant on n=6 swings from one agent, and the second live capture, already in the vault when that constant was written, refutes it (n=42 across four attackers at two declared speeds, two non-overlapping clusters 86 ms apart). The second largest is that **twelve of fourteen combat constants in `authsrv.py` can be changed to a wrong value and all 125 checks in the suite stay green** — so the honest comment at each call site is currently the only thing standing between an invented number and a claim. Confidence: high on the binary negative, high on the per-model spread of reach and windup, **low to nil on aggro range, leash and skill-selection policy**, none of which this corpus can answer. **UPDATE 2026-08-11, after the study's own cheapest follow-up ran: the binary negative is now TOTAL.** `CHAR_AI_MODES` — the one named server-shaped AI concept anywhere in the shipped image, and the one lead §2.2 explicitly declined to call refuted — reads **3**, and its three modes resolve through the client's own text system to **Fight / Guard / Avoid Combat**. It is the player's hero-and-pet stance widget. §2.2.1. **And the one structural hole in that negative is closed too**: `CompassAIControl.cpp`, the file named "AI Control" that carries no asserts and so could not be searched, sits in `Gw\Ui\Game\Compass\` — its directory answers it. The whole `Engine\Map\Path` subsystem has since been read as well (88 asserts, 9 files): a spatial query library with no steering vocabulary at all, so movement policy stays unrecoverable too. Nothing about monster decision-making survives in the client.
 
 **Notation.** Captures are named by timestamp stamp only: **capture A** = `20260807T143055`, **capture B** = `20260810T235916`. Connections are `A/2`, `B/4` etc. — capture stamp plus connection index in chain order. No ports, accounts, characters or session ids appear here or should appear in anything derived from this. Agent ids are per-connection wire ids and are not identifying.
 
@@ -43,9 +43,127 @@ This document is what decides what replaces the invented layer — or decides, w
 
 **Label: SOURCE-CODE. n:** two builds for the source-path census; one pinned build (`vault/client/2026-07-29_221c13772c7a/Gw.exe`, build 38797) for the rest. Every figure above was independently reproduced by a second party — the 30,941 string count reproduced *to the string* from a scanner written from scratch.
 
-The srctree zero is worth more than the others because its detector is proven able to fire: `test_srctree.py` plants six fabricated `Srv`-style paths and requires all six caught, with a no-false-positive control. The keyword zeros are worth less, and their own tool says so — `asserts.py` prints a coverage shortfall of 370 unreadable call sites on every invocation, so **every keyword zero is a floor short by up to that many sites**, and `CompassAIControl.cpp` — the one file in the whole image whose name is literally "AI Control" — contains **zero asserts** and is structurally invisible to the tool that produced them.
+The srctree zero is worth more than the others because its detector is proven able to fire: `test_srctree.py` plants six fabricated `Srv`-style paths and requires all six caught, with a no-false-positive control. The keyword zeros are worth less, and their own tool says so — `asserts.py` prints a coverage shortfall of 370 unreadable call sites on every invocation, so **every keyword zero is a floor short by up to that many sites**, and `CompassAIControl.cpp` — the one file in the whole image whose name is literally "AI Control" — contains **zero asserts** and is structurally invisible to the tool that produced them. **CLOSED 2026-08-11 without needing an assert: its full path is `P:\Code\Gw\Ui\Game\Compass\CompassAIControl.cpp`** — the Compass **UI** directory. §2.1.1.
 
 Two scope corrections that were missed and matter. "No `Srv` translation unit" is **not** "no server code in the image": `srctree.py`'s own output ends with *"shared trees: no Cli/Srv split, so the server built these too — Base 79, Engine 297, Net 18, Gw\Const 37"*, i.e. **431 shipped files the server also compiled**. Among them is an eleven-file `Engine\Map\Path` subsystem — `PathFind`, `PathFlood`, `PathObstacle`, `PathDir`, `PathBsp`, `PathBuild`, `PathApi`, `PathData` and more. Six of those were read in full for this dive: their asserts are trapezoids, portals, barriers, `SINK_NODE`/`X_NODE`, edge tables, `blockMap`/`mapDims`. **Pure geometry, zero AI vocabulary.** One positive fell out that nobody had: `PathObstacle:176` asserts `radius >= 0` — the shipped pathing library models **dynamic obstacles with a radius**, which is the mechanism behind the wiki's body-blocking and melee-surround behaviour, and `toolkit/mapdata/pathmap.py` has no dynamic obstacle at all.
+
+
+### 2.1.1 The `Engine\Map\Path` read, 2026-08-11 — a spatial query library, and nothing else
+
+**PREDICTION, stated before the disassembler ran:** pure geometry again — no steering, no
+pursuit, no follow, no arrival, no repath-on-target-move — so movement *policy* stays in
+§7.6's "cannot be settled" tier. **Refuted if** any Path module asserted on a pursuit or
+steering concept: a follow target, a desired velocity, an arrival radius, a repath trigger.
+
+**This one mattered more than the other two desk tasks** because `Engine\Map\Path` is in
+the **shared** tree — no `Cli`/`Srv` split, so ArenaNet's *server* compiled these same
+files. It is the one place where server-side movement logic could be visible to us at all.
+
+**CONFIRMED. 88 asserts across the whole subsystem, and the vocabulary is exhaustively
+geometric:** trapezoids and their `above[]`/`below[]` links, portals and portal pairs,
+barriers, edges, `SINK_NODE`/`X_NODE`/`Y_NODE`, segments, vectors, vertices, `blockMap`,
+`mapDims`, `tileMap`, `tileDims`, flood fill, BSP, stacks and delete queues, file loading.
+**It answers *where can I go*. It never asks *where should I go*.**
+
+| module | asserts | what it is |
+|---|---|---|
+| `PathBuild` | 28 | builds the trapezoid graph — `above[0]`/`below[1]` link invariants, node stacks |
+| `PathApi` | 20 | the public surface — `blockMap`, `mapDims`, `tileMap`, `tileDims`, `pathArray`, **`obstacleCenter`/`obstacleRadius`** |
+| `PathDir` | 16 | direction and barrier walking, portal pairs, `edge < EDGES`, `EDGE_NONE` |
+| `PathDataImport` | 12 | file load — trapezoid/sink/Y/X node counts, `PATH_SEQUENCE_FAST_SAVE` |
+| `PathFind` | 10 | the search — `nodeCache.IsEmpty()`, `curr->type == SINK_NODE`, portal bounds |
+| `PathFlood` | 7 | flood fill — edge table, `pointCount % 2 == 0`, "No adjacent edge" |
+| `PathData` | 3 | `src.y < 131071.0f && src.y > -131071.0f`, segment counts |
+| `PathObstacle` | 1 | `radius >= 0` |
+| `PathBsp` | **0** | — |
+| `MapPath` | 6 | file plumbing: `dataLength`, `data`, `filenames`, `pathValid` |
+| `MsPathPack` | 1 | **`!m_charIndex.Count()`** |
+
+#### Three corrections to §2.1's own accounting
+
+1. **`Engine\Map\Path\` is NINE files, not eleven.** §2.1 says "an eleven-file
+   `Engine\Map\Path` subsystem". A raw source-path scan of the image finds nine.
+2. **`PathBsp.cpp` has ZERO asserts.** §2.1 names it in the list of modules as though it
+   had been read; it is structurally invisible to `asserts.py`, which is the
+   `CompassAIControl.cpp` blindness in the very subsystem §2.1 was describing.
+3. **There is a separate `Engine\Map\PathEngine\` directory** — `PeApi.cpp`,
+   `PeObject.cpp` — that no angle mentioned and that also carries zero asserts. So the
+   subsystem's assert-blind spot is **three files**, not none. A "PathEngine" with an
+   "Object" in it is where moving-entity logic would live, and nothing in this study has
+   read a byte of it.
+
+#### A new search axis, and it closes the hole §2.1 named in its own negative
+
+The study ran 33 keyword searches over assert **expressions** and raw strings. It never
+searched the **file names**, which is a different axis: a translation unit called
+`AgSteering.cpp` with no assert mentioning "steer" is invisible to every search that was
+run. All 936 embedded `P:\Code` source paths, scanned by basename:
+
+**No file name anywhere in the image contains** `steer`, `pursu`, `chase`, `follow`,
+`seek`, `flee`, `wander`, `patrol`, `roam`, `brain`, `behav`, `tactic`, `decis`, `aggro`,
+`threat`, `navig`, `flock`, `herd`, `goal` or `waypoint`.
+
+Three names did hit, and their **directories** dispose of all three:
+
+- **`P:\Code\Gw\Ui\Game\Compass\CompassAIControl.cpp`.** §2.1 called this the one named
+  hole in its own negative — *"the one file in the whole image whose name is literally 'AI
+  Control', contains zero asserts, and is structurally invisible to the tool that produced
+  them."* **Its path closes it without needing a single assert: it is in the Compass UI
+  directory.** That independently corroborates §2.2.1's `CHAR_AI_MODES` = Fight / Guard /
+  Avoid Combat from an angle sharing no evidence with it — one result read an enum's
+  cardinality and its string ids, this one read a directory name.
+- **`P:\Code\Gw\Ui\Game\AgentText\AtAvoid.cpp`.** `At` is **AgentText** — the floating
+  label system (`AtName`, `AtFloat`, `AtMonolog`, `AtParty`, `AtImage`). Its asserts are
+  `s_avoidCount` and `!s_sortedList->Head()`: this is **label overlap avoidance**, keeping
+  nameplates from colliding on screen. `s_avoidCount` was already a flagged false positive
+  in §6; this is the file it lives in.
+- **`P:\Code\Gw\Ui\Game\GmWalk.cpp`**, asserting `evt.code < KEYSTATES` — the player's own
+  walk **keys**.
+
+#### What the read did turn up, which is not nothing
+
+- **`PathApi:753 obstacleCenter` and `PathApi:754 obstacleRadius`** — a **second,
+  independent** witness to §2.1's dynamic-obstacle finding, and a stronger one: these are
+  **public API parameters**, not an internal invariant like `PathObstacle:176`'s
+  `radius >= 0`. The shipped interface *accepts moving circular obstacles*. That is the
+  substrate under GWW's body-blocking and melee-surround (§4.5), and
+  `toolkit/mapdata/pathmap.py` has no dynamic obstacle of any kind.
+- **`MsPathPack:115 !m_charIndex.Count()`** — a path *pack* service carrying a **character
+  index**. The closest thing in the whole subsystem to path data keyed by character, and
+  unread.
+- **Two grid representations in one API**: `PathApi:573/574 blockMap`/`mapDims` and
+  `PathApi:965/966 tileMap`/`tileDims`.
+- **`PathData:34`: `src.y` is bounded to ±131071.0f** — 2^17 − 1. A statement about the
+  world's coordinate space that our own decoders could check.
+- **`PathDataImport:89`: `Endian(hdr->sequence) != PATH_SEQUENCE_FAST_SAVE`** — a second
+  sequence variant `pathchunk.py` does not know about.
+
+#### A reading of mine, refuted by our own decoder
+
+`PathBuild:2297` asserts `def->trapezoidCount < 1024`. I read `def` as a **plane**, since
+every other count in that file is per-plane, and predicted no retail plane would reach
+1024. **Refuted, and not narrowly:** across 60 sampled retail maps, **40 of 1,805 planes
+hold 1024 or more trapezoids, the largest 6,577.** So `def` is not a shipped plane — most
+plausibly a build-time input, which fits `PathBuild` being the *builder*. Recorded because
+the wrong reading is the sort that becomes a "constraint" in our own writer later.
+
+**And the check that produced it first produced a vacuous pass.** Its first version passed
+`Entry` objects where a file id was wanted, decoded **zero** maps, and printed
+`CONSISTENT across 0 maps ... headroom 1024` — a green conclusion over an empty sample,
+which is precisely what `toolkit/checks.py` exists to prevent and what
+`test_codec.py`'s ALL-CHECKS-PASSED-over-nothing incident is about. It now declares a
+floor and exits non-zero below it. The result only means anything because the sample was
+read before the conclusion was.
+
+**Reproducing it**
+
+```bash
+python toolkit/clientscan/asserts.py --modules
+python toolkit/clientscan/asserts.py --file PathApi
+python toolkit/clientscan/asserts.py --file PathBuild
+python toolkit/clientscan/asserts.py --file MsPathPack
+```
+
 
 ### 2.2 The one crack: `CHAR_AI_MODES` — **CLOSED 2026-08-11, as UI**
 
@@ -688,7 +806,7 @@ Scripted keystrokes or clicks against ArenaNet in any form, including a "gentle"
 ### 7.9 Four desk follow-ups that need no capture at all
 
 1. ~~**Read the immediate at `0x0080dfae`** — the cardinality of `CHAR_AI_MODES`.~~ **DONE 2026-08-11, and it closed as UI.** 3, across five bound sites; two independent three-arm switches; `AI_MODE_ICONS` also 3; `CHAR_AI_MODE_AGGRESSIVE` = 0; and the modes resolve to **Fight / Guard / Avoid Combat**. Every step could have refuted the prediction and none did. §2.2.1.
-2. **Read the remaining `Engine\Map\Path` modules** — could move movement policy out of the impossible tier.
+2. ~~**Read the remaining `Engine\Map\Path` modules**~~ **DONE 2026-08-11 — all 88 asserts, no steering.** A spatial query library: trapezoids, portals, barriers, flood fill. Movement policy STAYS in the impossible tier. Three corrections to §2.1's accounting and one new closure (`CompassAIControl.cpp` is in the Compass **UI** directory) in §2.1.1.
 3. **Histogram Props-chunk model ids for one map** — closes the last of Gw.dat's 23 slots.
 4. **Run `msghandler.py` on opcode `0x0056`** — settles what the definition `flags` bits mean, from the client's own use.
 
@@ -754,7 +872,7 @@ Play the R1.5 tape of ArenaNet's own recorded monster behaviour into our client 
 |---|---|---|---|
 | 1 | ~~Is `CHAR_AI_MODES` a UI enum or a server-side AI concept?~~ **ANSWERED 2026-08-11: UI.** | *was:* one capstone read | 3 at five sites, two three-arm switches, `AI_MODE_ICONS` = 3, `AGGRESSIVE` = 0, and the labels are **Fight / Guard / Avoid Combat**. The lead closed and the binary negative is total. §2.2.1. |
 | 2 | ~~What do the definition `flags` bits mean?~~ **ANSWERED 2026-08-11: to the client, they are display.** | *was:* one `msghandler.py` run | Nine readers, every one `AvChar`/`AvApi` (the renderer) or `PtRoster`/`PtMinionRoster`/`CtlInstance` (UI panels). Bit 9 — the near-perfect combatant separator, 0/302 vs 282/283 — is an **animation gate**. The partition is real; the client cannot support a combat reading of it. §3.7.1. |
-| 3 | Does `Engine\Map\Path` contain steering or pursuit? | **Reading five more modules' asserts.** | Six of eleven are read and are pure geometry; `PathObstacle`'s `radius >= 0` says dynamic obstacles are modelled. |
+| 3 | ~~Does `Engine\Map\Path` contain steering or pursuit?~~ **ANSWERED 2026-08-11: no.** | *was:* reading five more modules | All 88 asserts across 9 files (not 11) read: pure geometry, zero steering vocabulary, and no file name in the image's 936 contains `steer`/`pursu`/`chase`/`follow`/`patrol`/`wander`. `PathApi:753/754 obstacleCenter`/`obstacleRadius` is a second and stronger dynamic-obstacle witness. **Still unread: 3 files with zero asserts** — `PathBsp.cpp` and all of `Engine\Map\PathEngine\`. §2.1.1. |
 | 4 | Do monster spawn placements live in the Props chunk? | **One prop model-id histogram** for one map, off code `mapexport` already has. | Whether any id lands in the `0x20000000` creature-class range. Closes Gw.dat's last unmeasured slot. |
 | 5 | Does the tick clock agree with the wire clock on the **existing** captures? | **One analyser run**, no new session. | The `0x001E` integral against the wire span, ≤50 ms. If red, every timed claim in the repo is suspect. |
 | 6 | Does windup scale with declared speed, or is it per-creature? | **One session** targeting a third declared speed, n≥8. | A creature at 1.33 or 2.475. Predicts windup in [0.43, 0.46] × its own declared base. |
