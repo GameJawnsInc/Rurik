@@ -125,7 +125,15 @@ class Assert:
 
     @property
     def module(self):
-        """Basename without extension: ChCliSkill, AgMsg, PathDir."""
+        """Basename without extension: ChCliSkill, AgMsg, PathDir.
+
+        A LABEL, NOT AN IDENTITY. Nine basenames on build 38797 name two
+        different source files each -- `PrApi` is both `Gw\\Pref\\PrApi.cpp` and
+        `Engine\\Map\\Props\\PrApi.cpp` -- so this is safe to PRINT beside a line
+        number and an expression, and unsafe to GROUP or COUNT by. `modules()`
+        keys on `.file` for exactly that reason; `Asserts.collisions()` names the
+        nine.
+        """
         return self.file.rsplit("\\", 1)[-1].rsplit(".", 1)[0]
 
     def __repr__(self):
@@ -376,11 +384,73 @@ class Asserts:
                 f"`codescan.py --in <module>`, which takes its bounds from here.")
         return out
 
+    def _grouped(self):
+        """(rows, spellings) keyed by source FILE. Both queries below use it."""
+        cached = getattr(self, "_groups", None)
+        if cached is None:
+            rows, spell, canon = {}, {}, {}
+            for a in self.items:
+                key = canon.setdefault(a.file.casefold(), a.file)
+                rows.setdefault(key, []).append(a)
+                seen = spell.setdefault(key, [])
+                if a.file not in seen:
+                    seen.append(a.file)
+            cached = self._groups = (rows, spell)
+        return cached
+
     def modules(self):
-        out = {}
-        for a in self.items:
-            out.setdefault(a.module, []).append(a)
-        return out
+        """Assert sites grouped by SOURCE FILE: {full path: [Assert, ...]}.
+
+        THE FULL PATH, NEVER THE BASENAME, and that is the whole point of this
+        method. It grouped by `Assert.module` until 2026-08-11 and the census it
+        fed was wrong wherever two source files share one basename. Build 38797
+        has nine such collisions and the two largest are the top two rows of the
+        report: `Base\\Rtl\\Array.cpp` (2 sites) and `Base\\rtl\\Array.h` (4431)
+        were summed into a single row of 4433 printed under the .cpp's path, and
+        `List.cpp`/`List.h` into one of 3295. Neither number described any file.
+
+        The small ones are the dangerous ones, because they are plausible.
+        `Gw\\Pref\\PrApi.cpp` is the preferences API, 67 sites around 0x00499xxx;
+        `Engine\\Map\\Props\\PrApi.cpp` is the props API, 19 sites around
+        0x00738xxx. Unrelated modules in unrelated subsystems, 2.4 MB apart. The
+        census printed ONE row -- `86  P:\\Code\\Gw\\Pref\\PrApi.cpp` -- so a
+        reader asking what the client asserts about props found no such module
+        and would have read that as absence. The representative path was
+        `mods[m][0].file`, i.e. whichever colliding file happened to hold the
+        lowest VA, so which of the two names a row was decided by layout.
+
+        CASE-ONLY SPELLINGS ARE MERGED, and named rather than picked. The image
+        contains both `Base\\Compress\\CmpIo.h` and `Base\\compress\\CmpIo.h`:
+        the build was on Windows, whose paths are case-insensitive, so that is
+        one file reached by two translation units spelling a directory
+        differently -- 65 sites, not 31 and 34. Merging it is a fact about the
+        filesystem and not a guess. But silently choosing one of the two
+        spellings to print is the same defect one level down, so every spelling
+        seen is kept and `spellings()` returns them. The key is the first in VA
+        order; 864 rows, 19758 sites, on build 38797.
+        """
+        return self._grouped()[0]
+
+    def spellings(self):
+        """{key path: [every spelling of it in the image]} for `modules()`."""
+        return self._grouped()[1]
+
+    def collisions(self):
+        """{basename: [the source files sharing it]}, for the >1 cases only.
+
+        Printed under `--modules` because the collision does not stop mattering
+        once the census is right: `--file` and `codescan.py --in` take a NAME and
+        match it as a SUBSTRING, so a reader who reads `PrApi` off the census and
+        types it gets both modules pooled. `by_module` at least sorts them apart
+        under `--file`; `codescan.module_bounds` takes min and max VA and returns
+        0x00499B01..0x0073943A, 2.4 MB of mostly unrelated .text, which is a
+        silent WIDENING of every field search run inside it. Nine on build 38797.
+        """
+        by = {}
+        for path in self.modules():
+            name = path.rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+            by.setdefault(name.lower(), []).append(path)
+        return {k: sorted(v) for k, v in by.items() if len(v) > 1}
 
     def by_module(self, name):
         name = name.lower()
@@ -473,9 +543,26 @@ def main():
         return 0
 
     if a.modules:
-        mods = az.modules()
-        for m in sorted(mods, key=lambda k: -len(mods[k])):
-            print(f"{len(mods[m]):5}  {mods[m][0].file}")
+        # One row per source FILE. The count and the path on a row are now
+        # necessarily about the same file; see `Asserts.modules()` for the nine
+        # basenames that made that false, and why the biggest row of the old
+        # report described no file at all.
+        mods, spell = az.modules(), az.spellings()
+        for m in sorted(mods, key=lambda k: (-len(mods[k]), k.lower())):
+            alt = [s for s in spell[m] if s != m]
+            also = f"   (also spelled {', '.join(alt)})" if alt else ""
+            print(f"{len(mods[m]):5}  {m}{also}")
+        print(f"\n{len(mods)} source file(s), {sum(len(v) for v in mods.values())} "
+              f"site(s) -- one row per file, keyed on the full path")
+        coll = az.collisions()
+        if coll:
+            # Not a leftover of the bug: `--file` and `codescan.py --in` still
+            # take a substring, so naming one of these bounds two modules.
+            print(f"\n{len(coll)} basename(s) below name more than one file, so "
+                  f"`--file <name>` and `codescan.py --in <name>` pool them:")
+            for name in sorted(coll):
+                for p in coll[name]:
+                    print(f"  {len(mods[p]):5}  {p}")
         return 0
 
     if a.callers:
@@ -520,7 +607,23 @@ def main():
           + (f", {shown} shown after --unique" if a.unique else "")
           + (" -- " + ", ".join(f"{k} {v}" for k, v in sorted(by_shape.items()))
              if by_shape else ""))
+    # WHICH FILES that count is over. `--file` matches a substring against the
+    # basename AND the full path, so one name can pool two modules: `--file
+    # PrApi` prints 86 sites drawn from a preferences module and a props module
+    # 2.4 MB apart, every row labelled `PrApi:<line>` because the label is the
+    # basename. The rows were always sorted by path so they printed contiguously,
+    # but the total underneath them said nothing, and the total is what gets
+    # quoted. Only printed when there is more than one, so the common case is
+    # unchanged.
     files = {h.file for h in hits}
+    if len(files) > 1:
+        per = {}
+        for h in hits:
+            per[h.file] = per.get(h.file, 0) + 1
+        why = f" -- `{a.file}` matched each as a substring" if a.file else ""
+        print(f"across {len(files)} source file(s){why}:")
+        for path in sorted(per, key=lambda p: -per[p]):
+            print(f"  {per[path]:5}  {path}")
     missing = [u for u in az.unreadable if u[1] in files]
     if missing:
         print(f"and {len(missing)} further assert call(s) in these files whose "
