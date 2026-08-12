@@ -1,4 +1,4 @@
-# The loopback opcode sweep — what 89 of 487 GAME_SMSG opcodes do
+# The loopback opcode sweep — what 242 of 487 GAME_SMSG opcodes do
 
 **Status: OBSERVED, 2026-08-12.** Our own server sends each catalogued opcode ArenaNet has
 never shown us to a client we control on 127.0.0.1, and the client's reaction is the
@@ -9,12 +9,14 @@ measurement. Method and every refusal: `toolkit/authsrv/smsgsweep.py`. Readout c
 
 | | count | of |
 |---|---|---|
-| measured | **89** | 487 catalogued |
-| ASSERTED — a guard the client wrote caught it | **17** | |
+| measured | **242** | 487 catalogued |
+| ASSERTED — a guard the client wrote caught it | **57** | |
 | FAULTED — access violation, no guard at all | **3** | |
-| REPLIED — client answered | **1** | |
-| SILENT | 68 | |
-| remaining to plan | 237 | of the 324 never-seen |
+| REPLIED — client answered | **3** | |
+| SILENT | 179 | |
+| remaining to plan | 82 | of the 324 never-seen |
+
+Sixty crash rows, **every one paired to the dialog its own run captured** — no gaps.
 
 The 155 opcodes ArenaNet has sent us are excluded (rebuilt from the tapes by
 `--write-seen`: 155 over 12 live connections). So are the ten with no receive-table entry.
@@ -69,14 +71,56 @@ boundary — a derived table may carry the constraint and must leave the express
 `0x0038`–`0x003B` are four consecutive opcodes sharing one constraint, which is the
 strongest structural hint in the table: a family of four attribute messages.
 
-## 3. The one reply
+## 2b. The constraint census — 60 crash rows, and it maps the catalogue
 
-`0x0000` → the client answers c2s `0x0000`, at 10 ms, reproduced in three runs, the last
-with a clean control window holding only the idle-floor ping.
+Grouped by the constraint each opcode's guard enforces. **Our words; ArenaNet's assert
+text stays in the vault.** The clustering is the finding: these are not scattered.
 
-**CONTESTED, and it stays contested.** `0x0000` is always the FIRST opcode in plan order,
-so "reply to `0x0000`" and "reply to the first message of the sweep" are not separated.
-One run with the plan reordered settles it. Do not quote this as a binding until then.
+| n | what must exist / hold | opcodes |
+|---|---|---|
+| 8 | an **inventory** record the payload names | `0x0141` `0x0142` `0x0145` `0x0146` `0x014F` `0x0150` `0x0151` `0x0153` |
+| 6 | an **item** record | `0x0137` `0x0139` `0x0155` `0x0156` `0x0159` `0x0160` |
+| 5 | a valid **encoded string** — first code unit at or above the encoding's base | `0x0033` `0x009E` `0x00B9` `0x00C0` `0x017A` |
+| 6 | a loadable **file id** | `0x0017` `0x0019` `0x00A8` `0x00A9` `0x015F` `0x0162` |
+| 4 | an **attribute state** record, reached through the agent | `0x0038` `0x0039` `0x003A` `0x003B` |
+| 3 | a non-null **object pointer** | `0x0023` `0x0163` `0x0169` |
+| 3 | a **bag** record | `0x0143` `0x0149` `0x014E` |
+| 3 | *(no guard — access violation)* | `0x005F` `0x0060` `0x006F` |
+| 2 | a **sync/session object** | `0x0024` `0x002F` |
+| 2 | a **skill** record | `0x00D1` `0x00D2` |
+| 2 | a **guild** record | `0x0118` `0x011E` |
+| 1 each | agent, hero data, bag count, mission-completion mask, a closed enum, a game-view frame, a result value, a byte buffer, a non-empty accumulator list, a boss count, two skills that must differ, an upgrade item id, a tournament record, an index within a count, and one whose text is empty | `0x009D` `0x0072` `0x0083` `0x0096` `0x0097` `0x00AB` `0x00AD` `0x00B5` `0x00C5` `0x00D4` `0x00D6` `0x016A` `0x0173` `0x0174` `0x0109` |
+
+**`0x0137`–`0x0163` is the inventory and item block**, 17 of the 60 crash rows and almost
+every one of them in one contiguous stretch. A server that wants to hand a player an item
+is working in exactly that range, and this is a map of it that cost no live capture.
+
+## 3. The replies
+
+### 3.1 `0x0166` and `0x0167` → c2s `0x0079` — the first clean binding
+
+Both draw an **empty** c2s `0x0079` (header only, no payload fields) within 10 ms.
+Replicated in two independent runs, and the second was built as a controlled experiment:
+
+| sent | run 1 | run 2 (replication) |
+|---|---|---|
+| `0x0164` | silent | silent |
+| `0x0165` | silent | silent |
+| **`0x0166`** | **→ `0x0079`** | **→ `0x0079`** |
+| **`0x0167`** | **→ `0x0079`** | **→ `0x0079`** |
+
+The two silent sends immediately before are internal negative controls, and they also
+kill the first-send confound below: `0x0166` was not the first message of either run.
+Both control windows held nothing but the idle-floor ping.
+
+Two adjacent opcodes eliciting one empty acknowledgement is the shape of a request/ack
+pair. **What they ask for is not established** — only that the client answers.
+
+### 3.2 `0x0000` → c2s `0x0000` — still CONTESTED
+
+Reproduced in three runs, but `0x0000` is always the FIRST opcode in plan order, so
+"reply to `0x0000`" and "reply to the first message of the sweep" are not separated. One
+run with the plan reordered settles it. Do not quote this as a binding until then.
 
 ## 4. What this does not establish
 
