@@ -2146,7 +2146,21 @@ parallel, with one safety change that is not optional — see its entry.
     **The harness gap is closed too**: `capture_error_dialog` was reachable only under
     `--keep-open`, so ordinary runs captured nothing; it now runs in `run_client`'s
     `finally` before the client is closed, and caught both of §42's asserts unaided.
-    **(e10)** ⬜ Only the TERRAIN is ours. Props, zones, collision and Map Parameters in
+    **(e10)** ✅ **DONE 2026-08-12 (FINDINGS 43). THE CLIENT COMPILED A MAP WE
+    ASSEMBLED** — seven chunks built from typed parameters, **97.69% generated**
+    (2,285 B of 2,339), 54 B borrowed across three NAMED chunks read from the owner's
+    archive at run time. Map Parameters, Terrain, Terrain Dependencies and Path are
+    generated; the deps chunk lands byte-identical to the donor's from four ids. All
+    four predictions passed: no crash, 1,024/1,024 samples equal our height field, a
+    Path chunk produced, and the mesh confined to the flat half (0.0% walkable area
+    below x=1152, extent 1152..3072 — FINDINGS 38's mesh from a map we built rather
+    than an edit of theirs). **One failure paid for itself**: seeding the Path chunk's
+    boundary point at the rect corner, which our own terrain makes unwalkable, asserted
+    `segments->Count()` at PathData:365. **The boundary point is a flood SEED and must
+    stand on walkable ground** — FINDINGS 34 had seed/flood/contour as INFERRED, and
+    this is the first observation of it, undiscoverable from the corpus because every
+    retail map's point is already sensible.
+    **(e10-next)** ⬜ Only the TERRAIN is ours. Props, zones, collision and Map Parameters in
     FINDINGS 38's map are ArenaNet's, so FINDINGS 34's props hard gate was satisfied by
     their data. An end-to-end authored map — §32's Blender pipeline through
     `mapbuild.py` into a Stripped stream — has not been compiled by a client.
