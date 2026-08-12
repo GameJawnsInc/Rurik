@@ -483,7 +483,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   shapes. Each pinned at a named address with the reason it was missed, because
   all three answered a clean confident zero. Its stdlib half runs without
   capstone: `asserts.py` takes no disassembler on purpose, and its under-count
-  silently narrows every `--in <module>` range on the capstone side),
+  silently narrows every `--in <module>` range on the capstone side. §8 and §9
+  are the same failure from the other direction, found 2026-08-11: the assert
+  census grouped by BASENAME and printed the path of whichever colliding file
+  held the lowest VA, so nine rows summed two modules under one of their names
+  while the other vanished. The two biggest rows of that report described no
+  file in the image — `Base\rtl\Array.h` (4431) and `Base\rtl\List.h` (3288)
+  printed as 4433 and 3295 under their `.cpp` siblings — and `PrApi` merged the
+  preferences module (67) with the props module (19), 2.4 MB apart, so "props
+  has no PrApi.cpp" read as absence. §8's FIRST check is the negative control,
+  the collision itself, and it reproduces the old grouping inline so 67/19 is a
+  difference between two live answers rather than a number the test asked the
+  code to confirm about itself; the basename sabotage reddens 9 of its 19. §9
+  pins the consequence downstream, where `module_bounds` matches a substring and
+  therefore silently WIDENS `--in PrApi` to 2.4 MB — with `--in AvChar`, which
+  legitimately catches the adjacent `AvCharAnim.cpp`, as the control that must
+  keep reading differently, since a warning that fires the same way on both is
+  noise),
   `toolkit/test_checks.py` (the check on the checker — see below),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into

@@ -405,6 +405,18 @@ class Image:
         return sorted(set(calls)), sorted(words)
 
 
+_ASSERTS = {}
+
+
+def _asserts(exe):
+    """One `Asserts` per exe per process. Scanning 5.4 MB is not free and the
+    two queries below plus `test_codescan.py` ask for it several times a run."""
+    from asserts import Asserts
+    if exe not in _ASSERTS:
+        _ASSERTS[exe] = Asserts(exe)
+    return _ASSERTS[exe]
+
+
 def module_bounds(name, exe):
     """(lo, hi, count) for an ArenaNet source module, from its own asserts.
 
@@ -413,13 +425,57 @@ def module_bounds(name, exe):
     silence, not absence. This is a filter over an exhaustive scan, so a range
     that is slightly too wide costs nothing and a range that is too narrow shows
     up as a hit count that disagrees with the unbounded one.
+
+    "SLIGHTLY" DOES NOT COVER A BASENAME COLLISION, though, which is why
+    `module_files` exists beside this. `name` is matched as a substring, and nine
+    basenames on build 38797 name two source files each: `PrApi` bounds
+    0x00499B01..0x0073943A because ArenaNet has a preferences PrApi.cpp and a
+    props PrApi.cpp 2.4 MB apart, and a `--field --in PrApi` inside that range is
+    drawn from most of the image. Call `module_files` and say what was bounded.
     """
-    from asserts import Asserts
-    hits = Asserts(exe).by_module(name.lower())
+    hits = _asserts(exe).by_module(name.lower())
     if not hits:
         return None
     vas = [h.va for h in hits]
     return min(vas), max(vas), len(vas)
+
+
+def module_files(name, exe):
+    """The distinct source files `name` matched: {path: (count, lo, hi)}.
+
+    Reported rather than resolved. A substring is a legitimate way to name a
+    subsystem -- `--in Rtl` meaning all of it is a real query -- so the caller is
+    told what its name actually caught and decides, instead of this guessing that
+    two files 2.4 MB apart were not both wanted.
+    """
+    per = {}
+    for h in _asserts(exe).by_module(name.lower()):
+        per.setdefault(h.file, []).append(h.va)
+    return {f: (len(v), min(v), max(v)) for f, v in per.items()}
+
+
+def bounds_note(name, exe, indent="  "):
+    """The lines `--bounds`/`--in` print when a name caught more than one file.
+
+    Each file's OWN span, not just its name, because the two ways a name catches
+    two files are not equally bad and the reader has to be able to tell them
+    apart. `AvChar` also matches `AvCharAnim.cpp`, whose two sites sit
+    immediately below AvChar.cpp's -- the range grows by 0x17F0 bytes of
+    genuinely adjacent code and nothing downstream notices. `PrApi` matches two
+    unrelated modules 2.4 MB apart and the range between them is 99.9% neither.
+    Printing only the file names would make those look like the same warning.
+
+    Empty list when the name caught one file, which is the usual case.
+    """
+    files = module_files(name, exe)
+    if len(files) < 2:
+        return []
+    out = [f"WARNING: `{name}` matched {len(files)} source files, so the range "
+           f"above is their union and the gaps between them belong to neither:"]
+    for path in sorted(files, key=lambda p: files[p][1]):
+        n, lo, hi = files[path]
+        out.append(f"{indent}{n:5}  0x{lo:08X}..0x{hi:08X}  {path}")
+    return out
 
 
 def main():
@@ -451,6 +507,8 @@ def main():
                          f"silence, not absence -- the module may still be "
                          f"there with nothing to assert.")
         print(f"{a.bounds}: 0x{b[0]:08X}..0x{b[1]:08X}  ({b[2]} assert sites)")
+        for line in bounds_note(a.bounds, exe):
+            print(line)
         return 0
 
     if a.field:
@@ -463,6 +521,8 @@ def main():
                 return print(f"cannot bound {a.module}: it has no asserts.")
             lo, hi, n = b
             where = f"{a.module} 0x{lo:08X}..0x{hi:08X} ({n} assert sites)"
+            for line in bounds_note(a.module, exe):
+                print(line)
         rows = img.field_access(disp, lo, hi)
         if a.writes:
             rows = [r for r in rows if r[1]]

@@ -878,11 +878,29 @@ over 29 maps, not 1.96–3.36 over 10; the navmesh overhang maximum is 2,141 uni
 not ~700; grid dims max out at 768×384 by area (no 768×1024 map exists); the
 Bloated Path chunk range is 419–950,208 B; `m_bitOffset % 8 == 4` is
 `TrnChunk:490`, not `TrnBitStore`; four bit-31 file ids land on map rows, not two;
-`--modules` prints 855 basenames from 865 distinct path strings, not 856; the
+`--modules` prints 855 basenames from 865 distinct path strings, not 856 (**and
+that gap was a defect, not a rounding — see the note under B12 below**); the
 `Map`/`Model` tree is 92 files in 14 directories, not 93 in 13; every Bloated map
 row carries exactly **2** file ids (the `{4: 2}` outlier is our own
 `archive.py:file_id_table()` registering bit-31 ids under both raw and masked
 forms — our helper double-counting, not a property of the archive).
+
+> **Follow-up, 2026-08-11 — the 865 → 855 gap above was `--modules` silently
+> merging modules.** OBSERVED. B12 recorded the discrepancy as a count to correct;
+> it was `Asserts.modules()` grouping by BASENAME while the printer showed
+> `mods[m][0].file`, i.e. the path of whichever colliding file held the lowest VA.
+> Nine basenames on build 38797 name two source files each, so nine rows summed
+> two modules under one of their names and the other file was absent from the
+> census entirely. The two largest rows of that report described no file in the
+> image: `Base\rtl\Array.h` (4431 sites) and `Base\rtl\List.h` (3288) printed as
+> 4433 and 3295 under their `.cpp` siblings' paths. The one that would have
+> produced a wrong *finding* is `PrApi` — `Gw\Pref\PrApi.cpp` (67, preferences)
+> and `Engine\Map\Props\PrApi.cpp` (19, props) are unrelated modules 2.4 MB apart,
+> printed as one row of 86 against the preferences path, so "props has no
+> PrApi.cpp" read as absence. `modules()` now keys on the full path and prints 864
+> rows over 19,758 sites; the tenth apparent collision, `Base\Compress\CmpIo.h` vs
+> `Base\compress\CmpIo.h`, is one file spelled two ways by two translation units
+> and is merged with both spellings named. Regression: `test_codescan.py` §8/§9.
 
 **B13 — Provenance of the assert evidence.** Track 1's reproduce block claims the
 asserts were read from the vaulted build; `asserts.py` has `DEFAULT_EXE =
