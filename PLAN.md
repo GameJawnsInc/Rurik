@@ -503,6 +503,37 @@ The cheapest next thing this opens up is **a deliberately labelled input run** (
 an accident of five unplanned minutes) and **chaining tapes across a map transition**,
 which is what would turn four instance tapes into one continuous session.
 
+### 3.6 The loopback opcode sweep — 242 of 487 GAME_SMSG opcodes measured
+
+**2026-08-12, `ece0b8a`.** [studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md).
+Our own server sends each catalogued opcode ArenaNet has never shown us to a client we
+control on 127.0.0.1 and reads the reaction. 242 measured, 82 of the never-seen 324 left:
+**57 ASSERTED, 3 FAULTED, 3 REPLIED, 179 SILENT**, and every crash row pairs to the dialog
+its own run captured.
+
+**One binding, and it is the first this project can quote.** s2c `0x0166` and `0x0167`
+each draw an empty c2s `0x0079` within 10 ms — replicated in two runs, with `0x0164` and
+`0x0165` silent immediately before them as internal negative controls. `0x0000 → 0x0000`
+reproduces three times and stays CONTESTED, because `0x0000` is always the first send.
+
+**The crash census maps the catalogue**: 8 opcodes want an inventory record, 6 an item, 6
+a loadable file id, 5 a valid encoded string, 4 an attribute state, 3 a bag. `0x0137`–
+`0x0163` is the inventory and item block — 17 of 60 crash rows in one contiguous stretch.
+
+**What it cannot reach, measured rather than assumed.** The remaining gates are CLIENT
+STATE, not payload: `charHeroData` wants a hero, the mission mask wants a finished
+mission, `bagCount` wants bags past the starter. No wire value opens them from a level-1
+character standing in one map. Six of twenty gates opened; the rest need a richer client.
+
+Three readout defects were found the hard way and each printed a confident wrong number
+first — a stimulus stream that could not see itself, a stimulus fired inside the client's
+own load traffic, and a socket fence that scored **78 opcodes SILENT against a client
+showing a crash dialog** because a Guild Wars assert leaves the process alive with its
+socket open. The fence is the client's own ping reply now. A fourth was found only
+because the operator said what was on screen: the default hostile was killing the player
+throughout, so sixteen `SILENT` rows meant "silent on a corpse". `record()` refuses such
+a run outright.
+
 ### 3.2 R4b and R4c, rewritten as counts
 
 The old criteria could not be evaluated. R4b's was *"one skill from each mechanical

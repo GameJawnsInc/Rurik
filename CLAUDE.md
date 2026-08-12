@@ -580,6 +580,44 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   the third by `read()` refusing and naming both speeds rather than averaging. Also:
   six definitions carry an EncString word in the UTF-16 surrogate range and were
   **unsendable by this server until the `string16` fix**),
+  `toolkit/authsrv/test_smsgsweep.py` (the loopback opcode sweep's READOUT, against
+  captures the test builds out of dicts -- no vault for the scoring half, no socket, no
+  client, because a scoring defect is not a property of any one capture. It is mostly
+  negative controls, because the 2026-08-12 pilot's four defects each printed a
+  CONFIDENT NUMBER rather than an error and three printed the wrong one: the analyser
+  read s2c `frame` events where our sends are `sent` events, so it found zero stimuli in
+  a run that sent twelve and reported "nothing happened"; the first packet went out
+  3.66 s in, INSIDE the client's own instance-load traffic, and a c2s 0x0000 arriving
+  5 ms later was scored a reply; `ConnectionResetError` after 0x000B was reported as a
+  crash when the session report's own endpoint table says the client lived another 42 s,
+  with no assert and no fatal-error dialog -- the final screenshot is a live client on a
+  loading screen; and 0x000B is one of the ten opcodes with NO receive-table entry, which
+  the plan should never have held. **The fence is the client's own PROOF OF LIFE, not the
+  socket, and that is the section worth reading.** A Guild Wars assert leaves the process
+  ALIVE behind a modal dialog with its message pump stopped and its socket open: on the
+  first full run the client stopped answering at t=17.16 and the reset did not arrive
+  until t=48.77, so a socket fence scored **78 opcodes SILENT against a client that was
+  showing a crash dialog** and wrote all 90 into the ledger. An opcode is now scored only
+  if a c2s message arrived AFTER it, the run ending belongs to a WINDOW rather than to
+  one opcode (blaming the last one named 0x00A9 when the assert was near 0x0012), and
+  `--only` bisects that window. The cost is stated as its own check: the last ~5 s of
+  every run has no proof and is retried. Each defect is pinned by reproducing the broken
+  version inline and requiring it to differ. The
+  control window is the design: the quiet seconds before the first send measure what the
+  client says UNPROMPTED in this session, so the inherited floor {0x0008, 0x0009} --
+  measured on a PARKED client -- is corroborated rather than trusted, and a reply on an
+  opcode the window also produced is CONTESTED rather than counted. Section 8 rebuilds
+  the sweep's DENOMINATOR from the tapes rather than from a file somebody made once:
+  **155 opcodes over 12 live connections, and 324 remaining**. Its control is the defect
+  that was made writing it -- filtering channels by `:6112` cut the corpus to 52 and said
+  so without complaint, because ArenaNet serves the GAME channel on port 80 in 10 of the
+  12 canon connections),
+  Section 7b covers `sweeploop.py`, the unattended driver: its stop conditions are a
+  PURE function so they can be checked without a client, and its control is that ONE
+  barren round must NOT stop -- a single unlocalised crash is normal, and stopping at one
+  would end most sweeps early. The last check asks the SYNTAX TREE whether the loop
+  imports the cage or launches anything itself, because the grep version of that check
+  went red on the docstring explaining the rule),
   `toolkit/authsrv/test_rotate.py` (that GAME_CMSG 0x0040 really is ROTATE_PLAYER: the
   client's own assert text and the two ±inf constants are still at their addresses, both
   payload fields are still `dword` and not the `float` they look like, and the finite
