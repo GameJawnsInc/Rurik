@@ -1,35 +1,47 @@
-"""Find ArenaNet assert EXPRESSIONS committed to git alongside their source path and line.
+"""Count ArenaNet assert expressions cited in committed prose, to catch a DUMP forming.
 
-WHY THIS EXISTS. The provenance gate's boundary is MEASUREMENT vs EXPRESSION
-(owner's ruling 2026-08-11, `PLAN.md` 7 Q3). Measured facts are permitted in bulk;
-ArenaNet's *expression* is not, and the ruling names one form of it explicitly:
+WHAT THIS IS FOR, and it is narrower than it looks. The provenance gate's boundary is
+MEASUREMENT vs EXPRESSION (owner's ruling 2026-08-11, `PLAN.md` 7 Q3, refined
+2026-08-12). Under the refinement:
 
-    "verbatim assert expressions with their source path and line. A derived table
-     may carry the *constraint* (opcode, field, bound, address) and must leave the
-     expression text out."
+  * a SINGLE assert expression cited as the evidence for a claim is a MEASUREMENT,
+    and is permitted with its file and line;
+  * a BULK DUMP of assert strings is still ArenaNet's expression and is refused;
+  * asset bytes, `Gw.dat` chunks and decompiled function bodies are refused
+    absolutely, and that tier is the one with teeth.
 
-`toolkit/content.py` has enforced the measurement side of that gate for
-`source = "client-table"` rows since the day it was written. Nothing has ever
-enforced the expression side, and nothing has ever looked at prose at all -- so
-while the content store was refusing unprovenanced rows, seventeen study documents
-accumulated assert text pasted straight out of the crash dialog and out of
-`asserts.py --grep`. A rule nothing checks is a wish.
+So this module is an ACCUMULATION TRIPWIRE, not a gate. Its job is to notice a
+document turning into a string dump. `studies/smsg/FINDINGS.md` quotes 65 asserts to
+name twenty GAME_SMSG opcodes and that is FINE -- the quote is what lets a reader
+audit the naming argument without the binary in front of them.
 
-WHAT IS AND IS NOT A FINDING. The refused artifact is the TRIPLE: ArenaNet's
-authored expression text, its source file, and its line. Any two of the three are
-permitted and this module must stay quiet on them, because the study docs are built
-out of the permitted forms and a checker that reddens at all of them is one nobody
-can leave switched on:
+HOW IT GOT HERE, because the first version was wrong in an instructive way. Read
+literally, the clause "verbatim assert expressions with their source path and line"
+made 134 sites across sixteen documents refusable, and one session scrubbed 46 of them
+before the owner asked whether provenance was starting to cost more than it protected.
+It was: this repo's recorded provenance mistakes are REFUSALS -- an undecided assert
+table, unbuilt unit data -- not disclosures. The zero-tolerance version of this file
+would have kept demanding rewrites that traded evidence quality for nearly nothing.
+What survived is the cheap part: `content.py` enforced the gate's other half from day
+one while prose was checked by nobody, and a tripwire with real headroom fixes that
+for free.
+
+WHAT IS AND IS NOT COUNTED. A citation is ArenaNet's authored expression text plus its
+source file plus its line. Any two of the three are ordinary and this module must stay
+quiet on them, because the study docs are built out of the permitted forms and a
+checker that reddens at all of them is one nobody can leave switched on:
 
   * a bare source path (`P:\\Code\\Gw\\Char\\CharPool.cpp`)              -- permitted
   * a path with a line (`AgMsg.cpp:208`)                                 -- permitted
   * a field or bound named in prose (``the `m_attackInterval` bound``)   -- permitted
   * a VA, an offset, a struct layout, a count                            -- permitted
-  * `AgMsg:208 "(int)message.time >= 0"`                                 -- REFUSED
+  * `AgMsg:208 "(int)message.time >= 0"`                                 -- COUNTED
 
-`toolkit/clientscan/asserts.py --grep` prints the refused triple by design and is
-fine: it is a TOOL reading the owner's own install. This module is only about what
-is committed.
+Counted is not refused. One is evidence; sixty in a file nobody argued from is a dump.
+The ceilings live in `test_provlint.py`, which is where the judgement belongs.
+
+`toolkit/clientscan/asserts.py --grep` prints citations by design and is fine: it is a
+TOOL reading the owner's own install. This module is only about what is committed.
 
 THE MODULE-NAME PROBLEM, and why this scans twice. `asserts.py` prints locations as
 `AgMsg:208` with no extension, so the naive pattern for one is `Word:digits` -- which
@@ -251,7 +263,7 @@ def strip_locations(line, modules):
 
 
 def scan_text(text, path, modules):
-    """Every refused triple in one document."""
+    """Every assert citation in one document."""
     out = []
     lines = text.splitlines()
     for i, line in enumerate(lines):
@@ -324,7 +336,7 @@ def markdown_files(root):
 
 
 def scan_tree(root):
-    """Every refused triple in every tracked markdown file under `root`."""
+    """Every assert citation in every tracked markdown file under `root`."""
     paths = list(markdown_files(root))
     texts = {}
     for p in paths:
@@ -351,9 +363,11 @@ def main(argv):
         _say(f"\n{path}")
         for f in by_file[path]:
             _say(f"  :{f.line:<6} [{f.kind:<6}] {f.loc:<44} {f.expr}")
-    _say(f"\n{len(found)} refused triple(s) in {len(by_file)} file(s); "
-         f"{len(modules)} ArenaNet module names recognised")
-    return 1 if found else 0
+    _say(f"\n{len(found)} assert citation(s) in {len(by_file)} file(s); "
+         f"{len(modules)} ArenaNet module names recognised.")
+    _say("Citations are PERMITTED (PLAN.md 7 Q3, refined 2026-08-12). "
+         "test_provlint.py holds the dump ceilings.")
+    return 0  # counting is not judging; the ceilings live in test_provlint.py
 
 
 if __name__ == "__main__":

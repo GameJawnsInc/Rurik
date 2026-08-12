@@ -48,13 +48,18 @@ the gap with a checker.
   field, the symbol, the address, the line, the build — and drops only ArenaNet's
   wording. No claim lost a supporting fact; §4 records the two places where the
   rewrite had to *add* a measured detail to keep the claim as strong as it was.
-- **NOT DONE, and it is the owner's call.** **104 triples remain in 5 files**, 65 of
-  them in [studies/smsg/FINDINGS.md](../smsg/FINDINGS.md). Those are not more of the
-  same: that document's method *is* the assert text, and scrubbing it is a different
-  kind of edit from the 33. §6 puts the question.
+- **STOPPED, by the owner, the same day — and the stop is the most useful result
+  here.** 104 citations remained in 5 files, 65 in
+  [studies/smsg/FINDINGS.md](../smsg/FINDINGS.md). Asked whether provenance was
+  starting to cost more than it protected, the owner **refined the ruling** rather
+  than authorising the rest of the sweep: *a single assert cited as evidence is a
+  measurement; the refusal targets bulk dumps and decompiled bodies.* The 104 are
+  permitted, the backlog is retired, and `smsg` keeps the quotes that make its naming
+  argument auditable. §6.
 - **DONE.** `toolkit/provlint.py` + `toolkit/test_provlint.py`, in `CLAUDE.md`'s suite
-  list. The scrubbed files are held at zero and the remaining five at a not-growing
-  baseline, so the remainder is visible rather than pending.
+  list — repurposed from a zero-tolerance gate into an **accumulation tripwire**. It
+  is silent on `smsg`'s 65 and fires on a 15-row dump appended to a document that
+  argues from none. That is the only part of this study with no recurring cost.
 
 ---
 
@@ -221,16 +226,16 @@ clean — which is why it is written down here rather than left for the next ses
 - It requires a **line number**, so category (c) — expression + path, no line — is
   invisible to it. All four scrubbed (c) sites were found by hand.
 - **It matches three MACHINE formats and no prose paraphrase.** `AgMsg:208 "expr"` is
-  caught; *"the CharPool method whose line 84 asserts `expr`"* and a table cell reading
-  *"**AvChar** — 5893 `expr`"* are the same disclosure and are not. Sixteen such sites
-  survived the first pass in files this study had already called clean, including a
-  nine-row stack-trace table in `enemy/PLAN.md` §"frames". They were swept by hand on
-  2026-08-12 and are **not continuously enforced** — so "the scrubbed files are at
-  zero" means *zero machine-detectable triples*, which is a weaker claim than it
-  sounds and should be read as one. Widening to prose is possible but the precision
-  cost is real: the natural pattern (a vouched module, an integer, an expression, any
-  order, one line) also matches ordinary sentences about addresses, and §5's first
-  bullet is why that trade was not taken blind.
+  caught; *"the CharPool method whose line 84 asserts `expr`"* is not. Sixteen such
+  sites survived the first pass in files this study had already called clean.
+  **Under the zero-tolerance reading that was a defect; under the tripwire it is
+  not**, and the difference is worth stating because it is the clearest example of a
+  rule change making work disappear rather than creating it. A dump is a paste, and a
+  paste keeps its machine format — nobody hand-paraphrases sixty asserts into prose.
+  So the blind spot does not matter at the job the checker now has. **There is no
+  standing obligation to hand-grep for paraphrases**; that expectation was created by
+  the first draft of this study and is deleted. The checker catches what it catches,
+  and that is the standard.
 - An upstream marker on a line suppresses the two inference-based shapes. That is
   deliberate (the second gate is a licence question, not this one) but it is a real
   blind spot, and it hid `mapdata/FORMAT.md:233` for the length of a draft because the
@@ -239,9 +244,9 @@ clean — which is why it is written down here rather than left for the next ses
 
 ---
 
-## 6. The 104 that remain — an open question for the owner
+## 6. The 104 that remain — CLOSED, and the sweep was stopped
 
-| file | triples |
+| file | citations |
 |---|---|
 | [studies/smsg/FINDINGS.md](../smsg/FINDINGS.md) | **65** |
 | [studies/monsterai/FINDINGS.md](../monsterai/FINDINGS.md) | 12 |
@@ -259,23 +264,33 @@ is real, at the quoted line, and genuinely reached"`). Rewriting 65 of those to
 something real: the reader's ability to audit the naming argument without the binary in
 front of them.
 
-That is a call about how much auditability the gate is meant to cost, and it belongs to
-the owner rather than to a session. Three options, no recommendation smuggled in:
+**RULED 2026-08-12 by the owner, in answer to "are we going too crazy with
+provenance?"** — a fair question, and this repo's own record answers it. The
+provenance mistakes that have cost something here were **refusals**: `PLAN.md` §7 Q3
+lists three, including R4c-2's unit data left unbuilt behind a rule that never forbade
+it. Nothing in the record says a disclosure has ever cost anything.
 
-1. **Scrub all 104 the same way as the 33.** Uniform, defensible, and `smsg` loses the
-   quotability of its naming evidence.
-2. **Scrub the incidental ones, keep the load-bearing ones with a stated exemption.**
-   The ruling's target is bulk reproduction of ArenaNet's authored text; an argument
-   that turns on the exact wording is arguably a different use. Would need the
-   exemption written into §7 Q3 and into `provlint.py`'s allowlist, per-site.
-3. **Rule that a single assert expression is a measurement, not expression**, and that
-   the refusal is aimed at bulk dumps. That would retire most of this study — and it is
-   a real reading, since the docs' own framing has always been that the assert *names a
-   constraint*.
+**The ruling: a single assert expression cited as evidence is a MEASUREMENT and is
+permitted with its file and line. The refusal targets BULK dumps and decompiled
+bodies.** The 104 are permitted. The sweep stops. Two further distinctions came with
+it and both narrow the rule:
 
-Until that is decided, `test_provlint.py` holds the five files at a **not-growing**
-baseline: scrubbing one is progress and does not redden the suite, a new one is the
-drift resuming and does.
+- **The crash dialog is not extraction.** `Assertion: <expr> / File.cpp(NNN)` is text
+  the retail client puts on screen for any player who crashes, and players paste it
+  into forums. Treating that identically to a scripted sweep of the PE's string table
+  was the original clause's main overreach.
+- **Two tiers, not one.** The bytes gate — assets, `Gw.dat` chunks, decompiled bodies
+  — is existential, binary, cheap to comply with and impossible to retrofit. Prose
+  hygiene is none of those things. Conflating them is what let a low-risk question
+  consume a session.
+
+**What is kept.** The 46 already-scrubbed sites read fine and stay scrubbed, but they
+are **no longer required to be at zero** — the test's per-file zero list is gone. What
+survives is the cheap half of the original finding: `content.py` enforced this ruling's
+permitted side from day one while prose was checked by nobody, and a tripwire with real
+headroom closes that for free. `test_provlint.py` now allows `smsg` 80 and an
+unlisted document 10, and it was checked in the direction that matters — a 15-row
+assert dump appended to `tape/FINDINGS.md` trips it, while `smsg`'s 65 do not.
 
 ---
 

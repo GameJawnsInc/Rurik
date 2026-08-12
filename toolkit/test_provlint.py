@@ -7,24 +7,35 @@ that refuses "verbatim assert expressions with their source path and line", was 
 by nobody and applied to nothing. Seventeen study documents accumulated assert text
 pasted straight out of the crash dialog while the content store was refusing rows.
 
+WHAT IT IS FOR CHANGED ON 2026-08-12, AND THE CHANGE MATTERS MORE THAN THE CODE.
+The first version was a zero-tolerance gate, on a literal reading of the ruling. The
+owner refined the ruling the same day (`PLAN.md` 7 Q3) after asking whether provenance
+was starting to cost more than it protected: **a single assert cited as evidence is a
+measurement and is permitted; the refusal targets BULK dumps and decompiled bodies.**
+So this is now an ACCUMULATION TRIPWIRE. It does not care that
+`studies/smsg/FINDINGS.md` quotes 65 asserts to name twenty opcodes -- that is the
+auditable half of the naming argument. It cares whether a document is turning into a
+string dump.
+
 THREE THINGS ARE TESTED AND THE SECOND IS THE REAL ONE.
 
-  1. It catches all three shapes the drift actually took (section 2).
+  1. It catches all three shapes assert citation actually takes (section 2).
   2. IT DOES NOT REDDEN AT THE PERMITTED FORMS. The study docs are BUILT out of
      locations, field names, bounds and VAs -- all permitted, all explicitly named in
      the ruling as the constraint we may keep. A checker that flags those is one that
      gets switched off within a day, and switching it off restores the exact silence
      it exists to end. Section 3 is therefore the long one.
-  3. The corpus itself, with the un-scrubbed files named and bounded (section 5), so
-     the remainder is visible rather than pending.
+  3. The corpus, against per-file and tree-wide ceilings with real headroom
+     (section 5). Headroom is the point: ordinary research adds citations, and a
+     tripwire that fires on ordinary work is one nobody leaves on.
 
 A NOTE ON WHAT IS NOT TESTED. This checker reads PROSE, so its judgement of "is this
-string an expression" is a heuristic and will always have a residual error rate in both
-directions. That is acceptable here in a way it would not be for a wire codec: the
-consequence of a miss is a line of drift that the next run catches once someone widens
-a pattern, and the consequence of a false positive is a rewritten sentence. What is NOT
-acceptable is the checker silently reading zero files, so section 5 asserts the corpus
-size before it asserts the corpus is clean.
+string an expression" is a heuristic with a residual error rate in both directions, and
+it matches three machine formats and no prose paraphrase. That is fine at the job it
+now has -- a dump is not going to be hand-written in paraphrase -- and it would NOT
+have been fine for the zero-tolerance version, which is part of why that version was
+the wrong design. What is not acceptable is the checker silently reading zero files, so
+section 5 asserts the corpus size and the detector's own liveness around the ceilings.
 
 standard library only.
 
@@ -38,39 +49,41 @@ sys.path.insert(0, HERE)
 import checks  # noqa: E402
 import provlint  # noqa: E402
 
-# 19, from a real green run on 2026-08-12.
-LEDGER = checks.Ledger("provlint", floor=19)
+# 18, from a real green run on 2026-08-12 after the ruling was refined.
+LEDGER = checks.Ledger("provlint", floor=18)
 
 ROOT = os.path.dirname(HERE)
 
-# Files still carrying the refused triple, MEASURED 2026-08-12 at the counts below.
-# These predate the 2026-08-11 ruling and are drift, not defiance -- see the scrub
-# note in `studies/agentprops/FINDINGS.md`. The rule here is NOT-GROWING rather than
-# an exact match: scrubbing one is progress and must not redden the suite, while a new
-# one is the drift resuming and must. Delete a row when its file reaches zero.
-BASELINE = {
-    os.path.join("studies", "smsg", "FINDINGS.md"): 65,
-    os.path.join("studies", "monsterai", "FINDINGS.md"): 12,
-    os.path.join("studies", "reconstruction", "FINDINGS.md"): 11,
-    os.path.join("studies", "customarea", "FINDINGS.md"): 9,
-    os.path.join("studies", "skillcast", "FINDINGS.md"): 7,
+# WHAT THIS SECTION ENFORCES CHANGED ON 2026-08-12, and the change was a LOOSENING.
+#
+# The first version held eleven scrubbed files at zero and five others at a
+# not-growing baseline, on a literal reading of "verbatim assert expressions with
+# their source path and line". The owner refined the ruling the same day (`PLAN.md`
+# 7 Q3): a SINGLE assert cited as evidence is a measurement and is permitted; the
+# refusal targets BULK dumps and decompiled bodies. `studies/smsg/FINDINGS.md` quotes
+# 65 of them to name twenty GAME_SMSG opcodes, and the quote is what lets a reader
+# audit the naming without the binary -- so a gate demanding zero was costing more
+# evidence than it protected.
+#
+# So the ceiling below is an ACCUMULATION TRIPWIRE, not a debt schedule. A document
+# is allowed to cite; it is not allowed to become a string dump. The grandfathered
+# entries are the five documents that legitimately argue from assert text; anything
+# else gets NEWCOMER_CEILING before somebody should look at it. Raise a number when
+# a document has a real reason to argue from more asserts -- that is a normal edit,
+# not a defeat.
+NEWCOMER_CEILING = 10
+GRANDFATHERED = {
+    os.path.join("studies", "smsg", "FINDINGS.md"): 80,
+    os.path.join("studies", "monsterai", "FINDINGS.md"): 25,
+    os.path.join("studies", "reconstruction", "FINDINGS.md"): 25,
+    os.path.join("studies", "customarea", "FINDINGS.md"): 25,
+    os.path.join("studies", "skillcast", "FINDINGS.md"): 25,
 }
 
-# The sites scrubbed on 2026-08-12. Each file must now be CLEAN: these are the exact
-# documents the drift was found in, so a regression here is the work coming undone.
-SCRUBBED = [
-    os.path.join("studies", "agentprops", "FINDINGS.md"),
-    os.path.join("studies", "cmsg", "FINDINGS.md"),
-    os.path.join("studies", "tape", "FINDINGS.md"),
-    os.path.join("studies", "enemy", "PLAN.md"),
-    os.path.join("studies", "datwrite", "FINDINGS.md"),
-    os.path.join("studies", "character", "FINDINGS.md"),
-    os.path.join("studies", "mapdata", "FORMAT.md"),
-    os.path.join("studies", "review", "FINDINGS.md"),
-    os.path.join("studies", "divergence", "FINDINGS.md"),
-    os.path.join("studies", "texture", "FINDINGS.md"),
-    "PLAN.md",
-]
+# A dump landing anywhere in the tree moves this even if no single file trips its own
+# ceiling. 104 on 2026-08-12; the headroom is deliberate, because ordinary research
+# adds citations and a tripwire that fires on ordinary work gets switched off.
+TOTAL_CEILING = 160
 
 
 def hits(text, modules=None):
@@ -198,32 +211,28 @@ def main():
     for f in found:
         by_file[f.path] = by_file.get(f.path, 0) + 1
 
-    dirty = sorted(p for p in SCRUBBED if by_file.get(p))
-    LEDGER.ok(not dirty,
-              f"all {len(SCRUBBED)} files scrubbed on 2026-08-12 are still clean",
-              f"REGRESSED: {[(p, by_file[p]) for p in dirty]}" if dirty else "clean")
+    over = {p: (n, GRANDFATHERED.get(p, NEWCOMER_CEILING))
+            for p, n in by_file.items()
+            if n > GRANDFATHERED.get(p, NEWCOMER_CEILING)}
+    LEDGER.ok(not over,
+              "no document is becoming an assert-string dump",
+              f"OVER CEILING: {over}" if over else
+              f"worst is {max(by_file.values(), default=0)} in a file allowed "
+              f"{max(GRANDFATHERED.values())}")
 
-    grown = {p: (n, BASELINE[p]) for p, n in by_file.items()
-             if p in BASELINE and n > BASELINE[p]}
-    LEDGER.ok(not grown,
-              f"and none of the {len(BASELINE)} un-scrubbed files has grown",
-              f"GREW: {grown}" if grown else
-              f"{sum(by_file.get(p, 0) for p in BASELINE)} remaining, "
-              f"baseline {sum(BASELINE.values())}")
+    total = sum(by_file.values())
+    LEDGER.ok(total <= TOTAL_CEILING,
+              f"and the tree-wide count is under {TOTAL_CEILING}",
+              f"{total} across {len(by_file)} files")
 
-    unknown = {p: n for p, n in by_file.items()
-               if p not in BASELINE and p not in SCRUBBED}
-    LEDGER.ok(not unknown,
-              "and no file outside the baseline carries the refused triple",
-              f"NEW DRIFT: {unknown}" if unknown else "none")
-
-    # The baseline is only meaningful if it is still reachable. A checker whose
-    # patterns rot reports a clean tree and the shrinking count looks like progress.
-    total_baseline = sum(by_file.get(p, 0) for p in BASELINE)
-    LEDGER.ok(total_baseline > 0,
-              "the un-scrubbed files still produce findings",
-              f"{total_baseline} -- if this ever hits 0 without a scrub commit, the "
-              "patterns have rotted rather than the tree having been cleaned")
+    # The ceilings are only meaningful if the detector still fires. A checker whose
+    # patterns rot reports a clean tree, and under a not-growing rule that reads as
+    # progress rather than as breakage -- which is the one way this test could go
+    # quietly useless while staying green.
+    LEDGER.ok(total > 0,
+              "and the detector still finds the citations it is measuring",
+              f"{total} -- a drop to 0 with no scrub commit means the patterns "
+              "rotted, not that the tree got cleaner")
 
     return LEDGER.verdict()
 
