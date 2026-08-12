@@ -357,6 +357,36 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   must go red, including one flipped height byte in a real chunk. It also builds a
   32x32 map out of nothing, which needs no vault. Slow-ish: 25 maps is ~55 s,
   `--all` is ~7 minutes),
+  `toolkit/mapdata/test_strippedterrain.py` (the OTHER terrain chunk, `0x10000002`,
+  which nothing in this tree could read until 2026-08-12 — and its headline is
+  deliberately not the round trip. The height field this codec pulls out of a
+  canonical-Huffman bit stream and a 4x4 integer transform must EQUAL, sample for
+  sample, the one `terrain.py` reads out of the Bloated chunk: a different encoding,
+  written by a different subsystem, that the module never looks at. **349 of 349
+  maps, 60,468,224 float32 samples** predicted from compressed bits is an oracle a
+  codec cannot force; the byte-identical re-encode is 349/349 too and is reported
+  beside it as the weaker claim, with the reconstructed/carried split (65.67%) as
+  the honest half.
+  **Every coding parameter is RE-DERIVED and the decoder refuses a file whose stored
+  one disagrees** — both bases are the minima, both widths are bit lengths, the
+  symbol set is exactly what the block uses, every alignment pad is zero — so N green
+  decodes are N assertions about the derivation rather than N comparisons of a value
+  with itself. The one carried thing is which code length each symbol gets, which is
+  ArenaNet's frequency model and is not recoverable from the samples. Two controls
+  earn the file: the memcpy saboteur is BUILT and RUN, and required to pass the round
+  trip while failing the mutation checks, so the file measures which of its own checks
+  are load-bearing; and `_forward4` REFUSES a four-vector off the transform's lattice
+  where a truncating encoder would silently move a height — the two agree exactly ON
+  the lattice, which is why byte-identity cannot see the difference, and the test
+  builds the truncating version to show it. It also pins that the client bakes tag 9,
+  the lightmap, rather than storing it: the Bloated chunk's shade bytes do not occur
+  anywhere in the Stripped one, 349/349. And its angle control reproduces
+  `terrain.py`'s own figure from the other side — 63 of 349 maps carry an index where
+  the retired `float32(b*pi/508)` differs and it is wrong on all 63, leaving the 286
+  that file measured before anyone had read the client's expression. Sections 0-3 need
+  no vault and score 57 against a floor of 66. Default ~25 s and 66 checks; `--all` is
+  67 checks and ~20 minutes — MEASURED 2026-08-12 at 1,205 s, so budget for that rather
+  than for a round number),
   `toolkit/mapdata/test_mapexport.py` (the neutral terrain interchange, and the
   orientation checked against a chunk the exporter never reads: prop `z` from
   `0x20000004` sampled against the exported height field, with three rival layouts
