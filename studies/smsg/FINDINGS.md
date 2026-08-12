@@ -653,7 +653,27 @@ Reached: `GcGameCmd.cpp (handler block, bracketed)`, `GcApi.cpp (the sample ring
 
 > **A trap worth naming, because it wasted a run and mimics the result.** `SendInput` returned 0 with `ERROR_INVALID_PARAMETER` for every trial until the `INPUT` struct was sized correctly: the union is as large as its BIGGEST member, `MOUSEINPUT` (32 bytes on x64), not `KEYBDINPUT` (24), so `INPUT` is 40 bytes and a `KEYBDINPUT`-sized union yields 32. A rejected struct and a rejected keystroke look identical from the outside -- both are "the key did nothing". The script now asserts `sizeof(INPUT)` before it sends anything.
 
-**The latency readout therefore stays unread, and the unit stays INFERRED.** `--netgraph` on `authsrv` sends the byte and is verified against a real client; the frame toggle is the only remaining blocker, and it is now a question about the client's key vocabulary rather than about keyboards.
+**RESOLVED 2026-08-11 by reading where the parameter is BUILT, which is what the guessing should have given way to sooner.** `0x004A3D50` is the **Root frame's** message callback -- registered at `0x004A2375` through `0x630C90` with the UTF-16 name `"Root"`, which is why its asserts say UiRoot. The key value in its message-`0x20` parameter comes from the OS input layer at `~0x005EDA80`, and that code answers the vocabulary question outright:
+
+```
+005EDA86  mov ecx, ebx          ; ebx = the WM_KEY* lParam
+005EDA89  shr ecx, 0x10         ; lParam >> 16
+005EDA8C  movzx ecx, cl         ; ...low byte = the SCAN CODE
+005EDA88  push eax              ; hkl, from [0xC103FC]
+005EDA8F  push 1                ; MAPVK_VSC_TO_VK
+005EDA91  push ecx              ; the scan code
+005EDA92  call [0x9394D8]       ; USER32!MapVirtualKeyExA  (verified in the import table)
+005EDABA  test ebx, 0x1000000   ; lParam bit 24, the extended flag
+005EDAC2  or   esi, 0x80000000  ; VK_EXTENDED  (hence OsInput:402's !(vKey & VK_EXTENDED))
+```
+
+**The client never looks at `wParam`. It recomputes the virtual key from the SCAN CODE through the active keyboard layout.** So the table's values are Windows VKs after all -- but a key is reachable if and only if some scan code maps to it under the client's own `hkl`.
+
+**That explains every result of the SendInput pass exactly, including the controls.** `H` worked because the scan code sent was `0x23` and `MapVirtualKeyEx(0x23, VSC_TO_VK)` is `0x48` -- the value the table wants. It worked identically with and without `KEYEVENTF_SCANCODE` because in both cases the delivered lParam carried scan `0x23`. And **`0x29` failed all seventeen times because no scan code on layout `0x0409` maps to `VK_SELECT`** -- measured directly, forwards and backwards, over the whole `0x000`-`0x1FF` range. Setting `wVk = 0x29` could never have worked: that field is discarded before the value the handler compares is even computed. The backtick attempt failed for the same reason from the other side -- scan `0x29` maps to `VK_OEM_3` (`0xC0`), not to `0x29`.
+
+**Conclusion: the net-graph frame is unreachable on a US layout by construction, not by accident.** It is a developer path gated behind a virtual key that no scan code on this keyboard produces. The only route left is a keyboard layout under which some scan code maps to `VK_SELECT`, which is a machine-level change to the operator's system and is **not** something to do on a hunch -- it is recorded here as the option, not taken.
+
+**So the readout stays unread and the unit stays INFERRED, but nothing about it is mysterious any more.** `--netgraph` sends `GAME_SMSG 0x016E` and is verified against a real client; the flags bit it sets is real; the widget it would build is gated behind a frame whose toggle this keyboard cannot type. Every link in the chain is now either done or explained.
 
 **What the run did settle, because we now hold the other end.** The loop runs against a real client: **10 of 10 requests answered** in a 45 s session and 0 missed in a second, with round trips of 658, 15, 12, 10, 7, 7, 3, 14, 14, 11 ms -- the 658 is the first ping landing during the map load, and every later one is loopback-shaped. So the three-message exchange, the 5 s cadence and our elapsed-ms arithmetic are all confirmed end to end; only the client's *rendering* of the number is still unread.; What event 0xA2 does downstream.; Which index of the 0xC03370 ring other code writes — the accessor reads up to 10 but 0x000D only ever writes index 0, so either nothing else writes it or the other writer was not found.
 
