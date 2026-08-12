@@ -1543,6 +1543,27 @@ which is the defect `CLAUDE.md` already names from the other side.*
     leaves -- `Gw.log` does not record asserts, no dump file is written anywhere
     findable, and a ConnectionResetError appears on clean teardowns too.
 
+0n. **NAME THE SILENT OPCODES — 239 candidates, tooling done, needs only harness time.**
+    [studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md) §3.4. The sweep's
+    `SILENT` means *no c2s reply* and is BLIND to anything the client draws: four of four
+    opcodes retested with a meaningful payload turned out to be opening windows and
+    printing chat, and the operator reports visible UI throughout every earlier round too.
+    So 239 rows are unread rather than empty. The conversion is mechanical and needs no
+    new decoding — one opcode per run, screenshots during the hold, read the picture:
+
+    ```
+    python toolkit/authsrv/smsgsweep.py --plan --encstring --dwell 0.9 --only <opcode>
+    python toolkit/harness/session.py --game-args "--probe smsgsweep --ping-seconds 0.5 --no-enemy"         --keep-open --shots 2 --hold 22
+    # then read <run>/hold007.png -- the send lands ~13 s in
+    ```
+
+    `--encstring` reads a real encoded string from the owner's own captures at plan time
+    (`corpus_encstring`), so string-gated opcodes get past their format check; it never
+    writes ArenaNet's text into the repo. About 40 s per opcode unattended. **Deferred
+    2026-08-12 at the owner's request — the harness is wanted elsewhere.** Four are done:
+    `0x0033` is Message of the Day by the client's own title bar, `0x009E` is a chat line,
+    `0x00B9` a framed world callout, `0x00C0` unframed floating world text.
+
 0h. **The measured gap list, and it is the best next-actions source this project has
     had.** `toolkit/authsrv/msgmix.py`, `studies/divergence/FINDINGS.md` D12. Where our
     server sends a message at all it sends it at **3-13% of ArenaNet's rate**: we

@@ -234,6 +234,14 @@ no network traffic, so the instrument cannot see it **by construction**. The 239
 rows are a statement about the wire and nothing else, and an unknown fraction of them did
 something a person watching would have seen.
 
+**OPERATOR REPORT, 2026-08-12, and it widens this from four rows to the whole sweep:**
+the client was producing visible UI throughout the sweep runs, not only in the four
+isolated above — the operator was watching it happen and chose not to interrupt a run in
+progress to tally it. So the blind spot is not a property of these four opcodes or of the
+encoded-string family; it applied to every round this instrument ever scored. Labelled
+OBSERVED (operator) rather than MEASURED, because no capture of ours recorded it and the
+screenshots only exist for the four.
+
 That is also the cheapest remaining upgrade to this whole apparatus: `--shots` plus one
 opcode per run turns SILENT rows into named behaviour, and it needs no new decoding.
 
