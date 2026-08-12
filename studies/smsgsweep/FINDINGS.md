@@ -1,4 +1,4 @@
-# The loopback opcode sweep — COMPLETE: all 324 never-seen GAME_SMSG opcodes
+# The loopback opcode sweep — COMPLETE: 334 of 487 GAME_SMSG opcodes
 
 **Status: OBSERVED, 2026-08-12.** Our own server sends each catalogued opcode ArenaNet has
 never shown us to a client we control on 127.0.0.1, and the client's reaction is the
@@ -15,7 +15,11 @@ measurement. Method and every refusal: `toolkit/authsrv/smsgsweep.py`. Readout c
 | DROPPED_CHANNEL — client re-established and kept playing | **1** | |
 | REPLIED — client answered | **3** | |
 | SILENT | 235 | |
+| DISCONNECTED — transport closed the channel | **6** | the ten table-less, §2c |
 | remaining | **0** | the loop stopped on "nothing left to plan" |
+
+Plus the ten opcodes with no receive-table entry, taken deliberately one per run (§2c),
+for **334 of 487** measured in total.
 
 **86 crash rows, every one paired to the dialog its own run captured — no gaps.**
 Every reading was taken in map 148 with the player alive and the map quiet; `record`
@@ -108,6 +112,28 @@ Both were invisible before this sweep: the static assert map names a source file
 42 ms later**, still running, taking the whole plan again. It is the only DROPPED_CHANNEL
 in the set.
 
+## 2c. The ten with no receive-table entry — the family SPLITS
+
+Taken deliberately, one opcode per run, each run a fresh client, each read by shape
+because the automatic attributor refuses them by design (a one-send run ending in a close
+cannot be told from a harness kill by the capture alone).
+
+| opcode | result |
+|---|---|
+| `0x000A` `0x000C` `0x000D` `0x000E` | **survived** — client kept answering, ~37 c2s messages after |
+| `0x000B` `0x004F` `0x0055` `0x007F` `0x014A` `0x01DA` | **DISCONNECTED** in 2–16 ms |
+
+The disconnect is a **transport-level session error, not a crash**: no assert, no dialog,
+`Code=007` on screen and the client alive at character select. That is what "handled below
+the message table" looks like from the wire.
+
+**`0x000C` is the control and it is the reason this table means anything.** It is the ping
+request the client demonstrably answers (`toolkit/authsrv/test_ping.py`), it has no
+receive-table entry, and it survived with 38 c2s messages behind it. So *absent from the
+table* does not imply *dangerous* — the family splits 4 to 6, and the earlier assumption
+that all ten were channel-killers was wrong. `0x000B`, which ended the pilot, is the odd
+one out of an otherwise benign low block.
+
 ## 3. The replies
 
 ### 3.1 `0x0166` and `0x0167` → c2s `0x0079` — the first clean binding
@@ -129,11 +155,27 @@ Both control windows held nothing but the idle-floor ping.
 Two adjacent opcodes eliciting one empty acknowledgement is the shape of a request/ack
 pair. **What they ask for is not established** — only that the client answers.
 
-### 3.2 `0x0000` → c2s `0x0000` — still CONTESTED
+### 3.2 `0x0000` → c2s `0x0000` — the confound is dead, this is a binding
 
 Reproduced in three runs, but `0x0000` is always the FIRST opcode in plan order, so
-"reply to `0x0000`" and "reply to the first message of the sweep" are not separated. One
-run with the plan reordered settles it. Do not quote this as a binding until then.
+"reply to `0x0000`" and "reply to the first message of a sweep" were not separated.
+
+**Settled 2026-08-12 by `--plan --reverse`**: sent THIRD, behind `0x0165` and `0x0164`
+which both stayed silent in the same run, `0x0000` still drew c2s `0x0000`. The reply
+belongs to the opcode, not to the position. Promoted from CONTESTED to a binding.
+
+### 3.3 What `0x0166` and `0x0167` actually do
+
+Their handlers are the thinnest in the set, and they post to the SAME dispatcher
+`0x00633d70` that `0x0017` calls:
+
+    0x0166  ->  0x633d70(0x10000100, NULL, 0)      no message field is read at all
+    0x0167  ->  0x633d70(0x10000101, &field1, 0)   field 1 passed by pointer
+
+Adjacent opcodes post **adjacent event ids**, which is why they pair and why both acks
+are empty. `0x0017` posts `0x100000be` through the same door. So a slice of the GAME_SMSG
+table is a thin shim over one client-side event bus, and the `0x1000xxxx` space is its id
+range — which is a structural fact about the client, not about any one message.
 
 ## 4. What this does not establish
 

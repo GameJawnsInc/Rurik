@@ -315,7 +315,7 @@ def check_table_less(classified, schema_opcodes):
 
 def plan(codec, seen=(), classified=None, done=(), table_less=False,
          settle=SETTLE, control=CONTROL, dwell=DWELL, limit=0, only=None,
-         sets=None):
+         sets=None, reverse=False):
     """The ordered send list: never-seen opcodes first, each with its prediction.
 
     `seen` is the set observed from ArenaNet -- excluded, because the point is the third
@@ -567,6 +567,14 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
     # answering while the socket stays open (measured 31.6 s, then 120.8 s, then 30.1 s),
     # and when the harness kills a healthy client the two stop together.
     quiet = (gone[0] - alive_until) if (gone and alive_until is not None) else 0.0
+    # WHY "THE PLAN DID NOT FINISH" IS NOT ADDED HERE, having been tried on 2026-08-12.
+    # It looks like a clean discriminator -- the harness only kills the client after the
+    # probe stops sending, so leftover rows mean the client ended the run. It is unsound:
+    # a `--hold` shorter than the plan has the harness tearing down mid-send too, and the
+    # rule would then blame whichever opcode happened to be last. That is the same false
+    # positive the control below already guards, wearing a different hat. A run that ends
+    # in one send and an instant close (0x01DA did) is unambiguous to a READER and stays
+    # unattributed here on purpose: the refusal is what protects the other 324 rows.
     died = bool(dead) and gone is not None and quiet > max(3.0 * (heartbeat or 0.0), 2.0)
     crash = None
     if died:

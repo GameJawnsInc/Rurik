@@ -505,12 +505,20 @@ which is what would turn four instance tapes into one continuous session.
 
 ### 3.6 The loopback opcode sweep — 242 of 487 GAME_SMSG opcodes measured
 
-**COMPLETE 2026-08-12.** [studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md).
+**COMPLETE 2026-08-12**, plus the ten table-less opcodes and both quick-win controls. [studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md).
 Our own server sends each catalogued opcode ArenaNet has never shown us to a client we
 control on 127.0.0.1 and reads the reaction. **All 324 of the never-seen set are
 measured** — the unattended loop stopped on "nothing left to plan": **82 ASSERTED,
 3 FAULTED, 1 DROPPED_CHANNEL, 3 REPLIED, 235 SILENT**, with all 86 crash rows paired to
 the dialog their own run captured and every reading taken in map 148 on a live player.
+The ten with no receive-table entry were then taken one per run: **the family splits**,
+four survive and six close the channel with a transport-level `Code=007` — no assert, no
+dialog, client alive at character select. `0x000C`, the ping the client demonstrably
+answers, is the control that makes that table mean something. **334 of 487 measured.**
+Two bindings now stand: `0x0000` → c2s `0x0000` (the first-send confound killed by
+`--reverse`, sent third behind two silent sends) and `0x0166`/`0x0167` → c2s `0x0079`,
+whose handlers post adjacent event ids `0x10000100`/`0x10000101` through the same
+dispatcher `0x0017` uses.
 
 **One binding, and it is the first this project can quote.** s2c `0x0166` and `0x0167`
 each draw an empty c2s `0x0079` within 10 ms — replicated in two runs, with `0x0164` and
