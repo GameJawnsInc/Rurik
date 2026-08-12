@@ -2119,6 +2119,20 @@ parallel, with one safety change that is not optional — see its entry.
     That half is deliberately not attempted: its only strong oracle is a client
     accepting the stream, since agreement with our own `gwdat.py` decompressor is two
     of our own components agreeing.
+    **(e10a)** ✅ **DONE 2026-08-12 (FINDINGS 41). THE COMPILER NEEDS SEVEN CHUNKS, NOT
+    EIGHTEEN** — measured against the client one removal at a time, six sessions, and
+    FINDINGS 34's disassembly-derived list was wrong in BOTH directions. `0x11000002`
+    (Terrain Dependencies) is required and was not on it; Collision `0x1000000E` is on
+    it and is not required. **Order matters and nothing had said so**: terrain bloat
+    asserts `state->zones`, so Zones must precede Terrain. The four failure signatures
+    are all different and all diagnostic — assert `deps`, assert `state->zones`,
+    `Error: Creating default map` with no crash (the props gate's `je return 0`, exactly
+    as §34 read it), and a rebuild carrying no mesh at all (no Stripped Path chunk).
+    **Everything outside terrain and path is 124 bytes**: Header 8, Map Parameters 41,
+    Props 12, Zones 34, Terrain Dependencies 29. That is the whole authoring target
+    left, and `strippedterrain.py` and `pathchunk.StrippedPath` already write the other
+    two. NOT established: Header, Map Parameters and Terrain Dependencies were never
+    removed, so they are unfalsified rather than shown necessary — three more runs.
     **(e10)** ⬜ Only the TERRAIN is ours. Props, zones, collision and Map Parameters in
     FINDINGS 38's map are ArenaNet's, so FINDINGS 34's props hard gate was satisfied by
     their data. An end-to-end authored map — §32's Blender pipeline through
