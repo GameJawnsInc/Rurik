@@ -209,6 +209,18 @@ def set_type(codec, opcode, idx, channel="GAME_SMSG"):
     return fields[idx - 1]["type"]
 
 
+def sets_for(sets, opcode):
+    """The {idx: val} that apply to ONE opcode: the global ones plus its own.
+
+    `--set 2=1` is global and must name the same declared type everywhere (check_sets).
+    `--set 0x0083:2=1` names one opcode and needs no such agreement, which is what lets
+    six different second-gate experiments share one client launch instead of six.
+    """
+    out = dict(sets.get(None, {}))
+    out.update(sets.get(opcode, {}))
+    return out
+
+
 def check_sets(codec, opcodes, sets, channel="GAME_SMSG"):
     """Refuse a --set that means a DIFFERENT field in different opcodes.
 
@@ -218,7 +230,12 @@ def check_sets(codec, opcodes, sets, channel="GAME_SMSG"):
     them. So the index must name the same declared type in every opcode planned, and the
     refusal names the disagreement rather than dropping the odd one out.
     """
-    for idx in sorted(sets or ()):
+    for opcode, per in (sets or {}).items():
+        if opcode is None:
+            continue
+        for idx in per:                       # a qualified set only has to fit ITS opcode
+            set_type(codec, opcode, idx, channel)
+    for idx in sorted((sets or {}).get(None, {})):
         kinds = {}
         for opcode in opcodes:
             kinds.setdefault(set_type(codec, opcode, idx), []).append(opcode)
@@ -317,11 +334,12 @@ def plan(codec, seen=(), classified=None, done=(), table_less=False,
                 skipped["not_only"] += 1
                 continue
             c = (classified or {}).get(opcode) or {}
-            vals = apply_set(good[opcode], sets)
+            vals = apply_set(good[opcode], sets_for(sets or {}, opcode))
             rows.append({"opcode": opcode,
                          "predicted": c.get("class", "UNKNOWN"),
                          "callee": (c.get("callees") or [None])[0],
-                         "set": {str(k): v for k, v in (sets or {}).items()},
+                         "set": {str(k): v for k, v in
+                                 sets_for(sets or {}, opcode).items()},
                          "bytes": len(codec.encode("GAME_SMSG", opcode, list(vals)))})
             continue
         if opcode in seen:
@@ -350,7 +368,6 @@ def plan(codec, seen=(), classified=None, done=(), table_less=False,
             "control": control,
             "dwell": dwell,
             "table_less": bool(table_less),
-            "set": {str(k): v for k, v in (sets or {}).items()},
             "predicted": bool(classified),
             "note": "degenerate (all-zero) payloads; a handler that early-outs on a "
                     "zero id is indistinguishable here from one that does nothing"}
@@ -867,9 +884,11 @@ def main():
     ap.add_argument("--limit", type=int, default=0,
                     help="keep only the first N rows of the plan")
     ap.add_argument("--set", default=None, metavar="IDX=VAL", action="append",
-                    help="override one field by 1-based index, e.g. --set 5=1. Changes "
-                         "ONE thing: the sweep's asserts are all zero-branch gates, and "
-                         "filling every field would test five things at once")
+                    help="override one field: --set 5=1 applies to every planned opcode "
+                         "(and is refused unless index 5 is the same declared type in "
+                         "each); --set 0x0083:2=1 applies to one. Changes ONE thing per "
+                         "field, because the sweep's asserts are zero-branch gates and "
+                         "filling everything would test five things at once")
     ap.add_argument("--only", default=None, metavar="OPCODES",
                     help="plan exactly these (comma-separated, 0x ok), overriding every "
                          "filter. This is how a crash window is bisected down to the one "
@@ -935,8 +954,10 @@ def main():
         only = {int(x, 0) for x in a.only.replace(" ", "").split(",") if x}
     sets = {}
     for spec in (a.set or []):
-        k, _, v = spec.partition("=")
-        sets[int(k, 0)] = int(v, 0)
+        lhs, _, v = spec.partition("=")
+        op, _, idx = lhs.rpartition(":")
+        key = int(op, 0) if op else None
+        sets.setdefault(key, {})[int(idx, 0)] = int(v, 0)
     if sets and only is None:
         print("REFUSED: --set without --only would apply one field index to every "
               "opcode in the plan, which means a different field in each.",

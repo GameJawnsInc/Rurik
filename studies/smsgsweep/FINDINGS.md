@@ -138,7 +138,32 @@ it. That is a structural fact the assert text alone did not give.
 
 `--set` refuses an index whose declared type differs across the planned opcodes, because a
 field index is not a field: `--set 1=1` over these nine is one experiment, and over a
-mixed plan it would be nine unrelated ones sharing a report.
+mixed plan it would be nine unrelated ones sharing a report. `--set 0x0083:2=1` names one
+opcode and needs no such agreement, which is what lets several second-gate experiments
+share one client launch.
+
+## 5c. Where a plausible value was NOT enough — and why guessing stopped
+
+Five more opcodes, each re-sent with the field its assert pointed at set to something
+defensible. **None of them opened**, and that is the result:
+
+| opcode | tried | still |
+|---|---|---|
+| `0x005F` | field 1 = live agent, field 2 = 1 | FAULTED — its field 3 is a `string16`, so it belongs to the encoded-string family below |
+| `0x0072` | field 2 = live agent | ASSERTED — so hero data is NOT reached through the agent; its `word` field 1 is the index |
+| `0x0083` | field 1 = live agent, field 2 = 1 | ASSERTED — a third gate, its `dword` field 3 |
+| `0x0096` | field 1 = 1 | ASSERTED — the mask wants specific bits and bit 0 is not one of them |
+| `0x00A8` | field 3 = 1, then = `0x100000be` (a real resource id from `0x0017`'s path) | ASSERTED — so field 3 is not the file id, or neither value names a loadable file |
+
+**Six of fifteen gates closed on a value we could justify; the other nine did not, and the
+next attempt on each would be a guess costing a client launch.** `0x0017` was solved by
+reading its handler and predicting the gate before sending anything — that is the method
+that worked, and it is the one these nine want. `msghandler.py <op> --follow --annotate`.
+
+A limit found while doing it: `--set` indexes into the VALUE list, and `degenerate` stops
+at a `nested_struct` because that type swallows the tail. `0x0019` declares four fields
+and has three values, so its file id — likely inside the struct — is out of `--set`'s
+reach entirely.
 
 ## 6. Next
 
