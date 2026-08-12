@@ -184,6 +184,16 @@ corrections to `studies/customarea/FINDINGS.md` itself, made by re-measuring it.
     integer b in [16, 250]" and dies as a bit-exact identity. **Consequence, and
     it is why `encode()` stores the decoded float32 verbatim: an encoder must
     never recompute the angle from `b`.**
+
+    *The 1-ULP caveat is RETIRED as of 2026-08-12, and only the last sentence of
+    it still matters. The client's own expression, at 0x00758D99 in the Stripped
+    loader, is `(float)((double)b * 282.74334716796875 / 45720.0)` -- where
+    282.74334716796875 is `(double)(float)(90pi)`, a float32 constant promoted,
+    so 90pi is rounded ONCE before the divide. That reproduces the stored float
+    on 349 of 349 maps. `strippedterrain.ANGLE_TABLE` is that expression and
+    `test_strippedterrain.py` runs both formulations above as controls that must
+    disagree with it. Nothing changes here: `b` is not in this chunk, so this
+    encoder still has nothing to recompute from.*
   * FINDINGS 17.4 says the angle takes "54 distinct" values; FINDINGS 4 says 55
     in the same document. MEASURED: **55** -- 55 distinct bit patterns mapping
     to 55 distinct `b` in [16, 250], injectively.
@@ -221,10 +231,22 @@ TRAPS, ALL OF THEM REAL AND ALL OF THEM PAID FOR ONCE.
     time; that bug silently zeroed a corpus script's results once already.
 
 SCOPE. Bloated stream only. The Stripped partner's terrain chunk is
-`0x10000002` and is a DIFFERENT ENCODING, not a re-framing -- signature, then
-`u16 17`, then `u16 0x6088`, and row 46196's stripped terrain is 2,123 bytes
-against 7,165 Bloated. `from_chunk()` refuses it loudly rather than half-parsing
-it. This module produces `bytes`; placing them in an archive is a separate rung
+`0x10000002` and is a DIFFERENT ENCODING, not a re-framing: a **five-byte**
+header (`u32` signature then a `u8` version), one-byte record headers, a
+Huffman-coded 4x4-transform height field, and no tag 9 at all -- the client bakes
+the lightmap from tag 0's sun elevation. Row 46196's stripped terrain is 2,123
+bytes against 7,165 Bloated. `from_chunk()` refuses it loudly rather than
+half-parsing it; **`strippedterrain.py` decodes it**, and agrees with this module
+on every height sample of every map.
+
+*The two sentences above used to read "signature, then `u16 17`, then
+`u16 0x6088`", which is wrong twice: the version is a byte, and 0x6088 is not a
+field -- it is the first two bytes of tag 0's body. Reading eight bytes of
+header puts the first record three bytes late. Corrected 2026-08-12 by reading
+the client's stage-0 handler at 0x00759380, which compares a `u32` and then a
+`byte ptr` against 0x11.*
+
+This module produces `bytes`; placing them in an archive is a separate rung
 and nothing here opens a file for writing.
 
     python toolkit/mapdata/terrain.py                        # Kamadan
@@ -478,10 +500,11 @@ class Terrain:
         if chunk_id == STRIPPED_TERRAIN_CHUNK:
             raise ValueError(
                 "chunk 0x10000002 is the STRIPPED terrain encoding, which is a "
-                "different format and not a re-framing of this one: signature, "
-                "then u16 17, then u16 0x6088, and no {u8 tag, u32 size} "
-                "records carrying these dims. This module decodes the Bloated "
-                "chunk 0x20000002 only.")
+                "different format and not a re-framing of this one: a FIVE-byte "
+                "header (u32 signature, u8 version), one-byte record headers, a "
+                "Huffman-coded height field and no tag 9. Use "
+                "strippedterrain.StrippedTerrain; this module decodes the "
+                "Bloated chunk 0x20000002 only.")
         if chunk_id != TERRAIN_CHUNK:
             raise ValueError(f"chunk 0x{chunk_id:08X} is not terrain "
                              f"(0x{TERRAIN_CHUNK:08X})")

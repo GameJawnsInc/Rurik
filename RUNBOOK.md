@@ -811,16 +811,25 @@ it is never a target for patching or launching.
 
 ## Rung E3: does the client ever compile a map?
 
-**Prepared 2026-08-12, NOT YET RUN.** Everything below is offline-tested; the
-only untested step is the client launch itself, which is the experiment.
+**RUN TWICE, 2026-08-12, and the answer is YES both times.** FINDINGS 35: given a
+zero-length Bloated stream the client logs, compiles the navmesh from the Stripped
+partner and writes it back **byte-identical to what ArenaNet shipped**. FINDINGS 36:
+given a Stripped stream belonging to a *different map*, it builds THAT map — so the
+compiler's input is the bytes in stream 0 and nothing else. The procedure below is
+what was run and is kept as the procedure; the only thing that has changed is that
+its outcome is no longer open.
 
-**The question.** FINDINGS 34 established what the compiler *reads* by reading
-x86. What nobody has established is that the shipped client ever *runs* the
-converter. All 349 retail maps ship with both streams already built, so stage 2
-may be pre-baked by ArenaNet's own tool with `0x00713630` dead weight in the
-image. **This is the first experiment in the arc that can come back "no", and a
-"no" is the useful result** — it would collapse E3 into authoring the Bloated
-stream directly, which `mapbuild.py` already does.
+**The question it answered.** FINDINGS 34 established what the compiler *reads* by
+reading x86. What nobody had established was that the shipped client ever *runs* the
+converter. All 349 retail maps ship with both streams already built, so stage 2 might
+have been pre-baked by ArenaNet's own tool with `0x00713630` dead weight in the
+image. **This was the first experiment in the arc that could come back "no", and a
+"no" would have been the useful result** — it would have collapsed E3 into authoring
+the Bloated stream directly, which `mapbuild.py` already does.
+
+**What is still open** is the run with terrain WE authored: both maps in those two
+runs were ArenaNet's. `strippedterrain.build` (FINDINGS 37) is the missing half and
+has never been through a client. That is `PLAN.md` §8 item 10 (e7).
 
 **The trigger.** A zero-length stream-1 payload. FINDINGS 17.1 traced the
 loader's `size == 0` branch at `0x00707749` straight through to the re-bloat
