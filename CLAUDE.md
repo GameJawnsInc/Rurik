@@ -309,6 +309,26 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   and below, each with a POSITIVE control that an ordinary copy is allowed —
   a guard that refuses everything protects nothing because the tool never runs.
   Sections 0-3 need no vault and score 22 against a floor of 28. ~20 s),
+  `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
+  purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
+  will not move a row, so authoring only worked where the stream SHRANK. Against
+  an archive the test builds with free runs of KNOWN size -- 1, 2 and 6 blocks
+  usable plus an 8-block one carrying a planted `Mft` generation -- so "it took
+  the 2-block run and not the 6-block one" is a fact about the policy rather than
+  about this machine's copy, and the LARGEST run in the archive is the one a
+  writer may not have, which is the shape the real archive has. The headline is
+  not that the payload came back: a relocation can break one invariant no
+  checksum sees, two rows sharing blocks, since each crc is computed over its own
+  row's bytes and all three still verify across an overlap. So the load-bearing
+  check is that after a move no two reservations intersect AND every other row
+  still reads back byte-identical -- with a negative control that corrupts an
+  offset by hand and requires the walker to catch it, because a "0 overlaps" that
+  has never reported anything else is not a check. The walker is written in the
+  test out of `int.from_bytes` and shares no code with `datmove.overlaps`. Five
+  sabotages were built and run and all five reddened; the numbers are in the
+  floor comment, and the one worth noting is that skipping the old-reservation
+  zeroing reddens exactly ONE check. No vault, no client -- and that is also the
+  limit: **no client has ever read a row this module moved**),
   `toolkit/mapdata/test_datplan.py` (where a new file may be PUT, against an
   archive the test builds with two shadow containers in it: that placement is
   best fit rather than the head of the largest run, that a run carrying a live
