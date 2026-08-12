@@ -4546,3 +4546,114 @@ on 349/349 and are not passed to the builder. Sight is generated from nothing �
 **The next honest step is not more static analysis.** It is authoring a minimal
 Stripped map and observing whether a Bloated Path chunk appears — the first
 experiment in this arc that could come back "no".
+
+## 35. OBSERVED: the client compiles a map, and reproduces ArenaNet's bytes exactly (2026-08-12)
+
+**Rung E3's premise is confirmed, and the largest open question in the arc is
+answered YES.** The shipped retail client runs the stage 1 → 2 converter at load
+time. Given a map whose Bloated stream is zero length, it logs, compiles the
+navmesh from the Stripped partner, and writes the result back into the archive —
+**byte-identical to what ArenaNet shipped**.
+
+Run 2026-08-12, `vault/research/e3-rebloat-2026-08-12/`, on
+`vault/run/2026-07-29_221c13772c7a-c2/Gw.dat` (a copy; `dat_study` and `C:\gw`
+were read-only throughout).
+
+### What was done
+
+`rebloat.py --arm` replaced map 143's Bloated stream (file id `0x287D3`, MFT row
+71496, 9,284 B stored / 33,021 B payload, **27 trapezoids over 1 plane**) with a
+**zero-length** payload, zeroing its whole 9,728-byte reservation and journalling
+every byte first. This is FINDINGS 17.1's cheapest trigger and deliberately not
+the corrupt-chunk one, which C2's arm 3b showed produces an access violation with
+no re-bloat attempt (§20.3).
+
+Post-arm, **all ten of the client's own open-time rules still passed** — measured
+on the real 4.2 GB archive, not just on the built fixture. Live rows fell
+177,329 → 177,328, which is the zeroed row leaving the live set.
+
+The client was then launched caged against our own server (ours-DH build,
+loopback) and sent to map 143.
+
+### What the client did
+
+`Gw.log`, from the unguarded log site FINDINGS 17.1 predicted:
+
+```
+Perf: Map file '0x0287d3' failed to load.  Attempting to re-bloat.
+```
+
+And then it rebuilt it. The row **relocated**, exactly as predicted — a
+reservation is `ceil(size/512)*512`, so a zero-length row reserves nothing and
+the client's free map took the blocks:
+
+| | before | after |
+|---|---|---|
+| offset | `0x63C64200` | **`0x4B82E00`** |
+| size | 9,284 | 9,284 |
+| compression | 8 → **0** (by the arm) | **8** |
+| stored CRC | `0x12ACFE34` → 0 (by the arm) | **`0x12ACFE34`** |
+
+### The result, and it is stronger than the experiment asked for
+
+**The rebuild is byte-identical to ArenaNet's shipped payload, in both forms:**
+
+| | client's rebuild | ArenaNet's ship |
+|---|---|---|
+| stored (compressed), 9,284 B | `85cb3f332c8a29e0…` | `85cb3f332c8a29e0…` |
+| decompressed payload, 33,021 B | `acfc8e7501e94b9e…` | `acfc8e7501e94b9e…` |
+
+Same trapezoid count (27), same plane count (1), same 18 chunks — and the same
+bytes, compression included.
+
+**THE ARM DEMONSTRABLY APPLIED**, which is the check that makes the above mean
+anything rather than being what a failed arm looks like. The journal records the
+pre-arm bytes: the reservation went from `c01d010266bc75c9…` to all zeros, size
+9284 → 0, **compression 8 → 0**, crc `0x12ACFE34` → 0. The compression field is
+the clincher: the arm set it to 0 and it is 8 again, so the client rewrote the
+row wholesale rather than anything having failed to take. `rebloat.py` prints a
+warning on byte-identity for exactly this reason, and the warning is what
+prompted the check.
+
+### What this corroborates, and it was flagged as INFERRED
+
+FINDINGS 17.1 named an unmeasured claim as "the cheapest possible test of the
+whole model": *whether retail's Bloated streams were shipped by ArenaNet or
+produced by this client at download time* — INFERRED from the two bloat entry
+points, `FcApi:1393/1394`'s paired `downloadIndex`/`bloatIndex` meter, and
+`MapData:997` *"Only clients can bloat client maps"*.
+
+**A compiler reproducing a shipped payload to the bit is what you see when the
+shipped payload came out of that compiler.** The alternative — that ArenaNet's
+own offline tool and this client independently emit identical compressed streams
+— is not credible. So the INFERRED claim is now CORROBORATED, by an experiment
+nobody designed to test it, and **every retail Bloated map in the archive is an
+output of the compiler we want to borrow.**
+
+### Archive hygiene
+
+Post-flight `datcheck --diff`: TIER 0 descriptor counter 26881 → 26886, MFT
+moved; TIER 1 four relocations — row 71496 plus rows **8315/8316/8317**, the
+client's own scratch rows, which are the known baseline churn C2 established and
+which moved in every arm of that rung too. TIER 2 (the directory invariant)
+unchanged both ways. All ten open-time rules and all three CRC rules pass after.
+The copy was re-cut from `dat_study` afterwards and the journal marked CONSUMED —
+reverting it after the client relocated rows would corrupt rather than restore.
+
+### What this does NOT establish
+
+1. **n = 1.** One map, one run. Small (27 trapezoids, one plane, 64×64 cells).
+   Nothing here says a large multi-plane map recompiles, or recompiles
+   identically.
+2. **It says NOTHING about terrain we authored.** This map's Stripped stream is
+   ArenaNet's, so what was demonstrated is that the compiler reproduces
+   *ArenaNet's* input faithfully. Whether it floods a height field WE wrote is
+   the next experiment and is not evidence in hand.
+3. **"Non-null" is not "usable".** FINDINGS 34's hard gates require terrain and
+   props objects to exist. That an authored Stripped map would bloat to objects
+   the builder accepts is untested.
+4. **The re-bloat wrote to the archive**, which is a hazard, not a convenience:
+   any run of an authored map is a run that mutates the copy it was given.
+5. **We did not observe the mesh being USED.** The character spawned and the run
+   passed its checkpoints, but nothing here walked the rebuilt navmesh or
+   collided against it.

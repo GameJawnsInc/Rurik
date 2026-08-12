@@ -1899,16 +1899,29 @@ parallel, with one safety change that is not optional — see its entry.
     the file side — so the compiler would flood OUR terrain, which is the mechanism §32
     needs. The seven-stage pipeline at `0xBF72F0` also settles §33 mechanically: tag 7 is
     copied through by pass 1, the mesh is built by pass 2, which never touches it.
-    **(e4)** ⚠️ **THE LARGEST OPEN QUESTION IS NOW UPSTREAM OF ALL OF THIS.** Nobody has
-    run the compiler, and **we have not shown the shipped client ever executes the
-    converter at load time**. All 349 retail maps ship with BOTH streams already built, so
-    stage 2 may always be pre-baked by ArenaNet's own tool with the converter dead weight
-    in the retail image. That decides whether E3 authors stage 1 at all — and if it does
-    not, E3 collapses into authoring the Bloated stream directly, which `mapbuild.py`
-    already does. **The next step is not more static analysis**: author a minimal Stripped
-    map (terrain + props + map parameters + zones + a collision stub) and see whether a
-    Bloated Path chunk appears. It is the first experiment in this arc that could come
-    back "no".
+    **(e4)** ✅ **ANSWERED YES, 2026-08-12 (FINDINGS 35). THE CLIENT COMPILES.** Map 143's
+    Bloated stream was zeroed on a copy; the retail client logged
+    `Map file '0x0287d3' failed to load.  Attempting to re-bloat.`, compiled the navmesh
+    from the Stripped partner, and wrote it back — **byte-identical to what ArenaNet
+    shipped**, 9,284 B stored and 33,021 B decompressed, sha-identical in both forms, 27
+    trapezoids over 1 plane. The row relocated `0x63C64200` → `0x4B82E00` exactly as
+    predicted from the released reservation, and `verify` re-resolving by file id is what
+    made that a non-event. The arm demonstrably applied — the journal shows compression
+    8 → 0 and the rebuilt row carries 8 again, so the client rewrote it wholesale.
+    **And it corroborates FINDINGS 17.1's INFERRED claim** that retail's Bloated streams
+    are locally generated at download time: a compiler reproducing a shipped payload to
+    the bit is what you see when the shipped payload came out of that compiler. So every
+    retail Bloated map in the archive is an output of the compiler we want to borrow.
+    **E3 is alive and the route works.**
+    **(e5-next)** ⬜ **THE EXPERIMENT THIS UNLOCKS, and it is the one §32 has been waiting
+    for:** the map above is ArenaNet's, so what was shown is that the compiler reproduces
+    *ArenaNet's* input faithfully. Author a Stripped stream whose TERRAIN is ours —
+    a Blender-authored height field through §32's exporter — and see whether the client
+    floods it into a navmesh. FINDINGS 34 says the flood grid IS the terrain lattice, so
+    this is the mechanism that would finally join the two halves of the arc. Unknowns
+    that only that run settles: whether an authored terrain/props pair bloats to objects
+    the builder accepts ("non-null" is not "usable"), and what sets the walkability mode
+    that picks 10/45/40° over 15/35/30°.
     **(e5)** 🔧 **PREPARED 2026-08-12, NOT RUN — waiting on the harness.**
     `toolkit/mapdata/rebloat.py` drives (e4)'s experiment and
     `toolkit/mapdata/test_rebloat.py` (28 checks, floor 28) covers everything about
