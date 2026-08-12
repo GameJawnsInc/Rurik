@@ -6,6 +6,7 @@ field layout is wrong, the real frame will not decode cleanly to its end.
 """
 
 import binascii
+import collections
 import glob
 import json
 import os
@@ -22,14 +23,17 @@ import checks  # noqa: E402
 
 AUTH_CMSG_MASK = 0x8000
 
-# Floor 11 = every check below, all of them unconditional: section 1 contributes
-# exactly one whatever the vault holds (the three branches each score a single
-# verdict), then 2 + 5 + 3 for sections 2, 3 and 4. Measured from a green run on
-# 2026-08-06 against 162 captured opening frames. This file is the reason
-# checks.py exists — it once printed ALL CHECKS PASSED with its capture glob
-# matching nothing — so the floor is what makes section 1 going quiet a failure
-# rather than a shorter list of passes.
-LEDGER = checks.Ledger("codec vs captured bytes", floor=18)
+# Floor 27, measured from a green run on 2026-08-11: section 1 contributes exactly
+# one whatever the vault holds (its three branches each score a single verdict),
+# then 2 + 5 + 3 for sections 2, 3 and 4, 5 for section 5, 4 for section 6, and 7
+# for the catalog block at the end. It was 18 before the string16 sections landed.
+# This file is the reason checks.py exists — it once printed ALL CHECKS PASSED with
+# its capture glob matching nothing — so the floor is what makes a section going
+# quiet a failure rather than a shorter list of passes. Section 6 needs the live
+# captures and declares four skips without them, which puts a vault-less run four
+# below the floor and therefore RED: ArenaNet's own bytes are the only oracle for
+# the round trip, and a run that could not consult them has not checked it.
+LEDGER = checks.Ledger("codec vs captured bytes", floor=27)
 check = checks.adopt_named(LEDGER)
 
 
@@ -176,6 +180,194 @@ def main():
     ok &= check("a sockaddr cast reads back the address we meant",
                 af == socket.AF_INET and port == 6113 and ip == "127.0.0.1",
                 f"af={af} {ip}:{port}")
+
+    print("\n5. string16 carries CODE UNITS, not text (no vault needed)")
+    # `string16` decoded with errors="replace" until 2026-08-11. GW's encoded
+    # names are not text -- they are code units that index string tables, and many
+    # land in the UTF-16 surrogate range -- so "replace" turned each one into
+    # U+FFFD and the message could never be re-encoded to the bytes it arrived as.
+    # Section 6 measures that against ArenaNet's own traffic; this section is the
+    # half that runs on a bare machine, and it holds the three controls that
+    # separate "carries raw code units" from two implementations that only look
+    # like it.
+    #
+    # Fixture: GAME_SMSG 0x0054 is [msg_header, dword, string16] -- a neighbouring
+    # field to mutate and nothing else to confuse the picture. It is also one of
+    # the twelve opcodes that really failed (2 of its messages).
+    STR_OP = 0x0054
+    LONE = "\udE01"                      # one low surrogate, as one code unit
+    lone_msg = c.encode("GAME_SMSG", STR_OP, [0x11111111, LONE])
+    got, consumed, err = c.decode_stream("GAME_SMSG", lone_msg)
+    round2 = (c.encode("GAME_SMSG", STR_OP, list(got[0][1])[1:],
+                       header_value=got[0][1][0]) if got else b"")
+    ok &= check("a lone surrogate survives decode and re-encodes to the same bytes",
+                consumed == len(lone_msg) and err is None and len(got) == 1
+                and got[0][1][2] == LONE and round2 == lone_msg,
+                f"{err or ''} decoded={got[0][1][2]!r} identical={round2 == lone_msg}"
+                if got else "nothing decoded")
+
+    # The second bug, which the first one was hiding. A valid surrogate PAIR
+    # decodes to ONE Python character while occupying TWO code units, so the old
+    # `len(s)` wrote a count two bytes short of the data it then appended -- and
+    # that is a desync, not a lossy field: the NEXT message frames from inside
+    # this one. It could not fire while decode was "replace" (U+FFFD is one unit
+    # and one character), so it was unreachable until the real fix exposed it.
+    # The check is therefore on the FOLLOWING message, which is where the damage
+    # actually lands.
+    ASTRAL = "\U0001F600"                # one character, two code units
+    pair = c.encode("GAME_SMSG", STR_OP, [0x22222222, ASTRAL])
+    tail = c.encode("GAME_SMSG", STR_OP, [0x33333333, "ok"])
+    both, consumed2, err2 = c.decode_stream("GAME_SMSG", pair + tail)
+    declared = struct.unpack_from("<H", pair, 6)[0]
+    ok &= check("an astral character counts as TWO units, so the next message "
+                "still frames",
+                declared == 2 and len(pair) == 12 and consumed2 == len(pair + tail)
+                and err2 is None and len(both) == 2
+                and both[1][1][1] == 0x33333333,
+                f"declared={declared} units, {len(pair)} B, consumed "
+                f"{consumed2}/{len(pair + tail)}, {len(both)} messages"
+                + (f", {err2}" if err2 else ""))
+
+    # str(bytes) is "b'AB'", which encodes happily and puts the repr on the wire.
+    # A caller holding raw code units would have been silently wrong.
+    try:
+        c.encode("GAME_SMSG", STR_OP, [0, b"\x01\xDE"])
+        refused = False
+    except ValueError:
+        refused = True
+    ok &= check("encode refuses bytes rather than encoding their repr", refused,
+                "ValueError" if refused else "bytes were accepted")
+
+    # CONTROL B, and it is the one that catches the sabotage the round-trip
+    # cannot. An implementation that stashes the original bytes ON THE VALUE and
+    # replays them at encode round-trips every message it ever decoded, byte for
+    # byte, and survives the mutation control below -- mutating a neighbouring
+    # field leaves the string's value object and its stash untouched. What it
+    # cannot do is encode a value it never decoded. So: build the value from raw
+    # code units, never having seen it on a wire, and require the exact bytes out.
+    # The naive encoder raising on the same input is what makes this discriminate
+    # rather than merely pass.
+    BUILT = "".join(chr(u) for u in (0x2186, 0xDE01, 0x0041))
+    try:
+        BUILT.encode("utf-16-le")
+        naive_raised = False
+    except UnicodeEncodeError:
+        naive_raised = True
+    built_msg = c.encode("GAME_SMSG", STR_OP, [0x44444444, BUILT])
+    want = b"\x86\x21\x01\xDE\x41\x00"
+    ok &= check("a value we CONSTRUCTED from code units encodes to exactly them",
+                naive_raised and built_msg[6:8] == b"\x03\x00"
+                and built_msg[8:] == want,
+                f"naive encoder raised={naive_raised}, count="
+                f"{struct.unpack_from('<H', built_msg, 6)[0]}, "
+                f"payload={binascii.hexlify(built_msg[8:]).decode()}")
+
+    # CONTROL C: the message-level byte cache. Decode stashes the whole plaintext
+    # and encode replays it -- round-trip 100%, U+FFFD zero, and completely
+    # broken, because it discards anything the caller changed. Mutate the
+    # neighbour, re-encode, and DECODE THE RESULT: both halves must hold, and
+    # asserting only the string half is what let this survive an earlier draft of
+    # the criterion.
+    dec = c.decode_stream("GAME_SMSG", lone_msg)[0][0][1]
+    mutated = list(dec)[1:]
+    mutated[0] = 0x55555555
+    re_enc = c.encode("GAME_SMSG", STR_OP, mutated, header_value=dec[0])
+    back = c.decode_stream("GAME_SMSG", re_enc)[0][0][1]
+    cache_sabotage = lone_msg                       # what a byte cache emits
+    ok &= check("mutating a neighbour moves that field and leaves the string "
+                "intact",
+                back[1] == 0x55555555 and back[2] == LONE
+                and re_enc != cache_sabotage,
+                f"dword=0x{back[1]:08X} string={back[2]!r} "
+                f"differs-from-cache={re_enc != cache_sabotage}")
+
+    print("\n6. the whole live corpus re-encodes to ArenaNet's own bytes")
+    # THE CRITERION, and the reason this section is worth its runtime: every
+    # GAME_SMSG in every decrypted live connection must re-encode to the exact
+    # bytes ArenaNet sent. Before the string16 fix this was 133 failures over
+    # 22,524 messages, and the failing set was EXACTLY the set whose decoded
+    # values carried U+FFFD -- one defect, one number, in twelve opcodes, none
+    # differing in length. Both figures are measured by this reader, from the
+    # same loop, so the invariant below can fail in either direction.
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "authsrv"))
+    import tape  # noqa: E402  -- cross-package, the repo has no packages
+    live = vaultpath.require_dir(
+        "captures", "live",
+        why="ArenaNet's own bytes are the only oracle for this round trip")
+    caps = sorted(d for d in os.listdir(live)
+                  if glob.glob(os.path.join(live, d, "game-*.jsonl")))
+    if not caps:
+        LEDGER.skip("the live corpus re-encodes byte-identically",
+                    f"no decrypted game channels under {live}")
+        LEDGER.skip("no decoded value carries U+FFFD", "same")
+        LEDGER.skip("the failure set and the U+FFFD set are the same set", "same")
+        LEDGER.skip("0x004C and 0x0161 specifically", "same")
+    else:
+        total = conns = 0
+        fails = collections.Counter()
+        replaced = collections.Counter()
+        seen = collections.Counter()
+        lendiff = 0
+        for cap in caps:
+            d = os.path.join("captures", "live", cap)
+            for row in tape.channel_files(d):
+                _info, events = tape.load_tape(d, row["connection"])
+                blob = b"".join(b for _t, b in events)
+                msgs, consumed, err = c.decode_stream_at("GAME_SMSG", blob, 0)
+                conns += 1
+                for i, (off, op, vals) in enumerate(msgs):
+                    end = msgs[i + 1][0] if i + 1 < len(msgs) else consumed
+                    total += 1
+                    seen[op] += 1
+                    if any(isinstance(x, str) and "�" in x for x in vals):
+                        replaced[op] += 1
+                    try:
+                        enc = c.encode("GAME_SMSG", op, list(vals)[1:],
+                                       header_value=vals[0])
+                    except Exception:
+                        fails[op] += 1
+                        continue
+                    if enc != blob[off:end]:
+                        fails[op] += 1
+                        if len(enc) != len(blob[off:end]):
+                            lendiff += 1
+        nfail, nrep = sum(fails.values()), sum(replaced.values())
+        print(f"  {conns} connections, {total} GAME_SMSG, "
+              f"{nfail} round-trip failures, {nrep} values carrying U+FFFD")
+        ok &= check("every live GAME_SMSG re-encodes byte-identically",
+                    total > 0 and nfail == 0,
+                    f"{total - nfail}/{total}" + (
+                        f" — failing: "
+                        f"{ {f'0x{k:04X}': v for k, v in sorted(fails.items())} }"
+                        if fails else
+                        f" over {conns} connections; was 133/22,524 before the "
+                        f"string16 fix, in twelve opcodes"))
+        ok &= check("no decoded value carries U+FFFD", nrep == 0,
+                    f"{nrep}" + (
+                        f" — {  {f'0x{k:04X}': v for k, v in sorted(replaced.items())} }"
+                        if replaced else " (a replacement char is an unrecoverable "
+                        "code unit, not a rendering nicety)"))
+        # The invariant, which is the honest form of "one defect, one number": the
+        # two sets were identical before the fix and must stay identical after.
+        # It can fail in BOTH directions -- a re-encode failure with no U+FFFD is
+        # a different bug, and a U+FFFD with no failure would mean the round trip
+        # is not actually comparing bytes.
+        ok &= check("the round-trip failures and the U+FFFD values are the SAME "
+                    "set, per opcode",
+                    dict(fails) == dict(replaced),
+                    f"fails={ {hex(k): v for k, v in fails.items()} } "
+                    f"ffd={ {hex(k): v for k, v in replaced.items()} }"
+                    if dict(fails) != dict(replaced) else
+                    "both empty now; both were the same 12-opcode multiset before")
+        # Named because they are the two the study document quotes, and a
+        # regression that spared them would still be a regression.
+        ok &= check("0x004C and 0x0161 are whole, and were the worst two",
+                    fails.get(0x004C, 0) == 0 and fails.get(0x0161, 0) == 0
+                    and seen.get(0x004C, 0) > 0 and seen.get(0x0161, 0) > 0,
+                    f"0x004C {seen.get(0x004C, 0) - fails.get(0x004C, 0)}/"
+                    f"{seen.get(0x004C, 0)} (was 0/40), "
+                    f"0x0161 {seen.get(0x0161, 0) - fails.get(0x0161, 0)}/"
+                    f"{seen.get(0x0161, 0)} (was 363/394)")
 
     # --- the catalog this checkout loads, and the names it now carries ----------
     # DEFAULT_SCHEMA was a hardcoded absolute path into the MAIN checkout until

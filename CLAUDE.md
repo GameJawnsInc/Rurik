@@ -166,7 +166,22 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   python toolkit/authsrv/test_handshake.py
   ```
 
-  Others: `toolkit/schema/test_codec.py` (codec vs. real captured bytes),
+  Others: `toolkit/schema/test_codec.py` (codec vs. real captured bytes — and
+  since 2026-08-11 the `string16` round trip: **22,524 of 22,524** live GAME_SMSG
+  re-encode to ArenaNet's own bytes, where 133 in twelve opcodes did not, because
+  the field decoded with `errors="replace"` and GW's encoded names carry code
+  units in the UTF-16 surrogate range. The failing set was EXACTLY the set whose
+  values carried U+FFFD, and the test asserts that as an invariant so it can fail
+  in both directions. Three controls sit under it and each catches a different
+  wrong implementation: a value CONSTRUCTED from raw code units must encode to
+  exactly them — which is what a decoder that stashes the original bytes on the
+  value cannot do, and the only thing that catches it, since such a decoder
+  round-trips every message it ever saw and survives the mutation control; a
+  mutated neighbouring field must read back mutated with the string intact,
+  which catches a message-level byte cache; and an astral character must count
+  as TWO code units, which is a second bug the first one was hiding — `len(s)`
+  counts Python characters, so a surrogate pair wrote a count two bytes short and
+  desynced the NEXT message. The check is on that next message),
   `toolkit/schema/test_catalog.py` (our message catalog vs. the client's own
   format tables — 477/477 GAME_SMSG agree field-for-field on build 38797),
   `toolkit/harness/test_harness.py` (the one-command stack, the launch safety

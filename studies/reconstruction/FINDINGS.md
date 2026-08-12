@@ -1708,6 +1708,29 @@ both times. The control that proves the reader is measuring the same thing the d
 the two big captures the same walk returns **127 of 22,137** with the draft's exact per-opcode split, and
 restricted to `chain()`'s eight connections, 117 of 21,543.
 
+#### 6.2a [OBSERVED] FIXED 2026-08-11, and it was hiding a second bug
+
+`string16` now decodes and encodes with `surrogatepass`, and **22,524 of 22,524 canon-12 GAME_SMSG re-encode to
+ArenaNet's own bytes**, with zero values carrying U+FFFD. Both figures come from one reader running the same
+loop over both codecs: **133 → 0**, per-opcode dict identical to the table above, 0 length differences.
+`toolkit/schema/test_codec.py` sections 5 and 6 pin it (floor 18 → 27; suite 50 of 50 green).
+
+**The second bug could not fire until the first was fixed.** The encoder wrote `len(s)` as the wire count, and
+`len(s)` counts *Python characters* — a valid surrogate PAIR is one character occupying **two** code units, so
+the count went out two bytes short of the data that followed it. That is not a lossy field, it is a **desync**:
+the next message frames from inside this one. Under `replace` it was unreachable, because U+FFFD is one unit
+and one character. The count is now derived from the encoded bytes, so the two cannot disagree, and the check
+is on the *following* message — which is where the damage lands.
+
+**And §8.1's own sabotage control was insufficient, which the test found and this section records rather than
+quietly fixing.** The criterion as written asked that a mutated neighbouring field read back mutated while the
+string survived. That catches a message-level byte cache. It does **not** catch the sabotage §8.1 names by
+name — a decoder that stashes the original bytes *on the value object* — because mutating a neighbour leaves
+that stash untouched, so it passes every clause. What separates them is **construction**: a value built from
+raw code units that was never decoded has no stash to replay, and a naive encoder raises `UnicodeEncodeError`
+on it. Section 5 therefore builds one and requires the exact bytes out, with the naive encoder's raising as the
+proof the input discriminates. §8.1 below carries the corrected control.
+
 This is not cosmetic. It **blocks two techniques outright** — tape mutation (§4.14: its no-op control is red on
 the item-create family it targets, so one in thirteen mutations would be measuring our encoder) and every name
 join through `0x0056` field[9] or `0x0161` field[12]. It does **not** block §4.11's sweep, which uses the encode
@@ -1888,12 +1911,22 @@ MUTATED value, and `field[12]` still carries `01 DE`.**
 
 **Asserting only the second half is the vacuous version, and it was the first thing written here.** A
 message-level byte cache — decode stashes the whole original plaintext, encode replays it — emits `01 DE` and
-passes while silently discarding the mutation entirely; and a stash carried *on the value object* survives a
-mutation to a neighbouring field untouched, because moving `field[9]` does not move `field[12]`'s stash. Only
-reading the mutation back out separates them. This is the shape `test_mapfile.py` already uses — mutate a
-decoded chunk in place until its payload changes length and require the emitted size field to move with it —
-and it is here for the same reason: the first version of that test replaced the chunk object instead of
-mutating it, and a sabotaged encoder passed it 22 checks to 0. `floor` set from a green run.
+passes while silently discarding the mutation entirely. Reading the mutation back out separates them. This is
+the shape `test_mapfile.py` already uses — mutate a decoded chunk in place until its payload changes length and
+require the emitted size field to move with it — and it is here for the same reason: the first version of that
+test replaced the chunk object instead of mutating it, and a sabotaged encoder passed it 22 checks to 0.
+
+*Fourth control, and the criterion was still insufficient without it.* **The mutation control does NOT catch
+the sabotage this section names by name.** A stash carried *on the value object* survives a mutation to a
+neighbouring field untouched — moving `field[9]` does not move `field[12]`'s stash — so it satisfies both
+halves and passes. The paragraph above asserted otherwise and was wrong; writing the test is what showed it.
+What separates a value that CARRIES code units from one that REPLAYS them is **construction**: build a
+`string16` value from raw code units that was never decoded, and require the encoder to emit exactly those
+units. A value-level stash has nothing to replay and must fall back to a strict encode, which raises
+`UnicodeEncodeError` on a lone surrogate — and that raising, asserted in the same check, is what makes the
+input discriminate rather than merely pass. **Status: all four controls are implemented and green**
+(`test_codec.py` §5–§6, floor 18 → 27, 2026-08-11), and the criterion is met: **22,524 of 22,524**, U+FFFD
+zero, `0x004C` 40/40 and `0x0161` 394/394. See §6.2a, including the astral-pair desync the fix exposed.
 
 **8.2 `toolkit/authsrv/lootledger.py` — the kill ledger.** *Shape, not criterion:* a table with **one row per
 (capture, connection, agent-death)**, carrying species slot, class tag, drop/no-drop, item model id and an explicit
