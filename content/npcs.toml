@@ -75,6 +75,8 @@ speed = 12.0                # its burrow-crawl speed, 151 of 151 creates
 
 [npc.lakeside_worm.provenance]
 source = "capture"
+capture = "20260807T143055"
+origin = "live"
 verified = """OBSERVED, capture 20260807T143055, four chained live tapes of the owner's \
 own session against the live service. Definition slot 1442 is declared by GAME_SMSG \
 0x0056 NPC_UPDATE_PROPERTIES twice in the capture and the two declarations are \
