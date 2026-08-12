@@ -273,7 +273,16 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   combat `--probe` into a run against an empty world, so a probe with no hostile
   must WARN, and must NOT warn with `--enemy` -- a warning that fires either way
   is noise. A contradiction (`--enemy` plus an explicit `--no-enemy`) is refused
-  rather than resolved),
+  rather than resolved. **And since 2026-08-12 the crash dialog is captured on
+  EVERY run**, not just `--keep-open` ones: `capture_error_dialog` was reachable
+  only from `hold_open()`, so a plain `--hold N` run captured nothing and rung
+  E10a's client asserts survived only because the owner read them off the screen.
+  The extraction was never broken -- the assert text sits in a hidden `Edit`
+  control the reader already finds, and nothing may CLICK, because the control
+  beside it is `&Send report to ArenaNet`. It was a missing call site. The test
+  asserts it on the SYNTAX TREE, because "in the finally" and "before
+  `close_client`, which destroys the dialog" are both invisible to a grep, with a
+  control that the ordering check fails on a reversed finally),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_datwrite.py` (the only tool that opens the archive `r+b`,

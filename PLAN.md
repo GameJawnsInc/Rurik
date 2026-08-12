@@ -2131,8 +2131,21 @@ parallel, with one safety change that is not optional — see its entry.
     **Everything outside terrain and path is 124 bytes**: Header 8, Map Parameters 41,
     Props 12, Zones 34, Terrain Dependencies 29. That is the whole authoring target
     left, and `strippedterrain.py` and `pathchunk.StrippedPath` already write the other
-    two. NOT established: Header, Map Parameters and Terrain Dependencies were never
-    removed, so they are unfalsified rather than shown necessary — three more runs.
+    two.
+    **(e10a-2)** ✅ **DONE 2026-08-12 (FINDINGS 42).** All seven have now been removed
+    individually and all seven are required; Collision remains the only member of §34's
+    list that is not. **The loader NAMES the chunk it cannot use** — `missing chunk
+    'Header Stripped Data'`, `corrupt chunk 'Terrain Stripped Data'` — which §41 missed
+    by reading `tail -1` of `Gw.log` instead of `tail -4`, and which corrects §41's
+    account of the props signature: the re-bloat DOES run, and the failure surfaces as
+    `corrupt chunk 'Path Stripped Data'`. Two more facts fell out. The Header is refused
+    BEFORE the re-bloat and everything else after, so requirement has two stages. And
+    removing Map Parameters makes the converter assert
+    `dims.x * XY_DIST == mapRect.x1 - mapRect.x0` — `terrain.py`'s 96.0 cell pitch in
+    the client's own expression, and a hard authoring rule for any map we build.
+    **The harness gap is closed too**: `capture_error_dialog` was reachable only under
+    `--keep-open`, so ordinary runs captured nothing; it now runs in `run_client`'s
+    `finally` before the client is closed, and caught both of §42's asserts unaided.
     **(e10)** ⬜ Only the TERRAIN is ours. Props, zones, collision and Map Parameters in
     FINDINGS 38's map are ArenaNet's, so FINDINGS 34's props hard gate was satisfied by
     their data. An end-to-end authored map — §32's Blender pipeline through
