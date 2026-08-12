@@ -542,6 +542,12 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   that was made writing it -- filtering channels by `:6112` cut the corpus to 52 and said
   so without complaint, because ArenaNet serves the GAME channel on port 80 in 10 of the
   12 canon connections),
+  Section 7b covers `sweeploop.py`, the unattended driver: its stop conditions are a
+  PURE function so they can be checked without a client, and its control is that ONE
+  barren round must NOT stop -- a single unlocalised crash is normal, and stopping at one
+  would end most sweeps early. The last check asks the SYNTAX TREE whether the loop
+  imports the cage or launches anything itself, because the grep version of that check
+  went red on the docstring explaining the rule),
   `toolkit/authsrv/test_rotate.py` (that GAME_CMSG 0x0040 really is ROTATE_PLAYER: the
   client's own assert text and the two ±inf constants are still at their addresses, both
   payload fields are still `dword` and not the `float` they look like, and the finite

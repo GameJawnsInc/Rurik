@@ -58,7 +58,7 @@ import checks  # noqa: E402
 import smsgsweep as sw  # noqa: E402
 from codec import Codec  # noqa: E402
 
-# Floor 50, measured from a green run on 2026-08-12. Sections 0 and 2-7 need no vault, no
+# Floor 58, measured from a green run on 2026-08-12. Sections 0 and 2-7 need no vault, no
 # socket and no client -- 32 checks -- because a scoring defect is not a property of any
 # one capture. Two sections do need more and both declare their skips: section 1's
 # cross-check of NOT_IN_RECV_TABLE against the client's own receive table wants capstone
@@ -67,7 +67,7 @@ from codec import Codec  # noqa: E402
 # the way test_mapexport treats a vault-less run: those two sections are the ones that
 # pin the sweep's DENOMINATOR and the ten opcodes that tear the game channel down, and a
 # plan built on a constant nothing confirmed is exactly the wish this repo keeps refusing.
-LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=50)
+LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=58)
 
 # MEASURED 2026-08-12: the opcodes whose field list `overrides.json` changes. Written as
 # literals rather than recomputed from the module under test.
@@ -444,6 +444,53 @@ def main():
     LEDGER.ok(ok, "CONTROL: two gamesrv captures in one report is REFUSED",
               "scoring one of two connections as though it were the run is worse than "
               "not scoring at all")
+
+    # ---- 7b. the loop's stop conditions -------------------------------------
+    print("\n7b. sweeploop stops rather than burning clients")
+    import sweeploop as loop
+    src = open(os.path.join(HERE, "sweeploop.py"), encoding="utf-8").read()
+    LEDGER.ok(loop.decide([1, 2], 3, 0, False, 5)[0],
+              "a round with work left and progress made continues", "")
+    LEDGER.ok(not loop.decide([], 0, 0, False, 5)[0],
+              "an empty plan stops -- the only good ending",
+              "a probe that sends nothing prints 'complete' and measures nothing")
+    LEDGER.ok(not loop.decide([1], 0, 2, False, 5)[0],
+              "two rounds recording nothing stops",
+              "the crash is not being localised, and a third round would burn another "
+              "client to learn the same thing")
+    LEDGER.ok(loop.decide([1], 0, 1, False, 5)[0],
+              "CONTROL: ONE round recording nothing does NOT stop",
+              "a single unlocalised crash is normal -- the suspects get bisected and the "
+              "next round moves again; stopping at one would end most sweeps early")
+    LEDGER.ok(not loop.decide([1], 5, 0, True, 5)[0],
+              "a harness failure stops even with progress and work left",
+              "that is a broken stack, not a sweep result, and looping hides it")
+    LEDGER.ok(not loop.decide([1], 5, 0, False, 0)[0],
+              "and the round ceiling stops an unattended run", "")
+    LEDGER.ok(all(k in loop.GAME_ARGS for k in ("--no-enemy", "--ping-seconds",
+                                                "--probe")),
+              "every round passes --no-enemy, --ping-seconds and --probe",
+              "leaving any to the operator is how a loop fails identically 17 times")
+    # THE SYNTAX TREE, not a grep. The first version of this check searched the file text
+    # for "assert_launch_safe" and went red on its own DOCSTRING, which names the gate to
+    # explain why the module does not call it. test_cmsgnames.py has the same lesson from
+    # the other side: a grep asserts formatting, not behaviour.
+    import ast
+    tree = ast.parse(src)
+    imported = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
+    imported |= {a.name for n in ast.walk(tree) if isinstance(n, ast.Import)
+                 for a in n.names}
+    called = {n.func.attr if isinstance(n.func, ast.Attribute) else
+              getattr(n.func, "id", None)
+              for n in ast.walk(tree) if isinstance(n, ast.Call)}
+    LEDGER.ok("cage" not in imported and "assert_launch_safe" not in called
+              and "SESSION" in {t.id for n in ast.walk(tree)
+                                if isinstance(n, ast.Assign) for t in n.targets
+                                if isinstance(t, ast.Name)},
+              "and it shells out to session.py rather than launching anything itself",
+              "the cage gate stays in the one place test_cage.py covers; a second launch "
+              "path is a second gate to get wrong. Asked of the SYNTAX TREE -- the grep "
+              "version went red on the docstring that explains the rule")
 
     # ---- 8. the denominator, rebuilt from the tapes -------------------------
     print("\n8. the observed set is recomputed, not remembered")
