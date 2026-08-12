@@ -604,7 +604,11 @@ def load_keyring(path):
     return out
 
 
-def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=None):
+GAME_MODES = ("base", "reforged")
+
+
+def run(account_label, exe, live_host, live_ports, minutes, confirm, mode=None,
+        out_root=None):
     """The live orchestration: launch, sniff, tap, hold, stop, assemble, scrub.
 
     Refuses without --confirm; needs WinDivert, an elevated shell and the secondary account.
@@ -621,6 +625,26 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         raise LiveError("a live run points a client at ArenaNet's real service. Re-run with "
                         "--confirm once you have read PLAN §6.2 and are at the keyboard: "
                         "human cadence, human hours, one client, never competitive.")
+    # --mode is required and has NO DEFAULT, deliberately, and it is the same shape as
+    # --confirm one line above: a value the operator must state, refused rather than
+    # guessed. See GAME_MODES and the manifest key below for why a default would be worse
+    # than useless here.
+    if mode not in GAME_MODES:
+        raise LiveError(
+            f"--mode is required and must be one of {'|'.join(GAME_MODES)} "
+            f"(got {mode!r}).\n"
+            f"  Reforged Mode changes enemy health and armour by roughly 20%, and NOTHING\n"
+            f"  in the recorded stream says which mode produced it. It is not recoverable\n"
+            f"  afterwards: every health number from an unstamped capture is base or\n"
+            f"  base x 0.8 with nothing on this machine able to say which, forever.\n"
+            f"  ~20% is the dangerous size -- it looks like a plausible base value rather\n"
+            f"  than an obvious error, so a contaminated number is used rather than caught.\n"
+            f"  This is asked BEFORE the client launches because it cannot be asked after,\n"
+            f"  and a wrong answer is worse than a refusal: say what the account is\n"
+            f"  actually set to, not what you intend it to be.\n"
+            f"  The three monster health readings already in the vault (definition slots\n"
+            f"  1346=96, 1434=8, 1442=40) predate this flag and are stamped\n"
+            f"  mode='unrecorded' -- kept, never promoted. They are the reason this exists.")
     preflight(account_label, exe, live_host)
     acct = accounts.for_automation(account_label)
     rva = slot_rva(exe)                      # raises if the live build is not key-tapped
@@ -821,6 +845,22 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         print("        make_run_dir.py --live")
 
     manifest = {"stamp": stamp, "exe": exe, "account": acct["label"],
+                # An OPERATOR DECLARATION, and labelled as one on purpose. Every other
+                # field here is derived from an artifact; this one cannot be. Reforged
+                # Mode leaves no mark on the wire that we have measured, so nothing can
+                # check it and nothing should pretend to -- `origin.py`'s design rule is
+                # derive-from-the-endpoint-never-self-declare, and mode has no endpoint,
+                # so it must not be taught to infer this.
+                #
+                # THE COROBBORATION THAT WOULD MAKE IT REFUTABLE IS NOT BUILT, and is not
+                # faked: a Reforged-only map id appearing on the wire would CONTRADICT a
+                # `base` declaration, the same one-directional shape as `origin_of`
+                # refusing a `live` stamp on an all-loopback file. It needs a measured
+                # list of Reforged-only map ids, which this project does not have -- the
+                # 12 decrypted connections load map ids 0, 146, 148 and 164 and none of
+                # them is Reforged-only. Writing the check against a guessed list would
+                # be a check that cannot fail in the direction that matters.
+                "game_mode": mode, "game_mode_source": "operator-declared",
                 "exe_sha256_before": exe_sha_before, "exe_sha256_after": exe_sha_after,
                 "exe_unchanged": bool(exe_sha_before and exe_sha_before == exe_sha_after),
                 "args": accounts.redact_for_file(args), "ports": ports,
@@ -1082,6 +1122,14 @@ def main():
                     help="session-length CEILING, not a duration -- Ctrl-C ends the run at "
                          "any point and still assembles and scrubs in full (default: 10)")
     ap.add_argument("--confirm", action="store_true", help="required for a real live run")
+    # No `default=`, and `choices` rather than a free string. argparse's own error is the
+    # first refusal an operator meets; run()'s longer one explains why. Both exist because
+    # a default here would be silently wrong on every run that did not think about it,
+    # which is the entire failure this flag prevents.
+    ap.add_argument("--mode", default=None, choices=GAME_MODES,
+                    help="REQUIRED: the account's game mode, base or reforged. Reforged "
+                         "changes enemy health and armour ~20%% and is UNRECOVERABLE "
+                         "afterwards -- an unstamped capture's stats can never be graded")
     a = ap.parse_args()
     if a.assemble:
         return reassemble(a.assemble)
@@ -1104,7 +1152,8 @@ def main():
             f"  Drop the flag: the sniff filters by port on any host, which is what the\n"
             f"  multi-connection reader exists for.")
     ports = {int(p) for p in a.ports.split(",") if p.strip()}
-    return run(a.account, a.exe, drive_client_default(), ports, a.minutes, a.confirm)
+    return run(a.account, a.exe, drive_client_default(), ports, a.minutes, a.confirm,
+               mode=a.mode)
 
 
 def reassemble(outdir):
