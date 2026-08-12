@@ -289,11 +289,122 @@ And the flags field partitions perfectly against the create's allegiance token:
 | `nonc` | 256, 521, 524, 525, 66048, 98816, 98820 | 244 |
 | `play` | 524 | 39 |
 
-Masking with `0x300`: **0 of 585 creates cross.** Every fighting token has bits `0x100`/`0x200` clear; every non-combatant token has one set. And `content/npcs.toml`'s hatcher — **the server's one and only enemy** — carries `flags = 0x20C = 524`, the most common non-combatant value and one no `mon1` definition ever takes. The rival (flags is a nameplate bitfield, the partition incidental) is not fully closed, but a single `mon1` create carrying `0x100` or `0x200` would have refuted it and there are none in 302 of them. **The cheapest close is `toolkit/clientscan/msghandler.py` on opcode `0x0056`** — reading the client's own use of the field, which is how this repo settles contested messages.
+Masking with `0x300`: **0 of 585 creates cross.** Every fighting token has bits `0x100`/`0x200` clear; every non-combatant token has one set. And `content/npcs.toml`'s hatcher — **the server's one and only enemy** — carries `flags = 0x20C = 524`, the most common non-combatant value and one no `mon1` definition ever takes. The rival (flags is a nameplate bitfield, the partition incidental) is not fully closed, but a single `mon1` create carrying `0x100` or `0x200` would have refuted it and there are none in 302 of them. **CLOSED 2026-08-11 — see §3.7.1. Every use the client makes of this field is a RENDERER or a UI PANEL, so the partition is real and its combat reading is not something the client can support.**
 
 **The `profession` byte is not established as a profession.** It reads **11** on five definitions, against `agents.py`'s own `CHAR_PROFESSIONS_MAX = 6` (from 387 live samples) and GW's ten professions. It reads 2 ("Ranger") on the one model measured closing to ~65 units to melee, and 1 ("Warrior") on the burrowing worm that has no legs. And it cannot be cross-checked here: `AGENT_SET_PROFESSION` names **only kind=5 player bodies** — 234 of 234 targets with a create in the same connection, zero NPCs. The field name is ours, taken from an upstream as a lead.
 
 **The level byte cannot be validated either, and there is a trap waiting.** Generic-value id 36 ("PublicLevel") takes the value **1 and only 1 on every NPC agent in the corpus** (kind 9: 9 events; kind 8: 18 events); all variation 2..20 is on player bodies. Pairing it against the definition's level byte yields 27 pairs, 8 "agreeing" and 19 "disagreeing" — **but both outcomes are forced, because every NPC sample is 1.** This is recorded here specifically so the next dive does not run that cross-check, see 8-for-8 on the non-zero subset, and promote the level byte. `content/npcs.toml`'s own caveat stands: *"a worm whose level reads 0 is at least as likely to mean the field is not a level as it is to mean the worm has none."*
+
+
+### 3.7.1 The `flags` read, 2026-08-11 — every consumer is a renderer or a panel
+
+**PREDICTION, stated before the disassembler ran:** the handler would store `flags` and
+the bits would be tested elsewhere, for **display** reasons — nameplate, targetability,
+minimap — and bits 8/9 would *not* branch into anything combat-named. The partition would
+turn out to be a consequence of a display rule rather than a combat rule. **Refuted if** a
+bit-8 or bit-9 test reached a combat-named branch, or an assert named the field with a
+combat term.
+
+**CONFIRMED, and more cleanly than predicted.** Nine sites read the field. Every one is
+the renderer or a UI panel. Not one is combat, and not one is gameplay.
+
+**The handler interprets nothing.** `0x0091dd80` copies seven message dwords into a
+32-byte stack struct and calls `0x0080fa30`, which writes them into
+`base[+0x7fc] + def_id * 48` under `Array.h:587 index < m_count`. Both are pure
+marshallers. Whatever `flags` *means* is decided by the readers.
+
+**Two parallel definition tables, dispatched on the id's top nibble** (`0x0080DEF0`,
+ChCliApi):
+
+```
+and eax, 0xf0000000
+cmp eax, 0x20000000   je -> monster table at +0x7fc, 48-byte rows  (lea edi,[ecx-0x20000000])
+cmp eax, 0x30000000   je -> player  table at +0x80c, 80-byte rows
+                      else -> assert ChCliApi:4325
+```
+
+**And the wire agrees, which is the cross-check that could have failed.** The create's
+model field carries exactly those class bases: **585 of 585** joined creates are
+`0x20000000`-based, the player's own create is `0x30000001`, and **48 of 54** definition
+ids join under `- 0x20000000` against **0 of 54** under the identity. The neighbouring
+assert `baseClass == CHAR_CLASS_PLAYER_BASE` names the other constant outright.
+
+**`flags` is message field[6], so row offset +0x10.** Cross-confirmed by a source this
+study did not write: `content/npcs.toml`'s worm provenance already records the mapping as
+`[definition, file_id, 0, scale, 0, flags, profession, level, enc_name]`, read back
+against the wire when that row landed.
+
+**The readers, each attributed by its own asserts:**
+
+| bits | site | module | what that module is |
+|---|---|---|---|
+| **9** | `0x007FD5B5` `test [+0x10], 0x200` | `AvChar` | `Gw\AgentView\AvChar.cpp` — the renderer. The branch ends in `AvChar:8212 seqIndex != SEQ_INDEX_UNDEFINED`: an **animation sequence** |
+| **4, 5, 13** | `0x007FD7D5` `test [+0x10], 0x2030` | `AvChar` | on a hit, substitutes **row+0x14** into an appearance call |
+| **8** | `0x00561E1F` `test [+0x10], 0x100` | `PtMinionRoster` | the minion-roster **panel** (`CtlFrameListGetItemFrameId`, `listFrame`) |
+| **10** | `0x00570B62` `test [esi], 0x400` | `PtRoster` | the party-roster **panel** (`FrameTestStyles(ThisFrame(), ROSTER_STYLE_…)`) |
+| **14** | `0x0056198F`, `0x00561E19` | `PtMinionRoster`, `CtlInstance` | panel plus UI control |
+| **4, 5, 12** | `0x0081B372` | `ChCliBase` | decomposes the word and ORs three bits into `[esi+0x64]`; its calls land in **`AvApi`** — AgentView again |
+
+`Av*` is AgentView, the render layer. `Pt*` are party-window panel frames. `Ctl*` is the
+UI control library. **There is no seventh category.**
+
+**The partition is really bit 9, not the `0x300` mask.** Re-counted from the corpus — 585
+creates joined to a definition, **0 crossing**, reproducing §3.7 exactly:
+
+| token | creates | flags values |
+|---|---|---|
+| `nonc` | 244 | 256(1), 521(13), 524(200), 525(2), 66048(4), 98816(16), 98820(8) |
+| `mon1` | 233 | 8(226), 13(7) |
+| `play` | 39 | 524(39) |
+| `band` | 37 | 12(37) |
+| `anim` | 32 | 9(32) |
+
+Per bit, combatant tokens against the rest: **bit 9 is 0/302 against 282/283** — nearly a
+perfect separator on its own — and **bit 8 is 0/302 against 1/283**, covering the single
+remaining definition. So the `0x300` mask is bit 9 plus one straggler, and bit 9 is the
+AvChar animation gate.
+
+**What this settles, and what it does not.** It settles that *the client* uses this word
+for display. It does **not** settle that the server means nothing else by it — the server
+is what sends the field, and §2.1 is precisely the finding that the server's code is not
+in this image. So the honest statement is: **the wire partition is a fact (585/585), and
+the client's own use does not corroborate a combat reading of it.** §3.7's framing that
+this read would "settle what the definition `flags` bits mean" was too strong; the client
+can only answer for its own half.
+
+**A correction to §3.7, and it is one of ours.** §3.7 noted that our hatcher carries
+`flags = 0x20C`, "the most common non-combatant value and one no `mon1` definition ever
+takes," with the implication that the row is wrong. **The row is right.** A Hatcher *is* a
+Collector — a non-combatant — and `0x20C` is what ArenaNet declares for one. What the
+observation actually shows is that **our test hostile is a non-combatant creature wearing
+a fight**, which `content/world.toml` already says out loud ("A Hatcher is standing in for
+a worm… this row exercises the CYCLE, not the creature"). Under this read it also means
+our enemy renders in the townsfolk animation class, bit 9 set — a fixture consequence, not
+a data defect. Nothing in `content/` needs changing.
+
+**One thing this strengthens elsewhere.** §3.7 doubts that the byte we call `profession`
+is a profession. The AvChar branch above consumes **row+0x14 — that byte — as a parameter
+to an appearance call**, gated on flags bits. That is the client using the field for how a
+character *looks*, which is evidence against the gameplay reading and was not available
+when §3.7 was written.
+
+**SCOPE, and the result contains its own proof that the scope is a floor.** `--xrefs`
+finds direct `call rel32`/`jmp rel32` only, and caller windows were walked to the next
+`call`/`ret`. **`ChCliBase`'s consumer at `0x0081B220` has no direct caller at all** — it
+is installed as a callback (`mov dword ptr [ecx], 0x81b220` at `0x00824606`) — so the xref
+method demonstrably under-reports, here, inside this very result. "Every reader is a
+renderer or a panel" is therefore a statement about every reader **reachable by this
+method**; an indirect or vtable path reaches none of it.
+
+**Reproducing it**
+
+```bash
+python toolkit/clientscan/msghandler.py 0x0056 --follow --depth 1 --annotate
+python toolkit/clientscan/codescan.py --field 0x7fc
+python toolkit/clientscan/codescan.py --xrefs 0x0080DEF0
+python toolkit/clientscan/asserts.py --at 0x00561DF0 --span 0x600
+```
+
 
 ### 3.8 Death, corpses and loot — a whole system nobody asked about
 
@@ -642,7 +753,7 @@ Play the R1.5 tape of ArenaNet's own recorded monster behaviour into our client 
 | # | Question | Cost | What settles it |
 |---|---|---|---|
 | 1 | ~~Is `CHAR_AI_MODES` a UI enum or a server-side AI concept?~~ **ANSWERED 2026-08-11: UI.** | *was:* one capstone read | 3 at five sites, two three-arm switches, `AI_MODE_ICONS` = 3, `AGGRESSIVE` = 0, and the labels are **Fight / Guard / Avoid Combat**. The lead closed and the binary negative is total. §2.2.1. |
-| 2 | What do the definition `flags` bits mean? | **One `msghandler.py` run** on opcode `0x0056`. | The client's own use of the field. The `0x100`/`0x200` partition is 585/585 but nothing has read the consumer. |
+| 2 | ~~What do the definition `flags` bits mean?~~ **ANSWERED 2026-08-11: to the client, they are display.** | *was:* one `msghandler.py` run | Nine readers, every one `AvChar`/`AvApi` (the renderer) or `PtRoster`/`PtMinionRoster`/`CtlInstance` (UI panels). Bit 9 — the near-perfect combatant separator, 0/302 vs 282/283 — is an **animation gate**. The partition is real; the client cannot support a combat reading of it. §3.7.1. |
 | 3 | Does `Engine\Map\Path` contain steering or pursuit? | **Reading five more modules' asserts.** | Six of eleven are read and are pure geometry; `PathObstacle`'s `radius >= 0` says dynamic obstacles are modelled. |
 | 4 | Do monster spawn placements live in the Props chunk? | **One prop model-id histogram** for one map, off code `mapexport` already has. | Whether any id lands in the `0x20000000` creature-class range. Closes Gw.dat's last unmeasured slot. |
 | 5 | Does the tick clock agree with the wire clock on the **existing** captures? | **One analyser run**, no new session. | The `0x001E` integral against the wire span, ≤50 ms. If red, every timed claim in the repo is suspect. |

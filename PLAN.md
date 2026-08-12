@@ -1071,14 +1071,35 @@ run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cms
        self-validated**: an MSVC assert pushes its own source line as an
        immediate, so every one of the nine sites had to agree with the line
        `asserts.py` reports from a different mechanism, and all nine did.
-    2. **Run `msghandler.py` on opcode `0x0056`** (`NPC_UPDATE_PROPERTIES`) — settles
-       what the definition `flags` bits mean from the client's own use of the field.
-       The wire already carries a per-creature record (definition id, flags, level,
-       scale, speed) that is byte-stable across sessions three days apart, and its
-       flags partition perfectly against the allegiance token: **0 of 585 creates
-       cross a `0x300` mask.** Nobody has read the consumer. Note the sting: our own
-       `content/npcs.toml` hatcher carries `flags = 0x20C`, the most common
-       **non-combatant** value, which no `mon1` definition ever takes.
+    2. ✅ **DONE 2026-08-11 — THE FLAGS ARE DISPLAY, ALL NINE READERS.** Prediction
+       stated first (display, not combat) and confirmed. The `0x0056` handler chain
+       is a pure marshaller: it writes 32 bytes into `base[+0x7fc] + def_id * 48`
+       and interprets nothing, so the meaning lives in the readers. There are nine,
+       and every one is `AvChar`/`AvApi` — `Gw\AgentView`, the renderer — or
+       `PtRoster`/`PtMinionRoster`/`CtlInstance`, which are party-panel frames and
+       the UI control library. **No combat site, no gameplay site.** Bit 9, which is
+       the near-perfect combatant separator on the wire (**0/302 vs 282/283**, with
+       bit 8 covering the single straggler), is an **animation gate** in `AvChar`
+       whose branch ends in `seqIndex != SEQ_INDEX_UNDEFINED`. So the partition is a
+       consequence of a display rule, not a combat rule.
+       **Two by-products worth more than the answer.** The client dispatches
+       definition ids on the top nibble — `0x20000000` → the monster table (48-byte
+       rows), `0x30000000` → the player table (80-byte rows), else an assert — and
+       **the wire agrees**: 585 of 585 joined creates are `0x20000000`-based, 48 of
+       54 ids join under `− 0x20000000` and **0 of 54** under the identity. And
+       `AvChar` consumes row+0x14 — the byte we call `profession` — as an
+       **appearance** parameter, which is fresh evidence against the gameplay
+       reading §3.7 already doubted.
+       **The sting was ours and it dissolves**: our hatcher's `flags = 0x20C` is
+       CORRECT — a Hatcher is a Collector, a non-combatant, and that is what
+       ArenaNet declares for one. What it shows is that our test hostile is a
+       non-combatant wearing a fight, which `content/world.toml` already says out
+       loud. Nothing in `content/` needs changing.
+       `studies/monsterai/FINDINGS.md` §3.7.1, reproduction commands included.
+       **And the result carries its own scope limit**: `ChCliBase`'s consumer has NO
+       direct caller — it is installed as a callback — so `--xrefs` demonstrably
+       under-reports inside this very result, and "every reader" means every reader
+       that method can reach.
     3. **Read the remaining five `Engine\Map\Path` modules' asserts.** Six of eleven
        are read and are pure geometry — but `PathObstacle:176` asserts `radius >= 0`,
        so the shipped pathing library models **dynamic obstacles with a radius**,
