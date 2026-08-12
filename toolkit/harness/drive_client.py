@@ -503,6 +503,69 @@ def orbit(hwnd, pid, dx, dy, steps=12):
     return True
 
 
+VK_SHIFT, VK_CONTROL, VK_MENU = 0x10, 0x11, 0x12
+MOD_KEYS = {"shift": VK_SHIFT, "ctrl": VK_CONTROL, "alt": VK_MENU}
+
+
+def press_vk(hwnd, pid, vk, mods=(), allow_no_scan=False):
+    """Press a RAW virtual key, optionally under modifier keys held down.
+
+    Two differences from `press_key`, and both were forced by the target.
+
+    THE SCAN CODE IS REAL. `press_key` passes `bScan=0`, which a UI reader
+    accepts and the raw-input path silently drops -- the scar recorded in
+    CLAUDE.md, where a client ignored 65 seconds of held W while the harness
+    reported success. `MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)` asks the active
+    layout for the real one, exactly as `hold_key` does.
+
+    A ZERO SCAN CODE IS REPORTED, NOT SENT. Some virtual keys have no position
+    on the current layout -- `VK_SELECT` (0x29) is a live candidate, since the
+    net-graph toggle wants that code and no ordinary keyboard produces it. If
+    the layout has no scan code, sending one anyway would be the bScan=0 defect
+    again with a different excuse, so this returns a distinct answer instead:
+    the caller learns "this key cannot be typed here", which is a RESULT about
+    the experiment rather than a failure of it.
+
+    Returns True on send, False if focus was lost, and None if the key has no
+    scan code on this layout.
+    """
+    if not _force_foreground(hwnd):
+        return False
+    fg = user32.GetForegroundWindow()
+    owner = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(fg, ctypes.byref(owner))
+    if owner.value != pid:
+        return False
+
+    scan = user32.MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)
+    if not scan and not allow_no_scan:
+        return None
+    # allow_no_scan sends bScan=0 DELIBERATELY, and it is not always wrong.
+    # CLAUDE.md's scar is specific: a zero scan code is accepted by a UI reader
+    # and dropped by the RAW INPUT path the client reads movement through. A
+    # target that is itself a UI-message handler is therefore reachable this
+    # way and only this way, when the layout has no position for the key. The
+    # caller must ask for it, and the result is worth less than a real
+    # keystroke: a silent client cannot distinguish "the key did nothing" from
+    # "the key never arrived".
+    held = [MOD_KEYS[m] for m in mods]
+    try:
+        for m in held:
+            user32.keybd_event(m, user32.MapVirtualKeyW(m, MAPVK_VK_TO_VSC), 0, 0)
+        time.sleep(0.03)
+        user32.keybd_event(vk, scan, 0, 0)
+        time.sleep(0.06)
+        user32.keybd_event(vk, scan, KEYEVENTF_KEYUP, 0)
+    finally:
+        # Released on EVERY path, in reverse order. A modifier left latched by
+        # an exception would ride into every later action in the script and
+        # into the operator's own desktop afterwards.
+        for m in reversed(held):
+            user32.keybd_event(m, user32.MapVirtualKeyW(m, MAPVK_VK_TO_VSC),
+                               KEYEVENTF_KEYUP, 0)
+    return True
+
+
 def press_key(hwnd, pid, vk):
     """Send one virtual key to the client, and ONLY ever to the client.
 
@@ -805,6 +868,29 @@ def main():
             if len(ch) != 1:
                 print(f"  key action wants ONE character, got {ch!r}"); continue
             ok = press_key(hwnd, proc.pid, ord(ch.upper()))
+        elif kind == "vk":
+            # "vk:0x29" or "vk:0x29:alt" or "vk:0x29:ctrl+shift". A RAW virtual
+            # key, for codes no character maps to -- the net-graph toggle wants
+            # 0x29, which is VK_SELECT and is on no ordinary keyboard.
+            vk = int(parts[2], 0)
+            raw = parts[3] if len(parts) > 3 and parts[3] else ""
+            force = "force" in raw.split("+")
+            mods = tuple(m for m in raw.split("+") if m and m != "force")
+            bad = [m for m in mods if m not in MOD_KEYS]
+            if bad:
+                print(f"  unknown modifier(s) {bad} -- want "
+                      f"{sorted(MOD_KEYS)} (or 'force')"); continue
+            ok = press_vk(hwnd, proc.pid, vk, mods, allow_no_scan=force)
+            if force:
+                print(f"  t+{now:6.1f}s  vk {vk:#04x} sent with bScan=0 "
+                      f"(FORCED) mods={mods or '-'} -- a UI handler accepts "
+                      f"this; the raw-input path would drop it", flush=True)
+            if ok is None:
+                # Distinct from failure: the layout has no scan code for it.
+                print(f"  t+{now:6.1f}s  vk {vk:#04x} has NO SCAN CODE on this "
+                      f"layout -- not sent. That is an answer about the key, "
+                      f"not a harness fault.", flush=True)
+                ok = False
         elif kind == "shot":
             ok = True
         else:

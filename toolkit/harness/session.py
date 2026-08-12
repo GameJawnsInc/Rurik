@@ -936,6 +936,27 @@ def run_client(a, outdir):
                 if len(ch) != 1:
                     raise SystemExit(f"key action wants ONE character: {spec!r}")
                 delivered = dc.press_key(hwnd, proc.pid, ord(ch.upper()))
+            elif kind == "vk":
+                # "vk:0x29:alt+force" -- a RAW virtual key under modifiers, for
+                # codes no character maps to. Added for the s_netGraph toggle,
+                # which wants key 0x29 with modifier 4 (studies/smsg). `force`
+                # sends bScan=0 when the layout has no position for the key,
+                # which is true of 0x29 on an ordinary keyboard; see press_vk.
+                vk = int(parts[2], 0)
+                raw = parts[3] if len(parts) > 3 and parts[3] else ""
+                force = "force" in raw.split("+")
+                mods = tuple(m for m in raw.split("+") if m and m != "force")
+                bad = [m for m in mods if m not in dc.MOD_KEYS]
+                if bad:
+                    raise SystemExit(f"unknown modifier(s) {bad} in {spec!r} -- "
+                                     f"want {sorted(dc.MOD_KEYS)} or 'force'")
+                delivered = dc.press_vk(hwnd, proc.pid, vk, mods,
+                                        allow_no_scan=force)
+                if delivered is None:
+                    print(f"  vk {vk:#04x} has NO SCAN CODE on this layout and "
+                          f"'force' was not given -- not sent. That is a fact "
+                          f"about the key, not a harness fault.", flush=True)
+                    delivered = False
             else:
                 raise SystemExit(f"unknown action kind {kind!r} in {spec!r}")
             sent.append({"spec": spec, "sent": delivered})

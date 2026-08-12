@@ -238,6 +238,18 @@ GAME_SMSG_WORLD_SIMULATION_TICK = 0x001E
 GAME_SMSG_CLIENT_PERF_REQUEST = 0x000C
 GAME_SMSG_LATENCY_REPORT = 0x000D
 GAME_CMSG_CLIENT_PERF_REPORT = 0x0009
+# One byte of UI-overlay flags, read out of the client rather than guessed
+# (studies/smsg, the s_netGraph section). Handler 0x0084E090 clears 0xFFFFFFF2
+# from the flags word at [TLS+0x44]+0x2A8 and then maps THIS byte onto it:
+#   bit 0 (0x01) -> flags bit 0
+#   bit 1 (0x02) -> flags bit 2
+#   bit 2 (0x04) -> flags bit 3  <-- the net graph's LATENCY widget
+# Only flags bit 3 is understood; it is the one the predicate at 0x0084DF00
+# tests (`shr 3 / and 1`) before building the object at 0xC06FE8, which is what
+# wraps the client's use of the round trip we send in 0x000D. Nothing in the
+# image sets that bit any other way, so this message is the ONLY route to it.
+GAME_SMSG_UI_OVERLAY_FLAGS = 0x016E
+UI_OVERLAY_FLAG_NETGRAPH_LATENCY = 0x04
 GAME_SMSG_WORLD_UPDATE_LOAD_TIME = 0x001F
 GAME_SMSG_WORLD_CREATE_AGENT = 0x0020
 
@@ -925,6 +937,13 @@ LABEL_RUN = None
 # Set from --explorable. Tells the client this instance is a field rather than a
 # town. See the INSTANCE_LOAD_INFO send site for why it is worth a flag.
 EXPLORABLE = False
+
+# Set from --netgraph. One byte of UI-overlay flags sent once, after the
+# instance loads, as GAME_SMSG_UI_OVERLAY_FLAGS. None means send nothing at
+# all, which is deliberately distinct from sending 0: the handler CLEARS three
+# bits before it sets any, so a 0 byte is an instruction to turn all three off
+# and is a different experiment from staying silent.
+NETGRAPH_FLAGS = None
 
 # Send the client somewhere other than the map it asked for. The character
 # record names 148, so without this every session lands in Ascalon City. A
@@ -4296,6 +4315,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # after spawn where we had it.
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
+                        if NETGRAPH_FLAGS is not None:
+                            # AFTER the load, not before: the widget this
+                            # unlocks is built by a routine that reads the flag
+                            # at construction time, so a byte that arrives
+                            # before the UI exists sets a bit nothing is left
+                            # to read. Sent once -- the handler is idempotent
+                            # and re-sending would only re-clear the two bits
+                            # we do not understand.
+                            send(GAME_SMSG_UI_OVERLAY_FLAGS, [NETGRAPH_FLAGS],
+                                 f"UI_OVERLAY_FLAGS(0x{NETGRAPH_FLAGS:02x}"
+                                 + (", netgraph latency"
+                                    if NETGRAPH_FLAGS
+                                    & UI_OVERLAY_FLAG_NETGRAPH_LATENCY
+                                    else "") + ")")
                         if SPAWN_ENEMY:
                             spawn_enemy(send, state,
                                         (pos[0], pos[1], cfg[2]), conn_id)
@@ -4620,6 +4653,15 @@ def main():
                          "merchants and 40 players but a skillbar of all zeros. "
                          "`labelrun.py --script NAME` prints one; "
                          "`labelrun.py --analyse` reads a result back.")
+    ap.add_argument("--netgraph", nargs="?", const="0x04", default=None,
+                    metavar="BYTE",
+                    help="Send GAME_SMSG 0x016E once after the instance loads, "
+                         "carrying this byte of UI-overlay flags. Default 0x04, "
+                         "which is the bit the client tests before building the "
+                         "net graph's LATENCY widget -- the readout our 0x000D "
+                         "round trip feeds. The graph FRAME is a separate "
+                         "object toggled by a keypress, so this alone may set "
+                         "a bit nothing draws. studies/smsg, s_netGraph.")
     ap.add_argument("--probe", metavar="NAME",
                     help="After the character spawns, fire a scripted experiment at "
                          "the client. See --list-probes. Only affects a session you "
@@ -4778,6 +4820,21 @@ def main():
         global EQUIP_WEAPON
         EQUIP_WEAPON = False
         print("NO WEAPON: the character's four weapon slots stay empty.")
+
+    if a.netgraph is not None:
+        global NETGRAPH_FLAGS
+        try:
+            NETGRAPH_FLAGS = int(a.netgraph, 0) & 0xFF
+        except ValueError:
+            raise SystemExit(f"--netgraph {a.netgraph!r} is not a number. "
+                             f"It is one byte of UI-overlay flags, e.g. 0x04.")
+        bits = [n for b, n in ((0x01, "bit0"), (0x02, "bit1"),
+                               (0x04, "NETGRAPH LATENCY"))
+                if NETGRAPH_FLAGS & b]
+        print(f"NETGRAPH: sending GAME_SMSG 0x016E = 0x{NETGRAPH_FLAGS:02x} "
+              f"once after the instance loads"
+              + (f" -- {', '.join(bits)}" if bits else
+                 " -- no bits set, which CLEARS all three"))
 
     if a.explorable:
         global EXPLORABLE
