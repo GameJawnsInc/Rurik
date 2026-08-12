@@ -1160,6 +1160,41 @@ not yet safe to run.**
 
 **Q5. Does Pre-Searing remain the finish line?** *Recommendation: yes, unchanged.*
 
+**Q6. May this project take a native (C/C++) toolchain dependency?** ✅ **CLOSED 2026-08-12,
+by the owner.** *"I don't mind the C/C++ requirement for the project."* **A compiler is a
+cost, not a blocker.** Routes that need native code — a hook DLL, an injected loader, a code
+cave assembler — are costed on their merits and are not refused on dependency grounds.
+
+**Why this needed asking, and it is Q3's shape exactly.** `CLAUDE.md` opens its dependency
+rule with *"Python 3, standard library only. No third-party dependencies anywhere in
+`toolkit/`"* and then names two narrow carve-outs. Read cold — which is how it is always read
+— that makes a native DLL look **forbidden**, so a route needing one gets scored BLOCKED
+rather than expensive. That is the same failure as Q3: a rule refusing something it never
+actually said, with the refusal costing real work. The ruling was volunteered by the owner
+mid-pass, unprompted, while a workflow was costing exactly those routes for the custom
+profession arc (`studies/profession/WORKAROUNDS.md`).
+
+**What does NOT change, and this is the one place the ruling has been scoped rather than
+quoted.** The owner's words were "for the project", which is broader than the boundary below.
+The existing bare-machine requirement is a *separate* rule with its own reason, and it is
+being left standing until the owner says otherwise:
+
+- **The server path stays dependency-free**, and so does every tool whose byte patterns are
+  fixed — `asserts.py`, `msgshape.py`, `areatable.py`, `genericvalue.py`. Those must keep
+  working on a bare machine, which is why the `capstone` carve-out was scoped to exactly two
+  files rather than to "client analysis" generally.
+- **The second gate is untouched.** A native dependency is still somebody else's work: it
+  needs its §6.1 derivation-register row and its licence checked *before* a line imports it.
+  "We relaxed the dependency rule" has never covered the licence question.
+- **Prefer `ctypes` where it genuinely suffices** — not as a rule, as economics.
+  `toolkit/harness/keytap.py` already does cross-process `ReadProcessMemory` with
+  ASLR-correct module-base resolution in pure `ctypes`. Where that generalises, it buys a
+  shorter iteration loop and no compiler in the inner cycle. Where it does not, reach for the
+  compiler without apology.
+
+If the intended scope was wider than this — native code on the server path, or dropping the
+bare-machine requirement — say so and this entry gets corrected rather than reinterpreted.
+
 ---
 
 ## 8. Immediate next actions

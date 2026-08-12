@@ -166,7 +166,10 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   read-only fan-out, `isolation: "worktree"` gives each agent a fresh tree at current
   HEAD and sidesteps the question.
 - **Python 3, standard library only.** No third-party dependencies anywhere in
-  `toolkit/`. Keep it that way — with two named carve-outs.
+  `toolkit/`. Keep it that way — with three named carve-outs, and **read carve-out
+  (3) before concluding that anything here is forbidden**, because this rule's
+  first sentence has already caused a route to be scored impossible when it was
+  merely expensive.
   **(1) 2026-08-06: read-only client analysis may use `capstone` and `pefile`**,
   because there is no reasonable stdlib x86 disassembler. It covers exactly
   `toolkit/clientscan/msghandler.py` and `toolkit/clientscan/codescan.py`.
@@ -183,6 +186,25 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   test in the suite above. `keytap.py` (the key reader) is pure `ctypes` and takes
   no dependency; only the ciphertext capture does. Pin the exact backend and its
   licence in `PLAN.md` §6.1's derivation register before importing it.
+  **(3) 2026-08-12: a native C/C++ toolchain is permitted. Owner's ruling,
+  `PLAN.md` §7 Q6 — "a compiler is a cost, not a blocker."** A hook DLL, an
+  injected loader or a code-cave assembler is costed on its merits and is **not**
+  refused on dependency grounds. This carve-out exists because the rule's opening
+  sentence was doing the opposite: read cold, "standard library only" made native
+  code look forbidden, so a client-side route that needed it would be scored
+  BLOCKED rather than expensive — the same failure the provenance gate had, where
+  four days of sessions refused what the rule never actually said. Three things it
+  does **not** change, and they are the whole boundary: the **server path stays
+  dependency-free**; the fixed-byte-pattern tools (`asserts.py`, `msgshape.py`,
+  `areatable.py`, `genericvalue.py`) must keep working **on a bare machine**, which
+  is why (1) was scoped to two named files rather than to "client analysis"; and
+  the **second gate is untouched** — a native dependency is still somebody else's
+  work and needs its §6.1 row and its licence settled before a line imports it.
+  Prefer `ctypes` where it genuinely suffices, as economics rather than as a rule:
+  `toolkit/harness/keytap.py` already does cross-process `ReadProcessMemory` with
+  ASLR-correct module bases in pure `ctypes`, and where that generalises it buys a
+  shorter loop with no compiler in the inner cycle. Where it does not, use the
+  compiler without apology.
 - Tests are plain scripts that print `[PASS]`/`[FAIL]` and exit non-zero. Run them
   before touching the game — a red test names the broken thing, the client says
   `Code=058` thirty seconds later and tells you nothing.
