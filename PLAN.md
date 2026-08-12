@@ -2101,10 +2101,18 @@ parallel, with one safety change that is not optional — see its entry.
     placement from `datplan.classify_runs` (never `free_runs` — 89.6% of the gap
     measure is live container generations), best fit, old reservation zeroed after the
     MFT is repointed, overlapping destinations refused. **46 checks, five sabotages all
-    red, no vault** — and now one caged run on top, which is what turned its offline
-    claims into an observed one. **What remains unmeasured is durability**: a
-    relocation the client tolerates at LOAD time is not one that survives a play
-    session, and nothing watched whether it reclaims the blocks the move frees. The
+    red, no vault** — and now two caged runs on top. FINDINGS 40 held a relocated row
+    across **four consecutive sessions**: it never moved, its payload sha never
+    changed, arming afterwards still rebuilt ArenaNet's map, and
+    `datmove --check-overlaps` stayed clean on the real archive. The control fired
+    every time (the client's scratch rows relocated in all four, 8315/8316 alternating
+    between two address pairs — FINDINGS 18's double buffer from the row side), so
+    "nothing moved" is a measurement rather than an absence of activity. **Two things
+    are still unmeasured and neither is small**: the movement session did NOT run —
+    our own `[npc.hatcher]` killed the character 10 s in and the last two walk legs
+    were cut to 1.5 s by loss of foreground — and **nothing ever pressured the
+    allocator**, since the 4,608 B the move freed was never claimed, so the client
+    was never observed wanting space near our row. The
     capacity limit is real and reported: 176 of 349 map rows are larger than the largest run
     `datplan` will hand over, so for half the archive "nowhere" is the true answer —
     which is what the OTHER half, a compressor for the archive's format, would fix.

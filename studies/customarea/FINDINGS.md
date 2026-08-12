@@ -5190,3 +5190,100 @@ Both journals marked `.CONSUMED.json` and the copy re-cut from `dat_study`.
 4. **The capacity limit is untouched by this.** 176 of 349 map rows are still
    larger than the largest run `datplan` will hand over. Relocation makes
    authoring possible where a run exists, not everywhere.
+
+## 40. A relocated row survived four client sessions — and the movement half did not run (2026-08-12)
+
+**FINDINGS 39's remaining caveat, half-answered.** A row moved by `datmove.py`
+stayed exactly where it was put across four consecutive client sessions and was
+still functionally readable at the end. **The other half of the design — a
+session with the character actually moving — did not happen, and the write-up
+below says so rather than rounding it up.**
+
+Run 2026-08-12, `vault/research/e9b-durability-2026-08-12/`, on the `-c2` copy.
+`PREDICTION.md` there was recorded before any write.
+
+### The design problem this rung had to solve first
+
+**Row 71497 is a map's STRIPPED partner, and the client only reads it when
+re-bloating.** An ordinary load reads the Bloated stream and never touches it. So
+"the row is unchanged after N sessions" is worth nothing on its own — it is
+exactly what you would see if the client's allocator never ran at all.
+
+**The control is rows 8315/8316/8317**, the client's own scratch rows, which
+FINDINGS 20, 35, 38 and 39 each recorded relocating every session.
+
+### What ran
+
+Row 71497 moved `0x63C66800` → `0x323A400`, uncompressed, 12,495 B — the same
+move as FINDINGS 39 — then four client sessions, **no arming for the first
+three** so they were ordinary loads.
+
+| after | row 71497 | payload sha | scratch rows | freed range |
+|---|---|---|---|---|
+| the move | `0x323A400` | `1438cbdb9d50682a` | 8315 `0x461AA00`, 8316 `0x3983600`, 8317 `0x3B2DC00` | empty |
+| session 1 | **unchanged** | **unchanged** | **all three moved** | empty |
+| session 2 | **unchanged** | **unchanged** | 8315/8316 moved BACK, 8317 held | empty |
+| session 3 | **unchanged** | **unchanged** | 8315/8316 moved again | empty |
+| session 4 (armed) | **unchanged** | **unchanged** | — | empty |
+
+**P1 (control) PASSED**: the allocator was demonstrably live in every session,
+and 8315/8316 alternating between two address pairs across sessions 1→2→3 is the
+double-buffer FINDINGS 18 describes, seen here from the row side.
+
+**P2 PASSED**: row 71497 never moved and its payload sha never changed.
+
+**P3 PASSED**: after all of it, arming row 71496 and loading once more produced
+ArenaNet's shipped map again — 33,021 B, sha `acfc8e7501e94b9e`, 27 trapezoids.
+So the row was not merely bytes in place; it was still the row the compiler
+reads.
+
+Post-flight: descriptor counter 26,881 → **26,895** (fourteen, against five for a
+single session), five relocations, TIER 2 unchanged, and
+`datmove --check-overlaps` reports **0 overlapping pairs** on the real 4.2 GB
+archive after four sessions.
+
+**The freed 4,608 B at `0x63C66800` was never claimed** by anything, in any
+session. No prediction was made on that and none is drawn from it: nine blocks in
+a 4.2 GB archive over four short sessions is very little opportunity.
+
+### THE MOVEMENT SESSION DID NOT RUN, and this is the honest part
+
+Session 3 was supposed to be the different one — `--walk "W:6 D:4 S:5 A:4"`,
+19 seconds of held keys — so that the run was not four identical loads. It was
+not:
+
+* `W:6` and `D:4` completed in full (10.0 s).
+* The client then **lost the foreground**, and `S:5` and `A:4` were cut to
+  **1.50 s each** by `hold_key`'s own foreground check.
+* `content/npcs.toml`'s `[npc.hatcher]` — **our own server's** NPC, spawned
+  hostile at (1536, 1836), 300 units from the spawn point — was attacking
+  throughout. The gamesrv log records **7 damage events and
+  `player hit by skill 253: 0/100`**. The character died.
+* **Session 3 is the ONLY one of the four with any damage at all**; the other
+  three record zero. It is also the only one that moved, which is the obvious
+  explanation and is not established here.
+
+So the intended contrast — three loads plus one session of movement — collapsed
+to four sessions of which one had 10 seconds of movement and a death. **A death
+is more client activity rather than less**, so this does not weaken P1, P2 or P3,
+all of which are facts about the archive and about a control that fired
+regardless. What it does mean is that **movement-driven client writes remain
+untested**, and any later claim that "walking around does not disturb a relocated
+row" is not supported by this run.
+
+*This section originally described session 3 as a session with the character
+moving, and the death was noticed only because the owner said so mid-run. The
+log had it the whole time. Recorded rather than edited away: the failure was
+treating an in-game event as irrelevant to an in-game measurement because it was
+irrelevant to the archive measurement sitting next to it.*
+
+### What this does NOT establish
+
+1. **Four short sessions on one map is not a play session.** No zoning between
+   maps, no inventory writes, no character save, no clean movement.
+2. **Nothing pressured the allocator.** The freed range stayed empty, so this
+   run never observed the client *wanting* space near our row. A durability test
+   that forces an allocation is the stronger version and has not been built.
+3. **One row, one map, one archive copy.**
+4. The relocated content was ArenaNet's own; this says nothing further about
+   authored bytes beyond FINDINGS 38.
