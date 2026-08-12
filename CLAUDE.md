@@ -465,6 +465,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   per-EVENT idiom it replaced loses two and INVENTS two more. That idiom cost the
   corpus 4,251 of 22,137 messages and invented 117 (studies/tape T18). It needs no
   vault -- a segmentation defect is not a property of any one capture),
+  `toolkit/authsrv/test_behaviourrun.py` (the LIVE behaviour run's analyser and its
+  operator script, against a session the test builds out of tuples -- no vault, no
+  socket, no client. It labels the MONSTER's behaviour where `labelrun` labels the
+  PLAYER's input, so its three refusals are the file: a subject that MOVED between its
+  create and its first reaction comes back UNRESOLVED and `separation` returns None,
+  because estimating that produced four numbers of which two were wrong by 481 and
+  1,594 units; no summary pools across model ids, because pooling three creature models
+  is what produced the refuted "269-1594 units" band; and the CONTROL predicate is on
+  the CLIENT half only -- its decisive check is a control window carrying 200 server
+  messages that must still pass, since a no-traffic predicate reddens in every control
+  window of every live capture ever taken. Section 2 pins `labelrun`'s own defect from
+  the other side: a mark written a beat LATE loses its step's first message AND steals
+  the next step's, asserted on CONTENTS because both windows hold two messages and a
+  count comparison could not fail for the right reason -- which was the first version.
+  Section 8 requires `narrate()` to write the MARK file BEFORE printing the prompt, and
+  greps the analyser for `SendInput`/`keybd_event`/`hold_key`/`click`: the driver sends
+  no keystrokes and no clicks, and that is the rule that protects the account),
   `toolkit/authsrv/test_labelrun.py` (the labelled input run, which names GAME_CMSG
   opcodes from what a human was told to do: a message lands in exactly one step's
   window, instance-load traffic is never folded into step 1, and a dirty idle CONTROL

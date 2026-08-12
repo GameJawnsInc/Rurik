@@ -358,7 +358,20 @@ echo approach > C:\gd\Rurik\vault\captures\live\<stamp>\MARK
 ```
 
 `session_start` and `session_end` are taken automatically, so even an unmarked run
-is bracketed. Use the same file mechanism as `STOP` and for the same reason: you
+is bracketed.
+
+**OR LET THE SCRIPT DO THE MARKING.** `behaviourrun.py` carries the campaign's step list
+and walks it for you in a second shell, writing each `MARK` as it goes. It prints a
+sentence, you do it, the timer runs out. It sends nothing to the game:
+
+```bash
+python toolkit/authsrv/behaviourrun.py --narrate C:\gd\Rurik\vault\captures\live\<stamp>
+```
+
+Read it first with `--script`, which prints each step with the reason it exists. And run
+`--preflight` once before the first session: it checks the tick clock against the wire
+clock on the captures already in the vault, and a red there means the mapping every timed
+claim in this repo rests on is broken and a live session is not the thing to spend next. Use the same file mechanism as `STOP` and for the same reason: you
 are looking at the game window, so anything needing console focus is advice that
 fails exactly when it is needed.
 
