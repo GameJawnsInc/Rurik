@@ -327,8 +327,11 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   test out of `int.from_bytes` and shares no code with `datmove.overlaps`. Five
   sabotages were built and run and all five reddened; the numbers are in the
   floor comment, and the one worth noting is that skipping the old-reservation
-  zeroing reddens exactly ONE check. No vault, no client -- and that is also the
-  limit: **no client has ever read a row this module moved**),
+  zeroing reddens exactly ONE check. No vault and no client -- and the client half
+  is no longer missing: FINDINGS 39 moved a real map's Stripped partner **1.6 GB**
+  and the retail client found it, compiled from it and emitted ArenaNet's own bytes,
+  with 0 overlapping pairs afterwards on the real 4.2 GB archive. What is still
+  unmeasured is DURABILITY across a play session),
   `toolkit/mapdata/test_datplan.py` (where a new file may be PUT, against an
   archive the test builds with two shadow containers in it: that placement is
   best fit rather than the head of the largest run, that a run carrying a live
