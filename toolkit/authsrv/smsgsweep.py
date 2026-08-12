@@ -123,6 +123,10 @@ from codec import Codec  # noqa: E402
 # just finished loading a map. See CONTROL WINDOW above.
 IDLE_FLOOR = {0x0008, 0x0009}
 
+# GAME_SMSG 0x00F1, which our own server sends to kill and to revive the player. Its
+# presence in a sweep capture means the map was NOT QUIET -- see `combat` in `analyse`.
+AGENT_LIFE = 0x00F1
+
 # The ten opcodes the schema catalogues with NO entry in the client's receive table,
 # MEASURED on build 38797 (toolkit/clientscan/test_msghandler.py pins this same literal,
 # and `_check_table_less` refuses if the disassembler disagrees). They are handled below
@@ -335,7 +339,7 @@ def read_capture(capture_jsonl):
     something happened -- and folding it into "the connection died" loses exactly the
     result the sweep is for.
     """
-    sends, replies, undec, gone = [], [], [], None
+    sends, replies, undec, gone, life = [], [], [], None, []
     with open(capture_jsonl, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             try:
@@ -345,13 +349,18 @@ def read_capture(capture_jsonl):
             kind, t = rec.get("kind"), float(rec.get("t", 0.0) or 0.0)
             if kind == "sent" and "PROBE[smsgsweep]" in (rec.get("label") or ""):
                 sends.append((t, int(rec.get("opcode", 0))))
+            elif kind == "sent" and int(rec.get("opcode", 0)) == AGENT_LIFE:
+                # Every 0x00F1 we sent -- the player dying or being revived. Detected by
+                # OPCODE rather than by our own label text, which is prose and would let
+                # a reworded log line silently retire the check.
+                life.append((t, (rec.get("label") or "")[:40]))
             elif kind == "decoded":
                 replies.append((t, int(rec.get("opcode", 0))))
             elif kind == "undecodable":
                 undec.append((t, str(rec.get("error", ""))[:160]))
             elif kind in ("error", "disconnect") and gone is None:
                 gone = (t, str(rec.get("error", "") or "disconnect")[:160])
-    return sends, replies, undec, gone
+    return sends, replies, undec, gone, life
 
 
 def control_window(sends, replies, settle, control):
@@ -396,7 +405,7 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
     window with `--only`.
     """
     codec = codec or Codec()
-    sends, replies, undec, gone = read_capture(capture_jsonl)
+    sends, replies, undec, gone, life = read_capture(capture_jsonl)
     noise, span = control_window(sends, replies, settle, control)
     floor = set(IDLE_FLOOR) | set(noise or ())
 
@@ -491,7 +500,16 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
     # IDLE_FLOOR as well as a filter: the prior was measured on a parked client, and this
     # one has just loaded a map. Splitting it is the honest report -- what corroborated
     # the prior, and what the prior did not know about.
+    # THE MAP HAS TO BE QUIET, AND UNTIL 2026-08-12 IT WAS NOT. The default world spawns
+    # a hostile, and it kills the player on a ~13 s cycle: measured over the first three
+    # sweeps, KILL at t=7.4 and revive at t=17.4, repeating. Every reading those runs
+    # produced was taken on a player who was DEAD -- the sends at 13.4-16.2 all landed
+    # between a kill and a revive -- so "SILENT" meant "silent on a corpse", which is not
+    # the measurement anyone wanted and is not what the ledger would have said. Run with
+    # authsrv --no-enemy. Refusing to record is the only version of this check worth
+    # having: a warning would be read once and the rows would go in anyway.
     return {"table": out,
+            "combat": [(t, why) for t, why in life],
             "crash": crash,
             "heartbeat": heartbeat,
             "alive_until": alive_until,
@@ -511,6 +529,15 @@ def record(result, ledger=None):
     That is the whole resume mechanism: a cursor advanced at send time would record
     opcodes the client may never have received, and the sweep would walk past them.
     """
+    if result.get("combat"):
+        raise ValueError(
+            f"REFUSING to record: this run sent {len(result['combat'])} "
+            f"0x{AGENT_LIFE:04X} message(s), so the player died or was revived during "
+            f"the sweep. The default world spawns a hostile that kills the player on a "
+            f"~13 s cycle, and every reading taken between a kill and a revive is a "
+            f"measurement of a CORPSE -- 'SILENT' would mean 'silent while dead'. "
+            f"Re-run with `authsrv.py --no-enemy`. First at t="
+            f"{result['combat'][0][0]:.2f}s: {result['combat'][0][1]}")
     ledger = dict(ledger if ledger is not None else load_ledger())
     added = 0
     for opcode, row in result["table"].items():
@@ -636,6 +663,13 @@ def print_run(result):
     if result["new_noise"]:
         print("  -> the prior floor {0x0008, 0x0009} was measured on a PARKED client; "
               "these are what a just-loaded one adds, and no reply on them counts.")
+    if result.get("combat"):
+        first = result["combat"][0]
+        print(f"  *** THE MAP WAS NOT QUIET: {len(result['combat'])} kill/revive "
+              f"message(s), first at t={first[0]:.2f}s ({first[1]}). Every reading below "
+              f"was taken while the default hostile was killing the player on its ~13 s "
+              f"cycle, so a SILENT row means 'silent while dead'. --record will refuse. "
+              f"Re-run with authsrv --no-enemy.")
     hb = result.get("heartbeat")
     if hb:
         print(f"  heartbeat (client's proof of life): {hb:.2f}s median -- so a crash "
@@ -779,7 +813,11 @@ def main():
                          planned=[r["opcode"] for r in p.get("rows", [])])
         rc = print_run(result)
         if a.record and rc == 0:
-            ledger, added = record(result)
+            try:
+                ledger, added = record(result)
+            except ValueError as exc:
+                print(f"\n{exc}", file=sys.stderr)
+                return 3
             _write_json(ledger_path(), ledger)
             print(f"recorded {added} newly measured opcode(s) -> {ledger_path()}")
         elif a.record:

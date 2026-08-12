@@ -58,7 +58,7 @@ import checks  # noqa: E402
 import smsgsweep as sw  # noqa: E402
 from codec import Codec  # noqa: E402
 
-# Floor 47, measured from a green run on 2026-08-12. Sections 0 and 2-7 need no vault, no
+# Floor 50, measured from a green run on 2026-08-12. Sections 0 and 2-7 need no vault, no
 # socket and no client -- 32 checks -- because a scoring defect is not a property of any
 # one capture. Two sections do need more and both declare their skips: section 1's
 # cross-check of NOT_IN_RECV_TABLE against the client's own receive table wants capstone
@@ -67,7 +67,7 @@ from codec import Codec  # noqa: E402
 # the way test_mapexport treats a vault-less run: those two sections are the ones that
 # pin the sweep's DENOMINATOR and the ten opcodes that tear the game channel down, and a
 # plan built on a constant nothing confirmed is exactly the wish this repo keeps refusing.
-LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=47)
+LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=50)
 
 # MEASURED 2026-08-12: the opcodes whose field list `overrides.json` changes. Written as
 # literals rather than recomputed from the module under test.
@@ -198,7 +198,7 @@ def main():
     path = capture([send(10.0, 0x0100), frame(10.0, 0x0100),
                     send(10.4, 0x0101), frame(10.4, 0x0101),
                     c2s(6.5, 0x0009), c2s(10.5, 0x00C1)])
-    sends, replies, undec, gone = sw.read_capture(path)
+    sends, replies, undec, gone, _life = sw.read_capture(path)
     LEDGER.ok(len(sends) == 2 and [o for _, o in sends] == [0x0100, 0x0101],
               "read_capture finds both sweep sends", f"{[hex(o) for _, o in sends]}")
     LEDGER.ok(naive_frame_reader(path) == 2 and len(sends) == 2,
@@ -393,6 +393,34 @@ def main():
               "CONTROL: with no measured heartbeat there are NO suspects",
               "without a cadence there is no beat that should have arrived, so every "
               "send after the last reply is equally implicated and naming one is a guess")
+
+    # ---- 6b. the map has to be quiet ----------------------------------------
+    print("\n6b. a run in which the player died records NOTHING")
+    # MEASURED on the first three real sweeps: the default world spawns a hostile that
+    # kills the player at t=7.4 and revives at t=17.4, on a ~13 s cycle. Every send those
+    # runs made landed between a kill and a revive, so every SILENT they produced meant
+    # "silent on a corpse". Nobody noticed until the operator said the Hatcher was
+    # attacking -- nothing in the capture was being read for it.
+    peace = [c2s(9.6, 0x0009), send(10.0, 0x0100), c2s(10.1, 0x0088)]
+    fought = peace + [{"kind": "sent", "t": 7.4, "opcode": 0x00F1,
+                       "label": "KILL the player"}]
+    rf = sw.analyse(capture(fought), codec, control=4.0)
+    LEDGER.ok(len(rf["combat"]) == 1,
+              "a 0x00F1 anywhere in the capture is detected",
+              "by OPCODE, not by our own label prose, which a reword would retire")
+    try:
+        sw.record(rf, {})
+        ok = False
+    except ValueError:
+        ok = True
+    LEDGER.ok(ok, "and --record REFUSES the whole run",
+              "a warning would be read once and the rows would go in anyway; the "
+              "instruction is authsrv --no-enemy")
+    rp = sw.analyse(capture(peace), codec, control=4.0)
+    LEDGER.ok(not rp["combat"] and sw.record(rp, {})[1] == 1,
+              "CONTROL: the same run without the kill records normally",
+              "the refusal is about the player dying, not about anything else in the "
+              "capture")
 
     # ---- 7. the capture is named by the run's own report --------------------
     print("\n7. the capture is named by the report, never picked by name")
