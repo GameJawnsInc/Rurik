@@ -1807,6 +1807,13 @@ parallel, with one safety change that is not optional — see its entry.
     short-circuit at `0x0070A433` fires, and the assert is unreachable by construction.
     **(c)** A height field that is not flat, walked — E1's terrain was flat, so nothing
     tested slope, step height or the z the client places a character at.
+    **(f)** ✅ **DONE 2026-08-12.** The Blender importer was upside down and is not
+    any more: `import_gwmap.py` negates z, `test_blenderimport`'s prop oracle negates
+    the prop too, and the score is INVARIANT under that -- |-a - -b| == |a - b| -- so
+    0.7338 and its 0.0775/0.1389 controls came back bit-identical rather than being
+    re-measured. `mesh_z` is now the one place stating the sign, with a check against
+    LITERALS beside it, because every other z prediction is computed through it and
+    would move with it. Sabotaging `mesh_z` to the identity reddens 10 checks.
     **(d)** Blender → `.blend`, and the round trip out of it. §22 exports an interchange a
     script imports; nobody has authored terrain *in* Blender and brought it back.
     **(f)** Flip the height sign in the exporter and the Blender importer TOGETHER

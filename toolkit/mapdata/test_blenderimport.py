@@ -162,7 +162,12 @@ PYTHON_EXIT_CODE = 66
 # SELECTOR rather than on a mesh, and it exists because the selector silently
 # fell through a bad `--blender` to the known install: a run that asked for one
 # Blender measured another and printed ALL CHECKS PASSED (69 checks).
-FLOOR = 74
+#
+# 74 -> 75 on 2026-08-12, when the mesh was flipped the right way up (FINDINGS
+# 25) and `mesh_z` became the one place stating the sign. The added check is the
+# only one that can catch that function itself, because every other z prediction
+# is computed through it.
+FLOOR = 75
 
 
 # ------------------------------------------------------------------ helpers
@@ -316,6 +321,20 @@ def height_map(verts):
     return out
 
 
+def mesh_z(stored):
+    """World z for a stored height. THE ONLY PLACE THIS TEST STATES THE SIGN.
+
+    FINDINGS 25: a greater stored value is LOWER in the world, measured by two
+    client runs differing in nothing else. The importer negates on the way into
+    Blender so a human looks at the map the right way up, and every prediction
+    below goes through here so the convention lives in one place instead of
+    eight. Nothing in the ARCHIVE can refute it -- props and terrain share the
+    file's convention, so the prop oracle is invariant under the flip and says
+    nothing about it. The warrant is the client.
+    """
+    return -stored
+
+
 def score_mesh(zmap, dim_x, dim_y, rect, props, layout):
     """Score one layout of the MESH against the props. `(frac<100, median, n, out)`.
 
@@ -340,7 +359,13 @@ def score_mesh(zmap, dim_x, dim_y, rect, props, layout):
         if z is None:
             missing += 1
             continue
-        dz.append(abs(z - wz))
+        # THE PROP IS NEGATED TOO, and it has to be. The importer emits world z
+        # (FINDINGS 25) while the props chunk stores the file's convention, so
+        # comparing them raw would score a correct mesh as inverted. Negating
+        # BOTH leaves this oracle's number bit-identical -- |-a - -b| == |a - b|
+        # -- which is exactly why it cannot see the sign and must not be quoted
+        # as evidence for it.
+        dz.append(abs(z - (-wz)))
     if not dz:
         return 0.0, float("inf"), 0, outside + missing
     dz.sort()
@@ -388,9 +413,12 @@ def structural_checks(check, summary, exp, tag):
           "%r" % summary["cell_pitch"])
 
     lo, hi = min(exp.heights), max(exp.heights)
-    check((bmin[2], bmax[2]) == (lo, hi),
-          "%s: z spans the stored heights, un-negated" % tag,
-          "%r..%r vs %r..%r" % (bmin[2], bmax[2], lo, hi))
+    # NOTE THE SWAP: negation turns the lowest stored value into the highest
+    # world z, so a version of this check that negated without swapping would
+    # fail on every map with any relief and pass on a flat one.
+    check((bmin[2], bmax[2]) == (mesh_z(hi), mesh_z(lo)),
+          "%s: z spans the stored heights NEGATED (FINDINGS 25)" % tag,
+          "%r..%r vs %r..%r" % (bmin[2], bmax[2], mesh_z(hi), mesh_z(lo)))
 
     # The four lattice corners, by name. Row 0 is world maxY, so j=0 is north.
     corners = exp.corner_heights()
@@ -400,7 +428,8 @@ def structural_checks(check, summary, exp, tag):
     for name, (i, j) in want.items():
         got = summary["corners"][name]
         wx, wy = exp.world_at(i, j)
-        if (got["x"], got["y"], got["z"]) != (wx, wy, corners[j * stride + i]):
+        if (got["x"], got["y"], got["z"]) != (wx, wy,
+                                              mesh_z(corners[j * stride + i])):
             bad.append((name, got))
     check(not bad, "%s: all four lattice corners carry the world position and "
                    "height the interchange says" % tag,
@@ -408,6 +437,7 @@ def structural_checks(check, summary, exp, tag):
 
     # EVERY vertex, through the digests, rather than the handful printed above.
     xs, ys, zs = expected_lattice(exp)
+    zs = [mesh_z(v) for v in zs]
     check(summary["digest_x"] == f32_digest(xs),
           "%s: all %d vertex x agree with x0 + i*pitch"
           % (tag, len(xs)))
@@ -415,14 +445,14 @@ def structural_checks(check, summary, exp, tag):
           "%s: all %d vertex y agree with y1 - j*pitch (row 0 is maxY)"
           % (tag, len(ys)))
     check(summary["digest_z"] == f32_digest(zs),
-          "%s: all %d vertex z are the stored heights with the client's "
-          "replicated far edge" % (tag, len(zs)))
+          "%s: all %d vertex z are the stored heights NEGATED, with the "
+          "client's replicated far edge" % (tag, len(zs)))
 
     probes = summary["probes"]
     off = [p for p in probes
            if (p["x"], p["y"], p["z"])
            != (exp.world_at(p["i"], p["j"])[0], exp.world_at(p["i"], p["j"])[1],
-               corners[p["j"] * stride + p["i"]])]
+               mesh_z(corners[p["j"] * stride + p["i"]]))]
     check(not off, "%s: the %d scattered probe vertices land where the "
                    "interchange puts them" % (tag, len(probes)),
           "%d off" % len(off) if off else "")
@@ -506,6 +536,21 @@ def _section0(check, blender):
 
 def _section1(check, led, blender, tmp):
     print("\n== 1. Blender builds the lattice the interchange describes (no vault) ==")
+    # AGAINST LITERALS, and this is the only check in the file that can catch
+    # `mesh_z` ITSELF being changed. Every other z prediction here routes through
+    # that function, so making it the identity would move all of them together
+    # and the run would stay green while Blender drew every map upside down --
+    # the same shape as the twelve combat constants in test_agentlife that could
+    # each be set to a wrong value with 125 checks passing, because every
+    # expectation was computed FROM the symbol under test. A symbol appearing in
+    # a test file is not a check.
+    check(mesh_z(100.0) == -100.0 and mesh_z(-13.0) == 13.0
+          and mesh_z(0.0) == 0.0,
+          "the sign convention is NEGATION, asserted against literals",
+          "mesh_z(100)=%r, mesh_z(-13)=%r -- FINDINGS 25, warranted by two "
+          "client runs and by nothing in the archive"
+          % (mesh_z(100.0), mesh_z(-13.0)))
+
     dx, dy = SYN_X, SYN_Y
     trn = synthetic_terrain(dx, dy)
     # A rect that is NOT centred on the origin and whose y0 is not -y1, so a sign
@@ -608,12 +653,13 @@ def _section2(check, led, blender, tmp, src):
           "the row-order control imports cleanly", "rc=%d" % rc)
     if summary_flip is not None:
         xs, ys, zs = expected_lattice(exp)
+        zs = [mesh_z(v) for v in zs]
         check(summary_flip["digest_z"] != f32_digest(zs),
               "ROW CONTROL: the z digest changes when the rows are reversed")
         check(summary_flip["digest_x"] == f32_digest(xs) and
               summary_flip["digest_y"] == f32_digest(ys),
               "ROW CONTROL: x and y are untouched -- only the heights moved")
-        check(summary_flip["corners"]["nw"]["z"] != exp.heights[0],
+        check(summary_flip["corners"]["nw"]["z"] != mesh_z(exp.heights[0]),
               "ROW CONTROL: the north-west corner now carries a different height",
               "%r vs %r" % (summary_flip["corners"]["nw"]["z"], exp.heights[0]))
         check(summary_flip["bbox"] == _bbox_of(exp),
@@ -648,7 +694,8 @@ def _section2(check, led, blender, tmp, src):
 
 def _bbox_of(exp):
     x0, y0, x1, y1 = exp.rect
-    return {"min": [x0, y0, min(exp.heights)], "max": [x1, y1, max(exp.heights)]}
+    return {"min": [x0, y0, mesh_z(max(exp.heights))],
+            "max": [x1, y1, mesh_z(min(exp.heights))]}
 
 
 # --- 3. a real map, and the props that stand on it --------------------------

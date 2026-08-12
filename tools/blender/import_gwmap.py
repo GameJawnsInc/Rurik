@@ -55,8 +55,8 @@ rival conventions are recorded as belonging to somebody else's renderer.
      quad winding below runs (i,j) -> (i,j+1) -> (i+1,j+1) -> (i+1,j): that is
      the order whose face normal comes out +Z, and the other order is upside
      down.
-  4. **z is the stored float, unchanged -- WHICH MEANS THIS MESH IS UPSIDE DOWN
-     relative to what a player sees.** MEASURED 2026-08-11 (FINDINGS 25): two
+  4. **z is the NEGATION of the stored float, so the mesh is the right way up.**
+     MEASURED 2026-08-11 (FINDINGS 25): two
      client runs differing only in the sign of one height showed that a GREATER
      stored value is LOWER in the world. A courtyard authored floor -13 /
      surround +600 was drawn as a mesa; the same map at surround -626 was drawn
@@ -65,13 +65,14 @@ rival conventions are recorded as belonging to somebody else's renderer.
      The load path still applies no transform -- tag 1 reaches the client's
      buffers through `memcpy` -- but that is a fact about bytes, not about which
      way is up.
-     **Nothing here is changed yet, deliberately.** `test_blenderimport.py`'s
-     orientation oracle compares Blender's own vertex z against prop z from
-     chunk `0x20000004`, and props are stored in the SAME convention as terrain,
-     so negating one and not the other would break an oracle that is currently
-     correct. Flipping this needs both sides moved together and the test's
-     0.7338 re-measured; it is PLAN.md 8 item 10(f). Until then, read a map
-     imported here as a height FIELD, not as a picture.
+     **Both sides moved together, 2026-08-12.** `test_blenderimport.py`'s
+     orientation oracle compares Blender's vertex z against prop z from chunk
+     `0x20000004`, and props are stored in the SAME convention as terrain, so
+     the oracle negates the prop too. Its score is INVARIANT under that --
+     |-a - -b| == |a - b| -- so 0.7338 must come back unchanged to the fourth
+     decimal, and the test asserts that rather than re-measuring it. The oracle
+     therefore still cannot see the sign; what warrants it is FINDINGS 25's
+     client runs, and the check below says so at the call site.
 
 WHAT THIS FILE IS NOT. It is not an authoring round-trip: nothing here writes to
 `Gw.dat`, and the mesh it builds is `(dims+1)^2` vertices, which is one column
@@ -272,7 +273,13 @@ def build_geometry(gwmap):
         wy = y1 - j * pitch
         row = j * stride
         for i in range(stride):
-            verts[row + i] = (x0 + i * pitch, wy, z[row + i])
+            # NEGATED. A greater stored value is LOWER in the world -- FINDINGS
+            # 25, measured by two client runs differing only in this sign. The
+            # load path still applies no transform (tag 1 reaches the client's
+            # buffers through memcpy), but that is a fact about bytes, not about
+            # which way is up. Blender is a place a human LOOKS at the map, so
+            # it gets the world's convention and not the file's.
+            verts[row + i] = (x0 + i * pitch, wy, -z[row + i])
 
     faces = [None] * (dx * dy)
     for j in range(dy):
