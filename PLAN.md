@@ -1048,7 +1048,7 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-11 (`9eb09a8`+, suite 48/48, 913 checks)
+### 8.0 Next, as of 2026-08-11 (`6afe3ae`+, suite 50/50, 965 checks)
 
 0m. **THE MONSTER-AI DIVE LANDED, and it leaves four desk tasks that need NO capture,
     NO client launch and NO operator.** [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
