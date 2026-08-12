@@ -656,6 +656,7 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
 
     procs, ring, client, endpoints = [], None, None, set()
     args = []                       # bound in the try; the manifest below reads it either way
+    marks_fh = None                 # same: the finally closes it either way
     log_path = os.path.join(os.path.dirname(exe), "Gw.log")
     cap_log = open(os.path.join(outdir, "wirecapture.log"), "w")
     try:
@@ -706,7 +707,15 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         ring.start()
 
         stop_file = os.path.join(outdir, "STOP")
+        mark_file = os.path.join(outdir, "MARK")
+        marks_fh = open(os.path.join(outdir, wc.MARKS_NAME), "w",
+                        encoding="utf-8")
         print("\n  YOU drive from here: log in and play at human cadence.")
+        print("  TO MARK A MOMENT (what you are about to do), from any shell:")
+        print(f"    echo approach > \"{mark_file}\"")
+        print("  The text becomes the label. Marks bind your narration to the capture's")
+        print("  own clock; without them a session can only be aligned to within seconds")
+        print("  after the fact. session_start and session_end are taken automatically.")
         print("  THREE WAYS TO STOP, and the first only works if THIS WINDOW has focus:")
         print("    1. one Ctrl-C here (the shutdown takes ~30s; pressing again is absorbed)")
         print("    2. just close the Guild Wars window -- same clean path")
@@ -714,7 +723,9 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
         print("  Nothing is lost by killing this process either: the keyring and the wire")
         print("  capture are flushed as they go, and `--assemble` rebuilds the rest.\n")
         _install_sigint()
-        endpoints = _hold(client, ring, wire, minutes, cap=cap, stop_file=stop_file)
+        endpoints = _hold(client, ring, wire, minutes, cap=cap,
+                          stop_file=stop_file, marks_fh=marks_fh,
+                          mark_file=mark_file)
     except KeyboardInterrupt:
         print("\n  stopping on Ctrl-C")
     finally:
@@ -734,6 +745,8 @@ def run(account_label, exe, live_host, live_ports, minutes, confirm, out_root=No
                     p.wait(timeout=15)
                 except (OSError, subprocess.SubprocessError):
                     pass
+        if marks_fh:
+            marks_fh.close()
         cap_log.close()
         time.sleep(1)
         if os.path.exists(wire):
@@ -930,7 +943,20 @@ def _wait_for_sniff(cap, wire, timeout=25):
     return False
 
 
-def _hold(client, ring, wire, minutes, cap=None, stop_file=None):
+def _take_mark(marks_fh, wire, n, label):
+    """Write one operator mark, binding this instant to the capture's own clock.
+
+    Reads the capture for its last segment `t` rather than sharing state with the
+    sniffer, because the sniffer is a SUBPROCESS and there is no shared state to have.
+    Cheap at human cadence: a mark is once per narration step, not once per packet.
+    """
+    if marks_fh is None:
+        return
+    wc.write_mark(marks_fh, n, label, wc.last_wire_t(wire))
+
+
+def _hold(client, ring, wire, minutes, cap=None, stop_file=None,
+          marks_fh=None, mark_file=None):
     """Hold the session until the ceiling, the client exiting, or Ctrl-C.
 
     AND WATCH THE INSTRUMENTS, which this used to not do. A ten-minute live session
@@ -948,6 +974,11 @@ def _hold(client, ring, wire, minutes, cap=None, stop_file=None):
     ceiling = time.monotonic() + minutes * 60
     started = time.monotonic()
     seen, warned = set(), False
+    # TWO ANCHORS EVEN IF THE OPERATOR NEVER MARKS. A session with zero marks is a
+    # session nothing can bind, and the operator has a game to play; these cost nothing
+    # and mean every capture is at least bracketed.
+    marks = 1
+    _take_mark(marks_fh, wire, marks, "session_start")
     while time.monotonic() < ceiling and not _STOPPING.is_set():
         if client.poll() is not None:
             print("\n  the client exited")
@@ -959,6 +990,24 @@ def _hold(client, ring, wire, minutes, cap=None, stop_file=None):
         if stop_file and os.path.exists(stop_file):
             print("\n  STOP file seen -- ending the session")
             break
+        # A NARRATION MARK, by the same file mechanism and for the same reason: the
+        # operator is looking at the game window, so anything needing console focus is
+        # advice that fails exactly when it is needed. `echo approach > <outdir>\MARK`
+        # from any shell stamps this instant into marks.jsonl, and the file's contents
+        # become the label. Deleted after reading so the next one is a fresh edge.
+        if mark_file and os.path.exists(mark_file):
+            try:
+                with open(mark_file, encoding="utf-8", errors="replace") as fh:
+                    label = fh.read().strip() or "mark"
+            except OSError:
+                label = "mark"
+            try:
+                os.remove(mark_file)
+            except OSError:
+                pass
+            marks += 1
+            _take_mark(marks_fh, wire, marks, label)
+            print(f"\n  mark {marks}: {label}", flush=True)
         if cap is not None and cap.poll() is not None:
             print(f"\n  *** THE OFF-WIRE CAPTURE DIED (exit {cap.poll()}) -- nothing is "
                   f"being recorded.\n      See wirecapture.log. Keys are still being "
@@ -998,6 +1047,7 @@ def _hold(client, ring, wire, minutes, cap=None, stop_file=None):
     else:
         if not _STOPPING.is_set():
             print("\n  session ceiling reached -- closing the client")
+    _take_mark(marks_fh, wire, marks + 1, "session_end")
     return seen
 
 

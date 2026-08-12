@@ -159,12 +159,39 @@ def reassemble(segments):
 
 
 # ------------------------------------------------------------- capture output --
-def open_capture(path, client, server, pid, server_ports, clock):
+def open_capture(path, client, server, pid, server_ports, clock, wall=time.time):
     """Start a live capture file: origin FIRST, then the wire metadata. Returns a writer.
 
     The origin record is written explicitly as LIVE -- origin.py never infers LIVE, by
     design, so a live capture that forgets to say so is UNKNOWN forever. `clock` is passed
-    in (time.perf_counter) so the pure tests can supply a deterministic one.
+    in (time.perf_counter) so the pure tests can supply a deterministic one, and `wall`
+    (time.time) for the same reason.
+
+    THE EPOCH, added 2026-08-11, and it is the fix for a real blocker rather than a
+    nicety. Every segment is stamped `clock() - t0`, and `t0` is taken HERE -- inside the
+    sniffer subprocess, after WinDivert opens. `perf_counter()`'s reference point is
+    undefined by CPython's own contract: only differences taken within one call site are
+    meaningful. So until now the `t` in a capture was an offset from an origin **no other
+    process could name**, and the only other clock in the artifact was `manifest.json`'s
+    `strftime`, taken in the PARENT before this subprocess was spawned. A narrated live
+    session could therefore be aligned to its narration only post-hoc and only to within
+    seconds, off server-side anchors -- which is precisely the gap-inference failure
+    `labelrun.py` was written to end, and it would have made every behaviour-capture
+    session un-analysable. studies/monsterai/FINDINGS.md §7.1.
+
+    `t0_wall` is `time.time()` sampled adjacent to `t0`, so `t0_wall + t` is an absolute
+    UTC timestamp for every segment. That IS a legitimate use of `perf_counter`: the
+    subtraction stays inside this process, and the absolute clock only pins its origin.
+
+    WRITTEN AFTER THE CLOCKS ARE TAKEN, which reorders two lines. `dryrun_keycapture.py`
+    and `livesession.py` both use the PRESENCE of the `wire_meta` line as proof the sniff
+    opened, and that still holds -- open_capture is only reached once WinDivert is up, so
+    every write in it is after.
+
+    It does NOT make the marks channel redundant. This binds the wire clock to absolute
+    time; it says nothing about whether the operator's narration is bound to the same
+    instant, and a single unchecked channel is what this project calls a fixture that
+    resolves silently. `marks.jsonl` is the second witness and they are required to agree.
     """
     # The stamp is DERIVED from the endpoint being sniffed, not asserted. It used to be a
     # hardcoded origin.LIVE, which made every loopback dry-run capture claim to be live
@@ -182,10 +209,14 @@ def open_capture(path, client, server, pid, server_ports, clock):
     rec = origin.record("toolkit/harness/wirecapture.py", who,
                         note="off-wire ciphertext; key from keytap.py, decrypt with replay.py")
     fh.write(json.dumps(rec) + "\n")
-    fh.write(json.dumps({"kind": "wire_meta", "client": client, "server": server,
-                         "pid": pid, "server_ports": sorted(server_ports)}) + "\n")
-    fh.flush()
+    # The two clocks, sampled adjacently. Order matters only in that nothing may run
+    # between them that could take measurable time.
     t0 = clock()
+    t0_wall = wall()
+    fh.write(json.dumps({"kind": "wire_meta", "client": client, "server": server,
+                         "pid": pid, "server_ports": sorted(server_ports),
+                         "t0_wall": t0_wall}) + "\n")
+    fh.flush()
 
     def record(direction, seq, payload, pkt=None):
         """One TCP segment. `pkt` carries the endpoints, and it is not optional for a live
@@ -259,6 +290,156 @@ def load_connections(path):
             entry[d], entry["gaps"][d] = reassemble(bucket[d])
         conns[key] = entry
     return meta, conns
+
+
+def capture_epoch(meta):
+    """The absolute UTC time a capture's `t = 0` corresponds to, or None.
+
+    None means the capture predates the epoch record (2026-08-11) and its segment
+    timestamps CANNOT be placed on any clock but their own. Returning None rather than
+    guessing is the whole point: a caller that silently substituted `manifest.json`'s
+    stamp would be off by however long it took to spawn the sniffer subprocess and open
+    WinDivert, which is exactly the error nobody would see.
+    """
+    if not isinstance(meta, dict):
+        return None
+    t0 = meta.get("t0_wall")
+    return float(t0) if isinstance(t0, (int, float)) else None
+
+
+def wall_of(meta, t):
+    """A segment's `t` as absolute UTC, or None when the capture carries no epoch."""
+    t0 = capture_epoch(meta)
+    return None if t0 is None else t0 + t
+
+
+MARKS_NAME = "marks.jsonl"
+
+
+def write_mark(fh, n, label, wire_t, clock=time.perf_counter, wall=time.time):
+    """One operator mark: the SECOND witness to the wire clock.
+
+    Each mark carries three numbers and the redundancy is the design:
+
+      * `wall`      -- absolute UTC, the same clock `t0_wall` is on. This is what
+                       actually binds a narration step to the capture.
+      * `perf`      -- the PARENT's own perf_counter. Useless across processes on its
+                       own, which is why it is not the binding; it is here so a
+                       mark-to-mark INTERVAL can be checked against the wall-clock
+                       interval, catching a wall clock that jumped (NTP, DST, a manual
+                       change) mid-session.
+      * `wire_t`    -- the `t` of the last record then present in the capture, read from
+                       the file. This is the independent channel. If wall-clock
+                       arithmetic and the capture's own progress disagree, one of them is
+                       wrong and the analyser must say so rather than average them.
+
+    A single channel would be unchecked, and this project's rule is that a fixture which
+    silently resolves to the wrong thing turns every assertion behind it into a no-op.
+    """
+    fh.write(json.dumps({"kind": "mark", "n": n, "label": label,
+                         "wall": wall(), "perf": clock(),
+                         "wire_t": wire_t}) + "\n")
+    fh.flush()
+
+
+def last_wire_t(path):
+    """The `t` of the last wire record in a capture, or None if there is none yet.
+
+    Reads the file rather than sharing state with the sniffer, because the sniffer is a
+    SUBPROCESS -- there is no shared state to have. Cheap enough at human cadence: a mark
+    happens once per narration step, not per packet.
+    """
+    t = None
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if '"wire"' not in line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if isinstance(r, dict) and r.get("kind") == "wire" and "t" in r:
+                    t = r["t"]
+    except OSError:
+        return None
+    return t
+
+
+def read_marks(path):
+    """[{n, label, wall, perf, wire_t}, ...] in file order. [] when there is no file."""
+    out = []
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    r = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if isinstance(r, dict) and r.get("kind") == "mark":
+                    out.append(r)
+    except OSError:
+        return []
+    return out
+
+
+def mark_skew(meta, marks):
+    """Per-mark skew in seconds between the two channels, and the order check.
+
+    Returns `(rows, problems)`. A row is `(n, label, wall_t, wire_t, skew)` where
+    `wall_t` is the mark's absolute time converted into capture-relative seconds via the
+    epoch, and `skew = wall_t - wire_t`. A perfectly bound capture has every skew equal to
+    the same small constant -- NOT zero, because `wire_t` is the last segment SEEN, which
+    is always a little behind the instant the mark was taken.
+
+    So the number that matters is the SPREAD, not the offset. `problems` names what could
+    not be checked or what disagrees:
+
+      * no epoch in the capture (pre-2026-08-11) -- nothing can be bound, say so
+      * marks out of order on either channel -- the two disagree about what happened
+        first, which no averaging can fix
+      * a wall-clock interval and a perf interval that disagree by more than a second --
+        the wall clock moved under us
+    """
+    t0 = capture_epoch(meta)
+    problems = []
+    if t0 is None:
+        return [], ["the capture carries no t0_wall: its timestamps cannot be placed on "
+                    "any clock but their own, so no binding is possible"]
+    rows = []
+    for m in marks:
+        w, wt = m.get("wall"), m.get("wire_t")
+        if not isinstance(w, (int, float)) or not isinstance(wt, (int, float)):
+            problems.append(f"mark {m.get('n')} is missing a channel")
+            continue
+        rel = w - t0
+        rows.append((m.get("n"), m.get("label"), rel, wt, rel - wt))
+
+    for a, b in zip(rows, rows[1:]):
+        if b[2] < a[2]:
+            problems.append(f"marks {a[0]} and {b[0]} are out of order on the wall clock")
+        if b[3] < a[3]:
+            problems.append(f"marks {a[0]} and {b[0]} are out of order on the wire clock")
+
+    for a, b in zip(marks, marks[1:]):
+        pa, pb = a.get("perf"), b.get("perf")
+        # A MISSING FIELD IS NOT A MOVED CLOCK, and the first version of this said it was.
+        # Defaulting the absent perf to 0 made `dp` the difference of two zeros, so any
+        # real elapsed wall time exceeded the threshold and the operator was told their
+        # clock had jumped. A wrong diagnosis sends someone hunting an NTP event that
+        # never happened; say what is actually true instead.
+        if not isinstance(pa, (int, float)) or not isinstance(pb, (int, float)):
+            problems.append(
+                f"marks {a.get('n')} and {b.get('n')}: no perf clock, so a wall-clock "
+                f"jump between them cannot be ruled out either way")
+            continue
+        dw = b.get("wall", 0) - a.get("wall", 0)
+        dp = pb - pa
+        if abs(dw - dp) > 1.0:
+            problems.append(
+                f"between marks {a.get('n')} and {b.get('n')} the wall clock advanced "
+                f"{dw:.3f}s but perf_counter advanced {dp:.3f}s -- the wall clock moved")
+    return rows, problems
 
 
 class MultiConnectionError(Exception):

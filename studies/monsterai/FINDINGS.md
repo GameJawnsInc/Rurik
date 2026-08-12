@@ -906,6 +906,33 @@ The refutations are the valuable half of this dive. Each entry names the killed 
 
 ### 7.1 Build the clock binding first, or the whole campaign is un-analysable
 
+**BUILT 2026-08-11, and one half of this section's premise was already false.** The
+pre-flight it asks for in §7.3 — the tick clock against the wire clock on the two existing
+captures — **already existed and was already green**: `test_smsgnames.py` §1 asserts it and
+measures **+18.1 ms worst drift** across tapes spanning 13–185 s. So the wire-clock-to-
+plaintext binding was never in doubt and nothing already shipped is suspect. What was
+genuinely missing is narrower and is now fixed:
+
+- **The epoch.** `open_capture` now samples `time.time()` adjacent to `t0` and writes it as
+  `t0_wall`, so every segment's `t` converts to absolute UTC. A capture written before this
+  has no epoch and `capture_epoch()` returns **None** rather than substituting
+  `manifest.json`'s stamp — which is taken in the parent before the sniffer exists and is
+  wrong by however long spawning it took.
+- **The marks channel.** The driver writes `marks.jsonl` and watches for a `MARK` file
+  beside `STOP` — same mechanism, same reason (the operator is looking at the game window).
+  `session_start` and `session_end` are automatic, so an unmarked run is still bracketed.
+- **The check.** `mark_skew()` returns per-mark skew and names disagreement. The number
+  that matters is the **spread**, not the offset: `wire_t` is the last segment *seen*, so a
+  healthy capture has a small constant lag, and a check on the offset itself would fail for
+  a good run.
+
+`test_wirecapture.py` §9 pins it, 42 checks, with five negative controls — no epoch, marks
+out of order on one channel, a wall clock that jumps, a mark missing a channel, and a
+missing perf clock. **The last one is a defect this found in itself**: absent `perf`
+defaulted to 0, so any real elapsed wall time exceeded the threshold and the operator was
+told their clock had jumped. A wrong diagnosis sends someone hunting an NTP event that
+never happened, so the absent-field case and the moved-clock case now say different things.
+
 **OBSERVED, and it is a blocker.** `wirecapture.open_capture` stamps every segment `perf_counter() - t0`, with `t0` taken **inside the sniffer subprocess** after WinDivert opens; the `wire_meta` line carries client, server, pid and ports and **no time**. The only other clock in the artifact is `manifest.json`'s `stamp`, a `strftime` taken in the parent **before that subprocess is spawned**. So a narrated live session can today be aligned only post-hoc, to within seconds, off server anchors — which is exactly the gap-inference failure `labelrun.py` was written to end.
 
 The fix is **dual**, because either channel alone is unchecked:

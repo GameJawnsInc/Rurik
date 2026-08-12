@@ -19,6 +19,7 @@ The driver itself is checked only for an honest refusal when WinDivert is absent
 
 standard library only.
 """
+import json
 import os
 import socket
 import struct
@@ -32,9 +33,11 @@ import checks  # noqa: E402
 import origin  # noqa: E402
 import wirecapture as wc  # noqa: E402
 
-# 26 is the measured total of a green run with WinDivert present (section 5 then declares a
-# skip); without the driver that skip becomes a check and the run scores 27.
-LEDGER = checks.Ledger("wirecapture", floor=28)
+# 42 is the measured total of a green run with WinDivert present (section 5 then declares
+# a skip); without the driver that skip becomes a check and the run scores 43. It was 28
+# until 2026-08-11, when §9 added the clock binding -- the epoch, the marks channel and
+# the five ways the two can disagree. Set from a real run, never from a guess.
+LEDGER = checks.Ledger("wirecapture", floor=42)
 
 
 def ipv4_tcp(src, dst, sport, dport, seq, payload=b"", proto=6, ver=4):
@@ -194,6 +197,127 @@ def main():
         LEDGER.ok("WinDivert.dll" in str(e) and "elevated" in str(e).lower(),
                   "absent WinDivert refuses with the install + elevation step",
                   "names the DLL and the elevated-shell requirement")
+
+    # ---- 9. the clock binding: an epoch, a second witness, and the refusals --
+    print("\n9. the clock binding (studies/monsterai §7.1)")
+    # WHAT THIS IS ABOUT. Every segment is stamped `perf_counter() - t0` with `t0` taken
+    # inside the SNIFFER SUBPROCESS, and CPython's contract says perf_counter's reference
+    # point is undefined -- only differences within one call site mean anything. So until
+    # `t0_wall` existed, a capture's `t` was an offset from an origin no other process
+    # could name, and a narrated session could be aligned to its narration only post-hoc
+    # and only to within seconds. Every check below is one this could get wrong quietly.
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "epoch.jsonl")
+        ticks = iter([0.0, 10.0, 11.0, 12.0])
+        fh, record = wc.open_capture(path, "127.0.0.1:5000", "127.0.0.3:6112", 7,
+                                     PORTS, lambda: next(ticks),
+                                     wall=lambda: 1_700_000_000.0)
+        record(wc.C2S, 1000, b"AAAA")
+        record(wc.C2S, 1004, b"BBBB")
+        fh.close()
+        meta, _streams, _gaps = wc.load_wire(path)
+
+        LEDGER.ok(wc.capture_epoch(meta) == 1_700_000_000.0,
+                  "a capture records the ABSOLUTE time its t=0 corresponds to",
+                  f"t0_wall={wc.capture_epoch(meta)} -- without it `t` is an offset from "
+                  "an origin no other process can name, which is the whole blocker")
+        LEDGER.ok(wc.wall_of(meta, 10.0) == 1_700_000_010.0,
+                  "so any segment's t converts to absolute UTC",
+                  "t0_wall + t, and the subtraction stays inside the sniffer process")
+        # THE ORDERING TRAP: t0 must be sampled BEFORE the first segment, or every
+        # timestamp is shifted by however long the meta write took.
+        recs = [json.loads(L) for L in open(path, encoding="utf-8")]
+        firstwire = next(r for r in recs if r.get("kind") == "wire")
+        LEDGER.ok(firstwire["t"] == 10.0,
+                  "and t is measured from the epoch, not from the meta write",
+                  f"first segment t={firstwire['t']} against the clock's second value")
+
+        # THE REFUSAL THAT MATTERS: a capture written before 2026-08-11 has no epoch,
+        # and nothing may invent one for it. manifest.json's stamp is the tempting
+        # substitute and it is wrong by however long spawning the sniffer took.
+        LEDGER.ok(wc.capture_epoch({"kind": "wire_meta", "pid": 1}) is None
+                  and wc.wall_of({"kind": "wire_meta"}, 5.0) is None,
+                  "a capture with no epoch refuses to be placed on a clock",
+                  "None, not a guess -- manifest.json's stamp is taken in the PARENT "
+                  "before the sniffer subprocess exists")
+
+        # ---- the marks channel, and the four ways it can disagree -----------
+        mpath = os.path.join(tmp, wc.MARKS_NAME)
+        with open(mpath, "w", encoding="utf-8") as mfh:
+            for i, (w, p, wt) in enumerate(
+                    [(1_700_000_002.0, 500.0, 1.5),
+                     (1_700_000_006.0, 504.0, 5.4),
+                     (1_700_000_009.0, 507.0, 8.6)], start=1):
+                wc.write_mark(mfh, i, f"step{i}", wt,
+                              clock=lambda p=p: p, wall=lambda w=w: w)
+        marks = wc.read_marks(mpath)
+        LEDGER.ok(len(marks) == 3 and marks[0]["label"] == "step1"
+                  and marks[2]["wire_t"] == 8.6,
+                  "marks round-trip with both clocks and the wire anchor",
+                  f"{len(marks)} marks, each carrying wall, perf and wire_t")
+
+        rows, problems = wc.mark_skew(meta, marks)
+        skews = [r[4] for r in rows]
+        LEDGER.ok(not problems and len(rows) == 3,
+                  "a well-formed session binds with no problems reported",
+                  f"skews {[round(s, 2) for s in skews]}")
+        LEDGER.ok(max(skews) - min(skews) < 0.2,
+                  "and it is the SPREAD of skew that is small, not the offset",
+                  f"spread {max(skews) - min(skews):.3f}s. A constant offset is expected "
+                  "-- wire_t is the last segment SEEN, always a little behind the mark "
+                  "-- so a check on the offset itself would fail for a healthy capture")
+
+        # NEGATIVE CONTROL 1: no epoch -> refuse rather than bind against nothing.
+        _rows, probs = wc.mark_skew({"kind": "wire_meta"}, marks)
+        LEDGER.ok(_rows == [] and any("cannot be placed" in p for p in probs),
+                  "marks against an epochless capture REFUSE rather than bind",
+                  str(probs))
+
+        # NEGATIVE CONTROL 2: the two channels disagree about order. No averaging can
+        # fix this, so it must be named.
+        swapped = [dict(marks[0]), dict(marks[1]), dict(marks[2])]
+        swapped[2]["wire_t"] = 0.1
+        _r, probs = wc.mark_skew(meta, swapped)
+        LEDGER.ok(any("out of order on the wire clock" in p for p in probs),
+                  "marks that go backwards on ONE channel are caught",
+                  f"{probs} -- the two channels disagree about what happened first")
+
+        # NEGATIVE CONTROL 3: the wall clock jumped mid-session (NTP, DST, a manual
+        # change). perf_counter is monotonic and does not, so the pair catches it.
+        jumped = [dict(m) for m in marks]
+        jumped[2]["wall"] += 3600.0
+        _r, probs = wc.mark_skew(meta, jumped)
+        LEDGER.ok(any("the wall clock moved" in p for p in probs),
+                  "a wall clock that jumps mid-session is caught by the perf pair",
+                  "this is the entire reason a mark carries perf as well as wall")
+
+        # NEGATIVE CONTROL 4: a single channel is not a check. Strip wire_t and the
+        # binding must report the loss rather than proceed on the wall clock alone.
+        halved = [{k: v for k, v in m.items() if k != "wire_t"} for m in marks]
+        _r, probs = wc.mark_skew(meta, halved)
+        LEDGER.ok(len(probs) == 3 and all("missing a channel" in p for p in probs),
+                  "and a mark missing a channel is reported, not silently half-checked",
+                  f"{len(probs)} of 3 marks named")
+
+        # NEGATIVE CONTROL 5: a MISSING perf clock must not be reported as a MOVED one.
+        # It was, until this check existed: absent perf defaulted to 0, so the difference
+        # of two zeros lost to any real elapsed wall time and the operator was told their
+        # clock had jumped. A wrong diagnosis is worse than a vague one.
+        noperf = [{k: v for k, v in m.items() if k != "perf"} for m in marks]
+        _r, probs = wc.mark_skew(meta, noperf)
+        LEDGER.ok(probs and all("cannot be ruled out" in p for p in probs)
+                  and not any("wall clock moved" in p for p in probs),
+                  "a mark with NO perf clock says so, rather than crying 'clock moved'",
+                  f"{probs[0]} -- the absent-field case and the moved-clock case are "
+                  "different findings and must not share a message")
+
+        LEDGER.ok(wc.last_wire_t(path) == 11.0,
+                  "last_wire_t reads the capture's own progress off disk",
+                  "the sniffer is a subprocess, so there is no shared state to read")
+        LEDGER.ok(wc.last_wire_t(os.path.join(tmp, "nope.jsonl")) is None
+                  and wc.read_marks(os.path.join(tmp, "nope.jsonl")) == [],
+                  "and both readers answer None/[] for a file that is not there",
+                  "a mark taken before any segment arrived is a real case")
 
     return LEDGER.verdict()
 

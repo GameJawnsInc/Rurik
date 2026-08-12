@@ -350,11 +350,39 @@ survives, and assembles per connection. **It sends no keystrokes and no clicks.*
 in and play; the driver only instruments. That is deliberate: the loopback harness's
 scripted three-Enters-and-a-Play-click is precisely the traffic pattern §6.1 warns about.
 
+**MARK WHAT YOU ARE ABOUT TO DO, from any shell.** The driver writes `marks.jsonl`
+and watches for a `MARK` file beside `STOP`; its contents become the label:
+
+```bash
+echo approach > C:\gd\Rurik\vault\captures\live\<stamp>\MARK
+```
+
+`session_start` and `session_end` are taken automatically, so even an unmarked run
+is bracketed. Use the same file mechanism as `STOP` and for the same reason: you
+are looking at the game window, so anything needing console focus is advice that
+fails exactly when it is needed.
+
+**Why it matters, and it is not bookkeeping.** Every captured segment is stamped
+`perf_counter() - t0` with `t0` taken *inside the sniffer subprocess*, and
+CPython's contract says that clock's reference point is undefined — only
+differences within one call site mean anything. So a capture's timestamps used to
+be offsets from an origin **no other process could name**, and the only other
+clock in the artifact was `manifest.json`'s stamp, taken in the parent *before*
+the sniffer was spawned. A narrated session could be aligned to its narration only
+after the fact and only to within seconds, which is exactly the gap-inference
+failure `labelrun.py` exists to end. Captures now record `t0_wall` so every `t`
+converts to absolute UTC, and each mark carries **three** numbers — wall, the
+parent's perf, and the capture's own last segment `t` — so the two channels can
+be required to agree instead of trusted. `wirecapture.mark_skew()` reports the
+per-mark skew and names any disagreement; a capture written before 2026-08-11 has
+no epoch and it **refuses to place it on a clock** rather than substituting the
+manifest stamp. See `studies/monsterai/FINDINGS.md` §7.1.
+
 **Output**, under `vault/captures/live/<stamp>/`: `wire.jsonl` (the raw off-wire capture,
 kept even if nothing decrypts), `keyring.jsonl` (**every tapped key, written and flushed
 the moment it is read** — the first run held them in memory and lost six of seven, which
 made six channels of captured ArenaNet ciphertext permanently undecryptable), one
-`<channel>-<connection>.jsonl` per decrypted channel, and `manifest.json`. The scrubbed
+`<channel>-<connection>.jsonl` per decrypted channel, `marks.jsonl` (the narration binding — empty is a red flag, not a neutral result: it means the driver never even took its two automatic anchors), and `manifest.json`. The scrubbed
 copy goes to `vault/captures-scrubbed/live-<stamp>/`, outside the capture tree so censuses
 and the tree-wide scrub do not walk it as if it were more evidence.
 
