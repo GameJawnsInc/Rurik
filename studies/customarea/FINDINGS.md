@@ -4657,3 +4657,92 @@ reverting it after the client relocated rows would corrupt rather than restore.
 5. **We did not observe the mesh being USED.** The character spawned and the run
    passed its checkpoints, but nothing here walked the rebuilt navmesh or
    collided against it.
+
+## 36. OBSERVED: the compiler builds from the Stripped stream WE supply (2026-08-12)
+
+**§35 showed the client compiles. This shows it compiles OUR INPUT.** Given a
+Stripped stream that belongs to a different map entirely, the client built that
+map's navmesh — byte-identical to the donor's shipped Bloated payload — under the
+file id of the map it was asked for.
+
+### The design, and the prediction stated before the run
+
+§35's result had an obvious alternative reading: the client might have restored
+map 143 from a cache, a download, or something keyed to the file id, and the
+byte-identity would then say nothing about compilation. This separates those.
+
+On a copy: row 71497 (map 143's Stripped partner) was replaced with **row 46197's**
+Stripped payload — the ladder template map, 32×32 cells — and row 71496 (map 143's
+Bloated stream) was zeroed. Nothing else changed. The two candidate meshes are far
+apart and both are known:
+
+| | trapezoids | Bloated payload |
+|---|---|---|
+| map 143's own (row 71496) | 27 | 33,021 B |
+| the donor's own (row 46196) | **2** | **8,471 B** |
+
+**PREDICTION, recorded before launching:** if the compiler reads the Stripped
+stream we supply, the rebuild holds **2 trapezoids over 1 plane**, not 27.
+
+### The result
+
+`Gw.log` again: `Map file '0x0287d3' failed to load.  Attempting to re-bloat.`
+
+The rebuild is **8,471 B, 18 chunks, 2 trapezoids over 1 plane** — and
+byte-identical to the donor's shipped map:
+
+| | payload | sha256 |
+|---|---|---|
+| client's rebuild of `0x287D3` | 8,471 B | `4178b052f0037fa8…` |
+| row 46196, the DONOR's shipped map | 8,471 B | `4178b052f0037fa8…` |
+| row 71496, map 143's original | 33,021 B | `acfc8e7501e94b9e…` |
+
+`rebuild == donor` **True**. `rebuild == map 143's original` **False**.
+
+### What this establishes
+
+**The compiler's input is the bytes in stream 0 of the row, and nothing else.**
+Not a cache, not the file id, not a download — the client produced a map it had
+never been asked for, because that is what the Stripped stream we wrote said.
+
+Combined with §35 (the rebuild reproduces ArenaNet's own bytes) and §34 (terrain
+and props are hard gates and the flood grid IS the terrain lattice), the route
+rung E3 was named for is now open end to end **except for one missing piece**:
+
+> **Author a Stripped stream → the retail client builds the Bloated map,
+> navmesh included.**
+
+### The one thing still in the way
+
+`0x10000002`, the STRIPPED terrain chunk, is a different encoding from the
+Bloated `0x20000002` and `terrain.py` refuses it — *"terrain version 1619525649
+!= 17 (the client compares the full u32)"*. Both share the signature
+`0x87821134` and the version byte `0x11`, and the stripped form is roughly half
+the size corpus-wide (ratio 0.4673), so it is a packing of the same logical data
+rather than a different structure. **Until that codec exists we can deliver
+somebody else's terrain but not our own**, which is exactly the gap between this
+result and §32's Blender pipeline.
+
+### Archive hygiene
+
+Post-flight: descriptor counter 26881 → 26886, five relocations (rows 71496 and
+71497 plus the client's three scratch rows), directory invariant unchanged both
+ways, all ten open-time rules and all three CRC rules pass. The copy was re-cut
+from `dat_study`; both journals are marked CONSUMED, because reverting after the
+client relocated rows would corrupt rather than restore. `dat_study` and `C:\gw`
+were read-only throughout.
+
+### What this does NOT establish
+
+1. **Still n = 1**, and the donor is a 32×32 one-plane map — the simplest in the
+   archive. Nothing here says a large or multi-plane Stripped stream recompiles.
+2. **The terrain is still ArenaNet's.** Both maps in this experiment are theirs.
+   No byte we authored has been through the compiler.
+3. **Nothing walked the rebuilt mesh.** The character spawned and the run passed
+   its checkpoints; collision against the 2-trapezoid mesh was not tested, and
+   the spawn (1536, 1536) happens to lie inside both candidate rects, which is
+   why the run could not fail for the wrong reason.
+4. **The Bloated stream must be made to FAIL for any of this to happen.** This is
+   a repair path, not a normal load — an authored map still has to ship a broken
+   or absent stage 2 to get compiled, and what the client does with a
+   *permanently* zero-length stream across sessions is untested.
