@@ -26,13 +26,15 @@ import checks  # noqa: E402
 import content  # noqa: E402
 
 # 4 load + 7 migration + 8 refusal + 4 extracted-source (the 2026-08-11 loosening,
-# PLAN.md section 7 Q3: three refusals and one positive) + 3 overlay + 2 shape = 28,
-# measured from a
+# PLAN.md section 7 Q3: three refusals and one positive) + 4 source-condition (the
+# hole that ruling left on its first day: measured/capture/wiki had no conditions --
+# three refusals and one positive for the measured/build asymmetry)
+# + 3 overlay + 2 shape = 32, measured from a
 # real green run. Every section runs unconditionally; nothing here is fixture-dependent
 # beyond content/ itself, which is tracked. It was 22 until rung C2 added a ninth map
 # row: the migration section now names the addition instead of pinning a length, so a
 # new row is a decision somebody wrote down rather than a number that drifted.
-LEDGER = checks.Ledger("content store", floor=28)
+LEDGER = checks.Ledger("content store", floor=32)
 
 
 def write(dirpath, name, text):
@@ -52,7 +54,14 @@ def refuses(toml_text, because):
         return None
 
 
-GOOD_PROV = '[thing.a.provenance]\nsource = "measured"\n'
+# A minimal row that must always load. It carries an `extractor` because `measured` is in
+# EXTRACTED as of 2026-08-11 -- this constant was `source = "measured"` alone and stopped
+# loading the moment that landed, which is the ripple worth noticing: a shared fixture is
+# the first thing a tightened rule breaks, and if it had been silently loosened instead of
+# fixed, every check downstream of it would have been testing a weaker rule than the one
+# that ships.
+GOOD_PROV = ('[thing.a.provenance]\nsource = "measured"\n'
+             'extractor = "toolkit/content.py"\n')
 
 
 def main():
@@ -197,6 +206,54 @@ def main():
               "a fully-conditioned extracted row loads",
               "extractor present in the repo, build stated, provenance per row")
 
+    # --- REFUSAL 5: the hole the ruling left on its first day -----------------
+    # The 2026-08-11 conditions were attached to the TOKEN `client-table`. `measured` is
+    # defined as "read or checked against our own artifacts on this machine", which covers
+    # reading a table out of the vaulted client -- the identical act -- and it triggered
+    # NOTHING. The conditions were opt-in by word choice, which is the same defect the
+    # ruling exists to fix, one level down. Found by asking what a row could get away with
+    # rather than by re-reading the rule, which is the only way this kind of hole is ever
+    # found.
+    msg = refuses('[thing.a]\nlevel = 5\n[thing.a.provenance]\nsource = "measured"\n',
+                  "measured, no extractor")
+    LEDGER.ok(msg is not None and "extractor" in (msg or ""),
+              "a `measured` row with no extractor is REFUSED, same as `client-table`",
+              "otherwise the ruling's conditions are opt-in by word choice")
+
+    # ...but `build` is required only for `client-table`, and the asymmetry is the point:
+    # a table read out of Gw.exe is a fact about THAT BUILD, while a value measured in an
+    # archive is a fact about an artifact the row's `verified` text identifies. Forcing a
+    # build number onto the second buys a field that is guessed or meaningless.
+    with tempfile.TemporaryDirectory() as tmp:
+        write(tmp, "t.toml", '[thing.a]\nlevel = 5\n[thing.a.provenance]\n'
+                             'source = "measured"\nextractor = "toolkit/content.py"\n')
+        meas = content.load(repo_dir=tmp, vault_dir="")
+    LEDGER.ok(meas.get("thing", "a")["level"] == 5,
+              "and `measured` needs no `build`, while `client-table` still does",
+              "a build number on an archive measurement would be guessed or meaningless")
+
+    # --- REFUSAL 6: a capture row must name its session -----------------------
+    # A capture value depends on session properties no later reader can recover. Reforged
+    # Mode is the one that bites: it scales enemy health ~20%, nothing records it, and it
+    # is unrecoverable afterwards -- so a captured health is base or base x 0.8 with
+    # nothing able to say which. `mode` is deliberately NOT required yet, because nothing
+    # can supply it truthfully and a required field nothing can fill buys invented values.
+    msg = refuses('[thing.a]\nhealth = 999\n[thing.a.provenance]\nsource = "capture"\n',
+                  "capture, no stamp")
+    LEDGER.ok(msg is not None and "capture" in (msg or ""),
+              "a `capture` row that does not name its capture is REFUSED",
+              "it had NO conditions at all until 2026-08-11 -- the source whose value "
+              "depends most on the session was the one asked least about it")
+
+    # --- REFUSAL 7: a wiki row must say where ---------------------------------
+    # This is the cheapest possible fake green: 35 rows of plausible numbers with
+    # `source = "wiki"`, each a guess wearing a citation. It loaded clean until now.
+    msg = refuses('[thing.a]\nhealth = 999\n[thing.a.provenance]\nsource = "wiki"\n',
+                  "wiki, no page")
+    LEDGER.ok(msg is not None and "page" in (msg or ""),
+              "a `wiki` row with no page is REFUSED",
+              "a fabricated health = 999 loaded clean before this check existed")
+
     # --- an empty store is refused, not defaulted ----------------------------
     with tempfile.TemporaryDirectory() as tmp:
         try:
@@ -210,12 +267,18 @@ def main():
 
     # --- the vault overlay -----------------------------------------------------
     with tempfile.TemporaryDirectory() as repo, tempfile.TemporaryDirectory() as vault:
+        # Every fixture row here carries the conditions its source now requires. The
+        # overlay is bulk `vault/content/` merged over the tracked rows, which is exactly
+        # where a capture-derived table would land, so these rows are written the way a
+        # real one would have to be rather than with the minimum that used to load.
+        cap = ('source = "capture"\ncapture = "20260807T143055"\norigin = "live"\n')
         write(repo, "a.toml",
               '[thing.a]\nvalue = 1\n' + GOOD_PROV +
-              '[thing.b]\nvalue = 2\n[thing.b.provenance]\nsource = "measured"\n')
+              '[thing.b]\nvalue = 2\n[thing.b.provenance]\nsource = "measured"\n'
+              'extractor = "toolkit/content.py"\n')
         write(vault, "a.toml",
-              '[thing.b]\nvalue = 22\n[thing.b.provenance]\nsource = "capture"\n'
-              '[thing.c]\nvalue = 3\n[thing.c.provenance]\nsource = "capture"\n')
+              '[thing.b]\nvalue = 22\n[thing.b.provenance]\n' + cap +
+              '[thing.c]\nvalue = 3\n[thing.c.provenance]\n' + cap)
         merged = content.load(repo_dir=repo, vault_dir=vault)
     LEDGER.ok(merged.get("thing", "a")["value"] == 1,
               "a repo row the vault does not mention survives the overlay")

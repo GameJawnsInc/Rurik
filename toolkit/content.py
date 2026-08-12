@@ -101,7 +101,39 @@ UNLICENSED = {"gw-preservation"}
 # Names and authored text are the deliberate middle: commit the id, resolve the string at
 # run time from the owner's own archive. That is not a compromise invented for the ruling,
 # it is what mapbuild.py already does with FINDINGS 14's five mandatory chunks.
-EXTRACTED = {"client-table"}
+EXTRACTED = {"client-table", "measured"}
+
+# ...and `measured` is in that set because of a hole found the same day the ruling landed.
+# The ruling's conditions were attached to the TOKEN `client-table`, so `measured` -- defined
+# as "read or checked against our own artifacts on this machine", which covers reading a
+# table out of the vaulted client -- performed the identical act and triggered nothing.
+# **The conditions were opt-in by word choice.** That is the same shape as the defect the
+# ruling exists to fix, one level down, and it was found by asking what a row could get away
+# with rather than by reading the rule: `source = "measured"` with no extractor LOADED.
+#
+# `build` is required only for `client-table`, and the asymmetry is deliberate rather than
+# lazy. A table read out of `Gw.exe` is a fact about THAT BUILD and moves when ArenaNet
+# ships -- 38797 today. A value measured in an archive or a mesh is a fact about an
+# ARTIFACT, which the row's `verified` text identifies; forcing a build number onto it would
+# buy a field that is either guessed or meaningless, and a guessed field is worse than an
+# absent one. What both need is the EXTRACTOR, because "measured" with no named tool is
+# unfalsifiable in exactly the way this store exists to prevent.
+NEEDS_BUILD = {"client-table"}
+
+# A capture row's value depends on session properties that no later reader can recover, so
+# the row must name the session. Reforged Mode is the one that bites: it scales enemy health
+# ~20%, nothing records it, and it is unrecoverable afterwards (studies/reconstruction
+# FINDINGS.md 7.6) -- so a health row from a capture is base or base x 0.8 with nothing able
+# to say which. `mode` is NOT required yet because nothing can supply it truthfully; making
+# it required before `livesession.py` records it would only buy invented values. That is
+# tracked, not forgotten.
+NEEDS_CAPTURE = {"capture"}
+
+# GWW is a fine source for a published constant and a terrible one for an unsourced number,
+# and the difference is whether the row says WHERE. Until this check existed, a row with
+# `source = "wiki"` and a fabricated `health = 999` loaded clean -- which is the single
+# cheapest way to fake a green content rung, 35 rows of guesses wearing citations.
+NEEDS_PAGE = {"wiki"}
 
 RULE_1_1 = ('PLAN.md section 1.1: gw-preservation and Py4GW_Reforged "carry no license '
             'at all, which means all rights reserved: read them, learn from them, cite '
@@ -157,7 +189,33 @@ def _check_provenance(kind, key, row):
             f"a row with no verification is transcription.")
     if source in EXTRACTED:
         _check_extracted(kind, key, prov)
+    if source in NEEDS_CAPTURE:
+        _need(kind, key, prov, "capture",
+              "which capture this was read out of -- the vault stamp, e.g. "
+              "'20260807T143055'. A capture row's value depends on session properties "
+              "no later reader can recover, so the row names the session or it is not a "
+              "capture row.")
+        _need(kind, key, prov, "origin",
+              "whose server produced it: 'live' or 'ours'. toolkit/origin.py is "
+              "three-valued and refuses to pool them, and a statistic about ArenaNet's "
+              "behaviour computed over our own server's traffic is not weaker evidence, "
+              "it is different evidence.")
+    if source in NEEDS_PAGE:
+        _need(kind, key, prov, "page",
+              "the wiki page and section the value came from, and when it was read. "
+              "A number with no page cannot be re-read or refuted, and 'the wiki says "
+              "so' is UPSTREAM rather than a fact about retail Guild Wars.")
     return prov
+
+
+def _need(kind, key, prov, field, why):
+    """Require a non-empty provenance field, naming what it is for."""
+    v = prov.get(field)
+    if not (isinstance(v, (str, int)) and str(v).strip()):
+        had = "" if v is None else f" (it is {v!r})"
+        raise ContentError(
+            f"{kind} row {key!r} has source {prov['source']!r} and no `{field}`{had}. "
+            f"{why}")
 
 
 def _check_extracted(kind, key, prov):
@@ -190,6 +248,8 @@ def _check_extracted(kind, key, prov):
             f"this checkout (looked at {path}). A named tool that is not here regenerates "
             f"nothing. If it moved, update the row; if it was never committed, the row is "
             f"a transcription wearing a citation.")
+    if prov["source"] not in NEEDS_BUILD:
+        return
     build = prov.get("build")
     if not (isinstance(build, (str, int)) and str(build).strip()):
         raise ContentError(

@@ -119,6 +119,8 @@ unmodified_modifier = 1.0
 
 [attack_speed.rates.provenance]
 source = "wiki"
+page = """GWW "Attack speed", section "Attack durations and effect of IAS and DAS", \
+read 2026-08-06. The table says outright "These are the exact values used by the game"."""
 verified = """A check that could have failed and did not: the client's own product \
 reproduces the wiki's published IAS table exactly for three weapon classes and two \
 modifiers -- 1.33/1.5/1.75 against 0.67 and 0.75 give 0.8911/1.005/1.1725 and \

@@ -534,9 +534,33 @@ Both are now graded against an enumerated content surface:
   *R4c-2, formerly capture-gated*: 35–40 monster types with real stats and skill bars,
   graded on **types, never on spawn instances** — spawn counts are unstatable from any
   source this project has.
-  **R4c-2 IS NO LONGER BLOCKED, and saying so is overdue.** This line read "R4c-2 stays at 0
-  and is **reported as blocked until R0b exists**" until 2026-08-11, four days after R0b was
-  met. Worse than stale: the monster stats it was waiting for have been sitting in the vault
+  **R4c-2 IS NOT BLOCKED — IT IS UNGRADEABLE, which is worse and is now measured.**
+  ⚠️ **Its criterion cannot be evaluated as written, and one clause can never be met.**
+  Full verdict: [studies/presearing/R4C2-FEASIBILITY.md](studies/presearing/R4C2-FEASIBILITY.md),
+  which proposes a three-way split (R4c-2a roster / R4c-2b evidence / R4c-2c the name join)
+  **and is a proposal until the owner adopts it**, exactly as the two rewrites above are.
+  The four clauses, measured over the canonical 12-connection corpus:
+  - *"35–40 monster types"* — **today 7** hostile definition slots (1346, 1420, 1421, 1431,
+    1432, 1434, 1442), all from one 568 s visit to one map. Coverage-blocked; a live capture
+    campaign fixes it at roughly one explorable per session. **And the denominator is
+    contested by 22% between two of our own wiki passes** (91 vs 111 hostile), while the
+    wire counts *slots* and the wiki counts *pages* — slots 1431/1432/1434 are one model
+    (file 82023) at three levels, so "n of 91" can exceed 1.0 and is not evaluable either way.
+  - *"real stats"* — health 3 of 7 and mode-ambiguous; energy 0 on the wire; **armour has no
+    property id in any channel across 22,524 messages** and wiki armour is back-computed from
+    observed damage, so fitting a damage formula to it closes the loop on itself. Armour and
+    energy should be **struck, not deferred** — a deferred column reads as "not done yet" and
+    invites a session that cannot succeed.
+  - *"and skill bars"* — **structurally unreachable, and this is the finding.** `0x00DA` is
+    the skill-bar message; it occurs 11 times in 22,524 and **0 of 11 name a `mon1` or `band`
+    agent** (verified twice, independently). ArenaNet never sends a monster's bar to a
+    client, so **no capture campaign of any length produces one.** A bar can only ever be
+    *inferred from observed casts*. Today: 0.
+  - *"graded on types, never on spawn instances"* — **survives and should be strengthened.**
+    Slot 1442 alone is 202 of 585 monster-class creates.
+
+  **This line previously read** "R4c-2 stays at 0 and is **reported as blocked until R0b
+  exists**" until 2026-08-11, four days after R0b was met. Worse than stale: the monster stats it was waiting for have been sitting in the vault
   in the clear since 2026-08-07, and the join that makes them a *table* rather than a
   reading is measured — **`WORLD_CREATE_AGENT` field[2]'s definition slot is a stable
   server-side key across sessions**, slot 1434 yielding `PROP_HEALTH_MAX` 8 in two captures

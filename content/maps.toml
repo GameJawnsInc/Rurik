@@ -171,6 +171,7 @@ explorable = false
 
 [map.143.provenance]
 source = "measured"
+extractor = "toolkit/mapdata/archive.py"
 verified = """MEASURED in our own archive copies. 0x287D3 is one of the two file ids \
 the archive's own id table stores for MFT row 71496; the other is 0x5CF20 and both \
 resolve to the same row, so either would open the same file. The spawn is the one \
