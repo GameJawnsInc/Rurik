@@ -827,6 +827,14 @@ worth having before you start another:
 - **Move `Gw.log` aside first.** The re-bloat line is the only evidence the map
   was reached at all, and a previous run's copy of it is indistinguishable from
   this run's.
+- **The harness spawns no hostile unless you pass `--enemy`** (changed
+  2026-08-12). `content/world.toml` puts the standing enemy 300 units from the
+  player's arrival point and `AGGRO_RANGE` is 1200, so it used to engage on
+  every session in every map — it killed the character 10 s into FINDINGS 40's
+  movement session and cut two walk legs to 1.5 s. **Combat work must pass
+  `--enemy`**; a `--probe` without it prints a warning naming the empty world,
+  because a combat probe against nothing is a silent no-op. `authsrv.py`
+  standalone is unchanged and still spawns it.
 - **Judge on GEOMETRY, never on the trapezoid count.** FINDINGS 38's mesh went
   from covering the whole rect to covering 62% of it with its edge exactly on an
   authored cell boundary — and the count stayed at 2, in a chunk the same 419

@@ -43,7 +43,7 @@ import checks  # noqa: E402
 # needed it. hold_key earned its own section the hard way -- see the comment in
 # it -- and the camera floor was declared as 67 from a miscount and reddened the
 # run at 65 until it was measured, which is what the floor is for.
-LEDGER = checks.Ledger("harness", floor=66)
+LEDGER = checks.Ledger("harness", floor=76)
 check = checks.adopt_named(LEDGER)
 
 
@@ -207,6 +207,64 @@ def test_game_args():
           and plain["gamesrv"] == specs["gamesrv"][:-4])
 
 
+# ------------------------------------------------------------- no enemy ----
+
+def test_enemy_default():
+    """The harness defaults to a world with no hostile in it.
+
+    Added 2026-08-12, after the standing hostile disrupted a SECOND unrelated
+    test. The chase gate is a real distance test against AGGRO_RANGE = 1200, but
+    content/world.toml puts the enemy 300 units from the player's arrival point
+    with enabled = true, so it engages on every session in every map -- which is
+    behaviourally a hard-coded attack even though the mechanism is not.
+
+    The checks that earn this section are the last three: defaulting the enemy
+    off silently turns every combat probe into a run against an empty world,
+    which is precisely the "the probe did nothing" failure the section above
+    exists for. So the warning must fire, and must NOT fire when the enemy is
+    on -- a warning that appears either way is noise and gets ignored.
+    """
+    check("default appends --no-enemy",
+          session.resolve_enemy([]) == ["--no-enemy"])
+    check("and it survives alongside the caller's own flags, at the end",
+          session.resolve_enemy(["--map", "143"])
+          == ["--map", "143", "--no-enemy"])
+    check("--enemy opts back in and adds nothing",
+          session.resolve_enemy(["--map", "143"], enemy=True)
+          == ["--map", "143"])
+    # Explicit beats implicit and must not be doubled: authsrv parses store_true
+    # so a duplicate is harmless, but a command line that says the same thing
+    # twice is one nobody can read.
+    once = session.resolve_enemy(["--no-enemy", "--map", "143"])
+    check("an explicit --no-enemy is not duplicated",
+          once.count("--no-enemy") == 1)
+    conflict = False
+    try:
+        session.resolve_enemy(["--no-enemy"], enemy=True)
+    except SystemExit:
+        conflict = True
+    check("--enemy against an explicit --no-enemy is REFUSED, not resolved",
+          conflict)
+
+    # End to end: the decision has to reach the gamesrv's real argv, and the
+    # asymmetry the section above pins must survive it.
+    specs = dict((n, a) for n, _h, _p, a in session.server_specs(
+        game_args=session.resolve_enemy(["--map", "143"])))
+    check("--no-enemy reaches the GAMESRV argv",
+          "--no-enemy" in specs["gamesrv"])
+    check("and neither the authsrv nor the webgate gets it",
+          "--no-enemy" not in specs["authsrv"]
+          and "--no-enemy" not in specs["webgate"])
+
+    warn = session.warn_probe_without_enemy(["--probe", "attack_anim"])
+    check("a probe with no hostile WARNS", bool(warn) and "NO HOSTILE" in warn)
+    check("CONTROL: the same probe with --enemy does not",
+          session.warn_probe_without_enemy(["--probe", "attack_anim"],
+                                           enemy=True) is None)
+    check("CONTROL: and a non-probe run is silent either way",
+          session.warn_probe_without_enemy(["--map", "143"]) is None)
+
+
 # ------------------------------------------------------------------ stack ----
 
 def test_stack():
@@ -248,6 +306,7 @@ if __name__ == "__main__":
     test_capture_tail()
     test_preflight_helpers()
     test_game_args()
+    test_enemy_default()
     test_stack()
 
     # --- --game-args must survive a Windows path ------------------------------

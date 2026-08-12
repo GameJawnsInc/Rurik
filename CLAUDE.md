@@ -259,7 +259,21 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   accepted by a UI reader and silently dropped by the raw input path the client
   reads movement through, so the first version held W for 65 seconds into a
   live client that ignored every one of them while the harness reported
-  `held 8.0s of 8.0s` six times. Only the capture could tell the two apart),
+  `held 8.0s of 8.0s` six times. Only the capture could tell the two apart.
+  **And since 2026-08-12 the harness spawns NO HOSTILE unless `--enemy` is
+  passed**, because the standing enemy had wrecked two unrelated tests -- most
+  recently FINDINGS 40's movement session, where it killed the character 10 s in
+  and `hold_key` cut the last two walk legs to 1.50 s of 5 and 4. It is not
+  hard-coded to attack: the chase gate is a real distance test against
+  `AGGRO_RANGE = 1200`, but `content/world.toml` puts it **300 units from the
+  player's arrival point** with `enabled = true`, so it engages in every map on
+  every session, which is the same thing from the outside. `authsrv.py`
+  standalone and `world.toml` are unchanged. The three checks that earn the
+  section are the warning ones: defaulting the enemy off silently turns every
+  combat `--probe` into a run against an empty world, so a probe with no hostile
+  must WARN, and must NOT warn with `--enemy` -- a warning that fires either way
+  is noise. A contradiction (`--enemy` plus an explicit `--no-enemy`) is refused
+  rather than resolved),
   `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_datwrite.py` (the only tool that opens the archive `r+b`,

@@ -109,6 +109,63 @@ def is_labelling(a):
     return "--labelrun" in split_args(getattr(a, "game_args", ""))
 
 
+def resolve_enemy(game_args, enemy=False):
+    """Decide whether the gamesrv spawns the standing hostile. Default: NO.
+
+    THE HARNESS DEFAULTS TO A WORLD WITH NO ENEMY IN IT, and that is a change of
+    behaviour made 2026-08-12 after the hostile disrupted a second unrelated
+    test. What it disrupted the second time was FINDINGS 40's movement session:
+    the walk plan asked for 19 s of held keys, `W:6` and `D:4` completed, the
+    character was killed (`player hit by skill 253: 0/100`, 7 damage events --
+    and it is the ONLY one of that run's four sessions with any damage at all),
+    the client lost the foreground, and `hold_key` cut `S:5` and `A:4` to 1.50 s
+    each. The run's archive result survived because it rested on a control that
+    fired regardless; the movement half simply did not happen.
+
+    IT IS NOT "PROGRAMMED TO ATTACK", and the difference decides the fix. The
+    chase gate at `authsrv.py:1853` is a real distance test against
+    `AGGRO_RANGE = 1200.0`. What makes it unconditional is
+    `content/world.toml [spawn.test_enemy]`: `offset_x = 300.0` from the
+    PLAYER'S ARRIVAL POINT, `enabled = true`. 300 is four times inside the
+    aggro radius, in every map, on every session -- so the behaviour is
+    indistinguishable from a hard-coded attack while the mechanism is not.
+    Moving the offset would have been the other fix and is worse: it would leave
+    a hostile wandering into range on a long run, which is the same surprise
+    later.
+
+    Nothing about `authsrv.py` or `content/world.toml` changes. `authsrv.py`
+    standalone still spawns it, and the combat arc gets it back with `--enemy`.
+
+    Returns the gamesrv arg list. Explicit beats implicit and a contradiction is
+    refused rather than silently resolved.
+    """
+    args = list(game_args)
+    if "--no-enemy" in args:
+        if enemy:
+            raise SystemExit(
+                "--enemy and --game-args '--no-enemy' contradict each other. "
+                "Say it once.")
+        return args                     # already explicit; do not duplicate it
+    if enemy:
+        return args                     # opt in: leave the world as world.toml has it
+    return args + ["--no-enemy"]
+
+
+def warn_probe_without_enemy(game_args, enemy=False):
+    """A probe in a world with no hostile is the silent no-op this rule risks.
+
+    Defaulting the enemy off makes every combat probe a run that quietly
+    measures nothing, which is the exact failure this repository keeps paying
+    for. So say it, loudly, at the top of the run rather than in the report.
+    Returns the message (for a test to assert on) or None.
+    """
+    if enemy or "--probe" not in list(game_args):
+        return None
+    return ("WARNING: a --probe is running in a world with NO HOSTILE. The "
+            "harness now defaults to --no-enemy; pass --enemy if this probe "
+            "is about combat, or this run measures an empty world.")
+
+
 def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                  capture_root=None, auth_host="127.0.0.1",
                  game_host="127.0.0.3", game_args=(), hops=()):
@@ -1151,6 +1208,17 @@ def main():
                          "The discriminating experiment for a transition that never "
                          "dials: make it the FIRST transfer of the session instead of "
                          "the second.")
+    ap.add_argument("--enemy", action="store_true",
+                    help="Spawn the standing hostile. OFF BY DEFAULT since "
+                         "2026-08-12: content/world.toml puts it 300 units from "
+                         "the player's arrival point and AGGRO_RANGE is 1200, so "
+                         "it engages on every session in every map, and it had "
+                         "wrecked two unrelated tests by then -- most recently "
+                         "FINDINGS 40's movement session, where it killed the "
+                         "character 10s in and the last two walk legs were cut "
+                         "short. Combat work wants this flag; map, archive and "
+                         "movement work does not. authsrv.py standalone is "
+                         "unchanged and still spawns it.")
     ap.add_argument("--game-args", default="",
                     help="Extra authsrv flags for the GAMESRV only, space "
                          "separated -- e.g. --game-args '--probe attack_anim' "
@@ -1181,6 +1249,10 @@ def main():
             f"Give the game channel an alias of its own (default 127.0.0.3).")
 
     game_args, hops, order, hosts = split_args(a.game_args), (), (), ()
+    warning = warn_probe_without_enemy(game_args, a.enemy)
+    if warning:
+        print(warning)
+    game_args = resolve_enemy(game_args, a.enemy)
     if a.tape_chain:
         game_args, hops, order, hosts = chain_specs(
             a.tape_chain, split_args(a.game_args), a.game_host, a.tape_chain_from)
