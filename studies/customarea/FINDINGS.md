@@ -5287,3 +5287,113 @@ irrelevant to the archive measurement sitting next to it.*
 3. **One row, one map, one archive copy.**
 4. The relocated content was ArenaNet's own; this says nothing further about
    authored bytes beyond FINDINGS 38.
+
+## 41. OBSERVED: what the compiler actually needs is SEVEN chunks, and FINDINGS 34 named the wrong set (2026-08-12)
+
+**Rung E10a.** FINDINGS 34 read the mandatory input set off the client's
+instructions. This measures it against the client, one removal at a time, and
+the disassembly was wrong in both directions: it missed a chunk that is required
+and listed one that is not. **A Stripped map needs 7 of its 18 chunks to compile
+to a navmesh**, and the mesh is byte-identical to the full map's.
+
+Run 2026-08-12, `vault/research/e10a-minmap-2026-08-12/`, six client sessions.
+Donor row 46197 (18 chunks, 2,951 B), written into map 143's Stripped slot with
+the Bloated stream zeroed — the FINDINGS 36 setup, whose own compile is OBSERVED
+three times over: 8,471 B, Path 419 B, 1 plane, **2 trapezoids**.
+
+**The surgery tool's control**: keeping all 18 chunks reproduces the donor
+byte-identically, so any later difference is the removal and not the tool.
+
+### The runs
+
+| # | chunks | change | outcome |
+|---|---|---|---|
+| 1 | 7 | FINDINGS 34's predicted set | **CRASH** — `deps`, TrnCreate:242 |
+| 2 | 8 | + Terrain Dependencies `0x11000002` | **COMPILES** 7,833 B, Path 419 B, 2 traps |
+| 3 | 7 | − Collision `0x1000000E` | **COMPILES** 7,816 B, Path 419 B, 2 traps |
+| 4 | 6 | − Zones `0x10000003` | **CRASH** — `state->zones`, MapData:660 |
+| 5 | 6 | − Props `0x10000004` | **no crash, NO REBUILD**, `Error: Creating default map` |
+| 6 | 6 | − Path `0x10000008` | **COMPILES** 7,389 B — but **NO MESH** |
+
+### The minimal set, MEASURED
+
+| chunk | bytes | |
+|---|---|---|
+| `0x10000000` Header | 8 | |
+| `0x1000000C` Map Parameters | 41 | |
+| `0x10000004` Props | 12 | hard gate |
+| `0x10000003` Zones | 34 | must precede Terrain |
+| `0x10000002` Terrain | 2,123 | ours since §37 |
+| `0x11000002` Terrain Dependencies | 29 | **§34 missed this** |
+| `0x10000008` Path | 27 | ours since §33 |
+
+**2,274 B of the donor's 2,951.** Everything outside terrain and path is
+**124 bytes**, which is what an authored map has to supply beyond the two chunks
+we can already write.
+
+### Three corrections to FINDINGS 34
+
+1. **`0x11000002` is REQUIRED and was not on the list.** Without the terrain's
+   own Dependencies chunk the builder asserts `deps`.
+2. **Collision `0x1000000E` is NOT required.** The list has it under "required by
+   the surrounding machinery"; removed, the map compiles to the same mesh. Its
+   9-byte stub satisfies `state+0x30` for something the Path builder does not
+   need.
+3. **Order matters, and nothing had said so.** Both crashes fire from inside the
+   TERRAIN bloat handler (`s_chunkInfo[0x02].bloat = 0x00711EC0`; the caller
+   frames resolve to `0x00711F6F` and `0x00711F93`, which bracket §34's
+   `0x00711F72 mov [esi+0x2c],eax`). **Terrain bloat reads `state->zones`**, so
+   Zones must be processed BEFORE Terrain. The donor's file order already does
+   — Props, Zones, Collision, Terrain — and an authored map must too.
+
+### Four failure signatures, and they are all different
+
+This is the part a disassembly could not have given, and each is diagnostic:
+
+* **assert `deps`** — a chunk the terrain builder dereferences is absent.
+* **assert `state->zones`** — a converter-state field its consumer requires.
+  §34 named that struct `state` from assert text and mapped +0x28 to zones by
+  disassembly; the client has now named `state->zones` itself, which is
+  corroboration from the other side.
+* **`Error: Creating default map`, no rebuild, NO CRASH** — the props gate. §34
+  read it as `cmp [ecx+0x24],0 → je return 0`, an early return rather than an
+  assert, and that is exactly what it looks like from outside.
+* **a rebuild with no `0x20000008` at all** — the Stripped Path chunk is the
+  carrier the pipeline is driven from (§33, §34 pass 1). Remove it and the
+  converter still runs and still writes a map; there is simply no mesh in it.
+
+### A trap this run walked into
+
+**Run 5's harness verdict was `RUN VERDICT: PASS`.** The client reached a map and
+put a body in it — the DEFAULT map, because ours would not load. A harness pass
+means the client got somewhere, not that it got where we sent it. The archive is
+the instrument; the verdict is not.
+
+### Method notes
+
+**`mapbuild.gates()` cannot pre-filter a stage 1 map.** Its seventeen rules
+demand `0x2000000C`, `0x20000002` and `0x20000008` and assert every chunk is
+stage 2, so an UNMODIFIED retail Stripped map fails five of them. That is the
+function working correctly on the wrong input. The control caught it before any
+client was spent; trusted, it would have refused every variant here and reported
+nothing.
+
+**The harness captured neither crash dialog** — no `final.png`, no crash text in
+either capture directory. Both were read off the screen by the owner.
+`test_harness.py`'s claim that the crash-dialog capture is the only
+machine-readable evidence an assert leaves is exactly right, and on these two
+runs it produced none. That is a gap in the harness, not in the result, and it
+is why both asserts are recorded here from a transcription.
+
+### What this does NOT establish
+
+1. **Header, Map Parameters and Terrain Dependencies were never removed.** They
+   are in the minimal set because they were never tested out of it, not because
+   a run showed they are required. Three runs would settle it.
+2. **One map, 32x32, one plane.** A larger or multi-plane map may need more.
+3. **"Compiles" is not "is correct".** The 7-chunk variants produce a mesh
+   byte-identical to the full map's, but nothing walked any of them, and a map
+   missing ten chunks is missing textures, sound, environment and light — this
+   says what the COMPILER needs, not what a playable map needs.
+4. **The removals are not independent.** Each run removed from the previous
+   surviving set, so an interaction between two removed chunks would not show.
