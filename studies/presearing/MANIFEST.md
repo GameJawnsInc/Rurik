@@ -2,6 +2,24 @@
 
 *Build 38797. Written 2026-08-06 from five parallel research passes plus one reconciliation pass that re-measured every CLIENT claim against `vault/areatable/full.json` and `vault/research/2026-08-06/*.json`.*
 
+> **REVISION, 2026-08-11 — R0b exists, and every "until R0b" in this document is spent.**
+> The body below is left as written because it is the 2026-08-06 record and §8 already
+> half-caught this. What changed: the vault holds **three keyed live captures** — 22,524
+> GAME_SMSG over twelve connections, 758.0 s, 155 opcodes, twelve of twelve framing clean —
+> so the phrases *"there is no recording"* (§"Why this exists"), *"R0b blocks roughly one
+> third of R4c"* (§893), *"stays at 0 and is reported as blocked until R0b exists"* (§960)
+> and *"returns as a fidelity check only once R0b exists"* (§962) are all discharged.
+> **§8 was right and was righter than it knew**: R4c-2 is not blocked, and beyond the
+> published health and armour it flagged, the *join* is now measured — the definition slot
+> in `WORLD_CREATE_AGENT` field[2] is a stable server-side key across sessions
+> ([studies/reconstruction/FINDINGS.md](../reconstruction/FINDINGS.md) §6.1). What limits
+> R4c-2 today is **corpus coverage — four kills of three species — not the instrument.**
+> Two caveats this document could not have carried: **Reforged Mode is recorded nowhere**
+> and scales enemy health ~20%, so every monster number is base or base × 0.8 with nothing
+> on this machine able to say which (§7.6); and the WIKI figures below still carry the
+> weakness §"Why this exists" admits — they came through search-engine prose rather than
+> page reads and have not been re-derived.
+
 ---
 
 ## Why this exists
