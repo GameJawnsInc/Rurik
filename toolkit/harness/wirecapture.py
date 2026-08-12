@@ -316,7 +316,8 @@ def wall_of(meta, t):
 MARKS_NAME = "marks.jsonl"
 
 
-def write_mark(fh, n, label, wire_t, clock=time.perf_counter, wall=time.time):
+def write_mark(fh, n, label, wire_t, clock=time.perf_counter, wall=time.time,
+               at_wall=None, at_perf=None):
     """One operator mark: the SECOND witness to the wire clock.
 
     Each mark carries three numbers and the redundancy is the design:
@@ -335,10 +336,23 @@ def write_mark(fh, n, label, wire_t, clock=time.perf_counter, wall=time.time):
 
     A single channel would be unchecked, and this project's rule is that a fixture which
     silently resolves to the wrong thing turns every assertion behind it into a no-op.
+
+    A MARK'S TIME IS WHEN IT WAS TAKEN, NOT WHEN IT WAS NOTICED, and `at_wall`/`at_perf`
+    are how a caller says so. The driver picks marks up by POLLING a file and its loop
+    waits 5 s between passes, so a mark stamped at pickup is late by up to five seconds
+    -- coarser than the alignment this whole mechanism exists to provide, and a defect
+    that would have made the first session's marks useless without ever looking wrong.
+    `narrate` records the instant it writes the MARK file and the driver carries that
+    through. `pickup_lag` keeps the latency VISIBLE instead of letting it vanish into
+    the timestamp: a lag near the poll interval on every mark is worth seeing.
     """
-    fh.write(json.dumps({"kind": "mark", "n": n, "label": label,
-                         "wall": wall(), "perf": clock(),
-                         "wire_t": wire_t}) + "\n")
+    w = wall() if at_wall is None else at_wall
+    p = clock() if at_perf is None else at_perf
+    rec = {"kind": "mark", "n": n, "label": label, "wall": w, "perf": p,
+           "wire_t": wire_t}
+    if at_wall is not None:
+        rec["pickup_lag"] = round(wall() - at_wall, 3)
+    fh.write(json.dumps(rec) + "\n")
     fh.flush()
 
 

@@ -943,7 +943,7 @@ def _wait_for_sniff(cap, wire, timeout=25):
     return False
 
 
-def _take_mark(marks_fh, wire, n, label):
+def _take_mark(marks_fh, wire, n, label, at_wall=None, at_perf=None):
     """Write one operator mark, binding this instant to the capture's own clock.
 
     Reads the capture for its last segment `t` rather than sharing state with the
@@ -952,7 +952,8 @@ def _take_mark(marks_fh, wire, n, label):
     """
     if marks_fh is None:
         return
-    wc.write_mark(marks_fh, n, label, wc.last_wire_t(wire))
+    wc.write_mark(marks_fh, n, label, wc.last_wire_t(wire),
+                  at_wall=at_wall, at_perf=at_perf)
 
 
 def _hold(client, ring, wire, minutes, cap=None, stop_file=None,
@@ -996,17 +997,26 @@ def _hold(client, ring, wire, minutes, cap=None, stop_file=None,
         # from any shell stamps this instant into marks.jsonl, and the file's contents
         # become the label. Deleted after reading so the next one is a fresh edge.
         if mark_file and os.path.exists(mark_file):
+            label, at_wall, at_perf = "mark", None, None
             try:
                 with open(mark_file, encoding="utf-8", errors="replace") as fh:
-                    label = fh.read().strip() or "mark"
-            except OSError:
-                label = "mark"
+                    parts = fh.read().splitlines()
+                label = (parts[0].strip() or "mark")
+                # THE INSTANT THE OPERATOR ACTED, not the instant we noticed. This loop
+                # polls every 5 s, so stamping at pickup is late by up to that much --
+                # coarser than the binding is for. narrate() writes both clocks into the
+                # file; a hand-written `echo label > MARK` has neither and falls back.
+                if len(parts) >= 3:
+                    at_wall, at_perf = float(parts[1]), float(parts[2])
+            except (OSError, ValueError, IndexError):
+                pass
             try:
                 os.remove(mark_file)
             except OSError:
                 pass
             marks += 1
-            _take_mark(marks_fh, wire, marks, label)
+            _take_mark(marks_fh, wire, marks, label,
+                       at_wall=at_wall, at_perf=at_perf)
             print(f"\n  mark {marks}: {label}", flush=True)
         if cap is not None and cap.poll() is not None:
             print(f"\n  *** THE OFF-WIRE CAPTURE DIED (exit {cap.poll()}) -- nothing is "
