@@ -114,10 +114,20 @@ class Refused(SystemExit):
 def guard_target(path):
     """Refuse the two archives this project may never write to.
 
-    `datwrite` already refuses `C:\\gw`; this repeats it rather than relying on
-    it, because the message a person needs is about WHICH archive they pointed
-    at, and adds `dat_study` -- the pristine snapshot every other copy is cut
-    from. Losing it means re-extracting from the owner's install.
+    `datwrite` refuses both too; this repeats them rather than relying on it,
+    because the message a person needs is about WHICH archive they pointed at,
+    and because refusing early means the plan never runs on a path the write
+    would reject.
+
+    *This docstring used to say datwrite refused `C:\\gw` and that this "adds"
+    `dat_study`. The second half was false for two days: `datwrite.guard()`
+    tested only the live install, and datwrite is the tool that opens the
+    archive `r+b`, so the gap sat in front of the only write path in the repo
+    while this sentence said it was covered. Closed 2026-08-12 by
+    `datwrite.guard_source()`, which is on `Writer.__init__` rather than in
+    `guard()` because `revert()` shares `guard()` and reverting is the one
+    legitimate write to `dat_study`. `test_datwrite.py` section 0b pins all
+    three facts.*
     """
     full = os.path.normcase(os.path.abspath(path))
     parts = full.replace("\\", "/").split("/")

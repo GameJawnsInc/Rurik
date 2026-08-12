@@ -67,7 +67,11 @@ HDR_CRC = 0x0C          # offset of the crc within the 32-byte file header
 
 
 def guard(path):
-    """Never the live install. Not a warning; a refusal."""
+    """Never the live install. Not a warning; a refusal.
+
+    Shared with `revert()`, which is exactly why `dat_study` is not here -- see
+    `guard_source`.
+    """
     p = os.path.normcase(os.path.abspath(path))
     if p == LIVE_INSTALL or p.startswith(LIVE_INSTALL + os.sep):
         raise SystemExit(
@@ -76,6 +80,40 @@ def guard(path):
             f"That install is read-only to this project. Point --dat at the "
             f"run-dir or study copy under vault/.")
     return p
+
+
+def guard_source(path):
+    """Never the pristine snapshot either. NEW edits only.
+
+    `vault/dat_study` is the archive every other copy is cut from, and losing it
+    means re-extracting from the owner's own install. `rebloat.guard_target()`
+    has refused it since that tool existed, and its docstring says it "adds
+    dat_study" to what datwrite refuses -- which was never true. This module is
+    the one that opens the archive `r+b`, so the gap sat in front of the only
+    write path there is. Found 2026-08-12 by an adversarial review of rung E3's
+    runsheet, which had told a future operator the check existed.
+
+    It is deliberately NOT in `guard()`, and that distinction is the design:
+    `guard()` is also what `revert()` calls, and replaying a journal is the ONE
+    legitimate write to `dat_study` -- it is how this mistake gets undone. A
+    blanket refusal would close the recovery door behind the accident.
+
+    Worth stating because no checksum catches it: `--replace` fixes the entry
+    crc and the MFT self-crc as it goes, so a mutated snapshot passes
+    `--verify`, passes `datcheck`, and reads as healthy everywhere.
+    """
+    parts = os.path.normcase(os.path.abspath(path)).replace("\\", "/").split("/")
+    if "dat_study" in parts:
+        raise SystemExit(
+            f"Refusing to write to {path}\n"
+            f"  vault/dat_study is the SOURCE snapshot every other copy is cut "
+            f"from, and nothing in this repo can put it back -- losing it means "
+            f"re-extracting from the owner's install.\n"
+            f"  Point --dat at a copy under vault/run/ or vault/dat_*/ that you "
+            f"can throw away.\n"
+            f"  (--revert is still allowed there: undoing a mistaken write is "
+            f"the one thing that should be.)")
+    return path
 
 
 def row_offset(ar, row):
@@ -138,10 +176,16 @@ class Journal:
 
 
 class Writer:
-    """An open archive plus the journal of what has been done to it."""
+    """An open archive plus the journal of what has been done to it.
+
+    Constructing one is the statement of intent to write, so both refusals live
+    here. `revert()` calls `guard()` directly and deliberately does not come
+    through this constructor -- see `guard_source`.
+    """
 
     def __init__(self, path, journal_path):
         guard(path)
+        guard_source(path)
         self.path = path
         self.ar = Archive(path)
         self.fh = open(path, "r+b")

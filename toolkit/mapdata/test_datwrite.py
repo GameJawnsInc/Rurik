@@ -61,13 +61,14 @@ from archive import Archive, ENTRY_SIZE  # noqa: E402
 import datwrite  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR: the thirty-one checks below, every one of which runs unconditionally --
+# FLOOR: the thirty-four checks below, every one of which runs unconditionally --
 # the fixture is built by this file, so there is no corpus to be missing and no
 # section that can legitimately not run. Measured from a green run on
-# 2026-08-10. Anything under this means a section stopped executing, and on a
-# file whose defects all present as silent success that is exactly the report we
-# must not accept.
-LEDGER = checks.Ledger("dat writer", floor=31)
+# 2026-08-10, and again on 2026-08-12 when section 0b took it from 31 to 34.
+# Anything under this means a section stopped executing, and on a file whose
+# defects all present as silent success that is exactly the report we must not
+# accept.
+LEDGER = checks.Ledger("dat writer", floor=34)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -239,6 +240,52 @@ def sections(tmp):
         except SystemExit:
             refused = True
         check(refused, f"guard({victim!r}) refuses the live install")
+
+    print("\n0b. and the SOURCE snapshot is refused on the write path")
+    # Added 2026-08-12. `rebloat.guard_target()` had refused vault/dat_study
+    # since it existed and its docstring claimed datwrite did too; datwrite did
+    # not, and datwrite is the tool that opens the archive r+b. No checksum
+    # catches the mistake -- --replace fixes the entry crc and the MFT self-crc
+    # as it goes, so a mutated snapshot verifies clean forever.
+    study_dir = os.path.join(tmp, "vault", "dat_study")
+    os.makedirs(study_dir, exist_ok=True)
+    study = os.path.join(study_dir, "Gw.dat")
+    build_archive(study)
+    try:
+        datwrite.Writer(study, os.path.join(tmp, "guard.journal.json")).close()
+        refused = False
+    except SystemExit:
+        refused = True
+    check(refused, "Writer() refuses a path under vault/dat_study")
+
+    # The positive control. A guard that refuses everything protects nothing,
+    # because the tool never runs.
+    ordinary = os.path.join(tmp, "ordinary.dat")
+    build_archive(ordinary)
+    try:
+        datwrite.Writer(ordinary,
+                        os.path.join(tmp, "ok.journal.json")).close()
+        allowed = True
+    except SystemExit:
+        allowed = False
+    check(allowed, "CONTROL: an ordinary copy is still allowed")
+
+    # The design point, and the check that catches the obvious wrong fix.
+    # `revert()` shares `guard()`, and replaying a journal is the ONE
+    # legitimate write to dat_study -- it is how the mistake above gets undone.
+    # Moving the refusal into guard() would pass both checks above and close the
+    # recovery door behind the accident.
+    empty = os.path.join(tmp, "empty.journal.json")
+    with open(empty, "w") as fh:
+        json.dump({"dat": study, "mft_offset": MFT_OFF, "edits": []}, fh)
+    try:
+        with quiet():
+            code = datwrite.revert(empty)
+    except SystemExit:
+        code = -1
+    check(code == 0,
+          "but --revert on dat_study is STILL allowed -- the refusal is on "
+          "Writer(), not in guard(), which revert shares")
 
     print("\n1. the fixture is a real archive (or nothing below measures anything)")
     dat, _payloads = fresh(tmp, "fixture.dat")
