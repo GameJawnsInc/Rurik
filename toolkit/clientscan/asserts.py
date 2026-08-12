@@ -377,9 +377,30 @@ class Asserts:
         return out
 
     def modules(self):
+        """Every source FILE that asserts, keyed by its full path.
+
+        KEYED BY PATH, NOT BY BASENAME, and that is a fix rather than a taste.
+        Until 2026-08-11 this grouped on `a.module` -- the basename without its
+        extension -- and the printer showed `mods[m][0].file`, i.e. whichever of
+        the colliding files happened to have the lowest VA. So two source files
+        sharing a name merged into ONE line carrying their SUMMED count under
+        ONE of the two paths, and the other file did not appear in the census at
+        all.
+
+        That is not hypothetical. `Engine\\Map\\Props\\PrApi.cpp` (19 sites) was
+        invisible behind `Gw\\Pref\\PrApi.cpp` (67), printed as a single
+        `86  P:\\Code\\Gw\\Pref\\PrApi.cpp`, while the whole Props subsystem was
+        being censused. Three basenames collide in build 38797 -- `CmpIo.h`,
+        `OsInput.cpp` and `PrApi.cpp` -- and only the last spans two directories,
+        so it is the only one that can hide a module.
+
+        `by_module()` deliberately still matches on either, because `--file
+        PrApi` wanting both is a reasonable thing to want; what it must not do
+        is hide that it matched two. The CLI prints the distinct paths.
+        """
         out = {}
         for a in self.items:
-            out.setdefault(a.module, []).append(a)
+            out.setdefault(a.file, []).append(a)
         return out
 
     def by_module(self, name):
@@ -475,7 +496,7 @@ def main():
     if a.modules:
         mods = az.modules()
         for m in sorted(mods, key=lambda k: -len(mods[k])):
-            print(f"{len(mods[m]):5}  {mods[m][0].file}")
+            print(f"{len(mods[m]):5}  {m}")
         return 0
 
     if a.callers:
@@ -492,6 +513,16 @@ def main():
         hits = az.near(int(a.at, 0), a.span)
     elif a.file:
         hits = az.by_module(a.file)
+        # SAY WHEN A NAME MATCHED MORE THAN ONE FILE. `--file PrApi` legitimately
+        # returns both `Engine\Map\Props\PrApi.cpp` and `Gw\Pref\PrApi.cpp`, and
+        # a reader who does not know that reads 86 sites as one module's. The
+        # merge is what hid the Props subsystem from a census on 2026-08-11.
+        matched = sorted({h.file for h in hits})
+        if len(matched) > 1:
+            print(f"NOTE: '{a.file}' matched {len(matched)} DISTINCT source "
+                  f"files; the counts below are their sum:")
+            for m in matched:
+                print(f"        {sum(1 for h in hits if h.file == m):5}  {m}")
     elif a.grep:
         hits = az.grep(a.grep)
     else:

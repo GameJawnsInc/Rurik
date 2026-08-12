@@ -104,8 +104,12 @@ EXE_BYTES = 10_483_904
 # because `asserts.py` is stdlib on purpose, so its shared-tail under-count is
 # catchable on a bare machine -- and it is the one that silently narrows every
 # `--in <module>` range on the capstone side.
-FLOOR_WITH_CAPSTONE = 56
-FLOOR_STDLIB_ONLY = 16
+#
+# And again on 2026-08-11 with §8, +6 on BOTH floors because that section takes
+# no disassembler either: `--modules` was merging two source files that share a
+# basename, which is upstream of every module-scoped search this file makes.
+FLOOR_WITH_CAPSTONE = 62
+FLOOR_STDLIB_ONLY = 22
 
 LEDGER = checks.Ledger(
     "codescan vs studies/enemy §6q",
@@ -433,6 +437,64 @@ def section_7(exe, img):
            "ExeArchive's upper bound is a recovered site (was 0x0047CE29)")
 
 
+def section_8(exe):
+    """`--modules` must not merge two source files that share a basename.
+
+    STDLIB ONLY, like the rest of the `asserts.py` half -- no disassembler.
+
+    THE DEFECT THIS PINS, found 2026-08-11 while censusing the Props subsystem
+    for studies/monsterai §3.10.1. `Asserts.modules()` grouped on the BASENAME
+    without extension and the CLI printed `mods[m][0].file`, i.e. whichever
+    colliding file had the lowest VA. So `Engine\\Map\\Props\\PrApi.cpp` (19
+    sites) vanished behind `Gw\\Pref\\PrApi.cpp` (67) as a single line reading
+    `86  P:\\Code\\Gw\\Pref\\PrApi.cpp` -- a summed count under the wrong path,
+    with one whole module absent from the census.
+
+    That is the same shape as §7's three under-reporting defects and belongs
+    beside them: a confident, wrong, quiet answer. `--modules` is how this
+    project decides what source files EXIST, so a merge there is upstream of
+    every module-scoped search that follows, including `codescan.py --in`.
+    """
+    from asserts import Asserts
+    az = Asserts(exe)
+    mods = az.modules()
+
+    check(all("\\" in k for k in mods),
+          "modules() keys on the FULL PATH, not the basename",
+          f"{len(mods)} keys, sample {sorted(mods)[0]!r} -- a basename key is "
+          "the defect: two directories' files merge under one of them")
+
+    bases = {}
+    for k in mods:
+        bases.setdefault(k.rsplit("\\", 1)[-1], []).append(k)
+    collide = {b: v for b, v in bases.items() if len(v) > 1}
+    check(bool(collide),
+          "the image really does contain colliding basenames, so this can fail",
+          f"{sorted(collide)} -- if this ever goes empty the check below is "
+          "vacuous and must be re-grounded, not deleted")
+
+    # The named case, pinned by VALUE so a regression cannot pass by shape.
+    props = [k for k in mods if k.endswith("\\Props\\PrApi.cpp")]
+    pref = [k for k in mods if k.endswith("\\Pref\\PrApi.cpp")]
+    check(len(props) == 1 and len(pref) == 1,
+          "both PrApi.cpp files appear in the census under their own paths",
+          f"Props {props}, Pref {pref}")
+    if props and pref:
+        eq((len(mods[props[0]]), len(mods[pref[0]])), (19, 67),
+           "and each carries its own count rather than their sum (86)")
+
+    # every Engine\Map\Props file is visible -- the census the defect broke
+    n_props = sum(1 for k in mods if "\\Engine\\Map\\Props\\" in k)
+    eq(n_props, 7, "all seven Engine\\Map\\Props source files are censused")
+
+    # by_module still unions on purpose; what it must not do is do it silently
+    both = {h.file for h in az.by_module("prapi")}
+    check(len(both) == 2,
+          "by_module('prapi') still returns BOTH, which is the wanted behaviour",
+          f"{sorted(both)} -- the CLI prints the split; a caller that wants one "
+          "file must say which, and codescan.py --in inherits the union")
+
+
 def main():
     # The build guard. `pinned` is stdlib -- `CS.find_exe` is literally
     # `pinned.find` -- so which client we are reading gets said out loud even on a
@@ -455,6 +517,7 @@ def main():
     section_5(img, lo, hi)
     section_6(img)
     section_7(exe, img)
+    section_8(exe)
 
     return LEDGER.verdict()
 
