@@ -880,6 +880,17 @@ def run_client(a, outdir):
     acct = accounts.for_target(a.auth_host, getattr(a, "account", None))
     args += accounts.login_args(acct)
     print(f"account: {accounts.describe(acct)}")
+    # Same passthrough and the SAME refusal as drive_client, deliberately not
+    # imported-and-trusted: this file already keeps its own copy of the launch
+    # gate three lines below, for the reason stated there.
+    for extra in (getattr(a, "client_arg", None) or []):
+        if extra.split("=", 1)[0].lower() in dc.FORBIDDEN_CLIENT_ARGS:
+            raise SystemExit(
+                f"--client-arg {extra!r} is refused: it decides where the client "
+                f"points, which is the cage's job. See FORBIDDEN_CLIENT_ARGS.")
+        args.append(extra)
+    if getattr(a, "client_arg", None):
+        print(f"extra client flags: {' '.join(a.client_arg)}")
     host = dc.assert_safe(a.exe, args)
     # Both launch sites run the gate independently rather than one trusting the other.
     # A guard that only guards one of two doors is the shape of the defect it is here
@@ -1092,6 +1103,14 @@ def main():
                          "the game channel, so anything about the world lives "
                          "there; the authsrv gets none of it. Without this the "
                          "one-command loop could not run a probe at all.")
+    ap.add_argument("--client-arg", action="append", metavar="FLAG",
+                    help="Extra flag for the CLIENT, repeatable -- the other "
+                         "side of --game-args, which reaches only the server. "
+                         "Write it with an equals sign, `--client-arg=-perf`, "
+                         "or argparse eats the leading dash as an option of its "
+                         "own. -perf draws triangles, fps and transfer rate in "
+                         "the top-right corner. Flags that decide where the "
+                         "client points are REFUSED.")
     a = ap.parse_args()
 
     if not dc.is_loopback(a.auth_host):

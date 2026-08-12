@@ -3085,6 +3085,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
     rec = Recorder(vault, conn_id)
     print(f"[c{conn_id}] connect from {addr[0]}:{addr[1]}", flush=True)
     rec.event("connect", peer=f"{addr[0]}:{addr[1]}")
+    # Bound BEFORE the try so the end-of-connection summaries in `finally` can
+    # always read it. It is re-bound below once the handshake completes; this
+    # binding exists only so a connection that dies during the handshake does
+    # not turn the summary into a NameError inside a finally block.
+    state = {}
     try:
         sock.settimeout(30)
 
@@ -4574,15 +4579,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         # closed politely.
         print(f"[c{conn_id}] done, {total} encrypted bytes recorded"
               f"{' -- ENDED ON DESYNC, see above' if desynced else ''}", flush=True)
-        # D9(a)'s tally, once, where the operator will actually read it. A
-        # per-message print buries the log; a per-session line is a real number.
-        report_unhandled(state, conn_id, rec)
-        report_ping(state, conn_id, rec)
         rec.event("disconnect", total_bytes=total, desynced=desynced)
     except (ConnectionError, socket.timeout, OSError) as ex:
         print(f"[c{conn_id}] {type(ex).__name__}: {ex}", flush=True)
         rec.event("error", error=repr(ex))
     finally:
+        # THE SUMMARIES RUN IN `finally`, AND THAT IS THE WHOLE POINT.
+        # They sat after the read loop inside the `try` for one day and never
+        # once executed: the loop exits by ConnectionResetError, because the
+        # harness kills the client, so control jumps to `except` and skips
+        # them. MEASURED 2026-08-11 -- a 45 s loopback run recorded 7
+        # `unhandled` events and 10 clean ping round trips and wrote ZERO
+        # summary records. The tallies were correct, the reporting was
+        # unreachable, and every offline test passed because it called these
+        # functions directly rather than asking whether anything calls them.
+        # That is the D9(a) defect exactly, one file over: a number the server
+        # knows and the operator never sees.
+        report_unhandled(state, conn_id, rec)
+        report_ping(state, conn_id, rec)
         rec.close()
         try:
             sock.close()
