@@ -326,10 +326,19 @@ def scan_text(text, path, modules):
     return [best[k] for k in sorted(best)]
 
 
+# `.claude` holds this repo's WORKTREES, each a full checkout of the same documents.
+# Walking into it from the main checkout counts every study doc once per worktree --
+# measured 2026-08-12 at 809 citations across 98 files against a true 136 across 17,
+# with 81 of those files living under `.claude/worktrees/`. The failure is worse than
+# a wrong number: it is tree-dependent, so the suite passed from inside a worktree and
+# went red the moment the same commit was checked out on `main`, which is the exact
+# drift `CLAUDE.md` warns about under "establish which tree you are actually in".
+SKIP_DIRS = (".git", ".claude", "__pycache__", "vault", "node_modules", ".venv")
+
+
 def markdown_files(root):
     for dirpath, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs
-                   if d not in (".git", "__pycache__", "vault", "node_modules")]
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for f in sorted(files):
             if f.endswith(".md"):
                 yield os.path.join(dirpath, f)

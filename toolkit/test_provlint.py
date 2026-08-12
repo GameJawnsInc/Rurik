@@ -49,8 +49,10 @@ sys.path.insert(0, HERE)
 import checks  # noqa: E402
 import provlint  # noqa: E402
 
-# 18, from a real green run on 2026-08-12 after the ruling was refined.
-LEDGER = checks.Ledger("provlint", floor=18)
+# 19, from a real green run on 2026-08-12: 18 after the ruling was refined, plus the
+# nested-worktree check added when this file went red on `main` at a commit it had
+# passed at from inside a worktree.
+LEDGER = checks.Ledger("provlint", floor=19)
 
 ROOT = os.path.dirname(HERE)
 
@@ -207,11 +209,26 @@ def main():
     print("\n5. the tree itself")
     found, modules = provlint.scan_tree(ROOT)
     n_md = len(list(provlint.markdown_files(ROOT)))
-    # 38 on 2026-08-12. The guard is against the walk matching nothing, which is how
+    # 39 on 2026-08-12. The guard is against the walk matching nothing, which is how
     # `test_codec.py` printed ALL CHECKS PASSED over an empty fixture glob -- so this
     # is set below the real count, not at it.
     LEDGER.ok(n_md >= 30, "the whole tree of markdown is read, not a sample",
               f"{n_md} files")
+
+    # ...and an UPPER bound, because the other failure is reading the tree several
+    # times over. `.claude/` holds this repo's worktrees, each a full checkout of the
+    # same documents; the first version walked into them and, from the main checkout,
+    # reported 809 citations across 98 files against a true 136 across 17. It passed
+    # from inside a worktree and went red on `main` at the same commit -- so the check
+    # that matters is not the count but that NO counted file sits under a skipped
+    # directory, which is tree-independent.
+    nested = [p for p in (os.path.relpath(f, ROOT)
+                          for f in provlint.markdown_files(ROOT))
+              if any(part in provlint.SKIP_DIRS for part in p.split(os.sep))]
+    LEDGER.ok(not nested,
+              "and no file is read from a nested worktree, vault or venv",
+              f"NESTED: {nested[:4]} ({len(nested)} total)" if nested
+              else f"{', '.join(provlint.SKIP_DIRS)} all skipped")
     LEDGER.ok(len(modules) >= 100,
               "and pass 1 built a real module vocabulary from it",
               f"{len(modules)} names")
