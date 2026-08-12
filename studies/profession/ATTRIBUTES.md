@@ -28,16 +28,17 @@ Corpus: `vault/client/2026-07-29_221c13772c7a/Gw.exe` (build 38797), the cross-c
 > **one-byte** attribute field at row `+0x29`, and by nothing softer. Everything between 51
 > and 255 is a patch, not a wall.
 >
-> **Cost: 64 same-length literal edits, 97 displacement edits, and two data relocations** —
+> **Cost: 64 same-length literal edits, 127 tail-reference edits, and two data relocations** —
 > the 51×20 definition table (which has **zero** bytes of in-place slack) and the 51-entry
-> pointer array (which has **at most 7 slots**). **161 edits in total, every one same-length.**
+> pointer array (which has **at most 7 slots**). **191 edits, every one same-length.**
 >
-> **Or ~11 function detours instead**, which trades 161 edits for a resident DLL. §2.4.
+> **Or ~11 function detours instead**, which trades 191 edits for a resident DLL. §2.4.
 >
-> *The displacement figure shipped as "≥ 116, census NOT closed" — the one estimate in this
-> document. It is now a count: **97**, on both builds, with the second call level adding
-> zero. The floor was an **over**count, because it filtered by a marker that 27 unrelated
-> structures also carry. §14.*
+> *The tail figure shipped as "≥ 116, census NOT closed" — the one estimate in this document.
+> Closing it took two attempts. The first produced **97** and declared the census closed; that
+> was **wrong**, and the document's own floor was the better number. The tail is reached
+> through **two** encodings, and 97 counts only one of them. The count across both is
+> **127**, and §14 says plainly which encodings are enumerated and which are not.*
 
 **MEASURED, this pass.** The ceiling is a field width. The skill row's attribute id is read
 as a byte — `cmp byte ptr [eax + 0x29], 0x33` at `0x008CAB27`, with the register-widened
@@ -61,7 +62,7 @@ table, `delta = 4100` and the per-character record goes from `0x43C` (1,084 B) t
 | **A** | The row count / bound literal `0x33` | **21** | → `N` | **Yes** — all `imm8`/`imm32` in place |
 | **B** | The array's byte size (`0x3FC`) and dword count (`0xFF`) | **5** | → `20N`, `5N−1` | **Yes** |
 | **C** | The record stride `0x43C` | **26** | → `0x43C + delta` | **Yes** — 19 are `imul r32, r/m32, imm32` |
-| **D** | Tail-field displacements into `[0x400, 0x43C)` | **97** | `± delta` | **Yes at every site. CENSUS CLOSED — §14** |
+| **D** | Tail-field references, **two encodings** | **127** = 97 direct + 25 biased + 5 bias immediates | `± delta` | **Yes at every site. §14 — two encodings closed, others not enumerated** |
 | **E** | The 51-entry pointer array `0x00C0EEC0`–`0x00C0EF8C` | **7** | bounds + base | Yes, but **≤ 7 spare slots** in place |
 | **F** | The 51×20 definition table at `0x00A35740` | **5** displacements | repoint | **Table must MOVE — 0 bytes of slack** |
 
@@ -85,10 +86,16 @@ outside it** — the reverse-walk destructor's `imul esi, edi, 0x43c` at `0x0082
 carry a field at `+0x43C`; nineteen of them cluster in `[0x0043B000, 0x0043D000)` alone.
 A patcher driven by "every `0x43C` in `.text`" corrupts 27 innocent sites. §4.3.
 
-**D — the tail. This shipped as the one floor in the table; it is now a closed count of 97**
-— 93 in-cluster across 18 functions plus 4 in `0x0081A410`, which receives the record as an
-argument and therefore carries no marker at all. Identical on both builds; the second call
-level adds zero. Method, blind spots and reproduce steps in **§14**; §2.3 is the layout.
+**D — the tail, reached through TWO encodings and counted at 127.** This shipped as the one
+floor in the table (`≥ 116`). A first attempt counted **97** direct `disp32` references — 93
+in-cluster over 18 functions plus 4 in `0x0081A410`, which receives the record as an argument
+and so carries no marker at all — and **wrongly declared the census closed**. It counts one
+encoding. The other biases a pointer into the tail (`add reg, 0x428`) and then accesses at
+*negative* displacements, which no `[0x400, 0x43C)` scan can see: **5 bias immediates + 25
+biased accesses**. `+0x41C` and `+0x430` are written by the zero-initialiser and appear in
+neither the 97 nor any direct form — which is how the second encoding was found rather than
+assumed. **The document's own floor was the better number.** Method, the closure check, and
+the remaining blind spots in **§14**; §2.3 is the layout.
 
 **E — the pointer array is nearly full.** The iterator at `0x005A9210` encodes the array's
 capacity as **two absolute addresses**, `mov edx, 0xc0eec0` at `0x005A9222` and
@@ -851,97 +858,107 @@ innocent sites.
 
 ---
 
-## 14. The displacement census, closed
+## 14. The tail census — closed for two encodings, and a correction to this section
 
-§1.1 class D shipped as **"≥ 116 displacement edits whose census is NOT closed"** — a floor,
-and the only number in this document that was not a count. It is now a count: **97 sites
-across 19 functions**, reproduced identically on both builds.
+§1.1 class D shipped as **"≥ 116 tail edits whose census is NOT closed"** — the one estimate
+in a document otherwise made of counts. Closing it took two attempts, and **the first was
+wrong in a way worth keeping on the record**, because it is this arc's recurring failure
+committed by the person who had just written the warning against it.
 
-### The result
+### 14.1 The first attempt, and why 97 was the wrong answer
 
-| | Build 38797 | Build 2026-04-30 |
+A scan for memory operands with a displacement in `[0x400, 0x43C)` and a base register,
+decoded from trusted boundaries with each function bounded by the next known entry, gives a
+very stable number: **97 sites over 19 functions — 93 in the `ChCliAttrib` cluster plus 4 in
+`0x0081A410` — identical on build 38797 and on 2026-04-30**, with a second call-graph hop
+adding zero. Total such sites in `.text` is 274; the other 177 belong to unrelated structures.
+
+That number is correct and it is **not the census.** It counts **one encoding**. §2.3 already
+recorded the other and named two instances (`0x00823DA0`, `0x00818EB0`), and the first attempt
+declared closure without testing against them. The test it should have run is the one §2.3
+supplies for free: **`+0x41C` and `+0x430` are fields the zero-initialiser demonstrably
+writes, and neither appears among the 97.** Two absent fields, in a set claimed to be
+complete.
+
+### 14.2 The second encoding: a biased pointer
+
+`0x00823DA0` is the shape. It computes `imul esi, edi, 0x43c`, then **`add esi, 0x428`** to
+bias the pointer into the tail, then adds the record base — and every subsequent field access
+reads at a *negative* displacement from that biased pointer (`mov ecx, [esi - 0x440]`,
+`lea esi, [esi - 0x43c]` to walk backwards a record at a time). **A `[0x400, 0x43C)`
+displacement scan cannot see any of it**: the bias is an arithmetic immediate rather than a
+memory displacement, and the accesses land at `-0x4xx`.
+
+Measured across the 43 record-touching functions (the cluster, every function carrying an
+`imul`-by-`0x43C`, and `0x0081A410`):
+
+| Form | Sites | Example |
 |---|---|---|
-| In-cluster sites | **93** across 18 functions | **93** across 19 functions |
-| Called-by-cluster sites | **4** in `0x0081A410` | **4** in 1 function |
-| **Attribute-related total** | **97** | **97** |
-| Second call level adds | **0** | **0** |
-| All `[0x400,0x43C)` sites in `.text` | 274 over 110 functions | 274 over 111 functions |
-| Of which belong to **unrelated structures** | **177** | **177** |
+| Direct, `disp32` in `[0x400, 0x43C)` | **97** | §14.1 |
+| **Bias-establishing** `add reg, imm` with imm in the tail range | **5** | `0x00818EC1` `+0x408` · `0x00819199` `+0x428` · `0x00819926` `+0x410` · `0x0081A2D0` `+0x424` · `0x00823DB8` `+0x428` |
+| **Biased accesses** at negative displacement near `−0x43C` | **25** | `0x00818EDD` `[eax−0x43c]` … `0x00818F23` `[eax−0x424]`; `0x00818846`–`0x0081886A` in the shifter |
+| **Total tail references to patch** | **127** | |
 
-**The floor was an overcount, not an undercount.** 116 was reached by including sites whose
-containing function merely carries a `0x43C` literal — and §1.1 class C already establishes
-that 27 of the 53 anchor-decoding `0x43C` sites belong to unrelated structures. Filtering by
-that marker inherits the false positives.
+The five bias immediates are themselves edits: each encodes a tail offset and must move with
+`delta`. And `0x00818EB0`'s writes to `[eax−0x430]` and `[eax−0x424]` are exactly the
+`+0x41C`/`+0x430` fields that were missing from the 97 — the blind spot closing on the
+evidence that revealed it.
 
-**The closure signal is the second call level adding zero.** Extending reachability one more
-hop from the `ChCliAttrib` cluster finds no further function with a tail-range displacement.
-The set does not keep growing when the net widens, which is the only evidence that a census is
-finished rather than merely tiring.
+**So the document's original floor was the better number.** "≥ 116" was right; "97, closed"
+was wrong; the count across both encodings is **127**.
 
-`0x0081A410` is the one site outside the cluster and it is unambiguous: it computes
-`lea eax,[eax+eax*4]` / `lea edx,[esi+eax*4]` — the ×20 element stride on a record base in
-`esi` — and then reads and writes `[esi + 0x434]`, one of the six tail fields. It carries
-neither a `0x43C` stride nor a `0x33` bound, because it **receives** the record pointer as an
-argument. **A marker-keyed census cannot see it**, which is §12's lesson arriving a second
-time in the same document.
+### 14.3 What is closed, what is not
 
-### The method, and why the first two attempts were wrong
+**Closed:** the two encodings above, over the 43 record-touching functions, on both builds.
 
-Three runs produced three different totals — **155, then 258, then 274** — before the method
-was sound. All three agreed on **93 + 4 = 97** attribute-related sites throughout, which is
-the reason the answer is trustworthy even though the totals were not: the classification was
-stable exactly where the global count was unstable.
+**Not closed, and stated rather than implied:**
 
-The instability was **function extent**. Decoding a function "until `ret`" runs past every
-function with a tail call, an interior jump table or a `noreturn` end, straight into the
-neighbour — inflating the total by double-counting the neighbour's sites. The fix is to bound
-each function's decode by **the next known entry**:
-
-1. Collect trusted entries: every direct `call rel32` target (14,574) plus every
-   `int3 int3` + prologue boundary — **17,900 entries**.
-2. Decode each `[entry, next_entry)`, stopping at `int3`. Never linearly from a section start
-   (§Method warning), and never past the next entry.
-3. Keep memory operands whose displacement lies in `[0x400, 0x43C)` **with a base register** —
-   an absolute `[disp32]` in that numeric range is not a record access.
-4. Classify by locality and call-graph, **not by marker**.
-
-The cluster itself is located **structurally, never by address**: the 19
-`imul r32, r/m32, 0x43C` sites are found by byte pattern, and the densest 8 KB window holding
-18 of them is the cluster. That yields `[0x818000, 0x81A000)` on 38797 and
-`[0x812000, 0x814000)` on 2026-04-30, with the single outlier at `0x00823DB2` and
-`0x0081D9A2` respectively — matching §1.1's independently-derived outliers on both builds.
-**A guessed range gave a confident zero**, which is worth recording: an early run assumed the
-old build's cluster sat at `0x816000` and reported 0 attribute sites, a wrong answer that
-looks exactly like a finding.
-
-### What this census still cannot see
-
-Stated because a closed census with an unstated blind spot is worse than an open one:
-
+- **Other encodings.** Two were found because §2.3 named them. A third idiom — a bias held in
+  a stack slot, an index folded into a `lea` scale, a `memcpy` of a sub-range — would be
+  invisible to both scans above. There is no positive evidence of one; there was no positive
+  evidence of the second either, until someone checked the two fields that did not appear.
 - **Indirect calls.** A function reached only through a vtable or function pointer, receiving
-  the record as an argument, appears in neither the in-cluster nor the called-by-cluster set.
-  This is the same blindness `codescan --xrefs` documents. Nothing in the traced code suggests
-  the attribute record travels that way, but that is an absence of evidence.
-- **The entry set is heuristic.** 17,900 entries from call targets and `int3`-delimited
-  prologues. A function reached only indirectly has no entry, so its sites are attributed to
-  the preceding function or dropped.
-- **Both are bounded by the same fact:** 177 of the 274 sites belong to unrelated structures,
-  so any missed site would have to be inside a function that touches the attribute record and
-  is invisible to both the cluster range and the direct call graph.
+  the record as an argument, is in neither the cluster nor the direct call graph. Same
+  blindness `codescan --xrefs` documents.
+- **The entry set is heuristic** — 17,900 entries from `call rel32` targets plus
+  `int3`-delimited prologues.
 
-### Reproduce
+**The check that would test closure, and it is the one that worked:** enumerate the tail
+fields the zero-initialiser writes, and require every one to appear in the census. Two were
+missing and that found the second encoding. **Re-run that check after any future addition to
+the count**, because it is the only assertion here the artifact can refute.
 
-Byte-pattern location, bounded extents, no linear sweep, no guessed ranges:
+### 14.4 Method, and three wrong totals before it was sound
+
+The direct-encoding scan produced **155, then 258, then 274** before the method held. All
+three agreed on **93 + 4 = 97**, which is why that sub-count is trustworthy even though the
+totals were not — the classification was stable exactly where the global count was not.
+
+The instability was **function extent**: decoding "until `ret`" runs past any function with a
+tail call or an interior jump straight into its neighbour, double-counting. The fix is to
+bound each decode by the **next known entry**.
+
+The cluster is located **structurally, never by address**: find the 19 `imul r32, r/m32,
+0x43C` sites by byte pattern, take the densest 8 KB window holding 18 of them. That yields
+`[0x818000, 0x81A000)` on 38797 and `[0x812000, 0x814000)` on 2026-04-30, with outliers
+`0x00823DB2` and `0x0081D9A2` — matching §1.1's independently derived outliers on both builds.
+**A guessed range gave a confident zero:** an early run assumed the old build's cluster sat at
+`0x816000` and reported 0 attribute sites, a wrong answer shaped exactly like a finding.
+
+### 14.5 Reproduce
 
 ```
-EXE="$(python -c "import sys; sys.path.insert(0,'toolkit'); import vaultpath; \
-      print(vaultpath.vault_path('client','2026-07-29_221c13772c7a','Gw.exe'))")"
+EXE="$(python -c "import sys; sys.path.insert(0,'toolkit'); import vaultpath;       print(vaultpath.vault_path('client','2026-07-29_221c13772c7a','Gw.exe'))")"
 ```
 
-1. Find the 19 `imul` stride sites by searching `.text` for the imm32 `3c 04 00 00` and
-   anchor-decoding 2–3 bytes back; keep decodings that end exactly on the immediate.
-2. Take the densest 8 KB window over those sites as the cluster.
-3. Build the entry set from `call rel32` targets plus `cc cc` + prologue matches.
-4. Decode each `[entry, next_entry)` with `capstone` in detail mode; collect memory operands
-   with `0x400 <= disp < 0x43C` and a non-zero base register.
-5. Partition: in-cluster, called-by-cluster, other. **Expect 93 / 4 / 177.**
+1. Find the 19 `imul` stride sites: search `.text` for imm32 `3c 04 00 00`, anchor-decode 2–3
+   bytes back, keep decodings ending exactly on the immediate.
+2. Cluster = densest 8 KB window over those sites.
+3. Entries = `call rel32` targets + `cc cc` + prologue matches. Decode each
+   `[entry, next_entry)` in `capstone` detail mode.
+4. **Encoding 1:** memory operands, `0x400 <= disp < 0x43C`, non-zero base. Expect
+   **93 / 4 / 177** (cluster / called-by-cluster / unrelated).
+5. **Encoding 2:** over record-touching functions only — `add|sub|lea reg, imm` with imm in
+   the tail range (**5**), and memory operands with `-0x460 < disp < -0x3F0` (**25**).
+6. **The closure check:** every tail field the zero-initialiser at `0x00818EB0` writes must
+   appear somewhere in 4 or 5. `+0x41C` and `+0x430` failing this is what exposed encoding 2.
