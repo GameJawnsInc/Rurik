@@ -157,6 +157,9 @@ SEEN_NAME = "smsgsweep-seen.txt"
 # the run ending: a crash belongs to a window of opcodes, never to one, so it cannot
 # retire a row.
 MEASURED = ("REPLIED", "UNDECODABLE", "CONTESTED", "SILENT")
+# What a single-suspect crash is filed as, once the dialog has been read.
+# ASSERTED is a guard ArenaNet wrote; FAULTED is the absence of one.
+CRASH_KINDS = ("ASSERTED", "FAULTED", "CRASHED")
 
 
 def degenerate(codec, opcode, channel="GAME_SMSG"):
@@ -196,6 +199,38 @@ def degenerate(codec, opcode, channel="GAME_SMSG"):
     return vals
 
 
+def set_type(codec, opcode, idx, channel="GAME_SMSG"):
+    """The declared type of an opcode's 1-based field `idx`, header excluded."""
+    fields = [f for f in codec.fields_for(channel, opcode)
+              if f["type"] != "msg_header"]
+    if not 1 <= idx <= len(fields):
+        raise ValueError(f"0x{opcode:04X} has {len(fields)} field(s); {idx} is outside "
+                         f"1..{len(fields)}")
+    return fields[idx - 1]["type"]
+
+
+def check_sets(codec, opcodes, sets, channel="GAME_SMSG"):
+    """Refuse a --set that means a DIFFERENT field in different opcodes.
+
+    A field index is not a field. `--set 1=1` across the ten opcodes whose first field is
+    an `agent_id` is one experiment; across a mixed plan it is ten unrelated ones sharing
+    a report, and the SILENT rows would be attributed to a change that never happened in
+    them. So the index must name the same declared type in every opcode planned, and the
+    refusal names the disagreement rather than dropping the odd one out.
+    """
+    for idx in sorted(sets or ()):
+        kinds = {}
+        for opcode in opcodes:
+            kinds.setdefault(set_type(codec, opcode, idx), []).append(opcode)
+        if len(kinds) > 1:
+            raise ValueError(
+                f"--set {idx}= names a different field in different opcodes: "
+                + "; ".join(f"{t} in {' '.join('0x%04X' % o for o in v[:6])}"
+                            for t, v in sorted(kinds.items()))
+                + ". A field index is not a field -- plan them separately.")
+    return True
+
+
 def apply_set(values, sets):
     """Override individual fields by 1-based index: `--set 5=1`.
 
@@ -210,8 +245,12 @@ def apply_set(values, sets):
     for idx, val in (sets or {}).items():
         if not 1 <= idx <= len(out):
             raise ValueError(f"field {idx} is outside this opcode's 1..{len(out)}")
-        out[idx - 1] = type(out[idx - 1])(val) if isinstance(out[idx - 1], (int, float)) \
-            else out[idx - 1]
+        cur = out[idx - 1]
+        if isinstance(cur, bool) or not isinstance(cur, (int, float)):
+            raise ValueError(
+                f"field {idx} holds {type(cur).__name__}, and --set only writes numbers. "
+                f"A string16 gate wants a real encoded string, not a number cast to one.")
+        out[idx - 1] = type(cur)(val)
     return out
 
 
@@ -583,9 +622,11 @@ def record(result, ledger=None):
     if crash and len(crash.get("suspects") or []) == 1:
         key = f"0x{crash['suspects'][0]:04X}"
         if key not in ledger:
-            ledger[key] = {"effect": "ASSERTED", "replies": [], "contested": [],
+            kind = result.get("crash_kind") or "ASSERTED"
+            ledger[key] = {"effect": kind, "replies": [], "contested": [],
                            "undecodable": [],
-                           "why": crash["why"], "capture": result["capture"]}
+                           "why": result.get("crash_detail") or crash["why"],
+                           "capture": result["capture"]}
             added += 1
     return ledger, added
 
@@ -647,6 +688,31 @@ def observed_from_live():
             "the 155 ArenaNet has already shown us, and the run would look bigger "
             "rather than broken.")
     return seen, dirs
+
+
+def crash_kind(report_json):
+    """(kind, detail) from the crash dialog the harness captured beside this report.
+
+    ASSERT and FAULT ARE DIFFERENT RESULTS and conflating them cost a wrong paragraph in
+    `studies/smsgsweep/FINDINGS.md`. An assert is a guard ArenaNet WROTE -- it names the
+    condition that had to hold. An access violation is the absence of one: the handler
+    dereferenced something the payload chose and nobody checked it. Three opcodes were
+    reported as "assert text not captured" when their dialogs said `Exception: c0000005`
+    the whole time; the reader only ever grepped for the word Assertion, so a whole class
+    of result was invisible by construction.
+    """
+    dlg = os.path.join(os.path.dirname(report_json), "crash-dialog.txt")
+    if not os.path.isfile(dlg):
+        return None, None
+    with open(dlg, encoding="utf-8", errors="replace") as fh:
+        text = fh.read()
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("Assertion:"):
+            return "ASSERTED", line.split(":", 1)[1].strip()
+        if line.startswith("Exception:"):
+            return "FAULTED", line.split(":", 1)[1].strip()
+    return "CRASHED", "dialog captured, neither an assert nor an exception line in it"
 
 
 def capture_from_report(report_json):
@@ -720,9 +786,12 @@ def print_run(result):
                  f"({c['socket_closed'] - c['alive_until']:.1f}s later)"
                  if c["socket_closed"] else "") + ".")
         if len(s) == 1:
+            k = result.get("crash_kind")
+            if k:
+                print(f"  {k}: {result.get('crash_detail')}")
             print(f"  SUSPECT: 0x{s[0]:04X} -- ALONE. The client answered a ping after "
                   f"the send before it and missed the ping behind it, and it reads the "
-                  f"stream in order. Recorded as ASSERTED.")
+                  f"stream in order. Recorded as {k or 'ASSERTED'}.")
         elif s:
             print(f"  SUSPECTS: {len(s)} opcode(s) sent between the last proof of life "
                   f"and the missed beat -- {' '.join('0x%04X' % o for o in s)}")
@@ -837,6 +906,9 @@ def main():
                          settle=p.get("settle", a.settle),
                          control=p.get("control", a.control),
                          planned=[r["opcode"] for r in p.get("rows", [])])
+        if a.from_report:
+            kind, detail = crash_kind(a.from_report)
+            result["crash_kind"], result["crash_detail"] = kind, detail
         rc = print_run(result)
         if a.record and rc == 0:
             try:
@@ -870,6 +942,12 @@ def main():
               "opcode in the plan, which means a different field in each.",
               file=sys.stderr)
         return 2
+    if sets:
+        try:
+            check_sets(codec, sorted(only), sets)
+        except ValueError as exc:
+            print(f"REFUSED: {exc}", file=sys.stderr)
+            return 2
     try:
         p = plan(codec, seen, _classify(), done=done, table_less=a.table_less,
                  settle=a.settle, control=a.control, dwell=a.dwell, limit=a.limit,

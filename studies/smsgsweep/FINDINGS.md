@@ -10,7 +10,8 @@ measurement. Method and every refusal: `toolkit/authsrv/smsgsweep.py`. Readout c
 | | count | of |
 |---|---|---|
 | measured | **89** | 487 catalogued |
-| ASSERTED — stops the client | **20** | |
+| ASSERTED — a guard the client wrote caught it | **17** | |
+| FAULTED — access violation, no guard at all | **3** | |
 | REPLIED — client answered | **1** | |
 | SILENT | 68 | |
 | remaining to plan | 237 | of the 324 never-seen |
@@ -45,7 +46,7 @@ dword is a relocated absolute operand, `0xbf4440` → `0xc24440`. With that delt
 frames resolve to `0x00804668` and `0x00807dd5`: the return addresses inside `0x0017`'s
 own handler and its callee. **The client's own stack names the opcode.**
 
-## 2. The twenty that stop the client
+## 2. The twenty that stop the client — seventeen asserts and three faults
 
 Each localised to ONE opcode. **The constraint is ours; ArenaNet's assert text stays in
 the vault** (`vault/captures/harness/*/crash-dialog.txt`), per `CLAUDE.md`'s provenance
@@ -63,7 +64,7 @@ boundary — a derived table may carry the constraint and must leave the express
 | `0x0096` | at least one of two mission-completion flag bits must be set; zero sets neither | a **completion-flag mask** |
 | `0x0097` | the value selects a switch arm and zero is not one of them | a **closed enum** |
 | `0x009D` | no agent exists for the id sent | an **agent id** |
-| `0x005F` `0x0060` `0x006F` | crash localised, **assert text NOT read** — see §4 | — |
+| `0x005F` `0x0060` `0x006F` | no assert at all — the client takes an **access violation** | an unguarded dereference |
 
 `0x0038`–`0x003B` are four consecutive opcodes sharing one constraint, which is the
 strongest structural hint in the table: a family of four attribute messages.
@@ -83,9 +84,14 @@ One run with the plan reordered settles it. Do not quote this as a binding until
   id is indistinguishable here from one that does nothing. It is NOT evidence of a
   missing handler: all 477 receive-table entries carry a non-null dispatch pointer
   (`toolkit/clientscan/test_msghandler.py`).
-* **Three asserts have no text.** `0x005F`, `0x0060`, `0x006F` are localised to one opcode
-  each by the same method as the rest, but their dialogs were captured without the detail
-  pane expanded, so the constraint is unknown. The crash is real; the readout missed it.
+* **CORRECTED 2026-08-12, and the first version of this line was wrong.** It said the
+  dialogs for `0x005F`, `0x0060` and `0x006F` had been captured with the detail pane
+  collapsed. They had not — all three say `Exception: c0000005`, an access violation, and
+  had done from the moment they were written. The reader only ever grepped for the word
+  Assertion, so a whole class of result was invisible by construction and got explained
+  away as a capture failure. **An assert and a fault are different findings**: an assert
+  names a condition ArenaNet chose to check, a fault means nobody checked. The readout
+  classifies both now (`smsgsweep.crash_kind`).
 * **One state, one map.** Every reading is a level-1 character standing in one map with
   nothing in progress — no party, no quest, no trade, no combat (`--no-enemy`; see §5).
   An opcode silent here may not be silent mid-mission.
@@ -114,10 +120,33 @@ the assert was near `0x0012`, seventy-eight sends earlier.
 Localisation is a measured property, not a constant: at ArenaNet's 5.000 s ping cadence a
 crash names twelve opcodes. `authsrv --ping-seconds 0.5` with a dwell of 0.8 names one.
 
+## 5b. The zero-branch pass — the agent_id family
+
+The gate for every opcode whose FIRST field is an `agent_id`, tested by re-sending it with
+that field set to the player's live agent id and nothing else changed. Nine opcodes:
+
+| result | opcodes | reading |
+|---|---|---|
+| **gate was the agent id** — now SILENT | `0x0038` `0x0039` `0x003A` `0x003B` `0x006F` `0x009D` | the whole crash was the missing agent |
+| **a SECOND gate behind it** | `0x0083` (bag index still 0), `0x009E` (its string16 still empty), `0x005F` (still faults) | field 1 was necessary, not sufficient |
+
+Six of nine gates closed with one value. **The prediction was half right and both halves
+are worth keeping:** `0x009D` was predicted to stop asserting and did; the four
+`attribState` opcodes were predicted to keep asserting on their still-zero attribute id
+and did NOT — so the attribute state is reached THROUGH the agent, not looked up beside
+it. That is a structural fact the assert text alone did not give.
+
+`--set` refuses an index whose declared type differs across the planned opcodes, because a
+field index is not a field: `--set 1=1` over these nine is one experiment, and over a
+mixed plan it would be nine unrelated ones sharing a report.
+
 ## 6. Next
 
-1. **The zero-branch pass.** Every ASSERTED row is a gate. `--only <op> --set N=1` walks
-   the other side, one field at a time. `0x0017` is done; nineteen to go.
+1. **Finish the zero-branch pass.** Done: `0x0017` (field 5), and the nine-opcode
+   `agent_id` family in §5b. Left: the `string16` gates (`0x0033` `0x0060` `0x0097`
+   `0x009E`) need a REAL encoded string, which `--set` deliberately will not fake; the
+   file-id gates (`0x0019` `0x00A8`); `0x0096`'s flag mask; `0x0072` (`--set 2=`, its
+   agent_id is field 2); and the three faults.
 2. **Reorder the plan** so `0x0000` is not first, and settle §3.
 3. **Recover the three missing asserts** — re-send `0x005F`, `0x0060`, `0x006F` and expand
    the dialog's detail pane before reading it.
