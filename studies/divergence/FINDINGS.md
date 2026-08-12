@@ -716,9 +716,9 @@ our own world tick contaminating the channel.
    protocol gap and the one that unblocks safe agent-id reuse.
 3. **`0x0048` after every `0x006E` — small.** 130/130 in both directions; our 18 existing
    `0x006E` sends are incomplete on that evidence. One line at the existing send site.
-4. **The `0x000C`/`0x000D` ping loop — small.** A 5 s timer, one 2-byte send, one
-   `0x000D` with the measured RTT, and a handler for `GAME_CMSG 0x8009` that does nothing
-   but does it *loudly*. ~~Also give the game dispatch chain an `else` (D9(a)) so
+4. ✅ **DONE 2026-08-11. The `0x000C`/`0x000D` ping loop — small.** A 5 s timer, one
+   2-byte send, one `0x000D` with the measured RTT, and a handler for `GAME_CMSG 0x8009`
+   that does nothing but does it *loudly*. ~~Also give the game dispatch chain an `else` (D9(a)) so
    unhandled-but-known stops being invisible.~~ **The `else` half is DONE (2026-08-11,
    both chains) — so `0x8009` is already loud on its first arrival and counted after,
    which is most of what "does nothing loudly" was asking for.** What remains here is the
