@@ -170,7 +170,7 @@ MEASURED = ("REPLIED", "UNDECODABLE", "CONTESTED", "SILENT")
 CRASH_KINDS = ("ASSERTED", "FAULTED", "CRASHED", "DROPPED_CHANNEL")
 
 
-def degenerate(codec, opcode, channel="GAME_SMSG"):
+def degenerate(codec, opcode, channel="GAME_SMSG", encstring=None):
     """A zeroed value for every field the codec says this opcode has.
 
     Read the field list from the CODEC, never from `schema/messages.json`: overrides
@@ -193,7 +193,7 @@ def degenerate(codec, opcode, channel="GAME_SMSG"):
         elif t == "blob":
             vals.append(b"\x00" * length)
         elif t == "string16":
-            vals.append("")
+            vals.append(encstring if encstring is not None else "")
         elif t in ("array8", "array16", "array32"):
             vals.append([])
         elif t == "nested_struct":
@@ -205,6 +205,51 @@ def degenerate(codec, opcode, channel="GAME_SMSG"):
             raise ValueError(f"0x{opcode:04X} has field type {t!r}, which this builder "
                              f"does not know how to zero. Refusing to guess a value.")
     return vals
+
+
+def corpus_encstring():
+    """The SHORTEST real encoded string in the live corpus, read at run time.
+
+    PROVENANCE. This is ArenaNet's authored text, so it is never written into a source
+    file, a test or a commit -- it is read from the owner's own captures when the plan is
+    built, lands in the vault's plan JSON and in the vault's capture, and nothing else.
+    Same pattern `mapbuild.py` uses for FINDINGS 14's mandatory chunks: commit the code
+    that fetches it, never the bytes.
+
+    Shortest, because the experiment is about the FORMAT gate and a long string drags in
+    whatever else its contents reference. Measured over the corpus: `string16` splits
+    cleanly into plain names (0x01DE) and encoded strings (0x0049, 0x004C, 0x0050,
+    0x007A), whose first code unit is never below 0x09C4 in 105 samples.
+    """
+    import tape
+    root = vaultpath.require_dir("captures", "live",
+                                 why="a real encoded string to test the format gate")
+    codec, best = Codec(), None
+    ENCODED = (0x0049, 0x004C, 0x0050, 0x007A)
+    for name in sorted(os.listdir(root)):
+        d = os.path.join(root, name)
+        if not os.path.isdir(d) or not any(f.startswith("game-")
+                                           for f in os.listdir(d)):
+            continue
+        for ch in tape.channel_files(d):
+            try:
+                _i, ev = tape.load_tape(d, connection=ch["connection"])
+                msgs, _r = tape.decode_all(ev, codec, "GAME_SMSG")
+            except Exception:
+                continue
+            for _t, op, vals in msgs:
+                if op not in ENCODED:
+                    continue
+                for f, v in zip([x for x in codec.fields_for("GAME_SMSG", op)
+                                 if x["type"] != "msg_header"], vals):
+                    if f["type"] == "string16" and isinstance(v, str) and v:
+                        if best is None or len(v) < len(best):
+                            best = v
+    if best is None:
+        raise ValueError("no encoded string found in the live corpus; refusing to "
+                         "invent one, because the whole question is what the client "
+                         "accepts and a guess would answer it wrong in both directions")
+    return best
 
 
 def set_type(codec, opcode, idx, channel="GAME_SMSG"):
@@ -279,13 +324,13 @@ def apply_set(values, sets):
     return out
 
 
-def encodable(codec, channel="GAME_SMSG"):
+def encodable(codec, channel="GAME_SMSG", encstring=None):
     """{opcode: values} for every opcode that encodes. Refusals are returned, not hidden."""
     good, refused = {}, {}
     for key in codec.channels[channel]["messages"]:
         opcode = int(key)
         try:
-            vals = degenerate(codec, opcode, channel)
+            vals = degenerate(codec, opcode, channel, encstring)
             codec.encode(channel, opcode, list(vals))
         except Exception as exc:                      # a refusal is a result
             refused[opcode] = f"{type(exc).__name__}: {exc}"
@@ -315,7 +360,7 @@ def check_table_less(classified, schema_opcodes):
 
 def plan(codec, seen=(), classified=None, done=(), table_less=False,
          settle=SETTLE, control=CONTROL, dwell=DWELL, limit=0, only=None,
-         sets=None, reverse=False):
+         sets=None, reverse=False, encstring=None):
     """The ordered send list: never-seen opcodes first, each with its prediction.
 
     `seen` is the set observed from ArenaNet -- excluded, because the point is the third
@@ -329,7 +374,7 @@ def plan(codec, seen=(), classified=None, done=(), table_less=False,
     the only thing in the plan. They are not part of the 324 and one of them ended the
     pilot at step 12.
     """
-    good, refused = encodable(codec)
+    good, refused = encodable(codec, encstring=encstring)
     check_table_less(classified, [int(k) for k in codec.channels["GAME_SMSG"]["messages"]])
     seen, done = set(seen), set(done)
     rows, skipped = [], {"seen": 0, "done": 0, "table_less": 0, "not_only": 0}
@@ -382,6 +427,7 @@ def plan(codec, seen=(), classified=None, done=(), table_less=False,
             "control": control,
             "dwell": dwell,
             "table_less": bool(table_less),
+            "encstring": encstring,
             "predicted": bool(classified),
             "note": "degenerate (all-zero) payloads; a handler that early-outs on a "
                     "zero id is indistinguishable here from one that does nothing"}
@@ -989,6 +1035,10 @@ def main():
     ap.add_argument("--write-seen", action="store_true",
                     help="recompute the observed set from the live tapes and write it "
                          "to the vault, then exit")
+    ap.add_argument("--encstring", action="store_true",
+                    help="fill every string16 field with a REAL encoded string read "
+                         "from the live corpus at plan time, instead of an empty one. "
+                         "Tests whether the format gate is the whole gate")
     ap.add_argument("--reverse", action="store_true",
                     help="send the plan in descending order. The control for 0x0000, "
                          "which is otherwise always the first message of every sweep")
@@ -1096,7 +1146,8 @@ def main():
     try:
         p = plan(codec, seen, _classify(), done=done, table_less=a.table_less,
                  settle=a.settle, control=a.control, dwell=a.dwell, limit=a.limit,
-                 only=only, sets=sets, reverse=a.reverse)
+                 only=only, sets=sets, reverse=a.reverse,
+                 encstring=corpus_encstring() if a.encstring else None)
     except ValueError as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2

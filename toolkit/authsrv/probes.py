@@ -1744,7 +1744,8 @@ def _smsgsweep_steps(a, o, dwell=0.4):
     for i, row in enumerate(p["rows"], 1):
         opcode = row["opcode"]
         try:
-            values = smsgsweep.apply_set(smsgsweep.degenerate(codec, opcode),
+            values = smsgsweep.apply_set(smsgsweep.degenerate(codec, opcode,
+                                        encstring=p.get("encstring")),
                                         {int(k): v for k, v in
                                          (p.get("set") or {}).items()})
         except ValueError:

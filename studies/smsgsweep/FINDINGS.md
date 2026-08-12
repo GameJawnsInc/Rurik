@@ -210,9 +210,38 @@ are empty. `0x0017` posts `0x100000be` through the same door. So a slice of the 
 table is a thin shim over one client-side event bus, and the `0x1000xxxx` space is its id
 range — which is a structural fact about the client, not about any one message.
 
+## 3.4 Four opcodes NAMED — and the readout's blind spot, demonstrated
+
+Feeding a real encoded string from the corpus (read at run time, never committed) into
+the seven string-gated opcodes opened four of them: `0x0033`, `0x009E`, `0x00B9`, `0x00C0`
+went from ASSERTED to SILENT. **They were not silent.** Re-run one per run with
+`--shots 2`, each produced an obvious and DIFFERENT visible effect:
+
+| opcode | what the client did | evidence |
+|---|---|---|
+| `0x0033` | opened a window whose own title bar reads **Message of the Day**, body = our string | the client's own words, so this is a NAME and not an inference |
+| `0x009E` | printed a **chat line** in Local, `sender: body`, both filled from our string — matching its `agent_id, string16, byte, string16` layout | chat panel |
+| `0x00B9` | placed a **framed, closable callout** in the world with our string in it | box + close button, anchored in 3D |
+| `0x00C0` | placed **unframed floating text** in the world — no box, no control | bare label |
+
+`0x00B9` and `0x00C0` both put text in the world and are told apart by the frame; neither
+is given a formal name here because the client never spelled one out.
+
+**THE BLIND SPOT IS NOW MEASURED, NOT HYPOTHETICAL.** `SILENT` has always meant *the
+client sent no c2s message*, and §4 said so — but four of four opcodes tested with a
+meaningful payload changed the screen while the wire stayed quiet. A UI update produces
+no network traffic, so the instrument cannot see it **by construction**. The 239 SILENT
+rows are a statement about the wire and nothing else, and an unknown fraction of them did
+something a person watching would have seen.
+
+That is also the cheapest remaining upgrade to this whole apparatus: `--shots` plus one
+opcode per run turns SILENT rows into named behaviour, and it needs no new decoding.
+
 ## 4. What this does not establish
 
-* **68 SILENT means silent on an all-zero payload.** A handler that early-outs on a zero
+* **SILENT MEANS NO c2s REPLY. IT DOES NOT MEAN NOTHING HAPPENED** — see §3.4, where
+  four of four opcodes scored SILENT were opening windows and printing chat.
+* **235 SILENT means silent on an all-zero payload.** A handler that early-outs on a zero
   id is indistinguishable here from one that does nothing. It is NOT evidence of a
   missing handler: all 477 receive-table entries carry a non-null dispatch pointer
   (`toolkit/clientscan/test_msghandler.py`).
