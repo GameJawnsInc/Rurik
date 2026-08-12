@@ -1707,7 +1707,61 @@ def _prop66_sweep_steps(agent_id):
     return steps
 
 
+def _smsgsweep_steps(a, o, dwell=0.4):
+    """One step per planned opcode: the loopback half of the never-seen sweep.
+
+    Unlike every other probe here the steps are NOT seconds apart for a human to watch.
+    The readout is the capture, not the screen -- `smsgsweep.analyse` attributes each
+    c2s reply by IDENTITY against a measured idle floor of {0x0008, 0x0009}, so the
+    dwell only has to exceed the client's reaction time, not a person's. 0.4 s over 324
+    opcodes is about two minutes.
+
+    An empty plan is a REFUSAL rather than an empty run: a probe that sends nothing and
+    prints "complete" is exactly the shape of a green run that measured nothing.
+    """
+    import smsgsweep
+    p = smsgsweep.load_plan()
+    if not p or not p.get("rows"):
+        return [Step(0.0, 0x0000, [], "NO PLAN -- run smsgsweep.py --plan first",
+                     "nothing was sent; this run measures nothing")]
+    codec = _sweep_codec()
+    steps = []
+    for i, row in enumerate(p["rows"], 1):
+        opcode = row["opcode"]
+        try:
+            values = smsgsweep.degenerate(codec, opcode)
+        except ValueError as exc:
+            continue                       # recorded in the plan's `refused` already
+        steps.append(Step(dwell, opcode, values,
+                          f"[{i}/{len(p['rows'])}] 0x{opcode:04X} "
+                          f"({row.get('predicted', '?')})",
+                          "any c2s that is not 0x0008/0x0009 is a reply to this"))
+    return steps
+
+
+def _sweep_codec():
+    from codec import Codec
+    return Codec()
+
+
 PROBES = {
+    "smsgsweep": lambda a, o: Probe(
+        question="Of the GAME_SMSG opcodes ArenaNet has never sent us, which ones does "
+                 "the client visibly act on -- and which of those answer back?",
+        predicts="EVERY planned opcode reaches a handler: all 477 receive-table entries "
+                 "carry a non-null dispatch pointer (msghandler.py --classify), so a "
+                 "silent row is a fact about the all-zero payload or the readout, NEVER "
+                 "about reachability. Most will be silent for exactly that reason -- a "
+                 "handler that early-outs on a zero id looks identical to one that does "
+                 "nothing. The result worth having is a REPLY: the client sending a c2s "
+                 "message names the request a panel makes, which is the binding a live "
+                 "session would otherwise have to go and discover. A crash is also a "
+                 "result, because the assert names a source file and a bound.",
+        steps=_smsgsweep_steps(a, o),
+        note="Loopback only -- both endpoints ours, ours-DH client, cage verified. "
+             "Score the run with `smsgsweep.py --analyse <the server's capture jsonl>`; "
+             "attribution is by opcode identity against a measured idle floor of "
+             "{0x0008, 0x0009}, not by timing."),
     "agent_removal": lambda a, o: Probe(
         question="Does GAME_SMSG 0x0021 remove an agent the client is already "
                  "drawing, and is its id then safe to reuse?",
