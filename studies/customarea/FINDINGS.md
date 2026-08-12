@@ -5499,3 +5499,112 @@ search, with a control that the ordering test fails on a reversed finally.
    would satisfy the same gates.
 3. The `missing`/`corrupt` distinction is measured on four chunks, not
    systematically — it is a lead about the loader's vocabulary, not a rule.
+
+## 43. OBSERVED: the retail client compiled a map we ASSEMBLED — rung E10 (2026-08-12)
+
+**The arc's destination.** A whole Stripped map built from typed parameters —
+**97.69% of its bytes generated**, 54 borrowed across three named chunks — went
+into the archive with its Bloated stream zeroed, and the retail client compiled
+it into a navmesh that follows the ground we wrote. All four predictions, all
+recorded before arming, passed.
+
+And it cost one failure that was worth more than the success: **the Stripped
+Path chunk's boundary point is a flood SEED, and it must stand on walkable
+ground.**
+
+Run 2026-08-12, `vault/research/e10-authored-2026-08-12/`.
+
+### What was assembled
+
+Seven chunks, FINDINGS 42's measured requirement, in the donor's own order.
+
+| chunk | bytes | origin |
+|---|---|---|
+| `0x10000000` Header | 8 | borrowed |
+| `0x1000000C` Map Parameters | 41 | **generated** — `mapbuild.encode_map_parameters` |
+| `0x10000004` Props | 12 | borrowed (§34's hard gate) |
+| `0x10000003` Zones | 34 | borrowed |
+| `0x10000002` Terrain | 2,188 | **generated** — `StrippedTerrain.build` from a height field |
+| `0x11000002` Terrain Dependencies | 29 | **generated** from 4 file ids read at run time |
+| `0x10000008` Path | 27 | **generated** |
+
+**2,400 B. GENERATED 2,285 (97.69%), BORROWED 54 (2.31%).** The three borrowed
+chunks are read from the owner's archive at run time and never stored in this
+repo — `mapbuild.py`'s pattern for FINDINGS 14's five, and the builder refuses
+(`NoConstants`) without an archive.
+
+**The dependency chunk is generated and lands byte-identical to the donor's**,
+built by `mapchunks.encode_dependencies` from the four ids `[17246, 23369,
+22972, 22269]` read at run time. Ids are measurements and CLAUDE.md's ruling
+permits them; the bytes are ours.
+
+Two of FINDINGS 42's rules are obeyed by construction rather than by luck: Zones
+precedes Terrain, and the rect is DERIVED as `dims * 96.0` so
+`dims.x * XY_DIST == mapRect.x1 - mapRect.x0` holds.
+
+### The failure, and what it taught
+
+The first build put the Path chunk's single boundary point at the rect's corner,
+`(0, 0)`. The client asserted:
+
+```
+Assertion: segments->Count()          PathData:365
+```
+
+Zero segments for the decomposition. The height field was FINDINGS 38's, which
+had already compiled — so the terrain was not the difference. Diffing our four
+generated chunks against the donor's semantically found it:
+
+| | donor | ours |
+|---|---|---|
+| Terrain Dependencies | 4 ids | **byte-identical** |
+| Map Parameters | `-0.0` origin, real UUID | `0.0`, zero UUID, **same flags** |
+| **Path boundary** | **(1472.0, 1564.0)** | **(0.0, 0.0)** |
+
+The donor's point is in its walkable interior. Ours was at a corner which, on
+this height field, is **inside the sawtooth and unwalkable**. Moving it to
+(2112, 1536) — in the flat half, nothing else changed — compiled.
+
+**So the boundary point is a seed for the flood, and seeding it on unwalkable
+ground produces no segments at all.** FINDINGS 34 read pass 2's callees as
+seed/flood/contour and labelled that INFERRED from call structure; this is the
+first observation of the seed behaving like one. It is also a hard authoring
+rule, and it is not discoverable from the corpus: every retail map's point is
+already somewhere sensible.
+
+*This does not overturn FINDINGS 33.* That section showed the boundary is
+CARRIED into the Bloated chunk rather than compiled from, and that one point
+suffices — both still hold. What is new is that the point is also USED, and
+where it sits matters.
+
+### The result
+
+`Gw.log`: the re-bloat line and nothing else — no error, no assert.
+
+| | predicted | observed |
+|---|---|---|
+| **P1** no crash, map rebuilt | — | **7,814 B, 7 chunks** |
+| **P2** our height field, exactly | 1,024/1,024 | **1,024/1,024** |
+| **P3** a Path chunk exists | yes | **419 B, 1 plane, 2 trapezoids** |
+| **P4** mesh confined to the flat half | `x < 1152` under 5% | **0.0%**, extent **1152..3072** |
+
+The mesh is the same one FINDINGS 38 produced — 419 B, 2 trapezoids, extent
+1152..3072, walkable area 5,898,240 — but from a map this repository assembled
+rather than from an edit of ArenaNet's file.
+
+### What this does NOT establish
+
+1. **54 bytes are still theirs**, and one of them is the props chunk that
+   satisfies §34's hard gate. **No map here has authored props**, so nothing has
+   been placed in a world we built, and the props record format remains
+   unread (342 distinct sizes over 349 maps).
+2. **Nothing walked it.** The character spawns at (1536, 1536), inside the flat
+   half by design. The mesh's edge at 1152 is a fact about the emitted chunk.
+3. **32x32, one plane, one run**, and the map has no textures, sound,
+   environment or light — this is what the COMPILER accepts, not a playable map.
+4. **The seed reading is one observation.** A corner seed on a map whose corner
+   is walkable was not tried, so "unwalkable seed" rather than "corner seed" is
+   the better-supported of the two readings but not the only one.
+5. The `-0.0` vs `0.0` rect origin and the zero UUID differ from the donor's and
+   were NOT isolated; they rode along in both the failing and succeeding builds,
+   so neither is implicated and neither is cleared.
