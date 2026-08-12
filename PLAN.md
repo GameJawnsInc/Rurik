@@ -1765,8 +1765,22 @@ parallel, with one safety change that is not optional — see its entry.
     In the order they are worth doing:
     **(a)** Split E1's result — it shrank the boundary polygon, the trapezoid and the DAG
     together, so which one the client reads is open. Two more 33-byte edits settle it.
-    **(b)** Two trapezoids and a portal, which is the first geometry `PathChunk.minimal`
-    cannot express and the first that needs the DAG to mean something.
+    **(b)** ✅ **Two trapezoids DONE** (§27, ArenaNet's own two-trapezoid plane walked in
+    front of a client; §28 settled the DAG semantics at 0.999935 over 3.6M queries).
+    **The portal is BLOCKED, and §30 says on what.** Tag 12 `plane_map` is a per-plane
+    PROP INDEX: every plane above 0 is mounted on a prop, so a two-plane map needs chunk
+    `0x20000004` with `propCount > max(plane_map[1:])`. We shipped `[0, 0]` into a
+    props-less map and crashed a client twice. `gates()` now refuses that shape.
+    **Newly unblocked by `studies/monsterai` §3.10.1** (2026-08-11, the other session):
+    the Props chunk is opened — the prop array is read, `read_props()` exists in
+    `test_mapexport.py`, and 346/346 maps validate. The remaining 67.42% of the chunk is
+    a `{u8 tag, u32 size}` record list that closes 349/349 with its meaning NOT FOUND, so
+    the route is to CARRY a props chunk read from the archive at run time — the pattern
+    `mapbuild` already uses for FINDINGS 14's five constants — rather than author one.
+    Its control is named in §30: change tag 12 entry 1 to exactly `propCount`, one past
+    the end, and it must still crash, or a green run means nothing.
+    **Do not "fix" it by collapsing to one plane** — zplane is then permanently 0, the
+    short-circuit at `0x0070A433` fires, and the assert is unreachable by construction.
     **(c)** A height field that is not flat, walked — E1's terrain was flat, so nothing
     tested slope, step height or the z the client places a character at.
     **(d)** Blender → `.blend`, and the round trip out of it. §22 exports an interchange a
