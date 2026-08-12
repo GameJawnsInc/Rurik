@@ -4130,9 +4130,31 @@ a client.
 
 **Not settled:**
 
-- **The zplane transition is RECONSTRUCTION.** Nobody has watched the position's
-  third field go from 0 to 1. It is cheap to refute — our server sees agent
-  positions — and it should be.
+- **The zplane transition was RECONSTRUCTION, and it is now MEASURED — and it was
+  WRONG.** §30.1 argued the avatar must have stepped onto plane 1, because
+  `MapQueryAltitude` short-circuits when the position's zplane is 0. The captures
+  already on disk refute it. Slot 2 of GAME_CMSG 0x003D is the client's own plane,
+  and across all three runs it is **0 in every single report**:
+
+  | run | position reports | plane field |
+  |---|---:|---|
+  | portalcut (no portal) | 76 | **0 on 76 of 76** |
+  | overlapcut (no portal) | 76 | **0 on 76 of 76** |
+  | overlap (PORTAL, crashed) | **1** | **0** |
+
+  The character never left plane 0 in any run, including the one that crashed —
+  and the crashing run sent exactly ONE position report before dying, i.e. it died
+  almost the moment the character began to move.
+
+  **So the trigger is a QUERY on plane 1, not OCCUPANCY of it.** Something asks
+  for the altitude of a point on the far plane — a path evaluation across the
+  portal is the obvious candidate — and that is enough. The defect is unchanged
+  (plane 1 names a prop that does not exist) and so is the gate, which keys on
+  REACHABILITY rather than on where the avatar stands; if anything this is why
+  reachability was the right predicate. But §30.1's sentence "the portal is what
+  lets zplane become 1" is a RECONSTRUCTION that the data does not support, and
+  what the portal actually does is make plane 1 *queryable*. NOT FOUND: which
+  call site issues that query.
 - **A legal two-plane map is not yet authorable.** It needs chunk `0x20000004`
   with `propCount > max(plane_map[1:])`, and that record's layout is NOT FOUND in
   this toolkit. Whether a dummy prop suffices, or the prop's model must actually
