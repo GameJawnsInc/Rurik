@@ -165,9 +165,43 @@ at a `nested_struct` because that type swallows the tail. `0x0019` declares four
 and has three values, so its file id — likely inside the struct — is out of `--set`'s
 reach entirely.
 
+## 5d. The handler reads — and the wall they found
+
+Thirteen chains disassembled (`msghandler.py <op> --follow`). Two things came out of the
+handler's OWN marshalling, which is measured rather than inferred:
+
+* **`0x0072` pushes only `msg+0xc` and `msg+0x10`** — fields 3 and 4. It never reads the
+  `agent_id` at field 2, which is why setting that field did nothing.
+* **`0x0096` pushes `msg+0xc`, `+0x10`, `+0x14`** — fields 3, 4, 5. Field 1, which the
+  first attempt set, is not read at all.
+* **`0x0083` carries a bound of 5** (`cmp eax, 5 / ja` at `0x008118b6`): a six-element
+  array, which is the shape of a bag list.
+
+**And then all of them still asserted on the fields the handler does read.** That is the
+result, and it is not a failure of the method — it is the answer:
+
+> **These are not payload gates. They are CLIENT-STATE gates.** `charHeroData` wants a
+> hero record; this character has no heroes. The completion-flag mask wants a mission
+> already finished; nothing is finished. `bagCount` wants bags past the starter. The
+> `ptr`/`syncPtr` pair want objects this session never created. **No value on the wire
+> opens them**, because the thing being looked up does not exist in a level-1 character
+> standing in one map with nothing in progress.
+
+This is §4's "one state, one map" caveat arriving as a measurement instead of a warning.
+Reaching these opcodes needs a client with the state, not a better payload — which makes
+them a task for a live capture or a much richer server, not for the sweep.
+
+**A methodological correction.** The first pass of this read labelled `[ebp+0xc]` inside
+any followed function as "message field 2". That mapping only holds for the handler's
+DIRECT callee, which receives the marshalled fields; functions further down take their own
+arguments. `0x0023`'s zero-test at `0x0046ed53` was labelled that way, predicted to be the
+gate, and was not. The handler's own `push dword ptr [eax + N]` list is the measured part;
+anything deeper is inference and is marked as such above.
+
 ## 6. Next
 
-1. **Finish the zero-branch pass.** Done: `0x0017` (field 5), and the nine-opcode
+1. **The zero-branch pass is CLOSED for the state-gated opcodes** — see §5d; they need a
+   client that has heroes, missions and bags, not a better payload. What remains open: Done: `0x0017` (field 5), and the nine-opcode
    `agent_id` family in §5b. Left: the `string16` gates (`0x0033` `0x0060` `0x0097`
    `0x009E`) need a REAL encoded string, which `--set` deliberately will not fake; the
    file-id gates (`0x0019` `0x00A8`); `0x0096`'s flag mask; `0x0072` (`--set 2=`, its
