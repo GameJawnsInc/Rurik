@@ -24,6 +24,7 @@ standard library only.
     python toolkit/test_srclint.py
 """
 import os
+import re
 import sys
 import textwrap
 
@@ -35,7 +36,12 @@ import srclint  # noqa: E402
 # 11, from a real green run. Section 3 is deliberately ONE check over 18 cases rather
 # than 18 checks: the failure that matters is "any ordinary binding form is flagged",
 # and the message names which. Guessed at 17 first; the floor guard rejected the run.
-LEDGER = checks.Ledger("srclint", floor=11)
+#
+# 11 -> 13 on 2026-08-12 with section 7, which checks CLAUDE.md's suite list against
+# the tree in both directions. That rule had been written down since the list existed
+# and enforced by nothing; it names three tests that went unrun for days, and on the
+# day section 7 was written a runner reported "51 of 51 green" over 52 test files.
+LEDGER = checks.Ledger("srclint", floor=13)
 
 
 def names(src):
@@ -163,6 +169,50 @@ def main():
     except SyntaxError:
         syntax_raised = True
     LEDGER.ok(syntax_raised, "and a file that does not parse raises SyntaxError")
+
+    # ---- 7. CLAUDE.md's suite list IS the suite --------------------------------
+    print("\n7. every test in the tree is named in CLAUDE.md's suite list")
+    # THE RULE EXISTED AND NOTHING CHECKED IT. CLAUDE.md: "This list is the
+    # suite. A test in the tree but not named here is a test nobody runs" --
+    # and it names three that were missing for days. On 2026-08-12 a runner
+    # reported "51 of 51 green" over a tree holding 52 test files, which is the
+    # same defect from the other side and is worse, because the count was
+    # self-consistent. A rule nothing checks is a wish.
+    #
+    # Both directions, and the second is not decoration: an entry naming a test
+    # that no longer exists makes the list look complete while covering less
+    # than it claims, and a checker that only walked the tree would call that
+    # healthy.
+    root = os.path.dirname(HERE)
+    claude = os.path.join(root, "CLAUDE.md")
+    if not os.path.isfile(claude):
+        LEDGER.skip("7. the suite list", f"no CLAUDE.md at {claude}")
+    else:
+        text = open(claude, encoding="utf-8").read()
+        on_disk = set()
+        for dirpath, _dirs, files in os.walk(HERE):
+            if "__pycache__" in dirpath:
+                continue
+            for f in files:
+                if f.startswith("test_") and f.endswith(".py"):
+                    on_disk.add(f)
+        # `test_` files this list deliberately does not carry: none today. If one
+        # is ever added, name it HERE with the reason rather than loosening the
+        # walk, so the exemption is visible.
+        EXEMPT = set()
+        unnamed = sorted(f for f in on_disk - EXEMPT if f not in text)
+        LEDGER.ok(not unnamed,
+                  f"all {len(on_disk)} test files in toolkit/ are named in CLAUDE.md",
+                  f"UNNAMED: {unnamed} -- add the line in the same commit as the "
+                  f"test, or the suite silently stops covering it")
+        # The reverse. Only names that look like our test files, so ordinary
+        # prose mentioning a module cannot trip it.
+        cited = set(re.findall(r"\btest_[a-z0-9_]+\.py\b", text))
+        missing = sorted(cited - on_disk)
+        LEDGER.ok(not missing,
+                  f"and all {len(cited)} tests CLAUDE.md names still exist",
+                  f"STALE: {missing} -- the list reads as complete while "
+                  f"covering less than it claims")
 
     return LEDGER.verdict()
 

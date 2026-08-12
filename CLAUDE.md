@@ -578,7 +578,13 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
   a live session on 2026-08-10. It also pins the checker's own vacuity failure — the
   first version treated every function local as a module binding and scored the real
-  defect zero),
+  defect zero. **And since 2026-08-12 it checks THIS LIST against the tree, both
+  directions**: a `test_*.py` under `toolkit/` that no line here names, and a name
+  here with no file behind it. The rule was written down from the day the list
+  existed and enforced by nothing — it names three tests that went unrun for days —
+  and on the day the check was added a runner reported `51 of 51 green` over a tree
+  holding 52 test files, which is the same defect from the other side and worse,
+  because the count was self-consistent),
   `toolkit/test_scrub.py` (the credential scrub, that no secret survives it, that the
   one field it CANNOT clean — a `plain` frame payload, which carries the account email as
   UTF-16 and is therefore invisible to the ASCII leak check — is reported rather than
