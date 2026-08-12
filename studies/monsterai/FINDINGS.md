@@ -963,6 +963,29 @@ The session must read as ordinary play. Two or three blocks, 25–40 minutes tot
 
 ### 7.3 The analyser: `toolkit/authsrv/behaviourrun.py`
 
+**BUILT 2026-08-11.** `toolkit/authsrv/behaviourrun.py` carries the §7.2 step table and
+three modes: `--script` prints the operator script with its rationale, `--narrate <outdir>`
+walks it during a session writing `MARK` files, and a stamp analyses afterwards.
+`--preflight` runs check 3 against the two vaulted captures — **green, 8 connections,
+worst +18.1 ms**, reproducing `test_smsgnames.py` §1 through a different code path
+(`decode_all` framing the whole stream, against that file's per-event carry).
+
+The step table lives in the analyser rather than beside the narrator so the two cannot
+drift: the thing that prompts the operator and the thing that windows the result are the
+same list.
+
+`test_behaviourrun.py`, **35 checks, no vault**, pins the three refusals — UNRESOLVED
+rather than estimated positions, no pooling across model ids, and the client-half control
+predicate whose decisive case is a control window carrying 200 server messages that must
+still pass. Both sabotages redden: letting `separation` estimate costs 3 checks, and
+restoring the loopback "no traffic" predicate costs 3 more.
+
+**A defect this found in its own first draft**, worth recording because it is the shape
+§6 keeps naming: the mark-after-prompt check compared message *counts*, and the on-time
+and late windows both hold two — the late one drops its own first message and picks up
+the next step's. Equal counts, so the check could not fail for the right reason. It now
+asserts contents.
+
 Sibling to `labelrun.py`. Consumes a live capture stamp plus its `marks.jsonl`. **Reuses** `tape.load_tape` + `tape.decode_all` (whole-stream, byte-accounted), `cmsgstream.timed(stamp, 'c2s')` (masked and timed), `origin.origin_of`, `agents.py`'s vocabulary and `checks.Ledger`. **Emits** per-step windows over both directions and an encounter table keyed by **(connection, model_id, agent_id)** — every row carrying its model id, because pooling across models is what produced the refuted range band.
 
 Nine checks that can go red:

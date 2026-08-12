@@ -1124,9 +1124,9 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-11 (`e6355fd`+, suite 50/50, 1,878 checks)
+### 8.0 Next, as of 2026-08-11 (`56426cb`+, suite 51/51, 1,927 checks)
 
-*The check total was printed as 965 and is measured at **1,878**. Method, because the gap is
+*1,927 is **derived, not re-summed**, and says so: the 1,878 below was measured over 50 files, and this session added `test_behaviourrun.py` (35, new) and took `test_wirecapture.py` from 28 to 42 — both counted from real green runs. 1,878 − 28 + 42 + 35 = 1,927. The suite runner reports 51/51 green in 611 s; its per-file log truncates, which is what made the earlier 965 wrong, so the arithmetic is shown rather than a figure quoted from a partial log. The 1,878 figure's own method:* Method, because the gap is
 large enough to want one: run each of the 50 files in `toolkit/**/test_*.py` as its own
 process, take the `ALL CHECKS PASSED (N checks` line, sum N, and require every exit code to
 be 0 — 50 of 50 green. This is a **default** run, so the three tests with an `--all` mode
