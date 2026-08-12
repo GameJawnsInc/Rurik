@@ -513,7 +513,7 @@ here, only to current behaviour.
 ### The ordering constraint: attribute points first
 
 **OBSERVED, and ours.** Sending 0x00B7 before attribute points killed the client
-on the `attribState` bound at `ChCliAttrib.cpp(435)` (`authsrv.py:897-904`). This
+with `Assertion: attribState ChCliAttrib.cpp(435)` (`authsrv.py:897-904`). This
 is the one hard fact in this section that no mirror gave us.
 
 Every reference server orders it the same way — `GmPlayer.c:169-173`
@@ -696,7 +696,7 @@ message with a matching `P236_AgentAttributeDestroy` — which is exactly the
 shape our own crash implies.
 
 **OBSERVED (ours).** Sending profession without prior attribute state killed the
-client on the `attribState` bound at `ChCliAttrib.cpp(435)` (`authsrv.py:897-902`).
+client on `Assertion: attribState`, `ChCliAttrib.cpp(435)` (`authsrv.py:897-902`).
 This is the only attribute observation we own. It establishes that *something*
 must precede profession. It does not establish that the something is 0x0037
 rather than 0x003A, nor that 50/50 or 42 zeros are right.

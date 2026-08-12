@@ -39,10 +39,9 @@ level record
 
 - **From the client.** The validating probe at VA `0x6c3050` checks the magic,
   switches on the fourcc, and walks 8-byte records from offset 12, counting them
-  out through a pointer the caller supplies. ArenaNet's own assertion at
-  `ImgAtex.cpp:1560` sits in the binary and bounds a running offset advanced by
-  `sizeof(AtexLevel)` against the buffer length — which fixes the record at 8
-  bytes, since that is the stride the walk advances by. Read independently by two agents, and
+  out through a pointer the caller supplies. ArenaNet's own assertion string
+  `"offset + sizeof(AtexLevel) <= bytes"` from `ImgAtex.cpp:1560` sits in the
+  binary and fixes the record at 8 bytes. Read independently by two agents, and
   a third wrote a small x86 decoder rather than trust either.
 - **From the corpus.** The walk closes to the exact final byte on every ATEX
   file our decompressor can produce — 52,253 closed exactly out of 53,922 rows

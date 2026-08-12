@@ -1,4 +1,8 @@
-# Assert expressions in committed prose — audit, scrub, and a checker
+# Assert expressions in committed prose — an audit, a scrub, and its revert
+
+**Read §6 first if you are here for the rule.** The scrub this document spends most of
+its length on was **undone**. What is live is the refined ruling and the checker; the
+rest is kept as the record of a rule read too strictly and what that cost.
 
 **2026-08-12.** The provenance gate's boundary is MEASUREMENT vs EXPRESSION (owner's
 ruling 2026-08-11, [PLAN.md](../../PLAN.md) §7 Q3). Measured facts are permitted in
@@ -11,8 +15,10 @@ bulk; ArenaNet's expression is not, and the ruling names one form of it outright
 `toolkit/content.py` has enforced the *measurement* side of that gate for
 `source = "client-table"` rows since the day it was written, and `test_content.py`
 proves the refusal fires. The *expression* side was enforced by nobody and applied to
-nothing. This study audits what accumulated behind that, scrubs what it can, and closes
-the gap with a checker.
+nothing. This study audited what accumulated behind that, scrubbed 46 sites, and then
+**reverted every one of them** when the owner refined the ruling rather than authorise
+the rest of the sweep. What closes the gap is the checker, at a much lower setting than
+the audit assumed.
 
 **Label vocabulary** is [studies/character/FINDINGS.md](../character/FINDINGS.md)'s.
 
@@ -42,12 +48,15 @@ the gap with a checker.
   that had no expression/measurement line in it, by sessions doing exactly what the
   repo asks — reading the client rather than reasoning about it — and quoting their
   evidence. §3 is the timeline.
-- **DONE.** **46 sites scrubbed across 15 files.** Thirty of those the checker finds
-  (134 → 104); **the other sixteen it does not**, and that is the honest half of the
-  result — see the limits in §5. Every scrub keeps the constraint — the bound, the
-  field, the symbol, the address, the line, the build — and drops only ArenaNet's
-  wording. No claim lost a supporting fact; §4 records the two places where the
-  rewrite had to *add* a measured detail to keep the claim as strong as it was.
+- **SCRUBBED, THEN REVERTED — and the round trip is the finding.** 46 sites in 15
+  files were rewritten to keep the constraint and drop ArenaNet's wording. Once the
+  ruling was refined (below), all 46 were **reverted**: with citation permitted, every
+  rewrite was a net loss. The paraphrases ran longer and repeatedly dropped the exact
+  symbol — `MissionCliIsGameMaster()` became "a game-master predicate",
+  `!s_reusableAgentArray.Count()` became "an empty-list bound" — and four crash-dialog
+  transcripts became second-hand reports of a primary artifact. The tree is back to
+  its pre-audit text, at **134 citations in 16 files**. §4 is what the scrub cost,
+  kept because it is the evidence that reverting was right.
 - **STOPPED, by the owner, the same day — and the stop is the most useful result
   here.** 104 citations remained in 5 files, 65 in
   [studies/smsg/FINDINGS.md](../smsg/FINDINGS.md). Asked whether provenance was
@@ -76,7 +85,10 @@ the ruling rather than against the string:
 
 ### 2.1 The 13 in category (a)
 
-All scrubbed. The location column is what the prose now carries.
+All were scrubbed and all were **reverted** once the ruling was refined (§6). The
+table is kept as the classification it was, and the third column records what the
+scrub would have left — which is the concrete form of §4's argument that reverting was
+right, since in most rows it is strictly less than the original.
 
 | site | constraint kept | location kept |
 |---|---|---|
@@ -99,7 +111,8 @@ All scrubbed. The location column is what the prose now carries.
 `(c)` is expression text beside a path with **no line number**, so the ruling's triple
 is not complete. Four of the five were scrubbed anyway, on the ground that the refused
 artifact is the verbatim text and the missing line makes it a smaller disclosure rather
-than a different one:
+than a different one. All four are now reverted; the reasoning is recorded because it
+is what the (c) category MEANT under the strict reading:
 
 - `datwrite/FINDINGS.md:105` — scrubbed to "the bound on `s_skill`'s array size".
 - `enemy/PLAN.md:599` — bare identifiers `syncPtr`/`asyncPtr`; scrubbed to "bounds on".
@@ -115,7 +128,8 @@ than a different one:
 Grepping the tree for the *expressions themselves* — `fraction <= 1.0f`,
 `index < m_count`, `damage.amount <= 0` — after the machine pass turned up sixteen
 further sites in files already reported clean. They are all prose paraphrases of the
-triple, which §5 records as the checker's largest blind spot. Scrubbed the same way:
+triple, which §5 records as the checker's largest blind spot. Scrubbed the same way and
+reverted the same way:
 `agentprops` :210 :427 :493, `enemy/PLAN.md` :19 :587 :1209–:1215 (a nine-row
 stack-trace table, module + line + expression per row) :1224 :2394, `tape` :156 :722,
 `presearing/MANIFEST.md` :157 :841, `presearing/R4C2-FEASIBILITY.md` :53, and
@@ -162,36 +176,41 @@ written, and the other half got a sentence.
 
 ---
 
-## 4. What the scrub cost
+## 4. What the scrub cost — measured, which is why it was reverted
 
-**Nothing load-bearing, and it is worth saying how that was checked.** The rewrite rule
-was: keep bound, field, symbol, address, line, build; drop wording. In every case the
-surviving sentence still supports the claim it was under, because the claims were about
-constraints, not about phrasing:
+**At the time this was written as "nothing load-bearing", and that was true only in the
+narrow sense that no claim became unsupported.** Reread against a ruling that permits
+citation, the cost is plain and it is not nothing. The rewrite rule — keep bound, field,
+symbol, address, line; drop wording — turns out to lose information *whenever the
+wording is where the symbol lives*, which for an assert expression is most of the time:
 
-- `cmsg` §"Leg 1" concludes **"the client's own word for the quantity is `rotation`"**.
-  That needs the *identifier*, which is permitted, and the bound — now stated as
-  **[-1.0, 1.0]** — not the operator spelling.
-- `enemy` §6d concludes NPC definitions are mandatory and the index is a raw array
-  index. That needs "an index-against-count bound on a dense array", which is the
-  constraint.
-- `review/FINDINGS.md:93`'s judgement — that ArenaNet's asserts are strictly better
-  evidence than any sniff — survives verbatim; only the two quoted examples beside it
-  changed form.
+| original | rewrite | what went |
+|---|---|---|
+| `GmView` — 2840 `MissionCliIsGameMaster()` | "2840 a game-master predicate" | the function name |
+| `AvManager` — 775 `!s_reusableAgentArray.Count()` | "an empty-list bound on the reusable-agent array" | the symbol, and 20 characters longer |
+| `AvChar` — 4745 `loop < 500` | "4745 bounds a loop counter below 500" | nothing, and still longer |
+| `ChCliApi:4809 !(playerId & CHAR_CLASS_BASE_MASK)` | "bounds the id to have no `CHAR_CLASS_BASE_MASK` bits set" | nothing, and two lines instead of one |
+| `missionMaskBytes <= MISSION_MASK_BYTES` | "bounds a mission-mask byte count by `MISSION_MASK_BYTES`" | the parameter name |
 
-Two rewrites had to **add** a measured detail to keep the claim as strong:
+**And the crash-dialog blocks were the worst of it.** Four fenced transcripts —
+`agentprops`, `enemy` ×3 — were rewritten from what the client actually printed into a
+description of what it printed. That converts a **primary observational record** into a
+second-hand report, in a repo whose first rule is "real bytes → replicate ONE piece →
+verify". `enemy/PLAN.md` even had to have its own framing sentence edited from *"the
+client says so in ArenaNet's own words"* to *"the client's own bound says so"* — the
+prose was fighting the scrub, which is usually the tell.
 
-1. `textrec` — see §2.2.
-2. `texture/FINDINGS.md:43` — the claim is that the assert "fixes the record at 8
-   bytes". With the expression gone, the rewrite states that the bound is on an offset
-   advanced by `sizeof(AtexLevel)` against the buffer length, **and** that 8 is the
-   stride the walk advances by, so the inference is on the page rather than in the
-   quoted text.
+Two rewrites did **add** a measured detail (`textrec`'s `StringHeader` size, `texture`'s
+8-byte stride). Both turned out to be redundant: the surrounding text already carried
+the number, which is why the revert loses nothing there either.
 
-`studies/texture/FINDINGS.md` is worth a line of its own: it has **zero** `P:\Code`
-occurrences and was correctly reported clean under that grep, and it carried a refused
-triple all the same (`ImgAtex.cpp:1560`). That single file is the whole argument for
-scanning for the rule instead of for the string.
+**All 46 are reverted.** The tree reads as it did before the audit.
+
+`studies/texture/FINDINGS.md` still earns its line: it has **zero** `P:\Code`
+occurrences, was correctly reported clean under that grep, and carried a citation all
+the same (`ImgAtex.cpp:1560`). That single file is the whole argument for scanning for
+the rule rather than for a string — a point that survives the ruling change intact,
+because it is about the instrument, not the policy.
 
 ---
 
@@ -284,8 +303,8 @@ it and both narrow the rule:
   hygiene is none of those things. Conflating them is what let a low-risk question
   consume a session.
 
-**What is kept.** The 46 already-scrubbed sites read fine and stay scrubbed, but they
-are **no longer required to be at zero** — the test's per-file zero list is gone. What
+**What is kept.** Nothing of the scrub: all 46 sites are reverted (§4 measures why) and
+the test's per-file zero list is gone. What
 survives is the cheap half of the original finding: `content.py` enforced this ruling's
 permitted side from day one while prose was checked by nobody, and a tripwire with real
 headroom closes that for free. `test_provlint.py` now allows `smsg` 80 and an

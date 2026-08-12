@@ -154,7 +154,7 @@ undercount" is confirmed as an undercount from the one zone that has been checke
 true figure is plausibly well above 40. Note also that *Bandit Raider* and *Bandit Raider
 (Vanguard quest)* are **separate articles** — Vanguard variants are distinct creature entries,
 which matters because each distinct definition needs its own row under the client's
-index-against-count constraint.
+`index < m_count` constraint.
 
 **One thing this does not settle.** *Hatcher* and *Varis* are categorised under **Regent
 Valley**, while §NPCs places both in Fort Ranik. That is consistent rather than contradictory
@@ -838,7 +838,7 @@ Reconstructed across several search passes rather than read from one page: **dir
 | Guild Registrar | forms guilds; no hall access from the mainland | Ascalon City |
 | Ascalon Guard | recurring generic town guard | Ascalon City, likely others |
 
-Plus an unnamed Merchant and an unnamed Weaponsmith, neither of which has an individual wiki page — **floor of 15 template rows**. GWW category counts (reported by the search backend, not verified by opening a page) suggest `Category:Regent Valley (pre-Searing) NPCs` alone holds ~40 pages and `Category:Ascalon City (pre-Searing) NPCs` ~23, which is the strongest sign that the wiki's NPC categories fold one-off named quest characters in with repeatable service archetypes. Since nothing in Guild Wars shares a template across differently-named unique characters — the definition index is a raw array index on the client, and creating an agent whose definition was never sent takes the client down on the index-against-count bound (OURS, `content/npcs.toml`, OBSERVED) — **the plausible ceiling is 60–100 template rows.**
+Plus an unnamed Merchant and an unnamed Weaponsmith, neither of which has an individual wiki page — **floor of 15 template rows**. GWW category counts (reported by the search backend, not verified by opening a page) suggest `Category:Regent Valley (pre-Searing) NPCs` alone holds ~40 pages and `Category:Ascalon City (pre-Searing) NPCs` ~23, which is the strongest sign that the wiki's NPC categories fold one-off named quest characters in with repeatable service archetypes. Since nothing in Guild Wars shares a template across differently-named unique characters — the definition index is a raw array index on the client, and creating an agent whose definition was never sent takes the client down on `index < m_count` (OURS, `content/npcs.toml`, OBSERVED) — **the plausible ceiling is 60–100 template rows.**
 
 **On our Hatcher.** One pass noticed that WIKI's Fort Ranik armor collector is also named Hatcher and proposed that OURS `[npc.hatcher]` may be the genuine article rather than a placeholder. **Do not adopt this.** What we OBSERVED is that four EncString words rendered as "Hatcher [Collector]" — that proves the string ids, not the location. Its provenance is gw-preservation, which pins clientVersion 37600 and whose identifier `hatcher_collector` carries no region. Comparing our row to a wiki page is offline agreement between two things neither of which observed our client standing in Fort Ranik, which is exactly the failure mode CLAUDE.md names. **Keep the row's own label** — "a borrowed Ascalon collector standing in for a monster. It is not a Pre-Searing enemy." What would settle it is a live Pre-Searing capture showing this `file_id`, which is the capture campaign anyway.
 

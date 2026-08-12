@@ -153,7 +153,7 @@ with itself.
 > And the thing no offline reading can settle: ArenaNet sends the `0x0056` definition
 > **once for 140 creates**. Our own probe re-sent it before every re-create, so "does a
 > definition survive a removal" has never actually been asked — and `agents.py` warns that
-> an agent whose definition was never sent takes the client down on the index-against-count bound.
+> an agent whose definition was never sent takes the client down on `index < m_count`.
 > That is the difference between a burrow and a client assert, and it needs the client.
 
 ### T4 — `GAME_CMSG 0x0046` field 1 is a skill id. OBSERVED, ground-truthed.
@@ -401,10 +401,12 @@ push [edi + 0x1f8] ... [edi + 0x1c8]    ; the stashed sockaddr and ids
 call 0x850df0                            ; DIAL
 ```
 
-That code lives in a handler whose own assertion names the module and the condition: at
-`P:\Code\Gw\Mission\Cli\MsCliGame.cpp:76` the handler requires `PLAYER_FLAG_CONNECTED`
-to be **clear** in the `playerFlags` field of its context. (Expression text omitted —
-provenance gate, `PLAN.md` §7 Q3.)
+That code lives in a handler whose own assertion names the module and the condition:
+
+```
+!(context->playerFlags & PLAYER_FLAG_CONNECTED)
+        P:\Code\Gw\Mission\Cli\MsCliGame.cpp:76
+```
 
 `playerFlags` is `+0x2a8`; `PLAYER_FLAG_CONNECTED` is **bit 1**, set at `0x008513a7` and
 cleared at exactly two sites, `0x00850ca7` and `0x00851534`. The handler also dispatches
@@ -719,7 +721,7 @@ most-reused definition is declared once and referenced by **140** creates. Since
 is the *same client* on both ends, this settles what `probes.py`'s `burrow` probe was
 built to ask: **the client keeps an NPC definition across agent removal.** If it did
 not, 31 of those 32 creates would name a definition slot the client no longer holds,
-and a create against an undeclared slot takes it down on `Array.h`'s index-against-count bound.
+and a create against an undeclared slot takes it down on `Array.h`'s `index < m_count`.
 It does not go down.
 
 A server may therefore declare once and re-create freely. The probe becomes

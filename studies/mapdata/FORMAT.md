@@ -230,7 +230,7 @@ it could be: by handing the client each form and watching.
 
 | Sent as `map_file_id` | Build 38797 |
 |---|---|
-| `0x1B97D` — masked, and what gw-preservation's table carries | **rejected.** `Map file '0x01b97d' failed to load. Attempting to re-bloat.` → `Creating default map` → the lookup's found-flag bound at `P:\Code\Engine\Map\Map.cpp(1762)` |
+| `0x1B97D` — masked, and what gw-preservation's table carries | **rejected.** `Map file '0x01b97d' failed to load. Attempting to re-bloat.` → `Creating default map` → `Assertion: found`, `P:\Code\Engine\Map\Map.cpp(1762)` |
 | `0x8001B97D` — the raw stored form | **loads.** Ascalon City Pre-Searing renders, and its collision matches what is drawn |
 
 So **a server must send the bit-31 id exactly as the archive stores it.** Masking

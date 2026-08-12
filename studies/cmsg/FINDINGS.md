@@ -303,13 +303,11 @@ radians, but fits a slope through vertical", and that one sentence held the opco
 **Leg 1 — the client names it.** Build 38797 has exactly **one** site that sends `0x0040`:
 the 12-byte wrapper at `0x009207B0`, found by enumerating all 174 callers of the channel
 send `0x007DCF00` and recovering the opcode immediate at each. Its public entry
-`0x008165C0` range-checks its float argument at
-`P:\Code\Gw\Char\Cli\ChCliApi.cpp:5562`, bounding it to **[-1.0, 1.0]**, inclusive on
-both sides — and the parameter that assert names is `rotation`. It then tail-calls the
-sender. **The client's own word for the quantity is `rotation`.**
+`0x008165C0` range-checks its float argument against the assert text
 
-> Expression text omitted per the provenance gate (`PLAN.md` §7 Q3); the bound, the
-> field name and the line are the measurement and are kept.
+    (rotation >= -1.0f) && (rotation <= 1.0f)      P:\Code\Gw\Char\Cli\ChCliApi.cpp:5562
+
+and then tail-calls the sender. **The client's own word for the quantity is `rotation`.**
 
 **Leg 2 — the infinities are a literal.** The sender at `0x0081BE90` loads `+inf` from
 `.rdata 0x00948654` when `rotation > 0` and `-inf` from `0x0094E538` when `rotation < 0`,
@@ -476,9 +474,9 @@ words rather than on our own labelled runs.
 
 Two worth calling out for the *kind* of evidence:
 
-- **`0x0092` MISSION_MASK_REPORT.** Its sender's only assert bounds a mission-mask
-  byte count by `MISSION_MASK_BYTES` (MsCliMsg.cpp:181), and the bit setter's bounds
-  a mission index by `MISSIONS` (MsCliMan.cpp:368) — so MISSIONS = 888. **Our own stdlib
+- **`0x0092` MISSION_MASK_REPORT.** Its sender's only assert is
+  `missionMaskBytes <= MISSION_MASK_BYTES` (MsCliMsg.cpp:181), and the bit setter's
+  is `mission < MISSIONS` (MsCliMan.cpp:368) — so MISSIONS = 888. **Our own stdlib
   `areatable.py` independently reads exactly 888 AreaInfo records out of the same
   build.** Two instruments that know nothing about each other, agreeing on a number.
 - **`0x0047` vs `0x003E`** have a byte-identical layout (vec2 + u32), so only values

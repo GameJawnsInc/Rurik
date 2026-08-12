@@ -65,25 +65,34 @@ ROOT = os.path.dirname(HERE)
 # audit the naming without the binary -- so a gate demanding zero was costing more
 # evidence than it protected.
 #
+# AND THEN THE 46 SCRUBBED SITES WERE REVERTED, the same day, for the same reason.
+# With citation permitted, every one of those rewrites was a net loss: the paraphrases
+# ran longer and repeatedly dropped the exact symbol -- `MissionCliIsGameMaster()`
+# became "a game-master predicate", `!s_reusableAgentArray.Count()` became "an
+# empty-list bound", and four crash-dialog transcripts became second-hand reports of
+# a primary artifact. The tree is back to its pre-audit text and the counts below are
+# the ORIGINAL ones. What survived the whole exercise is this file.
+#
 # So the ceiling below is an ACCUMULATION TRIPWIRE, not a debt schedule. A document
 # is allowed to cite; it is not allowed to become a string dump. The grandfathered
-# entries are the five documents that legitimately argue from assert text; anything
-# else gets NEWCOMER_CEILING before somebody should look at it. Raise a number when
-# a document has a real reason to argue from more asserts -- that is a normal edit,
-# not a defeat.
+# entries are the documents that legitimately argue from assert text; anything else
+# gets NEWCOMER_CEILING before somebody should look at it. Raise a number when a
+# document has a real reason to argue from more asserts -- that is a normal edit, not
+# a defeat, and it is much cheaper than what the alternative reading cost.
 NEWCOMER_CEILING = 10
 GRANDFATHERED = {
-    os.path.join("studies", "smsg", "FINDINGS.md"): 80,
-    os.path.join("studies", "monsterai", "FINDINGS.md"): 25,
-    os.path.join("studies", "reconstruction", "FINDINGS.md"): 25,
-    os.path.join("studies", "customarea", "FINDINGS.md"): 25,
-    os.path.join("studies", "skillcast", "FINDINGS.md"): 25,
+    os.path.join("studies", "smsg", "FINDINGS.md"): 85,      # 65: names 20 opcodes
+    os.path.join("studies", "monsterai", "FINDINGS.md"): 25,  # 12
+    os.path.join("studies", "customarea", "FINDINGS.md"): 25,  # 12
+    os.path.join("studies", "reconstruction", "FINDINGS.md"): 25,  # 11
+    os.path.join("studies", "enemy", "PLAN.md"): 25,          # 11
+    os.path.join("studies", "skillcast", "FINDINGS.md"): 20,  # 7
 }
 
 # A dump landing anywhere in the tree moves this even if no single file trips its own
-# ceiling. 104 on 2026-08-12; the headroom is deliberate, because ordinary research
+# ceiling. 134 on 2026-08-12; the headroom is deliberate, because ordinary research
 # adds citations and a tripwire that fires on ordinary work gets switched off.
-TOTAL_CEILING = 160
+TOTAL_CEILING = 200
 
 
 def hits(text, modules=None):

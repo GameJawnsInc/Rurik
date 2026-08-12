@@ -720,18 +720,22 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   enforced the provenance gate's permitted side from the day it was written; the same
   ruling's refusal of "verbatim assert expressions with their source path and line"
   applied to prose and was checked by nobody, so 134 citations sat in sixteen docs.
-  Read literally that made all 134 refusable, and 46 were scrubbed before the owner
-  asked whether provenance was starting to cost more than it protected. **It was**,
+  Read literally that made all 134 refusable, and 46 were scrubbed — **and then all 46
+  were REVERTED** — before and after the owner asked whether provenance was starting
+  to cost more than it protected. **It was**,
   and `PLAN.md` §7 Q3 was refined the same day: **a single assert cited as evidence is
   a MEASUREMENT; the refusal targets BULK dumps and decompiled bodies**, and the crash
   dialog — text the retail client shows any player who crashes — is not extraction.
   This repo's recorded provenance mistakes are REFUSALS, not disclosures. So the 104
   remaining are permitted, `smsg` keeps the 65 quotes that make its opcode naming
-  auditable, and the test allows it 80 while an unlisted doc gets 10. The ceiling was
-  checked in the direction that matters: a 15-row dump appended to a document that
+  auditable, and the test allows it 85 while an unlisted doc gets 10. The ceiling was
+  checked in the direction that matters: a 12-row dump appended to a document that
   argues from none trips it. **The lesson to carry, not the code:** a rule read at
-  maximum strictness generated a session of rewrites against negligible risk, and the
-  cheap part — a tripwire with real headroom — was the only part worth keeping. There
+  maximum strictness generated a session of rewrites against negligible risk, and every
+  one was a net LOSS once measured — the paraphrases ran longer and dropped the exact
+  symbol (`MissionCliIsGameMaster()` became "a game-master predicate"), and four crash
+  dialogs became second-hand reports of a primary artifact. Revert cost one command.
+  The cheap part — a tripwire with real headroom — was the only part worth keeping. There
   is NO standing obligation to hand-grep for citations the three machine patterns miss;
   a dump is a paste and keeps its format. Section 3 is still the load-bearing one —
   fifteen PERMITTED forms (a location, a bound, a field name, a VA) that must not be

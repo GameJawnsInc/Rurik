@@ -3995,7 +3995,7 @@ writing anything.
 | arm | portals | result |
 |---|---|---|
 | **PORTAL-CUT** | 0 | **loads, and the whole walk completes** |
-| **PORTAL-JOINED** | 2, one pair | **CRASHES on the shared index-against-count bound, `Base\rtl\Array.h(587)`, 17 s in** |
+| **PORTAL-JOINED** | 2, one pair | **CRASHES: `Assertion: index < m_count`, `Base\rtl\Array.h(587)`, 17 s in** |
 
 **So two planes are fine and the portal record is the fault** — the arms are the
 same file but for the portal, and the cut one survives 65 s of walking.
@@ -4057,7 +4057,7 @@ which is the shape every retail portal has, and the shape this one did not.
 
 ## 30. OBSERVED: `plane_map` is a per-plane PROP INDEX (2026-08-12)
 
-Two client crashes, identical: the shared index-against-count bound at
+Two client crashes, identical: `Assertion: index < m_count`,
 `P:\Code\Base\rtl\Array.h(587)`. Read out of the client rather than guessed at,
 after two hypotheses that measured well and were wrong.
 
@@ -4210,7 +4210,7 @@ died first.
 
 ### 31.3 The control, and why it is worth the crash
 
-`portalpropbad` crashed on the index-against-count bound at `Array.h(587)`, and the
+`portalpropbad` crashed with `Assertion: index < m_count, Array.h(587)`, and the
 crash log is not merely "it crashed":
 
 - It loaded at **BaseAddr 0x00400000**, so the trace carries the STATIC addresses
