@@ -305,7 +305,9 @@ def chat_marks(cmsg):
 # Narration: the operator-facing half. Writes MARK files; sends NOTHING to the client.
 # ---------------------------------------------------------------------------
 
-def narrate(outdir, steps=STEPS, say=print, sleep=time.sleep, now=time.monotonic):
+def narrate(outdir, steps=STEPS, say=print, sleep=time.sleep,
+            now=time.monotonic, wall=time.time,
+            clock=time.perf_counter):
     """Walk the script, marking each step. THE DRIVER STILL SENDS NO INPUT.
 
     This writes a MARK file that `livesession._hold` picks up; it never touches the
@@ -320,8 +322,13 @@ def narrate(outdir, steps=STEPS, say=print, sleep=time.sleep, now=time.monotonic
     say("\n  THE SCRIPT. Read each line, do it, and let the timer run out.")
     say("  Nothing here is sent to the game -- you are the one playing.\n")
     for i, s in enumerate(steps, 1):
+        # THREE LINES: the key, and the two clocks AT THE INSTANT THE MARK IS TAKEN.
+        # The driver polls this file every 5 s, so a mark stamped when the driver
+        # NOTICES it is late by up to that much -- coarser than the whole binding is
+        # for, and it would never have looked wrong. The driver carries these through
+        # and records the pickup lag separately.
         with open(markfile, "w", encoding="utf-8") as fh:
-            fh.write(s.key)
+            fh.write("\n".join((s.key, repr(wall()), repr(clock()))) + "\n")
         tag = "  [CONTROL]" if s.control else ""
         say(f"  {i}/{len(steps)}  {s.key}{tag}  ({s.seconds}s)")
         say(f"        {s.prompt}")

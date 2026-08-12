@@ -1034,7 +1034,82 @@ The impossible tier's floor should be stated as a floor: the srctree zero is a r
 
 ### 7.7 Sessions and stopping rules
 
-Six to ten sessions of 25–40 minutes, **at most one per day, at human hours, over two to three weeks, secondary account, one client**. `livesession.py` already enforces the cheap structural half (one live client, a `--minutes` ceiling, `--confirm`). Per-question stopping rules, fixed in advance so nothing is rationalised into agreeing afterwards:
+**REVISED 2026-08-11, on the owner's challenge, and the revision is a correction rather
+than a tweak.** This section said "six to ten sessions, at most one per day, over two to
+three weeks." The owner asked what constraint actually needs dividing up by time. There
+isn't one, and worse, the rule as written was mine:
+
+**The behavioural rule is a WITHIN-SESSION property.** `CLAUDE.md` says "human cadence,
+human hours, one client, never in a competitive context — because what closes accounts is
+a traffic pattern no person could produce." Nothing in it says one session per day. The
+day-spacing came from this study's own campaign design and was landed without being
+challenged.
+
+**And it is arguably counterproductive on its own terms.** Running an identical eight-step
+script once a day for ten days is a *more* machine-like signature than one varied
+three-hour play session: repetition at a regular interval is exactly the shape being
+avoided. Spacing does not launder a repetitive script, it just makes it slower.
+
+**Nothing statistical divides by time either.** Sample size is a function of ENCOUNTERS,
+not of days — Lakeside offers ten creatures in twenty minutes. The per-question targets in
+§7.6 are counts of clean measurements and they do not care when they were taken, with one
+real exception: samples should come from **different individuals in different parts of the
+map**, which is a within-session property too (walk somewhere else) and is already the
+behavioural cap.
+
+### 7.7.1 The constraint that IS real: the instrument has never met live traffic
+
+Everything §7.1–§7.3 built is proven against synthetic fixtures and the two vaulted
+captures. Not one part of it has run against ArenaNet. Specifically UNVERIFIED:
+
+| what | status |
+|---|---|
+| `t0_wall` written by a real capture | new code path, never executed live |
+| `marks.jsonl` written during a session | never |
+| the `MARK` file pickup in `_hold` | never exercised |
+| `narrate` in a second shell interoperating with the driver | never |
+| `CHAT_SEND` reaching the game channel | **n=0**, and step 0 exists because it is a stated prediction |
+| `analyse()` on a capture that has marks | never — only `preflight` and the pure functions have run |
+
+**One of those was already wrong and nothing would have shown it.** `_hold` polls the MARK
+file and its loop waits **5 s** between passes, so a mark stamped when the driver *noticed*
+it is late by up to five seconds — coarser than the alignment §7.1 was written to provide,
+and it would have looked perfectly normal in the artifact. Found by asking what the poll
+interval was, not by any test. `narrate` now writes both clocks into the MARK file, the
+driver carries them through, and `pickup_lag` keeps the latency visible instead of letting
+it vanish into the timestamp.
+
+That is the argument for the revised shape: an untested instrument found a defect the
+moment it was looked at, and a ten-session plan authored before session one is planning in
+the dark.
+
+### 7.7.2 The revised shape: shakedown, then decide
+
+**Session 1 is a SHAKEDOWN, not a data run.** Fifteen minutes. Its success criterion is
+not data — it is *did the binding work*. Log in, run `--narrate`, do two or three steps,
+stop. Then:
+
+    python toolkit/authsrv/behaviourrun.py <stamp>
+
+What it must answer: does the capture carry `t0_wall`; did marks land; is `pickup_lag`
+small and stable; **did chat reach the game channel** (step 0's prediction, currently n=0);
+does the analyser run end to end. Any of those failing is worth more than an hour of
+combat data, because every later number depends on all of them.
+
+**Then decide how much data-gathering is warranted**, with the instrument known good and
+the first real windows in hand to size the rest against. That is this project's normal
+loop — run, analyse, fix, run — and there is no reason the live half should be the one
+place it is replaced by a fortnight of plan.
+
+**What survives from the original section**: the per-question stopping rules in §7.6 (fixed
+in advance so nothing is rationalised into agreeing afterwards), the behavioural cap of no
+more than three approaches on one creature type per session and no repeated visits to a
+spawn point, the secondary account, one client, human hours, and `--minutes` as a ceiling.
+**What is dropped**: "at most one per day, over two to three weeks", as an invention that
+was never measured and never the owner's rule.
+
+
+*(Superseded by §7.7.1–§7.7.2 above; kept because the per-question stopping rules below still stand.)* Six to ten sessions of 25–40 minutes, secondary account, one client, human hours. `livesession.py` already enforces the cheap structural half (one live client, a `--minutes` ceiling, `--confirm`). Per-question stopping rules, fixed in advance so nothing is rationalised into agreeing afterwards:
 
 - **Aggro range** — 10 clean point measurements (subject stationary since create, player stationary at trigger) across ≥3 creature types, or 6 sessions, whichever first.
 - **Leash** — 6 disengagements across ≥2 creature types.

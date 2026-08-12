@@ -39,7 +39,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import behaviourrun as BR  # noqa: E402
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("behaviourrun", floor=35)
+LEDGER = checks.Ledger("behaviourrun", floor=36)
 check = checks.adopt(LEDGER)
 
 ATTACK_STARTED = 4          # agents.GV_ATTACK_STARTED, written as a literal on purpose
@@ -213,8 +213,10 @@ def main():
 
         def say(line):
             mf = os.path.join(tmp, "MARK")
-            seen.append((line, open(mf, encoding="utf-8").read()
-                         if os.path.exists(mf) else None))
+            # the KEY only: the file also carries the two clocks the mark is
+            # stamped with, and this check is about ordering, not about them
+            txt = open(mf, encoding="utf-8").read() if os.path.exists(mf) else None
+            seen.append((line, txt.splitlines()[0] if txt else None))
 
         # A clock that ADVANCES. A constant one makes `while now() < end` spin forever,
         # which is how the first version of this check hung instead of failing -- worth
@@ -234,6 +236,29 @@ def main():
               f"{first!r} -- marking after the prompt is exactly labelrun's defect")
         second = next((mark_txt for line, mark_txt in seen if "do two" in line), None)
         check(second == "two", "and it advances for the next step", f"{second!r}")
+
+    # THE MARK CARRIES ITS OWN CLOCKS. The driver polls the MARK file every 5 s, so a
+    # mark stamped when the driver NOTICES it is late by up to that -- coarser than the
+    # binding exists to provide, and invisible in the artifact.
+    with tempfile.TemporaryDirectory() as tmp:
+        # AN ADVANCING CLOCK. A constant `now` makes narrate's wait loop spin forever;
+        # this is the second time in this file, so it is worth a line rather than a
+        # third. `wall`/`clock` ARE constant on purpose -- they are the values under
+        # test, not the loop's driver.
+        tick = [0.0]
+
+        def step_now():
+            tick[0] += 0.5
+            return tick[0]
+
+        BR.narrate(tmp, steps=[BR.Step("approach", "x", 1)], say=lambda s: None,
+                   sleep=lambda s: None, now=step_now,
+                   wall=lambda: 1_700_000_123.5, clock=lambda: 42.25)
+        lines = open(os.path.join(tmp, "MARK"), encoding="utf-8").read().splitlines()
+        check(lines[0] == "approach" and float(lines[1]) == 1_700_000_123.5
+              and float(lines[2]) == 42.25,
+              "the MARK file carries the key AND both clocks at the taken instant",
+              f"{lines} -- the driver reads these through instead of stamping at pickup")
 
     src = open(os.path.join(HERE, "behaviourrun.py"), encoding="utf-8").read()
     for banned in ("SendInput", "keybd_event", "PostMessage", "mouse_event",

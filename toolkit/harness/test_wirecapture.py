@@ -37,7 +37,7 @@ import wirecapture as wc  # noqa: E402
 # a skip); without the driver that skip becomes a check and the run scores 43. It was 28
 # until 2026-08-11, when §9 added the clock binding -- the epoch, the marks channel and
 # the five ways the two can disagree. Set from a real run, never from a guess.
-LEDGER = checks.Ledger("wirecapture", floor=42)
+LEDGER = checks.Ledger("wirecapture", floor=45)
 
 
 def ipv4_tcp(src, dst, sport, dport, seq, payload=b"", proto=6, ver=4):
@@ -310,6 +310,32 @@ def main():
                   "a mark with NO perf clock says so, rather than crying 'clock moved'",
                   f"{probs[0]} -- the absent-field case and the moved-clock case are "
                   "different findings and must not share a message")
+
+        # A MARK'S TIME IS WHEN IT WAS TAKEN, NOT WHEN IT WAS NOTICED. The driver polls
+        # the MARK file and its loop waits 5 s between passes, so a mark stamped at
+        # pickup is late by up to five seconds -- coarser than this whole mechanism is
+        # for, and it would never have looked wrong in the file. Found by asking what
+        # the poll interval was, not by a test.
+        lagged = os.path.join(tmp, "lagged.jsonl")
+        with open(lagged, "w", encoding="utf-8") as lfh:
+            wc.write_mark(lfh, 1, "approach", 9.75, at_wall=1_700_000_123.5,
+                          at_perf=42.25, wall=lambda: 1_700_000_126.0)
+        rec = wc.read_marks(lagged)[0]
+        LEDGER.ok(rec["wall"] == 1_700_000_123.5 and rec["perf"] == 42.25,
+                  "a mark carries the instant it was TAKEN, not the instant it was seen",
+                  f"wall={rec['wall']} -- the driver's poll loop waits 5 s, so stamping "
+                  "at pickup silently coarsens every mark to that interval")
+        LEDGER.ok(rec.get("pickup_lag") == 2.5,
+                  "and the pickup lag is recorded rather than vanishing into the stamp",
+                  f"{rec.get('pickup_lag')}s -- a lag near the poll interval on every "
+                  "mark is worth seeing, so it is kept as its own field")
+        with open(lagged, "w", encoding="utf-8") as lfh:
+            wc.write_mark(lfh, 1, "hand", 1.0, wall=lambda: 5.0, clock=lambda: 6.0)
+        hand = wc.read_marks(lagged)[0]
+        LEDGER.ok(hand["wall"] == 5.0 and "pickup_lag" not in hand,
+                  "a hand-written mark with no taken-at time still works, and says so",
+                  "`echo label > MARK` from a shell carries no clocks; it falls back to "
+                  "now and omits the lag field rather than inventing a zero")
 
         LEDGER.ok(wc.last_wire_t(path) == 11.0,
                   "last_wire_t reads the capture's own progress off disk",
