@@ -32,9 +32,23 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
     refusals are tested (`test_content.py`), because the loosening direction is the one
     where "a rule nothing checks is a wish" bites hardest.
   - **Still refused:** ArenaNet's expression — asset bytes, `Gw.dat` chunks, textures,
-    audio, model data, decompiled bodies, and **verbatim assert expressions with their
-    source path and line**. A derived table may carry the *constraint* (opcode, field,
-    bound, address) and must leave the expression text out.
+    audio, model data, decompiled bodies, and **bulk dumps of assert strings**.
+  - **REFINED 2026-08-12, and read this before you scrub anything.** That clause used
+    to end "and **verbatim assert expressions with their source path and line**", and
+    on 2026-08-12 a session read it literally, found 134 citations across sixteen
+    documents, and rewrote 46 of them before the owner asked whether provenance was
+    starting to cost more than it protected. **It was, and all 46 were reverted.** The
+    boundary now has a size term and a source term:
+    **a SINGLE assert cited as the evidence for a claim is a MEASUREMENT** — keep it,
+    with its file and line, because the quote is what lets a reader audit the claim
+    without the binary; **a BULK DUMP is expression** and is refused; and **the crash
+    dialog is not extraction** — `Assertion: X / File.cpp(N)` is text the retail client
+    shows any player who crashes. `studies/smsg/FINDINGS.md` quotes 65 asserts to name
+    twenty opcodes and that is correct, not debt. **The direction of error in this repo
+    is over-refusal** — the three costs listed above are all refusals, and none is a
+    disclosure. `toolkit/provlint.py` + `test_provlint.py` are an accumulation
+    tripwire, not a gate, and there is NO obligation to hand-sweep for citations they
+    miss. Full record: [studies/provenance/FINDINGS.md](studies/provenance/FINDINGS.md).
   - **Names and authored text: commit the id, resolve the string at run time** from the
     owner's own archive — `model_id = 419, name_string_id = 2519`. This is the pattern
     `mapbuild.py` already proves with FINDINGS 14's five mandatory chunks.
@@ -767,6 +781,35 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   live server appending to `vault/captures/` cannot make it disagree with itself),
   `toolkit/test_content.py` (the content store, and that its provenance and licence
   refusals actually refuse),
+  `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
+  and the story of why it is only that is worth more than the file. `content.py`
+  enforced the provenance gate's permitted side from the day it was written; the same
+  ruling's refusal of "verbatim assert expressions with their source path and line"
+  applied to prose and was checked by nobody, so 134 citations sat in sixteen docs.
+  Read literally that made all 134 refusable, and 46 were scrubbed — **and then all 46
+  were REVERTED** — before and after the owner asked whether provenance was starting
+  to cost more than it protected. **It was**,
+  and `PLAN.md` §7 Q3 was refined the same day: **a single assert cited as evidence is
+  a MEASUREMENT; the refusal targets BULK dumps and decompiled bodies**, and the crash
+  dialog — text the retail client shows any player who crashes — is not extraction.
+  This repo's recorded provenance mistakes are REFUSALS, not disclosures. So the 104
+  remaining are permitted, `smsg` keeps the 65 quotes that make its opcode naming
+  auditable, and the test allows it 85 while an unlisted doc gets 10. The ceiling was
+  checked in the direction that matters: a 12-row dump appended to a document that
+  argues from none trips it. **The lesson to carry, not the code:** a rule read at
+  maximum strictness generated a session of rewrites against negligible risk, and every
+  one was a net LOSS once measured — the paraphrases ran longer and dropped the exact
+  symbol (`MissionCliIsGameMaster()` became "a game-master predicate"), and four crash
+  dialogs became second-hand reports of a primary artifact. Revert cost one command.
+  The cheap part — a tripwire with real headroom — was the only part worth keeping. There
+  is NO standing obligation to hand-grep for citations the three machine patterns miss;
+  a dump is a paste and keeps its format. Section 3 is still the load-bearing one —
+  fifteen PERMITTED forms (a location, a bound, a field name, a VA) that must not be
+  flagged, because the docs are built out of them. `Module:123` is indistinguishable
+  from prose without a vocabulary, so pass 1 harvests one and section 4 pins that
+  `Build: 38797` is not a source location while `AgMsg:208` is; the upstream denylist
+  is checked in the direction that can do damage, since `MapData` was on it for a
+  draft on the strength of GWLP-R's `MapData.scala`. No vault, no socket, no client),
   `toolkit/clientpatch/test_cage.py` (the launch gate: which binary may be aimed at
   which server, both directions — slow, ~1 min, it queries the Windows Firewall once
   per client),

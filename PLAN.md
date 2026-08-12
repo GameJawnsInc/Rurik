@@ -1133,6 +1133,40 @@ boundary rather than a hole:
 3. **Provenance is per row**, the way `content/*.toml` already carries it — not per file, not per
    commit message.
 
+**REFINED 2026-08-12 by the owner: the refusal is aimed at BULK, and a single assert cited as
+evidence is a measurement.** The clause above — "verbatim assert expressions with their source
+path and line" — was read literally for one session and produced a 134-site sweep across sixteen
+documents. That was too much, and the owner's question ("are we going too crazy with provenance?")
+is answered by this section's own history: **the costly mistakes in this repo have been refusals**,
+not disclosures. Three are recorded four paragraphs up. So the boundary gains a size term and a
+source term:
+
+- **A single assert expression, cited as the evidence for a claim, is a MEASUREMENT.** Permitted,
+  with its file and line. This is what `studies/smsg/FINDINGS.md` does twenty times over to name
+  GAME_SMSG opcodes, and the quote is what lets a reader audit the naming argument without the
+  binary in front of them. Removing it costs real evidence quality and buys almost nothing.
+- **A BULK DUMP of assert strings is still ArenaNet's expression.** A 477-opcode table of them is
+  a source dump with extra steps, exactly as the paragraph above says. The line is accumulation,
+  not any one citation.
+- **The crash dialog is NOT extraction.** `Assertion: <expr> / File.cpp(NNN)` is text the retail
+  client puts on screen for any player who crashes; people paste it into forums. That is
+  categorically different from a scripted sweep of the PE's string table, and the two had been
+  treated identically.
+- **Unchanged and absolute:** asset bytes, `Gw.dat` chunks, textures, audio, model data, and
+  decompiled function bodies. That tier is the one with teeth and it does not move.
+
+**What this leaves.** [studies/provenance/FINDINGS.md](studies/provenance/FINDINGS.md) is the
+audit. `content.py` enforced the PERMITTED half of this ruling from the day it was written; the
+REFUSED half applied to prose and was checked by nobody, which is the finding worth keeping. **46
+sites in 15 files were scrubbed** before the refinement landed — they read fine and are left that
+way, but they are no longer *required* to be at zero. The **104 remaining** are now permitted, and
+`toolkit/provlint.py` is repurposed from a zero-tolerance gate into an **accumulation tripwire**:
+it fails when a document starts becoming a dump, not when one is cited. Two findings worth carrying
+back here: a `P:\Code` grep finds only **13 of the 134**, because most citation uses
+`AgMsg.cpp:513` rather than the full build path — and **the illustrative example three paragraphs
+above is itself the pattern it once forbade**, kept deliberately, because a rule that cannot show
+what it means is harder to follow than one that quotes itself once.
+
 **What this deliberately does not touch.** The **derivation register** (§6.1) is a *second and
 separate* gate: it governs other people's work — OpenTyria, Py4GW_Reforged, GWCA, `gw-preservation`
 — and it is a licence question, not the ArenaNet question. Loosening nothing here changes it, and
@@ -1226,6 +1260,24 @@ list is reconciled against `CLAUDE.md`'s suite list in both directions: 50 named
 none named that does not exist and none on disk that is not named. That reconciliation is
 the point — the first sweep of this session ran 49 and would have reported a full pass,
 which is the defect `CLAUDE.md` already names from the other side.*
+
+0n. ✅ **CLOSED 2026-08-12 by the owner, the same day it opened — and the decision was
+    to STOP, which is the interesting part.** The question was what to do with 104
+    refused triples left after a 46-site scrub, 65 of them in
+    `studies/smsg/FINDINGS.md`. **Ruled: a single assert expression cited as evidence
+    is a measurement; the refusal targets bulk dumps and decompiled bodies** (§7 Q3,
+    refined). The 104 are permitted, the backlog is retired, and the scrub stops here.
+    Rationale, in the owner's framing: provenance must not hinder development speed,
+    and this section's own record says the expensive mistakes have been **refusals** —
+    an undecided assert table, three names caught late in a draft, R4c-2's unit data
+    unbuilt behind a rule that never forbade it. `smsg`'s quoted asserts are the
+    auditable half of how twenty opcodes got named; scrubbing them would have traded
+    real evidence quality for negligible risk. `toolkit/provlint.py` stays, repurposed
+    from a zero-tolerance gate into an **accumulation tripwire** — it is the one part
+    with no recurring cost, and it now fails only when a document starts becoming a
+    dump. The hand-sweep expectation the audit created is **deleted**: an unbounded
+    manual grep in service of the low-risk tier is exactly the drag this ruling exists
+    to avoid. The checker catches what it catches, and that is the standard.
 
 0m. **THE MONSTER-AI DIVE LANDED, and it leaves four desk tasks that need NO capture,
     NO client launch and NO operator.** [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
