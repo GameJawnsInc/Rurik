@@ -1712,9 +1712,21 @@ def _smsgsweep_steps(a, o, dwell=0.4):
 
     Unlike every other probe here the steps are NOT seconds apart for a human to watch.
     The readout is the capture, not the screen -- `smsgsweep.analyse` attributes each
-    c2s reply by IDENTITY against a measured idle floor of {0x0008, 0x0009}, so the
-    dwell only has to exceed the client's reaction time, not a person's. 0.4 s over 324
-    opcodes is about two minutes.
+    c2s reply by IDENTITY, so the dwell only has to exceed the client's reaction time,
+    not a person's. 0.4 s over 324 opcodes is about two minutes.
+
+    THE FIRST STEP'S DELAY IS THE EXPERIMENT'S CONTROL, and it is why this probe waits
+    ten seconds before doing anything. The pilot of 2026-08-12 fired its first packet
+    3.66 s in, 0.2 s after the client's own load traffic stopped arriving
+    (INSTANCE_LOAD_REQUEST_SPAWN_POINT, MISSION_MASK_REPORT, TARGET_SELECT) -- and a c2s
+    0x0000 landing 5 ms later was scored as a reply to that first send. It may be one.
+    That run had no way to tell. So: `settle` seconds of nothing for the load to finish,
+    then `control` seconds of nothing that the analyser MEASURES -- whatever the client
+    says in that window it said unprompted, and a "reply" on one of those opcodes is
+    downgraded to CONTESTED rather than counted as a binding.
+
+    The plan owns both numbers, so the analyser reads back exactly what the run used.
+    Passing them separately is how a control window silently moves off the quiet part.
 
     An empty plan is a REFUSAL rather than an empty run: a probe that sends nothing and
     prints "complete" is exactly the shape of a green run that measured nothing.
@@ -1725,17 +1737,20 @@ def _smsgsweep_steps(a, o, dwell=0.4):
         return [Step(0.0, 0x0000, [], "NO PLAN -- run smsgsweep.py --plan first",
                      "nothing was sent; this run measures nothing")]
     codec = _sweep_codec()
+    dwell = float(p.get("dwell", dwell))
+    quiet = (float(p.get("settle", smsgsweep.SETTLE))
+             + float(p.get("control", smsgsweep.CONTROL)))
     steps = []
     for i, row in enumerate(p["rows"], 1):
         opcode = row["opcode"]
         try:
             values = smsgsweep.degenerate(codec, opcode)
-        except ValueError as exc:
+        except ValueError:
             continue                       # recorded in the plan's `refused` already
-        steps.append(Step(dwell, opcode, values,
+        steps.append(Step(quiet if i == 1 else dwell, opcode, values,
                           f"[{i}/{len(p['rows'])}] 0x{opcode:04X} "
                           f"({row.get('predicted', '?')})",
-                          "any c2s that is not 0x0008/0x0009 is a reply to this"))
+                          "any c2s the control window did not also produce is a reply"))
     return steps
 
 
@@ -1755,13 +1770,16 @@ PROBES = {
                  "handler that early-outs on a zero id looks identical to one that does "
                  "nothing. The result worth having is a REPLY: the client sending a c2s "
                  "message names the request a panel makes, which is the binding a live "
-                 "session would otherwise have to go and discover. A crash is also a "
-                 "result, because the assert names a source file and a bound.",
+                 "session would otherwise have to go and discover. A channel teardown is "
+                 "also a result -- but it is NOT a crash until the session report's "
+                 "endpoint table says the client stopped: 0x000B tore the game channel "
+                 "down in the pilot and the client was alive on a loading screen 42 s "
+                 "later, with no assert in Gw.log and no fatal-error dialog.",
         steps=_smsgsweep_steps(a, o),
         note="Loopback only -- both endpoints ours, ours-DH client, cage verified. "
-             "Score the run with `smsgsweep.py --analyse <the server's capture jsonl>`; "
-             "attribution is by opcode identity against a measured idle floor of "
-             "{0x0008, 0x0009}, not by timing."),
+             "Score with `smsgsweep.py --from-report <the run's report.json> --record`. "
+             "Attribution is by opcode identity, against this run's OWN control window "
+             "-- the quiet seconds before the first send -- and not by timing."),
     "agent_removal": lambda a, o: Probe(
         question="Does GAME_SMSG 0x0021 remove an agent the client is already "
                  "drawing, and is its id then safe to reuse?",

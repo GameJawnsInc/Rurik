@@ -7,11 +7,12 @@ denominator, which is 324 rather than the 332 that paper first quoted). This is 
 loopback half of closing that: our own server sends each one to a client we control, on
 127.0.0.1, and the client's own reaction is the measurement.
 
-    python toolkit/authsrv/smsgsweep.py --plan            # write the plan, send nothing
-    python toolkit/authsrv/smsgsweep.py --analyse <cap>   # score a run
+    python toolkit/authsrv/smsgsweep.py --plan --resume     # next batch; sends nothing
+    python toolkit/authsrv/smsgsweep.py --from-report R.json --record   # score + record
+    python toolkit/authsrv/smsgsweep.py --report           # what the sweep knows so far
 
-    # the run itself, once a client is up against our server:
-    python toolkit/authsrv/authsrv.py --probe smsgsweep
+    # the run itself, once the harness has a client up against our server:
+    python toolkit/harness/session.py --game-args "--probe smsgsweep" --keep-open --hold 90
 
 **No live service is involved at any point.** Both endpoints are ours, the client is an
 ours-DH build under `vault/run/`, and `cage.assert_launch_safe(exe, "127.0.0.1")` is the
@@ -33,30 +34,77 @@ Three things that partition already settled, each of which had been assumed othe
     a builder reading the base catalogue produces the wrong arity for those three and
     only those three -- measured, 484 of 487 instead of 487 of 487.
 
+WHAT THE PILOT OF 2026-08-12 COST, because every one of its four defects printed a
+confident number rather than an error, and three of them printed the WRONG one:
+
+  1. **The readout could not see its own stimulus.** `analyse` read s2c `frame` events,
+     but the recorder writes our sends as `sent` events and only the RECEIVE path writes
+     frames. It found zero stimuli in a run that sent twelve and reported a clean
+     "nothing happened".
+  2. **The stimulus landed inside the client's own load traffic.** The first packet went
+     out 3.66 s in, while the client was still sending `INSTANCE_LOAD_REQUEST_SPAWN_POINT`,
+     `MISSION_MASK_REPORT` and `TARGET_SELECT`. A c2s `0x0000` arriving 5 ms after our
+     first send was scored REPLIED. It may well be one; the run had no way to tell, and
+     neither did the report. Hence `settle` and the CONTROL WINDOW below.
+  3. **"DIED" was reported for a client that did not die.** The run recorded
+     `ConnectionResetError` after `0x000B` and called it a crash. The session report's
+     own endpoint table says the AUTH connection stayed ESTABLISHED for another 42 s, no
+     assert reached `Gw.log`, and no fatal-error dialog was ever raised -- the final
+     screenshot is a live client sitting on the Ascalon City loading screen at 0%,
+     "Connecting". `0x000B` tore down the GAME CHANNEL and left the client running. That
+     is a better-specified result than a crash, and the word for it is DROPPED_CHANNEL.
+  4. **The ten table-less opcodes were in the plan.** `0x000B` is one of them, it was
+     step 12 of 24, and it ended the run. They are now excluded by default and reachable
+     only through `--table-less`, deliberately, because they are handled below the
+     message table and behave nothing like the 324 this sweep is about.
+
 THE READOUT, and why it needs nothing new. The capture the server already writes holds
 both directions with timestamps, so a run is scored by joining it to itself: find our
 sweep send in the s2c stream, then attribute the client's c2s messages that follow it.
-Attribution is by IDENTITY rather than by timing, which is what makes it sound -- a
-parked loopback client's idle traffic is only `0x0008` and `0x0009`, so anything else
-arriving after a stimulus is a reply to it.
+Attribution is by IDENTITY rather than by timing, which is what makes it sound -- but
+identity is only sound against a floor of what the client says WITHOUT being asked, and
+that floor is now MEASURED IN THE RUN ITSELF rather than inherited from another session:
+
+    CONTROL WINDOW   the `control` seconds immediately before the first send, after
+                     `settle` seconds of doing nothing at all. Whatever arrives there
+                     arrived unprompted, in this client, in this map, in this session.
+                     Any "reply" on an opcode the control window also produced is
+                     downgraded to CONTESTED and never counted as a binding.
+
+A run with no control window can attribute nothing and says so with a non-zero exit.
 
 WHAT COUNTS AS AN EFFECT, in decreasing order of how much it tells you:
 
-    REPLIED    the client sent a c2s message that is not the idle floor. The strongest
-               result: it names the request an opcode's panel makes, which is the
-               binding a live session would otherwise have to discover.
-    DIED       the connection dropped, or the client asserted. Also a result -- the
-               assert names a source file and a bound, which is a spec fragment.
-    SILENT     nothing. NOT "no handler": see above. Worth least, and it is most of
-               them.
+    REPLIED    the client sent a c2s message that neither the idle floor nor this run's
+               own control window accounts for. The strongest result: it names the
+               request an opcode's panel makes, which is the binding a live session
+               would otherwise have to discover.
+    UNDECODABLE the client answered on an opcode our catalogue cannot frame. STRONGER
+               than REPLIED as evidence that something happened, weaker as a binding,
+               and it must never be confused with the connection dying -- the recorder
+               writes those as two different record kinds and this module reads both.
+    DROPPED_CHANNEL  the client closed the game channel. A result, not a crash: see
+               defect 3 above. Check the session report's endpoint table before ever
+               upgrading this word to "crashed".
+    CONTESTED  a reply on an opcode this run's own control window also produced.
+    SILENT     nothing. NOT "no handler": see above. Worth least, and it is most of them.
+    UNREACHED  the plan named it and the capture has no send for it -- or the send came
+               after the connection was already gone. NOT a measurement of the opcode,
+               and it is kept out of the ledger so a resumed run tries it again.
 
 DEGENERATE VALUES ARE THE POINT AND THE LIMIT. Every field goes out zeroed, so this
 measures what an opcode does with an EMPTY payload, and a handler that early-outs on a
 zero id is indistinguishable here from one that does nothing at all. That is a real
 ceiling on what a silent row means and it is stated rather than discovered later.
+
+RESUME IS THE CAPTURE, NOT A CURSOR. The sweep survives a dropped channel by keeping a
+ledger of opcodes that have actually been MEASURED, rebuilt from captures rather than
+written as the probe goes: a cursor advanced at send time records opcodes the client may
+never have received. `--plan --resume` then skips what the ledger holds, so an operator
+loops launch/score/replan until `--report` says nothing is left.
 """
 import argparse
-import binascii
+import glob
 import json
 import os
 import sys
@@ -69,12 +117,42 @@ import vaultpath  # noqa: E402
 from codec import Codec  # noqa: E402
 
 # A parked loopback client sends only these. MEASURED over 47 idle sessions and 2,822 s:
-# 0x0009 at 0.082/s and 0x0008 at 0.013/s, and nothing else. That is what makes
-# attribution by identity sound -- any other opcode arriving after a stimulus is a reply
-# to it, and no timing argument is needed.
+# 0x0009 at 0.082/s and 0x0008 at 0.013/s, and nothing else. This is the PRIOR, and it is
+# no longer trusted alone -- every run measures its own floor in a control window, because
+# the pilot's floor was measured on a parked client and the sweep's client is one that has
+# just finished loading a map. See CONTROL WINDOW above.
 IDLE_FLOOR = {0x0008, 0x0009}
 
+# The ten opcodes the schema catalogues with NO entry in the client's receive table,
+# MEASURED on build 38797 (toolkit/clientscan/test_msghandler.py pins this same literal,
+# and `_check_table_less` refuses if the disassembler disagrees). They are handled below
+# the message table -- 0x000C/0x000D are the latency round trip, which the client acts on
+# unmistakably -- so they are neither part of the 324 nor safe to walk into: 0x000B tore
+# the game channel down in the pilot.
+NOT_IN_RECV_TABLE = {0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x004F, 0x0055, 0x007F,
+                     0x014A, 0x01DA}
+
+# Seconds of doing NOTHING after the probe starts, before the control window opens. The
+# pilot fired its first packet 3.66 s in and landed inside the client's own load traffic;
+# that load was still arriving at 3.44 s. 6 s is that with room, and it costs one dwell
+# per run rather than one per opcode.
+SETTLE = 6.0
+# Seconds of measured quiet immediately before the first send. Everything the client says
+# here is unprompted BY CONSTRUCTION, and that is the run's own floor.
+CONTROL = 4.0
+# Between sends. Only has to exceed the client's reaction time, not a person's -- the
+# readout is the capture, not the screen.
+DWELL = 0.4
+
 PLAN_NAME = "smsgsweep-plan.json"
+LEDGER_NAME = "smsgsweep-results.json"
+SEEN_NAME = "smsgsweep-seen.txt"
+
+# Effects that mean the opcode was actually put to a client that PROVED it was still
+# running afterwards, and is therefore done with. There is deliberately no entry here for
+# the run ending: a crash belongs to a window of opcodes, never to one, so it cannot
+# retire a row.
+MEASURED = ("REPLIED", "UNDECODABLE", "CONTESTED", "SILENT")
 
 
 def degenerate(codec, opcode, channel="GAME_SMSG"):
@@ -129,28 +207,86 @@ def encodable(codec, channel="GAME_SMSG"):
     return good, refused
 
 
-def plan(codec, seen, classified=None):
+def check_table_less(classified, schema_opcodes):
+    """The literal ten against the disassembler, when the disassembler is there.
+
+    A constant nothing checks is a wish. `classified` is the receive table read out of
+    build 38797; the opcodes the schema carries that it does not hold must be exactly
+    NOT_IN_RECV_TABLE. Returns None when there is nothing to check against.
+    """
+    if not classified:
+        return None
+    missing = set(schema_opcodes) - set(classified)
+    if missing != NOT_IN_RECV_TABLE:
+        raise ValueError(
+            "the receive table disagrees with NOT_IN_RECV_TABLE: the client is missing "
+            f"{sorted(hex(o) for o in missing)}, this module says "
+            f"{sorted(hex(o) for o in NOT_IN_RECV_TABLE)}. Refusing to plan a sweep "
+            "against a constant that no longer describes the binary.")
+    return len(missing)
+
+
+def plan(codec, seen=(), classified=None, done=(), table_less=False,
+         settle=SETTLE, control=CONTROL, dwell=DWELL, limit=0, only=None):
     """The ordered send list: never-seen opcodes first, each with its prediction.
 
-    `seen` is the set observed from ArenaNet -- those are excluded, because the point is
-    the third of the catalogue nothing has ever watched. `classified` is
-    `msghandler.classify()`'s output if the disassembler is available; without it the
-    plan still runs and simply carries no prediction to score against, which is a
+    `seen` is the set observed from ArenaNet -- excluded, because the point is the third
+    of the catalogue nothing has ever watched. `done` is the ledger: opcodes a previous
+    run already measured, which is how a sweep resumes after a dropped channel.
+    `classified` is `msghandler.classify()`'s output if the disassembler is available;
+    without it the plan still runs and carries no prediction to score against, which is a
     weaker experiment and says so in the file.
+
+    The ten table-less opcodes are EXCLUDED unless `table_less`, in which case they are
+    the only thing in the plan. They are not part of the 324 and one of them ended the
+    pilot at step 12.
     """
     good, refused = encodable(codec)
-    rows = []
+    check_table_less(classified, [int(k) for k in codec.channels["GAME_SMSG"]["messages"]])
+    seen, done = set(seen), set(done)
+    rows, skipped = [], {"seen": 0, "done": 0, "table_less": 0, "not_only": 0}
     for opcode in sorted(good):
+        # `only` bisects a crash window, so it overrides every other filter INCLUDING the
+        # table-less exclusion and the ledger -- the whole point is to re-send opcodes a
+        # previous run could not clear.
+        if only is not None:
+            if opcode not in only:
+                skipped["not_only"] += 1
+                continue
+            c = (classified or {}).get(opcode) or {}
+            rows.append({"opcode": opcode,
+                         "predicted": c.get("class", "UNKNOWN"),
+                         "callee": (c.get("callees") or [None])[0],
+                         "bytes": len(codec.encode("GAME_SMSG", opcode,
+                                                   list(good[opcode])))})
+            continue
         if opcode in seen:
+            skipped["seen"] += 1
+            continue
+        if (opcode in NOT_IN_RECV_TABLE) != bool(table_less):
+            skipped["table_less"] += 1
+            continue
+        if opcode in done:
+            skipped["done"] += 1
             continue
         c = (classified or {}).get(opcode) or {}
         rows.append({"opcode": opcode,
                      "predicted": c.get("class", "UNKNOWN"),
                      "callee": c.get("callees", [None])[0] if c.get("callees") else None,
                      "bytes": len(codec.encode("GAME_SMSG", opcode, list(good[opcode])))})
+    remaining = len(rows)
+    if limit:
+        rows = rows[:limit]
     return {"rows": rows,
+            "remaining": remaining,
+            "skipped": skipped,
             "refused": {f"0x{k:04X}": v for k, v in refused.items()},
             "idle_floor": sorted(IDLE_FLOOR),
+            "settle": settle,
+            "control": control,
+            "dwell": dwell,
+            "table_less": bool(table_less),
+            "predicted": bool(classified),
             "note": "degenerate (all-zero) payloads; a handler that early-outs on a "
                     "zero id is indistinguishable here from one that does nothing"}
 
@@ -159,60 +295,359 @@ def plan_path():
     return os.path.join(vaultpath.vault_path("probes"), PLAN_NAME)
 
 
+def ledger_path():
+    return os.path.join(vaultpath.vault_path("probes"), LEDGER_NAME)
+
+
 def load_plan():
-    path = plan_path()
+    return _load_json(plan_path())
+
+
+def load_ledger():
+    return _load_json(ledger_path()) or {}
+
+
+def _load_json(path):
     if not os.path.isfile(path):
         return None
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
 
+def _write_json(path, obj):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(obj, fh, indent=1, sort_keys=True)
+
+
 # ---------------------------------------------------------------- analysis
 
-def analyse(capture_jsonl, codec=None):
-    """Score a run from the server's own capture: sent opcode -> what came back.
+def read_capture(capture_jsonl):
+    """The four streams a run is scored from, and nothing inferred.
 
-    Joins the capture to itself. Our sweep sends are in the s2c stream and the client's
-    replies are in the c2s stream, both stamped, so every c2s message is attributed to
-    the most recent sweep send before it -- and then filtered by IDENTITY against the
-    idle floor, which is what keeps the attribution honest at a 0.4 s dwell.
+    `sent` is OUR sweep sends -- NOT s2c `frame` events. The recorder logs the two
+    directions differently and only the receive path writes frames; reading frames finds
+    zero stimuli and reports a clean, wrong "nothing happened", which is what the pilot's
+    first analyser did.
+
+    `undecodable` is kept APART from `error`. A c2s message our catalogue cannot frame is
+    the client answering on an opcode we do not know -- the strongest evidence that
+    something happened -- and folding it into "the connection died" loses exactly the
+    result the sweep is for.
     """
-    codec = codec or Codec()
-    sends, replies, died = [], [], None
+    sends, replies, undec, gone = [], [], [], None
     with open(capture_jsonl, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             try:
                 rec = json.loads(line)
             except ValueError:
                 continue
-            kind = rec.get("kind")
-            # OUR sends are `sent` events, NOT s2c `frame` events -- the recorder logs
-            # the two directions differently and only the receive path writes frames.
-            # Reading s2c frames finds zero stimuli and reports a clean, wrong "nothing
-            # happened", which is what the first version of this function did.
+            kind, t = rec.get("kind"), float(rec.get("t", 0.0) or 0.0)
             if kind == "sent" and "PROBE[smsgsweep]" in (rec.get("label") or ""):
-                sends.append((float(rec.get("t", 0.0)), int(rec.get("opcode", 0))))
+                sends.append((t, int(rec.get("opcode", 0))))
             elif kind == "decoded":
-                replies.append((float(rec.get("t", 0.0)), int(rec.get("opcode", 0))))
-            elif kind == "error" and died is None:
-                died = (float(rec.get("t", 0.0)), str(rec.get("error", ""))[:120])
+                replies.append((t, int(rec.get("opcode", 0))))
+            elif kind == "undecodable":
+                undec.append((t, str(rec.get("error", ""))[:160]))
+            elif kind in ("error", "disconnect") and gone is None:
+                gone = (t, str(rec.get("error", "") or "disconnect")[:160])
+    return sends, replies, undec, gone
+
+
+def control_window(sends, replies, settle, control):
+    """What the client said unprompted, measured in THIS run.
+
+    The window is the `control` seconds immediately before the first sweep send. Nothing
+    of ours goes out in it by construction, so every opcode in it is noise -- this
+    client, this map, this session. Returns (opcodes, span) or (None, None) when there is
+    no first send to anchor it, in which case the run can attribute nothing.
+    """
+    if not sends:
+        return None, None
+    t0 = min(t for t, _ in sends)
+    lo = t0 - float(control)
+    got = {op for t, op in replies if lo <= t < t0}
+    return got, (lo, t0)
+
+
+def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=None):
+    """Score a run from the server's own capture: sent opcode -> what came back.
+
+    Joins the capture to itself. Every c2s message is attributed to the most recent sweep
+    send before it, then filtered by IDENTITY against the idle floor AND against this
+    run's own control window.
+
+    THE FENCE IS THE CLIENT'S OWN PROOF OF LIFE, NOT THE SOCKET. An opcode is scored only
+    if a c2s message arrived AFTER it went out. Fencing on the connection instead was
+    wrong by 31.6 seconds and 78 opcodes on 2026-08-12: a Guild Wars assert leaves the
+    process ALIVE behind a modal dialog, its message pump stopped and its socket open, so
+    the client stopped answering at t=17.16 and `ConnectionResetError` did not arrive
+    until t=48.77. Everything between was scored SILENT -- 78 confident measurements of a
+    client that was showing a crash dialog. `capture_error_dialog`'s own docstring says a
+    ConnectionResetError appears on a clean teardown as readily as on a crash; the
+    converse is what bit here, and the client's traffic is the only honest witness.
+
+    WHAT THAT COSTS, stated rather than discovered: the proof of life is the client's
+    reply to our ping, which `world_tick` issues every 5 s, so the last ~5 s of sends in
+    every run have no proof and come back UNREACHED. At a 0.4 s dwell that is about
+    twelve opcodes per run, retried next time. It also sets the CRASH LOCALISATION
+    granularity -- a run that dies can only name the window between the last proof of
+    life and the end, never a single opcode. Narrow it with a longer dwell, or bisect the
+    window with `--only`.
+    """
+    codec = codec or Codec()
+    sends, replies, undec, gone = read_capture(capture_jsonl)
+    noise, span = control_window(sends, replies, settle, control)
+    floor = set(IDLE_FLOOR) | set(noise or ())
+
+    # The client demonstrably had its message pump running at this moment.
+    beats = [t for t, _ in replies] + [t for t, _ in undec]
+    alive_until = max(beats) if beats else None
+    fence = alive_until if alive_until is not None else -1.0
+    if gone is not None:
+        fence = min(fence, gone[0])
+    live = [(t, op) for t, op in sends if t < fence]
+    dead = [op for t, op in sends if t >= fence]
 
     out = {}
-    for i, (t, opcode) in enumerate(sends):
-        end = sends[i + 1][0] if i + 1 < len(sends) else float("inf")
-        got = [op for rt, op in replies if t <= rt < end and op not in IDLE_FLOOR]
-        row = out.setdefault(opcode, {"sent": 0, "replies": []})
+    for i, (t, opcode) in enumerate(live):
+        end = live[i + 1][0] if i + 1 < len(live) else float("inf")
+        got = [op for rt, op in replies if t <= rt < end and op not in floor]
+        contested = [op for rt, op in replies
+                     if t <= rt < end and op in (noise or ()) and op not in IDLE_FLOOR]
+        bad = [e for rt, e in undec if t <= rt < end]
+        row = out.setdefault(opcode, {"sent": 0, "replies": [], "contested": [],
+                                      "undecodable": []})
         row["sent"] += 1
         row["replies"].extend(got)
+        row["contested"].extend(contested)
+        row["undecodable"].extend(bad)
+
     for opcode, row in out.items():
-        row["effect"] = "REPLIED" if row["replies"] else "SILENT"
-    # The connection dying IS a result, and it belongs to the LAST opcode sent before
-    # it -- attributing it to nothing at all is how a crash gets read as a clean run.
-    if died and sends:
-        last = max(sends, key=lambda s: s[0])
-        out[last[1]]["effect"] = "DIED"
-        out[last[1]]["died"] = died
-    return out
+        if row["replies"]:
+            row["effect"] = "REPLIED"
+        elif row["undecodable"]:
+            row["effect"] = "UNDECODABLE"
+        elif row["contested"]:
+            row["effect"] = "CONTESTED"
+        else:
+            row["effect"] = "SILENT"
+
+    # THE RUN ENDING IS A RESULT, AND IT BELONGS TO A WINDOW RATHER THAN TO ONE OPCODE.
+    # Attributing it to the last opcode sent named 0x00A9 on 2026-08-12; the client had
+    # actually asserted around 0x0012, seventy-eight sends earlier, and sat behind a modal
+    # dialog with the socket open. The window is every send with no proof of life after
+    # it, and naming one of them would be a guess dressed as a measurement. Bisect it.
+    crash = None
+    if (gone is not None or dead) and dead:
+        crash = {"window": sorted(set(dead)),
+                 "alive_until": alive_until,
+                 "socket_closed": gone[0] if gone else None,
+                 "why": gone[1] if gone else "the client stopped answering"}
+
+    unreached = sorted(set(dead))
+    if planned:
+        unreached = sorted(set(unreached) | (set(planned) - {op for _, op in live}))
+    # `noise` is EVERYTHING the client said unprompted, which makes the window a check on
+    # IDLE_FLOOR as well as a filter: the prior was measured on a parked client, and this
+    # one has just loaded a map. Splitting it is the honest report -- what corroborated
+    # the prior, and what the prior did not know about.
+    return {"table": out,
+            "crash": crash,
+            "alive_until": alive_until,
+            "noise": sorted(noise) if noise is not None else None,
+            "floor_seen": sorted(set(noise or ()) & IDLE_FLOOR) if noise is not None else None,
+            "new_noise": sorted(set(noise or ()) - IDLE_FLOOR) if noise is not None else None,
+            "control_span": span,
+            "unreached": unreached,
+            "gone": gone,
+            "capture": os.path.basename(capture_jsonl)}
+
+
+def record(result, ledger=None):
+    """Merge a scored run into the ledger. UNREACHED opcodes are never recorded.
+
+    An opcode is in the ledger only if the capture shows it went out on a live channel.
+    That is the whole resume mechanism: a cursor advanced at send time would record
+    opcodes the client may never have received, and the sweep would walk past them.
+    """
+    ledger = dict(ledger if ledger is not None else load_ledger())
+    added = 0
+    for opcode, row in result["table"].items():
+        if row["effect"] not in MEASURED:
+            continue
+        key = f"0x{opcode:04X}"
+        if key in ledger:
+            continue
+        ledger[key] = {"effect": row["effect"],
+                       "replies": sorted(set(row["replies"])),
+                       "contested": sorted(set(row["contested"])),
+                       "undecodable": row["undecodable"][:2],
+                       "capture": result["capture"]}
+        added += 1
+    return ledger, added
+
+
+def done_opcodes(ledger=None):
+    ledger = ledger if ledger is not None else load_ledger()
+    return {int(k, 16) for k in ledger}
+
+
+def observed_from_live():
+    """The GAME_SMSG opcodes ArenaNet has actually sent us, rebuilt from the tapes.
+
+    THE DENOMINATOR HAS TO BE REPRODUCIBLE. The pilot's `seen` list was a text file
+    somebody made once, in a scratch directory that does not survive the session -- and
+    "324 never-seen opcodes" is a claim about that file as much as about the client. This
+    recomputes it from the live captures with `tape.decode_all`, which frames the WHOLE
+    stream: the per-event idiom it replaced lost 4,251 messages of 22,137 and invented
+    117, and an opcode seen only in a lost message would be swept as never-seen.
+
+    Live captures only. Pooling ours with ArenaNet's is the one thing `toolkit/origin.py`
+    exists to refuse, and a sweep whose denominator counted our own server's sends would
+    exclude exactly the opcodes it is meant to try.
+    """
+    import tape
+    root = vaultpath.require_dir("captures", "live",
+                                 why="the sweep's denominator is what ArenaNet has sent")
+    codec = Codec()
+    seen, dirs = set(), []
+    for name in sorted(os.listdir(root)):
+        path = os.path.join(root, name)
+        if not os.path.isdir(path):
+            continue
+        if not any(f.startswith("game-") and f.endswith(".jsonl")
+                   for f in os.listdir(path)):
+            continue
+        for ch in tape.channel_files(path):
+            conn = ch["connection"] if isinstance(ch, dict) else str(ch)
+            # NOT FILTERED BY PORT, and this cost a wrong number before it was written
+            # down: a `:6112` filter looks like the obvious way to keep the web gateway
+            # out, and it silently cut the corpus from 155 opcodes to 52. ArenaNet serves
+            # the GAME channel on port 80 in 10 of the 12 canon connections -- both
+            # 20260807T143055 and 20260810T235916 are entirely port 80 -- so the port
+            # says nothing about the protocol. `channel_files` selects decrypted game
+            # channels by content and `load_tape` refuses any capture that is not live;
+            # those are the discriminators, and the count is the check.
+            try:
+                _info, events = tape.load_tape(path, connection=conn)
+                msgs, receipt = tape.decode_all(events, codec, "GAME_SMSG")
+            except Exception as exc:
+                print(f"  SKIP {name}/{conn}: {type(exc).__name__}: "
+                      f"{str(exc).splitlines()[0][:120]}")
+                continue
+            seen |= {op for _t, op, _v in msgs}
+            dirs.append(f"{name}/{conn} ({len(msgs)} msgs, {receipt[0]:,}/{receipt[1]:,}B)")
+    if not seen:
+        raise ValueError(
+            "no GAME_SMSG opcode was read from any live capture. Refusing to write an "
+            "empty observed set: it would make the sweep plan EVERY opcode, including "
+            "the 155 ArenaNet has already shown us, and the run would look bigger "
+            "rather than broken.")
+    return seen, dirs
+
+
+def capture_from_report(report_json):
+    """The gamesrv capture THIS run produced, named by the run's own report.
+
+    Never the newest file in a directory. `sorted(...)[-1]` picked the wrong client on
+    2026-08-06 and the same reasoning applies to a capture: the run that wrote the report
+    is the run whose capture must be scored, and the report says which one that is.
+    """
+    with open(report_json, encoding="utf-8") as fh:
+        rep = json.load(fh)
+    caps = [c for c in rep.get("captures", []) if "gamesrv" in c.replace("\\", "/")]
+    if len(caps) != 1:
+        raise ValueError(f"{report_json} names {len(caps)} gamesrv captures; "
+                         f"expected exactly 1 -- refusing to pick one")
+    return caps[0]
+
+
+# ---------------------------------------------------------------- reporting
+
+def print_run(result):
+    table = result["table"]
+    by = {}
+    for row in table.values():
+        by[row["effect"]] = by.get(row["effect"], 0) + 1
+    if result["noise"] is None:
+        print("NO CONTROL WINDOW: this run has no sweep send to anchor one, so nothing "
+              "it saw can be attributed. Scoring stops here.")
+        return 2
+    span = result["control_span"]
+    fs = " ".join("0x%04X" % o for o in result["floor_seen"]) or "-"
+    nn = " ".join("0x%04X" % o for o in result["new_noise"]) or "-"
+    print(f"control window {span[0]:.2f}..{span[1]:.2f}s "
+          f"({span[1] - span[0]:.1f}s of nothing sent):")
+    print(f"  known idle floor seen: {fs}   NEW unprompted this run: {nn}")
+    if result["new_noise"]:
+        print("  -> the prior floor {0x0008, 0x0009} was measured on a PARKED client; "
+              "these are what a just-loaded one adds, and no reply on them counts.")
+    print(f"{len(table)} opcode(s) stimulated on a live channel -> "
+          + ", ".join(f"{k} {v}" for k, v in sorted(by.items())))
+    for want in ("REPLIED", "UNDECODABLE", "CONTESTED"):
+        for opcode in sorted(o for o, r in table.items() if r["effect"] == want):
+            row = table[opcode]
+            if want == "REPLIED":
+                got = " ".join(f"0x{o:04X}" for o in sorted(set(row["replies"])))
+                print(f"  REPLIED      0x{opcode:04X} -> {got}")
+            elif want == "UNDECODABLE":
+                print(f"  UNDECODABLE  0x{opcode:04X} -> {row['undecodable'][0]}")
+            else:
+                got = " ".join(f"0x{o:04X}" for o in sorted(set(row["contested"])))
+                print(f"  CONTESTED    0x{opcode:04X} -> {got} (also unprompted)")
+    c = result["crash"]
+    if c:
+        w = c["window"]
+        print(f"\nTHE RUN ENDED. Last proof of life t={c['alive_until']:.2f}s"
+              + (f", socket closed t={c['socket_closed']:.2f}s "
+                 f"({c['socket_closed'] - c['alive_until']:.1f}s later)"
+                 if c["socket_closed"] else "") + ".")
+        print(f"  CRASH WINDOW: {len(w)} opcode(s) with no proof of life after them. "
+              f"NOT attributed to one -- naming the last would be a guess.")
+        print("    " + " ".join(f"0x{o:04X}" for o in w[:16])
+              + (" ..." if len(w) > 16 else ""))
+        print(f"  Bisect it:  --plan --only "
+              f"{','.join('0x%04X' % o for o in w[:len(w) // 2 or 1][:8])}...")
+        print("  A Guild Wars assert leaves the process ALIVE behind a modal dialog with "
+              "its socket open, so the socket time is an upper bound and nothing more.")
+    if result["unreached"]:
+        u = result["unreached"]
+        print(f"  {len(u)} planned opcode(s) UNREACHED, not recorded, will be retried: "
+              + " ".join(f"0x{o:04X}" for o in u[:12]) + (" ..." if len(u) > 12 else ""))
+    if not by.get("REPLIED") and not by.get("UNDECODABLE"):
+        print("  (no replies. With all-zero payloads that is the expected common case, "
+              "and it is NOT evidence of a missing handler -- every entry in the receive "
+              "table dispatches.)")
+    return 0
+
+
+def print_report(ledger, codec):
+    total = len({int(k) for k in codec.channels["GAME_SMSG"]["messages"]})
+    by = {}
+    for row in ledger.values():
+        by[row["effect"]] = by.get(row["effect"], 0) + 1
+    print(f"ledger: {len(ledger)} opcode(s) measured of {total} catalogued")
+    for k, v in sorted(by.items()):
+        print(f"  {k:<16} {v}")
+    for want in ("REPLIED", "UNDECODABLE", "DROPPED_CHANNEL", "CONTESTED"):
+        for key in sorted(k for k, r in ledger.items() if r["effect"] == want):
+            row = ledger[key]
+            detail = (" ".join(f"0x{o:04X}" for o in row["replies"])
+                      or " ".join(f"0x{o:04X}" for o in row["contested"])
+                      or (row["undecodable"] or [""])[0])
+            print(f"  {want:<16} {key} {detail}  [{row['capture']}]")
+    return 0
+
+
+def _classify():
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+        import msghandler
+        return msghandler.classify(msghandler.Image())
+    except (ImportError, SystemExit, OSError) as exc:
+        print(f"(no static prediction: {type(exc).__name__}: {exc})")
+        return None
 
 
 def main():
@@ -221,58 +656,104 @@ def main():
     ap.add_argument("--plan", action="store_true", help="write the plan and exit")
     ap.add_argument("--analyse", metavar="CAPTURE_JSONL", default=None,
                     help="score a completed run from the server's capture")
+    ap.add_argument("--from-report", metavar="REPORT_JSON", default=None,
+                    help="score the run this session report names (never the newest file)")
+    ap.add_argument("--record", action="store_true",
+                    help="merge the scored run into the ledger so --resume skips it")
+    ap.add_argument("--report", action="store_true", help="print the ledger and exit")
+    ap.add_argument("--resume", action="store_true",
+                    help="plan only what the ledger has NOT measured")
+    ap.add_argument("--table-less", action="store_true",
+                    help="plan ONLY the ten opcodes with no receive-table entry. They "
+                         "are handled below the message table and one of them tore the "
+                         "game channel down; enter this deliberately, with --limit 1")
     ap.add_argument("--seen", default=None, metavar="FILE",
                     help="opcodes observed from ArenaNet, one per line")
+    ap.add_argument("--write-seen", action="store_true",
+                    help="recompute the observed set from the live tapes and write it "
+                         "to the vault, then exit")
     ap.add_argument("--limit", type=int, default=0,
-                    help="pilot: keep only the first N rows of the plan")
+                    help="keep only the first N rows of the plan")
+    ap.add_argument("--only", default=None, metavar="OPCODES",
+                    help="plan exactly these (comma-separated, 0x ok), overriding every "
+                         "filter. This is how a crash window is bisected down to the one "
+                         "opcode that ended a run")
+    ap.add_argument("--settle", type=float, default=SETTLE)
+    ap.add_argument("--control", type=float, default=CONTROL)
+    ap.add_argument("--dwell", type=float, default=DWELL)
     a = ap.parse_args()
     codec = Codec()
 
-    if a.analyse:
-        table = analyse(a.analyse, codec)
-        replied = {k: v for k, v in table.items() if v["effect"] == "REPLIED"}
-        dead = {k: v for k, v in table.items() if v["effect"] == "DIED"}
-        print(f"{len(table)} opcode(s) stimulated, {len(replied)} produced a reply, "
-              f"{len(dead)} ended the connection")
-        for opcode in sorted(replied):
-            got = " ".join(f"0x{o:04X}" for o in sorted(set(replied[opcode]["replies"])))
-            print(f"  REPLIED  0x{opcode:04X} -> {got}")
-        for opcode in sorted(dead):
-            print(f"  DIED     0x{opcode:04X} -> {dead[opcode]['died'][1]}")
-        if not replied:
-            print("  (no replies. With all-zero payloads that is the expected common "
-                  "case, and it is NOT evidence of a missing handler -- every entry in "
-                  "the receive table dispatches.)")
+    if a.report:
+        return print_report(load_ledger(), codec)
+
+    if a.write_seen:
+        seen, dirs = observed_from_live()
+        path = os.path.join(vaultpath.vault_path("probes"), SEEN_NAME)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("# GAME_SMSG opcodes OBSERVED from ArenaNet. Regenerate with\n"
+                     "#   python toolkit/authsrv/smsgsweep.py --write-seen\n"
+                     f"# {len(dirs)} live connection(s): {', '.join(dirs)}\n")
+            for o in sorted(seen):
+                fh.write(f"0x{o:04x}\n")
+        print(f"{len(seen)} observed over {len(dirs)} live connection(s) -> {path}")
         return 0
+
+    cap = a.analyse
+    if a.from_report:
+        cap = capture_from_report(a.from_report)
+        print(f"scoring {cap}")
+    if cap:
+        p = load_plan() or {}
+        result = analyse(cap, codec,
+                         settle=p.get("settle", a.settle),
+                         control=p.get("control", a.control),
+                         planned=[r["opcode"] for r in p.get("rows", [])])
+        rc = print_run(result)
+        if a.record and rc == 0:
+            ledger, added = record(result)
+            _write_json(ledger_path(), ledger)
+            print(f"recorded {added} newly measured opcode(s) -> {ledger_path()}")
+        elif a.record:
+            print("NOT recorded: the run could not attribute anything.")
+        return rc
 
     seen = set()
     if a.seen:
-        for line in open(a.seen, encoding="utf-8"):
-            line = line.split("#", 1)[0].strip()
-            if line:
-                seen.add(int(line, 0))
-    classified = None
+        with open(a.seen, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.split("#", 1)[0].strip()
+                if line:
+                    seen.add(int(line, 0))
+    done = done_opcodes() if a.resume else set()
+    only = None
+    if a.only:
+        only = {int(x, 0) for x in a.only.replace(" ", "").split(",") if x}
     try:
-        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
-        import msghandler
-        classified = msghandler.classify(msghandler.Image())
-    except (ImportError, SystemExit, OSError) as exc:
-        print(f"(no static prediction: {type(exc).__name__}: {exc})")
-
-    p = plan(codec, seen, classified)
-    if a.limit:
-        p["rows"] = p["rows"][:a.limit]
-        p["note"] += f"  PILOT: first {a.limit} rows only."
-    os.makedirs(os.path.dirname(plan_path()), exist_ok=True)
-    with open(plan_path(), "w", encoding="utf-8") as fh:
-        json.dump(p, fh, indent=1)
+        p = plan(codec, seen, _classify(), done=done, table_less=a.table_less,
+                 settle=a.settle, control=a.control, dwell=a.dwell, limit=a.limit,
+                 only=only)
+    except ValueError as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
+    _write_json(plan_path(), p)
     kinds = {}
     for r in p["rows"]:
         kinds[r["predicted"]] = kinds.get(r["predicted"], 0) + 1
-    print(f"{len(p['rows'])} opcode(s) planned -> {plan_path()}")
+    mode = "TABLE-LESS (below the message table)" if p["table_less"] else "receive table"
+    print(f"{len(p['rows'])} opcode(s) planned of {p['remaining']} remaining [{mode}] "
+          f"-> {plan_path()}")
     print(f"  predicted: {kinds}")
+    print(f"  skipped: {p['skipped']}")
+    print(f"  settle {p['settle']}s, control window {p['control']}s, dwell {p['dwell']}s "
+          f"-> about {p['settle'] + p['control'] + p['dwell'] * len(p['rows']):.0f}s")
     if p["refused"]:
         print(f"  {len(p['refused'])} refused to encode: {list(p['refused'])[:6]}")
+    if not p["rows"]:
+        print("  NOTHING TO SEND. A probe that sends nothing measures nothing; do not "
+              "launch a client for this plan.")
+        return 1
     return 0
 
 
