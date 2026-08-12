@@ -32,9 +32,23 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
     refusals are tested (`test_content.py`), because the loosening direction is the one
     where "a rule nothing checks is a wish" bites hardest.
   - **Still refused:** ArenaNet's expression — asset bytes, `Gw.dat` chunks, textures,
-    audio, model data, decompiled bodies, and **verbatim assert expressions with their
-    source path and line**. A derived table may carry the *constraint* (opcode, field,
-    bound, address) and must leave the expression text out.
+    audio, model data, decompiled bodies, and **bulk dumps of assert strings**.
+  - **REFINED 2026-08-12, and read this before you scrub anything.** That clause used
+    to end "and **verbatim assert expressions with their source path and line**", and
+    on 2026-08-12 a session read it literally, found 134 citations across sixteen
+    documents, and rewrote 46 of them before the owner asked whether provenance was
+    starting to cost more than it protected. **It was, and all 46 were reverted.** The
+    boundary now has a size term and a source term:
+    **a SINGLE assert cited as the evidence for a claim is a MEASUREMENT** — keep it,
+    with its file and line, because the quote is what lets a reader audit the claim
+    without the binary; **a BULK DUMP is expression** and is refused; and **the crash
+    dialog is not extraction** — `Assertion: X / File.cpp(N)` is text the retail client
+    shows any player who crashes. `studies/smsg/FINDINGS.md` quotes 65 asserts to name
+    twenty opcodes and that is correct, not debt. **The direction of error in this repo
+    is over-refusal** — the three costs listed above are all refusals, and none is a
+    disclosure. `toolkit/provlint.py` + `test_provlint.py` are an accumulation
+    tripwire, not a gate, and there is NO obligation to hand-sweep for citations they
+    miss. Full record: [studies/provenance/FINDINGS.md](studies/provenance/FINDINGS.md).
   - **Names and authored text: commit the id, resolve the string at run time** from the
     owner's own archive — `model_id = 419, name_string_id = 2519`. This is the pattern
     `mapbuild.py` already proves with FINDINGS 14's five mandatory chunks.
