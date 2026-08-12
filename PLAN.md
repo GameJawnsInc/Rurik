@@ -521,14 +521,32 @@ Both are now graded against an enumerated content surface:
   Flare 194, Healing Signet 1, Sever Artery 382, …). **Today n = 0.** Nine and not 21
   because the other twelve codes have no Pre-Searing content to test against; grading
   against 21 would grade v1 against non-v1 content.
-- **R4c — split, because half of it is blocked and reporting one number hides which.**
+- **R4c — split, because the two halves are reached by different instruments and reporting
+  one number hides which.**
   *R4c-1, capture-free*: 19 of 19 map rows with resolved file ids and arrival points that
-  pass the spawn-in-trapezoid test (today 2), ≥15 NPC templates (today 1), 2 of 2
-  mandatory quests completable, 6 of 6 quest verbs implemented, 4 of 4 services working.
-  *R4c-2, capture-gated*: 35–40 monster types with real stats and skill bars, graded on
-  **types, never on spawn instances** — spawn counts are unstatable from any source this
-  project has. R4c-2 stays at 0 and is **reported as blocked until R0b exists**, which is
-  a dependency rather than a failure and the ladder should show it as one.
+  pass the spawn-in-trapezoid test, ≥15 NPC templates, 2 of 2 mandatory quests completable,
+  6 of 6 quest verbs implemented, 4 of 4 services working. **Today the content store holds
+  9 map rows and 2 NPC rows** (`toolkit/content.py`'s own census, 2026-08-11: map 9, npc 2,
+  item 1, spawn 1). Every map row carries a `file_id` and a `spawn_x`/`spawn_y`; **how many
+  of the nine pass the trapezoid test has not been re-run**, so the map figure is a row
+  count and not yet a score against this criterion. The printed "(today 2)" and "(today 1)"
+  were true when written and were never updated.
+  *R4c-2, formerly capture-gated*: 35–40 monster types with real stats and skill bars,
+  graded on **types, never on spawn instances** — spawn counts are unstatable from any
+  source this project has.
+  **R4c-2 IS NO LONGER BLOCKED, and saying so is overdue.** This line read "R4c-2 stays at 0
+  and is **reported as blocked until R0b exists**" until 2026-08-11, four days after R0b was
+  met. Worse than stale: the monster stats it was waiting for have been sitting in the vault
+  in the clear since 2026-08-07, and the join that makes them a *table* rather than a
+  reading is measured — **`WORLD_CREATE_AGENT` field[2]'s definition slot is a stable
+  server-side key across sessions**, slot 1434 yielding `PROP_HEALTH_MAX` 8 in two captures
+  three days apart, on two characters, two connections and two agent ids
+  ([studies/reconstruction/FINDINGS.md](studies/reconstruction/FINDINGS.md) §6.1). What
+  gates R4c-2 now is **coverage, not instrument**: four kills of three species in the whole
+  corpus. It is **unstarted, not blocked**, and the difference decides what to do about it —
+  a blocked rung waits, an unstarted one gets a session. §7.6's caveat travels with every
+  number it will produce: Reforged Mode is not recorded anywhere, and it scales enemy health
+  ~20%, so each figure is base or base × 0.8 and nothing on this machine can say which.
 
 **Carried in the criterion rather than buried:** five real mechanical families — Shout,
 Interrupt, Well/Spirit/Trap/Ward, Block, Ritual — have **no** Pre-Searing exemplar at
@@ -1048,7 +1066,18 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-11 (`6afe3ae`+, suite 50/50, 965 checks)
+### 8.0 Next, as of 2026-08-11 (`e6355fd`+, suite 50/50, 1,878 checks)
+
+*The check total was printed as 965 and is measured at **1,878**. Method, because the gap is
+large enough to want one: run each of the 50 files in `toolkit/**/test_*.py` as its own
+process, take the `ALL CHECKS PASSED (N checks` line, sum N, and require every exit code to
+be 0 — 50 of 50 green. This is a **default** run, so the three tests with an `--all` mode
+(`test_pathchunk`, `test_terrain`, `test_mapfile`) contribute their default subset and not
+their full sweep; quoting a bigger number would need the ~20 minutes those take. The file
+list is reconciled against `CLAUDE.md`'s suite list in both directions: 50 named, 50 on disk,
+none named that does not exist and none on disk that is not named. That reconciliation is
+the point — the first sweep of this session ran 49 and would have reported a full pass,
+which is the defect `CLAUDE.md` already names from the other side.*
 
 0m. **THE MONSTER-AI DIVE LANDED, and it leaves four desk tasks that need NO capture,
     NO client launch and NO operator.** [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
@@ -1486,9 +1515,22 @@ parallel, with one safety change that is not optional — see its entry.
     floats, the marshalling is not, and C6's "the schema types them as dwords" read as a
     bug report for three days while being the correct behaviour.
 
-1. **Build the capture harness (A1).** *Started 2026-08-06, in build.* Every capture in the
-   vault is Rurik talking to Rurik; **not one byte is ArenaNet's**, so R0b is unmet and R1.5
-   and R4c's original criterion are both blocked behind it.
+1. **Build the capture harness (A1).** ✅ **DONE 2026-08-07. R0b is met, R1.5 is met, and
+   nothing is blocked behind either of them.** The vault holds **three keyed live captures**
+   — `20260807T133758`, `20260807T143055`, `20260810T235916` — decoding to **22,524 GAME_SMSG
+   over twelve connections, 398,945 B, 758.0 s, 155 distinct opcodes, twelve of twelve framing
+   to `consumed == total` with `err is None`**, plus 971 GAME_CMSG. See §3's R0b and R1.5 rows,
+   §3.3–§3.5, and [studies/reconstruction/FINDINGS.md](studies/reconstruction/FINDINGS.md) §1
+   for the corpus measured end to end.
+   *This item's lead sentence read* "Every capture in the vault is Rurik talking to Rurik;
+   **not one byte is ArenaNet's**, so R0b is unmet and R1.5 and R4c's original criterion are
+   both blocked behind it" *until 2026-08-11 — every clause of it false since 2026-08-07, and
+   contradicted by its own body eight lines later and by §3's two ✅ rows.* The body was
+   rewritten as the work landed and the lead sentence was not, so a cold session reading §8
+   first — which `CLAUDE.md` calls the live next-actions list — was told the project's central
+   instrument does not exist. **That is the exact failure §3's header exists to prevent,
+   arriving in the one document that is supposed to be immune.** Recorded rather than quietly
+   deleted, because the fix for it is a habit and not an edit.
    **Done:** the live-capture build exists, the launch gate binds a binary to a target
    (§6.2 preconditions, all met), and the **decryption engine is built and proven** —
    `toolkit/authsrv/replay.py` reads a `.raw` back and decrypts it offline, 329 captures
