@@ -84,6 +84,25 @@ SOURCES = {
 # what we independently verified, or it does not load. See rule 2 above.
 UNLICENSED = {"gw-preservation"}
 
+# Sources that are EXTRACTED rather than reasoned: the row is a fact read out of
+# ArenaNet's own artifact by our own tool. Owner's ruling 2026-08-11 (PLAN.md section 7
+# Q3) permits these IN BULK, which is a loosening, on three conditions -- and two of the
+# three are enforced here rather than asserted in a document, because the permission is
+# the loosening direction and section 1.1's lesson is that a rule nothing checks is a wish.
+#
+# The boundary that ruling draws is MEASUREMENT versus EXPRESSION, not bulk versus single
+# and not data versus code. A level, a bound, a stride, an id, an offset: facts about a
+# system, permitted. Asset bytes, decompiled bodies and verbatim assert expressions with
+# their source path and line: ArenaNet's expression, still refused, and no `extractor`
+# field makes them loadable -- this check cannot see them, which is why the ruling names
+# them explicitly and why the third condition (per-row provenance) is the one a human
+# still has to read.
+#
+# Names and authored text are the deliberate middle: commit the id, resolve the string at
+# run time from the owner's own archive. That is not a compromise invented for the ruling,
+# it is what mapbuild.py already does with FINDINGS 14's five mandatory chunks.
+EXTRACTED = {"client-table"}
+
 RULE_1_1 = ('PLAN.md section 1.1: gw-preservation and Py4GW_Reforged "carry no license '
             'at all, which means all rights reserved: read them, learn from them, cite '
             'them -- never copy from them."')
@@ -136,7 +155,48 @@ def _check_provenance(kind, key, row):
             f"checked against in OUR OWN artifacts -- an archive row, a parsed mesh, "
             f"a capture -- or derive the value independently. Citing them is reading; "
             f"a row with no verification is transcription.")
+    if source in EXTRACTED:
+        _check_extracted(kind, key, prov)
     return prov
+
+
+def _check_extracted(kind, key, prov):
+    """Conditions 1 and 2 of the owner's 2026-08-11 ruling, enforced from the row.
+
+    A fact extracted from ArenaNet's own artifact is permitted in bulk BECAUSE it
+    regenerates from the owner's install -- that is the whole basis of the permission
+    (`.gitignore`'s header: "Everything derived regenerates from the owner's own legally
+    purchased install via a documented extraction step"). A row that does not name the
+    tool, or names one that is not in this repo, does NOT regenerate, and the permission
+    it is claiming does not cover it.
+
+    The extractor path is resolved and required to EXIST. Requiring a non-empty string
+    would be satisfiable by anything; requiring the file makes it a check that can fail,
+    and it fails exactly when the tool is deleted, renamed or was never committed -- which
+    is the state the condition exists to catch.
+    """
+    extractor = prov.get("extractor")
+    if not (isinstance(extractor, str) and extractor.strip()):
+        raise ContentError(
+            f"{kind} row {key!r} cites an extracted source with no `extractor`. "
+            f"Owner's ruling 2026-08-11 (PLAN.md section 7 Q3) permits bulk extraction "
+            f"from the client on three conditions, and the first is that the tool that "
+            f"produced the row is IN THIS REPO and named by the row. Without it the "
+            f"artifact does not regenerate, which is the entire basis of the permission.")
+    path = os.path.join(os.path.dirname(HERE), *extractor.replace("\\", "/").split("/"))
+    if not os.path.exists(path):
+        raise ContentError(
+            f"{kind} row {key!r} names extractor {extractor!r}, which does not exist in "
+            f"this checkout (looked at {path}). A named tool that is not here regenerates "
+            f"nothing. If it moved, update the row; if it was never committed, the row is "
+            f"a transcription wearing a citation.")
+    build = prov.get("build")
+    if not (isinstance(build, (str, int)) and str(build).strip()):
+        raise ContentError(
+            f"{kind} row {key!r} cites an extracted source with no `build`. Condition 2: "
+            f"a number read out of a client is a number about THAT client -- 38797 today. "
+            f"Without the build it can be neither re-derived nor refuted, and ArenaNet's "
+            f"tables move between builds.")
 
 
 def _load_file(path):

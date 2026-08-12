@@ -13,9 +13,34 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
 ## Non-negotiable
 
 - **Provenance gate: zero ArenaNet bytes in the repo, ever.** No client files, no
-  `Gw.dat`, no extracted assets, no decompiled code — only our code and our
-  observations. The rationale is at the top of `.gitignore`; read it before editing
-  that file. Retrofitting provenance is not possible.
+  `Gw.dat`, no extracted assets, no decompiled code. The rationale is at the top of
+  `.gitignore`; read it before editing that file. Retrofitting provenance is not possible.
+  **But read the rationale's SECOND sentence too, because for four days nobody did:**
+  *"Everything derived regenerates from the owner's own legally purchased install via a
+  documented extraction step."* That is a permission, and it governs derived data. This
+  line used to end "— only our code and our observations", which cold sessions read as
+  forbidding a table of numbers read out of the client, and they refused every time: a
+  derived assert table was left undecided rather than ruled on, three extracted item names
+  reached a draft heading for git unnoticed, and R4c-2's unit data went unbuilt behind a
+  rule that never forbade it. **Owner's ruling 2026-08-11, `PLAN.md` §7 Q3 — the gate does
+  not move, its boundary is now written down, and the boundary is MEASUREMENT vs
+  EXPRESSION**, not bulk vs single and not data vs code:
+  - **Permitted, in bulk:** facts we measured — levels, bounds, counts, strides, ids,
+    offsets, addresses, layouts — on three conditions: **the extractor is in this repo and
+    the row names it, the row records the build, and provenance is per row.** Conditions 1
+    and 2 are enforced by `toolkit/content.py` for `source = "client-table"` and their
+    refusals are tested (`test_content.py`), because the loosening direction is the one
+    where "a rule nothing checks is a wish" bites hardest.
+  - **Still refused:** ArenaNet's expression — asset bytes, `Gw.dat` chunks, textures,
+    audio, model data, decompiled bodies, and **verbatim assert expressions with their
+    source path and line**. A derived table may carry the *constraint* (opcode, field,
+    bound, address) and must leave the expression text out.
+  - **Names and authored text: commit the id, resolve the string at run time** from the
+    owner's own archive — `model_id = 419, name_string_id = 2519`. This is the pattern
+    `mapbuild.py` already proves with FINDINGS 14's five mandatory chunks.
+  - **This does not touch the second gate.** `PLAN.md` §6.1's derivation register is about
+    *other people's* work and is a licence question. "We relaxed provenance" never covers
+    both.
 - **The vault stays local.** `vault/` holds captures, keys and client snapshots. It
   is gitignored, it is personal data from the owner's own account, and it never goes
   on the internet. Probe output goes there too.
