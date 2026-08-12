@@ -365,6 +365,12 @@ def plan(codec, seen=(), classified=None, done=(), table_less=False,
                      "callee": c.get("callees", [None])[0] if c.get("callees") else None,
                      "bytes": len(codec.encode("GAME_SMSG", opcode, list(good[opcode])))})
     remaining = len(rows)
+    # REVERSE EXISTS FOR ONE CONTROL. The plan is sorted, so 0x0000 is always the FIRST
+    # thing the sweep sends, and "the client answers 0x0000" and "the client answers the
+    # first message of a sweep" were never separated -- three reproductions and still
+    # CONTESTED. Sending it last, behind opcodes already measured SILENT, separates them.
+    if reverse:
+        rows = rows[::-1]
     if limit:
         rows = rows[:limit]
     return {"rows": rows,
@@ -975,6 +981,9 @@ def main():
     ap.add_argument("--write-seen", action="store_true",
                     help="recompute the observed set from the live tapes and write it "
                          "to the vault, then exit")
+    ap.add_argument("--reverse", action="store_true",
+                    help="send the plan in descending order. The control for 0x0000, "
+                         "which is otherwise always the first message of every sweep")
     ap.add_argument("--limit", type=int, default=0,
                     help="keep only the first N rows of the plan")
     ap.add_argument("--set", default=None, metavar="IDX=VAL", action="append",
@@ -1079,7 +1088,7 @@ def main():
     try:
         p = plan(codec, seen, _classify(), done=done, table_less=a.table_less,
                  settle=a.settle, control=a.control, dwell=a.dwell, limit=a.limit,
-                 only=only, sets=sets)
+                 only=only, sets=sets, reverse=a.reverse)
     except ValueError as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2

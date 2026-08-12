@@ -809,6 +809,30 @@ file header, and the two agree only if the 24-byte entry layout is right.
 strictly read-only, nothing written, nothing copied into the tracked tree — but
 it is never a target for patching or launching.
 
+## Authoring terrain the client will compile
+
+**RUN 2026-08-12 and it works** — FINDINGS 38. `vault/research/e3-terrain-2026-08-12/`
+holds the twelve-step `RUNSHEET.md` with exact commands and the `PREDICTION.md`
+that was recorded before anything was armed. Four things that run paid for,
+worth having before you start another:
+
+- **The authored stream must be SMALLER than its row's existing reservation.**
+  `datwrite --replace` writes uncompressed and refuses to relocate. This — not
+  the client — is the live constraint on authoring, and it confines the work to
+  maps that shrink until a compressor or a relocation verb exists. It killed the
+  first design of that experiment outright.
+- **`--exe` must be ABSOLUTE.** `session.py` hands it to `Popen` together with
+  `cwd=`, and Windows resolves a relative program path against the *new*
+  directory. The failure is a bare `FileNotFoundError` naming nothing.
+- **Move `Gw.log` aside first.** The re-bloat line is the only evidence the map
+  was reached at all, and a previous run's copy of it is indistinguishable from
+  this run's.
+- **Judge on GEOMETRY, never on the trapezoid count.** FINDINGS 38's mesh went
+  from covering the whole rect to covering 62% of it with its edge exactly on an
+  authored cell boundary — and the count stayed at 2, in a chunk the same 419
+  bytes. `rebloat.py --verify` prints the count, so its verdict line is not
+  enough on its own.
+
 ## Rung E3: does the client ever compile a map?
 
 **RUN TWICE, 2026-08-12, and the answer is YES both times.** FINDINGS 35: given a

@@ -4950,3 +4950,150 @@ requires the two to disagree off the lattice and agree exactly on it.
    legal table, not ArenaNet's. Nothing in the image builds one — there is no
    `TrnDataStrip` in the assert census — so an authored chunk will be a different
    size from what their tool would emit, and how different is unmeasured.
+
+## 38. OBSERVED: the client compiled a navmesh over ground WE authored (2026-08-12)
+
+**The rung the whole E3 ladder was built for.** A height field written by
+`strippedterrain.py` — never in any archive, exactly representable on the
+transform's lattice — went into a map's Stripped stream, and the retail client
+compiled a navmesh from it. **The mesh stops at world x = 1152.0, which is the
+cell boundary we authored, to the unit.**
+
+Run 2026-08-12, `vault/research/e3-terrain-2026-08-12/`, on
+`vault/run/2026-07-29_221c13772c7a-c2/Gw.dat` (a copy; `dat_study` and `C:\gw`
+were read-only throughout). `PREDICTION.md` in that directory was written before
+anything was armed and is quoted rather than reconstructed below.
+
+### The design, and why its null result is a measurement
+
+This is §36's experiment with one thing changed. §36 wrote row 46197's Stripped
+stream — the 32x32 ladder template — into map 143's Stripped slot with map 143's
+Bloated stream zeroed, and watched the client build **the donor's map**,
+byte-identical to what ArenaNet shipped. So the "compiler ignored our change"
+outcome is not a prediction here. It is a run that already happened.
+
+**The one change: the height field of chunk `0x10000002`.** Nothing else — same
+dims, same tag 0 fields, same tile indices, same two tile tables, same tag 3,
+same shadow blocks, and the other seventeen chunks byte-identical, asserted by
+re-decoding the whole container and diffing chunk by chunk.
+
+| grid | stored height | what it is |
+|---|---|---|
+| `gx < 12` | sawtooth **−13 / −1013** on `(gx+gy) & 1` | slope **86.1°** per triangle |
+| `gx >= 12` | flat **−13** | the donor's own height, unchanged |
+
+The 86.1° is computed from the ±96.0 quad corner spacing FINDINGS 34 read out of
+`0x0072CFD0`, and is over every threshold in both of that section's sets
+(10/45/40° and 15/35/30°). The field snapped to the lattice with **worst move 0**,
+so what follows is a claim about the client and not about our quantiser.
+
+### The predictions, recorded before arming
+
+* **P1** `Gw.log` emits the re-bloat line.
+* **P2** the rebuilt Bloated terrain holds our field exactly, 1,024 of 1,024.
+* **P3** the rebuilt map differs from §36's `4178b052…`.
+* **P4 — the decisive one** the walkable-area share in `x < 1152` falls from
+  **37.3% to under 5%**. *"If the compiler ignores our terrain and builds from
+  props, zones and collision alone, that share stays near 37.3% and P4 fails
+  while P2 may still pass."*
+
+### The result
+
+`Gw.log`, on a file cleared before the run so the line could not be §36's:
+
+```
+Perf: Map file '0x0287d3' failed to load.  Attempting to re-bloat.
+```
+
+| | control (§36, OBSERVED) | this run |
+|---|---|---|
+| terrain samples equal to ours | — | **1,024 / 1,024** |
+| map payload / sha | 8,471 B `4178b052f0037fa8` | 8,471 B **`a1087453ef8ebb65`** |
+| Path chunk | 419 B, 1 plane, 2 trapezoids | 419 B, 1 plane, 2 trapezoids |
+| **trapezoid x extent** | **0 .. 3072** | **1152 .. 3072** |
+| walkable area | 9,414,144 | **5,898,240** |
+| **walkable area with x < 1152** | **3,515,904 (37.3%)** | **0 (0.0%)** |
+
+All four pass. **P4 did not merely clear its threshold, it went to zero**, and
+5,898,240 is exactly the control's `x >= 1152` portion — the flat half came
+through untouched while the sawtoothed strip left the mesh entirely.
+
+**1152.0 = 12 × 96.** The compiler cut the navmesh at the cell boundary we
+chose. That is not a statistical result about a region; it is an exact
+coincidence between an authored grid column and an emitted float.
+
+### The trap this run walked into, and the only reason it is legible
+
+**The trapezoid count did not change. Two before, two after, 419 bytes both
+times.** A comparison on counts — which is what `rebloat.py --verify` prints and
+what the first draft of this experiment would have used — reads this run as
+"nothing happened". `PREDICTION.md` named that failure mode before the run
+(*"Comparing trapezoid counts without comparing geometry… the area split is the
+measurement"*) and the area split is what carries the finding.
+
+Worth stating plainly because it cuts the other way too: §35 and §36 both
+reported matching counts as corroboration, and a count is weak evidence in both
+directions.
+
+### What the flood does with slope, from the other side
+
+FINDINGS 34 read the classifier out of x86 and could not say which mode flag was
+in force. This run does not settle that either — 86.1° is unwalkable under both
+sets by design, chosen so the result could not depend on the answer. What it
+does establish is that **the classifier runs on the height field at all**, on
+one flood cell per terrain cell, with the boundary landing on a cell edge.
+
+### Archive hygiene
+
+Post-flight `datcheck --diff`: TIER 0 descriptor counter 26,881 → 26,886 and the
+MFT moved; TIER 1 five relocations — our rows 71496 and 71497 plus the client's
+own scratch rows 8315/8316/8317, the baseline churn C2 established and which
+moved in every arm of that rung. TIER 2 (the directory invariant) unchanged both
+ways. All three CRC rules pass after.
+
+Row 71496 was rebuilt into `0x3B2DC00` — **the address row 8317 had just
+vacated**, which is the MFT-derived coalescing free map of FINDINGS 18.11 doing
+exactly what it is documented to do.
+
+Both journals are marked `.CONSUMED.json` and the copy was re-cut from
+`dat_study`, verified back to MFT self-crc `0x9BFFD25C` with rows 46197, 71496
+and 71497 at their original sizes and CRCs. Reverting after the client relocated
+rows would corrupt rather than restore.
+
+### A defect this experiment's own review found, and it was not in the experiment
+
+An adversarial review of the runsheet raised 39 objections across four lenses; 22
+were judged and **one survived**, and it was about the repo rather than the run:
+`datwrite.py` — the only tool that opens the archive `r+b` — did **not** refuse
+`vault/dat_study`. `rebloat.guard_target()` had refused it since that tool
+existed and its docstring claimed datwrite did too. No checksum catches the
+mistake: `--replace` fixes the entry CRC and the MFT self-CRC as it goes, so a
+mutated snapshot verifies clean forever. Closed by `datwrite.guard_source()` on
+`Writer.__init__` — deliberately not inside `guard()`, which `revert()` shares,
+because replaying a journal is the one legitimate write to `dat_study`.
+`test_datwrite.py` section 0b pins all three facts.
+
+### What this does NOT establish
+
+1. **Only the terrain is ours.** The props, zones, collision and Map Parameters
+   in this map are ArenaNet's. FINDINGS 34's props hard gate was satisfied by
+   their data, not ours.
+2. **32x32, one plane, one run.** Nothing here says a large or multi-plane
+   authored field compiles, and n = 1.
+3. **Nothing walked the mesh.** The run passed its checkpoints and spawned at
+   (1536, 1536) — inside the surviving half by design, so the spawn could not
+   fail for the wrong reason — but no collision against the new edge at 1152 was
+   observed. That the trapezoids stop there is a fact about the emitted chunk,
+   not about where a character can stand.
+4. **The walkability mode flag is still NOT FOUND.** This run was built so the
+   answer could not matter.
+5. **The large-map wall stands.** `datwrite --replace` writes uncompressed and
+   refuses to relocate, so an authored stream only fits where it is smaller than
+   the row's existing reservation. Map 143's own 64x64 file is 12,495 B
+   uncompressed against a 4,608-byte reservation — the first design of this
+   experiment, recorded in `PREDICTION.md` and killed by it. **Until something
+   can compress a stream the way ArenaNet's archive does, authoring is confined
+   to maps that shrink.**
+6. **This is still the repair path.** An authored map must ship a broken or
+   absent stage 2 to be compiled at all, and every run of one mutates the archive
+   it is given.
