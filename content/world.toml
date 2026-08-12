@@ -49,8 +49,10 @@ and two families sharing one model ran ~8-10 s and ~33 s cycles with distance fr
 player failing to explain the split. 5.0 and 4.0 sit inside the observed ranges and are
 otherwise ours. Do not read them as the game's.
 
-The two numbers that ARE measured -- 2.00 s to emerge and 2.00 s to submerge, n=132 each
-way with every sample inside +/-60 ms -- deliberately did NOT come here. They are not
+The two numbers that ARE measured -- 2.00 s to emerge and 2.00 s to submerge, over 140
+worm creates, with every sample inside +/-40 ms (emerge n=137 in [1.976, 2.021],
+submerge n=132 in [1.973, 2.037]; the two n differ because a capture starts and ends
+mid-cycle) -- deliberately did NOT come here. They are not
 authorable: they are how long ArenaNet's server holds the transition effect bit before
 and after the create/remove, which is protocol timing rather than a fact about this
 particular creature, and this file's own header calls moving that kind of value here a
