@@ -1030,12 +1030,70 @@ this decision until it has recorded its first sessions.
 better instrumented, better symbolized, patch-resilient, and drivable by browser automation. Keep
 the x86 client as the playtest client.
 
-**Q3. Does the provenance gate survive contact?** §9 says "zero ArenaNet bytes in the repo, ever,"
-but R0 vaults `Gw.exe` and `Gw.dat` and every schema derives from them. *Recommendation:* restate
-the gate as a **derivation graph with a gitignored `build/`** — every derived artifact regenerates
-from a documented fetch of a freely downloadable client. That is a stronger and more honest
-formulation than a prohibition needing constant qualification, and it matches the owner's own point
-that the client is available to anyone.
+**Q3. Does the provenance gate survive contact?** ✅ **CLOSED 2026-08-11, by the owner. The gate
+does not move; its boundary is now written down.** The question was posed as "§9 says zero ArenaNet
+bytes in the repo, ever, but R0 vaults `Gw.exe` and `Gw.dat` and every schema derives from them",
+and the answer turned out to be that **the gate already said the right thing and only one of its
+two sentences was being read.** `.gitignore`'s header is: *"Zero ArenaNet bytes in this repo,
+ever… Everything derived regenerates from the owner's own legally purchased install via a
+documented extraction step."* The second sentence is a permission and it governs derived data.
+`CLAUDE.md`'s one-line summary — "only our code and our observations" — is what a cold session
+reads first, and every session resolved the ambiguity by refusing.
+
+**That refusal had a measured cost.** `studies/reconstruction/FINDINGS.md` §9.4 left the ruling on
+a derived assert table neutral rather than deciding it; §4.9 quoted three extracted item names into
+what would have become a tracked file and nobody caught it until a critic re-read the draft; and
+R4c-2's unit data sat unbuilt behind a rule that never actually forbade it.
+
+**The boundary, and it is measurement versus expression — not bulk versus single, and not data
+versus code:**
+
+- **PERMITTED: facts we measured.** Numbers, bounds, counts, strides, ids, offsets, addresses,
+  layouts. A monster's level, an item's requirement, a table's element count. These are facts about
+  a system, they are not ArenaNet's expression, and the gate's own second sentence contemplates
+  them. **In bulk, and generated, subject to the three conditions below.**
+- **REFUSED, unchanged: ArenaNet's expression.** Asset bytes, `Gw.dat` chunks, textures, audio,
+  model data, decompiled function bodies, and **verbatim assert expressions with their source path
+  and line** — `P:\Code\Base\Rtl\Random.cpp` plus `fraction <= 1.0f` is a line of their source
+  code, and a 477-opcode table of them is a source dump with extra steps. What a derived table may
+  carry instead is the *constraint*: opcode, field, bound, address. That is the useful content and
+  it loses almost nothing.
+- **NAMES AND AUTHORED TEXT: commit the id, resolve at run time.** Item, skill, NPC and dialogue
+  strings are individually trivial and in bulk a dump of authored work. A row carrying
+  `model_id = 419, name_string_id = 2519` is fully useful to the server and carries no ArenaNet
+  expression at all. **This is not a compromise invented for this ruling — it is the pattern the
+  repo already proved.** FINDINGS 14's five mandatory chunks are 232 bytes per map of genuine
+  ArenaNet constants, read from the owner's archive **at run time**; `mapbuild.py` refuses without
+  one (`NoConstants`), and `test_mapbuild.py` §2 reads the builder's own syntax tree to require no
+  bytes literal over two bytes in it. Extending that to unit and item data is consistent with what
+  already ships and is strictly better than committing the data.
+
+**Three conditions on anything committed under the permission**, and they are what keep this a
+boundary rather than a hole:
+
+1. **The extractor is in the repo and the row names it.** If the tool that produced it is not
+   here, the artifact does not regenerate and the gate's second sentence is not satisfied.
+2. **The row records the build it came from.** Build 38797 today. A number with no build is a
+   number that cannot be re-derived or refuted.
+3. **Provenance is per row**, the way `content/*.toml` already carries it — not per file, not per
+   commit message.
+
+**What this deliberately does not touch.** The **derivation register** (§6.1) is a *second and
+separate* gate: it governs other people's work — OpenTyria, Py4GW_Reforged, GWCA, `gw-preservation`
+— and it is a licence question, not the ArenaNet question. Loosening nothing here changes it, and
+"we relaxed provenance" must never be read as covering both. `toolkit/content.py`'s verified-only
+refusal for unlicensed upstreams (owner's ruling 2026-08-06) stands exactly as written.
+
+**The three arguments against going further than this**, recorded so the next person to propose it
+has to answer them: retrofitting is impossible — once bytes are in the history of a repo that is
+half merge commits, nobody will ever be confident they are out; it closes the currently-open door
+to sharing any of this; and the gate has an epistemic function as well as a legal one, in that the
+349/349 byte-exact round trips exist partly because copying was not available.
+
+**A rule nothing checks is a wish** — this document's own §1.1 lesson, learned while `gwdat.py`
+sat in the server's dependency chain breaking a rule that had been written for two days. The
+loosening direction is the one where that matters most, so the three conditions are enforced by
+`toolkit/content.py` and `toolkit/test_content.py` rather than asserted here.
 
 **Q4. A secondary account for automation?** ✅ **CLOSED 2026-08-06, by the owner.** A second
 account is bought. **Automation against the live ArenaNet service on that account is
