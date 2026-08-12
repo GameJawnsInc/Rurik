@@ -10,6 +10,7 @@ silent seconds and a Code=058.
     python toolkit/harness/test_harness.py
 """
 
+import ast
 import inspect
 import os
 import socket
@@ -43,7 +44,7 @@ import checks  # noqa: E402
 # needed it. hold_key earned its own section the hard way -- see the comment in
 # it -- and the camera floor was declared as 67 from a miscount and reddened the
 # run at 65 until it was measured, which is what the floor is for.
-LEDGER = checks.Ledger("harness", floor=76)
+LEDGER = checks.Ledger("harness", floor=84)
 check = checks.adopt_named(LEDGER)
 
 
@@ -265,6 +266,77 @@ def test_enemy_default():
           session.warn_probe_without_enemy(["--map", "143"]) is None)
 
 
+# ------------------------------------------------------- crash on every path ----
+
+def test_crash_capture_always():
+    """The crash dialog is read on EVERY run, not just --keep-open ones.
+
+    MEASURED 2026-08-12: `capture_error_dialog` was reachable only from
+    `hold_open()`, which `run_client` calls under `if a.keep_open:`. So an
+    ordinary `--hold N` run captured nothing, and rung E10a's two client asserts
+    (`deps` at TrnCreate:242, `state->zones` at MapData:660) survived only
+    because the owner read them off the screen. The extraction was never broken
+    -- the same crash under --keep-open wrote a crash-dialog.txt holding both
+    lines -- so this was a missing CALL SITE.
+
+    Asserted on the SYNTAX TREE, because the two things that matter here are
+    invisible to a grep: that the call is in `run_client`'s `finally` at all,
+    and that it comes BEFORE `dc.close_client`, which destroys the dialog.
+    A file containing both names in the wrong order greps identically.
+    """
+    src = inspect.getsource(session)
+    tree = ast.parse(src)
+    fn = next((n for n in ast.walk(tree)
+               if isinstance(n, ast.FunctionDef) and n.name == "run_client"),
+              None)
+    check("run_client is there to inspect", fn is not None)
+    tries = [n for n in ast.walk(fn) if isinstance(n, ast.Try) and n.finalbody]
+    check("run_client has a try/finally", bool(tries))
+
+    def called_names(nodes):
+        out = []
+        for st in nodes:
+            for n in ast.walk(st):
+                if isinstance(n, ast.Call):
+                    f = n.func
+                    if isinstance(f, ast.Name):
+                        out.append(f.id)
+                    elif isinstance(f, ast.Attribute):
+                        out.append(f.attr)
+        return out
+
+    final = [c for t in tries for c in called_names(t.finalbody)]
+    check("the finally captures the error dialog",
+          "capture_error_dialog" in final)
+    check("and closes the client", "close_client" in final)
+    if "capture_error_dialog" in final and "close_client" in final:
+        check("CAPTURE COMES FIRST -- close_client destroys the dialog",
+              final.index("capture_error_dialog") < final.index("close_client"))
+
+    # The negative control. Reversing the order must be DETECTABLE by the check
+    # above, or that check is decoration -- both names are present either way.
+    reversed_final = list(final)
+    i, j = (reversed_final.index("capture_error_dialog"),
+            reversed_final.index("close_client"))
+    reversed_final[i], reversed_final[j] = reversed_final[j], reversed_final[i]
+    check("CONTROL: the ordering check fails on a reversed finally",
+          not (reversed_final.index("capture_error_dialog")
+               < reversed_final.index("close_client")))
+
+    # And the first capture must win: a --keep-open run calls this twice, the
+    # second time with a shorter wait, and a short look must not overwrite a
+    # long one's result.
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "crash-dialog.txt")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("FIRST CAPTURE")
+        got = session.capture_error_dialog(d, wait=0.1, quiet=True)
+        check("an existing capture is not overwritten by a later, shorter look",
+              got == path)
+        with open(path, encoding="utf-8") as fh:
+            check("and its contents survive", fh.read() == "FIRST CAPTURE")
+
+
 # ------------------------------------------------------------------ stack ----
 
 def test_stack():
@@ -307,6 +379,7 @@ if __name__ == "__main__":
     test_preflight_helpers()
     test_game_args()
     test_enemy_default()
+    test_crash_capture_always()
     test_stack()
 
     # --- --game-args must survive a Windows path ------------------------------

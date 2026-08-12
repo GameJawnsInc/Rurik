@@ -907,6 +907,15 @@ def capture_error_dialog(outdir, wait=12.0, quiet=False):
         print(f"  (could not load read_error_dialog: {ex})")
         return None
 
+    # FIRST CAPTURE WINS. This is called twice on a --keep-open run -- once from
+    # hold_open with a 12 s look, then again from run_client's finally with a
+    # 2 s one -- and the first had the better chance of catching a dialog that
+    # is on its way up. Re-reading is harmless but re-WRITING a shorter look
+    # over a longer one is not.
+    path = os.path.join(outdir, "crash-dialog.txt")
+    if os.path.exists(path):
+        return path
+
     deadline = time.monotonic() + wait
     found = []
     while time.monotonic() < deadline:
@@ -922,7 +931,6 @@ def capture_error_dialog(outdir, wait=12.0, quiet=False):
                   f"WITHOUT one, which is a clean exit rather than a silent crash")
         return None
 
-    path = os.path.join(outdir, "crash-dialog.txt")
     with open(path, "w", encoding="utf-8") as fh:
         for hwnd, title, blocks in found:
             fh.write(f"=== window {hwnd:#x}  title={title!r}\n")
@@ -1088,6 +1096,21 @@ def run_client(a, outdir):
             hold_open(proc, a.hold, tails, outdir,
                       quiet=is_labelling(a), shot_every=a.shots)
     finally:
+        # READ THE CRASH DIALOG BEFORE ANYTHING CLOSES IT, ON EVERY PATH.
+        # `capture_error_dialog` used to be reachable ONLY from hold_open(),
+        # which line 1087 runs only under --keep-open -- so an ordinary
+        # `--hold N` run captured nothing. MEASURED 2026-08-12: rung E10a's six
+        # sessions crashed the client twice, and both asserts (`deps` at
+        # TrnCreate:242 and `state->zones` at MapData:660) survived only because
+        # the owner read them off the screen. The extraction itself was never
+        # broken -- the same run under --keep-open wrote a crash-dialog.txt
+        # holding both lines -- so this was a call site missing, which is the
+        # cheapest kind of gap to have and the most expensive kind to discover.
+        #
+        # It goes FIRST because `close_client` destroys the dialog, and it is
+        # quiet and short here: most runs end without one, and the --keep-open
+        # path has already had its longer look.
+        capture_error_dialog(outdir, wait=2.0, quiet=True)
         # ALWAYS close the client, --keep-open included. The hold above is the
         # whole of what keep-open buys; once it ends the stack is about to be
         # stopped, and a client with no servers is not a running session, it is
