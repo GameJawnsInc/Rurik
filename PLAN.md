@@ -349,7 +349,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R1** | Handshake against a local server | Client reaches character select | ✅ **2026-08-04 22:58**, `e34c417`. Build 38797 rendered "Test Warrior" against our portal, our DH parameters, our ARC4 channel and our login burst. |
 | **R2** | Presence | Your own body standing in a real map | ✅ **2026-08-05 11:15**, `aedc214`. |
 | **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. |
-| **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). ~~Nothing swings back and the player cannot die~~ — **BOTH MET 2026-08-11**, which is the half the criterion actually names. A Hatcher swings at the player, the player's health falls 10 a swing, and at zero the player drops face-down with both orbs at 0 and stands back up ten seconds later. Three full death/revive cycles in one 65 s run, on the wire and on film (`vault/captures/gamesrv/authsrv-20260811T160502-c1.jsonl`, `frames-20260811T160449`). `studies/enemy/PLAN.md` §11. What is still missing is a real agent model — no AI, no pathing (the Hatcher stands where it spawned and swings when you are inside 1200 units), no resurrection shrine (the revive is a timer), and energy is not restored on revive. No agent table either — `studies/enemy/PLAN.md` §7.2. **2026-08-11: one click now drives a whole fight** — `0x0026` ATTACK_AGENT arrives (four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it), the server dispatches it, seven swings at 1.77 s kill the agent, and it revives; the client drops the dead target and re-acquires the revived one unprompted (§10.9). **The first revive crashed the client** — `CharPool.cpp:84`, `fraction <= 1.0f` — because we sent `max_health` where a fraction belonged, on the one side of a `<=` bound that no damage test could ever reach. Fixed and re-verified. **2026-08-11 (earlier): the click arrives as `0x0026` ATTACK_AGENT** — four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it (§10.7). The server now dispatches both arms. |
+| **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). ~~Nothing swings back and the player cannot die~~ — **BOTH MET 2026-08-11**, which is the half the criterion actually names. A Hatcher swings at the player, the player's health falls 10 a swing, and at zero the player drops face-down with both orbs at 0 and stands back up ten seconds later. Three full death/revive cycles in one 65 s run, on the wire and on film (`vault/captures/gamesrv/authsrv-20260811T160502-c1.jsonl`, `frames-20260811T160449`). `studies/enemy/PLAN.md` §11. What is still missing is a real agent model — no AI, no pathing (the Hatcher stands where it spawned and swings when you are inside 1200 units), no resurrection shrine (the revive is a timer), and energy is not restored on revive. No agent table either — `studies/enemy/PLAN.md` §7.2. **2026-08-11: one click now drives a whole fight** — `0x0026` ATTACK_AGENT arrives (four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it), the server dispatches it, seven swings at 1.77 s kill the agent, and it revives; the client drops the dead target and re-acquires the revived one unprompted (§10.9). **The first revive crashed the client** — the upper bound of 1.0 on `fraction` at `CharPool.cpp:84` — because we sent `max_health` where a fraction belonged, on the one side of that bound no damage test could ever reach. Fixed and re-verified. **2026-08-11 (earlier): the click arrives as `0x0026` ATTACK_AGENT** — four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it (§10.7). The server now dispatches both arms. |
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started, **and 2026-08-11 established what "started" would even mean** ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md), `9eb09a8`+). Monster AI *as a mechanism* is **not recoverable** — not from the client (0 of 937 embedded source paths under any `\Srv\` tree, from a detector proven to catch 6 of 6 planted ones; 33 AI-adjacent searches over two independent routes, all zero), not from the wire, and not by any capture campaign, because it is never shipped and never transmitted. What **is** recoverable is the observable envelope, and the study designs the labelled behaviour campaign that would recover it (§7) plus four desk follow-ups needing no capture at all (§7.9) — **the first of which ran the same day and made the binary negative total**: `CHAR_AI_MODES`, the one lead the study declined to call refuted, is 3 and its modes are Fight/Guard/Avoid Combat, i.e. the player's own hero-and-pet stance widget. It also found the AI-adjacent numbers already in `authsrv.py` are mostly the **wrong shape** rather than merely unmeasured: reach is per-creature-model (~65 / ~599 / ~706 units observed against our one global 150), a leash is *uncomputable* from the state `spawn_enemy` keeps, and 4 of 5 fights in the corpus are started by the **player**, refuting our proximity-initiation model for 4 of 5. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. **Its other half now exists too**: R5m authors the zone's *geometry*, which TOML was never going to describe. |
@@ -1133,6 +1133,22 @@ boundary rather than a hole:
 3. **Provenance is per row**, the way `content/*.toml` already carries it — not per file, not per
    commit message.
 
+**AUDITED AND PARTLY SWEPT, 2026-08-12 — and the enforcement was one-sided.**
+[studies/provenance/FINDINGS.md](studies/provenance/FINDINGS.md). `content.py` enforced the
+PERMITTED half of this ruling from the day it was written and `test_content.py` proves the refusal
+fires; the REFUSED half above applied to prose and was checked by nobody, so **134 refused triples**
+sat in 16 tracked documents. The framing is drift rather than defiance: those files mostly predate
+this ruling, and before it the written gate produced the *opposite* error — sessions refusing too
+much, as the three costs above record. **33 sites in 11 files are scrubbed**, each keeping the
+constraint and dropping only the wording; **104 remain in 5 files**, 65 of them in
+`studies/smsg/FINDINGS.md`, where the assert text *is* the naming argument and scrubbing is a
+judgement the owner has not made — that question is §6 of the study and is open. `toolkit/provlint.py`
++ `test_provlint.py` now hold the scrubbed files at zero and the rest at a not-growing baseline.
+Two findings worth carrying back here: a `P:\Code` grep finds only **13 of the 134**, because most
+drift cites `AgMsg.cpp:513` rather than the full build path — and **the illustrative example three
+paragraphs above is itself the pattern it forbids**, kept deliberately, because a rule that cannot
+show what it means is harder to follow than one that quotes itself once.
+
 **What this deliberately does not touch.** The **derivation register** (§6.1) is a *second and
 separate* gate: it governs other people's work — OpenTyria, Py4GW_Reforged, GWCA, `gw-preservation`
 — and it is a licence question, not the ArenaNet question. Loosening nothing here changes it, and
@@ -1191,6 +1207,24 @@ list is reconciled against `CLAUDE.md`'s suite list in both directions: 50 named
 none named that does not exist and none on disk that is not named. That reconciliation is
 the point — the first sweep of this session ran 49 and would have reported a full pass,
 which is the defect `CLAUDE.md` already names from the other side.*
+
+0n. **AN OWNER DECISION, and it is the only thing blocking the rest of the provenance
+    sweep.** [studies/provenance/FINDINGS.md](studies/provenance/FINDINGS.md) §6.
+    **104 refused triples remain in 5 files** after 33 were scrubbed on 2026-08-12 —
+    65 of them in `studies/smsg/FINDINGS.md`. The 33 were incidental citations and
+    scrubbing them cost nothing. The 65 are not the same thing: that document names
+    twenty GAME_SMSG opcodes and its evidence for each name *is* the quoted assert
+    text, down to its own refutation passes checking the quotes back against the
+    binary. Rewriting them to "a bound on X at Y:N" is defensible under §7 Q3 and
+    costs a reader the ability to audit the naming argument without the binary in
+    front of them. **Three options, no recommendation smuggled in:** scrub all 104
+    uniformly; scrub the incidental ones and write a per-site exemption into §7 Q3 for
+    arguments that turn on the wording; or rule that a *single* assert expression is a
+    measurement and the refusal is aimed at bulk dumps, which retires most of the
+    study. Until it is decided, `test_provlint.py` holds the five files at a
+    **not-growing** baseline — scrubbing one is progress and stays green, a new one
+    reddens. No capture, no client, no operator; the work is a decision and then an
+    afternoon.
 
 0m. **THE MONSTER-AI DIVE LANDED, and it leaves four desk tasks that need NO capture,
     NO client launch and NO operator.** [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
@@ -1276,7 +1310,8 @@ which is the defect `CLAUDE.md` already names from the other side.*
        `MsPathPack:115 !m_charIndex.Count()` is a path pack keyed by CHARACTER
        and is unread. `PathData:34` bounds world y to ±131071.0 (2^17−1).
        **And a reading of mine was refuted by our own decoder**: I took
-       `PathBuild:2297 def->trapezoidCount < 1024` for a per-plane cap, and 40 of
+       `PathBuild:2297`'s 1024 bound on a build-input trapezoid count for a
+       per-plane cap, and 40 of
        1,805 planes across 60 retail maps exceed it, the largest 6,577. `def` is
        a build-time input. `studies/monsterai/FINDINGS.md` §2.1.1.
     4. ✅ **DONE 2026-08-11 — NO SPAWN TABLE, AND THE QUESTION WAS MALFORMED.**
@@ -1297,7 +1332,8 @@ which is the defect `CLAUDE.md` already names from the other side.*
        the right null — creature ids are drawn from the archive's model files, of
        which the props system names 54.65% — P(zero) ≈ 3.9e-26. The structural
        reason is better than the count: **interactive world objects in this client
-       are gadget AGENTS** (`GdCliApi.cpp:430 agentDef == GW_AGENTDEF_GADGET`), a
+       are gadget AGENTS** (`GdCliApi.cpp:430` bounds an agent definition to the
+       `GW_AGENTDEF_GADGET` kind), a
        subsystem disjoint from `Engine\Map\Props`, and **zero** of the 692
        asserts across 73 Agent/Char/Gadget files reference a map prop. Looking for
        creatures in Props was looking in the wrong subsystem.
@@ -1616,7 +1652,7 @@ parallel, with one safety change that is not optional — see its entry.
     creates** for the Lakeside worm in capture `20260810T235916`, and 1 declaration to
     **140** creates pooled across both captures. It is the *same client* on both ends,
     so the client keeps the definition -- otherwise 31 of those 32 creates would name a
-    slot it no longer holds and it would go down on `Array.h`'s `index < m_count`. A
+    slot it no longer holds and it would go down on `Array.h`'s index-against-count bound. A
     server may declare once and re-create freely. `probes.py`'s `burrow` probe is now
     confirmatory rather than necessary; what it still uniquely tests is whether OUR
     create path is right once it stops resending. **And the burrow status values are
@@ -1738,7 +1774,7 @@ parallel, with one safety change that is not optional — see its entry.
    * **The updater kill switch is wrong on the live build.** `DnSetEnabled` gates the
      whole download path, so a client that cannot patch also cannot **stream map
      content**. The second live run died entering Pre-Searing: `Map file '0x01b97d'
-     failed to load. Attempting to re-bloat.` then `Assertion: found, Map.cpp(1762)`.
+     failed to load. Attempting to re-bloat.` then the found-flag bound at `Map.cpp(1762)`.
      MEASURED: the map is present in both `Gw.dat` copies and reads identically, so it is
      the fetch that failed, not the archive. Owner's decision 2026-08-07: the live build
      is now built `--no-updater-patch`. The concern that justified the launch gate's

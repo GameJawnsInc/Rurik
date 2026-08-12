@@ -207,7 +207,7 @@ Three things fall out of the shims themselves:
   `imul ecx, esi, 0x34`. `studies/enemy/PLAN.md` §6f established the same thing
   by aiming damage at an NPC and watching the NPC's bar drop.
 - **The record is `0x34` bytes per agent**, based at `[context+0x7C]`, bounds
-  checked against `[context+0x84]` with the shared `Array.h` / `index < m_count`
+  checked against `[context+0x84]` with the shared `Array.h` index-against-count
   assert. Maximum health lives at `+0x24` of that record.
 
 ### The int path handles only three properties — SOURCED
@@ -384,11 +384,14 @@ so. See `studies/enemy/PLAN.md` §6i.
 and the client says so in three instructions.
 
 **How it surfaced.** `revive_due` sent property 34 with `max_health` — 100.0 — and the
-client asserted two seconds after the first kill this server drove to a revive:
+client asserted two seconds after the first kill this server drove to a revive: an
+**upper bound of 1.0** at `P:\Code\Gw\Char\CharPool.cpp(84)`, build 38797, on a value
+the assert's own identifier calls `fraction`.
 
-```
-Assertion: fraction <= 1.0f      P:\Code\Gw\Char\CharPool.cpp(84)     Build: 38797
-```
+> The assert's expression text is left out here and wherever else this repo cites one.
+> Provenance gate, `PLAN.md` §7 Q3: the constraint (field, bound, address, line) is a
+> measurement and ours to record; ArenaNet's wording of it is expression and is not.
+> `toolkit/provlint.py` enforces this.
 
 **Reading a crash trace at all needs one step nothing here had recorded: it is
 ASLR-rebased.** The dump's `BaseAddr: 007A0000` against the PE's `ImageBase 0x00400000`
@@ -421,7 +424,7 @@ an error, which is the failure mode worth naming. Subtract 0x3A0000 first.
 | **39 of the 47 ids**, incl. 42 and 61 | 8 | `0x0081838B` | the `ja` default. Ids 17–32, 35–41, 45–51, 53–54 and 56–61 all land here — the client acts on only **8** of the 47 it accepts. 42 is an INT-channel property, correctly absent |
 
 `0x009215F0 + 0x23 = 0x00921613`, which is the crash's own return address, so
-**`0x009215F0` is the CharPool method whose line 84 asserts `fraction <= 1.0f`** and
+**`0x009215F0` is the CharPool method whose line 84 carries the upper bound of 1.0** and
 property 34 is what it range-checks.
 
 **The decode is checked rather than fitted.** Every property this repo had already named
@@ -487,8 +490,8 @@ meaning "the bar drops to about half". The argument *is* a fraction, so the labe
 right and the behaviour it predicted was wrong — which is the failure mode a probe with a
 written prediction exists to catch, and it is left in the file rather than tidied away.
 
-**It also explains the crash, better than §1d did.** `CharPool.cpp:84` asserts
-`fraction <= 1.0f` because **a setter cannot exceed the maximum**. `revive_due`'s
+**It also explains the crash, better than §1d did.** `CharPool.cpp:84` bounds the
+value above by 1.0 because **a setter cannot exceed the maximum**. `revive_due`'s
 `max_health` was not merely a number too large; it was the wrong *kind* of number. And
 `1.0` is right for the strongest possible reason: it sets the pool full, which is what a
 revive means, from a pool the client's death path had zeroed.

@@ -147,7 +147,8 @@ rules out "creation ack"). A coincidence attack fails: field-0 occupancy over it
 value span is 9.4–41.0%, so a uniform draw would hit 9–41%, not 100%. Decisively, the
 client's own binary agrees — `msgshape` reads the RECV table at 0x00a52d70 as
 `0x0021 → handler 0x005FD2F0, 1 field u32, wire 6 bytes`, `asserts.py --at 0x005fd2f0`
-names `Array:587 "index < m_count"` and `AgMsg:316 "ptr"` (the dword is bounds-checked as
+names `Array:587`'s index-against-count bound and `AgMsg:316`'s non-null `ptr` bound
+(the dword is bounds-checked as
 an index into an agent array), and the handler walks every object bound to the agent,
 clears `m_bindTarget`, frees the array and zeroes count/capacity/base. That is teardown,
 read out of the exact binary that produced this capture.

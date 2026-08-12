@@ -102,7 +102,7 @@ first thing to do.** Three findings reorder the problem:
   prior study thought: all 3,443 rows are populated, the table base is referenced
   by **nine** relocated absolute addresses across three base constants plus a
   row-count immediate, and the table's tail abuts ArenaNet's own
-  `P:\Code\Gw\Const\ConstSkill.cpp` and `index < arrsize(s_skill)` strings — so
+  `P:\Code\Gw\Const\ConstSkill.cpp` string and the bound on `s_skill`'s array size — so
   appending in place overwrites the anchor every scanner uses to find the array.
 
 **Recommended route: static PE patch + side-hook first; direct dat write second;
@@ -1715,8 +1715,8 @@ another". **Wrong.** The crash reproduced with a clean archive and a stock
 binary, and the crash log names the real cause:
 
 ```
-Assertion: *skill
-P:\Code\Gw\Char\Cli\ChCliSkill.cpp(1022)
+assert  P:\Code\Gw\Char\Cli\ChCliSkill.cpp(1022)
+        a non-null bound on the dereferenced `skill` pointer
 ```
 
 A null **skill** pointer, not a texture. `authsrv.py --unlocks all` set all 4,096

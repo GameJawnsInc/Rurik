@@ -715,6 +715,35 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   live server appending to `vault/captures/` cannot make it disagree with itself),
   `toolkit/test_content.py` (the content store, and that its provenance and licence
   refusals actually refuse),
+  `toolkit/test_provlint.py` (the OTHER half of the same gate, and the half nothing
+  had ever checked: `content.py` refuses an unprovenanced row, while the ruling's
+  refusal of "verbatim assert expressions with their source path and line" applied
+  to prose and was enforced by nobody — so sixteen tracked docs accumulated assert
+  text pasted out of the crash dialog and out of `asserts.py --grep`. 134 refused
+  triples on 2026-08-12, in files that mostly predate the 2026-08-11 ruling: drift,
+  not defiance. The checker's hard part is that a location and a bound and a field
+  name are all PERMITTED and the docs are built out of them, so section 3 — fifteen
+  permitted forms that must NOT be flagged — is the load-bearing one; a checker that
+  reddens at the constraint gets switched off, which restores the exact silence it
+  exists to end. Three shapes are caught, and the third is why the `P:\Code` grep
+  that started this undercounts by 3x: the crash-dialog form, the quoted
+  `asserts.py` form, and the UNQUOTED expression sitting in a fenced block with no
+  label and no quotes. `Module:123` is indistinguishable from prose without a
+  vocabulary, so pass 1 harvests one from the corpus and section 4 pins that
+  `Build: 38797` is not a source location while `AgMsg:208` is. Its upstream
+  denylist is checked in the direction that can do damage — it must not shadow a
+  real ArenaNet module, because `MapData` was on it for a draft on the strength of
+  GWLP-R's `MapData.scala` and would have silently dropped customarea's findings.
+  Section 5 holds 11 scrubbed files at ZERO and the 5 un-scrubbed ones at a
+  not-growing baseline of 104, so the remainder is visible rather than pending.
+  **Its blind spot is written down because it was found the embarrassing way** —
+  by grepping for the expressions AFTER the checker had called those files clean:
+  it matches three MACHINE formats and no prose paraphrase, so "the CharPool method
+  whose line 84 asserts X" and a table cell reading "**AvChar** — 5893 X" are the
+  same disclosure and go unseen. Sixteen such sites were swept by hand and are NOT
+  continuously enforced, so "scrubbed files are at zero" means zero
+  MACHINE-DETECTABLE triples and is a weaker claim than it reads as. No vault, no
+  socket, no client),
   `toolkit/clientpatch/test_cage.py` (the launch gate: which binary may be aimed at
   which server, both directions — slow, ~1 min, it queries the Windows Firewall once
   per client),

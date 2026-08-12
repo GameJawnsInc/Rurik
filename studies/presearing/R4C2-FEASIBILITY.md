@@ -50,7 +50,7 @@ And a fifth defect nobody put on the rung: **numerator and denominator are count
 
 **8 rows, at capture strength, none of them named.** Full split, all measured this session:
 
-**Tier A — capture-sourced identity (`source = "capture"`), 8 of 8 slots.** The 7 hostile (1346, 1420, 1421, 1431, 1432, 1434, 1442) plus `anim` 1343. Per row: `definition`, `file_id`, `scale`, `flags`, profession byte, level byte, `enc_name`, `move_speed`. Evidence: 126 × 0x0056 over 54 slots, **zero payload disagreements anywhere**, 38 slots declared in more than one capture, 48 of 54 instantiated, **0 created-never-declared** (which is what the client's own `index < m_count` assert forces).
+**Tier A — capture-sourced identity (`source = "capture"`), 8 of 8 slots.** The 7 hostile (1346, 1420, 1421, 1431, 1432, 1434, 1442) plus `anim` 1343. Per row: `definition`, `file_id`, `scale`, `flags`, profession byte, level byte, `enc_name`, `move_speed`. Evidence: 126 × 0x0056 over 54 slots, **zero payload disagreements anywhere**, 38 slots declared in more than one capture, 48 of 54 instantiated, **0 created-never-declared** (which is what the client's own index-against-count assert forces).
 
 `move_speed` is a new result from this pass and it is 8 of 8: create field 9 is single-valued per slot at n = 7 to 202 creates — 1346 360.0, 1420/1421/1434 288.0, 1431/1432 300.0, 1442 **12.0 in 202 of 202**, which independently reproduces `content/npcs.toml`'s hand-written `speed = 12.0`. Create field 10 is *not* a type property: it takes two values inside slots 1420, 1421 and 1343.
 

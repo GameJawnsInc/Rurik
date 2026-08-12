@@ -40,8 +40,9 @@ hypotheses after the wrong thing. The 6-byte record header is ArenaNet's own
 ```
 
 **SOURCED.** The decoder is `P:\Code\Engine\Text\TextDecode.cpp` at
-**VA 0x007cb000**, and its first act is `cmp word ptr [edi], 6` guarding the
-assert `data->bytes >= sizeof(StringHeader)`. That is ArenaNet naming both the
+**VA 0x007cb000**, and its first act is `cmp word ptr [edi], 6` guarding an assert
+that bounds the record's byte count below by `sizeof(StringHeader)` — naming the
+struct `StringHeader` and fixing its size at **6**. That is ArenaNet naming both the
 struct and its size.
 
 **A record decodes as:** read `bits` bits at a time, LSB-first; symbol 0 becomes

@@ -16,7 +16,7 @@ Two findings are worth reading even if nothing else here is acted on.
 damage message; damage is agent property 16 on `0x00A3`, and the float is a
 **fraction of maximum health**, not an absolute amount. Health **clamps at 1**,
 so a damage packet cannot kill. And a positive value crashes the client on
-ArenaNet's own `Assertion: damage.amount <= 0`. This cost four packets and no NPC.
+ArenaNet's own non-positive bound on the damage `amount`. This cost four packets and no NPC.
 
 **§4 — allegiance is a FourCC.** The `PLAYER_TEAM_TOKEN = 'play'` we already send
 in every spawn is that field, and the friendly-NPC value is `'nonc'`. Hostility
@@ -332,19 +332,19 @@ change. Death is therefore a separate mechanism, and `AGENT_PLAYER_DIE`
 ask and it is the most useful thing it returned: an enemy that only deals damage
 can never kill anyone.
 
-**A positive value is illegal, and the client says so in ArenaNet's own words.**
+**A positive value is illegal, and the client's own bound says so.**
 The fourth step sent `+25.0` as a control on "the value is added". The client
 died on the spot:
 
 ```
-Assertion: damage.amount <= 0
-P:\Code\Gw\AgentView\AvChar.cpp(5893)
+assert  P:\Code\Gw\AgentView\AvChar.cpp(5893)
+        a NON-POSITIVE bound on the damage message's `amount` field
 Build: 38797     When: 8/6/2026 01:53:06
 ```
 
 The crash timestamp equals the packet's send timestamp to the second, so the
 causal link needs no argument. This is the same class of evidence as the
-manifest-phase assert that fixed the map load: **ArenaNet's text, naming their
+manifest-phase assert that fixed the map load: **ArenaNet's own bound, naming their
 source file, their line, and their field.** Three things follow:
 
 1. The channel is **damage-only**. Healing travels some other way — unknown, and
@@ -445,8 +445,8 @@ The control created a monster-class agent whose definition had never been sent.
 The client died on:
 
 ```
-Assertion: index < m_count
-P:\Code\Base\rtl\Array.h(587)
+assert  P:\Code\Base\rtl\Array.h(587)
+        the shared index-against-count bound on a dense array
 Build: 38797     When: 8/6/2026 09:43:32
 ```
 
@@ -571,7 +571,7 @@ timestamp, which identifies the culprit without argument.
 |---|---|
 | float property 42 = `0.0` (health fraction → zero) | **nothing** |
 | `AGENT_ALLY_DESTROY` (`0x003E`) | **nothing** |
-| int property 42 = `0` (maximum health → zero) | health bar **refilled to full**, then `Assertion: range > 0`, `P:\Code\Gw\Char\CharPool.cpp(98)` |
+| int property 42 = `0` (maximum health → zero) | health bar **refilled to full**, then a **strictly-positive bound on `range`** at `P:\Code\Gw\Char\CharPool.cpp(98)` |
 | `AGENT_PLAYER_DIE` on the *player* | **never ran** — sent 7 s after the crash, into a client that was no longer reading |
 
 **Int property 42 sets the maximum AND refills to full — OBSERVED.** This is the
@@ -584,8 +584,8 @@ rather than by design.
 
 **`CharPool.cpp` corroborates §6b in ArenaNet's own vocabulary.** The crash
 dump's string region carries that file's assert expressions, and beside
-`range > 0` sits **`fraction <= 1.0f`**. *Fraction* is their word for it. §6b
-measured that health is a fraction; the client's own assert text says so.
+the `range` bound sits one naming a value **`fraction`**. *Fraction* is their word
+for it. §6b measured that health is a fraction; the client's own assert says so.
 
 ### The capability that matters more than the result
 
@@ -596,9 +596,9 @@ into "which file did they write it in":
 
 ```
 GAME_SMSG 0x002D handler @ 0x005FDB70
-  asserts in  P:\Code\Engine\Agent\AgMsg.cpp   expressions 'syncPtr', 'asyncPtr'
-  (the bounds check that killed us in 6d is the same P:\Code\Base\rtl\Array.h,
-   'index < m_count' — one shared assert, two different crashes)
+  asserts in  P:\Code\Engine\Agent\AgMsg.cpp   bounds on syncPtr, asyncPtr
+  (the bounds check that killed us in 6d is the same P:\Code\Base\rtl\Array.h
+   index-against-count bound — one shared assert, two different crashes)
 ```
 
 The handler is **not a no-op**: it bounds-checks the agent id, resolves a `syncPtr`
@@ -871,7 +871,7 @@ reached the client and was refused outright:
 ```
 Map file '0x01b97d' failed to load.  Attempting to re-bloat.
 Map '0x01b97d' failed to load / Creating default map
-Assertion: found    P:\Code\Engine\Map\Map.cpp(1762)
+assert  P:\Code\Engine\Map\Map.cpp(1762)  — the lookup's found-flag bound
 ```
 
 The archive stores it as `0x8001B97D`, and sending that loads. So **masking is
@@ -965,9 +965,9 @@ renders with no bag behind it.** We sent `0x0161` + `0x006E` with no
 in the character's hands. OBSERVED.
 
 **`0x006D` carries item ids, not weapon types.** Sending weapon type 3 there —
-on the theory that it sets `weapon_type` at `+h01B2` — took the client down on
-`Assertion: ptr`, `P:\Code\Gw\Item\Cli\ItCliApi.cpp(400)`, with `baseItem` in
-the adjacent strings. It looked 3 up in the item table, got null and died.
+on the theory that it sets `weapon_type` at `+h01B2` — took the client down on a
+**non-null pointer bound** at `P:\Code\Gw\Item\Cli\ItCliApi.cpp(400)`, with `baseItem`
+in the adjacent strings. It looked 3 up in the item table, got null and died.
 OBSERVED. The client presumably derives `weapon_type` from the item's own
 `ItemType`, the way it derives the mesh from `file_id`.
 
@@ -1015,15 +1015,15 @@ right.
 fld   dword ptr [esi + 0xec]     ; weapon_attack_speed
 fldz / fucom / fnstsw / test ah, 0x44
 jp    0x7f82fc                   ; assert ONLY if it is zero
-push  0x12b7                     ; line 4791 -> "m_attackInterval"
+push  0x12b7                     ; line 4791 -> the m_attackInterval assert
 call  0x487bc0
 0x7f82fc: fld dword ptr [esi + 0xf0]   ; attack_speed_modifier, line 4792
 ```
 
 `esi` is the agent: `[esi+0x158]` is read a few instructions later and that is
 `type_map` in GWCA's map. So **both `+0xEC` and `+0xF0` must be non-zero before
-the client will animate a melee attack**, and ours are zero. That is the crash
-`Assertion: m_attackInterval / P:\Code\Gw\AgentView\AvChar.cpp(4791)`.
+the client will animate a melee attack**, and ours are zero. That is the crash — the
+**non-zero bound on `m_attackInterval`** at `P:\Code\Gw\AgentView\AvChar.cpp(4791)`.
 
 **What sets them is NOT FOUND.** No `mov` and no `fstp` writes either offset by
 displacement anywhere in the image. GWCA calls `+0xEC` "the base attack speed of
@@ -1169,8 +1169,8 @@ client died on the *same assert, at the same line*, as it did before the bag
 existed:
 
 ```
-Assertion: m_attackInterval
-P:\Code\Gw\AgentView\AvChar.cpp(4791)
+assert  P:\Code\Gw\AgentView\AvChar.cpp(4791)
+        the non-zero bound on `m_attackInterval`
 Build: 38797     When: 8/6/2026 16:31:49
 ```
 
@@ -1206,13 +1206,13 @@ to a stack trace instead of to a message handler.
 | # | static | ArenaNet's file, from asserts in the same function |
 |---|---|---|
 | 0 | `0x00487BDB` | the assert routine itself |
-| 1 | `0x007F82FA` | **AvChar** — 4791 `m_attackInterval`, 4792 `m_attackModifier` |
-| 2 | `0x007F867F` | **AvChar** — 2222 `dancer`, 4745 `loop < 500` |
-| 3 | `0x007F9F5F` | **AvChar** — 5893 `damage.amount <= 0`, the §6b assert |
+| 1 | `0x007F82FA` | **AvChar** — 4791 bounds `m_attackInterval`, 4792 `m_attackModifier` |
+| 2 | `0x007F867F` | **AvChar** — 2222 `dancer`, 4745 bounds a loop counter below 500 |
+| 3 | `0x007F9F5F` | **AvChar** — 5893 bounds the damage `amount` non-positive, the §6b assert |
 | 4 | `0x007F3486` | **AvChar** — 1484 `curr->fileId` |
-| 5 | `0x00801732` | **AvManager** — 714 `s_refCountAlert`, 775 `!s_reusableAgentArray.Count()` |
+| 5 | `0x00801732` | **AvManager** — 714 `s_refCountAlert`, 775 an empty-list bound on the reusable-agent array |
 | 6 | `0x007DF2CE` | **AvApi** — 480 `agent`, 497 `stat` |
-| 7 | `0x004E28C3` | **GmView** — 2840 `MissionCliIsGameMaster()` |
+| 7 | `0x004E28C3` | **GmView** — 2840 a game-master predicate |
 | 11 | `0x0063543D` | **FrApi** |
 | 14 | `0x0062BE5F` | **EvtApi** |
 | 15 | `0x004815B0` | **ExeTimer** |
@@ -1221,7 +1221,7 @@ Read bottom-up it is `ExeTimer → EvtApi → FrApi → … → GmView → AvApi
 AvManager → AvChar → AvChar → AvChar → assert`. Two things fall out.
 
 **Frame 3 is the damage function.** `0x007F9F5F` sits inside the very function
-that asserts `damage.amount <= 0` — the assert §6b earned with a positive
+that bounds the damage `amount` non-positive — the assert §6b earned with a positive
 damage value. So generic value 4 and generic value 16 arrive at the *same*
 AvChar routine, which is direct support for something the arc had only inferred
 from field shapes: `0x00A0` and `0x00A3` are the int and float halves of one
@@ -2080,8 +2080,8 @@ starter hammer's `0x22201000` is byte-identical to the Ranger's own equipped bow
 equipped weapons having it is a fact about weapons rather than about all items.
 
 **The middle predicate, named.** `0x0080D3E0` is ChCliApi's local-player-id getter
-(`ChCliApi:4809 !(playerId & CHAR_CLASS_BASE_MASK)`, matching its own
-`test esi, 0xf0000000`), reading `+0x2AC` of the mission context at `[G+0x44]`
+(`ChCliApi:4809` bounds the id to have no `CHAR_CLASS_BASE_MASK` bits set, matching
+its own `test esi, 0xf0000000`), reading `+0x2AC` of the mission context at `[G+0x44]`
 (`MsCliApi`). `0x0080CEE0` looks that id up through `0x005FC380` (`AgApi`) and
 returns nonzero only when one field equals 1 AND another equals 6 — two specific
 equalities, so a narrow special case rather than the common path. NOT measured
@@ -2174,12 +2174,13 @@ switch, picks an action, and sends it. It picks **arm 1** (`0x0033`) where Arena
 agents get **arm 0** (`0x0026` ATTACK). Same function, same click, same target field.
 
 **The switch, verified here byte by byte.** `0x00514840` takes `(action, targetAgentId,
-arg3)`, asserts `action < 6` (`GmCoreAction:933 action < WORLD_ACTIONS`, compiled as
-`cmp ebx,6 / jl`) and `AvValidate(targetAgentId)` (`:934`, via `0x007E1460`), then
+arg3)`, bounds the action by `WORLD_ACTIONS` = 6 (`GmCoreAction:933`, compiled as
+`cmp ebx,6 / jl`) and validates `targetAgentId` (`:934`, via `0x007E1460`), then
 dispatches through the table at `0x00514984`. The action index arrives from
 `0x004E6B20` — `0x004E2172 call 0x4e6b20 / mov ebx, eax` — whose own asserts name it
-the click path: `GmView:2229 !(selectFlags & UiMsgGameSelect::FLAG_NO_INTERACT)` and
-`GmView:2234 !((selectFlags & FLAG_DBL_CLICK) && !(selectFlags & FLAG_DUE_TO_CLICK))`.
+the click path: `GmView:2229` requires `FLAG_NO_INTERACT` clear in the selection
+flags, and `GmView:2234` rules out the double-click-without-click combination of
+`FLAG_DBL_CLICK` and `FLAG_DUE_TO_CLICK`.
 
 So `0x0033` is not "interact". **It is what the client sends when the world-action switch
 resolves a click to arm 1 instead of arm 0.** REPORTED (workflow, not re-verified here):
@@ -2377,8 +2378,9 @@ rung is the client asking and us answering, not combat.
 The first run of this went down two seconds after the kill:
 
 ```
-Assertion: fraction <= 1.0f
-P:\Code\Gw\Char\CharPool.cpp(84)          Build: 38797
+assert  P:\Code\Gw\Char\CharPool.cpp(84)
+        an UPPER bound of 1.0 on a value the assert names `fraction`
+Build: 38797
 ```
 
 The trace carries our own message three frames below the assert —
@@ -2386,10 +2388,10 @@ The trace carries our own message three frames below the assert —
 **10**, and `42c80000` = **100.0f**. That is `revive_due`'s "refill bar" send, which
 passed `max_health` where the client wanted a FRACTION of a pool.
 
-**The assert is `<=`, so it can only fire in the POSITIVE direction.** Every value this
+**The bound is an UPPER one, so it can only fire in the POSITIVE direction.** Every value this
 project had ever put on the `0x00A3` float channel was damage — `-HIT_FRACTION`, and the
-`-50.0` that `GV_HEALTH`'s own comment is built on. A negative number passes
-`fraction <= 1.0f` however absurd it is, so the entire damage side of this arc tested that
+`-50.0` that `GV_HEALTH`'s own comment is built on. A negative number passes an
+upper bound of 1.0 however absurd it is, so the entire damage side of this arc tested that
 bound **vacuously**. It took the first kill driven all the way to a revive — the first
 positive value ever sent — to reach it.
 
