@@ -41,7 +41,12 @@ import srclint  # noqa: E402
 # the tree in both directions. That rule had been written down since the list existed
 # and enforced by nothing; it names three tests that went unrun for days, and on the
 # day section 7 was written a runner reported "51 of 51 green" over 52 test files.
-LEDGER = checks.Ledger("srclint", floor=13)
+#
+# 13 -> 15 the same day with section 5b, which extends the corpus to `tools/`. That
+# directory holds the two halves of the Blender pipeline, which import `bpy` and so
+# cannot be run outside Blender at all -- exactly the place an unbound name hides
+# longest -- and nothing had ever linted it.
+LEDGER = checks.Ledger("srclint", floor=15)
 
 
 def names(src):
@@ -151,6 +156,37 @@ def main():
         LEDGER.ok(True, "and no file was skipped for a star-import",
                   "a skipped file is unjudged, so it is named rather than counted "
                   "as clean")
+
+    # ---- 5b. tools/, which nothing was checking --------------------------------
+    # `tools/blender/` holds the two halves of the Blender pipeline. They import
+    # `bpy` and therefore CANNOT be run outside Blender, so an unbound name in
+    # one of them survives every ordinary smoke test and surfaces as a traceback
+    # inside a headless render -- which is worse than the session.py NameError
+    # this checker exists for, not better. Added 2026-08-12 with
+    # `export_gwmap.py`; until then the directory was linted by nobody.
+    tools = os.path.join(os.path.dirname(HERE), "tools")
+    if not os.path.isdir(tools):
+        LEDGER.skip("5b. tools/", f"no tools directory at {tools}")
+    else:
+        tbad, tn = {}, 0
+        for path in srclint.python_files(tools):
+            tn += 1
+            try:
+                hits = srclint.check_file(path)
+            except srclint.StarImport:
+                tbad[os.path.relpath(path, tools)] = [(0, "star-import")]
+                continue
+            except SyntaxError as ex:
+                tbad[os.path.relpath(path, tools)] = [(ex.lineno, f"SyntaxError: {ex.msg}")]
+                continue
+            if hits:
+                tbad[os.path.relpath(path, tools)] = hits
+        LEDGER.ok(tn >= 2, "tools/ is checked too, not just toolkit/",
+                  f"{tn} files")
+        LEDGER.ok(not tbad, "and no file under tools/ reads a name nothing "
+                            "could have bound",
+                  "; ".join(f"{p}:{h[0][0]} {h[0][1]}"
+                            for p, h in sorted(tbad.items())) or "clean")
 
     # ---- 6. failure modes are loud ---------------------------------------------
     print("\n6. what it refuses to judge, it names")

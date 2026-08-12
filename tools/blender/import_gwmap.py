@@ -102,6 +102,11 @@ FORMAT_VERSION = 1
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
 
+# The object custom property carrying the manifest across the round trip. Read
+# back by `tools/blender/export_gwmap.py`; the two agree on this name and on
+# nothing else.
+STAMP = "gwmap"
+
 # The pitch the interchange is expected to carry. Not used to place a vertex --
 # see convention 1 -- only to say so when a file disagrees with the measurement.
 EXPECTED_PITCH = 96.0
@@ -335,7 +340,27 @@ def import_gwmap(json_path, name=None, clear=False):
     bpy.context.scene.collection.objects.link(obj)
 
     _attach_cell_attributes(mesh, gwmap)
+    _stamp(obj, gwmap)
     return obj, gwmap
+
+
+def _stamp(obj, gwmap):
+    """Leave the manifest on the object so the way OUT can carry it.
+
+    Tag 0's fields, the two tile tables and the emitted tag sequence are not
+    recoverable from a mesh -- a lattice of vertices simply does not contain
+    them -- so `export_gwmap.py` reads them back from here. The SIDECAR block is
+    stripped: its digests describe the file that was imported, and re-emitting
+    them beside heights a human has since edited would produce a manifest that
+    verifies against the wrong bytes.
+
+    `dims`, `map_rect` and `cell_pitch` are left in deliberately even though the
+    exporter re-derives all three from the geometry. They are what makes its
+    cross-check possible: the mesh is what a human edited and therefore wins,
+    and a disagreement is worth reporting rather than silently resolving.
+    """
+    stamp = {k: v for k, v in gwmap.meta.items() if k != "sidecars"}
+    obj[STAMP] = json.dumps(stamp, sort_keys=True)
 
 
 def _attach_cell_attributes(mesh, gwmap):
@@ -414,6 +439,12 @@ def mesh_summary(obj, gwmap):
         "digest_y": _packed_digest(ys),
         "digest_z": _packed_digest(zs),
         "attributes": sorted(a.name for a in mesh.attributes),
+        # Which keys of the manifest made it onto the object. The
+        # round-trip test reads this rather than reopening the .blend, so a
+        # stamp that silently stopped being written fails on the way IN instead
+        # of surfacing as a lost tile table on the way out.
+        "stamp_keys": sorted(json.loads(obj[STAMP]).keys()) if STAMP in obj
+                      else [],
     }
 
 
@@ -458,8 +489,12 @@ def main(argv=None):
     print("  bbox min      %r" % (summary["bbox"]["min"],))
     print("  bbox max      %r" % (summary["bbox"]["max"],))
     print("  rect          %r   pitch %r" % (list(gwmap.rect), gwmap.pitch))
-    print("  heights       %.1f .. %.1f  (AS STORED -- greater is LOWER in the "
-          "world, so this mesh is upside down: FINDINGS 25)"
+    # WORLD z, not stored. This line said "AS STORED ... so this mesh is upside
+    # down" until 2026-08-12, which was true of the mesh it described and became
+    # false in the same commit that negated the z -- the docstring's rule 4 moved
+    # and the readout did not.
+    print("  heights       %.1f .. %.1f  (world z, the stored heights NEGATED: "
+          "a greater stored value is LOWER in the world, FINDINGS 25)"
           % (summary["bbox"]["min"][2], summary["bbox"]["max"][2]))
 
     if args.dump_verts:

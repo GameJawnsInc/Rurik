@@ -359,7 +359,39 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   section 0 is that selector — an explicit path that does not exist is REFUSED
   rather than fallen through to the known install, because it fell through, and a
   run that asked for one Blender measured another and printed green. Sections 0-2
-  need no vault and score 39 against a floor of 74. ~13 s),
+  need no vault and score 39 against a floor of 75. ~13 s),
+  `toolkit/mapdata/test_blenderroundtrip.py` (the AUTHORING direction, and the
+  first thing in this arc to come OUT of Blender: an interchange imported, saved
+  to a `.blend`, and exported back by a SEPARATE Blender process — two processes,
+  because a round trip inside one scene proves the functions are inverses and
+  says nothing about whether the `.blend` carried anything. **ArenaNet's own
+  212,992 heights, 212,992 tile bytes and 212,992 shade bytes come back
+  byte-identical**, and that headline is the WEAK half: a memcpy sabotage — the
+  importer stashing the height array in its stamp and the exporter replaying it
+  — keeps all SIX byte-identity checks green, including the retail ones, and is
+  caught by exactly two. Those two are section 2, which SCULPTS one vertex in
+  Blender by a literal +250.0 and requires exactly that cell to move by exactly
+  −250.0 in the stored convention, because the importer negates in and the
+  exporter negates back; a run without it is satisfied by a tool that understands
+  nothing. Three refusals, each a thing a height field cannot express: a vertex
+  dragged 40 units in x leaves its column and the lattice stops filling, a vertex
+  nudged 0.5 units STAYS in its column and is caught only by the residual against
+  the lattice, and a far-edge vertex holds a value the file has nowhere to put.
+  The first two are one defect at two magnitudes and a version with only the
+  40-unit case passes a sabotage that deletes the residual check — measured, not
+  assumed. The far edge is checked from BOTH its causes, because the count is
+  named for its effect: sculpting the edge leaves the stored heights IDENTICAL
+  (the drop happened), while sculpting the last REAL column beside it moves that
+  cell and puts the same edge vertex on the same list, and an exporter conflating
+  them reports the wrong thing about a legitimate edit. It also pins that an
+  IDENTITY `matrix_world` multiply is not a bitwise no-op on SIGNED ZERO —
+  `-0.0 * 1.0 + 0.0` is `+0.0`, so one cell of 6,144 came back `00000080` for
+  ArenaNet's `00000000`, numerically equal and bytewise not, which is exactly what
+  a tolerance would have hidden; the comparison reports byte-differs and
+  value-differs separately so the next one names itself. Section 4 authors a mesh
+  in Blender from NOTHING, with no stamp to carry, and `mapbuild` assembles it
+  into a map file that passes all 17 of the client's open-time gates. Sections 0-4
+  need no vault and score 65 against a floor of 77. ~39 s),
   `toolkit/mapdata/test_mapfile.py` (the WHOLE-FILE codec: a retail `ffna` map
   payload decoded to a typed container and re-encoded byte-identically — **349 of
   349 Bloated and 349 of 349 Stripped** under `--all`, 6 of each by default. The

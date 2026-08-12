@@ -473,8 +473,14 @@ def build_manifest(trn, rect, name, source, tiles=True, shade=True):
             "array_order": "world row-major, index = gy * dimX + gx",
             "grid_row_0": "world maxY; gx = int((wx-x0)/pitch), "
                           "gy = int((y1-wy)/pitch)",
-            "height_sign": "as stored; NOT negated (the client's load path "
-                           "applies no transform)",
+            # CORRECTED 2026-08-12. This read "as stored; NOT negated (the
+            # client's load path applies no transform)" -- the load path fact is
+            # still true and is about BYTES, but the headline drawn from it was
+            # wrong, and rule 4 above was fixed while this string, which is the
+            # MACHINE-READABLE half and the only one a consumer parses, was not.
+            "height_sign": "as stored, and a GREATER stored value is LOWER in "
+                           "the world (FINDINGS 25). A consumer drawing this "
+                           "for a human must negate z.",
             "stored_samples": "dimX * dimY; a mesh has (dimX+1)*(dimY+1) "
                               "vertices, the extra column and row being "
                               "replicated by the client",
@@ -626,7 +632,8 @@ def _main(argv=None):
     print(f"  mesh          {vx} x {vy} vertices, {exp.cells} quads")
     print(f"  rect          {exp.rect}")
     print(f"  extent        {ex:.0f} x {ey:.0f}   pitch {exp.pitch}")
-    print(f"  height        {lo:.0f} .. {hi:.0f}  (as stored, NOT negated)")
+    print(f"  height        {lo:.0f} .. {hi:.0f}  (as stored -- a greater value "
+          f"is LOWER in the world, FINDINGS 25)")
     print(f"  sidecars      " + ", ".join(s["name"]
                                           for s in exp.meta["sidecars"]))
     return 0

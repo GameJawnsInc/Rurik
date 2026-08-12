@@ -4246,3 +4246,83 @@ carry the surface.
   and this client died during the HOLD. Fixed — a hold-time exit now retracts the
   verdict too. That is two distinct paths to a false PASS found in two days, both
   from the same root: the verdict is computed early and nothing downgraded it.
+
+## 32. The round trip out of Blender, and what its headline is worth (2026-08-12)
+
+**OBSERVED.** A retail map's terrain goes out to the neutral interchange, into
+Blender, onto disk as a `.blend`, back out through a *separate* Blender process,
+and returns **byte-identical**: Pre-Searing's 212,992 heights (851,968 B),
+212,992 tile bytes and 212,992 shade bytes, sha256 for sha256. Two processes and
+not one scene, because a round trip inside a single session establishes that two
+functions are inverses and says nothing about whether the `.blend` carried
+anything.
+
+`tools/blender/export_gwmap.py` is the new half. It undoes four things, and each
+is a place a silent exporter loses work:
+
+| undone | why it can go wrong |
+|---|---|
+| the lattice, re-derived from world POSITIONS | vertex order shares the importer's convention |
+| the manufactured far edge, dropped | the file holds `dimX*dimY`, the mesh `(dimX+1)²` |
+| z, negated back | FINDINGS 25 — raising a vertex LOWERS the stored value |
+| the metadata, carried but CROSS-CHECKED | tag 0 and the tile tables are not in a mesh |
+
+### The headline is the weak half, and that was measured rather than argued
+
+A memcpy passes it. **MEASURED:** with `_stamp` stashing the height array on the
+object and the exporter preferring it, a tool that reads no vertex and
+understands nothing keeps **all six byte-identity checks GREEN — including
+ArenaNet's 851,968 bytes** — and is caught by exactly two checks. Both are in the
+edit path, and the decisive one is the **sculpt**: one vertex moved in Blender by
+a literal `+250.0`, requiring exactly that cell to move by exactly `−250.0` in
+the stored convention. `453.0 → 203.0`, one cell of 6,144. Without it the whole
+file is satisfied by a tool that copies bytes.
+
+This is the same shape as `test_mapfile`'s stored-size control and
+`test_agentlife`'s twelve combat constants: the impressive number was never the
+check. Three sabotages were run and each landed where predicted —
+
+| sabotage | prediction | result |
+|---|---|---|
+| the negation dropped | several sections | 4 red, across 4 sections |
+| the memcpy above | sections 1 and 5 stay GREEN | exactly so; 2 red |
+| the residual check deleted | only the 0.5-unit band | exactly so; 40-unit case still green |
+
+### An identity `matrix_world` multiply is not a no-op on signed zero
+
+**OBSERVED, and it cost one byte of 24,576.** A stored height of `0.0` reaches
+Blender as `-0.0` (the importer negates), survives `from_pydata`, and survives
+the `.blend` — both checked directly against the bit patterns. Then
+`-0.0 * 1.0 + 0.0` evaluates to `+0.0`, because IEEE addition of the two zeroes
+yields the positive one. Negating back therefore produced `-0.0`, and one cell
+came back `00000080` where ArenaNet's byte was `00000000`: **numerically
+identical, bytewise not.** A tolerance would have hidden it; a bare digest would
+have reported "the heights are wrong" and sent a reader to the de-tiling. The
+export now skips the transform when there is no transform, and the comparison
+reports byte-differs and value-differs *separately* so the next one names itself.
+
+### The far edge is named for its effect, because it has two causes
+
+The count is `manufactured_edge_unstorable`, not "edited". Sculpting a far-edge
+vertex puts it on the list and the stored heights come back **identical** — the
+drop happened. Sculpting the **last real column beside it** puts the same vertex
+on the same list and the stored heights **change**, in exactly that cell. One
+number, two meanings; an exporter conflating them reports the wrong thing about a
+perfectly legitimate edit. Both are checked.
+
+### Authored from nothing
+
+A mesh built in Blender by script, with no stamp to carry, exports and reaches
+`mapbuild`, which assembles a map file passing **all 17** of the client's
+open-time gates. Terrain authored in Blender is now a thing the loader accepts.
+
+### What this does NOT establish
+
+- **Terrain only.** Props, zones, water and the navmesh do not go through
+  Blender. An author edits the height field and nothing else.
+- **The navmesh is still hand-authored**, and it is what the client actually
+  collides against (§23, §24). A sculpted hill in Blender changes what is *drawn*
+  and does not move a single trapezoid.
+- **No client run.** Nothing here was loaded by the retail client. The strongest
+  claim is `gates()`, which is our reading of the loader's rules, not the loader.
+- The `0.0`/`-0.0` finding is about our transform, not about ArenaNet's format.

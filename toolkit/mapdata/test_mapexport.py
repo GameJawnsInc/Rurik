@@ -417,9 +417,19 @@ def _section1(check, tmp):
     check(meta["format"] == FORMAT and meta["format_version"] == FORMAT_VERSION,
           f"the manifest declares {FORMAT} v{FORMAT_VERSION}")
     conv = meta["conventions"]
-    check("maxY" in conv["grid_row_0"] and "NOT negated" in conv["height_sign"]
+    # CORRECTED 2026-08-12. This asserted `"NOT negated" in height_sign`, which
+    # pinned the claim FINDINGS 25 RETIRED -- so the machine-readable half of
+    # the interchange went on telling consumers the wrong thing for a day after
+    # the docstring beside it was fixed, held in place by this check. The rule
+    # is now stated as its SUBSTANCE, and the retired phrase is asserted ABSENT
+    # rather than merely not required, so a revert to the old wording reddens
+    # here instead of passing quietly.
+    sign = conv["height_sign"]
+    check("maxY" in conv["grid_row_0"]
+          and "LOWER in the world" in sign and "NOT negated" not in sign
           and conv["sample_position"] == "cell corners",
-          "the manifest states row 0 = maxY, un-negated heights, corner samples")
+          "the manifest states row 0 = maxY, corner samples, and that a GREATER "
+          "stored value is LOWER in the world (FINDINGS 25)", sign[:80])
     check(len(meta["sidecars"]) == 3
           and {s["kind"] for s in meta["sidecars"]} == {"heights", "tiles", "shade"},
           "three sidecars, each named by kind in the manifest")
