@@ -332,6 +332,32 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   and below, each with a POSITIVE control that an ordinary copy is allowed —
   a guard that refuses everything protects nothing because the tool never runs.
   Sections 0-3 need no vault and score 22 against a floor of 28. ~20 s),
+  `toolkit/mapdata/test_stripbuild.py` (the STRIPPED-map assembler -- the input
+  the CLIENT's compiler reads, so most of what it must get right is not
+  checkable by decoding our own output and FINDINGS 43 is the run where the
+  client agreed. What this file pins is the three rules that run cost, each a
+  REFUSAL with a positive control so it cannot be "refuse everything": Zones
+  must precede Terrain (terrain bloat asserts `state->zones`); the rect is
+  DERIVED as `dims * 96.0` and `build()` has no rect parameter at all, asserted
+  on the syntax tree, because the converter asserts
+  `dims.x * XY_DIST == mapRect.x1 - mapRect.x0`; and **the Path chunk's boundary
+  point is a flood SEED that must stand on walkable ground** -- seeded on a
+  sawtooth the client asserts `segments->Count()` at PathData:365 and builds
+  nothing, so the refusal names that assert in its message. Its two controls are
+  what make it a measurement: the SAME point is accepted on flat ground, so the
+  rule is the slope under it rather than where it is, and the far edge reports
+  90 degrees rather than a number invented from one row. It also pins the
+  `cell_of` trap that shipped broken here -- grid row 0 is world maxY, so the
+  obvious `(0, 0)` corner divides to row `dim_y`, one past the end, and the
+  first version answered "outside the map rect" for a point plainly inside it.
+  Provenance is tested rather than assumed: no bytes literal over two bytes in
+  the module, AND the borrowed payloads are grepped for in the source as raw,
+  hex, spaced hex and `\x` escapes, because a docstring quote passes a
+  syntax-tree scan. The 54 borrowed bytes are read from the owner's archive at
+  run time and the report NAMES all three chunks rather than giving one
+  percentage; the generated dependency chunk lands byte-identical to ArenaNet's,
+  which the archive could have refused. Sections 0-3c score 30 on placeholder
+  constants of our own and need no vault, against a floor of 39),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against
