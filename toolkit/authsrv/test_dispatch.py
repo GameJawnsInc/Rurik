@@ -41,7 +41,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("dispatch catch-all (D9a)", floor=18)
+LEDGER = checks.Ledger("dispatch catch-all (D9a)", floor=20)
 
 AUTHSRV_PY = os.path.join(HERE, "authsrv.py")
 
@@ -79,6 +79,28 @@ def else_block_calls(tree, fname):
                                if isinstance(a, ast.Constant)
                                and isinstance(a.value, str))
     return out
+
+
+def called_in_finally(tree, fname):
+    """Is `fname` called from a `finally:` block?
+
+    Reachability, not behaviour -- and it is the check that was missing. The
+    summary calls sat after the read loop inside the `try` and NEVER RAN: the
+    loop exits by ConnectionResetError because the harness kills the client, so
+    control jumps to `except`. Every behavioural test passed the whole time,
+    because they call the function directly and so never ask whether anything
+    else does.
+    """
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        for stmt in node.finalbody:
+            for call in ast.walk(stmt):
+                if (isinstance(call, ast.Call)
+                        and isinstance(call.func, ast.Name)
+                        and call.func.id == fname):
+                    return True
+    return False
 
 
 def has_kind_ne_auth(tree):
@@ -212,7 +234,26 @@ def main():
               "run -- dead code that reads like a catch-all, directly above a "
               "real catch-all, is worse than no code")
 
+    LEDGER.ok(called_in_finally(tree, "report_unhandled"),
+              "and the tally is reported from a `finally`, so a reset still "
+              "prints it",
+              "MEASURED 2026-08-11: with the call sitting after the read loop "
+              "inside the `try`, a 45 s loopback run recorded 7 unhandled "
+              "events and wrote ZERO summaries -- the loop always exits by "
+              "ConnectionResetError because the harness kills the client. The "
+              "tally was right and unreachable, which is D9(a) one file over")
+
     # ---- 5. the structural checks must be able to go RED ---------------------
+    sab0 = ast.parse("def f():\n"
+                     "    try:\n"
+                     "        report_unhandled(s, c, r)\n"
+                     "    except OSError:\n"
+                     "        pass\n"
+                     "    finally:\n"
+                     "        rec.close()\n")
+    LEDGER.ok(not called_in_finally(sab0, "report_unhandled"),
+              "CONTROL: a call in the TRY body is not counted as reachable",
+              "this is exactly the arrangement that shipped and never ran")
     # Sabotage 1: demote the game else to an elif. This is the exact shape
     # D9(a) describes, so a detector that passes it is measuring nothing.
     sab = ast.parse(

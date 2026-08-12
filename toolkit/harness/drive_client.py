@@ -59,6 +59,16 @@ LIVE_ROOT = os.path.normcase(vault_path("run-live"))
 # configured host the client dials. What stays absolute: a missing flag or a
 # routable address is refused, never warned about.
 REQUIRED_FLAGS = ["-authsrv", "-portal"]
+# Flags `--client-arg` may NEVER add. Everything else in the client's 41-entry
+# argument table is a display or audio option and is harmless here, but these
+# three decide where the binary points, which is the one thing the cage exists
+# to fix. A second `-authsrv` is the sharp case: `assert_safe`'s parse keeps the
+# LAST value it sees while the client may act on the first, so the gate would
+# clear one host and the client would dial another -- the entire launch safety
+# story defeated by something that reads like a display option. `-portaldll` is
+# dead code in this build (PLAN.md §1.6) and is refused anyway, because "it does
+# nothing today" is a property of build 38797 rather than of the flag.
+FORBIDDEN_CLIENT_ARGS = {"-authsrv", "-portal", "-portaldll"}
 
 
 def is_loopback(value):
@@ -698,6 +708,13 @@ def main():
                          "assert_safe refuses anything else. A second loopback "
                          "alias is how the handoff probes make the client's own "
                          "dials say which configured host they follow.")
+    ap.add_argument("--client-arg", action="append", metavar="FLAG",
+                    help="Extra flag for the client, repeatable. For experiments "
+                         "needing UI the default launch does not show -- e.g. "
+                         "`--client-arg -perf`, which draws triangles, fps and "
+                         "transfer rate in the top-right corner. Flags that "
+                         "decide where the client points are REFUSED; see "
+                         "FORBIDDEN_CLIENT_ARGS.")
     a = ap.parse_args()
 
     if not a.exe:
@@ -711,6 +728,14 @@ def main():
     acct = accounts.for_target(a.authsrv, a.account)
     args += accounts.login_args(acct)
     print(f"account: {accounts.describe(acct)}")
+    for extra in (a.client_arg or []):
+        if extra.split("=", 1)[0].lower() in FORBIDDEN_CLIENT_ARGS:
+            raise SystemExit(
+                f"--client-arg {extra!r} is refused: it decides where the client "
+                f"points, which is the cage's job. See FORBIDDEN_CLIENT_ARGS.")
+        args.append(extra)
+    if a.client_arg:
+        print(f"extra client flags: {' '.join(a.client_arg)}")
     host = assert_safe(a.exe, args)
     # And that this BINARY may be pointed at THAT host. assert_safe checks the path and
     # the argv; a binary can pass both and still be the wrong build for where it is
