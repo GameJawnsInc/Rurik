@@ -494,6 +494,22 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   doc would have locked the error in. Its capture half decodes the tape WHOLE via
   `tape.decode_all` and asserts the byte accounting first, so every count beneath it is
   of all 3,604 messages rather than the 3,500 the per-event idiom read),
+  `toolkit/authsrv/test_npcdefs.py` (the capture→content compiler: **126 of 126**
+  NPC definitions rebuild BYTE-IDENTICALLY from the extractor's own typed rows —
+  rebuilt field by field, never replayed, so a compiler that stored the blob prints
+  the same number and cannot pass. Its real check is the interval join: a property
+  message belongs to the create IN EFFECT AT ITS TIMESTAMP, because agent ids are
+  recycled, and agent 38 at t=18.169 joins to definition 1434 `mon1` while
+  last-create-wins gives 1343 `anim` — one of the FIVE NPC health readings in
+  existence, wrong, and green on 99.8% of creates. **The first version of this test
+  did not catch that**, because the aggregate `{1346: 96, 1434: 8, 1442: 40}` is
+  UNCHANGED under the naive join: agent 43 in the other capture observes 1434 = 8
+  independently. The redundancy that makes the finding strong is what made the check
+  blind. What catches it is the per-definition event counts plus the rule that no
+  non-hostile definition may carry a health reading. Three sabotages run, three fail —
+  the third by `read()` refusing and naming both speeds rather than averaging. Also:
+  six definitions carry an EncString word in the UTF-16 surrogate range and were
+  **unsendable by this server until the `string16` fix**),
   `toolkit/authsrv/test_rotate.py` (that GAME_CMSG 0x0040 really is ROTATE_PLAYER: the
   client's own assert text and the two ±inf constants are still at their addresses, both
   payload fields are still `dword` and not the `float` they look like, and the finite
