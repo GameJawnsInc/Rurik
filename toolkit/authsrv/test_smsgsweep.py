@@ -58,7 +58,7 @@ import checks  # noqa: E402
 import smsgsweep as sw  # noqa: E402
 from codec import Codec  # noqa: E402
 
-# Floor 41, measured from a green run on 2026-08-12. Sections 0 and 2-7 need no vault, no
+# Floor 47, measured from a green run on 2026-08-12. Sections 0 and 2-7 need no vault, no
 # socket and no client -- 32 checks -- because a scoring defect is not a property of any
 # one capture. Two sections do need more and both declare their skips: section 1's
 # cross-check of NOT_IN_RECV_TABLE against the client's own receive table wants capstone
@@ -67,7 +67,7 @@ from codec import Codec  # noqa: E402
 # the way test_mapexport treats a vault-less run: those two sections are the ones that
 # pin the sweep's DENOMINATOR and the ten opcodes that tear the game channel down, and a
 # plan built on a constant nothing confirmed is exactly the wish this repo keeps refusing.
-LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=41)
+LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=47)
 
 # MEASURED 2026-08-12: the opcodes whose field list `overrides.json` changes. Written as
 # literals rather than recomputed from the module under test.
@@ -348,6 +348,51 @@ def main():
     LEDGER.ok(added2 == 0 and led2 == led,
               "CONTROL: recording the same run twice adds nothing",
               "the ledger keeps the FIRST measurement; a re-score cannot overwrite it")
+    # A window of ONE is the only attributable crash, and recording it is what makes the
+    # sweep converge: otherwise --resume replans the killer and every run dies in the
+    # same place forever.
+    one = [c2s(9.6, 0x0009), send(10.0, 0x0100), c2s(10.1, 0x0088), send(10.4, 0x0101),
+           {"kind": "error", "t": 40.0, "error": "ConnectionResetError(10054)"}]
+    r1 = sw.analyse(capture(one), codec, control=4.0)
+    l1, a1 = sw.record(r1, {})
+    LEDGER.ok(r1["crash"]["suspects"] == [0x0101]
+              and l1["0x0101"]["effect"] == "ASSERTED",
+              "a SUSPECT set of one is recorded as ASSERTED",
+              "the strongest result the sweep produces -- this opcode stops the client")
+    LEDGER.ok(0x0101 not in r1["unreached"],
+              "and it is NOT also listed as UNREACHED",
+              "one run reported 0x0017 as ASSERTED and as 'will be retried' in the same "
+              "breath; a suspect is implicated, not unreached")
+    LEDGER.ok(0x0101 not in {x["opcode"] for x in
+                             sw.plan(codec, done=sw.done_opcodes(l1))["rows"]},
+              "and --resume does not replan it",
+              f"{a1} rows recorded; without this every run dies in the same place")
+    two = one[:2] + [c2s(10.1, 0x0088), send(10.4, 0x0101), send(10.5, 0x0102),
+                     {"kind": "error", "t": 40.0, "error": "ConnectionResetError(10054)"}]
+    l2, _ = sw.record(sw.analyse(capture(two), codec, control=4.0), {})
+    LEDGER.ok("0x0101" not in l2 and "0x0102" not in l2,
+              "CONTROL: a SUSPECT set of two records nothing at all",
+              "one of them is innocent and the capture cannot say which; that is what "
+              "--only with a dwell above the heartbeat is for")
+    # THE CONTROL THAT MATTERS MOST HERE. Every run's tail lacks a beat behind it, so
+    # "sends with no proof of life" is true of a healthy run too. A crash is silence that
+    # OUTLASTS the socket -- measured at 31.6s, 120.8s and 30.1s on the three real runs.
+    tidy = [c2s(9.6, 0x0009), send(10.0, 0x0100), c2s(10.1, 0x0088), send(10.4, 0x0101),
+            {"kind": "error", "t": 10.6, "error": "ConnectionResetError(10054)"}]
+    rt = sw.analyse(capture(tidy), codec, control=4.0)
+    lt, _ = sw.record(rt, {})
+    LEDGER.ok(rt["crash"] is None and "0x0101" not in lt,
+              "CONTROL: a client killed while still answering is NOT a crash",
+              "the harness kills a healthy client and its socket and its traffic stop "
+              "together; without this the tail of EVERY clean run records as ASSERTED")
+    blind = [send(10.0, 0x0100), c2s(10.1, 0x0088), send(10.4, 0x0101),
+             {"kind": "error", "t": 40.0, "error": "ConnectionResetError(10054)"}]
+    rb = sw.analyse(capture(blind), codec, control=4.0)
+    LEDGER.ok(rb["crash"] and rb["crash"]["suspects"] == []
+              and "0x0101" not in sw.record(rb, {})[0],
+              "CONTROL: with no measured heartbeat there are NO suspects",
+              "without a cadence there is no beat that should have arrived, so every "
+              "send after the last reply is equally implicated and naming one is a guess")
 
     # ---- 7. the capture is named by the run's own report --------------------
     print("\n7. the capture is named by the report, never picked by name")

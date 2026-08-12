@@ -438,22 +438,62 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
     # actually asserted around 0x0012, seventy-eight sends earlier, and sat behind a modal
     # dialog with the socket open. The window is every send with no proof of life after
     # it, and naming one of them would be a guess dressed as a measurement. Bisect it.
+    # THE HEARTBEAT SETS THE LOCALISATION, so it is measured and reported rather than
+    # assumed from PING_SECONDS: the sweep can only ever name the opcodes between two
+    # proofs of life, and how many that is depends on the cadence the run actually ran
+    # at. Raise it with authsrv's --ping-seconds to narrow the window.
+    beat_times = sorted(t for t in beats if span and t >= span[0])
+    gaps = [b - a for a, b in zip(beat_times, beat_times[1:]) if b - a > 1e-6]
+    heartbeat = sorted(gaps)[len(gaps) // 2] if gaps else None
+
+    # A CRASH IS SILENCE THAT OUTLASTS THE SOCKET, not merely a tail with no proof.
+    # EVERY run's last few sends lack a beat behind them -- that is the standing cost of
+    # the fence -- so "dead is non-empty" is true of clean runs too, and treating it as a
+    # crash would record the tail of every healthy run as ASSERTED. The discriminator is
+    # the gap this whole section exists because of: when the client asserts, it stops
+    # answering while the socket stays open (measured 31.6 s, then 120.8 s, then 30.1 s),
+    # and when the harness kills a healthy client the two stop together.
+    quiet = (gone[0] - alive_until) if (gone and alive_until is not None) else 0.0
+    died = bool(dead) and gone is not None and quiet > max(3.0 * (heartbeat or 0.0), 2.0)
     crash = None
-    if (gone is not None or dead) and dead:
-        crash = {"window": sorted(set(dead)),
+    if died:
+        # THE SUSPECTS ARE NOT THE WHOLE WINDOW. Once the client is gone, every later
+        # send goes to a dead socket and implicates nothing -- lumping them in reported
+        # 78 suspects for a client that died on the sixth. The opcodes that could have
+        # done it are the ones sent between the last proof of life and the beat that
+        # never arrived: the client processes the stream IN ORDER, so anything it
+        # answered a ping after is cleared, and anything sent after the missed beat was
+        # never read. Everything else is UNREACHED, not evidence.
+        # NO HEARTBEAT, NO SUSPECTS. Without a measured cadence there is no "beat that
+        # should have arrived", so every send after the last reply is equally implicated
+        # and naming any of them is a guess. Run with authsrv --ping-seconds.
+        due = (alive_until + heartbeat) if heartbeat else None
+        suspects = sorted({op for t, op in sends
+                           if due is not None and alive_until < t <= due})
+        crash = {"suspects": suspects,
+                 "window": sorted(set(dead)),
+                 "heartbeat": heartbeat,
+                 "beat_due": due,
                  "alive_until": alive_until,
                  "socket_closed": gone[0] if gone else None,
                  "why": gone[1] if gone else "the client stopped answering"}
 
-    unreached = sorted(set(dead))
+    # A suspect is IMPLICATED, not unreached -- it demonstrably went out to a client that
+    # was still answering. Listing it in both places let one run report 0x0017 as
+    # ASSERTED and as "will be retried" in the same breath, which is two readings of one
+    # opcode and the sort of thing a later session picks the wrong one of.
+    unreached = set(dead) - set(crash["suspects"] if crash else ())
     if planned:
-        unreached = sorted(set(unreached) | (set(planned) - {op for _, op in live}))
+        unreached |= (set(planned) - {op for _, op in live}
+                      - set(crash["suspects"] if crash else ()))
+    unreached = sorted(unreached)
     # `noise` is EVERYTHING the client said unprompted, which makes the window a check on
     # IDLE_FLOOR as well as a filter: the prior was measured on a parked client, and this
     # one has just loaded a map. Splitting it is the honest report -- what corroborated
     # the prior, and what the prior did not know about.
     return {"table": out,
             "crash": crash,
+            "heartbeat": heartbeat,
             "alive_until": alive_until,
             "noise": sorted(noise) if noise is not None else None,
             "floor_seen": sorted(set(noise or ()) & IDLE_FLOOR) if noise is not None else None,
@@ -485,6 +525,19 @@ def record(result, ledger=None):
                        "undecodable": row["undecodable"][:2],
                        "capture": result["capture"]}
         added += 1
+    # A crash window of ONE is the only case where the run ending is attributable, and
+    # then it is the strongest result the sweep produces: this opcode stops the client.
+    # Recording it is also what lets the sweep converge -- otherwise --resume replans the
+    # opcode that killed the last run, and every run dies in the same place forever.
+    # A window of two or more records NOTHING and must be bisected with --only.
+    crash = result.get("crash")
+    if crash and len(crash.get("suspects") or []) == 1:
+        key = f"0x{crash['suspects'][0]:04X}"
+        if key not in ledger:
+            ledger[key] = {"effect": "ASSERTED", "replies": [], "contested": [],
+                           "undecodable": [],
+                           "why": crash["why"], "capture": result["capture"]}
+            added += 1
     return ledger, added
 
 
@@ -583,6 +636,11 @@ def print_run(result):
     if result["new_noise"]:
         print("  -> the prior floor {0x0008, 0x0009} was measured on a PARKED client; "
               "these are what a just-loaded one adds, and no reply on them counts.")
+    hb = result.get("heartbeat")
+    if hb:
+        print(f"  heartbeat (client's proof of life): {hb:.2f}s median -- so a crash "
+              f"localises to about {max(1, int(round(hb / DWELL)))} opcode(s). "
+              f"Narrow it with authsrv --ping-seconds.")
     print(f"{len(table)} opcode(s) stimulated on a live channel -> "
           + ", ".join(f"{k} {v}" for k, v in sorted(by.items())))
     for want in ("REPLIED", "UNDECODABLE", "CONTESTED"):
@@ -598,17 +656,26 @@ def print_run(result):
                 print(f"  CONTESTED    0x{opcode:04X} -> {got} (also unprompted)")
     c = result["crash"]
     if c:
-        w = c["window"]
+        s, w = c["suspects"], c["window"]
         print(f"\nTHE RUN ENDED. Last proof of life t={c['alive_until']:.2f}s"
+              + (f", next beat due t={c['beat_due']:.2f}s and never arrived"
+                 if c["beat_due"] else "")
               + (f", socket closed t={c['socket_closed']:.2f}s "
                  f"({c['socket_closed'] - c['alive_until']:.1f}s later)"
                  if c["socket_closed"] else "") + ".")
-        print(f"  CRASH WINDOW: {len(w)} opcode(s) with no proof of life after them. "
-              f"NOT attributed to one -- naming the last would be a guess.")
-        print("    " + " ".join(f"0x{o:04X}" for o in w[:16])
-              + (" ..." if len(w) > 16 else ""))
-        print(f"  Bisect it:  --plan --only "
-              f"{','.join('0x%04X' % o for o in w[:len(w) // 2 or 1][:8])}...")
+        if len(s) == 1:
+            print(f"  SUSPECT: 0x{s[0]:04X} -- ALONE. The client answered a ping after "
+                  f"the send before it and missed the ping behind it, and it reads the "
+                  f"stream in order. Recorded as ASSERTED.")
+        elif s:
+            print(f"  SUSPECTS: {len(s)} opcode(s) sent between the last proof of life "
+                  f"and the missed beat -- {' '.join('0x%04X' % o for o in s)}")
+            print(f"  Bisect:  --plan --only {','.join('0x%04X' % o for o in s)}  "
+                  f"with a dwell ABOVE the heartbeat so each gets its own beat")
+        else:
+            print("  NO SUSPECT: the client was never proved alive during the sweep.")
+        print(f"  ({len(w) - len(s)} further send(s) went to a client that was already "
+              f"gone. They implicate nothing and are UNREACHED, not evidence.)")
         print("  A Guild Wars assert leaves the process ALIVE behind a modal dialog with "
               "its socket open, so the socket time is an upper bound and nothing more.")
     if result["unreached"]:

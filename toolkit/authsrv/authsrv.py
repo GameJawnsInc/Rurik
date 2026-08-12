@@ -326,6 +326,16 @@ TICK_SECONDS = 0.05
 # and 0x000D are the ONLY periodic messages in the whole corpus -- the
 # next-lowest inter-arrival CV of any other opcode is 0.586 -- so this is the
 # one interval in this file that copying exactly is the right thing to do.
+#
+# `--ping-seconds` OVERRIDES IT, and there is exactly one reason to. The client's
+# reply to this request is the only PROOF OF LIFE the server has: a Guild Wars
+# assert leaves the process alive behind a modal dialog with its socket open, so
+# the connection says nothing about when the client stopped (2026-08-12: last
+# reply t=17.16, ConnectionResetError t=48.77, 31.6 s apart). The opcode sweep
+# therefore localises a crash to the gap between two replies, and at 5.000 s
+# against a 0.4 s dwell that gap is twelve opcodes wide. Raising the rate for a
+# sweep run narrows it to one or two. Do NOT raise it for anything else: 5.000 s
+# is ArenaNet's measured cadence, and this is the one interval worth copying.
 PING_SECONDS = 5.0
 # The client THROWS AWAY a latency above this: its handler at 0x0048DA40 opens
 # `cmp esi,0x1388 / ja skip` (0x1388 = 5000) before touching the shift
@@ -4758,6 +4768,11 @@ def main():
     ap.add_argument("--list-probes", action="store_true",
                     help="Print the available probes, their questions and their "
                          "predictions, then exit.")
+    ap.add_argument("--ping-seconds", type=float, default=None, metavar="S",
+                    help="Override the 0x000C cadence (default 5.000, ArenaNet's own "
+                         "measured value). Raise it ONLY for a run that needs the "
+                         "client's reply as a liveness heartbeat -- the opcode sweep "
+                         "localises a crash to the gap between two replies.")
     ap.add_argument("--click-sweep", action="store_true",
                     help="Cycle MOVE_TO_POINT's two plane fields through every "
                          "plausible assignment, one per click, and label each in "
@@ -4879,6 +4894,17 @@ def main():
         global PROBE_NAME
         PROBE_NAME = a.probe
         print(f"PROBE MODE: {a.probe} -- fires after the character spawns")
+
+    if a.ping_seconds is not None:
+        if not 0.05 <= a.ping_seconds <= 60.0:
+            raise SystemExit(f"--ping-seconds {a.ping_seconds} is outside 0.05..60. "
+                             f"The tick is {TICK_SECONDS}s, so anything below it cannot "
+                             f"be honoured and would misreport the cadence.")
+        global PING_SECONDS
+        PING_SECONDS = a.ping_seconds
+        print(f"PING CADENCE: {PING_SECONDS}s instead of ArenaNet's measured 5.000s. "
+              f"This is a LIVENESS instrument, not a fidelity setting -- the client's "
+              f"reply is the only evidence its message pump is still running.")
 
     if a.click_sweep:
         global CLICK_SWEEP
