@@ -69,8 +69,8 @@ def main():
     world = content.load()
 
     # --- it loads, and it loaded the tables we expect ------------------------
-    LEDGER.ok(world.census().get("map", 0) == 9,
-              "nine maps load", f"{world.census().get('map')}")
+    LEDGER.ok(world.census().get("map", 0) == 10,
+              "ten maps load", f"{world.census().get('map')}")
     LEDGER.ok(all(world.census().get(k) for k in
                   ("npc", "item", "spawn", "player", "attack_speed")),
               "every table has at least one row", str(world.census()))
@@ -102,13 +102,24 @@ def main():
     # to a length check. 143 is rung C2's experiment row (studies/customarea
     # FINDINGS 18.11): it points at MFT row 71496, which holds DIFFERENT content
     # in the C2 archive copies than in `vault/dat_study/Gw.dat`.
-    ADDED = {143}
+    # 144 is rung E1d's row (FINDINGS 31): the portal test done legally, which
+    # needs a props chunk and therefore a row whose reservation holds one. It
+    # points at MFT row 26209 in the C2 archive copies only.
+    ADDED = {143, 144}
     LEDGER.ok(set(msc) == MIGRATED | ADDED,
               "and the only additions are the ones this test names",
               f"unnamed: {sorted(set(msc) - MIGRATED - ADDED)}")
     LEDGER.ok(msc.get(143) == (0x287D3, (1536.0, 1536.0), 0, False),
               "map 143 is C2's target row, spawned at the centre of the "
               "DELIVERED map's rect", str(msc.get(143)))
+    # The two experiment rows must name DIFFERENT archive rows. They very nearly
+    # did not: 71496 reserves 9,728 B and a two-plane map needs 14,976 with its
+    # props chunk, which is the whole reason 144 exists.
+    LEDGER.ok(msc.get(144) == (0x5D037, (1536.0, 1536.0), 0, False),
+              "map 144 is E1d's target row", str(msc.get(144)))
+    LEDGER.ok(msc[143][0] != msc[144][0],
+              "and the two experiment rows point at different map files",
+              f"0x{msc[143][0]:X} vs 0x{msc[144][0]:X}")
 
     hatcher = world.get("npc", "hatcher")
     LEDGER.ok((hatcher["file_id"], hatcher["model_id"], hatcher["flags"],

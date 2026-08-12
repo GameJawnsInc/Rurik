@@ -4165,3 +4165,84 @@ a client.
   run says the map is walkable and says nothing about `plane_map`.
 - The gate is a static check against the crash we understand. **A map passing all
   17 gates is not a map a client will accept** — this one passed 16.
+
+---
+
+## 31. OBSERVED: a portal we authored, and the control that had to crash (2026-08-12)
+
+§30 named what stopped every portal: tag 12 is a per-plane PROP INDEX and our
+maps carried no props chunk. This adds the chunk rather than removing the plane,
+and runs the control that makes a green run mean something.
+
+### 31.1 The two arms
+
+Both 14,976 B into row 26209's 45,056 B reservation, **differing in ONE u16** at
+offset 14900 — tag 12 entry 1.
+
+| | `plane_map` | gates | run |
+|---|---|---|---|
+| **portalprop** | `[0, 0]` — prop 0 of 67 | **18 of 18** | walked 65 s, no crash |
+| **portalpropbad** | `[0, 67]` — one past the end | **RED**, by the §30 gate | **crashed** |
+
+The props chunk (6,585 B) and its model dependencies (89 B) are **carried from
+row 33086 at run time**, never stored — `mapbuild`'s FINDINGS 14 pattern. Their
+insertion point is read from a real map rather than chosen: retail puts
+`0x20000004` immediately after Map Parameters and `0x21000004` immediately after
+that, and our chunk order stays a subsequence of row 33086's.
+
+### 31.2 The portal joins two planes
+
+| | portalcut (no portal) | **portalprop** |
+|---|---|---|
+| bounding box | (0, 64)..**(2048**, 3072) | (0, 0)..**(3072**, 3072) |
+| plane field the client reported | **0 on 76 of 76** | **0 on 30, 1 on 19** |
+| reports past x = 2048 | 0 | **17** |
+
+Plane 0 is x 0..2048 and plane 1 is x 1792..3072, overlapping by 256 units with
+the spawn clear of it. Without the portal the character is pinned at x = 2048.0
+and never reports plane 1; with it, it crosses and reports plane 1 on 19 of 49.
+
+**This also settles §30.3 from the other side.** That section measured the plane
+field as 0 in every report of every run and concluded the crash was a QUERY on
+plane 1 rather than occupancy of it. Both hold: the transition is real and
+happens on a working portal, and the crashed runs never reached it because they
+died first.
+
+### 31.3 The control, and why it is worth the crash
+
+`portalpropbad` crashed with `Assertion: index < m_count, Array.h(587)`, and the
+crash log is not merely "it crashed":
+
+- It loaded at **BaseAddr 0x00400000**, so the trace carries the STATIC addresses
+  and they are §30's, unmodified: `0x0073C57F` ← `0x00738D82` ← `0x0070A4B0`.
+- The call frame reads `Rt:0073c57f Arg:1c93e808 **00000043** 00000000`, and at
+  the fault **`edi = 0x43 = 67`**.
+
+**67 is `propCount`. It is the number we wrote into tag 12, appearing in the
+register the disassembly said holds the index.** The diagnosis did not merely
+predict a crash; it predicted which value would be in which register, and that
+is what arrived.
+
+### 31.4 What this settles, and what it does not
+
+**Settled.** A portal we authored works: two planes, four trapezoids, a DAG
+derived from the split, a portal pair, and a props chunk that makes plane 1
+legal. §8 item 10(b) is done. And a prop index only has to be IN RANGE — prop 0
+of row 33086's 67 is somewhere else entirely in the world and the client did not
+care, which answers §30's open question about whether the prop must actually
+carry the surface.
+
+**Not settled:**
+
+- **What plane 1 looks like underfoot is untested.** The character crossed and
+  kept walking; nothing measured its z, and our terrain is flat, so a plane
+  mounted on a prop whose model is elsewhere may well be placing the character on
+  nothing. The interesting version of this rung is a plane whose prop IS its
+  surface.
+- **One prop index was tried, not the space.** `[0, 0]` works and `[0, 67]`
+  crashes; nothing between was tested.
+- **The harness said PASS over the crash**, again, for a new reason: `judge()`
+  runs before the walk, walk_legs retracts when the client dies BETWEEN steps,
+  and this client died during the HOLD. Fixed — a hold-time exit now retracts the
+  verdict too. That is two distinct paths to a false PASS found in two days, both
+  from the same root: the verdict is computed early and nothing downgraded it.

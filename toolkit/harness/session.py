@@ -786,6 +786,12 @@ def hold_open(proc, seconds, tails, outdir, quiet=False, shot_every=0.0):
         # without pressing "Send report to ArenaNet".
         print(f"  client exited with code {proc.returncode} during the hold")
         capture_error_dialog(outdir)
+        # AND THAT RETRACTS THE VERDICT TOO. walk_legs already retracts when the
+        # client dies BETWEEN steps, but a client can also die after the last
+        # step -- E1d's control did exactly that, and the run still printed
+        # RUN VERDICT: PASS over a client that had asserted on Array.h:587. The
+        # verdict is read before the walk; a corpse afterwards unmakes it.
+        return "exited"
     else:
         # AND THE HOLD RUNNING OUT IS NOT PROOF OF LIFE. This branch is here
         # because on 2026-08-11 the harness printed RUN VERDICT: PASS on a run
