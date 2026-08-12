@@ -107,6 +107,7 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -126,6 +127,13 @@ IDLE_FLOOR = {0x0008, 0x0009}
 # GAME_SMSG 0x00F1, which our own server sends to kill and to revive the player. Its
 # presence in a sweep capture means the map was NOT QUIET -- see `combat` in `analyse`.
 AGENT_LIFE = 0x00F1
+
+# GAME_SMSG 0x0197 MANIFEST_DONE, whose phase-0 row names the map the client is loading.
+MANIFEST_DONE = 0x0197
+# The map every reading in the ledger was taken in: Ascalon City. MEASURED -- it is what
+# authsrv serves a fresh login. A connection that loads anything else is a DIFFERENT
+# WORLD and its rows cannot be pooled with these; see `record`.
+BASELINE_MAP = 148
 
 # The ten opcodes the schema catalogues with NO entry in the client's receive table,
 # MEASURED on build 38797 (toolkit/clientscan/test_msghandler.py pins this same literal,
@@ -159,7 +167,7 @@ SEEN_NAME = "smsgsweep-seen.txt"
 MEASURED = ("REPLIED", "UNDECODABLE", "CONTESTED", "SILENT")
 # What a single-suspect crash is filed as, once the dialog has been read.
 # ASSERTED is a guard ArenaNet wrote; FAULTED is the absence of one.
-CRASH_KINDS = ("ASSERTED", "FAULTED", "CRASHED")
+CRASH_KINDS = ("ASSERTED", "FAULTED", "CRASHED", "DROPPED_CHANNEL")
 
 
 def degenerate(codec, opcode, channel="GAME_SMSG"):
@@ -417,7 +425,7 @@ def read_capture(capture_jsonl):
     something happened -- and folding it into "the connection died" loses exactly the
     result the sweep is for.
     """
-    sends, replies, undec, gone, life = [], [], [], None, []
+    sends, replies, undec, gone, life, map_id = [], [], [], None, [], None
     with open(capture_jsonl, encoding="utf-8", errors="replace") as fh:
         for line in fh:
             try:
@@ -427,6 +435,17 @@ def read_capture(capture_jsonl):
             kind, t = rec.get("kind"), float(rec.get("t", 0.0) or 0.0)
             if kind == "sent" and "PROBE[smsgsweep]" in (rec.get("label") or ""):
                 sends.append((t, int(rec.get("opcode", 0))))
+            elif kind == "sent" and int(rec.get("opcode", 0)) == MANIFEST_DONE:
+                # THE LABEL IS THE ONLY WITNESS, and that is a real weakness stated
+                # rather than hidden: `sent` records carry no decoded values, and the
+                # recorder writes frames only on the RECEIVE path, so the payload of our
+                # own s2c message is not in the capture at all. Parsing our own prose is
+                # what `test_cmsgnames` warns about -- so this fails SAFE. No phase-0
+                # match means `map_id` stays None and `record` refuses the connection,
+                # rather than assuming the baseline and pooling two different worlds.
+                m = re.search(r"\[0,\s*map\s+(\d+)\]", rec.get("label") or "")
+                if m:
+                    map_id = int(m.group(1))
             elif kind == "sent" and int(rec.get("opcode", 0)) == AGENT_LIFE:
                 # Every 0x00F1 we sent -- the player dying or being revived. Detected by
                 # OPCODE rather than by our own label text, which is prose and would let
@@ -438,7 +457,7 @@ def read_capture(capture_jsonl):
                 undec.append((t, str(rec.get("error", ""))[:160]))
             elif kind in ("error", "disconnect") and gone is None:
                 gone = (t, str(rec.get("error", "") or "disconnect")[:160])
-    return sends, replies, undec, gone, life
+    return sends, replies, undec, gone, life, map_id
 
 
 def control_window(sends, replies, settle, control):
@@ -457,7 +476,8 @@ def control_window(sends, replies, settle, control):
     return got, (lo, t0)
 
 
-def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=None):
+def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=None,
+            reconnected=False):
     """Score a run from the server's own capture: sent opcode -> what came back.
 
     Joins the capture to itself. Every c2s message is attributed to the most recent sweep
@@ -483,7 +503,7 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
     window with `--only`.
     """
     codec = codec or Codec()
-    sends, replies, undec, gone, life = read_capture(capture_jsonl)
+    sends, replies, undec, gone, life, map_id = read_capture(capture_jsonl)
     noise, span = control_window(sends, replies, settle, control)
     floor = set(IDLE_FLOOR) | set(noise or ())
 
@@ -565,6 +585,36 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
                  "socket_closed": gone[0] if gone else None,
                  "why": gone[1] if gone else "the client stopped answering"}
 
+    # THE CHANNEL DROP IS A DIFFERENT SHAPE AND IT IS BETTER CONSTRAINED THAN A CRASH.
+    # `died` above wants a long silence, which is what an assert behind a modal dialog
+    # looks like. A client that answers a ping and closes the socket 19 ms later did not
+    # stop -- measured 2026-08-12, when it re-established the channel 42 ms after and
+    # went on taking the whole plan again. That case used to fall through with NO suspect
+    # at all: the opcode that caused it went into `unreached` and was replanned forever,
+    # which is what spun the unattended loop on one plan twice and stopped it. Here the
+    # client was demonstrably processing right up to the close, so the sends between the
+    # fence and the close are the suspects -- usually exactly one.
+    # `reconnected` IS THE WHOLE DISCRIMINATOR, and without it this branch is a
+    # false-positive generator. A healthy client killed by the harness at the end of a
+    # hold stops its socket and its traffic together -- the same shape to the byte as a
+    # client that dropped the channel deliberately. Blaming the last send would then
+    # record the tail of EVERY clean run as a channel drop. `test_smsgsweep.py` has a
+    # control for exactly that and it caught this branch the first time it was written.
+    # What separates the two is what happened NEXT: a client that dropped the channel
+    # opened a new one 42 ms later, and the caller can see that because the run produced
+    # a second capture. Silence after the close means the harness ended the run.
+    elif bool(dead) and gone is not None and reconnected:
+        suspects = sorted({op for t, op in sends if fence <= t < gone[0]})
+        crash = {"suspects": suspects,
+                 "window": sorted(set(dead)),
+                 "heartbeat": heartbeat,
+                 "beat_due": None,
+                 "dropped": True,
+                 "alive_until": alive_until,
+                 "socket_closed": gone[0],
+                 "why": f"the client answered {quiet * 1000:.0f} ms before the socket "
+                        f"closed, so it did not stop -- the channel did"}
+
     # A suspect is IMPLICATED, not unreached -- it demonstrably went out to a client that
     # was still answering. Listing it in both places let one run report 0x0017 as
     # ASSERTED and as "will be retried" in the same breath, which is two readings of one
@@ -587,6 +637,7 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
     # authsrv --no-enemy. Refusing to record is the only version of this check worth
     # having: a warning would be read once and the rows would go in anyway.
     return {"table": out,
+            "map_id": map_id,
             "combat": [(t, why) for t, why in life],
             "crash": crash,
             "heartbeat": heartbeat,
@@ -607,6 +658,21 @@ def record(result, ledger=None):
     That is the whole resume mechanism: a cursor advanced at send time would record
     opcodes the client may never have received, and the sweep would walk past them.
     """
+    # THE WORLD HAS TO BE THE SAME ONE, and on 2026-08-12 it silently was not. An opcode
+    # near 0x019B made the client drop its game channel; it reconnected 42 ms later and
+    # our server handed the fresh connection **map 0** where every other reading in this
+    # ledger was taken in map 148. Twenty opcodes were then measured in a different world
+    # and pooled with the rest without a word. The operator noticed the map change on
+    # screen -- nothing in the readout was looking, exactly as with the hostile.
+    got = result.get("map_id")
+    if got != BASELINE_MAP:
+        raise ValueError(
+            "REFUSING to record: this connection loaded "
+            + (f"map {got}" if got is not None else "a map this readout could not name")
+            + f", not the baseline map {BASELINE_MAP}. Every other row in the ledger was "
+              f"measured in {BASELINE_MAP}, and an opcode's behaviour is a property of "
+              f"the world it was sent in -- pooling two is the mistake toolkit/origin.py "
+              f"exists to refuse one door along. Score it separately or discard it.")
     if result.get("combat"):
         raise ValueError(
             f"REFUSING to record: this run sent {len(result['combat'])} "
@@ -639,7 +705,12 @@ def record(result, ledger=None):
     if crash and len(crash.get("suspects") or []) == 1:
         key = f"0x{crash['suspects'][0]:04X}"
         if key not in ledger:
-            kind = result.get("crash_kind") or "ASSERTED"
+            # THE DEFAULT COMES FROM THE MEASUREMENT, NOT FROM THE CALLER. `crash_kind`
+            # is set by whoever read the crash dialog; without it a channel drop would
+            # file as ASSERTED, which is the wrong word for a client that re-established
+            # and kept playing. The `crash` dict already knows which shape it saw.
+            kind = result.get("crash_kind") or (
+                "DROPPED_CHANNEL" if crash.get("dropped") else "ASSERTED")
             ledger[key] = {"effect": kind, "replies": [], "contested": [],
                            "undecodable": [],
                            "why": result.get("crash_detail") or crash["why"],
@@ -732,19 +803,35 @@ def crash_kind(report_json):
     return "CRASHED", "dialog captured, neither an assert nor an exception line in it"
 
 
-def capture_from_report(report_json):
-    """The gamesrv capture THIS run produced, named by the run's own report.
+def captures_from_report(report_json):
+    """EVERY gamesrv capture this run produced, in the order the report lists them.
 
     Never the newest file in a directory. `sorted(...)[-1]` picked the wrong client on
     2026-08-06 and the same reasoning applies to a capture: the run that wrote the report
-    is the run whose capture must be scored, and the report says which one that is.
+    is the run whose captures must be scored, and the report says which those are.
+
+    MORE THAN ONE IS NORMAL AND IS ITSELF A RESULT. Measured 2026-08-12: an opcode in
+    0x017E..0x019B made the client drop its game channel at t=36.16 and open a new one
+    42 ms later, and the probe -- which runs per connection -- restarted from the top of
+    the plan on the fresh channel. So the run holds TWO experiments, each with its own
+    control window and its own fence, and they must be scored as two. An earlier version
+    refused the whole run rather than pick one; that refusal was right about the danger
+    and wrong about the remedy, and it spun the unattended loop on the same plan twice.
     """
     with open(report_json, encoding="utf-8") as fh:
         rep = json.load(fh)
     caps = [c for c in rep.get("captures", []) if "gamesrv" in c.replace("\\", "/")]
+    if not caps:
+        raise ValueError(f"{report_json} names no gamesrv capture at all")
+    return caps
+
+
+def capture_from_report(report_json):
+    """The single gamesrv capture, refusing when the run made more than one."""
+    caps = captures_from_report(report_json)
     if len(caps) != 1:
         raise ValueError(f"{report_json} names {len(caps)} gamesrv captures; "
-                         f"expected exactly 1 -- refusing to pick one")
+                         f"expected exactly 1 -- use captures_from_report")
     return caps[0]
 
 
@@ -806,9 +893,16 @@ def print_run(result):
             k = result.get("crash_kind")
             if k:
                 print(f"  {k}: {result.get('crash_detail')}")
-            print(f"  SUSPECT: 0x{s[0]:04X} -- ALONE. The client answered a ping after "
-                  f"the send before it and missed the ping behind it, and it reads the "
-                  f"stream in order. Recorded as {k or 'ASSERTED'}.")
+            # The two cases are localised by DIFFERENT evidence and the line has to say
+            # which, because "missed the ping behind it" is simply untrue of a drop --
+            # the client answered, then closed the socket 19 ms later.
+            why = ("the client answered a ping after the send before it and then closed "
+                   "the channel with this one outstanding"
+                   if c.get("dropped") else
+                   "the client answered a ping after the send before it and missed the "
+                   "ping behind it")
+            print(f"  SUSPECT: 0x{s[0]:04X} -- ALONE. {why}, and it reads the stream in "
+                  f"order. Recorded as {k or 'ASSERTED'}.")
         elif s:
             print(f"  SUSPECTS: {len(s)} opcode(s) sent between the last proof of life "
                   f"and the missed beat -- {' '.join('0x%04X' % o for o in s)}")
@@ -915,30 +1009,43 @@ def main():
         print(f"{len(seen)} observed over {len(dirs)} live connection(s) -> {path}")
         return 0
 
-    cap = a.analyse
+    caps = [a.analyse] if a.analyse else []
     if a.from_report:
-        cap = capture_from_report(a.from_report)
-        print(f"scoring {cap}")
-    if cap:
+        caps = captures_from_report(a.from_report)
+    if caps:
         p = load_plan() or {}
-        result = analyse(cap, codec,
-                         settle=p.get("settle", a.settle),
-                         control=p.get("control", a.control),
-                         planned=[r["opcode"] for r in p.get("rows", [])])
-        if a.from_report:
-            kind, detail = crash_kind(a.from_report)
-            result["crash_kind"], result["crash_detail"] = kind, detail
-        rc = print_run(result)
-        if a.record and rc == 0:
-            try:
-                ledger, added = record(result)
-            except ValueError as exc:
-                print(f"\n{exc}", file=sys.stderr)
-                return 3
-            _write_json(ledger_path(), ledger)
-            print(f"recorded {added} newly measured opcode(s) -> {ledger_path()}")
-        elif a.record:
-            print("NOT recorded: the run could not attribute anything.")
+        rc, total = 0, 0
+        for n, cap in enumerate(caps, 1):
+            if len(caps) > 1:
+                print(f"\n--- connection {n} of {len(caps)}: {os.path.basename(cap)}")
+            result = analyse(cap, codec,
+                             settle=p.get("settle", a.settle),
+                             control=p.get("control", a.control),
+                             planned=[r["opcode"] for r in p.get("rows", [])],
+                             reconnected=(n < len(caps)))
+            # THE DIALOG BELONGS TO THE LAST CONNECTION ONLY. The earlier ones ended
+            # because the client dropped the channel and opened a NEW one 42 ms later --
+            # it was alive and went on playing, so labelling their suspect with a crash
+            # the last connection produced is the pilot's "DIED" mistake with more steps.
+            if a.from_report and n == len(caps):
+                kind, detail = crash_kind(a.from_report)
+                result["crash_kind"], result["crash_detail"] = kind, detail
+            elif a.from_report:
+                result["crash_kind"] = "DROPPED_CHANNEL"
+                result["crash_detail"] = ("the client re-established its game channel "
+                                          "and kept running; it did not stop")
+            one = print_run(result)
+            rc = rc or one
+            if a.record and one == 0:
+                try:
+                    ledger, added = record(result)
+                except ValueError as exc:
+                    print(f"\n{exc}", file=sys.stderr)
+                    return 3
+                _write_json(ledger_path(), ledger)
+                total += added
+        if a.record:
+            print(f"\nrecorded {total} newly measured opcode(s) -> {ledger_path()}")
         return rc
 
     seen = set()

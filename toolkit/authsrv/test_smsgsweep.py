@@ -58,7 +58,7 @@ import checks  # noqa: E402
 import smsgsweep as sw  # noqa: E402
 from codec import Codec  # noqa: E402
 
-# Floor 58, measured from a green run on 2026-08-12. Sections 0 and 2-7 need no vault, no
+# Floor 64, measured from a green run on 2026-08-12. Sections 0 and 2-7 need no vault, no
 # socket and no client -- 32 checks -- because a scoring defect is not a property of any
 # one capture. Two sections do need more and both declare their skips: section 1's
 # cross-check of NOT_IN_RECV_TABLE against the client's own receive table wants capstone
@@ -67,7 +67,7 @@ from codec import Codec  # noqa: E402
 # the way test_mapexport treats a vault-less run: those two sections are the ones that
 # pin the sweep's DENOMINATOR and the ten opcodes that tear the game channel down, and a
 # plan built on a constant nothing confirmed is exactly the wish this repo keeps refusing.
-LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=58)
+LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=64)
 
 # MEASURED 2026-08-12: the opcodes whose field list `overrides.json` changes. Written as
 # literals rather than recomputed from the module under test.
@@ -79,14 +79,28 @@ TABLE_LESS = {0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x004F, 0x0055, 0x007F,
               0x014A, 0x01DA}
 
 
-def capture(records):
-    """Write a capture jsonl the way the recorder does, and return its path."""
+def capture(records, map_id=148):
+    """Write a capture jsonl the way the recorder does, and return its path.
+
+    Every capture carries a phase-0 MANIFEST_DONE naming its map, because a real one does
+    and `record` refuses a connection whose world it cannot name. `map_id=None` writes
+    none, which is the fixture for that refusal.
+    """
     fh = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False,
                                      encoding="utf-8")
-    for rec in records:
+    rows = list(records)
+    if map_id is not None and not any(r.get("opcode") == 0x0197 for r in rows):
+        rows.insert(0, manifest(map_id))
+    for rec in rows:
         fh.write(json.dumps(rec) + "\n")
     fh.close()
     return fh.name
+
+
+def manifest(map_id=148):
+    """The server's phase-0 MANIFEST_DONE, which is how a capture names its map."""
+    return {"kind": "sent", "t": 1.0, "opcode": 0x0197,
+            "label": f"MANIFEST_DONE[0, map {map_id}]"}
 
 
 def send(t, opcode):
@@ -198,7 +212,7 @@ def main():
     path = capture([send(10.0, 0x0100), frame(10.0, 0x0100),
                     send(10.4, 0x0101), frame(10.4, 0x0101),
                     c2s(6.5, 0x0009), c2s(10.5, 0x00C1)])
-    sends, replies, undec, gone, _life = sw.read_capture(path)
+    sends, replies, undec, gone, _life, _map = sw.read_capture(path)
     LEDGER.ok(len(sends) == 2 and [o for _, o in sends] == [0x0100, 0x0101],
               "read_capture finds both sweep sends", f"{[hex(o) for _, o in sends]}")
     LEDGER.ok(naive_frame_reader(path) == 2 and len(sends) == 2,
@@ -385,6 +399,27 @@ def main():
               "CONTROL: a client killed while still answering is NOT a crash",
               "the harness kills a healthy client and its socket and its traffic stop "
               "together; without this the tail of EVERY clean run records as ASSERTED")
+    # THE SAME BYTES, WITH A RECONNECT BEHIND THEM, ARE A RESULT. Measured 2026-08-12:
+    # an opcode in 0x017E..0x019B closed the game channel at t=36.16 and the client
+    # opened a new one 42 ms later, taking the whole plan again. The capture of a
+    # deliberate drop and of a harness kill are identical to the byte, so the ONLY thing
+    # that separates them is whether another connection followed -- which the caller
+    # knows because the run produced a second capture, and `analyse` cannot know at all.
+    rd = sw.analyse(capture(tidy), codec, control=4.0, reconnected=True)
+    ld, _ = sw.record(rd, {})
+    LEDGER.ok(rd["crash"] and rd["crash"]["suspects"] == [0x0101]
+              and rd["crash"].get("dropped") is True,
+              "the SAME capture with a reconnect behind it names 0x0101 -- DROPPED",
+              "the client answered right up to the close, so the send left outstanding "
+              "is far better constrained than a crash window")
+    LEDGER.ok(ld.get("0x0101", {}).get("effect") == "DROPPED_CHANNEL",
+              "and it records as DROPPED_CHANNEL rather than as a crash",
+              "the client re-established and kept playing; calling that a crash is the "
+              "pilot's mistake with more steps")
+    LEDGER.ok(rt["crash"] is None and rd["crash"] is not None,
+              "CONTROL: the two differ ONLY by `reconnected`",
+              "same bytes, same fixture, one flag -- which is why the flag has to come "
+              "from the report's capture list and never from the capture itself")
     blind = [send(10.0, 0x0100), c2s(10.1, 0x0088), send(10.4, 0x0101),
              {"kind": "error", "t": 40.0, "error": "ConnectionResetError(10054)"}]
     rb = sw.analyse(capture(blind), codec, control=4.0)
@@ -416,6 +451,32 @@ def main():
     LEDGER.ok(ok, "and --record REFUSES the whole run",
               "a warning would be read once and the rows would go in anyway; the "
               "instruction is authsrv --no-enemy")
+    # THE MAP MUST BE THE BASELINE ONE. Measured 2026-08-12: an opcode near 0x019B made
+    # the client drop its channel, it reconnected 42 ms later, and our server handed the
+    # fresh connection map 0 where every other row was measured in map 148. Twenty
+    # opcodes were scored in a different world and pooled without a word. The operator
+    # saw the map change on screen; nothing in the readout was looking.
+    elsewhere = sw.analyse(capture(peace, map_id=0), codec, control=4.0)
+    LEDGER.ok(elsewhere["map_id"] == 0, "the capture's own map is read back",
+              "from the phase-0 MANIFEST_DONE the server logs")
+    try:
+        sw.record(elsewhere, {})
+        ok = False
+    except ValueError:
+        ok = True
+    LEDGER.ok(ok, "a connection in a different map records NOTHING",
+              "an opcode's behaviour is a property of the world it was sent in")
+    nameless = sw.analyse(capture(peace, map_id=None), codec, control=4.0)
+    try:
+        sw.record(nameless, {})
+        ok2 = False
+    except ValueError:
+        ok2 = True
+    LEDGER.ok(nameless["map_id"] is None and ok2,
+              "CONTROL: a capture whose map cannot be NAMED is refused too",
+              "the map comes from our own label prose -- the one witness there is -- so "
+              "a reworded label must fail SAFE rather than assume the baseline")
+
     rp = sw.analyse(capture(peace), codec, control=4.0)
     LEDGER.ok(not rp["combat"] and sw.record(rp, {})[1] == 1,
               "CONTROL: the same run without the kill records normally",
