@@ -1744,7 +1744,9 @@ def _smsgsweep_steps(a, o, dwell=0.4):
     for i, row in enumerate(p["rows"], 1):
         opcode = row["opcode"]
         try:
-            values = smsgsweep.degenerate(codec, opcode)
+            values = smsgsweep.apply_set(smsgsweep.degenerate(codec, opcode),
+                                        {int(k): v for k, v in
+                                         (p.get("set") or {}).items()})
         except ValueError:
             continue                       # recorded in the plan's `refused` already
         steps.append(Step(quiet if i == 1 else dwell, opcode, values,

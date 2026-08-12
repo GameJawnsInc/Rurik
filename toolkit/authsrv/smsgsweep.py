@@ -196,6 +196,25 @@ def degenerate(codec, opcode, channel="GAME_SMSG"):
     return vals
 
 
+def apply_set(values, sets):
+    """Override individual fields by 1-based index: `--set 5=1`.
+
+    THE POINT IS TO CHANGE ONE THING. The degenerate payload selects the ZERO branch of
+    every gate a handler has, which is what the sweep's asserts have all turned out to be
+    -- 0x0017's handler tests its fifth field against zero and skips a whole resource
+    load when it is non-zero (0x00807d90, and the crash trace carries that chain by
+    address). Filling every field with ones would test that gate and four other things at
+    once, and a run that then behaved differently would not say which.
+    """
+    out = list(values)
+    for idx, val in (sets or {}).items():
+        if not 1 <= idx <= len(out):
+            raise ValueError(f"field {idx} is outside this opcode's 1..{len(out)}")
+        out[idx - 1] = type(out[idx - 1])(val) if isinstance(out[idx - 1], (int, float)) \
+            else out[idx - 1]
+    return out
+
+
 def encodable(codec, channel="GAME_SMSG"):
     """{opcode: values} for every opcode that encodes. Refusals are returned, not hidden."""
     good, refused = {}, {}
@@ -231,7 +250,8 @@ def check_table_less(classified, schema_opcodes):
 
 
 def plan(codec, seen=(), classified=None, done=(), table_less=False,
-         settle=SETTLE, control=CONTROL, dwell=DWELL, limit=0, only=None):
+         settle=SETTLE, control=CONTROL, dwell=DWELL, limit=0, only=None,
+         sets=None):
     """The ordered send list: never-seen opcodes first, each with its prediction.
 
     `seen` is the set observed from ArenaNet -- excluded, because the point is the third
@@ -258,11 +278,12 @@ def plan(codec, seen=(), classified=None, done=(), table_less=False,
                 skipped["not_only"] += 1
                 continue
             c = (classified or {}).get(opcode) or {}
+            vals = apply_set(good[opcode], sets)
             rows.append({"opcode": opcode,
                          "predicted": c.get("class", "UNKNOWN"),
                          "callee": (c.get("callees") or [None])[0],
-                         "bytes": len(codec.encode("GAME_SMSG", opcode,
-                                                   list(good[opcode])))})
+                         "set": {str(k): v for k, v in (sets or {}).items()},
+                         "bytes": len(codec.encode("GAME_SMSG", opcode, list(vals)))})
             continue
         if opcode in seen:
             skipped["seen"] += 1
@@ -290,6 +311,7 @@ def plan(codec, seen=(), classified=None, done=(), table_less=False,
             "control": control,
             "dwell": dwell,
             "table_less": bool(table_less),
+            "set": {str(k): v for k, v in (sets or {}).items()},
             "predicted": bool(classified),
             "note": "degenerate (all-zero) payloads; a handler that early-outs on a "
                     "zero id is indistinguishable here from one that does nothing"}
@@ -775,6 +797,10 @@ def main():
                          "to the vault, then exit")
     ap.add_argument("--limit", type=int, default=0,
                     help="keep only the first N rows of the plan")
+    ap.add_argument("--set", default=None, metavar="IDX=VAL", action="append",
+                    help="override one field by 1-based index, e.g. --set 5=1. Changes "
+                         "ONE thing: the sweep's asserts are all zero-branch gates, and "
+                         "filling every field would test five things at once")
     ap.add_argument("--only", default=None, metavar="OPCODES",
                     help="plan exactly these (comma-separated, 0x ok), overriding every "
                          "filter. This is how a crash window is bisected down to the one "
@@ -835,10 +861,19 @@ def main():
     only = None
     if a.only:
         only = {int(x, 0) for x in a.only.replace(" ", "").split(",") if x}
+    sets = {}
+    for spec in (a.set or []):
+        k, _, v = spec.partition("=")
+        sets[int(k, 0)] = int(v, 0)
+    if sets and only is None:
+        print("REFUSED: --set without --only would apply one field index to every "
+              "opcode in the plan, which means a different field in each.",
+              file=sys.stderr)
+        return 2
     try:
         p = plan(codec, seen, _classify(), done=done, table_less=a.table_less,
                  settle=a.settle, control=a.control, dwell=a.dwell, limit=a.limit,
-                 only=only)
+                 only=only, sets=sets)
     except ValueError as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
