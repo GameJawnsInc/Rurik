@@ -386,6 +386,22 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   go red, including an `elif` in the else's place and an `else` that calls
   something else, since `else: pass` satisfies "has an else" while restoring
   the exact silence D9(a) is about. No vault, no socket, no client),
+  `toolkit/authsrv/test_ping.py` (the `0x000C`→`0x0009`→`0x000D` round trip that
+  drives the client's net graph, and the three places a plausible
+  implementation quietly LIES: sending a second request while one is
+  outstanding would move the start time and make a bad link report a SHORTER
+  round trip — the one direction a latency meter must not fail in; answering an
+  unprompted reply would put an invented number on the one readout an operator
+  reads as measured, and 0 of 79 in the corpus are unprompted; and sending over
+  the client's own 5000 ms cutoff produces a message it DISCARDS at
+  `0x0048DA40` before the shift register, so the graph never moves and the
+  feature looks dead rather than wrong. Section 8 is not about the feature at
+  all — it asserts STRUCTURALLY that `world_tick`, which owns the 5 s timer,
+  starts only when `TAPE_EVENTS is None`, because a tape run requires zero
+  messages of our own on the channel and `PLAN.md` §3.4 records a run whose
+  client assert was un-attributable because our ticker talked over ArenaNet's
+  recording. Its control is that guard REVERSED, which is one character from
+  correct and would contaminate every tape run. No vault, no socket, no client),
   `toolkit/authsrv/test_tape.py` (R1.5's tape loader: the events ARE the recorded
   stream whole and in order, and a tape whose wire bytes do not account for the
   plaintext -- or that came from our own server -- is refused. Section 6 is the

@@ -221,6 +221,23 @@ GAME_SMSG_INSTANCE_LOAD_FINISH = 0x018E
 # the only thing its tick sends at all (GmAgent.c:261-268, :440). Payload is a
 # single uint32 of elapsed milliseconds. We had never sent it once.
 GAME_SMSG_WORLD_SIMULATION_TICK = 0x001E
+# The three-message round trip that drives the client's net graph. Server sends
+# 0x000C (empty), client replies 0x0009 (its own perf state), server sends
+# 0x000D carrying the elapsed milliseconds. studies/smsg `0x000C`/`0x000D`,
+# both read out of the client's own handler table rather than guessed:
+# handler 0x000C = 0x00491E50, handler 0x000D = 0x00491ED0.
+#
+# NAMES. The client-side reading is CLIENT_PERF_REQUEST -- the handler's only
+# effect is to compose and send a performance report, and the reply carries a
+# frame interval and a frame-system flag rather than echoing anything we sent.
+# The server-side reading (studies/divergence D4) is PING, because we time the
+# round trip and hand the result back. studies/smsg says to record both, so the
+# constants take the client's name and this comment carries ours: it is not a
+# liveness ping, and treating it as one would hide that the reply has real
+# content a future server has to make sense of.
+GAME_SMSG_CLIENT_PERF_REQUEST = 0x000C
+GAME_SMSG_LATENCY_REPORT = 0x000D
+GAME_CMSG_CLIENT_PERF_REPORT = 0x0009
 GAME_SMSG_WORLD_UPDATE_LOAD_TIME = 0x001F
 GAME_SMSG_WORLD_CREATE_AGENT = 0x0020
 
@@ -292,6 +309,18 @@ DEFAULT_RUN_SPEED = 288.0  # Guild Wars' base movement speed
 # AGENT_UPDATE_DESTINATION rather than MOVE_TO_POINT), a fast tick buys
 # smoothness cheaply -- this is loopback, and 20 Hz of one small message is free.
 TICK_SECONDS = 0.05
+# MEASURED, not chosen: ArenaNet's cadence is 5.000 s, 75 of 76 gaps inside
+# 100 ms across three tapes (studies/smsg, and studies/divergence D4). 0x000C
+# and 0x000D are the ONLY periodic messages in the whole corpus -- the
+# next-lowest inter-arrival CV of any other opcode is 0.586 -- so this is the
+# one interval in this file that copying exactly is the right thing to do.
+PING_SECONDS = 5.0
+# The client THROWS AWAY a latency above this: its handler at 0x0048DA40 opens
+# `cmp esi,0x1388 / ja skip` (0x1388 = 5000) before touching the shift
+# register. So an over-large value is not clamped for us, it is silently
+# dropped -- the net graph simply never moves, which looks like a dead feature
+# rather than a bad number. We refuse to send one instead.
+LATENCY_MAX_MS = 5000
 # How far the client's own idea of where it stopped may differ from ours before
 # we overrule it. Upstream's figure (OpenTyria GmAgent.c:4) and, like every other
 # constant in that file, its own invention rather than a measurement.
@@ -1276,6 +1305,86 @@ def begin_attack(send, state, target_id, conn_id):
         agent["last_hit"] = 0.0
         print(f"[c{conn_id}] attacking agent {target_id} ({agent['name']})",
               flush=True)
+
+
+def ping_tick(send, state, conn_id):
+    """Send `0x000C` every PING_SECONDS. Called from the world tick.
+
+    First leg of the three-message round trip: server `0x000C` (empty) ->
+    client `0x0009` (its perf state) -> server `0x000D[elapsed_ms]`, which the
+    client plots on its net graph. studies/smsg established the whole exchange
+    from the client's own handler table; the parts that constrain THIS function
+    are that the cadence is 5.000 s and that the message carries nothing at all
+    -- 2 bytes, header only, per `schema/messages.json`.
+
+    ONE OUTSTANDING PING AT A TIME. The corpus is 79/79 requests answered
+    inside their own 5 s window and 0/79 replies unprompted, so the client
+    never queues these. We stamp `ping_sent` and do NOT overwrite it while a
+    reply is outstanding: if the client is late or silent, sending a second
+    request would move the start time and make the eventual round trip read
+    SHORTER than it was. A latency meter that under-reports when the link is
+    bad is worse than one that reports nothing.
+
+    TAPE-SAFE BY CONSTRUCTION, and worth stating because it is not local: this
+    runs only inside `world_tick`, and `world_tick` is started only when
+    `TAPE_EVENTS is None`. Its partner is safe the same way -- under a tape the
+    game c2s chain `continue`s before any arm, so nothing of ours answers the
+    client's `0x0009` either. That matters more than it looks: a tape run
+    requires ZERO messages of our own on the channel, and PLAN.md §3.4 records
+    a run whose client assert was un-attributable precisely because our 20 Hz
+    ticker was talking over ArenaNet's recording. A 5 s timer would have been a
+    slower, subtler version of the same contamination.
+    """
+    now = time.perf_counter()
+    last = state.get("ping_at")
+    if last is not None and now - last < PING_SECONDS:
+        return
+    state["ping_at"] = now
+    if state.get("ping_sent") is None:
+        # No reply outstanding: this is a fresh round trip, so start the clock.
+        state["ping_sent"] = now
+    else:
+        # Previous request never answered. Keep the ORIGINAL start time so the
+        # eventual 0x000D tells the truth, and count the miss for the operator.
+        state["ping_missed"] = state.get("ping_missed", 0) + 1
+    send(GAME_SMSG_CLIENT_PERF_REQUEST, [], "CLIENT_PERF_REQUEST", quiet=True)
+
+
+def handle_perf_report(values, send, state, conn_id):
+    """Answer the client's `0x0009` with `0x000D[elapsed_ms]`.
+
+    The reply's two dwords are the client's own GrPerf frame interval and an
+    FrApi flag; they carry nothing from our request and we do not yet know what
+    to do with them, so they are recorded and not acted on. What we owe back is
+    the elapsed time since OUR `0x000C`, which is what the client graphs.
+
+    UNPROMPTED REPLIES ARE DROPPED. 0 of 79 in the corpus lacked a request
+    within 1.0 s before them, so a reply with no outstanding request is not a
+    thing this protocol does -- inventing an elapsed time for one would put a
+    fabricated number on the net graph, which is the one place an operator
+    would read it as measured.
+    """
+    sent_at = state.get("ping_sent")
+    if sent_at is None:
+        print(f"[c{conn_id}] CLIENT_PERF_REPORT with no request outstanding -- "
+              f"dropped rather than answered with an invented latency",
+              flush=True)
+        return
+    state["ping_sent"] = None
+    elapsed_ms = int(round((time.perf_counter() - sent_at) * 1000))
+    # Negative is impossible from perf_counter, but a clamp at 0 costs nothing
+    # and the field is an unsigned dword on the wire.
+    elapsed_ms = max(0, elapsed_ms)
+    state["ping_last_ms"] = elapsed_ms
+    if elapsed_ms > LATENCY_MAX_MS:
+        # Above the client's own cutoff this message is dropped on arrival, so
+        # sending it would be a no-op that LOOKS like a working feature here.
+        print(f"[c{conn_id}] round trip {elapsed_ms} ms exceeds the client's "
+              f"{LATENCY_MAX_MS} ms cutoff -- not sending LATENCY_REPORT, the "
+              f"client would discard it", flush=True)
+        return
+    send(GAME_SMSG_LATENCY_REPORT, [elapsed_ms],
+         f"LATENCY_REPORT({elapsed_ms} ms)", quiet=True)
 
 
 def attack_tick(send, state, conn_id):
@@ -2854,6 +2963,25 @@ def report_unhandled(state, conn_id, rec=None):
                   counts={f"{ch}:0x{op:04x}": n for (ch, op), n in seen.items()})
 
 
+def report_ping(state, conn_id, rec=None):
+    """Say how the round trip went, once, at disconnect. Silent if never used.
+
+    `ping_missed` counts requests that were still outstanding when the next one
+    fell due. Counting it and never printing it would be the D9(a) defect in
+    miniature -- a number the server knows and the operator cannot see.
+    """
+    if state.get("ping_at") is None:
+        return
+    missed = state.get("ping_missed", 0)
+    last = state.get("ping_last_ms")
+    print(f"[c{conn_id}] net graph: last round trip "
+          f"{'--' if last is None else str(last) + ' ms'}"
+          f"{f', {missed} request(s) went unanswered' if missed else ''}",
+          flush=True)
+    if rec is not None:
+        rec.event("ping_summary", last_ms=last, missed=missed)
+
+
 def recv_exact(sock, n, rec=None):
     buf = b""
     while len(buf) < n:
@@ -3203,6 +3331,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     # back up whether or not the player is moving, so this must
                     # be above the destination check that skips the rest.
                     try:
+                        # Above the fight, because the net graph should keep
+                        # moving whether or not anything is swinging -- and
+                        # because a 5 s timer that only runs during combat
+                        # would look like a working ping loop in exactly the
+                        # sessions nobody is testing it in.
+                        ping_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
                         # Both halves of the fight, and the order matters. The
@@ -4192,6 +4326,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # The load bar reaches 100% without this and stops there.
                         send(GAME_SMSG_INSTANCE_LOAD_FINISH, [],
                              "INSTANCE_LOAD_FINISH")
+                    elif opcode == GAME_CMSG_CLIENT_PERF_REPORT:
+                        handle_perf_report(values, send, state, conn_id)
                     else:
                         # D9(a), game half. Nine arms against 194 schema layouts,
                         # so this is the common path and not an exception.
@@ -4352,6 +4488,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         # D9(a)'s tally, once, where the operator will actually read it. A
         # per-message print buries the log; a per-session line is a real number.
         report_unhandled(state, conn_id, rec)
+        report_ping(state, conn_id, rec)
         rec.event("disconnect", total_bytes=total, desynced=desynced)
     except (ConnectionError, socket.timeout, OSError) as ex:
         print(f"[c{conn_id}] {type(ex).__name__}: {ex}", flush=True)

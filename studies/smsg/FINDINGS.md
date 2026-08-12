@@ -623,7 +623,7 @@ Reached: `GcGameCmd.cpp (handler block, bracketed)`, `GcApi.cpp (the sample ring
 
 **Ruled out:** "The client's own frame time echoed back" — the sink is s_netGraph in UiRoot.cpp, next to MsgConn byte counters.; "A counter or sequence number" — a counter would not be discarded above 5000, would not be averaged, and would not be non-monotonic across 35 distinct values.; "There is no receive handler for this opcode" — which is what `msghandler.py 0x000D` reports today. See the note under 0x000C; the tool is wrong, not the wire.
 
-**Still open:** The unit. Milliseconds is inferred, not read. A live capture where we know the true RTT (we control neither end, so this needs the ping loop implemented on OUR server and the client's net graph photographed) would confirm it.; What event 0xA2 does downstream.; Which index of the 0xC03370 ring other code writes — the accessor reads up to 10 but 0x000D only ever writes index 0, so either nothing else writes it or the other writer was not found.
+**Still open:** The unit. Milliseconds is inferred, not read. A live capture where we know the true RTT (we control neither end, so this needs the ping loop implemented on OUR server and the client's net graph photographed) would confirm it. **UNBLOCKED 2026-08-11: the ping loop now exists** (`authsrv.py:ping_tick` / `handle_perf_report`), so this is no longer a dependency -- it is a 20-minute experiment. We now control one end and know the true elapsed time exactly, so: run a loopback session, read `[cN] net graph: last round trip <n> ms` off our own log, and photograph the client's net graph beside it. If the units are milliseconds the two agree; if they are not, the graph is wrong by a fixed factor and that factor names the real unit. **State the prediction first, per the house rule: they agree, and the graph moves.** A graph that does NOT move is the informative failure -- it would mean the value is being discarded, and the 5000 ms cutoff is the first thing to doubt.; What event 0xA2 does downstream.; Which index of the 0xC03370 ring other code writes — the accessor reads up to 10 but 0x000D only ever writes index 0, so either nothing else writes it or the other writer was not found.
 
 **For our server:** Implement the 5 s loop and the client's net graph and connection meter start working against our server; more usefully, it gives us a place to put a real measured RTT instead of a constant.
 
@@ -662,7 +662,7 @@ Reached: `GcGameCmd.cpp (handler block, bracketed)`, `GrPerf.cpp`, `FrApi.cpp`, 
 
 **Still open:** What GrPerf counter 4 / period 3 actually counts. 1000/n with a 40 fallback is frame-rate shaped, but GR_COUNTERS' enum was not recovered — the names are not in the assert strings.; What the FrApi global at 0xC1100C means (the reply's second dword, a 0/1).; Whether the server ever sends 0x000A, 0x000B or 0x000E — none appeared in 10,944 messages, but their handlers now have addresses (0x00491E30, 0x00491E10, 0x00491EF0) and 0x000B's is a one-shot latch of its dword into a global.
 
-**For our server:** A 5 s timer sending a 2-byte 0x000C, plus a GAME_CMSG opcode-9 handler that at minimum fails loudly instead of silently — today all of the client's replies land on our silent-ignore path. ~~and per D9(b) a schema-unknown c2s opcode discards whatever shared its TCP read.~~ **CORRECTED 2026-08-11:** `0x0009` is schema-**known** (`GAME_CMSG_0009`), so it takes D9(**a**)'s silent-ignore path, which does not touch the buffer; D9(b) covers schema-*unknown* opcodes and is itself fixed. The replies are ignored, not destructive — worth handling for tidiness and for the net graph, not as a correctness fix.
+**For our server:** ✅ **BUILT 2026-08-11** (`ping_tick` / `handle_perf_report`, `test_ping.py`). A 5 s timer sending a 2-byte 0x000C, plus a GAME_CMSG opcode-9 handler that at minimum fails loudly instead of silently — today all of the client's replies land on our silent-ignore path. ~~and per D9(b) a schema-unknown c2s opcode discards whatever shared its TCP read.~~ **CORRECTED 2026-08-11:** `0x0009` is schema-**known** (`GAME_CMSG_0009`), so it takes D9(**a**)'s silent-ignore path, which does not touch the buffer; D9(b) covers schema-*unknown* opcodes and is itself fixed. The replies are ignored, not destructive — worth handling for tidiness and for the net graph, not as a correctness fix.
 
 
 > **Refutation pass.** The structural find is CONFIRMED and I can now close it harder than they did; the name is defensible but it is an inference from what the handler does, and the PING co-reading is not excluded. RAN: msghandler.py 0x000C --follow --annotate; read read_table in msghandler.py and _enumerate in msgshape.py; a raw stdlib descriptor walk of all 25 tables; a scratch .text scan for the load-time stores into every 0x00BEC384/0x00BEC394 count field; scratch disassembly of 0x00491e50, 0x007dcb10, 0x00631aa0; asserts.py --grep GR_COUNTERS / GR_PERIODS. CONFIRMED, THE TOOL BUG IS REAL: msghandler.read_table builds `cmds = [...for k in range(n)]` then `if not cmds: continue`, and msgshape._enumerate has `i
@@ -1368,14 +1368,22 @@ currently sends about a dozen opcode types.
    that our turn rate is one constant where **ArenaNet's is per-creature**, so this is
    built but not yet faithful.
 
-5. **The tick/ping loop: a 5 s `0x000C` and a `GAME_CMSG 0x0009` handler.** Today every
-   one of the client's replies lands on our silent-ignore path. ~~and per D9(b) a
-   schema-unknown c2s opcode **discards whatever shared its TCP read** — so this is a
-   correctness fix, not a cosmetic one.~~ **CORRECTED 2026-08-11 — it *is* the cosmetic
-   one.** `0x0009` is schema-**known** (`GAME_CMSG_0009`); the silent-ignore path is
-   D9(**a**) and leaves the buffer alone. D9(b) applies to schema-*unknown* opcodes only
-   and is now fixed. Then `0x000D` with a measured RTT makes the client's net graph and
-   connection meter work — which is the real reason to build it.
+5. ✅ **BUILT 2026-08-11. The tick/ping loop: a 5 s `0x000C` and a `GAME_CMSG 0x0009`
+   handler.** ~~Today every one of the client's replies lands on our silent-ignore path.
+   and per D9(b) a schema-unknown c2s opcode **discards whatever shared its TCP read** —
+   so this is a correctness fix, not a cosmetic one.~~ **CORRECTED 2026-08-11 — it *is*
+   the cosmetic one.** `0x0009` is schema-**known** (`GAME_CMSG_0009`); the silent-ignore
+   path is D9(**a**) and leaves the buffer alone. D9(b) applies to schema-*unknown*
+   opcodes only and is now fixed.
+
+   All three legs now exist (`authsrv.py`: `ping_tick`, `handle_perf_report`,
+   `report_ping`; `test_ping.py`, 27 checks). The cadence and the cutoff are ArenaNet's
+   measured numbers rather than ours — 5.000 s, and the client's own `0x1388` — and three
+   refusals are built in because each is a way to put a *plausible wrong number* on the
+   net graph: a second request never moves the outstanding start time, an unprompted
+   reply is dropped rather than answered with an invented elapsed, and a round trip over
+   5000 ms is **not sent at all**, because the client discards it at `0x0048DA40` and a
+   still graph would read as a dead feature rather than a bad value.
 
 ### Tier 2 — buildable, unlocks visible content
 
