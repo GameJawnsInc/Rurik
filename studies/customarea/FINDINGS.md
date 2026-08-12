@@ -4746,3 +4746,207 @@ were read-only throughout.
    a repair path, not a normal load — an authored map still has to ship a broken
    or absent stage 2 to get compiled, and what the client does with a
    *permanently* zero-length stream across sessions is untested.
+
+## 37. The STRIPPED terrain codec — the last piece of the E3 route (2026-08-12)
+
+**§36 left one thing in the way and named it: `0x10000002`.** This section is
+that chunk, read out of the client and then checked against the archive. A height
+field authored in Blender can now be written into a Stripped stream. **Whether
+the client compiles ground we wrote is the next experiment and is not evidence in
+hand** — §36 handed the compiler somebody else's terrain, and this is what makes
+handing it ours possible, not what shows the result.
+
+The evidence is not the round trip. It is that the height field this codec pulls
+out of a Huffman-coded bit stream **equals, sample for sample, the one
+`terrain.py` reads out of the BLOATED chunk** — a different encoding, written by
+a different subsystem, that the codec never looks at.
+
+MEASURED 2026-08-12 over the whole corpus, 1,205 s:
+
+| | |
+|---|---|
+| height field equals the Bloated chunk's, sample for sample | **349/349** |
+| dims, tiles, both tile tables, tag 3, distance, texture fields | **349/349** |
+| tag 7 decodes to the same 272x272 bitmaps | **349/349** |
+| the Bloated lightmap's bytes do NOT occur in the Stripped chunk | **349/349** |
+| byte-identical re-encode | **349/349** |
+| reconstructed vs carried | 144,594,950 / 220,180,662 = **65.67%** |
+
+That first row is **60,468,224 float32 samples** — FINDINGS 19's own corpus
+total for tag 1 — recovered from compressed bits. The byte-identity is the
+weaker claim and never appears without the census beside it.
+
+### Where it came from
+
+`s_chunkInfo[0x02].bloat = 0x00711EC0` calls **0x00759550**, whose two asserts
+name `TrnDataBloat.cpp:730/731` (`!stripDataLength || stripData`, `buffer`). It
+drives an **eleven-entry pipeline table at 0x00A74958** — `{fn, f32 cost}` —
+exactly the shape §34 found for the Path converter's seven at 0xBF72F0.
+
+| # | VA | emits | reads from the Stripped cursor |
+|---|---|---|---|
+| 0 | 0x00759380 | the 8-byte Bloated header | **5 bytes**: `u32` sig, `u8` version |
+| 1 | 0x00758CC0 | tag 0, 26 B | 1 + 9 bytes |
+| 2 | 0x00758A10 | tag 1, `dimX*dimY*4` B | the bit-coded height field |
+| 3 | 0x007590F0 | tag 2 | `dimX*dimY` bytes, verbatim |
+| 4 | 0x00759140 | tag 4 | `u8 n`, `u3 w`, n entries of w bits |
+| 5 | 0x00758F10 | tag 5 | the same shape |
+| 6 | 0x00759320 | tag 3 | `dimX*dimY/4` bytes, verbatim |
+| 7 | 0x00758AD0 | tag 9 | **nothing at all** |
+| 8 | 0x00758B60 | tag 7 | the shadow blocks, optional |
+| 9 | 0x00758C40 | tag 3' | 17 bytes, verbatim, optional |
+| 10 | 0x007589D0 | 0xFF | 1 byte |
+
+Record headers come from `0x0073E410` (read) and `0x0073E580` (write), and the
+split is the same one `pathchunk.StrippedPath` found from the other side: **at
+stage 1 a record header is ONE byte, the tag**; at stage 0 or 2 it is
+`{u8 tag, u32 size}`.
+
+### Tag 9 is BAKED, not stored — and it explains §19's lightmap fit
+
+**Stage 7 reads nothing from the cursor.** It computes `sin`/`cos` of tag 0's sun
+elevation (0x005BC0F0 / 0x005BC4F0), builds the vector `(f(t), 0, g(t))`, and
+hands it with the height field to **0x0075CC30**. The Bloated chunk's
+`dimX*dimY`-byte lightmap is generated at load time.
+
+FINDINGS 19 fitted `255 * max(0, N.L)` to tag 9 and reported a median Pearson r
+of **0.887 over 345 maps**, an elevation tracking tag 0's angle field at Spearman
+**0.9352**, and the light on the +x axis with no y component on **343 of 345**.
+That fit was measuring this generator. The client's own
+`TrnTexIntensity:342 lightDir.y == 0` is the same statement from a third side.
+`test_strippedterrain.py` pins the consequence with a check the archive could
+refuse: the Bloated shade bytes **do not occur anywhere in the Stripped chunk**.
+
+### The height codec
+
+Per 32x32 terrain tile, in the same tile-row-major order `Terrain.index` uses,
+and inside each tile a raster of 8x8 sub-blocks of 4x4 samples:
+
+* a 40-bit block header — `s16 dcBase`, `u4 dcBits-1`, `s16 escBase`,
+  `u4 escBits-1`. Five bytes, so the byte-align that follows is already
+  satisfied and the table always starts on a byte.
+* a canonical Huffman table over 1024 symbols: `u8 w-1`, eighteen counts of `w`
+  bits, then one 10-bit symbol per code in canonical order. 18 is the client's
+  own `maxLength` argument at 0x00764AC0 and 10 is `bitLength(1023)`.
+* 64 sub-blocks. Coefficient 0 is `dcBase + u<dcBits>`; the other fifteen are
+  symbols read as `symbol - 512`, with **symbol 1023 escaping** to
+  `escBase + u<escBits>`.
+* the sixteen coefficients are a 4x4 integer transform, inverted
+  columns-then-rows by `(a,b,c,d) -> (a-b-c, c+a-b, a+b-d, d+a+b)`, and written
+  as float32 at `out[r*32 + c]`.
+
+The bit reader is `TrnBitStore.h` — ctor 0x00758920, `Read` 0x007593F0, asserts
+at lines 52 (`bitCount < 8 * sizeof(dword)`) and 128 (`bitCount`). It is
+MSB-first over big-endian words with a 32-bit sliding window.
+
+### Every coding parameter is DERIVED, and each was measured to be
+
+This is what makes a green decode an assertion rather than a comparison of a
+value with itself. The decoder **refuses** a file whose stored parameter
+disagrees with what its own samples need — so the counts below are a 187-block
+census over three maps, and the corpus-wide decode asserts the same thing on
+every block of every map by refusing:
+
+| parameter | derivation | measured |
+|---|---|---|
+| `dcBase` | `min(the block's 64 DC coefficients)` | 187/187 blocks |
+| `escBase` | `min(the block's escaped coefficients)` | 66/66 |
+| `dcBits` | `max(bitLength(dc - dcBase), 1)` | 187/187 |
+| `escBits` | `max(bitLength(esc - escBase), 1)` | 66/66 |
+| `w` (table) | `max(bitLength(max count), 1)` | 187/187 |
+| `w` (tags 4/5) | `max(bitLength(max entry), 1)` | 6/6 records |
+| the symbol SET | exactly the symbols the block uses | 187/187 |
+| every align pad | zero | 187/187 |
+
+**One thing is carried: which code length each symbol gets** — the counts array
+and the symbol order within it. That is ArenaNet's frequency model, the samples
+cannot recover it, and a Huffman construction of ours would match their bytes
+only by coincidence. 22 of 187 sampled blocks have a symbol list that is not
+merely sorted, so the order is load-bearing. Tags 2, 3 and the optional second
+tag 3 are carried because the FORMAT carries them; there is no encoding under
+them to understand.
+
+### A correction to `terrain.py`: the 1-ULP caveat is retired
+
+That file records the sun angle as landing "within 1 ULP of `b*pi/508`", with
+`float32(b*pi/508)` reproducing 39 of 55 stored bit patterns and the best
+alternative, `float32(1.5707963705062866*b/254)`, reproducing 53 of 55.
+
+The client computes neither. At **0x00758D99** it evaluates
+
+```
+(float)((double)b * 282.74334716796875 / 45720.0)
+```
+
+where 282.74334716796875 is `(double)(float)(90*pi)` — a float32 constant
+promoted, so 90pi is rounded ONCE before the divide — and 45720 is 508*90. It
+reproduces the Bloated chunk's stored float on **349 of 349** maps.
+
+The two retired formulations differ from it at **88** and **3** of 256 indices
+respectively, and both are run as controls that must disagree. **The corpus
+confirms `terrain.py`'s own number from the other side**: 63 of 349 maps carry an
+angle index where `b*pi/508` differs, and it is wrong on all 63 — leaving
+349 − 63 = **286**, which is exactly the "286 of 349" that file measured
+independently before anyone had read the client's expression.
+
+### Traps, each paid for once
+
+* **The Stripped header is FIVE bytes, not eight.** `terrain.py`'s own docstring
+  said "signature, then `u16 17`, then `u16 0x6088`". The version is a byte and
+  0x6088 is not a field at all — it is the first two bytes of tag 0's body.
+  Reading eight puts the first record header three bytes late. Corrected there.
+* **Tag 0 stores dimY before dimX.** Every square map agrees under either
+  reading; 416x512 does not.
+* **Tag 0 stores the cell pitch, and the client compares it against 96.0** with
+  an `fucompp` against the f32 at 0x0094DE38. It is the only place in either
+  stream where the pitch is written down; every other appearance, including
+  `terrain.py`'s `CELL_PITCH` and the flood grid's divisor, is compiled in.
+* **The client's post-decode untile/retile pair is the identity.** 0x007630F0
+  and 0x00763060 are mirror images and their composition does nothing; the
+  decoded array is already in the Bloated chunk's tiled order. Do not read that
+  pair as evidence of a layout change.
+* The client reads tags 2 and 3 with **no bounds check at all** — 0x00763030
+  copies `dimX*dimY` bytes from the cursor whatever remains.
+
+### A real constraint on authored terrain, and it is small
+
+`_inverse4`'s matrix has determinant 8, so its image is an index-8 sublattice of
+Z^4 and a four-vector is representable only when `w == x (mod 2)`,
+`y == z (mod 2)` and `w + x == y + z (mod 4)`. Applied along both axes, a 4x4
+sample block lives on an index-8^8 sublattice of Z^16. **A freely authored height
+field is essentially never on it.**
+
+`snap_block` projects onto the nearest representable field. MEASURED on the
+random and smooth synthetic fields `test_strippedterrain.py` builds — not on
+anything retail, which is already on the lattice by construction: the worst
+sample moves **4 world units**, against a **96.0**-unit cell pitch and a corpus
+height range of about 25,000. It is a real quantisation and it is negligible;
+both halves belong in the record. What it does to a *Blender-sculpted* field of
+the kind §32 produces is untested.
+
+An encoder that TRUNCATED instead of refusing would move a height by a fraction
+of a unit, encode cleanly, and round-trip — and byte-identity could never see it,
+because such an encoder is only ever run on retail blocks already on the lattice.
+`_forward4` refuses; `test_strippedterrain.py` builds the truncating version and
+requires the two to disagree off the lattice and agree exactly on it.
+
+### What this does NOT establish
+
+1. **Nothing authored by this codec has been through the client.** Everything
+   above is a claim about a file format, checked against the archive. The E3
+   experiment that would close it — author a Stripped terrain chunk, zero the
+   Bloated stream, and watch the client compile — has not been run.
+2. **The lightmap generator was not reproduced.** 0x0075CC30 was identified, not
+   read. We know tag 9 is baked; we cannot predict its bytes, and nothing here
+   needs to, because the client bakes it.
+3. **The shadow record is carried through this codec's own boundary.** Tag 7
+   goes through `terrain.ShadowBlock`, so its 272x272 bitmap is decoded and its
+   128-byte tail derived — but `trnshadow` owns that, and nothing here re-read
+   `TrnCodecShadow`'s stripped reader at 0x0074AAE0 to check that the two agree
+   for a reason rather than by construction.
+4. **Whether a tag-7-less or table-less map loads was not tested.** Both records
+   are optional in the pipeline and no corpus map omits them.
+5. **The Huffman construction is ours.** `HuffmanTable.for_frequencies` builds a
+   legal table, not ArenaNet's. Nothing in the image builds one — there is no
+   `TrnDataStrip` in the assert census — so an authored chunk will be a different
+   size from what their tool would emit, and how different is unmeasured.

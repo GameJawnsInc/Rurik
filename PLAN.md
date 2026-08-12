@@ -353,7 +353,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started, **and 2026-08-11 established what "started" would even mean** ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md), `9eb09a8`+). Monster AI *as a mechanism* is **not recoverable** — not from the client (0 of 937 embedded source paths under any `\Srv\` tree, from a detector proven to catch 6 of 6 planted ones; 33 AI-adjacent searches over two independent routes, all zero), not from the wire, and not by any capture campaign, because it is never shipped and never transmitted. What **is** recoverable is the observable envelope, and the study designs the labelled behaviour campaign that would recover it (§7) plus four desk follow-ups needing no capture at all (§7.9) — **the first of which ran the same day and made the binary negative total**: `CHAR_AI_MODES`, the one lead the study declined to call refuted, is 3 and its modes are Fight/Guard/Avoid Combat, i.e. the player's own hero-and-pet stance widget. It also found the AI-adjacent numbers already in `authsrv.py` are mostly the **wrong shape** rather than merely unmeasured: reach is per-creature-model (~65 / ~599 / ~706 units observed against our one global 150), a leash is *uncomputable* from the state `spawn_enemy` keeps, and 4 of 5 fights in the corpus are started by the **player**, refuting our proximity-initiation model for 4 of 5. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. **Its other half now exists too**: R5m authors the zone's *geometry*, which TOML was never going to describe. |
-| **R5m** | **Custom map geometry, end to end** | A map we authored loads in the retail client, and geometry we chose constrains the character | ✅ **2026-08-11**, arc landed `0be1555`, criterion completed the same day. **The client walks on our terrain and stops at our walls.** `mapbuild.build_flat` assembles a whole map from typed parameters — 7,841 B, 9 chunks, **97.04% generated**, the rest being FINDINGS 14's 232 bytes of ArenaNet constants read from an archive at run time — and the retail client loads it, places a character in it and writes nothing back (FINDINGS §22, four discriminators). Then **E1 proved the geometry is ours and not a coincidence**: two maps differing in **33 of 7,841 bytes**, all inside the pathing chunk, both 7,841 B, with the mesh rect at 0..3072 against 1024..2048, confined the character to reported bounding boxes of **3072.0 × 3072.0** and **1024.0 × 1024.5** — the ratio of the two rectangles, measured from the client's own position reports while our server broadcast no position at all (FINDINGS §23). The read direction is byte-exact across the corpus: terrain 349/349, pathing 349/349, whole map file 349/349 Bloated **and** Stripped. A retail map also stands up in Blender (`tools/blender/import_gwmap.py`, 213,921 verts, orientation checked against a chunk the exporter never reads) and **since 2026-08-12 comes back out of it**: `export_gwmap.py` round-trips Pre-Searing's 212,992 heights, tiles and shade bytes byte-identically through a `.blend` read by a separate Blender process, and a mesh authored in Blender from nothing reaches a map file passing all 17 open-time gates (FINDINGS §32). That byte-identity is the weak half by measurement — a memcpy sabotage keeps all six of those checks green and is caught only by a sculpt control. **What is NOT done**: authored art (textures are borrowed retail file ids), portals, multiple planes and elevation, and the delivery path is still `datwrite` into a copied archive rather than anything a person would call a tool. |
+| **R5m** | **Custom map geometry, end to end** | A map we authored loads in the retail client, and geometry we chose constrains the character | ✅ **2026-08-11**, arc landed `0be1555`, criterion completed the same day. **The client walks on our terrain and stops at our walls.** `mapbuild.build_flat` assembles a whole map from typed parameters — 7,841 B, 9 chunks, **97.04% generated**, the rest being FINDINGS 14's 232 bytes of ArenaNet constants read from an archive at run time — and the retail client loads it, places a character in it and writes nothing back (FINDINGS §22, four discriminators). Then **E1 proved the geometry is ours and not a coincidence**: two maps differing in **33 of 7,841 bytes**, all inside the pathing chunk, both 7,841 B, with the mesh rect at 0..3072 against 1024..2048, confined the character to reported bounding boxes of **3072.0 × 3072.0** and **1024.0 × 1024.5** — the ratio of the two rectangles, measured from the client's own position reports while our server broadcast no position at all (FINDINGS §23). The read direction is byte-exact across the corpus: terrain 349/349, pathing 349/349, whole map file 349/349 Bloated **and** Stripped — and since 2026-08-12 the STRIPPED terrain chunk too (`strippedterrain.py`, FINDINGS §37), whose real claim is not the round trip but that its **60,468,224 height samples equal the Bloated chunk's on 349 of 349 maps**, pulled out of a Huffman bit stream by a module that never reads that chunk. A retail map also stands up in Blender (`tools/blender/import_gwmap.py`, 213,921 verts, orientation checked against a chunk the exporter never reads) and **since 2026-08-12 comes back out of it**: `export_gwmap.py` round-trips Pre-Searing's 212,992 heights, tiles and shade bytes byte-identically through a `.blend` read by a separate Blender process, and a mesh authored in Blender from nothing reaches a map file passing all 17 open-time gates (FINDINGS §32). That byte-identity is the weak half by measurement — a memcpy sabotage keeps all six of those checks green and is caught only by a sculpt control. **What is NOT done**: authored art (textures are borrowed retail file ids), portals, multiple planes and elevation, and the delivery path is still `datwrite` into a copied archive rather than anything a person would call a tool. |
 | **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ✅ **2026-08-07**, `vault/captures/live/20260807T143055`. Six connections to ArenaNet (one auth, five game, all on **port 80**), both directions, zero TCP gaps, stamped `origin: live`, and **byte-replayable in the strong sense**: `livesession.py --assemble` regenerates all six decrypted files **sha256-identical** from `wire.jsonl` + `keyring.jsonl` alone, with no client and no network. 200,153 bytes of ArenaNet plaintext, 11,700 messages. **The independent check is the framing**: every one of the 12 streams decodes 100% clean to its final byte against `schema/messages.json`, which was built from the *client's* format tables and never from these bytes. Adversarially attacked from four angles (§3.3); three failed to refute, and the fourth's safety finding is fixed. See §3.3 for what the number does *not* mean. The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10, and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. **A second run the same day played Lakeside County (`:64103`, 1,074/1,074, 0 non-tape sends) and rendered COMBAT** — plus a labelled c2s corpus, and independent corroboration of D1's agent-id reuse from ArenaNet's own traffic. See §3.5 and [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md). |
 
@@ -1873,7 +1873,11 @@ parallel, with one safety change that is not optional — see its entry.
     `Map file '0x0287d3' failed to load.  Attempting to re-bloat.`, compiled the navmesh
     from the Stripped partner, and wrote it back — **byte-identical to what ArenaNet
     shipped**, 9,284 B stored and 33,021 B decompressed, sha-identical in both forms, 27
-    trapezoids over 1 plane. The row relocated `0x63C64200` → `0x4B82E00` exactly as
+    trapezoids over 1 plane. The driver is `toolkit/mapdata/rebloat.py`
+    (`--plan/--arm/--verify`, refusing `C:\gw` and `vault/dat_study`), with
+    `toolkit/mapdata/test_rebloat.py` (28 checks, floor 28) covering everything about it
+    that can be judged without a client, and `RUNBOOK.md` §"Rung E3" as the procedure.
+    The row relocated `0x63C64200` → `0x4B82E00` exactly as
     predicted from the released reservation, and `verify` re-resolving by file id is what
     made that a non-event. The arm demonstrably applied — the journal shows compression
     8 → 0 and the rebuilt row carries 8 again, so the client rewrote it wholesale.
@@ -1892,33 +1896,41 @@ parallel, with one safety change that is not optional — see its entry.
     143's (`acfc8e75…`). So the compiler's input is the bytes in stream 0 and nothing
     else. **Author a Stripped stream → the retail client builds the Bloated map, navmesh
     included.**
-    **(e6-next)** ⬜ **ONE PIECE IS IN THE WAY, and it is now precisely named.**
-    `0x10000002`, the STRIPPED terrain chunk, is a different encoding from the Bloated
-    `0x20000002` and `terrain.py` refuses it (*"terrain version 1619525649 != 17"*).
-    Both carry signature `0x87821134` and version byte `0x11`, and the stripped form is
-    ~0.4673 of the bloated corpus-wide, so it is a packing of the same logical data.
-    **Until that codec exists we can deliver somebody else's terrain but not our own** —
-    which is exactly the gap between §36 and §32's Blender pipeline. Write the Stripped
-    terrain codec, hold it to the same standard as `pathchunk.StrippedPath` (349/349
-    byte-identical with a mutation control), and the arc joins end to end.
-    Still unknown after that: whether an authored terrain/props pair bloats to objects
-    the builder ACCEPTS ("non-null" is not "usable"), and what sets the walkability mode
-    that picks 10/45/40° over 15/35/30°.
-    **(e5)** 🔧 **PREPARED 2026-08-12, NOT RUN — waiting on the harness.**
-    `toolkit/mapdata/rebloat.py` drives (e4)'s experiment and
-    `toolkit/mapdata/test_rebloat.py` (28 checks, floor 28) covers everything about
-    it that can be judged without a client. `RUNBOOK.md` §"Rung E3" is the procedure.
-    **The gate the whole trigger rests on is now MEASURED rather than assumed**: after
-    a zero-length replace, all ten of the client's open-time rules still pass and the
-    row reads back as 0 bytes, so FINDINGS 17.1's cheapest provocation is usable. The
-    hazard is measured too — a reservation is `ceil(size/512)*512`, so zeroing the size
-    RELEASES the row's blocks to the client's free map (§18.11), and `verify` therefore
-    re-resolves by file id rather than assuming the row. Target is map 143
-    (`0x287D3`, row 71496, 9,284 B, **27 trapezoids**, both hard gates present in its
-    Stripped stream); fallback map 144. The arm/revert cycle is byte-identical over the
-    whole reservation.
-    **What the run cannot settle by itself:** UNCHANGED does not distinguish "the client
-    never loaded the map" from "the client does not re-bloat" — only `Gw.log` does — and
-    a REBUILT would say nothing about whether the compiler floods terrain WE authored,
-    since this map's Stripped terrain is ArenaNet's. That is the experiment after.
-    **(e6)** Nothing in FINDINGS 34 is covered by a test, and none of it is in the suite.
+    **(e6)** ✅ **DONE 2026-08-12 (FINDINGS 37). THE STRIPPED TERRAIN CODEC EXISTS**, so
+    the gap between §36 and §32's Blender pipeline is closed on paper.
+    `toolkit/mapdata/strippedterrain.py` decodes and encodes `0x10000002`;
+    `toolkit/mapdata/test_strippedterrain.py` (floor 66, 57 vault-less) covers it.
+    **The headline is deliberately not the round trip.** The height field the codec
+    pulls out of a canonical-Huffman bit stream and a 4x4 integer transform EQUALS,
+    sample for sample, the one `terrain.py` reads out of the Bloated chunk — a different
+    encoding, written by a different subsystem, that the codec never looks at. The
+    byte-identical re-encode is reported beside it as the weaker claim, because a memcpy
+    passes it; the test BUILDS that saboteur and requires it to pass the round trip and
+    fail the mutation checks.
+    Read out of the eleven-stage pipeline at **0x00A74958** (`TrnDataBloat.cpp:730/731`),
+    the bit reader at `TrnBitStore.h`, and the codec at `TrnCodecHeight.cpp`. Three
+    things came out of it that were not the point:
+    **(i) tag 9 is BAKED, not stored** — stage 7 reads nothing from the cursor and
+    generates the lightmap from tag 0's sun elevation, which is what FINDINGS 19's
+    0.887 Pearson fit was measuring;
+    **(ii) `terrain.py`'s 1-ULP angle caveat is retired** — the client computes
+    `float32(b * 282.74334716796875 / 45720.0)` in double, and the two formulations that
+    file preferred differ from it at 88 and 3 of 256 indices;
+    **(iii) the Stripped header is FIVE bytes, not eight** — `terrain.py`'s docstring
+    read the version as a `u16` and called tag 0's first two body bytes a field.
+    **What is NOT done and is the next experiment**: nothing this codec authored has
+    been through the client. Also unknown: whether an authored terrain/props pair bloats
+    to objects the builder ACCEPTS ("non-null" is not "usable"), and what sets the
+    walkability mode that picks 10/45/40° over 15/35/30°.
+    **A real constraint fell out, and it is small**: the transform's matrix has
+    determinant 8, so an authored height field must be snapped onto a sublattice.
+    MEASURED worst move **4 world units** against a 96.0 cell pitch.
+    **(e7)** ⬜ **THE NEXT EXPERIMENT, and it is the one the whole ladder was for.**
+    Author a Stripped terrain chunk with `strippedterrain.build`, splice it into a map
+    whose Bloated stream is then zeroed by `rebloat.py --arm`, and watch whether the
+    client compiles a navmesh over ground WE wrote. §36 supplied somebody else's
+    terrain; this supplies ours, and it is the first run that can say whether FINDINGS
+    34's flood grid accepts an authored height field. `RUNBOOK.md` §"Rung E3" is the
+    procedure; the tooling for both halves now exists and neither has been run together.
+    **(e8)** ⬜ Nothing in FINDINGS 34 is covered by a test, and none of it is in the
+    suite. (FINDINGS 37 is: `test_strippedterrain.py`.)
