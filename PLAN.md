@@ -1882,14 +1882,27 @@ parallel, with one safety change that is not optional — see its entry.
     the bit is what you see when the shipped payload came out of that compiler. So every
     retail Bloated map in the archive is an output of the compiler we want to borrow.
     **E3 is alive and the route works.**
-    **(e5-next)** ⬜ **THE EXPERIMENT THIS UNLOCKS, and it is the one §32 has been waiting
-    for:** the map above is ArenaNet's, so what was shown is that the compiler reproduces
-    *ArenaNet's* input faithfully. Author a Stripped stream whose TERRAIN is ours —
-    a Blender-authored height field through §32's exporter — and see whether the client
-    floods it into a navmesh. FINDINGS 34 says the flood grid IS the terrain lattice, so
-    this is the mechanism that would finally join the two halves of the arc. Unknowns
-    that only that run settles: whether an authored terrain/props pair bloats to objects
-    the builder accepts ("non-null" is not "usable"), and what sets the walkability mode
+    **(e5)** ✅ **DONE 2026-08-12 (FINDINGS 36). THE COMPILER BUILDS FROM THE STREAM WE
+    SUPPLY.** §35 left an alternative reading open — the client might have restored map
+    143 from a cache or a download keyed to the file id. So map 143's Stripped partner
+    (row 71497) was replaced with **row 46197's** stream, a different map entirely, and
+    its Bloated stream zeroed. **PREDICTION recorded before the run: 2 trapezoids, not
+    27.** The client rebuilt `0x287D3` as **8,471 B, 18 chunks, 2 trapezoids over 1
+    plane** — byte-identical to the DONOR's shipped map (`4178b052…`) and not to map
+    143's (`acfc8e75…`). So the compiler's input is the bytes in stream 0 and nothing
+    else. **Author a Stripped stream → the retail client builds the Bloated map, navmesh
+    included.**
+    **(e6-next)** ⬜ **ONE PIECE IS IN THE WAY, and it is now precisely named.**
+    `0x10000002`, the STRIPPED terrain chunk, is a different encoding from the Bloated
+    `0x20000002` and `terrain.py` refuses it (*"terrain version 1619525649 != 17"*).
+    Both carry signature `0x87821134` and version byte `0x11`, and the stripped form is
+    ~0.4673 of the bloated corpus-wide, so it is a packing of the same logical data.
+    **Until that codec exists we can deliver somebody else's terrain but not our own** —
+    which is exactly the gap between §36 and §32's Blender pipeline. Write the Stripped
+    terrain codec, hold it to the same standard as `pathchunk.StrippedPath` (349/349
+    byte-identical with a mutation control), and the arc joins end to end.
+    Still unknown after that: whether an authored terrain/props pair bloats to objects
+    the builder ACCEPTS ("non-null" is not "usable"), and what sets the walkability mode
     that picks 10/45/40° over 15/35/30°.
     **(e5)** 🔧 **PREPARED 2026-08-12, NOT RUN — waiting on the harness.**
     `toolkit/mapdata/rebloat.py` drives (e4)'s experiment and
