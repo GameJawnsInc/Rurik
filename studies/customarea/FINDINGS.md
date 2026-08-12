@@ -5397,3 +5397,105 @@ is why both asserts are recorded here from a transcription.
    says what the COMPILER needs, not what a playable map needs.
 4. **The removals are not independent.** Each run removed from the previous
    surviving set, so an interaction between two removed chunks would not show.
+
+## 42. The minimal set, completed — and the loader NAMES the chunk it is missing (2026-08-12)
+
+**Closes FINDINGS 41's two open ends and corrects one of its claims.** All seven
+members of the minimal set have now been removed individually. More useful than
+the answer: **the client reports which chunk it could not use, by name**, and
+FINDINGS 41 missed that because it read the last line of `Gw.log` instead of the
+last four.
+
+### The full removal table
+
+Every row is one client session against the FINDINGS 36 setup. The set is
+Header, Map Parameters, Props, Zones, Terrain, Terrain Dependencies, Path.
+
+| removed | re-bloat attempted | what the client said | mesh |
+|---|---|---|---|
+| Terrain Deps `0x11000002` | yes | assert **`deps`**, TrnCreate:242 | — |
+| Zones `0x10000003` | yes | assert **`state->zones`**, MapData:660 | — |
+| Map Parameters `0x1000000C` | yes | assert **`dims.x * XY_DIST == context->mapRect.x1 - context->mapRect.x0`**, TrnDataBloat:191 | — |
+| Terrain `0x10000002` | yes | `corrupt chunk 'Terrain Stripped Data'` | — |
+| Props `0x10000004` | yes | `corrupt chunk 'Path Stripped Data'` | — |
+| Path `0x10000008` | yes | *(nothing)* — rebuilt 7,389 B | **NO Path chunk** |
+| Header `0x10000000` | **no** | `missing chunk 'Header Stripped Data'` | — |
+| Collision `0x1000000E` | yes | *(nothing)* | **419 B, 2 traps** |
+
+**All seven are required.** Collision is the only chunk of FINDINGS 34's list
+that is not.
+
+### Three things this adds
+
+**1. The loader names the chunk.** `Error: Map '0x0287d3' missing chunk 'Header
+Stripped Data'` and `corrupt chunk 'Terrain Stripped Data'` are the client
+telling us its own requirement in its own words. It distinguishes *missing* from
+*corrupt*, and — measured here — an absent Header is "missing" while an absent
+Terrain or Path is "corrupt", so the two words are not synonyms for absence.
+This is a far better instrument than watching for a rebuilt row, and it was
+available from run 1.
+
+**2. The Header is refused BEFORE the re-bloat; everything else after.** Its row
+is the only one with no `Attempting to re-bloat` line. So there are two distinct
+stages of requirement — what the container needs to open at all, and what the
+converter needs to run — and only the Header sits in the first.
+
+**3. The rect invariant is the client's own expression.** Removing Map
+Parameters leaves the rect zeroed and the terrain bloat asserts
+`dims.x * XY_DIST == mapRect.x1 - mapRect.x0`. That is `terrain.py`'s cell pitch
+of 96.0, measured from the archive as `rect/dims` on 349 of 349 maps, now stated
+by the client. **`XY_DIST` is ArenaNet's name for it.** It is also a hard
+authoring rule: an authored map's rect must equal `dims * 96.0` exactly, or the
+converter asserts rather than compiling something wrong.
+
+### The correction to FINDINGS 41
+
+That section reported the props removal as *"`Error: Creating default map`, no
+rebuild, NO CRASH — the props gate, exactly as §34 read it"*. The mechanism
+reading survives; the evidence quoted for it does not. Re-run with the whole log
+read, the props removal says:
+
+```
+Perf: Map file '0x0287d3' failed to load.  Attempting to re-bloat.
+Error: Map '0x0287d3' corrupt chunk 'Path Stripped Data'
+```
+
+So the re-bloat runs, the Path builder produces nothing (consistent with §34's
+`cmp [ecx+0x24],0 → je return 0`), and the loader then rejects the map because
+the Path chunk is unusable. **`Creating default map` is the third line of that
+sequence, not the finding.** §41 read `tail -1` and reported a conclusion the
+next three lines would have sharpened — the same shape as the trapezoid-count
+trap that section itself warns about.
+
+### The harness gap, closed
+
+FINDINGS 41 recorded that neither crash dialog was captured and both were read
+off the screen. **The extraction was never broken.** `capture_error_dialog`
+finds the dialog, and the assert text sits in a hidden `Edit` control (id 1003)
+that is readable without clicking anything — which matters, because the control
+next to it is **`&Send report to ArenaNet`**, and clicking in that dialog would
+upload a crash report from a patched client to the vendor.
+
+What was missing was a CALL SITE: `capture_error_dialog` was reachable only from
+`hold_open()`, which `run_client` invokes under `if a.keep_open:`. A plain
+`--hold N` run never called it. It is now called unconditionally in
+`run_client`'s `finally`, **before** `dc.close_client`, which destroys the
+dialog. Both of this section's asserts — `dims.x * XY_DIST ...` and `deps` —
+were captured automatically by that path on ordinary runs, which is the check
+that it works.
+
+`test_harness.py` asserts the call on the SYNTAX TREE rather than by grep,
+because "in the finally" and "before close_client" are both invisible to a text
+search, with a control that the ordering test fails on a reversed finally.
+
+### What this does NOT establish
+
+1. **One map, 32x32, one plane, and removals are not independent** — each run
+   removed from the previous surviving set, so an interaction between two
+   removed chunks would not show.
+2. **"Required" here means "this map would not compile without it"**, not that
+   the chunk's CONTENT matters. Every removal used ArenaNet's own bytes for the
+   chunks that stayed; nothing yet says a minimal or authored Zones or Props
+   would satisfy the same gates.
+3. The `missing`/`corrupt` distinction is measured on four chunks, not
+   systematically — it is a lead about the loader's vocabulary, not a rule.
