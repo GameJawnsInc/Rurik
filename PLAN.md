@@ -1224,10 +1224,45 @@ which is the defect `CLAUDE.md` already names from the other side.*
        `PathBuild:2297 def->trapezoidCount < 1024` for a per-plane cap, and 40 of
        1,805 planes across 60 retail maps exceed it, the largest 6,577. `def` is
        a build-time input. `studies/monsterai/FINDINGS.md` §2.1.1.
-    4. **Histogram Props-chunk model ids for one map**, off code `mapexport` already
-       has. Closes the last unmeasured slot of `Gw.dat`'s 23 — no chunk in any of 349
-       maps carries spawn or patrol data, but Props is carried opaquely and is where
-       placements would live if they live in the archive at all.
+    4. ✅ **DONE 2026-08-11 — NO SPAWN TABLE, AND THE QUESTION WAS MALFORMED.**
+       Nine agents over the Props chunk. **The framing first**: this item asked
+       whether a prop model id lands in the `0x20000000` creature-class range,
+       and that is two unrelated numbering schemes sharing a leading `2`. The
+       leading nibble of a **chunk id** is its *stage* field
+       (`decompose(0x20000004)` → stage=Bloated, baseId=4); `CHAR_CLASS_MONSTER_BASE`
+       is the top nibble of a runtime **agent class id** that never appears in
+       the archive. And the field itself is a **u16** — corpus-wide 0..439 — so a
+       32-bit tag cannot fit in it and the search as posed had no failing branch.
+       **The answerable question is what the index RESOLVES to**, and it resolves:
+       `+0` is a per-map index into that map's own Props Dependencies chunk
+       `0x21000004`, in range on 346/346 maps that have one, with a cross-map
+       control that forces an out-of-range in ≥44.9% of 119,716 pairings.
+       **The answer is no.** All 285,670 prop records in 349 maps resolve to model
+       files; **0** resolve to any of the creature model ids we can name. Under
+       the right null — creature ids are drawn from the archive's model files, of
+       which the props system names 54.65% — P(zero) ≈ 3.9e-26. The structural
+       reason is better than the count: **interactive world objects in this client
+       are gadget AGENTS** (`GdCliApi.cpp:430 agentDef == GW_AGENTDEF_GADGET`), a
+       subsystem disjoint from `Engine\Map\Props`, and **zero** of the 692
+       asserts across 73 Agent/Char/Gadget files reference a map prop. Looking for
+       creatures in Props was looking in the wrong subsystem.
+       **But the slot is not closed — it is newly OPEN.** Only 32.68% of the Props
+       chunk is the prop array. The other **67.32% frames as `{u8 tag, u32 size}`
+       records closing 349/349** (both ±1 start controls close 0/349), two tag
+       sequences only, and **tag 1 alone is 66% of the entire Props chunk corpus**
+       — framed, walkable today, and read by nothing in this repo. That is now the
+       single most valuable unread structure in the map format.
+       `studies/monsterai/FINDINGS.md` §3.10.1, which also corrects two reversed
+       size ranges in §3.10 and lists what each of the 23 slots actually is: **11
+       have no field-reading code anywhere in the repo.**
+       **A tooling defect fell out and is fixed in the same commit.**
+       `asserts.py --modules` keyed on the source BASENAME and printed the first
+       colliding file's path, so `Engine\Map\Props\PrApi.cpp` (19 sites) was
+       invisible behind `Gw\Pref\PrApi.cpp` (67) as one `86` line — a module
+       missing from the census that decides what source files exist. Now keyed by
+       full path, `--file` prints the split, and `test_codescan.py` §8 pins it
+       (62 checks, floors 56→62 / 16→22). Checked and clear: no Path basename
+       collides, so task 3's read is unaffected.
 
     **And one analyser check that needs no new session either:** run the `0x001E`
     tick-clock integral against the wire span on the two EXISTING captures. If it

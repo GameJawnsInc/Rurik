@@ -546,9 +546,203 @@ Each of these is a real zero over 21,543 messages, stated with what was searched
 
 **OBSERVED, and opened here for the first time in this arc. n = 698 MFT rows (349 map heads + 349 partners), every chunk in every row.**
 
-No chunk in any of 349 maps carries spawn, patrol or behaviour data. The two candidate slots are empty or trivial: **Locations is a constant 9 bytes (Bloated) / 13 bytes (Stripped) in 349 of 349 maps**, and **Mission is 56–1,226 bytes (median 221)** of short ASCII name and link tokens (`next` in 88 maps, `town` 53, `prev` 17). Every large per-map chunk is geometry or render: Terrain, Props, Path, Zones, Shore, Sight, VisData.
+No chunk in any of 349 maps carries spawn, patrol or behaviour data. The two candidate slots are empty or trivial: **Locations is a constant 13 bytes (Bloated) / 9 bytes (Stripped) in 349 of 349 maps** (this read 9/13 until 2026-08-11 — the two stages were transposed; `test_mapfile.py:94` pins `(0x2000000A, 13)` and `mapbuild.py`'s `BORROWED_SIZES` agrees), and **Mission is 56–1,226 bytes (median 221)** of short ASCII name and link tokens (`next` in 88 maps, `town` 53, `prev` 17). Every large per-map chunk is geometry or render: Terrain, Props, Path, Zones, Shore, Sight, VisData.
 
-**One slot of 23 remains inferred rather than measured:** Props (12–97 KB Bloated, 51–657 KB Stripped) is carried opaquely. If placements live in the archive they live there. Cheapest close: `mapexport` already reads prop positions for its orientation oracle — extend that read to histogram prop model ids for one map and check whether any lands in the `0x20000000` creature-class range the corpus uses. Separately, the **Sight** chunk (median ~60 KB per map, up to 478 KB, carried opaquely) is a candidate precomputed line-of-sight structure, and every discussion of LOS in this dossier went through `pathmap.clip()` without mentioning it.
+**One slot of 23 remains inferred rather than measured:** Props (51 B – 657 KB Bloated, 12 B – 97 KB Stripped — also transposed here until 2026-08-11) is carried opaquely. If placements live in the archive they live there. **OPENED 2026-08-11 — they do not: §3.10.1.** The "cheapest close" proposed here, histogramming prop model ids against the `0x20000000` creature-class range, turned out to be **malformed**: the field is a 16-bit per-map index and the class-tag space is 32-bit, so the search had no failing branch. What settles it is what the index RESOLVES to. Separately, the **Sight** chunk (median ~60 KB per map, up to 478 KB, carried opaquely) is a candidate precomputed line-of-sight structure, and every discussion of LOS in this dossier went through `pathmap.clip()` without mentioning it.
+
+### 3.10.1 The Props chunk, opened — no spawn table, and the question was malformed
+
+**2026-08-11.** Four desk angles (record layout, index resolution, chunk census, client code), each dug independently and each then attacked by a second agent whose only job was to refute it. Nineteen of the combined claims survived as stated; eleven were weakened; five were refuted outright. What follows is the surviving set, and the refuted set is written down in full so nobody rebuilds it.
+
+**Result, first.** `Gw.dat` carries no monster spawn placements anywhere this pass could reach. Every one of the 285,670 prop records in all 349 maps resolves to a model file, and not one of them resolves to any of the 74 creature model ids we can currently name. The client's own Props subsystem has no vocabulary for actors at all — 692 asserts across 73 Agent/Char/Gadget files, zero of which reference map props — and the reason is structural rather than accidental: in this client the interactive world objects are **gadget agents** (`GdCliApi.cpp:430 agentDef == GW_AGENTDEF_GADGET`), a subsystem disjoint from `Engine\Map\Props`. **NOT FOUND**, with the floors named below.
+
+#### The question §7.9 asked cannot be asked of that field
+
+§7.9 framed this as "histogram prop model ids and see whether any lands in the `0x20000000` creature-class range." That is two unrelated numbering schemes that happen to share a leading `2`, and naming the collision is worth more than the histogram would have been.
+
+`mapchunks.decompose(0x20000004)` returns `(stage=Bloated=2, chunkType=Data=0, baseId=4)` — the leading nibble of a **chunk id** is its *stage* field. `CHAR_CLASS_MONSTER_BASE = 0x20000000` (`toolkit/authsrv/agents.py:58`, from `ChCliApi:6312`) is the top nibble of an **agent class id**, a runtime concept that never appears in the archive. **SOURCE-CODE** for the constant, **OBSERVED** for the decomposition.
+
+The field the question wanted histogrammed is a **u16** at prop record offset `+0`. Corpus-wide (n = 285,670 records, 349 maps) its range is **min 0, max 439, 440 distinct values** — nineteen times below the `0x2000` bound the earlier 6-map probe reported, and four orders of magnitude below `0x20000000`. A 16-bit field cannot hold a 32-bit tagged id, so the search as posed has no failing branch. **OBSERVED.** (Prior sample maxima — 228 over 6 maps, 336 over 40 — were sample artifacts stated as observations; the full-corpus figure is 439.)
+
+The answerable question is what the index *resolves to*, and it resolves cleanly.
+
+#### What a prop record actually is
+
+Independently re-walked this session by two decoders that share no code, over the full corpus: **349 map heads (flags 259), 285,670 records, 334,725 ring points, ~478 s**.
+
+| Offset | Type | Field | Corpus evidence (n = 285,670 unless noted) |
+|---|---|---|---|
+| +0 | u16 | model index | min 0, max 439, 440 distinct; resolves — see below |
+| +2 | f32 ×3 | position x, y, z | x and y are **integer-valued in 285,670/285,670**; z integer in 5.03% |
+| +14 | f32 ×3 | basis vector *a* | orthonormality residual **3.371e-08** at this offset |
+| +26 | f32 ×3 | basis vector *b* | next-best offset +18 scores 1.976 — eight orders of magnitude worse |
+| +38 | f32 | scale | **193 distinct values**, a uniform grid: `scale × 32768 ∈ {255k+1 : k = 64..256}` |
+| +42 | f32 | radius | a deterministic function of `scale` within every same-model group, 31,643/31,643 |
+| +46 | u8 | flags | **73 distinct values**, max 200, all 8 bit positions used, mode 0 at 54.9% |
+| +47 | u8 | ring count | 0 (248,122), **never 1, never 3**, then 4..109 |
+| +48 | Vec2f × n | footprint ring | world-space; first == last **bit-identically in 37,505 of 37,548** ring-bearing records |
+
+**OBSERVED**, and the walk closes (`p − 10 == arraySize`) on **349/349** maps, props chunk version 17 on 349/349. The closure is discriminating but not as discriminating as it sounds: a naive fixed 48-byte stride still closes on **14 of 349** maps and a rival that swaps `+46`/`+47` closes on **6 of 349**, so a three-map spot check could have "confirmed" a fixed stride. Say 14/349, not 0/349.
+
+Three things here are new relative to `studies/customarea/FINDINGS.md` §5 and each is a check that could have failed:
+
+- **x and y are always whole numbers** (285,670/285,670, only fractional part observed is 0.0), while z and radius carry ordinary float precision (radius integer in 0.015%). This is what manufactures the false positives in the class-tag scan below.
+- **`scale` is a ~7.6-bit quantized field**, not a free float and *not* integer-valued (0 of 285,670 are integers). Step 255/32768 = 0.007781982421875, min 0.498077, max 1.992218, and **1.0 is not representable** — the mode is 0.996124 at 47.28% of all props.
+- **`ring_count` is never 1 and never 3.** An explicitly-closed polygon needs ≥4 stored points for a triangle; the histogram obeys that prediction without having been asked to. This is corroboration of the footprint reading from a direction the reading did not control.
+
+Per-model vs per-placement, over 31,643 within-map same-model groups of ≥2 placements — constant-within-group fractions: x 0.1%, y 0.1%, z 0.8%, *b* 8.6%, *a* 48.2%, scale 36.7%, radius 36.7%, flags 55.3%, ring_count 69.1%. **OBSERVED.** Nothing in the record is per-record monotonic: **14 of 14 parsed fields, 0/349 maps strictly increasing** across a map's own record order, so there is no placement/spawn autoincrement id.
+
+Ring geometry, corrected: `mean(|ring − pos|)/radius` median **0.825** (p10 0.452, p90 2.158); the apt statistic, since radius is `scale × max` model radius, is `max(|ring − pos|)/radius` median **1.115** (p10 0.660, p90 3.901). A ~5× decile span is "the right order of magnitude", not "almost 1:1". The label is **CORROBORATED**, not OBSERVED — customarea §5 already reads `+48` as a world-space footprint polygon.
+
+#### What the model index resolves to
+
+`+0` is a **per-map index into that map's own Props Dependencies chunk `0x21000004`**, and the entry it selects names a file in the archive's own file-id table. **CORROBORATED** (customarea §5 published the mechanism; both this session's walkers reproduce it), with three controls that could have gone red:
+
+| Control | Result | n |
+|---|---|---|
+| `max(model_idx) < len(dependency list)` | in range **346/346**, out of range 0 | 346 maps with a non-empty Props chunk |
+| Slack (`len − 1 − max index`) | median **0**; exactly 0 in **197 of 346** maps | 346 |
+| Resolution through `archive.file_id_table()` | **0 of 285,670** resolved ids missed | 285,670 |
+| Cross-map falsification: map *i*'s indices against map *j*'s list | forces an out-of-range in **≥44.9%** of 119,716 pairings | 119,716 |
+| Index 0 | names **10 distinct file ids across 12 maps** → per-map local, measured not inferred | 12 |
+
+The last two are what make the first one a check rather than a tautology. And a loose end in customarea §5 closes on the way past: the **3 maps whose Props chunk holds zero records are exactly the 3 lacking a `0x21000004`**, which explains its unexplained "Props 349 / `0x21000004` 346".
+
+Resolved corpus: **285,670 instances → 8,420 distinct model file ids**, 6,748 of them appearing in more than one map (80.1%), the most-shared in 152 maps, span 9,340..386,938. Sampling 300 of the referenced files by type: **133 `ffna` type 2 (models), 167 ATEX (textures), nothing else.** Beyond the placed set, the 346 dependency lists hold 60,096 entries naming **18,733 distinct file ids** — so **10,313 models (55.1%) are declared as a map's prop dependencies and never placed by any record in the corpus.** That is where a creature model would most plausibly hide, and it was searched too.
+
+**The creature side, and the zero.** Reference set assembled from four independent sources, union computed rather than summed: `content/npcs.toml` (2 ids); GAME_SMSG `0x0056` field `v[2]` over the two live captures (126 messages, 8 connections, 54 definitions, **32 distinct**); GAME_SMSG `0x0057` MONSTER_COMPOSITE over the same captures (101 messages, **40 distinct** dwords, 0 of them among the 32); and `gw-preservation`'s `instance_definitions.go` FileId column, used only as verification per the second-gate carve-out (5 distinct non-zero, 4 already in the live set, 1 new). **Union: 74 resolvable creature-side model ids.**
+
+Intersection with the 8,420 placed models: **0**. Intersection with all 18,733 named: **0**. **OBSERVED.**
+
+The zero is not vacuous, but the *first* argument offered for that was wrong and is recorded under "Refuted". What carries it:
+
+- **Namespace.** All 33 ids of the first reference set, and all 40 of the `0x0057` set, resolve to MFT rows with `flags = 515` carrying `ffna` type 2 — the same file kind as **8,420 of 8,420** prop model ids. Only 34,281 of the file-id table's 171,048 entries (20.04%) land on such a row, so 73/73 doing so has P ≈ 9.2e-24 under a random-table-id null. This is also what makes `0x0056` field 2 a *model file id* as an OBSERVED fact — `studies/smsg/FINDINGS.md` labels that field "record dword 0. 23 distinct, large values; not resolved further", so calling them "creature file ids" was previously a RECONSTRUCTION.
+- **The right null.** Both sets are drawn from the archive's 34,281 model-file ids, of which 18,733 (54.65%) are named by the props system. P(zero hits | 74 draws) ≈ **3.9e-26**.
+
+#### What the client's own Props code says
+
+Read out of the pinned pristine build via `asserts.py` and `codescan.py`. **49 assert sites** across the seven `Engine\Map\Props\*` files — the whole population, reachable directly because `Assert.file` carries the full path: PrApi 19, PrIntersect 10, PrProp 8, PrAnimate 4, PrDataBloat 3, PrDataImport 3, PrCollision 2.
+
+The names the corpus **demonstrates** are struct members are the arrow-notation ones only: `prop->model`, `prop->modelData`, `prop->grIndex`, `prop->grCount`, and on the container `props->propArray`, `props->grModels`, `props->visMode`. `altitude`, `count`, `collisionPoints`, `portalPoints` and `dist` are **function parameters null-checked in a prologue**, not prop fields — disassembling `0x0073C970` (PrIntersect:265-267) shows the `push ebp / mov ebp,esp / cmp [ebp+8],0` idiom. That still beats the pure-mesh rival (the subsystem produces collision and portal geometry and altitude answers) but it does not license attributing those to the record. **SOURCE-CODE.**
+
+The load-bearing assert is `PrIntersect:186`:
+
+    prop->grIndex + prop->grCount <= props->grModels.Count()
+
+A prop's model reference is a **range into a per-container array bounded by that container's own `Count()`** — the client-side statement of exactly what the data side measured, reached independently. It kills the `0x20000000` framing from the code side: the reference is container-local by construction, and a container-local reference cannot be a globally tagged id. **SOURCE-CODE.**
+
+Props are wired into the pathing block-map, and the layout is readable: the function at `0x00721C40` (PathApi:507, :510) does `mov edi,[edi]` (`path.staticData`), `cmp esi,[edi+0x20]` (`map.Count()`), `imul ecx,esi,0x54` + `add ecx,[edi+0x18]` (`map.Ptr()`), then writes `[ecx+0x00]` and `[ecx+0x04]` through its two out-parameters. So **`path.staticData->map` is an array of 0x54-byte (84 B) records with `propIndex` at record `+0x00` and `propLayer` at `+0x04`** — a per-path-map-element prop reference. `PathDataImport:658 propCount <= path->staticData->map.Count()` is its load-time counterpart. **SOURCE-CODE + disassembly.**
+
+Animation: the 6-case jump table at `0x0073BC80` is **PrProp.cpp** (its asserts load the PrProp path string), not PrAnimate. PrAnimate proper begins at `0x0073BDA0`: it walks a pointer array at container `+0x1E4`/`+0x1EC`, increments `+0x1E0`, zeroes `+0x1C8`, and blends with `fld [ebp+0xC]` against a 7-slot ring index and a 7-entry float table at `0xA7022C` (the `0x24924925` magic is divide-by-**seven**, not three). Neither window reaches an agent list, a player pointer, HP or a target — only `Gr*` calls and PrProp's model loader. Label **RECONSTRUCTION**: the disassembly is observed; "scripted visual animation, not actor behaviour" is a partial-window inference over ~130 instructions.
+
+**The actor-side denominator, which is the result.** The informative sample is not the 19,758-assert corpus — it is the **692 asserts across 73 Agent/Char/Gadget files** (ChCliApi 105, AgAgent 70, AvApi 36, AvChar 32, GmAgentCommander 30, AgMsg 27, AvSelect 26, …). **Zero** of them reference map props. The only `prop` hits in char code are `ChCliApi:51/67`'s generic *Property* framework switch — a different, unrelated ArenaNet abstraction sharing the word, confirmed by namespace (it never uses `propArray`/`propIndex`/`propLayer`/`grModels`) and by its neighbours asserting `targetDef == GW_AGENTDEF_CHAR` and `baseClass == CHAR_CLASS_PLAYER_BASE`. **CORROBORATED, n = 692.**
+
+And the positive structural answer: `GdCliApi.cpp:430 agentDef == GW_AGENTDEF_GADGET`, with five asserts across `GdCliApi.cpp`/`GdCliBase.cpp` including `MissionCliValidateTeam(teamToken)` twice. **Interactive world objects in this client are gadget *agents*, not props** — which is why the Props corpus is silent about actors, and why looking for creatures in the Props chunk was looking in the wrong subsystem.
+
+#### The chunk census — what is still carried opaquely
+
+23 slots. Four are NULL-load and never authored (`0x01`, `0x05`, `0x0B`, `0x0D`); 19 are present. Code coverage in this repo, corrected:
+
+| Coverage | Slots | Note |
+|---|---|---|
+| Fully field-decoded in production | Path, Map Parameters | Map Parameters via `mapbuild.py:265-318`, a complete 41-byte codec including the 16-byte content id |
+| Framed, five arrays carried | Terrain | `TERRAIN_CARRIED_FIELDS` = tiles, bits, shade, table_a, table_b — meaning **NOT FOUND** |
+| Test-oracle only | Props | `test_mapexport.py:read_props`, and it covers **32.58%** of the chunk (below) |
+| Verified donor constants, no field parsed | Header, Water, Locations, Collision | `mapbuild.py`'s five-mandatory-constant path |
+| **Zero field-reading code anywhere in the repo** | Zones, Mission, Environment, Light, Shore, Sight, Sound, CubeMap, VisData, Occluders, PathEngine | 11 slots |
+
+Byte totals reproduce independently against customarea §2-3 to the tenth of a megabyte (Terrain 471.19 / Path 156.49 / Props 50.32 / Sight 29.86 / Zones 3.92 MB) and presence counts match exactly (CubeMap 207, VisData 235, Occluders 117, PathEngine 1 — row 26209 only). **CORROBORATED, n = 698 rows (349 Bloated + 349 Stripped), 0 undecodable chunk ids.**
+
+**The largest unread structure in the map format sits inside the Props chunk itself.** On **0 of 349** maps does the prop-array walk reach the end of the chunk: the array occupies **16,394,148 B (32.58%)** and **33,925,411 B (67.42%)** lie past it, summing to the 50,319,559 B census exactly. With the prediction stated first — "a `{u8 tag, u32 size}` record list, the framing `terrain.py` already uses, closing to the exact byte" — that region **closes 349/349**, terminator tag 255, with both ±1 start-offset controls closing **0/349**. Two tag sequences only: `(1,2,3,4,6,255)` on 262 maps and `(1,2,3,4,255)` on 87, mirroring terrain's own two accepted sequences. Byte split: tag 1 = 33,204,388 B (66.0% of the entire Props chunk), tag 3 = 616,516, tag 6 = 43,374, tag 4 = 26,118, tag 2 = 24,980, tag 255 = 0. **OBSERVED** for the framing and census; the meaning of tags 1/2/3/4/6 is **NOT FOUND**. This is the honest reading of the ground-truth line "the walk closes when `p − 10 == arraySize`": true, and much weaker than it sounds.
+
+**Sight**, §3.10's own LOS candidate. Its first 8 bytes are byte-identical on **all 349** maps — `THGS` (`SGHT` reversed) plus u32 version 2, exactly one distinct value. Size correlates with prop count r = 0.860 against rect area r = 0.500 (Spearman 0.857 / 0.576), the largest props-lean of any chunk kind *other than Props itself* (Props 0.958 / 0.595, gap 0.363, edging Sight's 0.360). The method's own control sits at the opposite pole in the same table: Terrain 0.571 / 0.991 (Spearman 0.664 / 0.962). Spearman preserved every conclusion, which matters because Pearson over sizes spanning four orders of magnitude is dominated by a handful of maps.
+
+A stronger check than the correlation, from data both angles already had: **exactly 3 maps carry zero props (rows 26209, 46196, 71496), and those same 3 are exactly the maps whose Sight chunk sits at its 44-byte floor.** Set equality, n = 349, refutable in either direction.
+
+Sight's record framing is **NOT FOUND** and now provably so: the two growing header u32s at `+8`/`+12` are multiples of 1024 on 349/349 and run **4.7× to 93× larger than the whole chunk** (max 21,236,736 against a 478,412-byte chunk). They are allocation sizes, not counts, so no divisor built from them could ever close — which is why all four tested divisors (32-cell terrain grid, padded +1 grid, raw cell count, prop count) failed.
+
+Two corrections to §3.10's own prose, both from the same head/partner mix-up and both needing fixing in place:
+
+- **Locations** is a constant **13 B Bloated / 9 B Stripped**, 349/349 each, 0 exceptions — §3.10 line 549 has it reversed. Two in-tree, no-vault witnesses agree: `test_mapfile.py:94` pins `(0x2000000A, 13)`, and `mapbuild.py`'s `BORROWED_SIZES` has `LOCATIONS_CHUNK: 13`.
+- **Props** is **51 B – 657 KB Bloated / 12 B – 97 KB Stripped** — §3.10 line 551 has it reversed too.
+
+And a search-shape note worth keeping: §3.10's Mission-chunk link counts (next 88, town 53, prev 17) reproduce **exactly** — but only with the four bytes searched in **reverse character order**. A forward-ASCII search returns 0, 0, 0 across all 349 maps. Scoped claim: it holds for Mission's link tokens and Sight's signature; the format's magics are not uniformly 4CC (Mission's own is the numeric `0x40010020` v10).
+
+#### Refuted
+
+Written down so nobody rebuilds them.
+
+1. **"Reproducing customarea §5's 8,420 / 285,670 headline from an independent walker corroborates the interpretation."** No. Both walkers run through `mapchunks.decode_dependencies` and `archive.file_id_table` over the same bytes; the reproduction is deterministic and *must* happen. It proves no coding error, not that the reading is right. The witness that can fail is the cross-map index control (44.9% of 119,716 pairings forced out of range) and customarea's own cross-file radius identity.
+2. **"The zero-overlap is non-vacuous because all 33 creature ids sit inside the prop-id span."** Refuted numerically: prop model ids occupy only 8,022 of the 333,748 integers in the creature span (density 2.404%), so under exactly that null P(zero hits | 33 draws) = **0.448** — a coin flip. "The ranges overlap" is not evidence. The namespace and model-id-null controls above are.
+3. **"Reuse across maps is atypical of area-specific monster rosters."** False for this game — monster models are among its most heavily reused assets (Charr across every Ascalon map, Skale across half a continent). Reuse does not discriminate scenery from creatures at all; the claim carried no independent weight.
+4. **"`scale` is integer-mantissa-quantized like x and y."** Refuted: 0 of 285,670 are integers. It is a 193-value uniform grid on which 1.0 does not exist.
+5. **"`radius` and `scale` are constant-within-group in exactly the same count of groups (1325/3583) — an exact match."** A 40-map coincidence. Corpus-wide it is 11,600 against 11,603 of 31,643 groups. The true statement is stronger and different: radius is a *function* of scale within every group, 31,643/31,643.
+6. **"`flags` decomposes as a union of single bits, which an id would not show."** A check that cannot fail — every integer in 0..255 is a union of single bits. The non-vacuous statement is the cardinality: 73 values over 285,670 records against 8,420 distinct models, constant within 55.3% of same-model groups.
+7. **"The exact-range class-tag scan establishes NOT FOUND."** The instrument has no power. Extending the same scan to the whole Props payload at every byte offset — which is the only version that reaches ring bytes at every alignment and every record boundary — returns **73,598 hits over 16,388,913 windows against a uniform expectation of 500 (147×)**. A scan emitting 73,598 false positives could not have detected a few hundred real ids. The NOT FOUND stands on the structural argument (all 48 bytes accounted for by fields with independent evidence, and `+0` resolving to a model or texture file), not on the scan. The loose "high nibble in {2,3}" variant is worse still: it scores **100.00%** at offset +38, the known `scale` field, purely by IEEE-754 construction over the range [0.498, 1.992).
+8. **"The ring polygon's shape is per-model, a 2.5× self-similarity gap."** The metric normalised only by `scale` and therefore scored footprint *size* and shape together — and per-model size is already known from the radius identity. Dividing each profile by its own mean, the pure-shape gap is **1.32×** (0.1502 vs 0.1987) with heavily overlapping deciles, and **0 of 12,187** same-model pairs share an identical profile. "A per-model hull transformed per placement" is not supported either.
+9. **"PathApi:507's `propIndex` feeds a `blockMap` write three lines later."** There is a **function boundary** between them: the function returns at `0x00721CF9`, six `int3` bytes follow, and a new prologue begins at `0x00721D00` — `blockMap`/`mapDims` (:573/:574) are *its* argument checks. Also backwards: `propIndex`/`propLayer` at :507 are out-parameters, not values received. The prop↔pathing link survives on the 0x54-byte record layout above, which is better evidence than the claim it was traded for.
+10. **"PrAnimate.cpp implements a 6-case mode-selected state machine."** That code is PrProp.cpp, and the divide is by seven.
+11. **"§3.10 never mentions VisData."** It does, by name, in the same paragraph. VisData's own numbers are the Path/navmesh profile (props 0.809 / area 0.784; Spearman 0.861 / 0.838), not Sight's props-lean, and its magic is `VISD`. Its one genuinely interesting figure survives — floor occupancy **2/235 (0.9%)** against CubeMap 168/207 (81.2%) and Occluders 87/117 (74.4%) — but no measurement here makes it a spawn candidate.
+12. **"Sight being generated at bloat time closes the spawn reading *structurally*."** It is OBSERVED (Stripped Sight is a constant 9-byte stub, 349/349) plus inference, not SOURCE-CODE — customarea's own open question is still "read StBuild.cpp's 17 asserts". And Stripped is not established as the authoring stage: stage 0 = Raw is, and it was never shipped. Very unlikely, not impossible.
+13. **"§3.10 undercounts its opaque slots by ~11×."** Different metric — §3.10's sentence is about which slot's *contents* remain inferred with respect to spawn data, not about repo code coverage — and its own next sentence already names a second opaque slot. The honest correction is that §3.10 asserts contents for Zones, Shore, Sight and VisData that it never measured.
+14. **`asserts.py --modules` conflates source files sharing a basename.** `modules()` keys on the basename and prints the lowest-VA path, so `Gw\Pref\PrApi.cpp` (67 sites) and `Engine\Map\Props\PrApi.cpp` (19) merge into one `86  P:\Code\Gw\Pref\PrApi.cpp` line and the Props file never appears in the census at all. **10 of 855 module keys collide**; PrApi is the only cross-directory one and therefore the only one that can hide a whole module. `by_module()` inherits it, so `codescan.py --in PrApi` silently takes over-wide bounds. Label **OBSERVED** (our tool, our source) — not SOURCE-CODE, which is reserved for the client binary. Filed as a background task, not fixed in a read-only tree.
+
+**Where the angles disagreed.** The resolution angle wrote "corpus-wide on the props side" while walking only the 349 **Bloated** heads; all 349 Stripped partners carry their own `0x10000004`, and 346 carry `0x11000004`. The hole closed by luck rather than by method — the Stripped dependency lists name **exactly the same 18,733 file ids**, 0 in either direction — but the Stripped *record* encoding is genuinely different (same signature `0x39583392`, same version 17, yet the Bloated 48+8N stride desyncs on the first map tried; header reads `u32 sig, u16 ver, u32 count` with the count matching Bloated in 39 of 40; records average ~21-26 B, n=40). Row 26209's 10-byte Stripped props chunk reads 262144 there and is unexplained — reported rather than dropped. The record and resolution angles reached the same NOT FOUND by different routes and disagree about which carries it; the resolution is load-bearing and the scan is not.
+
+#### What this leaves open
+
+- **The Props tail's tags 1/2/3/4/6** — 66.0% of the entire Props chunk corpus in tag 1 alone, framed and walkable today, walked by nothing in this repo. This is the single most valuable next read in the map format, and it is inside the one slot §3.10 singled out.
+- **The 10,313 models declared as prop dependencies and never placed** (55.1% of the 18,733 named). What they are is NOT FOUND.
+- **The Stripped props record encoding**, and row 26209's anomalous 10-byte chunk.
+- **The Zones chunk** — ~1,548 distinct model files referenced, undecoded in both stages, and its Stripped form carries UTF-16 authoring paths its Bloated form does not. The other plausible home for authoring-side data.
+- **Sight's payload past its 8-byte header**, all four framing hypotheses refuted.
+- **The negative's real floor.** 74 creature model ids is a tiny slice of Guild Wars' monster roster: two capture sessions across three early-game maps plus a seven-row upstream fragment. *"No creature model anywhere in the game is ever placed as a prop"* is **UNVERIFIED** and unreachable from these sources. Nor was a duplicate model file storing the same geometry under a different id tested. What is established is the corpus-wide-on-the-props-side zero for every creature we have actually observed.
+- **The assert corpus's structural blind spot**: an unasserted plain read leaves no trace by construction. Floor: 19,758 expressions read, 3 named-unreadable, **370 assert call sites corpus-wide the pattern scanner cannot decode**, of which at least 3 sit in the Props neighbourhood (`[0x738000,0x73F000)`: 164 call sites against 161 decoded) and could not be localised to a file. Four of the five words originally searched — creature, npc, spawn, critter, mob — return 0 because ArenaNet does not write them; `monster` returns 2 sites, both actor-side. Positive controls confirm the grep works: agent 209, skill 215, model 177.
+- **Two customarea corpus counts that do not reproduce**: `a == (0,0,-1)` measured 180,391 against a published 180,393, and `b[2] == 0` measured **182,646 against 185,389** — a 2,743 gap, probably an exact-zero vs tolerance difference, unexplained and unexamined.
+- **Row 26209's map identity** stays owner-gated (the area table carries no map file id), but a free partial answer arrived: it is one of the three zero-prop, Sight-at-floor maps. "Why does exactly one map carry PathEngine" is therefore a question about degenerate maps, not about content.
+- **§3.10's two reversed size ranges** (Locations, Props) should be corrected in place.
+
+#### What the orchestrator re-ran
+
+Three load-bearing claims were re-measured from scratch before this section landed.
+**All three reproduce**, one with a correction to my own scouting figure and one
+with a detail the fan-out glossed.
+
+| claim | verdict | the re-run |
+|---|---|---|
+| the tail is ~67% of the chunk and frames as `{u8 tag, u32 size}` | **CONFIRMED** | 60 maps: body 32.68% / tail 67.32%; framing closes **60 of 60**; **both** ±1 start-offset controls close **0 of 60**; sequences `(1,2,3,4,6,255)` ×43 and `(1,2,3,4,255)` ×17; tag 1 = 65.8% of the corpus |
+| prop model ids never collide with creature model ids | **CONFIRMED** | index in range **60 of 60**; 4,573 placed and 6,442 named ids against a 109-id creature set built only from `npcs.toml` + `0x0056` + `0x0057`; intersection **0 and 0** |
+| `asserts.py --modules` merges colliding basenames | **CONFIRMED, and FIXED** | see below |
+
+**A detail the fan-out's "closes 349/349" glossed, and it is the reason my first
+check read 0 of 60.** The tag walk does not land on the chunk end: it lands **four
+bytes short, and those four bytes are `00 00 00 00`, on 60 of 60 maps.** My walker
+required exact closure and therefore rejected every map — a stricter test failing
+against a correct claim, which is the good direction for that error to run, but
+only because the sample size was printed next to the verdict. Record the trailer;
+a future decoder that emits the terminator and stops will produce a chunk four
+bytes short of retail's and round-trip nothing.
+
+**My own scouting number was a sample artifact and is corrected here.** I seeded
+the fan-out with "record offset +0 is a u16, values 0..228" from **6 maps**. Over
+40 maps it is 0..336; corpus-wide it is **0..439**. Nothing downstream depended on
+the maximum — the argument is that a u16 cannot hold a 32-bit tag, which holds at
+any maximum — but a figure I supplied as ground truth was narrower than I said,
+and an agent caught it.
+
+**The tooling defect is real, and it is ours.** `Asserts.modules()` grouped on the
+basename without extension while the CLI printed the *first* colliding file's
+path, so two source files sharing a name merged into ONE line carrying their
+SUMMED count under ONE of the two paths — `Engine\Map\Props\PrApi.cpp` (19 sites)
+printed as part of `86  P:\Code\Gw\Pref\PrApi.cpp`, with the Props file absent
+from the census entirely. **My count of how many basenames collide was wrong, and the fix that landed is not mine.** I counted basenames *with* the extension and got three (`CmpIo.h`, `OsInput.cpp`, `PrApi.cpp`). But `Assert.module` is the basename *without* the extension — which is the definition the census actually uses — and under it build 38797 has **nine** collisions. The two largest are the two largest rows of the whole report: `Base\rtl\Array.h` (4,431 sites) and `Base\rtl\List.h` (3,288) were printed under their `.cpp` siblings' paths at **4,433** and **3,295**, so the two biggest numbers in the census described no file in the image. `PrApi` is the one that produces a wrong *finding* rather than a wrong number, which is why this study met it.
+
+A parallel session on `claude/reconstruct-inaccessible-systems-6fa47e` found the same defect independently and fixed it more completely, so **their implementation is what is on `main` and mine was dropped at the merge**: theirs also merges case-only directory spellings deliberately (the image contains both `Base\Compress\` and `Base\compress\`, one file reached by two translation units) rather than silently picking one, exposes `spellings()` and `collisions()`, prints the collisions under `--modules`, and records that `codescan.module_bounds` on a collided name returns a 2.4 MB range — a silent *widening* of every field search inside it, which is the half I had not traced. Their `test_codescan.py` §8 also opens with a negative control asserting the collision still exists before anything rests on it. Recorded here because two sessions hitting the same defect from opposite directions on the same day is the most useful thing either of us learned about it: it was reachable from a props census and from a tooling audit, which means it was costing answers in both.
+
+**And I checked whether it contaminated the earlier Path read**, since I used
+`--modules` to enumerate that subsystem an hour before. **It did not** — no Path
+basename collides, verified over all 936 embedded source paths. Worth stating,
+because the alternative was hoping.
 
 ---
 
@@ -807,7 +1001,7 @@ Scripted keystrokes or clicks against ArenaNet in any form, including a "gentle"
 
 1. ~~**Read the immediate at `0x0080dfae`** — the cardinality of `CHAR_AI_MODES`.~~ **DONE 2026-08-11, and it closed as UI.** 3, across five bound sites; two independent three-arm switches; `AI_MODE_ICONS` also 3; `CHAR_AI_MODE_AGGRESSIVE` = 0; and the modes resolve to **Fight / Guard / Avoid Combat**. Every step could have refuted the prediction and none did. §2.2.1.
 2. ~~**Read the remaining `Engine\Map\Path` modules**~~ **DONE 2026-08-11 — all 88 asserts, no steering.** A spatial query library: trapezoids, portals, barriers, flood fill. Movement policy STAYS in the impossible tier. Three corrections to §2.1's accounting and one new closure (`CompassAIControl.cpp` is in the Compass **UI** directory) in §2.1.1.
-3. **Histogram Props-chunk model ids for one map** — closes the last of Gw.dat's 23 slots.
+3. ~~**Histogram Props-chunk model ids**~~ **DONE 2026-08-11 — no spawn table, and the question was malformed.** §3.10.1.
 4. **Run `msghandler.py` on opcode `0x0056`** — settles what the definition `flags` bits mean, from the client's own use.
 
 ---
@@ -873,7 +1067,7 @@ Play the R1.5 tape of ArenaNet's own recorded monster behaviour into our client 
 | 1 | ~~Is `CHAR_AI_MODES` a UI enum or a server-side AI concept?~~ **ANSWERED 2026-08-11: UI.** | *was:* one capstone read | 3 at five sites, two three-arm switches, `AI_MODE_ICONS` = 3, `AGGRESSIVE` = 0, and the labels are **Fight / Guard / Avoid Combat**. The lead closed and the binary negative is total. §2.2.1. |
 | 2 | ~~What do the definition `flags` bits mean?~~ **ANSWERED 2026-08-11: to the client, they are display.** | *was:* one `msghandler.py` run | Nine readers, every one `AvChar`/`AvApi` (the renderer) or `PtRoster`/`PtMinionRoster`/`CtlInstance` (UI panels). Bit 9 — the near-perfect combatant separator, 0/302 vs 282/283 — is an **animation gate**. The partition is real; the client cannot support a combat reading of it. §3.7.1. |
 | 3 | ~~Does `Engine\Map\Path` contain steering or pursuit?~~ **ANSWERED 2026-08-11: no.** | *was:* reading five more modules | All 88 asserts across 9 files (not 11) read: pure geometry, zero steering vocabulary, and no file name in the image's 936 contains `steer`/`pursu`/`chase`/`follow`/`patrol`/`wander`. `PathApi:753/754 obstacleCenter`/`obstacleRadius` is a second and stronger dynamic-obstacle witness. **Still unread: 3 files with zero asserts** — `PathBsp.cpp` and all of `Engine\Map\PathEngine\`. §2.1.1. |
-| 4 | Do monster spawn placements live in the Props chunk? | **One prop model-id histogram** for one map, off code `mapexport` already has. | Whether any id lands in the `0x20000000` creature-class range. Closes Gw.dat's last unmeasured slot. |
+| 4 | ~~Do monster spawn placements live in the Props chunk?~~ **ANSWERED 2026-08-11: no.** | *was:* one histogram | Every prop in all 349 maps resolves to a model file; **0** of them to any creature model id we can name. The client's Props subsystem has no actor vocabulary — interactive world objects are **gadget agents**, a disjoint subsystem. But **67% of the Props chunk is still unread** and is framed and walkable today. §3.10.1. |
 | 5 | Does the tick clock agree with the wire clock on the **existing** captures? | **One analyser run**, no new session. | The `0x001E` integral against the wire span, ≤50 ms. If red, every timed claim in the repo is suspect. |
 | 6 | Does windup scale with declared speed, or is it per-creature? | **One session** targeting a third declared speed, n≥8. | A creature at 1.33 or 2.475. Predicts windup in [0.43, 0.46] × its own declared base. |
 | 7 | Does unprovoked proximity aggro happen at all, and at what radius per creature? | **1–3 sessions**, the `approach` step, subjects that have not moved since create. | 10 point measurements across ≥3 types. **Refuted if** two creature types' brackets do not overlap — then it is a field, not a constant, as GWW says. **Also refuted if** a subject never reacts down to contact, in which case `AGGRO_RANGE` dies as a concept rather than being retuned. |
