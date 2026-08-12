@@ -371,7 +371,22 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   red. ~12 s),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
-  and that an unframeable opcode stops the framer instead of being framed past),
+  that an unframeable opcode stops the framer instead of being framed past, and
+  the whole enemy: a hostile that swings back, chases, turns to face you and
+  casts — each phase checked as a SHAPE the wire could contradict rather than as
+  a message count. Its last section is the one that earned the entry:
+  **every combat constant is asserted against a LITERAL written in the test
+  file.** That exists because on 2026-08-11 the monster-AI dive sabotaged them
+  one at a time and **twelve of fourteen could be set to a wrong value with all
+  125 checks green** — `ENEMY_MELEE_RANGE` 150→400, `AGGRO_RANGE` 1200→1100,
+  `SWING_WINDUP` 0.899→0.2, all PASS. Only `ENEMY_TURN_RATE` reddened, and it is
+  the only constant in the set corroborated to the bit. Not a coverage accident
+  but a shape: every other section computed its expectation *from* the symbol
+  under test, so the symbol was free to move and the test moved with it. **A
+  symbol appearing in a test file is not a check.** The same section reads
+  `skilltable.py`'s live table off build 38797 and cross-checks the enemy's bar —
+  which is how `authsrv.py`'s claim that all four bar skills are non-elite was
+  found false (276 is elite), the comment having been the only witness),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The

@@ -1157,12 +1157,51 @@ PLAYER_REVIVE_AFTER = 10.0 # seconds face-down. Longer than an agent's 8.0 on
 # swings, mean 0.899. We sent all three messages in the same instant, so the
 # damage number appeared on the same frame the animation began.
 #
-# WHAT IS NOT KNOWN, and the reason this is a constant rather than a ratio: all
-# six swings came from ONE agent at ONE declared attack speed (2.00 s), so
-# whether the windup scales with the weapon or is fixed cannot be told from this
-# corpus. 0.899/2.00 = 0.449 and 0.899 are equally consistent with n=1 speeds.
-# Taking the constant is the smaller claim.
-SWING_WINDUP = 0.899       # seconds between ATTACK_STARTED and the landing
+# AND THAT CONSTANT IS REFUTED, 2026-08-11, by the OTHER live capture -- which was
+# already in the vault on the day it was adopted. See studies/monsterai/FINDINGS.md
+# 3.5 and 10. The comment that stood here said "all six swings came from ONE agent
+# at ONE declared attack speed (2.00 s), so whether the windup scales with the
+# weapon or is fixed cannot be told from this corpus. Taking the constant is the
+# smaller claim." Every clause of that is true and the conclusion still does not
+# follow, because a constant is only the smaller claim when it is applied at the
+# speed it was measured at, and our Hatcher declares 1.33.
+#
+# Re-measured over BOTH captures, pairing conservatively (a start pairs only with a
+# landing preceding that attacker's next start, so a truncated swing is DROPPED):
+#
+#     declared 2.00 s   n=18   agents 40, 48 (mon1)   0.880 - 0.920 s
+#     declared 1.75 s   n=24   agents 46, 47 (band)   0.746 - 0.794 s
+#
+# The two windup clusters DO NOT OVERLAP -- an 86 ms gap, about twice either
+# cluster's own width -- while the two RATIO bands do. In seconds the creatures
+# disagree; as a fraction of each creature's own declared attack base they agree.
+# Pooled: mean 0.4458, sd 0.0073, range [0.4263, 0.4600], n=42.
+#
+# So the fixed model is dead, and 0.899 was worse than merely fixed: paired with our
+# declared 1.33 it implies a ratio of 0.6759, which is 47% ABOVE the largest ratio
+# ever observed. It lost to both surviving models, not just to this one.
+#
+# TWO CONFOUNDS, stated because a ratio read off two speeds is not a law:
+#   * two declared speeds across two creature pairs cannot separate "scales with
+#     declared speed" from "is per-creature and happens to track speed";
+#   * the 1.75 group carries the `band` token, so the comparison crosses an
+#     allegiance class as well as a speed. The `mon1` cluster ALONE still refutes
+#     0.899-at-1.33, so the correction stands either way -- but a third speed
+#     inside one class is what would close it, and the corpus has no third: one
+#     agent declares 2.475 and never lands a paired swing.
+SWING_WINDUP_RATIO = 0.4458   # of the attacker's OWN declared attack base
+SWING_WINDUP_MIN = 0.4263     # the observed band, used only by the test
+SWING_WINDUP_MAX = 0.4600
+
+
+def swing_windup(attack_speed):
+    """Seconds between ATTACK_STARTED and the landing, for a given attack base.
+
+    A FRACTION of the attacker's own declared speed rather than a constant. Our
+    Hatcher declares 1.33, so this returns 0.593 s where the old constant returned
+    0.899 -- a value no observation supports under either surviving model.
+    """
+    return SWING_WINDUP_RATIO * float(attack_speed)
 
 # IT WALKS NOW. Until this, `AGGRO_RANGE` was doing two jobs -- deciding both when
 # a hostile notices the player and when it can reach them -- so a Hatcher rooted to
@@ -1215,9 +1254,21 @@ ENEMY_FACING_EPSILON = 0.15            # radians (~8.6 deg) before re-announcing
 #
 #     0x009F [value 60 = GV_SKILL_ACTIVATED, agent 36, skill 83]
 #
-# n=1, in 20260810T235916 connection :62994, and n=1 is thin enough that it is
-# written down here rather than dressed up. It is still the only evidence there
-# is, and it beats inventing a message. (A near miss worth recording so nobody
+# n=1, in 20260807T143055 connection :62994 (the stamp read 20260810T235916 here
+# until 2026-08-11 -- the connection was always right and the capture was not),
+# and n=1 is thin enough that it is written down here rather than dressed up. It
+# is still the only evidence there is, and it beats inventing a message.
+#
+# AND THE SHAPE DIFFERS BY ACTOR, which is the actionable half and was not written
+# down anywhere until studies/monsterai/FINDINGS.md 10. All FIVE activations in the
+# corpus carry value 60, and they do not share a message:
+#
+#     NPC     x1   0x009F  [60, agent, skill]           <- no target slot
+#     player  x4   0x00A0  [60, caster, target, skill]
+#
+# We send the 0x009F form, so this code is right -- but it was right without that
+# being recorded, which is the same as being right by luck. (A near miss worth
+# recording so nobody
 # re-finds it: 0x00A0 value 20 GV_EFFECT_ON_TARGET looks NPC-exclusive on a census
 # keyed by slot 2, and is not -- in context the player casts, then value 20 lands
 # with the player's TARGET in that slot. Different value ids put different roles
@@ -1254,12 +1305,25 @@ ENEMY_FACING_EPSILON = 0.15            # radians (~8.6 deg) before re-announcing
 # WHAT IS ARENANET'S: every id, activation and recharge below, out of the client's
 # own table via toolkit/clientscan/skilltable.py on build 38797. All four are
 # profession 3 -- the profession this server already declares for the Hatcher at
-# spawn (0x00A6) -- campaign 1, non-elite, and each has a different type_code, so
-# the bar is four different kinds of thing rather than one skill four times.
+# spawn (0x00A6) -- campaign 1, and each has a different type_code, so the bar is
+# four different kinds of thing rather than one skill four times.
 #
-# WHAT IS OURS: the selection of these four from the 21 that qualify, the priority
-# order, and the damage. Recharges of 2, 5, 8 and 2 are the table's and are what
-# makes the order observable: the 8 s skill fires once and the 2 s ones cycle.
+# CORRECTION 2026-08-11: this comment used to say "campaign 1, non-elite". SKILL
+# 276 IS ELITE -- its flags word carries FLAG_ELITE (bit 2), which the table's own
+# decoder reports as elite=True, and bit 2 is set on 391 of 3,443 rows so it is a
+# real field rather than a one-row artifact. A monster with an elite skill is not
+# absurd (retail bosses have them), but the claim was made without checking and
+# nothing checked it, which is the point: see section 7c below, added in the same
+# commit, which reads the live table and would have caught it.
+#
+# WHAT IS OURS: the selection of these four, the priority order, and the damage.
+# Recharges of 2, 5, 8 and 2 are the table's and are what makes the order
+# observable: the 8 s skill fires once and the 2 s ones cycle.
+#
+# WHAT IS MODELLED AND WHAT IS NOT. The table also gives each of these four an
+# AFTERCAST of 0.75 s and an energy cost (5, 5, 5, 10). Neither is modelled --
+# aftercast is wirable from the same read and is not wired; energy is a pool the
+# client never sees (PLAN.md 1.7). studies/monsterai/FINDINGS.md 8.2.
 #
 #                  id  activation  recharge   type_code
 ENEMY_SKILL_BAR = ((276, 0.75, 2.0),   # 5
@@ -1624,10 +1688,19 @@ def enemy_attack_tick(send, state, conn_id):
                 land_swing(send, state, agent_id, agent, conn_id)
             continue
 
-        # A SKILL GOES FIRST when the bar has one ready. FIRST READY IN BAR ORDER,
-        # which makes the bar a priority list -- roughly what a Guild Wars monster
-        # does, and stated as roughly rather than measured. A recharge runs from
-        # the START of the cast, which is what the client's table means by one.
+        # A SKILL GOES FIRST when the bar has one ready. WHICH one is pick_skill's
+        # business and is a TESTING FIXTURE -- read its docstring before changing
+        # anything here. This comment used to say "first ready in bar order, which
+        # makes the bar a priority list -- roughly what a Guild Wars monster does";
+        # the selector became round robin two commits later and the claim was never
+        # true anyway. studies/monsterai/FINDINGS.md is the dive that went looking:
+        # a monster's skill-selection policy is not in the client, is not on the
+        # wire, and needs a capture campaign (its 7.6, tier 2).
+        #
+        # A recharge runs from the START of the cast, which is what the client's
+        # table means by one. That is a RECONSTRUCTION from the table's semantics,
+        # not an observation: no NPC in the corpus casts twice, so there is no
+        # recharge cycle anywhere to tell start-triggered from finish-triggered.
         slot = pick_skill(agent, now)
         if slot is not None:
             skill_id, activation, recharge = agent["skills"][slot]
@@ -1661,7 +1734,10 @@ def enemy_attack_tick(send, state, conn_id):
         # instead of one per swing.
         face_player(send, state, agent_id, agent, conn_id)
         start_swing(send, agent_id, conn_id)
-        agent["swing_lands_at"] = now + SWING_WINDUP
+        # `interval` is this agent's own declared attack base -- the same number it
+        # was told to the client in 0x0035. The windup is a fraction OF THAT, not a
+        # constant, so an agent that declares a slower weapon also winds up longer.
+        agent["swing_lands_at"] = now + swing_windup(interval)
 
 
 def face_player(send, state, agent_id, agent, conn_id, force=False):
@@ -1824,7 +1900,7 @@ def start_swing(send, agent_id, conn_id):
 
 
 def land_swing(send, state, agent_id, agent, conn_id):
-    """The closing half: the swing connects, SWING_WINDUP seconds later.
+    """The closing half: the swing connects, `swing_windup(interval)` seconds later.
 
     THE ORDER IS ARENANET'S, and it is the opposite of hit_enemy's. OBSERVED in
     the Lakeside tape: the landing is GV_MELEE_ATTACK_FINISHED and then the
@@ -1919,6 +1995,16 @@ def land_skill(send, state, agent_id, agent, conn_id):
     No MELEE_ATTACK_FINISHED here: that value names the end of a SWING, and 40 of
     the 42 in the live corpus are immediately followed by a property-16 damage from
     the same agent. A cast is not a swing.
+
+    SINGLE TARGET, ALWAYS, and this is the flag that was missing. Every skill on
+    the bar lands on PLAYER_AGENT_ID and on nothing else -- there is no area of
+    effect, no splash, no secondary target, and no line of sight. That is not a
+    reading of any evidence; it is the only shape this function has ever had, and
+    until 2026-08-11 it was the one simplification in the combat block with no
+    comment saying so while every equally-implied neighbour had one. GWW documents
+    a whole mechanic keyed to the absent one (scatter: foes run from the epicenter
+    of an area damage-OVER-TIME skill, and single-packet AoE does not trigger it) --
+    studies/monsterai/FINDINGS.md 4.4. Nothing here can express any of that.
     """
     player_pools(state)
     slot = agent.get("casting")
@@ -2188,7 +2274,10 @@ def create_agent_world(send, state, agent_id, entry, why,
 
 
 # Burrowing. The measured cycle, from vault/captures/live/20260807T143055 -- two
-# independent Lakeside visits, 151 worm re-creations, one burst shape and no exceptions.
+# independent Lakeside visits, 140 worm re-creations across 13 worm ids, one burst
+# shape and no exceptions. (This read 151 until 2026-08-11. The instrument that
+# produces the number is test_burrow.py section 2 and it says 140; three files
+# carried three different counts, which is what a number nothing re-derives does.)
 #
 # Only the two transition windows are fixed at 2.00 s. How long a worm stays OUT and how
 # long it stays HIDDEN are not periods at all: out ran 0.48-7.48 s and hidden 1.6-6.9 s
