@@ -2160,6 +2160,27 @@ parallel, with one safety change that is not optional — see its entry.
     stand on walkable ground** — FINDINGS 34 had seed/flood/contour as INFERRED, and
     this is the first observation of it, undiscoverable from the corpus because every
     retail map's point is already sensible.
+    **(e10b)** ✅ **DONE 2026-08-12.** `stripbuild.py` + `test_stripbuild.py` (39
+    checks, floor measured, 60th test in the suite): the E10 assembler out of the
+    scratchpad, with all three rules that rung cost as REFUSALS — order, the derived
+    rect, and `check_seed()`, which computes the quad slope under the Path chunk's
+    boundary point and refuses above 30° with a message naming `segments->Count()`.
+    Its controls are the measurement: the same point is accepted on flat ground. One
+    defect shipped and the test caught it — `cell_of` sent the `(0,0)` corner to row
+    `dim_y`, one past the end, because grid row 0 is world maxY.
+    **(e10c)** ⬜ **THE PROPS CHUNK, and it is an ARC rather than a loose end** —
+    scoped 2026-08-12 in [studies/customarea/PROPS.md](studies/customarea/PROPS.md).
+    The corpus gives the terminator (`0xFF`, so it is a tag pipeline like terrain and
+    path) and **342 distinct sizes over 349 maps**, but no framing law: `9 + n*k` and
+    `12 + n*k` fire 0/349 for every stride to 200 under both a u32 and a u16 count,
+    and neither the terrain chunk's `{u8 tag, u32 size}` nor `{u8 tag, u16 count}`
+    closes on both of the two smallest chunks. The parse chain IS pinned —
+    `0x00712200` → `0x00738A90` → `0x0073CC80`, which allocates 0x228 bytes and calls
+    `0x00737B40`; the tag walk is at or below that and is unread. **The payoff is not
+    the byte count** (props is 12 of `stripbuild`'s 54 borrowed bytes, so the 97.69%
+    barely moves): it is that props is where OBJECTS live, and FINDINGS 34 has it
+    supplying the portal and collision point pairs, so until it is read a map from
+    this toolkit can have our ground and not one tree, wall, door or portal on it.
     **(e10-next)** ⬜ Only the TERRAIN is ours. Props, zones, collision and Map Parameters in
     FINDINGS 38's map are ArenaNet's, so FINDINGS 34's props hard gate was satisfied by
     their data. An end-to-end authored map — §32's Blender pipeline through
