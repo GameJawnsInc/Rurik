@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=125)
+LEDGER = checks.Ledger("agent lifetime", floor=148)
 
 
 def main():
@@ -185,6 +185,7 @@ def main():
     section_chase()
     section_facing()
     section_enemy_skill()
+    section_constants()
     return LEDGER.verdict()
 
 
@@ -991,6 +992,163 @@ def section_enemy_skill():
               "and spawn_enemy carries the skill from the content row",
               "`entry` is a closed literal; a key that is not named there never "
               "arrives, however it is spelled in world.toml")
+
+
+def section_constants():
+    """Every combat constant, against a LITERAL written here.
+
+    WHY A LITERAL. On 2026-08-11 studies/monsterai/FINDINGS.md 5 sabotaged this
+    server's combat constants one at a time and re-ran this file. TWELVE OF
+    FOURTEEN could be set to a wrong value with all 125 checks still green:
+
+        SWING_WINDUP      0.899 -> 0.2      125/125 PASS
+        ENEMY_MELEE_RANGE 150.0 -> 400.0    125/125 PASS
+        AGGRO_RANGE      1200.0 -> 1100.0   125/125 PASS
+        ENEMY_TURN_RATE   2pi/3 -> 1.0      RED     <- the only one
+
+    That is not an accident of coverage, it is a shape: every other section
+    computes its expectation FROM the symbol under test, so the symbol is free to
+    move and the test moves with it. A symbol appearing in a test file is not a
+    check. `test_burrow.py` is the model that got this right -- it writes 2.00 in
+    the test file and compares.
+
+    So this section is deliberately dumb. It carries the number, not the name.
+    Changing a constant now costs a second edit HERE, and that edit is where you
+    have to say what changed and why -- which is the whole point, because two of
+    these are measured, one is corroborated to the bit, and the rest are ours.
+
+    IT IS NOT A CLAIM THAT THE VALUES ARE RIGHT. Most of them are invented and the
+    `why` column says so. It is a claim that they cannot change SILENTLY.
+    """
+    import authsrv
+
+    # (name, literal, label, why)
+    PINNED = (
+        ("ATTACK_RANGE", 1500.0, "OURS",
+         "how far the PLAYER may reach. Nothing measured it"),
+        ("AGGRO_RANGE", 1200.0, "OURS",
+         "when a hostile notices, and its leash. GWW says the aggro bubble is "
+         "1012 and that named creatures differ in BOTH directions, so this is "
+         "not even the right SHAPE -- it should be per-creature "
+         "(studies/monsterai 4.2)"),
+        ("ENEMY_MELEE_RANGE", 150.0, "OURS",
+         "reach. Refuted from both sides at once: ArenaNet's own models strike "
+         "from ~65, ~599 and ~706 units, so no single number is right "
+         "(studies/monsterai 3.3)"),
+        ("ENEMY_HIT_FRACTION", 0.10, "OURS", "damage per swing"),
+        ("HIT_FRACTION", 0.15, "OURS", "the player's own swing"),
+        ("REVIVE_AFTER", 8.0, "OURS", "how long an agent stays dead"),
+        ("PLAYER_REVIVE_AFTER", 10.0, "OURS",
+         "a timer, not a resurrection shrine. n=0 player deaths in the corpus"),
+        ("ENEMY_MOVE_RATE", 0.75, "OURS",
+         "216 u/s. NEVER sent to a hostile in the corpus -- ArenaNet's hostiles "
+         "take 0.2778, 0.3333, 0.3472 and 1.0 (studies/monsterai 3.4)"),
+        ("ENEMY_DEST_RESEND", 120.0, "OURS", "bandwidth, not mechanics"),
+        ("ENEMY_FACING_EPSILON", 0.15, "OURS", "bandwidth, not mechanics"),
+        ("ENEMY_SKILL_FRACTION", 0.25, "OURS",
+         "flat for every skill on the bar, on purpose"),
+        ("ENEMY_ATTACK_SPEED", 1.33, "UPSTREAM",
+         "agents.ATTACK_SPEED['axe']. The base x modifier FORMULA is corroborated "
+         "against the client's own fmul; the 1.33 itself is the wiki's"),
+        ("SWING_WINDUP_RATIO", 0.4458, "OBSERVED",
+         "mean of 42 paired windups over both live captures. THIS ONE IS "
+         "MEASURED -- see the band checks below"),
+    )
+    for name, literal, label, why in PINNED:
+        got = getattr(authsrv, name)
+        LEDGER.ok(got == literal,
+                  f"{name} is still {literal} ({label})",
+                  f"{got} against the literal in this file -- {why}")
+
+    LEDGER.ok(abs(authsrv.ENEMY_TURN_RATE - 2.0 * math.pi / 3.0) < 1e-12,
+              "ENEMY_TURN_RATE is still 2*pi/3 (CORROBORATED)",
+              f"{authsrv.ENEMY_TURN_RATE!r} -- ArenaNet's own largest quantised "
+              "turn rate, bit-identical, and the ONLY constant in this list the "
+              "suite could already catch")
+
+    # --- the windup, which is a ratio because a constant was refuted -----------
+    #
+    # The band is ArenaNet's, measured over both captures. A ratio outside it is
+    # not a tuning choice, it is a value no observation supports.
+    OBSERVED_MIN, OBSERVED_MAX = 0.4263, 0.4600
+    LEDGER.ok(OBSERVED_MIN <= authsrv.SWING_WINDUP_RATIO <= OBSERVED_MAX,
+              "the windup ratio sits inside the band ArenaNet's own swings drew",
+              f"{authsrv.SWING_WINDUP_RATIO} in [{OBSERVED_MIN}, {OBSERVED_MAX}] "
+              "-- 42 paired windups, 4 attackers, 2 declared speeds, both live "
+              "captures. The two windup CLUSTERS do not overlap (86 ms apart); "
+              "the two RATIO bands do, which is the whole argument")
+    LEDGER.ok(not hasattr(authsrv, "SWING_WINDUP"),
+              "and the fixed SWING_WINDUP constant is GONE, not merely unused",
+              "0.899 s paired with our declared 1.33 implies a ratio of 0.6759 -- "
+              "47% above the largest ratio ever observed. Leaving the name bound "
+              "invites a future call site to reach for it")
+    slow, fast = authsrv.swing_windup(2.0), authsrv.swing_windup(1.0)
+    LEDGER.ok(slow > fast and abs(slow / fast - 2.0) < 1e-9,
+              "and a slower declared weapon winds up proportionally longer",
+              f"{fast:.4f}s at 1.0 against {slow:.4f}s at 2.0 -- a windup that "
+              "does NOT move with the declared speed is the refuted model, and "
+              "this check is what makes reverting to it cost a red run")
+    LEDGER.ok(abs(authsrv.swing_windup(1.33) - 0.5929) < 1e-3,
+              "our own Hatcher's windup is 0.593 s, not the 0.899 it shipped with",
+              f"{authsrv.swing_windup(1.33):.4f}s -- the number that actually "
+              "changed on the wire, named here so the behaviour change is visible "
+              "in the test and not only in the diff")
+
+    # --- the bar against the client's OWN table, not against our comment -------
+    #
+    # This is the check that would have caught the elite error: authsrv.py claimed
+    # all four bar skills were "campaign 1, non-elite" and 276 is elite. Nothing
+    # read the table, so the comment was the only witness and it was wrong.
+    try:
+        import pathlib
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "clientscan"))
+        import skilltable
+        exe, _why = skilltable.find_exe()
+        data = pathlib.Path(exe).read_bytes()
+        base, count, _score = skilltable.locate_table(data)
+        rows = {i: skilltable.parse_record(data, base, i) for i in range(count)}
+    except Exception as ex:                                    # pragma: no cover
+        # NAMED, not swallowed. The first version of this handler said "no
+        # readable client build" for every failure and its actual cause was a
+        # method name that does not exist -- a skip that lies about WHY is worse
+        # than a red check, because it reads as an environment problem forever.
+        LEDGER.skip("the bar vs the client's own skill table",
+                    f"{type(ex).__name__}: {ex}")
+        rows = None
+
+    if rows:
+        bar = authsrv.ENEMY_SKILL_BAR
+        missing = [sid for sid, _a, _r in bar if sid not in rows]
+        LEDGER.ok(not missing,
+                  "every skill on the bar exists in the client's own table",
+                  f"missing {missing} of {[b[0] for b in bar]}")
+        bad = [(sid, a, rows[sid]["activation"]) for sid, a, _r in bar
+               if sid in rows and abs(rows[sid]["activation"] - a) > 1e-6]
+        LEDGER.ok(not bad,
+                  "and each activation matches the table to the millisecond",
+                  f"{bad or 'all four agree'} -- a typo'd activation passed every "
+                  "check in this file before this line existed")
+        bad_r = [(sid, r, rows[sid]["recharge"]) for sid, _a, r in bar
+                 if sid in rows and abs(rows[sid]["recharge"] - r) > 1e-6]
+        LEDGER.ok(not bad_r,
+                  "and so does each recharge",
+                  f"{bad_r or 'all four agree'}")
+        elite = sorted(sid for sid, _a, _r in bar
+                       if sid in rows and rows[sid]["elite"])
+        LEDGER.ok(elite == [276],
+                  "and exactly one bar skill is elite, which is 276",
+                  f"{elite} -- authsrv.py claimed all four were non-elite until "
+                  "2026-08-11. This is not a rule about what a bar may contain; "
+                  "it is a pin so the COMMENT and the TABLE cannot drift apart "
+                  "again. flags bit 2 is set on 391 of 3,443 rows, so it is a "
+                  "real field and not a one-row artifact")
+        prof = sorted({rows[sid]["profession"] for sid, _a, _r in bar
+                       if sid in rows})
+        LEDGER.ok(prof == [3],
+                  "and all four share the profession the Hatcher is declared with",
+                  f"{prof} against the 3 sent at spawn in 0x00A6 -- the one "
+                  "non-arbitrary thing about this selection")
 
 
 def section_named_builders(codec):

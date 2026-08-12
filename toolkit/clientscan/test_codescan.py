@@ -8,7 +8,7 @@ in it is an address. Addresses rot silently: a build changes, a tool's decoding
 changes, and the study becomes a confident description of a binary nobody has
 re-read. This makes each claim executable.
 
-Six of the seven sections can fail for the right reason:
+Eight of the nine sections can fail for the right reason:
 
   * §2 pins that `+0xEC` and `+0xF0` have exactly TWO writers each and where
     they are. §6o reported ZERO writers image-wide and that was the finding
@@ -38,6 +38,15 @@ Six of the seven sections can fail for the right reason:
     the two ExeArchive assert sites compiled into a shared tail block. §2 and
     §6 catch a regression in what the scan finds; §7 catches one in what it
     looks AT, which is the failure mode that produces a confident zero.
+  * §8 pins that the assert census names the file it counted. It grouped by
+    BASENAME until 2026-08-11, and nine basenames on this build name two source
+    files each, so nine rows summed two modules and printed the total under one
+    of their paths while the other vanished from the census. Its first check is
+    the negative control -- the collision itself -- and it reproduces the old
+    grouping inline so 67/19 is a difference between two live answers.
+  * §9 pins the same ambiguity one tool downstream: `module_bounds` matches a
+    substring, so `--in PrApi` silently WIDENS to 2.4 MB spanning two unrelated
+    modules. §7 catches the range being narrowed; §9 catches it being stretched.
 
 §1 is a guard, not a check: everything below is measured against one build.
 
@@ -87,25 +96,25 @@ NO_CAPSTONE = "needs capstone and pefile: python -m pip install capstone pefile"
 BUILD = 38797
 EXE_BYTES = 10_483_904
 
-# 56 checks in a green run with capstone present, MEASURED 2026-08-10 against the
+# 83 checks in a green run with capstone present, MEASURED 2026-08-11 against the
 # pinned pristine 38797 -- the banner's own total, not a count of `check(` lines:
-# 2 in §1, 5 in §2, 9 in §3, 6 in §4, 5 in §5, 3 in §6, 26 in §7. None of it is
-# fixture-dependent: every section reads that one binary and every loop is over a
-# tuple written into this file, so a capstone run scoring fewer has had a section
-# stop executing rather than found less data.
+# 2 in §1, 5 in §2, 9 in §3, 6 in §4, 5 in §5, 3 in §6, 26 in §7, 19 in §8, 8 in
+# §9. None of it is fixture-dependent: every section reads that one binary and
+# every loop is over a tuple written into this file, so a capstone run scoring
+# fewer has had a section stop executing rather than found less data.
 #
-# Without capstone, §3's stdlib half and §7b's: 16 checks, measured the same day
-# by blocking the import. Hence two floors rather than one. A flat 16 would let a
-# capstone run lose the whole of §2 -- the two-writers claim, the most valuable
-# failure this file can produce -- and still print green, which is precisely the
-# partial vacuity checks.py was written to name.
+# Without capstone, §3's stdlib half, §7b's and all of §8: 35 checks, measured the
+# same day by blocking the import. Hence two floors rather than one. A flat 35
+# would let a capstone run lose the whole of §2 -- the two-writers claim, the most
+# valuable failure this file can produce -- and still print green, which is
+# precisely the partial vacuity checks.py was written to name.
 #
-# Both numbers went up on 2026-08-10 with §7. The stdlib floor moved 3 -> 16
-# because `asserts.py` is stdlib on purpose, so its shared-tail under-count is
-# catchable on a bare machine -- and it is the one that silently narrows every
-# `--in <module>` range on the capstone side.
-FLOOR_WITH_CAPSTONE = 56
-FLOOR_STDLIB_ONLY = 16
+# Both numbers went up on 2026-08-10 with §7 (3 -> 16 on the stdlib side) and
+# again on 2026-08-11 with §8 and §9. The stdlib floor takes the whole of §8
+# because `asserts.py` is stdlib on purpose: its census is checkable on a bare
+# machine, and a wrong census is what §9's bounds are computed from.
+FLOOR_WITH_CAPSTONE = 83
+FLOOR_STDLIB_ONLY = 35
 
 LEDGER = checks.Ledger(
     "codescan vs studies/enemy §6q",
@@ -433,6 +442,172 @@ def section_7(exe, img):
            "ExeArchive's upper bound is a recovered site (was 0x0047CE29)")
 
 
+def section_8(exe):
+    """The census attributes each count to the file it counted.
+
+    THE DEFECT, found 2026-08-11. `Asserts.modules()` grouped by `Assert.module`
+    -- the basename with no extension -- and `--modules` printed
+    `mods[m][0].file` as the row's path, i.e. whichever colliding file happened
+    to hold the lowest VA. Nine basenames on build 38797 name two source files
+    each, so nine rows of that report carried a count of one thing under the name
+    of another, and the second file never appeared in the census at all.
+
+    It was worst where it was least visible. The top two rows are
+    `Base\\rtl\\Array.h` (4431) and `Base\\rtl\\List.h` (3288); both were printed
+    under their .cpp siblings' paths at 4433 and 3295, so the two largest numbers
+    in the report described no file in the image. And `PrApi` is the one that
+    would have produced a wrong FINDING rather than a wrong number: 67 sites in
+    `Gw\\Pref\\PrApi.cpp` (the preferences API) and 19 in
+    `Engine\\Map\\Props\\PrApi.cpp` (the props API), unrelated modules 2.4 MB
+    apart, printed as one row of 86 against the preferences path -- so "the props
+    code has no PrApi.cpp" read as absence off a census that had merged it away.
+    That is the same shape as §7: a clean, confident, wrong answer.
+
+    THE FIRST CHECK IS THE NEGATIVE CONTROL, and it is checked before anything
+    below rests on it. Every check here is worthless if the two files stopped
+    colliding, so the collision itself is asserted first -- both paths must still
+    reduce to the same `Assert.module`. A regrouping by basename is then run
+    inside this file, out of `int`s and `dict`s that import nothing from the tool
+    under test, and required to still produce the merged 86: that is the bug,
+    reproduced, so the 67/19 below is a difference between two live answers
+    rather than a number this file asked the code to confirm about itself.
+
+    Stdlib. `asserts.py` takes no disassembler on purpose, and the census is the
+    part of it a bare machine can still check.
+    """
+    print("\n8. the module census names the file it counted")
+    az = AZ.Asserts(exe)
+
+    # The two colliding files, and the counts MEASURED 2026-08-11 on the pinned
+    # pristine 38797. Literals, not read back out of the tool: a count computed
+    # from the thing under test moves when the thing under test moves.
+    PREF = r"P:\Code\Gw\Pref\PrApi.cpp"
+    PROPS = r"P:\Code\Engine\Map\Props\PrApi.cpp"
+    mods = az.modules()
+
+    # -- 8a. the collision is real, or nothing below means anything ---------
+    pref_items = [a for a in az.items if a.file == PREF]
+    props_items = [a for a in az.items if a.file == PROPS]
+    check(bool(pref_items) and bool(props_items),
+          "both PrApi.cpp still exist in the image",
+          f"{len(pref_items)} pref, {len(props_items)} props")
+    if pref_items and props_items:
+        eq(pref_items[0].module, props_items[0].module,
+           "and still collide on basename -- which is what this section tests")
+
+    # The bug, reproduced here rather than described. Grouping by basename is
+    # four lines, so the merged answer is a live measurement of the old rule and
+    # not a number quoted from a commit message.
+    merged = {}
+    for a in az.items:
+        merged.setdefault(a.module, []).append(a)
+    eq(len(merged.get("PrApi", [])), 86,
+       "grouping by basename merges them into one row of 86 -- the old census")
+    eq(merged["PrApi"][0].file, PREF,
+       "under the path of whichever file held the lowest VA")
+
+    # -- 8b. and the shipped census does not ------------------------------
+    eq(len(mods.get(PREF, [])), 67, "the preferences PrApi.cpp is its own row")
+    eq(len(mods.get(PROPS, [])), 19, "the props PrApi.cpp is its own row")
+    check(PROPS in mods, "so the props module is IN the census, not absent")
+
+    # They are unrelated code, not one file under two spellings: every props site
+    # sits above every preferences site, 2.4 MB up the image.
+    if pref_items and props_items:
+        check(min(a.va for a in props_items) > max(a.va for a in pref_items),
+              "the two modules do not overlap -- 2.4 MB apart",
+              f"pref <=0x{max(a.va for a in pref_items):08X}, "
+              f"props >=0x{min(a.va for a in props_items):08X}")
+
+    # -- 8c. the two largest rows, which were the two most wrong ----------
+    for path, n in ((r"P:\Code\Base\rtl\Array.h", 4431),
+                    (r"P:\Code\Base\Rtl\Array.cpp", 2),
+                    (r"P:\Code\Base\rtl\List.h", 3288),
+                    (r"P:\Code\Base\Rtl\List.cpp", 7)):
+        eq(len(mods.get(path, [])), n, f"{path} has {n} sites of its own")
+
+    # -- 8d. nothing was dropped or double-counted by the regrouping ------
+    eq(sum(len(v) for v in mods.values()), az.coverage()["total"],
+       "every site is in exactly one row")
+    eq(len(mods), 864, "864 source files assert on this build")
+
+    # -- 8e. case-only spellings ARE one file, and say so -----------------
+    # `Base\Compress\CmpIo.h` and `Base\compress\CmpIo.h` differ only in the case
+    # of a directory, and the build was on Windows: one file, two translation
+    # units spelling it differently. 65 sites, not a 31 and a 34 -- and the row
+    # names both spellings rather than silently picking the one it keyed on,
+    # which would be this same defect one level down.
+    CMPIO = r"P:\Code\Base\Compress\CmpIo.h"
+    eq(len(mods.get(CMPIO, [])), 65, "the two CmpIo.h spellings are one row")
+    eq(sorted(az.spellings().get(CMPIO, [])),
+       [r"P:\Code\Base\Compress\CmpIo.h", r"P:\Code\Base\compress\CmpIo.h"],
+       "and the row names both spellings instead of choosing one")
+
+    # -- 8f. the collisions are reported, because --file still pools them --
+    coll = az.collisions()
+    eq(len(coll), 9, "nine basenames name more than one file")
+    eq(coll.get("prapi"), sorted([PREF, PROPS]), "PrApi is one of them")
+    # `coll and` is load-bearing: `all()` over an empty dict is True, so the
+    # basename-grouping sabotage that empties `collisions()` passed this check
+    # while every check around it went red. A vacuous pass inside a red section
+    # is still a check that cannot fail.
+    check(coll and all(len(v) == 2 for v in coll.values()),
+          "each names exactly two", f"{sorted((k, len(v)) for k, v in coll.items())}")
+
+
+def section_9(exe, img):
+    """The same ambiguity one tool downstream: `codescan --in <name>`.
+
+    `module_bounds` takes min and max VA over a SUBSTRING match, so the collision
+    the census used to hide is a silent widening here: `--in PrApi` bounds
+    0x00499B01..0x0073943A and every `--field` run inside it is drawn from 2.4 MB
+    of mostly unrelated .text while the header says it searched one module. That
+    is the opposite direction from §7's shared-tail under-count -- which narrowed
+    the same ranges -- and it fails the same way, by answering confidently.
+
+    Not resolved, reported: `--in Rtl` meaning a whole subsystem is a legitimate
+    query, so the caller is told what its name caught. Which means the check that
+    matters is that the note distinguishes the two shapes of multi-file match --
+    `AvChar` also catches `AvCharAnim.cpp`, immediately adjacent, and that one is
+    the harmless widening `module_bounds` documents. A note that read the same
+    for both would be noise, and noise gets ignored.
+    """
+    print("\n9. and the module bounds downstream say what they bounded")
+    if img is None:
+        LEDGER.skip("9. --in's multi-file bounds", NO_CAPSTONE)
+        return
+
+    files = CS.module_files("PrApi", exe)
+    eq(len(files), 2, "`--in PrApi` bounds two source files")
+    eq({f: files[f][0] for f in files},
+       {r"P:\Code\Gw\Pref\PrApi.cpp": 67,
+        r"P:\Code\Engine\Map\Props\PrApi.cpp": 19},
+       "with the counts the census now reports")
+    lo, hi, n = CS.module_bounds("PrApi", exe)
+    eq((lo, hi, n), (0x00499B01, 0x0073943A, 86),
+       "and the pooled range really is their union -- 2.4 MB of it")
+
+    note = CS.bounds_note("PrApi", exe)
+    check(note and "matched 2 source files" in note[0],
+          "the CLI warns rather than printing the union unremarked")
+    check(any("0x00738AC1" in ln for ln in note),
+          "and prints each file's OWN span, not just its name")
+
+    # The two shapes of multi-file match, kept apart. AvCharAnim's two sites are
+    # 0x17F0 below AvChar.cpp's first: adjacent code, the harmless widening.
+    av = CS.module_files("AvChar", exe)
+    eq(sorted(av), [r"P:\Code\Gw\AgentView\AvChar.cpp",
+                    r"P:\Code\Gw\AgentView\AvCharAnim.cpp"],
+       "`--in AvChar` catches AvCharAnim.cpp too, by substring")
+    eq(av[r"P:\Code\Gw\AgentView\AvChar.cpp"][1], 0x007F215F,
+       "AvChar.cpp's own sites start above the pinned §1 lower bound, which is "
+       "AvCharAnim's")
+
+    # The control: a name that catches ONE file prints nothing at all.
+    eq(CS.bounds_note("ExeArchive", exe), [],
+       "and a name matching one file warns about nothing")
+
+
 def main():
     # The build guard. `pinned` is stdlib -- `CS.find_exe` is literally
     # `pinned.find` -- so which client we are reading gets said out loud even on a
@@ -455,6 +630,8 @@ def main():
     section_5(img, lo, hi)
     section_6(img)
     section_7(exe, img)
+    section_8(exe)
+    section_9(exe, img)
 
     return LEDGER.verdict()
 

@@ -25,12 +25,14 @@ sys.path.insert(0, os.path.join(HERE, "authsrv"))
 import checks  # noqa: E402
 import content  # noqa: E402
 
-# 4 load + 7 migration + 8 refusal + 3 overlay + 2 shape = 24, measured from a
+# 4 load + 7 migration + 8 refusal + 4 extracted-source (the 2026-08-11 loosening,
+# PLAN.md section 7 Q3: three refusals and one positive) + 3 overlay + 2 shape = 28,
+# measured from a
 # real green run. Every section runs unconditionally; nothing here is fixture-dependent
 # beyond content/ itself, which is tracked. It was 22 until rung C2 added a ninth map
 # row: the migration section now names the addition instead of pinning a length, so a
 # new row is a decision somebody wrote down rather than a number that drifted.
-LEDGER = checks.Ledger("content store", floor=24)
+LEDGER = checks.Ledger("content store", floor=28)
 
 
 def write(dirpath, name, text):
@@ -151,6 +153,49 @@ def main():
     LEDGER.ok(msg is not None,
               "an unlicensed row whose `verified` is a bare `true` is REFUSED",
               "a boolean records nothing about what was checked")
+
+    # --- REFUSAL 4: the 2026-08-11 loosening, and the conditions that bound it ---
+    # PLAN.md section 7 Q3 permits facts extracted from the client IN BULK. That is the
+    # loosening direction, so it is the direction that needs a check: conditions 1 and 2
+    # (the extractor is in this repo and named; the row records the build) are enforced by
+    # content.py, and this block is what proves they can go red. A permission whose
+    # conditions nothing tests is the same wish section 1.1 already caught once.
+    EXTRACTED_OK = ('[thing.a]\nlevel = 5\n[thing.a.provenance]\n'
+                    'source = "client-table"\nextractor = "toolkit/content.py"\n'
+                    'build = "38797"\n')
+    msg = refuses(EXTRACTED_OK.replace('extractor = "toolkit/content.py"\n', ""),
+                  "extracted, no extractor")
+    LEDGER.ok(msg is not None and "extractor" in (msg or ""),
+              "an extracted row that does not name its extractor is REFUSED",
+              "without the tool the artifact does not regenerate, which is the "
+              "entire basis of the permission")
+
+    # The condition is that the tool IS HERE, not that the row says a word. A
+    # string-non-empty test passes for a path that was renamed, deleted or never
+    # committed -- which is precisely the state the condition exists to catch -- so the
+    # path is resolved and required to exist.
+    msg = refuses(EXTRACTED_OK.replace("toolkit/content.py",
+                                       "toolkit/clientscan/no_such_tool.py"),
+                  "extractor does not exist")
+    LEDGER.ok(msg is not None and "does not exist" in (msg or ""),
+              "and one naming an extractor that is not in this checkout is REFUSED",
+              "a named tool that is not here regenerates nothing")
+
+    msg = refuses(EXTRACTED_OK.replace('build = "38797"\n', ""), "extracted, no build")
+    LEDGER.ok(msg is not None and "build" in (msg or ""),
+              "an extracted row with no `build` is REFUSED",
+              "ArenaNet's tables move between builds; a number with no build can be "
+              "neither re-derived nor refuted")
+
+    # ...and the legitimate row loads. Same reason as REFUSAL 3's positive case: a gate
+    # that refuses the permitted case is not a gate, it is the old ambiguity with extra
+    # steps -- and that ambiguity is what this ruling exists to end.
+    with tempfile.TemporaryDirectory() as tmp:
+        write(tmp, "t.toml", EXTRACTED_OK)
+        got = content.load(repo_dir=tmp, vault_dir="")
+    LEDGER.ok(got.get("thing", "a")["level"] == 5,
+              "a fully-conditioned extracted row loads",
+              "extractor present in the repo, build stated, provenance per row")
 
     # --- an empty store is refused, not defaulted ----------------------------
     with tempfile.TemporaryDirectory() as tmp:

@@ -2896,3 +2896,113 @@ than invention:
   measured against table values 0.75 / 1.00 / 0.75.
 - Recharge must be per SLOT, not per skill id.
 - `0x00A0` value 20 is not an NPC casting; slot 2 there is the target.
+
+---
+
+## 12. The AI dive landed — and it moved this arc's floor
+
+**2026-08-11.** [studies/monsterai/FINDINGS.md](../monsterai/FINDINGS.md) is the
+study the owner's §11.7 ruling asked for. It is a separate arc because it outgrew
+this one: five evidence angles, an independent skeptic per angle, a capture-campaign
+design, a completeness critic, and a verification pass over every code-driving claim.
+**Read it rather than the summary here.** What belongs in *this* file is only what
+changed about the enemy.
+
+**The headline is a negative and it is firm.** Monster AI *as a mechanism* is not in
+the client and not on the wire, because it is never shipped and never transmitted —
+zero of 937 embedded source paths lie under any `\Srv\` tree, from a detector proven
+able to catch 6 of 6 planted ones, and 33 AI-adjacent searches across two independent
+routes return zero. So `pick_skill` does not get replaced by a transcription. It gets
+replaced by a **measurement campaign** or it stays a fixture, and the study designs the
+campaign (§7) rather than leaving that as an aspiration.
+
+**But the dive did not come back empty, and one of the things it found is mine.**
+
+### 12.1 `SWING_WINDUP = 0.899` is refuted, and the refuting bytes were already here
+
+§11.1 measured six swings from one agent at one declared attack speed and adopted the
+mean as a constant, reasoning at the call site that *"taking the constant is the smaller
+claim."* Every clause of that comment is true and the conclusion still does not follow:
+**a constant is only the smaller claim when it is applied at the speed it was measured
+at, and our Hatcher declares 1.33.** Re-measured over both captures — 42 paired windups,
+4 attackers, 2 declared speeds:
+
+| declared | n | windup | ratio |
+|---|---|---|---|
+| 2.00 s | 18 | 0.880 – 0.920 s | 0.4401 – 0.4600 |
+| 1.75 s | 24 | 0.746 – 0.794 s | 0.4263 – 0.4538 |
+
+The windup clusters **do not overlap** — 86 ms apart, twice either cluster's own
+width — while the ratio bands do. In seconds the creatures disagree; as a fraction of
+each creature's own declared base they agree. `swing_windup()` is now that fraction
+(mean 0.4458), and our Hatcher's windup went **0.899 → 0.593 s** on the wire.
+
+The sharpest way to say what was wrong: 0.899 paired with a declared 1.33 implies a
+ratio of **0.6759, which is 47% above the largest ratio ever observed.** It did not lose
+to one of two rival models — it lost to both.
+
+**The confound is stated and not resolved:** two speeds across two creature pairs cannot
+separate "scales with declared speed" from "is per-creature and happens to track it",
+and the 1.75 pair carries the `band` token so the comparison also crosses an allegiance
+class. What is dead is *fixed for everything*. A third declared speed closes it, and the
+corpus has none that lands a swing.
+
+### 12.2 The thing that made all of this possible to get wrong
+
+**Twelve of fourteen combat constants in `authsrv.py` could be set to a wrong value with
+all 125 checks green.** Only `ENEMY_TURN_RATE` reddened — the one constant that is
+corroborated to the bit. That is not a coverage accident, it is a shape: every section
+computed its expectation *from* the symbol under test, so the symbol was free to move and
+the test moved with it. **A symbol appearing in a test file is not a check.**
+
+`test_agentlife.py` now carries `section_constants`, which asserts each value against a
+**literal written in the test file** the way `test_burrow.py` always did, plus the bar
+against `skilltable.py`'s live read of build 38797. 125 → **148 checks**. Every one was
+sabotaged to prove it can go red; the old effective windup ratio fails three of them.
+
+### 12.3 Three corrections to things this file and `authsrv.py` asserted
+
+- **Skill 276 is ELITE.** `authsrv.py` said all four bar skills were "campaign 1,
+  non-elite"; 276's flags word carries `FLAG_ELITE` (bit 2, set on 391 of 3,443 rows).
+  Nobody had read the table, so the comment was the only witness. The new cross-check
+  would have caught it.
+- **The single NPC cast is in capture `20260807T143055`, not `20260810T235916`.** The
+  connection was always right and the stamp was not.
+- **The NPC and player cast messages are different shapes**, which was nowhere on record:
+  the NPC's rides `0x009F [60, agent, skill]` with **no target slot**, all four player
+  casts ride `0x00A0 [60, caster, target, skill]`. We send the `0x009F` form, so the code
+  was right — by luck rather than by record.
+
+### 12.4 What the study says about the rest of this arc's open items
+
+Most of them are not "not done yet"; they are **the wrong shape**, and the study says so
+with numbers:
+
+- **`ENEMY_MELEE_RANGE = 150.0` is refuted from both sides at once.** ArenaNet's own
+  models strike from ~65, ~599 and ~706 units — one from well inside our reach, two from
+  four to five times outside it. Reach is a per-model property and no single number is
+  right. (The 269–1594 "range band" an earlier pass reported is what pooling three
+  creature models produces.)
+- **`ENEMY_MOVE_RATE = 0.75` is never sent to a hostile anywhere in the corpus.**
+  ArenaNet's hostiles take 0.2778, 0.3333, 0.3472 and 1.0. It *is* sent to the player's
+  own agent, so it is a real retail value — just not one these creatures take.
+- **`AGGRO_RANGE` is not merely unmeasured, it is the wrong shape.** GWW puts the default
+  aggro bubble at 1012 gwinches *and* says named creatures differ in both directions, and
+  that very low level starter-zone foes have none at all. One global constant cannot
+  express that.
+- **The missing leash is worse than documented**: `spawn_enemy` stores no spawn anchor,
+  so a leash is not a branch we have not written — it is **uncomputable from the state the
+  server keeps.** (And GWW anchors leash at *where aggro was taken*, not at the spawn.)
+- **Four of five fights in the corpus are started by the PLAYER**, witnessed in the
+  client's own stream 2.0–11.5 s before the server's echo. Our model — a hostile notices
+  an approaching non-attacking player and initiates — is refuted for 4 of 5 and left open
+  for the 5th.
+
+### 12.5 Where the policy goes next
+
+Not into `authsrv.py`. The study's §8.1 argues AI policy belongs in `content/ai.toml`
+with per-creature rows carrying `content.py`-enforced provenance, precisely because the
+corpus shows reach and speed are **per-model** and no annotation on a global constant can
+fix that. `pick_skill` stays a fixture until the campaign runs. **Keep round robin** — it
+is the owner's ruling, and the only property it claims (every slot is reachable) is a
+mechanism property that was actually measured.

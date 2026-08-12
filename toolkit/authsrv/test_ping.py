@@ -43,7 +43,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("net-graph ping loop", floor=20)
+LEDGER = checks.Ledger("net-graph ping loop", floor=22)
 
 AUTHSRV_PY = os.path.join(HERE, "authsrv.py")
 
@@ -81,6 +81,27 @@ def tick_thread_is_tape_guarded(tree):
                     if (kw.arg == "target" and isinstance(kw.value, ast.Name)
                             and kw.value.id == "world_tick"):
                         return True
+    return False
+
+
+def called_in_finally(tree, fname):
+    """Is `fname` called from a `finally:` block? Reachability, not behaviour.
+
+    The check that was missing: `report_ping` sat after the read loop inside
+    the `try` and never ran, because the loop exits by ConnectionResetError
+    when the harness kills the client. Sections 1-7 above all passed anyway --
+    they call the function directly, so none of them asks whether anything
+    else does.
+    """
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        for stmt in node.finalbody:
+            for call in ast.walk(stmt):
+                if (isinstance(call, ast.Call)
+                        and isinstance(call.func, ast.Name)
+                        and call.func.id == fname):
+                    return True
     return False
 
 
@@ -260,7 +281,22 @@ def main():
               "otherwise it would land on D9(a)'s catch-all, which is where "
               "it was until 2026-08-11")
 
+    LEDGER.ok(called_in_finally(tree, "report_ping"),
+              "and report_ping is called from a `finally`, so a reset still "
+              "prints the round trip",
+              "MEASURED 2026-08-11: the 45 s loopback run completed 10 of 10 "
+              "round trips and wrote ZERO ping summaries, because the call sat "
+              "in the `try` and the connection ended on ConnectionResetError")
+
     # ---- 9. the structural checks must be able to go red --------------------
+    sab0 = ast.parse("def f():\n"
+                     "    try:\n"
+                     "        report_ping(s, c, r)\n"
+                     "    finally:\n"
+                     "        rec.close()\n")
+    LEDGER.ok(not called_in_finally(sab0, "report_ping"),
+              "CONTROL: a call in the TRY body is not reachable on a reset",
+              "this is the arrangement that shipped and never ran")
     sab = ast.parse("def f():\n"
                     "    if TAPE_EVENTS is not None:\n"
                     "        threading.Thread(target=world_tick).start()\n")

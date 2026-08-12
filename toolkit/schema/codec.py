@@ -8,7 +8,7 @@ from build 38797:
     dword, float, agent_id    u32 / f32
     vec2, vec3                2 or 3 f32
     blob                      exactly `length` bytes, no count prefix
-    string16                  u16 count, then count * 2 bytes of UTF-16LE
+    string16                  u16 count of CODE UNITS, then count * 2 bytes UTF-16LE
     array8 / array16 / array32  u16 count, then count * 1 / 2 / 4 bytes
     nested_struct             u8 count, then count nested records
 
@@ -199,7 +199,28 @@ class Codec:
             raw = data[p:p + need]
             p += need
             if t == "string16":
-                return raw.decode("utf-16-le", "replace"), p
+                # `surrogatepass`, never `replace`. GW's encoded names carry code
+                # units in the UTF-16 surrogate range -- an agent name is not text,
+                # it is a private encoding whose units index string tables -- and
+                # `replace` turns every one of them into U+FFFD, which is LOSSY: the
+                # original code unit is gone and the message can never be re-encoded
+                # to the bytes it arrived as.
+                #
+                # Measured before this line changed, over the 12 decrypted live
+                # connections (22,524 GAME_SMSG): 133 messages did not re-encode
+                # byte-identically, and they were EXACTLY the 133 whose decoded
+                # values carried U+FFFD -- 0x004C 40 of 40, 0x0161 31 of 394,
+                # 0x0080 19, 0x005D 12, 0x0056 9 of 126, none differing in LENGTH.
+                # One defect, one number. studies/reconstruction/FINDINGS.md 6.2.
+                #
+                # `surrogatepass` keeps each lone surrogate as its own code point,
+                # so decode->encode is the identity. The value stays a `str` on
+                # purpose: every consumer compares, joins and json-dumps these, and
+                # json.dumps escapes a lone surrogate as \udXXX under the default
+                # ensure_ascii=True, which is what the recorders write. A `str` that
+                # PRINTS badly on a Windows console is the accepted cost; a value
+                # that cannot be re-encoded was not.
+                return raw.decode("utf-16-le", "surrogatepass"), p
             if t == "array8":
                 return raw, p
             if t == "array16":
@@ -312,10 +333,30 @@ class Codec:
                 raise ValueError(f"blob wants exactly {length} bytes, got {len(b)}")
             out += b
         elif t == "string16":
-            s = str(v)
-            if len(s) > length:
-                raise ValueError(f"string of {len(s)} exceeds cap {length}")
-            out += struct.pack("<H", len(s)) + s.encode("utf-16-le")
+            # Refuse bytes rather than mangling them. `str(b"AB")` is `"b'AB'"`,
+            # which encodes happily and puts the repr on the wire -- a caller that
+            # holds raw code units and passes them here would have been silently
+            # wrong, with no exception anywhere.
+            if isinstance(v, (bytes, bytearray)):
+                raise ValueError(
+                    "string16 wants a str; bytes would be encoded as their repr. "
+                    "Decode them with .decode('utf-16-le', 'surrogatepass') first.")
+            b = str(v).encode("utf-16-le", "surrogatepass")
+            # THE COUNT IS CODE UNITS, AND len(s) IS NOT THAT. A valid surrogate
+            # PAIR decodes to one Python character while occupying two code units
+            # -- surrogatepass does not change that, it only spares LONE surrogates
+            # -- so `len(s)` under-counted by one per astral character and the wire
+            # got a count two bytes short of the data that followed it. That is not
+            # a lossy field, it is a DESYNC: the next message is framed from inside
+            # this one. It could not fire while decode was `replace` (U+FFFD is one
+            # unit and one character), so fixing the decode is what exposed it.
+            # Derive the count from the encoded bytes and the two can never
+            # disagree again.
+            units = len(b) // 2
+            if units > length:
+                raise ValueError(
+                    f"string of {units} code units exceeds cap {length}")
+            out += struct.pack("<H", units) + b
         elif t in ("array8", "array16", "array32"):
             seq = list(v)
             if len(seq) > length:

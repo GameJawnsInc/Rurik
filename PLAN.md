@@ -351,7 +351,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. |
 | **R4a** | Agent model + combat core | An ettin swings at you and you die | 🔶 **half.** A hostile Hatcher stands in the map, and a click orders an attack the server drives to a kill and a revive (`f8320ff`, `37cb856`, 2026-08-06). ~~Nothing swings back and the player cannot die~~ — **BOTH MET 2026-08-11**, which is the half the criterion actually names. A Hatcher swings at the player, the player's health falls 10 a swing, and at zero the player drops face-down with both orbs at 0 and stands back up ten seconds later. Three full death/revive cycles in one 65 s run, on the wire and on film (`vault/captures/gamesrv/authsrv-20260811T160502-c1.jsonl`, `frames-20260811T160449`). `studies/enemy/PLAN.md` §11. What is still missing is a real agent model — no AI, no pathing (the Hatcher stands where it spawned and swings when you are inside 1200 units), no resurrection shrine (the revive is a timer), and energy is not restored on revive. No agent table either — `studies/enemy/PLAN.md` §7.2. **2026-08-11: one click now drives a whole fight** — `0x0026` ATTACK_AGENT arrives (four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it), the server dispatches it, seven swings at 1.77 s kill the agent, and it revives; the client drops the dead target and re-acquires the revived one unprompted (§10.9). **The first revive crashed the client** — `CharPool.cpp:84`, `fraction <= 1.0f` — because we sent `max_health` where a fraction belonged, on the one side of a `<=` bound that no damage test could ever reach. Fixed and re-verified. **2026-08-11 (earlier): the click arrives as `0x0026` ATTACK_AGENT** — four of them at our Hatcher, zero `0x0033`, ending a year in which the client had never once sent it (§10.7). The server now dispatches both arms. |
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
-| **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started. |
+| **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started, **and 2026-08-11 established what "started" would even mean** ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md), `9eb09a8`+). Monster AI *as a mechanism* is **not recoverable** — not from the client (0 of 937 embedded source paths under any `\Srv\` tree, from a detector proven to catch 6 of 6 planted ones; 33 AI-adjacent searches over two independent routes, all zero), not from the wire, and not by any capture campaign, because it is never shipped and never transmitted. What **is** recoverable is the observable envelope, and the study designs the labelled behaviour campaign that would recover it (§7) plus four desk follow-ups needing no capture at all (§7.9) — **the first of which ran the same day and made the binary negative total**: `CHAR_AI_MODES`, the one lead the study declined to call refuted, is 3 and its modes are Fight/Guard/Avoid Combat, i.e. the player's own hero-and-pet stance widget. It also found the AI-adjacent numbers already in `authsrv.py` are mostly the **wrong shape** rather than merely unmeasured: reach is per-creature-model (~65 / ~599 / ~706 units observed against our one global 150), a leash is *uncomputable* from the state `spawn_enemy` keeps, and 4 of 5 fights in the corpus are started by the **player**, refuting our proximity-initiation model for 4 of 5. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. **Its other half now exists too**: R5m authors the zone's *geometry*, which TOML was never going to describe. |
 | **R5m** | **Custom map geometry, end to end** | A map we authored loads in the retail client, and geometry we chose constrains the character | ✅ **2026-08-11**, arc landed `0be1555`, criterion completed the same day. **The client walks on our terrain and stops at our walls.** `mapbuild.build_flat` assembles a whole map from typed parameters — 7,841 B, 9 chunks, **97.04% generated**, the rest being FINDINGS 14's 232 bytes of ArenaNet constants read from an archive at run time — and the retail client loads it, places a character in it and writes nothing back (FINDINGS §22, four discriminators). Then **E1 proved the geometry is ours and not a coincidence**: two maps differing in **33 of 7,841 bytes**, all inside the pathing chunk, both 7,841 B, with the mesh rect at 0..3072 against 1024..2048, confined the character to reported bounding boxes of **3072.0 × 3072.0** and **1024.0 × 1024.5** — the ratio of the two rectangles, measured from the client's own position reports while our server broadcast no position at all (FINDINGS §23). The read direction is byte-exact across the corpus: terrain 349/349, pathing 349/349, whole map file 349/349 Bloated **and** Stripped. A retail map also stands up in Blender (`tools/blender/import_gwmap.py`, 213,921 verts, orientation checked against a chunk the exporter never reads). **What is NOT done**: authored art (textures are borrowed retail file ids), portals, multiple planes and elevation, and the delivery path is still `datwrite` into a copied archive rather than anything a person would call a tool. |
 | **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ✅ **2026-08-07**, `vault/captures/live/20260807T143055`. Six connections to ArenaNet (one auth, five game, all on **port 80**), both directions, zero TCP gaps, stamped `origin: live`, and **byte-replayable in the strong sense**: `livesession.py --assemble` regenerates all six decrypted files **sha256-identical** from `wire.jsonl` + `keyring.jsonl` alone, with no client and no network. 200,153 bytes of ArenaNet plaintext, 11,700 messages. **The independent check is the framing**: every one of the 12 streams decodes 100% clean to its final byte against `schema/messages.json`, which was built from the *client's* format tables and never from these bytes. Adversarially attacked from four angles (§3.3); three failed to refute, and the fourth's safety finding is fixed. See §3.3 for what the number does *not* mean. The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
@@ -521,14 +521,32 @@ Both are now graded against an enumerated content surface:
   Flare 194, Healing Signet 1, Sever Artery 382, …). **Today n = 0.** Nine and not 21
   because the other twelve codes have no Pre-Searing content to test against; grading
   against 21 would grade v1 against non-v1 content.
-- **R4c — split, because half of it is blocked and reporting one number hides which.**
+- **R4c — split, because the two halves are reached by different instruments and reporting
+  one number hides which.**
   *R4c-1, capture-free*: 19 of 19 map rows with resolved file ids and arrival points that
-  pass the spawn-in-trapezoid test (today 2), ≥15 NPC templates (today 1), 2 of 2
-  mandatory quests completable, 6 of 6 quest verbs implemented, 4 of 4 services working.
-  *R4c-2, capture-gated*: 35–40 monster types with real stats and skill bars, graded on
-  **types, never on spawn instances** — spawn counts are unstatable from any source this
-  project has. R4c-2 stays at 0 and is **reported as blocked until R0b exists**, which is
-  a dependency rather than a failure and the ladder should show it as one.
+  pass the spawn-in-trapezoid test, ≥15 NPC templates, 2 of 2 mandatory quests completable,
+  6 of 6 quest verbs implemented, 4 of 4 services working. **Today the content store holds
+  9 map rows and 2 NPC rows** (`toolkit/content.py`'s own census, 2026-08-11: map 9, npc 2,
+  item 1, spawn 1). Every map row carries a `file_id` and a `spawn_x`/`spawn_y`; **how many
+  of the nine pass the trapezoid test has not been re-run**, so the map figure is a row
+  count and not yet a score against this criterion. The printed "(today 2)" and "(today 1)"
+  were true when written and were never updated.
+  *R4c-2, formerly capture-gated*: 35–40 monster types with real stats and skill bars,
+  graded on **types, never on spawn instances** — spawn counts are unstatable from any
+  source this project has.
+  **R4c-2 IS NO LONGER BLOCKED, and saying so is overdue.** This line read "R4c-2 stays at 0
+  and is **reported as blocked until R0b exists**" until 2026-08-11, four days after R0b was
+  met. Worse than stale: the monster stats it was waiting for have been sitting in the vault
+  in the clear since 2026-08-07, and the join that makes them a *table* rather than a
+  reading is measured — **`WORLD_CREATE_AGENT` field[2]'s definition slot is a stable
+  server-side key across sessions**, slot 1434 yielding `PROP_HEALTH_MAX` 8 in two captures
+  three days apart, on two characters, two connections and two agent ids
+  ([studies/reconstruction/FINDINGS.md](studies/reconstruction/FINDINGS.md) §6.1). What
+  gates R4c-2 now is **coverage, not instrument**: four kills of three species in the whole
+  corpus. It is **unstarted, not blocked**, and the difference decides what to do about it —
+  a blocked rung waits, an unstarted one gets a session. §7.6's caveat travels with every
+  number it will produce: Reforged Mode is not recorded anywhere, and it scales enemy health
+  ~20%, so each figure is base or base × 0.8 and nothing on this machine can say which.
 
 **Carried in the criterion rather than buried:** five real mechanical families — Shout,
 Interrupt, Well/Spirit/Trap/Ward, Block, Ritual — have **no** Pre-Searing exemplar at
@@ -965,6 +983,7 @@ keep honest.
 | `schema/overrides.json` — GAME_CMSG **names** | ldufr/Headquarter `opcodes.h` | **MIT** — permissive, attribution only | ✅ row added 2026-08-10, *before* the first name landed. Headquarter is where §4's A3 got the 60/40/194/487 counts and it has carried `ROTATE_PLAYER = 0x0040` all along, with no row here — the `gwdat.py` shape exactly. **What we take is corroboration, not the name**: 0x0040 was named from the client's own assert text `(rotation >= -1.0f) && (rotation <= 1.0f)` at `ChCliApi.cpp:5562`, read out of build 38797, and Headquarter agreeing is a second witness we did not need. Any *future* name adopted from Headquarter without that independent leg is a derivation and must say so in its `why`. |
 | `toolkit/mapdata/terrain.py` — the **terrain chunk** layout | GuildWarsMapBrowser: `FFNA_ImHexPatterns`, `FFNA_MapFile.h`, and `SourceFiles/Terrain.cpp` | same custom licence as the two rows above — permissive, **requires a repo link and visible credit**, *not* MIT | ✅ row added 2026-08-10, *before* the module exists. The `pathmap.py` row covers the **pathing** pattern only and does not reach terrain. **What we take is the hypothesis, not the layout**: every load-bearing field is re-derived from the client's own 11-entry step table at `0xA74F28` and confirmed corpus-wide — see [studies/customarea/FINDINGS.md](studies/customarea/FINDINGS.md) §4 and §17.4. Recorded because upstream is a **witness we had to correct**, which is the strongest argument for keeping the row honest rather than dropping it: its pattern reads the tags positionally so its "tag5"/"tag6 Shadow Map" are the file's tags 3 and 9 and **tag 6 exists in none of the 349 maps**; its `cellSize` is not a cell size but `max(3, v/3072.0)`, a distance in whole terrain chunks; and its pattern and its own renderer **disagree with each other** on storage order — the renderer is right and only the pattern had been read. |
 | `toolkit/mapdata/mapchunks.py` — the **Dependencies record** `{u16 id0, u16 id1, u16 pad}` and the pair→file-id formula | GuildWarsMapBrowser: `FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat` (`MapFileRef` / `MapFileRefPadded`, and the comment `decode: (id0 - 0xff00ff) + (id1 * 0xff00)`), the same expression in `SourceFiles/animation_state.cpp` | same custom licence as the three rows above — permissive, **requires a repo link and visible credit**, *not* MIT | ✅ row added 2026-08-11 by the verifier, *after* the module landed without one — the `gwdat.py` shape again, and the reason this table exists. The `pathmap.py` row covers the **pathing** chunk of that pattern and does not reach the dependency lists, exactly as the `terrain.py` row argues for terrain. **Everything else in the module is not upstream's**: the id decomposition, the 23-slot `s_chunkInfo` name table and the `alloc` byte split are read from the client's own strings and asserts (SOURCE-CODE, [FINDINGS](studies/customarea/FINDINGS.md) §3/§17.4), and the signature `0x29939830` and the `(size − 5) % 6` law are measured from the archive — GWMB has neither. **And upstream is a witness we corrected**: nobody upstream wrote the inverse, so nobody found that the pair encoding *aliases* (`id0 ≥ 0xFF00` names the same file as `(id0 − 0xFF00, id1 + 1)`), which retail's own writer uses in 85 records of 134,290. `THIRD-PARTY-NOTICES.md` names the module. |
+| **monster AI: aggro radius, leash, scatter, targeting, formation, patrol** — *no module takes these yet* | GWW (`wiki.guildwars.com`), the pages named in [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §4 with revision ids | GFDL 1.2 / CC BY-NC-SA 2.5 (dual) — **attribution required**, and the NC arm is satisfied by this project being local and personal (`CLAUDE.md`) | ✅ row added 2026-08-11 **before any module takes any of it**, which is the first time this table has been used the way it was designed rather than retrofitted. **The split that matters is values vs. algorithms.** The gwinch table (aggro bubble/earshot 1012, touch 144, casting 1248, longbow 1498, compass 5020 …) is a set of *values* and reaches the repo as `content/*.toml` rows carrying `source = "wiki"`, which `toolkit/content.py` already gates. **Scatter, leash, target priority and the melee-surround formation are *algorithms*** and are what this row exists for — none has landed, and none may land without citing it here. **Currency is the failure mode, not licence**: three of the four core pages carry `Category:Unofficial terms`, *Foe* has not been revised since 2021 and *Patrol* since 2017, the wiki **contradicts itself** on target priority (§4.3), and where a stale page and a fresh one disagree the stale one was wrong both times. So every borrowed row records its revision id, and a value our own artifacts can check is checked rather than adopted. |
 
 **The rule this table encodes:** before a module takes a layout, an algorithm or a table
 from any upstream, add its row *first*. If the upstream grants nothing, the only
@@ -1011,12 +1030,70 @@ this decision until it has recorded its first sessions.
 better instrumented, better symbolized, patch-resilient, and drivable by browser automation. Keep
 the x86 client as the playtest client.
 
-**Q3. Does the provenance gate survive contact?** §9 says "zero ArenaNet bytes in the repo, ever,"
-but R0 vaults `Gw.exe` and `Gw.dat` and every schema derives from them. *Recommendation:* restate
-the gate as a **derivation graph with a gitignored `build/`** — every derived artifact regenerates
-from a documented fetch of a freely downloadable client. That is a stronger and more honest
-formulation than a prohibition needing constant qualification, and it matches the owner's own point
-that the client is available to anyone.
+**Q3. Does the provenance gate survive contact?** ✅ **CLOSED 2026-08-11, by the owner. The gate
+does not move; its boundary is now written down.** The question was posed as "§9 says zero ArenaNet
+bytes in the repo, ever, but R0 vaults `Gw.exe` and `Gw.dat` and every schema derives from them",
+and the answer turned out to be that **the gate already said the right thing and only one of its
+two sentences was being read.** `.gitignore`'s header is: *"Zero ArenaNet bytes in this repo,
+ever… Everything derived regenerates from the owner's own legally purchased install via a
+documented extraction step."* The second sentence is a permission and it governs derived data.
+`CLAUDE.md`'s one-line summary — "only our code and our observations" — is what a cold session
+reads first, and every session resolved the ambiguity by refusing.
+
+**That refusal had a measured cost.** `studies/reconstruction/FINDINGS.md` §9.4 left the ruling on
+a derived assert table neutral rather than deciding it; §4.9 quoted three extracted item names into
+what would have become a tracked file and nobody caught it until a critic re-read the draft; and
+R4c-2's unit data sat unbuilt behind a rule that never actually forbade it.
+
+**The boundary, and it is measurement versus expression — not bulk versus single, and not data
+versus code:**
+
+- **PERMITTED: facts we measured.** Numbers, bounds, counts, strides, ids, offsets, addresses,
+  layouts. A monster's level, an item's requirement, a table's element count. These are facts about
+  a system, they are not ArenaNet's expression, and the gate's own second sentence contemplates
+  them. **In bulk, and generated, subject to the three conditions below.**
+- **REFUSED, unchanged: ArenaNet's expression.** Asset bytes, `Gw.dat` chunks, textures, audio,
+  model data, decompiled function bodies, and **verbatim assert expressions with their source path
+  and line** — `P:\Code\Base\Rtl\Random.cpp` plus `fraction <= 1.0f` is a line of their source
+  code, and a 477-opcode table of them is a source dump with extra steps. What a derived table may
+  carry instead is the *constraint*: opcode, field, bound, address. That is the useful content and
+  it loses almost nothing.
+- **NAMES AND AUTHORED TEXT: commit the id, resolve at run time.** Item, skill, NPC and dialogue
+  strings are individually trivial and in bulk a dump of authored work. A row carrying
+  `model_id = 419, name_string_id = 2519` is fully useful to the server and carries no ArenaNet
+  expression at all. **This is not a compromise invented for this ruling — it is the pattern the
+  repo already proved.** FINDINGS 14's five mandatory chunks are 232 bytes per map of genuine
+  ArenaNet constants, read from the owner's archive **at run time**; `mapbuild.py` refuses without
+  one (`NoConstants`), and `test_mapbuild.py` §2 reads the builder's own syntax tree to require no
+  bytes literal over two bytes in it. Extending that to unit and item data is consistent with what
+  already ships and is strictly better than committing the data.
+
+**Three conditions on anything committed under the permission**, and they are what keep this a
+boundary rather than a hole:
+
+1. **The extractor is in the repo and the row names it.** If the tool that produced it is not
+   here, the artifact does not regenerate and the gate's second sentence is not satisfied.
+2. **The row records the build it came from.** Build 38797 today. A number with no build is a
+   number that cannot be re-derived or refuted.
+3. **Provenance is per row**, the way `content/*.toml` already carries it — not per file, not per
+   commit message.
+
+**What this deliberately does not touch.** The **derivation register** (§6.1) is a *second and
+separate* gate: it governs other people's work — OpenTyria, Py4GW_Reforged, GWCA, `gw-preservation`
+— and it is a licence question, not the ArenaNet question. Loosening nothing here changes it, and
+"we relaxed provenance" must never be read as covering both. `toolkit/content.py`'s verified-only
+refusal for unlicensed upstreams (owner's ruling 2026-08-06) stands exactly as written.
+
+**The three arguments against going further than this**, recorded so the next person to propose it
+has to answer them: retrofitting is impossible — once bytes are in the history of a repo that is
+half merge commits, nobody will ever be confident they are out; it closes the currently-open door
+to sharing any of this; and the gate has an epistemic function as well as a legal one, in that the
+349/349 byte-exact round trips exist partly because copying was not available.
+
+**A rule nothing checks is a wish** — this document's own §1.1 lesson, learned while `gwdat.py`
+sat in the server's dependency chain breaking a rule that had been written for two days. The
+loosening direction is the one where that matters most, so the three conditions are enforced by
+`toolkit/content.py` and `toolkit/test_content.py` rather than asserted here.
 
 **Q4. A secondary account for automation?** ✅ **CLOSED 2026-08-06, by the owner.** A second
 account is bought. **Automation against the live ArenaNet service on that account is
@@ -1047,7 +1124,161 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
 
-### 8.0 Next, as of 2026-08-11 (`7b24cd6`+, suite 45/45, ~1393 checks)
+### 8.0 Next, as of 2026-08-11 (`e6355fd`+, suite 50/50, 1,878 checks)
+
+*The check total was printed as 965 and is measured at **1,878**. Method, because the gap is
+large enough to want one: run each of the 50 files in `toolkit/**/test_*.py` as its own
+process, take the `ALL CHECKS PASSED (N checks` line, sum N, and require every exit code to
+be 0 — 50 of 50 green. This is a **default** run, so the three tests with an `--all` mode
+(`test_pathchunk`, `test_terrain`, `test_mapfile`) contribute their default subset and not
+their full sweep; quoting a bigger number would need the ~20 minutes those take. The file
+list is reconciled against `CLAUDE.md`'s suite list in both directions: 50 named, 50 on disk,
+none named that does not exist and none on disk that is not named. That reconciliation is
+the point — the first sweep of this session ran 49 and would have reported a full pass,
+which is the defect `CLAUDE.md` already names from the other side.*
+
+0m. **THE MONSTER-AI DIVE LANDED, and it leaves four desk tasks that need NO capture,
+    NO client launch and NO operator.** [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md)
+    is the study; its §9 ranks every open question by cost and these are the whole
+    top of that ranking. Each is an afternoon and each closes a named lead:
+
+    1. ✅ **DONE 2026-08-11 — `CHAR_AI_MODES` IS 3, AND IT IS THE STANCE WIDGET.**
+       The prediction was stated first and confirmed on every axis. Five bound
+       sites read `cmp <var>, 3`; two independent switches (`GmAgentCommander:150`,
+       `GmView:6743`) compile to `sub`/`je` chains with exactly three arms each,
+       so the count owes nothing to any `cmp`; `AI_MODE_ICONS` is also 3, a
+       parallel icon array; `CHAR_AI_MODE_AGGRESSIVE` is 0; and the switch maps
+       the three modes to consecutive string ids 44156/44157/44158, which
+       `textrec.py` resolves to **Fight / Guard / Avoid Combat**. So the only
+       named server-shaped AI concept in the shipped image is the player's own
+       hero-and-pet stance control, **the binary negative is now total**, and the
+       `HeroActivate (… aiMode %d)` format string reads as the client telling the
+       server which stance the player picked. `studies/monsterai/FINDINGS.md`
+       §2.2.1, with the four reproduction commands in §2.2.2. **The read
+       self-validated**: an MSVC assert pushes its own source line as an
+       immediate, so every one of the nine sites had to agree with the line
+       `asserts.py` reports from a different mechanism, and all nine did.
+    2. ✅ **DONE 2026-08-11 — THE FLAGS ARE DISPLAY, ALL NINE READERS.** Prediction
+       stated first (display, not combat) and confirmed. The `0x0056` handler chain
+       is a pure marshaller: it writes 32 bytes into `base[+0x7fc] + def_id * 48`
+       and interprets nothing, so the meaning lives in the readers. There are nine,
+       and every one is `AvChar`/`AvApi` — `Gw\AgentView`, the renderer — or
+       `PtRoster`/`PtMinionRoster`/`CtlInstance`, which are party-panel frames and
+       the UI control library. **No combat site, no gameplay site.** Bit 9, which is
+       the near-perfect combatant separator on the wire (**0/302 vs 282/283**, with
+       bit 8 covering the single straggler), is an **animation gate** in `AvChar`
+       whose branch ends in `seqIndex != SEQ_INDEX_UNDEFINED`. So the partition is a
+       consequence of a display rule, not a combat rule.
+       **Two by-products worth more than the answer.** The client dispatches
+       definition ids on the top nibble — `0x20000000` → the monster table (48-byte
+       rows), `0x30000000` → the player table (80-byte rows), else an assert — and
+       **the wire agrees**: 585 of 585 joined creates are `0x20000000`-based, 48 of
+       54 ids join under `− 0x20000000` and **0 of 54** under the identity. And
+       `AvChar` consumes row+0x14 — the byte we call `profession` — as an
+       **appearance** parameter, which is fresh evidence against the gameplay
+       reading §3.7 already doubted.
+       **The sting was ours and it dissolves**: our hatcher's `flags = 0x20C` is
+       CORRECT — a Hatcher is a Collector, a non-combatant, and that is what
+       ArenaNet declares for one. What it shows is that our test hostile is a
+       non-combatant wearing a fight, which `content/world.toml` already says out
+       loud. Nothing in `content/` needs changing.
+       `studies/monsterai/FINDINGS.md` §3.7.1, reproduction commands included.
+       **And the result carries its own scope limit**: `ChCliBase`'s consumer has NO
+       direct caller — it is installed as a callback — so `--xrefs` demonstrably
+       under-reports inside this very result, and "every reader" means every reader
+       that method can reach.
+    3. ✅ **DONE 2026-08-11 — IT IS A SPATIAL QUERY LIBRARY, NO STEERING.**
+       All 88 asserts across the subsystem read. The vocabulary is exhaustively
+       geometric — trapezoids and their above/below links, portals, barriers,
+       SINK_NODE/X_NODE/Y_NODE, segments, flood fill, blockMap/mapDims,
+       tileMap/tileDims — and there is no follow, arrival, desired-velocity or
+       repath concept anywhere. It answers WHERE CAN I GO and never WHERE SHOULD
+       I GO, so **movement policy stays in the "cannot be settled" tier.** This
+       one mattered because `Engine\Map\Path` is in the SHARED tree, so
+       ArenaNet's server compiled these same files — it was the one place
+       server-side movement logic could have been visible.
+       **Three corrections to the study's own accounting**: the directory is NINE
+       files, not eleven; `PathBsp.cpp` carries zero asserts and was listed as
+       though read; and a separate `Engine\Map\PathEngine\` (`PeApi`,
+       `PeObject`) exists that nobody mentioned and that also has zero asserts.
+       **Three files remain unread because no tool here can see them.**
+       **A new search axis closed the negative's own named hole.** The study ran
+       33 keyword searches over assert TEXT and never over the 936 embedded
+       source FILE NAMES. Scanned: no name contains steer, pursu, chase, follow,
+       seek, flee, wander, patrol, roam, brain, behav, tactic, decis, aggro,
+       threat, navig, flock, herd, goal or waypoint. Three names did hit and
+       their DIRECTORIES dispose of all three — and one is
+       `Gw\Ui\Game\Compass\CompassAIControl.cpp`, the "AI Control" file the
+       study flagged as structurally unsearchable. Its path answers it,
+       corroborating task 1's Fight/Guard/Avoid-Combat result from an angle that
+       shares no evidence with it. (`AtAvoid.cpp` is `Ui\Game\AgentText` —
+       floating-label overlap avoidance; `GmWalk.cpp` asserts
+       `evt.code < KEYSTATES`, the player's own walk keys.)
+       **Kept**: `PathApi:753/754 obstacleCenter`/`obstacleRadius` is a second
+       and STRONGER dynamic-obstacle witness than `PathObstacle:176` — a public
+       API parameter rather than an internal invariant, so the shipped interface
+       accepts moving circular obstacles, and `pathmap.py` has none.
+       `MsPathPack:115 !m_charIndex.Count()` is a path pack keyed by CHARACTER
+       and is unread. `PathData:34` bounds world y to ±131071.0 (2^17−1).
+       **And a reading of mine was refuted by our own decoder**: I took
+       `PathBuild:2297 def->trapezoidCount < 1024` for a per-plane cap, and 40 of
+       1,805 planes across 60 retail maps exceed it, the largest 6,577. `def` is
+       a build-time input. `studies/monsterai/FINDINGS.md` §2.1.1.
+    4. ✅ **DONE 2026-08-11 — NO SPAWN TABLE, AND THE QUESTION WAS MALFORMED.**
+       Nine agents over the Props chunk. **The framing first**: this item asked
+       whether a prop model id lands in the `0x20000000` creature-class range,
+       and that is two unrelated numbering schemes sharing a leading `2`. The
+       leading nibble of a **chunk id** is its *stage* field
+       (`decompose(0x20000004)` → stage=Bloated, baseId=4); `CHAR_CLASS_MONSTER_BASE`
+       is the top nibble of a runtime **agent class id** that never appears in
+       the archive. And the field itself is a **u16** — corpus-wide 0..439 — so a
+       32-bit tag cannot fit in it and the search as posed had no failing branch.
+       **The answerable question is what the index RESOLVES to**, and it resolves:
+       `+0` is a per-map index into that map's own Props Dependencies chunk
+       `0x21000004`, in range on 346/346 maps that have one, with a cross-map
+       control that forces an out-of-range in ≥44.9% of 119,716 pairings.
+       **The answer is no.** All 285,670 prop records in 349 maps resolve to model
+       files; **0** resolve to any of the creature model ids we can name. Under
+       the right null — creature ids are drawn from the archive's model files, of
+       which the props system names 54.65% — P(zero) ≈ 3.9e-26. The structural
+       reason is better than the count: **interactive world objects in this client
+       are gadget AGENTS** (`GdCliApi.cpp:430 agentDef == GW_AGENTDEF_GADGET`), a
+       subsystem disjoint from `Engine\Map\Props`, and **zero** of the 692
+       asserts across 73 Agent/Char/Gadget files reference a map prop. Looking for
+       creatures in Props was looking in the wrong subsystem.
+       **But the slot is not closed — it is newly OPEN.** Only 32.68% of the Props
+       chunk is the prop array. The other **67.32% frames as `{u8 tag, u32 size}`
+       records closing 349/349** (both ±1 start controls close 0/349), two tag
+       sequences only, and **tag 1 alone is 66% of the entire Props chunk corpus**
+       — framed, walkable today, and read by nothing in this repo. That is now the
+       single most valuable unread structure in the map format.
+       `studies/monsterai/FINDINGS.md` §3.10.1, which also corrects two reversed
+       size ranges in §3.10 and lists what each of the 23 slots actually is: **11
+       have no field-reading code anywhere in the repo.**
+       **A tooling defect fell out and is fixed in the same commit.**
+       `asserts.py --modules` keyed on the source BASENAME and printed the first
+       colliding file's path, so `Engine\Map\Props\PrApi.cpp` (19 sites) was
+       invisible behind `Gw\Pref\PrApi.cpp` (67) as one `86` line — a module
+       missing from the census that decides what source files exist. Now keyed by
+       full path, `--file` prints the split, and `test_codescan.py` §8 pins it
+       (62 checks, floors 56→62 / 16→22). Checked and clear: no Path basename
+       collides, so task 3's read is unaffected.
+
+    **And one analyser check that needs no new session either:** run the `0x001E`
+    tick-clock integral against the wire span on the two EXISTING captures. If it
+    reddens there, the wire-clock-to-plaintext mapping every timed claim in this repo
+    rests on is broken — which is worth knowing before a campaign is designed on top
+    of it, not after.
+
+    **What is NOT on this list is the campaign itself.** It is 6–10 operator sessions
+    at human cadence over two to three weeks and it is the owner's call, not a task an
+    agent picks up. §7 of the study specifies it fully — operator script, the live
+    CONTROL predicate (which is *not* `labelrun`'s: against ArenaNet the world keeps
+    talking, so "no traffic" reddens in every window), the `behaviourrun.py` analyser
+    with nine checks that can go red, per-question stopping rules fixed in advance,
+    and an explicit refusal list. **Read §7.8 before proposing any shortcut**; the
+    cheap way to get n on skill selection is exactly the traffic pattern that closes
+    accounts, and grinding one spawn point is refused rather than refuted.
 
 0k. **DONE 2026-08-11 — `0x0026` IS ON THE WIRE and the attack blocker is dead.**
     The `worldaction` labelled run on loopback drew **four `ATTACK_AGENT` at our own
@@ -1377,9 +1608,22 @@ parallel, with one safety change that is not optional — see its entry.
     floats, the marshalling is not, and C6's "the schema types them as dwords" read as a
     bug report for three days while being the correct behaviour.
 
-1. **Build the capture harness (A1).** *Started 2026-08-06, in build.* Every capture in the
-   vault is Rurik talking to Rurik; **not one byte is ArenaNet's**, so R0b is unmet and R1.5
-   and R4c's original criterion are both blocked behind it.
+1. **Build the capture harness (A1).** ✅ **DONE 2026-08-07. R0b is met, R1.5 is met, and
+   nothing is blocked behind either of them.** The vault holds **three keyed live captures**
+   — `20260807T133758`, `20260807T143055`, `20260810T235916` — decoding to **22,524 GAME_SMSG
+   over twelve connections, 398,945 B, 758.0 s, 155 distinct opcodes, twelve of twelve framing
+   to `consumed == total` with `err is None`**, plus 971 GAME_CMSG. See §3's R0b and R1.5 rows,
+   §3.3–§3.5, and [studies/reconstruction/FINDINGS.md](studies/reconstruction/FINDINGS.md) §1
+   for the corpus measured end to end.
+   *This item's lead sentence read* "Every capture in the vault is Rurik talking to Rurik;
+   **not one byte is ArenaNet's**, so R0b is unmet and R1.5 and R4c's original criterion are
+   both blocked behind it" *until 2026-08-11 — every clause of it false since 2026-08-07, and
+   contradicted by its own body eight lines later and by §3's two ✅ rows.* The body was
+   rewritten as the work landed and the lead sentence was not, so a cold session reading §8
+   first — which `CLAUDE.md` calls the live next-actions list — was told the project's central
+   instrument does not exist. **That is the exact failure §3's header exists to prevent,
+   arriving in the one document that is supposed to be immune.** Recorded rather than quietly
+   deleted, because the fix for it is a habit and not an edit.
    **Done:** the live-capture build exists, the launch gate binds a binary to a target
    (§6.2 preconditions, all met), and the **decryption engine is built and proven** —
    `toolkit/authsrv/replay.py` reads a `.raw` back and decrypts it offline, 329 captures

@@ -13,9 +13,34 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
 ## Non-negotiable
 
 - **Provenance gate: zero ArenaNet bytes in the repo, ever.** No client files, no
-  `Gw.dat`, no extracted assets, no decompiled code — only our code and our
-  observations. The rationale is at the top of `.gitignore`; read it before editing
-  that file. Retrofitting provenance is not possible.
+  `Gw.dat`, no extracted assets, no decompiled code. The rationale is at the top of
+  `.gitignore`; read it before editing that file. Retrofitting provenance is not possible.
+  **But read the rationale's SECOND sentence too, because for four days nobody did:**
+  *"Everything derived regenerates from the owner's own legally purchased install via a
+  documented extraction step."* That is a permission, and it governs derived data. This
+  line used to end "— only our code and our observations", which cold sessions read as
+  forbidding a table of numbers read out of the client, and they refused every time: a
+  derived assert table was left undecided rather than ruled on, three extracted item names
+  reached a draft heading for git unnoticed, and R4c-2's unit data went unbuilt behind a
+  rule that never forbade it. **Owner's ruling 2026-08-11, `PLAN.md` §7 Q3 — the gate does
+  not move, its boundary is now written down, and the boundary is MEASUREMENT vs
+  EXPRESSION**, not bulk vs single and not data vs code:
+  - **Permitted, in bulk:** facts we measured — levels, bounds, counts, strides, ids,
+    offsets, addresses, layouts — on three conditions: **the extractor is in this repo and
+    the row names it, the row records the build, and provenance is per row.** Conditions 1
+    and 2 are enforced by `toolkit/content.py` for `source = "client-table"` and their
+    refusals are tested (`test_content.py`), because the loosening direction is the one
+    where "a rule nothing checks is a wish" bites hardest.
+  - **Still refused:** ArenaNet's expression — asset bytes, `Gw.dat` chunks, textures,
+    audio, model data, decompiled bodies, and **verbatim assert expressions with their
+    source path and line**. A derived table may carry the *constraint* (opcode, field,
+    bound, address) and must leave the expression text out.
+  - **Names and authored text: commit the id, resolve the string at run time** from the
+    owner's own archive — `model_id = 419, name_string_id = 2519`. This is the pattern
+    `mapbuild.py` already proves with FINDINGS 14's five mandatory chunks.
+  - **This does not touch the second gate.** `PLAN.md` §6.1's derivation register is about
+    *other people's* work and is a licence question. "We relaxed provenance" never covers
+    both.
 - **The vault stays local.** `vault/` holds captures, keys and client snapshots. It
   is gitignored, it is personal data from the owner's own account, and it never goes
   on the internet. Probe output goes there too.
@@ -166,7 +191,22 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   python toolkit/authsrv/test_handshake.py
   ```
 
-  Others: `toolkit/schema/test_codec.py` (codec vs. real captured bytes),
+  Others: `toolkit/schema/test_codec.py` (codec vs. real captured bytes — and
+  since 2026-08-11 the `string16` round trip: **22,524 of 22,524** live GAME_SMSG
+  re-encode to ArenaNet's own bytes, where 133 in twelve opcodes did not, because
+  the field decoded with `errors="replace"` and GW's encoded names carry code
+  units in the UTF-16 surrogate range. The failing set was EXACTLY the set whose
+  values carried U+FFFD, and the test asserts that as an invariant so it can fail
+  in both directions. Three controls sit under it and each catches a different
+  wrong implementation: a value CONSTRUCTED from raw code units must encode to
+  exactly them — which is what a decoder that stashes the original bytes on the
+  value cannot do, and the only thing that catches it, since such a decoder
+  round-trips every message it ever saw and survives the mutation control; a
+  mutated neighbouring field must read back mutated with the string intact,
+  which catches a message-level byte cache; and an astral character must count
+  as TWO code units, which is a second bug the first one was hiding — `len(s)`
+  counts Python characters, so a surrogate pair wrote a count two bytes short and
+  desynced the NEXT message. The check is on that next message),
   `toolkit/schema/test_catalog.py` (our message catalog vs. the client's own
   format tables — 477/477 GAME_SMSG agree field-for-field on build 38797),
   `toolkit/harness/test_harness.py` (the one-command stack, the launch safety
@@ -371,7 +411,22 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   red. ~12 s),
   `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
-  and that an unframeable opcode stops the framer instead of being framed past),
+  that an unframeable opcode stops the framer instead of being framed past, and
+  the whole enemy: a hostile that swings back, chases, turns to face you and
+  casts — each phase checked as a SHAPE the wire could contradict rather than as
+  a message count. Its last section is the one that earned the entry:
+  **every combat constant is asserted against a LITERAL written in the test
+  file.** That exists because on 2026-08-11 the monster-AI dive sabotaged them
+  one at a time and **twelve of fourteen could be set to a wrong value with all
+  125 checks green** — `ENEMY_MELEE_RANGE` 150→400, `AGGRO_RANGE` 1200→1100,
+  `SWING_WINDUP` 0.899→0.2, all PASS. Only `ENEMY_TURN_RATE` reddened, and it is
+  the only constant in the set corroborated to the bit. Not a coverage accident
+  but a shape: every other section computed its expectation *from* the symbol
+  under test, so the symbol was free to move and the test moved with it. **A
+  symbol appearing in a test file is not a check.** The same section reads
+  `skilltable.py`'s live table off build 38797 and cross-checks the enemy's bar —
+  which is how `authsrv.py`'s claim that all four bar skills are non-elite was
+  found false (276 is elite), the comment having been the only witness),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
@@ -468,7 +523,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   shapes. Each pinned at a named address with the reason it was missed, because
   all three answered a clean confident zero. Its stdlib half runs without
   capstone: `asserts.py` takes no disassembler on purpose, and its under-count
-  silently narrows every `--in <module>` range on the capstone side),
+  silently narrows every `--in <module>` range on the capstone side. §8 and §9
+  are the same failure from the other direction, found 2026-08-11: the assert
+  census grouped by BASENAME and printed the path of whichever colliding file
+  held the lowest VA, so nine rows summed two modules under one of their names
+  while the other vanished. The two biggest rows of that report described no
+  file in the image — `Base\rtl\Array.h` (4431) and `Base\rtl\List.h` (3288)
+  printed as 4433 and 3295 under their `.cpp` siblings — and `PrApi` merged the
+  preferences module (67) with the props module (19), 2.4 MB apart, so "props
+  has no PrApi.cpp" read as absence. §8's FIRST check is the negative control,
+  the collision itself, and it reproduces the old grouping inline so 67/19 is a
+  difference between two live answers rather than a number the test asked the
+  code to confirm about itself; the basename sabotage reddens 9 of its 19. §9
+  pins the consequence downstream, where `module_bounds` matches a substring and
+  therefore silently WIDENS `--in PrApi` to 2.4 MB — with `--in AvChar`, which
+  legitimately catches the adjacent `AvCharAnim.cpp`, as the control that must
+  keep reading differently, since a warning that fires the same way on both is
+  noise),
   `toolkit/test_checks.py` (the check on the checker — see below),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into

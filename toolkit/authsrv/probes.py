@@ -1578,7 +1578,9 @@ def _burrow_steps(agent_id, origin):
     worth the run; the asymmetry is recorded instead.
 
     Steps 1-2 are cheap and ride along: EFFECT_TRANSITION (0x1000) is the bit
-    ArenaNet sets on 151 of 151 worm creates and clears exactly 2.00 s later. What the
+    ArenaNet sets on 140 of 140 worm creates and clears 2.00 s later -- and the two
+    windows have different n, because a capture starts and ends mid-cycle: emerge
+    n=137 in [1.976, 2.021], submerge n=132 in [1.973, 2.037]. What the
     client DOES with it is UNVERIFIED -- we know only its timing. Property 66, which
     also appears in the worm burst, is NOT probed here: `prop66_sweep` already owns
     that question and section 16.4 has already bounded it to one byte at AvChar+0x113.
