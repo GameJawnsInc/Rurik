@@ -519,8 +519,21 @@ ALLEGIANCE_NPC_MINIPET = 6
 #   GenericValueTarget    int,   with target  -- 0x00A0 (same shape as 0x00A3)
 #   GenericFloat          float, no target    -- 0x00A2
 #   GenericTargetModifier float, with target  -- 0x00A3
-# The first and last are OBSERVED working. The middle two are INFERRED from the
-# field shapes matching; nothing has confirmed them on the wire.
+# The first and last are OBSERVED working. The middle two were INFERRED from the
+# field shapes matching, with nothing confirming them on the wire --
+# CORROBORATED 2026-08-11 by the client's own dispatch table, which is a witness
+# that was not consulted to make the claim. `msghandler.py --classify` reads the
+# handler each opcode forwards to: 0x009F and 0x00A0 both hand off to
+# 0x008128F0, 0x00A2 and 0x00A3 both hand off to 0x00813040, and the two
+# functions are different. So the client itself splits these four exactly along
+# the int/float line GWCA names them by, and the with-target member of each pair
+# carries one more field than the no-target member -- 5 against 4.
+# It is evidence rather than a coincidence because sharing is RARE: 241
+# forwarding handlers resolve to 215 distinct callees and only 8 callees are
+# shared by more than one opcode at all. `test_msghandler.py` pins both the
+# pairing and that base rate, since the pairing means nothing without it.
+# Still not confirmation of the SEMANTICS -- it says these four are two pairs of
+# the same kind, not what any of them does.
 # GenericValueTarget. GWCA's note reads "caster_id is victim, target_id is
 # attacker"; OBSERVED on our own client, the FIRST agent slot is the one that
 # plays the swing -- the attacker. See hit_enemy() for the run that showed it

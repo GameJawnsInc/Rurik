@@ -549,6 +549,21 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first),
+  `toolkit/clientscan/test_msghandler.py` (the receive-handler classifier, which is
+  the loopback opcode sweep's PREDICTION stated before it runs. Three corrections it
+  pins, each to a claim that was in circulation: **477 of 477 table entries carry a
+  non-null dispatch**, so the sweep has no "inert by construction" bucket and a silent
+  result is a fact about the readout rather than about reachability; the never-seen
+  denominator is **324, not 332** — 332 is `487 − 155` over the schema while the
+  receive table holds 477, and the difference is exactly the ten opcodes catalogued
+  with no receive entry; and **"absent from the table" does not mean "inert"**, because
+  `0x000C`/`0x000D` are two of those ten and are the latency round trip the client
+  demonstrably acts on, handled below the message table. It also CORROBORATES something
+  `agents.py` had as inferred: the client's own dispatch pairs 0x009F/0x00A0 to one
+  callee and 0x00A2/0x00A3 to another, splitting GWCA's four generic-value shapes
+  exactly along the int/float line, with the with-target member of each pair carrying
+  one extra field. Its control is the base rate — 241 forwarders over 215 callees with
+  only 8 shared at all — because a pairing means nothing if sharing is common),
   `toolkit/clientscan/test_codescan.py` (the attack-speed chain, the two
   decoding traps that hid it, and §7's three under-reporting defects — a
   `--field` that knew one displacement encoding of two, a `--xrefs` that swept

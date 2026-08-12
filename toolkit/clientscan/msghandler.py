@@ -48,6 +48,7 @@ C:\\gw is the player's own and is never written, patched or launched from here.
 """
 
 import argparse
+import collections
 import os
 import sys
 
@@ -190,6 +191,149 @@ def disasm(img, va, limit=90, indent="  ", note=None):
     return calls
 
 
+def shape(img, va, limit=64):
+    """A receive handler's SHAPE, without reading a line of it as English.
+
+    (instructions, [callee VAs], terminates) for the handler at `va`. Silent -- the
+    printing disassembler above is for a human reading one handler; this is for
+    classifying 477 of them, and a classifier that prints 477 disassemblies has
+    classified nothing.
+
+    Deliberately shallow. It does not follow calls and does not try to understand a
+    body: what it recovers is the handler's own instruction count and the set of
+    functions it hands off to. That is enough to PARTITION the catalogue, which is all
+    the sweep needs -- see classify().
+    """
+    md = capstone.Cs(capstone.CS_ARCH_X86, capstone.CS_MODE_32)
+    o = img.off(va)
+    if o is None:
+        return None
+    calls, n, ended = [], 0, False
+    for n, ins in enumerate(md.disasm(img.blob[o:o + limit * 8], va), start=1):
+        if ins.mnemonic in ("call", "jmp") and ins.op_str.startswith("0x"):
+            try:
+                calls.append(int(ins.op_str, 16))
+            except ValueError:
+                pass
+            if ins.mnemonic == "jmp" and n <= 4:
+                ended = True       # MSVC tail-call thunk: the jmp IS the handoff
+                break
+        if ins.mnemonic == "ret":
+            ended = True
+            break
+        if n >= limit:
+            break
+    return n, calls, ended
+
+
+def classify(img):
+    """Partition every receive opcode by what its handler DOES, structurally.
+
+    THE POINT, and why this is not a curiosity. `studies/reconstruction/FINDINGS.md`
+    measures that **332 of the 487 catalogued GAME_SMSG opcodes have never been seen
+    from ArenaNet** -- a third of the protocol, for which we hold a field layout and no
+    behaviour. The sweep that fixes that sends each one to a real client on loopback and
+    records what happens. But a sweep with no stated prediction is a fishing trip, and
+    the repo's own rule is that a probe states its expectation FIRST
+    (`toolkit/authsrv/probes.py`). This is that prediction, and it is computed from the
+    binary rather than guessed:
+
+      FORWARDER    a short handler whose whole body hands off to exactly one function.
+                   PREDICTS: whatever that callee does -- so opcodes sharing a callee
+                   should behave alike, which is a check the sweep can fail.
+      BODY         a handler that does its own work, or calls several functions.
+                   PREDICTS: nothing specific; these are the ones worth watching.
+
+    EVERY entry in the receive table carries a non-null dispatch pointer -- MEASURED,
+    477 of 477, so there is no NO_HANDLER class and the sweep cannot expect a "this one
+    cannot possibly do anything" bucket from the table. The opcodes that are genuinely
+    absent are absent from the TABLE, not null within it: `schema/messages.json` holds
+    487 and the receive table holds 477, so ten are catalogued with no receive entry.
+    Pass the schema set to see them (`missing` in the returned dict).
+
+    AND "NOT IN THE TABLE" DOES NOT MEAN "NO EFFECT", which is the correction that
+    matters and it comes free with the corpus. Two of those ten -- `0x000C` and
+    `0x000D` -- are sent by ArenaNet 145 and 144 times and are unmistakably acted on:
+    they are the latency round trip `0x000C -> 0x0009 -> 0x000D` that drives the
+    client's net graph (`toolkit/authsrv/test_ping.py`). So they are handled BELOW the
+    message table, in the transport, which is exactly where a keepalive belongs. The
+    honest prediction for the other eight is therefore "no MESSAGE-TABLE effect", and
+    `0x000C`/`0x000D` are a standing counterexample to the stronger reading -- one this
+    project already holds rather than one the sweep would have to discover.
+
+    The partition is a PREDICTION, not a result. Scored against the dynamic sweep it is
+    a real experiment; on its own it is a map of the catalogue and nothing more.
+    """
+    out = {}
+    for va, count, direction in TABLES:
+        if direction != "RECV":
+            continue
+        for opcode, cmds, dispatch in read_table(img, va, count, direction):
+            if not dispatch or img.off(dispatch) is None:
+                out[opcode] = {"class": "NO_HANDLER", "handler": dispatch or 0,
+                               "instructions": 0, "callees": [], "fields": len(cmds)}
+                continue
+            got = shape(img, dispatch)
+            if got is None:
+                out[opcode] = {"class": "NO_HANDLER", "handler": dispatch,
+                               "instructions": 0, "callees": [], "fields": len(cmds)}
+                continue
+            n, calls, _ended = got
+            kind = "FORWARDER" if len(calls) == 1 else "BODY"
+            out[opcode] = {"class": kind, "handler": dispatch, "instructions": n,
+                           "callees": calls, "fields": len(cmds)}
+    return out
+
+
+def print_classify(img, seen=None):
+    """The partition, plus the callee groups that make it falsifiable."""
+    table = classify(img)
+    buckets = collections.Counter(v["class"] for v in table.values())
+    print(f"\n{len(table)} receive opcodes classified by handler shape")
+    for kind in ("NO_HANDLER", "FORWARDER", "BODY"):
+        print(f"  {kind:<11} {buckets.get(kind, 0)}")
+
+    # Handlers that hand off to the SAME function are the same kind of message. This is
+    # the group that makes the prediction refutable: if two opcodes share a callee and
+    # the sweep sees an effect for one and silence for the other, either the partition
+    # is wrong or the readout missed it -- and both are findings.
+    groups = collections.defaultdict(list)
+    for opcode, v in table.items():
+        if v["class"] == "FORWARDER":
+            groups[v["callees"][0]].append(opcode)
+    shared = {k: v for k, v in groups.items() if len(v) > 1}
+    print(f"\n{len(groups)} distinct forwarder callees; {len(shared)} are shared by "
+          f"more than one opcode")
+    for callee in sorted(shared, key=lambda c: -len(shared[c]))[:10]:
+        ops = " ".join(f"0x{o:04X}" for o in sorted(shared[callee])[:12])
+        more = "" if len(shared[callee]) <= 12 else f" (+{len(shared[callee]) - 12})"
+        print(f"  0x{callee:08x}  {len(shared[callee]):>3} opcodes  {ops}{more}")
+
+    if seen:
+        unseen = sorted(set(table) - set(seen))
+        outside = sorted(set(seen) - set(table))
+        print(f"\nof {len(table)} table entries, {len(set(seen) & set(table))} have been "
+              f"observed from ArenaNet and {len(unseen)} never have")
+        b = collections.Counter(table[o]["class"] for o in unseen)
+        for kind in ("FORWARDER", "BODY"):
+            print(f"  never-seen {kind:<11} {b.get(kind, 0)}")
+        if outside:
+            print(f"\n  and {len(outside)} OBSERVED opcode(s) are not in the receive "
+                  f"table at all: {' '.join(f'0x{o:04X}' for o in outside)}")
+            print(f"  -- ArenaNet sends them and the client acts on them, so they are "
+                  f"handled BELOW\n     the message table. Any prediction of the form "
+                  f"'absent from the table => inert'\n     is refuted by these before "
+                  f"the sweep runs.")
+        print(f"\nPREDICTION, stated before the sweep: all {len(unseen)} never-seen "
+              f"opcodes reach a\n  handler, so NONE of them is inert by construction "
+              f"and a silent result is a fact\n  about the READOUT or about the "
+              f"client's state, never about reachability.\n"
+              f"  {b.get('FORWARDER', 0)} forward to one function and should behave "
+              f"like the other opcodes\n  sharing that callee -- which is the half "
+              f"this can fail on.")
+    return table
+
+
 def callers(exe, target):
     """Every direct `call` to a VA. One implementation, in asserts.py."""
     from asserts import Asserts
@@ -250,6 +394,14 @@ def main():
     ap.add_argument("--map", action="store_true",
                     help="map every receive opcode to the ArenaNet source file "
                          "its handler asserts in")
+    ap.add_argument("--classify", action="store_true",
+                    help="partition every receive opcode by handler SHAPE "
+                         "(NO_HANDLER / FORWARDER / BODY). This is the loopback "
+                         "sweep's prediction, stated before it runs")
+    ap.add_argument("--seen", default=None, metavar="FILE",
+                    help="a file of opcodes observed from ArenaNet (one per line, "
+                         "hex or decimal); --classify then splits its prediction "
+                         "over the never-seen set")
     ap.add_argument("--exe", default=None,
                     help="client to read; defaults to the pinned pristine "
                          "build, and the choice is printed")
@@ -276,6 +428,17 @@ def main():
 
     if a.map:
         print_map(img)
+        return 0
+
+    if a.classify:
+        seen = None
+        if a.seen:
+            seen = set()
+            for line in open(a.seen, encoding="utf-8"):
+                line = line.split("#", 1)[0].strip()
+                if line:
+                    seen.add(int(line, 0))
+        print_classify(img, seen)
         return 0
 
     if a.callers:
