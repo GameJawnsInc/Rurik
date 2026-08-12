@@ -5097,3 +5097,96 @@ because replaying a journal is the one legitimate write to `dat_study`.
 6. **This is still the repair path.** An authored map must ship a broken or
    absent stage 2 to be compiled at all, and every run of one mutates the archive
    it is given.
+
+## 39. OBSERVED: the client read a row we relocated 1.6 GB (2026-08-12)
+
+**`datmove.py` shipped with one standing caveat — *no client has ever read a row
+this module moved* — and this retires it.** Map 143's Stripped partner was moved
+from `0x63C66800` to `0x323A400`, stored uncompressed instead of compressed, and
+the client found it, compiled from it, and produced **ArenaNet's shipped map to
+the byte**.
+
+Run 2026-08-12, `vault/research/e9-datmove-2026-08-12/`, on
+`vault/run/2026-07-29_221c13772c7a-c2/Gw.dat`. `PREDICTION.md` there was written
+before any write.
+
+### The design, and why its control was already measured
+
+FINDINGS 35 zeroed map 143's Bloated stream and watched the client rebuild it
+from row 71497 — 33,021 B, sha `acfc8e7501e94b9e`, 27 trapezoids, byte-identical
+to ArenaNet's ship. In that run row 71497 sat where ArenaNet put it.
+
+This run changes **where those bytes live and nothing else about them**.
+
+| row 71497 | FINDINGS 35 | this run |
+|---|---|---|
+| content | 12,495 B decompressed | **identical**, sha `1438cbdb9d50682a` |
+| offset | `0x63C66800` | **`0x323A400`** — 1.6 GB earlier |
+| stored | 4,544 B, compression 8 | 12,495 B, **compression 0** |
+| reservation | 4,608 B | 12,800 B |
+
+Compression 0 and a changed size were already established by FINDINGS 36, which
+wrote a stored payload into this same row with `datwrite --replace`. **The one
+property this run adds is the offset**, which is the one `datwrite` refuses to
+change and the one nothing had tested.
+
+Placement came from `datmove --plan`, and on the real archive it reproduced
+`datplan`'s own corpus figures: **208 usable runs, largest 953,856 B, 6 runs
+withheld whole** for carrying container generations.
+
+### The result — all three predictions
+
+`Gw.log`, on a log moved aside first:
+
+```
+Perf: Map file '0x0287d3' failed to load.  Attempting to re-bloat.
+```
+
+| | predicted | observed |
+|---|---|---|
+| rebuilt payload | 33,021 B `acfc8e7501e94b9e` | **33,021 B `acfc8e7501e94b9e`** |
+| mesh | 27 trapezoids, 1 plane | **27 trapezoids, 1 plane** |
+| row 71497 after | still `0x323A400`, 12,495 B, comp 0 | **unchanged on all three** |
+
+**The client followed a 1.6 GB relocation, read a stored row where a compressed
+one had been, and emitted ArenaNet's own bytes.** The offset field in the MFT is
+therefore load-bearing at load time and the client holds no cached address for a
+map's partner row.
+
+### One thing that reproduced without being asked
+
+Row 71496 was rebuilt at **`0x4B82E00`** — the same address FINDINGS 35 recorded
+for its rebuild of the same row. Two runs, days apart, with a differently-laid
+archive between them, and the client's MFT-derived free map chose the same place.
+That is consistent with the best-fit allocator FINDINGS 18 read at `0x00478C50`
+and is the closest thing to a corroboration of it we have, though it is **one
+coincidence and not a measurement** — nothing here varied the free map on purpose.
+
+### Archive hygiene
+
+Post-flight: descriptor counter 26,881 → 26,886; five relocations — rows 71496
+and 71497 plus the client's scratch rows 8315/8316/8317, the same baseline churn
+every arm of this rung has shown. TIER 2 (the directory invariant) unchanged both
+ways. **`datmove --check-overlaps` reports 0 overlapping row pairs after a client
+session on a relocated archive**, which is the invariant `test_datmove.py` is
+built around, now checked against a real 4.2 GB archive the client has written to
+rather than a fixture.
+
+Both journals marked `.CONSUMED.json` and the copy re-cut from `dat_study`.
+`dat_study` and `C:\gw` were read-only throughout, with `guard_source()` live.
+
+### What this does NOT establish
+
+1. **One row, one map, one load.** A relocation the client tolerates at load
+   time is not one that survives a play session.
+2. **Nothing watched the freed space.** The move released 4,608 B at
+   `0x63C66800` and the arm released more; FINDINGS 18 records the client
+   relocating and resizing its own rows during ordinary play, and whether it
+   reclaims those blocks — and what that does to a row we moved — was not
+   observed.
+3. **The relocated row was ArenaNet's own content.** This says the client
+   follows the offset; it says nothing new about authored bytes, which is
+   FINDINGS 38's result and a different question.
+4. **The capacity limit is untouched by this.** 176 of 349 map rows are still
+   larger than the largest run `datplan` will hand over. Relocation makes
+   authoring possible where a run exists, not everywhere.

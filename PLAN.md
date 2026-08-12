@@ -2085,8 +2085,15 @@ parallel, with one safety change that is not optional — see its entry.
     `rebloat.py --verify` prints, and is worth remembering about §35 and §36 too.
     **(e8)** ⬜ Nothing in FINDINGS 34 is covered by a test, and none of it is in the
     suite. (FINDINGS 37 is: `test_strippedterrain.py`.)
-    **(e9)** 🟡 **HALF DONE 2026-08-12 — the relocation verb exists and no client has
-    read a row it moved.** The wall was never the compiler: `datwrite --replace` writes
+    **(e9)** ✅ **DONE 2026-08-12 (FINDINGS 39). THE CLIENT READS A ROW WE RELOCATED**
+    — map 143's Stripped partner moved **1.6 GB**, from `0x63C66800` to `0x323A400`,
+    stored uncompressed where a compressed row had been, and the client found it,
+    compiled from it, and emitted ArenaNet's shipped map to the byte (33,021 B, sha
+    `acfc8e7501e94b9e`, 27 trapezoids). FINDINGS 35 is the control and was already
+    measured, so the only new variable was the offset — the one field `datwrite`
+    refuses to change. `datmove --check-overlaps` reports 0 overlapping pairs after a
+    client session on the relocated 4.2 GB archive. The wall was never the compiler:
+    `datwrite --replace` writes
     UNCOMPRESSED and refuses to relocate, so an authored stream only fits where it is
     smaller than its row's existing reservation. Map 143's own 64x64 file is 12,495 B
     against a 4,608-byte reservation, which killed FINDINGS 38's first design and forced
@@ -2094,9 +2101,11 @@ parallel, with one safety change that is not optional — see its entry.
     placement from `datplan.classify_runs` (never `free_runs` — 89.6% of the gap
     measure is live container generations), best fit, old reservation zeroed after the
     MFT is repointed, overlapping destinations refused. **46 checks, five sabotages all
-    red, no vault** — but every claim is about the archive's own rules, and **whether
-    the client accepts a relocated row is one caged run away and unmade**. The capacity
-    limit is real and reported: 176 of 349 map rows are larger than the largest run
+    red, no vault** — and now one caged run on top, which is what turned its offline
+    claims into an observed one. **What remains unmeasured is durability**: a
+    relocation the client tolerates at LOAD time is not one that survives a play
+    session, and nothing watched whether it reclaims the blocks the move frees. The
+    capacity limit is real and reported: 176 of 349 map rows are larger than the largest run
     `datplan` will hand over, so for half the archive "nowhere" is the true answer —
     which is what the OTHER half, a compressor for the archive's format, would fix.
     That half is deliberately not attempted: its only strong oracle is a client
