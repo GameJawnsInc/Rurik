@@ -1,4 +1,4 @@
-# The loopback opcode sweep — what 242 of 487 GAME_SMSG opcodes do
+# The loopback opcode sweep — COMPLETE: all 324 never-seen GAME_SMSG opcodes
 
 **Status: OBSERVED, 2026-08-12.** Our own server sends each catalogued opcode ArenaNet has
 never shown us to a client we control on 127.0.0.1, and the client's reaction is the
@@ -9,14 +9,17 @@ measurement. Method and every refusal: `toolkit/authsrv/smsgsweep.py`. Readout c
 
 | | count | of |
 |---|---|---|
-| measured | **242** | 487 catalogued |
-| ASSERTED — a guard the client wrote caught it | **57** | |
+| measured | **324 of 324** | the whole never-seen set |
+| ASSERTED — a guard the client wrote caught it | **82** | |
 | FAULTED — access violation, no guard at all | **3** | |
+| DROPPED_CHANNEL — client re-established and kept playing | **1** | |
 | REPLIED — client answered | **3** | |
-| SILENT | 179 | |
-| remaining to plan | 82 | of the 324 never-seen |
+| SILENT | 235 | |
+| remaining | **0** | the loop stopped on "nothing left to plan" |
 
-Sixty crash rows, **every one paired to the dialog its own run captured** — no gaps.
+**86 crash rows, every one paired to the dialog its own run captured — no gaps.**
+Every reading was taken in map 148 with the player alive and the map quiet; `record`
+refuses a connection that fails either, and one row measured in map 0 was removed.
 
 The 155 opcodes ArenaNet has sent us are excluded (rebuilt from the tapes by
 `--write-seen`: 155 over 12 live connections). So are the ten with no receive-table entry.
@@ -71,17 +74,20 @@ boundary — a derived table may carry the constraint and must leave the express
 `0x0038`–`0x003B` are four consecutive opcodes sharing one constraint, which is the
 strongest structural hint in the table: a family of four attribute messages.
 
-## 2b. The constraint census — 60 crash rows, and it maps the catalogue
+## 2b. The constraint census — 86 crash rows, and it maps the catalogue
 
 Grouped by the constraint each opcode's guard enforces. **Our words; ArenaNet's assert
 text stays in the vault.** The clustering is the finding: these are not scattered.
 
 | n | what must exist / hold | opcodes |
 |---|---|---|
+| 10 | a **party** record | `0x01C4` `0x01C5` `0x01C6` `0x01C7` `0x01C8` `0x01C9` `0x01CC` `0x01CD` `0x01CE` `0x01D1` |
 | 8 | an **inventory** record the payload names | `0x0141` `0x0142` `0x0145` `0x0146` `0x014F` `0x0150` `0x0151` `0x0153` |
+| 6 | an **index within a count** — a bounds check on an array | `0x0174` `0x01A1` `0x01AC` `0x01AE` `0x01E1` `0x01E2` |
+| 2 | a **skill bar** | `0x01A2` `0x01A3` |
 | 6 | an **item** record | `0x0137` `0x0139` `0x0155` `0x0156` `0x0159` `0x0160` |
-| 5 | a valid **encoded string** — first code unit at or above the encoding's base | `0x0033` `0x009E` `0x00B9` `0x00C0` `0x017A` |
-| 6 | a loadable **file id** | `0x0017` `0x0019` `0x00A8` `0x00A9` `0x015F` `0x0162` |
+| 7 | a valid **encoded string** — first code unit at or above the encoding's base | `0x0033` `0x009E` `0x00B9` `0x00C0` `0x017A` `0x019C` `0x01D4` |
+| 7 | a loadable **file id** | `0x0017` `0x0019` `0x00A8` `0x00A9` `0x01A4` `0x015F` `0x0162` |
 | 4 | an **attribute state** record, reached through the agent | `0x0038` `0x0039` `0x003A` `0x003B` |
 | 3 | a non-null **object pointer** | `0x0023` `0x0163` `0x0169` |
 | 3 | a **bag** record | `0x0143` `0x0149` `0x014E` |
@@ -91,9 +97,16 @@ text stays in the vault.** The clustering is the finding: these are not scattere
 | 2 | a **guild** record | `0x0118` `0x011E` |
 | 1 each | agent, hero data, bag count, mission-completion mask, a closed enum, a game-view frame, a result value, a byte buffer, a non-empty accumulator list, a boss count, two skills that must differ, an upgrade item id, a tournament record, an index within a count, and one whose text is empty | `0x009D` `0x0072` `0x0083` `0x0096` `0x0097` `0x00AB` `0x00AD` `0x00B5` `0x00C5` `0x00D4` `0x00D6` `0x016A` `0x0173` `0x0174` `0x0109` |
 
-**`0x0137`–`0x0163` is the inventory and item block**, 17 of the 60 crash rows and almost
-every one of them in one contiguous stretch. A server that wants to hand a player an item
-is working in exactly that range, and this is a map of it that cost no live capture.
+**Two contiguous functional blocks fall out of this, and neither cost a live capture.**
+`0x0137`–`0x0163` is the **inventory and item** block — 17 crash rows in one stretch, so a
+server handing a player an item works exactly there. `0x01C4`–`0x01D1` is the **party**
+block — 10 rows, nearly consecutive, and the single largest constraint group in the table.
+Both were invisible before this sweep: the static assert map names a source file for only
+63 of 477 handlers and says nothing about what a payload must satisfy.
+
+`0x019B` is its own result: it made the client **close the game channel and open a new one
+42 ms later**, still running, taking the whole plan again. It is the only DROPPED_CHANNEL
+in the set.
 
 ## 3. The replies
 
