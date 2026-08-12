@@ -1878,4 +1878,21 @@ parallel, with one safety change that is not optional — see its entry.
     map (terrain + props + map parameters + zones + a collision stub) and see whether a
     Bloated Path chunk appears. It is the first experiment in this arc that could come
     back "no".
-    **(e5)** Nothing in FINDINGS 34 is covered by a test, and none of it is in the suite.
+    **(e5)** 🔧 **PREPARED 2026-08-12, NOT RUN — waiting on the harness.**
+    `toolkit/mapdata/rebloat.py` drives (e4)'s experiment and
+    `toolkit/mapdata/test_rebloat.py` (28 checks, floor 28) covers everything about
+    it that can be judged without a client. `RUNBOOK.md` §"Rung E3" is the procedure.
+    **The gate the whole trigger rests on is now MEASURED rather than assumed**: after
+    a zero-length replace, all ten of the client's open-time rules still pass and the
+    row reads back as 0 bytes, so FINDINGS 17.1's cheapest provocation is usable. The
+    hazard is measured too — a reservation is `ceil(size/512)*512`, so zeroing the size
+    RELEASES the row's blocks to the client's free map (§18.11), and `verify` therefore
+    re-resolves by file id rather than assuming the row. Target is map 143
+    (`0x287D3`, row 71496, 9,284 B, **27 trapezoids**, both hard gates present in its
+    Stripped stream); fallback map 144. The arm/revert cycle is byte-identical over the
+    whole reservation.
+    **What the run cannot settle by itself:** UNCHANGED does not distinguish "the client
+    never loaded the map" from "the client does not re-bloat" — only `Gw.log` does — and
+    a REBUILT would say nothing about whether the compiler floods terrain WE authored,
+    since this map's Stripped terrain is ArenaNet's. That is the experiment after.
+    **(e6)** Nothing in FINDINGS 34 is covered by a test, and none of it is in the suite.

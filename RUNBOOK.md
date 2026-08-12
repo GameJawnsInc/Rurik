@@ -808,3 +808,121 @@ file header, and the two agree only if the 24-byte entry layout is right.
 `C:\gw` is the owner's real install. Reading bytes from it is acceptable —
 strictly read-only, nothing written, nothing copied into the tracked tree — but
 it is never a target for patching or launching.
+
+## Rung E3: does the client ever compile a map?
+
+**Prepared 2026-08-12, NOT YET RUN.** Everything below is offline-tested; the
+only untested step is the client launch itself, which is the experiment.
+
+**The question.** FINDINGS 34 established what the compiler *reads* by reading
+x86. What nobody has established is that the shipped client ever *runs* the
+converter. All 349 retail maps ship with both streams already built, so stage 2
+may be pre-baked by ArenaNet's own tool with `0x00713630` dead weight in the
+image. **This is the first experiment in the arc that can come back "no", and a
+"no" is the useful result** — it would collapse E3 into authoring the Bloated
+stream directly, which `mapbuild.py` already does.
+
+**The trigger.** A zero-length stream-1 payload. FINDINGS 17.1 traced the
+loader's `size == 0` branch at `0x00707749` straight through to the re-bloat
+with no parse attempted. This is deliberately *not* the corrupt-chunk trigger:
+C2's arm 3b fed the client a corrupt Bloated chunk and got an access violation
+with no re-bloat attempt (FINDINGS 20.3), which is a different failure mode —
+that crash happened during parsing, and a zero-length payload is never parsed.
+
+**Target.** Map 143, file id `0x287D3` — row 71496 on `dat_study`, 9,284 B
+Bloated, **27 trapezoids over 1 plane**, and its Stripped partner carries both
+of FINDINGS 34's hard gates. It is already `content/maps.toml`'s map 143, so
+the server can send the client to it. Fallback: map 144, `0x5D037`, 26
+trapezoids.
+
+### Before you start
+
+The archive **must be a copy you can throw away**. `rebloat.py` refuses `C:\gw`
+and `vault/dat_study`, but nothing stops you pointing it at a copy you care
+about.
+
+```bash
+python toolkit/mapdata/datcheck.py --dat vault/dat_e3/Gw.dat --snapshot vault/research/e3/before.json
+```
+
+### 1. Plan (read-only, run it and read it)
+
+```bash
+python toolkit/mapdata/rebloat.py --dat vault/dat_e3/Gw.dat --file-id 0x287D3 --plan --baseline vault/research/e3/baseline.json
+```
+
+It prints the baseline mesh, confirms both hard gates are present, and refuses
+outright if the map cannot answer the question. **The baseline JSON is what
+makes a later "REBUILT" mean anything** — without it, "a Path chunk exists" is
+satisfied by bytes we never deleted.
+
+### 2. Arm
+
+```bash
+python toolkit/mapdata/rebloat.py --dat vault/dat_e3/Gw.dat --file-id 0x287D3 --arm --confirm --baseline vault/research/e3/baseline.json
+```
+
+Zeroes row 71496's whole 9,728-byte reservation, journalling every byte first.
+
+**Then re-check the archive still opens legally** — this is measured to pass on
+a built archive, but measure it on the real one too:
+
+```bash
+python toolkit/mapdata/datcheck.py --dat vault/dat_e3/Gw.dat --diff vault/research/e3/before.json
+```
+
+Exit 1 means CHANGED (expected — that is a result, not an error). Exit 2 means
+the archive is too broken to have findings; **stop and revert if you see 2.**
+
+### 3. Run the client
+
+Standard three-terminal loop against our own server, caged, with the ours-DH
+build. Travel to map 143 and let it load.
+
+**Watch `Gw.log`.** The three strings that matter, all unguarded and so all
+emitted if reached: `Attempting to re-bloat`, `Map '%s' failed to load`, and
+`Map '%s' could not be opened for writing`. **Whether the map was reached at all
+is a fact only the logs carry** — step 4 cannot tell "never loaded" from "loaded
+and did not compile", and conflating those is the one way to draw a wrong
+conclusion from this run.
+
+### 4. Verify
+
+```bash
+python toolkit/mapdata/rebloat.py --dat vault/dat_e3/Gw.dat --file-id 0x287D3 --verify --baseline vault/research/e3/baseline.json
+```
+
+| outcome | means |
+|---|---|
+| **REBUILT** | the client compiles. Compare the trapezoid count against the baseline's 27 — a match means it reproduces ArenaNet's own build from the Stripped stream alone. A matching *count* is not a matching *mesh*; diff the payloads before claiming determinism. |
+| **UNCHANGED** | still zero length. Read `Gw.log` before concluding anything. |
+| **WRITTEN** | something is there that is not a map. Report it verbatim. |
+| **RELOCATED** | expected, not a failure — see below. |
+
+**The row will very likely move.** A reservation is `ceil(size/512)*512`, so a
+zero-length row reserves nothing and the client's MFT-derived coalescing free
+map is entitled to those blocks (FINDINGS 18.11). `verify` re-resolves by file
+id for exactly this reason. Also run `datcheck --diff` and read the MFT
+classification — relocation/recycle/delete/sibling-relink are the four shapes it
+names, and a fifth is reported as UNCLASSIFIED rather than dropped.
+
+### 5. Restore
+
+```bash
+python toolkit/mapdata/datwrite.py --dat vault/dat_e3/Gw.dat --revert vault/research/e3/rebloat_journal.json
+```
+
+Then re-cut the copy from `dat_study` anyway. `--revert` is byte-exact and
+tested, but the client may have written elsewhere in the archive during the
+session — it always does — and the journal only covers our own edits.
+
+### What would make this run worthless
+
+- Running it on an archive that already had a zero-length row (the plan refuses).
+- Not reading `Gw.log`, so UNCHANGED cannot be attributed.
+- Concluding "the compiler does not run" from a session where the client never
+  reached the map.
+- Treating a rebuilt Path chunk as proof the compiler would flood *our* terrain.
+  It would not be: this map's Stripped terrain is ArenaNet's. That is the
+  **next** experiment, and it only becomes worth running if this one says
+  REBUILT.

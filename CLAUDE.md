@@ -253,6 +253,26 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   is a result, so an archive too broken to have findings must exit 2 -- it exited
   1 from an uncaught traceback, and a reader of the code would have reported the
   crash as "the row moved"),
+  `toolkit/mapdata/test_rebloat.py` (rung E3's driver, which is the only tool
+  here that deliberately DESTROYS a payload — it zeroes a map's Bloated stream
+  so the client is forced down the re-bloat path — so almost every check is a
+  refusal. **The gate the whole trigger rests on is measured, not assumed**:
+  after a zero-length replace, all ten of the client's open-time rules still
+  pass and the row reads back as 0 bytes, which is what makes FINDINGS 17.1's
+  cheapest provocation usable at all. The arm/revert cycle is the one positive
+  claim and it is byte-identical over the WHOLE reservation, because a
+  zero-length replace sets size 0 and a reservation is `ceil(size/512)*512`, so
+  the row's blocks are released to the client's free map (FINDINGS 18.11) and a
+  revert restoring only the payload would look like a success. Four refusals
+  cover maps that could not answer the question — already armed, no Stripped
+  input, missing Terrain or Props (FINDINGS 34's unguarded `je`s mean NO Path
+  chunk is produced even if the client does compile, so such a run could not
+  tell that apart from a client that never compiles), and no baseline mesh,
+  since without one "a Path chunk exists" is satisfied by bytes we did not
+  delete. Two write guards refuse `C:\gw` and `vault/dat_study` case-insensitively
+  and below, each with a POSITIVE control that an ordinary copy is allowed —
+  a guard that refuses everything protects nothing because the tool never runs.
+  Sections 0-3 need no vault and score 22 against a floor of 28. ~20 s),
   `toolkit/mapdata/test_datplan.py` (where a new file may be PUT, against an
   archive the test builds with two shadow containers in it: that placement is
   best fit rather than the head of the largest run, that a run carrying a live
