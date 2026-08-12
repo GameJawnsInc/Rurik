@@ -4398,3 +4398,151 @@ run, and the cost is a whole Stripped map rather than 19 + 8n bytes.
 - **What the compiler actually reads** is now the open question, and it is
   answerable offline by reading `PathBuild.cpp`/`PathFlood.cpp`'s closure for the
   chunks it touches — no client needed.
+
+## 34. What the map compiler reads — terrain and props are hard gates (2026-08-12)
+
+**The question §33 left open, answered from the client's own instructions.** When
+the client converts stage 1 → stage 2, the Path builder reads **no chunk by id**.
+It reads the already-bloated *in-memory objects* of Terrain, Props, Zones and
+Collision, plus the Map Parameters rect and flags, out of a **0x34-byte
+converter-local** that ArenaNet's own assert text calls `state`.
+
+Four agents, two adversarial skeptics, and every load-bearing address below
+re-disassembled independently before it was written down.
+
+### The dispatch
+
+```
+s_chunkInfo[0x08].bloat = 0x00712640          MapData.cpp
+  0x00712643  target stage must be 2, else return 1 untouched
+  0x00712650  mapType 2 (server maps) REFUSED -- assert at 0x00712656
+  0x0071266E  ecx = [ebp+0x1c] = state
+  0x00712671  edx = [ecx+0x2C]  -> je return 0   TERRAIN IS A HARD GATE
+  0x00712678  cmp [ecx+0x24],0  -> je return 0   PROPS IS A HARD GATE
+  0x0071269D  call 0x007217D0 with ELEVEN args (add esp,0x2c)
+     -> 0x007217D0  PathApi, validates srcData/srcSize and the output buffer
+     -> 0x00724990  copies state into a ctx at ebp-0x7c, then runs a
+                    SEVEN-ENTRY pipeline table at 0xBF72F0..0xBF730C
+```
+
+**The two `je`s are unconditional and unguarded: with no terrain object or no
+props object the Path chunk is not built at all.** That is the strongest single
+result in the study.
+
+### The `state` struct — every field pinned to its writing instruction
+
+| off | object | written at | by |
+|---|---|---|---|
+| +0x00..0x0F | map rect, 4×f32 | 0x0070D977–0x0070D98A | Map Parameters |
+| +0x10 | flags (normalised ≥1, range-checked ≤3) | 0x0070D990 | Map Parameters |
+| +0x24 | **props** | `0x00712324 mov [esi+0x24],eax` | Props |
+| +0x28 | **zones** | `0x00712134 mov [edi+0x28],eax` | Zones |
+| +0x2C | **terrain** | `0x00711F72 mov [esi+0x2c],eax` | Terrain |
+| +0x30 | **collision** | `0x00712BAA mov [ecx+0x30],eax` | Collision |
+
+All four object writes were verified by direct disassembly here, not taken on an
+agent's report. The Collision one loads `ecx` from `[ebp+0x1c]` explicitly — the
+same argument slot the Path handler reads — which is what proves the struct
+identity rather than merely being consistent with it.
+
+### The seven-stage pipeline, and where the boundary goes
+
+The table at **0xBF72F0** (7 entries, bound `cmp esi,0xBF730C`) sits immediately
+before the per-plane table `pathchunk.PLANE_TAG_ORDER` already uses. It had never
+been dumped.
+
+| # | VA | does | reads |
+|---|---|---|---|
+| 0 | 0x00724910 | 9-byte Stripped header in, 12-byte out | — |
+| 1 | 0x00724770 | **copies tag 7 through**, size `n*8+2` | ctx+0x0C |
+| 2 | **0x00724670** | **the mesh builder** → 0x0072FB80; emits tag 8 | terrain, props, collision, flags, rect |
+| 3 | 0x007243C0 | tag 12 | ctx+0x74 |
+| 4 | 0x007244C0 | tag 13 obstacles → ZnApi | **zones** |
+| 5 | 0x007242E0 | tag 14 through | ctx+0x28 |
+| 6 | 0x00724380 | 0xFF terminator | — |
+
+**This settles §33 mechanically.** Tag 7 is copied by pass 1; the mesh is built by
+pass 2, which never touches it. The client's own `n*8+2` emit is the same `8` as
+the `19 + 8n` law measured from the archive — two sides, no shared input. And the
+table's tag order, read out of `.data`, reproduces `pathchunk.CHUNK_TAG_ORDER`
+exactly, which was derived here from the file format alone.
+
+### The flood grid IS the terrain lattice
+
+**OBSERVED.** Grid allocated `(w+2)·(h+2)·16` with a one-cell border
+(0x0072CBBA); index `dims->w·row + col`, 16 bytes per cell. Sibling 0x0072CFD0
+reads four corner heights per quad into vec3s whose x/y are ±96.0, and the
+world-to-cell divisor is the double 96.0 at 0x0094DE10 — the same cell pitch
+`test_terrain.py` pins independently from the file side. **One flood cell per
+terrain cell, two triangles per quad**, classified by slope against 10/45/40° or
+15/35/30° depending on a mode flag.
+
+**So the compiler floods OUR terrain.** That is exactly the mechanism §32 hoped
+for: it is how a Blender-authored hill could become a navmesh.
+
+### Where the angles disagreed
+
+- **The corpus cannot name the compiler's inputs, and the skeptic wins.** A
+  size-ranking method scored **AUC 0.463 — below a coin flip** — against the true
+  input set; it would have named Mission, Environment and Light while leaving
+  Terrain, Collision and Map Parameters off. Its own nuisance floor, built from
+  eight chunks the builder never touches, is partial r **+0.478**. The corpus
+  contributed exactly two things: the row-33833 counterexample and a seed→plane
+  relation. **Take the input set from the disassembly and nothing from the
+  ranking.**
+- **A confident zero was correctly reached on an insufficient basis.** "0
+  references to `s_chunkInfo`" scoped only the base address 0xA6CF78, but the
+  dispatch encodes `0xA6CF90` (base + 0x18) with the index already scaled by 5 —
+  so a base-scoped sweep is blind to 9 of 12 references *including the dispatch
+  itself*. Re-run with a positive control that fires (5 refs from the converter
+  root, 0 from the Path root), the zero is real. Right answer, wrong warrant,
+  recorded separately. Same shape as `test_codescan` §7's three defects.
+- **8 pushes vs 11.** One angle printed an abridged listing; the real call takes
+  eleven and hands the callee the **entire `state`**. An independent count agreed
+  on 11. **So the reachable input set is a floor, not a ceiling.**
+
+### What this does NOT establish
+
+1. **Nobody has run the compiler.** Everything above is a claim about
+   instructions in a file. No map authored, no conversion executed, no client
+   observed compiling anything.
+2. **We have not shown the shipped client ever runs this path at load time.** All
+   349 retail maps ship with *both* streams already built. Whether the runtime
+   ever converts — or whether stage 2 is always pre-baked by ArenaNet's own tool
+   and the converter is dead weight in the retail image — is **NOT ESTABLISHED**,
+   and it decides whether E3 authors stage 1 at all.
+3. **The trapezoid algorithm was not read.** Six flood/contour callees
+   (0x0072E0E0, 0x0072D670, 0x0072D730, 0x0072D7E0, 0x0072E810, 0x0072D450) were
+   not disassembled. The seed/flood/contour reading is INFERRED from call
+   structure.
+4. **3,953 indirect calls were not followed**, and `codescan --xrefs` does not
+   search indirect or computed targets at all. Three within this arc are
+   unresolved.
+5. **The assert census is short by ~370 sites image-wide.** Every per-module
+   count is a floor — and the clean negative "no assert in PathBuild/PathFlood
+   names terrain, height, grid, cell or prop" is **actively misleading**: the code
+   does precisely what those asserts do not mention. A reader of the census alone
+   would conclude the builder consumes nothing but segments, and would be wrong.
+6. **Collision has never been observed non-empty** — a 9-byte stub in 349/349.
+7. **The walkability mode flag was not traced to a source**, so which of our
+   authored slopes count as walkable is unknown.
+8. **No `mapType` of any real map was measured.** NOT FOUND.
+9. **Nothing here is covered by a test.** None of it is in the suite.
+
+### What rung E3 must now author
+
+Mandatory, or no Path chunk is produced at all: **Terrain (0x02)** bloating to a
+non-null object, and **Props (0x04)** bloating to a non-null object — props
+supplies the portal/collision point pairs the decomposition runs over. Required
+by the surrounding machinery: **Map Parameters (0x0C)** (41 B, signature
+0x5943EEEF, version byte 2), **Zones (0x03)**, and a **Collision (0x0E)** 9-byte
+stub. The Stripped **Path (0x08)** chunk itself is carried through verbatim and
+its boundary is not the mesh; one point demonstrably suffices.
+
+**Ruled out as geometry sources:** Locations and Sight are 9-byte constant stubs
+on 349/349 and are not passed to the builder. Sight is generated from nothing —
+9 bytes in, up to 478,412 out — so it needs no authoring.
+
+**The next honest step is not more static analysis.** It is authoring a minimal
+Stripped map and observing whether a Bloated Path chunk appears — the first
+experiment in this arc that could come back "no".

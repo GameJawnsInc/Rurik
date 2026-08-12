@@ -1857,6 +1857,25 @@ parallel, with one safety change that is not optional — see its entry.
     *the input is tiny*. The trigger is still cheap; the input is a whole Stripped map
     (~900 KB for Pre-Searing). Likely source is terrain + collision — `PathFlood.cpp` is
     on the builder's closure and a flood fill is a terrain operation.
-    **(e3)** NEXT, and it needs no client: read `PathBuild.cpp`/`PathFlood.cpp`'s closure
-    for which chunks the compiler actually touches. That answers what E3 must author, and
-    it is a `clientscan` question rather than a launch.
+    **(e3)** ✅ **DONE 2026-08-12 (FINDINGS 34).** The compiler's input set is read off the
+    client's own instructions. The Path builder reads **no chunk by id** — it reads the
+    already-bloated in-memory objects out of a 0x34-byte converter-local (`state`), and
+    **terrain and props are HARD GATES**: `0x00712671` and `0x00712678` are unguarded `je`s
+    to `return 0`, so with either object null the Path chunk is not built at all. All four
+    object writes verified by direct disassembly (`state+0x24` props, `+0x28` zones,
+    `+0x2C` terrain, `+0x30` collision). **The flood grid IS the terrain lattice** — one
+    cell per terrain cell, ±96.0 quad corners, the same pitch `test_terrain.py` pins from
+    the file side — so the compiler would flood OUR terrain, which is the mechanism §32
+    needs. The seven-stage pipeline at `0xBF72F0` also settles §33 mechanically: tag 7 is
+    copied through by pass 1, the mesh is built by pass 2, which never touches it.
+    **(e4)** ⚠️ **THE LARGEST OPEN QUESTION IS NOW UPSTREAM OF ALL OF THIS.** Nobody has
+    run the compiler, and **we have not shown the shipped client ever executes the
+    converter at load time**. All 349 retail maps ship with BOTH streams already built, so
+    stage 2 may always be pre-baked by ArenaNet's own tool with the converter dead weight
+    in the retail image. That decides whether E3 authors stage 1 at all — and if it does
+    not, E3 collapses into authoring the Bloated stream directly, which `mapbuild.py`
+    already does. **The next step is not more static analysis**: author a minimal Stripped
+    map (terrain + props + map parameters + zones + a collision stub) and see whether a
+    Bloated Path chunk appears. It is the first experiment in this arc that could come
+    back "no".
+    **(e5)** Nothing in FINDINGS 34 is covered by a test, and none of it is in the suite.
