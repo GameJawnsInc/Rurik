@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=189)
+LEDGER = checks.Ledger("agent lifetime", floor=194)
 
 
 def main():
@@ -190,6 +190,7 @@ def main():
     section_spawn_profession()
     section_unlock_bitmap()
     section_secondary_bits()
+    section_party_of_one()
     return LEDGER.verdict()
 
 
@@ -1375,6 +1376,93 @@ def section_secondary_bits():
               f"{authsrv.SECONDARY_BITS} -- ArenaNet's own server sends mask 0 "
               f"in 11 of 11 live samples, so an unlocked-by-default character "
               f"would be us inventing state retail does not send")
+
+
+def section_party_of_one():
+    """The party pair, and the player's own AGENT profession.
+
+    Both are messages the real server sends and ours never did. The party pair
+    (0x00B0 size, 0x00B1 leader) writes the per-PLAYER array at ChCliApi
+    ctx+0x80C that PLAYER_CREATE already makes; 0x00A6 for the player's own
+    agent is the SOLE write path to the agent's profession bytes, which is what
+    the party/roster label builder reads -- so the profession ABBREVIATION had
+    nothing to draw from and has never appeared in any session.
+
+    The ORDER is the measured part and the reason this has a section: 0x00B0
+    fires no event for a fresh entry while 0x00B1 fires only on a LEADER
+    CHANGE. Leader-first makes the change a no-op against the default and
+    nothing is notified, so the pair must go size-then-leader.
+    """
+    import ast
+    import authsrv
+
+    LEDGER.ok(agents.player_party_size(3, 1) == [3, 1]
+              and agents.player_set_party(3, 3) == [3, 3],
+              "the party-of-one payloads are [player, 1] and [player, player]",
+              "a solo player is their own leader; both fields are the player's "
+              "own number, which is what makes the self-link a party")
+    refused = None
+    try:
+        agents.player_party_size(3, 0)
+    except ValueError as ex:
+        refused = str(ex)
+    LEDGER.ok(refused is not None,
+              "and a party size of 0 is REFUSED",
+              f"{refused!r} -- the local player is always a member of their own "
+              f"party, so 0 is not a state the client is ever sent")
+
+    codec = _codec()
+    sizes = {}
+    for op, vals in ((authsrv.GAME_SMSG_PLAYER_PARTY_SIZE,
+                      agents.player_party_size(1, 1)),
+                     (authsrv.GAME_SMSG_PLAYER_SET_PARTY,
+                      agents.player_set_party(1, 1))):
+        sizes[op] = len(codec.encode("GAME_SMSG", op, vals))
+    LEDGER.ok(sizes[0x00B0] == 5 and sizes[0x00B1] == 6,
+              "and they encode to the 5 and 6 bytes their handlers read",
+              f"{sizes} -- the handlers read fields at +4 and +8; a wrong width "
+              f"would desync the next message rather than error")
+
+    # THE ORDER, on the syntax tree. A comment cannot enforce it and a grep
+    # cannot tell which send comes first.
+    with open(authsrv.__file__, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    order = []
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "send" and node.args
+                and isinstance(node.args[0], ast.Name)):
+            name = node.args[0].id
+            if name in ("GAME_SMSG_PLAYER_INFO", "GAME_SMSG_PLAYER_PARTY_SIZE",
+                        "GAME_SMSG_PLAYER_SET_PARTY"):
+                order.append((node.lineno, name))
+    order.sort()
+    names = [n for _, n in order]
+    LEDGER.ok(names == ["GAME_SMSG_PLAYER_INFO", "GAME_SMSG_PLAYER_PARTY_SIZE",
+                        "GAME_SMSG_PLAYER_SET_PARTY"],
+              "PLAYER_CREATE, then SIZE, then LEADER (syntax tree)",
+              f"{names} -- leader-first is a no-op against the default, and "
+              f"both need the player record PLAYER_CREATE makes")
+
+    # And the player's own agent must get 0x00A6, which is what the roster reads.
+    sends = [n.args[0].id for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+             and n.func.id == "send" and n.args
+             and isinstance(n.args[0], ast.Name)]
+    LEDGER.ok(sends.count("GAME_SMSG_AGENT_SET_PROFESSION") >= 2,
+              "and the player's OWN agent gets 0x00A6, not just NPCs",
+              f"{sends.count('GAME_SMSG_AGENT_SET_PROFESSION')} send site(s) -- "
+              f"0x00A6's setter is the sole write path to the agent's "
+              f"profession bytes, which the roster label builder reads")
+
+
+def _codec():
+    import os
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     "..", "schema"))
+    from codec import Codec
+    return Codec()
 
 
 def section_unlock_bitmap():

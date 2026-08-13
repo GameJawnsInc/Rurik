@@ -280,6 +280,8 @@ GAME_SMSG_WORLD_REMOVE_AGENT = 0x0021
 GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT = 0x0022
 GAME_SMSG_PLAYER_INFO = 0x0059
 GAME_SMSG_PLAYER_UPDATE_PROFESSION = 0x00B7
+GAME_SMSG_PLAYER_PARTY_SIZE = 0x00B0
+GAME_SMSG_PLAYER_SET_PARTY = 0x00B1
 # 0x00B6, the client's own OnProfessionSecondaryBits: which professions this
 # agent may take as a SECONDARY. MUST be sent AFTER that agent's 0x00B7 -- the
 # handler looks the record up and drops the message silently if it is not there
@@ -4465,6 +4467,22 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_PLAYER_INFO,
                              [PLAYER_NUMBER, PLAYER_AGENT_ID, appearance_for(SPAWN_PROFESSION),
                               0, 0, 0, TEST_CHAR_NAME], "PLAYER_CREATE")
+                        # The party of one. Both write the per-PLAYER array at
+                        # ChCliApi ctx+0x80C (stride 0x50) that PLAYER_CREATE
+                        # just made, and touch no agent -- so they belong here
+                        # rather than after the agent create.
+                        #
+                        # SIZE THEN LEADER, and the order is the measured part:
+                        # 0x00B0 fires no event for a fresh entry while 0x00B1
+                        # fires only on a LEADER CHANGE, so leader-first makes
+                        # the change a no-op against the default and nothing is
+                        # notified.
+                        send(GAME_SMSG_PLAYER_PARTY_SIZE,
+                             agents.player_party_size(PLAYER_NUMBER, 1),
+                             "PLAYER_PARTY_SIZE(1)")
+                        send(GAME_SMSG_PLAYER_SET_PARTY,
+                             agents.player_set_party(PLAYER_NUMBER, PLAYER_NUMBER),
+                             "PLAYER_SET_PARTY(self is leader)")
                         # Field names carrying hex offsets (h000B, h001E, h0023,
                         # h0027, h003B, h004B, h0059) let the 23 schema fields be
                         # aligned to the struct by offset rather than by counting:
@@ -4504,6 +4522,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
                              spawn_profession_values(),
                              f"PLAYER_UPDATE_PROFESSION(prof {SPAWN_PROFESSION})")
+                        # ...and the AGENT-side pair, which we had never sent
+                        # for the player's own agent -- only for NPCs.
+                        #
+                        # 0x00B7 writes the per-PLAYER record the Skills panel
+                        # displays from; 0x00A6's setter 0x007F7330 is the SOLE
+                        # write path to the AGENT's own profession bytes at
+                        # +0x10E/+0x10F (one caller, reached only from this
+                        # opcode). The party/roster label builder reads the
+                        # agent, not the player record, so without this the
+                        # profession ABBREVIATION has nothing to draw from --
+                        # which is why it has never appeared in any session.
+                        # studies/profession/RESKIN.md s14.
+                        send(GAME_SMSG_AGENT_SET_PROFESSION,
+                             agents.agent_set_profession(
+                                 PLAYER_AGENT_ID, SPAWN_PROFESSION, 0,
+                                 custom=SPAWN_PROFESSION
+                                 > agents.CHAR_PROFESSIONS - 1),
+                             f"AGENT_SET_PROFESSION(player, {SPAWN_PROFESSION})")
                         # STRICTLY AFTER the 0x00B7 above, which CREATES the
                         # per-agent record 0x00B6 writes into. Reversed, the
                         # client drops it with no error (RUNS.md §13).
