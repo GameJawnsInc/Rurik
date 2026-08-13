@@ -1452,7 +1452,15 @@ re-skinned skill it is very often enough, and it was never listed.
 
 **What Route 1 is still needed for**, unchanged: text that does not exist anywhere
 in the archive, and genuinely new art. Both remain gated on the blockers above,
-and the durability experiment is still unrun.
+and the durability experiment is ~~still unrun~~ **armed but not deliverable —
+corrected 2026-08-13.** It was armed, byte-verified, reverted and re-armed the same
+day this sentence was last true, and nothing wrote it down: `vault/dat_durability/`
+holds the tracer, the pre-arm baseline and a full cross-build diff, and
+[studies/crossbuild/FINDINGS.md](../crossbuild/FINDINGS.md) is the record plus the
+prediction that closes rung 6. What is genuinely open is **delivery** — the tracer
+sits on a copy no update can reach, and moving it onto one costs either a search for
+an uncompressed row or one broken map. "Unrun" and "armed on the wrong archive" point
+at different next actions, which is why the correction is worth the line.
 
 **A correction to this document's own framing.** The comparison table's Route 4
 row reads "borrowed only" as though it were a limitation. Against the actual
