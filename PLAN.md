@@ -1270,14 +1270,19 @@ and its CONTROL arm reddened** (`RUNS.md` §8): a mid-session skillbar re-send f
 opening the panel asserts the client at profession **3** — the SAME `*skill` null, with no
 out-of-band byte anywhere in the session — while the unattended session outlived all seven
 steps, so the re-send is harmless until the panel reads it. **The instrument is poisoned
-and the population question is UNANSWERED, not negative.** Two routes stand: spawn-time
-delivery (spawn the character AS profession 12, so bar/unlocks/attributes all arrive in
-the burst and K is the first provocation — needs a small server option and a second
-control session at 3), or R1 — now more attractive, since two distinct provocations reach
-the same noreturn assert and a neutered reporter yields the ordering for both in one run.
+and the population question is UNANSWERED, not negative.** Two routes stand, and the
+first is **built as of 2026-08-12**: spawn-time delivery — `authsrv.py
+--spawn-profession N` puts the custom id in the burst's own `0x00B7` (validated through
+the guard, appearance nibble untouched), so bar/unlocks/attributes arrive after it,
+nothing is re-sent, and K is the session's first provocation; pair with the
+observation-only probe `profession_spawn`, control session at 3 first (`RUNS.md` §8 has
+the two commands). The other is R1 — now more attractive, since two distinct provocations
+reach the same noreturn assert and a neutered reporter yields the ordering for both in
+one run. WIKI note recorded in `RUNS.md` §8: the panel's secondary-profession drop-down
+means it ENUMERATES professions, a plausible frame for the null (INFERRED).
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
-`profession_skillbar`, `profession_sentinel`, `profession_max`
+`profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`
 (`toolkit/authsrv/probes.py`). L0 is done —
 `agents.py`'s `CHAR_PROFESSIONS_MAX = 6` was a live bug that refused professions 7–10.
 

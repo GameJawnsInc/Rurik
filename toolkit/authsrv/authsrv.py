@@ -311,6 +311,52 @@ GAME_SMSG_INSTANCE_LOADED = 0x00F2
 PROF_WARRIOR = 1
 APPEARANCE = PROF_WARRIOR << 20
 
+# What the SPAWN BURST's 0x00B7 carries as the primary profession. Rebound by
+# --spawn-profession, and the point of that flag is RUNS.md section 8: a
+# mid-session profession change needs the skill state re-delivered, and a
+# mid-session SKILLBAR_UPDATE followed by opening the skills panel asserts the
+# client even at a LEGAL profession -- so the only clean delivery of a custom
+# profession is the burst itself, where bar, unlocks and attributes all arrive
+# AFTER the profession and nothing is ever re-sent. The APPEARANCE nibble above
+# deliberately does NOT follow this value: it is different storage
+# (studies/profession/MODDABLE.md), bound-checked `< 0xB` with an assert at
+# load, so a custom id must never go there -- and a mismatch (nibble 1, byte N)
+# is exactly the condition run 2 already measured as survivable.
+SPAWN_PROFESSION = PROF_WARRIOR
+
+
+def spawn_profession_values(profession=None):
+    """The 0x00B7 payload for the spawn burst, built THROUGH the guard.
+
+    agents.agent_set_profession is the server's own bound check; building the
+    burst payload from it rather than beside it is the same rule the probes
+    follow -- custom=True is derived here, not defaulted, so an out-of-band
+    spawn profession still traverses the u8 ceiling and the 0-refusal.
+    """
+    p = SPAWN_PROFESSION if profession is None else profession
+    return agents.agent_set_profession(
+        PLAYER_AGENT_ID, p, 0,
+        custom=p > agents.CHAR_PROFESSIONS - 1) + [0]
+
+
+def spawn_probe_warning(probe, spawn_set):
+    """profession_spawn without --spawn-profession measures the wrong thing.
+
+    The probe's question is what the skills panel does when a custom
+    profession arrived IN the burst; without the flag the session spawns at
+    the default (profession 1), which run 2 already measured. A warning, not
+    a refusal -- and it must NOT fire when the flag is given, because a
+    warning that fires either way is noise (same rule as the enemy warning).
+    """
+    if probe == "profession_spawn" and not spawn_set:
+        return ("WARNING: --probe profession_spawn without --spawn-profession: "
+                f"this session spawns at the default profession {PROF_WARRIOR}, "
+                "which run 2 already measured. The probe's question needs "
+                "--spawn-profession 12, with a control session at "
+                "--spawn-profession 3 first (studies/profession/RUNS.md s8).")
+    return None
+
+
 PLAYER_AGENT_ID = 1        # what INSTANCE_LOAD_INFO already claims
 DEFAULT_RUN_SPEED = 288.0  # Guild Wars' base movement speed
 # How often the server reports where the agent got to. The client SNAPS to each
@@ -4292,8 +4338,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                              [PLAYER_AGENT_ID, ATTRIBUTE_POINTS,
                               ATTRIBUTE_POINTS], "AGENT_ATTRIBUTE_POINTS")
                         send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
-                             [PLAYER_AGENT_ID, PROF_WARRIOR, 0, 0],
-                             "PLAYER_UPDATE_PROFESSION")
+                             spawn_profession_values(),
+                             f"PLAYER_UPDATE_PROFESSION(prof {SPAWN_PROFESSION})")
                         # The skill block. Upstream's SendSkillsAndAttributes
                         # sends the bar (218) BEFORE the unlock list (219); we
                         # send the unlocks first, deliberately. Upstream never
@@ -4666,7 +4712,7 @@ def main():
     # so rebinding the module constants is enough and keeps
     # handle_request_game_instance free of plumbing it would only ever use once.
     global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
-    global UNLOCKED, UNLOCK_LABEL
+    global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION
 
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -4765,6 +4811,18 @@ def main():
                     help="After the character spawns, fire a scripted experiment at "
                          "the client. See --list-probes. Only affects a session you "
                          "ask for it in; the default path is untouched.")
+    ap.add_argument("--spawn-profession", type=int, default=None, metavar="N",
+                    help="Primary profession the SPAWN BURST's 0x00B7 carries "
+                         f"(default {PROF_WARRIOR}). The clean delivery for a "
+                         "custom id: bar, unlocks and attributes all arrive "
+                         "AFTER it in the same burst, nothing is re-sent "
+                         "mid-session, and opening the skills panel is the "
+                         "session's first provocation (RUNS.md s8 -- a "
+                         "mid-session re-send asserts the client even at a "
+                         "legal profession). Out-of-band ids (11..255) are the "
+                         "experiment and are announced loudly; the appearance "
+                         "nibble stays at the default on purpose, being "
+                         "different bound-checked storage.")
     ap.add_argument("--list-probes", action="store_true",
                     help="Print the available probes, their questions and their "
                          "predictions, then exit.")
@@ -4968,6 +5026,20 @@ def main():
         raise SystemExit(f"--skills takes at most {SKILLBAR_SLOTS} ids, "
                          f"got {len(SKILLBAR)}")
     print(f"skillbar: {SKILLBAR}")
+    if a.spawn_profession is not None:
+        try:
+            spawn_profession_values(a.spawn_profession)
+        except ValueError as ex:
+            raise SystemExit(f"--spawn-profession: {ex}")
+        SPAWN_PROFESSION = a.spawn_profession
+        band = ("OUT OF BAND -- the client does not ship this id; "
+                "this session is the experiment"
+                if SPAWN_PROFESSION > agents.CHAR_PROFESSIONS - 1
+                else "in band, non-default")
+        print(f"SPAWN PROFESSION: {SPAWN_PROFESSION} ({band})")
+    warning = spawn_probe_warning(a.probe, a.spawn_profession is not None)
+    if warning:
+        print(warning)
     UNLOCKED, UNLOCK_LABEL = build_unlock_bitmap(a.unlocks)
     set_bits = sum(bin(w).count("1") for w in UNLOCKED)
     print(f"unlocks:  {UNLOCK_LABEL}  ({set_bits} bit(s) set across "

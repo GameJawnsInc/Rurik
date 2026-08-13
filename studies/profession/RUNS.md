@@ -183,7 +183,7 @@ and the ABI it depends on is now confirmed by a live crash.
 ## 7. Reproduce
 
 ```
-python toolkit/authsrv/authsrv.py --list-probes    # profession_custom | _ab | _skillbar | _sentinel | _max
+python toolkit/authsrv/authsrv.py --list-probes    # profession_custom | _ab | _skillbar | _spawn | _sentinel | _max
 python toolkit/harness/session.py --keep-open --shots 10 \
     --game-args '--probe profession_ab'
 ```
@@ -252,11 +252,36 @@ Three consequences:
   dereferences was left null by the REBUILD. Consistent with §4's "nothing registered
   behind the id" — but it is one crash, and the client's re-send handler is unread.
 
+### A frame for the null, from the game's own mechanics
+
+**WIKI (GWW, "Skills and Attributes Panel" and "Profession changer"):** the panel
+carries a drop-down for changing SECONDARY profession — roleplaying characters list
+the secondaries unlocked on that character, PvP characters any profession unlocked on
+the account, and a character who cannot change secondary cannot select the box. So the
+panel **enumerates professions and builds per-profession state**, and a per-profession
+walk that dereferences skill data is a plausible frame for both crashes: profession 12
+in the walk (run 2), and a walk re-entered after a skill-state rebuild (run 3b).
+Operator's suggestion, 2026-08-12. The wiki is strong for this player-visible
+mechanic and weak for internals — the frame is **INFERRED**; the handler is unread.
+
 ### The routes from here
 
-- **Spawn-time delivery.** A server option so the SPAWN BURST itself carries profession
-  12 — bar, unlocks and attributes then all arrive at 12 with zero mid-session sends,
-  and K is the session's first provocation. Control: a second session spawned at 3.
-  Loses run 2's one-byte-one-session purity; removes the poisoned instrument.
+- **Spawn-time delivery — BUILT 2026-08-12.** `authsrv.py --spawn-profession N`
+  rebinds what the burst's `0x00B7` carries, built through
+  `agents.agent_set_profession` (custom derived from the value, 0 refused at startup,
+  out-of-band announced loudly); the appearance nibble deliberately stays put —
+  different storage, bound-checked `< 0xB` at load, and the mismatch is run 2's
+  measured-survivable condition. Bar, unlocks and attributes all arrive AFTER it in
+  the same burst, nothing is re-sent, and K is the session's first provocation.
+  Paired observation-only probe: `profession_spawn` (warns if run without the flag).
+  TWO sessions, control first — spawn-time delivery of a non-default profession is
+  itself new:
+
+  ```
+  python toolkit/harness/session.py --keep-open --shots 10 \
+      --game-args '--probe profession_spawn --spawn-profession 3'
+  python toolkit/harness/session.py --keep-open --shots 10 \
+      --game-args '--probe profession_spawn --spawn-profession 12'
+  ```
 - **R1, the five-byte neuter — now MORE attractive.** Two distinct provocations reach
   the same noreturn assert; with it neutered, one run yields the ordering for both.

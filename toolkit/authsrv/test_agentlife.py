@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=156)
+LEDGER = checks.Ledger("agent lifetime", floor=163)
 
 
 def main():
@@ -187,6 +187,7 @@ def main():
     section_enemy_skill()
     section_constants()
     section_probe_encoding()
+    section_spawn_profession()
     return LEDGER.verdict()
 
 
@@ -1302,6 +1303,76 @@ def section_probe_encoding():
               f"{failures} failures -- an unencodable step is only discovered "
               f"by launching a client, which is the most expensive way to find "
               f"a typo in this repo")
+
+
+def section_spawn_profession():
+    """--spawn-profession: the burst's 0x00B7, built through the guard.
+
+    RUNS.md section 8: a mid-session SKILLBAR_UPDATE followed by opening the
+    skills panel asserts the client at a LEGAL profession, so the only clean
+    delivery of a custom profession is the spawn burst itself. This section
+    pins the payload builder, the pairing warning, and -- on the syntax tree --
+    that the burst's send site actually calls the builder, because a literal
+    list restored there would silently disconnect the flag while every other
+    check stayed green.
+    """
+    import ast
+    import authsrv
+
+    LEDGER.ok(authsrv.spawn_profession_values() == [1, 1, 0, 0],
+              "the default burst payload is unchanged: profession 1, agent 1",
+              f"{authsrv.spawn_profession_values()} -- [agent_id, primary, "
+              f"secondary, is_pvp]; the flag must not move the default path")
+    LEDGER.ok(authsrv.spawn_profession_values(3) == [1, 3, 0, 0],
+              "an in-band override threads through unchanged",
+              f"{authsrv.spawn_profession_values(3)}")
+    LEDGER.ok(authsrv.spawn_profession_values(12) == [1, 12, 0, 0],
+              "and an out-of-band id passes -- custom is DERIVED, not defaulted",
+              f"{authsrv.spawn_profession_values(12)} -- the builder computes "
+              f"custom from the value, so 12 traverses the guard's u8 ceiling "
+              f"rather than bypassing the guard")
+    refused = None
+    try:
+        authsrv.spawn_profession_values(0)
+    except ValueError as ex:
+        refused = str(ex)
+    LEDGER.ok(refused is not None,
+              "a primary of 0 is still refused THROUGH the builder",
+              f"{refused!r} -- 0 never occurs in the corpus and does not mean "
+              f"'none'; a builder that bypassed the guard would send it")
+
+    # The pairing warning, in both directions -- a warning that fires either
+    # way is noise (the enemy warning's rule).
+    warn = authsrv.spawn_probe_warning("profession_spawn", False)
+    LEDGER.ok(warn is not None and "--spawn-profession" in warn,
+              "profession_spawn without the flag WARNS",
+              f"{warn!r} -- without it the session measures the default "
+              f"profession, which run 2 already covered")
+    LEDGER.ok(authsrv.spawn_probe_warning("profession_spawn", True) is None
+              and authsrv.spawn_probe_warning("profession_ab", False) is None,
+              "and the warning is silent when paired, and for other probes",
+              "a warning that fires on a correctly-invoked run trains the "
+              "operator to ignore it")
+
+    # The send site, on the SYNTAX TREE: the call that sends 0x00B7 in the
+    # spawn burst must take its values from spawn_profession_values(), not
+    # from a literal list. A grep cannot tell a call site from this comment.
+    with open(authsrv.__file__, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    wired = False
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "send" and node.args
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id == "GAME_SMSG_PLAYER_UPDATE_PROFESSION"):
+            wired = any(isinstance(inner, ast.Call)
+                        and isinstance(inner.func, ast.Name)
+                        and inner.func.id == "spawn_profession_values"
+                        for inner in ast.walk(node.args[1]))
+    LEDGER.ok(wired,
+              "the burst's 0x00B7 send site calls the builder (syntax tree)",
+              "a literal list restored at the send site would disconnect "
+              "--spawn-profession while the builder's own checks stay green")
 
 
 def section_pool_fraction():
