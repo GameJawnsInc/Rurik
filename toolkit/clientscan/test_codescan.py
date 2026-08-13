@@ -8,7 +8,7 @@ in it is an address. Addresses rot silently: a build changes, a tool's decoding
 changes, and the study becomes a confident description of a binary nobody has
 re-read. This makes each claim executable.
 
-Eight of the nine sections can fail for the right reason:
+Nine of the ten sections can fail for the right reason:
 
   * §2 pins that `+0xEC` and `+0xF0` have exactly TWO writers each and where
     they are. §6o reported ZERO writers image-wide and that was the finding
@@ -47,6 +47,14 @@ Eight of the nine sections can fail for the right reason:
   * §9 pins the same ambiguity one tool downstream: `module_bounds` matches a
     substring, so `--in PrApi` silently WIDENS to 2.4 MB spanning two unrelated
     modules. §7 catches the range being narrowed; §9 catches it being stretched.
+  * §10 is §7's defect a third time and from a new direction, found 2026-08-13:
+    `--field` searched MEMORY OPERANDS and nothing else, so `--field 0x6bc`
+    answered 14 without `0x00813AD1 add ecx, 0x6bc` -- the writer reached from
+    GAME_SMSG 0x00B6's handler, i.e. the writer of the field that search was
+    run to find. The displacement-only rule is reproduced inline and required
+    to reach 14 and to MISS that address, so the 19 beside it is a difference
+    between two live answers. Its other half is the controls on the new `A`
+    class, because widening `A` is the lazy way to pass.
 
 §1 is a guard, not a check: everything below is measured against one build.
 
@@ -66,6 +74,7 @@ through `gwpe`, stdlib only, no disassembler involved.
 """
 
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -96,24 +105,28 @@ NO_CAPSTONE = "needs capstone and pefile: python -m pip install capstone pefile"
 BUILD = 38797
 EXE_BYTES = 10_483_904
 
-# 83 checks in a green run with capstone present, MEASURED 2026-08-11 against the
-# pinned pristine 38797 -- the banner's own total, not a count of `check(` lines:
-# 2 in §1, 5 in §2, 9 in §3, 6 in §4, 5 in §5, 3 in §6, 26 in §7, 19 in §8, 8 in
-# §9. None of it is fixture-dependent: every section reads that one binary and
-# every loop is over a tuple written into this file, so a capstone run scoring
-# fewer has had a section stop executing rather than found less data.
+# 106 checks in a green run with capstone present, MEASURED 2026-08-13 against
+# the pinned pristine 38797 -- the banner's own total, not a count of `check(`
+# lines: 2 in §1, 5 in §2, 9 in §3, 6 in §4, 6 in §5, 3 in §6, 26 in §7, 19 in
+# §8, 8 in §9, 22 in §10. None of it is fixture-dependent: every section reads
+# that one binary and every loop is over a tuple written into this file, so a
+# capstone run scoring fewer has had a section stop executing rather than found
+# less data.
 #
-# Without capstone, §3's stdlib half, §7b's and all of §8: 35 checks, measured the
-# same day by blocking the import. Hence two floors rather than one. A flat 35
-# would let a capstone run lose the whole of §2 -- the two-writers claim, the most
-# valuable failure this file can produce -- and still print green, which is
-# precisely the partial vacuity checks.py was written to name.
+# Without capstone, §3's stdlib half, §7b's and all of §8: 35 checks, measured
+# the same day by blocking the import. UNCHANGED by §10, which needs a
+# disassembler for every one of its claims and declares one skip. Hence two
+# floors rather than one. A flat 35 would let a capstone run lose the whole of
+# §2 -- the two-writers claim, the most valuable failure this file can produce --
+# and still print green, which is precisely the partial vacuity checks.py was
+# written to name.
 #
-# Both numbers went up on 2026-08-10 with §7 (3 -> 16 on the stdlib side) and
-# again on 2026-08-11 with §8 and §9. The stdlib floor takes the whole of §8
-# because `asserts.py` is stdlib on purpose: its census is checkable on a bare
-# machine, and a wrong census is what §9's bounds are computed from.
-FLOOR_WITH_CAPSTONE = 83
+# The capstone number went up on 2026-08-10 with §7 (3 -> 16 on the stdlib
+# side), on 2026-08-11 with §8 and §9, and on 2026-08-13 with §10 plus one check
+# added to §5 (83 -> 106). The stdlib floor takes the whole of §8 because
+# `asserts.py` is stdlib on purpose: its census is checkable on a bare machine,
+# and a wrong census is what §9's bounds are computed from.
+FLOOR_WITH_CAPSTONE = 106
 FLOOR_STDLIB_ONLY = 35
 
 LEDGER = checks.Ledger(
@@ -165,12 +178,16 @@ def section_2(img, lo, hi):
     for disp, ctor, setter in ((0xEC, 0x007F1FD2, 0x007FBD88),
                                (0xF0, 0x007F1FE2, 0x007FBD8E)):
         rows = img.field_access(disp, lo, hi)
-        writes = sorted(r[0] for r in rows if r[1])
+        writes = sorted(r.va for r in rows if r.is_write)
         # The count that matters. "No mov and no fstp writes either offset by
         # displacement anywhere in the image" was the §6o claim this refutes.
         eq(writes, [ctor, setter], f"+0x{disp:X} is written from exactly two sites")
-        check(any(not r[1] for r in rows), f"+0x{disp:X} is also read",
-              f"{sum(1 for r in rows if not r[1])} reads")
+        # `kind == "R"` and not `not is_write`, since 2026-08-13. An `A` row is
+        # not a write either, so the loose form would be satisfied by a field
+        # whose address is taken and never loaded -- which is a different and
+        # much less interesting shape than the one this line claims.
+        check(any(r.kind == "R" for r in rows), f"+0x{disp:X} is also read",
+              f"{sum(1 for r in rows if r.kind == 'R')} reads")
 
     # The constructor writes zero, which is why an untold agent cannot animate.
     ctor = [i for i in img.dis(0x007F1FD0, count=4)]
@@ -239,9 +256,20 @@ def section_5(img, lo, hi):
                     "the AvChar bounds this searches inside were not measured")
         return
     rows = img.field_access(0x1B8, lo, hi)
-    eq(len(rows), 11, "+0x1B8: the prefix-shadow duplicates are dropped")
-    check(all("word ptr" in r[4] and "dword" not in r[4] for r in rows),
+    # Memory rows only. The prefix-shadow claim is about the MEMORY scan, and
+    # since 2026-08-13 this field also carries two `add eax, 0x1b8` rows (§10):
+    # comparing the whole list to 11 would have made this section fail for a
+    # reason that has nothing to do with legacy prefixes.
+    mem = [r for r in rows if r.kind != "A"]
+    eq(len(mem), 11, "+0x1B8: the prefix-shadow duplicates are dropped")
+    check(all("word ptr" in r.text and "dword" not in r.text for r in mem),
           "and every survivor is the 16-bit form the prefix really encodes")
+    # And the arithmetic scan did not perturb the dedup it runs beside: same 11
+    # memory rows, plus exactly the two address-taking ones, no third copy of
+    # anything. The two scans share one `seen` set and one shadow filter, so
+    # this is the check that they do not stand on each other.
+    eq((len(mem), len(rows) - len(mem)), (11, 2),
+       "and the arithmetic rows sit beside them without disturbing the dedup")
 
     # GWCA's documented offsets for the same pair, six bytes earlier: absent.
     for gone in (0x1B1, 0x1B2):
@@ -608,6 +636,152 @@ def section_9(exe, img):
        "and a name matching one file warns about nothing")
 
 
+def section_10(exe, img):
+    """The THIRD under-reporting defect: `--field` knew memory operands only.
+
+    THE DEFECT, found 2026-08-13 by studies/profession/RUNS.md §13. `--field
+    0x6bc` reported **14 instructions** over the whole image and `0x00813AD1
+    add ecx, 0x6bc` was not among them -- the writer reached from GAME_SMSG
+    0x00B6's handler, i.e. the writer of the very field that search was run to
+    find. Five sites were missing, a quarter of the answer, and the footer
+    disclaimed the disp8 and disp16 encodings and nothing else, so the report
+    read as complete.
+
+    It is the same shape as §7 twice over: a clean, confident, wrong count. What
+    makes it a THIRD instance rather than a repeat is where the constant lives.
+    §7's disp8 miss was a displacement in an encoding the scan did not search;
+    this one is not a displacement at all. `81 c1 bc 06 00 00` carries 0x6BC in
+    its IMMEDIATE field, and an anchored scan that accepts a candidate only when
+    capstone's encoding record puts a DISPLACEMENT on the bytes it found cannot
+    match it however many widths it knows.
+
+    THE OLD RULE IS REPRODUCED HERE, not described -- the §8 pattern. Eighteen
+    lines of `capstone` that import nothing from the tool under test re-run the
+    displacement-only acceptance rule over the same anchors, and are required to
+    reach 14 and to MISS 0x00813AD1. So the 19 below is a difference between two
+    live answers, and the miss is a measurement of the old rule rather than a
+    number quoted from a study.
+
+    THE CONTROLS THAT KEEP `A` HONEST. Address-taking is a new class and the
+    lazy way to pass this section is to widen it -- so a real load and a real
+    store at the same displacement are required to stay `R` and `W`, every `A`
+    row is required to have `is_write` false (§2's two-writers claim reads
+    `is_write`, and an inflated `A` must not be able to reach it), and the
+    narrow-destination exclusion is checked against an instruction proved to
+    exist first.
+    """
+    print("\n10. the arithmetic form: an address taken, not a displacement")
+    if img is None:
+        LEDGER.skip("10. --field's address-arithmetic blind spot", NO_CAPSTONE)
+        return
+
+    DISP = 0x6BC
+    WRITER = 0x00813AD1          # add ecx, 0x6bc -- GAME_SMSG 0x00B6's chain
+    rows = {r.va: r for r in img.field_access(DISP)}
+
+    # -- 10a. the address, and the reason it was missed --------------------
+    check(WRITER in rows,
+          "--field 0x6bc finds 0x00813AD1, GAME_SMSG 0x00B6's writer",
+          f"{len(rows)} row(s)")
+    if WRITER in rows:
+        hit = rows[WRITER]
+        eq(hit.hexbytes, "81c1bc060000",
+           "encoded `add r/m32, imm32` -- the form the old scan missed")
+        eq(hit.kind, "A", "and is classified address-taking, not a read")
+        eq(hit.text, "add ecx, 0x6bc", "with the instruction spelled out")
+
+    # THE REASON, read off the bytes by capstone directly. `disp_size == 0` is
+    # what says no displacement-anchored rule could ever have matched this, and
+    # it is a fact about the encoding rather than an answer from the scanner.
+    ins = next(iter(img.md.disasm(img.read(WRITER, 16), WRITER, 1)), None)
+    check(ins is not None and ins.encoding.disp_size == 0,
+          "0x00813AD1 carries NO displacement field at all",
+          f"disp_size={ins.encoding.disp_size}" if ins else "did not decode")
+    check(ins is not None and ins.encoding.imm_size == 4
+          and ins.encoding.imm_offset == 2,
+          "it carries 0x6BC as a 4-byte IMMEDIATE, two bytes in",
+          f"imm_size={ins.encoding.imm_size}, off={ins.encoding.imm_offset}"
+          if ins else "did not decode")
+
+    # -- 10b. the old rule, reproduced, and required to miss it ------------
+    # Displacement-only acceptance over the same anchor, written out of
+    # `capstone` and `struct` so its 14 is an independent answer.
+    old, blob, tva = set(), img.tdata, img.tva
+    needle = struct.pack("<I", DISP)
+    p = blob.find(needle)
+    while p != -1:
+        for back in range(1, 12):
+            start = p - back
+            if start < 0:
+                continue
+            i2 = next(iter(img.md.disasm(blob[start:start + 24],
+                                         tva + start, 1)), None)
+            if i2 is None or i2.encoding.disp_size != 4:
+                continue
+            if start + i2.encoding.disp_offset != p:
+                continue
+            if any(o.type == capstone.x86.X86_OP_MEM and o.mem.disp == DISP
+                   for o in i2.operands):
+                old.add(i2.address)
+        p = blob.find(needle, p + 1)
+    eq(len(old), 14, "the displacement-only rule reaches 14 -- the old answer")
+    check(WRITER not in old,
+          "and cannot reach 0x00813AD1, whatever width it searches")
+    eq(len(rows), 19, "searching both, the real count is 19")
+    eq(sorted(set(rows) - old), [WRITER, 0x00816D1E, 0x00816D3E, 0x00816D5E,
+                                0x00819ED1],
+       "and the five it adds are exactly the register-arithmetic sites")
+
+    # -- 10c. `A` is a class, not a bucket everything falls into -----------
+    for va, kind, why in ((0x0041806F, "A", "lea takes the address, reads no "
+                                            "memory, and used to read as R"),
+                          (0x004184DC, "R", "a real load is still a read"),
+                          (0x00418763, "W", "a real store is still a write")):
+        got = rows.get(va)
+        eq(got.kind if got else None, kind, f"0x{va:08X} is {kind}: {why}")
+    check(all(not r.is_write for r in rows.values() if r.kind == "A"),
+          "no address-taking row claims to be a store",
+          f"{sum(1 for r in rows.values() if r.kind == 'A')} A row(s)")
+
+    # -- 10d. and the scope statement says both halves ---------------------
+    asearched, ablind = CS.Image.address_forms(DISP)
+    names = [n for n, _ in asearched]
+    check("add r32, imm32" in names and "sub r32, -imm32" in names,
+          "--field states that it searched the arithmetic forms", f"{names}")
+    check(any(n == "the constant held in a register" for n, _ in ablind),
+          "and names the form it provably cannot reach")
+
+    # -- 10e. the `sub` spelling, against real bytes -----------------------
+    # Not hypothetical and not free: -0x19 is different bytes from 0x19, so this
+    # form costs the one extra sweep `field_access` documents. A scan that
+    # skipped it would answer confidently again.
+    subrows = {r.va: r for r in img.field_access(0x19)}
+    check(0x00622199 in subrows,
+          "--field 0x19 finds `sub ecx, -0x19` at 0x00622199",
+          f"{len(subrows)} row(s)")
+    if 0x00622199 in subrows:
+        eq(subrows[0x00622199].hexbytes, "83e9e7",
+           "whose immediate byte is 0xE7 -- -0x19, not 0x19, hence its own anchor")
+        eq(subrows[0x00622199].kind, "A", "and it is address-taking too")
+
+    # -- 10f. the narrow-destination exclusion, proved to be excluding -----
+    # `add al, 0xe` cannot be an address in 32-bit code. It is dropped, which is
+    # a filter -- so the instruction is decoded here FIRST, and the check is
+    # that a real instruction is being excluded rather than an address that was
+    # never there.
+    narrow = next(iter(img.md.disasm(img.read(0x00479BC8, 8), 0x00479BC8, 1)),
+                  None)
+    eq(f"{narrow.mnemonic} {narrow.op_str}" if narrow else None, "add al, 0xe",
+       "0x00479BC8 really is `add al, 0xe`")
+    b = CS.module_bounds("ExeArchive", exe)
+    ea = {r.va: r for r in img.field_access(0xE, b[0], b[1])}
+    check(0x00479BC8 not in ea,
+          "and --field 0xE --in ExeArchive drops it: al is not an address")
+    check(any(r.kind == "A" for r in ea.values()),
+          "while the range's real address-taking rows survive the filter",
+          f"{sum(1 for r in ea.values() if r.kind == 'A')} A row(s)")
+
+
 def main():
     # The build guard. `pinned` is stdlib -- `CS.find_exe` is literally
     # `pinned.find` -- so which client we are reading gets said out loud even on a
@@ -632,6 +806,7 @@ def main():
     section_7(exe, img)
     section_8(exe)
     section_9(exe, img)
+    section_10(exe, img)
 
     return LEDGER.verdict()
 
