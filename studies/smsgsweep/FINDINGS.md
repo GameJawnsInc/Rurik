@@ -659,3 +659,27 @@ whose job is to refuse a party action for an unnamed account, in `PyCliParty.cpp
 worth checking against that before it is attributed elsewhere — our synthetic loopback
 account has no account name at all. **UNVERIFIED as a connection**; it is a lead, and
 the two arcs have not been run against each other.
+
+#### Why the five stay unnamed: the id is never compared, and one poster is not a dialog
+
+Two more measurements, both cheap and both negative in the useful way.
+
+**`0x100000B5` is never compared anywhere in the image.** A byte scan of the whole file
+finds **9 occurrences, all 9 `push imm32`, and zero `cmp`** in any register form. So the
+UI does not dispatch this by an inline test; the id is `0x10000000 | ordinal` (the party
+notices are `0x117`, `0x119`, `0x12C`, the tournament one `0x116` and `0x160`) and the
+consumer is reached through a registration or a table. **Naming the five therefore needs
+that table, not another disassembly of the senders** — which is a bounded next dig and is
+the reason this stops here rather than guessing.
+
+**And the senders are not all dialogs.** Of the 9 pushes, five are our opcodes' workers,
+three are siblings in the same `0x813F80`–`0x814500` family, and one is at `0x004ECEFC`,
+whose nearest named assert is `GmView:3737`. A game-view function posting the same
+message argues `0x100000B5` is a general **character-data UI update** rather than "open
+the account-name selector" — the dialog the operator saw would then be whichever frame
+consumes that update in the client's current state, not a property of the message.
+
+**That is a caution against the obvious name.** Calling `0x00C3` `ACCOUNT_NAME_PROMPT`
+would have recorded the frame that happened to be listening on a level-1 character in an
+empty map as the meaning of the opcode. §7.6 declined to name them from the picture; the
+binary now says the picture was showing a consequence two steps removed from the message.
