@@ -58,6 +58,14 @@ FRESH_AGENT_ID = 12
 # them further apart to keep them separate.
 PROBE_SPAWN_NEAR = 150.0
 
+# GAME_SMSG 0x003C's first field is a PLAYER NUMBER, not an agent id -- and this
+# module is only ever handed an agent id (`probes.get(name, PLAYER_AGENT_ID, ...)`).
+# On this server both are 1, which is exactly the conflation the party dive flagged
+# as making every possible mis-join invisible, so the constant is named for what the
+# FIELD is rather than reused from `a`. If PLAYER_AGENT_ID is ever changed to differ
+# from PLAYER_NUMBER -- which is the recommendation -- this must NOT follow it.
+PROBE_PLAYER_NUMBER = 1
+
 # Agent int-property ids (GmAgentProperties.h via studies/character/FINDINGS.md).
 PROP_LEVEL = 36
 # Property 60. SOURCED three ways: GWLP-R (2013) and GWCA both name it
@@ -183,6 +191,46 @@ def _agent_removal_steps(agent_id, origin):
              "one before it did not, "
              "the removed id is genuinely poisoned. If neither appears, the burst "
              "is wrong and the id was never the problem."),
+    ]
+
+
+def _player_flags_steps(agent_id):
+    """GAME_SMSG 0x003C -- the player-record flag word this server has never sent.
+
+    MEASURED 2026-08-13 over ArenaNet's own captures, read whole with
+    `tape.decode_all` (the per-event idiom loses and invents messages): **12 of 12
+    live game connections carry it**, at t=0.23-0.73s, i.e. inside the instance
+    load. Our server has sent it ZERO times in 190 played captures.
+
+    The SHAPE is the part worth writing down, because the party dive reported it as
+    "(player_number, set=4, clear=7)" and the corpus says otherwise. Censused over
+    all 423 sends in those 12 connections:
+
+        mask (the second dword) is 7 in 423 of 423
+        value (the first) is 4 x287, 5 x60, 0 x48, 7 x12, 6 x12, 1 x4
+
+    Every value lies inside the mask and the mask never varies. That is a
+    (value, mask) pair, not (set, clear): three bits, cleared then written, which
+    matches the handler doing an `and` at 0x0080EC26 and an `or` at 0x0080EC48 into
+    `[playerRec+0x34]` -- the same ctx+0x80C stride-0x50 array 0x00B0/0x00B1 write.
+    UPSTREAM for the two addresses (the party dive); OBSERVED for the wire values.
+
+    A solo player is (player, 4, 7) in every single-connection capture, so bit 2 is
+    the one a lone character carries. This sweeps all three bits rather than sending
+    only retail's value, because a null on 4 alone would not say whether the message
+    does nothing or whether 4 is simply what we already look like.
+    """
+    p = PROBE_PLAYER_NUMBER
+    return [
+        Step(2.0, 0x003C, [p, 4, 7], "flags -> 4 (retail's own solo value)",
+             "anything at all: the party row, the nameplate, the chat, the "
+             "compass. Retail sends exactly this for a lone player."),
+        Step(6.0, 0x003C, [p, 0, 7], "flags -> 0 (all three bits CLEAR)",
+             "if step 1 changed nothing, does REMOVING the bits change "
+             "something? We may already look like 4 by default."),
+        Step(6.0, 0x003C, [p, 7, 7], "flags -> 7 (all three bits SET)",
+             "bits 0 and 1, which no solo capture carries. If nothing has "
+             "moved by here, 0x003C is invisible in a one-player instance."),
     ]
 
 
@@ -2400,6 +2448,24 @@ PROBES = {
              "would let the server stop worrying about a message it has never "
              "sent. Any visible effect refutes the read and is more "
              "interesting still.",
+    ),
+    "player_flags": lambda a, o: Probe(
+        question="What does GAME_SMSG 0x003C do? It is in 12 of 12 live ArenaNet "
+                 "connections, 423 sends, and this server has never sent it once "
+                 "in 190 played captures.",
+        predicts="NOTHING VISIBLE in a one-player instance, and that is the "
+                 "honest prediction rather than a hedge: the handler's two "
+                 "writes land in the same ctx+0x80C player array 0x00B0/0x00B1 "
+                 "already populate, and the party roster ALREADY draws its row "
+                 "without it. If something does move, the three bits are worth "
+                 "far more than the message -- watch the party row first, since "
+                 "that array is what a row resolves a member through.",
+        steps=_player_flags_steps(a),
+        note="Run this with the roster OPEN (press P first) -- a change to the "
+             "player record with no window showing it is a null we could not "
+             "attribute. The sweep is 4 -> 0 -> 7 rather than retail's 4 alone, "
+             "because a null on 4 cannot tell 'the message does nothing' from "
+             "'we already look like 4'.",
     ),
     "level": lambda a, o: Probe(
         question="Is agent int-property 36 on 0x009F the character's level?",

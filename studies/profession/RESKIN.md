@@ -1033,3 +1033,61 @@ Ranked by what they would buy. None is required for the roster: it draws today.
 
 The dive's own top unknown, unresolved: **`0x00C07980`** selects between two frame procs at
 `0x004EC175`-`0x004EC1AC` and nobody has found its writer.
+
+### 18.8 `0x003C` sent, three ways: a clean NULL (2026-08-13)
+
+§18.7's best lead, run. Harness `20260813T191759`, capture
+`authsrv-20260813T191811-c1.jsonl`, explorable, roster open before the first send.
+
+**First, a correction to the dive's reading of the message.** It reported
+`(player_number, set=4, clear=7)`. Censused over ArenaNet's own captures with
+`tape.decode_all` -- **423 sends across 12 of 12 live game connections**:
+
+| | |
+|---|---|
+| mask (second dword) | **7 in 423 of 423** |
+| value (first dword) | 4 x287, 5 x60, 0 x48, 7 x12, 6 x12, 1 x4 |
+
+Every value lies inside the mask and the mask never varies, so it is a
+**(value, mask)** pair -- three bits cleared then written -- not (set, clear). That
+matches the handler's `and` at `0x0080EC26` and `or` at `0x0080EC48` into
+`[playerRec+0x34]`. A lone player is `(1, 4, 7)`.
+
+**The sweep, and why it is a sweep.** Retail sends 4 for a solo player, so sending only
+4 could not distinguish "the message does nothing" from "we already look like 4". All
+three OBSERVED on the wire with the intended bytes:
+
+| t | payload | |
+|---|---|---|
+| 5.33 s | `3c0001000400000007000000` | value 4 -- retail's own solo value |
+| 11.34 s | `3c0001000000000007000000` | value 0 -- all three bits clear |
+| 17.34 s | `3c0001000700000007000000` | value 7 -- all three bits set |
+
+> **NOTHING CHANGED.** The party region is **0.000% across all 18 frame transitions**,
+> and the send-adjacent whole-frame diffs (0.108%, 0.076%) sit **at or below the 0.104%
+> idle median**. Max whole-frame movement in the window was 1.586%, and that was the P
+> press opening the roster.
+
+The control that keeps this from being vacuous: **the roster was open the whole time** --
+`w010.png` at 23:18:32Z shows `Party Members [P]` carrying `W0 Test Warrior`. A null
+measured against a window that was never there would say nothing. Client survived all
+three; no error dialog.
+
+**Prediction was a null and the null held**, which is the weaker kind of result to
+report and is why the sweep matters: three different values, one open window, no
+movement.
+
+**What this does NOT settle**, and both limits are real:
+
+1. **One player.** 0x003C is per-player and our instance has exactly one. The values
+   retail varies most (5, 6, 7, 1) appear in its BUSY connections; the solo ones send 4
+   three times and nothing else. A three-bit per-player flag may simply have nothing to
+   express about a party of one.
+2. **Late, not at load.** Retail sends it at t=0.23-0.73 s, inside the instance load;
+   ours went at 5-17 s. If the bits are read once when something is BUILT, a later write
+   changes a value nobody re-reads. The cheap follow-up is to move it into the burst at
+   retail's position -- before `0x0020` -- and diff the load.
+
+So `0x003C` stays on the "never sent by us" list with its reason now measured rather than
+assumed, and it is **not** a prerequisite for anything in this section: the roster drew
+its row, with an abbreviation and a level, without it.
