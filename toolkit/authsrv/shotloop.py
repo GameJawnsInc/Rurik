@@ -67,6 +67,16 @@ STATE = "shotloop-state.json"
 # at one would end most loops early -- `sweeploop.decide` learned the same lesson.
 MAX_CONSECUTIVE_FAILURES = 2
 
+# Fewer hold shots than this and the run cannot show an effect: the idle window needs
+# several frames to measure drift against and the strip needs several after the send.
+# A 22 s hold at --shots 1.0 yields 17-19, so 10 is a wide margin rather than a tuned
+# number -- the 9 short runs of 2026-08-13 came back with 3 to 6.
+MIN_USABLE_SHOTS = 10
+
+# Consecutive short runs before stopping. Looser than the failure threshold because a
+# stolen foreground is an environment fault that costs one re-run, not a broken stack.
+MAX_CONSECUTIVE_SHORT = 5
+
 
 def state_path():
     return os.path.join(vaultpath.vault_path("probes"), STATE)
@@ -157,7 +167,7 @@ def main(argv=None):
               + (" ..." if len(todo) > 20 else ""))
         return 0
 
-    fails, started = 0, time.time()
+    fails, shorts, started = 0, 0, time.time()
     for i, op in enumerate(todo, 1):
         key = f"0x{op:04X}"
         print(f"\n[{i}/{len(todo)}] {key}  "
@@ -197,12 +207,36 @@ def main(argv=None):
         if not sent_ok:
             print(f"  NO SEND in the capture ({why or 'saw ' + str([hex(g) for g in got])})"
                   f" -- not recording {key}", flush=True)
-        print(f"  {'PASS' if ok and sent_ok else 'FAIL'}  {os.path.basename(rundir)}  "
+        # A SHORT RUN IS NOT A RESULT EITHER. `drive_client.shot_if_foreground`
+        # deliberately writes nothing when the client does not own the foreground -- a
+        # screenshot of somebody else's window is worse than none -- so a run that lost
+        # focus comes back with the opcode sent and the evidence missing. MEASURED on
+        # the 2026-08-13 sweep: 9 of 238 runs, in consecutive clusters, one with 3 shots
+        # of an expected 19, and all 9 were recorded as done because the client stayed
+        # connected to the end and the harness verdict was PASS. Not recording them is
+        # what makes a later pass pick them up.
+        long_enough = shots >= MIN_USABLE_SHOTS
+        if sent_ok and not long_enough:
+            print(f"  SHORT: {shots} shot(s) of ~{int(a.hold / a.shots)} -- the client "
+                  f"lost the foreground, so the frames that would show the effect are "
+                  f"missing. Not recording {key}.", flush=True)
+        good = ok and sent_ok and long_enough
+        print(f"  {'PASS' if good else 'FAIL'}  {os.path.basename(rundir)}  "
               f"{shots} shot(s)", flush=True)
-        if ok and sent_ok:
+        if good:
             st["done"][key] = {"run": os.path.basename(rundir), "ok": True,
                                "shots": shots}
             save_state(st)
+        # Short runs get their OWN counter and a looser threshold. A stolen foreground
+        # is an environment fault, not a broken stack, and one or two in a long sweep
+        # cost nothing but a re-run -- but a permanently stolen foreground would
+        # otherwise produce 238 empty runs and call it a pass.
+        shorts = shorts + 1 if (sent_ok and not long_enough) else 0
+        if shorts >= MAX_CONSECUTIVE_SHORT:
+            print(f"\nSTOP: {shorts} runs in a row lost the foreground. Every one of "
+                  f"them sends its opcode and screenshots nothing, so this measures "
+                  f"nothing until whatever is stealing focus is closed.", flush=True)
+            return 1
         fails = fails + 1 if not (ok and sent_ok) else 0
         if fails >= MAX_CONSECUTIVE_FAILURES:
             print(f"\nSTOP: {fails} runs in a row did not reach the map. That is a "
