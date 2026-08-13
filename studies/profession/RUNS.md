@@ -382,3 +382,40 @@ BEFORE the skill block, which no tooling does yet and which is worth building on
 after the bar-mismatch story is settled — if a matching bar is what makes the panel
 safe, "populated" may simply mean "a bar of skills the profession owns", and no
 profession-12 bar can exist in the compiled table.
+
+### Discriminator results (same evening) — the mismatch story is REFUTED
+
+Discriminators 1 and 3 ran; both CRASHED on the same `*skill` assert (dialogs
+captured: harness `20260812T220906` and `20260812T221006`; worlds verified from the
+captures — prof 1 + Warrior bar, and prof 3 + bar `[276, 0×7]`). Both were MATCHED
+configurations and both predicted OPENS, so **the bar-mismatch story is dead by its
+own stated predictions**. Discriminator 2 never ran: PowerShell 5.1 collapses the
+trailing `""` into a lone `"` and the harness died on an unterminated quote —
+`split_args` now refuses that cleanly naming the trap, and an empty bar is
+`--skills 0`. (Under the new story below, #2 is no longer load-bearing.)
+
+**The real finding is discriminator 1: the PURE DEFAULT world cannot open the skills
+panel.** Six sessions have now pressed K without a prior `0x00A6` and all six died on
+the same null; the ONE session that ever opened (run 2 arm A) is the one where
+`0x00A6` arrived first. This was never about custom professions.
+
+**And the missing piece was already measured, in another study.** `studies/smsg`
+§`0x00A6`: retail sends AGENT_SET_PROFESSION **136 times across 4 tapes**, field 3
+cross-matches the player-create profession byte 130/130, and the handler chain
+(`0x0091ee70 → … → 0x007f7330`) writes the pair and **notifies exactly the attributes
+panel, the party roster and the hero commander** (event `0x1000001d`). Its "for our
+server" list — bullet 10 — already recommended sending `0x00A6` per agent. Our burst
+sends only `0x00B7` for the player. **INFERRED, one step from SOURCED: the skills
+panel dereferences state that only the `0x00A6` handler builds, and our server never
+sends the message.** Run 2's arm A opened because the probe happened to deliver it.
+
+**Next: `profession_trigger`** — run 2A replayed with the one change that removes the
+change: `0x00A6(1)`, the value the burst already declared, then K. OPENS → the
+arrival is the trigger, and the fix is to send the player's `0x00A6` in the burst,
+which is what retail does. CRASHES → the trigger is the CHANGE (run 2A's value was
+3), and the next probe sends `0x00A6(3)`. Either way, one session:
+
+```
+python toolkit/harness/session.py --keep-open --shots 10 \
+    --game-args '--probe profession_trigger'
+```

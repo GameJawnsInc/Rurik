@@ -410,6 +410,48 @@ def _profession_skillbar_steps(agent_id, custom_id):
     ]
 
 
+def _profession_trigger_steps(agent_id):
+    """Is the 0x00A6 HANDLER what builds the panel's skill state?
+
+    THE ONE SESSION THAT EVER OPENED the skills panel (run 2 arm A) is the
+    one session where 0x00A6 arrived before K. Six sessions without it died
+    on the same *skill null -- including the PURE DEFAULT world (run 4,
+    discriminator 1), so this is not about custom professions at all. Our
+    burst sends only 0x00B7 for the player; retail sends 0x00A6 routinely --
+    136 across 4 tapes, field 3 cross-matching the player-create byte
+    130/130 -- and its handler notifies exactly the attributes panel, the
+    party roster and the hero commander via event 0x1000001d
+    (studies/smsg/FINDINGS.md, whose 'for our server' list already
+    recommended sending it per agent).
+
+    This probe mirrors run 2A EXCEPT the value: profession 1, the same value
+    the burst already declared on 0x00B7. No profession change, no new
+    information -- just the message. That isolates 'the handler ran' from
+    'the profession changed', which run 2A conflated.
+    """
+    control = 1
+    return [
+        Step(2.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"0x00A6, profession {control} -- the value the burst already "
+             f"declared",
+             "nothing yet. This is the message run 2A had and every crashed "
+             "session lacked, carrying a value that changes nothing."),
+        Step(6.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"still {control} -- NOW open the skills menu (K)",
+             "the panel. If it OPENS, the 0x00A6 handler builds the state "
+             "the panel reads, and the default world's crash is OUR missing "
+             "message -- the fix is to send it at spawn, which is what "
+             "retail does. If it CRASHES (*skill, ChCliSkill.cpp:1022), "
+             "arrival alone is not enough and the next question is the "
+             "CHANGE -- run 2A's value was 3."),
+        Step(20.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             "closing marker, same value again",
+             "nothing -- this send marks the tape. If you are still "
+             "in-world, say out loud whether the panel showed a Warrior "
+             "skill list."),
+    ]
+
+
 def _armor_steps(agent_id):
     # EXPLORATORY, and labelled as such. 0x006F is {agent_id, dword, dword} and
     # which dword is the slot and which the model is NOT established -- the
@@ -2328,6 +2370,26 @@ PROBES = {
              "OBSERVATION ONLY -- no packets; the design is that nothing is "
              "sent after the burst. The server refuses invalid flag values "
              "at startup and announces an out-of-band id loudly.",
+    ),
+    "profession_trigger": lambda a, o: Probe(
+        question="Does an 0x00A6 arrival -- value unchanged -- make the "
+                 "skills panel openable in our world?",
+        predicts="OPENS. Retail sends 0x00A6 routinely (136 across 4 tapes) "
+                 "and its handler notifies exactly the attributes panel "
+                 "(event 0x1000001d, studies/smsg); our burst never sends "
+                 "the player's. Every session without one died on K -- "
+                 "including the pure default -- and the one session with one "
+                 "opened. If it CRASHES instead, the trigger is the "
+                 "profession CHANGE (run 2A sent 3, a change from the "
+                 "burst's 1), which the next probe would isolate.",
+        steps=_profession_trigger_steps(a),
+        note="THE PROFESSION ARC IS NOT THE SUBJECT HERE. Run 4's "
+             "discriminators killed the bar-mismatch story and exposed that "
+             "the PURE DEFAULT world cannot open the skills panel -- so this "
+             "probe is about our server's missing message, not about custom "
+             "ids. profession_ab arm A is the n=1 that opened; this replays "
+             "it with the one change that removes the change. RUNS.md "
+             "section 9.",
     ),
     "profession_sentinel": lambda a, o: Probe(
         question="Is profession 11 handled specially, being the client's own "
