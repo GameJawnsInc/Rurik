@@ -97,6 +97,15 @@ CONTROL_SPAN = 8.0
 # that. At --shots 1.0 an 8 s window yields about seven.
 MIN_FLOOR_PAIRS = 3
 
+# Pool drift pairs within this many seconds of the requested lag before taking their
+# median. See `floor_at` -- a single load-to-world pair can otherwise own a lag outright.
+LAG_POOL = 1.5
+
+# A frame-to-frame change this large is not idle -- it is the map load finishing. The
+# idle window is trimmed at the last one. See `drift_floor`: 64-82% for a loading
+# screen against a world frame, 0.05-0.4% for an idle pair.
+LOAD_JUMP = 0.20
+
 MARK = "PROBE[smsgsweep]"
 
 
@@ -244,6 +253,91 @@ def diff_score(a_path, b_path):
     return changed / float(a.size[0] * a.size[1]), mask.getbbox()
 
 
+def drift_floor(shots, wall, span=CONTROL_SPAN):
+    """How much the screen moves ON ITS OWN over a lag of `lag` seconds: {lag: fraction}.
+
+    THE FLOOR MUST BE MEASURED THE WAY THE SCORE IS, and the first two versions of this
+    module were not. They compared CONSECUTIVE idle frames -- about 1 s apart -- while
+    scoring every post-send frame against ONE baseline up to 9 s behind it. A scene that
+    drifts slowly accumulates against a fixed baseline and barely moves between
+    neighbours, so the two sides were not comparable and the difference was charged to
+    the opcode.
+
+    MEASURED 2026-08-13, and it is not subtle: six consecutive opcodes -- `0x0016`,
+    `0x0032`, `0x0034`, `0x0036`, `0x003D`, `0x003F` -- all scored CHANGED at 0.37%
+    against an adjacent-pair floor of 0.05%, and every one of them reported the SAME
+    bounding box, (824, 491, 1113, ~724). That is the player standing in the middle of
+    the screen, breathing. The opcode had nothing to do with it.
+
+    So: for every lag k that fits inside the idle window, take the MEDIAN diff over all
+    idle pairs separated by k. Median rather than max because a map-load transition can
+    still land in the window and one such pair would otherwise be the whole curve, and
+    over all pairs at that lag rather than one so a single frame cannot set it.
+    """
+    lo = wall - datetime.timedelta(seconds=span)
+    idle = [s for s in shots if lo <= s[1] < wall]
+    # TRIM AT THE LAST BIG TRANSITION, which is what `CONTROL_SPAN` was approximating
+    # with a fixed number of seconds and could not do reliably. If the map load ends
+    # inside the window, EVERY long-lag pair straddles it -- the load frame is at the
+    # start, so there is nothing else at that lag to take a median against, and pooling
+    # cannot help: `sustained` came out at -66.77% for a panel plainly on screen for the
+    # whole strip. Dropping everything up to and including the jump leaves a genuinely
+    # idle window, which is what this measurement claims to be about.
+    #
+    # LOAD_JUMP is not delicately tuned. A loading screen against a world frame is
+    # 64-82% of pixels; an idle pair is 0.05-0.4%. Two and a half orders of magnitude
+    # separate them and anything in between would do.
+    for k in range(len(idle) - 1, 0, -1):
+        s, _ = diff_score(idle[k - 1][0], idle[k][0])
+        if s is not None and s > LOAD_JUMP:
+            idle = idle[k:]
+            break
+    pairs = []
+    for i in range(len(idle)):
+        for j in range(i + 1, len(idle)):
+            lag = round((idle[j][1] - idle[i][1]).total_seconds(), 1)
+            s, _ = diff_score(idle[i][0], idle[j][0])
+            if s is not None:
+                pairs.append((lag, s))
+    return pairs, len(idle)
+
+
+def floor_at(pairs, lag, window=LAG_POOL):
+    """The drift floor for a lag: the median over pairs at a SIMILAR lag.
+
+    POOLED, not looked up exactly, and that is not a smoothing preference. The idle
+    window can still contain the tail of the map load, and a load-to-world pair may be
+    the ONLY pair at its particular lag -- at which point a per-lag median is that one
+    contaminated value, and the excess for a frame near it comes out around -67%.
+    MEASURED on the test's own standard fixture, where the load frame sits alone at
+    lags 1.0, 2.5, 4.0, 5.5 and 7.0 while the clean pairs cluster at 1.5, 3.0, 4.5 and
+    6.0. Pooling +/- `window` seconds puts several clean pairs beside each dirty one and
+    the median goes back to describing the scene.
+
+    Falls back to the nearest lag when the pool is empty, so a short strip still gets an
+    answer rather than None. Returns None only when there are no pairs at all.
+    """
+    if not pairs:
+        return None
+    # WIDEN UNTIL THERE ARE ENOUGH TO TAKE A MEDIAN OF, rather than falling back to the
+    # single nearest lag. A strip runs ~9 s past its baseline while the idle window is
+    # 8 s, so lags past everything measured are the NORMAL case, not an edge one -- and
+    # the nearest lag out there is the longest, which is exactly where a lone
+    # load-to-world pair sits. Falling back to it put `sustained` at -66.77% on a panel
+    # that was plainly on screen for the whole strip.
+    span = window
+    while True:
+        near = [s for lg, s in pairs if abs(lg - lag) <= span]
+        if len(near) >= MIN_FLOOR_PAIRS or span > 3600:
+            break
+        span += window
+    if not near:
+        near = [s for _lg, s in pairs]
+    near.sort()
+    mid = len(near) // 2
+    return near[mid] if len(near) % 2 else (near[mid - 1] + near[mid]) / 2.0
+
+
 def noise_floor(shots, wall, span=CONTROL_SPAN):
     """The MEDIAN change between consecutive shots in the idle window before a send.
 
@@ -318,6 +412,7 @@ def score_run(run_dir, settle=SETTLE):
 
     opcode, wall, label = sends[0]
     floor, n_floor = noise_floor(shots, wall)
+    pairs, n_idle = drift_floor(shots, wall)
     flag_at = None if floor is None else max(floor * NOISE_MULT, MIN_FLAG)
     row = {"opcode": opcode, "wall": wall.isoformat(), "label": label,
            "run": os.path.basename(run_dir)}
@@ -346,14 +441,24 @@ def score_run(run_dir, settle=SETTLE):
         strip = []
         for path, t in after:
             s, bbox = diff_score(b[0], path)
+            # EXCESS over what the screen does by itself across the SAME lag. The raw
+            # fraction is kept beside it because it is what a person sees in the
+            # picture, but the verdict is on the excess -- see `drift_floor`.
+            lag = (t - b[1]).total_seconds()
+            fl = floor_at(pairs, lag)
             strip.append({"path": path, "score": s, "bbox": bbox,
-                          "dt": (t - wall).total_seconds()})
-        vals = [f["score"] for f in strip if f["score"] is not None]
+                          "dt": (t - wall).total_seconds(), "lag": lag,
+                          "drift": fl,
+                          "excess": None if (s is None or fl is None) else s - fl})
+        vals = [f["excess"] for f in strip if f["excess"] is not None]
         peak = max(vals) if vals else None
-        tail = [f["score"] for f in strip[-3:] if f["score"] is not None]
+        raws = [f["score"] for f in strip if f["score"] is not None]
+        raw_peak = max(raws) if raws else None
+        tail = [f["excess"] for f in strip[-3:] if f["excess"] is not None]
         sustained = min(tail) if tail else None
-        best = max(strip, key=lambda f: (f["score"] is not None, f["score"] or 0))
+        best = max(strip, key=lambda f: (f["excess"] is not None, f["excess"] or 0))
         row.update(before=b[0], strip=strip, peak=peak, sustained=sustained,
+                   raw_peak=raw_peak, drift_lags=len({lg for lg, _ in pairs}),
                    after=best["path"], score=peak, bbox=best["bbox"],
                    verdict=("UNSCORABLE" if peak is None else
                             "CHANGED" if peak > flag_at else "QUIET"))
@@ -435,6 +540,15 @@ def build_page(results, out_dir, title="smsgsweep -- name the silent opcodes"):
             "fields": _catalogue(r["opcode"]),
             "frames": frames, "shared": ", ".join(r.get("shared_with") or []),
         })
+    # Drop images this build did not write. The page is rebuilt as the loop adds runs,
+    # and a stale frame from an earlier scoring rule is worse than a missing one: it
+    # looks like evidence and is not. The labels themselves live in the browser's
+    # localStorage keyed by opcode+run, so they survive a rebuild -- which is the
+    # whole reason the page is regenerated in place rather than into a new directory.
+    keep = {os.path.basename(f["src"]) for c in cards for f in c["frames"]}
+    for stale in os.listdir(img_dir):
+        if stale not in keep:
+            os.remove(os.path.join(img_dir, stale))
     page = os.path.join(out_dir, "index.html")
     with open(page, "w", encoding="utf-8") as fh:
         fh.write(_render(cards, title))

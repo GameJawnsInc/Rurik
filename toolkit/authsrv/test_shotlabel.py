@@ -16,9 +16,10 @@ like the Message of the Day panel. A scoring defect is not a property of any one
 capture, and building the fixture is what lets the load-screen and the ambiguous-second
 cases exist at all -- neither occurs in a run anybody would keep.
 
-THE FOUR DEFECTS, all four measured on 2026-08-12/13 against the four opcodes already
-named by eye (`0x0033` Message of the Day, `0x009E` chat line, `0x00B9` framed callout,
-`0x00C0` floating text), which is the only reason they could be caught:
+THE FIVE DEFECTS. Four were measured against the four opcodes already named by eye
+(`0x0033` Message of the Day, `0x009E` chat line, `0x00B9` framed callout, `0x00C0`
+floating text), which is the only reason they could be caught; the fifth was measured
+against six opcodes that all reported the SAME bounding box:
 
   1. THE JOIN WAS BY INDEX. "The send lands 13.3 s in, so shot 13.3/cadence is the
      baseline" reads the CAPTURE's clock, which starts at the server connection, not at
@@ -32,6 +33,13 @@ named by eye (`0x0033` Message of the Day, `0x009E` chat line, `0x00B9` framed c
   4. A PAIR CANNOT SEE A TRANSIENT. `0x00C0`'s floating text rises and fades in about
      two seconds and at a 2.3 s cadence lands BETWEEN frames -- one pair scored it
      0.190%, BELOW the same run's idle noise. Section 5.
+  5. THE FLOOR WAS MEASURED AT THE WRONG LAG. Idle noise was taken between ADJACENT
+     frames ~1 s apart while every post-send frame was scored against a baseline up to
+     9 s behind it, so a slowly drifting scene accumulated on one side only. Six
+     consecutive opcodes -- 0x0016, 0x0032, 0x0034, 0x0036, 0x003D, 0x003F -- scored
+     CHANGED at 0.37% against a 0.05% floor and every one reported the same bbox,
+     (824, 491, 1113, ~724): the player standing in the middle of the screen
+     breathing. The floor is now measured at MATCHING lags. Section 9.
 
 AND THE ONE THAT WAS NOT IN THIS MODULE AT ALL, which is section 7: the harness's log
 pump died on a cp1252 console, the gamesrv wedged on its next print, the probe sent
@@ -52,10 +60,10 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks                                                   # noqa: E402
 import shotlabel                                                # noqa: E402
 
-# 33 is what a green run executes today, MEASURED rather than guessed. Every section
+# 38 is what a green run executes today, MEASURED rather than guessed. Every section
 # needs PIL; without it the whole file declares one skip and goes red, the way
 # test_keytap.py does off Windows -- the fixture is drawn, not stored.
-LEDGER = checks.Ledger("test_shotlabel", floor=33)
+LEDGER = checks.Ledger("test_shotlabel", floor=38)
 ok = LEDGER.ok
 
 UTC = datetime.timezone.utc
@@ -96,6 +104,25 @@ def _jitter(im, n=180):
         x = (s >> 8) % out.size[0]
         y = (s >> 20) % out.size[1]
         px[x, y] = (255, 255, 255)
+    return out
+
+
+def _drifted(im, k, w=60, h=80):
+    """The world with a SOLID block standing k pixels along -- a character breathing.
+
+    The point is that consecutive frames differ LITTLE while the distance from frame 0
+    grows with the lag: a solid block shifted one pixel changes only its two edge
+    columns, so neighbours differ by ~2 columns and frames eight apart by ~16. That is
+    the shape `drift_floor` exists for.
+
+    The block must be SOLID. The first version shifted a crop of the noise world, and
+    noise decorrelates completely under a one-pixel shift -- adjacent frames differed
+    6.27% and frames six apart 6.06%, so the curve did not rise with the lag at all
+    and the fixture could not express the defect it was built for.
+    """
+    Image = _pil()
+    out = im.copy()
+    out.paste(Image.new("RGB", (w, h), (200, 40, 40)), (40 + k, 40))
     return out
 
 
@@ -407,6 +434,62 @@ def section_8_provenance(tmp):
        "nothing, because the tool never runs")
 
 
+def section_9_drift(tmp):
+    print("\n9. the floor is measured at the SAME LAG as the score -- DEFECT 5")
+    # THE DEFECT THAT SIX OPCODES FOUND. The floor was measured between ADJACENT idle
+    # frames (~1 s apart) while every post-send frame was scored against ONE baseline
+    # up to 9 s behind it. A scene that drifts slowly is nearly still between
+    # neighbours and far from a fixed baseline, so the difference was charged to the
+    # opcode: 0x0016, 0x0032, 0x0034, 0x0036, 0x003D and 0x003F all scored CHANGED at
+    # 0.37% against a 0.05% adjacent-pair floor -- and all six reported the SAME
+    # bounding box, (824, 491, 1113, ~724), which is the player standing in the middle
+    # of the screen breathing.
+    world = _world(1)
+    frames, t = [], 1.0
+    for k in range(12):                       # steady drift, NOTHING else happens
+        frames.append((t, _drifted(world, k)))
+        t += 1.2
+    d = _run_dir(tmp, "r9", frames, T0 + datetime.timedelta(seconds=8.5))
+    res = shotlabel.score_run(d)
+    row = res["rows"][0]
+    ok(row["verdict"] == "QUIET",
+       "a scene drifting on its own is QUIET -- no opcode did that",
+       f"excess {row['peak']*100:.3f}%  raw {row['raw_peak']*100:.3f}%  "
+       f"flag {res['flag_at']*100:.2f}%")
+    ok(row["raw_peak"] > res["flag_at"],
+       "and the RAW score alone would have cleared the flag, which is the defect",
+       f"raw {row['raw_peak']*100:.3f}% > {res['flag_at']*100:.2f}%")
+    # The adjacent-pair floor, REPRODUCED: it is small because neighbours barely move.
+    shots = shotlabel.hold_shots(d)
+    adj = [shotlabel.diff_score(shots[i - 1][0], shots[i][0])[0] for i in range(1, 6)]
+    adj = [v for v in adj if v is not None]
+    ok(max(adj) * shotlabel.NOISE_MULT < row["raw_peak"],
+       "the adjacent-pair floor is REPRODUCED and cannot see the drift",
+       f"adjacent max {max(adj)*100:.3f}%  vs raw peak {row['raw_peak']*100:.3f}%")
+    # And the curve must actually rise with the lag, or it is not measuring drift.
+    pairs, _n = shotlabel.drift_floor(
+        shots, T0 + datetime.timedelta(seconds=8.5))
+    lo_lag, hi_lag = 1.2, 6.0
+    lo_v = shotlabel.floor_at(pairs, lo_lag, window=0.3)
+    hi_v = shotlabel.floor_at(pairs, hi_lag, window=0.3)
+    ok(lo_v is not None and hi_v is not None and hi_v > lo_v * 2,
+       "the drift curve RISES with the lag -- which is the whole claim",
+       f"{lo_v*100:.3f}% at {lo_lag:.1f}s -> {hi_v*100:.3f}% at {hi_lag:.1f}s")
+    # CONTROL: a real window on top of the same drift must still be seen, or the fix
+    # is just a way of never reporting anything.
+    frames2 = []
+    t = 1.0
+    for k in range(12):
+        im = _drifted(world, k)
+        frames2.append((t, _with_window(im) if k >= 7 else im))
+        t += 1.2
+    d2 = _run_dir(tmp, "r9b", frames2, T0 + datetime.timedelta(seconds=8.5))
+    row2 = shotlabel.score_run(d2)["rows"][0]
+    ok(row2["verdict"] == "CHANGED",
+       "CONTROL: a real panel on top of the same drift is still CHANGED",
+       f"excess {row2['peak']*100:.3f}%")
+
+
 def main():
     if _pil() is None:
         LEDGER.skip("every section", "PIL is missing -- the fixture is drawn with it, "
@@ -421,6 +504,7 @@ def main():
         section_6_refusals(tmp)
         section_7_no_send_is_not_a_result(tmp)
         section_8_provenance(tmp)
+        section_9_drift(tmp)
     return LEDGER.verdict()
 
 
