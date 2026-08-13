@@ -780,3 +780,52 @@ The remaining step is inside the view frame: the per-message handler behind the 
 `frame+0xA8`, reached via `0x0064C7D0`. That is a routing read, not a naming one, and it
 is the same cost for all 90 ids — so it is worth doing once for the family rather than
 five times for these opcodes. **Nothing here needs the harness.**
+
+### 7.9 The routing read: dispatch is a runtime callback list, so the static chain ENDS here
+
+**Status: OBSERVED, 2026-08-13, binary only.** §7.8 left one step: the per-message handler
+behind `frame+0xA8`, reached via `0x0064C7D0`. Reading it answers the naming question in
+the negative, and the negative is worth more than a guess would have been.
+
+**The invoke path.** `0x0064C7D0(this, data, flags)` walks a subscriber list. Each
+subscriber is a **12-byte record** in an array at `[this]` with its count at `[this+8]`,
+iterated **backwards** (`sub eax, 0xC` per step; the `imul 0x2AAAAAAB; sar edx, 1` at
+`0x0064CA09` is the compiler's divide-by-12, which is what fixes the stride). Two skip
+rules: a record whose `+0` is NULL, and one whose `+8` is `>= 0`. Survivors reach
+`0x0064C9A0`, which builds a context on the stack out of `[edi+0x14]`, `[edi+0xE8]`,
+`&record+4` and `[record+8]`, and then:
+
+    0064CA20  mov eax, dword ptr [esi]     ; record[0] -- the handler
+    0064CA22  call eax                     ; <- the dispatch
+
+**The handler is a function pointer held in a record built at run time.** It is not a
+table in the image, not a vtable at a fixed VA, and not a switch on the id. So "which
+function handles `0x100000B5`" has no static answer: the chain
+`opcode -> SEND -> map 0xC11BC4 -> frame -> subscriber list -> call eax` is fully
+resolvable up to the list, and the list's contents are program state.
+
+**A detail that settles the shape.** The id is **not forwarded** to `0x0064C7D0` — its
+arguments are `(data, flags)` only. A handler therefore cannot switch on the message, so
+the map value cannot be "the frame": it must be the **per-id subscriber list**, with
+`0x00633BD0` binding one list per id. That is consistent with 90 ids binding to one frame
+in §7.8, and it means each id has its own handler chain rather than 90 handlers filtering
+90 messages.
+
+#### What this settles, and what it costs
+
+* **The five opcodes of §7.7 cannot be named from the image.** §7.6 declined from the
+  picture, §7.7 warned the id was a destination, §7.8 measured that, and the routing read
+  now shows the last hop is runtime state. Three independent stopping points, all short of
+  the name — which is why none of them invented one.
+* **It is not the harness that would settle it either.** A screen reading cannot separate
+  five opcodes that reach the same frame; that was §7.6's finding. Naming them needs the
+  subscriber list's contents at run time — a debugger or an injected read, i.e. the
+  `PLAN.md` §7 Q6 native route — or a labelled live capture where ArenaNet's own server
+  sends them in a context that distinguishes them.
+* **The cheap win is the SEND direction, and it is already banked.** `0x00633D70` and
+  `0x00633BD0` are a complete, verified API for the client's UI bus, and the silent-no-op
+  property of §7.8 is a fact any future probe needs.
+
+**Nothing further here is worth doing statically.** The next honest step for these five is
+a live capture from ArenaNet's server, where the surrounding traffic names the context —
+not another disassembly and not another loopback run.
