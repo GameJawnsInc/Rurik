@@ -910,20 +910,45 @@ moved 15,595 px against a 16,496 px idle control), which is the number that did 
 The lesson is the repo's own: an instrument aimed at the wrong place returns a confident
 constant, not an error.
 
-### 18.4 Open: the `0` in `W0`
+### 18.4 The `0` in `W0` is the LEVEL -- and it settles property 36
 
-The row reads `W0`, not `W`. UNVERIFIED. Two candidates, and they are cheap to separate:
+**OBSERVED.** Operator's call, confirmed in one run. Harness `20260813T172323`,
+`--probe level --explorable`, the roster open across all three steps:
 
-1. **A secondary-profession slot** rendering id 0 numerically because profession 0 has no
-   abbreviation string. §14.2's render gate carries style bit `0x10000` for the
-   abbreviation; a secondary of 0 is what our server sends.
-2. **A level suffix** (style bit `0x1000`). Against this: the Hero panel in the SAME frame
-   reads `Level: 1`, so a level suffix showing `0` would have to be reading a different
-   level than the Hero panel does -- plausibly the per-AGENT level (property 36 on
-   `0x009F`), which this server does not send and which would default to 0.
+| probe step | roster row | frame |
+|---|---|---|
+| `level -> 1` | **`W1 Test Warrior`** | `w003.png` |
+| `level -> 15` | **`W15 Test Warrior`** | `w006.png` |
+| `level -> 20` | **`W20 Test Warrior`** | `w019.png` |
 
-The discriminator is one run: send a secondary profession and see whether the `0` becomes
-an abbreviation, or send the agent level property and see whether it becomes a `1`.
+The row is `<abbreviation><level>`, so the earlier `W0` was a level of zero -- the value
+this server had never sent. Style bit `0x1000`, the "level suffix" of §14.2's render gate,
+is on.
+
+**This settles the `level` probe's own question**, open since 2026-08-05 and UPSTREAM-only:
+*"Is agent int-property 36 on `0x009F` the character's level?"* Its criterion was stated in
+advance -- *"If all three tracked, property 36 is level and this is settled"* -- and all
+three tracked. It was corroborated by ldufr and gw-preservation and had **never been
+observed by us**; now it has.
+
+**The two level channels are confirmed distinct in the SAME frame**, which is the part no
+single readout could have shown. The top-left bar reads `Level: 1` in w003, w006 and w019
+alike -- that is the per-PLAYER level, `0x00E9` field 9, which this server does send -- while
+the roster row moves 1 -> 15 -> 20 on the per-AGENT property beside it. `authsrv.py`'s own
+warning at the field map ("do not confuse this with the per-AGENT level ... probing one
+while watching the other is how the first attempt read as a false negative") is now a
+measurement rather than a caution.
+
+**A method note.** The probe predicted the effect on the **nameplate**, which our world does
+not draw, so the probe as written could not have been scored in this session. The roster is a
+second readout for the same property, and it existed only because §18 opened it. The probe's
+own note names this failure mode -- aiming at the other channel -- and the fix was a new
+place to look rather than a new packet.
+
+**My reasoning was the wrong half.** §18.4 as first written argued that the Hero panel's
+`Level: 1` told *against* a level suffix. It does not: it tells against a level suffix
+reading the *player* level, which is the distinction the same paragraph then raised and
+declined to lead with.
 
 ### 18.5 Why this matters to the reskin
 
