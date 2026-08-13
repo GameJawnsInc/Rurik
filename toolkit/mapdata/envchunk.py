@@ -22,17 +22,22 @@ two `EnvDataImport` asserts name the pieces. Both are cited per claim.
     each handler's stride, VAs in _SECTIONS):
 
       tag  size  what it is
-       0   10    an aspect array (meaning of the record NOT FOUND)
-       1    6    an aspect array
+       0   10    an aspect array: {u8 a/256, u8 b/256, u32 raw f32, u8 gain
+                 1+d*15/256, u8 e/256, u16 dep ref} -- purpose NOT FOUND
+       1    6    an aspect array: three /256 scalars + a u16 + a byte
        2   19    FOG: {u8 r, g, b, u32 near, u32 far, i32, i32}, near<far 349/349
-       3    8    an aspect array (two 4-byte colour+alpha, INFERRED)
-       4    2    a u16 aspect array
-       5   15 or 16   an aspect array; the record WIDTH is chosen by `flag`
-       6   57    the main environment record: 10 f32 params + 2 colours + 2 deps
-       7    4    an opaque u32 array (resource ids? NOT FOUND)
-       8   17    FIXED, no count -- the map-GLOBAL default environment ('envGlobal')
+       3    8    an aspect array: two {u16 raw, u8 raw, u8 /256} groups
+       4    2    a u16 dep-list index -- an indirection table
+       5   15 or 16   ONE SKY-LAYER configuration; the WIDTH is chosen by `flag`,
+                 and the 16th byte is one more /256 scalar
+       6   57    the WATER record -- see below
+       7    4    {u8 azimuth byte-turn, ...} -- not the opaque u32 array a first
+                 pass took it for
+       8   17    FIXED, no count: the map-GLOBAL default environment --
+                 EIGHT u16 selectors (one per aspect array, tag order) plus
+                 the SUN ELEVATION byte at +0x10
        9   32    the ZONE list: {u16 sel[8], i32 x, i32 y, u32 r_in, u32 r_out}
-      11    5    per-region records that index the zone list
+      11    5    the tagged-environment table; indexes the zone list
       12   var   OPTIONAL polygons: count * {u8 npoints, u16 envIndex, npoints*(f32,f32)}
 
     Tag 10 never occurs (its handler slot is NULL). Tags 0-9 and 11 are present
@@ -40,14 +45,35 @@ two `EnvDataImport` asserts name the pieces. Both are cited per claim.
 
 THE CENTRAL IDEA, because it is what makes the multiplicity make sense. A map
 holds SEVERAL environment configurations and blends between them SPATIALLY, not
-by time of day. Record 0 of each aspect array is the map default; a `tag9` zone
-is a world-space circle `{x, y, r_in, r_out}` carrying `sel[8]`, one index into
-each of the eight arrays (tags 0-7), that overrides the default inside its blend
-band `r_in..r_out`. The clincher: all 73 maps with no zones have every aspect
-array at count exactly 1 (MEASURED). `tag11` and `tag12` are the second level --
-each carries an index the client bounds against the zone-array count (the two
-`EnvDataImport` asserts, strings verbatim `tag->index < envArray.Count()` at VA
-`0x0072032d` and `data->envIndex < ...` at `0x0072044a`).
+by time of day. **A configuration is a SELECTOR TUPLE**: eight u16 indices, one
+into each aspect array. `tag8` is the map's default tuple; a `tag9` zone is the
+same tuple plus a world-space circle `{x, y, r_in, r_out}` that overrides the
+default inside its blend band. The clincher: all 73 maps with no zones have every
+aspect array at count exactly 1 (MEASURED). The selector-to-array mapping is
+forced by the resolver at `0x0071F2F0`, which bounds each slot against its own
+array's count and indexes with its own stride (`imul ecx, eax, 0x39` for tag6's
+57, and so on) -- and by the corpus, where all 20,936 zone slot reads are in
+bounds while rotating the slot-to-array assignment by one puts 3,562 out.
+`tag11` and `tag12` are the second level -- each carries an index the client
+bounds against the zone-array count (the two `EnvDataImport` asserts, strings
+verbatim `tag->index < envArray.Count()` at VA `0x0072032d` and
+`data->envIndex < ...` at `0x0072044a`).
+
+TAG6 IS THE WATER RECORD, and this correction is worth stating loudly because a
+first pass called it "the main environment record" purely from its size. It is
+the parameter block of the animated water surface: its selected record reaches
+`MapWater`'s setter as one struct, and the floats are a water shader's --
+`+0x05` is the water plane's base height (the ONE float the zone blender refuses
+to interpolate, copied from the dominant zone instead), `+0x09` is wave
+amplitude scaling a five-sine surface sum, and two (tiling-scale, scroll-speed)
+pairs drive texture matrices through `GrTrans`. `+0x00` is a mode enum the loader
+VALIDATES -- `cmp eax, 3; ja <abort>` at `0x0071F6F3` then a four-arm jump table,
+so a value above 3 aborts the whole import. `+0x02..+0x04` are padding (zero in
+865 of 865 records). The two u32s at `+0x2D`/`+0x31` are D3DCOLOR `0xAARRGGBB`.
+
+WHAT IS STILL NOT NAMED: the purpose of tag0/tag1/tag3 as aspects (their record
+FIELDS are read out above, but what the aspect IS is NOT FOUND), tag6's floats at
+`+0x21`/`+0x25` (normalised 0..1 coefficients), and tag7 beyond its azimuth byte.
 
 WHAT `flag` IS, and the correction it cost. `flag` is the header u16 at offset 6,
 and it selects `tag5`'s record width: 15 bytes when 0, 16 when >=1 (the loader
@@ -84,7 +110,23 @@ TAG_GLOBAL = 8                  # the one section with no count field (17 bytes)
 TAG_FOG = 2
 TAG_ZONES = 9
 TAG_POLYGONS = 12
-TAG_MAIN = 6
+TAG_WATER = 6                   # named for what MapWater does with it, not size
+
+#: The eight aspect arrays a selector tuple picks from, in slot order. Forced by
+#: the resolver at 0x0071F2F0 (each slot bounded against its own array's count
+#: and indexed with that array's stride) and corroborated by the corpus: all
+#: 20,936 zone slot reads land in bounds, while rotating this assignment by one
+#: puts 3,562 out.
+SELECTOR_TAGS = (0, 1, 2, 3, 4, 5, 6, 7)
+
+#: The sun elevation's scaling. The loader multiplies tag8's byte at +0x10 by the
+#: f64 at 0xA6EE50 (`fmul` at 0x0071FBD8), which is float32(2*pi)/256 -- a
+#: byte-turn. MEASURED against the Stripped terrain chunk's own angle_index,
+#: which encodes the SAME authored angle at a different quantisation: 306 of 349
+#: maps agree exactly under `round(b * 3.96875)`, 313 within one terrain quantum,
+#: and 28 of the 34 that disagree carry terrain byte 127 -- the 45-degree default,
+#: i.e. the terrain copy was left unset. Four controls score 0/349.
+SUN_TURN = 6.2831854820251465 / 256.0
 
 #: tag -> fixed record size for the count-prefixed sections. tag5 is absent here
 #: because its width depends on `flag`; tag8 is absent because it has no count;
@@ -176,6 +218,45 @@ class EnvChunk:
         """The 17-byte map-global default environment record, raw."""
         s = self.section(TAG_GLOBAL)
         return s.records[0] if s and s.records else None
+
+    def default_selectors(self):
+        """tag8's eight u16 selectors -- the map's default pick per aspect array.
+
+        Same tuple shape a zone carries, so `zones()[i][0]` and this are
+        interchangeable inputs to `resolve()`.
+        """
+        g = self.global_env()
+        return struct.unpack_from("<8H", g, 0) if g else None
+
+    def sun_index(self):
+        """tag8's sun-elevation byte, raw (a byte-turn; see SUN_TURN)."""
+        g = self.global_env()
+        return g[16] if g else None
+
+    def sun_elevation(self):
+        """The sun elevation in radians, by the client's own scaling."""
+        b = self.sun_index()
+        return None if b is None else b * SUN_TURN
+
+    def resolve(self, selectors):
+        """`{tag: record-bytes}` for one selector tuple -- a whole environment.
+
+        The tuple is tag8's (the map default) or a zone's. A slot indexing past
+        its array is refused rather than clamped: the client bounds-checks every
+        one and aborts the import, so an out-of-range slot is a corrupt chunk
+        rather than a value to interpret.
+        """
+        out = {}
+        for slot, tag in enumerate(SELECTOR_TAGS):
+            s = self.section(tag)
+            recs = s.records if s else []
+            i = selectors[slot]
+            if i >= len(recs):
+                raise ValueError(
+                    f"selector slot {slot} picks record {i} of tag {tag}, which "
+                    f"holds {len(recs)}; the client bounds-checks this and aborts")
+            out[tag] = recs[i]
+        return out
 
     # ---- codec ----------------------------------------------------------
 

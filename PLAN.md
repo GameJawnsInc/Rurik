@@ -2422,14 +2422,21 @@ parallel, with one safety change that is not optional — see its entry.
     rect 318/318; env: dep fields in bounds of `0x11000009` 0/5,897). **Sound is a
     positioned-emitter layer** — `{dep, x, y, r_lo, r_hi, r_mid}`, radii squared at
     load, sounds one hop deeper in `ffna8` descriptors — and is AUTHORABLE.
-    **Environment is parallel aspect arrays + a spatial zone list** — fog and zones
-    typed, tag6's ten floats carried opaque (no `1/101` constant in the image) — so
-    it is EDITABLE, not yet writable from nothing. NEXT RUNG (needs owner go-ahead +
-    harness): a client run authoring a sound chunk from scratch — Pre-Searing's same
-    sounds placed at custom `(x, y)`/radii, a minimal delta from (e10j)'s proven dep
-    list — and, if the compiler accepts it, promote authored sound (and fog/zones)
-    into `stripbuild` the way (e10j) promoted the borrowed pair. Still open:
-    naming tag6's main-environment floats. Record: `vault/research/envsound-2026-08-13/`.
+    **Environment is parallel aspect arrays + a spatial zone list**, where a
+    configuration is a SELECTOR TUPLE — tag8 is the map default, a tag9 zone is the
+    same tuple plus a circle. Fog (tag2) and zones typed; **tag6 is the WATER
+    record**, not the "main environment" a size-based guess called it, which is why
+    (e10i)'s "the ocean looks much better now" was literally true. **The sun is
+    written twice**: tag8's angle byte predicts the terrain chunk's own
+    `angle_index` on 313/349 maps (ratio exactly 127/32), so our authored maps —
+    which moved the terrain byte and borrowed the env chunk — had a baked lightmap
+    and a runtime sky that disagreed. NEXT RUNG (needs owner go-ahead + harness): a
+    client run authoring a sound chunk from scratch — Pre-Searing's same sounds at
+    custom `(x, y)`/radii, a minimal delta from (e10j)'s proven dep list — and, if
+    the compiler accepts it, promote authored sound (and fog/zones/sun) into
+    `stripbuild` the way (e10j) promoted the borrowed pair. Still open: tag6's
+    floats at +0x21/+0x25, and what tag0/tag1/tag3 ARE as aspects (their fields are
+    read out; their purpose is NOT FOUND). Record: `vault/research/envsound-2026-08-13/`.
 
 ### Naming the archive's map rows — 2026-08-13
 
