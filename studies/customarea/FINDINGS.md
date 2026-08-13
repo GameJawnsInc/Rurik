@@ -6040,3 +6040,30 @@ the measurement. What the run does NOT settle: the roles of the set's other
 two numbers (15 and 30 — candidate "unsure"/"amble" boundaries, unread), and
 whether the mode flag can select the other set on some map kind; every map
 this toolkit compiles goes through the path measured here.
+
+## 49. OBSERVED: the terrain wears our paint — rung (e10f), textures (2026-08-12)
+
+**Rung F2 is done, one variable against the map the owner had just walked.**
+Heights and all five trees extracted byte-for-byte from (e10-next)'s
+NEXT.bin; only the texturing fields changed: tag 2 painted by height band
+(plaza / low rolling / high rolling / hill top — census 84/363/472/105),
+tags 4/5 and tex_word taken from the DONOR's own tables at run time
+([0,1,2,3], [11,21,17,7], 8421) — ArenaNet's pairing for the four
+dependency files the map already ships, because table_b is a property of
+the TEXTURE (a function of the file, 17,083/17,089) and inventing one is
+wrong when reading it is free.
+
+Readback, all predictions HIT: the compiled Bloated terrain carries the
+painted tag 2 **VERBATIM**, both tables and tex_word carried, deps
+unchanged, props oracle 442 and `corresponds()` clean, heights 1,024/1,024.
+**And the owner walked it: the ground wears the four painted bands.** The
+tile table is what selects among the terrain dependency files, per cell,
+and the whole chain — paint in this toolkit, compile in the retail client,
+render on screen — is closed. Run record:
+`vault/research/e10f-textures-2026-08-12/`.
+
+Kept honest: tables/tex_word changed alongside the paint (to
+correct-by-retail values), so the claim rests on the SPATIAL pattern, which
+only tag 2 can produce. Still NOT FOUND: what table_a's staircase grouping
+means, and what table_b's 7 bits classify. Not tried: dependency ids from a
+DIFFERENT biome (the four textures here are the template's own set).

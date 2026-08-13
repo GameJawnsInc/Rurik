@@ -2301,3 +2301,10 @@ parallel, with one safety change that is not optional — see its entry.
     mesh, 5 of 5. `stripbuild`'s 30° seed refusal stays as a measured 5° margin.
     Unread still: the roles of 15 and 30, and whether the mode flag ever selects
     the other set.
+    **(e10f)** ✅ **DONE 2026-08-12 (FINDINGS 49). THE TERRAIN WEARS OUR PAINT.**
+    Old rung F2, one variable against the walked map: tag 2 painted by height band,
+    tags 4/5 and tex_word read from the donor at run time (table_b is a property of
+    the TEXTURE — inventing it is wrong when reading it is free). Compiled tag 2
+    came back VERBATIM, everything else carried, and the owner walked the four
+    bands. Still NOT FOUND: table_a's grouping, table_b's 7 bits; not tried:
+    another biome's dependency ids.
