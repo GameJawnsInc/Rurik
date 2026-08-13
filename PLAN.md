@@ -2339,3 +2339,19 @@ parallel, with one safety change that is not optional — see its entry.
     PASS that meant "reached A map" while the client never loaded ours; the second
     was caught only because `datcheck --diff` CONTRADICTED the readback.
     Record: `vault/research/e10l-authored-2026-08-13/`.
+    **(e10m)** ✅ **DONE 2026-08-13 (FINDINGS 55). ARENANET NAMES THE FIELDS.**
+    §53's two loose threads closed offline, no client. The client looks its shader
+    constants up BY NAME and the strings are in the image, so tag6 `+0x21` is
+    **`waterFresnel`** (string `0x00A6C430`) and `+0x25` is **`waterSpecularColor`**
+    (`0x00A6C474`) — our labels replaced by ArenaNet's. Both are also GATES: each
+    promotes the water technique, so the path that reads a field is unlocked by that
+    field. **tag1 is POST-PROCESS** {BloomAmount, PostProcSaturation, tint .w, B,G,R}
+    from the constant table at `0xBF7DA8`, corpus-corroborated (saturation 1.0 on
+    648/741, tint off on 571/741) and correcting this repo's "raw u16" to two thirds
+    of a packed colour; **tag3 is the DIRECTIONAL LIGHT**, two {rgb, intensity} pairs
+    to `GrLight`, which REFUTES the idea its u16s were dep indices. Still NOT FOUND
+    and deliberately unnamed: tag0 (consumer at `0x0071A4C0` unattempted), tag4,
+    tag7 — naming tag7 "wind" is precisely the move that mis-named tag6 once already.
+    Two of ten namings were REFUTED on audit, one of them a false "no correlation"
+    contradicted by its own numbers (χ²=92.4, 0/2000 permutations).
+    `envchunk` gains `postproc()`/`lights()`; test floor 25 → 28, 40 under `--all`.

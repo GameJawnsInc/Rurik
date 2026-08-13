@@ -6369,6 +6369,69 @@ FILES themselves (an `ffna8` sound descriptor, a sky texture) are ArenaNet
 assets referenced by run-time id, which is the `borrowed_constants` pattern and
 not a gap. Run record: `vault/research/e10l-authored-2026-08-13/`.
 
+## 55. OBSERVED: ArenaNet names three of the fields itself (2026-08-13)
+
+§53 left two threads: tag6's two unnamed floats, and what tag0/tag1/tag3 ARE as
+aspects. A consumer-side pass closed most of it — offline, no client — and the
+best evidence in the whole arc turned up here, because **the client looks its
+shader constants up BY NAME and the name strings are in the image**. These are
+not our labels.
+
+| field | name | how we know |
+|---|---|---|
+| tag6 `+0x21` | **`waterFresnel`** | string `0x00A6C430`, bound to the handle uploaded at `0x0070B0F2` |
+| tag6 `+0x25` | **`waterSpecularColor`** (scales an RGB triple) | string `0x00A6C474`, upload at `0x0070B134` |
+| tag6 `+0x29` | projective texture-matrix scale, used as `0.5 / value` | `0x0070AD21`, installed on `GrTrans` slot 3 |
+
+Both water coefficients are 0..1 in 865/865 and both are also **gates**:
+`+0x21 > 0` and `+0x25 != 0` each promote the water technique, so the only path
+that reads a field is unlocked by that same field. A pleasing consequence: 128
+records set the specular strength but only 72 also set fresnel, so **56 records
+carry a value the technique gate can never reach** — a fact about ArenaNet's
+authoring tool, not about the format.
+
+**tag1 is the POST-PROCESS aspect**, named the same way, from the client's own
+19-entry constant table at `0xBF7DA8`: `{u8 BloomAmount, u8 PostProcSaturation,
+u8 PostProcTintColor.w, u8 B, u8 G, u8 R}`. The corpus is what makes those the
+*right* names rather than plausible ones — saturation is 255 (i.e. 1.0) on **648
+of 741** records, which is what a defaulted parameter looks like and what a
+second bloom scalar would not, and the tint strength is 0 on **571 of 741**.
+It also corrects this repo: the earlier reading called bytes 3–4 "a raw u16",
+and it is not an index at all, it is two thirds of a packed colour stored B,G,R.
+
+**tag3 is the DIRECTIONAL LIGHT**: two `{u8 r, u8 g, u8 b, u8 intensity}` pairs
+fed to `GrLight` setters (`0x0067B560`, `0x0067B6A0`), with the direction set
+beside them asserting `GrLight:400 m_type == GR_LIGHT_DIRECTIONAL`. Colour-ness
+is forced independently of the call: the zone blender reads `+0x50/+0x51/+0x52`
+as **three separate bytes**, which a u16 id could not survive. That also
+**REFUTES** a standing suspicion — tag3's u16s are not dep-list indices, they are
+the low bytes of a colour.
+
+### What stayed NOT FOUND, and why that is the right answer
+
+**tag0** (ten bytes, fully read out), **tag4** (a bare dep reference) and
+**tag7** (two angles, a weight and a magnitude — a direction and a distance in
+shape) have no name here. For tag0 the consumer was never reached: the
+dispatcher hands its zone index to `0x0071A4C0`, which nobody disassembled. That
+is recorded as *unattempted*, not as absence — the ranges actually searched are
+in the run record. Naming tag7 "wind" would have been easy and is exactly the
+move that made tag6 "the main environment record" in the first place.
+
+### The audit earned its keep again
+
+Ten positive namings went to skeptics; **two came back REFUTED**. One is a
+lesson about statistics rather than disassembly: an agent reported "no
+correlation between the water coefficients and the mode enum" as MEASURED, and
+its own numbers refute it — the fresnel rate by mode is 6.2% / 60.4% / 20.4% /
+20.3%, χ² = 92.4, and 0 of 2000 cluster-preserving permutations reach it. The
+other trimmed tag1's umbrella name from "bloom" to post-process and replaced one
+inferred sub-name with the constant table above. A third verdict corrected *my
+own* handoff: the `EnvApi:165` sites I flagged as a getter family are not
+getters.
+
+`envchunk.py` gains `postproc()` and `lights()`; `test_envchunk` pins the two
+population facts that carry the names (floor 25 → 28, 40 checks under `--all`).
+
 ### What this buys, and what it does not
 
 Sound is understood end to end at the map-chunk level — an emitter can be
