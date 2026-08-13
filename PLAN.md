@@ -1339,7 +1339,10 @@ run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cms
 placement from both streams cross-checked at export, the rotation composition is MEASURED
 (z, then x, then y — was `props.py`'s open item), and Blender places each prop as a measured
 proxy; Kamadan and Pre-Searing exported whole to `vault/exports/` with `.blend` scenes beside
-them. Placements only — model geometry stays undecoded and is the natural next rung if wanted.
+them. Placements only — model geometry stays undecoded; **scoped the same day as a six-rung
+ladder in [studies/models/PLAN.md](studies/models/PLAN.md)** (a proposal until adopted): the
+format is half-read in customarea §5, the radius identity is a ready-made oracle, and the
+missing piece is committed code plus the client's own FVF dispatch.
 
 ### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks)
 
