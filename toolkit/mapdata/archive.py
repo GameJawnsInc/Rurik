@@ -161,9 +161,46 @@ class Archive:
     def __exit__(self, *exc):
         self.close()
 
+    def row(self, n):
+        """The entry for MFT ROW n, one-based -- the id studies quote.
+
+        USE THIS WHENEVER YOU HAVE A ROW NUMBER. `entries` is a POSITIONAL
+        list: `entries[k].index == k + 1`, so `entries[row]` is off by one and
+        silently returns a DIFFERENT FILE. That is not hypothetical -- on
+        2026-08-13 an archive census mixed `archive.entries[row]` with
+        `textrec.TextIndex._rows[row]` (which is keyed by row number, not
+        position), silently resolved a text row to a TEXTURE, and nearly filed
+        a false refutation of the text-authoring plan off the back of it.
+
+        Most callers in this tree already write `entries[row - 1]` and are
+        correct; this exists so the correct thing is also the obvious thing.
+        """
+        # NOTE THE BOUND, which is its own instance of the confusion above:
+        # `entry_count` is mft_size/24 and COUNTS THE HEADER SLOT, while
+        # `entries` excludes it. So the last addressable row is
+        # entry_count - 1, and bounding on entry_count walks off the end --
+        # which is exactly how this was found, by the test written with it.
+        last = len(self.entries)
+        if not 1 <= n <= last:
+            raise IndexError(
+                f"MFT row {n} outside 1..{last}. Rows are ONE-based -- row 0 "
+                f"does not exist, because the MFT's slot 0 is the header "
+                f"rather than a file. (entry_count is {self.entry_count}, "
+                f"which COUNTS that header slot and is therefore one more "
+                f"than the highest row.)")
+        e = self.entries[n - 1]
+        # Cheap, and it is the whole point of the method: if the positional
+        # convention ever changes, this fires here instead of returning a
+        # plausible wrong file to a caller that cannot tell.
+        assert e.index == n, f"row {n} resolved to entry {e.index}"
+        return e
+
     @property
     def entries(self):
-        """Every MFT row. About 4 MB in memory; read once, kept."""
+        """Every MFT row, POSITIONALLY. `entries[k].index == k + 1`.
+
+        NOT keyed by row number -- see `row()`, and use it if you have one.
+        """
         if self._entries is None:
             self.fh.seek(self.mft_offset + ENTRY_SIZE)
             blob = self.fh.read(self.mft_size - ENTRY_SIZE)
