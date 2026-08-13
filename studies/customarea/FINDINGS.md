@@ -6088,3 +6088,42 @@ names the file, both under our control, both compiling and rendering. Run
 record: `vault/research/e10g-grass-2026-08-12/`.
 
 Still NOT FOUND, unchanged: table_a's grouping semantics, table_b's 7 bits.
+
+## 51. OBSERVED: the sun moves and the sky arrives — rungs (e10h) and (e10i) (2026-08-12/13)
+
+Two runs, one variable each, run records
+`vault/research/e10h-light-2026-08-12/` and `…/e10i-environment-2026-08-12/`.
+
+### (e10h) the sun: tag 0's angle byte re-bakes the lightmap
+
+One byte against the grass map — angle index 194 → 103, 68.7° → 36.5° by
+the client's own expression — and the compiler re-baked **985 of 1,024**
+tag-9 bytes. The elevation sweep orders correctly: each compile's lightmap
+best-fits a sun on ITS OWN side (the low-angle compile fits low, the
+high-angle fits high), which is the §49-era lightmap reading measured from
+the AUTHORING side for the first time. **The pre-registered two-way
+inequality itself MISSED, and the defect is the prediction model's**: a
+pure N·L fit carries no CAST SHADOWS, which dominate at a low sun and drag
+a Lambertian best-fit far below the true elevation (best |r| 0.93 at 5°
+against a true 36.5°). Kept as a model defect beside the mechanism's HIT.
+Owner's eyes: "hard to tell" — and (e10i) explains why.
+
+### (e10i) the environment chunk brings the sky, the ambient light, and the horizon
+
+The pair our maps never carried — `0x10000009` + `0x11000009`, present on
+every retail map sampled — added in retail's slot after the Path chunk:
+Pre-Searing's 639 B payload BORROWED at run time (not understood, named in
+the census), the deps regenerated from its 10 ids. The compiler accepted
+the ten-chunk configuration and carried the payload **VERBATIM** to
+`0x20000009`. **Owner, verbatim: "yep that's a sky, and it was key to the
+lighting. the ocean looks much better now."** Three facts in one: the sky
+was the missing environment chunk all along; ambient/light colors ride in
+it, which is why (e10h)'s visual was masked under the void; and the
+horizon water plane reads from it too, on a map with no water chunk of its
+own.
+
+`stripbuild.build()` now takes `env_payload`/`env_dep_ids` — together or
+not at all, counted BORROWED (`test_stripbuild` §3e, floor 46 → 51). The
+presentation ladder now stands: textures painted (§49), biomes swapped
+(§50), the sun ours (§51), the sky borrowed whole (§51). Still not
+understood: the environment payload's 639 bytes; still absent: sound.

@@ -365,9 +365,13 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   a build without props must NOT, because the three zero-prop retail maps are
   exactly the three without the chunk. Both directions refuse, and a model
   index past the list is refused too, since the client's failure mode for an
-  unresolvable model has never been measured.** Sections 0-3d score 33 on
-  placeholder constants of our own and need no vault, against a floor of 46 --
-  and the vault-less score (27 then, 33 now) was the first number that path
+  unresolvable model has never been measured. And since 2026-08-13 section 3e
+  pins the ENVIRONMENT pair (rung e10i): env_payload and env_dep_ids together
+  or not at all, landing after the Path chunk in retail's slot, the payload
+  counted BORROWED because the chunk is not understood.** Sections 0-3e score
+  38 on
+  placeholder constants of our own and need no vault, against a floor of 51 --
+  and the vault-less score (27 then, 38 now) was the first number that path
   ever printed, because `vaultpath.require_dir` raises SystemExit, a
   BaseException, so the `except Exception` around it never fired: a vault-less
   run died before the verdict, its `LEDGER.skip` had never executed once (one
