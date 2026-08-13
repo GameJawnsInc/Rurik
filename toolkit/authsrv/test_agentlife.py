@@ -1569,6 +1569,35 @@ def section_probe_encoding():
               f"by launching a client, which is the most expensive way to find "
               f"a typo in this repo")
 
+    # A REFUSAL step sends nothing, so there is nothing to encode. This went red on
+    # 2026-08-13 for the best possible reason: the all-zero sweep FINISHED, `remaining`
+    # went to 0, `smsgsweep_steps` returned its "NO PLAN" refusal, and the encoder tried
+    # to encode it -- 0x0000 is a real opcode wanting one value, so a completed sweep
+    # reported itself as a broken probe.
+    refusal = probes.Step(0.0, 0x0000, [], "refusal", "sends nothing", sends=False)
+    LEDGER.ok(refusal.sends is False and probes.Step(0.0, 0x0000, [1], "x", "y").sends,
+              "a step declares whether it SENDS, and the default is that it does",
+              "the flag defaults True, so an existing step cannot become invisible to "
+              "the encoder by omission")
+
+    # THE CONTROL, and it is the whole reason `sends` is a declared flag rather than an
+    # `if not step.values` shape test. A malformed step that carries no values and DOES
+    # claim to send is exactly what this section exists to catch, and it is bytewise
+    # identical to the refusal apart from the flag. Skipping on shape would have made
+    # the check unable to fail for its own reason.
+    class _Probe:
+        steps = [probes.Step(0.0, 0x0000, [], "malformed", "should be caught")]
+    saved = probes.get
+    try:
+        probes.get = lambda name, n=1: _Probe()
+        caught = probes.check_encodable(quiet=True)
+    finally:
+        probes.get = saved
+    LEDGER.ok(caught > 0,
+              "CONTROL: a valueless step that still claims to SEND is caught",
+              f"{caught} failure(s) -- identical to the refusal but for the flag, so a "
+              f"shape-based skip would have silently stopped catching broken probes")
+
 
 def section_secondary_bits():
     """0x00B6, and the two ways it fails SILENTLY.

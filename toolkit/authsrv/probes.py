@@ -103,14 +103,31 @@ WARRIOR_ARMOR = [
 
 
 class Step:
-    """One packet, plus what a human should look at after it lands."""
+    """One packet, plus what a human should look at after it lands.
 
-    def __init__(self, delay, opcode, values, label, watch):
+    `sends` is False for a REFUSAL step -- one whose whole purpose is to carry a
+    message to the operator and send nothing. `smsgsweep_steps` returns one when the
+    plan is empty, deliberately, because a probe that sends nothing and prints
+    "complete" is the shape of a green run that measured nothing.
+
+    It is a DECLARED flag rather than a shape test, and that distinction cost a red
+    suite on 2026-08-13. The refusal was built as `Step(0.0, 0x0000, [], ...)` and
+    `check_encodable` encoded it like any other step: 0x0000 is a real opcode wanting
+    one value, so the refusal reported itself as a BROKEN PROBE. Nothing was broken --
+    the all-zero sweep had simply finished, `remaining` went to 0, and the plan emptied
+    for the best possible reason. Inferring "this is a refusal" from an empty `values`
+    list would be worse than the bug it fixes: a genuinely malformed step with no
+    values is precisely what that check exists to catch, and the two are
+    indistinguishable by shape.
+    """
+
+    def __init__(self, delay, opcode, values, label, watch, sends=True):
         self.delay = delay
         self.opcode = opcode
         self.values = values
         self.label = label
         self.watch = watch
+        self.sends = sends
 
 
 class Probe:
@@ -2089,7 +2106,7 @@ def _smsgsweep_steps(a, o, dwell=0.4):
     p = smsgsweep.load_plan()
     if not p or not p.get("rows"):
         return [Step(0.0, 0x0000, [], "NO PLAN -- run smsgsweep.py --plan first",
-                     "nothing was sent; this run measures nothing")]
+                     "nothing was sent; this run measures nothing", sends=False)]
     codec = _sweep_codec()
     dwell = float(p.get("dwell", dwell))
     quiet = (float(p.get("settle", smsgsweep.SETTLE))
@@ -2916,6 +2933,15 @@ def check_encodable(quiet=False):
                 print(f"  [ -- ] {name}: no packets, observation only")
             continue
         for step in probe.steps:
+            if not getattr(step, "sends", True):
+                # A declared refusal. It carries a message and no packet, so there is
+                # nothing to encode and an encode attempt reports it as a broken probe
+                # -- which is what happened on 2026-08-13 when the all-zero sweep
+                # finished and the plan emptied. See Step's docstring for why this is a
+                # flag and not an `if not step.values` test.
+                if not quiet:
+                    print(f"  [ -- ] {name}: {step.label} -> refusal, sends nothing")
+                continue
             try:
                 blob = codec.encode("GAME_SMSG", step.opcode, step.values)
                 if not quiet:

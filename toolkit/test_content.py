@@ -459,22 +459,53 @@ def main():
         with tempfile.TemporaryDirectory() as tmp:
             copy = os.path.join(tmp, "content")
             shutil.copytree(real_vault, copy)
+            # The target must be a row whose SOURCE actually reaches `_check_extracted`,
+            # and grepping for `extractor = "` does not find one. An extractor on a row
+            # outside `content.EXTRACTED` is inert -- `capture` rows carry the field and
+            # nothing validates it -- so mutating one changes nothing, no refusal comes
+            # back, and the check reddens naming the gate when the gate is fine. That is
+            # not hypothetical: it is what this check did the moment a parallel session
+            # removed `effects.toml` and left `npcs.toml`, whose rows are all `capture`.
+            # So the row is chosen by PARSING for a source in EXTRACTED, and the file's
+            # own extractor VALUE is what gets replaced -- which works whether the row
+            # writes provenance inline or as a `[x.provenance]` block, and cannot pick a
+            # row that has no condition-1 claim to break.
             target = None
             for name in sorted(os.listdir(copy)):
                 if not name.endswith(".toml"):
                     continue
                 path = os.path.join(copy, name)
-                with open(path, encoding="utf-8") as fh:
-                    text = fh.read()
-                if 'extractor = "' in text:
-                    target = (path, text)
+                with open(path, "rb") as fh:
+                    try:
+                        doc = content.tomllib.load(fh)
+                    except Exception:
+                        continue
+                for rows in doc.values():
+                    if not isinstance(rows, dict):
+                        continue
+                    for row in rows.values():
+                        if not isinstance(row, dict):
+                            continue
+                        prov = row.get("provenance")
+                        if not isinstance(prov, dict):
+                            continue
+                        cited = prov.get("extractor")
+                        if (prov.get("source") in content.EXTRACTED
+                                and isinstance(cited, str) and cited.strip()):
+                            target = (path, cited)
+                            break
+                    if target:
+                        break
+                if target:
                     break
             if target is None:
                 LEDGER.skip("the extractor mutation (2 checks)",
-                            "no row in this vault cites an `extractor`, so there is no "
-                            "condition-1 claim here to break")
+                            "no row in this vault carries a source in EXTRACTED with an "
+                            "`extractor`, so there is no condition-1 claim here to break")
             else:
-                path, text = target
+                path, cited = target
+                with open(path, encoding="utf-8") as fh:
+                    text = fh.read()
                 try:
                     content.load(vault_dir=copy)
                     copy_err = None
@@ -484,10 +515,8 @@ def main():
                           "CONTROL: an unmutated copy of the overlay loads",
                           copy_err or f"copied {os.path.basename(path)} and its siblings")
 
-                i = text.index('extractor = "') + len('extractor = "')
-                j = text.index('"', i)
                 with open(path, "w", encoding="utf-8") as fh:
-                    fh.write(text[:i] + "toolkit/clientscan/NOT_COMMITTED.py" + text[j:])
+                    fh.write(text.replace(cited, "toolkit/clientscan/NOT_COMMITTED.py"))
                 try:
                     content.load(vault_dir=copy)
                     broke = None
