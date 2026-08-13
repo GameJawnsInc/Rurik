@@ -2325,3 +2325,9 @@ parallel, with one safety change that is not optional — see its entry.
     payload is 639 bytes NOT UNDERSTOOD, counted borrowed. `stripbuild` takes the
     pair as of this rung (test §3e, floor 51). Presentation still open: SOUND, and
     understanding the environment payload.
+    **(e10j)** ✅ **DONE 2026-08-13 (FINDINGS 52). THE MAP HAS A VOICE.** The sound
+    pair 0x10000012/0x11000012, Pre-Searing's 89 B payload borrowed at run time,
+    carried VERBATIM; the owner: "background audio plays birds and wind."
+    `stripbuild` takes the pair under the env rules (test §3e, floor 54). THE
+    PRESENTATION LADDER IS WALKED — what remains is AUTHORING the borrowed
+    payloads (env 639 B, sound 89 B) instead of wearing Pre-Searing's.

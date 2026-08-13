@@ -6127,3 +6127,25 @@ not at all, counted BORROWED (`test_stripbuild` §3e, floor 46 → 51). The
 presentation ladder now stands: textures painted (§49), biomes swapped
 (§50), the sun ours (§51), the sky borrowed whole (§51). Still not
 understood: the environment payload's 639 bytes; still absent: sound.
+
+## 52. OBSERVED: the map has a voice — rung (e10j), sound (2026-08-13)
+
+The last presentation pair: `0x10000012` + `0x11000012`, present on most
+retail maps and never on ours. Pre-Searing's 89 B payload BORROWED at run
+time (not understood, named in the census), its 3 audio-file ids (`ffna`
+type 8) regenerated as ours, the pair after the environment pair — the file
+stays a subsequence of retail's total order. One run: the compiler carried
+the payload VERBATIM to `0x20000012`. **Owner, verbatim: "background audio
+plays birds and wind."** Pre-Searing's ambience on our authored map.
+
+`stripbuild.build()` takes `sound_payload`/`sound_dep_ids` under the
+environment pair's rules (together or not at all, counted BORROWED —
+`test_stripbuild` §3e, floor 51 → 54). Run record:
+`vault/research/e10j-sound-2026-08-12/`.
+
+**The presentation ladder is walked**: textures painted per cell (§49),
+biomes swapped (§50), the sun authored (§51), the sky and now the ambience
+borrowed whole (§51, §52). What "borrowed whole" leaves open is authoring:
+the environment's 639 bytes and the sound chunk's 89 are carried, not
+understood, and understanding them is the difference between wearing
+Pre-Searing's weather and writing our own.

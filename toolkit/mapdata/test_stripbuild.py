@@ -26,8 +26,8 @@ syntax-tree scan (that is how `test_mapbuild.py` caught one).
 
 Sections 0-3 need no vault: they run on PLACEHOLDER constants of our own, which
 is also the only way to check that `NoConstants` refuses rather than falling
-back to something. Sections 4-6 need `vault/dat_study/Gw.dat`, and score 38
-against a floor of 51 without it -- a number that could not be observed at all
+back to something. Sections 4-6 need `vault/dat_study/Gw.dat`, and score 41
+against a floor of 54 without it -- a number that could not be observed at all
 until the SystemExit bug in section 4's vault gate was fixed on 2026-08-12.
 
 SECTION 3D IS THE PROPS-DEPS PAIRING (2026-08-12, for rung e10d): a build
@@ -43,7 +43,8 @@ and `env_dep_ids` go together or not at all, the pair lands after the Path
 chunk in retail's slot, and the payload counts BORROWED in the census -- the
 chunk is not understood, and a borrowed byte reporting as generated is a
 census lie. FINDINGS 51's run carried a borrowed environment VERBATIM
-through the compiler and it brought the sky.
+through the compiler and it brought the sky; FINDINGS 52's did the same
+for the SOUND pair and the map played Pre-Searing's birds and wind.
 
 THE BORROWED SET SHRANK on 2026-08-12: props is GENERATED now, by `props.py`,
 so `BORROWED` is Header and Zones alone -- 42 bytes, down from 54, and 98.20%
@@ -78,8 +79,8 @@ import vaultpath  # noqa: E402
 # FLOOR: 51, MEASURED from a green run on 2026-08-13 (guessed 44 first, which
 # reddened the run at 39 -- which is what the floor is for; 40 since props left
 # the borrowed set, 46 since section 3d pinned the props-deps pairing, 51
-# since 3e pinned the environment pair).
-# Sections 0 to 3e score 38 and need no vault, so a vault-less run goes red
+# since 3e pinned the environment pair, 54 since 3e grew the sound pair).
+# Sections 0 to 3e score 41 and need no vault, so a vault-less run goes red
 # rather than reporting a smaller success -- the corpus half is where
 # "byte-identical to ArenaNet's" lives.
 #
@@ -89,7 +90,7 @@ import vaultpath  # noqa: E402
 # died before the verdict -- and the `LEDGER.skip` in that handler had never
 # executed once, being called with one argument where it takes two. The 30 this
 # comment used to claim was a number nobody had ever seen printed.
-LEDGER = checks.Ledger("stripbuild", floor=51)
+LEDGER = checks.Ledger("stripbuild", floor=54)
 check = checks.adopt(LEDGER)
 
 DIMS = 32
@@ -295,9 +296,10 @@ def sections():
                      PLACEHOLDER, PLACEHOLDER_IDS, props=one_prop,
                      prop_dep_ids=[77])
     ids_p = [c.chunk_id for c in mapfile.MapFile.decode(rep_p.blob).chunks]
-    check(ids_p == [c for c in sb.ORDER if c not in (sb.ENV, sb.ENV_DEPS)],
+    check(ids_p == [c for c in sb.ORDER
+                    if c == sb.PROPS_DEPS or c not in sb.OPTIONAL],
           f"POSITIVE CONTROL: a props-bearing build carries the props-deps "
-          f"chunk in ORDER (and no env pair it was not given)")
+          f"chunk in ORDER (and no other optional pair it was not given)")
     check(ids_p.index(sb.PROPS_DEPS) == ids_p.index(sb.PROPS) + 1,
           "and the props-deps chunk rides immediately after the props chunk, "
           "where retail puts it")
@@ -327,7 +329,8 @@ def sections():
                      PLACEHOLDER, PLACEHOLDER_IDS,
                      env_payload=b"\x00" * 16, env_dep_ids=[9])
     ids_e = [c.chunk_id for c in mapfile.MapFile.decode(rep_e.blob).chunks]
-    check(ids_e == [c for c in sb.ORDER if c != sb.PROPS_DEPS],
+    check(ids_e == [c for c in sb.ORDER
+                    if c in (sb.ENV, sb.ENV_DEPS) or c not in sb.OPTIONAL],
           "POSITIVE CONTROL: the pair lands after the Path chunk, in ORDER")
     check(rep_e.origin[sb.ENV] == "borrowed"
           and sb.ENV not in sb.GENERATED,
@@ -336,6 +339,23 @@ def sections():
           "generated is a census lie")
     check(rep_e.borrowed == 42 + 16,
           f"the census moves by exactly the payload  ({rep_e.borrowed})")
+    refused = False
+    try:
+        sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0), PLACEHOLDER,
+                 PLACEHOLDER_IDS, sound_payload=bytes(1) * 8)
+    except ValueError:
+        refused = True
+    check(refused, "a sound payload with NO id list is refused")
+    rep_s = sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0),
+                     PLACEHOLDER, PLACEHOLDER_IDS,
+                     env_payload=bytes(1) * 16, env_dep_ids=[9],
+                     sound_payload=bytes(1) * 8, sound_dep_ids=[5])
+    ids_s = [c.chunk_id for c in mapfile.MapFile.decode(rep_s.blob).chunks]
+    check(ids_s == [c for c in sb.ORDER if c != sb.PROPS_DEPS],
+          "POSITIVE CONTROL: env and sound pairs both land in ORDER")
+    check(rep_s.origin[sb.SOUND] == "borrowed"
+          and rep_s.borrowed == 42 + 16 + 8,
+          f"and the sound payload counts BORROWED  ({rep_s.borrowed})")
 
     print("\n4. against the archive: the borrowed two and the generated deps")
     # NOT `require_dir`, and that is the fix rather than the style. It raises

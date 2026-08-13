@@ -97,6 +97,8 @@ TERRAIN_DEPS = 0x11000002
 PATH = 0x10000008
 ENV = 0x10000009
 ENV_DEPS = 0x11000009
+SOUND = 0x10000012
+SOUND_DEPS = 0x11000012
 
 # The donor's own order, which is also the corpus's single total order
 # (FINDINGS §5: 321 ordered pairs, 0 contradictions). Zones before Terrain is
@@ -107,13 +109,13 @@ ENV_DEPS = 0x11000009
 # carries the list (the three zero-prop retail maps are exactly the three
 # with no props-deps chunk).
 ORDER = (HEADER, MAP_PARAMS, PROPS, PROPS_DEPS, ZONES, TERRAIN, TERRAIN_DEPS,
-         PATH, ENV, ENV_DEPS)
+         PATH, ENV, ENV_DEPS, SOUND, SOUND_DEPS)
 #: The chunks encode() allows a payload to omit, each with its pairing rule
 #: enforced in build(): PROPS_DEPS goes with props (retail 349/349), and the
 #: ENV pair goes together or not at all -- FINDINGS 51's run put a borrowed
 #: environment through the compiler and it carried VERBATIM, but the payload
 #: is not understood, so it stays opt-in and BORROWED rather than generated.
-OPTIONAL = (PROPS_DEPS, ENV, ENV_DEPS)
+OPTIONAL = (PROPS_DEPS, ENV, ENV_DEPS, SOUND, SOUND_DEPS)
 BORROWED = (HEADER, ZONES)
 GENERATED = (MAP_PARAMS, PROPS, PROPS_DEPS, TERRAIN, TERRAIN_DEPS, PATH)
 
@@ -313,7 +315,8 @@ class BuildReport:
 
 def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
           tiles=None, sync_hash=0, sync_flag=0, props=None,
-          prop_dep_ids=None, env_payload=None, env_dep_ids=None):
+          prop_dep_ids=None, env_payload=None, env_dep_ids=None,
+          sound_payload=None, sound_dep_ids=None):
     """A whole Stripped map. `heights` is in `Terrain.index` order, integers.
 
     `props` is a `props.StrippedProps`, or None for an empty one. Empty is not
@@ -334,6 +337,10 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
     VERBATIM through the compiler and brought the sky, the ambient light
     and the horizon water with it). It counts as borrowed in the report,
     named like every borrowed byte.
+
+    `sound_payload` + `sound_dep_ids` are chunk 0x10000012 and its ids,
+    the same shape and the same rules (FINDINGS 52: Pre-Searing's carried
+    VERBATIM and the map played its birds and wind).
     """
     for cid in BORROWED:
         if cid not in constants:
@@ -400,6 +407,18 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
         payload[ENV_DEPS] = mapchunks.encode_dependencies(list(env_dep_ids))
         origin[ENV_DEPS] = (f"generated from {len(list(env_dep_ids))} "
                             f"run-time ids")
+
+    if (sound_payload is None) != (sound_dep_ids is None):
+        raise ValueError(
+            "sound_payload and sound_dep_ids go together or not at all, "
+            "the environment pair's rule for the same reason")
+    if sound_payload is not None:
+        payload[SOUND] = bytes(sound_payload)
+        origin[SOUND] = "borrowed"
+        payload[SOUND_DEPS] = mapchunks.encode_dependencies(
+            list(sound_dep_ids))
+        origin[SOUND_DEPS] = (f"generated from {len(list(sound_dep_ids))} "
+                              f"run-time ids")
 
     blob = encode(payload)
     return BuildReport(blob, origin, {c: len(payload[c]) for c in payload},
