@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=148)
+LEDGER = checks.Ledger("agent lifetime", floor=156)
 
 
 def main():
@@ -186,6 +186,7 @@ def main():
     section_facing()
     section_enemy_skill()
     section_constants()
+    section_probe_encoding()
     return LEDGER.verdict()
 
 
@@ -1212,6 +1213,12 @@ def section_named_builders(codec):
          agents.agent_set_profession, (7, 0)),
         ("a secondary profession equal to the primary",
          agents.agent_set_profession, (7, 4, 4)),
+        ("a custom profession WITHOUT the opt-in",
+         agents.agent_set_profession, (7, 12)),
+        ("a custom SECONDARY without the opt-in",
+         agents.agent_set_profession, (7, 4, 12)),
+        ("a profession past the u8 the wire carries, even WITH the opt-in",
+         agents.agent_set_profession, (7, 256, 0, True)),
     ]
     for label, fn, args in refusals:
         try:
@@ -1235,6 +1242,66 @@ def section_named_builders(codec):
               f"angle bits {spin[1]:#010x} == +inf" if ok else
               "the guard swallowed the sentinel, which would make the message "
               "unusable for the one case it is most needed")
+
+    # THE PROFESSION BOUND, against literals written here.
+    #
+    # This file's own §"combat constants" section exists because twelve of
+    # fourteen constants could be set to a wrong value with every check green --
+    # every other section computed its expectation FROM the symbol under test, so
+    # the symbol was free to move and the test moved with it. Same trap here, so
+    # the numbers are literals and not `agents.CHAR_PROFESSIONS`.
+    LEDGER.ok(agents.CHAR_PROFESSIONS == 11,
+              "the client's compiled profession bound is 11",
+              f"{agents.CHAR_PROFESSIONS} -- ids 0..10, MEASURED on build 38797 "
+              f"at 29 assert sites across 13 modules (studies/profession/)")
+    LEDGER.ok(agents.PROFESSION_FIELD_MAX == 255,
+              "and the wire field is a u8",
+              f"{agents.PROFESSION_FIELD_MAX} -- 0x00A6 is 8 wire bytes and "
+              f"0x00B7 is 9, both carrying profession as one byte")
+
+    # The bound USED to be 6 -- the largest primary our (early-Prophecies) corpus
+    # happened to contain -- and enforcing it refused four professions that ship
+    # and that reach this function straight from content. This is the regression
+    # check for that, and it is a positive: 7..10 must be ACCEPTED.
+    shipped_ok = []
+    for prof in (7, 8, 9, 10):
+        try:
+            agents.agent_set_profession(7, prof)
+            shipped_ok.append(prof)
+        except ValueError:
+            pass
+    LEDGER.ok(shipped_ok == [7, 8, 9, 10],
+              "and professions 7..10 -- which SHIP -- are accepted",
+              f"{shipped_ok} of [7, 8, 9, 10]. The old bound of 6 refused all "
+              f"four; an Assassin NPC in content raised ValueError")
+
+    custom = None
+    try:
+        custom = agents.agent_set_profession(7, 12, 0, custom=True)
+    except ValueError:
+        pass
+    LEDGER.ok(custom == [7, 12, 0],
+              "and a custom id passes WITH the opt-in, unchanged",
+              f"{custom} -- the value must reach the wire as sent; a guard that "
+              f"clamped it would make the probe measure our clamp, not the client")
+
+
+def section_probe_encoding():
+    """Every probe step must ENCODE, and nothing in the suite checked that.
+
+    `probes.check_encodable()` exists precisely because a probe that fails to
+    encode wastes a whole client run -- the client has to be launched, logged in
+    and walked into a map before the first packet fires. It was reachable only
+    from `probes.py`'s own `__main__`, so the suite never ran it and a broken
+    probe would have been discovered by spending the run.
+    """
+    import probes
+    failures = probes.check_encodable(quiet=True)
+    LEDGER.ok(failures == 0,
+              "every step of every probe encodes",
+              f"{failures} failures -- an unencodable step is only discovered "
+              f"by launching a client, which is the most expensive way to find "
+              f"a typo in this repo")
 
 
 def section_pool_fraction():

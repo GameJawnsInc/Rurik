@@ -34,7 +34,7 @@ from agents import (                                        # noqa: E402
     AGENT_KIND_NPC, AGENT_KIND_PLAYER, AGENT_TYPE_LIVING, APPEARANCE_WARRIOR,
     CHAR_CLASS_MONSTER_BASE, CHAR_CLASS_PLAYER_BASE, DEFAULT_RUN_SPEED,
     ALLEGIANCE_HOSTILE, EFFECT_DEAD, EFFECT_TRANSITION, HATCHER, INF, WORLD,
-    create_agent, npc_model, npc_properties)
+    agent_set_profession, create_agent, npc_model, npc_properties)
 
 # The hostile the normal map load spawns. Read from content, the same row
 # authsrv.py reads, so the removal probe cannot drift from what is in the world.
@@ -208,6 +208,81 @@ def _attribute_steps(agent_id):
              "same panel. Still fine?"),
         Step(6.0, 0x003A, [agent_id, [0] * 42], "attributes: 42 zeros",
              "same panel. If this one breaks and 3 did not, our 42 is wrong."),
+    ]
+
+
+def _profession_steps(agent_id, custom_id):
+    """Does the client accept a profession id it does not ship?
+
+    THE CENTRAL CLAIM OF studies/profession/MODDABLE.md, and the first thing in
+    that arc a client can refute. Four documents of static analysis say 256
+    professions are reachable; not one packet has ever been sent to check.
+
+    The claim rests on the profession value living in TWO places that are not
+    the same storage: the `0x0059` appearance dword packs it into a 4-bit
+    nibble at bits 20-23 (16 values, bound-checked `< 0xB` with an assert), and
+    the Agent object holds it as a plain byte at `+0x10E`/`+0x10F` written by
+    the setter at `0x007F7330` -- which contains NO comparison instruction in
+    its whole body. So the design sends a legal placeholder in the dword and
+    the custom id on the byte carriers. This probe sends only the byte carriers.
+
+    ONE OUT-OF-BAND VALUE PER RUN, and that is the whole design. Every profession
+    bound check in the image ends the session: the assert reporter at
+    `0x00488210` is noreturn, so a failed check leaves a live process behind a
+    modal dialog with its message pump stopped. There is no second question
+    after the first one kills it. So the run spends its single out-of-band
+    value deliberately, and everything around it is control.
+
+    WHY 12 AND NOT 11. Eleven is the client's own reserved/none sentinel -- all
+    nine reserved attribute rows carry profession 11. Probing with 11 would
+    test the sentinel, and an anomaly would be unattributable between "custom
+    id refused" and "sentinel handled specially". `profession_sentinel` exists
+    to ask that as its own question, on its own run.
+
+    STEP 4 IS THE POINT. A recovery to the control value is the only
+    unambiguous proof the client survived: it is the client's own rendering,
+    not our socket. A `ConnectionResetError` appears on a clean teardown too,
+    and the crash dialog leaves the socket open -- so neither says anything.
+    If step 4 renders, the byte carriers tolerated an id the client does not
+    ship, and MODDABLE.md's premise holds for this surface.
+    """
+    # Built through agent_set_profession rather than as raw value lists, so the
+    # server's own guard sees every packet this probe sends. That is what makes
+    # `custom=True` mean something: it is an opt-in written at the call site,
+    # visible in a diff, and it still refuses a primary of 0, a secondary equal
+    # to the primary, and anything past the u8 the wire actually carries. A
+    # probe that bypassed the guard could send a payload the server would never
+    # send, and then the run would measure our bug instead of the client.
+    control = 3
+    return [
+        Step(2.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"CONTROL: profession {control}, which ships",
+             "the party window and the hero panel. The profession must CHANGE. "
+             "If it does not, stop the run and fix the carrier -- nothing after "
+             "this step means anything without it."),
+        Step(10.0, 0x00A6, agent_set_profession(agent_id, custom_id, 0, custom=True),
+             f"THE EXPERIMENT: profession {custom_id}, which does not ship",
+             "nothing, for a moment. Prediction: the packet lands silently, "
+             "because the setter has no comparison in it. THEN open the party "
+             "window, and say out loud which action you took last -- if the "
+             "client dies, the last action names the first profession-keyed "
+             "table that reads out of bounds, and that is the finding."),
+        # 0x00B7 is 0x00A6's three fields plus the trailing is_pvp byte, so it
+        # is built FROM the validated payload rather than beside it -- the two
+        # carriers cannot drift apart, and the bound checks apply to both.
+        Step(12.0, 0x00B7,
+             agent_set_profession(agent_id, custom_id, 0, custom=True) + [0],
+             f"the player-specific carrier, also {custom_id}",
+             "the hero panel and your own nameplate. 0x00B7 is the message the "
+             "real server sends 29 times across 11 live connections, so this is "
+             "the shape retail uses, carrying a value retail never carries."),
+        Step(12.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"RECOVERY: back to {control}",
+             "the party window. If the profession returns to the control value, "
+             "the client SURVIVED an out-of-band id on both byte carriers and "
+             "the session is still healthy -- which is the result this probe "
+             "exists to get. If nothing changes, the client is already behind a "
+             "crash dialog and the run ended at whichever step you noted."),
     ]
 
 
@@ -2031,6 +2106,55 @@ PROBES = {
              "study's best-supported claim into an observation and explains why "
              "the character is level 0.",
     ),
+    "profession_custom": lambda a, o: Probe(
+        question="Does the client accept a primary profession of 12 -- an id it "
+                 "does not ship -- on the byte-wide carriers?",
+        predicts="ACCEPTED AND STORED SILENTLY, then survives, because the "
+                 "setter at 0x007F7330 has no comparison instruction in its "
+                 "whole body and the appearance nibble is different storage we "
+                 "are not touching. The recovery step in particular should "
+                 "render. If instead the session dies, it dies at a UI action "
+                 "rather than at the packet, and WHICH action names the first "
+                 "of the 13 profession-keyed tables to read out of bounds -- "
+                 "which is the ordering studies/profession/ has no way to get "
+                 "statically.",
+        steps=_profession_steps(a, 12),
+        note="THE FIRST PACKET EVER SENT AT studies/profession/. Four documents "
+             "of static analysis stand behind this one value. Twelve, not "
+             "eleven, because 11 is the client's own reserved sentinel -- see "
+             "profession_sentinel. Expect ONE out-of-band answer per run: every "
+             "profession bound check ends the session, so there is nothing "
+             "after the first failure.",
+    ),
+    "profession_sentinel": lambda a, o: Probe(
+        question="Is profession 11 handled specially, being the client's own "
+                 "reserved/none marker rather than merely out of range?",
+        predicts="DIFFERENT from 12, in some visible way -- a blank profession, "
+                 "a default icon, or a distinct failure. All nine reserved "
+                 "attribute rows carry profession 11, so the client has a "
+                 "meaning for it. If 11 and 12 behave identically, then 11 is "
+                 "not special on this surface and the custom range could start "
+                 "there after all.",
+        steps=_profession_steps(a, 11),
+        note="Run this ONLY after profession_custom, and compare. Running it "
+             "first makes any anomaly unattributable between 'custom id "
+             "refused' and 'sentinel handled specially', which is exactly the "
+             "confusion MODDABLE.md warns about.",
+    ),
+    "profession_max": lambda a, o: Probe(
+        question="Does the byte carrier really hold 255, or does something "
+                 "downstream mask it to a nibble?",
+        predicts="If the appearance dword's PACKER (0x0091D430) is reached by "
+                 "any path we have not found, 255 masks to 255 mod 16 = 15 and "
+                 "the client shows profession 15 rather than failing -- a "
+                 "SILENT wrong value, which is the one failure mode this arc "
+                 "has no other way to detect. If nothing packs client-side, "
+                 "255 behaves like any other out-of-band id.",
+        steps=_profession_steps(a, 255),
+        note="This is the silent-failure check, and it is the reason the ceiling "
+             "is stated as a conditional (256 if nothing packs client-side, 16 "
+             "if something does). Cheapest test of that conditional.",
+    ),
     "attributes": lambda a, o: Probe(
         question="Is a 42-zero attribute array well-formed?",
         predicts="If ATTRIBUTE_COUNT = 42 is right, all three lengths are "
@@ -2323,12 +2447,16 @@ def names():
     return sorted(PROBES)
 
 
-def check_encodable():
+def check_encodable(quiet=False):
     """Encode every step of every probe. Run this before spending a client run.
 
     A probe that fails to encode wastes a whole session -- the client has to be
     launched, logged in and walked into a map before the first packet fires, and
     the failure would not surface until then.
+
+    `quiet` suppresses the per-step lines so the suite can call this as one
+    check. It was reachable only from `__main__` until 2026-08-12, which meant
+    the guard against wasting a client run was itself never run by the suite.
     """
     import os
     import sys
@@ -2341,13 +2469,15 @@ def check_encodable():
     for name in names():
         probe = get(name, 1)
         if not probe.steps:
-            print(f"  [ -- ] {name}: no packets, observation only")
+            if not quiet:
+                print(f"  [ -- ] {name}: no packets, observation only")
             continue
         for step in probe.steps:
             try:
                 blob = codec.encode("GAME_SMSG", step.opcode, step.values)
-                print(f"  [PASS] {name}: {step.label} -> "
-                      f"0x{step.opcode:04X}, {len(blob)}B")
+                if not quiet:
+                    print(f"  [PASS] {name}: {step.label} -> "
+                          f"0x{step.opcode:04X}, {len(blob)}B")
             except Exception as exc:
                 bad += 1
                 print(f"  [FAIL] {name}: {step.label} -> "
