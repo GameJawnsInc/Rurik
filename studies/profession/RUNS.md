@@ -750,6 +750,28 @@ python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.
     --keep-open --shots 10 --game-args '--probe profession_spawn --unlocks corpus'
 ```
 
+### RESULT — **1,333 skills, and the discriminator is settled**
+
+Harness `20260813T002742`. `unlocks: corpus (1333 player-usable of 3443 rows, build
+38797, pinned pristine client)`, correct tree, **no crash dialog**, c2s to **+32.98 s**,
+**`missed 0`**. The panel lists the whole corpus grouped by attribute — Inspiration
+Magic (40), Wilderness Survival (40), Strength (38), Protection Prayers (36),
+Marksmanship (34), Restoration Magic (32), Smiting Prayers (31), Tactics (30), Water
+Magic (30), … and an Asura Title Track (12), scrolling. The client's own grouping is
+**43 attribute groups over 1,333 skills**, which is exactly what `skilltable.py` counts
+for the same set — an independent agreement between the client's UI and our extractor.
+
+> **MEMBERSHIP, NOT MAGNITUDE.** 1,333 rows render fine, so the `fileId` assert was
+> never about how long the list is — it was the 2,109 non-player rows with no skill
+> icon. §10.7 item 4's unmeasured magnitude is now measured, at least to 1,333.
+
+**`--unlocks` now DEFAULTS to `corpus`.** `all` is measured to crash the client's own
+panel the moment a player presses K, and a default that breaks the game is not a
+default. With no client to read, the derivation refuses with a message naming
+`--unlocks bar` as the fallback rather than silently falling back to the broken set.
+Pinned on the syntax tree (`test_agentlife.py`), because a default is one word and
+nothing else in the suite would notice it moving back.
+
 ### And the arc's own question is finally askable
 
 With a working panel, `--spawn-profession` becomes meaningful again. §10 predicts the

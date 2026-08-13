@@ -595,7 +595,17 @@ def unlock_corpus_words():
     import pinned                                              # noqa: E402
     import skilltable                                          # noqa: E402
 
-    path, why = pinned.find()
+    try:
+        path, why = pinned.find()
+    except SystemExit as ex:
+        raise SystemExit(
+            f"{ex}\n"
+            f"  --unlocks corpus derives the player-usable skill ids from the "
+            f"client itself, so it needs one to read.\n"
+            f"  With no client: `--unlocks bar` sends exactly the --skills ids "
+            f"and is what the panel was first opened with.\n"
+            f"  `--unlocks all` is REFUSED in spirit but not in code -- it "
+            f"asserts fileId (File.cpp:367) the moment the Skills panel opens.")
     data = open(path, "rb").read()
     base, count, _score = skilltable.locate_table(data)
     rows = [skilltable.parse_record(data, base, i) for i in range(count)]
@@ -4824,7 +4834,14 @@ def main():
                          "slot. Ids are row indices into the client's own skill "
                          "table, so they must exist in the build being launched "
                          "(0..3442 here). Fewer than 8 are padded with zeros.")
-    ap.add_argument("--unlocks", default="all",
+    # DEFAULT CHANGED 2026-08-13, all -> corpus. `all` is MEASURED to crash the
+    # client's own Skills panel: it unlocks 2,109 weapon modifiers and other
+    # non-player rows that have no skill icon, and the loader asserts `fileId`
+    # (File.cpp:367) building the list. `corpus` is the same run with membership
+    # corrected and was observed listing 1,333 skills in 43 attribute groups with
+    # the client answering every ping. A default that breaks the game the moment
+    # a player presses K is not a default. studies/profession/RUNS.md §11.
+    ap.add_argument("--unlocks", default="corpus",
                     help="Unlock bitmap sent as opcodes 29 and 219: 'all' "
                          "(ids 1..3442 -- NOT 0, see refuse_skill_zero), "
                          "'corpus' (only the 1,333 player-usable skills, "
