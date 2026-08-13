@@ -600,11 +600,21 @@ def pick_object(name=None):
     if not meshes:
         raise ValueError("the scene holds no mesh object")
     if len(meshes) > 1:
+        # A props-carrying import (2026-08-13) legitimately fills the scene
+        # with proxy objects, so a crowd is no longer proof of ambiguity. The
+        # terrain is picked by IDENTITY -- the importer's stamp, which proxies
+        # never carry -- and only an actual tie (or no stamp at all) refuses.
+        # Never by position in a list: that is how the wrong client got
+        # launched on 2026-08-06, and a duplicated terrain copies its stamp,
+        # so the duplicate case still refuses.
+        stamped = [o for o in meshes if o.get(STAMP) is not None]
+        if len(stamped) == 1:
+            return stamped[0]
         raise ValueError(
-            "the scene holds %d mesh objects (%r) and none was named. Pass "
-            "--object, because picking one by position in a list is how the "
-            "wrong client got launched on 2026-08-06."
-            % (len(meshes), [o.name for o in meshes]))
+            "the scene holds %d mesh objects and %d carry the %r stamp, so "
+            "no single terrain can be picked. Pass --object; picking one by "
+            "position in a list is how the wrong client got launched on "
+            "2026-08-06." % (len(meshes), len(stamped), STAMP))
     return meshes[0]
 
 

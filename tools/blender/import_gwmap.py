@@ -83,11 +83,28 @@ The tile indices (`.tiles.u8`) and shade bytes (`.shade.u8`) are loaded when
 present and attached as mesh attributes, but their MEANING is unsettled upstream
 of here (`terrain.py` labels both NOT FOUND); carrying them is transport, not
 understanding, and no geometry depends on them.
+
+PROPS (format_version 2, 2026-08-13). When the export carries a props sidecar,
+every placement becomes a PROXY object in a `<name>.props` collection --
+**never ArenaNet's geometry**, which nothing in this tree decodes. A prop with
+an outline gets its measured footprint polygon extruded; one without gets a
+16-gon cylinder at the measured placement radius (the compiled `radius` field:
+scale * the model's max 2D vertex radius). The proxy HEIGHT is invented for
+display -- half the radius, floored at 10 -- and is the one number here that
+measures nothing; everything else on the object is the archive's. The z
+negation is the terrain's (convention 4), so a prop stands ON the mesh it
+shipped beside. The outline is NOT rotated -- the compiled ring is literally
+`(x + dx, y + dy)`, the client's own add-back, with no rotation term -- while
+a radius proxy carries the compiled basis as its object rotation (conjugated
+through the z-flip, so det stays +1). Each object records the sidecar record
+on itself as custom properties (`gw_index`, `gw_model`, `gw_model_file_id`,
+`gw_rot_bytes`, `gw_scale_byte`, `gw_radius`, `gw_flags`).
 """
 
 import argparse
 import hashlib
 import json
+import math
 import os
 import struct
 import sys
@@ -98,9 +115,12 @@ except ImportError:                                          # pragma: no cover
     bpy = None
 
 FORMAT = "rurik.gwmap"
-FORMAT_VERSION = 1
+# 1 is the terrain-only interchange; 2 adds the OPTIONAL props sidecar and
+# changes nothing else, so both load here.
+FORMAT_VERSIONS = (1, 2)
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
+DTYPE_JSON = "json"
 
 # The object custom property carrying the manifest across the round trip. Read
 # back by `tools/blender/export_gwmap.py`; the two agree on this name and on
@@ -120,7 +140,8 @@ class GwMap(object):
     are None when the export did not carry them.
     """
 
-    def __init__(self, meta, path, heights, tiles=None, shade=None):
+    def __init__(self, meta, path, heights, tiles=None, shade=None,
+                 props=None):
         self.meta = meta
         self.path = path
         self.name = meta.get("name") or os.path.basename(path).split(".")[0]
@@ -132,6 +153,7 @@ class GwMap(object):
         self.heights = heights
         self.tiles = tiles
         self.shade = shade
+        self.props = props
 
     @property
     def cells(self):
@@ -213,10 +235,10 @@ def load_export(json_path):
     if meta.get("format") != FORMAT:
         raise ValueError("%s: format is %r, not %r"
                          % (json_path, meta.get("format"), FORMAT))
-    if meta.get("format_version") != FORMAT_VERSION:
-        raise ValueError("%s: format_version is %r, not %d"
+    if meta.get("format_version") not in FORMAT_VERSIONS:
+        raise ValueError("%s: format_version is %r, not one of %r"
                          % (json_path, meta.get("format_version"),
-                            FORMAT_VERSION))
+                            FORMAT_VERSIONS))
 
     cells = meta["dims"]["x"] * meta["dims"]["y"]
     if meta["dims"].get("cells", cells) != cells:
@@ -225,6 +247,7 @@ def load_export(json_path):
                             meta["dims"]["cells"]))
 
     arrays = {}
+    props = None
     for side in meta["sidecars"]:
         path = os.path.join(base, side["name"])
         if not os.path.isfile(path):
@@ -239,11 +262,24 @@ def load_export(json_path):
             raise ValueError("%s: sha256 %s... does not match the manifest's "
                              "%s..." % (side["name"], digest[:16],
                                         side["sha256"][:16]))
+        with open(path, "rb") as fh:
+            blob = fh.read()
+        if side["dtype"] == DTYPE_JSON:
+            # The props sidecar: its count is PROPS, not cells.
+            if side["kind"] != "props":
+                raise ValueError("%s: unknown json sidecar kind %r"
+                                 % (side["name"], side["kind"]))
+            props = json.loads(blob.decode("utf-8"))
+            n = len(props.get("props", ()))
+            if side["count"] != n or props.get("count") != n:
+                raise ValueError(
+                    "%s: manifest says %d props, the sidecar declares %r and "
+                    "holds %d" % (side["name"], side["count"],
+                                  props.get("count"), n))
+            continue
         if side["count"] != cells:
             raise ValueError("%s: %d values for a %d-cell grid"
                              % (side["name"], side["count"], cells))
-        with open(path, "rb") as fh:
-            blob = fh.read()
         if side["dtype"] == DTYPE_F32:
             arrays[side["kind"]] = list(struct.unpack("<%df" % cells, blob))
         elif side["dtype"] == DTYPE_U8:
@@ -255,7 +291,8 @@ def load_export(json_path):
     if "heights" not in arrays:
         raise ValueError("%s: no heights sidecar" % json_path)
     return GwMap(meta, json_path, arrays["heights"],
-                 tiles=arrays.get("tiles"), shade=arrays.get("shade"))
+                 tiles=arrays.get("tiles"), shade=arrays.get("shade"),
+                 props=props)
 
 
 # ------------------------------------------------------------ the geometry
@@ -294,6 +331,68 @@ def build_geometry(gwmap):
         for i in range(dx):
             faces[out + i] = (a + i, b + i, b + i + 1, a + i + 1)
     return verts, faces
+
+
+def basis_matrix_blender(basis):
+    """The 3x3 rotation for a prop, in BLENDER's frame. Pure Python.
+
+    The sidecar's `basis` is the compiler's own two vectors (basis_a, basis_b),
+    which at rot (0,0,0) are (0,0,-1) and (0,1,0) -- so in the GAME frame the
+    rotation's columns are (b x -a, b, -a), right-handed (at identity that is
+    exactly the identity matrix). Blender's terrain negates z (convention 4), a
+    MIRROR, so the rotation must be conjugated through it: B = M R M with
+    M = diag(1, 1, -1), which flips the sign of every element with exactly one
+    index on the z axis and keeps det = +1.
+    """
+    a, b = basis
+    na = (-a[0], -a[1], -a[2])
+    c1 = (b[1] * na[2] - b[2] * na[1],
+          b[2] * na[0] - b[0] * na[2],
+          b[0] * na[1] - b[1] * na[0])
+    # rows of R_game from its columns (c1, b, na)
+    r = [[c1[0], b[0], na[0]],
+         [c1[1], b[1], na[1]],
+         [c1[2], b[2], na[2]]]
+    for i in range(3):
+        for j in range(3):
+            if (i == 2) != (j == 2):
+                r[i][j] = -r[i][j]
+    return r
+
+
+def prop_proxy_geometry(rec, min_height=10.0):
+    """`(verts, faces, kind)` for one prop's PROXY. Pure Python; local frame.
+
+    An outlined prop is its measured footprint -- the prop-local (dx, dy)
+    pairs, which the compiled ring proves are UNROTATED world-axis offsets --
+    extruded upward. One without an outline is a 16-gon cylinder at the
+    measured placement radius. The HEIGHT is invented for display (half the
+    radius, floored at `min_height`); it is the only number here that measures
+    nothing.
+    """
+    radius = rec["radius"]
+    h = max(min_height, 0.5 * radius)
+    ring = [tuple(p) for p in rec["outline"]]
+    if ring:
+        if len(ring) > 1 and ring[0] == ring[-1]:
+            ring = ring[:-1]                    # closed outlines repeat point 0
+        kind = "outline"
+    if not ring or len(ring) < 3:
+        # 37,505 of 37,548 retail outlines are closed rings; a degenerate one
+        # (or none) falls back to the radius cylinder.
+        n = 16
+        r = max(radius, 1.0)
+        ring = [(r * math.cos(2 * math.pi * k / n),
+                 r * math.sin(2 * math.pi * k / n)) for k in range(n)]
+        kind = "radius"
+    n = len(ring)
+    verts = ([(x, y, 0.0) for x, y in ring]
+             + [(x, y, h) for x, y in ring])
+    faces = [tuple(range(n))[::-1], tuple(range(n, 2 * n))]
+    for k in range(n):
+        k2 = (k + 1) % n
+        faces.append((k, k2, n + k2, n + k))
+    return verts, faces, kind
 
 
 def _packed_digest(values):
@@ -359,7 +458,11 @@ def _stamp(obj, gwmap):
     cross-check possible: the mesh is what a human edited and therefore wins,
     and a disagreement is worth reporting rather than silently resolving.
     """
-    stamp = {k: v for k, v in gwmap.meta.items() if k != "sidecars"}
+    # `props_state` goes with `sidecars`: both describe the file that was
+    # imported, and the way OUT (a terrain-only manifest today) carries
+    # neither honestly.
+    stamp = {k: v for k, v in gwmap.meta.items()
+             if k not in ("sidecars", "props_state")}
     obj[STAMP] = json.dumps(stamp, sort_keys=True)
 
 
@@ -375,6 +478,78 @@ def _attach_cell_attributes(mesh, gwmap):
             continue
         attr = mesh.attributes.new(name=kind, type="INT", domain="FACE")
         attr.data.foreach_set("value", list(data))
+
+
+def build_prop_objects(gwmap, name=None):
+    """Every placement as a proxy object in its own collection.
+
+    Returns `(collection, objects)`, or `(None, [])` when the export carries
+    no props. See the module docstring: footprints and radii are measured,
+    the proxy height is display-only, and NOTHING here is ArenaNet geometry.
+    """
+    import mathutils
+    pd = gwmap.props
+    if pd is None:
+        return None, []
+    base = name or gwmap.name
+    coll = bpy.data.collections.new("%s.props" % base)
+    bpy.context.scene.collection.children.link(coll)
+
+    objs = []
+    for i, rec in enumerate(pd["props"]):
+        verts, faces, kind = prop_proxy_geometry(rec)
+        mesh = bpy.data.meshes.new("prop_%04d_m%d" % (i, rec["model"]))
+        mesh.from_pydata(verts, [], faces)
+        mesh.update()
+        obj = bpy.data.objects.new(mesh.name, mesh)
+        coll.objects.link(obj)
+
+        x, y, z = rec["position"]
+        rows = [[1.0, 0.0, 0.0, x],
+                [0.0, 1.0, 0.0, y],
+                [0.0, 0.0, 1.0, -z],          # convention 4: negated, like
+                [0.0, 0.0, 0.0, 1.0]]         # the terrain it stands on
+        if kind == "radius":
+            # The compiled basis as the object rotation. An outline proxy gets
+            # NONE, because the ring is measured UNROTATED (the compiled ring
+            # is literally x+dx, y+dy) -- rotating it would move measured
+            # points to invented ones.
+            b = basis_matrix_blender(rec["basis"])
+            for r in range(3):
+                for c in range(3):
+                    rows[r][c] = b[r][c]
+        obj.matrix_world = mathutils.Matrix(rows)
+
+        model = pd["models"][rec["model"]] if rec["model"] < len(
+            pd["models"]) else None
+        obj["gw_index"] = i
+        obj["gw_model"] = rec["model"]
+        obj["gw_model_file_id"] = -1 if model is None else model["file_id"]
+        obj["gw_rot_bytes"] = list(rec["rot_bytes"])
+        obj["gw_scale_byte"] = rec["scale_byte"]
+        obj["gw_radius"] = rec["radius"]
+        obj["gw_flags"] = rec["flags"]
+        obj["gw_proxy"] = kind
+        objs.append(obj)
+    return coll, objs
+
+
+def props_summary(objs, gwmap):
+    """The props block of the dump: what a checker outside Blender needs."""
+    out = []
+    for obj in objs:
+        loc = obj.matrix_world.translation
+        out.append({"name": obj.name,
+                    "location": [loc.x, loc.y, loc.z],
+                    "model": obj["gw_model"],
+                    "file_id": obj["gw_model_file_id"],
+                    "radius": obj["gw_radius"],
+                    "proxy": obj["gw_proxy"]})
+    pd = gwmap.props or {}
+    return {"count": len(objs),
+            "sidecar_count": pd.get("count", 0),
+            "outlined": sum(1 for o in objs if o["gw_proxy"] == "outline"),
+            "objects": out}
 
 
 def mesh_summary(obj, gwmap):
@@ -477,10 +652,17 @@ def main(argv=None):
     ap.add_argument("--name", default=None, help="name for the object and mesh")
     ap.add_argument("--clear", action="store_true",
                     help="empty the scene first (the startup cube and friends)")
+    ap.add_argument("--no-props", action="store_true",
+                    help="terrain only; skip the props collection even when "
+                         "the export carries the sidecar")
     args = ap.parse_args(_script_argv(argv))
 
     obj, gwmap = import_gwmap(args.json, name=args.name, clear=args.clear)
     summary = mesh_summary(obj, gwmap)
+    prop_objs = []
+    if not args.no_props and gwmap.props is not None:
+        _coll, prop_objs = build_prop_objects(gwmap, name=args.name)
+        summary["props"] = props_summary(prop_objs, gwmap)
 
     print("imported %s" % gwmap)
     print("  mesh          %d vertices, %d quads (%d x %d cells)"
@@ -496,6 +678,15 @@ def main(argv=None):
     print("  heights       %.1f .. %.1f  (world z, the stored heights NEGATED: "
           "a greater stored value is LOWER in the world, FINDINGS 25)"
           % (summary["bbox"]["min"][2], summary["bbox"]["max"][2]))
+    if prop_objs:
+        ps = summary["props"]
+        print("  props         %d proxies (%d outlined footprints, %d radius "
+              "cylinders) -- placements are measured, the proxy meshes are "
+              "NOT ArenaNet geometry"
+              % (ps["count"], ps["outlined"], ps["count"] - ps["outlined"]))
+    elif gwmap.props is not None:
+        print("  props         %d in the sidecar, skipped (--no-props)"
+              % gwmap.props["count"])
 
     if args.dump_verts:
         co = [0.0] * (3 * len(obj.data.vertices))

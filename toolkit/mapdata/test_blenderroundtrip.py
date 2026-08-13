@@ -131,14 +131,20 @@ AUTHORED_X, AUTHORED_Y = 32, 32
 AUTHORED_PROBE_IJ = (3, 4)
 AUTHORED_PROBE_STORED = -292.0
 
-# FLOOR: 77, from a real green run on vault/dat_study/Gw.dat with Blender 5.1.1,
-# 2026-08-12 (39.4 s). Sections 0-4 alone score 65 -- MEASURED by running with
-# --dat pointed at nothing, not counted by eye, and the first guess written here
-# was 56 -- so a vault-less run lands 12 short and goes RED. That is deliberate
-# and it is the rule test_blenderimport.py states: a round trip on a grid this
-# file invented has verified the plumbing and refuted nothing about ArenaNet's
-# bytes. Only section 5 compares against a sidecar that came out of the archive.
-FLOOR = 77
+# FLOOR: 79, from a real green run on vault/dat_study/Gw.dat with Blender 5.1.1,
+# 2026-08-13 (48.6 s; was 77). Sections 0-4 alone score 67 -- MEASURED by
+# running with --dat pointed at nothing, not counted by eye, and the first guess
+# written here was 56 -- so a vault-less run lands 12 short and goes RED. That is
+# deliberate and it is the rule test_blenderimport.py states: a round trip on a
+# grid this file invented has verified the plumbing and refuted nothing about
+# ArenaNet's bytes. Only section 5 compares against a sidecar that came out of
+# the archive.
+#
+# 77 -> 79 on 2026-08-13, when props proxies made a crowded scene the normal
+# case: the two-mesh refusal split into the unstamped-intruder POSITIVE control
+# (the stamp picks the terrain) and the two-stamped-meshes refusal (genuine
+# ambiguity still refuses).
+FLOOR = 79
 
 
 # ------------------------------------------------------------------ helpers
@@ -164,6 +170,7 @@ ap.add_argument("--at", default=None)          # "x,y" of the vertex to touch
 ap.add_argument("--dz", type=float, default=0.0)
 ap.add_argument("--dx", type=float, default=0.0)
 ap.add_argument("--duplicate", action="store_true")
+ap.add_argument("--duplicate-stamped", action="store_true")
 args = ap.parse_args(_argv())
 
 bpy.ops.wm.open_mainfile(filepath=args.blend)
@@ -194,6 +201,14 @@ if args.duplicate:
     m.update()
     bpy.context.scene.collection.objects.link(
         bpy.data.objects.new("intruder", m))
+
+if args.duplicate_stamped:
+    # obj.copy() copies custom properties, so the duplicate carries the STAMP
+    # too -- which is what makes it genuine ambiguity where the intruder above
+    # is not.
+    dup = obj.copy()
+    dup.data = obj.data.copy()
+    bpy.context.scene.collection.objects.link(dup)
 
 bpy.ops.wm.save_as_mainfile(filepath=args.save)
 print("EDIT_SAVED %s" % args.save)
@@ -684,18 +699,38 @@ def _section3(check, led, blender, tmp, base, edit):
               "change, in exactly the cell that was edited",
               "changed %r" % (differing(baseline, now) or [])[:8])
 
-    # (e) two meshes and no --object. Picking by position in a list is how the
-    # wrong client got launched on 2026-08-06.
+    # (e) an UNSTAMPED intruder beside the stamped terrain. Until 2026-08-13
+    # ANY second mesh refused; the props proxies made a crowded scene the
+    # NORMAL case, so the exporter now picks the terrain by its STAMP --
+    # identity, never position in a list. This half is the positive control:
+    # the export must succeed and be the terrain (the intruder's three
+    # vertices cannot form a lattice, and the dims pin it).
     twinned = os.path.join(tmp, "twinned.blend")
     rc, _out = run_blender(blender, edit,
                            ["--blend", base["blend"], "--save", twinned,
                             "--duplicate"])
-    check(rc == 0, "a second mesh object was added to the scene")
+    check(rc == 0, "an unstamped intruder mesh was added to the scene")
     outdir = os.path.join(tmp, "ctl_two")
     os.makedirs(outdir, exist_ok=True)
     rc, out, meta = do_export(blender, twinned, outdir, "synthetic")
+    check(rc == 0 and meta is not None
+          and meta["dims"] == {"x": dx, "y": dy, "cells": dx * dy},
+          "INTRUDER: the stamp picks the terrain and the export succeeds",
+          "rc=%d, dims %r" % (rc, meta and meta.get("dims")))
+
+    # (e2) TWO STAMPED meshes are genuine ambiguity and must still refuse --
+    # picking one by position in a list is how the wrong client got launched
+    # on 2026-08-06, and a duplicated terrain copies its stamp.
+    stamped2 = os.path.join(tmp, "stamped2.blend")
+    rc, _out = run_blender(blender, edit,
+                           ["--blend", base["blend"], "--save", stamped2,
+                            "--duplicate-stamped"])
+    check(rc == 0, "a STAMPED duplicate of the terrain was added")
+    outdir2 = os.path.join(tmp, "ctl_two_stamped")
+    os.makedirs(outdir2, exist_ok=True)
+    rc, out, meta = do_export(blender, stamped2, outdir2, "synthetic")
     check(rc == PYTHON_EXIT_CODE and meta is None,
-          "TWO MESHES: refused rather than exporting whichever comes first",
+          "TWO STAMPS: refused rather than exporting whichever comes first",
           "rc=%d" % rc)
 
     # (f) THE PROVENANCE GATE. mapexport.resolve_outdir is the authority and
