@@ -316,7 +316,8 @@ class BuildReport:
 def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
           tiles=None, sync_hash=0, sync_flag=0, props=None,
           prop_dep_ids=None, env_payload=None, env_dep_ids=None,
-          sound_payload=None, sound_dep_ids=None):
+          sound_payload=None, sound_dep_ids=None,
+          table_a=None, table_b=None, angle_index=None, tex_word=None):
     """A whole Stripped map. `heights` is in `Terrain.index` order, integers.
 
     `props` is a `props.StrippedProps`, or None for an empty one. Empty is not
@@ -343,6 +344,19 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
     same shape and the same rules (FINDINGS 52: Pre-Searing's carried VERBATIM
     and the map played its birds and wind), and likewise accept a
     `soundchunk.SoundChunk`.
+
+    `table_a` / `table_b` / `angle_index` / `tex_word` are the terrain chunk's
+    SURFACE parameters, passed through to `StrippedTerrain.build`. They are here
+    because rungs (e10f)-(e10h) each proved one of them in the client and then
+    reached it by SURGERY -- build a map, decode its terrain chunk, change the
+    field, re-encode -- which works and is not something a caller should have to
+    know. `table_a`/`table_b` pair 1:1 with the terrain dependency ids in
+    `dep_ids` (FINDINGS 49: `table_b` is a property of the TEXTURE and must
+    travel with its source file), `angle_index` is the sun (FINDINGS 51, and see
+    `envchunk.SUN_TURN` -- the environment chunk carries the SAME angle under a
+    different quantisation, so a map that sets one should set the other), and
+    `tex_word` is the terrain's texture selector word. None of them is a new
+    capability; they are the ones already proven, made declarative.
 
     AUTHORING EITHER ONE IS EARNED, NOT ASSUMED. FINDINGS 53 decoded both
     chunks and FINDINGS 54 put our own bytes in front of the client: an env
@@ -394,7 +408,16 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
         payload[PROPS_DEPS] = mapchunks.encode_dependencies(dep_list)
         origin[PROPS_DEPS] = f"generated from {len(dep_list)} run-time ids"
 
-    trn = stx.StrippedTerrain.build(dim_x, dim_y, heights, tiles=tiles)
+    tkw = {}
+    if table_a is not None:
+        tkw["table_a"] = bytes(table_a)
+    if table_b is not None:
+        tkw["table_b"] = bytes(table_b)
+    if angle_index is not None:
+        tkw["angle_index"] = int(angle_index)
+    if tex_word is not None:
+        tkw["tex_word"] = int(tex_word)
+    trn = stx.StrippedTerrain.build(dim_x, dim_y, heights, tiles=tiles, **tkw)
     payload[TERRAIN] = trn.encode()
     origin[TERRAIN] = "generated"
 

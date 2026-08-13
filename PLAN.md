@@ -2355,3 +2355,22 @@ parallel, with one safety change that is not optional — see its entry.
     Two of ten namings were REFUTED on audit, one of them a false "no correlation"
     contradicted by its own numbers (χ²=92.4, 0/2000 permutations).
     `envchunk` gains `postproc()`/`lights()`; test floor 25 → 28, 40 under `--all`.
+    **(G)** ✅ **DONE 2026-08-13 (FINDINGS 56). THE LADDER IS CLIMBED.** Rung G of
+    the original ladder — *"someone models a shape in Blender, runs one command,
+    and walks around it in the retail client"*, dependencies **all of the above** —
+    is one command: `deploy.py --area plaza --install --launch --dat <copy>`, with
+    the recipe in `content/areas.toml` (`source = "invented"`). Geometry → borrow →
+    assemble → verify → install → launch → read back, refusing at each step. The
+    client compiled it and every readback check is green: **55 trapezoids built
+    from our terrain** (against 22 for the flat map), heights **1024/1024**, env and
+    sound VERBATIM, 5 props, and the spawn in **exactly one** trapezoid with two
+    retail spawns as 0-scoring controls. **3,941 B, 77.90% ours**, 770 borrowed
+    bytes every one named. Three defects, all in the JOINS rather than in any
+    component (every one of which was green): structural constants must come from a
+    map SHAPED like ours (Pre-Searing's Zones is 7,208 B against 34, which blew the
+    reservation), the client must OWN the archive you armed, and a documented stage
+    that no line runs is a docstring. `test_deploy.py` (floor 14) pins all three —
+    and its own syntax check was VACUOUS at first, passing against a sabotaged
+    source, so it now runs that sabotage as a negative control.
+    Not a hot reload: the client compiles at load, so iterating means running it
+    again. Record: `vault/research/rungG-2026-08-13/`.
