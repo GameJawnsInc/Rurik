@@ -2490,6 +2490,31 @@ parallel, with one safety change that is not optional — see its entry.
     `--hold` alone — the flag named a wait that never happened. Fixed, pinned on
     the syntax tree, sabotage reddens 1. FINDINGS 58's "MEASURED" sentence is
     retracted in place.
+    **(J)** ✅ **DONE 2026-08-13 (FINDINGS 60). THE ZONE IS POPULATED.** R5's
+    criterion is "a new zone in TOML, hot-reloaded, walked" and the toolkit could
+    author a zone's GROUND and nothing standing on it. `authsrv --area NAME`
+    serves `content/world.toml` spawn rows carrying `area = NAME`; **three bodies
+    stood in the sculpt map at their declared coordinates**, `3 of 3 placed`, run
+    20260813T185442. No new protocol -- every body goes out through
+    `create_agent_world` -- what is new is that the SET, the positions, the
+    allegiances and the health are content rows. **This is what rung (I) was
+    for**: a body goes out only where the navmesh says there is ground, and the
+    sculpt map is **1.2% walkable**, so a coordinate picked by eye is ground one
+    time in eighty. Positions are trapezoid centres read out of the mesh the
+    client compiled; the server nudges and REPORTS, or refuses past 480 units.
+    **The defect is the lesson: the first populated run placed ZERO bodies and
+    reported PASS** -- `spawn_population` took the raw content row, whose
+    `enc_name` is a list of string ids, so the codec refused every definition
+    (`string of 28 code units exceeds cap 8`); the throw landed inside instance
+    bring-up, so the harness passed, all six map checks were green and the
+    command exited 0. Caught because the OWNER LOOKED AT THE SCREEN.
+    `agents.npc_template` is public now and `deploy --serve` reads
+    `area 'X': N of M placed` out of the server's own log. `test_population.py`
+    floor 38; sections 0-2 could not have caught it (the bug was in entry
+    construction), so section 2b encodes every row through the real codec with
+    the raw row as a negative control. Seven sabotages, all red -- one CRASHED
+    rather than reddening and one passed GREEN because it derived its probe from
+    the constant under test.
 ### Naming the archive's map rows — 2026-08-13
 
 **[studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md), `toolkit/clientscan/maprows.py`.**

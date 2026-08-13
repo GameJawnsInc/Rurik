@@ -6823,3 +6823,92 @@ that fits inside the un-held window; the flag was naming a wait that never
 happened, and a bigger map is where that stops being free. `launch()` passes
 `--keep-open` now, asked of the syntax tree rather than grepped (the comment
 explaining the rule would satisfy a grep), sabotage reddens 1.
+
+## 60. OBSERVED: an authored area gets a population (2026-08-13)
+
+R5's criterion is *"a new zone in TOML, hot-reloaded, walked"*. The toolkit could
+author a zone's **ground** long before anything standing on it, and an area with
+a tree in it and nothing alive is a diorama. `authsrv --area NAME` serves the
+`content/world.toml` spawn rows carrying `area = NAME`; `deploy --launch` passes
+it. **Three bodies stood in the sculpt map at their declared coordinates**, run
+`20260813T185442`:
+
+    AREA: sculpt -- 3 spawn row(s). This REPLACES the standing test enemy.
+    'sculpt_farside': Hatcher [Collector] at (2596, 3520) absolute, hostile
+    'sculpt_hostile': Hatcher [Collector] at (2619, 2921) absolute, hostile
+    'sculpt_watcher': Hatcher [Collector] at (2934, 3046) absolute, noncombatant
+    area 'sculpt': 3 of 3 placed
+
+Nothing here is new protocol — every body goes out through `create_agent_world`,
+the call the enemy rung proved. What is new is that the SET of bodies, their
+positions, allegiances and health come from content rows.
+
+### 60.1 This is what rung (I) was for
+
+The load-bearing rule is that a body goes out **only where the navmesh says
+there is ground**, and §59 is why that could not have been enforced before: the
+server held either ArenaNet's geometry for the same map id or no mesh at all. It
+is not a formality — **the sculpt map is 1.2% walkable by area**, 13 trapezoids
+over 64×64, because a Blender basin and a hard ridge leave most of the terrain
+steeper than the client's walkable band. A coordinate picked by eye is ground
+about **one time in eighty**. Every shipped position is a trapezoid centre read
+out of the mesh the client itself compiled, and the server re-checks each
+against that mesh: on the mesh it stands, near it it is nudged and the distance
+REPORTED, beyond 480 units it is REFUSED. A body standing where the server's own
+collision says nothing exists makes everything downstream reason about it
+wrongly.
+
+### 60.2 The defect, and it reported PASS
+
+**The first populated run placed ZERO bodies and every check was green.**
+`spawn_population` reached for `agents.WORLD.get("npc", …)` — the raw content
+row, whose `enc_name` is a list of 16-bit string ids — where `agents._row()`
+encodes it first. `npc_properties` then built a message the codec refused:
+
+    ValueError: string of 28 code units exceeds cap 8
+
+The throw landed **inside instance bring-up**, after the map had loaded. So the
+harness reported PASS, all six map readback checks were green (correctly — they
+are about the map), the serve check matched the navmesh, and the command exited
+0. The only evidence was a traceback in a log nobody was reading, and three
+bodies that were not there. **It was caught because the owner looked at the
+screen**, which is how rung E10a's client asserts were caught too.
+
+Two things changed, because either alone leaves the hole:
+
+* `agents.npc_template(key)` is public and documents the difference; the raw row
+  is not a usable template.
+* `deploy --serve` now reads `area 'X': N of M placed` out of the server's own
+  log and fails without it. Separate from the mesh check because they fail
+  separately: bodies are created well after the navmesh is read, so a throw
+  there leaves the mesh line correct and every map check green.
+
+### 60.3 What the tests could and could not do
+
+`test_population.py` (floor 38, no vault/socket/client — the mesh is
+`pathchunk.minimal()`). **Sections 0–2 did not catch the defect and could not**:
+they check which rows are selected and where a body may stand, and the bug was
+in entry construction. Section 2b encodes every shipped row through the real
+codec, with the raw row reproduced as a negative control so the section can tell
+the fix from the bug.
+
+Seven sabotages built and run, all seven redden — but the two worth keeping are
+the ones that did **not** at first:
+
+* one **CRASHED**: refusing any shared `definition` makes the real rows
+  unloadable, and the positive controls called `area_population` directly, so
+  the run died with a bare traceback, no verdict banner and no ledger — the trap
+  `vaultpath.require_dir` set for `test_stripbuild`. Everything goes through
+  `accepts()` now.
+* one passed **GREEN**: the bounded-search check computed its probe point as
+  `-(PLACE_SEARCH_RADIUS + 2*PLACE_SEARCH_STEP)`, so raising the radius to
+  100,000 moved the probe with it. A symbol appearing in a test file is not a
+  check — the same defect `test_agentlife` records, where twelve of fourteen
+  combat constants could be set wrong with all 125 checks green. Both constants
+  are now asserted against **literals written in the test file**.
+
+The `definition` rule has a shape worth keeping: sharing an index is ALLOWED
+within one npc template — a definition is per-instance and outlives its agents,
+and ArenaNet sends one for 140 re-creates of one worm — and REFUSED across two,
+since the array is a raw index and the second row would silently overwrite the
+first.
