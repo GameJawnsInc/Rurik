@@ -58,16 +58,17 @@ import checks  # noqa: E402
 import smsgsweep as sw  # noqa: E402
 from codec import Codec  # noqa: E402
 
-# Floor 64, measured from a green run on 2026-08-12. Sections 0 and 2-7 need no vault, no
-# socket and no client -- 32 checks -- because a scoring defect is not a property of any
-# one capture. Two sections do need more and both declare their skips: section 1's
-# cross-check of NOT_IN_RECV_TABLE against the client's own receive table wants capstone
-# and the pinned client (2), and section 8's rebuild of the observed set wants the live
-# captures (3). A machine missing either lands under the floor and goes RED, deliberately,
-# the way test_mapexport treats a vault-less run: those two sections are the ones that
-# pin the sweep's DENOMINATOR and the ten opcodes that tear the game channel down, and a
-# plan built on a constant nothing confirmed is exactly the wish this repo keeps refusing.
-LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=64)
+# Floor 75, measured from a green run on 2026-08-13 (was 64; 7b gained eleven checks for
+# the planner's exit code). Sections 0 and 2-7b need no vault, no socket and no client --
+# 43 checks -- because a scoring defect is not a property of any one capture. Two sections
+# do need more and both declare their skips: section 1's cross-check of NOT_IN_RECV_TABLE
+# against the client's own receive table wants capstone and the pinned client (2), and
+# section 8's rebuild of the observed set wants the live captures (3). A machine missing
+# either lands under the floor and goes RED, deliberately, the way test_mapexport treats a
+# vault-less run: those two sections are the ones that pin the sweep's DENOMINATOR and the
+# ten opcodes that tear the game channel down, and a plan built on a constant nothing
+# confirmed is exactly the wish this repo keeps refusing.
+LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=75)
 
 # MEASURED 2026-08-12: the opcodes whose field list `overrides.json` changes. Written as
 # literals rather than recomputed from the module under test.
@@ -552,6 +553,125 @@ def main():
               "the cage gate stays in the one place test_cage.py covers; a second launch "
               "path is a second gate to get wrong. Asked of the SYNTAX TREE -- the grep "
               "version went red on the docstring that explains the rule")
+
+    # THE PLANNER'S EXIT CODE, which the loop discarded until 2026-08-13. `load_plan()`
+    # reads a file out of the vault and cannot tell this round's plan from the last one's,
+    # so a planner that REFUSED left the loop holding a stale plan that still parsed like
+    # a plan -- and it launched a real client against it and recorded what that client did
+    # under this round's opcodes. All three refusals `smsgsweep --plan` has on 2026-08-13
+    # exit 2 and write nothing: `--set` without `--only`, a `check_sets` disagreement, any
+    # ValueError out of `plan()`. Nothing here enumerates them, deliberately -- the gate is
+    # on the class, so a refusal added later is covered without editing this file.
+    print("   and it refuses a plan this round did not produce")
+    LEDGER.ok(loop.accept_plan(0, True)[0],
+              "a planner that exited 0 and moved the plan file is accepted", "")
+    refused, why_r = loop.accept_plan(2, False, "REFUSED: --set without --only ...")
+    LEDGER.ok(not refused and "--set without --only" in why_r,
+              "one that exited 2 without writing is refused, NAMING its stderr",
+              "'exit 2' alone sends the operator back to the planner to ask what it "
+              "already said")
+    LEDGER.ok(loop.accept_plan(loop.PLAN_EMPTY_RC, True)[0],
+              "CONTROL: exit 1 -- NOTHING TO SEND -- is NOT a refusal",
+              "it WRITES an empty plan, and an empty plan is the sweep's only good "
+              "ending; a blunt `rc != 0` stop would rename completion as breakage and "
+              "the round after it would never be reached")
+    LEDGER.ok(not loop.accept_plan(0, False)[0],
+              "and one that exited 0 without moving the file is refused too",
+              "the exit code alone misses a planner that dies after its own checks, or a "
+              "future refusal that forgets to exit 2 -- 'it refused and the file did not "
+              "move' is the shape of the whole failure")
+    # BOTH of these are `moved=True` on purpose. The first version passed them False and
+    # the `rc >= 2` sabotage went 0 red: with the file unmoved the freshness half refuses
+    # anyway, so the check read green while measuring nothing about the rule it names.
+    LEDGER.ok(not loop.accept_plan(-1073741819, True)[0],
+              "CONTROL: a planner that DIED is refused even though the file moved",
+              "Windows hands back the exception code (0xC0000005 here), which arrives "
+              "NEGATIVE as a returncode, so an `rc >= 2` test accepts it -- and the file "
+              "moving is not evidence the write finished, since `_write_json` truncates "
+              "and then streams")
+    LEDGER.ok(not loop.accept_plan(loop.PLAN_EMPTY_RC, False)[0],
+              "CONTROL: and the exit-1 exemption does not bypass the freshness check",
+              "the exemption is the loosening in this gate, so it gets its own control: "
+              "'NOTHING TO SEND' is only believable from a planner that wrote one")
+
+    # THE LOOP POINTED AT A PLANNER THAT REFUSES -- still no client and no vault:
+    # `plan_path` is redirected at a temp file holding the PREVIOUS round's plan, which is
+    # exactly what `load_plan()` would have handed back.
+    tmp = tempfile.mkdtemp()
+    stale = os.path.join(tmp, sw.PLAN_NAME)
+    with open(stale, "w", encoding="utf-8") as fh:
+        json.dump({"rows": [{"opcode": 0x0100}], "settle": 5.0, "control": 5.0,
+                   "dwell": 0.8}, fh)
+
+    def planner(body):
+        path = os.path.join(tmp, f"planner{len(os.listdir(tmp))}.py")
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(body)
+        return path
+
+    refuser = planner("import sys\n"
+                      "sys.stderr.write('REFUSED: 0x0100 declares dword at index 2 and "
+                      "0x0101 declares byte\\n')\n"
+                      "sys.exit(2)\n")
+    # TWO rows where the stale plan has one, so the file's SIZE moves as well as its
+    # mtime: the positive control must not rest on the clock advancing between two writes
+    # milliseconds apart, or it fails for a reason that has nothing to do with the gate.
+    writer = planner("import json, sys\n"
+                     "json.dump({'rows': [{'opcode': 512}, {'opcode': 513}], "
+                     "'settle': 5.0, 'control': 5.0, 'dwell': 0.8}, "
+                     f"open({stale!r}, 'w'))\n"
+                     "sys.exit(0)\n")
+    real_plan_path = sw.plan_path
+    sw.plan_path = lambda: stale
+    try:
+        seen_arg = os.path.join(tmp, "seen.txt")
+        got, why_p = loop.plan_round(seen_arg, 80, 0.8, sweep=refuser)
+        would_have = (sw.load_plan() or {}).get("rows")
+        fresh, why_f = loop.plan_round(seen_arg, 80, 0.8, sweep=writer)
+    finally:
+        sw.plan_path = real_plan_path
+    LEDGER.ok(got is None and "0x0100 declares dword" in why_p
+              and would_have == [{"opcode": 0x0100}],
+              "the loop pointed at a refusing planner hands back NO plan",
+              "and the check is a difference between two live answers: load_plan() "
+              "answered from the previous round's file, in this same process, with the "
+              "one row the old loop would have launched a client against")
+    LEDGER.ok(fresh is not None and len(fresh["rows"]) == 2 and not why_f,
+              "CONTROL: a planner that does write one is accepted",
+              "a gate that refuses every plan protects nothing -- the loop never runs a "
+              "round and the refusal is indistinguishable from the tool being broken")
+
+    # THE ORDER, on the syntax tree. "It stops eventually" is not the fix: the whole point
+    # is that the client must not go up, so the guard has to sit BEFORE the launch in the
+    # round body. Both halves are sabotaged below, because a predicate that merely finds
+    # two statements is satisfied by any file mentioning both.
+    def guard_and_launch(body):
+        def names(node):
+            return {x.id for x in ast.walk(node) if isinstance(x, ast.Name)}
+        launch = next((i for i, st in enumerate(body) if "SESSION" in names(st)), None)
+        guard = next((i for i, st in enumerate(body)
+                      if isinstance(st, ast.If) and "plan" in names(st.test)
+                      and any(isinstance(x, ast.Break) for x in ast.walk(st))), None)
+        return guard, launch
+
+    main_fn = next(n for n in ast.walk(tree)
+                   if isinstance(n, ast.FunctionDef) and n.name == "main")
+    round_body = next(n for n in ast.walk(main_fn) if isinstance(n, ast.For)).body
+    guard_i, launch_i = guard_and_launch(round_body)
+    LEDGER.ok(guard_i is not None and launch_i is not None and guard_i < launch_i,
+              "the refusal is handled BEFORE the statement that launches a client",
+              f"guard at statement {guard_i} of the round body, session.py at {launch_i}")
+    deleted = [st for i, st in enumerate(round_body) if i != guard_i]
+    LEDGER.ok(guard_and_launch(deleted)[0] is None,
+              "CONTROL: the same predicate over that body with the guard DELETED fails",
+              "which is the loop as it stood -- rc discarded, load_plan() trusted")
+    moved_after = list(deleted)
+    moved_after.insert(launch_i, round_body[guard_i])
+    g2, l2 = guard_and_launch(moved_after)
+    LEDGER.ok(g2 is not None and l2 is not None and not g2 < l2,
+              "CONTROL: and with the guard moved one past the launch it fails too",
+              "a client that goes up and is stopped afterwards has already measured the "
+              "wrong opcodes; stopping is not the same as not launching")
 
     # ---- 8. the denominator, rebuilt from the tapes -------------------------
     print("\n8. the observed set is recomputed, not remembered")
