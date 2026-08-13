@@ -1017,6 +1017,25 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   live server appending to `vault/captures/` cannot make it disagree with itself),
   `toolkit/test_content.py` (the content store, and that its provenance and licence
   refusals actually refuse),
+  `toolkit/test_contentids.py` (the pre-flight that a run's TWO archives agree
+  about what `content/maps.toml`'s file ids NAME. **A file id is archive STATE,
+  not a property of the map** -- bit 31 means `FcArchive` renamed that row away
+  pending a replacement, so the same map is `0x8001B97D` in one copy and
+  `0x1B97D` on a different row in another, and both are right for their own copy
+  (`studies/maprows/FINDINGS.md` §8). The server reads one archive for the
+  navmesh and the client opens its own for the geometry, and nothing checked they
+  matched. The POSITIVE CONTROL is what earns the file and it is not synthetic:
+  `vault/run-live/`, a copy a client really played live from, genuinely does not
+  bind `0x8001B97D`, and the check must go FATAL on EXACTLY the two Pre-Searing
+  rows while the other eight stay green -- a guard that reddens on all ten says
+  nothing. Identity is the MFT entry's size and crc, never the row, because row
+  indices do not survive a patch; a one-bit crc mutation must be caught, since
+  two archives resolving one id to different FILES is worse than a failed launch
+  (the run produces data and looks like it worked). Section 4 asserts the
+  LOOPBACK GATE on the syntax tree -- a live run answers to ArenaNet's own ids
+  and must never be refused on our rows, and "the call is inside the RUN_ROOT
+  branch" is invisible to a grep; the sabotage that removes the gate reddens it
+  alone. ~3 s),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same

@@ -43,10 +43,29 @@ count, and count * 24 == size only if the 24-byte entry stride is right.
 TWO ARCHIVES ARE NOT THE SAME ARCHIVE. A running client writes to the Gw.dat it
 was launched from. Our install copy holds 177,335 entries and the copy our
 patched client has actually run holds 177,342 -- same allocated size, same MFT
-offset, seven more files. File ids are content keys and should survive that; raw
-MFT row indices do not. Any row index recorded in a study is only meaningful
-against the copy it was measured on, which is why open() below wants an explicit
-path rather than guessing one.
+offset, seven more files. Raw MFT row indices do not survive that. Any row index
+recorded in a study is only meaningful against the copy it was measured on,
+which is why open() below wants an explicit path rather than guessing one.
+
+**AND NEITHER DO FILE IDS, WHICH THIS USED TO SAY THEY DID.** The sentence above
+read "File ids are content keys and should survive that" until 2026-08-13. It is
+false, and the correction is the whole of `contentids.py`: bit 31 on a stored id
+means `FcArchive` has renamed that row away because it requested a replacement,
+and the plain id binds only after `DnArchive` installs it and re-links. So the
+same map is `0x8001B97D` in one copy and `0x1B97D` on a different row in another,
+and both are right for their own copy. **A file id is archive STATE.**
+
+MEASURED, and it is why `dat_study` is no longer the copy this file once claimed:
+`vault/dat_study/Gw.dat` carries 25 bit-31 ids, `vault/run/` carries 29, and
+`vault/run-live/` -- a copy a client actually played live from -- carries 9 and
+does not bind `0x8001B97D` at all, holding that map on row 177262 under the plain
+id instead. A comment here previously described `dat_study` as "a copy of the
+run-dir archive"; the two have drifted and it is not.
+
+Because a run uses TWO copies -- the server reads one for the navmesh, the client
+opens its own for the geometry -- `toolkit/contentids.py` checks that every id in
+`content/maps.toml` names the SAME FILE in both, by size and crc rather than by
+row, and `drive_client.assert_safe` refuses a loopback launch when it does not.
 """
 
 import os

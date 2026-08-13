@@ -2496,6 +2496,43 @@ and wrong for `run-live`. Any content row carrying a bit-31 id records a
 transient state of one copy, and a server should send the plain id and serve from
 an archive that binds it. Nothing was changed on that basis yet.
 
+**(B) IS DONE 2026-08-13.** `toolkit/contentids.py` + `test_contentids.py`
+(floor 15) check that every `content/maps.toml` file id names the SAME FILE in
+both archives a run uses -- identity by MFT size and crc, never by row, since row
+indices do not survive a patch -- and `drive_client.assert_safe` refuses a
+loopback launch when it does not. Gated to `RUN_ROOT`: a live run answers to
+ArenaNet's own ids and must never be refused on our rows. The positive control is
+`vault/run-live/`, which genuinely fails on exactly the two Pre-Searing rows.
+Today the real pair is 10 of 10 clean.
+
+**(C) IS PLANNED, NOT BUILT -- make content archive-INDEPENDENT.** (B) is a guard;
+it tells you the two copies disagree, it does not let a content row survive the
+disagreement. The defect it guards is real and structural: `content/maps.toml`
+records a file id, and a file id is a fact about one copy of `Gw.dat`.
+
+  *What C would do.* Record a durable KEY per map instead of (or beside) the id,
+  and resolve the id at launch against the archive the CLIENT will open. The key
+  has to be something both copies agree on when the bytes are the same map.
+  Candidates, cheapest first: the MFT entry's `crc` + `size` over the stored
+  bytes (already proven sufficient for identity by `contentids.py`, and free --
+  no decompression); the map's dims from chunk `0x2000000C` (weak alone, 104
+  distinct over 349 rows -- see the footprint work above); or the content UUID in
+  the same chunk, which is per-map and stable but which `mapbuild.py` records as
+  never read by the client, so nothing guarantees ArenaNet keeps it stable across
+  a patch. **The crc is the one to try, and it needs measuring across a patch
+  before it is trusted** -- a re-bloated map changed both size and crc between
+  `dat_study` and `run-live` (1,300,036 B vs 1,300,044 B), so crc identifies a
+  FILE, and whether it identifies a MAP across an ArenaNet update is exactly the
+  open question.
+
+  *Why it is not urgent.* The exposure is two content rows and one id, it is
+  correct for the current pair, and (B) now makes any future divergence a refusal
+  rather than a client assert. Do C when a second archive state actually has to
+  be supported -- e.g. serving a live-updated copy -- not before.
+
+  *What C must not do.* Silently pick an id. If two archives disagree the right
+  answer is still to refuse; C only widens the set of pairs that can agree.
+
 **Next.** (2) The remaining 296 rows are limited by information, not
 effort: the archive carries a map's dims and nothing that places it on a
 continent. A live capture on a known-named zone yields one exact `(map id, file
