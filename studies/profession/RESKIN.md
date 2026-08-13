@@ -449,3 +449,64 @@ the second axis where reusing a legal id beats adding a twelfth.
 `s_charProfessionAbbrev` is still unexercised. It renders in the party window and over
 nameplates, and our world has neither. Not a blocker — it is one dword, already
 patchable, and it will show the moment there is a party.
+
+
+---
+
+## 12. The recipe: a profession design as a versioned file
+
+`toolkit/clientpatch/recipes/ritualist-demo.toml`, applied with
+`reskin.py --recipe FILE`. The command line that produced §§8-11 was eleven flags and
+told a reader nothing; the recipe says what the profession IS.
+
+```
+python toolkit/clientpatch/reskin.py --recipe toolkit/clientpatch/recipes/ritualist-demo.toml --out <vault path>
+```
+
+**Validated end to end** (harness `20260813T112450`): the recipe alone reproduces the
+whole result — *Profession: Soul Reaping*, five attributes, and the skill groups at
+2 and 2. An explicit `--profession` still overrides the recipe's host, so one design can
+be aimed at a different host for a single run without editing the file.
+
+**Everything in a recipe is a NUMBER** — profession, attribute, skill and string ids —
+which is what keeps ArenaNet's words out of the tree while the client resolves each
+string from the owner's own archive at run time. Eight checks cover it, including that a
+row missing its id is REFUSED rather than silently skipped: a design that half-applies
+reads as a client bug rather than as a typo.
+
+**The host is Ritualist (8), by the owner's decision, 2026-08-13.** It was also the
+cheapest candidate on the evidence: all eleven of its identity string ids live in ONE
+archive text file where every other profession's straddle two to four, so it is the
+cheapest host to rename once authored text is possible.
+
+---
+
+## 13. Where this stands, and what is left
+
+**Working, validated in a running client, eleven bytes of same-length edits:**
+
+| | field | run |
+|---|---|---|
+| Profession name, in world and on the roster | `s_charProfession[N]` | §8, §11 |
+| Attribute names | `s_attrib +0x08` | §9 |
+| Which attributes the profession owns (nine spare rows) | `s_attrib +0x00` | §9 |
+| Which attribute a skill scales with | `s_skill +0x29` | §10 |
+| Model, hair, skin, starter gear | appearance nibble | §11, free |
+| Animations | — | §7, inherited from the host |
+
+**Blocked on the world, not on the client:**
+
+- **The abbreviation** renders only in the party window and over nameplates. Our server
+  sends no party state, so the dword is patched and unexercised.
+- **The picker label** is character-creation only, and this server has no creation flow.
+- **The `.data` table's consumer** is still unidentified; a split-donor run would name it
+  the moment a second profession-name surface appears.
+
+**The one real wall left is TEXT.** Every name above is BORROWED — the client will only
+show words it already ships strings for. A profession called what you want needs a text
+file authored into `Gw.dat`, and the open question is whether the client accepts a row
+whose compression flag reads 0, since this repo has no compression-8 encoder. The archive
+layer already has journalled writes with byte-for-byte revert (`datwrite`, `test_datwrite`),
+so the mechanism exists and is tested — but no text file has ever been served stored, and
+it is the first edit in this arc that touches the 8 GB archive rather than a 10 MB
+executable.

@@ -1,0 +1,48 @@
+# A worked profession reskin, on the host the owner chose: Ritualist (id 8).
+#
+# This file is a DESIGN, and it is the artifact worth versioning -- the command
+# line that produced the same result was eleven flags and told a reader nothing.
+# Everything in it is a NUMBER: profession ids, attribute ids, skill ids and
+# string ids. No ArenaNet text lives here; the client resolves every string id
+# from the owner's own archive at run time, which is the pattern `mapbuild.py`
+# uses for FINDINGS 14's constants.
+#
+# WHY RITUALIST. All eleven of its identity string ids live in ONE archive text
+# file, where every other profession's straddle two to four -- so when arbitrary
+# authored text becomes possible, this host is the cheapest one to rename.
+#
+# THE STRING IDS BELOW ARE BORROWED, and that is the honest limit of this demo.
+# Until a text file can be authored into the archive, a reskinned profession can
+# only be NAMED things the client already ships strings for. These borrow
+# attribute names, which belong to no profession, so nothing on screen is
+# ambiguous. studies/profession/RESKIN.md sections 8-11 are the runs.
+
+[profession]
+host   = 8       # Ritualist -- stays legal, so no bound check can ever fire
+name   = 2092    # "Soul Reaping"  (Necromancer's primary attribute)
+abbrev = 2078    # "Fast Casting"  (Mesmer's primary) -- UNVERIFIED, party only
+picker = 2094    # an Elementalist attribute -- creation screen only
+
+# Attributes. Nine rows sit on the reserved profession 11 with zero skills; one
+# is claimed here, which is what gives the profession a FIFTH attribute rather
+# than merely renaming the host's four.
+[[attribute]]
+id    = 26       # a spare row
+owner = 8        # claim it for our profession -- the panel derives from this
+name  = 2094
+
+[[attribute]]
+id   = 32        # the host's own "Communing"
+name = 2092      # renamed
+
+# Skills. row+0x29 decides which attribute group a skill appears under, so this
+# is how a profession gets a roster. Two skills move off Strength (attribute 17)
+# and onto the claimed row, which is the countable check of section 10: both
+# group headers must move by exactly two, in opposite directions.
+[[skill]]
+id        = 317
+attribute = 26
+
+[[skill]]
+id        = 318
+attribute = 26
