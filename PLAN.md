@@ -671,11 +671,21 @@ timestamped raw-packet writing is roughly one function.
 100% of game-server↔client traffic to disk **[measured — mirrored]**, and `Fournux/Tyria-Extractor`
 (MIT) ships an injected sniffer alongside its `Gw.dat` extractor.
 
-Layer the shadow-server idea on top once capture works: feed your server the real CtoS stream and
+~~Layer the shadow-server idea on top once capture works: feed your server the real CtoS stream and
 diff its would-be output against the real server's while still forwarding the real answer. That is
 HANDOFF §7's replay oracle at R0 instead of R2, open-loop, self-updating as you play. Then stop
 forwarding message types that diff clean and answer them yourself, so the system stays playable
-throughout and the project becomes incremental replacement rather than a cold start.
+throughout and the project becomes incremental replacement rather than a cold start.~~
+**❌ STRUCK 2026-08-13 with HANDOFF §7, which it depended on.** The byte-diff at its centre is
+refuted by its own subject: **ArenaNet's server is 0.2% byte-identical against its own recording**
+of the same character on the same map minutes apart, diverging at message 6, while the same method
+scores 99.3% on opcode *sequence*. A gate that cannot go green cannot go red for a reason, and its
+tolerance layer is vacuous by its own control (masking three dwords blanks 45% of bytes and still
+scores 76.8–97.5% on *different* maps). The prize is already banked by §8's `msgmix.py` and
+`studies/divergence` D1–D11, which is what the shadow diff was for. See HANDOFF §7 and
+[studies/recon/FINDINGS.md](studies/recon/FINDINGS.md) §5.5 for the measurement and for the
+structural load-prefix gate that replaces it. **The rest of A1 stands** — capture was and remains
+the right first move, and R0b/R1.5 are met.
 *Wasted if:* nothing obvious — this is required under every strategic option, it does not depend on
 the language decision, and building it is how you find out how good the rest of the prior art
 really is. **Build it first regardless of every other choice in this document.**
@@ -787,7 +797,8 @@ prior art.
   every session from then on, including sessions played for fun. Begin the WASM symbolization
   pipeline (A4, A7).
 - **Days 46–90** — Tape player (R1.5). Skill-table extraction and the referee'd data pipeline (A6).
-  First shadow-server diffs on real traffic.
+  ~~First shadow-server diffs on real traffic.~~ **Struck 2026-08-13** — see §4 A1 and
+  HANDOFF §7; the byte-diff is refuted and `msgmix.py` already delivers what it was for.
 
 Capture still starts immediately and never stops — the wasting-asset argument is right. What
 changes is that capture is now cheap enough to leave running rather than a project in itself.

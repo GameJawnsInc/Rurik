@@ -92,6 +92,14 @@ FOOTPRINT_B = (0x58, 0x5C, 0x60, 0x64)
 # `stripbuild.py` derives its rect as `dims * 96.0`. `--check` re-runs that.
 CELL_PITCH = 96.0
 
+# Bumped BY HAND, and only for what has no value to fold into the stamp: the
+# shape of the cached dict, the integrality rule in `map_dims`, or a change in
+# `mapbuild.decode_map_parameters`. Everything that IS a value -- the pitch, the
+# row filter, the chunk id -- goes into the stamp directly instead, because a
+# constant somebody has to remember to bump is a constant somebody forgets to
+# bump, and that is exactly the defect `_stamp` records below.
+CACHE_FORMAT = 1
+
 
 def i32(blob: bytes, off: int) -> int:
     return struct.unpack_from("<i", blob, off)[0]
@@ -140,9 +148,53 @@ def read_footprints(pe: PE, base_off: int, count: int):
 
 
 def _stamp(dat: str) -> dict:
+    """The cache's validity key: the archive, AND the parameters used to read it.
+
+    THIS SHIPPED WITHOUT THE SECOND HALF, AND IT SILENTLY DISARMED A DOCUMENTED
+    CONTROL FOR AS LONG AS IT DID. Until 2026-08-13 the stamp was
+    `{dat, size, mtime}` -- the archive alone -- while `CELL_PITCH` is consumed at
+    the `/ CELL_PITCH` in `map_dims` **before** the cache is written. So a dims
+    table computed under one pitch was served under another, and
+    `test_maprows.py`'s own docstring recorded a control that no longer fired:
+    "CELL_PITCH was set to 64.0 ... 6 checks go red" is true on a COLD cache and
+    false on a warm one, which is the way anyone actually runs it (9.2 s against
+    ~9 minutes). MEASURED the day this was fixed: warm, with the pitch set to any
+    of 64.0, 48.0, 100.0, 112.0, 97.0, 96.5, 96.1, 96.01, 96.001 or 96.0000001,
+    the file printed ALL CHECKS PASSED (23 checks) and exited 0. Only `--all`,
+    which deletes the cache file outright, could see any of it. A cache is not
+    supposed to be able to change a measurement's answer, and this one could.
+
+    WHY THE PARAMETERS ARE FOLDED IN RATHER THAN LEFT TO `CACHE_FORMAT`.
+    `mapchunks.archive_stamp`, the model for this function, carries a hand-bumped
+    `format` integer and nothing else -- and that is the right answer THERE,
+    because what its cache stores is chunk offsets: a shape, with no coding
+    parameter to fold. Here there are three, and a hand-bumped integer would have
+    to be remembered by whoever next edits `CELL_PITCH`. The whole defect above is
+    somebody not remembering something, so a version number that has to be
+    remembered is the same bet a second time. A FOLDED parameter cannot go stale,
+    because the value that produced the cache and the value being asked about are
+    the same expression. `CACHE_FORMAT` is therefore kept for exactly what cannot
+    be folded -- the stored dict's shape, the integrality rule,
+    `mapbuild.decode_map_parameters` -- and the three constants the cached numbers
+    are arithmetic in go in by value.
+
+    The comparison is plain dict equality over JSON round-tripped values, which is
+    exact for these: Python's encoder reprs a float round-trip-exactly, so
+    96.0000001 stays distinguishable from 96.0 rather than collapsing onto it. A
+    NaN pitch would never compare equal to itself and would drop the cache on
+    every run -- slow, but in the safe direction, which is the direction a stamp
+    should fail in.
+    """
     st = os.stat(dat)
-    return {"dat": os.path.abspath(dat), "size": st.st_size,
-            "mtime": int(st.st_mtime)}
+    return {"format": CACHE_FORMAT,
+            "dat": os.path.abspath(dat), "size": st.st_size,
+            "mtime": int(st.st_mtime),
+            # The coding parameters the cached dims are arithmetic in. Move any
+            # one of these and the stored numbers are answers to a different
+            # question, so they must key the cache the same way the archive does.
+            "cell_pitch": float(CELL_PITCH),
+            "map_flags": MAP_FLAGS,
+            "params_chunk": MAP_PARAMS_CHUNK}
 
 
 def map_dims(dat=DEFAULT_DAT, cache=None, verbose=True):
@@ -152,6 +204,11 @@ def map_dims(dat=DEFAULT_DAT, cache=None, verbose=True):
     cache is DROPPED rather than trusted when its stamp disagrees, the way
     `mapchunks.py`'s chunk index is. A cache keyed to a different archive would
     silently answer about a different set of maps.
+
+    Note the ORDER, because it is what made the stamp's missing half invisible:
+    `CELL_PITCH` is consumed below, at the division, and the cache is written
+    after that. The stored numbers are therefore already pitch-dependent, and
+    `_stamp` -- read it -- now says so.
     """
     want = _stamp(dat)
     if cache and os.path.isfile(cache):
