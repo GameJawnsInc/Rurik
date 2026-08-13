@@ -2247,6 +2247,15 @@ parallel, with one safety change that is not optional — see its entry.
     (`vault/research/e10d-props-2026-08-12/`). Still open: visuals (screenshots
     caught the loading crossfade), play-session collision, union-vs-replace of ring
     and model footprint, generalisation past one model and one map.
-    **(e10-next)** ⬜ Terrain and props are ours; Header (8 B) and Zones (34 B) are not.
-    An end-to-end authored map — §32's Blender pipeline through `mapbuild.py` into a
-    Stripped stream — has not been compiled by a client.
+    **(e10-next)** ✅ **DONE 2026-08-12 (FINDINGS 47). THE BLENDER LOOP IS CLOSED.**
+    A scene authored in headless Blender (plaza, rolling ground, a landmark hill),
+    exported through §32's pipeline, LATTICE-SNAPPED (`snap_block` first — a free
+    field is essentially never on the transform's sublattice; worst move 4 units)
+    and assembled by `stripbuild` with five ringed trees, was compiled by the
+    retail client in one run with **every prediction hit**: heights back
+    **1,024/1,024** through the BLOATED codec, oracle 442 exact, `corresponds()`
+    clean, radii retail-exact ×5, and 12 of 12 mesh probes — five carved tree
+    rings, walkable plaza and hill. Header (8 B) and Zones (34 B) remain the two
+    borrowed constants. Still open: textures/sound/environment/light, and which of
+    FINDINGS 34's two threshold sets is in force (the ~22° flank compiled walkable,
+    consistent with both).

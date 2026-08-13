@@ -5971,3 +5971,41 @@ ring, walked into. Still open: whether the ring UNIONS with or REPLACES the
 model footprint (the ~±40 carve lies inside the ±100 ring, so the union IS
 the ring — a ring excluding the model footprint would distinguish);
 generalisation past one model, one map, one position each way.
+
+## 47. OBSERVED: the Blender loop is CLOSED — rung (e10-next), one run, all predictions hit (2026-08-12)
+
+**A terrain a human tool authored came back bit-faithful through ArenaNet's
+own compiler, with five placed trees carving the navmesh where we drew their
+rings.** Run record: `vault/research/e10next-blender-2026-08-12/`
+(PREDICTIONS.md before arming, RESULTS.md immediately after; one run).
+
+The scene: `author_scene.py` in headless Blender — a flat plaza around the
+spawn, rolling sines, one gaussian landmark hill, every height integer —
+through `export_gwmap.py` to the interchange, then `build_map.py` into
+`stripbuild` with five trees (model 209883) on near-flat cells, each with
+the proven ±100 ring. 3,045 B staged, 98.59% generated.
+
+| | predicted | observed |
+|---|---|---|
+| compiled head | — | 11,749 B, 8 chunks, `0x21000004` = [209883] |
+| **heights, via the BLOATED codec** | **1,024/1,024** | **1,024/1,024** |
+| props tag-0 (oracle) | 442 | **442** |
+| `corresponds()` | clean | **CLEAN**, radii `672c1444` ×5 |
+| mesh probes | 12 stated | **12 of 12** — spawn and hill flank walkable, five tree centres not, five outside probes are |
+
+Two mechanisms the driver had to learn, both now written into it:
+
+* **The export was PROVEN against the design before anything else** — all
+  1,024 samples equal the formula, which pins the interchange's world
+  row-major order and the stored-z sign in one check.
+* **A freely authored field is essentially never on the terrain transform's
+  lattice.** The first build quietly moved 610 samples; `snap_block()` FIRST
+  (worst move: 4 stored units against a 96-unit cell) makes the round trip
+  exact and puts the quantisation error in the record instead of in-game.
+  Tree heights are computed from the SNAPPED field, not the design.
+
+The hill flank at ~22° compiled WALKABLE, consistent with both of FINDINGS
+34's candidate threshold sets; which set is in force is still undecided.
+NOT established: textures, sound, environment, lighting (the map renders
+with the default tile stretched over authored slopes — the owner has seen
+what that looks like); anything past one run of one scene.
