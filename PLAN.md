@@ -2306,5 +2306,9 @@ parallel, with one safety change that is not optional — see its entry.
     tags 4/5 and tex_word read from the donor at run time (table_b is a property of
     the TEXTURE — inventing it is wrong when reading it is free). Compiled tag 2
     came back VERBATIM, everything else carried, and the owner walked the four
-    bands. Still NOT FOUND: table_a's grouping, table_b's 7 bits; not tried:
-    another biome's dependency ids.
+    bands. Still NOT FOUND: table_a's grouping, table_b's 7 bits.
+    **(e10g)** ✅ **DONE 2026-08-12 (FINDINGS 50). ANOTHER BIOME'S GROUND RENDERS.**
+    Pre-Searing's four most-used textures (by its own census, read at run time)
+    on the walked map's geometry, table_b travelling with its files. One run, all
+    readback HIT, owner confirmed. Texture files are ordinary archive files;
+    nothing ties a map to its biome's set.
