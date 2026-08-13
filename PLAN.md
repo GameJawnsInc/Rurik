@@ -1287,12 +1287,19 @@ DEFAULT world cannot open the skills panel.** Six sessions pressed K without a p
 `studies/smsg` already measured the missing piece: retail sends `0x00A6` 136 times
 across 4 tapes and its handler notifies exactly the attributes panel (event
 `0x1000001d`) — our burst sends only `0x00B7` for the player. **This was never about
-custom professions: our server is missing a message retail always sends.** The next
-session is `profession_trigger` — `0x00A6(1)`, the value the burst already declared,
-then K; opens → send the player's `0x00A6` in the burst and re-ask every profession
-question on top of a working panel. R1 stands as the other route. WIKI note (§8): the
-panel's secondary-profession drop-down means it enumerates professions (INFERRED as a
-frame).
+custom professions.** `profession_trigger` (`0x00A6(1)` then K) ran and CRASHED — the
+third refuted prediction of the evening — so the run-and-guess loop is over and the
+next rung is a STATIC DIVE (`RUNS.md` §9, T1 result). What the disassembly already
+gave: the setter `0x007F7330` notifies unconditionally (no comparison — the event was
+never the variable), and the `*skill` assert at ChCliSkill.cpp:1022 sits inside a
+find-next-set-bit iterator — **the skills panel walks a skill bitmap and asserts a
+per-id object non-null**, the same family the unlock clamp already fixed once from
+the other direction. The one pattern surviving eight K observations: `0x00A6`-delivered
+primary 3 opened; 1, 12, and never-set crashed. **Next: read GmDeckBuilder's open path
+(`0x0050277E`/`0x0050106F` → ChCliApi `0x00816E6F` → the iterator's callers), name the
+walked bitmap and its filter — NO client run until then.** R1 stands as the other
+route. WIKI note (§8): the panel's secondary-profession drop-down means it enumerates
+professions (INFERRED as a frame).
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`

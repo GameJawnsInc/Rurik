@@ -419,3 +419,41 @@ which is what retail does. CRASHES → the trigger is the CHANGE (run 2A's value
 python toolkit/harness/session.py --keep-open --shots 10 \
     --game-args '--probe profession_trigger'
 ```
+
+### T1 result — CRASHED, and the third refuted story ends the run-and-guess loop
+
+Harness `20260812T221706`, capture `authsrv-20260812T221714-c1.jsonl`. Both
+`0x00A6(1)` sends landed (+4.8 s, +10.8 s), K at ~+12 s, same `*skill` at
+`ChCliSkill.cpp:1022` (dialog 22:17:27). **The arrival-trigger story is refuted.**
+That is three stated predictions dead in one evening — bar-mismatch, arrival-trigger,
+and (below) compare-before-notify — so per the house rule the next rung is READING,
+not another run.
+
+**Two readings already done (OBSERVED, disassembly of build 38797):**
+
+- **The setter `0x007F7330` has no comparison and notifies unconditionally**: it
+  writes the pair to `[AvChar+0x108]+2/+3`, caches at `+0x10E/+0x10F`, and fires
+  event `0x1000001d` on EVERY call — confirming MODDABLE's original reading. A
+  compare-before-notify cannot explain T1; the event fired in every session, so the
+  event was never the discriminating variable. (A by-agent-id variant sits at
+  `0x007F73A0` firing the same event.)
+- **The `*skill` assert lives inside a bitmap iterator.** The function at
+  `0x00821790` is find-next-set-bit over a word bitmap (words at `+0x10`, word count
+  at `+0x18`); it converts the found bit to an id, fetches a per-id skill object,
+  and line 1022 asserts that object non-null. **The skills panel WALKS A SKILL
+  BITMAP and asserts on each id it visits.** Sibling asserts in the same region:
+  `*copies` (1036), `skill` (442/463). And this repo has met the family before from
+  the unlock direction: `unlock_all_words()`'s clamp comment records that an
+  UNCLAMPED unlock bitmap asserted ChCliSkill the moment the panel opened, which is
+  why "all" means all 3,443 real rows and not all 4,096 bits.
+
+**What survives eight K observations:** the current primary at K is the only
+variable left standing — `0x00A6`-delivered **3 opened; 1, 12, and never-set all
+crashed** — and no story yet explains that shape. Which bitmap instance the walk
+reads (unlocks? per-profession learned list?), what it filters by, and which per-id
+object is null are all READABLE from the callers: GmDeckBuilder's open path
+(`0x0050277E`, `0x0050106F`) → ChCliApi (`0x00816E6F`) → the iterator's call sites.
+
+**The next rung is that static dive, and NO client run until it is done.** Three
+refuted predictions is past the study-before-iterating threshold; the dive names the
+walked object and the filter, and then ONE run confirms it.
