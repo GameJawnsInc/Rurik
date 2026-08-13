@@ -5961,8 +5961,13 @@ ratio the corpus probe had rounded to three decimals (`round(x, 3)` printed
 stronger, correct statement; and P5-A's mesh prediction was wrong as above.
 A constant quoted from a rounded probe is not a constant.
 
-NOT established: how the prop looks (screenshots caught the loading
-crossfade); server-side collision during play; whether the ring UNIONS with
-or REPLACES the model footprint (the ~±40 carve lies inside the ±100 ring,
-so the union IS the ring — a ring excluding the model footprint would
-distinguish); generalisation past one model, one map, one position each way.
+NOT established at readback time — the first two CLOSED the same day by the
+owner's own session (build B re-staged, owner in the map): **model 209883 is
+a TREE, rendered standing at (2400, 2400)** — which retroactively explains
+every number (visual radius ~595 is the canopy, intrinsic ~±40 collision is
+the trunk, retail's ~149 outlines are a canopy footprint) — and **the felt
+collision in-client is a small square box around it**: the authored ±100
+ring, walked into. Still open: whether the ring UNIONS with or REPLACES the
+model footprint (the ~±40 carve lies inside the ±100 ring, so the union IS
+the ring — a ring excluding the model footprint would distinguish);
+generalisation past one model, one map, one position each way.
