@@ -2540,7 +2540,12 @@ PROBES = {
                  "Assassin. All 11 live samples of this opcode carry mask 0, "
                  "so no capture can settle the layout and only this can.",
         steps=_profession_secondary_steps(a),
-        note="MUST RUN IN AN ARENA MAP -- pass --map 796 (Codex Arena) or one "
+        note="RAN 2026-08-13 AND ALL THREE SHOTS HIT EXACTLY (RUNS.md §14): "
+             "0x07FE gave ten entries and ungreyed, 0x0044 gave exactly three "
+             "(None, Ranger, Elementalist), 0 locked it again -- so the bit "
+             "index IS the profession id, OBSERVED. Kept as the regression "
+             "run for the mechanic. "
+             "MUST RUN IN AN ARENA MAP -- pass --map 796 (Codex Arena) or one "
              "of 823-836. The builder self-gates on that 15-map whitelist and "
              "outside it panel init zeroes the gate, so a null result "
              "elsewhere says nothing about 0x00B6. Sends NO 0x00B7 on "
