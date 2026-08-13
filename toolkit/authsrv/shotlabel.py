@@ -468,8 +468,14 @@ def score_run(run_dir, settle=SETTLE):
 
 # ---------------------------------------------------------------- the page
 
-def _thumb(src, out_dir, name, bbox=None, pad=40):
-    """Write a page-sized copy, cropped to the changed region when there is one."""
+def _thumb(src, out_dir, name, bbox=None, pad=40, width=THUMB_W, quality=78):
+    """Write a page-sized copy, cropped to the changed region when there is one.
+
+    `width=0` writes at NATIVE resolution. That is what the detail crop uses: the
+    frames are 1936x1040 and the strip shows them at 560, a 3.5x downscale that turns
+    every line of client text into grey mush. An operator naming a panel needs to READ
+    it, and a native crop of the changed region is the only image here that lets them.
+    """
     Image, _ = _pil()
     if Image is None:
         return None
@@ -479,24 +485,55 @@ def _thumb(src, out_dir, name, bbox=None, pad=40):
         box = (max(0, x0 - pad), max(0, y0 - pad),
                min(im.size[0], x1 + pad), min(im.size[1], y1 + pad))
         im = im.crop(box)
-    if im.size[0] > THUMB_W:
-        h = int(im.size[1] * THUMB_W / float(im.size[0]))
-        im = im.resize((THUMB_W, max(1, h)), Image.LANCZOS)
+    if width and im.size[0] > width:
+        h = int(im.size[1] * width / float(im.size[0]))
+        im = im.resize((width, max(1, h)), Image.LANCZOS)
     os.makedirs(out_dir, exist_ok=True)
     dst = os.path.join(out_dir, name)
-    im.save(dst, "JPEG", quality=78)
+    im.save(dst, "JPEG", quality=quality)
     return name
+
+
+def _full_rel(out_dir, src):
+    """A page-relative path to the ORIGINAL png, for the lightbox.
+
+    The strip is thumbnails and must stay that way -- 2,400 full frames is 8 GB and a
+    page no browser will open -- so the full-resolution image is LINKED rather than
+    copied. Both live under the vault, so this is a short relative hop and the page
+    keeps working from `file://` with nothing copied and nothing served.
+    """
+    try:
+        return os.path.relpath(src, out_dir).replace("\\", "/")
+    except ValueError:
+        return None            # different drive; the lightbox degrades to the thumbnail
+
+
+_catalogue_failed = set()
 
 
 def _catalogue(opcode):
     """The opcode's catalogued field list, so the picture is read beside the layout."""
+    # `Codec()` -- there is no `Codec.load()`, and the first version called one behind a
+    # bare `except Exception: return ""`. Every card on the page carried an EMPTY field
+    # list and the build printed nothing, so the layout an operator reads the picture
+    # against was silently absent from all 238. The except stays (a page is still worth
+    # having without the schema) but it now reports, because a swallowed failure that
+    # renders as a blank field is indistinguishable from an opcode that has no fields.
     try:
         sys.path.insert(0, os.path.join(REPO_ROOT, "schema"))
-        import codec as codec_mod
-        c = codec_mod.Codec.load()
-        fields = c.fields_for("GAME_SMSG", opcode)
-        return ", ".join(f"{f['name']}:{f['type']}" for f in fields) or "(no fields)"
-    except Exception:
+        from codec import Codec
+        # A field carries `type` and `length`; `name` is present only where the catalogue
+        # has one, so the first version's `f['name']` raised KeyError on EVERY opcode.
+        # The header row is dropped -- its `length` is the opcode, not a payload width,
+        # and printing it as a field invites reading it as one.
+        fields = [f for f in Codec().fields_for("GAME_SMSG", opcode)
+                  if f.get("type") != "msg_header"]
+        return ", ".join(
+            (f"{f['name']}:{f['type']}" if f.get("name") else str(f.get("type")))
+            + (f"[{f['length']}]" if f.get("length") else "")
+            for f in fields) or "(no payload fields)"
+    except Exception as exc:
+        _catalogue_failed.add(f"0x{opcode:04X}: {type(exc).__name__}: {exc}")
         return ""
 
 
@@ -524,13 +561,26 @@ def build_page(results, out_dir, title="smsgsweep -- name the silent opcodes"):
             # and the operator is reading these to recognise a panel, a chat line or
             # a world label -- all of which are identified by WHERE they sit.
             b = _thumb(r["before"], img_dir, f"{key}_base.jpg")
-            frames.append({"src": f"img/{b}", "cap": "baseline", "score": ""})
+            frames.append({"src": f"img/{b}", "cap": "baseline", "score": "",
+                           "full": _full_rel(out_dir, r["before"])})
             for i, f in enumerate(r.get("strip") or []):
                 n = _thumb(f["path"], img_dir, f"{key}_{i:02d}.jpg")
                 frames.append({
                     "src": f"img/{n}",
                     "cap": f"+{f['dt']:.1f}s",
-                    "score": "--" if f["score"] is None else f"{f['score']*100:.2f}%"})
+                    "score": "--" if f["score"] is None else f"{f['score']*100:.2f}%",
+                    "full": _full_rel(out_dir, f["path"])})
+        # THE DETAIL CROP, and it is the one image on this page meant to be READ rather
+        # than recognised. The strip answers "did something appear and where"; it cannot
+        # answer "what does it say", because 1936 px of client downscaled to 560 loses
+        # every glyph. So a CHANGED row also gets the peak frame cropped to the changed
+        # region at NATIVE resolution -- which for a dialog or a toast is the text.
+        detail = None
+        if r.get("verdict") == "CHANGED" and r.get("after") and r.get("bbox"):
+            d = _thumb(r["after"], img_dir, f"{key}_detail.jpg", bbox=r["bbox"],
+                       pad=12, width=0, quality=92)
+            if d:
+                detail = {"src": f"img/{d}", "full": _full_rel(out_dir, r["after"])}
         peak, sus = r.get("peak"), r.get("sustained")
         cards.append({
             "id": key, "op": op, "run": r["run"], "verdict": r["verdict"],
@@ -539,6 +589,7 @@ def build_page(results, out_dir, title="smsgsweep -- name the silent opcodes"):
             "flag": "--" if not r.get("flag_at") else f"{r['flag_at'] * 100:.2f}%",
             "fields": _catalogue(r["opcode"]),
             "frames": frames, "shared": ", ".join(r.get("shared_with") or []),
+            "detail": detail,
         })
     # Drop images this build did not write. The page is rebuilt as the loop adds runs,
     # and a stale frame from an earlier scoring rule is worse than a missing one: it
@@ -546,9 +597,13 @@ def build_page(results, out_dir, title="smsgsweep -- name the silent opcodes"):
     # localStorage keyed by opcode+run, so they survive a rebuild -- which is the
     # whole reason the page is regenerated in place rather than into a new directory.
     keep = {os.path.basename(f["src"]) for c in cards for f in c["frames"]}
+    keep |= {os.path.basename(c["detail"]["src"]) for c in cards if c.get("detail")}
     for stale in os.listdir(img_dir):
         if stale not in keep:
             os.remove(os.path.join(img_dir, stale))
+    if _catalogue_failed:
+        print(f"  WARNING: no field layout for {len(_catalogue_failed)} opcode(s) -- "
+              f"the cards show a blank layout. First: {sorted(_catalogue_failed)[0]}")
     page = os.path.join(out_dir, "index.html")
     with open(page, "w", encoding="utf-8") as fh:
         fh.write(_render(cards, title))
@@ -563,11 +618,22 @@ def _render(cards, title):
     for c in cards:
         if c["frames"]:
             strip = "".join(
-                f'<figure><img loading=lazy src="{html.escape(f["src"])}">'
+                f'<figure><img loading=lazy src="{html.escape(f["src"])}" '
+                f'data-full="{html.escape(f.get("full") or f["src"])}" '
+                f'data-cap="{html.escape(c["op"])} {html.escape(f["cap"])}">'
                 f'<figcaption>{html.escape(f["cap"])} '
                 f'<b>{html.escape(f["score"])}</b></figcaption></figure>'
                 for f in c["frames"])
-            imgs = f'<div class=strip>{strip}</div>'
+            det = ""
+            if c.get("detail"):
+                d = c["detail"]
+                det = (f'<figure class=detail><img loading=lazy '
+                       f'src="{html.escape(d["src"])}" '
+                       f'data-full="{html.escape(d.get("full") or d["src"])}" '
+                       f'data-cap="{html.escape(c["op"])} changed region">'
+                       f'<figcaption>the changed region, full resolution '
+                       f'-- click for the whole frame</figcaption></figure>')
+            imgs = f'<div class=strip>{strip}</div>{det}'
         else:
             imgs = (f'<p class=none>no frames -- {html.escape(c["verdict"])}'
                     + (f' with {html.escape(c["shared"])}' if c["shared"] else "")
@@ -614,8 +680,19 @@ h2 {{ font:600 1.05rem ui-monospace,monospace; margin:0; }}
 .strip {{ display:flex; gap:.5rem; overflow-x:auto; padding-bottom:.4rem; }}
 .strip figure {{ flex:0 0 auto; width:270px; }}
 .strip img {{ width:270px; cursor:zoom-in; }}
-.strip img.big {{ width:min(94vw,1200px); }}
 figure {{ margin:0; }} figcaption {{ font-size:.72rem; color:#888; }}
+/* The detail crop is native resolution and must NOT be scaled to the card: shrinking
+   it to fit is exactly the downscale it exists to undo. It scrolls instead. */
+.detail {{ margin-top:.6rem; max-width:100%; overflow:auto; }}
+.detail img {{ max-width:none; cursor:zoom-in; }}
+#lb {{ position:fixed; inset:0; background:#000e; z-index:99; display:none;
+       overflow:auto; text-align:center; }}
+#lb.on {{ display:block; }}
+#lb img {{ max-width:none; margin:2.2rem auto; border:0; cursor:zoom-out; }}
+#lb img.fit {{ max-width:96vw; }}
+#lbbar {{ position:fixed; top:0; left:0; right:0; padding:.4rem .8rem; background:#000c;
+          color:#eee; font:12px ui-monospace,monospace; display:flex; gap:.8rem;
+          align-items:center; }}
 img {{ max-width:100%; border:1px solid var(--line); border-radius:6px; display:block; }}
 .none {{ color:#a33; font-size:.85rem; }}
 .controls {{ display:flex; gap:.4rem; margin-top:.8rem; flex-wrap:wrap; }}
@@ -637,6 +714,11 @@ button.on {{ background:#2b7a2b; color:#fff; border-color:#2b7a2b; }}
   <span id=count class=meta></span>
 </div>
 {''.join(body)}
+<div id=lb>
+  <div id=lbbar><b id=lbfit>fit to window</b><span id=lbcap></span>
+    <span style="margin-left:auto">click anywhere or Esc to close</span></div>
+  <img id=lbimg alt="">
+</div>
 <script>
 const KEY = 'rurik-shotlabel';
 const store = JSON.parse(localStorage.getItem(KEY) || '{{}}');
@@ -674,8 +756,29 @@ function paint() {{
   document.getElementById('count').textContent =
     Object.keys(store).length + ' labelled, ' + shown + ' shown';
 }}
-document.querySelectorAll('.strip img').forEach(im =>
-  im.addEventListener('click', () => im.classList.toggle('big')));
+// THE LIGHTBOX LOADS THE ORIGINAL PNG, not the thumbnail. The old handler widened the
+// 560 px thumbnail to 1200 px, which is an upscale: it made the picture bigger and no
+// more readable, which is the one thing an operator trying to read a toast needs.
+const lb = document.getElementById('lb'), lbi = document.getElementById('lbimg'),
+      lbc = document.getElementById('lbcap'), lbf = document.getElementById('lbfit');
+function openLb(im) {{
+  lbi.src = im.dataset.full || im.src;
+  lbc.textContent = (im.dataset.cap || '') + '  ' + (im.dataset.full || '');
+  lb.classList.add('on');
+}}
+document.addEventListener('click', e => {{
+  const im = e.target.closest('.strip img, .detail img');
+  if (im) {{ openLb(im); return; }}
+  if (e.target.id === 'lbfit') {{
+    lbi.classList.toggle('fit');
+    lbf.textContent = lbi.classList.contains('fit') ? 'actual size' : 'fit to window';
+    return;
+  }}
+  if (lb.classList.contains('on') && e.target.id !== 'lbcap') lb.classList.remove('on');
+}});
+document.addEventListener('keydown', e => {{
+  if (e.key === 'Escape') lb.classList.remove('on');
+}});
 document.getElementById('onlych').addEventListener('change', paint);
 document.getElementById('onlyun').addEventListener('change', paint);
 document.getElementById('save').addEventListener('click', () =>

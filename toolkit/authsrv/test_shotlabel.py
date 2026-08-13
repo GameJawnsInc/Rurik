@@ -41,6 +41,15 @@ against six opcodes that all reported the SAME bounding box:
      (824, 491, 1113, ~724): the player standing in the middle of the screen
      breathing. The floor is now measured at MATCHING lags. Section 9.
 
+AND SECTION 10 IS A DIFFERENT KIND OF DEFECT: three ways the page RENDERED FINE and
+could not be read. `_catalogue` called a `Codec.load()` that does not exist behind a
+bare `except`, so all 238 cards carried a blank field list; the click handler widened
+the 560 px thumbnail to 1200 px, which is an upscale, so magnifying a toast made it
+bigger and blurrier while the full-resolution png was never referenced by the page at
+all; and there was no native-resolution view of the changed region, which for a dialog
+is exactly where the text is. None of the three could fail a build -- the page was
+produced, the count was right, and only a human trying to READ a frame ever found out.
+
 AND THE ONE THAT WAS NOT IN THIS MODULE AT ALL, which is section 7: the harness's log
 pump died on a cp1252 console, the gamesrv wedged on its next print, the probe sent
 NOTHING, and the run reported RUN VERDICT: PASS. Three opcodes were marked done having
@@ -51,6 +60,7 @@ holds its send, and `score_run` refuses a multi-send run outright.
 import datetime
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -60,10 +70,10 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks                                                   # noqa: E402
 import shotlabel                                                # noqa: E402
 
-# 38 is what a green run executes today, MEASURED rather than guessed. Every section
+# 46 is what a green run executes today, MEASURED rather than guessed. Every section
 # needs PIL; without it the whole file declares one skip and goes red, the way
 # test_keytap.py does off Windows -- the fixture is drawn, not stored.
-LEDGER = checks.Ledger("test_shotlabel", floor=38)
+LEDGER = checks.Ledger("test_shotlabel", floor=46)
 ok = LEDGER.ok
 
 UTC = datetime.timezone.utc
@@ -490,6 +500,77 @@ def section_9_drift(tmp):
        f"excess {row2['peak']*100:.3f}%")
 
 
+def section_10_page_is_readable(tmp):
+    """The page must let an operator READ the client, not just recognise a shape.
+
+    Every check here is a defect the first page shipped with, and all three were
+    INVISIBLE: the page rendered, the build printed a card count, and nothing was
+    wrong except that the evidence could not be read.
+
+      * `_catalogue` called `Codec.load()`, which does not exist, behind a bare
+        `except Exception: return ""`. All 238 cards carried a BLANK field list.
+      * the click handler widened the 560 px thumbnail to 1200 px -- an upscale, so
+        magnifying a toast made it bigger and blurrier. The full-resolution png was
+        never referenced by the page at all.
+      * there was no native-resolution view of the changed region, which for a dialog
+        or a toast is where the text is.
+    """
+    print("\n10. the page can be READ -- three defects the first page shipped with")
+    # (a) THE FIELD LIST. The bug returned "" for every opcode, so the assertion is on
+    # CONTENT: a known multi-field opcode must name more than one field.
+    cat = shotlabel._catalogue(0x0014)
+    ok(cat and "dword" in cat and cat.count(",") >= 1,
+       "a catalogued opcode renders a real field list",
+       f"0x0014 -> {cat!r} -- '' means the lookup is silently failing again")
+    ok(not shotlabel._catalogue_failed,
+       "and the lookup reported no swallowed failure",
+       f"{sorted(shotlabel._catalogue_failed)[:1]}")
+    # The header is dropped: its `length` is the OPCODE, and printing it as a field
+    # invites reading 20 as a payload width.
+    ok("msg_header" not in cat, "the msg_header row is not printed as a payload field",
+       cat)
+
+    # (b) THE FULL-RESOLUTION LINK. Build a real page off a synthetic run and require
+    # every image to carry a data-full that RESOLVES -- a broken relative path renders
+    # an identical page and fails only when a human clicks it.
+    run = _standard(tmp, "r10")
+    res = shotlabel.score_run(run)
+    out = os.path.join(tmp, "page10")
+    page, n = shotlabel.build_page([res], out, title="t")
+    h = open(page, encoding="utf-8").read()
+    fulls = re.findall(r'data-full="([^"]+)"', h)
+    ok(len(fulls) >= 2, "every strip frame carries a full-resolution source",
+       f"{len(fulls)} data-full attribute(s)")
+    missing = [f for f in fulls
+               if not os.path.isfile(os.path.join(out, f.replace("/", os.sep)))]
+    ok(not missing, "and every one of them resolves to a file on disk",
+       f"{len(missing)} broken: {missing[:2]}")
+    # The whole point: it must point at the ORIGINAL, not back at the thumbnail.
+    ok(all(not f.startswith("img/") for f in fulls),
+       "and points at the original png rather than the thumbnail it is enlarging",
+       "a data-full into img/ is the upscale bug wearing a lightbox")
+
+    # (c) THE DETAIL CROP AT NATIVE RESOLUTION. Its whole reason is to undo the 3.5x
+    # downscale, so the assertion is on PIXELS: a crop of a region must not come back
+    # narrower than the region.
+    row = res["rows"][0]
+    if row.get("bbox") and row.get("verdict") == "CHANGED":
+        x0, y0, x1, y1 = row["bbox"]
+        name = shotlabel._thumb(row["after"], out, "probe_detail.jpg",
+                                bbox=row["bbox"], pad=0, width=0)
+        w, _h = _pil().open(os.path.join(out, name)).size
+        ok(w == x1 - x0, "the detail crop is written at native resolution",
+           f"{w}px for a {x1 - x0}px region -- a downscale here defeats the crop")
+        # CONTROL: the same call WITH a width must still downscale, or the parameter
+        # is dead and every strip frame is silently full-size.
+        name2 = shotlabel._thumb(row["after"], out, "probe_scaled.jpg",
+                                 bbox=row["bbox"], pad=0, width=64)
+        w2, _ = _pil().open(os.path.join(out, name2)).size
+        ok(w2 == 64, "CONTROL: a width still downscales", f"{w2}px")
+    else:
+        LEDGER.skip("10c", "the fixture row is not CHANGED with a bbox")
+
+
 def main():
     if _pil() is None:
         LEDGER.skip("every section", "PIL is missing -- the fixture is drawn with it, "
@@ -505,6 +586,7 @@ def main():
         section_7_no_send_is_not_a_result(tmp)
         section_8_provenance(tmp)
         section_9_drift(tmp)
+        section_10_page_is_readable(tmp)
     return LEDGER.verdict()
 
 
