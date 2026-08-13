@@ -113,9 +113,14 @@ CELL = terrain_pitch = trn_mod.CELL_PITCH        # 96.0, and the client's XY_DIS
 REFERENCE_PARTNER = 46197                        # the 32x32 template's stripped row
 
 # FINDINGS 34 read two threshold sets off the classifier, 10/45/40 and
-# 15/35/30 degrees, and could not say which is in force. 30 is the smallest
-# "unwalkable above this" value in either, so refusing above it is the choice
-# that is correct under both. Between 10 and 30 we cannot say, and say so.
+# 15/35/30 degrees, and could not say which is in force. MEASURED 2026-08-12
+# by the ramp map (FINDINGS 48): the set is 15/35/30 and the walkable
+# boundary is 35 -- a 32.0-degree strip compiled walkable and a 36.1-degree
+# one did not, so the cut sits in (32.0, 36.1) and only 35 is inside it.
+# The refusal below stays at 30 DELIBERATELY: it is now a measured 5-degree
+# margin rather than merely the value safe under both readings, and a seed
+# this close to the boundary would make every build a bet on the snap not
+# steepening its cell.
 SEED_UNWALKABLE_DEG = 30.0
 SEED_UNSURE_DEG = 10.0
 

@@ -6012,3 +6012,31 @@ read in-game the way the chunks say.
 NOT established: textures, sound, environment, lighting (the map renders
 with the default tile stretched over authored slopes — the owner has seen
 what that looks like); anything past one run of one scene.
+
+## 48. OBSERVED: the slope-threshold set is 15/35/30, boundary 35 — rung (e10e), the ramp map (2026-08-12)
+
+**FINDINGS 34's open question is measured.** The flood classifier reads slope
+against `10/45/40°` or `15/35/30°` on a mode flag; the sets share no values,
+so one map answers both which set and which number. Five ramp strips whose
+snapped interior slopes bracket every candidate cutoff (26.6..29.4, 32.0,
+36.1..37.6, 41.5..41.9, 46.5..47.8 degrees), a flat apron with the seed and
+spawn, a flat plateau atop each strip. Predictions before arming; one run;
+run record `vault/research/e10e-threshold-2026-08-12/`.
+
+**Pattern `WW...`: the 32.0° strip compiled WALKABLE and the 36.1° strip did
+not.** The cut is measured inside (32.0°, 36.1°); **35 is the only candidate
+in the window**, every number of the `10/45/40` set is excluded, and the set
+in force is **`15/35/30`**. The apron control walked; the anchors agree (22°
+walkable in §47, 86° not in §38/43).
+
+Second result, free: **walkable area is connectivity-pruned from the flood
+seed.** The plateau row repeats the ramp row 5 of 5 — a FLAT plateau above a
+too-steep ramp is absent from the mesh entirely. "Walkable" in the compiled
+chunk means *reachable and gentle*, not gentle alone.
+
+`stripbuild.SEED_UNWALKABLE_DEG` stays at 30, now a measured 5° margin
+rather than the value merely safe under both readings; its comment records
+the measurement. What the run does NOT settle: the roles of the set's other
+two numbers (15 and 30 — candidate "unsure"/"amble" boundaries, unread), and
+whether the mode flag can select the other set on some map kind; every map
+this toolkit compiles goes through the path measured here.
