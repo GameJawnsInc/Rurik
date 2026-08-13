@@ -1091,3 +1091,72 @@ movement.
 So `0x003C` stays on the "never sent by us" list with its reason now measured rather than
 assumed, and it is **not** a prerequisite for anything in this section: the roster drew
 its row, with an abbreviation and a level, without it.
+
+### 18.9 `0x003C` at retail's own LOAD-TIME position: still nothing (2026-08-13)
+
+§18.8 sent it late and measured a null; the open question it left was whether bits read
+once at BUILD time behave differently. Answered: they do not. `--player-flags VALUE` now
+sends `0x003C` immediately before `WORLD_CREATE_AGENT`, which is retail's own slot.
+
+**Six runs, four arms, one message the only variable.** All PASS, no error dialog.
+
+| arm | value | `0x003C` on the wire | party region vs control |
+|---|---|---|---|
+| A, A2 | *(none)* | -- | control |
+| B | 4 (retail's lone-player value) | `3c0001000400000007000000` | **0.000%** |
+| C | 0 | `3c0001000000000007000000` | **0.000%** |
+| D, D2 | 7 | `3c0001000700000007000000` | **0.000%** |
+
+Zero across **every matched frame of every arm**, while the within-arm noise floor reaches
+0.007% -- so the instrument is live and reads nothing. Whole-frame differences (0.137%,
+0.243%, 0.304%) are the animating world, the same magnitude as §18.8's 0.104% idle median.
+The order is confirmed in the capture: `0x003C` and `0x0020` carry the SAME timestamp with
+`0x003C` first, and the control emits no `0x003C` at all.
+
+**Not vacuous:** the roster was open in every arm -- the cropped party region shows
+`Party Members [P]` carrying `W0 Test Warrior`.
+
+**The client's own traffic is unchanged too**, which is the stronger half: 20 decoded c2s
+messages over 9 opcodes in arms A, B and C, identical sets and counts.
+
+#### The excursion that was NOT a finding, and the correction under it
+
+Arm D (value 7) came back with **21** decoded messages over 10 opcodes -- one extra
+`0x000C` at t=2.61 s. It survived the obvious explanation: arm D was not the longest
+session (C ran 54.16 s to D's 53.57 s) and the message landed at 2.6 s rather than at the
+tail. Value 7 sets two bits no solo capture carries, so this looked like the one place the
+sweep had bitten.
+
+**Repeats refuted it.** A2, a CONTROL run, produced `0x000C` at t=2.22 s; D2, a second
+value-7 run, produced none. Two of six runs carry it, one from each arm -- nondeterministic
+client behaviour, not an effect of the flag. Recorded because a single-run signal that
+survives one alternative explanation is exactly the shape this project has been burned by
+before, and the repeat cost ninety seconds.
+
+**And a correction to how the first comparison was made.** The A-vs-B traffic check was
+first run over `frame`/`c2s` records, which carry `plain` bytes and NO opcode field -- so
+every one of them counted under a single `None` key and the result was reported as
+"identical opcode sets and counts" when it was really "both arms sent 16 frames". The
+`decoded` records are the instrument, and they are what found the `0x000C` the frame-level
+view had hidden. A comparison that cannot tell two opcodes apart cannot find a difference
+between them.
+
+#### What is settled and what is not
+
+**Settled:** `0x003C` is not a prerequisite for anything currently observable here. At
+retail's position, with retail's value, it changes neither the screen nor the client's
+behaviour -- and the roster draws its row, with an abbreviation and a level, without it.
+The flag stays OFF by default: sending a message that demonstrably does nothing would
+retire a control for no gain.
+
+**Not settled, both still real:**
+
+1. **One player.** Values 5, 6 and 1 appear only in retail's BUSY connections and are
+   untested; a three-bit per-player flag may have nothing to express about a party of one.
+2. **A lead from another session, UNVERIFIED and theirs:** three opcodes in
+   `PyCliParty.cpp` whose job is to refuse a party action for an **unnamed account**, and
+   our loopback account has no account name. Not tested against this arc by either of us,
+   and no connection is asserted here -- but it is the first candidate offered for why the
+   member row renders as a RED bar, which nothing in §18 explains. Note `asserts.py --file
+   PyCliParty` shows no account-name assert in its readable set, and that set is a FLOOR
+   rather than a census, so its silence refutes nothing.

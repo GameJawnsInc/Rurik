@@ -301,6 +301,9 @@ GAME_SMSG_PLAYER_INFO = 0x0059
 GAME_SMSG_PLAYER_UPDATE_PROFESSION = 0x00B7
 GAME_SMSG_PLAYER_PARTY_SIZE = 0x00B0
 GAME_SMSG_PLAYER_SET_PARTY = 0x00B1
+# Three bits in the player record, (value, mask). See agents.player_flags for the
+# 423-send census that fixes the shape and picks 4 as the lone-player value.
+GAME_SMSG_PLAYER_FLAGS = 0x003C
 # 0x00B6, the client's own OnProfessionSecondaryBits: which professions this
 # agent may take as a SECONDARY. MUST be sent AFTER that agent's 0x00B7 -- the
 # handler looks the record up and drops the message silently if it is not there
@@ -1244,6 +1247,12 @@ LABEL_RUN = None
 # Set from --explorable. Tells the client this instance is a field rather than a
 # town. See the INSTANCE_LOAD_INFO send site for why it is worth a flag.
 EXPLORABLE = False
+
+# Set from --player-flags. The VALUE half of GAME_SMSG 0x003C's (value, mask)
+# pair; the mask is always 7 (423 of 423 live sends). None means send nothing,
+# which is this server's behaviour up to 2026-08-13 and is therefore the control
+# arm rather than a disabled feature.
+PLAYER_FLAGS = None
 
 # Set from --netgraph. One byte of UI-overlay flags sent once, after the
 # instance loads, as GAME_SMSG_UI_OVERLAY_FLAGS. None means send nothing at
@@ -4667,6 +4676,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         for op, vals, label in agents.party_build(
                                 1, PLAYER_NUMBER):
                             send(op, vals, label)
+                        # ...and the player-record flag word, in retail's own
+                        # position: BEFORE the agent create, 423 sends over 12 of
+                        # 12 live connections, all inside the instance load. OFF by
+                        # default because it is being measured -- the control arm is
+                        # this server's behaviour up to now, so a default-on flag
+                        # would leave nothing to diff against. RESKIN.md 18.8 sent
+                        # it LATE and measured a clean null; the open question this
+                        # answers is whether bits read once at BUILD time differ.
+                        if PLAYER_FLAGS is not None:
+                            send(GAME_SMSG_PLAYER_FLAGS,
+                                 agents.player_flags(PLAYER_NUMBER, PLAYER_FLAGS),
+                                 f"PLAYER_FLAGS(value {PLAYER_FLAGS}, mask 7)")
                         # Field names carrying hex offsets (h000B, h001E, h0023,
                         # h0027, h003B, h004B, h0059) let the 23 schema fields be
                         # aligned to the struct by offset rather than by counting:
@@ -5289,6 +5310,17 @@ def main():
                          "is the cheap way to find out whether combat is gated on "
                          "the map or on this one field — the alternative is "
                          "recovering a real explorable's file id out of Gw.dat.")
+    ap.add_argument("--player-flags", type=lambda s: int(s, 0), default=None,
+                    metavar="VALUE",
+                    help="Send GAME_SMSG 0x003C (player number, VALUE, mask 7) "
+                         "immediately before WORLD_CREATE_AGENT, which is retail's "
+                         "own position for it: 423 sends over 12 of 12 live "
+                         "connections, all inside the instance load, and this "
+                         "server has never sent it. A lone player is VALUE 4 in "
+                         "every single-connection capture. Omit for the control "
+                         "arm — sending it LATE was already measured as a clean "
+                         "null (RESKIN.md 18.8), so what this asks is whether a "
+                         "LOAD-time write behaves differently.")
     ap.add_argument("--allow-any-session", action="store_true",
                     help="Accept a login with no matching session record. A debugging "
                          "escape hatch so a stale sessions.json cannot be mistaken for a "
@@ -5437,6 +5469,15 @@ def main():
               + (f" -- {', '.join(bits)}" if bits else
                  " -- no bits set, which CLEARS all three"))
 
+    if a.player_flags is not None:
+        global PLAYER_FLAGS
+        # Validate HERE rather than at send time: a bad value would otherwise
+        # raise on the burst thread, mid-instance-load, where the traceback lands
+        # in a capture nobody reads and the client just fails to spawn.
+        agents.player_flags(PLAYER_NUMBER, a.player_flags)
+        PLAYER_FLAGS = a.player_flags
+        print(f"PLAYER_FLAGS: sending 0x003C (player {PLAYER_NUMBER}, value "
+              f"{a.player_flags}, mask 7) before WORLD_CREATE_AGENT")
     if a.explorable:
         global EXPLORABLE
         EXPLORABLE = True

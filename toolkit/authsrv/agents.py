@@ -388,6 +388,47 @@ def party_build(party_id=1, player_number=None):
     ]
 
 
+def player_flags(player_number, value, mask=7):
+    """GAME_SMSG 0x003C -- three bits in the player record, cleared then written.
+
+    OBSERVED 2026-08-13 over ArenaNet's own captures, read whole with
+    `tape.decode_all`: **423 sends across 12 of 12 live game connections**, all
+    inside the instance load (t = 0.23-0.73 s). This server had sent it ZERO times
+    in 190 played captures.
+
+        mask (the second dword) is 7 in 423 of 423
+        value (the first)       is 4 x287, 5 x60, 0 x48, 7 x12, 6 x12, 1 x4
+
+    Every value lies inside the mask and the mask never varies, which is what makes
+    this (value, mask) rather than the (set, clear) an earlier read proposed. It
+    matches the handler clearing with an `and` at 0x0080EC26 and writing with an
+    `or` at 0x0080EC48 into `[playerRec+0x34]` -- the same ctx+0x80C stride-0x50
+    array 0x00B0/0x00B1 write. UPSTREAM for the two addresses (the party dive);
+    OBSERVED for everything above.
+
+    **A lone player is (player, 4, 7) in every single-connection capture**, three
+    times, and 5/6/7/1 appear only in the busy ones -- so 4 is the value to send for
+    a party of one and the others are not ours to guess at.
+
+    Sending it LATE does nothing: studies/profession/RESKIN.md 18.8 swept 4 -> 0 -> 7
+    at 5-17 s with the party roster open and measured 0.000% change in the party
+    region across all 18 frame transitions. That is why this exists as a burst
+    message rather than a probe -- the open question is whether bits read once at
+    BUILD time behave differently, and only a load-time send can ask it.
+    """
+    if not 0 <= player_number <= 0xFFFF:
+        raise ValueError(f"player number {player_number} does not fit the u16 field")
+    if mask == 0:
+        raise ValueError("mask 0 writes nothing: the handler clears with ~mask and "
+                         "ors the value in, so a zero mask is a no-op message")
+    if value & ~mask:
+        raise ValueError(
+            f"value {value:#x} has bits outside mask {mask:#x}: the handler ANDs "
+            f"with ~mask before ORing the value, so bits {value & ~mask:#x} would "
+            f"be discarded. All 423 observed sends satisfy value & ~mask == 0")
+    return [player_number, value, mask]
+
+
 def player_party_size(player_number, size):
     """GAME_SMSG 0x00B0 -- how many members the player's party holds.
 
