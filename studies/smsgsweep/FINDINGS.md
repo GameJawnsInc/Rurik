@@ -566,3 +566,68 @@ here by hand rather than by loosening that refusal.
 `0x0191` is therefore a **map/instance change**, which makes it the most consequential
 row of this pass: it is the first opcode found that moves the player between maps, and
 `PLAN.md` §3.6's capture campaign wants exactly that.
+
+### 7.6 TWENTY-TWO NAMED, and thirteen CHANGED rows that were the operator's mouse
+
+**Status: OBSERVED, 2026-08-13.** The owner read the page and labelled every CHANGED
+row. Twenty-two are real; the remaining thirteen are hover artifacts (see below).
+Labels in `vault/labelling/labels-20260813.json`, folded into `schema/overrides.json` by
+`shotlabel.py --merge`.
+
+**Thirteen carry the client's own words** — which is the same standard that made `0x0033`
+Message of the Day, and the reason they are filed `name_confidence: high`:
+
+| opcode | name | what the client drew |
+|---|---|---|
+| `0x000E` | `NETWORK_ERROR_NOTICE` | green chat: "Network error 0." then a connection-check line |
+| `0x0014` | `TRIAL_TIME_REMAINING` | trial toast: playtime left, with the expiry date |
+| `0x001C` | `SKILL_UNLOCKED` | "Skill Unlocked!" popup with name, icon and description |
+| `0x0082` | `EQUIP_TEMPORARY_SKILL` | equip-temporary-skill UI |
+| `0x00B8` | `TRIAL_FEATURE_RESTRICTED` | trial toast about restricted features |
+| `0x00FD` | `PLAYER_REPORT_MENU` | the player-report reason menu |
+| `0x0101` | `CINEMATIC_WAIT_SCREEN` | "A Cinematic is in Progress" |
+| `0x0123` | `ALLIANCE_INVITE_RECEIVED` | green chat: guild received an alliance invitation |
+| `0x01B8` | `ACCOUNT_UNNAMED_NOTICE` | "Your account must be named… Tolkano [Tournament]" |
+| `0x01BC` | `ACCOUNT_UNNAMED_PROMPT` | the same line **plus** a centre-screen popup |
+| `0x01D6` | `ACCOUNT_UNNAMED_NOTICE_ALT` | the same line again |
+| `0x01D8` | `PARTY_DEFEATED` | "Your party was defeated. Your leader may return you…" |
+| `0x01E6` | `MISSION_ENTRY_CONFIRM` | "Your party has characters from another campaign…" |
+
+**Four are inferences from an animation with no text in it**, so they are filed
+`medium` — the operator's own hedging ("some sort of victory flag") is the tell, and a
+name taken from a picture of an effect is a guess about PURPOSE:
+`0x004E` `VICTORY_BANNER`, `0x006C` `CHEST_REWARD_EFFECT`, `0x00FB`
+`HARD_MODE_SUCCESS_BANNER`, `0x01AA` `AMBIENT_LIGHT_SET` (which repaints 88% of the
+window by changing the light colour and intensity — not a map change).
+
+**Five are NOT named, on purpose.** `0x00C3` `0x00C7` `0x00C8` `0x00C9` `0x00CA` all
+draw the same account-name selector and are indistinguishable on screen. Giving them one
+name each invents a distinction; giving them the same name asserts they are
+interchangeable. Neither is supported by a picture, so they are recorded here and left
+out of the schema until something separates them — `--merge` writes no row without an
+identifier and does not guess.
+
+**The account-name cluster is the largest thing here.** Eight of the twenty-two —
+`0x00C3/C7/C8/C9/CA`, `0x01B8`, `0x01BC`, `0x01D6` — are all the account-naming flow, and
+they sit in the same region as §7.3's tournament crash (`0x0170`, `MsCliTourn.cpp`) and
+the guild block. The notice text names Tolkano, the tournament registrar.
+
+#### The thirteen artifacts, and why the score cannot find them
+
+`0x0031` `0x0036` `0x00FC` `0x0113` `0x011F` `0x0127` `0x012E` `0x0136` `0x015D`
+`0x0182` `0x018C` `0x018D` `0x01E3` scored CHANGED and are the operator moving the
+mouse over the skill bar or the taskbar during the run. **They are QUIET.**
+
+**Their scores overlap the real ones and the instrument cannot separate them.** The
+artifacts run 0.22%–2.03%; four real readings sit inside that band (`0x01D6` 0.27%,
+`0x000E` 0.33%, `0x01BC` 0.47%, `0x0123` 1.53%) and four artifacts score ABOVE all four
+of them (`0x012E` 2.03%, `0x01E3` 1.97%, `0x018C` 1.71%). So magnitude ranks nothing
+here, and no threshold recovers the split — which is the argument for the page rather
+than against it: §7's design says a changed screen is evidence and the NAME comes from a
+person, and this is the case that proves the second half was not a formality.
+
+**The cause is a real limit of the apparatus, not a bug.** The run screenshots whatever
+the client window shows, and a hovered skill draws a tooltip that is indistinguishable
+from a tooltip an opcode drew. An unattended sweep is the fix, and the sweep WAS
+unattended for its 162 minutes — these thirteen are from the periods the operator was at
+the machine. Anything re-run should be re-run hands-off.

@@ -837,12 +837,31 @@ def main(argv=None):
                     help="a harness run directory; repeatable")
     ap.add_argument("--scan", default=None, metavar="PREFIX",
                     help="every harness run whose name starts with PREFIX")
+    ap.add_argument("--merge", default=None, metavar="LABELS.JSON",
+                    help="fold the operator's answers into schema/overrides.json")
+    ap.add_argument("--apply", action="store_true",
+                    help="with --merge: actually write. Default is a dry run.")
     ap.add_argument("--from-state", action="store_true",
                     help="the runs shotloop RECORDED, one per opcode (recommended)")
     ap.add_argument("--out", default=None, help="page directory (under the vault)")
     ap.add_argument("--settle", type=float, default=SETTLE)
     ap.add_argument("--json", action="store_true", help="print the scoring, no page")
     a = ap.parse_args(argv)
+
+    if a.merge:
+        r = merge_labels(a.merge, apply=a.apply)
+        for op, name in r["wrote"]:
+            print(f"  {op}  {name}")
+        for op, text in r["skipped"]:
+            print(f"  {op}  NO IDENTIFIER -- left out of the schema on purpose: "
+                  f"{text[:60]}")
+        for op, prior, name in r["conflicts"]:
+            print(f"  {op}  REFUSED: already named {prior}, screen reading says {name}")
+        print(f"{len(r['wrote'])} row(s) {'written to' if r['applied'] else 'would go to'} "
+              f"{r['path']}; {len(r['skipped'])} skipped, {len(r['conflicts'])} refused")
+        if not r["applied"]:
+            print("  dry run -- pass --apply to write")
+        return 0
 
     runs = list(a.run)
     base = os.path.join(vaultpath.vault_path("captures"), "harness")
@@ -907,6 +926,71 @@ def main(argv=None):
     print(f"page: {page}  ({n} card(s))")
     print("  local file, vault only -- it holds frames of the retail client")
     return 0
+
+
+# ---------------------------------------------------------------- folding answers back
+
+OVERRIDES = os.path.join(REPO_ROOT, "..", "schema", "overrides.json")
+
+
+def merge_labels(labels_path, apply=False, overrides_path=None):
+    """Fold the operator's answers into the wire schema, one row per NAMED opcode.
+
+    `--merge` was in this module's docstring from the day it was written and was
+    implemented by nothing -- the same shape as the blank field list: a promise with no
+    code behind it, which reads as a finished feature.
+
+    A row is written ONLY where the labels file carries an identifier. A screen reading
+    that says WHAT THE OPCODE DRAWS does not always say what to CALL it: five opcodes in
+    this run produce an indistinguishable account-name dialog, and naming them five
+    things invents a distinction while naming them one thing asserts they are
+    interchangeable. Neither is supported by a picture, so they are recorded in the
+    study and left out of the schema. This function does not guess.
+
+    The operator's VERBATIM text goes into `why` beside the run id, because the
+    identifier is a reading and the words are the evidence for it.
+    """
+    with open(labels_path, encoding="utf-8") as fh:
+        labels = json.load(fh)
+    path = overrides_path or os.path.abspath(OVERRIDES)
+    with open(path, encoding="utf-8") as fh:
+        ov = json.load(fh)
+    chan = ov.setdefault("channels", {}).setdefault("GAME_SMSG", {})
+    wrote, skipped, conflicts = [], [], []
+    for key, row in sorted(labels.items()):
+        op = int(row["opcode"], 16)
+        name = (row.get("name") or "").strip()
+        if not name:
+            skipped.append((row["opcode"], row.get("text", "")))
+            continue
+        slot = chan.setdefault(str(op), {"opcode": op})
+        prior = slot.get("name")
+        if prior and prior != name:
+            # Never silently rename. A name already in the schema came from the wire or
+            # from the binary; a screen reading is a weaker witness than either.
+            conflicts.append((row["opcode"], prior, name))
+            continue
+        slot["name"] = name
+        # The schema demands a declared confidence per name (test_codec), and a screen
+        # reading has two grades: the client WROTE the words, or we inferred a purpose
+        # from an animation. Default MEDIUM -- the weaker one -- so an unstated grade
+        # cannot quietly enter the catalogue as a strong claim.
+        slot["name_confidence"] = row.get("confidence") or "medium"
+        run = key.split("_", 1)[1] if "_" in key else "?"
+        slot["why"] = (
+            f"OBSERVED on screen, {run}. One opcode sent to a fresh client with a real "
+            f"encoded string, screenshots joined to the send by wall clock; the operator "
+            f"read the frame and wrote: \"{row.get('text', '').strip()}\". "
+            f"Class: {row.get('verdict', 'unclassified')}. The wire sweep scored this "
+            f"row SILENT -- a UI update produces no c2s reply. "
+            f"studies/smsgsweep/FINDINGS.md 7.6.")
+        wrote.append((row["opcode"], name))
+    if apply:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(ov, fh, indent=1, ensure_ascii=False)
+            fh.write("\n")
+    return {"wrote": wrote, "skipped": skipped, "conflicts": conflicts,
+            "path": path, "applied": bool(apply)}
 
 
 if __name__ == "__main__":

@@ -1712,6 +1712,108 @@
     "name": "ITEM_CREATE_BAG",
     "name_confidence": "high",
     "why": "OBSERVED. ItCliInv:38 'No valid case for switch variable \\'bagType\\'' is the client's own name for field 2; ItCliApi:1942 'inventory' guards the hash lookup keyed by field 1; ItCliBag:167 'slot != m_bagArray.Count()' is the remove-then-insert path keyed on field 4. Exactly 9 per tape in all four tapes, and the nine (bagType, field 3, capacity) triples are identical across all four: (1,0,20), (2,21,9), (3,6,12), (4,7..11,25) five times, (5,5,42). NOT a shippable constant table -- fields 1 and 4 are session-scoped ids a server must allocate itself."
+   },
+   "14": {
+    "opcode": 14,
+    "name": "NETWORK_ERROR_NOTICE",
+    "why": "OBSERVED on screen, 20260813T121533. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Green chat \"Network error 0.\" 2 newlines \"Please check your connection to the Internet and try again.\"\". Class: chat. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "20": {
+    "opcode": 20,
+    "name": "TRIAL_TIME_REMAINING",
+    "why": "OBSERVED on screen, 20260813T121902. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Free trial playtime left toast\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "28": {
+    "opcode": 28,
+    "name": "SKILL_UNLOCKED",
+    "why": "OBSERVED on screen, 20260813T122107. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Skill Unlocked! popup, shows name icon and description\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "78": {
+    "opcode": 78,
+    "name": "VICTORY_BANNER",
+    "why": "OBSERVED on screen, 20260813T123003. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"some sort of victory flag animation UI in the center of the screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "medium"
+   },
+   "108": {
+    "opcode": 108,
+    "name": "CHEST_REWARD_EFFECT",
+    "why": "OBSERVED on screen, 20260813T123733. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"dungeon chest animation UI in the center of the screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "medium"
+   },
+   "130": {
+    "opcode": 130,
+    "name": "EQUIP_TEMPORARY_SKILL",
+    "why": "OBSERVED on screen, 20260813T124501. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Equip Temporary Skill\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "184": {
+    "opcode": 184,
+    "name": "TRIAL_FEATURE_RESTRICTED",
+    "why": "OBSERVED on screen, 20260813T125947. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"trial toast about restricted game features\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "251": {
+    "opcode": 251,
+    "name": "HARD_MODE_SUCCESS_BANNER",
+    "why": "OBSERVED on screen, 20260813T132453. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"hard mode mission success animation UI in center of screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "medium"
+   },
+   "253": {
+    "opcode": 253,
+    "name": "PLAYER_REPORT_MENU",
+    "why": "OBSERVED on screen, 20260813T132618. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"Player Report reason menu\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "257": {
+    "opcode": 257,
+    "name": "CINEMATIC_WAIT_SCREEN",
+    "why": "OBSERVED on screen, 20260813T132742. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"A Cinematic is in Progress waiting screen\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "291": {
+    "opcode": 291,
+    "name": "ALLIANCE_INVITE_RECEIVED",
+    "why": "OBSERVED on screen, 20260813T134214. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"green chat, Guild received alliance invitation \"Your guild received an alliance invitation from  .\"\". Class: chat. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "426": {
+    "opcode": 426,
+    "name": "AMBIENT_LIGHT_SET",
+    "why": "OBSERVED on screen, 20260813T142821. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"changes lighting color, varying in color and intensity\". Class: world. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "medium"
+   },
+   "440": {
+    "opcode": 440,
+    "name": "ACCOUNT_UNNAMED_NOTICE",
+    "why": "OBSERVED on screen, 20260813T143433. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"\"Your account must be named. Please speak to the Account Registrar, Tolkano [Tournament].\"\". Class: chat. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "444": {
+    "opcode": 444,
+    "name": "ACCOUNT_UNNAMED_PROMPT",
+    "why": "OBSERVED on screen, 20260813T143556. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"\"Your account must be named. Please speak to the Account Registrar, Tolkano [Tournament].\" with center screen popup as well\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "470": {
+    "opcode": 470,
+    "name": "ACCOUNT_UNNAMED_NOTICE_ALT",
+    "why": "OBSERVED on screen, 20260813T144242. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"\"Your account must be named. Please speak to the Account Registrar, Tolkano [Tournament].\"\". Class: unclassified. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "472": {
+    "opcode": 472,
+    "name": "PARTY_DEFEATED",
+    "why": "OBSERVED on screen, 20260813T144403. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"\"Your party was defeated. Your leader may return you to the outpost.\"\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
+   },
+   "486": {
+    "opcode": 486,
+    "name": "MISSION_ENTRY_CONFIRM",
+    "why": "OBSERVED on screen, 20260813T144929. One opcode sent to a fresh client with a real encoded string, screenshots joined to the send by wall clock; the operator read the frame and wrote: \"mission entry screen \"Your party has characters from another campaign. Are you sure you wish to enter this mission?\"\". Class: ui. The wire sweep scored this row SILENT -- a UI update produces no c2s reply. studies/smsgsweep/FINDINGS.md 7.6.",
+    "name_confidence": "high"
    }
   }
  }
