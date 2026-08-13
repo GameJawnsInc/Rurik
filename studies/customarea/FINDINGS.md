@@ -6685,12 +6685,20 @@ map-rows arc, and a good one, which the arm-and-recompile loop trips BY DESIGN.
 serves: the launch sets `RURIK_DAT` to that archive and hands the environment to
 the harness. The guard then passes because the situation is actually right —
 server and client path against the same authored map — rather than because it
-was bypassed. The known hazard is stated rather than discovered: a running
-client holds its archive open, so a server wanting to re-read mid-session could
-be refused; MEASURED 2026-08-13, the run completes, because the server reads the
-world at startup before the client launches. `test_deploy` §3 pins it with two
-NEGATIVE CONTROLS — pointing the server elsewhere, and building the env without
-handing it over, which is exactly the shape of a fix that does nothing.
+was bypassed. `test_deploy` §3 pins it with two NEGATIVE CONTROLS — pointing the
+server elsewhere, and building the env without handing it over, which is exactly
+the shape of a fix that does nothing.
+
+> **RETRACTED 2026-08-13, same day, by §59.** This paragraph continued: *"The
+> known hazard is stated rather than discovered: a running client holds its
+> archive open, so a server wanting to re-read mid-session could be refused;
+> MEASURED 2026-08-13, the run completes, because the server reads the world at
+> startup before the client launches."* **The word MEASURED was doing work no
+> measurement supported.** The *world* is read at startup; the *navmesh* is not
+> — `load_pathmap` runs at instance bring-up, after the client is up and
+> holding the archive open — so that read returned EACCES and collision turned
+> off silently. The run "completing" was the fallback working, not the hazard
+> being absent. §59 has the numbers and the fix.
 
 A second robustness gap fell out of the same run: `rebloat --arm` refuses a
 head that is ALREADY zero length, rightly, since it cannot record a baseline
@@ -6705,3 +6713,81 @@ no flags papering over anything:
     deploy.py --area sculpt --blend vale.blend --install --launch --dat <copy>
 
 Run record: `vault/research/blender-2026-08-13/`.
+
+## 59. OBSERVED: the server never once walked on our ground (2026-08-13, offline)
+
+Rungs (e10*), G and H all read the same way: *the client compiled our map and
+the character walked around in it.* True, and it is one half of a claim that
+reads as two. **The other half — that the SERVER agreed about where the ground
+was — was false on every compiler-route run this project has made.**
+
+Found by a completeness critic over six scouting reports, then verified here.
+
+### 59.1 Two failures, one cause, both silent
+
+`load_pathmap`'s only call site was instance bring-up (`authsrv.py`, inside the
+connection handler). That is *after* a client has connected. Two regimes:
+
+| when | what the server read | what happened |
+|---|---|---|
+| before `RURIK_DAT` | its default `vault/dat_study/Gw.dat` | **ArenaNet's map 143**, 27 trapezoids, while the client drew ours |
+| after `RURIK_DAT` | our run archive — correctly | **EACCES.** A running Guild Wars client holds its own `Gw.dat` open exclusively |
+
+Neither failed a test. Neither failed the harness. The first is quiet because
+ArenaNet's mesh is a perfectly valid mesh; the second because `load_pathmap`
+catches, prints one line and returns `None`, and the caller's documented
+fallback is *no collision*. `20260813T112706` — rung G's own headline run —
+logs `[map] navmesh 0x287D3: 1 planes, 27 trapezoids`.
+
+### 59.2 How wrong was it? The walkable sets are DISJOINT
+
+Prediction-first, on the sculpt map (64×64, rect 0..6144), 4,096-point grid:
+
+| | result |
+|---|---|
+| **P1** spawn walkable on ours / on ArenaNet's | **True / False** — HOLDS |
+| **P2** *(predicted)* >50% of samples disagree | **FAILS** — 11.8% |
+| **the statistic P2 should have been** | walkable on **both: 0**; 484 disagreements = 49 + 435 **exactly** |
+| **C1** every mesh agrees with itself | 13/13, 27/27, 1270/1270 — the query is sound |
+| **C2** Kamadan over the same rect | 0% walkable — the control does not collapse |
+
+**P2 was the wrong statistic and is recorded as failing rather than quietly
+restated.** Both meshes are mostly empty over that rect, so *unwalkable on
+both* scores as agreement and dilutes the rate. The set relation is what
+carries it: across 4,096 points the server and the client never once agreed
+that the same spot was standable. 16 vault runs carry
+`standing at (…), which the navmesh does not cover — collision suspended`.
+
+### 59.3 The fix, and why it is inherently TWO runs
+
+`prewarm_pathmap(map_id)` reads the navmesh **at startup**, from the `--map`
+branch — the only moment the archive both holds our map and is unlocked.
+Verified: with `RURIK_DAT` on the run archive it returns **13 trapezoids**
+(ours); with the default it returns **27** (ArenaNet's); on an unconfigured map
+it refuses and says why.
+
+It cannot rescue the run that installs. `--install` arms the head to zero *so
+that* the client recompiles, so at that server's startup there is no compiled
+mesh to read — and once the client is up the archive is locked. **The run that
+produces the mesh can never serve it.** `deploy --serve` therefore launches a
+second time, unarmed, and the verdict is the server's own log line matched
+against a count read from the archive by `pathmap` — two independent readers of
+the same bytes, never a predicted constant.
+
+`load_pathmap` also names `PermissionError` separately now: *Permission denied*
+on a file the process owns reads as a broken install, and the cause is a client.
+
+### 59.4 What this does and does not touch
+
+**Does not:** the readback checks run offline after the client exits and stand
+unchanged; client-side confinement to authored geometry is established
+independently by §23 (two maps differing in 33 bytes, bounding boxes in the
+ratio of the two mesh rects).
+
+**Does:** every "walked" sentence in §§54–58 means *the client drew and confined
+us to our geometry*, not *the server pathed on it*. And the retraction in §58 is
+the lesson — the word MEASURED was attached to a hazard nobody had measured, in
+a document whose whole purpose is to separate those.
+
+`test_deploy` §6 pins it (floor 25 → 34); the sabotage that deletes the one
+startup call was built and run and reddens exactly 2 checks.
