@@ -6679,8 +6679,29 @@ PathData:365.
 And the harness now refuses to launch when the server's archive and the
 client's bind one file id to different files — a guard from the parallel
 map-rows arc, and a good one, which the arm-and-recompile loop trips BY DESIGN.
-Pointing `RURIK_DAT` at the client's own run archive makes them agree; the
-exclusive-lock worry did not materialise. That deserves a real answer inside
-`deploy` rather than an env var typed into a shell.
+
+**That is now answered inside `deploy` rather than by an env var in a shell.**
+`--dat` already decides which client runs, so it decides which world the server
+serves: the launch sets `RURIK_DAT` to that archive and hands the environment to
+the harness. The guard then passes because the situation is actually right —
+server and client path against the same authored map — rather than because it
+was bypassed. The known hazard is stated rather than discovered: a running
+client holds its archive open, so a server wanting to re-read mid-session could
+be refused; MEASURED 2026-08-13, the run completes, because the server reads the
+world at startup before the client launches. `test_deploy` §3 pins it with two
+NEGATIVE CONTROLS — pointing the server elsewhere, and building the env without
+handing it over, which is exactly the shape of a fix that does nothing.
+
+A second robustness gap fell out of the same run: `rebloat --arm` refuses a
+head that is ALREADY zero length, rightly, since it cannot record a baseline
+mesh from a row that has none. But "already armed" is not an error for THIS
+command — the client recompiles on load either way, and `deploy` is meant to be
+re-run while iterating on a shape. Every re-run after an interrupted one was a
+dead end; it now checks the head and says so instead.
+
+With both in place the whole thing is one command again, exit 0, no env var and
+no flags papering over anything:
+
+    deploy.py --area sculpt --blend vale.blend --install --launch --dat <copy>
 
 Run record: `vault/research/blender-2026-08-13/`.

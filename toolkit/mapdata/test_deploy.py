@@ -55,9 +55,9 @@ BIOME_ROW = 7982               # Pre-Searing
 BORROWED_MAX = 900             # generous ceiling; the real figure is 770
 PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 
-# FLOOR: 22, MEASURED from a green run 2026-08-13 (sections 0,1,3,4,5 score 18
+# FLOOR: 25, MEASURED from a green run 2026-08-13 (sections 0,1,3,4,5 score 21
 # and need no vault; section 2 reads the archive).
-LEDGER = checks.Ledger("test_deploy", floor=22)
+LEDGER = checks.Ledger("test_deploy", floor=25)
 check = checks.adopt(LEDGER)
 
 
@@ -122,6 +122,34 @@ def exe_derived_from_dat(source):
     return False
 
 
+def sets_rurik_dat(source):
+    """True iff main() assigns env["RURIK_DAT"] from `dat` AND hands env over.
+
+    Takes the SOURCE rather than reading the module, so section 3 can run it
+    against a sabotage and show the answer flips -- the same shape as
+    `exe_derived_from_dat`, and for the same reason: a structural check that has
+    only ever seen the passing case is a check nobody has watched fail.
+    """
+    fn = next(n for n in ast.walk(ast.parse(source))
+              if isinstance(n, ast.FunctionDef) and n.name == "main")
+    assigned = False
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1):
+            continue
+        t = node.targets[0]
+        if not (isinstance(t, ast.Subscript)
+                and isinstance(t.value, ast.Name) and t.value.id == "env"
+                and isinstance(t.slice, ast.Constant)
+                and t.slice.value == "RURIK_DAT"):
+            continue
+        assigned = any(isinstance(n, ast.Name) and n.id == "dat"
+                       for n in ast.walk(node.value))
+    handed = any(isinstance(n, ast.keyword) and n.arg == "env"
+                 and isinstance(n.value, ast.Name) and n.value.id == "env"
+                 for n in ast.walk(fn))
+    return assigned and handed
+
+
 def section3():
     print("\n3. the client is DERIVED from the archive, not defaulted")
     source = open(deploy.__file__, encoding="utf-8").read()
@@ -150,6 +178,25 @@ def section3():
                  for n in ast.walk(fn))
     check(called, "main() actually calls readback() -- a documented stage that "
                   "no line runs is a docstring, not a check")
+
+    # THE SERVER'S WORLD. After an install the archive we wrote and the server's
+    # default (vault/dat_study) disagree about the area's map id, and
+    # contentids.preflight refuses the launch -- correctly, since the server
+    # would path against ArenaNet's geometry while the client drew ours. The fix
+    # is to point the server at the same archive, which `--dat` already names.
+    check(sets_rurik_dat(source),
+          "main() sets RURIK_DAT from `dat` and hands the env to the harness -- "
+          "server and client read ONE world, so the archive-mismatch guard "
+          "passes because the situation is right, not because it was bypassed")
+    # NEGATIVE CONTROLS, one per half of that claim.
+    hardcoded = source.replace('env["RURIK_DAT"] = os.path.abspath(dat)',
+                               'env["RURIK_DAT"] = DEFAULT_DAT')
+    check(hardcoded != source and not sets_rurik_dat(hardcoded),
+          "and pointing the server somewhere OTHER than `dat` makes it go red")
+    dropped = source.replace("text=True, env=env", "text=True")
+    check(dropped != source and not sets_rurik_dat(dropped),
+          "and building the env without handing it over makes it go red -- "
+          "which is precisely the shape of a fix that does nothing")
 
 
 def section4():
