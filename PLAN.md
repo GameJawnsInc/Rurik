@@ -543,6 +543,29 @@ because the operator said what was on screen: the default hostile was killing th
 throughout, so sixteen `SILENT` rows meant "silent on a corpse". `record()` refuses such
 a run outright.
 
+**IN PROGRESS 2026-08-13 — reading the OTHER channel, the screen.** `SILENT` means *no
+c2s reply* and is blind to anything the client draws, so the 239 SILENT rows are unread
+rather than empty. `toolkit/authsrv/shotloop.py` re-sends each one to a FRESH client with
+screenshots through the hold, and `toolkit/authsrv/shotlabel.py` joins the send to the
+frames that bracket it and builds a local page (vault only — the frames are the retail
+client) where a person types the name. **One opcode per client launch**, owner's call: a
+window an earlier opcode opened is still on screen when the next lands, so it sits in the
+next opcode's own baseline. ~40 s each, ~2.5 h for the set; `score_run` refuses a
+multi-send run outright. Controls in `test_shotlabel.py` (33 checks).
+
+**And it found the defect that had been silently wrecking harness runs.**
+`session.Stack._pump` is the only reader of a server's stdout pipe. One gamesrv line
+carried U+FFFD — our own `string16` replacement character — the print raised
+`UnicodeEncodeError` against a cp1252 console, the pump thread died, the pipe filled, and
+the gamesrv **blocked forever on its next print**. The probe sent nothing. The run still
+reported **RUN VERDICT: PASS**, because the one send that kept working is the 20 Hz world
+tick — the only send in the server that does not print — so the capture filled with 649
+plausible events while three opcodes were recorded as run. `checks.py` had written this
+lesson down for tests in 2026-08-06 (`_say`, after `test_textrec` died the same way); the
+harness never got it, and it is the one place the failure blocks a SERVER rather than
+ending a script. Fixed, and `shotloop` now records an opcode only when the run's own
+capture holds its send.
+
 ### 3.2 R4b and R4c, rewritten as counts
 
 The old criteria could not be evaluated. R4b's was *"one skill from each mechanical
@@ -1688,7 +1711,13 @@ which is the defect `CLAUDE.md` already names from the other side.*
     leaves -- `Gw.log` does not record asserts, no dump file is written anywhere
     findable, and a ConnectionResetError appears on clean teardowns too.
 
-0n. **NAME THE SILENT OPCODES — 239 candidates, tooling done, needs only harness time.**
+0n. **NAME THE SILENT OPCODES — 239 candidates. RUNNING 2026-08-13, ~2.5 h of harness.**
+    `shotloop.py` (one opcode per fresh client, screenshots through the hold) +
+    `shotlabel.py` (joins the send to the frames, builds the local labelling page).
+    See §3.6. The text below is the manual procedure it replaced, kept because the
+    `--encstring` note and the four already-named opcodes still apply.
+
+0n-old. **The manual procedure.**
     [studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md) §3.4. The sweep's
     `SILENT` means *no c2s reply* and is BLIND to anything the client draws: four of four
     opcodes retested with a meaningful payload turned out to be opening windows and
@@ -1704,8 +1733,11 @@ which is the defect `CLAUDE.md` already names from the other side.*
 
     `--encstring` reads a real encoded string from the owner's own captures at plan time
     (`corpus_encstring`), so string-gated opcodes get past their format check; it never
-    writes ArenaNet's text into the repo. About 40 s per opcode unattended. **Deferred
-    2026-08-12 at the owner's request — the harness is wanted elsewhere.** Four are done:
+    writes ArenaNet's text into the repo. About 40 s per opcode unattended. Deferred
+    2026-08-12 at the owner's request, **and taken up 2026-08-13 — see 0n above, which
+    automates exactly this.** Note the corpus string is picked fresh at plan time and one
+    of them (U+3D64) is not encodable in cp1252, which is how the harness pump defect in
+    §3.6 was found. Four are done:
     `0x0033` is Message of the Day by the client's own title bar, `0x009E` is a chat line,
     `0x00B9` a framed world callout, `0x00C0` unframed floating world text.
 
