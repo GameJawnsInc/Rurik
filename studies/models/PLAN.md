@@ -88,7 +88,7 @@ Sessions are estimates, not commitments.
 
 | Rung | What | Criterion | Est. |
 |---|---|---|---|
-| **M1** | `toolkit/mapdata/modelfile.py` + `test_modelfile.py`: the KNOWN layout as committed code — chunk walk, sub-model walk, positions | Reproduce the radius identity from committed code at ≥ the study's 12,766/12,875, pinned as the test's oracle; report the closure census (~85%) and the per-format census for the two reference maps' 145+229 models | 1 session |
+| **M1** ✅ | `toolkit/mapdata/modelfile.py` + `test_modelfile.py`: the KNOWN layout as committed code — chunk walk, sub-model walk, positions | **DONE 2026-08-13, criterion met exactly**: the radius identity reproduces at 12,766/12,875 (`--all`, 165 s) and 474/474 + 664/664 on the reference maps, pinned as the test's floor-guarded oracle with the 3D rival as control; closure census 1,741/1/306 and thirteen format pairs, all pinned. The reference-map model census: Kamadan 86 used models (71 close), Pre-Searing 229 (152 close — a 33.6% no-close rate against the corpus ~15%, pinned per map). **New finding**: the corpus's single `dat_fvf 0x2C` sighting is the ambiguous file 0x1BAE2's chosen parse (its rival parse is format 21), so the rare format's existence AND §B6's GWMB-table disagreement both rest on an uncertain read — M2 must settle it from the client. | 1 session |
 | **M2** | The vertex-format table, client-corroborated: FVF dispatch read from the loader (via `clientscan/codescan.py`, whose capstone carve-out already covers it), field maps for position/normal/UV per format | The client's table agrees with the corpus-derived strides; every format used by the reference maps' models has a field map; the one known GWMB disagreement (`0x2C`) is settled by the client | 1–2 sessions |
 | **M3** | Mesh assembly to the interchange: a `.gwmodel` sidecar family in `vault/exports/` (positions + triangles first) | A decoded mesh's max 2D radius equals `f11/scale` per instance (M1's oracle, now per-mesh); decoded collision meshes vs retail outline rings (the e10d oracle) on outlined props | 1 session |
 | **M4** | Blender: real meshes replace proxies, instanced per file id, transform/scale/z-sign settled by rendering against terrain | Kamadan renders recognizably; prop mesh bottoms sit on terrain at the placement rate the proxies scored (0.7338/0.304 baselines); local z sign MEASURED, not assumed | 1 session |
@@ -162,3 +162,9 @@ user-visible result; M5 is the finish.
   census in M1 will say exactly how many of Kamadan's and Pre-Searing's
   models fall in the gap. If it is many, M6's preamble work is promoted; if
   few, proxies remain for those props and the count is printed.
+  **ANSWERED by M1 (2026-08-13), and it is more than the corpus average
+  suggested**: Kamadan 15 of 86 models (42 of 516 props keep proxies),
+  Pre-Searing 77 of 229 (200 of 864 props — 23%). The per-map rate varies
+  hard, so M6's preamble decode is worth more than the ~15% figure implied;
+  it stays unblocking, but it is promoted from "stretch" to "the first thing
+  to try after M4 renders".
