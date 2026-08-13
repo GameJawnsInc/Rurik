@@ -474,8 +474,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/mapdata/test_envchunk.py` (the Environment chunk `0x10000009`, the sky,
   fog, ambient light and horizon water -- the chunk rung (e10i) proved was the
   difference between a black void and a lit world, borrowed whole then and now
-  decoded. Re-encodes **349 of 349** byte-identically, 25 checks under `--all` and
-  20 by default. The codec keeps record interiors opaque (the loader itself stores
+  decoded. Re-encodes **349 of 349** byte-identically, 33 checks under `--all` and
+  25 by default. The codec keeps record interiors opaque (the loader itself stores
   tag0/1/3/5/6/8 records as raw {ptr,count} and decodes no colour and none of
   tag6's ten floats -- there is NO `1/101` constant in the image, so the authored-
   slider reading is authoring-time only), so byte-identity is the weak half and the
@@ -488,11 +488,26 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   by the disassembly and each is a thing a wrong reading gets wrong on some map: the
   header is 8 bytes not 5, the tag5-width `flag` is the header word at offset 6 not
   tag0's count (they disagree on 168/349), and tag8 is a real 17-byte section not
-  part of tag7's tail. The oracle comes from a chunk this codec never reads: every
-  dep-reference field (tag0@8, tag4, tag5's four slots, tag6@53/@55) is 0xFFFF or
-  below the length of the sibling `0x11000009` dep list -- **0 of 5,897 out of
-  bounds**, while the same fields read one byte early blow the bound 5,087 times.
-  Sections 0-2 need no vault and score 15 against a floor of 20),
+  part of tag7's tail -- and tag8 turned out to be the map's DEFAULT SELECTOR TUPLE
+  (eight u16, one per aspect array) plus the sun byte, which is what makes the
+  architecture close: a default and a zone are the same kind of object.
+  **A fourth correction is the one to learn from**: tag6, the 57-byte record, was
+  called "the main environment record" on the strength of its SIZE alone, and the
+  consumer disassembly says it is the WATER record -- `MapWater`'s parameter block,
+  whose `+0x05` is the water plane height (the one float the zone blender refuses
+  to interpolate) and whose `+0x00` is a 0..3 mode enum the loader validates with
+  `cmp eax,3; ja <abort>`. Inferring a name from a size is not a measurement.
+  Two oracles, each from a chunk this codec never reads: every dep-reference field
+  (tag0@8, tag4, tag5's four slots, tag6@53/@55) is 0xFFFF or below the length of
+  the sibling `0x11000009` dep list -- **0 of 5,897 out of bounds**, while the same
+  fields read one byte early blow the bound 5,087 times; and **tag8's sun byte
+  predicts the STRIPPED TERRAIN chunk's own `angle_index`** (the two quantise one
+  authored angle at a ratio of exactly 127/32) on **313 of 349** maps within a
+  quantum, with the neighbouring byte scaled identically scoring 0/349 as the
+  control. That second one is quoted as the tolerance figure on purpose: the
+  exact-match count is ROUNDING-DEPENDENT (`b=48` lands on exactly 190.5, and two
+  maps carry it), so the file states the tie rather than picking 307 or 308 quietly.
+  Sections 0-2 need no vault and score 15 against a floor of 25),
   `toolkit/mapdata/test_pathchunk.py` (the pathing chunk's WHOLE-CHUNK codec: a
   retail `0x20000008` decoded to typed values and re-encoded byte-identically,
   **349 of 349** under `--all`, 8 by default. Nothing declared is stored --

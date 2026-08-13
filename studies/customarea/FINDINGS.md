@@ -6201,18 +6201,23 @@ The 639-byte mystery is a spatial environment SYSTEM. Framing (loader
 Tags 0–7 are PARALLEL ARRAYS of environment aspects; **tag9 is a zone list**.
 A zone is a world-space circle `{u16 sel[8], i32 x, i32 y, u32 r_in, u32 r_out}`
 whose `sel[8]` names one record from each of the eight arrays, overriding the
-map default (array record 0) inside its blend band. The clincher, MEASURED: all
-73 maps with no zones have every aspect array at count exactly 1. "Several
-environments per map, blended" is SPATIAL, not day/night — day/night keyframes
-were NOT FOUND. Two arrays are fully typed: **tag2 is fog** —
-`{u8 r,g,b, u32 near, u32 far, i32, i32}`, `near < far` 1745/1745, Pre-Searing
-reading hazy-blue 6200/22500 over a bright map with one dark-fog corner —
-and tag12 is optional per-region boundary polygons. The other array interiors
-(tag0/1/3/5/6/8) are carried opaque, exactly as the loader itself carries them:
-it stores each as a raw `{ptr, count}` and decodes no colour and none of tag6's
-ten floats. The "authored 0–100 slider stored /101" reading is authoring-time
-only — **the float `1/101` occurs 0 times in the entire image** (f32 and f64),
-so the runtime reads raw f32.
+map default inside its blend band. The clincher, MEASURED: all 73 maps with no
+zones have every aspect array at count exactly 1. "Several environments per map,
+blended" is SPATIAL, not day/night — day/night keyframes were NOT FOUND. **tag2
+is fog** — `{u8 r,g,b, u32 near, u32 far, i32, i32}`, `near < far` 1745/1745,
+Pre-Searing reading hazy-blue 6200/22500 over a bright map with one dark-fog
+corner — and tag12 is optional per-region boundary polygons.
+
+**And `tag8` is the map's DEFAULT selector tuple**, which is what makes the
+architecture close: its 17 bytes are EIGHT u16 selectors, one per aspect array in
+tag order, plus one byte. So the default environment and a zone's environment are
+the same kind of object — a pick from each array — and a zone is that tuple plus
+a circle. The slot-to-array mapping is forced by the resolver at `0x0071F2F0`,
+which bounds each slot against its own array's count and indexes with that
+array's stride (`imul ecx, eax, 0x39` for tag6's 57 bytes, and so on), and by the
+corpus: all 20,936 zone slot reads are in bounds, while rotating the assignment
+by one puts 3,562 out and the full 8×8 discrimination matrix has a zero diagonal
+with 55 of 56 off-diagonal cells non-zero.
 
 ### The three corrections the client forced
 
@@ -6236,16 +6241,70 @@ and bound tag11's and tag12's indices against the tag9 zone array — so
 `envArray` is the zone list, not tag6, closing a question the corpus could only
 guess at.
 
-### A cross-chunk fact worth keeping
+### THE SUN IS WRITTEN TWICE, and the two copies agree
 
-Pre-Searing's tag8 global-env record is 16 zero bytes and one angle byte `26`,
-which the loader scales by `π/128` (`0x0071fbd8`) to **0.638 rad = 36.5°** —
-the SAME sun elevation rung (e10h) measured from the terrain chunk's
-`angle_index` 103. The sun angle lives in both chunks: terrain bakes the
-lightmap from it, env tag8 carries it for the runtime sky. Two independent
-subsystems agreeing on one number is the shape that made §51's lightmap reading
-trustworthy, seen again here from the environment side (INFERRED that tag8's
-angle IS the sun rather than a coincident value, but corroborated numerically).
+`tag8`'s seventeenth byte is the SUN ELEVATION, stored as a byte-turn: the
+loader multiplies it by the f64 at `0xA6EE50` = `float32(2π)/256`
+(`fmul` at `0x0071FBD8`). The Stripped TERRAIN chunk's tag-0 `angle_index`
+encodes the same authored angle under its own scaling
+(`b × 282.74334716796875/45720`), and the ratio between the two quantisations is
+exactly `127/32`. So one chunk predicts the other, and it does:
+
+- **313 of 349 maps agree within one terrain quantum** (0.354°), median residual
+  +0.011°; 308 agree EXACTLY under `floor(b₈ × 3.96875 + 0.5) == angle_index`.
+  The tolerance figure is the one to quote because the exact one is
+  **rounding-dependent**: `b₈ = 48` lands on exactly 190.5, two maps carry it,
+  and banker's rounding scores 307 where round-half-up scores 308 — one of those
+  two maps really does store 191. A number that moves with your rounding mode is
+  not the number to put in a headline.
+- Controls all collapse: the same byte read at +0x0E or +0x0F → 0/349; every
+  other one of tag8's 17 bytes → 0/349 each; the NEIGHBOURING byte scaled
+  identically → 0/349 (this one is in the test); shuffled map pairing → 42/349;
+  rival scalings `π/256` and `π/64` → 0/349.
+- **The 34 disagreements are not scattered**: 28 carry terrain byte 127 —
+  exactly 45.00°, the modal default — against an authored env angle, i.e. the
+  terrain copy was left unset. That is a story about ArenaNet's tools, not a
+  failure of the reading.
+
+Two independent subsystems, written by different code, storing one physical
+quantity — the shape that made §51's lightmap reading trustworthy, now measured
+from the environment side. Terrain bakes the lightmap from its copy; the env
+copy drives the runtime sky. This also explains a thing (e10h) could not: our
+authored maps moved the terrain byte and left the env chunk borrowed, so the
+baked lightmap and the runtime sky disagreed about where the sun was.
+
+### tag6 is the WATER record — a correction worth stating loudly
+
+An earlier draft of this section called tag6 "the main environment record",
+which was inferred from nothing but its size (57 bytes, the largest). The
+consumer disassembly refutes it: the selected tag6 record reaches `MapWater`'s
+parameter setter as one struct, and its floats are a water shader's. `+0x05` is
+the water plane's base height — **the one float the zone blender refuses to
+interpolate**, copied from the dominant zone instead (`fld [ecx+0x98]` at
+`0x00717B01`) — `+0x09` is a wave amplitude scaling a five-sine surface sum, and
+two `(tiling-scale, scroll-speed)` pairs drive texture matrices through
+`GrTrans`. `+0x00` is a mode enum the loader VALIDATES rather than tolerates:
+`cmp eax, 3; ja <abort>` at `0x0071F6F3` into a four-arm jump table, so a value
+above 3 aborts the entire import. `+0x02..+0x04` are padding, zero in 865 of 865
+records. The two u32s are D3DCOLOR `0xAARRGGBB`.
+
+This is why the owner's (e10i) observation — "**the ocean looks much better
+now**" — was literally true and not a side effect of the sky: the environment
+chunk carries the water parameters, and our maps had none until that rung.
+
+### What the audit caught, and why the pass is worth trusting
+
+Fifteen namings went to independent skeptics that re-disassembled the cited VA
+*and* re-ran the corpus claim. **Three came back REFUTED, and all three in the
+same way**: the offsets and mechanics reproduced exactly, and the NAME
+overreached its evidence. tag6's `+0x00` really is a validated 0..3 enum with a
+real four-arm jump table, but "water technique" rested on a downstream citation
+the disassembly did not support; tag5's `+0x05` really does map to zone+0x7c,
+but "layer texture slot 2" claimed more than the code showed; tag1's three bytes
+really are each normalised `/256`, but "an RGB triple" is ruled against by the
+corpus, which carries typed colour triples with a different profile. Those are
+recorded as structure-without-a-name rather than quietly promoted, which is the
+difference between this pass and a plausible story.
 
 ### What this buys, and what it does not
 

@@ -34,6 +34,7 @@ floor turns that into the FAIL it is.
 """
 
 import argparse
+import math
 import os
 import struct
 import sys
@@ -45,9 +46,11 @@ from archive import Archive  # noqa: E402
 from mapchunks import MapIndex, decode_dependencies  # noqa: E402
 import mapfile as mfile  # noqa: E402
 import envchunk as env  # noqa: E402
+import strippedterrain as stx  # noqa: E402
 from envchunk import (EnvChunk, Section, Undecodable,  # noqa: E402
                       SIGNATURE, VERSION, TERMINATOR, ORDER, GLOBAL_SIZE,
-                      TAG_GLOBAL, TAG_FOG, TAG_ZONES, TAG_POLYGONS, TAG_MAIN)
+                      TAG_GLOBAL, TAG_FOG, TAG_ZONES, TAG_POLYGONS, TAG_WATER,
+                      SELECTOR_TAGS, SUN_TURN)
 import checks  # noqa: E402
 import vaultpath  # noqa: E402
 
@@ -65,6 +68,25 @@ CORPUS_ZONES = 2617
 CORPUS_FOG = 1745
 CORPUS_DEP_REFS = 5897         # dep-reference fields, 0 out of bounds
 CORPUS_SHIFT_VIOL = 5087       # same fields read one byte early: violations
+# The sun oracle. NEAR is the claim to quote: it is ROUNDING-INDEPENDENT, and
+# EXACT is not. `b = 48` maps to exactly 190.5, and two maps carry it -- Python's
+# banker's rounding sends that to 190 and round-half-up to 191, and one of the two
+# maps really does store 191. So the exact count is 307 under `round()` and 308
+# under `floor(x+0.5)`, which is why the test uses the latter (what a C-era
+# `(int)(x + 0.5)` does) and states the tie rather than picking a number quietly.
+CORPUS_SUN_EXACT = 308         # maps where tag8's sun byte predicts terrain's
+CORPUS_SUN_NEAR = 313          # ... within one terrain quantum (0.354 deg)
+CORPUS_ZONE_SLOTS = 20936      # zone selector reads, 0 out of bounds
+
+# The Stripped terrain chunk's angle_index sits at a fixed offset: the 5-byte
+# header, the tag-0 byte, then 4 into tag 0's body. Computed from the terrain
+# module's own constants rather than written as 10, so a header change there
+# breaks this loudly instead of silently reading the wrong byte.
+TERRAIN_CHUNK = 0x10000002
+TERRAIN_ANGLE_OFF = stx.HEADER.size + 1 + 4
+# (2*pi/256) / (282.74334716796875/45720) -- the ratio between the two chunks'
+# quantisations of the same authored angle. Exactly 127/32.
+SUN_RATIO = 127.0 / 32.0
 
 # The dep-reference fields, as (tag, (offsets,)). ALIGNED is the codec's reading;
 # SHIFT reads each one byte earlier and must break the bound. tag0@8, tag4@0,
@@ -72,12 +94,12 @@ CORPUS_SHIFT_VIOL = 5087       # same fields read one byte early: violations
 ALIGNED_REFS = ((0, (8,)), (4, (0,)), (5, (1, 3, 5, 7)), (6, (53, 55)))
 SHIFT_REFS = ((0, (7,)), (4, (0,)), (5, (0, 2, 4, 6)), (6, (52, 54)))
 
-# FLOOR: 20, MEASURED from a green default run 2026-08-13 (which executes 20; a
-# --all run executes 25, adding five corpus-total checks). Sections 0-2 score 15
+# FLOOR: 25, MEASURED from a green default run 2026-08-13 (which executes 25; a
+# --all run executes 33, adding eight corpus-total checks). Sections 0-2 score 15
 # and need no vault, so a vault-less run stops at 15 and the floor turns that into
 # the FAIL it is. The floor equals what a sampled run produces, which is its
 # mandatory core.
-LEDGER = checks.Ledger("test_envchunk", floor=20)
+LEDGER = checks.Ledger("test_envchunk", floor=25)
 check = checks.adopt(LEDGER)
 
 
@@ -236,12 +258,21 @@ def section2():
 
 
 def read_corpus(ar, mi, picks):
+    """Each map ONCE: the env payload, its dep count, and the terrain angle byte.
+
+    The terrain byte is read raw rather than decoded -- `StrippedTerrain.decode`
+    would huffman-decode the whole height field for one byte, turning a 30 s
+    sweep into a 20 minute one, and section 5 only needs the byte.
+    """
     out = []
     for head in picks:
         m = mfile.MapFile.decode(ar.read(mi.partner(head)), strict=False)
         d = m.find(ENV_DEPS_CHUNK)
         ndeps = len(list(decode_dependencies(d.payload()).file_ids)) if d else 0
-        out.append((mi.partner(head).index, m.find(ENV_CHUNK).payload(), ndeps))
+        t = m.find(TERRAIN_CHUNK)
+        angle = t.payload()[TERRAIN_ANGLE_OFF] if t else None
+        out.append((mi.partner(head).index, m.find(ENV_CHUNK).payload(),
+                    ndeps, angle))
     return out
 
 
@@ -264,7 +295,7 @@ def section3(corpus):
     flag1 = fog = zones = tag12 = 0
     versions = set()
     global_ok = True
-    for _row, blob, _n in corpus:
+    for _row, blob, _n, _a in corpus:
         ec = EnvChunk.decode(blob)
         if ec.encode() == blob:
             same += 1
@@ -301,7 +332,7 @@ def section3(corpus):
 def section4(corpus, complete):
     print("\n-- 4. cross-chunk oracle: dep references bounded by 0x11000009 --")
     tot = viol = s_tot = s_viol = 0
-    for _row, blob, ndeps in corpus:
+    for _row, blob, ndeps, _a in corpus:
         ec = EnvChunk.decode(blob)
         for v in refs(ec, ALIGNED_REFS):
             tot += 1
@@ -325,6 +356,79 @@ def section4(corpus, complete):
               f"corpus dep-reference total == {CORPUS_DEP_REFS}", f"{tot}")
         check(s_viol == CORPUS_SHIFT_VIOL,
               f"shifted-read violations == {CORPUS_SHIFT_VIOL}", f"{s_viol}")
+
+
+def section5(corpus, complete):
+    """The selector tuples resolve, and the sun byte predicts the OTHER chunk."""
+    print("\n-- 5. selector tuples, and the sun byte vs the terrain chunk --")
+    slots = bad_slots = 0
+    rot_bad = 0
+    for _row, blob, _n, _a in corpus:
+        ec = EnvChunk.decode(blob)
+        counts = [len(ec.section(t).records) if ec.section(t) else 0
+                  for t in SELECTOR_TAGS]
+        tuples = [ec.default_selectors()] + [z[0] for z in ec.zones()]
+        for sel in tuples:
+            for i, v in enumerate(sel):
+                slots += 1
+                if v >= counts[i]:
+                    bad_slots += 1
+                # control: the slot-to-array assignment rotated by one
+                if v >= counts[(i + 1) % len(counts)]:
+                    rot_bad += 1
+    check(bad_slots == 0,
+          f"{slots} selector reads (tag8 + every zone), 0 index past their array",
+          f"{bad_slots} out of bounds")
+    check(rot_bad > bad_slots,
+          "rotating the slot-to-array assignment by one puts selectors out of "
+          "bounds -- the mapping is measured, not chosen",
+          f"rotated {rot_bad} vs aligned {bad_slots}")
+
+    # every map's default tuple must resolve to a full environment
+    resolved = 0
+    for _row, blob, _n, _a in corpus:
+        ec = EnvChunk.decode(blob)
+        got = ec.resolve(ec.default_selectors())
+        if len(got) == len(SELECTOR_TAGS):
+            resolved += 1
+    check(resolved == len(corpus),
+          f"{resolved} of {len(corpus)} default tuples resolve to all "
+          f"{len(SELECTOR_TAGS)} aspects")
+
+    # THE ORACLE: tag8's sun byte predicts the terrain chunk's own angle index
+    exact = near = have = shifted = 0
+    for _row, blob, _n, angle in corpus:
+        if angle is None:
+            continue
+        have += 1
+        g = EnvChunk.decode(blob).global_env()
+        pred = math.floor(g[16] * SUN_RATIO + 0.5)      # round half UP; see above
+        if pred == angle:
+            exact += 1
+        if abs(pred - angle) <= 1:
+            near += 1
+        # control: the byte beside the sun byte, scaled the same way
+        if abs(math.floor(g[15] * SUN_RATIO + 0.5) - angle) <= 1:
+            shifted += 1
+    if have == 0:
+        LEDGER.skip("sun-angle oracle", "no terrain chunks in this sample")
+        return
+    check(near > have * 0.8,
+          f"tag8's sun byte predicts the TERRAIN chunk's angle_index to within "
+          f"one quantum on {near} of {have} maps -- two chunks, one authored "
+          f"angle", f"exact: {exact}")
+    check(shifted < near // 4,
+          "the neighbouring byte scaled identically predicts almost nothing "
+          "-- it is this byte, not any byte", f"neighbour {shifted} vs sun {near}")
+    if complete:
+        check(exact == CORPUS_SUN_EXACT,
+              f"corpus exact agreement == {CORPUS_SUN_EXACT}", f"{exact}")
+        check(near == CORPUS_SUN_NEAR,
+              f"corpus within-one-quantum agreement == {CORPUS_SUN_NEAR}",
+              f"{near}")
+        check(slots == CORPUS_ZONE_SLOTS + CORPUS_MAPS * len(SELECTOR_TAGS),
+              "selector-read total matches the measured zone population",
+              f"{slots}")
 
 
 def main(argv=None):
@@ -351,6 +455,7 @@ def main(argv=None):
         corpus = read_corpus(ar, mi, picks)
     complete = section3(corpus)
     section4(corpus, complete)
+    section5(corpus, complete)
     return LEDGER.verdict()
 
 
