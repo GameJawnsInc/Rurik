@@ -6067,3 +6067,24 @@ correct-by-retail values), so the claim rests on the SPATIAL pattern, which
 only tag 2 can produce. Still NOT FOUND: what table_a's staircase grouping
 means, and what table_b's 7 bits classify. Not tried: dependency ids from a
 DIFFERENT biome (the four textures here are the template's own set).
+
+## 50. OBSERVED: another biome's ground — rung (e10g), Pre-Searing grass on Ascalon geometry (2026-08-12)
+
+One variable past §49: WHICH FILES. GRASS.bin is (e10f)'s map byte-for-byte
+in heights, trees, paint and staircase; the four dependency ids were swapped
+to Pre-Searing's four most-used ground textures — ranked by its OWN tile
+census at run time, slots [12, 19, 15, 18] of its 59 → files
+[112780, 112787, 112786, 112784] — with table_b following its files
+([17, 17, 23, 17] from Pre-Searing's own pairing), because §49's reading
+says table_b is the texture's property and must travel with it.
+
+One run, readback all HIT (deps carried, tiles VERBATIM, oracle 442,
+corresponds clean, heights 1,024/1,024), **and the owner walked it: Pre-
+Searing ground on Ascalon-template geometry.** Texture files are ordinary
+archive files selected per-slot by the dependency list; nothing ties a map
+to its biome's set. With §49 this closes the texturing mechanism at the
+level an authoring tool needs: the tile byte selects the slot, the slot
+names the file, both under our control, both compiling and rendering. Run
+record: `vault/research/e10g-grass-2026-08-12/`.
+
+Still NOT FOUND, unchanged: table_a's grouping semantics, table_b's 7 bits.
