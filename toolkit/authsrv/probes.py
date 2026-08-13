@@ -2383,13 +2383,15 @@ PROBES = {
                  "profession CHANGE (run 2A sent 3, a change from the "
                  "burst's 1), which the next probe would isolate.",
         steps=_profession_trigger_steps(a),
-        note="THE PROFESSION ARC IS NOT THE SUBJECT HERE. Run 4's "
-             "discriminators killed the bar-mismatch story and exposed that "
-             "the PURE DEFAULT world cannot open the skills panel -- so this "
-             "probe is about our server's missing message, not about custom "
-             "ids. profession_ab arm A is the n=1 that opened; this replays "
-             "it with the one change that removes the change. RUNS.md "
-             "section 9.",
+        note="RAN 2026-08-12 AND CRASHED -- same *skill assert with both "
+             "sends landed, so the arrival-trigger story is REFUTED (RUNS.md "
+             "section 9, T1). Third dead prediction of the evening; the next "
+             "rung is the STATIC DIVE of the panel's open path, and no "
+             "client run until it is done. The disassembly so far: the "
+             "setter 0x007F7330 notifies unconditionally, and the 1022 "
+             "assert sits inside a find-next-set-bit bitmap walk. Original "
+             "design: profession_ab arm A is the n=1 that opened; this "
+             "replayed it with the one change that removes the change.",
     ),
     "profession_sentinel": lambda a, o: Probe(
         question="Is profession 11 handled specially, being the client's own "
