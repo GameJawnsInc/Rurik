@@ -2291,6 +2291,13 @@ parallel, with one safety change that is not optional — see its entry.
     **1,024/1,024** through the BLOATED codec, oracle 442 exact, `corresponds()`
     clean, radii retail-exact ×5, and 12 of 12 mesh probes — five carved tree
     rings, walkable plaza and hill. Header (8 B) and Zones (34 B) remain the two
-    borrowed constants. Still open: textures/sound/environment/light, and which of
-    FINDINGS 34's two threshold sets is in force (the ~22° flank compiled walkable,
-    consistent with both).
+    borrowed constants. Still open: textures/sound/environment/light.
+    **(e10e)** ✅ **DONE 2026-08-12 (FINDINGS 48). THE THRESHOLD SET IS MEASURED:
+    15/35/30, walkable boundary 35.** The ramp map — five strips bracketing every
+    candidate cutoff — compiled its 32.0° strip walkable and its 36.1° strip not,
+    so the cut sits in (32.0°, 36.1°) and only 35 is inside; every number of
+    10/45/40 is excluded. Free second result: walkable area is CONNECTIVITY-PRUNED
+    from the flood seed — a flat plateau above a too-steep ramp is absent from the
+    mesh, 5 of 5. `stripbuild`'s 30° seed refusal stays as a measured 5° margin.
+    Unread still: the roles of 15 and 30, and whether the mode flag ever selects
+    the other set.
