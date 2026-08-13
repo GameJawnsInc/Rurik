@@ -205,15 +205,30 @@ def file_id_table(archive):
     under both its raw and its masked form, plain ids first so that a real id can
     never be shadowed by another entry's masked one.
 
-    Why the bit is set is NOT ESTABLISHED. We have not read the client's own
-    lookup path in the binary.
+    WHY THE BIT IS SET -- ANSWERED 2026-08-13, by reading the client's own
+    lookup path. **It is a RENAME, not a spelling.** `FcArchive` binds
+    `id | 0x80000000` to the row and deletes the plain name when it has requested
+    a replacement (Gw.exe 0x007D7B70, twelve instructions); `DnArchive` re-links
+    the plain id once the replacement is installed (0x004766F0). So a bit-31 id
+    means "this row's replacement is pending", and the plain id genuinely stops
+    resolving until it lands. The count moves with play: 25 in `dat_study`, 29 in
+    the owner's live install, **9** in `vault/run-live/`, the copy a live client
+    actually played from -- where `0x1B97D` binds PLAINLY, to a different row.
 
-    But "the client masks it" is now FALSIFIED for build 38797, measured by
-    handing the client each form: 0x1B97D is refused with `Map file '0x01b97d'
-    failed to load` and then an assert, while 0x8001B97D loads Ascalon City
-    Pre-Searing. Masking is right HERE, for finding the row; it is wrong on the
-    wire. A server must send the id exactly as the archive stores it. See
-    studies/mapdata/FORMAT.md.
+    **THE CLIENT DOES NOT MASK.** The index it builds from this table stores the
+    id verbatim (0x0047C027) and the lookup is an exact 32-bit compare
+    (0x0047AA20), with no retry on the map path. So the dual registration below
+    is OUR convenience for finding a row, and it is NOT a model of the client:
+    it will answer `0x1B97D` where the client would miss. That difference is not
+    hypothetical -- it put a wrong MFT row into a study draft, because the id was
+    resolved here against an archive the client was never reading.
+
+    "The client masks it" was FALSIFIED for build 38797 by handing the client each
+    form, and the falsification stands; the RULE drawn from it did not. A server
+    should send the **plain logical id** and serve from an archive that binds it.
+    `0x8001B97D` works against `dat_study` only because that copy has the map
+    renamed away. **A file id recorded anywhere is archive STATE, not a property
+    of the map.** See studies/maprows/FINDINGS.md §8 and studies/mapdata/FORMAT.md.
     """
     blob = archive.read(archive.entries[1])
     out = {}

@@ -237,12 +237,31 @@ So **a server must send the bit-31 id exactly as the archive stores it.** Maskin
 remains correct for *our* lookup — it is how we find the row — but it is wrong on
 the wire, and those two had been conflated.
 
-Two things this does not settle. It does not explain *why* the bit is set;
-reading `Gw.exe`'s file-open path is still the way to that. And it does not make
-gw-preservation wrong on their own terms — they pin `clientVersion` 37600, a
-pre-Reforged build, so their masked id may well be right there and simply not
-here. What is now certain is that their value cannot be copied onto this build
-unchanged.
+> **REVISED 2026-08-13 — the experiment above is right and the rule drawn from it
+> is not.** The client's file-open path has now been read
+> ([studies/maprows/FINDINGS.md](../maprows/FINDINGS.md) §8) and it never masks:
+> the index stores the id verbatim and the lookup is an exact 32-bit compare.
+> **Bit 31 is a RENAME.** `FcArchive` binds `id | 0x80000000` and deletes the
+> plain name when a replacement has been requested; `DnArchive` re-links the plain
+> id once it is installed. So the table above is not a fact about the wire — it is
+> a fact about **this copy of the archive**, which has that map's replacement
+> pending. Measured the same day: the archive the live client actually played from
+> (`vault/run-live/`) binds the **plain** `0x1B97D`, to a different row (177262),
+> and carries 9 bit-31 ids where this copy carries 25. ArenaNet's own server sends
+> the plain id, 9 of 9 captured instance loads.
+>
+> The rule is therefore **send the plain logical id and serve from an archive that
+> binds it** — and a `file_id` recorded anywhere is archive STATE, not a property
+> of the map. The "Attempting to re-bloat" line above is the local miss path at
+> `0x00707845` retrying **the same id** with a different bloat flag; no file
+> server is involved, so it is not evidence of masking either way.
+
+Two things this does not settle. ~~It does not explain *why* the bit is set;
+reading `Gw.exe`'s file-open path is still the way to that.~~ **Answered — see the
+revision above.** And it does not make gw-preservation wrong on their own terms —
+they pin `clientVersion` 37600, a pre-Reforged build, so their masked id may well
+be right there and simply not here. What is now certain is that their value cannot
+be copied onto this build unchanged.
 
 `studies/datwrite/FINDINGS.md` lists a "~29-entry bit-31 file-id watchlist" as an
 open question; this is that watchlist, and it is 25 entries on this copy. The
@@ -572,7 +591,7 @@ upstream being trustworthy — it was checked, and the check is what counts.
 | ~~Which map file is Ascalon City Pre-Searing?~~ | **Answered 2026-08-06: row 7982, file id `0x1B97D`, stored with bit 31 set.** |
 | ~~Which of a map's two file numbers does a server send?~~ | **Answered 2026-08-06: the smaller one, 397 for 397.** |
 | ~~What is the u32 at entry+0x14?~~ | **Answered elsewhere and this table was stale.** `studies/datwrite/FINDINGS.md` establishes it as CRC-32/ISO-HDLC over the stored bytes, and `toolkit/mapdata/test_datcrc.py` checks it against real bytes. Same for the header field at 0x0C. |
-| Why is bit 31 set on 25 of the 171,023 file ids? | Read the client's file-open path in `Gw.exe`. Still open. **"The client does not mask" is now CONTESTED** — ArenaNet's own live server sent the MASKED `0x1B97D` in 9 of 9 captured instance loads and the retail client loaded Pre-Searing from it, while `0x8001B97D` is the stored form in both our archive and the owner's live install. See [studies/maprows/FINDINGS.md](../maprows/FINDINGS.md) §8, which also corrects the count: **four** bit-31 ids land on map rows (two rows × a head/partner pair), not two, and the count is 29 in the live install against 25 here. |
+| ~~Why is bit 31 set on 25 of the 171,023 file ids?~~ | **ANSWERED 2026-08-13 by reading the client. It is a RENAME.** `FcArchive` binds `id \| 0x80000000` to the row and deletes the plain name when it has requested a replacement (`0x007D7B70`, twelve instructions); `DnArchive` re-links the plain id when the replacement is installed (`0x004766F0`). So a bit-31 id means "this row's replacement is pending", the plain id genuinely stops resolving meanwhile, and the count moves with play — 25 here, 29 in the live install, **9** in the copy the live client actually read. The client does **not** mask: the index stores the id verbatim (`0x0047C027`) and the lookup is an exact 32-bit compare (`0x0047AA20`). [studies/maprows/FINDINGS.md](../maprows/FINDINGS.md) §8. Also: **four** bit-31 ids land on map rows (two rows × a head/partner pair), not two. |
 | What are the other 100 map-flagged rows? | **Partly answered 2026-08-13, and by a route this table did not list.** The area table carries each map's FOOTPRINT on its continent at `+0x48`/`+0x58`, in terrain cells, and its size equals the map file's own dims at the 96.0 pitch — 319 of 319, with a one-cell shift scoring 0. That names 53 rows outright (20 to a single name, 5 of them named by no upstream) and gives every row a candidate set. `toolkit/clientscan/maprows.py`, [studies/maprows/FINDINGS.md](../maprows/FINDINGS.md). The remaining ambiguity is information-theoretic: the archive carries a map's dims and nothing that places it on a continent. |
 | Are the 101 shared file ids real, or upstream copy-paste? | Geometry. If two named zones share a file, both their spawns should land in it, as Pre Ascalon City's and Ashford Abbey's do. |
 | Is our decompressor exactly right? | Diff against `xentax.cpp` output on the same input. Needs a C compiler. Separately, it fails on 12 of 1,089 text files with a huffman table hole — that is a live defect and the cheaper thread to pull. |
