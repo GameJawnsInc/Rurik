@@ -570,10 +570,35 @@ UNLOCKED = unlock_all_words()
 UNLOCK_LABEL = "all"
 
 
+def refuse_skill_zero(words, spec):
+    """Bit 0 set means the client asserts the moment the Skills panel opens.
+
+    A HARD REFUSAL AT STARTUP, because the alternative is a crash twelve
+    seconds into a client session that costs a launch, a login and a map load
+    to observe -- and it has already cost seven of them (RUNS.md §10). The
+    client's panel enumerates this bitmap with a find-next-set-bit iterator,
+    forms `id = (word << 5) + bit`, and asserts the id NON-ZERO at
+    ChCliSkill.cpp:1022. Skill id 0 is not a skill, so bit 0 is never
+    legitimate on this wire.
+
+    It refuses rather than silently clearing the bit: a server that quietly
+    repaired its own payload would hide a regression in whatever produced it,
+    and the point is to make the next one impossible to ship unnoticed.
+    """
+    if words and words[0] & 1:
+        raise SystemExit(
+            f"--unlocks {spec!r} produced a bitmap with BIT 0 SET (skill id 0). "
+            f"Refusing to send it: the client's Skills panel enumerates this "
+            f"bitmap and asserts `*skill` at ChCliSkill.cpp:1022 on a zero id, "
+            f"so the session would die the moment the panel opens. Skill ids "
+            f"start at 1. See studies/profession/RUNS.md §10.")
+    return words
+
+
 def build_unlock_bitmap(spec):
     """--unlocks: 'all', 'none', 'bar', or an explicit comma-separated id list."""
     if spec == "all":
-        return (unlock_all_words(),
+        return (refuse_skill_zero(unlock_all_words(), spec),
                 f"all ({SKILL_TABLE_ROWS - 1} real skills, ids 1..{SKILL_TABLE_ROWS - 1})")
     words = [0] * UNLOCK_WORDS
     if spec == "none":
@@ -593,7 +618,7 @@ def build_unlock_bitmap(spec):
                 f"({SKILL_TABLE_ROWS} rows). Unlocking it asserts in the "
                 f"client's ChCliSkill.cpp the moment the Skills panel opens.")
         words[w] |= 1 << b
-    return words, ",".join(str(i) for i in ids)
+    return refuse_skill_zero(words, spec), ",".join(str(i) for i in ids)
 
 # Eight real Warrior skills (profession byte 1 at row+0x28), read from this
 # build's own table, each with both icon file ids present and name/description
@@ -5083,6 +5108,15 @@ def main():
         raise SystemExit("key file has no server_private — cannot decrypt.")
     print(f"build tag: {keys.get('build_tag', '?')}   generator {keys['generator']}, "
           f"prime {keys['prime'].bit_length()} bits")
+    # WHICH TREE IS SERVING THIS RUN. The harness spawns authsrv.py from its OWN
+    # directory (session.py's TOOLKIT is derived from __file__), so launching a
+    # different worktree's session.py silently runs THAT worktree's server. On
+    # 2026-08-13 a run reported as testing a fix was served by a parallel
+    # session's tree carrying the pre-fix code, and the only tell was a count in
+    # this banner. Trees are not copies of each other -- CLAUDE.md opens on that
+    # -- so the server now names the one it came from, in the log the diagnosis
+    # actually reads.
+    print(f"source:    {os.path.dirname(os.path.abspath(__file__))}")
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # Do NOT set SO_REUSEADDR here. On Windows it does not mean what it means on

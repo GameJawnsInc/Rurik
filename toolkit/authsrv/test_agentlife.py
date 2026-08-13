@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=169)
+LEDGER = checks.Ledger("agent lifetime", floor=172)
 
 
 def main():
@@ -1373,6 +1373,37 @@ def section_unlock_bitmap():
               "sees the real count",
               f"{label!r} -- it said 3443 while sending a bit that is not a "
               f"skill")
+
+    # THE STARTUP REFUSAL. A regression here costs a launch, a login and a map
+    # load to observe, so it must die before the socket opens -- and it must
+    # die rather than silently repair, or the next bad producer ships unseen.
+    refused = None
+    try:
+        authsrv.refuse_skill_zero(old, "all")
+    except SystemExit as ex:
+        refused = str(ex)
+    LEDGER.ok(refused is not None and "1022" in refused,
+              "a bitmap with bit 0 set is REFUSED at startup, naming the "
+              "client assert it would cause",
+              f"{refused!r} -- without this the failure surfaces as a client "
+              f"crash twelve seconds into a session, which is how it survived "
+              f"seven of them")
+    # POSITIVE CONTROL: a guard that refuses everything protects nothing,
+    # because the server never starts.
+    passed = authsrv.refuse_skill_zero(list(words), "all")
+    empty = authsrv.refuse_skill_zero([0] * authsrv.UNLOCK_WORDS, "none")
+    LEDGER.ok(passed == words and empty[0] == 0,
+              "while the real bitmap and an empty one pass untouched",
+              "the guard must not clear the bit or reject legitimate input -- "
+              "it reports, it does not repair")
+    both_arms = 0
+    for spec in ("all", "bar", "none", "316,317"):
+        w, _ = authsrv.build_unlock_bitmap(spec)
+        both_arms += 0 if (w[0] & 1) else 1
+    LEDGER.ok(both_arms == 4,
+              "and every --unlocks arm routes through the guard clean",
+              f"{both_arms}/4 -- 'all' and the explicit arm are separate code "
+              f"paths and only one of them was ever wrong")
 
 
 def section_spawn_profession():
