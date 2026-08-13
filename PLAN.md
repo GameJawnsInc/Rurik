@@ -1324,43 +1324,38 @@ was the 2,109 non-player rows with no skill icon. **`--unlocks` now defaults to
 refuses with an actionable message (naming `--unlocks bar`) rather than falling back to
 the broken set when there is no client to read. Default pinned on the syntax tree.
 
-**ANSWERED 2026-08-13 (`RUNS.md` §12).** Profession **12** on `0x00A6` in a working
-panel: the client survived the whole session (104 c2s, +68.02 s, `missed 0`). Both
-prediction halves held — the panel OPENS at a custom primary, and the drop-down does not
-read 12 (it reads *Warrior*, what the burst's `0x00B7` wrote, because `0x00A6` never
-touches the panel's record). `0x00B7(12)` was re-measured lethal on arrival, +3.39 s.
+**THE ROUTE IS DECIDED: R-RESKIN** (`studies/profession/RESKIN.md`, 2026-08-13, nine
+agents; two of three verifiers refuted parts and both refutations changed the plan).
+**Repurpose a shipped profession id rather than adding a twelfth.** The id stays legal, so
+not one bound check, assert or `0..10` loop can fire — and on every axis that makes a class
+playable a reskin delivers what a 12th id would. **Five dwords, 20 bytes, zero code bytes**
+against ~60 sites for R-WIDEN. Three measurements decide it: `.rdata` has **zero slack**
+(every table is packed flush against the next live datum, so widening is always
+relocate-plus-repoint); **seven per-profession tables are CODE**, materialised as
+`mov imm32` ladders in a 240-byte stack frame with 36 callers; and a **bound-check-free**
+read of a fifth table at `0x00BEF4A4` that every census in this arc missed because they all
+keyed on `cmp reg, 0x0b`. **R-NEUTER should stop being listed as a route** — it is the
+global assert wrapper, and the fall-through reads are disqualifying (model scale collapses
+to ~0, chapter becomes 1.1 billion, the creation icon comes from an uninitialised stack
+slot).
 
-**THE SECONDARY-UNLOCK MESSAGE IS FOUND: `GAME_SMSG 0x00B6` (`RUNS.md` §13).** The
-client's own `OnProfessionSecondaryBits(agent, secondaryBits)` — SOURCED from the format
-string at `0xA95A70`, which names the message and both fields. `u32 agent_id, u32 mask`,
-10 bytes; `schema/messages.json` entry 182 already had the shape. Handler `0x0091F090` →
-`0x00813AC0` → `0x0081FD00` stores the mask at field `+0xC` of the per-agent record at
-`ctx[0x2c]+0x6BC`; the drop-down builder tests it `shl 1,cl / test edx,eax` over ids
-0..10, so **the bit index is the profession id**, attested at three independent read
-sites. Shipped: `--secondary-bits all|<ids>|<mask>` and `--probe profession_secondary`.
+**Honest scope, stated because this arc has over-promised twice:** you get a playable class
+with its own name, campaign availability, attribute set and primary, skill roster, model
+scale, palettes, starter gear and borrowed armour — whose **skills keep their shipped names
+and icons** (identity text is 1 archive file; its skills' names are 19–22), wearing the
+host's in-game glyph. You lose a slot, not a capability.
 
-**Two silent failure modes, both guarded.** `0x00B6` before that agent's first `0x00B7`
-is DROPPED (the handler logs and returns without storing), so the burst's order is pinned
-on the syntax tree; and the reader's loop is `cmp edi, 0xb`, so `secondary_bits()`
-refuses ids 0/11/12/255. **That closes the custom-secondary route from the writing side
-too: `0x00B6` physically cannot offer a custom id.**
+**Next: RUN 0, the control, on a PRISTINE exe.** Prove the character renders as a Ritualist
+everywhere before changing a byte — the experiment as first designed was untestable,
+because two of its five dwords are read only from the character-creation picker and our
+server has no creation flow (`studies/divergence` D10). Built for it: `--spawn-profession`
+now drives the **appearance nibble** on both carriers (the `0x0059` dword and the
+character-select blob disagreed), for in-band ids only — 12 still keeps the legal
+placeholder, since the nibble is asserted `< 0xB` at load.
 
-**CONFIRMED 2026-08-13 (`RUNS.md` §14) — all three shots hit exactly.** In map 796:
-mask `0x07FE` ungreyed the control with **ten** entries (Warrior, Warrior/Ranger …
-Warrior/Dervish — every profession but the primary), `0x0044` gave **exactly three**
-(None, Ranger, Elementalist), `0x0000` **locked** it again. 48 c2s, +77.76 s, `missed 0`,
-no dialog. **The bit index IS the profession id, OBSERVED** — the two-shot design killed
-the count-only and wrong-bit-base rivals, and the layout no capture could settle (all 11
-live samples are mask 0) is settled. Three open questions closed with it: the arena gate
-bit is set in 796 under our server, the mission-map field reads 0 (our own `0x0199`'s
-`is_explorable`), and Codex Arena loads at all.
-
-**So the secondary-profession mechanic works end to end on this server** — a real feature
-driven by the message ArenaNet's own server sends, via `--secondary-bits all|<ids>|<mask>`.
-And the custom route is now closed from both sides and confirmed in action: the reader is
-`cmp edi, 0xb` and `secondary_bits()` refuses above 10, so **no server message can ever
-offer a custom profession as a secondary.** What remains for a custom id is client-side —
-widening the compiled tables, or R1's assert neuter.
+```
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_panel --spawn-profession 8 --map 796'
+```
 
 **What this changed for the arc's actual goal.** The custom-profession boundary is now
 sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has
