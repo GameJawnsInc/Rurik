@@ -1242,6 +1242,37 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
+### Custom professions — a five-document arc, and one live result (2026-08-12)
+
+**Read [`studies/profession/RUNS.md`](studies/profession/RUNS.md) first.** It is the only one
+of the five made of observations rather than readings, and it corrects the other four.
+
+| Doc | What it settles |
+|---|---|
+| [`FINDINGS.md`](studies/profession/FINDINGS.md) | The limits. `CHAR_PROFESSIONS = 11` is a compiled array *dimension*, not a table row — 29 bound checks over 13 modules, and the assert reporter is **noreturn**. |
+| [`WORKAROUNDS.md`](studies/profession/WORKAROUNDS.md) | The routes. The 29 session-enders are **one 5-byte patch site**; the armour composite gate is a redirect, not art (professions 0/1/2/9 already share a row). |
+| [`MODDABLE.md`](studies/profession/MODDABLE.md) | The design for arbitrary N. Ceiling **256** via the `u8` carriers; the appearance nibble is real but different storage. Custom ids start at **12** (11 is the client's sentinel). |
+| [`ATTRIBUTES.md`](studies/profession/ATTRIBUTES.md) | **204** custom attributes (52–255), capped by a one-byte field. 191 same-length edits; custom attributes start at **52** (51 is the NONE sentinel). |
+| [`RUNS.md`](studies/profession/RUNS.md) | **OBSERVED.** Profession 12 rides `0x00A6` and the client plays on 5.1 s. It dies in the **skills panel**, on a **null-pointer** assert — not a bound check. |
+
+**The next rung, and why it is cheap.** `R1` — NOP the `call` at `0x00487C11`, five bytes,
+one site for all 19,758 asserts. The ABI it depends on is confirmed by a live crash
+(`RUNS.md` §3), and `ret 4` is correct because there is exactly one stack argument. With
+asserts falling through, one client run yields the *ordering* of many profession-keyed
+surfaces instead of only the first.
+
+**The cheaper alternative that may not need patching at all.** The assert was
+`*skill` — nothing registered for profession 12, rather than "12 is invalid". **Send a
+skillbar for the custom profession before opening the panel** and see whether the null
+clears. If it does, the mechanism is population, not bounds, and most of `ATTRIBUTES.md`'s
+191 edits are not on the critical path.
+
+Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
+`profession_sentinel`, `profession_max` (`toolkit/authsrv/probes.py`). L0 is done —
+`agents.py`'s `CHAR_PROFESSIONS_MAX = 6` was a live bug that refused professions 7–10.
+
+---
+
 **Status lives in §3, not here.** This list is what to *do*; §3 is where the project *is*.
 Cross off an item in the same commit that lands it — on 2026-08-06 this list still opened
 with "R2 — the game server" thirty-two hours after R2 was standing in a map, and `CLAUDE.md`
