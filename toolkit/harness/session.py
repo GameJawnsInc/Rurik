@@ -208,6 +208,23 @@ def warn_probe_without_enemy(game_args, enemy=False):
             "is about combat, or this run measures an empty world.")
 
 
+def spawn_profession_args(game_args):
+    """['--spawn-profession', 'N'] if game_args carries it, else [].
+
+    The roster and the avatar must agree about who you are. Everything else in
+    --game-args is a GAME-channel experiment and must NOT reach the authsrv --
+    handing it the whole list would arm a second, idle copy of the same probe,
+    which is the asymmetry `server_specs` documents at length.
+    """
+    args = list(game_args)
+    for i, tok in enumerate(args):
+        if tok == "--spawn-profession" and i + 1 < len(args):
+            return ["--spawn-profession", args[i + 1]]
+        if tok.startswith("--spawn-profession="):
+            return [tok]
+    return []
+
+
 def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                  capture_root=None, auth_host="127.0.0.1",
                  game_host="127.0.0.3", game_args=(), hops=()):
@@ -247,7 +264,16 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
                "--port", str(auth_port), "--bind", auth_host,
                "--vault", cap("authsrv"),
-               "--game-host", game_host, "--game-port", str(game_port)]),
+               "--game-host", game_host, "--game-port", str(game_port)]
+         # --spawn-profession is the ONE game flag the authsrv also needs, and
+         # it is forwarded rather than left to --game-args. The character-select
+         # ROSTER is served on the auth channel, from the character blob, while
+         # the in-world avatar is served on the game channel -- so with the flag
+         # reaching only the gamesrv the roster read "Warrior" for a character
+         # that was profession 8 everywhere else (OBSERVED 2026-08-13, harness
+         # 20260813T111856). Two answers to one question, which is exactly the
+         # split `appearance_for` exists to prevent one level down.
+         + spawn_profession_args(game_args)),
         ("gamesrv", game_host, game_port,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
                "--port", str(game_port), "--bind", game_host,

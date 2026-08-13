@@ -44,7 +44,7 @@ import checks  # noqa: E402
 # needed it. hold_key earned its own section the hard way -- see the comment in
 # it -- and the camera floor was declared as 67 from a miscount and reddened the
 # run at 65 until it was measured, which is what the floor is for.
-LEDGER = checks.Ledger("harness", floor=89)
+LEDGER = checks.Ledger("harness", floor=94)
 check = checks.adopt_named(LEDGER)
 
 
@@ -413,6 +413,36 @@ if __name__ == "__main__":
               "and what to type instead",
               f"{refusal!r} -- a bare shlex ValueError blames this module "
               f"for the shell's rewrite and says nothing actionable")
+
+    # --- the roster and the avatar must agree about who you are -----------------
+    # The character-select ROSTER is served on the AUTH channel from the
+    # character blob; the in-world avatar is served on the GAME channel. With
+    # --spawn-profession reaching only the gamesrv, the roster read "Warrior"
+    # for a character that was profession 8 everywhere else (OBSERVED
+    # 2026-08-13). It is the ONE game flag the authsrv also needs.
+    print("\n8b. --spawn-profession reaches the authsrv, and nothing else does")
+    LEDGER.ok(_sess.spawn_profession_args(["--probe", "x", "--spawn-profession", "8"])
+              == ["--spawn-profession", "8"]
+              and _sess.spawn_profession_args(["--spawn-profession=8"])
+              == ["--spawn-profession=8"],
+              "the flag is extracted in both spellings",
+              "argparse accepts --flag N and --flag=N; a forwarder that knew "
+              "one would silently drop the other")
+    LEDGER.ok(_sess.spawn_profession_args(["--probe", "x", "--unlocks", "bar"]) == [],
+              "and nothing is forwarded when it is absent")
+    _specs = _sess.server_specs(game_args=["--spawn-profession", "8",
+                                           "--unlocks", "bar", "--probe", "p"])
+    _auth = [s for s in _specs if s[0] == "authsrv"][0][3]
+    _game = [s for s in _specs if s[0] == "gamesrv"][0][3]
+    LEDGER.ok("--spawn-profession" in _auth and "8" in _auth,
+              "the authsrv spec carries it",
+              "otherwise the roster and the avatar disagree")
+    LEDGER.ok("--unlocks" not in _auth and "--probe" not in _auth,
+              "while the GAME-channel flags do NOT leak to the authsrv",
+              "handing it the whole list would arm a second, idle copy of the "
+              "same experiment -- the asymmetry server_specs documents")
+    LEDGER.ok(all(f in _game for f in ("--spawn-profession", "--unlocks", "--probe")),
+              "and the gamesrv still gets everything")
 
     # --- --labelrun prompts must reach the operator's screen ---------------------
     # The gamesrv is a CHILD process whose stdout session.py normally sends only to
