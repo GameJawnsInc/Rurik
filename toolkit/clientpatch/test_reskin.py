@@ -24,7 +24,7 @@ import checks                                                  # noqa: E402
 import reskin                                                  # noqa: E402
 import vaultpath                                               # noqa: E402
 
-LEDGER = checks.Ledger("reskin", floor=33)
+LEDGER = checks.Ledger("reskin", floor=40)
 
 
 def synth(name_ids=None, abbrev_ids=None, picker_ids=None, data_ids=None,
@@ -311,6 +311,50 @@ def _attr_refuses(data, needle):
     return False
 
 
+def section_skills():
+    print("\n5. the skill roster (two single-byte fields)")
+    stride, count = 0xA4, 40
+    data = bytearray(b"\x00" * (stride * count))
+    for i in range(count):
+        data[i * stride + reskin.SKILL_PROF] = 8
+        data[i * stride + reskin.SKILL_ATTR] = 32
+    out, log = reskin.skill_edits(bytes(data), 0, count, stride,
+                                 profs=[(3, 5)], attrs=[(4, 26), (5, 26)])
+    LEDGER.ok(len(out) == len(data), "skill edits are same-length",
+              f"{len(out)} -- two single-byte fields, so trivially so")
+    LEDGER.ok(out[3 * stride + reskin.SKILL_PROF] == 5
+              and out[4 * stride + reskin.SKILL_ATTR] == 26
+              and out[5 * stride + reskin.SKILL_ATTR] == 26,
+              "profession lands on +0x28 and attribute on +0x29",
+              "the panel groups by the ATTRIBUTE byte, which is why that is "
+              "the field with a countable visible effect")
+    moved = {3 * stride + reskin.SKILL_PROF, 4 * stride + reskin.SKILL_ATTR,
+             5 * stride + reskin.SKILL_ATTR}
+    diff = {i for i, (x, y) in enumerate(zip(data, out)) if x != y}
+    LEDGER.ok(diff == moved,
+              "and NOTHING else in the table moves",
+              f"{len(diff)} byte(s) changed, expected exactly the 3 targeted -- "
+              f"a stride error would smear edits across neighbouring rows and "
+              f"still look plausible on a spot check")
+    for bad, needle in (((0, 5), "not a skill"), ((count, 5), "outside"),
+                        ((1, 12), "outside 0..11")):
+        sid, val = bad
+        try:
+            reskin.skill_edits(bytes(data), 0, count, stride, profs=[(sid, val)])
+            ok = False
+        except SystemExit as ex:
+            ok = needle in str(ex)
+        LEDGER.ok(ok, f"skill edit ({sid}, {val}) is REFUSED", needle)
+    try:
+        reskin.skill_edits(bytes(data), 0, count, stride, attrs=[(1, 52)])
+        ok = False
+    except SystemExit as ex:
+        ok = "no-attribute marker" in str(ex)
+    LEDGER.ok(ok, "and an attribute above the no-attribute marker is REFUSED",
+              "51 is the client's own 'no attribute'; above it is not a value "
+              "the client has a row for")
+
+
 def main():
     print("Reskin patcher: structural location, edits, and refusals.")
     section_locator()
@@ -318,6 +362,7 @@ def main():
     section_output_guards()
     section_real_client()
     section_attributes()
+    section_skills()
     return LEDGER.verdict()
 
 
