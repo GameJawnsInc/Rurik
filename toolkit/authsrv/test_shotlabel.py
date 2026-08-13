@@ -73,7 +73,7 @@ import shotlabel                                                # noqa: E402
 # 46 is what a green run executes today, MEASURED rather than guessed. Every section
 # needs PIL; without it the whole file declares one skip and goes red, the way
 # test_keytap.py does off Windows -- the fixture is drawn, not stored.
-LEDGER = checks.Ledger("test_shotlabel", floor=53)
+LEDGER = checks.Ledger("test_shotlabel", floor=60)
 ok = LEDGER.ok
 
 UTC = datetime.timezone.utc
@@ -632,6 +632,76 @@ def section_11_partial_build_is_additive(tmp):
        f"{n4} card(s)")
 
 
+def section_12_merge_writes_the_schema(tmp):
+    """--merge folds answers into overrides.json, and must not guess or overwrite.
+
+    It was in this module's docstring from the first commit and implemented by nothing,
+    which is the blank-field-list defect again: a promise that reads as a feature.
+
+    What it writes goes into a TRACKED schema file that the server decodes with, so the
+    refusals matter more than the writes.
+    """
+    print("\n12. --merge writes names into the schema, and refuses to guess")
+    base = {"channels": {"GAME_SMSG": {
+        "20": {"opcode": 20, "name": "ALREADY_NAMED", "fields": [{"type": "byte"}]},
+        "30": {"opcode": 30, "fields": [{"type": "dword"}]}}}}
+    ov = os.path.join(tmp, "over.json")
+    with open(ov, "w", encoding="utf-8") as fh:
+        json.dump(base, fh)
+    labels = {
+        "0x001E_r": {"opcode": "0x001E", "name": "SCREEN_NAME", "text": "a panel",
+                     "verdict": "ui", "confidence": "high"},
+        "0x0040_r": {"opcode": "0x0040", "name": "NEW_ROW", "text": "another",
+                     "verdict": "ui"},
+        "0x0014_r": {"opcode": "0x0014", "name": "DIFFERENT", "text": "x",
+                     "verdict": "ui"},
+        "0x0050_r": {"opcode": "0x0050", "text": "indistinguishable from four others",
+                     "verdict": "ui"}}
+    lp = os.path.join(tmp, "labels.json")
+    with open(lp, "w", encoding="utf-8") as fh:
+        json.dump(labels, fh)
+
+    # A DRY RUN WRITES NOTHING. The default has to be safe: this edits a tracked file.
+    before = open(ov, encoding="utf-8").read()
+    r = shotlabel.merge_labels(lp, apply=False, overrides_path=ov)
+    ok(open(ov, encoding="utf-8").read() == before,
+       "a dry run leaves the schema byte-identical", "")
+    ok(len(r["wrote"]) == 2 and len(r["skipped"]) == 1 and len(r["conflicts"]) == 1,
+       "it reports what it would write, skip and refuse",
+       f"wrote {len(r['wrote'])}, skipped {len(r['skipped'])}, "
+       f"refused {len(r['conflicts'])}")
+
+    r = shotlabel.merge_labels(lp, apply=True, overrides_path=ov)
+    got = json.load(open(ov, encoding="utf-8"))["channels"]["GAME_SMSG"]
+    # A ROW WITH NO IDENTIFIER IS NOT WRITTEN. Five opcodes in the real run draw the
+    # same dialog; naming them one thing each invents a distinction and naming them the
+    # same asserts they are interchangeable, so the tool writes neither.
+    ok("80" not in got, "an answer with no identifier writes NO row",
+       "0x0050 would be a guess, and the five-way account-name family is exactly this")
+    # AN EXISTING NAME IS NEVER OVERWRITTEN. A name already in the schema came from the
+    # wire or the binary; a screen reading is the weaker witness.
+    ok(got["20"]["name"] == "ALREADY_NAMED",
+       "an opcode already named is REFUSED, not renamed",
+       f"{got['20']['name']} -- a screen reading must not outrank the wire")
+    # THE LAYOUT SURVIVES. This is the defect that broke the codec: a name-only row
+    # replaced the entry and removed `fields` from 17 opcodes.
+    ok(got["30"]["fields"] == [{"type": "dword"}],
+       "naming an opcode leaves its existing layout intact",
+       f"{got['30'].get('fields')}")
+    ok("fields" not in got["64"],
+       "and a NEW row carries no invented layout", f"{sorted(got['64'])}")
+    # CONFIDENCE DEFAULTS TO THE WEAKER GRADE, so an unstated one cannot enter the
+    # catalogue as a strong claim.
+    ok(got["30"]["name_confidence"] == "high"
+       and got["64"]["name_confidence"] == "medium",
+       "confidence is carried, and an unstated one defaults to medium",
+       f"stated -> {got['30']['name_confidence']}, "
+       f"unstated -> {got['64']['name_confidence']}")
+    # The operator's VERBATIM words are the evidence for the identifier and must survive.
+    ok("a panel" in got["30"]["why"] and "20260813" not in got["30"]["why"],
+       "the operator's own words are recorded beside the name", got["30"]["why"][:60])
+
+
 def main():
     if _pil() is None:
         LEDGER.skip("every section", "PIL is missing -- the fixture is drawn with it, "
@@ -649,6 +719,7 @@ def main():
         section_9_drift(tmp)
         section_10_page_is_readable(tmp)
         section_11_partial_build_is_additive(tmp)
+        section_12_merge_writes_the_schema(tmp)
     return LEDGER.verdict()
 
 

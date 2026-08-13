@@ -416,11 +416,29 @@ def main():
                               encoding="utf-8"))["channels"]
     named_over = [(ch, k) for ch, msgs in all_over.items()
                   for k, v in msgs.items() if "name" in v]
+    # A NAME-ONLY row carries no `fields` at all, and that satisfies this check in its
+    # strongest form: it cannot move a layout it does not contain. `shotlabel --merge`
+    # writes such rows from a screen reading, which learns what a message DRAWS and
+    # nothing about its marshalling, so carrying a copied layout would be the schema
+    # asserting something the evidence never touched.
     moved = [(ch, k) for ch, k in named_over
              if (ch, k) not in LAYOUT_FIXED
              and k in all_base.get(ch, {}).get("messages", {})
+             and "fields" in all_over[ch][k]
              and all_over[ch][k]["fields"]
              != all_base[ch]["messages"][k]["fields"]]
+    # ...but "no fields" must mean NO LAYOUT, not "fields under another key". A row that
+    # renamed an opcode while flipping `variable_length` or `declared_unpack_size` would
+    # pass the check above by having no `fields`, which is the loophole the shape invites.
+    LAYOUT_KEYS = {"fields", "variable_length", "declared_unpack_size", "table"}
+    sneaky = [(ch, k) for ch, k in named_over
+              if "fields" not in all_over[ch][k]
+              and (set(all_over[ch][k]) & LAYOUT_KEYS)]
+    LEDGER.ok(not sneaky,
+              "a name-only override carries no layout key at all",
+              f"{sneaky}" if sneaky else
+              f"{sum(1 for ch, k in named_over if 'fields' not in all_over[ch][k])} "
+              f"name-only row(s), none of which touch a layout field")
     LEDGER.ok(not moved,
               "a named entry copies its layout verbatim and changes no field",
               f"moved: {moved}" if moved else

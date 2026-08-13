@@ -137,7 +137,18 @@ def main():
     catalog = json.load(open(os.path.join(ROOT, "schema", "messages.json")))
     over = json.load(open(os.path.join(ROOT, "schema", "overrides.json")))
     msgs = dict(catalog["channels"]["GAME_SMSG"]["messages"])
-    msgs.update(over["channels"].get("GAME_SMSG", {}))
+    # A NAME-ONLY override merges; one carrying `fields` replaces. Same rule as
+    # `codec.Codec.__init__`, deliberately restated here rather than imported: this
+    # file's subject is OUR CATALOG against the client's own tables, and reading the
+    # merged view out of the module that performs the merge would let a merge bug
+    # decide what gets compared. A blind `update` -- which is what this was -- drops
+    # the layout of every opcode that has only been NAMED, and the comparison below
+    # then dies rather than reporting a disagreement.
+    for key, row in over["channels"].get("GAME_SMSG", {}).items():
+        if "fields" not in row and key in msgs:
+            msgs[key] = {**msgs[key], **row}
+        else:
+            msgs[key] = row
 
     print("\nGAME_SMSG: our catalog against the client's own tables")
     shared, disagreed = 0, []
