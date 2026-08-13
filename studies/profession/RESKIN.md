@@ -410,3 +410,42 @@ the totals alone.
 That is a profession with its own name, its own attributes with their own names, and its
 own skills grouped under them — **eleven bytes of same-length edits**, no code, no bound
 check touched, no assert neutered.
+
+
+---
+
+## 11. RUN 4 (2026-08-13): the roster, and the visual identity for free
+
+Harness `20260813T111856` then `20260813T112121`, `--until login` so the run stops on the
+character-select screen instead of clicking through it.
+
+**First attempt found a plumbing defect, not a reskin defect.** The roster read
+**"Warrior"** for a character that was profession 8 everywhere else. Cause: `--game-args`
+reaches the GAMESRV only, by deliberate design — but **the character-select roster is
+served on the AUTH channel**, from the character blob. So the authsrv was still on the
+default profession. Two answers to one question, which is the same split `appearance_for`
+exists to prevent one level down.
+
+Fixed in `session.py`: `--spawn-profession` is now forwarded to the authsrv as well, and
+it is the ONLY game flag that is — `--unlocks`, `--probe` and the rest must not reach it,
+or the authsrv arms a second idle copy of the same experiment. Five checks pin both
+halves, including that the game-channel flags do NOT leak.
+
+**Second attempt, and it delivered more than it was aimed at:**
+
+> The roster reads **`Soul Reaping`** — so the character-select screen reads the same
+> `s_charProfession` name table the in-world panel does.
+>
+> And the character MODEL changed completely: different build, different hair and face,
+> and Ritualist starter clothing in place of the Warrior's shorts.
+
+**The appearance nibble carries the whole visual identity.** `RESKIN.md` §4 listed model
+scale, hair palette, skin palette and starter kit as four separate Tier-1 edits; setting
+the nibble to the host profession delivers all four **for free**, because they are indexed
+by the same id. A reskin inherits the host's body — which, with §7's animation finding, is
+the second axis where reusing a legal id beats adding a twelfth.
+
+**Still UNVERIFIED: the abbreviation.** The roster shows the full name, so
+`s_charProfessionAbbrev` is still unexercised. It renders in the party window and over
+nameplates, and our world has neither. Not a blocker — it is one dword, already
+patchable, and it will show the moment there is a party.
