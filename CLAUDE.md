@@ -387,7 +387,7 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   CANNOT decide is asserted too: tag 6's count must be a u16 because one map
   holds 611 entries, while tag 4's largest is 81, so its width is undecided and
   the check says so -- if it ever reddens the ambiguity is gone. Sections 0-3c
-  need no vault and score 55 against a floor of 67; `--all` is 76 checks in
+  need no vault and score 58 against a floor of 70; `--all` is 79 checks in
   ~200 s, one pass over the archive rather than the three the first draft took.
   **The client was read AFTERWARDS and agreed**, which is the shape that makes
   this worth trusting: the framing came out of the archive alone, and the
