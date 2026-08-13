@@ -63,3 +63,36 @@ assembles the map, verifies the seed stands on walkable ground under the \
 exactly one trapezoid of the compiled mesh -- the same test every maps.toml row \
 carries -- and then delivers it to an archive COPY and reads back what the \
 client's own compiler produced."""
+
+# The area that broke the size ceiling. Every map this toolkit authored before
+# it was 32x32 for ONE reason, and the reason was never the format: the terrain
+# codec caps at 16,777,216 cells, so 9,216 is not close to a limit. The cap was
+# the ROW -- `datwrite` writes uncompressed and refuses to grow a reservation,
+# so an authored map only fit where it was SMALLER than what ArenaNet had
+# compressed into that row. 96x96 needs 22,016 B against map 143's 4,096, so
+# installing this one RELOCATES the row (`datmove`) instead of replacing it.
+[area.vale]
+name = "The Vale"
+map_id = 143
+dims = 96
+heights = "plaza"
+seed_x = 4608.0
+seed_y = 4608.0
+donor_row = 7982
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 12
+
+[area.vale.provenance]
+source = "invented"
+verified = """Ours, chosen rather than observed, like every area row. What this \
+one adds over `plaza` is SIZE: at 96x96 the assembled map is 21,786 B against \
+the 4,096 B its target row reserves, so it cannot be written in place and the \
+install path must relocate the row. That is the whole point of the row -- it \
+exercises the branch a 32x32 map never reaches. Verified offline: the terrain \
+round-trips 9,216/9,216 samples exact, the seed stands on walkable ground, and \
+the relocation was planned and executed against a throwaway archive copy with \
+every open-time rule re-checked and no overlapping reservations afterwards."""

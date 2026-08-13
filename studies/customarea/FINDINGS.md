@@ -6527,3 +6527,77 @@ referenced by run-time id out of the owner's own archive, which is the
 the navmesh seed, the prop placement, the surface, and now the recipe.
 
 Run record: `vault/research/rungG-2026-08-13/`.
+
+
+## 57. OBSERVED: the size ceiling was the ROW, not the format (2026-08-13, offline)
+
+Every map this toolkit ever built was 32x32, and it was easy to assume the
+codec imposed that. It does not: `terrain._gate_dims` caps at **16,777,216
+cells**, so 96x96's 9,216 is not close to a limit. The cap was the ROW.
+`datwrite` writes UNCOMPRESSED and refuses to grow a reservation — correctly,
+since its invariant is same row, same offset, same length — so an authored map
+only fit where it was SMALLER than what ArenaNet had compressed into that row.
+`datmove` was built for this in FINDINGS 38 and had never been used from the
+authoring path.
+
+| dims | payload | map 143's row |
+|---|---|---|
+| 32x32 | 3,941 B | fits |
+| 64x64 | 10,654 B | **no** |
+| 96x96 | 21,926 B | **no** |
+
+`deploy.py --area vale --install` now picks the VERB from the size — replace in
+place when it fits, relocate when it does not — and a **96x96 map, 21,926 B,
+went into a row reserving 4,608**. Offline verification, all green: terrain
+round trip **9,216/9,216** exact, **96.03% ours** (770 borrowed bytes, every one
+named), row 71497 relocated `0x63C66800 → 0x6FF0A00`, `datcheck --preflight`
+**10 of 10** open-time rules clear, **0 overlapping row pairs**, and the
+`--diff` showing exactly the two rows we touched. **No client run** — the
+harness was in use by another session — so this is staged, not walked.
+
+### `snap_block` is a one-tile function, and that is the finding
+
+The verifier refused the first 96x96 build: **134 of 9,216 samples lost** after
+snapping. `snap_block` takes exactly one 32x32 tile — its docstring says "1024
+integer samples" and it strides by `CHUNK_SIZE` — and I handed it a whole map,
+so tile 0 was projected and the other eight were not.
+
+**It fails in the worst possible direction.** A linear field is exactly
+representable *without* snapping, so the failure is invisible to every obvious
+test: a gentle ramp lost 0, a steep ramp lost 0, a **400-unit cliff** lost 0,
+and a smooth curve lost 2,752. Only CURVATURE goes missing — which is precisely
+what an authored landscape is made of, and precisely what a Blender sculpt
+produces. The reported worst error stayed at 2 units while a sixth of the map
+was wrong, and every lost slot sat past index 1024.
+
+`strippedterrain.snap_field(samples, dim_x, dim_y)` now walks tile by tile.
+`test_deploy` §4 pins 32/64/96 at exact round trips and runs `snap_block` alone
+as the NEGATIVE CONTROL, asserting both that it still loses samples and that the
+losses start past the first tile — the fingerprint rather than a coincidence.
+
+### An exit code is not evidence
+
+`deploy` passed `--check-overlaps` to `datmove`. That is a READ-ONLY verb which
+returns before any move: it exited **0** having written nothing, `deploy`
+reported *"installed and armed"*, and the archive still held ArenaNet's own
+64x64 map — while the head had been armed, so the next client run would have
+recompiled **retail's map** and every readback check would have described it.
+The install path now READS THE ROW BACK and compares it against what it wrote,
+because a writer returning success and an archive disagreeing is a case where
+the archive wins.
+
+A third defect rode along and is worth one line: the test written to pin the
+second one first GREPPED THE SOURCE TEXT for `--check-overlaps` and went red on
+its own explanatory comment about the flag. It reads the argument list off the
+syntax tree now. A grep cannot tell an argument from prose — the same lesson
+`test_cmsgnames.py` recorded, relearned.
+
+### What is left
+
+One client run, prediction stated: the client re-bloats, builds a navmesh over
+9,216 cells (the 32x32 plaza compiled to 55 trapezoids over 1,024), carries env
+and sound verbatim, and the spawn at (4608, 4608) lands in exactly one
+trapezoid. It would also be a second data point on the standing unmeasured
+question from FINDINGS 39 — whether a relocated row SURVIVES a play session.
+
+Run record: `vault/research/size-2026-08-13/`.
