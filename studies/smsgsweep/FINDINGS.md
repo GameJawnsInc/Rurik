@@ -327,21 +327,57 @@ share one client launch.
 
 ## 5c. Where a plausible value was NOT enough — and why guessing stopped
 
+> ## RETRACTED 2026-08-13 — these five experiments never ran
+>
+> **Every payload below went out ALL-ZERO.** `probes._smsgsweep_steps` read the plan's
+> field overrides from the top level; `plan()` had just been rewritten to write them per
+> ROW (`sets_for`, for the qualified `--set 0x0083:2=1` form these very runs were the first
+> to use), so `p.get("set")` was `{}` and `apply_set` returned the degenerate payload
+> untouched. The five re-sends were byte-identical to the plain sweep's, and "none of them
+> opened" is a restatement of the sweep result already in the ledger.
+>
+> This is OBSERVED, not inferred. The server records the plaintext of every send
+> (`authsrv.py` `rec.event("sent", …, plain=…)`), and across the whole of 2026-08-12
+> exactly 30 sweep sends carried a non-zero payload — `0x0017` at 10:59 (§5a) and the nine
+> `agent_id` opcodes at 11:44–11:47 (§5b), then nothing until the `--encstring` family at
+> 17:42. The §5c runs at 11:54–12:00 and 12:15–12:18 are all zeros, e.g. `0x0083` reads
+> `8300000000000000000000` in both the 11:01 plain sweep and the 11:54 "experiment".
+>
+> **§5a and §5b are UNAFFECTED** — both predate the rewrite and their captures carry the
+> value (`0x0017` ends `…01`; all nine of §5b's carry field 1 = 1). **The ledger is also
+> unaffected**: `record` scores the capture and is first-write-wins, and every row for
+> these five was already written from the 11:0x–11:36 sweep, so it correctly says these
+> opcodes assert on the DEGENERATE payload. Only the sentences below were wrong.
+>
+> **What is salvaged and what is not.** §5d disassembled the handlers afterwards and found
+> `0x0072` never reads field 2 and `0x0096` never reads field 1 — so those two conclusions
+> stand on the static read, which is the evidence that was doing the work anyway.
+> `0x0083` field 2, `0x005F` field 2 and `0x00A8` field 3 are **UNVERIFIED — never
+> tested**, and the "third gate" and "not the file id" readings are withdrawn.
+>
+> Fixed 2026-08-13 (`row.get("set")`), with the check in `test_smsgsweep.py` §9 — which
+> lives there because everything else in that file runs inside `smsgsweep`, and the module
+> agreed with itself perfectly the entire time.
+
 Five more opcodes, each re-sent with the field its assert pointed at set to something
 defensible. **None of them opened**, and that is the result:
 
-| opcode | tried | still |
-|---|---|---|
-| `0x005F` | field 1 = live agent, field 2 = 1 | FAULTED — its field 3 is a `string16`, so it belongs to the encoded-string family below |
-| `0x0072` | field 2 = live agent | ASSERTED — so hero data is NOT reached through the agent; its `word` field 1 is the index |
-| `0x0083` | field 1 = live agent, field 2 = 1 | ASSERTED — a third gate, its `dword` field 3 |
-| `0x0096` | field 1 = 1 | ASSERTED — the mask wants specific bits and bit 0 is not one of them |
-| `0x00A8` | field 3 = 1, then = `0x100000be` (a real resource id from `0x0017`'s path) | ASSERTED — so field 3 is not the file id, or neither value names a loadable file |
+| opcode | tried | still | 2026-08-13 |
+|---|---|---|---|
+| `0x005F` | field 1 = live agent, field 2 = 1 | FAULTED — its field 3 is a `string16`, so it belongs to the encoded-string family below | field 1 ran (§5b, 11:44); **field 2 never left** |
+| `0x0072` | field 2 = live agent | ASSERTED — so hero data is NOT reached through the agent; its `word` field 1 is the index | never left; conclusion re-derived in §5d |
+| `0x0083` | field 1 = live agent, field 2 = 1 | ASSERTED — a third gate, its `dword` field 3 | field 1 ran (§5b); **field 2 never left — "third gate" WITHDRAWN** |
+| `0x0096` | field 1 = 1 | ASSERTED — the mask wants specific bits and bit 0 is not one of them | never left; conclusion re-derived in §5d |
+| `0x00A8` | field 3 = 1, then = `0x100000be` (a real resource id from `0x0017`'s path) | ASSERTED — so field 3 is not the file id, or neither value names a loadable file | **never left — WITHDRAWN, untested** |
 
 **Six of fifteen gates closed on a value we could justify; the other nine did not, and the
 next attempt on each would be a guess costing a client launch.** `0x0017` was solved by
 reading its handler and predicting the gate before sending anything — that is the method
 that worked, and it is the one these nine want. `msghandler.py <op> --follow --annotate`.
+
+**Corrected denominator (2026-08-13): six of TEN, because five of the fifteen were never
+put on the wire.** The paragraph above is otherwise unchanged, and its recommendation is
+strengthened rather than weakened — the method that worked was reading the handler.
 
 A limit found while doing it: `--set` indexes into the VALUE list, and `degenerate` stops
 at a `nested_struct` because that type swallows the tail. `0x0019` declares four fields
@@ -389,6 +425,10 @@ anything deeper is inference and is marked as such above.
    `0x009E`) need a REAL encoded string, which `--set` deliberately will not fake; the
    file-id gates (`0x0019` `0x00A8`); `0x0096`'s flag mask; `0x0072` (`--set 2=`, its
    agent_id is field 2); and the three faults.
+   **Add back the three §5c retracted: `0x0083` field 2 (bag index), `0x005F` field 2 and
+   `0x00A8` field 3.** They were reported as tested and never left the server — see §5c's
+   retraction. `--set` works as of 2026-08-13; these are now one client launch, and the
+   qualified form puts all three in it.
 2. **Reorder the plan** so `0x0000` is not first, and settle §3.
 3. **Recover the three missing asserts** — re-send `0x005F`, `0x0060`, `0x006F` and expand
    the dialog's detail pane before reading it.
