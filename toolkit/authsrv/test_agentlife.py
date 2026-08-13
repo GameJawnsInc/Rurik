@@ -1601,13 +1601,27 @@ def section_probe_encoding():
     section_planless_probe()
 
 
-def _plan_steps(plan_obj):
+def _plan_steps(plan_obj, strict=False):
     """`_smsgsweep_steps` for a plan, reached THROUGH A REAL FILE and NO VAULT.
 
     `plan_path` is monkeypatched rather than used, so nothing here reads
     `vault/probes/smsgsweep-plan.json` -- which is the whole point of the section
     below. It also means every key of a row's `set` arrives as a STRING, the way
     JSON delivers it, rather than as the int an in-memory fixture would hand over.
+
+    `strict` picks WHICH `send` the run gets, and the two model the two ways the
+    unfixed `run_probe` failed. They are both needed and the sabotage is what
+    proved it: reverting the fix reddens the permissive run's check and NOT the
+    strict run's, because a `send` that never raises never reaches the branch
+    that misreports the refusal.
+
+      strict=False -- a send that ACCEPTS anything, which is the refusal whose
+        opcode the degenerate encoder can fill. The old code put the packet on
+        the wire here, under the words "nothing was sent".
+      strict=True  -- a send that refuses an empty payload the way the codec
+        really does (`GAME_SMSG 0x0000 wants 1 values, got 0`). The old code
+        printed `SEND FAILED: ValueError` and `that is a result too -- record
+        it` here, and `continue`d past the `watch` line.
 
     Returns (steps, sent, printed, failures): the Steps the builder produced,
     whatever `run_probe` actually handed to `send`, everything it printed, and
@@ -1639,6 +1653,13 @@ def _plan_steps(plan_obj):
             return False
 
     sent = []
+
+    def _send(op, vals, label=""):
+        if strict and not vals:
+            # What the real send does with the refusal, via the codec.
+            raise ValueError(f"GAME_SMSG 0x{op:04X} wants 1 values, got 0")
+        sent.append((op, list(vals), label))
+
     real = smsgsweep.plan_path
     smsgsweep.plan_path = lambda: fh.name
     buf = io.StringIO()
@@ -1646,10 +1667,7 @@ def _plan_steps(plan_obj):
         steps = probes._smsgsweep_steps(1, None)
         failures = probes.check_encodable(quiet=True)
         with contextlib.redirect_stdout(buf):
-            thread = authsrv.run_probe(
-                "smsgsweep",
-                lambda op, vals, label="": sent.append((op, list(vals), label)),
-                1, _Stop(), None)
+            thread = authsrv.run_probe("smsgsweep", _send, 1, _Stop(), None)
             if thread is not None:
                 thread.join(timeout=20)
     finally:
@@ -1674,14 +1692,28 @@ def section_planless_probe():
     The runtime half is a separate claim from the encoder half and it is the one
     that was still broken after `sends` landed. `check_encodable` honoured the
     flag; `authsrv.run_probe` did not, and it is the consumer that puts bytes on
-    a socket. The `send` below RECORDS and never raises, which is deliberately
-    the dangerous case: it models a refusal the codec would have accepted, where
-    the packet goes out under the words "nothing was sent".
+    a socket. Both of its `send` fixtures are needed, one per failure direction,
+    and `_plan_steps`'s docstring says which is which.
+
+    WHICH CHECKS ARE LOAD-BEARING WAS MEASURED. Four sabotages were built and
+    run against a green 223, and all four redden a DIFFERENT set:
+
+      run_probe forgets the flag (the defect as it shipped)  2 red
+      the sentinel is built without sends=False              5 red
+      run_probe skips EVERY step, not just refusals          2 red
+      check_encodable stops honouring the flag               1 red
+
+    The third is the one that earns the positive control: it reddens the two
+    control checks and NOTHING else, so without them "skip every step" -- a
+    sweep that fires no packets and prints "probe complete" -- would have been
+    indistinguishable from the fix. The first is why there are two runtime
+    fixtures: with only the permissive `send` it reddened 1 rather than 2,
+    because that fixture never reaches the branch that misreports the refusal.
     """
     import probes
 
-    empty, empty_sent, empty_out, empty_bad = _plan_steps({"rows": [],
-                                                           "remaining": 0})
+    empty, empty_sent, _eo, empty_bad = _plan_steps({"rows": [],
+                                                     "remaining": 0})
     LEDGER.ok(empty_bad == 0,
               "with NO plan at all, `check_encodable` still scores 0 -- the "
               "headline this section exists for",
@@ -1711,10 +1743,20 @@ def section_planless_probe():
               f"that does not refuse puts 0x0000 on the wire, and that is the "
               f"hazard the sends flag was chosen over making the sentinel "
               f"encodable")
-    LEDGER.ok("nothing was sent; this run measures nothing" in empty_out
-              and "SEND FAILED" not in empty_out,
-              "and the operator is told WHY, not shown a codec error",
-              f"the old path printed `SEND FAILED: ValueError` and `that is a "
+    # The OTHER half, and it needs its own fixture. A send that accepts anything
+    # never reaches the misreporting branch, so reverting the fix leaves the check
+    # above red and this one GREEN -- measured, not assumed. `strict` models the
+    # codec that really is behind `send` today.
+    _se, strict_sent, strict_out, _sb = _plan_steps({"rows": [], "remaining": 0},
+                                                    strict=True)
+    LEDGER.ok(not strict_sent
+              and "nothing was sent; this run measures nothing" in strict_out
+              and "SEND FAILED" not in strict_out
+              and "that is a result too" not in strict_out,
+              "and against the REAL codec's refusal the operator is told why, "
+              "not shown a ValueError filed as a result",
+              f"printed {strict_out.count('SEND FAILED')} SEND FAILED line(s). "
+              f"The old path printed `SEND FAILED: ValueError` and `that is a "
               f"result too -- record it`, filing an absent plan as an "
               f"experimental result, then `continue`d past the one line the "
               f"step exists to carry")

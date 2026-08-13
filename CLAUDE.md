@@ -886,7 +886,32 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   symbol appearing in a test file is not a check.** The same section reads
   `skilltable.py`'s live table off build 38797 and cross-checks the enemy's bar —
   which is how `authsrv.py`'s claim that all four bar skills are non-elite was
-  found false (276 is elite), the comment having been the only witness),
+  found false (276 is elite), the comment having been the only witness.
+  **And since 2026-08-13 the plan-less probe run, which is the section that
+  stopped this file's COLOUR from tracking mutable vault state.** Every check in
+  `section_probe_encoding` built its own `Step`; the PRODUCER — `_smsgsweep_steps`
+  — was checked by nothing and reads `vault/probes/smsgsweep-plan.json`, which any
+  sweep in any session rewrites. So the red of 2026-08-13 was not a defect at all:
+  the all-zero sweep FINISHED, `remaining` went to 0, and the refusal step the
+  builder returns for an empty plan could not encode. Seven checks now pin both
+  answers through a temp file with `plan_path` monkeypatched — no vault, no
+  socket, no client. **The half still broken when that section was written is the
+  RUNTIME one**: `Step.sends=False` was added for `check_encodable`, and
+  `authsrv.run_probe` — the consumer that puts bytes on a socket — was not taught
+  about it, so it sent the refusal and relied on the codec to raise. That fails in
+  both directions, which is why there are TWO `send` fixtures: a strict one
+  (refuses an empty payload the way the codec does) catches the refusal being
+  printed as `SEND FAILED … that is a result too — record it` with the `watch`
+  line skipped past, and a permissive one (the refusal whose opcode the degenerate
+  encoder can fill) catches the packet going on the wire underneath the words
+  "nothing was sent". Four sabotages were BUILT AND RUN and all four redden
+  different sets (2, 5, 2 and 1) — and the one that earns the POSITIVE CONTROL is
+  `run_probe` skipping EVERY step, which reddens the two control checks and
+  nothing else, so without them a sweep that fires no packets and prints "probe
+  complete" would be indistinguishable from the fix. The flag stays DECLARED and
+  never an `if not step.values` shape test, because a malformed valueless step
+  that DOES claim to send is exactly what the encoder check exists to catch and
+  the two are identical in shape. Floor 214 against a green 223),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
