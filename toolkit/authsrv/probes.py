@@ -2088,8 +2088,17 @@ def _smsgsweep_steps(a, o, dwell=0.4):
     import smsgsweep
     p = smsgsweep.load_plan()
     if not p or not p.get("rows"):
-        return [Step(0.0, 0x0000, [], "NO PLAN -- run smsgsweep.py --plan first",
-                     "nothing was sent; this run measures nothing")]
+        # NO STEPS, not a placeholder step. This used to return
+        # Step(0.0, 0x0000, [], ...) as a way of carrying the message, and that
+        # step CANNOT ENCODE -- GAME_SMSG 0x0000 wants one value and it has
+        # none -- so `check_encodable()` failed for everyone without a sweep
+        # plan in their vault. That guard exists precisely to catch an
+        # unencodable step before a client run is spent on it, and a guard that
+        # is always red is one nobody can read. The probe machinery already has
+        # a first-class way to say "this run sends nothing": an empty step list,
+        # which prints "no packets, observation only". The warning lives in the
+        # registry note instead, where it does not have to survive a codec.
+        return []
     codec = _sweep_codec()
     dwell = float(p.get("dwell", dwell))
     quiet = (float(p.get("settle", smsgsweep.SETTLE))
@@ -2146,7 +2155,11 @@ PROBES = {
                  "down in the pilot and the client was alive on a loading screen 42 s "
                  "later, with no assert in Gw.log and no fatal-error dialog.",
         steps=_smsgsweep_steps(a, o),
-        note="Loopback only -- both endpoints ours, ours-DH client, cage verified. "
+        note="NEEDS A PLAN: run `smsgsweep.py --plan` first, or this probe has NO "
+             "STEPS and the run measures nothing. (It used to carry that warning as a "
+             "placeholder step, which could not encode and so held "
+             "`check_encodable()` red for every tree without a plan.) "
+             "Loopback only -- both endpoints ours, ours-DH client, cage verified. "
              "Score with `smsgsweep.py --from-report <the run's report.json> --record`. "
              "Attribution is by opcode identity, against this run's OWN control window "
              "-- the quiet seconds before the first send -- and not by timing."),
