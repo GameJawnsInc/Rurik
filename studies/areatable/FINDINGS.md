@@ -259,10 +259,26 @@ expects: the client says `REMOVE` for skills ArenaNet deleted while GWCA keeps
 the old name, and says `Asuran Bodyguard Rank 2/3/4` where GWCA invented
 `Asuran_Bodyguard`, `_1`, `_2`.
 
-**Not solved.** Map id → *map file*. `AreaInfo` does not carry it (§3), so
-naming the 100 map-flagged archive rows that no mirror names is still open. The
-routes left are geometry matching and rendering, not static analysis — unless
-the id turns up in a table we have not found.
+**Not solved here, and largely settled since — see
+[studies/maprows/FINDINGS.md](../maprows/FINDINGS.md) (2026-08-13).** Map id →
+*map file* is genuinely absent from the client, and that is now REFUTED rather
+than merely unfound: an exhaustive byte sweep with a null control, a backwards
+walk of every producer of the file id (there are two, both the network), and a
+sweep of every map chunk from the other side all agree. **This section's own
+"unless the id turns up in a table we have not found" is closed.**
+
+Two corrections that land on this document. The table's name is
+**`s_missionClientData`**, from the client's own assert at its accessor
+`0x005A8580` — where `cmp esi, 0x378` and `imul eax, esi, 0x7c` make **888 and
+124 ArenaNet's own numbers** rather than the structural inference §2 records.
+And §4's file-reference formula, taken here from GWCA's accessors and labelled
+UPSTREAM, is now **CORROBORATED**: the client computes exactly it at
+`0x004702B0`, and `File.cpp:850` names the inverse `ExtractArchiveFileId`.
+
+What replaced the dead route was geometry, but not the kind this section
+imagined: `AreaInfo` carries the map's **footprint on its continent** at `+0x48`
+and `+0x58` — a rect in terrain cells, unnamed in every mirror — whose size
+equals the map file's own dims. That names 53 rows outright.
 
 ---
 

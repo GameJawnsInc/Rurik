@@ -891,6 +891,25 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   never created", which are different facts),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
+  `toolkit/clientscan/test_maprows.py` (the footprint join that NAMES archive map
+  rows, and the negative the arc turned on. `s_missionClientData` -- the client's
+  own name for the 888x124 table, out of its accessor's assert at 0x005A8580,
+  where `cmp esi, 0x378` and `imul eax, esi, 0x7c` make 888 and 124 ArenaNet's
+  numbers rather than our structural inference -- carries the map's FOOTPRINT on
+  its continent at +0x48/+0x58, a rect in terrain cells whose SIZE equals the map
+  file's own dims at the known 96.0 pitch, **319 of 319**. The headline is the
+  weak half: a two-number key over an 84-value alphabet, and random sizes already
+  score ~41%. Which checks are load-bearing was MEASURED by setting the pitch to
+  64.0 -- six go red and **section 4 is not one of them**, because the random null
+  is a ratio and a wrong pitch moves both terms. What catches it is the one-cell
+  control (319/319 -> 0/319) and the two ANCHORS, which go to zero candidates:
+  row 7982, whose three names came off ArenaNet's own wire in 9 of 9 live
+  connections, and row 22371 from `archive.py`'s measured note. Neither was
+  derived from the join. Section 5 pins the refutation -- no dword column of the
+  table resolves to a map-flagged row in either the raw or the packed reading --
+  so a future build that gains a map-id -> file-id table fails here loudly. The
+  tool returns a SET per row on purpose: 888 named areas over 349 files means at
+  least 539 must share one. ~7 min on a cold vault cache, ~10 s warm),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first),
