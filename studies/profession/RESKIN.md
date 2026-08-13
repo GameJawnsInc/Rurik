@@ -722,3 +722,38 @@ The honest summary: **`0x00A6` for the player's own agent and the party pair are
 and correct, and they buy nothing visible yet.** They are still worth keeping -- `0x00A6`
 is the sole write path to the agent profession bytes that six documents of this arc
 wanted, and it costs two messages.
+
+
+### 16.1 P is dead while every other window opens -- the prerequisites are missing
+
+Operator's reading, and the runs support it: *the party window differs between explorable
+areas and outposts, and we may not have met the conditions for it to exist.*
+
+**The explorable field is not the condition.** `--explorable` reaches the wire -- `0x0199`
+carries `is_explorable = 1` (payload `...9400 01...`, harness `20260813T152507`) -- and
+the top-left party region is byte-identical to the outpost run, one hash across every
+frame of both. That field is real and load-bearing elsewhere (it is what
+`0x0084D9B0` reads, and it gates the secondary-profession drop-down's enable), but it
+does not summon a party window.
+
+**A key sweep separates "our input is broken" from "the window refuses", and it is the
+window.** One run, per-step frames, whole-frame pixel diffs (harness `20260813T152713`):
+
+| key | pixels changed | |
+|---|---|---|
+| **P** (party) | **15,603** | idle magnitude -- nothing opened |
+| *wait -> wait* | 16,020 | the idle control |
+| **H** (hero) | **133,938** | opened |
+| **I** (inventory) | **118,477** | opened |
+| **F** (friends) | **31,907** | opened |
+
+So scripted input works, three windows open on demand, and **the party window is the only
+one that refuses**. That is a much sharper negative than section 16's: it is not the input
+path, not the UI generally, and not the explorable flag.
+
+**What it leaves.** The window needs state we do not send. `0x00B0`/`0x00B1` write the
+per-player array and that is measured, but the array is evidently not the gate on the
+window's existence. The next step is offline and specific: find the party frame's own
+open path and what it tests before it will exist -- the same consumer-backwards method
+that named `0x00B6` and the abbreviation builder. `GmPosseRoster` and the `Pt*` modules
+named in section 14.2 are the entry points.
