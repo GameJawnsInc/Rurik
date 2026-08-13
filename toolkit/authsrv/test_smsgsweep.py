@@ -56,6 +56,40 @@ opcodes, so a builder reading the base catalogue gets the arity wrong for those 
 and only those three. Section 0 measures both and requires the difference to be exactly
 {140, 146, 421}: a check that names the three is a check that can fail if a fourth is
 added, which is the point.
+
+AND ONE THAT IS NOT ABOUT smsgsweep AT ALL (section 9, 2026-08-13). Everything above runs
+inside this module -- plan() resolves the overrides, apply_set applies them, encodable()
+encodes them -- so the module agreed with itself perfectly while `--set` was putting the
+DEGENERATE payload on the wire. The consumer is `probes._smsgsweep_steps`, which built the
+Steps the server actually sends and read the overrides off the PLAN when plan() writes
+them per ROW.
+
+The regression is the shape worth remembering: `p.get("set")` was CORRECT when --set
+shipped (280a29b, 2026-08-12 10:59), and became a no-op an hour later when the qualified
+`--set 0x0083:2=1` form replaced the top-level key with sets_for (fdb63e6, 12:00). One
+side of a two-module contract moved and the other was not touched, so nothing errored and
+nothing downstream could catch it: the plan file is right, the capture is right, and
+`record` scores the capture -- so a --set run reads as a measurement of the all-zero
+payload wearing the label of the experiment. Five of studies/smsgsweep/FINDINGS.md §5c's
+gate experiments were retracted for it; the server's own `plain=` hexdumps settled which,
+because the bytes were recorded even though nothing was reading them. Section 9 is the
+only place the two halves are made to meet, and it goes through a REAL FILE because the
+plan reaches the probe as JSON.
+
+FIVE SABOTAGES WERE BUILT AND RUN (2026-08-13), and the last one is the reason steps_for
+is written the way it is:
+
+    1. the original defect, `p.get("set")`                        3 red
+    2. `rows[0]["set"]` for every row                             1 red  <- the per-row check alone
+    3. drop the `int(k)` cast (str keys straight from JSON)       2 red, naming the TypeError
+    4. wrong key name, `row.get("sets")`                          3 red
+    5. sabotage 3 with a fixture that skips the file              0 red -- ALL 72 PASS
+
+Number 5 breaks the TEST rather than the source: hand the builder an in-memory dict with
+int keys and the missing cast is invisible, green, and raises on the first real run. The
+JSON round trip is the only thing standing there. Number 3 also found a defect in this
+section's own first draft -- steps_for returned [] and a later check indexed got[0], so a
+caught defect was reported as a bare traceback with no verdict banner at all.
 """
 import json
 import os
@@ -70,13 +104,16 @@ import checks  # noqa: E402
 import smsgsweep as sw  # noqa: E402
 from codec import Codec  # noqa: E402
 
-# Floor 110, MEASURED from a green run on 2026-08-13 on the merged file. Two arcs raised
-# it the same day and neither number survives alone: 64 -> 75 when section 7b pinned the
-# planner's exit code, and 64 -> 99 when section 9 added the regime. Their sum is what the
-# merged file actually runs, and it was RE-MEASURED here rather than added up, because a
-# floor computed from two branch numbers is a guess about a file neither branch ran.
+# Floor 118, MEASURED from a green run on 2026-08-13 on the merged file. THREE arcs raised
+# it the same day and no number survives alone: 64 -> 75 when section 7b pinned the
+# planner's exit code, 64 -> 99 when section 9 added the regime, and 110 -> 118 when
+# section 10 met the probe. Each was RE-MEASURED on the merged file rather than added up,
+# because a floor computed from branch numbers is a guess about a file no branch ran.
 # Sections 0 and 2-7b and 9 need no vault, no socket and no client -- because a scoring
-# defect is not a property of any one capture, and neither is a key format. Two sections
+# defect is not a property of any one capture, and neither is a key format. Section 10
+# needs none of the three either, but it DOES need `content.load()` to succeed, because
+# the step builder it checks lives in probes.py, which imports the world at module scope.
+# Two sections
 # do need more and both declare their skips: section 1's cross-check of NOT_IN_RECV_TABLE
 # against the client's own receive table wants capstone and the pinned client (2), and
 # section 8's rebuild of the observed set wants the live captures (3). A machine missing
@@ -84,7 +121,7 @@ from codec import Codec  # noqa: E402
 # vault-less run: those two sections are the ones that pin the sweep's DENOMINATOR and the
 # ten opcodes that tear the game channel down, and a plan built on a constant nothing
 # confirmed is exactly the wish this repo keeps refusing.
-LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=110)
+LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=118)
 
 # MEASURED 2026-08-12: the opcodes whose field list `overrides.json` changes. Written as
 # literals rather than recomputed from the module under test.
@@ -175,6 +212,39 @@ def c2s(t, opcode):
 def frame(t, opcode):
     """An s2c frame -- what the pilot's analyser mistook for a stimulus."""
     return {"kind": "frame", "t": t, "opcode": opcode, "direction": "s2c", "n": 6}
+
+
+def steps_for(pr, sw_mod, plan_obj):
+    """The probe's Steps for a plan, reached THROUGH A REAL FILE.
+
+    `probes._smsgsweep_steps` calls `smsgsweep.load_plan()`, which reads JSON off disk, so
+    every key in a row's `set` arrives as a STRING. Handing the builder an in-memory dict
+    would let a version that dropped the `int(k)` cast pass this whole section and then
+    raise TypeError inside apply_set on the first real --set run -- the same shape of
+    fixture-too-kind failure the sweep's own pilot kept producing.
+
+    `plan_path()` is monkeypatched rather than used, so this needs no vault.
+
+    A raising builder returns [] and PRINTS why, rather than propagating. `_smsgsweep_steps`
+    catches only ValueError, so a builder that fed apply_set a string key would die of
+    TypeError -- and an uncaught exception here would kill the run before the verdict
+    banner, which is the trap SystemExit set for test_stripbuild: a control that aborts
+    the process looks nothing like a control that goes red.
+    """
+    fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8")
+    fh.close()
+    sw_mod._write_json(fh.name, plan_obj)
+    real = sw_mod.plan_path
+    sw_mod.plan_path = lambda: fh.name
+    try:
+        return [s for s in pr._smsgsweep_steps(None, None)]
+    except Exception as exc:
+        print(f"     (step builder raised {type(exc).__name__}: "
+              f"{str(exc).splitlines()[0][:70]})")
+        return []
+    finally:
+        sw_mod.plan_path = real
+        os.unlink(fh.name)
 
 
 def naive_frame_reader(path):
@@ -1080,6 +1150,90 @@ def main():
               "and a write against a STALE stamp is refused, leaving the file intact",
               "another session recording between our read and our write would otherwise "
               "have its row overwritten by our 334 -- silently, with no second copy")
+
+    # ---- 10. the probe puts the plan's overrides ON THE WIRE ------------------
+    print("\n10. --set reaches the wire")
+    # Every check above this line runs inside smsgsweep: plan() resolves the overrides,
+    # apply_set applies them, encodable() encodes them. The consumer is somewhere else
+    # entirely -- probes._smsgsweep_steps builds the Steps the server actually sends --
+    # and it read the overrides off the PLAN after plan() moved them per ROW (fdb63e6).
+    # So the module agreed with itself perfectly while --set sent the degenerate payload.
+    # This section is the only place the two halves are made to meet.
+    try:
+        import probes as pr
+    except Exception as exc:                        # pragma: no cover - import guard
+        LEDGER.skip("the probe's step builder against the plan",
+                    f"probes did not import: {type(exc).__name__}: "
+                    f"{str(exc).splitlines()[0][:80]}")
+        pr = None
+    if pr is not None:
+        # 0x0017 because it is the experiment apply_set's own docstring describes: its
+        # handler tests the FIFTH field against zero and skips a resource load when it is
+        # non-zero, so `--set 5=1` is the one payload that reaches the other branch.
+        OP_A, OP_B = 0x0017, 0x000F
+        base_a, base_b = sw.degenerate(codec, OP_A), sw.degenerate(codec, OP_B)
+        LEDGER.ok(base_a == [0, 0, 0, 0, 0] and base_b == [0, 0, 0],
+                  "FIXTURE: both degenerate payloads are all-zero",
+                  f"{base_a} / {base_b} -- an override is only a visible difference if "
+                  f"the field it lands in was 0, so a non-zero here would make every "
+                  f"check below unable to fail")
+        p9 = sw.plan(codec, only={OP_A}, sets={OP_A: {5: 1}})
+        LEDGER.ok(p9["rows"][0].get("set") == {"5": 1} and "set" not in p9,
+                  "the plan writes overrides PER ROW and carries no top-level `set`",
+                  f"row={p9['rows'][0].get('set')} top-level={'set' in p9} -- this is the "
+                  f"level the step builder has to read, and the level it did not")
+        # A LIST, never got[0]: steps_for returns [] when the builder raises, and indexing
+        # it here would kill the run before the verdict banner -- which is how the first
+        # version of this section reported a caught defect as a bare traceback.
+        got = [s.values for s in steps_for(pr, sw, p9)]
+        LEDGER.ok(got == [[0, 0, 0, 0, 1]],
+                  "and the probe SENDS it: --set 5=1 puts a 1 in field 5",
+                  f"{got} -- the 1-based index has to land on the "
+                  f"fifth value and leave the other four alone")
+        # THE DEFECT, reproduced inline out of the three lines it used to be, so the check
+        # above is a difference between two live answers rather than a number this file
+        # asked the code to confirm about itself.
+        broken = sw.apply_set(sw.degenerate(codec, OP_A),
+                              {int(k): v for k, v in (p9.get("set") or {}).items()})
+        LEDGER.ok(broken == base_a and [broken] != got,
+                  "CONTROL: the old plan-level lookup yields the DEGENERATE payload",
+                  f"{broken} -- `p.get('set')` reads {{}} from every plan since fdb63e6 moved "
+                  f"the overrides per row, so apply_set returned its input untouched "
+                  f"and the run measured all-zero while the report said otherwise")
+        # A fix that reads rows[0]["set"] for every row passes a one-row plan and is wrong
+        # the moment a sweep sets a field on two opcodes at once.
+        p9b = sw.plan(codec, only={OP_A, OP_B}, sets={OP_A: {5: 1}, OP_B: {2: 7}})
+        vals = {s.opcode: s.values for s in steps_for(pr, sw, p9b)}
+        LEDGER.ok(vals == {OP_A: [0, 0, 0, 0, 1], OP_B: [0, 7, 0]},
+                  "each row gets ITS OWN override, not the first row's",
+                  f"{ {hex(k): v for k, v in vals.items()} } -- --set is qualified per "
+                  f"opcode (sets_for), so one row's dict must never reach another's step")
+        # A row reaches the builder in two override-free shapes and it must not start
+        # raising on either: the ordinary 324-opcode sweep writes NO `set` key at all,
+        # while --only with no --set writes an EMPTY one. Both must still send degenerate.
+        p9c = sw.plan(codec, limit=2)
+        LEDGER.ok(all("set" not in r for r in p9c["rows"])
+                  and ([s.values for s in steps_for(pr, sw, p9c)]
+                       == [sw.degenerate(codec, r["opcode"]) for r in p9c["rows"]]),
+                  "CONTROL: the ordinary sweep has no `set` key and is unaffected",
+                  f"rows {[hex(r['opcode']) for r in p9c['rows']]} -- 324 of the sweep's "
+                  f"324 rows look like this, so a builder that required the key would "
+                  f"break every run that is not an experiment")
+        p9d = sw.plan(codec, only={OP_A})
+        LEDGER.ok(p9d["rows"][0].get("set") == {}
+                  and [s.values for s in steps_for(pr, sw, p9d)] == [base_a],
+                  "CONTROL: --only with no --set writes an EMPTY override and sends zeros",
+                  f"set={p9d['rows'][0].get('set')} -- the other override-free shape, and "
+                  f"the one a bisection run produces")
+        # The plan reaches the probe as JSON, so its keys are STRINGS -- which is why the
+        # builder casts them. steps_for() goes through a real file for exactly this
+        # reason: handed an in-memory dict with int keys, a builder that dropped the
+        # int(k) cast would pass every check above and raise TypeError inside apply_set
+        # on the first real run.
+        LEDGER.ok(list((json.loads(json.dumps(p9))["rows"][0]["set"] or {})) == ["5"],
+                  "and the override survives JSON as a STRING key",
+                  "the builder casts with int(k); a check that skipped the file would "
+                  "not notice if it stopped")
 
     return LEDGER.verdict()
 

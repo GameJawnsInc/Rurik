@@ -1029,7 +1029,7 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   **155 opcodes over 12 live connections, and 324 remaining**. Its control is the defect
   that was made writing it -- filtering channels by `:6112` cut the corpus to 52 and said
   so without complaint, because ArenaNet serves the GAME channel on port 80 in 10 of the
-  12 canon connections).
+  12 canon connections.
   **Section 9 (2026-08-13) is the REGIME**, and it exists because a row was a
   measurement of two things while its key named one. An all-zero send and an
   `--encstring` send are different experiments -- 0x0033, 0x009E, 0x00B9 and 0x00C0 each
@@ -1056,7 +1056,31 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   times on real data is why it is there); and the write is `os.replace` with a
   stale-stamp refusal, with the positive control that a current stamp is allowed, because
   the ledger is a live vault artifact another session reads while a sweep is running.
-  Floor 99, was 64; sections 0 and 2-7 and 9 need no vault and score 94),
+  Floor 99, was 64; sections 0 and 2-7 and 9 need no vault and score 94).
+  **Section 10 (2026-08-13) is the one that is not about smsgsweep at all**, and it exists
+  because every other section runs INSIDE the module: `plan()` resolves the `--set`
+  overrides, `apply_set` applies them, `encodable()` encodes them, so the module agreed
+  with itself perfectly while **`--set` was putting the DEGENERATE payload on the wire**.
+  The consumer is `probes._smsgsweep_steps`, and the regression is the shape worth
+  remembering -- `p.get("set")` was CORRECT when `--set` shipped and became a no-op an
+  hour later when the qualified `--set 0x0083:2=1` form moved the overrides per ROW; one
+  side of a two-module contract moved and the other was not touched, so nothing errored
+  and nothing downstream could tell: the plan file is right, the capture is right, and
+  `record` scores the capture, so a `--set` run reads as a measurement of the all-zero
+  payload wearing the label of the experiment. **Five of `studies/smsgsweep/FINDINGS.md`
+  §5c's gate experiments were retracted for it**, settled from the server's own `plain=`
+  hexdumps -- the bytes were recorded all along, nothing was reading them. Note what
+  section 9 above could NOT do: it checks `planned_regime` against smsgsweep's own
+  encoder, so it agrees with the module and never reaches the probe. The section joins
+  the two halves and goes through a REAL FILE, which is not decoration -- five sabotages
+  were BUILT AND RUN (3, 1, 2, 3 red; the `rows[0]`-for-every-row one reddens the per-row
+  check ALONE) and the fifth breaks the TEST instead of the source: the same missing
+  `int(k)` cast, handed an in-memory plan with int keys, is invisible and **every check
+  PASSES** while the first real run raises TypeError. The plan reaches the probe as JSON,
+  so the fixture must too. That sabotage also found a defect in the section's own draft --
+  an empty step list was indexed at `got[0]`, so a caught defect printed a bare traceback
+  and no verdict banner. Its 8 checks need no vault, no socket and no client, but they DO
+  need `content.load()` to succeed, since the builder lives in `probes.py`),
   Section 7b covers `sweeploop.py`, the unattended driver: its stop conditions are a
   PURE function so they can be checked without a client, and its control is that ONE
   barren round must NOT stop -- a single unlocalised crash is normal, and stopping at one
