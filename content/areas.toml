@@ -96,3 +96,34 @@ exercises the branch a 32x32 map never reaches. Verified offline: the terrain \
 round-trips 9,216/9,216 samples exact, the seed stands on walkable ground, and \
 the relocation was planned and executed against a throwaway archive copy with \
 every open-time rule re-checked and no overlapping reservations afterwards."""
+
+# Rung G's headline sentence, taken literally: a shape MODELLED IN BLENDER.
+# `heights` is unused for this row -- `deploy --blend` overrides it -- and the
+# row exists so the size, the seed and the borrowed set stay declarative.
+[area.sculpt]
+name = "Sculpted Vale"
+map_id = 143
+dims = 64
+heights = "plaza"
+# The plaza generator has a CLIFF built into it: at gx == mid the dip side
+# (+4/cell) meets the rise side (-8/cell), a 168-unit step that measures 61
+# degrees. The first seed here sat on that seam and `stripbuild` refused it,
+# correctly. The centre is measured at 3 degrees.
+seed_x = 3072.0
+seed_y = 3072.0
+donor_row = 7982
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 8
+
+[area.sculpt.provenance]
+source = "invented"
+verified = """Ours, and more literally ours than any other area row: the height \
+field came out of a Blender mesh that was sculpted with a radial basin and a \
+hard-crested ridge, not out of a Python formula. Verified by `deploy.py --area \
+sculpt --blend`, which re-derives the lattice from the mesh's world positions, \
+rounds and snaps onto the codec's reachable set with both errors reported, and \
+checks the seed against the slope classifier before anything is written."""

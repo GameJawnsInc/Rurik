@@ -144,13 +144,22 @@ def heights_from_blend(blend, dim, blender=None, workdir=None):
     if len(vals) != dim * dim:
         raise Refused(f"{len(vals)} samples exported, area declares {dim}x{dim}"
                       f" = {dim * dim}")
-    ints = [int(v) for v in vals]
-    if any(float(i) != v for i, v in zip(ints, vals)):
-        raise Refused("a non-integer height reached the exporter; the terrain "
-                      "codec's coefficients are integers and there is nowhere "
-                      "to put a fraction")
+    # A BRUSH PRODUCES FRACTIONS, and refusing them refuses the workflow this
+    # command exists for. The first version raised here -- correct while the
+    # only producer was a Python generator emitting integers, and wrong the
+    # moment a real sculpt arrived: 1,010 of 4,225 vertices of the first
+    # Blender scene came back non-integer, which is simply what moving a vertex
+    # with a falloff does. So round, and REPORT, exactly as the lattice snap
+    # does. The residual is <= 0.5 against a 96-unit cell pitch, and the snap
+    # that follows moves samples by up to 3 anyway.
+    if any(v != v or v in (float("inf"), float("-inf")) for v in vals):
+        raise Refused("a non-finite height (NaN or inf) reached the exporter; "
+                      "there is no value to round it to")
+    ints = [round(v) for v in vals]
+    worst = max((abs(i - v) for i, v in zip(ints, vals)), default=0.0)
+    frac = sum(1 for i, v in zip(ints, vals) if float(i) != v)
     # world row-major -> the codec's tiled order
-    return mapexport.retile(ints, dim, dim), exe, why
+    return mapexport.retile(ints, dim, dim), exe, why, worst, frac
 
 
 # --------------------------------------------------------------- borrow
@@ -425,6 +434,11 @@ def resolve_rows(archive, file_id):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--area", required=True)
+    ap.add_argument("--repo-content-only", action="store_true",
+                    help="load content from the repo alone, ignoring the vault "
+                         "overlay. For when another session is mid-edit in "
+                         "vault/content/ and its rows will not load -- it "
+                         "narrows the world, it does NOT relax a check")
     ap.add_argument("--blend", help="a .blend to author the terrain from")
     ap.add_argument("--blender", help="path to the Blender executable")
     ap.add_argument("--dat", help="archive COPY to install into")
@@ -438,7 +452,12 @@ def main(argv=None):
                                   "the one beside --dat")
     args = ap.parse_args(argv)
 
-    world = content_mod.load()
+    # The vault overlay is shared between sessions, so a half-written row over
+    # there stops this command dead. --repo-content-only skips the overlay; it
+    # does not weaken the provenance gate, which still runs on every row that
+    # remains, and an area row lives in the repo anyway.
+    world = (content_mod.load(vault_dir="") if args.repo_content_only
+             else content_mod.load())
     area = world.get("area", args.area)
     dim = int(area["dims"])
     map_id = int(area["map_id"])
@@ -449,8 +468,11 @@ def main(argv=None):
 
     # 1. geometry
     if args.blend:
-        heights, exe, why = heights_from_blend(args.blend, dim, args.blender)
+        heights, exe, why, wr, frac = heights_from_blend(
+            args.blend, dim, args.blender)
         print(f"  geometry: {args.blend} via Blender ({why})")
+        print(f"  rounding: {frac} of {dim * dim} heights were fractional, "
+              f"worst moved {wr:.3f} (cell pitch is 96)")
     else:
         gen = area.get("heights", "flat")
         if gen not in GENERATORS:

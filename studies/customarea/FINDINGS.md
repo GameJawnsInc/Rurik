@@ -6620,3 +6620,67 @@ byte-untouched. The client relocated its OWN compiled head to a new extent,
 which is the client doing what it always does rather than a symptom.
 
 Run record: `vault/research/size-2026-08-13/`.
+
+
+## 58. OBSERVED: a shape sculpted in Blender, standing in the client (2026-08-13)
+
+Rung G's sentence is *"someone models a shape in Blender, runs one command, and
+walks around it"*, and the rung shipped with that proved by a PYTHON GENERATOR
+— `--blend` was wired and had never run. It has now, through the artist's own
+round trip: export an area to interchange, import it into Blender, **sculpt it
+by moving vertices** (a radial basin with a smoothstep falloff, 620 vertices;
+a hard-crested ridge, 455), save the `.blend`, and deploy it.
+
+    terrain round trip 4,096/4,096 samples exact       92.34% ours
+    [PASS] the client re-compiled the map     3,016 B path chunk
+           mesh: 13 trapezoids built from our terrain
+    [PASS] the compiled height field equals ours    4,096/4,096
+    [PASS] environment 639 B and sound 89 B carried VERBATIM
+    [PASS] our 8 props present; spawn in exactly one trapezoid
+
+**13 trapezoids against the plaza's 55 over the same 4,096 cells** — the sculpt
+made most of the map unwalkable, which is what a 900-unit ridge and a steep
+basin rim do. That is a fact about the shape, not a defect. The basin was the
+edit worth making: it is CURVATURE, the thing §57's one-tile snap defect
+destroyed silently while cliffs round-tripped perfectly.
+
+### A brush produces fractions, and the pipeline forbade them
+
+`deploy` REFUSED the first sculpt — *"a non-integer height reached the
+exporter"*. That refusal was correct while the only producer was a generator
+emitting integers, and **wrong the moment a real sculpt arrived**: 1,004 of
+4,096 heights came back fractional, which is simply what moving a vertex with a
+falloff does. It now ROUNDS and REPORTS, exactly as the lattice snap does —
+worst residual 0.500 against a 96-unit cell pitch, against a snap that moves
+samples by up to 4 anyway. Non-finite values are still refused, because there
+is no value to round them to. A rule written for one producer became a wall in
+front of the only workflow the rung is named for.
+
+### The sculpt that never ran
+
+The scene script imported the area with `runpy.run_path`. The importer ends in
+`sys.exit()`, `run_path` propagated the `SystemExit`, and the script ended
+there — **silently, with Blender exiting 0 and a `.blend` saved by nobody**.
+The scene on disk was the unsculpted import. Deploying it would have shipped
+the generator's own terrain under the name of a Blender sculpt and every check
+downstream would have passed, because every check downstream is about the
+pipeline rather than about provenance of the shape. It was caught only because
+the `sculpt:` report lines were missing from the output — i.e. by a print, not
+by a check. `SystemExit` is a `BaseException`, which is the same family of trap
+`test_stripbuild`'s vault gate hit in §43.
+
+### Two more, briefly
+
+`gen_plaza` has a cliff built into it: at `gx == mid` the dip side (+4/cell)
+meets the rise side (−8/cell), a 168-unit step measuring **61°**. The first
+seed sat on that seam and `stripbuild` refused it, correctly, naming
+PathData:365.
+
+And the harness now refuses to launch when the server's archive and the
+client's bind one file id to different files — a guard from the parallel
+map-rows arc, and a good one, which the arm-and-recompile loop trips BY DESIGN.
+Pointing `RURIK_DAT` at the client's own run archive makes them agree; the
+exclusive-lock worry did not materialise. That deserves a real answer inside
+`deploy` rather than an env var typed into a shell.
+
+Run record: `vault/research/blender-2026-08-13/`.

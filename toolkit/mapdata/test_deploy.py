@@ -63,7 +63,13 @@ check = checks.adopt(LEDGER)
 
 def section0():
     print("\n0. the area row loads, and says what it borrows")
-    world = content_mod.load()
+    # REPO ONLY, deliberately. `content.load()` merges the VAULT overlay, which
+    # is shared between sessions -- so a half-written row over there turns this
+    # test red for reasons that have nothing to do with deploy. It happened:
+    # another arc's effects.toml cited an extractor it had not committed, and
+    # every caller of load() raised, this file included. Area rows live in the
+    # repo; the overlay's rules are `test_content.py`'s job.
+    world = content_mod.load(vault_dir="")
     area = world.get("area", "plaza")
     check(int(area["map_id"]) in {int(k) for k in world.rows("map")},
           "the area's map_id names a real maps.toml row", f"{area['map_id']}")
