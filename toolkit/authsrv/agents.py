@@ -163,7 +163,20 @@ AGENT_MAX_MOVE_SPEED = 1.0      # float32 of 0.01.  AgAgent.cpp:2367
 AGENT_FACING_MASK = 0xF         # AgAgent.cpp:2368 "!(facing & ~AGENT_FACING_MASK)"
 MAX_TURN_RATE = 20.0 * math.pi  # rad/s. Observed: 0.24892, 0.89012, 2.0943952
 FACING_FORWARD = 1              # 119 of 163 samples, and every varied speed
-CHAR_PROFESSIONS_MAX = 6        # observed primaries are 1..6; 0 NEVER occurs
+# Three different numbers that used to be one, and the one they were collapsed
+# into was the weakest of them. See studies/profession/FINDINGS.md.
+CHAR_PROFESSIONS = 11           # the CLIENT's own compiled bound: ids 0..10 are
+                                # valid, 0 = None. MEASURED on build 38797 at 29
+                                # assert sites across 13 modules, and reproduced
+                                # on the 2026-04-30 build.
+OBSERVED_PRIMARY_MAX = 6        # the largest primary our live corpus ever showed
+                                # (387 samples of 0x00A6, all early-Prophecies).
+                                # A fact about the CORPUS, not a limit on the
+                                # field -- professions 7..10 ship and are legal.
+PROFESSION_FIELD_MAX = 0xFF     # the wire field is a plain u8 on 0x00A6/0x00B7,
+                                # and the setter at 0x007F7330 contains no
+                                # comparison instruction at all. 255 is the
+                                # field's width, not a claim the client copes.
 
 # GAME_SMSG 0x0026's setter is ((old ^ new) & 0x3f0000) ^ new -- it KEEPS the old
 # bits inside this mask and takes the new bits everywhere else. A server cannot
@@ -262,18 +275,39 @@ def agent_update_flags(agent_id, flags):
     return [agent_id, flags]
 
 
-def agent_set_profession(agent_id, primary, secondary=0):
+def agent_set_profession(agent_id, primary, secondary=0, custom=False):
     """GAME_SMSG 0x00A6 -- the profession pair: icons, roster, nameplate.
 
     The client's own invariant is GmDeckBuilder:2321
     `agentPrimaryProf != agentSecondaryProf`, and across 387 live samples the
     primary is 1..6 and NEVER 0 while the secondary is 0 about half the time.
     A primary of 0 is therefore not "no profession"; it is out of band.
+
+    THE BOUND USED TO BE 6 AND THAT WAS WRONG IN BOTH DIRECTIONS. Six is the
+    largest primary our capture corpus happens to contain, and every one of
+    those captures is early-Prophecies content; it was never the client's
+    limit. Enforcing it refused professions 7..10 -- Assassin, Ritualist,
+    Paragon, Dervish -- which ship, are legal, and reach this function straight
+    from content via authsrv.py's NPC loop. Any such NPC raised.
+
+    `custom=True` raises the ceiling to the wire field's own width so a
+    profession experiment can send an id the client does not ship. It is opt-in
+    because out-of-band is exactly what an ordinary caller must not send by
+    accident, and because what the client does with such an id is the
+    QUESTION -- studies/profession/ measures 29 bound-check sites, every one
+    of which ends the session (the assert reporter is noreturn). Passing
+    custom=True means "I am the experiment", not "this is safe".
     """
-    if not 1 <= primary <= CHAR_PROFESSIONS_MAX:
-        raise ValueError(f"primary profession {primary} outside "
-                         f"1..{CHAR_PROFESSIONS_MAX}; 0 never occurs in the "
-                         f"live corpus and does not mean 'none'")
+    limit = PROFESSION_FIELD_MAX if custom else CHAR_PROFESSIONS - 1
+    if not 1 <= primary <= limit:
+        why = ("the wire field is a u8" if custom else
+               f"the client's compiled bound is {CHAR_PROFESSIONS} "
+               f"(ids 0..{CHAR_PROFESSIONS - 1}); pass custom=True to go past it")
+        raise ValueError(f"primary profession {primary} outside 1..{limit}: {why}. "
+                         f"0 does not mean 'none' and never occurs in the corpus")
+    if not 0 <= secondary <= limit:
+        raise ValueError(f"secondary profession {secondary} outside 0..{limit} "
+                         f"(0 means none)")
     if secondary and secondary == primary:
         raise ValueError(f"primary == secondary == {primary} violates the "
                          f"client's own assert (GmDeckBuilder:2321)")
