@@ -1,13 +1,16 @@
-"""Take one map's terrain out of `Gw.dat` and put it in a neutral interchange.
+"""Take one map's terrain AND PROPS out of `Gw.dat`; put them in a neutral
+interchange.
 
-`terrain.py` decodes the chunk; this module turns that into something a tool
-which knows nothing about ArenaNet's archive can open. Three files per map:
+`terrain.py` and `props.py` decode the chunks; this module turns that into
+something a tool which knows nothing about ArenaNet's archive can open. Up to
+five files per map:
 
     <name>.gwmap.json     dims, the world rect, the cell pitch, tag 0's fields,
                           where it came from, and a sha256 for each sidecar
     <name>.heights.f32    dimX*dimY little-endian float32, DE-TILED
     <name>.tiles.u8       dimX*dimY tile indices, same order       (optional)
     <name>.shade.u8       dimX*dimY tag-9 bytes, same order        (optional)
+    <name>.props.json     every prop placement, both streams joined (optional)
 
     python toolkit/mapdata/mapexport.py --row 22371
     python toolkit/mapdata/mapexport.py --file-id 0x345CC --out D:\\scratch
@@ -77,11 +80,15 @@ nothing, and `test_mapexport.py` says so and checks `detile` against
 `terrain.Terrain.index` element-for-element instead, which is a different
 implementation in a module this one does not own.
 
-HOW THE ORIENTATION IS ESTABLISHED, and it is not by anything in this file. The
-oracle is a DIFFERENT CHUNK: props, `0x20000004`, carry a world `(x, y, z)` each.
-Sampling the exported height field at every prop's `(x, y)` and comparing with
-its stored `z` scores the layout without our exporter or our importer having any
-say in it. MEASURED by `test_mapexport.py` on the two reference maps, against
+HOW THE ORIENTATION IS ESTABLISHED, and it is not by anything in the terrain
+path. The oracle is a DIFFERENT CHUNK: props, `0x20000004`, carry a world
+`(x, y, z)` each. Sampling the exported height field at every prop's `(x, y)`
+and comparing with its stored `z` scores the layout. Since 2026-08-13 this
+module also EXPORTS the props chunk, so the old framing ("a chunk the exporter
+never reads") is dead -- the independence that carries the oracle survives and
+is narrower: the TERRAIN path (`detile`, the height sidecar) never reads props,
+and the props path never touches the height arrays, so neither can force the
+comparison. MEASURED by `test_mapexport.py` on the two reference maps, against
 three rival layouts:
 
     map                 baseline   y-flip   x-flip   not de-tiled
@@ -103,9 +110,37 @@ is deliberately not exported at all: its bit-pair position inside a byte is not
 established by anything measured, so any per-cell unpacking would be a convention
 we invented and could never refute.
 
-SCOPE. Bloated stream, terrain only. Props, zones, water and the navmesh are not
-exported; `pathmap.py` already reads the last of those and joining them is a
-separate rung. Nothing here writes to an archive.
+THE PROPS SIDECAR (format_version 2, 2026-08-13). Every placement, from BOTH
+streams, made to check each other at export time: the Stripped chunk
+`0x10000004` (partner row) is the authoring form -- model index, three rot
+bytes, scale byte, flags, prop-local outline -- and the Bloated chunk
+`0x20000004` (head row) is the compiled form -- the two basis vectors, the f32
+scale, the placement radius. `BloatedProps.corresponds()` joins them, retail
+satisfies it 349/349, so a disagreement at export is a finding and the export
+REFUSES rather than picking a side. The model index resolves through the
+dependency chunks (`0x21000004` head, `0x11000004` partner -- MEASURED
+identical on 39/39 probed maps, refused on disagreement) to a file id, and the
+file id to the MFT's (size, crc) -- recorded because a file id is ARCHIVE
+STATE, not a property of the map (`test_contentids.py`).
+
+WHAT A PROPS EXPORT IS AND IS NOT. Placements are MEASUREMENTS -- positions,
+ids, bounds, angles -- and sit on the provenance gate's permitted side, in the
+vault like everything else here. Model GEOMETRY is not exported and nothing in
+this tree decodes it; a prop reaches a consumer as a transform, a footprint and
+a radius, never as ArenaNet's mesh.
+
+THE ROTATION COMPOSITION IS MEASURED, closing what `props.py` left open. Each
+rot byte b is an angle b*2*pi/256 about x/y/z with signs (-, +, -) (the
+single-axis result recorded in `props.py`); the COMPOSITION is z first, then
+x, then y -- Blender's 'ZXY' -- which reproduces the compiled basis on
+3,545 of 3,545 multi-axis records over a 12-map probe (2026-08-13), the
+nearest rival order closing 2,070. `test_mapexport.py` pins it on the
+reference maps. The sidecar still carries the compiled basis verbatim, so no
+consumer is forced through the formula.
+
+SCOPE. Terrain and props. Zones, water and the navmesh are not exported;
+`pathmap.py` already reads the last of those and joining them is a separate
+rung. Nothing here writes to an archive.
 """
 
 import argparse
@@ -121,10 +156,18 @@ sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive, file_id_table, DEFAULT_DAT  # noqa: E402
 from terrain import CELL_PITCH, CHUNK_SIZE  # noqa: E402
 from mapfile import MapFile  # noqa: E402
+from mapchunks import next_stream  # noqa: E402
+from props import StrippedProps, BloatedProps  # noqa: E402
 import vaultpath  # noqa: E402
 
 FORMAT = "rurik.gwmap"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
+
+#: Versions a reader accepts. 1 is the terrain-only interchange; 2 adds the
+#: OPTIONAL props sidecar and changes nothing else, so a version-1 file stays
+#: readable forever and a version-2 file with no props sidecar is a version-1
+#: file wearing the new number.
+FORMAT_VERSIONS_READ = (1, 2)
 
 # The Map Parameters chunk, FINDINGS 3 and 17.4. 41 bytes: u32 signature, u8
 # version, four f32 x0,y0,x1,y1 -- which start at the UNALIGNED offset 5,
@@ -137,9 +180,19 @@ MAP_PARAMS_MIN = 41
 MAP_RECT = struct.Struct("<4f")
 
 # The sidecars, and the one dtype each. Fixed here so the JSON's `dtype` field
-# is never a free-form string a reader has to interpret.
+# is never a free-form string a reader has to interpret. The first two are
+# per-cell arrays and their `count` is the cell count; `json` is the props
+# sidecar and its `count` is the prop record count.
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
+DTYPE_JSON = "json"
+
+# The props chunks and their model dependency lists, one pair per stream.
+# `props.py` owns both codecs; `mapchunks.py` owns the dependency decode.
+PROPS_BLOATED_CHUNK = 0x20000004
+PROPS_STRIPPED_CHUNK = 0x10000004
+PROPS_DEPS_BLOATED = 0x21000004
+PROPS_DEPS_STRIPPED = 0x11000004
 
 # `HERE` is toolkit/mapdata, so the repo root is two levels up FROM IT -- three
 # dirnames from the file. The first version of this line took two from the file
@@ -226,13 +279,15 @@ class MapExport:
 
     Every array is in world row-major order, `gy*dim_x + gx`, with grid row 0 at
     world maxY. `tiles` and `shade` are None when they were not exported.
+    `props` is the parsed props sidecar (a dict -- see `build_props` for its
+    shape) or None when the export has none.
     """
 
     __slots__ = ("meta", "dim_x", "dim_y", "rect", "pitch", "heights", "tiles",
-                 "shade", "path")
+                 "shade", "props", "path")
 
     def __init__(self, meta, dim_x, dim_y, rect, pitch, heights, tiles=None,
-                 shade=None, path=None):
+                 shade=None, props=None, path=None):
         self.meta = meta
         self.dim_x = dim_x
         self.dim_y = dim_y
@@ -241,6 +296,7 @@ class MapExport:
         self.heights = heights
         self.tiles = tiles
         self.shade = shade
+        self.props = props
         self.path = path
 
     @property
@@ -335,9 +391,9 @@ def _verify_meta(meta, base):
     bad = []
     if meta.get("format") != FORMAT:
         bad.append(f"format is {meta.get('format')!r}, not {FORMAT!r}")
-    if meta.get("format_version") != FORMAT_VERSION:
+    if meta.get("format_version") not in FORMAT_VERSIONS_READ:
         bad.append(f"format_version is {meta.get('format_version')!r}, "
-                   f"not {FORMAT_VERSION}")
+                   f"not one of {FORMAT_VERSIONS_READ}")
     for side in meta.get("sidecars", []):
         path = os.path.join(base, side["name"])
         if not os.path.isfile(path):
@@ -378,9 +434,22 @@ def load_export(json_path):
     rect = (r["x0"], r["y0"], r["x1"], r["y1"])
 
     arrays = {}
+    props = None
     for side in meta["sidecars"]:
         with open(os.path.join(base, side["name"]), "rb") as fh:
             blob = fh.read()
+        if side["dtype"] == DTYPE_JSON:
+            if side["kind"] != "props":
+                raise ValueError(f"{side['name']}: unknown json sidecar kind "
+                                 f"{side['kind']!r}")
+            props = json.loads(blob.decode("utf-8"))
+            n = len(props.get("props", ()))
+            if side["count"] != n or props.get("count") != n:
+                raise ValueError(
+                    f"{side['name']}: manifest says {side['count']} props, "
+                    f"the sidecar declares {props.get('count')} and holds {n}")
+            continue
+        # the per-cell array sidecars; their count is the cell count
         if side["count"] != cells:
             raise ValueError(f"{side['name']} holds {side['count']} values for "
                              f"a {dim_x}x{dim_y} grid ({cells} cells)")
@@ -396,7 +465,7 @@ def load_export(json_path):
         raise ValueError("export has no heights sidecar")
     return MapExport(meta, dim_x, dim_y, rect, pitch, arrays["heights"],
                      tiles=arrays.get("tiles"), shade=arrays.get("shade"),
-                     path=json_path)
+                     props=props, path=json_path)
 
 
 # ---------------------------------------------------------- where output goes
@@ -434,14 +503,139 @@ def _inside(path, root):
     return path == root or path.startswith(root + os.sep)
 
 
+# ------------------------------------------------------------- the props
+
+def build_props(head_mf, partner_mf, archive=None):
+    """The props sidecar body, or None when the map carries no props chunk.
+
+    Reads BOTH streams and makes them check each other -- `corresponds()` is
+    satisfied by retail 349/349, so any refusal below is a finding about the
+    source, not a formatting choice. With `archive` given, each model file id
+    is also resolved to its MFT row's (size, crc); without one (the in-memory
+    path the tests use) `mft` is None.
+    """
+    cb = head_mf.find(PROPS_BLOATED_CHUNK) if head_mf is not None else None
+    cs = (partner_mf.find(PROPS_STRIPPED_CHUNK)
+          if partner_mf is not None else None)
+    if cb is None and cs is None:
+        return None
+    if cb is None or cs is None:
+        raise ValueError(
+            f"props chunk on one side only (Bloated {cb is not None}, "
+            f"Stripped {cs is not None}); every retail map carries both or "
+            f"neither, so this pair is broken or mismatched")
+
+    sp = StrippedProps.decode(cs.payload())
+    bp = BloatedProps.decode(cb.payload())
+    bad = bp.corresponds(sp)
+    if bad:
+        raise ValueError(
+            "the two props streams disagree; retail agrees 349/349, so "
+            "refusing to export either:\n  " + "\n  ".join(bad[:8]))
+
+    db = head_mf.find(PROPS_DEPS_BLOATED)
+    ds = partner_mf.find(PROPS_DEPS_STRIPPED)
+    ids_b = db.value.file_ids if db is not None else []
+    ids_s = ds.value.file_ids if ds is not None else []
+    if ids_b != ids_s:
+        raise ValueError(
+            f"the model dependency lists disagree ({len(ids_b)} vs "
+            f"{len(ids_s)} entries); measured identical on every probed "
+            f"retail map, so refusing to pick one")
+    need = max((p.model for p in sp.props), default=-1)
+    if need >= len(ids_b):
+        # `stripbuild.py` refuses this in the write direction for the same
+        # reason: the client's failure mode for an unresolvable model has
+        # never been measured.
+        raise ValueError(
+            f"model index {need} into a {len(ids_b)}-entry dependency list; "
+            f"an unresolvable model cannot be exported honestly")
+
+    fid_rows = by_row = None
+    if archive is not None:
+        fid_rows = file_id_table(archive)
+        by_row = {e.index: e for e in archive.entries}
+    models = []
+    for i, fid in enumerate(ids_b):
+        entry = None
+        if fid_rows is not None:
+            row = fid_rows.get(fid)
+            entry = by_row.get(row) if row is not None else None
+        models.append({
+            "index": i,
+            "file_id": fid,
+            # (size, crc) is the durable identity; `row` is this archive's.
+            "mft": None if entry is None else
+                   {"row": entry.index, "size": entry.size, "crc": entry.crc},
+        })
+
+    records = []
+    for spr, rec in zip(sp.props, bp.records):
+        records.append({
+            "model": spr.model,
+            "position": [spr.x, spr.y, spr.z],
+            "rot_bytes": list(spr.rot),
+            "basis": [list(rec.basis[:3]), list(rec.basis[3:])],
+            "scale_byte": spr.scale,
+            "scale": rec.scale,
+            "radius": struct.unpack("<f", rec.tail)[0],
+            "flags": spr.flags,
+            "outline": [[dx, dy] for dx, dy in spr.outline],
+        })
+
+    return {
+        "format": "rurik.gwmap-props",
+        "count": len(records),
+        # Everything a consumer would otherwise have to guess. Each line's
+        # evidence is in this module's docstring and `props.py`'s.
+        "conventions": {
+            "position": "world (x, y, z); heights share the terrain's "
+                        "convention -- a GREATER stored value is LOWER in "
+                        "the world (FINDINGS 25)",
+            "rotation": "rot_bytes[i] is an angle b*2*pi/256 about "
+                        "(x, y, z)[i] with signs (-1, +1, -1), applied z "
+                        "first, then x, then y (Blender 'ZXY'). MEASURED "
+                        "against the compiled basis, 3545/3545 multi-axis "
+                        "records, 12-map probe 2026-08-13; nearest rival "
+                        "order 2070. `basis` is the compiler's own two "
+                        "vectors -- at rot (0,0,0) they are (0,0,-1), "
+                        "(0,1,0) -- prefer them to re-deriving",
+            "scale": "scale_byte b -> b*(255/128)/256 + 1/128; `scale` is "
+                     "the compiled f32, and the formula holds EXACTLY on "
+                     "every retail record",
+            "radius": "the compiled placement radius: scale * the model's "
+                      "max 2D vertex radius (measured at 1e-5 on "
+                      "12,766/12,875 props)",
+            "outline": "prop-local i16 (dx, dy); world point = "
+                       "(x + dx, y + dy), the client's own add-back",
+            "model": "an index into `models`; a file id is ARCHIVE STATE, "
+                     "so `mft` (size, crc) is the durable identity",
+            "refs": "tag-4/tag-6 pairs [value, prop]; `prop` indexes "
+                    "`props`, `value`'s meaning is UNVERIFIED",
+        },
+        "models": models,
+        "props": records,
+        "refs4": [[r.value, r.prop] for r in sp.refs4],
+        "refs6": None if sp.refs6 is None else
+                 {"word": sp.tag6_word,
+                  "entries": [[r.value, r.prop] for r in sp.refs6]},
+    }
+
+
 # ------------------------------------------------------------- the export
 
-def build_manifest(trn, rect, name, source, tiles=True, shade=True):
+def build_manifest(trn, rect, name, source, tiles=True, shade=True,
+                   props=None, props_state=None):
     """The JSON body and the sidecar payloads, with no file touched yet.
 
     Split out from `export_map` so the whole interchange can be built in memory
     from a `Terrain` that never came out of an archive -- which is what lets the
     round-trip section of the test run on a bare machine.
+
+    `props` is a `build_props` dict or None; `props_state` names why the
+    sidecar is or is not there ("exported", "none in source", "skipped") and
+    is omitted from the manifest when None -- the in-memory builders that
+    carry no claim about a source archive leave it that way.
     """
     dim_x, dim_y = trn.dim_x, trn.dim_y
     cells = dim_x * dim_y
@@ -455,6 +649,10 @@ def build_manifest(trn, rect, name, source, tiles=True, shade=True):
     if shade:
         payloads.append(("shade", f"{name}.shade.u8", DTYPE_U8,
                          detile(trn.shade, dim_x, dim_y), cells))
+    if props is not None:
+        blob = (json.dumps(props, indent=2) + "\n").encode("utf-8")
+        payloads.append(("props", f"{name}.props.json", DTYPE_JSON, blob,
+                         props["count"]))
 
     x0, y0, x1, y1 = rect
     meta = {
@@ -501,6 +699,7 @@ def build_manifest(trn, rect, name, source, tiles=True, shade=True):
         "tile_table_a": list(trn.table_a),
         "tile_table_b": list(trn.table_b),
         "tag_sequence": list(trn.order),
+        **({} if props_state is None else {"props_state": props_state}),
         "sidecars": [
             {"kind": kind, "name": fname, "dtype": dtype, "count": count,
              "bytes": len(blob),
@@ -529,8 +728,13 @@ def write_export(meta, payloads, outdir):
 
 
 def export_row(row, archive, outdir=None, name=None, file_id=None, tiles=True,
-               shade=True):
-    """One MFT row's terrain to an interchange on disk. Returns the JSON path."""
+               shade=True, props=True):
+    """One MFT row's terrain and props to an interchange on disk.
+
+    Returns the JSON path. `row` is the Bloated HEAD; the props sidecar also
+    reads its Stripped partner (resolved through `alloc.nextStream`, the same
+    join `mapchunks.MapIndex` makes) because the two streams check each other.
+    """
     mf = MapFile.from_row(row, archive)
     trn = mf.terrain()
     if trn is None:
@@ -544,23 +748,47 @@ def export_row(row, archive, outdir=None, name=None, file_id=None, tiles=True,
     rect = map_rect(params.value)
     _check_rect(rect, trn.dim_x, trn.dim_y)
 
+    props_dict = None
+    props_state = "skipped"
+    partner_row = None
+    if props:
+        entry = next(e for e in archive.entries if e.index == row)
+        nxt = next_stream(entry)
+        partner = next((e for e in archive.entries if e.index == nxt),
+                       None) if nxt else None
+        if partner is None:
+            if mf.find(PROPS_BLOATED_CHUNK) is not None:
+                raise ValueError(
+                    f"row {row} carries the Bloated props chunk but its "
+                    f"Stripped partner (nextStream {nxt}) resolves to no "
+                    f"row; the pair is broken and the streams cannot check "
+                    f"each other. --no-props exports the terrain alone.")
+            props_state = "none in source"
+        else:
+            partner_row = partner.index
+            partner_mf = MapFile.from_row(partner_row, archive)
+            props_dict = build_props(mf, partner_mf, archive=archive)
+            props_state = ("exported" if props_dict is not None
+                           else "none in source")
+
     if name is None:
         name = f"map_{file_id:X}" if file_id is not None else f"row_{row}"
     source = {"archive": os.path.basename(archive.path), "row": row,
-              "file_id": file_id, "chunk_count": len(mf),
-              "ffna_type": mf.ffna_type}
+              "partner_row": partner_row, "file_id": file_id,
+              "chunk_count": len(mf), "ffna_type": mf.ffna_type}
     meta, payloads = build_manifest(trn, rect, name, source, tiles=tiles,
-                                    shade=shade)
+                                    shade=shade, props=props_dict,
+                                    props_state=props_state)
     return write_export(meta, payloads, outdir)
 
 
 def export_file_id(file_id, archive, outdir=None, name=None, tiles=True,
-                   shade=True):
+                   shade=True, props=True):
     row = file_id_table(archive).get(file_id)
     if row is None:
         raise KeyError(f"no file id 0x{file_id:X} in {archive.path}")
     return export_row(row, archive, outdir=outdir, name=name, file_id=file_id,
-                      tiles=tiles, shade=shade)
+                      tiles=tiles, shade=shade, props=props)
 
 
 def _check_rect(rect, dim_x, dim_y):
@@ -594,6 +822,9 @@ def _main(argv=None):
     ap.add_argument("--name", default=None, help="basename for the three files")
     ap.add_argument("--no-tiles", action="store_true")
     ap.add_argument("--no-shade", action="store_true")
+    ap.add_argument("--no-props", action="store_true",
+                    help="terrain only; skip the props sidecar and the "
+                         "partner-row read it needs")
     ap.add_argument("--verify", default=None, metavar="JSON",
                     help="verify an existing export instead of making one")
     args = ap.parse_args(argv)
@@ -616,11 +847,13 @@ def _main(argv=None):
     with Archive(args.dat) as ar:
         if args.row is not None:
             path = export_row(args.row, ar, outdir=args.out, name=args.name,
-                              tiles=not args.no_tiles, shade=not args.no_shade)
+                              tiles=not args.no_tiles, shade=not args.no_shade,
+                              props=not args.no_props)
         else:
             path = export_file_id(int(args.file_id, 0), ar, outdir=args.out,
                                   name=args.name, tiles=not args.no_tiles,
-                                  shade=not args.no_shade)
+                                  shade=not args.no_shade,
+                                  props=not args.no_props)
 
     exp = load_export(path)
     ex, ey = exp.extent
@@ -634,6 +867,12 @@ def _main(argv=None):
     print(f"  extent        {ex:.0f} x {ey:.0f}   pitch {exp.pitch}")
     print(f"  height        {lo:.0f} .. {hi:.0f}  (as stored -- a greater value "
           f"is LOWER in the world, FINDINGS 25)")
+    if exp.props is not None:
+        outlined = sum(1 for p in exp.props["props"] if p["outline"])
+        print(f"  props         {exp.props['count']} placements, {outlined} "
+              f"with outlines, {len(exp.props['models'])} model files")
+    else:
+        print(f"  props         {exp.meta.get('props_state', 'absent')}")
     print(f"  sidecars      " + ", ".join(s["name"]
                                           for s in exp.meta["sidecars"]))
     return 0

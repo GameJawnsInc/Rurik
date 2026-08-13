@@ -520,7 +520,12 @@ class BloatedRecord:
         +0x1A f32[3] basis_b  / at rot (0,0,0) they are (-0,-0,-1), (0,1,-0)
                                 on every such record. Single-axis rotations
                                 close against b*2*pi/256 about x (sign -1),
-                                y (+1), z (-1); COMPOSITION IS NOT MEASURED.
+                                y (+1), z (-1); the COMPOSITION is z first,
+                                then x, then y (Blender 'ZXY') -- MEASURED
+                                2026-08-13, 3545/3545 multi-axis records on
+                                a 12-map probe, nearest rival order 2070;
+                                pinned on the reference maps by
+                                `test_mapexport.py`.
         +0x26 f32    scale    == f32(b*(255/128)/256 + 1/128) of the Stripped
                                 scale byte, EXACTLY -- which is what took that
                                 formula from INFERRED to compiler-corroborated
