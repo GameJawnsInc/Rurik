@@ -562,14 +562,28 @@ def main(argv=None):
                 f"against {len(report.blob)} B written. The writer returned "
                 f"success and the archive disagrees, so the archive wins")
         print(f"  verified: the row reads back the {len(got)} B we wrote")
-        rc = subprocess.run(
-            [sys.executable, os.path.join(HERE, "rebloat.py"), "--dat", dat,
-             "--file-id", hex(file_id), "--arm", "--confirm",
-             "--baseline", os.path.join(here, f"{args.area}_baseline.json"),
-             "--journal", os.path.join(here, f"{args.area}_rebloat.json")],
-            text=True).returncode
-        if rc != 0:
-            raise Refused(f"rebloat refused (rc {rc})")
+        # ARM ONLY IF IT IS NOT ALREADY ARMED. `rebloat --arm` refuses a
+        # zero-length head -- rightly, since it cannot record a baseline mesh
+        # from a row that has none, and a second arm would overwrite the first
+        # journal with nothing. But "already armed" is not an error HERE: the
+        # client recompiles on load either way, and this command is meant to be
+        # run repeatedly while iterating on a shape. The previous version turned
+        # every re-run after an interrupted one into a dead end.
+        with Archive(dat) as ar:
+            head_now = next(e for e in ar.entries if e.index == head_row)
+            already = head_now.size == 0
+        if already:
+            print("  the head is already zero length -- already armed, so the "
+                  "client will recompile; not arming twice")
+        else:
+            rc = subprocess.run(
+                [sys.executable, os.path.join(HERE, "rebloat.py"), "--dat", dat,
+                 "--file-id", hex(file_id), "--arm", "--confirm",
+                 "--baseline", os.path.join(here, f"{args.area}_baseline.json"),
+                 "--journal", os.path.join(here, f"{args.area}_rebloat.json")],
+                text=True).returncode
+            if rc != 0:
+                raise Refused(f"rebloat refused (rc {rc})")
 
     if not args.launch:
         print("\ninstalled and armed. --launch to run the client.")
@@ -587,11 +601,31 @@ def main(argv=None):
         raise Refused(f"no client beside the archive at {exe}; the client that "
                       f"reads {dat} is the only one that can load what we armed")
     session = os.path.join(os.path.dirname(HERE), "harness", "session.py")
+
+    # THE SERVER MUST READ THE ARCHIVE WE JUST WROTE TO, and this is the whole
+    # reason `RURIK_DAT` is set here rather than typed into a shell. The server
+    # takes its navmesh from `vault/dat_study/Gw.dat` by default; we install the
+    # authored map into a COPY, so after an install the two disagree about this
+    # very map id -- the server would path against ArenaNet's geometry while the
+    # client draws ours, and `contentids.preflight` refuses the launch for
+    # exactly that reason (studies/maprows FINDINGS 8). It is a good guard and
+    # the fix is not to bypass it: `--dat` already decides which client runs, so
+    # it decides which world the server serves too. Both halves then name the
+    # same file and the guard passes because the situation is actually right.
+    #
+    # The known hazard, stated rather than discovered: a RUNNING client holds
+    # its archive open, so a server that wanted to re-read mid-session could be
+    # refused. Measured 2026-08-13 -- the run completes, because the server
+    # reads the world at startup, before the client is launched.
+    env = dict(os.environ)
+    env["RURIK_DAT"] = os.path.abspath(dat)
     print(f"launching {exe} at map {map_id}")
+    print(f"  server world: RURIK_DAT={env['RURIK_DAT']} -- the same archive "
+          f"the client reads, so both path against OUR map")
     rc = subprocess.run(
         [sys.executable, session, "--replace", "--hold", str(args.hold),
          "--warn", "3", "--exe", exe,
-         "--game-args", f"--map {map_id}"], text=True).returncode
+         "--game-args", f"--map {map_id}"], text=True, env=env).returncode
     print(f"\nharness rc {rc}")
 
     # 7. read back. A harness PASS says the client reached a map; only this
