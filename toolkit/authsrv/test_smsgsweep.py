@@ -38,6 +38,18 @@ THE FIVE THINGS IT PINS:
      A cursor advanced at send time would record opcodes the client never received and
      the sweep would walk past them for good.
 
+AND A SIXTH, ADDED 2026-08-13, WHICH IS THE ONE THAT COST THE MOST. **A ledger row is a
+measurement of an opcode AND of the payload it was sent with**, and for a day it was
+keyed by the opcode alone. Four opcodes -- 0x0033, 0x009E, 0x00B9, 0x00C0 -- crashed the
+client on an all-zero payload and went SILENT when the same opcode carried a real encoded
+string, two of them naming a guard that is ABOUT the string. Nine runs measured that and
+none could be recorded: `record` is first-write-wins, every key was already taken, and
+`--record` printed `recorded 0`, which reads as "nothing new" and meant "your measurement
+was discarded". Section 9 pins the whole dimension, and its load-bearing check is the
+SABOTAGE: the regime-less key is reproduced inline, run on the same two fixtures, and
+required to lose one of the two results -- so "the key needs a regime in it" is a
+difference between two live answers rather than an assertion about the code.
+
 AND ONE THAT IS NOT ABOUT SCORING. `degenerate` must read the CODEC, never
 `schema/messages.json` -- `overrides.json` changes the field list of exactly three
 opcodes, so a builder reading the base catalogue gets the arity wrong for those three
@@ -58,9 +70,13 @@ import checks  # noqa: E402
 import smsgsweep as sw  # noqa: E402
 from codec import Codec  # noqa: E402
 
-# Floor 75, measured from a green run on 2026-08-13 (was 64; 7b gained eleven checks for
-# the planner's exit code). Sections 0 and 2-7b need no vault, no socket and no client --
-# 43 checks -- because a scoring defect is not a property of any one capture. Two sections
+# Floor 110, MEASURED from a green run on 2026-08-13 on the merged file. Two arcs raised
+# it the same day and neither number survives alone: 64 -> 75 when section 7b pinned the
+# planner's exit code, and 64 -> 99 when section 9 added the regime. Their sum is what the
+# merged file actually runs, and it was RE-MEASURED here rather than added up, because a
+# floor computed from two branch numbers is a guess about a file neither branch ran.
+# Sections 0 and 2-7b and 9 need no vault, no socket and no client -- because a scoring
+# defect is not a property of any one capture, and neither is a key format. Two sections
 # do need more and both declare their skips: section 1's cross-check of NOT_IN_RECV_TABLE
 # against the client's own receive table wants capstone and the pinned client (2), and
 # section 8's rebuild of the observed set wants the live captures (3). A machine missing
@@ -68,11 +84,27 @@ from codec import Codec  # noqa: E402
 # vault-less run: those two sections are the ones that pin the sweep's DENOMINATOR and the
 # ten opcodes that tear the game channel down, and a plan built on a constant nothing
 # confirmed is exactly the wish this repo keeps refusing.
-LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=75)
+LEDGER = checks.Ledger("smsgsweep: the loopback sweep's readout", floor=110)
 
 # MEASURED 2026-08-12: the opcodes whose field list `overrides.json` changes. Written as
 # literals rather than recomputed from the module under test.
 OVERRIDDEN = {140, 146, 421}
+# MEASURED 2026-08-13 over build 38797's catalogue: how many GAME_SMSG opcodes carry a
+# `string16` field at all, and how many `--encstring` can actually FILL. They are not the
+# same number, and the gap is the finding this section produced on its first run:
+# `degenerate` stops at a `nested_struct` (the tail after it is the element layout, and an
+# empty element list emits none of it), and 0x019D hides its `string16` behind one. So 87
+# carry the field, 86 can be moved, and 401 -- not 400 -- go out byte-identically either
+# way. Written as literals because the whole design rests on the regime coming from the
+# PAYLOAD rather than from the flag, and this is the case where the flag lies.
+WITH_STRING16 = 87
+FILLABLE = 86
+NESTED_STRING16 = {0x019D}
+# A string of OUR OWN for the encstring fixtures. Deliberately not the corpus one:
+# `corpus_encstring()` reads ArenaNet's authored text out of the vault, and the regime
+# axis is "the string16 fields are empty" versus "they are not", which any string
+# exercises. So this file needs no vault for section 9 and commits no borrowed bytes.
+OURS = "A"
 # The ten with no receive-table entry on build 38797. Same literal as
 # toolkit/clientscan/test_msghandler.py, deliberately: two files asserting one measured
 # fact is how a constant that drifts gets caught in the tree that still cares.
@@ -104,9 +136,36 @@ def manifest(map_id=148):
             "label": f"MANIFEST_DONE[0, map {map_id}]"}
 
 
-def send(t, opcode):
-    return {"kind": "sent", "t": t, "opcode": opcode,
-            "label": f"PROBE[smsgsweep] [1/9] 0x{opcode:04X} (BODY)"}
+_CODEC = None
+
+
+def _codec():
+    global _CODEC
+    if _CODEC is None:
+        _CODEC = Codec()
+    return _CODEC
+
+
+def send(t, opcode, encstring=None, plain=...):
+    """A probe send, CARRYING ITS PLAINTEXT the way the recorder writes it.
+
+    The fixture used to omit `plain`, which was fine while a row was keyed by opcode
+    alone and is not fine now: the regime of a row is read out of the bytes that went on
+    the wire, so a fixture with no bytes is a fixture that cannot exercise the thing this
+    file exists to check. `plain=None` writes the record WITHOUT the field, which is the
+    fixture for a capture from a recorder that logged no plaintext -- `record` must refuse
+    such a row rather than file it under a guess.
+    """
+    rec = {"kind": "sent", "t": t, "opcode": opcode,
+           "label": f"PROBE[smsgsweep] [1/9] 0x{opcode:04X} (BODY)"}
+    if plain is ...:
+        codec = _codec()
+        plain = codec.encode("GAME_SMSG", opcode,
+                             list(sw.degenerate(codec, opcode,
+                                                encstring=encstring))).hex()
+    if plain is not None:
+        rec["plain"] = plain
+    return rec
 
 
 def c2s(t, opcode):
@@ -214,8 +273,9 @@ def main():
                     send(10.4, 0x0101), frame(10.4, 0x0101),
                     c2s(6.5, 0x0009), c2s(10.5, 0x00C1)])
     sends, replies, undec, gone, _life, _map = sw.read_capture(path)
-    LEDGER.ok(len(sends) == 2 and [o for _, o in sends] == [0x0100, 0x0101],
-              "read_capture finds both sweep sends", f"{[hex(o) for _, o in sends]}")
+    LEDGER.ok(len(sends) == 2 and [o for _t, o, _b in sends] == [0x0100, 0x0101],
+              "read_capture finds both sweep sends",
+              f"{[hex(o) for _t, o, _b in sends]}")
     LEDGER.ok(naive_frame_reader(path) == 2 and len(sends) == 2,
               "CONTROL: this capture holds s2c frames too, so the pilot's reader would "
               "have found 2 as well -- the defect needs the shape below to show",
@@ -286,7 +346,7 @@ def main():
               "no single opcode is blamed for the run ending",
               "blaming the last one named 0x00A9 on 2026-08-12 when the client had "
               "asserted around 0x0012, seventy-eight sends earlier")
-    socket_fenced = [op for t, op in sw.read_capture(capture(recs))[0] if t < 42.0]
+    socket_fenced = [op for t, op, _b in sw.read_capture(capture(recs))[0] if t < 42.0]
     LEDGER.ok(len(socket_fenced) == 4 and len(r["table"]) == 1,
               "CONTROL: a socket-fenced scorer scores 4 where 1 is provable",
               "which is the same defect as no fence at all, just later")
@@ -330,7 +390,7 @@ def main():
             send(11.2, 0x0103)]
     r = sw.analyse(capture(recs), codec, control=4.0, planned=[0x0100, 0x0101, 0x0102,
                                                               0x0103, 0x0104])
-    led, added = sw.record(r, {})
+    led, added, kept, refused = sw.record(r, {})
     LEDGER.ok(set(led) == {"0x0100", "0x0101"} and added == 2,
               "the two opcodes the client proved it survived are recorded",
               f"{sorted(led)}")
@@ -359,7 +419,7 @@ def main():
               "--only plans exactly what it names, ledger and table-less overridden",
               f"{sorted(hex(r['opcode']) for r in p4['rows'])} -- 0x0100 is already "
               f"recorded and 0x000B is table-less, and a bisection needs both")
-    led2, added2 = sw.record(r, led)
+    led2, added2, kept2, _ref2 = sw.record(r, led)
     LEDGER.ok(added2 == 0 and led2 == led,
               "CONTROL: recording the same run twice adds nothing",
               "the ledger keeps the FIRST measurement; a re-score cannot overwrite it")
@@ -369,7 +429,7 @@ def main():
     one = [c2s(9.6, 0x0009), send(10.0, 0x0100), c2s(10.1, 0x0088), send(10.4, 0x0101),
            {"kind": "error", "t": 40.0, "error": "ConnectionResetError(10054)"}]
     r1 = sw.analyse(capture(one), codec, control=4.0)
-    l1, a1 = sw.record(r1, {})
+    l1, a1, _k1, _r1 = sw.record(r1, {})
     LEDGER.ok(r1["crash"]["suspects"] == [0x0101]
               and l1["0x0101"]["effect"] == "ASSERTED",
               "a SUSPECT set of one is recorded as ASSERTED",
@@ -384,7 +444,7 @@ def main():
               f"{a1} rows recorded; without this every run dies in the same place")
     two = one[:2] + [c2s(10.1, 0x0088), send(10.4, 0x0101), send(10.5, 0x0102),
                      {"kind": "error", "t": 40.0, "error": "ConnectionResetError(10054)"}]
-    l2, _ = sw.record(sw.analyse(capture(two), codec, control=4.0), {})
+    l2 = sw.record(sw.analyse(capture(two), codec, control=4.0), {})[0]
     LEDGER.ok("0x0101" not in l2 and "0x0102" not in l2,
               "CONTROL: a SUSPECT set of two records nothing at all",
               "one of them is innocent and the capture cannot say which; that is what "
@@ -395,7 +455,7 @@ def main():
     tidy = [c2s(9.6, 0x0009), send(10.0, 0x0100), c2s(10.1, 0x0088), send(10.4, 0x0101),
             {"kind": "error", "t": 10.6, "error": "ConnectionResetError(10054)"}]
     rt = sw.analyse(capture(tidy), codec, control=4.0)
-    lt, _ = sw.record(rt, {})
+    lt = sw.record(rt, {})[0]
     LEDGER.ok(rt["crash"] is None and "0x0101" not in lt,
               "CONTROL: a client killed while still answering is NOT a crash",
               "the harness kills a healthy client and its socket and its traffic stop "
@@ -407,7 +467,7 @@ def main():
     # that separates them is whether another connection followed -- which the caller
     # knows because the run produced a second capture, and `analyse` cannot know at all.
     rd = sw.analyse(capture(tidy), codec, control=4.0, reconnected=True)
-    ld, _ = sw.record(rd, {})
+    ld = sw.record(rd, {})[0]
     LEDGER.ok(rd["crash"] and rd["crash"]["suspects"] == [0x0101]
               and rd["crash"].get("dropped") is True,
               "the SAME capture with a reconnect behind it names 0x0101 -- DROPPED",
@@ -703,6 +763,323 @@ def main():
                   "and the plan that excludes them is the stated 324",
                   f"{p3['remaining']} -- 487 catalogued, minus 153 observed that are in "
                   f"the receive table, minus the 10 with no entry")
+
+    # ---- 9. the payload regime: one row per EXPERIMENT ----------------------
+    print("\n9. a row is an opcode AND the payload it was sent with")
+    # 9a. THE AXIS IS THE PAYLOAD, NOT THE FLAG. This is the whole design and it is the
+    # first thing checked, because getting it from the flag is the obvious wrong answer:
+    # `--encstring` sends BYTE-IDENTICAL bytes to every opcode with no string16 field, so
+    # 400 of the 487 would have gained a duplicate row describing one experiment.
+    s16 = {int(k) for k in codec.channels["GAME_SMSG"]["messages"]
+           if any(f["type"] == "string16"
+                  for f in codec.fields_for("GAME_SMSG", int(k)))}
+    LEDGER.ok(len(s16) == WITH_STRING16,
+              f"{WITH_STRING16} of the 487 catalogued opcodes carry a string16 field",
+              f"{len(s16)} -- the candidates; the other {487 - len(s16)} go out "
+              f"identically whatever the flag says")
+    moved = {o for o in s16
+             if codec.encode("GAME_SMSG", o, list(sw.degenerate(codec, o,
+                                                                encstring=OURS)))
+             != codec.encode("GAME_SMSG", o, list(sw.degenerate(codec, o)))}
+    LEDGER.ok(len(moved) == FILLABLE and s16 - moved == NESTED_STRING16,
+              f"but only {FILLABLE} ENCODE differently -- 0x019D's string16 is behind a "
+              f"nested_struct",
+              f"{sorted(hex(o) for o in s16 - moved)} -- `degenerate` stops at a "
+              f"nested_struct because the tail after it is the element layout, so the "
+              f"string is never reached and an --encstring run of 0x019D is an ALLZERO "
+              f"experiment. The field-scan version of planned_regime called it encstring "
+              f"and this check is what found it")
+    LEDGER.ok({o for o in s16 if sw.fills_a_string(codec, o)} == moved,
+              "and `fills_a_string` agrees with the encoder, opcode for opcode",
+              "the structural walk is what the planner uses and the encoder is the "
+              "artifact; a claim only one of them makes is the kind that reached the "
+              "ledger last time")
+    # 9b. THE PREDICTOR AND THE READER MUST NOT DRIFT. `planned_regime` says what a plan
+    # will send; `regime_of_payload` reads what a capture DID send. They are separate
+    # code paths and the ledger's whole meaning rests on them agreeing, so agreement is
+    # measured over every encodable opcode, in both regimes -- 974 comparisons.
+    good, _refused = sw.encodable(codec)
+    agree, disagree = 0, []
+    for opcode in sorted(good):
+        for enc in (None, OURS):
+            body = codec.encode("GAME_SMSG", opcode,
+                                list(sw.degenerate(codec, opcode, encstring=enc)))
+            want = sw.planned_regime(codec, opcode, encstring=enc)
+            got = sw.regime_of_payload(codec, opcode, body)
+            if want == got:
+                agree += 1
+            else:
+                disagree.append((hex(opcode), enc, want, got))
+    LEDGER.ok(not disagree and agree == 2 * len(good),
+              f"the plan's predicted regime equals the wire's, {agree} of {2 * len(good)}",
+              f"{disagree[:4]} -- two independent code paths over every encodable "
+              f"opcode in both regimes, which is what stops the ledger's key drifting "
+              f"away from what the capture says")
+    LEDGER.ok(sw.planned_regime(codec, 0x0100, encstring=OURS) == sw.ALLZERO
+              and sw.planned_regime(codec, 0x0102, encstring=OURS) == sw.ENCSTRING,
+              "CONTROL: under --encstring 0x0100 is still an ALLZERO experiment",
+              "it has no string16 field, so the flag changed nothing about what went "
+              "out; 0x0102 has one and is a genuinely different send")
+    # A --set run is a THIRD experiment, and must not be filed as either of the two.
+    set_bytes = codec.encode("GAME_SMSG", 0x0100,
+                             sw.apply_set(sw.degenerate(codec, 0x0100), {1: 1}))
+    LEDGER.ok(sw.regime_of_payload(codec, 0x0100, set_bytes) == sw.OTHER
+              and sw.planned_regime(codec, 0x0100, sets={1: 1}) == sw.OTHER,
+              "a --set payload reads OTHER from both sides, never ALLZERO",
+              "filing a one-field-changed run under the all-zero key would retire the "
+              "degenerate measurement with a different experiment's answer")
+    LEDGER.ok(sw.regime_of_payload(codec, 0x0102, None) == sw.UNKNOWN,
+              "and a send with no plaintext is UNKNOWN, not assumed",
+              "a capture from a recorder that logged no payload cannot say which "
+              "experiment it was, and `record` refuses rather than guessing")
+
+    # 9c. THE KEY. ALLZERO keeps the bare historical key; everything else is suffixed.
+    LEDGER.ok(sw.ledger_key(0x0102, sw.ALLZERO) == "0x0102"
+              and sw.ledger_key(0x0102, sw.ENCSTRING) == "0x0102@encstring"
+              and sw.ledger_key(0x0102, sw.ALLZERO)
+              != sw.ledger_key(0x0102, sw.ENCSTRING),
+              "one opcode, two regimes, TWO keys -- and allzero keeps the bare one",
+              "so 334 historical rows keep their names and anything that only walks "
+              "rows keeps working; only a second regime introduces a new shape")
+    LEDGER.ok(sw.parse_key("0x0102@encstring") == (0x0102, "encstring")
+              and sw.parse_key("0x0102") == (0x0102, None),
+              "and parse_key round-trips it, returning None for a BARE key",
+              "None rather than 'allzero' -- a bare key is a key that never said, and "
+              "reading it as though it had is the defect this section exists for")
+    try:
+        sw.ledger_key(0x0102, "whatever")
+        ok = False
+    except ValueError:
+        ok = True
+    LEDGER.ok(ok, "CONTROL: an unrecognised regime is REFUSED, not keyed",
+              "a typo'd regime would key a row that no query ever finds again")
+
+    # 9d. A ROW MEASURED UNDER ONE REGIME DOES NOT SATISFY A QUERY FOR THE OTHER.
+    allzero_run = sw.analyse(capture(
+        [c2s(6.2, 0x00C1), send(10.0, 0x0102), c2s(10.1, 0x0088),
+         send(10.4, 0x0100), c2s(10.5, 0x0088)]), codec, control=4.0)
+    enc_run = sw.analyse(capture(
+        [c2s(6.2, 0x00C1), send(10.0, 0x0102, encstring=OURS), c2s(10.1, 0x0009),
+         send(10.4, 0x0100, encstring=OURS), c2s(10.5, 0x0009)]), codec, control=4.0)
+    LEDGER.ok(allzero_run["table"][0x0102]["regime"] == sw.ALLZERO
+              and enc_run["table"][0x0102]["regime"] == sw.ENCSTRING
+              and enc_run["table"][0x0100]["regime"] == sw.ALLZERO,
+              "analyse reads each row's regime out of the capture's own bytes",
+              "including that 0x0100 in the --encstring run is STILL an allzero "
+              "measurement, which no flag written in a report could have told it")
+    led9 = sw.record(allzero_run, {})[0]
+    LEDGER.ok(sw.measured_under(codec, led9, encstring=None) == {0x0100, 0x0102}
+              and sw.measured_under(codec, led9, encstring=OURS) == {0x0100},
+              "an allzero row answers the allzero query and NOT the encstring one",
+              "0x0100 answers both because its bytes are the same either way -- which "
+              "is the point of reading the regime off the payload")
+    p9 = sw.plan(codec, done=sw.measured_under(codec, led9, encstring=OURS),
+                 encstring=OURS)
+    LEDGER.ok(0x0102 in {r["opcode"] for r in p9["rows"]}
+              and 0x0100 not in {r["opcode"] for r in p9["rows"]},
+              "so --resume --encstring replans 0x0102 and still skips 0x0100",
+              "the version that asked done_opcodes() instead skipped both and printed "
+              "'nothing left' for a sweep that had never sent a string")
+    led9b, added9b, kept9b, _r9b = sw.record(enc_run, led9)
+    LEDGER.ok(added9b == 1 and "0x0102@encstring" in led9b
+              and led9b["0x0102"]["effect"] != led9b["0x0102@encstring"]["effect"],
+              "and the encstring run lands BESIDE the allzero row, not over it",
+              f"{sorted(led9b)} -- 0x0102 is REPLIED on an empty payload and SILENT on "
+              f"a filled one, which is exactly the shape 0x0033/0x009E/0x00B9/0x00C0 "
+              f"had and which the old key could not hold")
+    LEDGER.ok(kept9b == ["0x0100"],
+              "CONTROL: 0x0100 collides and is reported KEPT rather than dropped quietly",
+              "its bytes really were the same experiment; `recorded 0` with no second "
+              "line is what made nine runs look like they had measured nothing")
+
+    # 9e. THE SABOTAGE. Revert the key to the regime-less one -- the code as it stood --
+    # and require the two experiments to COLLIDE. This is the check that makes the
+    # regime load-bearing rather than decorative: without it, every assertion above is
+    # about a field nothing depends on.
+    def record_v1(result, ledger):
+        """`record` AS IT WAS: keyed by opcode alone, first-write-wins, silent."""
+        out, added = dict(ledger), 0
+        for opcode, row in result["table"].items():
+            if row["effect"] not in sw.MEASURED:
+                continue
+            key = f"0x{opcode:04X}"
+            if key in out:
+                continue
+            out[key] = {"effect": row["effect"], "capture": result["capture"]}
+            added += 1
+        return out, added
+
+    v1a, _ = record_v1(allzero_run, {})
+    v1b, v1_added = record_v1(enc_run, v1a)
+    LEDGER.ok(v1_added == 0 and set(v1b) == set(v1a)
+              and v1b["0x0102"]["effect"] == v1a["0x0102"]["effect"],
+              "SABOTAGE: the regime-less key records 0 and LOSES the encstring result",
+              f"`recorded {v1_added}` -- the same line nine runs printed on 2026-08-12 "
+              f"while four opcodes stayed filed as crashing. The two answers differ: "
+              f"{len(led9b)} rows with the regime in the key, {len(v1b)} without")
+    LEDGER.ok(len(led9b) == len(v1b) + 1
+              and 0x0102 in {sw.parse_key(k)[0] for k in led9b
+                             if sw.parse_key(k)[1] == "encstring"},
+              "and the difference is exactly the experiment the old key could not name",
+              "two live answers, not an assertion about the code -- test_codescan §8's "
+              "pattern, because a sabotage nobody ran is a sentence in a comment")
+    # THE CRASH PATH IS THE ONE THAT ACTUALLY BIT, so it gets its own collision. The four
+    # cleared opcodes are ASSERTED rows written by the crash branch, not by the table.
+    crash_all0 = sw.analyse(capture(
+        [c2s(9.6, 0x0009), send(10.0, 0x0100), c2s(10.1, 0x0088),
+         send(10.4, 0x0102),
+         {"kind": "error", "t": 40.0, "error": "ConnectionResetError(10054)"}]),
+        codec, control=4.0)
+    LEDGER.ok(crash_all0["crash"]["suspects"] == [0x0102]
+              and crash_all0["crash"]["regime"] == sw.ALLZERO,
+              "a crash suspect carries the regime of the payload that produced it",
+              "the ASSERTED rows this whole item is about were written by this branch, "
+              "so a regime on the table rows alone would have fixed nothing")
+    ledc = sw.record(crash_all0, {})[0]
+    ledc2, addc, keptc, _rc = sw.record(enc_run, ledc)
+    LEDGER.ok(ledc["0x0102"]["effect"] == "ASSERTED"
+              and addc == 1 and ledc2["0x0102@encstring"]["effect"] == "SILENT",
+              "and the encstring SILENT lands beside the allzero ASSERTED",
+              "0x0033, 0x009E, 0x00B9 and 0x00C0 in one sentence: the ASSERTED row is "
+              "not wrong, it is a measurement of a different payload")
+    LEDGER.ok(record_v1(enc_run, ledc)[1] == 0
+              and record_v1(enc_run, ledc)[0]["0x0102"]["effect"] == "ASSERTED",
+              "SABOTAGE on the crash path: the old key keeps ASSERTED and drops SILENT",
+              "which is the ledger as it stood at the start of 2026-08-13")
+
+    # 9f. FIRST-WRITE-WINS IS THE POLICY AND IT IS PINNED, so nobody again believes that
+    # re-running --record will correct a row. It is the RIGHT policy once the key names an
+    # experiment; what was wrong was the silence.
+    again, added_again, kept_again, _ra = sw.record(enc_run, led9b)
+    LEDGER.ok(added_again == 0 and again == led9b
+              and sorted(kept_again) == ["0x0100", "0x0102@encstring"],
+              "recording the same experiment twice adds nothing and NAMES what it kept",
+              f"{sorted(kept_again)} -- the ledger keeps the FIRST measurement, and a "
+              f"re-score can never overwrite it. `--record` prints this list now; the "
+              f"version that printed only `recorded 0` is why item 5 existed at all")
+
+    # 9g. AN OLD-FORMAT LEDGER MUST STILL LOAD. There are 334 measured rows in the vault
+    # and they cost a day of client launches; a format change that could not read them
+    # would be far worse than the defect it fixes.
+    old = {"0x0033": {"effect": "ASSERTED", "replies": [], "contested": [],
+                      "undecodable": [], "capture": "a.jsonl", "why": "an assert"},
+           "0x0100": {"effect": "SILENT", "replies": [], "contested": [],
+                      "undecodable": [], "capture": "a.jsonl"}}
+    LEDGER.ok(sw.done_opcodes(old) == {0x0033, 0x0100}
+              and sw.regime_of_row("0x0033", old["0x0033"]) == sw.UNKNOWN
+              and sorted(sw.unmigrated(old)) == ["0x0033", "0x0100"],
+              "an unmigrated row loads, is readable, and is named as UNMIGRATED",
+              "regime UNKNOWN rather than 'allzero': almost all of them are all-zero "
+              "measurements and 'almost all' is not one")
+    LEDGER.ok(sw.print_report(old, codec) == 0,
+              "and --report prints it without raising",
+              "the reporting path is what an operator reaches for first; a migration "
+              "that broke it would be found by a person and not by a test")
+    resolve = {0x0033: sw.ENCSTRING, 0x0100: sw.ALLZERO}
+    new, changes = sw.migrate(old, lambda op, row: resolve[op])
+    LEDGER.ok(len(new) == len(old) == 2 and len(changes) == 2
+              and set(new) == {"0x0033@encstring", "0x0100"},
+              "migrate gives every row an explicit regime and LOSES NONE",
+              f"{sorted(new)} -- 334 rows in the real ledger, and the migration is a "
+              f"rewrite of all of them, so 'nothing is dropped' is the first claim")
+    LEDGER.ok(all(r["regime"] in sw.REGIMES for r in new.values())
+              and new["0x0033@encstring"]["why"] == "an assert"
+              and new["0x0100"]["effect"] == "SILENT",
+              "and it carries every other field through untouched",
+              "the row's evidence -- its capture, its assert text -- is the part that "
+              "cannot be re-derived if it is lost")
+    unk, _ch = sw.migrate(old, lambda op, row: None)
+    LEDGER.ok(set(unk) == {"0x0033@unknown", "0x0100@unknown"}
+              and all(r["regime"] == sw.UNKNOWN for r in unk.values()),
+              "a row whose regime cannot be derived is written `unknown`, EXPLICITLY",
+              "and gets its own key, so it can never silently satisfy a query for the "
+              "all-zero experiment it probably but unprovably was")
+    LEDGER.ok(sw.migrate(new, lambda op, row: sw.ALLZERO)[0] == new,
+              "CONTROL: migrating an already-migrated ledger is a no-op",
+              "rows that carry a regime keep it; the resolver is not consulted, so a "
+              "second --migrate cannot re-key what the first one settled")
+    try:
+        sw.migrate({"0x0033": {"effect": "SILENT", "regime": sw.ALLZERO,
+                               "capture": "a"},
+                    "0x0033@encstring": {"effect": "SILENT", "capture": "b"}},
+                   lambda op, row: sw.ALLZERO)
+        ok = False
+    except ValueError:
+        ok = True
+    LEDGER.ok(ok, "CONTROL: two rows resolving to ONE key is REFUSED, not merged",
+              "silently letting one win is how a measurement disappears, and the whole "
+              "point of the migration is that none does")
+
+    # 9h. THE COST OF THE SUFFIX, STATED AS A CHECK RATHER THAN A HOPE. A reader that
+    # turns a key straight into an opcode breaks on a suffixed one. That is deliberate --
+    # such a reader would otherwise pool two regimes into one number -- but it is a real
+    # break and it should be this file that says so.
+    try:
+        {int(k, 16) for k in led9b}
+        loud = False
+    except ValueError:
+        loud = True
+    LEDGER.ok(loud and sw.done_opcodes(led9b) == {0x0100, 0x0102},
+              "int(key, 16) RAISES on a migrated ledger where parse_key does not",
+              "the suffix is a loud break by design: a reader that cannot see the "
+              "regime is a reader that would have conflated the two experiments")
+    LEDGER.ok(all(isinstance(r.get("effect"), str) for r in led9b.values()),
+              "CONTROL: every row is still a plain row with an `effect`",
+              "no marker object and no nesting at the top level, so the external "
+              "scripts that scan the ledger for SILENT rows keep working")
+
+    # 9i. RECORD REFUSES WHAT IT CANNOT FILE. A row whose regime is unknown must not be
+    # keyed at all: an `@unknown` key would block the real measurement for good.
+    blind_run = sw.analyse(capture(
+        [c2s(6.2, 0x00C1), send(10.0, 0x0102, plain=None), c2s(10.1, 0x0088)]),
+        codec, control=4.0)
+    lb, ab, _kb, rb9 = sw.record(blind_run, {})
+    LEDGER.ok(blind_run["table"][0x0102]["regime"] == sw.UNKNOWN
+              and ab == 0 and lb == {} and [o for o, _w in rb9] == [0x0102],
+              "a send with no plaintext is REFUSED and reported, not filed",
+              "the same shape as UNREACHED: kept out of the ledger so a later run can "
+              "still measure it, and printed so the operator knows it happened")
+    mixed = sw.analyse(capture(
+        [c2s(6.2, 0x00C1), send(10.0, 0x0102), c2s(10.1, 0x0088),
+         send(10.4, 0x0102, encstring=OURS), c2s(10.5, 0x0088)]), codec, control=4.0)
+    lm, am, _km, rm = sw.record(mixed, {})
+    LEDGER.ok(mixed["table"][0x0102]["regime"] == sw.UNKNOWN
+              and mixed["table"][0x0102]["regime_mixed"] == [sw.ALLZERO, sw.ENCSTRING]
+              and am == 0 and lm == {} and [o for o, _w in rm] == [0x0102],
+              "and one opcode sent under TWO regimes in one connection is refused too",
+              "its score pools two experiments and there is no honest way to split them "
+              "afterwards, so the row is named rather than averaged")
+
+    # 9j. THE WRITE. The ledger is a live vault artifact that other sessions read while a
+    # sweep is running, so the write is all-or-nothing and refuses a file that moved.
+    tmpd = tempfile.mkdtemp()
+    lp = os.path.join(tmpd, "led.json")
+    sw._write_json(lp, {"0x0100": {"effect": "SILENT", "regime": sw.ALLZERO}},
+                   expect=None)
+    tok = sw.stamp(lp)
+    with open(lp, encoding="utf-8") as fh:
+        back = json.load(fh)
+    LEDGER.ok(back["0x0100"]["effect"] == "SILENT" and tok is not None
+              and not [f for f in os.listdir(tmpd) if f.startswith(".tmp-")],
+              "an atomic write lands the whole file and leaves no temp behind",
+              "os.replace is atomic on Windows too, so a concurrent reader sees the old "
+              "file or the new one and never a truncated one")
+    sw._write_json(lp, {"0x0101": {"effect": "SILENT", "regime": sw.ALLZERO}},
+                   expect=tok)
+    LEDGER.ok(json.load(open(lp, encoding="utf-8")) == {"0x0101": {"effect": "SILENT",
+                                                                  "regime": sw.ALLZERO}},
+              "CONTROL: a write with the CURRENT stamp is allowed",
+              "a guard that refuses every write protects nothing, because the tool "
+              "stops being used")
+    try:
+        sw._write_json(lp, {"0x0102": {}}, expect=tok)
+        ok = False
+    except ValueError:
+        ok = True
+    LEDGER.ok(ok and "0x0101" in json.load(open(lp, encoding="utf-8")),
+              "and a write against a STALE stamp is refused, leaving the file intact",
+              "another session recording between our read and our write would otherwise "
+              "have its row overwritten by our 334 -- silently, with no second copy")
 
     return LEDGER.verdict()
 

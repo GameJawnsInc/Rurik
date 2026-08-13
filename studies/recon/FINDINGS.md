@@ -451,24 +451,35 @@ in the process that exists to prevent one.
 
 Lanes follow PLAN §5's own finding that the constraint is human time, not agent time.
 
-### LANE A — desk work, no client, no human
+### LANE A — ✅ **ALL 14 LANDED 2026-08-13**, same day this document was written
 
-| # | Action | Expected result |
+Kept in full rather than deleted, because the *expected result* column is what each fix is
+now accountable to, and three of them came back different. Where the outcome disagreed with
+the expectation, the real number is in the Outcome column — that disagreement is the useful
+part of the record.
+
+| # | Action | Outcome |
 |---|---|---|
-| 1 | `atex.py` output guard (§7.1) | `--make C:\gw\Gw.dat` refused; scratch path still allowed |
-| 2 | `maprows._stamp` gains `format: CACHE_FORMAT` (1 line) | a **warm** `test_maprows` at `CELL_PITCH = 64.0` goes red with the same six failures the cold run produces |
-| 3 | Eight literal opcode pins in `test_agentlife.py` | sabotage sweep flips from 11 survived / 4 caught to 4 / 11 |
-| 4 | `cmsgstream.py:128` channel fix (1 line) + ship the AUTH-clean/GAME-desync assertion | `test_cmsgnames` auth count 2 → 17; 22 UPSTREAM auth names become CORROBORATED or CONTESTED with zero new capture |
-| 5 | Add a `regime` dimension to the sweep ledger, then re-score the nine orphaned runs | `0x0033`/`0x009E`/`0x00B9`/`0x00C0` move ASSERTED → SILENT-under-encstring; `0x019C`/`0x01D4` land UNRESOLVED. Do **not** just add `--record` — first-write-wins prints `recorded 0` |
-| 6 | `msgmix.py`: widen `[-6:]`, drop the `kind == "sent"` filter | the tool that ranks what to build next sees 306 sessions and both directions for the first time |
-| 7 | `0x0039` arm beside the existing `0x0033`, plus `0x0092`/`0x00C1`/`0x0040` handlers | dropped fraction falls from 20.9% toward ~3% |
-| 8 | Bound `_string_pull`, re-measure the same 1,500 routes | p99.9 falls from 87.7 ms; "11 of 1,500 over a whole tick" → 0, with the None-rate unchanged and every path still passing `route()`'s own gate |
-| 9 | Write `studies/crossbuild/FINDINGS.md` from `vault/dat_durability`; correct `datwrite/FINDINGS.md:1455` | a finished experiment stops being invisible |
-| 10 | Point the scrub at `vault/state` (§7.2) | the tree that may leave the machine actually covers the credentials |
-| 11 | Strike HANDOFF §7 and PLAN §4-A1's shadow-server paragraph; leave the load-prefix carve-out | weeks removed from the ladder, and the vacuous tolerance layer recorded as a refuted rival so it is not rediscovered |
-| 12 | Run the map suite against the second vaulted archive (19 tests take `--dat`; three pass today) | every "349 of 349" gains a second witness for free |
-| 13 | `npcdefs.py --emit`, then re-census `content.py` | R4c-1/R4c-2 gain their first extracted rows; `vault/content/` exists |
-| 14 | `consttable.py --verify` seeded with the 12 closures, then `s_effect` | the first `client-table` provenance row in this repo's history |
+| 1 | `atex.py` output guard (§7.1) | ✅ Three refusals, each with a positive control. **The check that would actually have caught it is the syntax-tree one** — a guard can exist, be documented and be greppable while never being CALLED. Pre-fix file restored from git reddens 4 checks by line. `test_atex.py` new, 50 checks |
+| 2 | `maprows._stamp` gains a cache-format field | ✅ **Folded the coding parameters into the stamp instead** of adding a hand-bumped integer — a number somebody must remember to bump is the same bet that just lost. Asserted behaviourally, because a test reading the stamp's field *names* passes against a stamp that carries them and compares only the old three. 29 checks |
+| 3 | Literal opcode pins in `test_agentlife.py` | ✅ 214 checks. Was 1 of 9 opcodes pinned |
+| 4 | `cmsgstream.py:128` channel fix | ✅ Two-sided control: auth frames to residual 0 under AUTH **and must fail to frame under GAME**, since a decoder that frames everything passes the first half alone. 16 checks |
+| 5 | `regime` dimension on the sweep ledger + re-score the nine orphaned runs | ✅ **334 → 338 rows, none lost.** `0x0033`/`0x009E`/`0x00B9`/`0x00C0` each now carry ASSERTED under `allzero` **and** SILENT under `encstring`; `0x019C`/`0x01D4` correctly left UNRESOLVED. **The axis is the PAYLOAD, not the flag** — 87 opcodes carry a `string16` and only **86** can be filled, so a flag-keyed ledger would have filed 401 duplicate rows for one experiment |
+| 6 | `msgmix.py`: widen `[-6:]`, drop the `kind == "sent"` filter | ✅ **Corpus is 439 captures, not 306** — and **257 of 439 are unattended sweep runs**, whose server emits 381 distinct s2c opcodes against a played session's 101, so pooling collapses the never-sent list the tool exists to produce. `test_msgmix.py` new, 56 checks |
+| 7 | `0x0039` arm plus `0x0092`/`0x00C1`/`0x0040` handlers | ✅ **16.1% → 8.9%**, not the 20.9% → 3% predicted; the 20.88% figure did not reproduce on the larger corpus. Tripwire is asymmetric on purpose (§below). 45 checks |
+| 8 | Bound `_string_pull` | ✅ p50 0.395 → 0.163 ms, **max 346.6 → 19.8 ms, 0 of 1,500 over a tick**, and **0 of 1,500 paths differ** from the old answer. A `route()` that skips smoothing is *faster* and passes the timing check, so the length check is the only thing standing there. 64 checks |
+| 9 | `studies/crossbuild/FINDINGS.md`; correct `datwrite/FINDINGS.md:1455` | ✅ Rung 6's missing half, with the prediction stated — **and the finding that as staged it cannot fire** |
+| 10 | Point the scrub at `vault/state` (§7.2) | ✅ **Excluded by construction**, not merely walked. The trap: `issue()` keys the map BY THE TOKEN, so a scrubber reusing `scrub_record` blanks the value and leaves the credential standing as the key with every record-level check green. 47 checks |
+| 11 | Strike HANDOFF §7 and PLAN §4-A1 | ✅ Kept and marked refuted, with the replacement gate and its n=2 caveat |
+| 12 | Map suite against the second vaulted archive | ✅ **The old gate was wrong in BOTH directions** — too strict (the 2026-04-30 archive holds the same 349 heads at the same indices with the same crcs, 349/349) and too loose (a row count is a fact about the copy, so any tampered archive with 177,342 rows passed). Identity now resolves by file id. `test_mapfile` 59 and `test_mapexport` 108 on **both** archives |
+| 13 | `npcdefs.py --emit`, then re-census | ✅ **54 rows.** `content.py` now loads **2,149 rows against 18** |
+| 14 | `consttable.py`, then `s_effect` | ✅ **24 of 24 tables close, not the 12 of 14 predicted, and no sentinel non-closure exists** — `s_attribPoints`'s `FF FF FF FF` is the fourteenth ELEMENT and `arrsize` counts it. **2,077 `s_effect` rows** are the first `source = "client-table"` extraction here. The blind spot is measured: a stride that DIVIDES the true one closes on the same base, and `s_glow` was entered as 2 × 44, closed, and is 11 × 8 |
+
+**What the lane actually cost and returned.** Suite 70 files (was 66), and four of the
+fourteen **corrected the document that commissioned them** — items 6, 7, 12 and 14 each came
+back with a different number than §5 predicted, in every case because §5 had sampled where
+the fix measured. That is the intended direction of error for a survey, and it is recorded
+rather than quietly overwritten.
 
 ### LANE B — needs a client at the keyboard
 
