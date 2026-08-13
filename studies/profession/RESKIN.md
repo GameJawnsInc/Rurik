@@ -510,3 +510,84 @@ layer already has journalled writes with byte-for-byte revert (`datwrite`, `test
 so the mechanism exists and is tested — but no text file has ever been served stored, and
 it is the first edit in this arc that touches the 8 GB archive rather than a 10 MB
 executable.
+
+
+---
+
+## 14. Offline dive (2026-08-13): text is VIABLE, and the abbreviation has one consumer
+
+Six agents, three parallel reads, no client launched -- the harness was in use. One
+verifier held and **closed its own angle's weak link**; the other refuted parts of the
+party plan and reordered it.
+
+### 14.1 Authored text: **VIABLE**, by proof of existence
+
+> **ArenaNet's own archive already ships 38,633 stored (compression-0) rows** against
+> 138,708 compressed, 177,341 total. Re-derived independently by the verifier straight
+> from the MFT bytes, importing nothing from `toolkit/mapdata`, and matching a third
+> reader in `studies/datwrite/FINDINGS.md`.
+
+They are ordinary content -- 36,658 `ffna` and 1,950 `ATEX`, **both types that also ship
+compressed** -- so storedness is orthogonal to file type. The client-side branch is
+OBSERVED byte-for-byte: at `0x00476315` a `test esi,esi / je` on the MFT extraBytes field
+takes a path that computes the output size and returns the row's own buffer, **before any
+payload byte is inspected and with no reference to file type**.
+
+**VIABLE, not PROVEN:** no text file has ever shipped stored -- 1,089 of 1,089 text rows
+are compression 8, 99 per language across 11 languages. The mechanism is generic; the
+precedent stops at file type.
+
+**The real cost is placement, not permission.** The eleven profession names span **three**
+text files (language-0 indices 1, 2 and 30), and file 1 is 21,376 B compressed against
+83,961 B stored -- about 4x its row, so it must relocate. The largest stored row that is
+not the MFT or the file-id table is 19,292 B, and `test_datplan` already measured that
+88.5% of nominal free space is live shadow-container generations.
+
+**A live footgun, which nearly produced a false refutation:**
+`archive.Archive().entries[row]` is **positional** while `textrec.TextIndex._rows[row]` is
+keyed by **MFT row number**. Mixing them silently resolves to a different file -- the
+verifier's first census "found" a stored text row that was actually a texture. That is the
+fixture-resolves-to-the-wrong-thing failure this repo keeps paying for, and it is still
+live in our toolkit.
+
+### 14.2 The abbreviation has exactly ONE accessor, and no party gate
+
+Accessor `0x005AB7E0` has **four direct callers, all inside one function** -- `0x00538D60`,
+the abbreviated profession-label builder. The NAME accessor has **31**. That builder is
+reached from `PtPartyEntry`, the party-search screens, `GmAgentCommander` and
+**`GmPosseRoster`** (the verifier's correction; the synthesis had named `GmAgentStatus`).
+
+**The render path contains no party, player-count or guild test.** It needs an agent bound
+to the frame carrying professions at `+0x10E`/`+0x10F`, gated on `[edi+8] != 0` and style
+bits `0x10000` and `0x1000` (also corrected -- the synthesis said `0x2000000`).
+
+### 14.3 So the abbreviation was blocked by OUR server, not by the client
+
+`0x00A6`'s setter is the **sole write path** to an agent's profession bytes -- one caller,
+reached only from that opcode. **Our server sent `0x00A6` only for NPCs, never for the
+player's own agent**, and the roster builder reads the agent rather than the player record.
+
+Implemented offline:
+
+| | opcode | payload |
+|---|---|---|
+| the player's own agent profession | `0x00A6` | after `0x00B7`, reusing the tested builder |
+| party size | `0x00B0` | `[player, 1]`, 5 B |
+| party leader | `0x00B1` | `[player, player]`, 6 B, self-link |
+
+**Order is the measured part** and is pinned on the syntax tree: `PLAYER_CREATE`, then
+SIZE, then LEADER. `0x00B0` fires no event for a fresh entry while `0x00B1` fires only on a
+**leader change**, so leader-first is a no-op against the default and nothing is notified.
+
+**Honest scope:** the array and the event are now correct. Whether a party entry actually
+DRAWS is UNVERIFIED and needs one client run -- the verifier downgraded that claim and was
+right to.
+
+### 14.4 The `.data` table is the in-game Store, and it is dead weight
+
+`0x004D1280` is reached through **slot 7 of a 72-slot vtable** whose owning translation
+unit is pinned to `StoreSkillList.cpp` by two independent `.rdata` neighbours. Correction
+to section 2.3: indices **1..10** duplicate `s_charProfession` exactly, not 1..8, with only
+index 0 differing. Repointing the name table therefore leaves the Store panel showing the
+host's original name -- a cosmetic divergence on a screen our server has no opcodes for.
+**Dropped from the reskin patch list.**

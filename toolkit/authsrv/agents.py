@@ -336,6 +336,39 @@ def secondary_bits(*professions):
 ALL_SECONDARIES = secondary_bits(*range(1, CHAR_PROFESSIONS))
 
 
+def player_party_size(player_number, size):
+    """GAME_SMSG 0x00B0 -- how many members the player's party holds.
+
+    OBSERVED (build 38797): handler 0x0091EFC0 forwards to 0x00813850, a thin
+    two-argument worker that writes the per-PLAYER array at ChCliApi
+    ctx+0x80C, stride 0x50. It touches no agent, so it depends only on
+    PLAYER_CREATE (0x0059) having made the player record -- never on the
+    agent create.
+
+    Five bytes on the wire: u16 player, u8 size.
+    """
+    if size < 1:
+        raise ValueError(f"party size {size} < 1: the local player is always a "
+                         f"member of their own party, so 0 is not a state the "
+                         f"client is ever sent")
+    return [player_number, size]
+
+
+def player_set_party(player_number, leader_number):
+    """GAME_SMSG 0x00B1 -- which party (by leader) a player belongs to.
+
+    OBSERVED: handler 0x0091F050 -> 0x00813980, the same shape and the same
+    per-player array as 0x00B0. A solo player is their own leader, so both
+    fields are the player's own number.
+
+    ORDER, and it is the one thing measured about these two: 0x00B0 fires no
+    event for a fresh entry and 0x00B1 fires only on a LEADER CHANGE, so the
+    pair is sent size-then-leader. Sending the leader first makes the change
+    a no-op against the default and the roster is never notified.
+    """
+    return [player_number, leader_number]
+
+
 def agent_set_secondary_bits(agent_id, mask):
     """GAME_SMSG 0x00B6 -- which professions this agent may take as SECONDARY.
 
