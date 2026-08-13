@@ -841,3 +841,93 @@ other players exist on our server -- and the roster entry that draws an abbrevia
 `PtPartyEntry`, a different frame from the search dialog. The top-left party region is
 still unchanged. So §16's target is not met; what is met is the gate that stood in front
 of it, and the arc now has a party window to build on for the first time.
+
+
+---
+
+## 18. The party ROSTER opens, and the abbreviation renders (2026-08-13)
+
+Harness `20260813T171051`, capture `authsrv-20260813T171058-c1.jsonl`, stock patched
+client, `Test Warrior`, profession 1. Scripted input, no operator: `wait:6 P:1 wait:8
+H:1 wait:8`.
+
+> **`Party Members [P]` opens, carrying one member row: `W0 Test Warrior`.**
+
+`W` is the Warrior abbreviation. **This is §16's target, met** -- the frame that draws a
+profession abbreviation is `PtPartyEntry`, and it is now on screen with an abbreviation in
+it.
+
+### 18.1 The gate was a PAIR, and each half had been tested alone
+
+The one combination nobody had run is the one that works:
+
+| | outpost | explorable |
+|---|---|---|
+| **no party record** | P discarded by the key router `0x004E8BC0` (§17.1) | P's arm bails at `0x004EC115` (§17.1) |
+| **party record built** | Party **SEARCH**, dialog `0x1E` (§17.3) | **Party Members -- the ROSTER** |
+
+§16.1's explorable run predated the party build; §17.3's party build ran in an outpost.
+Both halves were measured, the pair never was. So `is_explorable` is not "not the
+condition" as §16.1 concluded -- it is *half* of it, and §16.1's conclusion was drawn from
+a run that could not have shown the other half.
+
+**This confirms §17.1's reading of the explorable arm exactly.** `0x004EC115` bailed on
+`PyCliGetMyPartyId`; with the party record built that value is 1, the arm reaches the
+FrameCreate at `0x004EC1BF` (child `0x66`, `CONTROL_PARTY_MAIN`, GmView.cpp:3099), and
+`CONTROL_PARTY_MAIN` is the roster rather than a search container. Prediction stated before
+the run, hit.
+
+### 18.2 Wire and controls
+
+Every message OBSERVED in the capture:
+
+| opcode | payload | |
+|---|---|---|
+| `0x0199` | `990101000000940001...` | INSTANCE_LOAD_INFO, **`is_explorable=1`** |
+| `0x01D2` | `d2010100` | party build BEGIN |
+| `0x01CB` | `cb010100010001` | ADD member, player 1 |
+| `0x01D3` | `d3010100` | COMMIT |
+| `0x01B2` | `b201010001` | set mine |
+| `0x00B7` | `b70001000000010000` | player profession record, prof 1 |
+| `0x00A6` | `a600010000000100` | the player's own agent profession, prof 1 |
+
+All 8 spawn checkpoints PASS, `P` delivered in full (1.00034 s of 1), client exited code 0
+with **no error dialog**. Control: `H` opened the Hero panel in the same run, reading
+`Test Warrior / Warrior`.
+
+Two independent witnesses, which is why this is not one screenshot: the harness's own
+frame `w014.png` and the operator's screenshot both show the window.
+
+### 18.3 A method correction: §16 measured a rectangle that could not have gone red
+
+§16 and §16.1 reported the **top-left** party region as byte-identical, one hash
+`2430457683`, across every frame of every run, and read that as evidence of the null.
+
+**The party roster draws at the TOP RIGHT.** That regional hash was over a rectangle the
+roster never touches, so it would have stayed constant through a success too -- a check
+that cannot fail. The null itself was real and was carried by the *whole-frame* diffs (P
+moved 15,595 px against a 16,496 px idle control), which is the number that did the work.
+The lesson is the repo's own: an instrument aimed at the wrong place returns a confident
+constant, not an error.
+
+### 18.4 Open: the `0` in `W0`
+
+The row reads `W0`, not `W`. UNVERIFIED. Two candidates, and they are cheap to separate:
+
+1. **A secondary-profession slot** rendering id 0 numerically because profession 0 has no
+   abbreviation string. §14.2's render gate carries style bit `0x10000` for the
+   abbreviation; a secondary of 0 is what our server sends.
+2. **A level suffix** (style bit `0x1000`). Against this: the Hero panel in the SAME frame
+   reads `Level: 1`, so a level suffix showing `0` would have to be reading a different
+   level than the Hero panel does -- plausibly the per-AGENT level (property 36 on
+   `0x009F`), which this server does not send and which would default to 0.
+
+The discriminator is one run: send a secondary profession and see whether the `0` becomes
+an abbreviation, or send the agent level property and see whether it becomes a `1`.
+
+### 18.5 Why this matters to the reskin
+
+The abbreviation is drawn from the profession tables `reskin.py` edits. A reskinned host
+profession should now be READABLE on this row -- which makes the party roster the first
+place in the client where a custom profession's identity is visible outside the panels,
+and the cheapest visual check the arc has.
