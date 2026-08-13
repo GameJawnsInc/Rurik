@@ -16,6 +16,7 @@ so a wrong edit to the TOML reddens here rather than at the client.
     python toolkit/test_content.py
 """
 import os
+import shutil
 import sys
 import tempfile
 
@@ -30,12 +31,40 @@ import content  # noqa: E402
 # hole that ruling left on its first day: measured/capture/wiki had no conditions --
 # three refusals and one positive for the measured/build asymmetry) + 4 game-mode
 # (Reforged scales health/armour ~20% and cannot be recovered afterwards)
-# + 3 overlay + 2 shape = 36, measured from a
-# real green run. Every section runs unconditionally; nothing here is fixture-dependent
-# beyond content/ itself, which is tracked. It was 22 until rung C2 added a ninth map
+# + 3 overlay + 2 shape. It was 22 until rung C2 added a ninth map
 # row: the migration section now names the addition instead of pinning a length, so a
 # new row is a decision somebody wrote down rather than a number that drifted.
-LEDGER = checks.Ledger("content store", floor=36)
+#
+# That itemisation sums to 36 while a real run scored 38, so two checks were added at
+# some point without touching the tally and the floor had been carrying two checks of
+# slack. It is set from a MEASURED run below rather than from the sum, which is the rule
+# the drift broke.
+#
+# The four checks added 2026-08-13 are the first here to read the REAL `vault/content/`
+# overlay, which is gitignored and machine-local -- so the floor is the VAULT-LESS score:
+# a bare machine declares one skip and scores 39 (MEASURED with RURIK_VAULT pointed at an
+# empty directory), a machine with the vault scores 42.
+#
+# They exist because every other check in this file passes `vault_dir=""` or a temp dir.
+# For the whole life of the file the store's own overlay -- the input the server, the
+# harness and `deploy.py` actually load -- was the one input it never read, and the bare
+# `content.load()` it opened with was a fixture rather than a claim. On 2026-08-13 the
+# overlay shipped 2,077 effect rows citing an extractor that had not been committed;
+# `_check_extracted` refused them, `content.load()` raised for every caller, and this
+# file did not go red -- it DIED at line 1 of main() with a traceback and printed no
+# verdict, no ledger and no floor shortfall, which is the one failure `checks.py` cannot
+# see.
+#
+# Which of the four are load-bearing was MEASURED, not assumed -- four sabotages, and the
+# two that matter are the ones the pre-existing checks survive:
+#   A  the extractor deleted (the real defect):  3 red, and the two synthetic overlay
+#      checks stay GREEN -- previously a traceback with no verdict at all
+#   B  the overlay emptied:                      1 red (the contribution check alone)
+#   C  the existence check gutted:               2 red, one synthetic and one here
+#   D  the vault dropped from load()'s dirs:     4 red, two synthetic and two here
+# C and D are caught by the synthetic checks too; A and B are caught by nothing else, and
+# A is the one that actually happened.
+LEDGER = checks.Ledger("content store", floor=39)
 
 
 def write(dirpath, name, text):
@@ -66,7 +95,28 @@ GOOD_PROV = ('[thing.a.provenance]\nsource = "measured"\n'
 
 
 def main():
-    world = content.load()
+    # This is the call the server, `deploy.py` and every tool actually make, and it
+    # reads the REAL `vault/content/` overlay. Until 2026-08-13 it was made bare --
+    # `world = content.load()` -- and that is the whole of what this file knew about
+    # the overlay: not a check, just a fixture. When the overlay shipped 2,077 effect
+    # rows citing an extractor that had not been committed, `_check_extracted` refused
+    # them (correctly -- that is condition 1 of the 2026-08-11 ruling doing its job)
+    # and this line RAISED. The run died at it: no verdict, no ledger, no floor
+    # shortfall, a traceback from line 82. That is worse than a red test and is exactly
+    # the hole `checks.py` exists to close -- "a run that measured nothing failed"
+    # cannot fire in a process that never reaches its verdict, and a reader of that
+    # output reports "content.py is broken" rather than "the suite cannot see the
+    # overlay". So the load is guarded, the failure is a NAMED CHECK, and the file
+    # falls back to the tracked rows so the remaining checks still run and still
+    # report a verdict against the floor.
+    try:
+        world, world_err = content.load(), None
+    except content.ContentError as exc:
+        world, world_err = content.load(vault_dir=""), str(exc)
+    LEDGER.ok(world_err is None,
+              "content.load() -- no arguments, the call the server makes -- accepts "
+              "this machine's vault overlay",
+              world_err or f"census {world.census()}")
 
     # --- it loads, and it loaded the tables we expect ------------------------
     LEDGER.ok(world.census().get("map", 0) == 10,
@@ -337,12 +387,117 @@ def main():
               '[thing.b]\nvalue = 22\n[thing.b.provenance]\n' + cap +
               '[thing.c]\nvalue = 3\n[thing.c.provenance]\n' + cap)
         merged = content.load(repo_dir=repo, vault_dir=vault)
-    LEDGER.ok(merged.get("thing", "a")["value"] == 1,
+    # Read through `rows()` rather than `get()`: `get()` RAISES on a missing key, so a
+    # loader that dropped the overlay entirely killed this section with a traceback at
+    # the third check instead of reddening it -- no verdict, no ledger, and the two
+    # checks after it never ran. Same defect as the bare `content.load()` this file
+    # opened with, one level down, and found by the sabotage that removes the vault
+    # from `load()`'s directory list.
+    merged_thing = merged.rows("thing")
+    LEDGER.ok(merged_thing.get("a", {}) and merged_thing["a"]["value"] == 1,
               "a repo row the vault does not mention survives the overlay")
-    LEDGER.ok(merged.get("thing", "b")["value"] == 22,
+    LEDGER.ok(merged_thing.get("b", {}) and merged_thing["b"]["value"] == 22,
               "a vault row overrides the repo row of the same key")
-    LEDGER.ok(merged.get("thing", "c")["value"] == 3,
-              "and the vault may add rows the repo does not have")
+    LEDGER.ok(merged_thing.get("c", {}) and merged_thing["c"]["value"] == 3,
+              "and the vault may add rows the repo does not have",
+              f"loaded keys: {sorted(merged_thing)}")
+
+    # --- the REAL vault overlay, which nothing here loaded until 2026-08-13 ----
+    # Every load above passes `vault_dir=""` or a temp dir, so the three checks above
+    # pin the MERGE SEMANTICS and say nothing about the bytes on this machine. On
+    # 2026-08-13 `vault/content/effects.toml` shipped 2,077 rows citing
+    # `toolkit/clientscan/consttable.py`, which existed only in the worktree that wrote
+    # them and had not been committed. `_check_extracted` refused all 2,077 -- correctly,
+    # that is condition 1 doing its job -- so `content.load()` raised for the server,
+    # for `deploy.py` and for every session that called it. This file printed ALL CHECKS
+    # PASSED throughout, because not one of its 36 checks had ever touched the vault.
+    # The gate worked; the suite could not see it. The store's own overlay was the one
+    # input it never read.
+    #
+    # These four are vault-dependent and declare a skip on a bare machine, so the floor
+    # stays the vault-less score. Checks 3 and 4 are what stop check 1 from being
+    # vacuous: `load()` SKIPS a vault directory that is not there (`content.py` line 358),
+    # so "it loaded" is equally what a machine with no overlay prints -- and renaming the
+    # overlay aside is exactly the workaround that was reached for the morning this gap
+    # was found, which would otherwise leave this section green over an empty vault.
+    try:
+        real_vault = content.vaultpath.vault_path("content")
+    except Exception:
+        real_vault = None
+    if not (real_vault and os.path.isdir(real_vault)):
+        LEDGER.skip("the real vault overlay (3 checks)",
+                    "no vault/content/ on this machine; the overlay is gitignored and "
+                    "machine-local, so there is nothing here to accept or refuse")
+    else:
+        # 1. Non-vacuity for the guarded load at the top of main(). `load()` SKIPS a
+        #    vault directory that is not there (`content.py` line 358), so "it loaded"
+        #    is equally what an absent overlay prints -- and renaming the overlay aside
+        #    is the workaround that was reached for the morning this gap was found, so
+        #    this is not a hypothetical way for that check to pass while measuring
+        #    nothing.
+        #
+        #    What this CANNOT decide, stated rather than implied by the label: it is a
+        #    total over every file, so it catches an overlay that is absent or wholly
+        #    sidelined and NOT one file of several renamed aside. Catching that needs
+        #    a per-file expectation, and there is nothing tracked to check one against
+        #    -- the overlay is gitignored and its file list is a property of the
+        #    machine. The mutation controls below are what cover the rows that ARE
+        #    present.
+        repo_only = content.load(vault_dir="")
+        n_repo = sum(repo_only.census().values())
+        n_live = sum(world.census().values())
+        LEDGER.ok(world_err is None and n_live > n_repo,
+                  "the overlay CONTRIBUTED rows rather than being absent or wholly "
+                  "sidelined",
+                  f"{n_repo} rows from content/ alone, {n_live} with the vault merged "
+                  f"over it")
+
+        # 2/3. The gate must RUN over these rows, not merely tolerate them. Copy the
+        #      overlay, break ONE row's extractor the way 2026-08-13 broke 2,077 of
+        #      them, and require the refusal -- with the unmutated copy as the control,
+        #      so the refusal is attributable to the mutation and not to the copying.
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = os.path.join(tmp, "content")
+            shutil.copytree(real_vault, copy)
+            target = None
+            for name in sorted(os.listdir(copy)):
+                if not name.endswith(".toml"):
+                    continue
+                path = os.path.join(copy, name)
+                with open(path, encoding="utf-8") as fh:
+                    text = fh.read()
+                if 'extractor = "' in text:
+                    target = (path, text)
+                    break
+            if target is None:
+                LEDGER.skip("the extractor mutation (2 checks)",
+                            "no row in this vault cites an `extractor`, so there is no "
+                            "condition-1 claim here to break")
+            else:
+                path, text = target
+                try:
+                    content.load(vault_dir=copy)
+                    copy_err = None
+                except content.ContentError as exc:
+                    copy_err = str(exc)
+                LEDGER.ok(copy_err is None,
+                          "CONTROL: an unmutated copy of the overlay loads",
+                          copy_err or f"copied {os.path.basename(path)} and its siblings")
+
+                i = text.index('extractor = "') + len('extractor = "')
+                j = text.index('"', i)
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(text[:i] + "toolkit/clientscan/NOT_COMMITTED.py" + text[j:])
+                try:
+                    content.load(vault_dir=copy)
+                    broke = None
+                except content.ContentError as exc:
+                    broke = str(exc)
+                LEDGER.ok(broke is not None and "NOT_COMMITTED" in (broke or ""),
+                          "ONE real overlay row repointed at an uncommitted extractor is "
+                          "REFUSED -- the 2026-08-13 defect, reproduced",
+                          broke or "the loader accepted a row whose named tool is not in "
+                                   "this checkout, which is condition 1 not running")
 
     # --- an unknown key is an error, not a None ------------------------------
     try:

@@ -1381,8 +1381,28 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   from that one read. Sections 9-11 are synthetic throughout and need no vault; the
   only claim about the real store is that its census carries no value out of it. 47
   checks against a floor of 45, the two vault-dependent ones declaring a skip. ~3m25s),
-  `toolkit/test_content.py` (the content store, and that its provenance and licence
-  refusals actually refuse),
+  `toolkit/test_content.py` (the content store, that its provenance and licence
+  refusals actually refuse -- and, since 2026-08-13, that the REAL `vault/content/`
+  overlay loads, which is the one input this file never read. Every other check in it
+  passes `vault_dir=""` or a temp dir, and the bare `content.load()` it opened with was
+  a fixture rather than a claim, so when the overlay shipped **2,077 effect rows citing
+  an extractor that had not been committed**, `_check_extracted` refused them correctly,
+  `content.load()` raised for the server, the harness and `deploy.py` -- and this file
+  did not go red. It DIED at the first line of `main()` and printed no verdict, no
+  ledger and no floor shortfall, which is the one failure `checks.py` cannot see: "a run
+  that measured nothing failed" cannot fire in a process that never reaches its verdict.
+  The load is now guarded and the failure is a named check. Which of the four new checks
+  are load-bearing was MEASURED by four sabotages, and the two that earn the section are
+  the ones the pre-existing checks SURVIVE: deleting the extractor reddens 3 while both
+  synthetic overlay checks stay green, and emptying the overlay reddens exactly 1;
+  gutting the existence check and dropping the vault from `load()`'s directory list are
+  caught synthetically too. The same sabotage found the pre-existing check next door
+  crashing rather than reddening -- `World.get()` RAISES on a missing key, so a dropped
+  overlay killed the section at its third check and the two after it never ran. What the
+  contribution check CANNOT decide is stated at the call site rather than implied by its
+  label: it is a total, so one file of several renamed aside does not move it, and there
+  is nothing tracked to check a per-file expectation against. Floor 39, the MEASURED
+  vault-less score; 42 with the vault),
   `toolkit/test_contentids.py` (the pre-flight that a run's TWO archives agree
   about what `content/maps.toml`'s file ids NAME. **A file id is archive STATE,
   not a property of the map** -- bit 31 means `FcArchive` renamed that row away
