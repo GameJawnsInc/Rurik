@@ -853,9 +853,9 @@ H:1 wait:8`.
 
 > **`Party Members [P]` opens, carrying one member row: `W0 Test Warrior`.**
 
-`W` is the Warrior abbreviation. **This is §16's target, met** -- the frame that draws a
-profession abbreviation is `PtPartyEntry`, and it is now on screen with an abbreviation in
-it.
+`W` is the Warrior abbreviation. **This is §16's target, met** -- a party row drawing a
+profession abbreviation is on screen. *(The frame is `PtPlayer`, not `PtPartyEntry`; §16,
+§17.4 and the first draft of this section all had that wrong. Corrected in §18.6.)*
 
 ### 18.1 The gate was a PAIR, and each half had been tested alone
 
@@ -956,3 +956,80 @@ The abbreviation is drawn from the profession tables `reskin.py` edits. A reskin
 profession should now be READABLE on this row -- which makes the party roster the first
 place in the client where a custom profession's identity is visible outside the panels,
 and the cheapest visual check the arc has.
+
+### 18.6 The static dive, and the two corrections it makes to this section
+
+Thirteen agents (six lenses, six skeptics, one synthesis), no client launches, run
+CONCURRENTLY with §18's experiment. **Its central question was overtaken by the run** -- it
+was asked "why does our client fail the gate", which was true when it launched and false by
+the time it answered, and its synthesis says so honestly ("why our client fails it is,
+honestly, not yet established"). Its READINGS of the code stand, and two of them correct
+this arc. Both are re-verified here rather than taken on the agents' word.
+
+**Correction 1 -- the member row is `PtPlayer`, not `PtPartyEntry`.** §16.1, §17.4 and
+§18's own opening all named `PtPartyEntry` as the frame that draws a member's abbreviation.
+PtRoster's member loop at `0x00570527` adds each row through `0x0057056D` ->
+`0x00570A80` -> `CtlFrameList` with item proc `0x00574F30` = PtPlayer, whose init asserts
+`msg.createParam` (PtPlayer.cpp:442, `0x005747B8`) and `uiMsg.member` (PtPlayer.cpp:445,
+`0x005747D4`). **VERIFIED HERE** -- both asserts are at those addresses. `PtPartyEntry` is
+the row for a WHOLE PARTY, the unit of the search list, and it draws abbreviations too,
+which is how the two came to be conflated.
+
+**Correction 2 -- `is_explorable` is the mission MAP TYPE, and that is WHY it was half the
+gate.** The dword this server sends as `is_explorable` in `0x0199` is `context->map`,
+written by the `0x0199` handler at `0x0084EE65` into `missionContext+0x238` and read by
+`MissionCliGetMap` (`0x0084D9B0`). **`MISSION_MAP_GAME` is ArenaNet's own name for the
+value 1**, asserted 9 times in MsCliApi (MsCliApi.cpp:313 among them). PtFrame's child
+builder decides on it:
+
+```
+0x00564F8F  e8 1c8a2e00   call 0x0084D9B0      ; MissionCliGetMap()
+0x00564F94  83 f8 01      cmp  eax, 1          ; MISSION_MAP_GAME
+0x00564F97  75 4a         jne  0x00564FE3
+0x00564F9B  c745f0 500d5700  mov [ebp-0x10], 0x00570D50   ; PtRoster's frame proc
+```
+
+The not-equal branch builds child 1 with proc `0x0056A100` = **PtFormation** (assert
+`placement`, PtFormation.cpp:612, `0x0056A264`). **VERIFIED HERE** -- the bytes above, the
+`MISSION_MAP_GAME` assert census, and PtFormation's assert.
+
+So §18.1's table is right about what happens and this is the mechanism: **in an outpost the
+roster is never the frame that exists** -- the formation panel is -- and P falls through to
+the search dialog. "Explorable" is not a flag the party code consults; it is the map-type
+dword that selects which panel PtFrame builds. That is a better model than §18.1's "half the
+gate", and it predicts the outpost result rather than merely accommodating it.
+
+**And a corroboration of §18.4 from the other side.** UPSTREAM (the dive's, not re-verified
+here): the abbreviation builder `0x00538D60` falls through at `0x00538E16` to a LEVEL-ONLY
+string when primary and secondary are both zero. The row's format being
+`<abbreviation><level>` is what `W1` -> `W15` -> `W20` shows from the wire side.
+
+### 18.7 Live leads from the dive -- none of them needed for what now works
+
+Ranked by what they would buy. None is required for the roster: it draws today.
+
+1. **`0x003C` `(player_number, set=4, clear=7)`** -- present in 9/9 retail connections, 3x
+   per player, and **never sent by us in 190 played captures**. Writes `[playerRec+0x34]`
+   in the same `ctx+0x80C` stride-0x50 array `0x00B0`/`0x00B1` write. The cheapest unknown
+   message in the arc.
+2. **`PLAYER_AGENT_ID == PLAYER_NUMBER == 1`** makes every possible player/agent mis-join
+   invisible. Retail never has them equal. Worth changing for diagnostic value alone,
+   independent of any fix.
+3. **The `1 <= party_id <= 20` refusal in `agents.party_build` may be wrong.** Retail's own
+   outposts use 25, 37, 45 and 69. NOT re-verified here, and the refusal is cheap while a
+   wrong id fails SILENTLY -- check `0x00858897`'s reachability before relaxing it.
+4. **Ordering.** Retail sends the party build AFTER the local `WORLD_CREATE_AGENT` (8/8,
+   with indices); we send `0x0020` four messages after `0x01CB`. **It works anyway**, so the
+   ordering is not load-bearing for the roster -- and that is a measurement, not a
+   dismissal.
+5. **Do not "fix" `0x01CB`.** Ours is byte-identical to ArenaNet's wire (`cb010100010001`)
+   and its field 2 is a player number in 8/8, including four connections where player and
+   agent differ. The member record's middle dword is explicitly zeroed at `0x00859894` with
+   no reader anywhere.
+6. **An honest negative worth keeping:** no message binds a party member slot to an agent.
+   The client resolves `player_number -> agent` itself through the ChCliApi array that
+   `0x0059`/`0x00B0`/`0x00B1`/`0x003C` populate. This kills the "our member is added before
+   the agent exists" hypothesis I raised before the run.
+
+The dive's own top unknown, unresolved: **`0x00C07980`** selects between two frame procs at
+`0x004EC175`-`0x004EC1AC` and nobody has found its writer.
