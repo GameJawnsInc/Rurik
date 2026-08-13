@@ -895,7 +895,31 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   therefore silently WIDENS `--in PrApi` to 2.4 MB — with `--in AvChar`, which
   legitimately catches the adjacent `AvCharAnim.cpp`, as the control that must
   keep reading differently, since a warning that fires the same way on both is
-  noise),
+  noise. **§10 (2026-08-13) is the same defect a THIRD time, from the direction
+  that makes the footer's encoding list not enough.** `--field` searched MEMORY
+  OPERANDS and nothing else, so `--field 0x6bc` answered **14** without
+  `0x00813AD1 add ecx, 0x6bc` — the writer reached from GAME_SMSG 0x00B6's
+  handler, i.e. the writer of the very field studies/profession/RUNS.md §13 was
+  hunting — plus four more `add ecx` sites and an `add ebx`. Five of 19, from a
+  report whose footer disclaimed disp8 and disp16 and therefore read as
+  complete. The constant is not a displacement at all: `81 c1 bc 06 00 00`
+  carries 0x6BC in its IMMEDIATE field, which the test reads off the bytes
+  (`disp_size == 0`) rather than asking the scanner about. The old
+  displacement-only rule is REPRODUCED inline out of capstone and struct and
+  required both to reach 14 and to MISS that address, so 14 against 19 is a
+  difference between two live answers — §8's pattern. The other half is the
+  controls on the new `A` (address-taking) class, because widening `A` is the
+  lazy way to pass: a real load stays `R`, a real store stays `W`, no `A` row
+  may claim `is_write` (§2's two-writers claim reads that field), and `lea`
+  moved from `R` to `A` because it touches no memory. `sub reg, -imm` is
+  searched too and pinned against real bytes — `sub ecx, -0x19` at 0x00622199,
+  whose immediate byte is 0xE7 and which therefore needs its own anchor and its
+  own sweep; 265 sites of `sub eax, -0x80` are why that sweep is paid for. The
+  one filter is NAMED and controlled: a narrow destination is dropped, and
+  `add al, 0xe` at 0x00479BC8 is decoded and proved to exist before the check
+  that it is excluded. Three sabotages built and run, three redden. 106 checks
+  with capstone (was 83) and 35 without — §10 needs a disassembler for every
+  claim and declares one skip, so the stdlib floor is unmoved),
   `toolkit/test_checks.py` (the check on the checker — see below),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into

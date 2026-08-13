@@ -61,15 +61,52 @@ same shape as the §6o failure above, from inside the tool written to prevent it
     stores" with `0x00478FB8 mov byte [edi+0xe], al` inside the range. Fixed:
     both encodings, anchored exactly (see below).
 
+**And a THIRD, 2026-08-13, which is why the paragraph below now says what it is
+NOT looking for and not only how it looks.** `--field` searched for the constant
+as a MEMORY DISPLACEMENT and nothing else, so it was blind to the field address
+being computed in a register and dereferenced somewhere else:
+
+  * `--field 0x6bc` reported **14 instructions** over the whole image and did
+    not contain `0x00813AD1 add ecx, 0x6bc`, which studies/profession/RUNS.md
+    §13 had just identified as the writer reached from GAME_SMSG 0x00B6's
+    handler -- **the writer of the very field that search was run to find.**
+    Four more `add ecx, 0x6bc` sites and an `add ebx, 0x6bc` were missing with
+    it: 5 of 19, a quarter of the answer, absent from a report whose footer
+    disclaimed the disp8 and disp16 encodings and therefore read as complete.
+
+The lesson is the one the first two already taught and this module had only
+half-learned: a scope statement that lists encodings answers "how is this number
+written" and not "what does the code do with it". `MOV`-through-a-displacement
+and `ADD`-then-dereference are the same access at the source level and the
+second leaves the displacement in an IMMEDIATE field. So `--field` now runs two
+scans over the same anchors -- see `field_encodings` for the memory half and
+`address_forms` for the arithmetic one -- and prints both scope statements.
+
+ADDRESS-TAKING IS ITS OWN CLASS, not a third kind of read. `add ecx, 0x6bc` and
+`lea ecx, [edi+0x6bc]` compute where the field IS; whether anything is loaded or
+stored through the pointer happens in another instruction and usually in another
+function (0x00813AD1's callee `0x0081FD00` is where 0x00B6's mask actually
+lands). Folding them into R would claim a read the scan has not seen, so rows
+are `W` / `R` / `A` and the counts are printed separately. It also means
+`--writes` alone cannot answer "who writes this field" -- a store through a
+computed pointer is an `A` row here and a `W` row at some other displacement --
+so `--writes` says how many address-taking rows it dropped rather than dropping
+them quietly.
+
 So the range is no longer the only thing said out loud. `--field` prints which
-ENCODINGS it searched and which it provably cannot reach; `--xrefs` prints which
-alignments and sections. A zero now carries the discipline that produced it,
-because a reader cannot otherwise tell "not encoded that way" from "not there."
+ENCODINGS and which ADDRESS FORMS it searched and which it provably cannot
+reach; `--xrefs` prints which alignments and sections. A zero now carries the
+discipline that produced it, because a reader cannot otherwise tell "not encoded
+that way" from "not there."
 
 The one encoding no anchored scan can reach is mod=00 `[reg]` -- displacement
 zero, written as no bytes at all. `--field 0x0` says so rather than implying its
 count is complete; finding those needs a linear sweep, and a linear sweep is the
-thing this module refuses (see above).
+thing this module refuses (see above). The arithmetic scan has the matching hole
+and it is wider: an address the image builds through a register (`mov eax,
+0x6BC` then `add ecx, eax`) or in more than one step writes the constant into an
+instruction this scan does find, but the ADDITION carries no constant at all.
+Both are named in the footer instead of being left to the count.
 
 ANCHORING IS EXACT, not a window. A candidate decode is kept only when
 capstone's own encoding record puts the displacement on the bytes we found it
@@ -134,6 +171,7 @@ owner's own install and is never written, patched or launched from here.
 """
 
 import argparse
+import collections
 import os
 import struct
 import sys
@@ -163,6 +201,18 @@ _PREFIXES = (0x66, 0x67, 0xF2, 0xF3)
 # x87 memory stores. capstone marks their memory operand as a READ, so the
 # access flag alone would hide every floating-point store in the image.
 _FPU_STORES = ("fst", "fstp", "fist", "fistp", "fisttp", "fbstp")
+
+# One row of `field_access`. A namedtuple rather than a plain tuple because
+# `kind` had to be added to rows that four sections of `test_codescan.py` index
+# positionally: appending a field keeps `r[0]`, `r[1]`, `r[2]`, `r[4]` and
+# `r[5]` meaning exactly what they meant, so the pins that already exist go on
+# measuring what they were written to measure.
+#
+#   kind  W  a store into [reg + disp]
+#         R  a load from it
+#         A  the ADDRESS computed, with no access to memory at this instruction
+Access = collections.namedtuple(
+    "Access", "va is_write base index text hexbytes kind")
 
 
 find_exe = _pinned.find
@@ -224,7 +274,9 @@ class Image:
     def field_encodings(disp):
         """(searched, blind) for `[reg + disp]`, each [(name, detail)].
 
-        The scope statement `--field` prints. An anchored scan can only find a
+        Half of the scope statement `--field` prints -- the MEMORY half, where
+        the constant is a displacement inside a memory operand.
+        `address_forms` is the other half. An anchored scan can only find a
         displacement that is written into the instruction stream, so which
         encodings exist for THIS displacement decides what a zero can mean --
         and that is a property of the number, not of the image.
@@ -247,23 +299,141 @@ class Image:
                                 "32-bit compiled code does not emit"))
         return searched, blind
 
-    def field_access(self, disp, lo=None, hi=None):
-        """Every instruction whose memory operand is [reg + disp].
+    @staticmethod
+    def address_forms(disp):
+        """(searched, blind) for computing `reg + disp`, each [(name, detail)].
 
-        Returns [(va, is_write, base_reg, index_reg, text, hexbytes)], sorted.
+        The other half of `--field`'s scope statement, and the half that did not
+        exist until 2026-08-13. A field can be reached without its offset ever
+        appearing in a memory operand -- take the address, then dereference the
+        register -- and `--field 0x6bc` reported 14 sites with `0x00813AD1
+        add ecx, 0x6bc` not among them, five sites short and missing the one the
+        search was run for.
+
+        Blind is the honest part here, because the arithmetic hole is wider than
+        the memory one: an addition whose operand is a REGISTER carries no
+        constant for an anchored scan to find, and nothing about the offset is
+        recoverable from the instruction that performs it.
+        """
+        searched = [("add r32, imm32", "`81 /0` and the `05` eax short form"),
+                    ("sub r32, -imm32",
+                     "the same address spelled as a subtraction, and not "
+                     "hypothetical -- 265 sites of `sub eax, -0x80` on build "
+                     "38797. Its anchor is -disp, so it is the one form here "
+                     "that costs a second sweep of the section")]
+        if 0 <= disp <= 0x7F:
+            searched.append(("add/sub r32, imm8",
+                             "`83 /0` and `83 /5`, the one-byte forms a "
+                             "compiler prefers for an offset this small"))
+        searched.append(("lea r32, [reg + disp]",
+                         "found by the memory scan above -- lea's constant IS "
+                         "a displacement -- and reported `A` rather than `R`, "
+                         "because it touches no memory"))
+        blind = [("the constant held in a register",
+                  f"`mov eax, 0x{disp:X}` then `add ecx, eax` puts 0x{disp:X} "
+                  f"in a row above and the ADDITION nowhere. `--xrefs` on the "
+                  f"function is the fallback"),
+                 ("an address built in more than one step",
+                  "`add ecx, 0x600` then `add ecx, 0xBC` reaches +0x6BC "
+                  "carrying neither constant. Nothing anchored can see this"),
+                 ("a narrow destination register",
+                  "an 8- or 16-bit destination cannot hold an address in "
+                  "32-bit code, so those rows are dropped rather than "
+                  "reported. MEASURED: `add al, 0xe` at 0x00479BC8 is the one "
+                  "`--field 0xE --in ExeArchive` would otherwise carry")]
+        return searched, blind
+
+    def _mem_row(self, ins, disp):
+        """An `Access` when this instruction's memory operand is [reg + disp]."""
+        for op in ins.operands:
+            if op.type != capstone.x86.X86_OP_MEM or op.mem.disp != disp:
+                continue
+            # `lea` is decided by the mnemonic and not by the access flag. It
+            # neither loads nor stores -- the whole instruction is the address
+            # computation -- so calling it a read would claim an access this
+            # scan has not seen.
+            if ins.mnemonic == "lea":
+                is_w, kind = False, "A"
+            else:
+                is_w = (bool(op.access & capstone.CS_AC_WRITE)
+                        or ins.mnemonic in _FPU_STORES)
+                kind = "W" if is_w else "R"
+            return Access(ins.address, is_w,
+                          ins.reg_name(op.mem.base) if op.mem.base else "-",
+                          ins.reg_name(op.mem.index) if op.mem.index else "",
+                          f"{ins.mnemonic} {ins.op_str}", ins.bytes.hex(), kind)
+        return None
+
+    def _arith_row(self, ins, disp, mnemonics):
+        """An `Access` when this instruction computes `reg + disp` in place."""
+        if ins.mnemonic not in mnemonics:
+            return None
+        ops = ins.operands
+        if len(ops) != 2:
+            return None
+        dst, src = ops
+        if (dst.type != capstone.x86.X86_OP_REG
+                or src.type != capstone.x86.X86_OP_IMM):
+            return None
+        # Named in `address_forms`' blind list rather than left silent: a byte
+        # or word register is not an address in 32-bit code, and `add al, 0xe`
+        # at 0x00479BC8 is what a scan without this rule reports for `--field
+        # 0xE --in ExeArchive`.
+        if dst.size != 4:
+            return None
+        want = disp if ins.mnemonic == "add" else (-disp) & 0xFFFFFFFF
+        if src.imm & 0xFFFFFFFF != want:
+            return None
+        return Access(ins.address, False, ins.reg_name(dst.reg), "",
+                      f"{ins.mnemonic} {ins.op_str}", ins.bytes.hex(), "A")
+
+    def field_access(self, disp, lo=None, hi=None):
+        """Every instruction that accesses [reg + disp] OR computes its address.
+
+        Returns a sorted list of `Access`, which is a tuple of
+        (va, is_write, base_reg, index_reg, text, hexbytes, kind).
 
         SEARCHES EVERY ENCODING THE DISPLACEMENT CAN HAVE -- see
-        `field_encodings`, which is what `--field` prints alongside the count.
-        Searching disp32 alone reported zero for `+0xE` in ExeArchive with a
-        `mov byte [edi+0xe], al` sitting inside the range.
+        `field_encodings` -- AND EVERY ARITHMETIC FORM THAT REACHES THE SAME
+        ADDRESS -- see `address_forms`. Both are what `--field` prints alongside
+        the count. Searching disp32 alone reported zero for `+0xE` in ExeArchive
+        with a `mov byte [edi+0xe], al` sitting inside the range; searching
+        memory operands alone reported 14 sites for `+0x6BC` with the writer at
+        0x00813AD1 sitting outside them.
+
+        ONE SWEEP, TWO ACCEPTANCE RULES. The bytes are the same either way --
+        `8d 8f bc 06 00 00` carries 0x6BC as a displacement and `81 c1 bc 06 00
+        00` carries it as an immediate -- so the arithmetic form costs no extra
+        pass over the section, only an extra test per candidate decode. The
+        `sub` spelling does cost a pass, because -disp is different bytes:
+        MEASURED 2026-08-13, an unbounded `--field 0x14` goes from 7.5 s and
+        19,125 rows to 14.4 s and 21,703, while `--field 0x6bc` stays under a
+        tenth of a second and the `--in <module>` path that is the flagship
+        stays in milliseconds. Paid, because `sub eax, -0x80` is not
+        hypothetical -- 265 sites on this build.
         """
         out, seen = [], set()
         blob, tva = self.tdata, self.tva
 
-        # One anchor per encoding: the displacement's own bytes, as written.
-        anchors = [(struct.pack("<I", disp), 4)]
+        # One anchor per encoding: the constant's own bytes, as written. Keyed
+        # by (bytes, width) so a displacement whose negation is itself -- 0 --
+        # does not sweep `\x00` over 5 MB twice.
+        anchors = {}
+
+        def anchor(needle, width, mem=False, arith=()):
+            was_mem, was_arith = anchors.get((needle, width), (False, ()))
+            anchors[(needle, width)] = (was_mem or mem,
+                                        tuple(set(was_arith) | set(arith)))
+
+        anchor(struct.pack("<I", disp), 4, mem=True, arith=("add",))
         if 0 <= disp <= 0x7F:
-            anchors.append((bytes([disp]), 1))
+            anchor(bytes([disp]), 1, mem=True, arith=("add",))
+        # The subtraction spelling. `sub ecx, -0x6BC` lands on +0x6BC, and its
+        # anchor is a different four bytes, so it is the one form here that is
+        # not free.
+        anchor(struct.pack("<I", (-disp) & 0xFFFFFFFF), 4, arith=("sub",))
+        if -0x80 <= -disp <= 0x7F:
+            anchor(struct.pack("<b", -disp), 1, arith=("sub",))
 
         # Restrict the sweep to the requested range when there is one. An
         # instruction inside [lo, hi] carries its displacement after its own
@@ -274,7 +444,7 @@ class Image:
         blo = 0 if lo is None else max(0, lo - tva)
         bhi = len(blob) if hi is None else min(len(blob), hi - tva + 16)
 
-        for needle, ndisp in anchors:
+        for (needle, width), (mem_ok, mnemonics) in anchors.items():
             p = blob.find(needle, blo, bhi)
             while p != -1:
                 # `back` starts at 1: `A1 <disp32>` and friends put the
@@ -286,40 +456,35 @@ class Image:
                         continue
                     ins = next(iter(self.md.disasm(blob[start:start + 24],
                                                    tva + start, 1)), None)
-                    if ins is None:
+                    if ins is None or ins.address in seen:
                         continue
                     # EXACT, from capstone's own encoding record: this
-                    # instruction's displacement field must BE the bytes we
-                    # found, at the width we searched. No window, no proxy.
+                    # instruction's displacement -- or its immediate, for the
+                    # arithmetic forms -- must BE the bytes we found, at the
+                    # width we searched. No window, no proxy.
                     enc = ins.encoding
-                    if enc.disp_size != ndisp or start + enc.disp_offset != p:
-                        continue
-                    for op in ins.operands:
-                        if op.type != capstone.x86.X86_OP_MEM:
-                            continue
-                        if op.mem.disp != disp:
-                            continue
-                        if ins.address in seen:
-                            continue
+                    row = None
+                    if (mem_ok and enc.disp_size == width
+                            and start + enc.disp_offset == p):
+                        row = self._mem_row(ins, disp)
+                    elif (mnemonics and enc.imm_size == width
+                            and start + enc.imm_offset == p):
+                        row = self._arith_row(ins, disp, mnemonics)
+                    if row is not None:
                         seen.add(ins.address)
-                        is_w = (bool(op.access & capstone.CS_AC_WRITE)
-                                or ins.mnemonic in _FPU_STORES)
-                        out.append((ins.address, is_w,
-                                    ins.reg_name(op.mem.base) if op.mem.base else "-",
-                                    ins.reg_name(op.mem.index) if op.mem.index else "",
-                                    f"{ins.mnemonic} {ins.op_str}", ins.bytes.hex()))
+                        out.append(row)
                 p = blob.find(needle, p + 1, bhi)
 
         # Drop the prefix-shadow duplicate: same displacement, address one byte
         # after a real hit whose first byte is a legacy prefix.
-        addrs = {r[0] for r in out}
+        addrs = {r.va for r in out}
         out = [r for r in out
-               if not (r[0] - 1 in addrs
-                       and self.read(r[0] - 1, 1)[:1]
-                       and self.read(r[0] - 1, 1)[0] in _PREFIXES)]
+               if not (r.va - 1 in addrs
+                       and self.read(r.va - 1, 1)[:1]
+                       and self.read(r.va - 1, 1)[0] in _PREFIXES)]
 
         if lo is not None:
-            out = [r for r in out if lo <= r[0] <= hi]
+            out = [r for r in out if lo <= r.va <= hi]
         return sorted(out)
 
     # -- cross references -----------------------------------------------
@@ -524,35 +689,63 @@ def main():
             for line in bounds_note(a.module, exe):
                 print(line)
         rows = img.field_access(disp, lo, hi)
+        dropped_addr = 0
         if a.writes:
-            rows = [r for r in rows if r[1]]
+            # `--writes` cannot answer "who writes this field" on its own and
+            # says so. The store through a computed pointer is an `A` row here
+            # and a `W` row at whatever displacement the callee uses -- which
+            # is exactly the shape of GAME_SMSG 0x00B6's writer, `add ecx,
+            # 0x6bc` at 0x00813AD1 storing at +0xC inside 0x0081FD00.
+            dropped_addr = sum(1 for r in rows if r.kind == "A")
+            rows = [r for r in rows if r.is_write]
         # Say WHERE we looked and HOW, always. "Nothing writes it" is only a
         # finding when the range is stated with it -- and only an honest one
-        # when the encodings searched are stated too, because a scan that knew
-        # one encoding reported a confident zero over a range containing the
-        # instruction it was looking for.
+        # when the encodings and the address forms searched are stated too,
+        # because a scan that knew one encoding, and later a scan that knew
+        # only memory operands, each reported a confident zero over a range
+        # containing the instruction it was looking for.
         searched, blind = Image.field_encodings(disp)
+        asearched, ablind = Image.address_forms(disp)
+        kinds = collections.Counter(r.kind for r in rows)
         print(f"[reg + 0x{disp:X}] in {where}\n"
               f"{len(rows)} instruction(s)"
               + (" (stores only)" if a.writes else
-                 f", {sum(1 for r in rows if r[1])} of them stores"))
-        for va, w, base, idx, txt, hx in rows:
-            print(f"  {va:08X}  {'W' if w else 'R'}  base={base:<4} "
-                  f"{idx:<4} {txt:<40} {hx}")
+                 f": {kinds['W']} store(s), {kinds['R']} read(s), "
+                 f"{kinds['A']} address-taking"))
+        for r in rows:
+            print(f"  {r.va:08X}  {r.kind}  base={r.base:<4} "
+                  f"{r.index:<4} {r.text:<40} {r.hexbytes}")
         if not rows:
             print("  -- none. That is a statement about the range and the "
-                  "encodings below, and nothing wider.")
+                  "encodings and forms below, and nothing wider.")
+        if dropped_addr:
+            print(f"\n--writes dropped {dropped_addr} address-taking row(s). A "
+                  f"store through a pointer computed there is NOT in the list "
+                  f"above; drop --writes to see them.")
         # A row with no base register is `[0xdisp]`, an absolute address that
         # happens to equal the displacement -- not a struct field. Counted and
         # named rather than filtered out, because a quiet filter is the defect
         # this module was rewritten to stop making.
-        noreg = sum(1 for r in rows if r[2] == "-")
+        noreg = sum(1 for r in rows if r.base == "-")
         if noreg:
             print(f"\n{noreg} of the above have no base register: those are "
                   f"absolute address 0x{disp:X}, not a field at +0x{disp:X}.")
-        print("\nencodings searched: "
+        # Same rule, same reason, for the arithmetic rows: `add esp, 0x14` is a
+        # stack frame being unwound and `add ebp, ...` is almost always the
+        # same. On an unbounded `--field 0x14` that is 2,421 of the 2,579
+        # address-taking rows, so a reader who is not told will read the count
+        # as a field with two thousand users.
+        stack = sum(1 for r in rows if r.kind == "A" and r.base in ("esp", "ebp"))
+        if stack:
+            print(f"\n{stack} of the address-taking rows target esp/ebp: those "
+                  f"are stack-frame arithmetic, not a field at +0x{disp:X}.")
+        print("\nmemory accesses -- encodings searched: "
               + ", ".join(f"{n} ({d})" for n, d in searched))
         for n, d in blind:
+            print(f"NOT searched: {n} -- {d}")
+        print("\naddress computations -- forms searched: "
+              + ", ".join(f"{n} ({d})" for n, d in asearched))
+        for n, d in ablind:
             print(f"NOT searched: {n} -- {d}")
         return 0
 

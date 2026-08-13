@@ -1042,3 +1042,16 @@ map under our server has never been tried; that is an unmeasured risk of its own
 disp8/disp16 encodings but not the arithmetic one, so it reads as complete when it is
 not. **Third under-reporting defect of this shape in that module.** A fix plus a negative
 control that reddens on `0x00813AD1` is small and high-value.
+
+> **CLOSED 2026-08-13.** `--field` now runs two acceptance rules over the same anchors —
+> a memory operand at `[reg + disp]`, and `add`/`sub`/`lea` computing `reg + disp` — and
+> reports the second as a third class, **`A`**, because taking an address is not a read:
+> `0x00813AD1`'s store lands at `+0xC` inside its callee `0x0081FD00`, not here.
+> **`--field 0x6bc` is 19 rows, not 14**, and the five it gained are `0x00813AD1`,
+> `0x00816D1E`, `0x00816D3E`, `0x00816D5E` and `0x00819ED1 add ebx, 0x6bc`. `lea` moved
+> from `R` to `A` (it touches no memory), `--writes` now says how many `A` rows it
+> dropped rather than dropping them silently, and the footer states the arithmetic forms
+> searched **and** the two it provably cannot reach — a constant held in a register, and
+> an address built in more than one step. `test_codescan.py` §10 pins it: the
+> displacement-only rule reproduced inline must reach 14 and must miss `0x00813AD1`.
+> **OBSERVED.**
