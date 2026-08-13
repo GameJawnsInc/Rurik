@@ -483,26 +483,46 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   MFT row -> geometry chunk -> sub-model walk -> vertex stride), so no decoder
   error at any step survives it. **474/474 and 664/664 at 1e-5** on the
   reference maps' comparable props with the 3D-radius rival pinned collapsed (1
-  and 7); `--all` reproduces the study's full 14-map sample from committed code
+  and 7); `--all` reproduces the full 14-map sample from committed code
   -- 2,048 model files: 1,741 unique / 1 ambiguous / 306 no-close, f11
-  **12,766/12,875**, rival 103, thirteen (dat_fvf, stride) pairs, ti and n0
-  divisible by 3 on 3,834/3,834 -- MEASURED at 165 s against the default's
-  30 s. The three failure populations are pinned APART (§A5's lesson: conflating
+  **12,782/12,875**, rival 103, twelve (dat_fvf, stride) pairs, ti and n0
+  divisible by 3 on 3,834/3,834 -- MEASURED at 227 s against the default's
+  121 s. The three failure populations are pinned APART (§A5's lesson: conflating
   them manufactured a false theory) and PER MAP, because Pre-Searing's no-close
-  rate is 77/229 against the corpus ~15% and an average would hide both. The
-  stride rule is labelled RECONSTRUCTION at its definition -- the test asserts
-  the label -- and its thirteen pairs are LITERALS in the test file (the
-  test_agentlife lesson: an expectation computed from the symbol under test
-  lets the symbol move); a sabotage that quietly reads the 3D radius as the 2D
+  rate is 77/229 against the corpus ~15% and an average would hide both.
+  **The stride is the CLIENT'S OWN three tables since M2** (VA 0x00BF5B80/
+  0xBF5BC0/0xBF5BE0, accessor 0x00688010), and section 5 re-reads them out of
+  the vaulted image through the test's OWN PE walk so the module's literals are
+  pinned to ArenaNet's bytes rather than to a transcription, with a read four
+  bytes early as the control. **They REPLACED a byte-cost rule of ours, and
+  that correction is the lesson the file exists to carry**: the two rules agree
+  on all twelve real formats and differ on 60,168 of 65,536 words, so a wrong
+  rule closed 1,741 files and satisfied a two-file oracle on 99.15% of props
+  while the corpus could never show it. **dat_fvf 0x2C never existed** -- its
+  one sighting was our misparse of the ambiguous file 0x1BAE2, which the client's
+  tables resolve to a single closure at the common format 21, and the ORACLE
+  confirms the fix from a source sharing nothing with the binary: that model's
+  props score f11 **0/16 under the retired rule and 16/16 under the client's**,
+  which is the whole corpus improvement 12,766 -> 12,782 and shrinks §A5's
+  unexplained population from 109 to 93. The retired rule is REPRODUCED as a
+  live function so all of that is a difference between two answers rather than
+  prose. GWMB's tables ARE these client tables, so §B6's recorded disagreement
+  resolves in UPSTREAM's favour -- the direction nobody predicted. The
+  ambiguity moved rather than vanished (0x25AA9 at 170/65,842) and both files
+  are pinned, because closure is NOT identity (§B5). Section 6 establishes the
+  vertex FIELD MAP by refutable prediction rather than by field size (the
+  envchunk tag-6 lesson): **normal unit on 90,108/90,108** with the same read
+  four bytes early unit on 2.7%, tangent-frame vectors unit 20,034/20,034 and
+  93.0% orthogonal against a 26.0% next-vertex control, texcoords 97.8% inside
+  +/-16 over a real range of -519.7..520.4 so a consumer must WRAP not clamp,
+  and **bit 1's D3DCOLOR reading REFUTED** -- high three bytes zero on 9,128 of
+  9,128, ten values all <= 9, so it is an index whose purpose stays UNVERIFIED.
+  A sabotage that quietly reads the 3D radius as the 2D
   one was built and run and reddens 5 checks from three directions, the
-  synthetic literal plus both maps' oracle and rival. Section 3 pins the
-  ambiguous file 0x1BAE2 at exactly offsets (97, 101), all indices in range
-  under BOTH parses -- closure is NOT identity (§B5) -- and the finding M1
-  adds: the corpus's single dat_fvf 0x2C sighting IS that file's chosen parse,
-  so the rare format's existence, and GWMB's one stride-table disagreement
-  which rests on it, are both UNCONFIRMED until rung M2 reads the client's own
-  FVF dispatch. Sections 0-1 build a model file from `struct.pack` and need no
-  vault, scoring 19 against a floor of 34. ~30 s),
+  synthetic literal plus both maps' oracle and rival. Three scores, each
+  MEASURED rather than subtracted, because the file needs TWO vault artifacts
+  that fail independently: 57 with archive + client image, 33 with the client
+  image alone, **29 with neither** -- against a floor of 57. ~121 s),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against

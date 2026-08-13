@@ -89,7 +89,7 @@ Sessions are estimates, not commitments.
 | Rung | What | Criterion | Est. |
 |---|---|---|---|
 | **M1** ✅ | `toolkit/mapdata/modelfile.py` + `test_modelfile.py`: the KNOWN layout as committed code — chunk walk, sub-model walk, positions | **DONE 2026-08-13, criterion met exactly**: the radius identity reproduces at 12,766/12,875 (`--all`, 165 s) and 474/474 + 664/664 on the reference maps, pinned as the test's floor-guarded oracle with the 3D rival as control; closure census 1,741/1/306 and thirteen format pairs, all pinned. The reference-map model census: Kamadan 86 used models (71 close), Pre-Searing 229 (152 close — a 33.6% no-close rate against the corpus ~15%, pinned per map). **New finding**: the corpus's single `dat_fvf 0x2C` sighting is the ambiguous file 0x1BAE2's chosen parse (its rival parse is format 21), so the rare format's existence AND §B6's GWMB-table disagreement both rest on an uncertain read — M2 must settle it from the client. | 1 session |
-| **M2** | The vertex-format table, client-corroborated: FVF dispatch read from the loader (via `clientscan/codescan.py`, whose capstone carve-out already covers it), field maps for position/normal/UV per format | The client's table agrees with the corpus-derived strides; every format used by the reference maps' models has a field map; the one known GWMB disagreement (`0x2C`) is settled by the client | 1–2 sessions |
+| **M2** ✅ | The vertex-format table, client-corroborated: FVF dispatch read from the loader, field maps for position/normal/UV per format | **DONE 2026-08-13 — and it CORRECTED M1 rather than confirming it.** The client's three stride tables (VA `0x00BF5B80`/`BC0`/`BE0`, accessor `0x00688010`) replaced our byte-cost rule: the two agree on all twelve real formats and differ on 60,168 of 65,536 words, which is why a wrong rule survived a corpus-wide check. **`dat_fvf 0x2C` never existed** — its one sighting was our misparse of the ambiguous file, and the cross-file oracle confirms the fix from a source sharing nothing with the binary (that model's props: **f11 0/16 → 16/16**, the whole corpus improvement 12,766 → **12,782**). GWMB was right; §B6 resolves in upstream's favour. Field map derived from the tables' per-bit additivity and each name established by refutable prediction: **normal unit on 90,108/90,108** (control 2.7%), tangent frame unit with 93.0% orthogonality (control 26.0%), texcoords wrapping past ±16, and **bit 1's colour reading REFUTED** (small index, purpose UNVERIFIED). Test floor 34 → 57 (68 under `--all`), with the module's tables pinned to the vaulted image by the test's own PE walk. | 1 session |
 | **M3** | Mesh assembly to the interchange: a `.gwmodel` sidecar family in `vault/exports/` (positions + triangles first) | A decoded mesh's max 2D radius equals `f11/scale` per instance (M1's oracle, now per-mesh); decoded collision meshes vs retail outline rings (the e10d oracle) on outlined props | 1 session |
 | **M4** | Blender: real meshes replace proxies, instanced per file id, transform/scale/z-sign settled by rendering against terrain | Kamadan renders recognizably; prop mesh bottoms sit on terrain at the placement rate the proxies scored (0.7338/0.304 baselines); local z sign MEASURED, not assumed | 1 session |
 | **M5** | Textures: FA1/FA5 → `atex.py` → images → Blender diffuse materials; the ten DDS get a stdlib reader | Reference-map textures resolve at the study's rate; UV sanity is statistical (coverage, seam rate) plus render inspection — stated as the weak half, because no strong UV oracle exists | 1 session |
@@ -107,9 +107,13 @@ user-visible result; M5 is the finish.
   already measured, so M1's job is to make it a floor-guarded regression pin
   the way `test_props.py` pinned `corresponds()`.
 - **Verbatim-first applies to the FVF table**: the client's dispatch is the
-  authority; GWMB's table is UPSTREAM (a witness we have already corrected
-  once, `dat_fvf 0x2C`) and the corpus fit is RECONSTRUCTION until the client
-  agrees.
+  authority; GWMB's table is UPSTREAM and the corpus fit is RECONSTRUCTION
+  until the client agrees. **VINDICATED 2026-08-13 and in the direction
+  nobody predicted** — this line was written expecting to correct upstream
+  again (`dat_fvf 0x2C`) and the client corrected *us* instead: GWMB's tables
+  ARE the client's, our corpus-fitted rule was wrong, and the only reason it
+  survived M1 is that the two agree exactly where the corpus lives. Read the
+  authority, not the fit, even when the fit closes 1,741 files.
 - **Failure populations stay separated** (§A5's lesson): the test reports
   non-closing, ambiguous-closing and `f11`-disagreeing files as three numbers,
   never one, and the M1 floor pins each.
