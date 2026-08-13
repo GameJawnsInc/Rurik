@@ -463,6 +463,24 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   passed against the defect),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
+  `toolkit/mapdata/test_deploy.py` (rung G's one command, `deploy.py`, which
+  takes an area row in `content/areas.toml` from geometry to a map the retail
+  client compiles. It is an ORCHESTRATOR -- nearly every line it runs belongs to
+  a module with its own test -- so this file checks only what is true of the
+  COMPOSITION, and each of its three sections is a defect the first runs of the
+  command actually had. **The two kinds of borrowing are different**: structural
+  constants (Header, Zones) must come from a map shaped like ours, the biome
+  (textures, sun, env, sound) from wherever you like, and taking both from
+  Pre-Searing pulled in its 7,208-byte Zones chunk and built an 11,115-byte map
+  for a 4,608-byte reservation. **The client must own the archive you armed** --
+  every run directory has its own `Gw.dat`, and arming the C2 copy while
+  launching the default client compiled nothing. That one is asserted on the
+  SYNTAX TREE, and its NEGATIVE CONTROL is the check that earns the section: the
+  first version asked whether `main()` contained any `join(dirname(dat), ...)`,
+  which it does TWICE because the output path defaults that way, so it returned
+  True against a sabotaged source and could not fail. The test now runs that
+  exact sabotage and requires the answer to flip. Sections 0-1 and 3 need no
+  vault and score 10 against a floor of 14),
   `toolkit/mapdata/test_soundchunk.py` (the Sound chunk `0x10000012`, the map's
   ambient-sound layer -- the second of the two chunks rung E10 could only BORROW,
   now decoded and re-encoded byte-identically, **349 of 349**, 27 checks under
