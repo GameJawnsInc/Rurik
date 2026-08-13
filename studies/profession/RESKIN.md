@@ -166,9 +166,28 @@ independent constants and disagreed. In-band ids only: the nibble is 4 bits asse
 python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_panel --spawn-profession 8 --map 796'
 ```
 
+**RUN 0 PASSED, 2026-08-13** (harness `20260813T103437`). `--spawn-profession 8` renders
+a Ritualist end to end: `0x0059` carried appearance `0x00800000` (the nibble followed) and
+`0x00B7` carried prof 8; no crash dialog, 34 c2s, `missed 0`. **The operator identified it
+by the weapon-holding animation**, which is worth more than the confirmation — see §7.
+
 **RUN 1 — the in-world dwords only**, with a **different donor string id per table** (the
 original plan collapsed three tables onto one donor and so could not say which table fed
 which widget), and never a profession-name id as donor.
+
+**Built 2026-08-13: `toolkit/clientpatch/reskin.py`.** It locates all four name tables
+**structurally, never by address** — each `.rdata` table by the assert expression the
+compiler emitted immediately after it (each occurring exactly once in the image), then
+corroborated by shape, with **the anchor and the shape required to agree**; the `.data`
+table by its values against the located name table. It writes **out of place only**, and
+refuses `C:\gw`, its own input, and every checkout of this repo. Verified on the pinned
+client: the four offsets it derives match the workflow's independently-derived numbers to
+the byte.
+
+```
+python toolkit/clientpatch/reskin.py --show
+python toolkit/clientpatch/reskin.py --profession 8 --name <ID> --abbrev <ID> --out <vault path>
+```
 
 **RUN 2 — the `.data` table** `0x00BEF4A4`, whose consumer no document in this arc names.
 
@@ -186,8 +205,31 @@ builds `0x0060`/`0x0084`/`0x008b` handlers.
 | Is `0x00BEF4A4` indexed by profession id? | **INFERRED** — values match `s_charProfession[1..10]`; reached via a vtable slot, so nothing static resolves it |
 | Does a static armour row copy survive runtime population? | **UNVERIFIED** — table A's pointers reach past the raw-backed `.data` end at `0x00C02A00` |
 | Will the client accept a text file whose row reads compression 0? | **UNVERIFIED** — gates arbitrary authored text; Tier 0 needs no archive write |
-| `0x00A79758` — an 11-entry table read with a bound and **no assert**, in the model loader | **UNVERIFIED** — if its index is the profession id, it is a profession→model map in the animation layer, the one axis both routes declare uncosted |
+| `0x00A79758` — an 11-entry table read with a bound and **no assert**, in the model loader | **PROMOTED to a live lead (§7)** — the animation layer demonstrably reads profession |
 | The in-game glyph | **NOT FOUND** |
 
 **Retired by this pass:** the `CpsData` 0x16 stride mystery — it is `2 × 11`, and the
 composite lookup is now fully understood.
+
+
+---
+
+## 7. The animation layer reads profession — and that favours the reskin
+
+**OBSERVED 2026-08-13, run 0.** With `--spawn-profession 8` and no client patch at all,
+the operator identified the character as a Ritualist **from the weapon-holding
+animation** before reading a single label.
+
+That is a measurement, not a nicety. §4 lists animations under DOES NOT WORK and a
+verifier flagged an 11-entry table at `0x00A79758` in the model loader — read with a
+bound but **no assert**, index taken from a model-file byte — as *possibly* a
+profession→model/shader map, labelled UNVERIFIED because nothing static resolved it.
+The animation changing with the profession id is direct evidence that **the animation
+layer does read profession**, which promotes that table from a guess to the prime
+candidate.
+
+**And it turns a listed weakness into an argument for the route.** A reskin **inherits
+the host profession's animations**, so a custom class animates like a Ritualist —
+coherent, if not bespoke. A twelfth id would index that table at 11 or 12 instead, and
+since it is read with a bound and no assert, the failure would be silent rather than
+loud. One more axis on which the legal-id route wins by not being clever.

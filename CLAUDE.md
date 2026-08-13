@@ -1055,6 +1055,25 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientpatch/test_keytap_patch.py` (the R0b key-tap code cave: build_cave's
   edges resolve, the planted client changes only the tap and the cave, and the patcher
   refuses a changed or already-tapped binary),
+  `toolkit/clientpatch/test_reskin.py` (the profession reskin -- repointing a SHIPPED
+  profession's name string ids, which `studies/profession/RESKIN.md` chose over adding a
+  twelfth id because `.rdata` has zero slack and seven of the profession tables are
+  `mov imm32` ladders rather than data. Four tables are located STRUCTURALLY, never by
+  address: each `.rdata` one by the assert expression the compiler emitted immediately
+  after it (each occurring exactly once) and then corroborated by shape, with the
+  ANCHOR AND THE SHAPE REQUIRED TO AGREE -- five negative controls break one assumption
+  each and must be refused alone, including a duplicated anchor, a missing one, and an
+  ambiguous match on the fourth table, which is the `.data` one read at `0x004D128E`
+  with NO bound check at all and therefore the most dangerous edit here. The headline
+  is deliberately NOT "4 bytes changed": that was this file's first version and it went
+  red for the right reason -- 2048 to 2041 is `00 08` to `F9 07`, so the high bytes are
+  zero in both and only TWO bytes move. How many bytes a dword write disturbs depends
+  on the values, so the invariant is CONTAINMENT (every changed byte inside the intended
+  dword) plus a read-back, since containment alone also passes a write that changed
+  nothing. The output guards refuse in-place, `C:\gw`, and EVERY checkout of this repo
+  (a worktree root is not the main checkout's -- it reports 2), each with a positive
+  control that an ordinary path is allowed. Sections 0-2 build their own buffers and
+  need no vault; section 3 skips without one. ~2 s),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
   refused),
   `toolkit/harness/test_keytap.py` (the ReadProcessMemory key reader — RPM round-trip,
