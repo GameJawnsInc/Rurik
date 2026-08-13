@@ -44,7 +44,7 @@ import checks  # noqa: E402
 # needed it. hold_key earned its own section the hard way -- see the comment in
 # it -- and the camera floor was declared as 67 from a miscount and reddened the
 # run at 65 until it was measured, which is what the floor is for.
-LEDGER = checks.Ledger("harness", floor=84)
+LEDGER = checks.Ledger("harness", floor=88)
 check = checks.adopt_named(LEDGER)
 
 
@@ -419,6 +419,47 @@ if __name__ == "__main__":
               "chatter")
     LEDGER.ok(all(stack_all._echoes(n) for n in ("webgate", "authsrv", "gamesrv")),
               "and --serve still echoes every server, as it always did")
+
+    # --- and --probe prompts the operator the same way (2026-08-12) --------------
+    # probes.py prints the question, the prediction and every step's watch line
+    # through the same gamesrv stdout, and the watch lines ARE the experiment
+    # ("NOW open the skills menu"). Until this date only --labelrun earned the
+    # echo, so the first profession_skillbar attempt sat at a silent terminal
+    # while its prompts went to gamesrv.log alone -- the 2026-08-10 labelrun
+    # failure again, on the other flag that prompts a human.
+    import argparse as _argparse
+
+    def _flags(ga):
+        return _argparse.Namespace(game_args=ga)
+
+    LEDGER.ok(_sess.is_probing(_flags("--probe profession_skillbar"))
+              and _sess.prompts_operator(_flags("--probe profession_skillbar")),
+              "--probe counts as prompting the operator",
+              "a probe run's step prompts go only to gamesrv.log otherwise, and "
+              "the operator cannot know when to open the panel")
+    LEDGER.ok(_sess.prompts_operator(_flags("--labelrun"))
+              and not _sess.is_probing(_flags("--labelrun")),
+              "--labelrun still prompts, and the two flags stay distinguishable",
+              "the banner names the flag the operator actually passed")
+    LEDGER.ok(not _sess.prompts_operator(_flags(""))
+              and not _sess.prompts_operator(_flags("--enemy --tape-speed 2")),
+              "an ordinary run still echoes nothing -- the default loop stays quiet",
+              "an echo that fires on every run would bury the prompt banner in "
+              "gamesrv chatter, which is the failure section 8 exists to prevent")
+    import ast as _ast
+    with open(_sess.__file__, encoding="utf-8") as f:
+        _tree = _ast.parse(f.read())
+    _fns = {fn.name: fn for fn in _tree.body if isinstance(fn, _ast.FunctionDef)}
+
+    def _names(fn):
+        return {n.id for n in _ast.walk(fn) if isinstance(n, _ast.Name)}
+
+    LEDGER.ok("prompts_operator" in _names(_fns["main"])
+              and "prompts_operator" in _names(_fns["run_client"]),
+              "and BOTH consumers read the shared predicate (syntax tree)",
+              "main() routes the echo and run_client() silences the hold's "
+              "progress line; a revert to is_labelling in either restores the "
+              "silent terminal for --probe runs")
 
     # ---- a chained tape run must outlive its own verdict ------------------------
     print("\n- the tape chain (R1.5 0b)")

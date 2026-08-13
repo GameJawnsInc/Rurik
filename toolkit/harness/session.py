@@ -109,6 +109,32 @@ def is_labelling(a):
     return "--labelrun" in split_args(getattr(a, "game_args", ""))
 
 
+def is_probing(a):
+    """Is --probe among the gamesrv flags?
+
+    Same shape as is_labelling and the same failure when missed: a probe
+    prompts a HUMAN through the gamesrv's stdout -- probes.py prints the
+    question, the prediction and every step's watch line there, and the watch
+    lines are the experiment ("NOW open the skills menu"). Until 2026-08-12
+    only --labelrun earned the echo, so a --probe run's prompts went to
+    gamesrv.log alone and the operator sat at a silent terminal: a client
+    session burned, and a capture whose steps nobody performed -- the exact
+    2026-08-10 labelrun failure, on the other flag that prompts.
+    """
+    return "--probe" in split_args(getattr(a, "game_args", ""))
+
+
+def prompts_operator(a):
+    """Does this run drive a human through the gamesrv's stdout?
+
+    One predicate, two consumers, like is_labelling: the echo decision in
+    main() and the hold's progress-line silencing in run_client(). Both
+    matter -- an unechoed prompt is invisible, and a "holding 8s" line
+    interleaved with the prompts is how one gets misread by glancing.
+    """
+    return is_labelling(a) or is_probing(a)
+
+
 def resolve_enemy(game_args, enemy=False):
     """Decide whether the gamesrv spawns the standing hostile. Default: NO.
 
@@ -1094,7 +1120,7 @@ def run_client(a, outdir):
 
         if a.keep_open:
             hold_open(proc, a.hold, tails, outdir,
-                      quiet=is_labelling(a), shot_every=a.shots)
+                      quiet=prompts_operator(a), shot_every=a.shots)
     finally:
         # READ THE CRASH DIALOG BEFORE ANYTHING CLOSES IT, ON EVERY PATH.
         # `capture_error_dialog` used to be reachable ONLY from hold_open(),
@@ -1328,22 +1354,24 @@ def main():
     outdir = vault_path("captures", "harness", stamp)
     os.makedirs(outdir, exist_ok=True)
 
-    # --labelrun prompts a HUMAN through the gamesrv's stdout, so that stdout has to
-    # reach this terminal. Detected from the flags rather than added as a second flag
-    # here: the operator already says --labelrun once, and a run where they said it and
-    # saw nothing is worse than useless -- it burns a client session and produces a
-    # capture whose steps nobody performed.
+    # --labelrun and --probe both prompt a HUMAN through the gamesrv's stdout, so that
+    # stdout has to reach this terminal. Detected from the flags rather than added as a
+    # second flag here: the operator already says --probe once, and a run where they
+    # said it and saw nothing is worse than useless -- it burns a client session and
+    # produces a capture whose steps nobody performed.
     labelling = is_labelling(a)
+    prompting = prompts_operator(a)
     # Under a chain the operator's only truthful progress signal is each hop's own
     # "tape complete: N/N" line, and hops 2..N are different processes -- echoing only
     # "gamesrv" would show the first hop and then go silent for six minutes while the
     # run was working perfectly. Same failure as the labelled run's on 2026-08-10,
     # where the script driving the human was invisible.
     echoing = {s[0] for s in specs if s[0].startswith("gamesrv")} if a.tape_chain \
-        else ({"gamesrv"} if labelling else False)
+        else ({"gamesrv"} if prompting else False)
     stack = Stack(specs, logdir=outdir, echo=True if a.serve else echoing)
-    if labelling:
-        print("--labelrun: the gamesrv's prompts will appear IN THIS WINDOW.\n"
+    if prompting:
+        which = "--labelrun" if labelling else "--probe"
+        print(f"{which}: the gamesrv's prompts will appear IN THIS WINDOW.\n"
               "  Put this window beside the game. Read it by glancing -- clicking\n"
               "  here takes focus off the game and your next action goes nowhere.")
     print("starting the stack:")
