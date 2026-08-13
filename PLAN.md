@@ -2312,3 +2312,16 @@ parallel, with one safety change that is not optional — see its entry.
     on the walked map's geometry, table_b travelling with its files. One run, all
     readback HIT, owner confirmed. Texture files are ordinary archive files;
     nothing ties a map to its biome's set.
+    **(e10h)** ✅ **DONE 2026-08-12 (FINDINGS 51). THE SUN IS OURS.** One byte —
+    tag 0's angle, 68.7° → 36.5° — re-baked 985 of 1,024 lightmap bytes, and the
+    elevation sweep orders with the byte. The pre-registered N·L inequality missed
+    on its own model (no cast shadows — recorded as the model's defect), and the
+    visual was masked by the missing environment, which (e10i) then explained.
+    **(e10i)** ✅ **DONE 2026-08-13 (FINDINGS 51). THE SKY ARRIVES.** The
+    environment pair 0x10000009/0x11000009 — never carried by our maps, present on
+    every retail one — added in retail's slot with Pre-Searing's 639 B payload
+    borrowed at run time. The compiler carried it VERBATIM; the owner: "yep that's
+    a sky, and it was key to the lighting. the ocean looks much better now." The
+    payload is 639 bytes NOT UNDERSTOOD, counted borrowed. `stripbuild` takes the
+    pair as of this rung (test §3e, floor 51). Presentation still open: SOUND, and
+    understanding the environment payload.

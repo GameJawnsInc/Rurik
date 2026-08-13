@@ -95,6 +95,8 @@ ZONES = 0x10000003
 TERRAIN = 0x10000002
 TERRAIN_DEPS = 0x11000002
 PATH = 0x10000008
+ENV = 0x10000009
+ENV_DEPS = 0x11000009
 
 # The donor's own order, which is also the corpus's single total order
 # (FINDINGS §5: 321 ordered pairs, 0 contradictions). Zones before Terrain is
@@ -105,7 +107,13 @@ PATH = 0x10000008
 # carries the list (the three zero-prop retail maps are exactly the three
 # with no props-deps chunk).
 ORDER = (HEADER, MAP_PARAMS, PROPS, PROPS_DEPS, ZONES, TERRAIN, TERRAIN_DEPS,
-         PATH)
+         PATH, ENV, ENV_DEPS)
+#: The chunks encode() allows a payload to omit, each with its pairing rule
+#: enforced in build(): PROPS_DEPS goes with props (retail 349/349), and the
+#: ENV pair goes together or not at all -- FINDINGS 51's run put a borrowed
+#: environment through the compiler and it carried VERBATIM, but the payload
+#: is not understood, so it stays opt-in and BORROWED rather than generated.
+OPTIONAL = (PROPS_DEPS, ENV, ENV_DEPS)
 BORROWED = (HEADER, ZONES)
 GENERATED = (MAP_PARAMS, PROPS, PROPS_DEPS, TERRAIN, TERRAIN_DEPS, PATH)
 
@@ -305,7 +313,7 @@ class BuildReport:
 
 def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
           tiles=None, sync_hash=0, sync_flag=0, props=None,
-          prop_dep_ids=None):
+          prop_dep_ids=None, env_payload=None, env_dep_ids=None):
     """A whole Stripped map. `heights` is in `Terrain.index` order, integers.
 
     `props` is a `props.StrippedProps`, or None for an empty one. Empty is not
@@ -318,6 +326,14 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
     past its end is refused here because the client-side failure mode of an
     unresolvable model has never been measured and this module is not the
     place to find out by accident.
+
+    `env_payload` + `env_dep_ids` are chunk 0x10000009 and its dependency
+    ids, TOGETHER OR NOT AT ALL. The payload is an environment chunk this
+    toolkit cannot author -- it is not understood -- so callers BORROW one
+    from a donor map at run time (FINDINGS 51: Pre-Searing's carried
+    VERBATIM through the compiler and brought the sky, the ambient light
+    and the horizon water with it). It counts as borrowed in the report,
+    named like every borrowed byte.
     """
     for cid in BORROWED:
         if cid not in constants:
@@ -373,6 +389,18 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
         sync_hash=sync_hash, sync_flag=sync_flag).encode()
     origin[PATH] = "generated"
 
+    if (env_payload is None) != (env_dep_ids is None):
+        raise ValueError(
+            "env_payload and env_dep_ids go together or not at all: the "
+            "payload references files only the id list can resolve, and an "
+            "id list with no payload describes nothing")
+    if env_payload is not None:
+        payload[ENV] = bytes(env_payload)
+        origin[ENV] = "borrowed"
+        payload[ENV_DEPS] = mapchunks.encode_dependencies(list(env_dep_ids))
+        origin[ENV_DEPS] = (f"generated from {len(list(env_dep_ids))} "
+                            f"run-time ids")
+
     blob = encode(payload)
     return BuildReport(blob, origin, {c: len(payload[c]) for c in payload},
                        slope, rect, (dim_x, dim_y))
@@ -381,12 +409,12 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
 def encode(payload):
     """The container, in ORDER. Refuses any other, because order is a gate.
 
-    PROPS_DEPS is the one chunk allowed to be absent -- `build()` pairs it
-    with the props exactly as retail does. Everything else is FINDINGS 42's
-    measured requirement, one client run per removal.
+    The OPTIONAL chunks may be absent -- `build()` enforces their pairing
+    rules. Everything else is FINDINGS 42's measured requirement, one client
+    run per removal.
     """
     ids = tuple(payload)
-    want = set(ORDER) - ({PROPS_DEPS} if PROPS_DEPS not in ids else set())
+    want = set(ORDER) - {c for c in OPTIONAL if c not in ids}
     if set(ids) != want:
         raise BadOrder(f"expected exactly {[f'0x{c:08X}' for c in sorted(want)]}, "
                        f"got {[f'0x{c:08X}' for c in ids]}")

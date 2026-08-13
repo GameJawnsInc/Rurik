@@ -26,8 +26,8 @@ syntax-tree scan (that is how `test_mapbuild.py` caught one).
 
 Sections 0-3 need no vault: they run on PLACEHOLDER constants of our own, which
 is also the only way to check that `NoConstants` refuses rather than falling
-back to something. Sections 4-6 need `vault/dat_study/Gw.dat`, and score 33
-against a floor of 46 without it -- a number that could not be observed at all
+back to something. Sections 4-6 need `vault/dat_study/Gw.dat`, and score 38
+against a floor of 51 without it -- a number that could not be observed at all
 until the SystemExit bug in section 4's vault gate was fixed on 2026-08-12.
 
 SECTION 3D IS THE PROPS-DEPS PAIRING (2026-08-12, for rung e10d): a build
@@ -37,6 +37,13 @@ refuse, the positive control carries all eight chunks with the deps chunk
 immediately after props (retail's slot), and a model index past the list is
 refused because the client's failure mode for an unresolvable model has never
 been measured.
+
+SECTION 3E IS THE ENVIRONMENT PAIR (2026-08-13, rung e10i): `env_payload`
+and `env_dep_ids` go together or not at all, the pair lands after the Path
+chunk in retail's slot, and the payload counts BORROWED in the census -- the
+chunk is not understood, and a borrowed byte reporting as generated is a
+census lie. FINDINGS 51's run carried a borrowed environment VERBATIM
+through the compiler and it brought the sky.
 
 THE BORROWED SET SHRANK on 2026-08-12: props is GENERATED now, by `props.py`,
 so `BORROWED` is Header and Zones alone -- 42 bytes, down from 54, and 98.20%
@@ -68,10 +75,11 @@ import terrain as trn_mod  # noqa: E402
 import checks  # noqa: E402
 import vaultpath  # noqa: E402
 
-# FLOOR: 46, MEASURED from a green run on 2026-08-12 (guessed 44 first, which
+# FLOOR: 51, MEASURED from a green run on 2026-08-13 (guessed 44 first, which
 # reddened the run at 39 -- which is what the floor is for; 40 since props left
-# the borrowed set, 46 since section 3d pinned the props-deps pairing).
-# Sections 0 to 3d score 33 and need no vault, so a vault-less run goes red
+# the borrowed set, 46 since section 3d pinned the props-deps pairing, 51
+# since 3e pinned the environment pair).
+# Sections 0 to 3e score 38 and need no vault, so a vault-less run goes red
 # rather than reporting a smaller success -- the corpus half is where
 # "byte-identical to ArenaNet's" lives.
 #
@@ -81,7 +89,7 @@ import vaultpath  # noqa: E402
 # died before the verdict -- and the `LEDGER.skip` in that handler had never
 # executed once, being called with one argument where it takes two. The 30 this
 # comment used to claim was a number nobody had ever seen printed.
-LEDGER = checks.Ledger("stripbuild", floor=46)
+LEDGER = checks.Ledger("stripbuild", floor=51)
 check = checks.adopt(LEDGER)
 
 DIMS = 32
@@ -139,9 +147,9 @@ def sections():
         boundary=[(1536.0, 1536.0)]).encode()
     blob = sb.encode(payload)
     ids = [c.chunk_id for c in mapfile.MapFile.decode(blob).chunks]
-    check(ids == [c for c in sb.ORDER if c != sb.PROPS_DEPS],
-          f"encode() emits ORDER  {len(ids)} chunks -- no props, so no "
-          f"props-deps chunk, which is retail's own pairing")
+    check(ids == [c for c in sb.ORDER if c not in sb.OPTIONAL],
+          f"encode() emits ORDER  {len(ids)} chunks -- no props and no env, "
+          f"so none of the OPTIONAL chunks, which is retail's own pairing")
     check(ids.index(sb.ZONES) < ids.index(sb.TERRAIN),
           "and Zones precedes Terrain, which terrain bloat asserts on")
     short = dict(payload)
@@ -287,9 +295,9 @@ def sections():
                      PLACEHOLDER, PLACEHOLDER_IDS, props=one_prop,
                      prop_dep_ids=[77])
     ids_p = [c.chunk_id for c in mapfile.MapFile.decode(rep_p.blob).chunks]
-    check(ids_p == list(sb.ORDER),
-          f"POSITIVE CONTROL: a props-bearing build carries all "
-          f"{len(sb.ORDER)} chunks in ORDER")
+    check(ids_p == [c for c in sb.ORDER if c not in (sb.ENV, sb.ENV_DEPS)],
+          f"POSITIVE CONTROL: a props-bearing build carries the props-deps "
+          f"chunk in ORDER (and no env pair it was not given)")
     check(ids_p.index(sb.PROPS_DEPS) == ids_p.index(sb.PROPS) + 1,
           "and the props-deps chunk rides immediately after the props chunk, "
           "where retail puts it")
@@ -299,6 +307,35 @@ def sections():
         dep_chunk.payload()).file_ids)
     check(back_ids == [77],
           f"the generated list decodes back to the same file id  {back_ids}")
+
+    print("\n3e. the environment pair goes together, or not at all")
+    refused = False
+    try:
+        sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0), PLACEHOLDER,
+                 PLACEHOLDER_IDS, env_payload=b"\x00" * 16)
+    except ValueError:
+        refused = True
+    check(refused, "an env payload with NO id list is refused")
+    refused = False
+    try:
+        sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0), PLACEHOLDER,
+                 PLACEHOLDER_IDS, env_dep_ids=[9])
+    except ValueError:
+        refused = True
+    check(refused, "an env id list with NO payload is refused")
+    rep_e = sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0),
+                     PLACEHOLDER, PLACEHOLDER_IDS,
+                     env_payload=b"\x00" * 16, env_dep_ids=[9])
+    ids_e = [c.chunk_id for c in mapfile.MapFile.decode(rep_e.blob).chunks]
+    check(ids_e == [c for c in sb.ORDER if c != sb.PROPS_DEPS],
+          "POSITIVE CONTROL: the pair lands after the Path chunk, in ORDER")
+    check(rep_e.origin[sb.ENV] == "borrowed"
+          and sb.ENV not in sb.GENERATED,
+          "and the env payload is counted BORROWED",
+          "the chunk is not understood; a borrowed byte that reports as "
+          "generated is a census lie")
+    check(rep_e.borrowed == 42 + 16,
+          f"the census moves by exactly the payload  ({rep_e.borrowed})")
 
     print("\n4. against the archive: the borrowed two and the generated deps")
     # NOT `require_dir`, and that is the fix rather than the style. It raises
@@ -368,9 +405,9 @@ def sections():
           f"{100 * rep.fraction_generated:.2f}% generated")
     mf = mapfile.MapFile.decode(rep.blob)
     check([c.chunk_id for c in mf.chunks]
-          == [c for c in sb.ORDER if c != sb.PROPS_DEPS],
+          == [c for c in sb.ORDER if c not in sb.OPTIONAL],
           "the assembled map carries exactly the seven, in ORDER -- a "
-          "zero-prop map has no props-deps chunk")
+          "zero-prop, no-env map has none of the OPTIONAL chunks")
     check(mf.encode() == rep.blob, "and round-trips")
     again = stx.StrippedTerrain.decode(
         next(c for c in mf.chunks if c.chunk_id == sb.TERRAIN).payload())
