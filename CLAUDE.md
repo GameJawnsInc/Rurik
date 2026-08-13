@@ -353,11 +353,48 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   Provenance is tested rather than assumed: no bytes literal over two bytes in
   the module, AND the borrowed payloads are grepped for in the source as raw,
   hex, spaced hex and `\x` escapes, because a docstring quote passes a
-  syntax-tree scan. The 54 borrowed bytes are read from the owner's archive at
-  run time and the report NAMES all three chunks rather than giving one
+  syntax-tree scan. The borrowed bytes are read from the owner's archive at
+  run time and the report NAMES every borrowed chunk rather than giving one
   percentage; the generated dependency chunk lands byte-identical to ArenaNet's,
-  which the archive could have refused. Sections 0-3c score 30 on placeholder
-  constants of our own and need no vault, against a floor of 39),
+  which the archive could have refused. **Since 2026-08-12 props is GENERATED**,
+  so BORROWED is Header and Zones alone -- 42 bytes, down from 54, and 98.20%
+  of the map ours. Sections 0-3c score 27 on placeholder constants of our own
+  and need no vault, against a floor of 40 -- and 27 is the first number that
+  path ever printed, because `vaultpath.require_dir` raises SystemExit, a
+  BaseException, so the `except Exception` around it never fired: a vault-less
+  run died before the verdict, its `LEDGER.skip` had never executed once (one
+  argument where it takes two), and the 30 the comment claimed was a number
+  nobody had seen),
+  `toolkit/mapdata/test_props.py` (the props chunk `0x10000004`, the last one
+  `stripbuild` had to borrow and the one that mattered -- FINDINGS 34 makes it a
+  hard gate, so while it was borrowed no map from this toolkit could hold a
+  single tree, wall, door or portal. **349 of 349 byte-identical**, and that is
+  deliberately the WEAK half: the record is VARIABLE LENGTH (20 bytes plus four
+  per outline point), so a codec that stored each record's own length
+  round-trips everything and understands nothing -- the memcpy saboteur is BUILT
+  and RUN, passes the headline, and is caught by exactly the three mutation
+  controls that grow a decoded chunk in place and require the emitted counts to
+  move, read back by a walker written here out of `int.from_bytes`. The layout
+  is a MEASUREMENT, not a preference: the stride came from an oracle in another
+  chunk (slide a window, keep the offsets whose float pair lands in the map
+  RECT from Map Parameters -- gaps are 49.1% four and 40.9% sixteen, alternating,
+  so 20, with the first hit at offset 10 in all twelve maps), tag 6's stride is
+  4 and every other value tested closes only the 200 maps where its count is
+  zero, and the rival layout that a stride-20 hexdump suggests -- model u16 at
+  the END, five-byte tag-0 header, self-consistent, and what `PROPS.md` was
+  written under -- closes for **0 of 349** and is kept as a control. The oracle
+  is 285,670 of 285,670 prop positions inside their map's rect. What the corpus
+  CANNOT decide is asserted too: tag 6's count must be a u16 because one map
+  holds 611 entries, while tag 4's largest is 81, so its width is undecided and
+  the check says so -- if it ever reddens the ambiguity is gone. Sections 0-3c
+  need no vault and score 55 against a floor of 67; `--all` is 76 checks in
+  ~200 s, one pass over the archive rather than the three the first draft took.
+  **The client was read AFTERWARDS and agreed**, which is the shape that makes
+  this worth trusting: the framing came out of the archive alone, and the
+  disassembly of `0x0073E260` -- a DIFFERENT pipeline from the one `PROPS.md`
+  was tracing, whose `0x00712200` parses the BLOATED chunk with five-byte
+  headers -- confirmed it and settled the one thing the corpus could not, that
+  tag 4's count is a u16),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against

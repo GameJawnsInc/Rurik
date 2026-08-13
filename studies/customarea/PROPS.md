@@ -1,13 +1,32 @@
 # The Stripped props chunk — reconnaissance, and why it is an arc
 
+> **SUPERSEDED THE SAME DAY, 2026-08-12 — the chunk is read.** See
+> [FINDINGS.md §44](FINDINGS.md) and `toolkit/mapdata/props.py`: 349 of 349
+> byte-identical, and `stripbuild.py` no longer borrows it.
+>
+> **This document is kept because its NEGATIVE results were correct and its
+> conclusion was wrong, and the gap between those two is the lesson.** The
+> record is **variable length** — 20 bytes plus four per outline point — so
+> every fixed-stride test below was doomed before it ran, and no amount of
+> sweeping `k` would have found it. The count was also read a byte late, as a
+> `u32` at +5 straddling the tag byte, which is why it reported 262,144 on a
+> chunk holding no props at all.
+>
+> What was actually missing was not effort or disassembly but a **bigger
+> sample**. The two chunks reasoned from below are the 12- and 16-byte ones,
+> which are the two least informative in the corpus: both are entirely empty
+> sections. The structure is plain in any map with real content. "Read the
+> dispatch harder" was the wrong next step; "look at a map with 864 props in
+> it" was the right one, and it took twenty minutes.
+
 **Written 2026-08-12, after rung E10.** `0x10000004` is the last chunk standing
 between `stripbuild.py` and a map that is entirely ours. FINDINGS 34 makes it a
 hard gate: no props object, no navmesh. This document is what a survey and an
 hour of disassembly established, and — more usefully — what they did **not**,
 so the next attempt starts from the right place.
 
-**NOTHING HERE IS A CODEC.** No props chunk has been decoded. The 12 bytes
-`stripbuild.py` borrows are still borrowed.
+**NOTHING HERE IS A CODEC** *(true when written; see the note above)*. No props
+chunk has been decoded. The 12 bytes `stripbuild.py` borrows are still borrowed.
 
 ## What the corpus says
 

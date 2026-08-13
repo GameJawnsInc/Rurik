@@ -15,7 +15,7 @@ FINDINGS 42 removed each one against a live client, one run apiece:
 
   0x10000000 Header       borrowed    absent -> `missing chunk`, no re-bloat
   0x1000000C Map Params   GENERATED   absent -> assert dims.x * XY_DIST == ...
-  0x10000004 Props        borrowed    absent -> `corrupt chunk 'Path ...'`
+  0x10000004 Props        GENERATED   absent -> `corrupt chunk 'Path ...'`
   0x10000003 Zones        borrowed    absent -> assert `state->zones`
   0x10000002 Terrain      GENERATED   absent -> `corrupt chunk 'Terrain ...'`
   0x11000002 Terrain Deps GENERATED   absent -> assert `deps`, TrnCreate:242
@@ -41,14 +41,19 @@ THREE RULES THAT ARE NOT STYLE, each of which cost a client run:
     is invisible from the corpus: every retail map's point is already somewhere
     sensible, so no amount of reading the archive would have found it.
 
-PROVENANCE. Three chunks cannot be generated yet -- Header (8 B), Props (12 B)
-and Zones (34 B), 54 bytes in total. They are ArenaNet constants, and
+PROVENANCE. Two chunks cannot be generated yet -- Header (8 B) and Zones
+(34 B), 42 bytes in total. They are ArenaNet constants, and
 `borrowed_constants()` reads them from the owner's own archive AT RUN TIME.
 They are never stored here: not as literals, not as hex, not in a fixture.
 `build()` raises `NoConstants` without them and `BuildReport` NAMES every
-borrowed chunk rather than reporting one percentage. Props is FINDINGS 34's hard
-gate, so until its record format is read (342 distinct sizes over 349 maps) a
-map from this module cannot place anything in the world.
+borrowed chunk rather than reporting one percentage.
+
+PROPS WAS THE THIRD until 2026-08-12, and it was the one that mattered: it is
+FINDINGS 34's hard gate, so while it was borrowed a map from this module could
+not place a single object in the world. `props.StrippedProps` now generates it,
+and `build()` takes a `props=` argument -- default `minimal()`, which is the
+empty chunk and reproduces ArenaNet's own smallest one byte for byte. The
+remaining two are 42 bytes of constant that nothing needs to vary.
 
 The terrain dependency chunk is GENERATED, from file IDS read at run time --
 ids are measurements and CLAUDE.md's ruling permits them. On the reference map
@@ -71,6 +76,7 @@ import mapbuild  # noqa: E402
 import mapchunks  # noqa: E402
 import mapfile  # noqa: E402
 import pathchunk  # noqa: E402
+import props as props_mod  # noqa: E402
 import strippedterrain as stx  # noqa: E402
 import terrain as trn_mod  # noqa: E402
 
@@ -84,8 +90,8 @@ PATH = 0x10000008
 
 # The donor's own order. Zones before Terrain is the load-bearing part.
 ORDER = (HEADER, MAP_PARAMS, PROPS, ZONES, TERRAIN, TERRAIN_DEPS, PATH)
-BORROWED = (HEADER, PROPS, ZONES)
-GENERATED = (MAP_PARAMS, TERRAIN, TERRAIN_DEPS, PATH)
+BORROWED = (HEADER, ZONES)
+GENERATED = (MAP_PARAMS, PROPS, TERRAIN, TERRAIN_DEPS, PATH)
 
 CELL = terrain_pitch = trn_mod.CELL_PITCH        # 96.0, and the client's XY_DIST
 REFERENCE_PARTNER = 46197                        # the 32x32 template's stripped row
@@ -274,8 +280,13 @@ class BuildReport:
 
 
 def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
-          tiles=None, sync_hash=0, sync_flag=0):
-    """A whole Stripped map. `heights` is in `Terrain.index` order, integers."""
+          tiles=None, sync_hash=0, sync_flag=0, props=None):
+    """A whole Stripped map. `heights` is in `Terrain.index` order, integers.
+
+    `props` is a `props.StrippedProps`, or None for an empty one. Empty is not
+    the same as absent: FINDINGS 42 removed the chunk and the client refused the
+    map, so `minimal()` is the floor rather than a shortcut.
+    """
     for cid in BORROWED:
         if cid not in constants:
             raise NoConstants(f"no borrowed chunk 0x{cid:08X}")
@@ -289,6 +300,10 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
 
     payload[MAP_PARAMS] = mapbuild.encode_map_parameters(rect)
     origin[MAP_PARAMS] = "generated"
+
+    sp = props_mod.StrippedProps.minimal() if props is None else props
+    payload[PROPS] = sp.encode()
+    origin[PROPS] = f"generated, {len(sp.props)} props"
 
     trn = stx.StrippedTerrain.build(dim_x, dim_y, heights, tiles=tiles)
     payload[TERRAIN] = trn.encode()

@@ -5608,3 +5608,199 @@ rather than from an edit of ArenaNet's file.
 5. The `-0.0` vs `0.0` rect origin and the zero UUID differ from the donor's and
    were NOT isolated; they rode along in both the failing and succeeding builds,
    so neither is implicated and neither is cleared.
+
+## 44. The props chunk, read — and the survey that said it could not be (2026-08-12)
+
+**`0x10000004` decodes and re-encodes byte-identically, 349 of 349.** It was the
+last chunk `stripbuild.py` borrowed and the only one that mattered: §34 makes it
+a hard gate, so while it was borrowed a map from this toolkit could have our
+ground and **not one tree, wall, door or portal standing on it**. `BORROWED` is
+now Header and Zones alone — 42 bytes, and 98.20% of the map ours.
+
+The record is **variable length**, which is why `PROPS.md`'s survey found no law
+and correctly refused to invent one.
+
+### The layout
+
+    u32 signature 0x39583392
+    u8  version 17
+    u8 0   u16 n     n prop records, each 20 + 4*points bytes:
+                         u16 model
+                         f32 x, y, z
+                         u32 extra                 (meaning UNVERIFIED)
+                         u8  flags
+                         u8  points
+                         (i16 dx, i16 dy) * points -- a CLOSED outline
+    u8 4   u16 n     n * {u16 value, u16 prop}
+    u8 6   u8 word, u16 n   n * {u16 value, u16 prop}      (optional)
+    u8 255           terminator, and the last byte of the chunk
+
+**285,670 props over 349 maps.** 37,548 carry an outline; 37,505 of those return
+to their first point and **43 do not**, which is recorded rather than rounded
+away. 262 maps carry a tag-6 section; 87 carry none at all, which is a different
+file from the 114 that carry it empty.
+
+### Why the earlier survey found nothing, which is the useful part
+
+`PROPS.md` tested `9 + n*k` and `12 + n*k` for every stride to 200 and got 0/349
+every time. **Both readings were wrong in the same way and neither was careless.**
+A fixed stride cannot close on a variable-length record, so the whole family of
+tests was doomed before it ran; and the count it read was a `u32` at +5, which
+straddles the tag byte, so on a chunk holding **no props at all** it reported
+262,144. The two smallest chunks it reasoned from are the two least informative
+in the corpus — 12 bytes and 16 bytes, both entirely empty sections.
+
+`PROPS.md` was right to stop where it did. What it was missing was not effort but
+a **bigger sample**: the structure is plain in any map with real content, and
+invisible in the two it had.
+
+### How each field was pinned, because a walk that closes proves nothing
+
+A tolerant walk closes on anything, so none of the below rests on the walk.
+
+* **The stride came from an oracle in a chunk this codec never reads.** Slide a
+  window over the raw bytes and keep every offset whose float pair lands inside
+  the map RECT, which lives in Map Parameters `0x1000000C`. Pooled over twelve
+  maps the gap histogram is **49.1% gap-4 and 40.9% gap-16, alternating** — two
+  in-rect pairs per record, 4 + 16 = **20** — and the first hit is at offset
+  **10** in all twelve, which is what puts a u16 in front of the floats.
+* **Tag 6's extra header byte was forced by the data.** Read as
+  `{u8 tag, u16 count}` its count came out 0, 256, 512, 768 … a multiple of 256
+  every time. One more byte moves it into place, and that is also exactly what
+  makes the 16-byte chunk close: `06 00 00 00 FF` is tag, word, count 0,
+  terminator.
+* **Tag 6's stride is uniquely determined.** 4 closes 349/349. 1, 2, 6, 8, 12,
+  16 and 20 each close 200/349 — precisely the maps whose tag-6 count is zero,
+  where the stride cannot matter. **The 149 maps with a non-zero count are the
+  measurement**; without them the sweep would have been vacuous, which is why
+  the test asserts the sample contains one.
+* **The alignment is uniquely determined.** Putting the model u16 at the END of
+  the record and giving tag 0 a five-byte header shifts section 0 by exactly two
+  bytes and is otherwise self-consistent — it is what a stride-20 hexdump
+  suggests, and a version of it is what `PROPS.md` was written under. It closes
+  for **0 of 349**, and is kept as a control.
+* **Tags 4 and 6 index the prop array.** The corpus had 17,002 chances to say
+  otherwise — 6,355 tag-4 and 10,647 tag-6 references — and every one lands below
+  its map's prop count.
+* **The oracle, on the whole corpus: 285,670 of 285,670 prop positions are
+  inside their map's rect.** If the record layout were off by any amount the
+  floats would be garbage.
+
+### What the corpus cannot decide, asserted rather than glossed
+
+Tag 6's count **must** be a u16: one map carries 611 entries. Tag 4's largest is
+**81**, so `{u8 tag, u16 count}` and `{u8 tag, u8 count, u8 pad}` fit its bytes
+equally well and **the corpus cannot separate them**. `test_props.py` asserts
+both bounds, so the day an archive holds a map with 256 tag-4 entries the file
+goes red and says the ambiguity is gone.
+
+### The client, read AFTERWARDS — and it agreed
+
+Everything above came out of the archive alone. The disassembly of build 38797
+was done after the codec was written and could have refuted it; it did not, and
+it settled the one thing the corpus cannot.
+
+**`PROPS.md` was tracing the wrong reader, and that is why it got nowhere.**
+There are two props chunks and two pipelines:
+
+| | entry | reads | section header |
+|---|---|---|---|
+| `s_chunkInfo[0x04].load` | `0x00712200` → `0x0073CC80` | **Bloated** `0x20000004` | `{u8 tag, u32 size}` |
+| `s_chunkInfo[0x04].bloat` | `0x00712280` → `0x0073E260` | **Stripped** `0x10000004` | `{u8 tag}` |
+
+`PROPS.md`'s chain ends at `0x0073CC80` — the **Bloated** reader. No amount of
+following it could have produced a framing that fits the Stripped bytes. Both
+pipelines share one tag reader, `0x0073E410`, whose `fmt` argument picks the
+header width (dispatch at `0x0073E433`); the Stripped side passes 1.
+
+The Stripped pipeline is an eight-entry stage table at `0x00BF74B4`. Four stages
+READ — tags 0, 4, 6 and 255 — and **that is exactly the set the corpus walk
+found in 349 of 349 maps**, arrived at from the other side. Tags 1, 2 and 3 are
+WRITE-only: the compiler generates them into the Bloated stream from tag 0.
+
+What the code settles that the archive could not:
+
+* **Tag 4's count is a u16** — `0x0073E1A6 movzx esi, word ptr [eax]`. The
+  corpus could not decide this and `test_props.py` still asserts the ambiguity,
+  because the ambiguity is a true fact about the corpus.
+* **Tag 6's second byte must be ZERO** — `0x0073D8D3 cmp byte ptr [eax], 0`. It
+  is a validated field, not padding, and `props.py` now refuses a non-zero one.
+* **The `extra` u32 is FOUR bytes, not one field** — read at four separate
+  addresses. Three (`0x0073DE88`, `0x0073DE6D`, `0x0073DE5D`) are `fild`-scaled
+  and feed `0x0073B4C0`, which fills two 12-byte vectors: a packed rotation,
+  INFERRED. The fourth (`0x0073DE2D`) is scaled into a float: a scale, INFERRED.
+  The widths are measured; the meanings are not. The corpus agrees without
+  confirming: the scale byte is 0x7F on 35,593 props and the rotation bytes are
+  zero on 180,391 — which is what the old "high half clusters at 0x7F00" was.
+* **The outline is in PROP-LOCAL coordinates.** The client sign-extends each
+  pair and adds the prop's own x and y back (`0x0073DF4F`, `0x0073DF67`).
+* **The client's version gate accepts 0x11 AND 0x12** (`0x0073E224`,
+  `0x0073E228`). The corpus is 0x11 on 349/349. `props.py` refuses 0x12 on
+  purpose: no version branch was found in the framing, but "probably the same"
+  is a guess.
+
+Three independent reads and an adversarial refutation were run. The refuter
+wrote its OWN walker from its OWN disassembly, sharing no code with `props.py`,
+and reported: **the framing is correct and I could not break it.** Six factual
+errors were found across the reports, all in citations and sample sizes; none
+touched the format. Its walker consumed **349 of 349** to the exact byte and
+reproduced 262 tag-6 maps, 285,670 props and 334,725 outline points exactly.
+
+**THE CROSS-STREAM ORACLE is the strongest single result, and it is 349 of 349.**
+The Bloated props record is 48 bytes with an 8-byte ring point where the Stripped
+one is 20 and 4, and the compiler derives one from the other. So the Bloated
+tag-0 section's declared size is predictable from the STRIPPED input alone:
+
+    bloated_tag0_size == 2 + 48 * props + 8 * outline_points
+
+**349 of 349, zero mismatches.** No walker can force that: it predicts a `u32`
+in a stream it never reads. Its sabotage controls over 40 maps all went red --
+stride 21 → 1/40, stride 19 → 1/40, count as u32 → 0/40, count as u8 → 0/40, no
+trailer → 3/40, trailer stride 8 → 3/40, tag 6 mandatory → 19/40, tag 6 without
+its pad byte → 21/40, against a 40/40 baseline.
+
+Three details worth carrying:
+
+* **Tag 6 is optional because the reader saves and restores the cursor**
+  (`0x0073D891` / `0x0073D8A2`). The shared reader advances past the tag byte
+  *before* comparing it, so a stage that may not match must back out by hand.
+  That is why the 12-byte chunk parses at all: `0xFF` fails the tag-6 match
+  without consuming a byte, and stage 7 then matches it. Read out of the code,
+  not fitted to the file.
+* **`model` is a filename index into chunk `0x21000004`** (`0x0073DE0E`), which
+  is why it does not index tag 4 and why its pooled range is 0..439.
+* **The rotation and scale bytes have formulas**: each angle is `b * 2*pi/256`,
+  the scale is `b * (255/128)/256 + 1/128`, so scale runs [1/128, ~1.992] in 256
+  steps. Constants at `0x00949D00`, `0x00946E80`, `0x00A70340`, `0x00953AB0`.
+
+**The props gate FINDINGS 34 asserted is now read directly**, and there is a
+second one it does not name. The Path bloat handler tests
+`cmp dword ptr [ecx+0x24], 0` at `0x00712678` and returns 0 -- so a props chunk
+that fails to bloat leaves the slot NULL and **silently kills the Path chunk**,
+with no assert. The props load handler has its own gate at `0x00712207`
+(`!map->props`, `MapData.cpp:976`), so the object hangs at `map+0x7C` and at
+`state+0x24`.
+
+### What is still UNVERIFIED
+
+1. **The rotation and scale readings are INFERRED**, from the client's
+   arithmetic rather than from any assert or any measurement of an effect. The
+   tag-4 and tag-6 `value` words recur across maps, so they are ids rather than
+   per-map hashes; also not measured. The u16 at +0x00 is **not** an index into
+   tag 4 — measured from both sides, 209,960 of 285,670 land outside it.
+2. **Nothing has been PLACED yet.** `stripbuild.build()` takes a `props=`
+   argument and defaults to `minimal()`, the empty chunk. That the client
+   compiles a map with props WE authored — with a real model id and a real
+   outline — is the next run, and it is not this finding.
+
+### The check that would have caught a memcpy
+
+The headline is the weak half and is reported that way. `test_props.py` builds
+the saboteur — decode by stashing the blob, encode by handing it back — runs it,
+and requires it to **pass** the 349/349 byte-identity while failing the three
+mutation controls that grow a decoded chunk in place and require the emitted
+counts to move. It is caught by 3 of 3, read back by a walker written in the
+test out of `int.from_bytes` that imports nothing from the module.
+
+`minimal()` — a props chunk authored from nothing, no archive and no donor —
+is byte-identical to row 46197's, the smallest in the archive.

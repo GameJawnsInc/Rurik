@@ -2160,7 +2160,7 @@ parallel, with one safety change that is not optional — see its entry.
     stand on walkable ground** — FINDINGS 34 had seed/flood/contour as INFERRED, and
     this is the first observation of it, undiscoverable from the corpus because every
     retail map's point is already sensible.
-    **(e10b)** ✅ **DONE 2026-08-12.** `stripbuild.py` + `test_stripbuild.py` (39
+    **(e10b)** ✅ **DONE 2026-08-12.** `stripbuild.py` + `test_stripbuild.py` (40
     checks, floor measured, 60th test in the suite): the E10 assembler out of the
     scratchpad, with all three rules that rung cost as REFUSALS — order, the derived
     rect, and `check_seed()`, which computes the quad slope under the Path chunk's
@@ -2168,20 +2168,30 @@ parallel, with one safety change that is not optional — see its entry.
     Its controls are the measurement: the same point is accepted on flat ground. One
     defect shipped and the test caught it — `cell_of` sent the `(0,0)` corner to row
     `dim_y`, one past the end, because grid row 0 is world maxY.
-    **(e10c)** ⬜ **THE PROPS CHUNK, and it is an ARC rather than a loose end** —
-    scoped 2026-08-12 in [studies/customarea/PROPS.md](studies/customarea/PROPS.md).
-    The corpus gives the terminator (`0xFF`, so it is a tag pipeline like terrain and
-    path) and **342 distinct sizes over 349 maps**, but no framing law: `9 + n*k` and
-    `12 + n*k` fire 0/349 for every stride to 200 under both a u32 and a u16 count,
-    and neither the terrain chunk's `{u8 tag, u32 size}` nor `{u8 tag, u16 count}`
-    closes on both of the two smallest chunks. The parse chain IS pinned —
-    `0x00712200` → `0x00738A90` → `0x0073CC80`, which allocates 0x228 bytes and calls
-    `0x00737B40`; the tag walk is at or below that and is unread. **The payoff is not
-    the byte count** (props is 12 of `stripbuild`'s 54 borrowed bytes, so the 97.69%
-    barely moves): it is that props is where OBJECTS live, and FINDINGS 34 has it
-    supplying the portal and collision point pairs, so until it is read a map from
-    this toolkit can have our ground and not one tree, wall, door or portal on it.
-    **(e10-next)** ⬜ Only the TERRAIN is ours. Props, zones, collision and Map Parameters in
-    FINDINGS 38's map are ArenaNet's, so FINDINGS 34's props hard gate was satisfied by
-    their data. An end-to-end authored map — §32's Blender pipeline through
-    `mapbuild.py` into a Stripped stream — has not been compiled by a client.
+    **(e10c)** ✅ **DONE 2026-08-12 (FINDINGS 44). THE PROPS CHUNK IS READ.**
+    `props.py` + `test_props.py` (67 checks default / 76 under `--all` in ~200 s, floor
+    measured, 61st test in the suite). **349 of 349 byte-identical**, and the record
+    is VARIABLE LENGTH — 20 bytes plus four per outline point — which is why the
+    survey in [studies/customarea/PROPS.md](studies/customarea/PROPS.md) found no
+    law and was right to refuse to invent one: no fixed stride could ever have
+    closed, and its count was read a byte late, straddling the tag. **285,670 props
+    over 349 maps**; 37,548 carry a closed outline. `stripbuild.BORROWED` is now
+    Header and Zones alone — **42 bytes, and 98.20% of the map generated**.
+    The layout is a MEASUREMENT and the file keeps every control that makes it one:
+    the stride came from an oracle in another chunk (float pairs against the Map
+    Parameters rect — **285,670 of 285,670** inside), tag 6's stride 4 is the only
+    one that closes the 149 maps whose count is non-zero, and the rival layout a
+    stride-20 hexdump suggests closes for **0 of 349**. The memcpy saboteur is built,
+    run, passes the headline and is caught 3 of 3. What the corpus CANNOT decide is
+    asserted as such: tag 4's largest table is 81 entries, so its count width is
+    undecided, and the check reddens the day that changes. Still UNVERIFIED: the
+    `extra` u32 and the tag-4/6 `value` words are carried, not understood, and the
+    client's tag walk below `0x00737B40` was not read.
+    **(e10d)** ⬜ **PLACE SOMETHING.** `props.py` can author a prop and
+    `stripbuild.build()` takes `props=`, but every map built so far passes
+    `minimal()` — the EMPTY chunk. That the client compiles a map carrying props WE
+    wrote, with a real model id and a real outline, is a client run that has not
+    happened, and it is the claim FINDINGS 44 explicitly does not make.
+    **(e10-next)** ⬜ Terrain and props are ours; Header (8 B) and Zones (34 B) are not.
+    An end-to-end authored map — §32's Blender pipeline through `mapbuild.py` into a
+    Stripped stream — has not been compiled by a client.
