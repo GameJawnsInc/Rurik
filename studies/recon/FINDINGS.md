@@ -481,19 +481,41 @@ back with a different number than §5 predicted, in every case because §5 had s
 the fix measured. That is the intended direction of error for a survey, and it is recorded
 rather than quietly overwritten.
 
-### LANE B — needs a client at the keyboard
+### LANE B — ✅ **ALL FIVE RESOLVED 2026-08-13**, four run and one refused
 
-1. **Send `0x009E` with a real encoded string and a live agent id.** Cheapest visible
-   player-facing result available; crash evidence and encstring evidence both point at it, and
-   `main`'s new `shotlabel.py` can now read the screen mechanically instead of by eye.
-2. **One bisected encstring run each for `0x019C` and `0x01D4`** — two ledger rows currently
-   neither cleared nor confirmed.
-3. **Confirm the party pair actually draws.** `main`'s own commit says whether an entry DRAWS is
-   UNVERIFIED and needs one run.
-4. **Loopback run with auth on a port that is neither 6112 nor 80** — discriminates RUNBOOK's
-   "hardcoded 6112" from "the client reuses the auth port" in a single run.
-5. **`0x0166`/`0x0167` → c2s `0x0079`**, with a `0x0079` arm added first — the only two
-   GAME_SMSG opcodes in 334 ledger rows that provoke a client reply.
+Four client runs at loopback, ~11 s of sends each. Item 3 was landed independently by a
+parallel session while this lane was queued.
+
+1. ✅ **`0x009E` puts text on the retail client's screen — the project's first player-facing
+   visible output.** Measured rather than read by eye: `shotlabel.py` scores the frame pair at
+   **0.37% changed against a 0.11% idle floor over 6 idle pairs**. The frames say what the
+   number cannot — the client renders **both** a Local chat line `Ascalon: Ascalon` **and** a
+   closable framed window titled with the sender. The before-frame is the control and holds
+   neither. So `0x009E` is not merely "a chat line", which is what the sweep's operator note
+   recorded; what the second surface IS remains **UNVERIFIED** — the window was not
+   identified, and one string filling both the sender and body fields is an artifact of
+   `corpus_encstring` supplying one encoded string, not a property of the message.
+2. ✅ **`0x019C` and `0x01D4` both SILENT under encstring**, one bisected run each, 0.50 s
+   heartbeat proving the channel live throughout. Both were ASSERTED under all-zero, so both
+   join the four already cleared: the crash is the empty payload, not the opcode. Recorded.
+3. ✅ **Done by a parallel session** — the party window opens, **281,814 px against a 13,419
+   idle control**, four messages in retail's own order. Not this lane's work; recorded so the
+   row is not re-run.
+4. ❌ **REFUSED, and the reason is a measurement.** The experiment cannot be expressed: the
+   client's `-authsrv` flag carries a **host only**, `assert_safe` refuses anything but a bare
+   127/8 address, and the one candidate knob — a `-port` entry that really does sit in the
+   client's own 47-token flag table — was already measured **dead, referenced nowhere in the
+   image** (`studies/handshake/PLAN.md`:236). Since auth and game both sit on 6112 on
+   loopback, **both hypotheses predict the same dials and no client run can separate them.**
+   Re-specified as desk work: read where the client gets its auth port (12 sites carry the
+   imm32 `0x17E0`). RUNBOOK's "hardcoded 6112" stays as written and stays single-witness.
+5. ✅ **The loop closes.** `0x0166` and `0x0167` are the only GAME_SMSG opcodes in 338 ledger
+   rows that provoke a c2s reply, and both were answered with `0x0079` — **REPLIED 2, one per
+   stimulus**, reproducing the original measurement from a different run. `0x0079` is
+   payload-free (`msg_header`, `declared_unpack_size` 2, no fields), so the new arm counts
+   arrivals rather than storing a value, and the reply is now **absent from the D9(a) unhandled
+   list** where it used to land. Deliberately **NOT NAMED**: two stimuli reaching one reply does
+   not say what the reply means, and `0x0166`/`0x0167` are themselves unnamed.
 
 ### LANE C — live service or an owner decision
 
