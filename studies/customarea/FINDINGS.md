@@ -6306,6 +6306,69 @@ corpus, which carries typed colour triples with a different profile. Those are
 recorded as structure-without-a-name rather than quietly promoted, which is the
 difference between this pass and a plausible story.
 
+## 54. OBSERVED: our own bytes compile — rung (e10l), authored env + sound (2026-08-13)
+
+Every rung to (e10j) put ArenaNet's environment and sound payloads in front of
+the client BYTE-FOR-BYTE, because nobody could read them. §53 decoded both. This
+rung is the consequence and the gate: a map whose env and sound chunks were
+**assembled by `envchunk.py` and `soundchunk.py` from typed fields**, carrying
+bytes that exist in no retail map. Owner away, so the verdict is entirely
+MECHANICAL — no screenshot, no listening.
+
+Three deltas against (e10j)'s map, ten chunks untouched: three sound emitters at
+our own positions and radii; fog record 0 recoloured to (198,150,96) at
+1200/7000; and **the zone list grown 11 → 12**. The client compiled it —
+`Perf: Map file '0x0287d3' failed to load.  Attempting to re-bloat.` — produced a
+2,695 B Path chunk (22 trapezoids), asserted nothing, and carried **both payloads
+verbatim**: env 671 B sha `20cd4337d0f71d1d`, sound 89 B sha `ebc366325090eb2f`,
+identical to what we wrote.
+
+**The zone growth is the load-bearing delta**, and the reason this run is worth
+more than "it still works". Growing the list changed a section COUNT, so every
+byte downstream of tag9 shifted. A codec that replayed stored counts — precisely
+the saboteur `test_envchunk` §2 builds and runs — would have emitted a chunk
+declaring 11 zones while carrying 12, and ArenaNet's own parser would have
+desynced into tag11. It did not. **The count re-derivation is now checked against
+the real consumer rather than against our own decoder**, which is the one thing a
+round-trip test structurally cannot do.
+
+The sun came out a corroboration instead of a delta: our terrain carries
+`angle_index` 103, §53's 127/32 ratio predicts env sun byte 26, and the map
+already carried 26 — the cross-chunk agreement reproduced on an authored map.
+
+### Three procedural defects, all mine, and what caught each
+
+None was a defect in the map or the codecs; all three printed something
+confident and wrong, which is why they are recorded rather than quietly fixed.
+
+1. **The wrong archive was armed.** `vault/dat_c2/Gw.dat` is a throwaway copy;
+   the client reads `vault/run/…-c2/Gw.dat`, a SEPARATE REAL FILE. The earlier
+   rungs' own journals record the run-dir path and settled it in one command.
+2. **`ar.entries[row]` is off by one** — `entries` is a list, `entry.index` is
+   the MFT row. Positional indexing read the NEIGHBOURING row, so the first
+   readback reported a "compiled head" that was really our own stripped input.
+   That reads as *the client ignored us*, not as a lookup bug.
+3. **The client was never sent to the map.** The harness spawns in the default
+   map; map 143 needs `--game-args "--map 143"`. Two runs passed the harness
+   verdict — *"body is in the map"* — while loading a map that needed no
+   compile. **A harness PASS is a claim about reaching A map, not OURS**; only
+   `Gw.log`'s re-bloat line says the compile happened, and its ABSENCE is what
+   named this.
+
+What caught (2) is worth keeping: **`datcheck --diff` said the client had changed
+nothing, contradicting the readback, and the diff was right.** Two instruments
+disagreeing is how a wrong confident number gets found; one instrument alone
+would have shipped the story.
+
+### State
+
+`stripbuild.build()` now takes typed `sound` and `env` objects alongside the
+borrowed-payload parameters, so a map can carry ambience and weather it authored
+rather than inherited. What is still borrowed by necessity: the dependency
+FILES themselves (an `ffna8` sound descriptor, a sky texture) are ArenaNet
+assets referenced by run-time id, which is the `borrowed_constants` pattern and
+not a gap. Run record: `vault/research/e10l-authored-2026-08-13/`.
+
 ### What this buys, and what it does not
 
 Sound is understood end to end at the map-chunk level — an emitter can be
