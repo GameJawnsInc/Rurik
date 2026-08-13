@@ -481,8 +481,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/mapdata/test_envchunk.py` (the Environment chunk `0x10000009`, the sky,
   fog, ambient light and horizon water -- the chunk rung (e10i) proved was the
   difference between a black void and a lit world, borrowed whole then and now
-  decoded. Re-encodes **349 of 349** byte-identically, 33 checks under `--all` and
-  25 by default. The codec keeps record interiors opaque (the loader itself stores
+  decoded. Re-encodes **349 of 349** byte-identically, 40 checks under `--all` and
+  28 by default. The codec keeps record interiors opaque (the loader itself stores
   tag0/1/3/5/6/8 records as raw {ptr,count} and decodes no colour and none of
   tag6's ten floats -- there is NO `1/101` constant in the image, so the authored-
   slider reading is authoring-time only), so byte-identity is the weak half and the
@@ -514,7 +514,13 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   control. That second one is quoted as the tolerance figure on purpose: the
   exact-match count is ROUNDING-DEPENDENT (`b=48` lands on exactly 190.5, and two
   maps carry it), so the file states the tie rather than picking 307 or 308 quietly.
-  Sections 0-2 need no vault and score 15 against a floor of 25),
+  Sections 0-2 need no vault and score 17 against a floor of 28. Since
+  2026-08-13 it also pins the NAMED aspects (FINDINGS 55): tag1 is post-process
+  and tag3 the directional light, named from the client's own shader-constant
+  strings rather than by us, and the two checks that carry those names are corpus
+  population facts -- saturation is 1.0 on 648 of 741 records and the tint is off
+  on 571, which is the shape of a DEFAULT and is what a rival reading would not
+  produce),
   `toolkit/mapdata/test_pathchunk.py` (the pathing chunk's WHOLE-CHUNK codec: a
   retail `0x20000008` decoded to typed values and re-encoded byte-identically,
   **349 of 349** under `--all`, 8 by default. Nothing declared is stored --
