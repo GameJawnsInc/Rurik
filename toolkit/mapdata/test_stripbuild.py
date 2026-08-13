@@ -26,7 +26,16 @@ syntax-tree scan (that is how `test_mapbuild.py` caught one).
 
 Sections 0-3 need no vault: they run on PLACEHOLDER constants of our own, which
 is also the only way to check that `NoConstants` refuses rather than falling
-back to something. Sections 4-6 need `vault/dat_study/Gw.dat`.
+back to something. Sections 4-6 need `vault/dat_study/Gw.dat`, and score 27
+against a floor of 40 without it -- a number that could not be observed at all
+until the SystemExit bug in section 4's vault gate was fixed on 2026-08-12.
+
+THE BORROWED SET SHRANK on 2026-08-12: props is GENERATED now, by `props.py`,
+so `BORROWED` is Header and Zones alone -- 42 bytes, down from 54, and 98.20%
+of the map generated. Section 3c asserts that props is in `GENERATED` and not
+in `BORROWED`, because the number moving is the least of it: props is
+FINDINGS 34's hard gate, and while it was borrowed no map from this module
+could place an object in the world.
 
     python toolkit/mapdata/test_stripbuild.py
 """
@@ -44,18 +53,26 @@ import mapbuild  # noqa: E402
 import mapchunks  # noqa: E402
 import mapfile  # noqa: E402
 import pathchunk  # noqa: E402
+import props  # noqa: E402
 import stripbuild as sb  # noqa: E402
 import strippedterrain as stx  # noqa: E402
 import terrain as trn_mod  # noqa: E402
 import checks  # noqa: E402
 import vaultpath  # noqa: E402
 
-# FLOOR: 39, MEASURED from a green run on 2026-08-12 (guessed 44 first, which
-# reddened the run at 39 -- which is what the floor is for). Sections 0 to 3c
-# score 30 and need no vault; a vault-less run goes red rather than reporting
-# a smaller success, because the corpus half is where "byte-identical to
-# ArenaNet's" lives and a run without it has not checked what can fail.
-LEDGER = checks.Ledger("stripbuild", floor=39)
+# FLOOR: 40, MEASURED from a green run on 2026-08-12 (guessed 44 first, which
+# reddened the run at 39 -- which is what the floor is for; 40 since props left
+# the borrowed set). Sections 0 to 3c score 27 and need no vault, so a
+# vault-less run goes red rather than reporting a smaller success -- the corpus
+# half is where "byte-identical to ArenaNet's" lives.
+#
+# 27 is MEASURED too, and it had to be: the vault-less path could not run at
+# all until 2026-08-12. `vaultpath.require_dir` raises SystemExit, a
+# BaseException, so the `except Exception` guarding it never fired and the run
+# died before the verdict -- and the `LEDGER.skip` in that handler had never
+# executed once, being called with one argument where it takes two. The 30 this
+# comment used to claim was a number nobody had ever seen printed.
+LEDGER = checks.Ledger("stripbuild", floor=40)
 check = checks.adopt(LEDGER)
 
 DIMS = 32
@@ -63,11 +80,11 @@ FLAT = -13
 RAISE = -1000
 SPLIT = 12
 
-# Ours, and deliberately not ArenaNet's: three payloads of the right SHAPE and
+# Ours, and deliberately not ArenaNet's: two payloads of the right SHAPE and
 # the wrong content, so sections 0-3 exercise the whole builder with no vault.
+# Props left this dict on 2026-08-12 when `props.py` learned to generate it.
 PLACEHOLDER = {
     sb.HEADER: bytes(8),
-    sb.PROPS: bytes(12),
     sb.ZONES: bytes(34),
 }
 PLACEHOLDER_IDS = [1, 2, 3, 4]
@@ -105,6 +122,7 @@ def sections():
     print("\n1. the order rule, and the refusal that enforces it")
     payload = dict(PLACEHOLDER)
     payload[sb.MAP_PARAMS] = mapbuild.encode_map_parameters(rect)
+    payload[sb.PROPS] = props.StrippedProps.minimal().encode()
     payload[sb.TERRAIN] = stx.StrippedTerrain.build(
         DIMS, DIMS, flat_heights()).encode()
     payload[sb.TERRAIN_DEPS] = mapchunks.encode_dependencies(PLACEHOLDER_IDS)
@@ -201,8 +219,12 @@ def sections():
     print("\n3c. the census, on placeholders")
     rep = sb.build(DIMS, DIMS, ridged, (2112.0, 1536.0), PLACEHOLDER,
                    PLACEHOLDER_IDS)
-    check(rep.borrowed == 54,
-          f"borrowed is exactly the three chunks' 54 B  ({rep.borrowed})")
+    check(rep.borrowed == 42,
+          f"borrowed is exactly the two chunks' 42 B  ({rep.borrowed})")
+    check(sb.PROPS not in sb.BORROWED and sb.PROPS in sb.GENERATED,
+          "and the props chunk is GENERATED, not borrowed",
+          "FINDINGS 34's hard gate; while it was borrowed no map from this "
+          "module could place an object")
     check(rep.borrowed_chunks() == sb.BORROWED,
           "and the report NAMES them rather than giving one percentage")
     check(rep.fraction_generated > 0.95,
@@ -212,16 +234,26 @@ def sections():
     check(len(rep.blob) > sum(rep.sizes.values()),
           "the file is larger than its payloads -- there is a chunk table")
 
-    print("\n4. against the archive: the borrowed three and the generated deps")
-    try:
-        dat = os.path.join(vaultpath.require_dir("dat_study"), "Gw.dat")
-    except Exception as exc:
-        LEDGER.skip(f"sections 4-6 need vault/dat_study/Gw.dat: {exc}")
+    print("\n4. against the archive: the borrowed two and the generated deps")
+    # NOT `require_dir`, and that is the fix rather than the style. It raises
+    # SystemExit, which is a BaseException -- so `except Exception` never caught
+    # it, a vault-less run died here without ever printing a verdict, and the
+    # `LEDGER.skip` below had never once executed (it was called with one
+    # argument where `skip(label, why)` takes two, so it would have raised
+    # TypeError the first time it ran). The docstring's "sections 0-3c score 30
+    # against a floor of 39" was therefore a number nobody had seen.
+    dat = os.path.join(vaultpath.vault_path("dat_study"), "Gw.dat")
+    if not os.path.isfile(dat):
+        LEDGER.skip("sections 4-6, which need the archive",
+                    f"no Gw.dat at {dat}; vault resolved to "
+                    f"{vaultpath.vault_root()} ({vaultpath.vault_why()}). "
+                    f"Sections 0-3c measured the builder against placeholder "
+                    f"constants of our own and NOTHING about ArenaNet's.")
         return
     constants, dep_ids = sb.borrowed_constants(path=dat)
     check(set(constants) == set(sb.BORROWED),
-          "the three borrowed chunks read back")
-    check([len(constants[c]) for c in sb.BORROWED] == [8, 12, 34],
+          "the two borrowed chunks read back")
+    check([len(constants[c]) for c in sb.BORROWED] == [8, 34],
           f"at their measured sizes  "
           f"{[len(constants[c]) for c in sb.BORROWED]}")
     check(len(dep_ids) == 4 and all(isinstance(i, int) for i in dep_ids),
@@ -264,7 +296,7 @@ def sections():
 
     print("\n6. the whole build, on the real constants")
     rep = sb.build(DIMS, DIMS, ridged, (2112.0, 1536.0), constants, dep_ids)
-    check(rep.borrowed == 54 and rep.generated > 2000,
+    check(rep.borrowed == 42 and rep.generated > 2000,
           f"generated {rep.generated} B, borrowed {rep.borrowed} B")
     check(rep.fraction_generated > 0.97,
           f"{100 * rep.fraction_generated:.2f}% generated")
