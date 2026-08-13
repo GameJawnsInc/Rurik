@@ -3,10 +3,15 @@
 THE HEADLINE IS SECTION 5 AND IT IS NOT OUR CODE AGREEING WITH OUR CODE. An
 exporter verified by our own importer proves nothing -- `CLAUDE.md` says so in
 those words -- so the layout is scored against the props chunk `0x20000004`,
-which `mapexport.py` never reads and which no part of this pipeline produced.
-Every prop carries a world `(x, y, z)`; sample the exported height field at
-`(x, y)` and compare with `z`. A wrong de-tiling, a flipped row order or a wrong
-pitch all move the sampled height away from the prop that is standing on it.
+which no part of the TERRAIN pipeline reads or produced. (Since 2026-08-13
+`mapexport.py` also exports props, so the old framing "a chunk the exporter
+never reads" is dead; the independence that carries the oracle is narrower and
+still real -- the height arrays' path never reads props, the props path never
+touches the height arrays, and this section reads the chunk through its OWN
+48-byte walker rather than through either.) Every prop carries a world
+`(x, y, z)`; sample the exported height field at `(x, y)` and compare with
+`z`. A wrong de-tiling, a flipped row order or a wrong pitch all move the
+sampled height away from the prop that is standing on it.
 
   Three rival layouts ship alongside as controls and every one must collapse:
   the y-flip (`gy = int((wy-y0)/96)`), the x-flip, and NOT DE-TILING at all --
@@ -35,10 +40,22 @@ must equal the Map Parameters rect exactly, and `(x1-x0)/dimX` must be 96.0.
 Section 6 runs it over a sample of maps and section 4 ships the `(dim-1)` divisor
 and a perturbed dimension as controls that must NOT pass.
 
-SECTIONS 0-4 NEED NO VAULT and build everything they check out of nothing. A run
-with no archive still executes them, declares the two vault sections as skips
-naming the path, and then FAILS on the floor -- because a run that measured
-nothing about ArenaNet's bytes has not verified this module, whatever it printed.
+SECTIONS 0-4b NEED NO VAULT and build everything they check out of nothing --
+including a matched props pair whose Bloated half is assembled here from
+`struct.pack`, which is what lets `build_props`'s refusals each sit beside a
+live baseline. A run with no archive still executes them, declares the three
+vault sections as skips naming the path, and then FAILS on the floor -- because
+a run that measured nothing about ArenaNet's bytes has not verified this
+module, whatever it printed.
+
+SECTION 7 IS THE PROPS SIDECAR against the archive: every position equal to
+this file's own independent walk of the Bloated chunk, every placement inside
+the rect, the props-vs-heights fraction reproducing section 5's pinned number
+from the sidecar's own two files, every model file resolving with the MFT's
+(size, crc), and THE ROTATION COMPOSITION -- z first, then x, then y, per-axis
+signs (-, +, -) -- reproducing the compiled basis on every record, with the
+nearest rival order (zyx) required to keep failing on the pinned multi-axis
+populations so the pin cannot go vacuous.
 
 MEASURED VALUES ARE THIS ARCHIVE'S, `vault/dat_study/Gw.dat`. File ids travel
 between installs; MFT rows do not, so the row-indexed constants are used only
@@ -64,12 +81,17 @@ sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive, ffna_chunks, file_id_table  # noqa: E402
 from terrain import Terrain, CELL_PITCH, CHUNK_SIZE, TERRAIN_CHUNK  # noqa: E402
 import mapexport  # noqa: E402
-from mapexport import (MAP_PARAMS_CHUNK, build_manifest, detile,  # noqa: E402
-                       export_row, load_export, map_rect, resolve_outdir,
-                       retile, verify_manifest, write_export, FORMAT,
-                       FORMAT_VERSION, _check_rect)
+from mapexport import (MAP_PARAMS_CHUNK, build_manifest, build_props,  # noqa: E402
+                       detile, export_row, load_export, map_rect,
+                       resolve_outdir, retile, verify_manifest, write_export,
+                       FORMAT, FORMAT_VERSION, _check_rect)
+from mapfile import MapFile, Chunk, FORM_OPAQUE, FORM_DEPENDENCIES  # noqa: E402
+from mapchunks import (Dependencies, dependency_pair,  # noqa: E402
+                       DEPENDENCY_SIGNATURE, DEPENDENCY_VERSION)
+from props import Prop, PropRef, StrippedProps  # noqa: E402
 import checks  # noqa: E402
 import vaultpath  # noqa: E402
+import math  # noqa: E402
 
 MAP_FLAGS = 259
 
@@ -130,20 +152,21 @@ SYN_X, SYN_Y = 64, 96
 CORPUS_MAPS = 349
 DEFAULT_SAMPLE = 12
 
-# FLOOR: 108, from a real green run on `vault/dat_study/Gw.dat` 2026-08-11
-# (31 s). The count does not move with `--sample` or `--all` -- every archive
-# section reports an aggregate, so the floor is a constant rather than a
-# function of the fixture.
+# FLOOR: 145, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
+# (51 s; was 108 before the props sections landed). The count does not move
+# with `--sample` or `--all` -- every archive section reports an aggregate, so
+# the floor is a constant rather than a function of the fixture.
 #
-# Sections 0-4 alone score 65, so a run with no archive lands 43 short and goes
-# RED. That is deliberate and it is the whole reason the floor exists: 65 checks
-# about a synthetic grid this file built itself have verified the plumbing and
+# Sections 0-4b alone score 84 (MEASURED by pointing --dat at a missing file),
+# so a run with no archive lands 61 short and goes RED. That is deliberate and
+# it is the whole reason the floor exists: 84 checks about a synthetic grid and
+# synthetic props this file built itself have verified the plumbing and
 # NOTHING about ArenaNet's layout, and a green exit code there would be the
 # `test_codec.py` failure all over again. The placeholder value this constant
 # carried while the file was being written was 46, and a vault-less run duly
-# printed ALL CHECKS PASSED -- which is how the number below came to be measured
+# printed ALL CHECKS PASSED -- which is how the number came to be measured
 # rather than guessed.
-FLOOR = 108
+FLOOR = 145
 
 
 # ------------------------------------------------------------------ helpers
@@ -294,9 +317,11 @@ def main(argv=None):
     with tempfile.TemporaryDirectory(prefix="rurik_mapexport_") as tmp:
         _section0(check, tmp)
         _section1(check, tmp)
+        _section1b(check, tmp)
         _section2(check)
         _section3(check, tmp)
         _section4(check)
+        _section4b(check)
         _vault_sections(check, led, args, tmp)
 
     print(f"\n({time.perf_counter() - t0:.1f}s)")
@@ -436,6 +461,127 @@ def _section1(check, tmp):
     check(len(meta["sidecars"]) == 3
           and {s["kind"] for s in meta["sidecars"]} == {"heights", "tiles", "shade"},
           "three sidecars, each named by kind in the manifest")
+
+
+# --- 1b. the props sidecar, built from nothing -----------------------------
+
+def _bloated_payload(sp, basis=(-0.0, -0.0, -1.0, 0.0, 1.0, -0.0)):
+    """A Bloated `0x20000004` payload built HERE to match `sp` record for
+    record, out of `struct.pack` and the documented layout -- so the no-vault
+    sections can hand `build_props` a pair that satisfies `corresponds()`
+    without an archive. `basis` is per-record constant; `corresponds` does not
+    check it and the synthetic props carry rot (0, 0, 0), where it is what the
+    compiler emits."""
+    body = bytearray(struct.pack("<H", len(sp.props)))
+    for p in sp.props:
+        body += struct.pack("<H3f", p.model, p.x, p.y, p.z)
+        body += struct.pack("<6f", *basis)
+        body += struct.pack("<f", p.scale * (255 / 128) / 256 + 1 / 128)
+        body += b"\x00\x00\x00\x00"                 # tail; corresponds ignores
+        body += bytes((p.flags, p.points))
+        for dx, dy in p.outline:
+            body += struct.pack("<ff", p.x + dx, p.y + dy)
+    out = bytearray(struct.pack("<IB", PROPS_SIG, PROPS_VERSION))
+    for tag in (0, 1, 2, 3, 4):
+        payload = bytes(body) if tag == 0 else b""
+        out += struct.pack("<BI", tag, len(payload)) + payload
+    if sp.refs6 is not None:
+        out += struct.pack("<BI", 6, 0)
+    out += struct.pack("<BI", 0xFF, 0)
+    return bytes(out)
+
+
+def _synth_pair(fids=(0x1111, 0x2222)):
+    """A (head MapFile, partner MapFile, StrippedProps) trio from nothing."""
+    sp = StrippedProps(props=[
+        Prop(0, 100.0, 200.0, -50.0, rot=(0, 0, 0), scale=0x99),
+        Prop(1, -300.0, 40.0, 12.5, rot=(0, 0, 0), scale=0x7F, flags=2,
+             outline=((-5, -5), (5, -5), (5, 5), (-5, -5))),
+        Prop(0, 0.0, -8.0, 3.0),
+    ], refs4=[PropRef(7, 1)])
+    dep = Dependencies(DEPENDENCY_SIGNATURE, DEPENDENCY_VERSION,
+                       [(*dependency_pair(f), 0) for f in fids])
+    head = MapFile(chunks=[
+        Chunk(mapexport.PROPS_BLOATED_CHUNK, _bloated_payload(sp), FORM_OPAQUE),
+        Chunk(mapexport.PROPS_DEPS_BLOATED, dep, FORM_DEPENDENCIES)])
+    partner = MapFile(chunks=[
+        Chunk(mapexport.PROPS_STRIPPED_CHUNK, sp.encode(), FORM_OPAQUE),
+        Chunk(mapexport.PROPS_DEPS_STRIPPED, dep, FORM_DEPENDENCIES)])
+    return head, partner, sp
+
+
+def _section1b(check, tmp):
+    print("\n== 1b. the props sidecar round-trips through load_export (no vault) ==")
+    trn = synthetic_terrain()
+    rect = (0.0, 0.0, SYN_X * CELL_PITCH, SYN_Y * CELL_PITCH)
+    src = {"archive": None, "row": None, "file_id": None}
+    head, partner, sp = _synth_pair()
+
+    pd = build_props(head, partner)
+    check(pd is not None and pd["count"] == len(sp.props),
+          f"build_props reads the synthetic pair ({len(sp.props)} props)")
+    check([m["file_id"] for m in pd["models"]] == [0x1111, 0x2222]
+          and all(m["mft"] is None for m in pd["models"]),
+          "the model list carries the file ids; mft is None without an archive")
+
+    meta, payloads = build_manifest(trn, rect, "withprops", src,
+                                    props=pd, props_state="exported")
+    path = write_export(meta, payloads, os.path.join(tmp, "wp"))
+    exp = load_export(path)
+    check(exp.props == pd,
+          "the props sidecar comes back DEEP-EQUAL through disk and json")
+    check(meta.get("props_state") == "exported"
+          and {s["kind"] for s in meta["sidecars"]}
+          == {"heights", "tiles", "shade", "props"},
+          "the manifest declares props_state and the fourth sidecar")
+    side = next(s for s in meta["sidecars"] if s["kind"] == "props")
+    check(side["dtype"] == mapexport.DTYPE_JSON
+          and side["count"] == pd["count"] and side["count"] != exp.cells,
+          "the props sidecar entry counts PROPS, not cells")
+    check(exp.props["props"][1]["outline"] == [[-5, -5], [5, -5], [5, 5],
+                                               [-5, -5]],
+          "an outline survives as the prop-local pairs")
+
+    # v2 is BACKWARD compatible: a version-1 manifest still loads. The other
+    # direction -- version 3 refused -- is section 3's existing check.
+    meta1, payloads1 = build_manifest(trn, rect, "v1", src)
+    p1 = write_export(meta1, payloads1, os.path.join(tmp, "v1"))
+    obj = json.load(open(p1, encoding="utf-8"))
+    obj["format_version"] = 1
+    open(p1, "w", encoding="utf-8").write(json.dumps(obj))
+    exp1 = load_export(p1)
+    check(exp1.props is None and exp1.dim_x == SYN_X,
+          "a version-1 manifest (terrain only) still loads under the v2 reader")
+
+    # Count coherence: a sidecar whose declared count disagrees with what it
+    # holds is refused even though every digest is clean.
+    bad = dict(pd, count=pd["count"] + 1)
+    metab, payloadsb = build_manifest(trn, rect, "badcount", src,
+                                      props=bad, props_state="exported")
+    pb = write_export(metab, payloadsb, os.path.join(tmp, "bc"))
+    check(raises(load_export, pb),
+          "a props sidecar whose declared count disagrees with its records "
+          "is refused")
+
+    # THE NEGATIVE CONTROL, section 3's shape: one byte of the props sidecar
+    # changed, same length, so nothing but the digest can catch it.
+    pj = os.path.join(tmp, "wp", "withprops.props.json")
+    original = open(pj, "rb").read()
+    i = original.index(b"100.0")
+    corrupt = bytearray(original)
+    corrupt[i] = ord("9")
+    check(len(corrupt) == len(original) and bytes(corrupt) != original,
+          "the control really changed one byte and nothing else")
+    open(pj, "wb").write(bytes(corrupt))
+    bad_list = verify_manifest(path)
+    check(len(bad_list) == 1 and "withprops.props.json" in bad_list[0],
+          "verify_manifest catches the corrupted prop and names the file",
+          bad_list[0][:70] if bad_list else "NOTHING REPORTED")
+    check(raises(load_export, path),
+          "load_export RAISES rather than handing back corrupted props")
+    open(pj, "wb").write(original)
+    check(load_export(path).props == pd,
+          "restoring the original bytes makes it load again")
 
 
 # --- 2. the de-tiling, against a different implementation ------------------
@@ -582,6 +728,72 @@ def _section4(check):
           "one tile of dimY error is refused")
 
 
+# --- 4b. build_props refuses, each refusal beside a live baseline -----------
+
+def _section4b(check):
+    print("\n== 4b. build_props refusals (no vault) ==")
+    head, partner, sp = _synth_pair()
+    ok = build_props(head, partner)
+    check(ok is not None and ok["count"] == 3,
+          "the matched pair is ACCEPTED -- the refusals below have a live "
+          "baseline")
+
+    check(build_props(MapFile(chunks=[]), MapFile(chunks=[])) is None,
+          "no props chunk on either side is None, not an error "
+          "(three retail maps have none)")
+    check(raises(build_props, head, MapFile(chunks=[])),
+          "a props chunk on ONE side only is refused")
+
+    # A compiled record that disagrees: record 0's x is at header(5) +
+    # section header(5) + count(2) + model(2) = offset 14.
+    blob = bytearray(_bloated_payload(sp))
+    struct.pack_into("<f", blob, 14, 999.0)
+    bad_head = MapFile(chunks=[
+        Chunk(mapexport.PROPS_BLOATED_CHUNK, bytes(blob), FORM_OPAQUE),
+        head.find(mapexport.PROPS_DEPS_BLOATED)])
+    check(raises(build_props, bad_head, partner),
+          "a compiled record disagreeing with the Stripped one is refused "
+          "(corresponds; retail agrees 349/349)")
+
+    # Dependency lists that disagree are refused, not resolved.
+    dep2 = Dependencies(DEPENDENCY_SIGNATURE, DEPENDENCY_VERSION,
+                        [(*dependency_pair(0x3333), 0),
+                         (*dependency_pair(0x2222), 0)])
+    head2 = MapFile(chunks=[
+        Chunk(mapexport.PROPS_BLOATED_CHUNK, _bloated_payload(sp), FORM_OPAQUE),
+        Chunk(mapexport.PROPS_DEPS_BLOATED, dep2, FORM_DEPENDENCIES)])
+    check(raises(build_props, head2, partner),
+          "model dependency lists that disagree are refused")
+
+    # A model index past the list; both streams consistent, so corresponds
+    # passes and the range check is the one that must fire.
+    sp2 = StrippedProps(props=[Prop(9, 1.0, 2.0, 3.0)])
+    dep1 = Dependencies(DEPENDENCY_SIGNATURE, DEPENDENCY_VERSION,
+                        [(*dependency_pair(0x1111), 0)])
+    head3 = MapFile(chunks=[
+        Chunk(mapexport.PROPS_BLOATED_CHUNK, _bloated_payload(sp2), FORM_OPAQUE),
+        Chunk(mapexport.PROPS_DEPS_BLOATED, dep1, FORM_DEPENDENCIES)])
+    partner3 = MapFile(chunks=[
+        Chunk(mapexport.PROPS_STRIPPED_CHUNK, sp2.encode(), FORM_OPAQUE),
+        Chunk(mapexport.PROPS_DEPS_STRIPPED, dep1, FORM_DEPENDENCIES)])
+    check(raises(build_props, head3, partner3),
+          "a model index past the dependency list is refused "
+          "(stripbuild's rule, read direction)")
+
+    # The POSITIVE control for the dep rules: a zero-prop chunk with no
+    # dependency list is row 26209's real shape and must export empty.
+    sp0 = StrippedProps()
+    head0 = MapFile(chunks=[
+        Chunk(mapexport.PROPS_BLOATED_CHUNK, _bloated_payload(sp0),
+              FORM_OPAQUE)])
+    partner0 = MapFile(chunks=[
+        Chunk(mapexport.PROPS_STRIPPED_CHUNK, sp0.encode(), FORM_OPAQUE)])
+    z = build_props(head0, partner0)
+    check(z is not None and z["count"] == 0 and z["models"] == [],
+          "a zero-prop chunk with no dependency list exports empty "
+          "(row 26209's shape)")
+
+
 # --- 5 and 6. the archive ---------------------------------------------------
 
 def _vault_sections(check, led, args, tmp):
@@ -594,16 +806,19 @@ def _vault_sections(check, led, args, tmp):
                f"{vaultpath.vault_root()}, {vaultpath.vault_why()})")
         led.skip("5. the prop-z oracle and its three controls", why)
         led.skip("6. extent agreement across the corpus", why)
+        led.skip("7. the props sidecar against the archive", why)
         return
 
     with Archive(dat) as ar:
         _section5(check, led, ar, tmp)
         _section6(check, led, ar, args)
+        _section7(check, led, ar, tmp)
 
 
 def _section5(check, led, ar, tmp):
     print("\n== 5. THE ORACLE: prop z against the exported height field ==")
-    print("   props chunk 0x20000004 -- a chunk mapexport.py never reads\n")
+    print("   props chunk 0x20000004, read here by this file's own walker --\n"
+          "   the terrain path never touches it\n")
 
     table = file_id_table(ar)
     pooled = {k: [0, 0] for k in ("baseline",) + CONTROLS}   # [within100, n]
@@ -770,6 +985,172 @@ def _section6(check, led, ar, args):
     check(bad_control == 0,
           f"the (dim-1) divisor gives 96.0 on 0 of {len(picks)} maps -- the "
           f"control still has power", f"{bad_control} would have passed")
+
+
+# --- 7. the props sidecar against the archive -------------------------------
+
+TAU = 2.0 * math.pi
+AXIS_SIGN = (-1.0, 1.0, -1.0)                  # x, y, z -- props.py, MEASURED
+BASIS_A0 = (0.0, 0.0, -1.0)                    # the rot-(0,0,0) vectors
+BASIS_B0 = (0.0, 1.0, 0.0)
+BASIS_TOL = 5e-4                               # f32 chain vs our f64 rebuild
+
+# MEASURED on this archive 2026-08-13, first green run of this section. The
+# multi-axis populations are pinned so the rival check cannot go vacuous on a
+# map whose props all rotate about one axis; `zyx` is the NEAREST rival (2,070
+# of 3,545 on the 12-map probe) and still failed 20 of Kamadan's 53 and 95 of
+# Pre-Searing's 179 on that run.
+MULTI_AXIS = {KAMADAN_ROW: 53, PRESEARING_ROW: 179}
+
+
+def _rotm(axis, theta):
+    c, s = math.cos(theta), math.sin(theta)
+    if axis == 0:
+        return ((1, 0, 0), (0, c, -s), (0, s, c))
+    if axis == 1:
+        return ((c, 0, s), (0, 1, 0), (-s, 0, c))
+    return ((c, -s, 0), (s, c, 0), (0, 0, 1))
+
+
+def _matmul(m, n):
+    return tuple(tuple(sum(m[i][k] * n[k][j] for k in range(3))
+                       for j in range(3)) for i in range(3))
+
+
+def _apply(m, v):
+    return tuple(sum(m[i][k] * v[k] for k in range(3)) for i in range(3))
+
+
+def _compose(rot_bytes, order):
+    """The rotation matrix for three rot bytes, axis matrices applied in
+    `order` (first-to-last). The measured composition is (2, 0, 1): z, x, y."""
+    mats = [_rotm(i, AXIS_SIGN[i] * rot_bytes[i] * TAU / 256.0)
+            for i in range(3)]
+    m = mats[order[0]]
+    m = _matmul(mats[order[1]], m)
+    return _matmul(mats[order[2]], m)
+
+
+def _basis_close(m, sa, sb, tol=BASIS_TOL):
+    a = _apply(m, BASIS_A0)
+    b = _apply(m, BASIS_B0)
+    return (all(abs(p - q) <= tol for p, q in zip(a, sa))
+            and all(abs(p - q) <= tol for p, q in zip(b, sb)))
+
+
+def _section7(check, led, ar, tmp):
+    print("\n== 7. the props sidecar against the archive and the compiled basis ==")
+    table = file_id_table(ar)
+    by_row = {e.index: e for e in ar.entries}
+    for fid, nprops in ((KAMADAN_FILE_ID, KAMADAN_PROPS),
+                        (PRESEARING_FILE_ID, PRESEARING_PROPS)):
+        row = table.get(fid)
+        if row is None:
+            led.skip(f"7. props export of 0x{fid:X}", "file id unresolved")
+            continue
+
+        path = export_row(row, ar, outdir=os.path.join(tmp, f"p{row}"),
+                          file_id=fid)
+        exp = load_export(path)
+        pd = exp.props
+        check(pd is not None and pd["count"] == nprops
+              and exp.meta.get("props_state") == "exported",
+              f"row {row}: the export carries all {nprops} props",
+              f"{pd and pd['count']}, state {exp.meta.get('props_state')!r}")
+        if pd is None:
+            continue
+
+        # THE INDEPENDENT WALKER. `read_props` is this file's own 48-byte walk
+        # over the Bloated chunk, sharing nothing with props.py; every sidecar
+        # position must equal it, in order, byte-exactly.
+        chunks = read_chunks(ar, row)
+        props, _v, _sz, _consumed = read_props(chunks[PROPS_CHUNK])
+        same = sum(1 for (x, y, z), r in zip(props, pd["props"])
+                   if [x, y, z] == r["position"])
+        check(len(props) == pd["count"] and same == pd["count"],
+              f"row {row}: every sidecar position equals the test's own "
+              f"48-byte walk", f"{same}/{pd['count']}")
+
+        # Placements land inside the map rect -- the same oracle that derived
+        # the record stride (props.py; 285,670/285,670 corpus-wide).
+        x0, y0, x1, y1 = exp.rect
+        inside = sum(1 for r in pd["props"]
+                     if x0 <= r["position"][0] <= x1
+                     and y0 <= r["position"][1] <= y1)
+        check(inside == pd["count"],
+              f"row {row}: all {pd['count']} placements land inside the rect",
+              f"{inside}/{pd['count']}")
+
+        # The terrain tie: scoring the SIDECAR's positions against the SIDECAR's
+        # heights reproduces section 5's pinned baseline, so the two sidecars of
+        # one export are placed in the same world.
+        frac, _med, n, outside = score_layout(
+            exp.heights, exp.dim_x, exp.dim_y, exp.rect,
+            [tuple(r["position"]) for r in pd["props"]], "baseline")
+        want_f, _ = ORACLE["baseline"][row]
+        check(outside == 0 and n == pd["count"]
+              and abs(frac - want_f) < FRAC_TOL,
+              f"row {row}: the sidecar's own props-vs-heights fraction is "
+              f"{want_f}", f"{frac:.4f}, n={n}, outside={outside}")
+
+        # THE COMPOSITION PIN. z first, then x, then y reproduces the compiled
+        # basis on every record; the nearest rival order must keep failing.
+        multi = m_ok = s_ok = rival_ok = 0
+        for r in pd["props"]:
+            good = _basis_close(_compose(r["rot_bytes"], (2, 0, 1)),
+                                r["basis"][0], r["basis"][1])
+            if sum(1 for v in r["rot_bytes"] if v) >= 2:
+                multi += 1
+                m_ok += good
+                if _basis_close(_compose(r["rot_bytes"], (2, 1, 0)),
+                                r["basis"][0], r["basis"][1]):
+                    rival_ok += 1
+            else:
+                s_ok += good
+        print(f"    row {row}: {multi} multi-axis records, ZXY closes "
+              f"{m_ok + s_ok}/{pd['count']}, rival ZYX closes "
+              f"{rival_ok}/{multi} of the multi-axis")
+        check(m_ok == multi and s_ok == pd["count"] - multi,
+              f"row {row}: the ZXY composition reproduces the compiled basis "
+              f"on ALL {pd['count']} records",
+              f"{m_ok}/{multi} multi, {s_ok}/{pd['count'] - multi} single")
+        pinned = MULTI_AXIS[row]
+        check(pinned is None or (multi == pinned and rival_ok < multi),
+              f"row {row}: the rival order still fails on multi-axis records "
+              f"-- the pin has power",
+              f"{multi} multi-axis (pinned {pinned}), rival closes {rival_ok}")
+
+        # The scale formula, transported: the compiled f32 must equal the
+        # byte's formula on every record, to the bit.
+        bad_scale = sum(
+            1 for r in pd["props"]
+            if struct.pack("<f", r["scale"])
+            != struct.pack("<f", r["scale_byte"] * (255 / 128) / 256 + 1 / 128))
+        check(bad_scale == 0,
+              f"row {row}: scale == the byte formula as f32 on every record",
+              f"{bad_scale} disagree")
+
+        # Model identity: every file id resolves in THIS archive and the
+        # recorded (size, crc) is the MFT's own.
+        ok_m = 0
+        for m in pd["models"]:
+            mft = m["mft"]
+            e = by_row.get(mft["row"]) if mft else None
+            if (mft and table.get(m["file_id"]) == mft["row"] and e is not None
+                    and e.size == mft["size"] and e.crc == mft["crc"]):
+                ok_m += 1
+        check(ok_m == len(pd["models"]),
+              f"row {row}: all {len(pd['models'])} model files resolve and "
+              f"(size, crc) match the MFT", f"{ok_m}/{len(pd['models'])}")
+
+        # Every reference lands in range.
+        nm = len(pd["models"])
+        check(all(0 <= r["model"] < nm for r in pd["props"])
+              and all(0 <= p < pd["count"] for _v, p in pd["refs4"])
+              and (pd["refs6"] is None
+                   or all(0 <= p < pd["count"]
+                          for _v, p in pd["refs6"]["entries"])),
+              f"row {row}: every model index and tag-4/6 reference is in range")
 
 
 if __name__ == "__main__":
