@@ -2394,3 +2394,37 @@ parallel, with one safety change that is not optional — see its entry.
     `stripbuild` takes the pair under the env rules (test §3e, floor 54). THE
     PRESENTATION LADDER IS WALKED — what remains is AUTHORING the borrowed
     payloads (env 639 B, sound 89 B) instead of wearing Pre-Searing's.
+
+### Naming the archive's map rows — 2026-08-13
+
+**[studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md), `toolkit/clientscan/maprows.py`.**
+The arc was opened to find the join `s_missionClientData` index → map file id.
+**There is none, and that is now REFUTED rather than assumed** — three methods
+that share nothing: an exhaustive packed-dword sweep against a 500-trial null
+(21 hits, null mean 21.4, and *below* chance on distinctness); a backwards walk
+of every producer of the file-id argument, which finds exactly two and both are
+the network; and a sweep of every field of every map chunk, whose positive
+control fires on the content UUID and on nothing else.
+
+**What replaced it does not need a file id.** The table carries each map's
+FOOTPRINT on its continent at `+0x48`/`+0x58` — a rect in terrain cells, unnamed
+in every mirror — and its size equals the map file's terrain dims at the known
+96.0 pitch, **319 of 319**, with a one-cell shift scoring **0 of 319** and a
+random-size null at 41%. Against gw-preservation's hand-typed table (verification
+only): **350 of 353, versus a 5.4% shuffle control**; on the rows named outright,
+**15 agree, 0 differ, 5 are named that no upstream names**.
+
+**Three corrections land on other documents.** The table is
+`s_missionClientData` and **888/124 are ArenaNet's own numbers**, out of its
+accessor's assert at `0x005A8580`. `textrec.combine()` moves from UPSTREAM to
+**CORROBORATED** — the client computes exactly it at `0x004702B0`. And
+`FORMAT.md`'s "the client does not mask" is **CONTESTED**: ArenaNet's own server
+sent the MASKED `0x1B97D` in 9 of 9 live instance loads.
+
+**Next, in cost order.** (1) Read the mask on the `ExtractArchiveFileId` caller
+chain — addresses are in §3, and it settles the bit-31 question that has been
+open since 2026-08-06. (2) The remaining 296 rows are limited by information, not
+effort: the archive carries a map's dims and nothing that places it on a
+continent. A live capture on a known-named zone yields one exact `(map id, file
+id)` pair at zero ambiguity, which is the cheapest evidence left and needs only
+play, not analysis.
