@@ -834,6 +834,12 @@ def load_pathmap(map_file_id):
 
     None is a normal outcome, not an error: no archive on this machine, or a map
     whose file id we do not have. The caller falls back to no collision.
+
+    WHEN this runs is load-bearing, which is why `prewarm_pathmap` exists. Its
+    other call site is instance bring-up -- i.e. after a client has connected --
+    and a RUNNING Guild Wars client holds its own `Gw.dat` open exclusively, so
+    on a run where the server and the client share one archive this read fails
+    with EACCES and collision silently turns off.
     """
     if PathingMap is None:
         return None
@@ -844,12 +850,59 @@ def load_pathmap(map_file_id):
             pm = PathingMap.load(map_file_id)
             print(f"[map] navmesh 0x{map_file_id:X}: {len(pm.planes)} planes, "
                   f"{len(pm.trapezoids)} trapezoids")
+        except PermissionError as exc:
+            # Name the cause. "Permission denied" on a file this process owns
+            # reads as a broken install or a stray antivirus; it is the CLIENT
+            # holding the archive, and the fix is to have read it earlier.
+            print(f"[map] no navmesh for 0x{map_file_id:X}: {exc}")
+            print("[map] that is the CLIENT holding this archive open -- the "
+                  "read came too late; see prewarm_pathmap()")
+            print("[map] collision is OFF; the character can walk through walls")
+            pm = None
         except Exception as exc:                              # noqa: BLE001
             print(f"[map] no navmesh for 0x{map_file_id:X}: {exc}")
             print("[map] collision is OFF; the character can walk through walls")
             pm = None
         _PATHMAPS[map_file_id] = pm
         return pm
+
+
+def prewarm_pathmap(map_id):
+    """Read the navmesh at STARTUP, before any client can lock the archive.
+
+    MEASURED 2026-08-13, and it corrects a claim this repo made the other way
+    round. `load_pathmap`'s other call site is instance bring-up -- the client
+    is up by then -- and on the authoring loop the server and the client read
+    the SAME archive, so that read hit a client-held exclusive lock, returned
+    EACCES, and left the character with no collision at all while the harness
+    still reported PASS.
+
+    Before that it was worse in a quieter way. With the server defaulted to
+    `vault/dat_study/Gw.dat` while the authored map was installed into a run
+    copy, the read SUCCEEDED and handed back ArenaNet's geometry for the same
+    map id. Over a 4,096-point grid on the sculpt map the two meshes' walkable
+    sets are DISJOINT -- 49 points ours, 435 theirs, 0 shared -- and the
+    authored spawn is not on ArenaNet's mesh at all, so the server suspended
+    collision on arrival. 16 runs in the vault carry that line.
+
+    Startup is the only moment both halves hold: the archive contains whatever
+    was installed, and nothing has opened it yet. This cannot rescue a run whose
+    head was just armed to zero -- there is no compiled mesh to read, by design,
+    and that run is the one that PRODUCES it. Serving an authored mesh is
+    inherently two runs; this makes the second one work rather than letting the
+    first pretend.
+    """
+    cfg = MAP_STATIC_CONFIG.get(map_id)
+    if cfg is None:
+        print(f"[map] map {map_id} has no static config, so its navmesh cannot "
+              f"be pre-warmed; it will be read at instance load, which is late "
+              f"-- see prewarm_pathmap()")
+        return None
+    pm = load_pathmap(cfg[0])
+    if pm is None:
+        print(f"[map] PRE-WARM FAILED for map {map_id} (file id 0x{cfg[0]:X}); "
+              f"this run serves NO collision")
+    return pm
 
 
 # How far the client's reported position may be from ours before we stop
@@ -5477,6 +5530,10 @@ def main():
               + (f", explorable={bool(known[3])}" if known
                  else " -- NOT in MAP_STATIC_CONFIG, so geometry falls back "
                     f"to map {FALLBACK_MAP_ID} and it will not be explorable"))
+        # RIGHT HERE, and not at instance load. We know which map this run will
+        # serve, and nothing has opened the archive yet -- both halves are only
+        # true at startup. See prewarm_pathmap() for what reading it late cost.
+        prewarm_pathmap(a.map if known else FALLBACK_MAP_ID)
 
     if a.no_enemy:
         global SPAWN_ENEMY

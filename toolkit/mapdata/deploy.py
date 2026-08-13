@@ -46,9 +46,11 @@ install, and it cannot -- `datwrite` refuses anything but a copy.
 import argparse
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -417,6 +419,90 @@ def readback(dat, file_id, staged_blob, area):
     return out, bad
 
 
+# --------------------------------------------------------------- launch
+
+def launch(exe, session, dat, map_id, hold):
+    """Run the harness once, with the server pointed at OUR archive.
+
+    `--dat` already decides which client runs, so it decides which world the
+    server serves too: `RURIK_DAT` makes both halves name the same file, which
+    is also what `contentids.preflight` requires (studies/maprows FINDINGS 8).
+    """
+    env = dict(os.environ)
+    env["RURIK_DAT"] = os.path.abspath(dat)
+    print(f"  server world: RURIK_DAT={env['RURIK_DAT']}")
+    return subprocess.run(
+        [sys.executable, session, "--replace", "--hold", str(hold),
+         "--warn", "3", "--exe", exe,
+         "--game-args", f"--map {map_id}"], text=True, env=env).returncode
+
+
+def trapezoid_count(dat, file_id):
+    """How many trapezoids the client's compiler actually built, from the row."""
+    with Archive(dat) as ar:
+        pm = pathmap.PathingMap.load(file_id, archive=ar)
+    return len(pm.trapezoids)
+
+
+def newest_harness_log(after):
+    """The gamesrv log of the newest harness run started after `after`."""
+    root = os.path.join(vaultpath.require_dir(), "captures", "harness")
+    best, best_t = None, after
+    for name in os.listdir(root):
+        d = os.path.join(root, name)
+        log = os.path.join(d, "gamesrv.log")
+        if not os.path.isfile(log):
+            continue
+        t = os.path.getmtime(log)
+        if t > best_t:
+            best, best_t = log, t
+    return best
+
+
+NAVMESH_RE = re.compile(
+    r"\[map\] navmesh 0x([0-9A-Fa-f]+): (\d+) planes, (\d+) trapezoids")
+
+
+def serve_run(exe, session, dat, map_id, hold, expect_traps):
+    """A SECOND run, unarmed, that proves the SERVER read our mesh.
+
+    WHY TWO RUNS, and it is not a scheduling detail. `--install` arms the head
+    to zero so the client is forced to recompile, so at the moment the server
+    starts there is no compiled mesh in the archive to read -- and once the
+    client is up it holds the archive open exclusively, so reading it later
+    fails (EACCES). The run that PRODUCES the mesh can therefore never serve it.
+    This one starts from an archive that already holds it, with nothing else
+    open, which is the only configuration where the server can win.
+
+    The verdict is the server's OWN log line rather than anything we compute:
+    `[map] navmesh 0x287D3: 1 planes, 13 trapezoids` must name the count we
+    just read out of the archive. Comparing against a number we predicted would
+    be a check that cannot fail -- this compares two independent readers of the
+    same bytes, ours through `pathmap` and the server's through its own load.
+    """
+    t0 = time.time()
+    rc = launch(exe, session, dat, map_id, hold)
+    log = newest_harness_log(t0)
+    if log is None:
+        return False, f"  harness rc {rc}, but no gamesrv log was written"
+    with open(log, "r", encoding="utf-8", errors="replace") as fh:
+        text = fh.read()
+    hits = NAVMESH_RE.findall(text)
+    where = os.path.basename(os.path.dirname(log))
+    if not hits:
+        why = ("PRE-WARM FAILED" if "PRE-WARM FAILED" in text
+               else "no navmesh line at all")
+        return False, (f"  harness rc {rc}; {where}: {why} -- the server "
+                       f"served no collision")
+    fid, planes, traps = hits[0]
+    traps = int(traps)
+    ok = traps == expect_traps
+    return ok, (f"  harness rc {rc}; {where}: server loaded 0x{fid} with "
+                f"{planes} plane(s), {traps} trapezoids "
+                f"({'MATCHES' if ok else 'DISAGREES WITH'} the "
+                f"{expect_traps} in the archive)")
+
+
 def resolve_rows(archive, file_id):
     """(head row, partner row, partner reservation). By FILE ID, never remembered."""
     row = file_id_table(archive).get(file_id)
@@ -447,6 +533,11 @@ def main(argv=None):
                     help="write the map and arm the re-bloat (needs --dat)")
     ap.add_argument("--launch", action="store_true",
                     help="run the harness at the area's own map id")
+    ap.add_argument("--serve", action="store_true",
+                    help="after the compile run, launch a SECOND time without "
+                         "arming, so the server reads the mesh the client just "
+                         "built and paths against OUR geometry. Needs --launch; "
+                         "see serve_run() for why one run cannot do both")
     ap.add_argument("--hold", type=int, default=45)
     ap.add_argument("--exe", help="client to launch; defaults to "
                                   "the one beside --dat")
@@ -613,19 +704,19 @@ def main(argv=None):
     # it decides which world the server serves too. Both halves then name the
     # same file and the guard passes because the situation is actually right.
     #
-    # The known hazard, stated rather than discovered: a RUNNING client holds
-    # its archive open, so a server that wanted to re-read mid-session could be
-    # refused. Measured 2026-08-13 -- the run completes, because the server
-    # reads the world at startup, before the client is launched.
-    env = dict(os.environ)
-    env["RURIK_DAT"] = os.path.abspath(dat)
+    # THE HAZARD IS REAL AND THIS COMMENT USED TO DENY IT. It said the run
+    # completes "because the server reads the world at startup, before the
+    # client is launched". The world, yes; the NAVMESH, no -- `load_pathmap`
+    # ran at instance bring-up, after the client was up and holding this
+    # archive open exclusively, so the read returned EACCES and collision
+    # turned off silently. Before this env var existed it was quieter still:
+    # the server read `dat_study` and got ARENANET's geometry for the same map
+    # id, whose walkable set is disjoint from ours (0 of 4,096 grid points
+    # shared). `authsrv.prewarm_pathmap` now reads it at startup, which is the
+    # only moment the archive both holds our map and is unlocked -- and that is
+    # why serving an authored mesh takes TWO runs. See serve_run().
     print(f"launching {exe} at map {map_id}")
-    print(f"  server world: RURIK_DAT={env['RURIK_DAT']} -- the same archive "
-          f"the client reads, so both path against OUR map")
-    rc = subprocess.run(
-        [sys.executable, session, "--replace", "--hold", str(args.hold),
-         "--warn", "3", "--exe", exe,
-         "--game-args", f"--map {map_id}"], text=True, env=env).returncode
+    rc = launch(exe, session, dat, map_id, args.hold)
     print(f"\nharness rc {rc}")
 
     # 7. read back. A harness PASS says the client reached a map; only this
@@ -637,6 +728,24 @@ def main(argv=None):
     if bad:
         print(f"\n{len(bad)} READBACK CHECK(S) FAILED")
         return 1
+
+    # 8. serve. Everything above is about the CLIENT: it compiled our geometry
+    # and drew it. Whether the SERVER agrees about the ground is a separate
+    # claim and was false for every run of this command until 2026-08-13.
+    if args.serve:
+        traps = trapezoid_count(dat, file_id)
+        print(f"\nserve -- a second run, unarmed, so the server reads the "
+              f"{traps}-trapezoid mesh the client just built:")
+        ok, note = serve_run(exe, session, dat, map_id, args.hold, traps)
+        print(note)
+        if not ok:
+            print("\nSERVE CHECK FAILED -- the client walked on our map and "
+                  "the server did not")
+            return 1
+    else:
+        print("\nnote: the SERVER did not path against this mesh. It is in the "
+              "archive now, so --serve runs again unarmed and proves it does.")
+
     print("\nrung G: the area was authored, delivered, compiled and verified.")
     return 0
 
