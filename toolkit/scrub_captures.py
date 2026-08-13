@@ -41,9 +41,52 @@ The `Arena 0` authorization header is NOT redacted: the literal `0` is what the 
 sends before it has a token, it is documented in studies/handshake/PLAN.md, and it is
 not a secret. Only the 36-character token form is replaced.
 
+`vault/state/` AND THE RULING ON IT, 2026-08-13.
+
+This tool defaulted its root to `require_dir("captures")`, so `vault/state/` -- a sibling,
+not a child -- was never walked. `vault/state/sessions.json` is the portal's issued-session
+table (`toolkit/portal/sessionstore.py`), and MEASURED on the day this was written it held
+five records, each carrying an `email`, a 36-character `user_id` and a 36-character `token`
+in cleartext, three of the five emails real-shaped rather than the synthetic `@local`
+forms, and the newest dated that day. Nothing was disclosed -- the vault is gitignored and
+RUNBOOK's off-disk list names `client/`, `mirrors/`, `keys/`, `research/` and
+`captures-scrubbed/` and not `state/`. The defect was that the exclusion existed only in
+prose. Neither scrubbed nor deliberately excluded is the one state that is not defensible,
+because the next person to widen that recipe has nothing to read but a paragraph.
+
+THE RULING IS EXCLUSION, and the argument is that a scrubbed session store is worthless
+rather than merely redundant. Every field in the record is a credential (`email`,
+`user_id`, `token`) or a timestamp; pseudonymise the three and what is left says only that
+five logins happened, which the captures already say with the protocol attached.
+`captures-scrubbed/` exists so a scrubbed capture can stand in for the original when
+someone studies the wire; nothing in the session store is wire. So copying it there would
+add a file to the one tree that may leave this machine whose entire content was
+credentials, buying nothing -- and every such file is one more surface for the next
+shape-the-scrubber-does-not-know bug, which is precisely how the `plain` payload shipped.
+
+Exclusion is only worth more than the status quo if it is ENFORCED AND REPORTED, so:
+
+  * `scrub_tree` REFUSES to copy anything under a `state/` path component into the output,
+    counts what it refused, and names it in the manifest. It was already excluded in
+    practice, but only by the accident that the store is `.json` and the walk takes
+    `.jsonl` -- an accident is not a rule, and it breaks silently.
+  * `audit_state` censuses the store by FIELD NAME AND COUNT, never by value, and the
+    census lands in every manifest this tool writes. A reader of the top-level report is
+    told the store exists, how many credentials are in it, and that it was deliberately
+    left behind. Same bargain as the opaque payloads: report rather than pretend.
+  * `scrub_state_json` exists anyway, because "we could not clean it" and "we chose not to
+    ship it" are different claims and this tool should only ever make the second. It is
+    reachable by `--state-out DIR`, deliberately, and REFUSES a destination inside the
+    shareable tree so it cannot become the default by somebody's convenience.
+
+A field in a session record that this tool does not recognise is COUNTED and NAMED rather
+than silently copied, exactly as `plain` is: the record shape is the server's and will
+grow, and the failure that matters is a credential field nobody put on a list.
+
     python toolkit/scrub_captures.py                    # portal -> portal-scrubbed
     python toolkit/scrub_captures.py --check            # report what would be replaced
     python toolkit/scrub_captures.py --src X --out Y
+    python toolkit/scrub_captures.py --state-out DIR    # scrub the session store, on purpose
 
 Proved by `toolkit/test_scrub.py`, which asserts that no original secret value survives
 anywhere in the output -- the check that can actually fail, as opposed to trusting that
@@ -146,10 +189,46 @@ COMPOSITE_KEYS = ("who",)
 OPAQUE_KEYS = ("plain", "payload")
 OPAQUE_STAT = "NOT_CLEANED_opaque_payload"
 
+# --- vault/state, the credential store that is NOT a capture -----------------------
+#
+# The path component that names it, matched case-insensitively anywhere in a relative
+# path rather than only at the root: a tree handed to `--src` may be rooted anywhere.
+CREDENTIAL_STATE_DIR = "state"
+STATE_STAT = "NOT_SCRUBBED_credential_state_records"
+
+# Trees RUNBOOK names as the copy that may leave this machine. `scrub_state_json`'s
+# output is refused into any of them -- see the module docstring's ruling. Matched as a
+# path COMPONENT, so `captures-scrubbed-old` is not accidentally caught and
+# `x/captures-scrubbed/y` is.
+SHAREABLE_TREES = ("captures-scrubbed", "portal-scrubbed")
+
+STATE_POLICY = ("EXCLUDED BY CONSTRUCTION -- audited by name and count, never scrubbed "
+                "into the shareable tree. See scrub_captures.py's module docstring.")
+
+# The session-store record as `toolkit/portal/sessionstore.py` writes it. The first three
+# are already in SECRET_KEYS and are therefore cleaned by `scrub_record`; `issued_utc` is
+# the one field here that is not a credential and must survive unchanged, which is what
+# stops "clean the store" from degenerating into "blank the store".
+STATE_KNOWN_FIELDS = ("email", "user_id", "token", "issued_utc")
+STATE_UNKNOWN_STAT = "NOT_CLEANED_unknown_state_field"
+
+STATE_SHAPE = "session-store"
+STATE_SHAPE_UNKNOWN = "UNRECOGNISED"
+
 # 8-4-4-4-12 hex. Matching the shape rather than the field means a UUID picks up the same
 # pseudonym here as it does in `account_uuid`, so correlation survives across both.
 UUID_RE = re.compile(r"\b[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}"
                      r"-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\b")
+
+
+def path_has_component(rel, name):
+    """True if `name` is a whole path component of `rel`, case-insensitively.
+
+    A substring test would catch `state_machine/` and miss `State/`; both matter on
+    Windows, where the second is the same directory under a different spelling.
+    """
+    parts = os.path.normpath(rel).replace("\\", "/").split("/")
+    return name.lower() in {p.lower() for p in parts}
 
 
 def scrub_composite(value, names, stats):
@@ -244,6 +323,233 @@ def scrub_auth(value, names, stats):
     return f"{parts[0]} {names.get(parts[1], 'tokn')}"
 
 
+def record_field_is_handled(key):
+    """True if `scrub_record` does something deliberate with this key.
+
+    "Deliberate" includes the opaque payloads, which are copied through -- but counted
+    and named, which is a decision rather than a fall-through. Everything else lands in
+    `scrub_record`'s trailing `else` and is copied verbatim with nobody the wiser, which
+    is the failure `plain` cost us and the one `scrub_state_json` reports below.
+    """
+    return (key in SECRET_KEYS or key == "authorization" or key in XML_FIELDS
+            or key in COMPOSITE_KEYS or key in OPAQUE_KEYS)
+
+
+def scrub_state_json(data, names, stats):
+    """The portal session store, anonymised. Returns (scrubbed, unknown_field_names).
+
+    Returns `(None, [])` for anything that is not the session-store shape, because a
+    half-understood credential file must be refused rather than partly cleaned -- a
+    partly cleaned one still looks scrubbed in a listing.
+
+    THE TRAP THIS SHAPE CARRIES, and it is the reason this is not just `scrub_record` in
+    a loop. `sessionstore.issue()` keys the map BY THE TOKEN and stores the same token
+    again inside the record, so the credential is present twice and only one of the two
+    is a value. `scrub_record` walks values; a version that reused it alone would emit
+    a record whose `token` field read `tokn1xxx...` under a map key that was still the
+    real 36-character token. Every check about the record would have passed.
+
+    The key and the record's own `token` go through the SAME `Pseudonyms` instance and
+    therefore land on the same placeholder, so the map stays self-consistent -- the
+    scrubbed store is still a store, with the same shape and the same lengths.
+
+    A field the tool does not recognise is copied through, COUNTED under
+    STATE_UNKNOWN_STAT and NAMED in the return, on the `plain` precedent: the record
+    shape belongs to the server and will grow, and the failure that matters is a
+    credential field nobody put on a list. Names, never values -- the report is written
+    into a manifest and a manifest that quoted the value would be the leak itself.
+    """
+    if not isinstance(data, dict) or not isinstance(data.get("sessions"), dict):
+        return None, []
+
+    unknown = set()
+    sessions = {}
+    for key, rec in data["sessions"].items():
+        new_key = key
+        if isinstance(key, str) and key:
+            new_key = names.get(key, SECRET_KEYS["token"])
+            stats["state_session_key"] = stats.get("state_session_key", 0) + 1
+        if isinstance(rec, dict):
+            for field in rec:
+                if field not in STATE_KNOWN_FIELDS and not record_field_is_handled(field):
+                    unknown.add(field)
+                    stats[STATE_UNKNOWN_STAT] = stats.get(STATE_UNKNOWN_STAT, 0) + 1
+            rec = scrub_record(rec, names, stats)
+        sessions[new_key] = rec
+
+    out = dict(data)
+    out["sessions"] = sessions
+    return out, sorted(unknown)
+
+
+def audit_state_text(name, text):
+    """One session-store file's BYTES -> one census row. Names and counts, never values.
+
+    Pure on purpose, and this is the answer to the same question `Snapshot` answers for
+    the capture tree: the store is LIVE -- `sessionstore.issue()` runs on every login --
+    so anything making two claims about it must make both about the same bytes.
+
+    `Snapshot` is the wrong instrument here and would be actively wrong. It pins a file's
+    LENGTH and raises `SnapshotChanged` if the file is shorter later, which is right for a
+    tree that is appended to. The store is not appended to: `sessionstore._write` dumps
+    the whole map to a temp file and `os.replace`s it, and the map is pruned from 200
+    records to 100 when it grows past 200. So a legitimate rewrite can shrink the file,
+    and a size pin would report the server doing its job as corpus corruption.
+
+    What `os.replace` does give is atomicity -- one `read()` returns one whole version of
+    the file, never a mix -- so the honest instrument is a single read, and every claim
+    made about the string it returned. A session landing mid-run means the census
+    describes the store as it was one moment earlier, which is a true statement about a
+    fixed set of bytes rather than a false one about a moving target.
+    """
+    row = {"file": name, "bytes": len(text)}
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, ValueError) as exc:
+        row.update(shape=STATE_SHAPE_UNKNOWN, sessions=0,
+                   note=f"not JSON ({exc.__class__.__name__}) -- cannot be censused, "
+                        "and must be assumed to carry credentials")
+        return row
+
+    if not isinstance(data, dict) or not isinstance(data.get("sessions"), dict):
+        row.update(shape=STATE_SHAPE_UNKNOWN, sessions=0,
+                   note="no top-level `sessions` map -- this is not the shape "
+                        "sessionstore.py writes, so nothing here knows what is in it")
+        return row
+
+    fields, other = {}, set()
+    for rec in data["sessions"].values():
+        if not isinstance(rec, dict):
+            continue
+        for field in rec:
+            if field in SECRET_KEYS:
+                fields[field] = fields.get(field, 0) + 1
+            elif field not in STATE_KNOWN_FIELDS:
+                other.add(field)
+    row.update(shape=STATE_SHAPE, sessions=len(data["sessions"]),
+               credential_fields=dict(sorted(fields.items())),
+               unrecognised_fields=sorted(other))
+    return row
+
+
+def audit_state(state_dir):
+    """Census `vault/state` without cleaning it, and without reading a value out of it.
+
+    This is what makes the exclusion a decision instead of an absence. A reader of a
+    SCRUB-MANIFEST.json is told the store exists, how many credentials sit in it and that
+    it was deliberately left behind -- which is the whole difference between the state
+    this repo found itself in on 2026-08-13 and the one it wants.
+
+    Every file is read exactly once; see `audit_state_text` for why that is the right
+    instrument rather than a `Snapshot`.
+    """
+    state_dir = os.path.abspath(state_dir)
+    report = {"dir": state_dir, "policy": STATE_POLICY, "files": [],
+              "sessions": 0, "unrecognised": 0}
+    if not os.path.isdir(state_dir):
+        report["note"] = "no such directory -- nothing to exclude"
+        return report
+    for name in sorted(os.listdir(state_dir)):
+        path = os.path.join(state_dir, name)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except OSError as exc:
+            report["files"].append({"file": name, "shape": STATE_SHAPE_UNKNOWN,
+                                    "sessions": 0, "note": f"unreadable ({exc})"})
+            report["unrecognised"] += 1
+            continue
+        row = audit_state_text(name, text)
+        report["files"].append(row)
+        report["sessions"] += row.get("sessions", 0)
+        if row.get("shape") == STATE_SHAPE_UNKNOWN:
+            report["unrecognised"] += 1
+    return report
+
+
+def refuse_shareable_destination(out):
+    """Refuse to write scrubbed credential state into the tree that may leave the machine.
+
+    Not because the output is dangerous -- the pseudonyms carry nothing -- but because
+    the ruling is that the store does not belong there at all, and a ruling that any
+    caller can opt out of by naming a path is not a ruling. See the module docstring.
+    """
+    for tree in SHAREABLE_TREES:
+        if path_has_component(out, tree):
+            raise SystemExit(
+                f"refusing to write scrubbed session state into {out}: `{tree}` is the "
+                "tree RUNBOOK names as the copy that may leave this machine, and the "
+                "session store is EXCLUDED from it by construction. A scrubbed store "
+                "says only that logins happened, which the captures already say with "
+                "the protocol attached -- so this would add a file whose entire content "
+                "was credentials and buy nothing. Name a destination outside it.")
+
+
+def scrub_state_tree(src, out, dry_run=False):
+    """Scrub every `*.json` session store under `src` into `out`. Deliberate, never default.
+
+    Reachable only from `--state-out`. It exists so this tool can say "we chose not to
+    ship the store" rather than "we could not clean it" -- two different claims, and only
+    the second would be an excuse.
+    """
+    src, out = os.path.abspath(src), os.path.abspath(out)
+    if os.path.normcase(src) == os.path.normcase(out):
+        raise SystemExit("refusing to scrub a directory into itself -- the store is live "
+                         "server state and this tool never edits it")
+    refuse_shareable_destination(out)
+
+    names, stats = Pseudonyms(), {}
+    rows, refused, unknown_fields = [], [], set()
+    for name in sorted(os.listdir(src)):
+        path = os.path.join(src, name)
+        if not os.path.isfile(path) or not name.endswith(".json"):
+            continue
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            text = fh.read()
+        row = audit_state_text(name, text)
+        rows.append(row)
+        if row.get("shape") != STATE_SHAPE:
+            # Refused rather than partly cleaned: a half-cleaned credential file still
+            # looks scrubbed in a listing, which is the worst of both.
+            refused.append(name)
+            continue
+        scrubbed, unknown = scrub_state_json(json.loads(text), names, stats)
+        unknown_fields.update(unknown)
+        if not dry_run:
+            os.makedirs(out, exist_ok=True)
+            with open(os.path.join(out, name), "w", encoding="utf-8") as fh:
+                json.dump(scrubbed, fh, indent=1)
+
+    if not dry_run:
+        os.makedirs(out, exist_ok=True)
+        with open(os.path.join(out, "SCRUB-MANIFEST.json"), "w", encoding="utf-8") as fh:
+            json.dump({
+                "source": src,
+                "kind": "credential session state",
+                "census": rows,
+                "distinct_secrets_replaced": names.count(),
+                "replacements_by_field": dict(sorted(stats.items())),
+                "REFUSED_unrecognised_shape": refused,
+                "NOT_CLEANED_unknown_state_fields": sorted(unknown_fields),
+                "note": "Placeholders are sequential, not derived from the values. The "
+                        "map key IS the token and is replaced with the same placeholder "
+                        "as the record's own `token` field. Lengths are preserved; UUID "
+                        "SHAPE is not -- a placeholder does not parse as a UUID, and "
+                        "nothing loads this copy.",
+                "WARNING": (
+                    f"{len(unknown_fields)} session field(s) were not recognised and were "
+                    f"copied through UNCLEANED: {sorted(unknown_fields)}. The record "
+                    f"shape belongs to the server and grows; a field nobody listed is "
+                    f"exactly how the account email shipped inside a `plain` payload. "
+                    f"Do not treat this output as clean until they are ruled on."
+                ) if unknown_fields else
+                "No unrecognised session fields: every field here was ruled on.",
+            }, fh, indent=2)
+    return rows, refused, sorted(unknown_fields), stats, names.count()
+
+
 class SnapshotChanged(Exception):
     """A snapshotted file no longer holds the bytes the snapshot recorded.
 
@@ -326,7 +632,7 @@ class Snapshot:
         return self.text(rel, encoding).split("\n")
 
 
-def scrub_tree(src, out, dry_run=False, skip=(), snapshot=None):
+def scrub_tree(src, out, dry_run=False, skip=(), snapshot=None, state_audit=None):
     """Scrub every .jsonl under `src` AND its subdirectories into `out`.
 
     Walks, because the credential was never only in captures/portal. Directory
@@ -336,6 +642,19 @@ def scrub_tree(src, out, dry_run=False, skip=(), snapshot=None):
     A caller whose own passes have to agree with these counts must pass the same
     snapshot it read from; see `Snapshot` for the run that made that necessary. `skip`
     belongs to building the snapshot, so passing both is refused rather than ignored.
+
+    ANYTHING UNDER A `state/` COMPONENT IS REFUSED AND NAMED, never written. That was
+    already true in practice on 2026-08-13, but only by the accident that
+    `sessionstore.py` writes `.json` and this walk takes `.jsonl` -- rename the store or
+    point `--src` at a tree that keeps one line per session and the credentials land in
+    the shareable copy with nothing to say so. An accident is not a rule; it breaks
+    silently and it breaks green.
+
+    `state_audit` is `audit_state`'s census, stamped into the manifest so a reader of the
+    top-level report learns the store exists and was left behind on purpose. `main()`
+    supplies it. It is not computed here because this function is also handed synthetic
+    trees by tests and by `livesession.py`, and a scrub of a temp directory has no
+    business reaching into the vault.
     """
     src, out = os.path.abspath(src), os.path.abspath(out)
     if os.path.normcase(src) == os.path.normcase(out):
@@ -355,7 +674,16 @@ def scrub_tree(src, out, dry_run=False, skip=(), snapshot=None):
     files = records = 0
     unscrubbed = [rel for rel, _n in snapshot.raw()]
     opaque_files = []
+    state_files = []
     for rel, _size in snapshot.jsonl():
+        if path_has_component(rel, CREDENTIAL_STATE_DIR):
+            # Not counted in `files`/`records` either: it is not part of the corpus, and
+            # folding it in would make the record arithmetic downstream a claim about a
+            # set this function refuses to write.
+            state_files.append(rel)
+            stats[STATE_STAT] = stats.get(STATE_STAT, 0) + sum(
+                1 for line in snapshot.lines(rel) if line.strip())
+            continue
         files += 1
         opaque_before = stats.get(OPAQUE_STAT, 0)
         lines = []
@@ -386,6 +714,13 @@ def scrub_tree(src, out, dry_run=False, skip=(), snapshot=None):
                 "replacements_by_field": dict(sorted(stats.items())),
                 "NOT_SCRUBBED": unscrubbed,
                 "NOT_CLEANED_opaque_payloads": opaque_files,
+                "NOT_SCRUBBED_credential_state": state_files,
+                "credential_state_census": state_audit if state_audit is not None else {
+                    "policy": STATE_POLICY,
+                    "note": "not audited by this call -- only `main()` reaches into the "
+                            "vault. A synthetic or per-session scrub says nothing about "
+                            "vault/state either way, and pretending otherwise would be "
+                            "an all-clear nobody measured."},
                 "note": "Placeholders are sequential, not derived from the values. "
                         "No mapping is stored anywhere. Lengths are preserved. "
                         ".raw files are NOT scrubbed and are not copied -- they are "
@@ -523,19 +858,29 @@ def main():
                     help="report what would be replaced; write nothing")
     ap.add_argument("--force", action="store_true",
                     help="replace an existing output directory")
+    ap.add_argument("--state-out", default=None, metavar="DIR",
+                    help="ALSO scrub vault/state's session store into DIR. Off by "
+                         "default and refused into the shareable tree -- the store is "
+                         "excluded by construction; see the module docstring")
     args = ap.parse_args()
 
     src = args.src or vaultpath.require_dir(
         "captures", why="the credential scrub reads the capture tree")
     out = args.out or os.path.join(os.path.dirname(src), "captures-scrubbed")
+    state_dir = os.path.join(os.path.dirname(src), CREDENTIAL_STATE_DIR)
 
     if not args.check and os.path.isdir(out):
         if not args.force:
             raise SystemExit(f"{out} exists. Re-run with --force to replace it.")
         shutil.rmtree(out)
 
+    # Audited before the scrub writes anything, so the census in the manifest is the
+    # store as it stood when this run began rather than after it.
+    state = audit_state(state_dir)
+
     files, records, stats, distinct, unscrubbed = scrub_tree(
-        src, out, dry_run=args.check, skip=("captures-scrubbed", "portal-scrubbed"))
+        src, out, dry_run=args.check, skip=("captures-scrubbed", "portal-scrubbed"),
+        state_audit=state)
 
     print(f"source   {src}")
     print(f"files    {files}")
@@ -555,6 +900,47 @@ def main():
         print("  as UTF-16 inside exactly such a blob (MEASURED, 271 captures), so the")
         print(f"  output tree is NOT safe to hand to anyone. {out}/SCRUB-MANIFEST.json")
         print("  names every file that still carries one.")
+
+    # Always printed, even when the store is absent or empty: "there is nothing there"
+    # and "nobody looked" are different results, and only one of them is an all-clear.
+    print(f"\nCREDENTIAL STATE, excluded by construction: {state_dir}")
+    if state.get("note"):
+        print(f"  {state['note']}")
+    for row in state["files"]:
+        if row.get("shape") == STATE_SHAPE:
+            fields = ", ".join(f"{k}x{n}" for k, n
+                               in row.get("credential_fields", {}).items())
+            print(f"  {row['file']:28s} {row['sessions']:4d} session(s)  {fields}")
+            if row.get("unrecognised_fields"):
+                print(f"      unrecognised field(s): {row['unrecognised_fields']}")
+        else:
+            print(f"  {row['file']:28s} {STATE_SHAPE_UNKNOWN} -- {row.get('note', '')}")
+    if state["sessions"]:
+        print(f"  {state['sessions']} cleartext session record(s) NOT scrubbed and NOT")
+        print("  copied. They are live server state, not evidence: pseudonymise the")
+        print("  three credential fields and what is left says only that logins")
+        print("  happened. `--state-out DIR` writes a scrubbed copy if you want one.")
+    if state["unrecognised"]:
+        print(f"  {state['unrecognised']} file(s) are NOT the shape sessionstore.py "
+              f"writes -- nothing here knows what is in them.")
+    if stats.get(STATE_STAT):
+        print(f"  {stats[STATE_STAT]} record(s) under a `state/` component inside the "
+              f"capture tree were REFUSED by the scrub itself.")
+
+    if args.state_out:
+        rows, refused, unknown, sstats, sdistinct = scrub_state_tree(
+            state_dir, args.state_out, dry_run=args.check)
+        print(f"\nsession store scrubbed: {len(rows)} file(s), "
+              f"{sdistinct} distinct value(s) replaced")
+        for field, n in sorted(sstats.items()):
+            print(f"  {field:24s} {n}")
+        if refused:
+            print(f"  REFUSED (unrecognised shape, not written): {refused}")
+        if unknown:
+            print(f"  NOT CLEANED, copied through: field(s) {unknown}")
+        print("  (dry run -- nothing written)" if args.check
+              else f"  wrote    {os.path.abspath(args.state_out)}")
+
     print("\n(dry run -- nothing written)" if args.check
           else f"\nwrote    {out}")
     return 0
