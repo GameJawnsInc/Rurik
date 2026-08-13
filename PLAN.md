@@ -1280,7 +1280,7 @@ answering pings; if it still asserts at `ChCliSkill.cpp:1022`, the whole reading
 wrong. Score it on c2s traffic after the K press, **never on the socket**:
 
 ```
-python C:\gd\Rurik\.claude\worktrees\sweet-euler-697883	oolkit\harness\session.py --keep-open --shots 10 --game-args '--probe profession_spawn'
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_spawn'
 ```
 
 **Run it by ABSOLUTE PATH, and check two lines of `gamesrv.log` before believing the
