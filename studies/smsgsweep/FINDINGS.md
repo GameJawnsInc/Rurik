@@ -57,9 +57,11 @@ own handler and its callee. **The client's own stack names the opcode.**
 
 ## 2. The twenty that stop the client — seventeen asserts and three faults
 
-Each localised to ONE opcode. **The constraint is ours; ArenaNet's assert text stays in
-the vault** (`vault/captures/harness/*/crash-dialog.txt`), per `CLAUDE.md`'s provenance
-boundary — a derived table may carry the constraint and must leave the expression out.
+Each localised to ONE opcode. The constraint below is in **our words**, and §2b says why:
+not because citing ArenaNet's assert text is refused — `PLAN.md` §7 Q3, refined
+2026-08-12, rules that a single assert cited as evidence is a MEASUREMENT and that the
+crash dialog is not extraction at all — but because 86 rows is the ACCUMULATION that
+`toolkit/provlint.py` exists to stop. Raw text: `vault/captures/harness/*/crash-dialog.txt`.
 
 | opcode | what the payload must satisfy | so the field is |
 |---|---|---|
