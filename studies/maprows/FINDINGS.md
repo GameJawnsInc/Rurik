@@ -57,8 +57,15 @@ Everything here is reproducible with `toolkit/clientscan/maprows.py`.
   connections, three *different* named zones — Ascalon City, Lakeside County,
   Ashford Abbey — loaded the one file `0x1B97D`. **Row → name is one-to-many,
   measured, not assumed.** (§4)
-- **Two corrections to `mapdata/FORMAT.md`**, one of them load-bearing for the
-  server: ArenaNet sends the **masked** file id, not the bit-31 form (§8).
+- **Bit 31 is a RENAME, not a spelling — and the first version of §8 got this
+  wrong and is retracted there.** The client never masks: the index stores the id
+  verbatim (`0x0047C027`) and the lookup is an exact 32-bit compare
+  (`0x0047AA20`). `FcArchive` renames a row to `id | 0x80000000` when it has
+  requested a replacement, and `DnArchive` re-links the plain id when the
+  replacement is installed. ArenaNet always sends the plain id; our `dat_study`
+  simply cannot answer it, while the archive the live client actually read binds
+  `0x1B97D` to a different row entirely. **A `file_id` is archive STATE, not a
+  property of the map.** (§8)
 
 ---
 
@@ -213,17 +220,26 @@ before the archive is touched.
 
 Six live captures, all connections, decoded whole through `tape.decode_all`.
 **GAME_SMSG `0x0195` field 1 is the map file id**: 9 of 9 instance loads carry
-`0x1B97D`, which resolves to MFT row 7982.
+`0x1B97D`.
 
 **GAME_SMSG `0x0199` field 2 is the instance's map id.** It holds exactly one
 value per connection in 9 of 9, and those values resolve through
 `s_missionClientData` to:
 
-| map id | name | file id | row |
-|---|---|---|---|
-| 146 | Lakeside County | `0x1B97D` | 7982 |
-| 148 | Ascalon City | `0x1B97D` | 7982 |
-| 164 | Ashford Abbey | `0x1B97D` | 7982 |
+| map id | name | file id |
+|---|---|---|
+| 146 | Lakeside County | `0x1B97D` |
+| 148 | Ascalon City | `0x1B97D` |
+| 164 | Ashford Abbey | `0x1B97D` |
+
+**A ROW IS DELIBERATELY NOT IN THAT TABLE, and an earlier version of it named
+row 7982 in all three cells.** That was wrong, and it was wrong in an instructive
+way: `archive.py`'s `file_id_table()` registers a bit-31 id under BOTH its raw
+and masked forms, which is our convenience and **not what the client does** —
+the client compares exactly (§8). So "`0x1B97D` → row 7982" was an artifact of
+our own reader. In the archive the live client was actually reading, `0x1B97D`
+binds to **row 177262**. The file id is the durable fact here; the row is a
+property of one copy of the archive.
 
 **Row → name is one-to-many, and this is the measurement that proves it.**
 `FORMAT.md` recorded 101 file ids claimed by more than one map id and left
@@ -349,34 +365,107 @@ The three disagreements are worth more than the rate:
 
 ---
 
-## 8. Two corrections to `studies/mapdata/FORMAT.md`
+## 8. Bit 31 is a RENAME, and my own correction here was wrong
 
-**(a) ArenaNet sends the MASKED file id.** OBSERVED. `FORMAT.md` records, and
-`archive.py`'s docstring repeats, that "a server must send the bit-31 id exactly
-as the archive stores it" and that the masked `0x1B97D` is refused. But
-ArenaNet's own live server sent **`0x1B97D`, masked**, in 9 of 9 captured
-instance loads, and the retail client loaded Pre-Searing from it.
+**RETRACTED 2026-08-13, same day it was written.** This section first claimed
+"ArenaNet sends the MASKED file id" and concluded that the client must normalise
+the high bit. **The client does not mask, anywhere.** The reasoning was a
+plausible inference from two archives, and it was wrong because it never asked
+which archive the live client was actually reading. Kept rather than deleted,
+because the shape of the mistake is the useful part: three measured facts, one
+unasked question, and a confident conclusion.
 
-MEASURED, to remove the obvious escape: `0x8001B97D` is stored with bit 31 in
-**both** the owner's live install and `dat_study`, and `0x1B97D` is stored
-plainly in **neither**. So the client must normalise the high bit when resolving
-a map file id, and "the client does not mask" is **CONTESTED at minimum and
-probably false**.
+### What the code does — MEASURED
 
-INFERRED, not established: `FORMAT.md`'s own transcript of the failure reads
-`Map file '0x01b97d' failed to load. Attempting to re-bloat.` — the client
-resolved the id and then failed on the map's *Bloated stream*, which is the state
-`test_rebloat.py` deliberately creates. A re-bloat confound would explain both
-observations. **This has not been re-run, and the server's current behaviour
-should not be changed on the strength of a hypothesis.** The safe reading is that
-the bit-31 form is known to work and the masked form is what retail uses.
+The index built from MFT row 2 stores the id **verbatim**, and the lookup is an
+**exact 32-bit equality test**:
 
-**(b) Four bit-31 ids land on map rows, not two.** MEASURED. `FORMAT.md` says
-"two of the 25 land on map-flagged rows". Reading the raw pairs:
-`0x8001B97D`→7982, `0x8005E728`→7982, `0x8001C539`→20118, `0x8005E715`→20118 —
-**two rows, each named by two bit-31 ids**, which is the head/partner pair. Also
-the count is archive-dependent: 25 in `dat_study`, **29** in the owner's live
-install, the four extra having accumulated since the snapshot.
+```
+0047C025  mov  eax, [edi]        ; pair.fileId
+0047C027  mov  [esi+0xc], eax    ; node->fileId = pair.fileId   -- bit 31 KEPT
+...
+0047AA14  mov  eax, [eax+edi*4]  ; bucket chain head
+0047AA20  cmp  [eax+0xc], esi    ; curr->fileId == fileId       -- EXACT, no mask
+0047AA2C  xor  eax, eax          ; MISS: return 0, no retry
+```
+
+Bucket selection does `and ecx, m_hashMask`, so `0x1B97D` and `0x8001B97D` land
+in the **same chain** — only the exact compare separates them. Neither open-by-id
+wrapper retries. Searched and NOT FOUND: `and reg, 0x7FFFFFFF` anywhere in
+`0x00460000..0x004A0000` (0 sites), `0x7FFFFFFF` at all in Map/MapData
+`0x00700000..0x00720000` (0), `bt`/`bts`/`btr`/`btc` on bit 31 image-wide (0),
+and the shift-pair spelling of a bit-31 clear image-wide (0) — every constant
+anchored at every alignment on capstone's own encoding record.
+
+### What bit 31 means — SOURCED and MEASURED
+
+It is a **rename performed by the file client**, not a spelling. `0x007D7B70` is
+twelve instructions: bind `fileId | 0x80000000` to the row, then delete the plain
+name. Its callers sit in `FcArchive`'s request path, in the branch that clears a
+stale file out of the archive **before asking for a replacement**. `0x004766F0`,
+reached only from `DnArchive`, is the exact inverse: it re-links the plain id to
+the installed row and deletes the bit-31 name. The file client asserts its input
+has the bit clear —
+
+```
+0x007d8b1f  FcArchive:1128   (int) fileId > 0
+```
+
+— so a bit-31 id is never valid input; it only ever exists as archive **state**.
+A row named `id | 0x80000000` is a row whose replacement is pending, and its plain
+id genuinely stops resolving until the replacement is installed.
+
+### The question I failed to ask — and the measurement that settles everything
+
+The live captures were replayed against `dat_study` and `C:\gw`. **Neither is the
+archive the live client was reading.** It played from
+`vault/run-live/2026-07-29_221c13772c7a/Gw.dat`, and that copy says:
+
+| archive | `0x1B97D` plain | `0x8001B97D` | bit-31 ids |
+|---|---|---|---|
+| `run-live` — what the live client actually read | **row 177262** | absent | **9** |
+| `dat_study` | absent | row 7982 | 25 |
+| `C:\gw` | absent | row 7982 | 29 |
+
+Row 177262 is flags 259, `ffna` type 3, 24 chunks, 2,925,267 B decompressed —
+the Pre-Searing map, on a **new row**; old row 7982 is freed and reused (flags
+`0xFF03`). So the replacement had been installed on that copy, `DnArchive`
+re-linked the plain name, and 16 of the 25 pending renames had cleared.
+
+**The re-link IS persisted to MFT row 2 on disk** — which is the one thing the
+disassembly could not settle, and the archive answers it directly.
+
+So every observation reconciles with no masking at all:
+
+- **ArenaNet always sends the plain, logical id.** `0x1B97D` is correct and it
+  resolved, because that client's archive had it bound.
+- **Our archive refuses it correctly.** `dat_study` has the map renamed away with
+  a replacement pending, so `0x1B97D` misses. `FORMAT.md`'s transcript —
+  `Map file '0x01b97d' failed to load. Attempting to re-bloat.` — is the miss
+  path at `0x00707845`, and the retry at `0x00707866` uses **the same id** with a
+  different bloat flag. Re-bloat is LOCAL. No file server is involved, so the
+  loopback server was never a confound and the re-bloat hypothesis above is dead
+  too.
+- **Both forms "worked" for the reason a state variable works**: whichever name
+  that copy currently binds.
+
+### What this means for the server — and it is not what §8 first said
+
+The rule is **not** "send the id exactly as the archive stores it". It is:
+**send the plain logical id, and serve from an archive that binds it.** A
+`file_id` in `content/maps.toml` is therefore **archive-state-dependent**, not a
+property of the map — `0x8001B97D` is right for `dat_study` and wrong for
+`run-live`, where the same map is `0x1B97D` on a different row. Any content row
+carrying a bit-31 id is recording a transient state of one copy.
+
+**(b) Four bit-31 ids land on map rows, not two.** MEASURED, and unaffected by
+the above. `FORMAT.md` says "two of the 25 land on map-flagged rows". Reading the
+raw pairs: `0x8001B97D`→7982, `0x8005E728`→7982, `0x8001C539`→20118,
+`0x8005E715`→20118 — two rows, each named by two ids. Across all 18 bit-31 rows
+in `C:\gw`, **0 of 18 also carry a plain id**, which is exactly what a rename
+predicts. The population is 2 map files and 14 ATEX textures, so bit 31 is not
+tied to a content class; and the set both grows and shrinks with play (25 in
+`dat_study`, 29 in `C:\gw`, 9 in `run-live`).
 
 ---
 

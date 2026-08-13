@@ -2457,9 +2457,28 @@ accessor's assert at `0x005A8580`. `textrec.combine()` moves from UPSTREAM to
 `FORMAT.md`'s "the client does not mask" is **CONTESTED**: ArenaNet's own server
 sent the MASKED `0x1B97D` in 9 of 9 live instance loads.
 
-**Next, in cost order.** (1) Read the mask on the `ExtractArchiveFileId` caller
-chain — addresses are in §3, and it settles the bit-31 question that has been
-open since 2026-08-06. (2) The remaining 296 rows are limited by information, not
+**(1) IS DONE, SAME DAY, AND IT REFUTED THE SESSION'S OWN CORRECTION.** The
+client never masks — the index stores the id verbatim (`0x0047C027`), the lookup
+is an exact 32-bit compare (`0x0047AA20`), and no retry exists on the map path.
+**Bit 31 is a RENAME**: `FcArchive` binds `id | 0x80000000` and deletes the plain
+name when a replacement has been requested (`0x007D7B70`), and `DnArchive`
+re-links the plain id once it is installed (`0x004766F0`). The question open
+since 2026-08-06 is closed.
+
+What settled it was not the disassembly but a question nobody had asked: **which
+archive the live client was reading.** It was `vault/run-live/`, and that copy
+binds the PLAIN `0x1B97D` — to row 177262, not 7982 — and carries 9 bit-31 ids
+against `dat_study`'s 25. So ArenaNet sends the plain logical id, our study copy
+cannot answer it, and both "the masked form is refused" and "the masked form
+works" were true of different copies.
+
+**Operational consequence, and it touches `content/maps.toml`:** a `file_id` is
+archive STATE, not a property of the map. `0x8001B97D` is right for `dat_study`
+and wrong for `run-live`. Any content row carrying a bit-31 id records a
+transient state of one copy, and a server should send the plain id and serve from
+an archive that binds it. Nothing was changed on that basis yet.
+
+**Next.** (2) The remaining 296 rows are limited by information, not
 effort: the archive carries a map's dims and nothing that places it on a
 continent. A live capture on a known-named zone yields one exact `(map id, file
 id)` pair at zero ambiguity, which is the cheapest evidence left and needs only
