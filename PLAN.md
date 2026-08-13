@@ -1265,10 +1265,15 @@ surfaces instead of only the first.
 `*skill` — nothing registered for profession 12, rather than "12 is invalid". **Send a
 skillbar for the custom profession before opening the panel** and see whether the null
 clears. If it does, the mechanism is population, not bounds, and most of `ATTRIBUTES.md`'s
-191 edits are not on the critical path.
+191 edits are not on the critical path. **That probe exists as of 2026-08-12:
+`profession_skillbar`**, run 2's A/B with the same bar delivered again AFTER the change
+to 12 — every prior run's bar arrived in the spawn burst, before the profession moved —
+and the re-send held constant across both arms so the arms still differ by one byte. It
+needs an operator and a loopback client run, nothing else.
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
-`profession_sentinel`, `profession_max` (`toolkit/authsrv/probes.py`). L0 is done —
+`profession_skillbar`, `profession_sentinel`, `profession_max`
+(`toolkit/authsrv/probes.py`). L0 is done —
 `agents.py`'s `CHAR_PROFESSIONS_MAX = 6` was a live bug that refused professions 7–10.
 
 ---
