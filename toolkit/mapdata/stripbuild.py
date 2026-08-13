@@ -21,6 +21,13 @@ FINDINGS 42 removed each one against a live client, one run apiece:
   0x11000002 Terrain Deps GENERATED   absent -> assert `deps`, TrnCreate:242
   0x10000008 Path         GENERATED   absent -> compiles, but NO MESH
 
+An EIGHTH chunk exists exactly when the map places props: 0x11000004 Props
+Dependencies, GENERATED from run-time file ids, rides immediately after the
+props chunk the way retail carries it. FINDINGS 42's removal ladder ran on a
+zero-prop map, which is why it is not in the table above; its absence has
+never been client-measured against a props-bearing map and `build()` refuses
+to produce that configuration.
+
 FINDINGS 34's list, taken from the dispatch, had Collision in it (it is not
 required) and did not have Terrain Dependencies (it is). This module follows the
 measurement.
@@ -83,15 +90,24 @@ import terrain as trn_mod  # noqa: E402
 HEADER = 0x10000000
 MAP_PARAMS = 0x1000000C
 PROPS = 0x10000004
+PROPS_DEPS = 0x11000004
 ZONES = 0x10000003
 TERRAIN = 0x10000002
 TERRAIN_DEPS = 0x11000002
 PATH = 0x10000008
 
-# The donor's own order. Zones before Terrain is the load-bearing part.
-ORDER = (HEADER, MAP_PARAMS, PROPS, ZONES, TERRAIN, TERRAIN_DEPS, PATH)
+# The donor's own order, which is also the corpus's single total order
+# (FINDINGS §5: 321 ordered pairs, 0 contradictions). Zones before Terrain is
+# the load-bearing part. PROPS_DEPS rides immediately after PROPS, exactly
+# where retail puts it, and is present EXACTLY when the props chunk holds a
+# prop -- `props.model` is an INDEX into it (0x0073DE0E), so a map with props
+# and no list has models that cannot resolve, and a map without props never
+# carries the list (the three zero-prop retail maps are exactly the three
+# with no props-deps chunk).
+ORDER = (HEADER, MAP_PARAMS, PROPS, PROPS_DEPS, ZONES, TERRAIN, TERRAIN_DEPS,
+         PATH)
 BORROWED = (HEADER, ZONES)
-GENERATED = (MAP_PARAMS, PROPS, TERRAIN, TERRAIN_DEPS, PATH)
+GENERATED = (MAP_PARAMS, PROPS, PROPS_DEPS, TERRAIN, TERRAIN_DEPS, PATH)
 
 CELL = terrain_pitch = trn_mod.CELL_PITCH        # 96.0, and the client's XY_DIST
 REFERENCE_PARTNER = 46197                        # the 32x32 template's stripped row
@@ -258,10 +274,11 @@ class BuildReport:
         return self.generated / total if total else 0.0
 
     def borrowed_chunks(self):
-        return tuple(c for c in ORDER if self.origin[c] == "borrowed")
+        return tuple(c for c in ORDER
+                     if c in self.origin and self.origin[c] == "borrowed")
 
     def show(self):
-        print(f"stripped map: {len(self.blob)} B, {len(ORDER)} chunks, "
+        print(f"stripped map: {len(self.blob)} B, {len(self.sizes)} chunks, "
               f"sha256 {hashlib.sha256(self.blob).hexdigest()[:16]}")
         print(f"  dims {self.dims[0]}x{self.dims[1]}  rect {self.rect}  "
               f"pitch {(self.rect[2] - self.rect[0]) / self.dims[0]:.1f}")
@@ -271,6 +288,8 @@ class BuildReport:
                  "  (10..30 -- walkable under one threshold set, unknown "
                  "under the other)"))
         for cid in ORDER:
+            if cid not in self.sizes:
+                continue
             print(f"    0x{cid:08X} {mapchunks.chunk_label(cid)[:26]:<28}"
                   f"{self.sizes[cid]:>6} B   {self.origin[cid]}")
         print(f"  GENERATED {self.generated} B "
@@ -280,12 +299,20 @@ class BuildReport:
 
 
 def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
-          tiles=None, sync_hash=0, sync_flag=0, props=None):
+          tiles=None, sync_hash=0, sync_flag=0, props=None,
+          prop_dep_ids=None):
     """A whole Stripped map. `heights` is in `Terrain.index` order, integers.
 
     `props` is a `props.StrippedProps`, or None for an empty one. Empty is not
     the same as absent: FINDINGS 42 removed the chunk and the client refused the
     map, so `minimal()` is the floor rather than a shortcut.
+
+    `prop_dep_ids` is the model file-id list for chunk 0x11000004, REQUIRED
+    exactly when `props` holds a prop and REFUSED when it does not -- retail's
+    own pairing. Every prop's `model` is an index into this list, and an index
+    past its end is refused here because the client-side failure mode of an
+    unresolvable model has never been measured and this module is not the
+    place to find out by accident.
     """
     for cid in BORROWED:
         if cid not in constants:
@@ -305,6 +332,30 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
     payload[PROPS] = sp.encode()
     origin[PROPS] = f"generated, {len(sp.props)} props"
 
+    dep_list = list(prop_dep_ids or ())
+    if sp.props and not dep_list:
+        raise ValueError(
+            f"{len(sp.props)} props but no prop_dep_ids. Every prop's `model` "
+            f"is an INDEX into chunk 0x11000004 (0x0073DE0E), so a map that "
+            f"places props must list the model files they resolve to. Pass "
+            f"the file ids -- ids are measurements and are read at run time.")
+    if dep_list and not sp.props:
+        raise ValueError(
+            f"{len(dep_list)} prop_dep_ids but no props. Retail never ships "
+            f"the list without the props: the three zero-prop maps are "
+            f"exactly the three with no props-deps chunk.")
+    over = [(i, p.model) for i, p in enumerate(sp.props)
+            if p.model >= len(dep_list)]
+    if over:
+        i, m = over[0]
+        raise ValueError(
+            f"prop {i} names model {m} but prop_dep_ids lists only "
+            f"{len(dep_list)} file(s); an index past the list cannot resolve "
+            f"and the client's failure mode for that has never been measured")
+    if dep_list:
+        payload[PROPS_DEPS] = mapchunks.encode_dependencies(dep_list)
+        origin[PROPS_DEPS] = f"generated from {len(dep_list)} run-time ids"
+
     trn = stx.StrippedTerrain.build(dim_x, dim_y, heights, tiles=tiles)
     payload[TERRAIN] = trn.encode()
     origin[TERRAIN] = "generated"
@@ -318,18 +369,24 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
     origin[PATH] = "generated"
 
     blob = encode(payload)
-    return BuildReport(blob, origin, {c: len(payload[c]) for c in ORDER},
+    return BuildReport(blob, origin, {c: len(payload[c]) for c in payload},
                        slope, rect, (dim_x, dim_y))
 
 
 def encode(payload):
-    """The container, in ORDER. Refuses any other, because order is a gate."""
+    """The container, in ORDER. Refuses any other, because order is a gate.
+
+    PROPS_DEPS is the one chunk allowed to be absent -- `build()` pairs it
+    with the props exactly as retail does. Everything else is FINDINGS 42's
+    measured requirement, one client run per removal.
+    """
     ids = tuple(payload)
-    if set(ids) != set(ORDER):
-        raise BadOrder(f"expected exactly {[f'0x{c:08X}' for c in ORDER]}, "
+    want = set(ORDER) - ({PROPS_DEPS} if PROPS_DEPS not in ids else set())
+    if set(ids) != want:
+        raise BadOrder(f"expected exactly {[f'0x{c:08X}' for c in sorted(want)]}, "
                        f"got {[f'0x{c:08X}' for c in ids]}")
     chunks = [mapfile.Chunk(cid, payload[cid], mapfile.FORM_OPAQUE)
-              for cid in ORDER]
+              for cid in ORDER if cid in payload]
     return mapfile.MapFile(chunks=chunks).encode()
 
 

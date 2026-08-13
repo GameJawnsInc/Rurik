@@ -358,9 +358,17 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   percentage; the generated dependency chunk lands byte-identical to ArenaNet's,
   which the archive could have refused. **Since 2026-08-12 props is GENERATED**,
   so BORROWED is Header and Zones alone -- 42 bytes, down from 54, and 98.20%
-  of the map ours. Sections 0-3c score 27 on placeholder constants of our own
-  and need no vault, against a floor of 40 -- and 27 is the first number that
-  path ever printed, because `vaultpath.require_dir` raises SystemExit, a
+  of the map ours. **And since the same day the props-deps pairing is a rule
+  with teeth (section 3d, for rung e10d): a build placing a prop must pass
+  `prop_dep_ids` -- `model` is an INDEX into chunk 0x11000004, generated from
+  run-time file ids into retail's own slot right after the props chunk -- and
+  a build without props must NOT, because the three zero-prop retail maps are
+  exactly the three without the chunk. Both directions refuse, and a model
+  index past the list is refused too, since the client's failure mode for an
+  unresolvable model has never been measured.** Sections 0-3d score 33 on
+  placeholder constants of our own and need no vault, against a floor of 46 --
+  and the vault-less score (27 then, 33 now) was the first number that path
+  ever printed, because `vaultpath.require_dir` raises SystemExit, a
   BaseException, so the `except Exception` around it never fired: a vault-less
   run died before the verdict, its `LEDGER.skip` had never executed once (one
   argument where it takes two), and the 30 the comment claimed was a number
@@ -386,9 +394,21 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   is 285,670 of 285,670 prop positions inside their map's rect. What the corpus
   CANNOT decide is asserted too: tag 6's count must be a u16 because one map
   holds 611 entries, while tag 4's largest is 81, so its width is undecided and
-  the check says so -- if it ever reddens the ambiguity is gone. Sections 0-3c
-  need no vault and score 58 against a floor of 70; `--all` is 79 checks in
-  ~200 s, one pass over the archive rather than the three the first draft took.
+  the check says so -- if it ever reddens the ambiguity is gone.
+  **And since 2026-08-12 section 9 is the CROSS-STREAM oracle, FINDINGS 44's
+  strongest result promoted out of prose**: the Bloated `0x20000004` tag-0
+  section's declared u32 equals `2 + 48*props + 8*points` PREDICTED from the
+  Stripped chunk alone -- 349/349 under `--all`, five rival formulas matching
+  0 of 335 discriminating maps -- and beneath the size the two streams agree
+  record for record via `BloatedProps.corresponds()` (model, position bytes,
+  flags, point count, world-coordinate ring, and the scale FORMULA holding
+  EXACTLY, which took that reading from INFERRED to compiler-corroborated).
+  `BloatedProps` is READ-ONLY and section 3d asserts it has no encode --
+  five of its six sections are opaque, so a round trip could only be a
+  memcpy. Sections 0-3d
+  need no vault and score 81 against a floor of 99; `--all` is 110 checks
+  reading BOTH streams of every map, MEASURED 2026-08-12 at 718 s against the
+  201 s the Stripped-only sweep took.
   **The client was read AFTERWARDS and agreed**, which is the shape that makes
   this worth trusting: the framing came out of the archive alone, and the
   disassembly of `0x0073E260` -- a DIFFERENT pipeline from the one `PROPS.md`

@@ -1,4 +1,4 @@
-"""The Stripped props chunk: read and write `0x10000004`.
+r"""The Stripped props chunk: read and write `0x10000004`.
 
 The last chunk `stripbuild.py` had to borrow, and the one that matters most,
 because props is where OBJECTS live. FINDINGS 34 makes it a hard gate -- no
@@ -112,24 +112,35 @@ and corrects the chain `studies/customarea/PROPS.md` was following:
     256 steps. This module stores the BYTES, which is what the file holds; the
     formulas are recorded here so a caller can place a prop at a real angle.
 
-THE CROSS-STREAM ORACLE, which is the strongest single result and belongs to
-the client-side read rather than to this module. The BLOATED props record is 48
-bytes with an 8-byte ring point (`0x0073D453`, `0x0073D4D9`) where the Stripped
-one is 20 and 4, and the compiler derives one from the other. So the Bloated
-tag-0 section's declared size is predictable from the STRIPPED input alone:
+THE CROSS-STREAM ORACLE, which is the strongest single result. The BLOATED
+props record is 48 bytes with an 8-byte ring point (`0x0073D453`, `0x0073D4D9`)
+where the Stripped one is 20 and 4, and the compiler derives one from the
+other. So the Bloated tag-0 section's declared size is predictable from the
+STRIPPED input alone:
 
     bloated_tag0_size == 2 + 48 * props + 8 * outline_points
 
-**349 of 349, zero mismatches.** Neither codec can force that -- it predicts a
-u32 in a stream this module never opens.
+**349 of 349, zero mismatches.** No codec can force that -- the prediction is
+computed from Stripped-side numbers only (`predicted_bloated_tag0_size`) and
+compared against a u32 the compiler wrote into the OTHER stream. `BloatedProps`
+below is how the other stream is read: a READ-ONLY parser, deliberately not a
+codec -- it has no encode, so nothing it returns can ever be replayed into a
+round-trip claim. Its record layout is its own docstring's story.
 
 WHAT IS STILL NOT KNOWN, stated so nobody quotes this module for more than it
 did. The three `rot` bytes and `scale` are named from the client's arithmetic --
 they are `fild`-scaled and fed to `0x0073B4C0`, which fills two 12-byte vectors
--- and that reading is INFERRED, not measured. Their WIDTHS are measured: four
-separate byte reads at four addresses. The corpus agrees with the reading
-without confirming it: `scale` is 0x7F on 35,593 of 285,670 props and the rot
-bytes are zero on 180,391. The `value` u16 of tags 4 and 6 recurs across maps,
+-- and since 2026-08-12 both readings are CORROBORATED BY THE COMPILER'S OWN
+OUTPUT (see `BloatedRecord`): the Bloated record's f32 at +38 equals the scale
+formula of the Stripped byte EXACTLY on every record in the corpus, and
+single-axis rot bytes rotate the constant basis by b*2*pi/256 about x/y/z
+(signs -/+/-) on every single-axis sample probed; multi-byte COMPOSITION is
+still unmeasured. Corpus populations, measured 2026-08-12 (FINDINGS 45 --
+an earlier draft of this paragraph had 35,593 for the scale count, which
+reproduces under no population and was wrong): `scale` is 0x7F on 135,079 of
+285,670 props; all three rot bytes are zero on 46,371; rot[0]==rot[1]==0
+(pure yaw) on 180,391; both together on 30,174.
+The `value` u16 of tags 4 and 6 recurs across maps,
 so those are ids rather than per-map hashes -- not measured. The u16 at +0x00 is
 NOT an index into tag 4 (measured, both ways: 209,960 of 285,670 land outside).
 
@@ -451,6 +462,25 @@ class StrippedProps:
         """
         return cls(props=(), refs4=(), refs6=None)
 
+    def predicted_bloated_tag0_size(self):
+        """The cross-stream oracle: what the COMPILER's output must declare.
+
+        The client compiles the Stripped chunk into the Bloated one, and the
+        Bloated tag-0 section's declared u32 size is exactly
+
+            2 + 48 * props + 8 * outline_points
+
+        -- a count word, a 48-byte record per prop, an 8-byte world-coordinate
+        ring point per outline point. Computed here from Stripped-side numbers
+        ONLY, so comparing it against the u32 in a real Bloated stream is a
+        prediction neither side can force. 349 of 349 retail maps agree
+        (`test_props.py --all`), and for a map WE author it is the first thing
+        to check in the compiled output: a mismatch means the compiler did not
+        keep our props.
+        """
+        return (2 + BLOATED_PROP_FIXED * len(self.props)
+                + BLOATED_RING_STRIDE * sum(p.points for p in self.props))
+
     def __len__(self):
         return len(self.props)
 
@@ -458,6 +488,263 @@ class StrippedProps:
         six = "none" if self.refs6 is None else f"{len(self.refs6)}"
         return (f"StrippedProps({len(self.props)} props, refs4="
                 f"{len(self.refs4)}, refs6={six})")
+
+
+# --------------------------------------------------------------------------
+# The BLOATED side, `0x20000004`: READ ONLY.
+# --------------------------------------------------------------------------
+
+#: The Bloated record's fixed part and its ring-point stride. The oracle
+#: formula is built from these two numbers and the count word.
+BLOATED_PROP_FIXED = 48
+BLOATED_RING_STRIDE = 8
+
+#: Section tags the Bloated stream carries, in the order every probed map
+#: uses. 1, 2 and 3 are the compiler's own products (WRITE-only stages of the
+#: Stripped pipeline -- FINDINGS 44); this module carries them opaquely.
+BLOATED_ORDER = (0, 1, 2, 3, 4, 6)
+
+_B_SECTION = struct.Struct("<BI")
+
+
+class BloatedRecord:
+    r"""One prop as the COMPILER wrote it into the Bloated stream.
+
+    MEASURED 2026-08-12 against the Stripped chunk of the same map, record by
+    record (the two arrays are in the same order -- 8,987 of 8,987 records on
+    a twelve-map probe, then the full corpus under `test_props.py --all`):
+
+        +0x00 u16    model    == the Stripped prop's model
+        +0x02 f32[3] x, y, z  == the Stripped prop's floats, byte for byte
+        +0x0E f32[3] basis_a  \ derived from the three Stripped rot bytes;
+        +0x1A f32[3] basis_b  / at rot (0,0,0) they are (-0,-0,-1), (0,1,-0)
+                                on every such record. Single-axis rotations
+                                close against b*2*pi/256 about x (sign -1),
+                                y (+1), z (-1); COMPOSITION IS NOT MEASURED.
+        +0x26 f32    scale    == f32(b*(255/128)/256 + 1/128) of the Stripped
+                                scale byte, EXACTLY -- which is what took that
+                                formula from INFERRED to compiler-corroborated
+        +0x2A f32    tail     the placement RADIUS, by FINDINGS section 5's
+                                cross-file identity: scale * max 2D vertex
+                                radius of the referenced model, measured at
+                                1e-5 on 12,766 of 12,875 props with five
+                                rival definitions failing. This module cannot
+                                check that (it never opens model files), so
+                                the four bytes are carried opaquely; the
+                                twelve-map probe's weaker grouping agrees --
+                                mostly (model, scale)-determined, 347 of
+                                2,553 groups varying, consistent with the
+                                identity's own 109 mismatches.
+        +0x2E u8     flags    == the Stripped flags byte
+        +0x2F u8     points   == the Stripped point count
+        then points * {f32 x, f32 y}: the outline in WORLD coordinates,
+        byte-exact f32(prop.x + dx), f32(prop.y + dy) -- the client's own
+        add-the-position-back at 0x0073DF4F/67, done at compile time.
+    """
+
+    __slots__ = ("model", "x", "y", "z", "basis", "scale", "tail", "flags",
+                 "ring")
+
+    def __init__(self, model, x, y, z, basis, scale, tail, flags, ring):
+        self.model = model
+        self.x = x
+        self.y = y
+        self.z = z
+        self.basis = basis
+        self.scale = scale
+        self.tail = tail
+        self.flags = flags
+        self.ring = tuple(ring)
+
+    @property
+    def points(self):
+        return len(self.ring)
+
+    def __repr__(self):
+        return (f"BloatedRecord(model={self.model}, at=({self.x:.1f}, "
+                f"{self.y:.1f}, {self.z:.1f}), scale={self.scale:.4f}, "
+                f"flags={self.flags:#04x}, points={self.points})")
+
+
+class BloatedProps:
+    """A parsed `0x20000004` payload. READ ONLY, on purpose.
+
+    This is NOT a codec and must never grow an `encode`: tags 1-6 are carried
+    opaquely, so a re-encode would be a memcpy wearing a round-trip headline --
+    the exact defect `test_mapfile.py` and `test_pathchunk.py` each caught.
+    What this class is for is READING the compiler's output: the cross-stream
+    oracle (`tag0_size`, a u32 this class refuses to derive -- it is the one
+    DECLARED number kept, because comparing it against
+    `StrippedProps.predicted_bloated_tag0_size()` is the whole point), and
+    `corresponds()`, which checks a compiled Bloated stream record-for-record
+    against the Stripped chunk it was compiled from. That check is how a map
+    WE author gets verified after the client compiles it (rung e10d).
+
+    The framing, MEASURED (twelve-map probe, 2026-08-12; the corpus sweep
+    lives in `test_props.py --all`): a 5-byte header -- u32 signature
+    0x39583392, u8 version 17, the SAME pair the Stripped chunk opens with,
+    where the Bloated terrain chunk has an 8-byte `<II` header -- then
+    `{u8 tag, u32 size}` sections in the order 0, 1, 2, 3, 4, [6], 255, tag 6
+    optional and present exactly when the Stripped chunk carries its tag-6
+    section (24 of 24 probed, asserted corpus-wide by the test), terminator
+    declaring size 0 and ending the payload.
+    """
+
+    __slots__ = ("version", "sections", "tag0_size", "count", "records")
+
+    def __init__(self, version, sections, tag0_size, count, records):
+        self.version = version
+        self.sections = sections
+        self.tag0_size = tag0_size
+        self.count = count
+        self.records = records
+
+    @classmethod
+    def decode(cls, payload):
+        payload = bytes(payload)
+        if len(payload) < _HDR.size + _B_SECTION.size:
+            raise Undecodable(
+                f"Bloated props chunk is {len(payload)} bytes, too short for "
+                f"a header and one section header")
+        signature, version = _HDR.unpack_from(payload, 0)
+        if signature != SIGNATURE:
+            raise Undecodable(
+                f"Bloated props signature is 0x{signature:08X}, not "
+                f"0x{SIGNATURE:08X}")
+        if version != VERSION:
+            raise Undecodable(
+                f"Bloated props version is {version}, not {VERSION}; every "
+                f"probed map is 17 and no other version has been read")
+
+        sections = {}
+        order = []
+        off = _HDR.size
+        while True:
+            if off + _B_SECTION.size > len(payload):
+                raise Undecodable(
+                    f"ran out of bytes at {off} without a terminator section")
+            tag, size = _B_SECTION.unpack_from(payload, off)
+            body = off + _B_SECTION.size
+            if body + size > len(payload):
+                raise Undecodable(
+                    f"Bloated tag {tag} at {off} declares {size} bytes but "
+                    f"only {len(payload) - body} remain")
+            if tag == TERMINATOR:
+                if size != 0:
+                    raise Undecodable(
+                        f"terminator section declares {size} bytes; every "
+                        f"probed map declares 0")
+                if body != len(payload):
+                    raise Undecodable(
+                        f"{len(payload) - body} bytes of tail after the "
+                        f"terminator section")
+                break
+            if tag not in BLOATED_ORDER:
+                raise Undecodable(
+                    f"unknown Bloated props tag {tag} at {off}; known tags "
+                    f"are {BLOATED_ORDER}")
+            if order and BLOATED_ORDER.index(tag) <= BLOATED_ORDER.index(
+                    order[-1]):
+                raise Undecodable(
+                    f"Bloated tag {tag} at {off} follows tag {order[-1]}; "
+                    f"the order is {BLOATED_ORDER}")
+            order.append(tag)
+            sections[tag] = payload[body:body + size]
+            off = body + size
+
+        missing = [t for t in BLOATED_ORDER if t != 6 and t not in sections]
+        if missing:
+            raise Undecodable(
+                f"Bloated props chunk is missing section(s) {missing}; every "
+                f"probed map carries all of {BLOATED_ORDER} except at most 6")
+
+        tag0 = sections[0]
+        count, records = cls._parse_tag0(tag0)
+        return cls(version, sections, len(tag0), count, records)
+
+    @staticmethod
+    def _parse_tag0(body):
+        if len(body) < 2:
+            raise Undecodable(
+                f"Bloated tag 0 is {len(body)} bytes, too short for its "
+                f"count word")
+        count = struct.unpack_from("<H", body, 0)[0]
+        records = []
+        off = 2
+        for i in range(count):
+            if off + BLOATED_PROP_FIXED > len(body):
+                raise Undecodable(
+                    f"Bloated record {i} of {count} runs off the section "
+                    f"end at {off}")
+            model = struct.unpack_from("<H", body, off)[0]
+            x, y, z = struct.unpack_from("<fff", body, off + 2)
+            basis = struct.unpack_from("<6f", body, off + 14)
+            scale = struct.unpack_from("<f", body, off + 38)[0]
+            tail = body[off + 42:off + 46]
+            flags = body[off + 46]
+            points = body[off + 47]
+            off += BLOATED_PROP_FIXED
+            end = off + BLOATED_RING_STRIDE * points
+            if end > len(body):
+                raise Undecodable(
+                    f"Bloated record {i}'s {points}-point ring runs off the "
+                    f"section end at {off}")
+            ring = [struct.unpack_from("<ff", body,
+                                       off + BLOATED_RING_STRIDE * k)
+                    for k in range(points)]
+            records.append(BloatedRecord(model, x, y, z, basis, scale, tail,
+                                         flags, ring))
+            off = end
+        if off != len(body):
+            raise Undecodable(
+                f"Bloated tag 0 record walk ended at {off} of {len(body)} "
+                f"bytes; {len(body) - off} bytes unaccounted for")
+        return count, records
+
+    def corresponds(self, sp):
+        """Every way this compiled stream can disagree with a Stripped chunk.
+
+        Returns a list of human-readable mismatches, empty on full agreement.
+        Retail agrees everywhere (the corpus sweep in `test_props.py`), so on
+        ArenaNet's own pairs this returns []. Its real customer is rung e10d:
+        after the client compiles a map WE authored, this is the check that
+        the compiler kept our props rather than quietly dropping them.
+        """
+        out = []
+        if self.tag0_size != sp.predicted_bloated_tag0_size():
+            out.append(
+                f"tag-0 size {self.tag0_size} != predicted "
+                f"{sp.predicted_bloated_tag0_size()}")
+        if self.count != len(sp.props):
+            out.append(f"count {self.count} != {len(sp.props)} props")
+        if (self.sections.get(6) is None) != (sp.refs6 is None):
+            out.append("tag-6 presence differs between the streams")
+        for i, (rec, spr) in enumerate(zip(self.records, sp.props)):
+            if rec.model != spr.model:
+                out.append(f"record {i}: model {rec.model} != {spr.model}")
+            if (struct.pack("<fff", rec.x, rec.y, rec.z)
+                    != struct.pack("<fff", spr.x, spr.y, spr.z)):
+                out.append(f"record {i}: position differs")
+            if struct.pack("<f", rec.scale) != struct.pack(
+                    "<f", spr.scale * (255 / 128) / 256 + 1 / 128):
+                out.append(f"record {i}: scale {rec.scale!r} is not the "
+                           f"formula of byte {spr.scale}")
+            if rec.flags != spr.flags:
+                out.append(f"record {i}: flags {rec.flags} != {spr.flags}")
+            if rec.points != spr.points:
+                out.append(f"record {i}: {rec.points} ring points != "
+                           f"{spr.points}")
+                continue
+            for k, (dx, dy) in enumerate(spr.outline):
+                want = struct.pack("<ff", spr.x + dx, spr.y + dy)
+                if struct.pack("<ff", *rec.ring[k]) != want:
+                    out.append(f"record {i} ring point {k} differs")
+                    break
+        return out
+
+    def __repr__(self):
+        return (f"BloatedProps({self.count} records, sections "
+                f"{sorted(self.sections)}, tag0={self.tag0_size}B)")
 
 
 def decode(payload):

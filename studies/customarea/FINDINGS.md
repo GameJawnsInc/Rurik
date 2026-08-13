@@ -5729,9 +5729,12 @@ What the code settles that the archive could not:
   addresses. Three (`0x0073DE88`, `0x0073DE6D`, `0x0073DE5D`) are `fild`-scaled
   and feed `0x0073B4C0`, which fills two 12-byte vectors: a packed rotation,
   INFERRED. The fourth (`0x0073DE2D`) is scaled into a float: a scale, INFERRED.
-  The widths are measured; the meanings are not. The corpus agrees without
-  confirming: the scale byte is 0x7F on 35,593 props and the rotation bytes are
-  zero on 180,391 — which is what the old "high half clusters at 0x7F00" was.
+  The widths are measured; the meanings are not. *(Both readings are now
+  CORROBORATED by the compiler's own output, and this sentence's two counts
+  were corrected on the same day — §45: the scale byte is 0x7F on **135,079**
+  props, not the 35,593 this line first claimed, which reproduces under no
+  population; and "the rotation bytes are zero on 180,391" counts props with
+  rot[0]==rot[1]==0 — a pure yaw — while all-three-zero is 46,371.)*
 * **The outline is in PROP-LOCAL coordinates.** The client sign-extends each
   pair and adds the prop's own x and y back (`0x0073DF4F`, `0x0073DF67`).
 * **The client's version gate accepts 0x11 AND 0x12** (`0x0073E224`,
@@ -5828,3 +5831,138 @@ test out of `int.from_bytes` that imports nothing from the module.
 
 `minimal()` — a props chunk authored from nothing, no archive and no donor —
 is byte-identical to row 46197's, the smallest in the archive.
+
+## 45. The Bloated props chunk, read — the oracle becomes a test, and (e10d) is staged (2026-08-12)
+
+**Chunk `0x20000004` is read, read-only, and the cross-stream oracle is now
+section 9 of `test_props.py`** — 349 of 349 under `--all` (110 checks, 718 s
+measured), where it had lived only in §44's prose and a workflow scratchpad.
+`props.BloatedProps` is the reader; it deliberately has NO `encode` (the test
+asserts that), because five of its six sections are carried opaquely and a
+round trip could only be a memcpy wearing a headline.
+
+### The framing, measured from the archive
+
+Header is **5 bytes** — u32 `0x39583392`, u8 version 17, the SAME pair the
+Stripped chunk opens with, where Bloated TERRAIN has an 8-byte `<II>` header.
+(§5's earlier "u16 version, u32 array size" read the same bytes with the tag
+byte folded into the version; both close because the tag is 0.) Then
+`{u8 tag, u32 size}` sections in the order **0, 1, 2, 3, 4, [6], 255**, tag 6
+optional and present EXACTLY when the Stripped chunk carries its tag-6
+section — 349/349 — terminator declaring size 0 and ending the payload.
+
+### The record, and the corroborations it carries
+
+Tag 0: u16 count == the Stripped prop count, then records **in the same order
+as the Stripped array**, 48 bytes + 8 per ring point:
+
+    +0x00 u16    model    == Stripped          \
+    +0x02 f32[3] x,y,z    == Stripped, bytewise | 285,670 of 285,670
+    +0x2E u8     flags    == Stripped           | records, corpus-wide,
+    +0x2F u8     points   == Stripped          /  via corresponds()
+    +0x0E f32[3] basis_a, +0x1A f32[3] basis_b -- from the rot bytes
+    +0x26 f32    scale    == f32(b*(255/128)/256 + 1/128)  EXACTLY
+    +0x2A f32    radius   == §5's cross-file identity (see below)
+    +0x30..      ring     == f32(prop.x+dx), f32(prop.y+dy)  BYTE-EXACT
+
+**Three of §44's INFERRED readings are now corroborated by the compiler's own
+output:**
+
+* **The scale formula is exact on every record in the corpus.** Not close —
+  the f32 the compiler wrote equals the formula of the Stripped byte to the
+  bit, 285,670/285,670.
+* **The rot bytes are single-axis rotations of a constant basis.** At rot
+  (0,0,0) the two vectors are (−0,−0,−1),(0,1,−0) on **46,371 of 46,371**
+  corpus-wide. On the twelve-map probe, single-nonzero-byte records close
+  against `b·2π/256` about x (sign −, 94/94), y (+, 72/72), z (−, 400/400)
+  at 2e-3. **Composition order for multi-byte rotations is NOT measured.**
+* **The +42 float is §5's placement radius.** New evidence at model
+  granularity: file id 209883's radius/scale is **exactly 595.0 on all 414
+  retail instances**.
+
+The ring is world-space: byte-exact `f32(prop.x+dx)` — the client's
+add-the-position-back (`0x0073DF4F/67`), done at compile time. Corpus ring
+population equals the Stripped outline-point population: **334,725**.
+
+### Two corrections to §44's prose, from the same sweep
+
+* "the rotation bytes are zero on 180,391" — the NUMBER is real, the
+  POPULATION was misnamed: 180,391 counts `rot[0]==rot[1]==0` (pure yaw,
+  which is also §5's 180,393 for `vecA==(0,0,-1)` seen from the other side —
+  a z-rotation leaves the vertical axis fixed). All-three-zero is **46,371**.
+* "the scale byte is 0x7F on 35,593" — **does not reproduce under any
+  population tried**: measured 135,079 (scale==0x7F), 30,174 (∧ rot zero).
+  §44 and `props.py` are corrected in place.
+
+### The props-deps pairing, and stripbuild learned it
+
+**`0x11000004` (Stripped props dependencies) is present EXACTLY when the map
+has props — 349/349**, closing the loop monsterai's study saw from the
+Bloated side (the three zero-prop maps are exactly the three absentees; the
+map-143 target row 71496 is one of them). `stripbuild.build()` now takes
+`prop_dep_ids` and generates the chunk into retail's slot, immediately after
+the props chunk; both unpaired configurations are REFUSED, as is a `model`
+index past the list — the handoff's known trap, turned into a refusal
+(`test_stripbuild` §3d, floor 40 → 46).
+
+### (e10d) is STAGED and holds for the owner's go
+
+`vault/research/e10d-props-2026-08-12/`: two builds identical but for the
+prop's outline (A none, B a closed ±100 square), model 209883 chosen by
+corpus sweep, first authored `0x11000004`, predictions RECORDED before
+arming (`PREDICTIONS.md` — the oracle says the compiled tag-0 sizes must be
+**50** and **90**; the radius must be f32(592.6939697265625)), and
+`readback.py` proven end-to-end against the untouched study archive. The
+harness is another session's; nothing arms until the owner says go.
+
+## 46. OBSERVED: the client compiled a map with a prop WE placed — rung (e10d), both runs (2026-08-12)
+
+**PLACE SOMETHING is done.** Two client runs, one variable apart — the same
+authored prop with and without a closed outline — and every load-bearing
+prediction hit. Run record: `vault/research/e10d-props-2026-08-12/`
+(PREDICTIONS.md written before arming, RESULTS-A.md and RESULTS-B.md written
+immediately after each run, both compiled heads and path chunks saved).
+
+The prop: model index 0 → file id 209883 via our own `0x11000004`, at
+(2400, 2400, −13) on FINDINGS 43's map, scale byte 0x7F, flags 0. Run A: no
+outline. Run B: a closed ±100 square, 5 points. Procedure was rung E3's, on
+the C2 archive, re-cut and verified pristine before each arm.
+
+| | A (no outline) | B (±100 ring) |
+|---|---|---|
+| compiled head | 8,417 B, 8 chunks | 8,481 B, 8 chunks |
+| `0x21000004` | **[209883]** | **[209883]** |
+| tag-0 size (oracle: 50 / 90) | **50** | **90** |
+| `corresponds()` | **CLEAN** | **CLEAN**, ring back edge-exact |
+| radius +42 | `672c1444` | `672c1444` |
+| path chunk | 835 B, **7 trapezoids** | 739 B, **5 trapezoids** |
+
+What the pair establishes:
+
+* **The compiler keeps our props, bit-faithfully.** Positions bytewise, the
+  scale formula exact, and the +42 radius BYTE-IDENTICAL to what all 296
+  retail records of this model at this scale carry — the compiled record is
+  indistinguishable from ArenaNet's own pipeline output.
+* **The cross-stream oracle holds on OUR input**, not just retail's 349.
+* **The outline is collision geometry, edge for edge.** B's navmesh hole is
+  exactly the authored square — trapezoid boundaries at 2300/2500 on both
+  axes — with all four inside-ring probes flipping walkable→not and no
+  outside-ring probe moving.
+* **A prop with NO outline still carves** — run A's mesh holds an irregular
+  ~±40-unit polygon hole at the prop, so the compiler ALSO instances the
+  model file's own collision sub-mesh (§5). P5-A's "the outline is the props
+  chunk's only geometry" was falsified, in the branch the predictions
+  reserved. Retail gives this model ~149-unit outlines against its ~40-unit
+  intrinsic footprint, so the two are not redundant in retail data either.
+
+Two prediction defects, kept: the predicted radius NUMBER was derived from a
+ratio the corpus probe had rounded to three decimals (`round(x, 3)` printed
+"exactly 595.0" for ≈594.9998) — the compiled bytes matching retail's is the
+stronger, correct statement; and P5-A's mesh prediction was wrong as above.
+A constant quoted from a rounded probe is not a constant.
+
+NOT established: how the prop looks (screenshots caught the loading
+crossfade); server-side collision during play; whether the ring UNIONS with
+or REPLACES the model footprint (the ~±40 carve lies inside the ±100 ring,
+so the union IS the ring — a ring excluding the model footprint would
+distinguish); generalisation past one model, one map, one position each way.

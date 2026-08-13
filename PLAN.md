@@ -2251,13 +2251,37 @@ parallel, with one safety change that is not optional — see its entry.
     run, passes the headline and is caught 3 of 3. What the corpus CANNOT decide is
     asserted as such: tag 4's largest table is 81 entries, so its count width is
     undecided, and the check reddens the day that changes. Still UNVERIFIED: the
-    `extra` u32 and the tag-4/6 `value` words are carried, not understood, and the
+    tag-4/6 `value` words are carried, not understood, and the
     client's tag walk below `0x00737B40` was not read.
-    **(e10d)** ⬜ **PLACE SOMETHING.** `props.py` can author a prop and
-    `stripbuild.build()` takes `props=`, but every map built so far passes
-    `minimal()` — the EMPTY chunk. That the client compiles a map carrying props WE
-    wrote, with a real model id and a real outline, is a client run that has not
-    happened, and it is the claim FINDINGS 44 explicitly does not make.
+    **(e10c-2)** ✅ **DONE 2026-08-12 (FINDINGS 45). THE BLOATED PROPS CHUNK IS READ
+    AND THE ORACLE IS A TEST.** `props.BloatedProps` (read-only, no encode, and the
+    test asserts that) + `test_props.py` section 9: the compiled tag-0 size equals
+    `2 + 48*props + 8*points` predicted from the Stripped side — **349/349 under
+    `--all`** (110 checks, 718 s measured, floor 99), five rival formulas 0/335,
+    record-for-record correspondence 285,670/285,670. Three of FINDINGS 44's
+    INFERRED readings are now compiler-corroborated: the scale formula holds
+    EXACTLY corpus-wide, the rot bytes single-axis-rotate a constant basis
+    (composition still unmeasured), and the `extra` u32's fourth byte is §5's
+    placement radius (595.0 × scale on all 414 instances of model 209883). Two §44
+    population figures corrected in place (§45). And `stripbuild` learned the
+    props-deps pairing: `0x11000004` present iff props, **349/349**, generated from
+    run-time ids, both unpaired shapes refused (`test_stripbuild` §3d, floor 46).
+    **(e10d)** ✅ **DONE 2026-08-12 (FINDINGS 46). SOMETHING IS PLACED.** Two client
+    runs, one variable apart — the same authored prop (model file id 209883 via our
+    own `0x11000004`) without and with a closed ±100 outline — and every load-bearing
+    prediction hit: **the oracle on OUR input (compiled tag-0 sizes 50 and 90,
+    exactly)**, `corresponds()` CLEAN both runs with B's ring back EDGE-EXACT, the
+    +42 radius byte-identical to retail's own value for this model+scale, and the
+    deps chunk surviving to `0x21000004`. **The outline is collision geometry**: B's
+    navmesh hole is exactly the authored square, all four inside-ring probes flip,
+    no outside probe moves. **And a prop with NO outline still carves** — run A
+    found the compiler ALSO instances the model file's own collision sub-mesh
+    (~±40-unit irregular polygon), falsifying the outline-only reading in the branch
+    the predictions reserved. Predictions were recorded before arming and two
+    prediction defects are kept in the run record
+    (`vault/research/e10d-props-2026-08-12/`). Still open: visuals (screenshots
+    caught the loading crossfade), play-session collision, union-vs-replace of ring
+    and model footprint, generalisation past one model and one map.
     **(e10-next)** ⬜ Terrain and props are ours; Header (8 B) and Zones (34 B) are not.
     An end-to-end authored map — §32's Blender pipeline through `mapbuild.py` into a
     Stripped stream — has not been compiled by a client.
