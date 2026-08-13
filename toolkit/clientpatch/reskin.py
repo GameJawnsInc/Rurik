@@ -154,6 +154,17 @@ def refuse_bad_output(src, out):
         raise SystemExit(
             f"Refusing to write into the owner's install at {LIVE_INSTALL}. "
             f"That copy is read-only to this project, always.")
+    # THE VAULT IS THE INTENDED DESTINATION, and it sits INSIDE the checkout.
+    # The first version of this guard refused it -- while its own message told
+    # the operator to write there -- so the tool could not perform the one job
+    # it exists for. The vault is gitignored (that is the whole reason derived
+    # ArenaNet artifacts live in it), so it is checked FIRST and allowed.
+    try:
+        vault = os.path.normcase(os.path.abspath(vaultpath.vault_root()))
+        if out_abs == vault or out_abs.startswith(vault + os.sep):
+            return
+    except SystemExit:
+        pass                        # no vault configured; fall through to refuse
     for root in working_tree_roots():
         if out_abs == root or out_abs.startswith(root + os.sep):
             raise SystemExit(
@@ -233,8 +244,13 @@ def main(argv=None):
     print(f"\nprofession {a.profession}, {len(log)} table(s):")
     for table, off, old, new in log:
         print(f"  {table:7s} file 0x{off:08X}  {old} -> {new}")
-    print(f"wrote {a.out}\n  {changed} byte(s) differ, {len(log) * ROW} expected; "
-          f"length unchanged at {len(patched):,}")
+    # "at most", not "expected": a dword write disturbs only the bytes that
+    # actually differ, so 2 changed bytes for 2 edits is correct when both ids
+    # share their high bytes (2048 -> 2092 is 00 08 -> 2C 08). The invariant
+    # worth printing is CONTAINMENT, which the count alone cannot show.
+    print(f"wrote {a.out}\n  {changed} byte(s) differ, at most {len(log) * ROW} "
+          f"possible for {len(log)} dword edit(s); length unchanged at "
+          f"{len(patched):,}")
     return 0
 
 

@@ -24,7 +24,7 @@ import checks                                                  # noqa: E402
 import reskin                                                  # noqa: E402
 import vaultpath                                               # noqa: E402
 
-LEDGER = checks.Ledger("reskin", floor=23)
+LEDGER = checks.Ledger("reskin", floor=24)
 
 
 def synth(name_ids=None, abbrev_ids=None, picker_ids=None, data_ids=None,
@@ -162,6 +162,20 @@ def section_output_guards():
               "while an ordinary path OUTSIDE all of them is allowed",
               f"{ok_path} -- the tool has to be usable or the guards are just "
               f"a way of never shipping")
+    # THE CONTROL THAT ACTUALLY MATTERED, and the first version did not have it:
+    # the vault is INSIDE the checkout, so the repo-tree refusal swallowed the
+    # one destination the tool exists to write to -- while its own error message
+    # named that destination. Caught by running the tool, not by this file.
+    try:
+        vault_out = os.path.join(vaultpath.vault_root(), "client-reskin", "Gw.exe")
+    except SystemExit:
+        LEDGER.skip("the vault-destination control", "no vault configured")
+    else:
+        LEDGER.ok(not _out_refused(src, vault_out),
+                  "and the VAULT is allowed even though it sits inside the checkout",
+                  f"{vault_out} -- it is gitignored, which is precisely why "
+                  f"derived ArenaNet artifacts live there; a guard that refused "
+                  f"it made the tool unable to do its only job")
 
 
 def _out_refused(src, out):
