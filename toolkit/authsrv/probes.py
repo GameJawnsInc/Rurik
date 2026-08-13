@@ -452,6 +452,60 @@ def _profession_trigger_steps(agent_id):
     ]
 
 
+def _profession_panel_steps(agent_id, custom_id):
+    """Does the SKILLS PANEL open at a custom profession? The arc's question.
+
+    THE FIRST SESSION IN THIS ARC THAT MEASURES A PROFESSION. Every earlier
+    one measured a bug of ours: the panel asserted on a zero skill id (our
+    unlock bit 0, RUNS.md §10) and then on a missing icon (our non-player
+    rows, §11). With both fixed the panel opens and lists 1,333 skills, so a
+    profession-keyed failure now has somewhere to show.
+
+    0x00A6 ONLY, AND THAT IS THE WHOLE DESIGN. The two byte carriers are NOT
+    equivalent and it is measured twice: 0x00B7 carrying 12 asserts
+    `profession < arrsize(s_profChapter)` (ConstChar.cpp:1296) ON ARRIVAL --
+    run 4b at +3.42 s and again 2026-08-13 at +3.39 s, both dead before any
+    UI action -- because its handler feeds the primary to a bound-checked
+    11-entry table. 0x00A6's handler writes two agent bytes and fires an event
+    the deck builder does not listen to, so it lands silently. This probe
+    therefore never sends 0x00B7, and must not be combined with
+    --spawn-profession, which does.
+
+    PREDICTION (studies/profession/RUNS.md §10): the panel OPENS. The skill
+    walk reads no profession and nothing on the path branches on one, so a
+    custom id cannot decide whether it opens. What it CANNOT do is display
+    the profession: the panel's record at ctx[0x2c]+0x6BC has exactly one
+    writer, reached only from 0x00B7's handler, so with 0x00A6 alone the
+    getters stay at their default of 11 and the drop-down should read blank
+    or none rather than 12.
+    """
+    control = 3
+    return [
+        Step(2.0, 0x00A6, agent_set_profession(agent_id, custom_id, 0,
+                                               custom=True),
+             f"0x00A6 ONLY -- profession {custom_id}, the agent carrier",
+             "nothing, and wait. Run 1 measured the client living on this "
+             "value while playing normally. If the session dies HERE, the "
+             "agent carrier is lethal after all and that refutes runs 1 and "
+             "2 -- say so, because it would be new."),
+        Step(8.0, 0x00A6, agent_set_profession(agent_id, custom_id, 0,
+                                               custom=True),
+             f"still {custom_id} -- NOW open the skills menu (K)",
+             "the panel. PREDICTION: it OPENS and lists the skills, because "
+             "the walk is profession-blind. Read the PROFESSION DROP-DOWN and "
+             "say what it shows -- blank/none is predicted, since 0x00A6 does "
+             "not write the record the panel displays from. Then look at the "
+             "ATTRIBUTES box: whatever it lists for an id the client does not "
+             "ship is the finding. If the client ASSERTS, name the assert -- a "
+             "profession-keyed surface finally failed for a profession reason."),
+        Step(25.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"RECOVERY: back to {control}",
+             "the panel, if it is still open. Does the drop-down or the "
+             "attribute list change back? A live client here means the whole "
+             "sequence was survivable on the agent carrier."),
+    ]
+
+
 def _armor_steps(agent_id):
     # EXPLORATORY, and labelled as such. 0x006F is {agent_id, dword, dword} and
     # which dword is the slot and which the model is NOT established -- the
@@ -2392,6 +2446,28 @@ PROBES = {
              "assert sits inside a find-next-set-bit bitmap walk. Original "
              "design: profession_ab arm A is the n=1 that opened; this "
              "replayed it with the one change that removes the change.",
+    ),
+    "profession_panel": lambda a, o: Probe(
+        question="Does the Skills panel OPEN at profession 12, now that the "
+                 "panel works at all -- and what does it display?",
+        predicts="IT OPENS. The skill walk reads no profession and nothing "
+                 "between the panel's entry and its enumeration branches on "
+                 "one, so a custom id cannot decide whether it opens (RUNS.md "
+                 "§10.4). The DISPLAY is the other half: the panel's "
+                 "profession record has exactly one writer, reached only from "
+                 "0x00B7, so with 0x00A6 alone the getters stay at their "
+                 "default of 11 and the drop-down should read blank/none "
+                 "rather than 12. A crash instead would be the FIRST "
+                 "profession-keyed failure in this arc that is not a bug of "
+                 "ours -- name the assert.",
+        steps=_profession_panel_steps(a, 12),
+        note="THE ARC'S QUESTION, ASKABLE FOR THE FIRST TIME. Everything "
+             "before this measured our own defects: the panel asserted on a "
+             "zero skill id (our unlock bit 0) and then on a missing icon "
+             "(our non-player rows). Both fixed, panel lists 1,333 skills. "
+             "0x00A6 ONLY -- do NOT pass --spawn-profession, which sends "
+             "0x00B7, measured lethal on arrival at ConstChar.cpp:1296 in two "
+             "separate sessions. Run with the default --unlocks corpus.",
     ),
     "profession_sentinel": lambda a, o: Probe(
         question="Is profession 11 handled specially, being the client's own "

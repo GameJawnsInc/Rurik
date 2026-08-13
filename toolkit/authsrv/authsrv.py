@@ -339,7 +339,7 @@ def spawn_profession_values(profession=None):
         custom=p > agents.CHAR_PROFESSIONS - 1) + [0]
 
 
-def spawn_probe_warning(probe, spawn_set):
+def spawn_probe_warning(probe, spawn_set, spawn_out_of_band=False):
     """profession_spawn without --spawn-profession measures the wrong thing.
 
     The probe's question is what the skills panel does when a custom
@@ -354,6 +354,21 @@ def spawn_probe_warning(probe, spawn_set):
                 "which run 2 already measured. The probe's question needs "
                 "--spawn-profession 12, with a control session at "
                 "--spawn-profession 3 first (studies/profession/RUNS.md s8).")
+    # profession_panel exists BECAUSE 0x00B7 cannot carry a custom id. Pairing
+    # it with an out-of-band --spawn-profession puts exactly that message in
+    # the burst, so the client dies at map load ~3.4 s in and the probe's own
+    # steps never run -- a whole session spent re-measuring a result we have
+    # twice. Refused rather than warned: there is no reading of that pair that
+    # answers the probe's question.
+    if probe == "profession_panel" and spawn_out_of_band:
+        raise SystemExit(
+            "--probe profession_panel with an out-of-band --spawn-profession "
+            "is refused. The burst's 0x00B7 would carry the custom id and the "
+            "client asserts `profession < arrsize(s_profChapter)` "
+            "(ConstChar.cpp:1296) ON ARRIVAL -- MEASURED twice, at +3.42 s and "
+            "+3.39 s, both dead before any UI action. This probe delivers the "
+            "custom id on 0x00A6 itself, which lands silently; run it with no "
+            "--spawn-profession at all (studies/profession/RUNS.md s10.5).")
     return None
 
 
@@ -5156,7 +5171,10 @@ def main():
                 if SPAWN_PROFESSION > agents.CHAR_PROFESSIONS - 1
                 else "in band, non-default")
         print(f"SPAWN PROFESSION: {SPAWN_PROFESSION} ({band})")
-    warning = spawn_probe_warning(a.probe, a.spawn_profession is not None)
+    warning = spawn_probe_warning(
+        a.probe, a.spawn_profession is not None,
+        a.spawn_profession is not None
+        and a.spawn_profession > agents.CHAR_PROFESSIONS - 1)
     if warning:
         print(warning)
     UNLOCKED, UNLOCK_LABEL = build_unlock_bitmap(a.unlocks)
