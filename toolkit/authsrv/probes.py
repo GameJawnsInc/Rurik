@@ -2163,7 +2163,11 @@ PROBES = {
                  "down in the pilot and the client was alive on a loading screen 42 s "
                  "later, with no assert in Gw.log and no fatal-error dialog.",
         steps=_smsgsweep_steps(a, o),
-        note="Loopback only -- both endpoints ours, ours-DH client, cage verified. "
+        note="NEEDS A PLAN: run `smsgsweep.py --plan` first, or this probe sends "
+             "nothing and the run measures nothing -- it says so as a step marked "
+             "`sends=False`, which carries the warning to the operator without "
+             "having to survive the codec. "
+             "Loopback only -- both endpoints ours, ours-DH client, cage verified. "
              "Score with `smsgsweep.py --from-report <the run's report.json> --record`. "
              "Attribution is by opcode identity, against this run's OWN control window "
              "-- the quiet seconds before the first send -- and not by timing."),

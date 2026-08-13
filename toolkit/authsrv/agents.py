@@ -336,6 +336,58 @@ def secondary_bits(*professions):
 ALL_SECONDARIES = secondary_bits(*range(1, CHAR_PROFESSIONS))
 
 
+def party_build(party_id=1, player_number=None):
+    """The four messages that BUILD a party and make it yours.
+
+    THE PARTY WINDOW'S GATE, and it is one value read in two places
+    (studies/profession/RESKIN.md 17). `PyCliGetMyPartyId` at 0x00856250 is
+    `[[ctx+0x4C]+0x54]` dereferenced, and it is 0 on our server because
+    nothing we sent ever wrote that pointer. In an OUTPOST the key router's
+    availability filter refuses both start-menu items bound to P and discards
+    the key at 0x004E8C61 before P's arm ever runs; with is_explorable set the
+    arm runs and bails at 0x004EC115 before the only party FrameCreate
+    (0x004EC1BF, child 0x66 = CONTROL_PARTY_MAIN). One value, two silent
+    refusals -- which is why forcing is_explorable changed nothing.
+
+    0x00B0/0x00B1 are NOT this. They write the per-player display array at
+    ChCliApi ctx+0x80C; the gate is the party manager's own vector.
+
+    THIS IS RETAIL'S OWN SEQUENCE, 8 of 8 live connections, in retail's own
+    position -- immediately after PLAYER_SET_PARTY. The alternative of
+    allocating a record directly was considered and rejected: it is fewer
+    messages but it is not what the client is built around, and the adversarial
+    pass measured this order on the wire.
+
+    THE CONSTRAINTS ARE ASSERTS, not taste:
+      * 0x01D2 exactly ONCE per connection -- a second with a build already
+        open fires PyCliParty.cpp:1228 at 0x00859DC1.
+      * 0x01CB must sit BETWEEN begin and commit, with the SAME party id, and
+        its player number must be the one 0x00B0/0x00B1 carry.
+      * 0x01D3's party id must equal 0x01D2's, else PyCliParty.cpp:1238 at
+        0x00859E39.
+      * The id must be NON-ZERO: 0x01B2 with 0 means "keep current" and is a
+        documented no-op at 0x0085879E, so a zero here fails SILENTLY, which
+        is the one failure mode we cannot see.
+
+    Returns [(opcode, values, label)] in the order they must be sent.
+    """
+    if not 1 <= party_id <= 20:
+        raise ValueError(
+            f"party id {party_id} outside 1..20: the manager's own bound is "
+            f"`cmp [esi+8], 0x14` (max 20 parties), and 0 is the client's "
+            f"'keep current' no-op rather than a party")
+    if player_number is None:
+        raise ValueError("player_number is required: it must match the value "
+                         "0x00B0/0x00B1 carry, or the member added is not you")
+    return [
+        (0x01D2, [party_id], f"PARTY_BUILD_BEGIN({party_id})"),
+        (0x01CB, [party_id, player_number, 1],
+         f"PARTY_ADD_MEMBER({party_id}, player {player_number})"),
+        (0x01D3, [party_id], f"PARTY_BUILD_COMMIT({party_id})"),
+        (0x01B2, [party_id, 1], f"PARTY_SET_MINE({party_id})"),
+    ]
+
+
 def player_party_size(player_number, size):
     """GAME_SMSG 0x00B0 -- how many members the player's party holds.
 

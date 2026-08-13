@@ -757,3 +757,87 @@ window's existence. The next step is offline and specific: find the party frame'
 open path and what it tests before it will exist -- the same consumer-backwards method
 that named `0x00B6` and the abbreviation builder. `GmPosseRoster` and the `Pt*` modules
 named in section 14.2 are the entry points.
+
+
+---
+
+## 17. The party window's gate, found and opened (2026-08-13)
+
+Seven agents, no client launches. One verifier held the gate analysis; the other **refuted
+the fix I was about to implement** and replaced it with retail's own sequence.
+
+### 17.1 One value, two silent refusals
+
+> **`PyCliGetMyPartyId` at `0x00856250`** -- `[[ctx+0x4C]+0x54]` dereferenced, returning 0
+> when the pointer is null. It is 0 on our server, because nothing we sent ever wrote it.
+
+It is read in two places, and BOTH refuse silently:
+
+- **Outpost (the case our runs hit).** In GmView's command router `0x004E8BC0` the key is
+  mapped to a start-menu item and passed through the availability predicate `0x005318D0`.
+  Only two of the 17 items carry P's command `0x0BF`: item `0x0D` requires
+  `is_explorable == 1`, and item `0x0E` -- the ONLY item of the 17 with an extra test --
+  ends at `cmp esi,0x0E; je` into `call 0x00856250`, the party id. Both unavailable, the
+  scan exhausts, and `je 0x004E995A` at `0x004E8C61` lands on the shared default arm,
+  which is `pop / mov esp,ebp / pop / ret`. **The key is discarded before P's own arm
+  runs.**
+- **Explorable.** The arm runs, reaches `0x004EC0B0`, and bails at `0x004EC115` on the
+  same party id -- before the only party FrameCreate at `0x004EC1BF` (child `0x66`,
+  `CONTROL_PARTY_MAIN`, named by ArenaNet's own assert at GmView.cpp:3099).
+
+**That is why forcing `is_explorable` changed nothing: it moves the refusal from the
+router to the frame builder, and both read the same zero.** The frame is never CREATED,
+which is exactly what unchanged pixels predict.
+
+**P was bound all along**, triangulated three ways: the default key table (`VK 0x50` ->
+command `0x0BF`), the start-menu command table, and the floating-dialog descriptor array
+(dialog `0x1E` carrying `0x0BF`). The keybinding hypothesis is dead. *(One control
+correction: **F is not a window toggle** -- its arm is a target/agent action -- so its
+31,907 px was a weak control. H and I stand.)*
+
+### 17.2 The fix is retail's own sequence, and my first one was wrong
+
+I proposed allocating a party record directly with two messages. **Refuted:** the party
+manager's vector must be built the way the client is built around, and the adversarial
+pass measured retail's order on the wire, **8 of 8 live connections**, in the position
+immediately after `PLAYER_SET_PARTY`:
+
+| opcode | payload | |
+|---|---|---|
+| `0x01D2` | `d2010100` | party build BEGIN, allocates the record |
+| `0x01CB` | `cb010100010001` | ADD the player as a member |
+| `0x01D3` | `d3010100` | COMMIT, grows the vector and installs `parties[1]` |
+| `0x01B2` | `b201010001` | `m_myParty = parties[1]` |
+
+Twenty bytes. The constraints are asserts rather than taste: `0x01D2` exactly once per
+connection (PyCliParty.cpp:1228), `0x01CB` between begin and commit with a matching id and
+the player number `0x00B0`/`0x00B1` carry, `0x01D3`'s id equal to `0x01D2`'s
+(PyCliParty.cpp:1238), and the id **non-zero** -- `0x01B2` with 0 means "keep current" and
+fails SILENTLY, the one failure mode we could not have seen.
+
+### 17.3 Result: it opens
+
+Harness `20260813T162246`, outpost, `is_explorable` left at 0, scripted input.
+
+| transition | pixels |
+|---|---|
+| wait -> **P** | **281,814** |
+| P -> wait (idle) | 13,419 |
+| wait -> H (control) | 130,644 |
+
+**Prediction was "unambiguously above the idle control, staked at >60,000". It came in at
+281,814** -- larger than the hero panel -- with no crash dialog and all four messages on
+the wire as exactly the bytes predicted.
+
+The window is **Party Search**: Players / Heroes / Henchmen tabs, a Party Leader / Size /
+District / Description list, Seek Party, Close. That is dialog `0x1E`, whose proc
+`0x005638B0` the dive named, and it answers the dive's own open question 3 -- our client
+is in the layout where P raises the search dialog rather than the console page.
+
+### 17.4 What this does NOT get, and it is the honest half
+
+**The profession abbreviation still does not render.** The search list is empty -- no
+other players exist on our server -- and the roster entry that draws an abbreviation is
+`PtPartyEntry`, a different frame from the search dialog. The top-left party region is
+still unchanged. So §16's target is not met; what is met is the gate that stood in front
+of it, and the arc now has a party window to build on for the first time.

@@ -4656,6 +4656,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_PLAYER_SET_PARTY,
                              agents.player_set_party(PLAYER_NUMBER, PLAYER_NUMBER),
                              "PLAYER_SET_PARTY(self is leader)")
+                        # ...and the party the WINDOW needs, which is a
+                        # different structure entirely. RESKIN.md 17: the
+                        # window's gate is PyCliGetMyPartyId (0x00856250)
+                        # reading the party manager's own vector, not the
+                        # per-player array above -- so P was discarded by the
+                        # key router before its arm ever ran. Retail's own
+                        # four-message sequence, in retail's own position,
+                        # 8 of 8 live connections.
+                        for op, vals, label in agents.party_build(
+                                1, PLAYER_NUMBER):
+                            send(op, vals, label)
                         # Field names carrying hex offsets (h000B, h001E, h0023,
                         # h0027, h003B, h004B, h0059) let the 23 schema fields be
                         # aligned to the struct by offset rather than by counting:
