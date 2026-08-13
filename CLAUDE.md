@@ -474,6 +474,35 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   was tracing, whose `0x00712200` parses the BLOATED chunk with five-byte
   headers -- confirmed it and settled the one thing the corpus could not, that
   tag 4's count is a u16),
+  `toolkit/mapdata/test_modelfile.py` (the prop model decoder -- rung M1 of
+  `studies/models/PLAN.md`, the layout customarea §5 measured from scratch
+  scripts promoted to committed code -- and the cross-file oracle that makes it
+  trustable: the Bloated prop record's `f11` equals scale x the referenced
+  model's max 2D vertex radius, a number crossing TWO FILES and eight decode
+  steps through committed code (props.py -> dependency pair -> file-id table ->
+  MFT row -> geometry chunk -> sub-model walk -> vertex stride), so no decoder
+  error at any step survives it. **474/474 and 664/664 at 1e-5** on the
+  reference maps' comparable props with the 3D-radius rival pinned collapsed (1
+  and 7); `--all` reproduces the study's full 14-map sample from committed code
+  -- 2,048 model files: 1,741 unique / 1 ambiguous / 306 no-close, f11
+  **12,766/12,875**, rival 103, thirteen (dat_fvf, stride) pairs, ti and n0
+  divisible by 3 on 3,834/3,834 -- MEASURED at 165 s against the default's
+  30 s. The three failure populations are pinned APART (§A5's lesson: conflating
+  them manufactured a false theory) and PER MAP, because Pre-Searing's no-close
+  rate is 77/229 against the corpus ~15% and an average would hide both. The
+  stride rule is labelled RECONSTRUCTION at its definition -- the test asserts
+  the label -- and its thirteen pairs are LITERALS in the test file (the
+  test_agentlife lesson: an expectation computed from the symbol under test
+  lets the symbol move); a sabotage that quietly reads the 3D radius as the 2D
+  one was built and run and reddens 5 checks from three directions, the
+  synthetic literal plus both maps' oracle and rival. Section 3 pins the
+  ambiguous file 0x1BAE2 at exactly offsets (97, 101), all indices in range
+  under BOTH parses -- closure is NOT identity (§B5) -- and the finding M1
+  adds: the corpus's single dat_fvf 0x2C sighting IS that file's chosen parse,
+  so the rare format's existence, and GWMB's one stride-table disagreement
+  which rests on it, are both UNCONFIRMED until rung M2 reads the client's own
+  FVF dispatch. Sections 0-1 build a model file from `struct.pack` and need no
+  vault, scoring 19 against a floor of 34. ~30 s),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against
