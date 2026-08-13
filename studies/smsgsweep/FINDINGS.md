@@ -395,3 +395,79 @@ anything deeper is inference and is marked as such above.
 4. **Finish the 237.** `sweeploop.py --rounds 20` did 71 opcodes and 20 asserts in about
    35 minutes; yield falls as the asserts cluster, so budget more rounds than opcodes.
 5. **The ten table-less opcodes**, `--table-less --limit 1`, deliberately.
+
+---
+
+## 7. The SCREEN pass — 238 SILENT opcodes re-sent one per client, with screenshots
+
+**Status: OBSERVED, 2026-08-13.** §3.4 measured this instrument's blind spot: `SILENT`
+means *no c2s reply*, and four of four opcodes tested with a meaningful payload were
+drawing windows while the wire stayed quiet. This is the conversion of the other 239.
+Method: `toolkit/authsrv/shotloop.py` (one opcode, one FRESH client, a screenshot every
+second through a 22 s hold), read by `toolkit/authsrv/shotlabel.py`, controls in
+`test_shotlabel.py` (38 checks). 162 minutes, 238 runs, **zero harness failures**.
+
+**One opcode per client launch, and it is a rule rather than a budget.** A window an
+earlier opcode opened is still on screen when the next one lands, so it sits inside the
+next opcode's own baseline frame; and an opcode may only act BECAUSE of state a previous
+one left, which would report a joint effect under one name. `score_run` refuses a
+multi-send run outright.
+
+### 7.1 What came back
+
+| | count |
+|---|---|
+| scored | **221** |
+| CHANGED — the screen moved beyond its own drift | **34** |
+| QUIET | 187 |
+| CRASHED — dialog captured, §7.3 | **8** |
+| lost the foreground, re-run | 9 |
+
+### 7.2 The three read so far, and two are NAMED by the client's own words
+
+Read by eye off the page, which is what this apparatus is for:
+
+| opcode | what the client did |
+|---|---|
+| `0x0101` | the screen goes black and reads **"A Cinematic is in Progress"** — the client's own text, so this is a NAME |
+| `0x00C3` `0x00C7` `0x00C8` `0x00C9` `0x00CA` | a modal dialog whose body text is the **account-name / ladder** prompt, with `Accept Name` and `Goodbye` buttons. Five opcodes, one contiguous block, all five scoring 11.10–11.16% over the SAME bounding box (715, 276, 1191, 783) — a family |
+| `0x006C` | a large golden burst centred on the player: a world EFFECT, not a panel |
+
+`0x0101` at 94.99% and `0x01AA` at 88.13% both repaint essentially the whole window
+(bbox (8, 31, 1928, 1032)); `0x01AA` has not been read yet.
+
+### 7.3 EIGHT OPCODES CRASH — and the wire sweep scored every one of them SILENT
+
+The eight `UNSCORABLE` rows are frames that changed SIZE mid-run, from 1936x1040 to
+646x237, **all eight at the same frame index**. That is the client window being replaced
+by its error dialog, and `capture_error_dialog` caught all eight:
+
+| opcode | the client's own assert | subsystem |
+|---|---|---|
+| `0x0105` | `context->script`, `Cinematic\Cli\CiCliApi.cpp(201)` | **cinematic** |
+| `0x0122` `0x0125` `0x0126` `0x0130` | `guild`, `GuCliApi.cpp` lines 340, 363, 384, 420 | **guild** |
+| `0x0170` | `IsBatching()`, `MsCliTourn.cpp(475)` | **tournament** |
+| `0x0172` `0x01B7` | `index < m_count`, `Base\rtl\Array.h(587)` | a bounds check |
+
+**The difference is the encoded string.** The wire sweep sent all-zero payloads; this
+pass runs `--encstring`, which puts a REAL encoded string from the owner's own captures
+into `string16` fields. So these eight are §5c's "second gate" arriving from the other
+side: with the string field valid the handler runs on past its format check and reaches
+a CLIENT-STATE gate — no guild, no cinematic script, no tournament batch. §5d's reading
+holds and now has eight more instances.
+
+**A contiguous guild block at `0x0122`–`0x0130`** joins §2b's inventory block
+(`0x0137`–`0x0163`) and party block (`0x01C4`–`0x01D1`). The census had two guild
+opcodes; this makes six, four of them with a line number.
+
+### 7.4 What this does not establish
+
+* **A changed screen is not a named opcode.** The score says pixels moved; whether they
+  moved because of this opcode is a judgement, and 34 rows are evidence awaiting a
+  reader. Only the three in §7.2 have been read.
+* **QUIET is not "nothing happened" either**, for a weaker version of the same reason:
+  an effect smaller than the client's own drift, or one that fades between two frames,
+  is under this instrument's floor. `0x00C0`'s floating text was measured doing exactly
+  that at a 2.3 s cadence, which is why this pass runs at 1 s.
+* **Still one state, one map.** Level-1 character, empty map, `--no-enemy`. Every §5d
+  caveat applies unchanged.

@@ -700,18 +700,40 @@ def main(argv=None):
                     help="a harness run directory; repeatable")
     ap.add_argument("--scan", default=None, metavar="PREFIX",
                     help="every harness run whose name starts with PREFIX")
+    ap.add_argument("--from-state", action="store_true",
+                    help="the runs shotloop RECORDED, one per opcode (recommended)")
     ap.add_argument("--out", default=None, help="page directory (under the vault)")
     ap.add_argument("--settle", type=float, default=SETTLE)
     ap.add_argument("--json", action="store_true", help="print the scoring, no page")
     a = ap.parse_args(argv)
 
     runs = list(a.run)
+    base = os.path.join(vaultpath.vault_path("captures"), "harness")
     if a.scan:
-        base = os.path.join(vaultpath.vault_path("captures"), "harness")
         runs += [os.path.join(base, d) for d in sorted(os.listdir(base))
                  if d.startswith(a.scan)]
+    if a.from_state:
+        # ONE RUN PER OPCODE, and the loop's own state file is the authority on which.
+        # A `--scan` over a date picks up superseded runs too -- an opcode whose first
+        # attempt lost the foreground has two directories under the same prefix, and
+        # scoring both puts two cards for one opcode on the page, one of them a refusal
+        # for a reading that was retaken. The state file records exactly the run that
+        # measured each opcode.
+        sp = os.path.join(vaultpath.vault_path("probes"), "shotloop-state.json")
+        if not os.path.isfile(sp):
+            ap.error(f"no shotloop state at {sp} -- run shotloop.py first")
+        with open(sp, encoding="utf-8") as fh:
+            st = json.load(fh)
+        runs += [os.path.join(base, e["run"])
+                 for e in st.get("done", {}).values() if e.get("run")]
+    seen, ordered = set(), []
+    for r in runs:
+        if os.path.abspath(r) not in seen:
+            seen.add(os.path.abspath(r))
+            ordered.append(r)
+    runs = ordered
     if not runs:
-        ap.error("name at least one --run or a --scan prefix")
+        ap.error("name at least one --run, a --scan prefix, or --from-state")
 
     results, scored, refused = [], 0, 0
     for d in runs:
