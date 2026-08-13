@@ -725,8 +725,18 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   own; a sha256 manifest whose negative control flips one mantissa bit of one height
   and must be caught; and a refusal that keeps derived ArenaNet bytes out of the
   working tree — which shipped broken, one `dirname` short, and wrote a 745 KB height
-  field into the repo before the test pinned the resolved root. Sections 0-4 need no
-  vault and score 65 against a floor of 108, so a vault-less run goes red. ~31 s),
+  field into the repo before the test pinned the resolved root.
+  Section 6 lost its entry-count gate on 2026-08-13 and the reason is the lesson: it
+  skipped whole unless the archive had exactly 177,342 MFT rows "because these row
+  constants were measured on it", and it has no row constants -- every row it touches
+  comes from `sample_rows`, which selects on `flags == 259` and never on an index. The
+  gate could not fail for the reason it was there and did nothing but hide four checks
+  and redden the floor on `vault/client/2026-04-30_b174de1f2d8d`, which holds the same
+  349 pairs at the same rows with the same crcs. What guards the section is the
+  population assertion on the next line -- 349 rows with flags 259 -- which the
+  impostor archive of `test_mapfile`'s section 2b reddens at 1. Sections 0-4 need no
+  vault and score 65 against a floor of 108, so a vault-less run goes red. ~31 s, and
+  108 of 108 on BOTH vaulted archives),
   `toolkit/mapdata/test_blenderimport.py` (the Blender half: it runs
   `tools/blender/import_gwmap.py` headless as a SUBPROCESS — the test is stdlib-only
   and never imports `bpy`, which is why the importer may live outside `toolkit/` —
@@ -800,7 +810,33 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   different encoding and must come back CARRIED. Sections 1-2 build a whole map file
   out of nothing and need no vault; the run reports the reconstructed/carried byte
   split, which is 34.92% / 65.07% and is the honest half of the result.
-  `--all` is ~13 minutes),
+  **And since 2026-08-13 the pinned sections are gated on
+  IDENTITY rather than on a census, which is what let a second archive in.** The old
+  gate compared the whole archive's MFT row count to 177,342 and skipped 13 checks
+  otherwise, reasoning that "file ids travel, row indices do not" -- right in general
+  and wrong in both directions here. TOO STRICT: `vault/client/2026-04-30_b174de1f2d8d`
+  (177,311 rows) holds the same 349 map heads at the same indices with the same sizes
+  AND the same crcs, head and partner, **349 of 349**, and its pinned pair is
+  byte-for-byte the same file -- MEASURED 2026-08-13, and `vault/run-live` agrees as a
+  third. TOO LOOSE: a row count is a fact about the COPY, so any tampered archive with
+  177,342 rows passed -- relocation, recycle, rewrite and sibling relink all leave it
+  alone. `resolve_pinned` now looks the map up by FILE ID (`test_pathchunk`'s pattern)
+  and requires the row it lands on to carry the MFT's own measured (stored size, crc);
+  the row is printed, never required. The PARTNER is deliberately NOT in the gate --
+  the first version verified both rows there and made section 3's partner check
+  unfalsifiable, so partner identity is now a claim the archive can refute. Section 2b
+  is the control and needs no vault: it BUILDS an impostor archive carrying the old
+  constant's row count and a different file at the pinned id, requires the new gate to
+  REFUSE it while the retired rule -- reproduced inline as a live function -- ACCEPTS
+  it, then requires the opposite on a 177,311-row copy holding the right file, so the
+  two disagree in both directions from two live answers rather than from prose. Four
+  more refusals sit under it (an unbound id, an id landing on a non-head, a
+  non-archive, a truncated archive), and running the impostor END TO END is what found
+  section 7's KeyError -- a sweep where every file failed left the census empty and
+  reported a red run as a traceback with no verdict and no ledger. Default is 59 checks
+  against a floor of 59, 34 of them on a bare machine (was 50/25). `--all` is
+  ~13 minutes, and **has not yet been run against the second archive** -- the gate
+  makes the 698-file second witness reachable, it does not make it measured),
   `toolkit/mapdata/test_mapbuild.py` (the AUTHORING direction: a whole Bloated map
   assembled from typed parameters -- dims, a height field, a tile table, a navmesh --
   and row 46196 coming back BYTE-IDENTICAL, 8,471 B. That equality is the weaker half
@@ -994,7 +1030,34 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   that was made writing it -- filtering channels by `:6112` cut the corpus to 52 and said
   so without complaint, because ArenaNet serves the GAME channel on port 80 in 10 of the
   12 canon connections.
-  **Section 9 (2026-08-13) is the one that is not about smsgsweep at all**, and it exists
+  **Section 9 (2026-08-13) is the REGIME**, and it exists because a row was a
+  measurement of two things while its key named one. An all-zero send and an
+  `--encstring` send are different experiments -- 0x0033, 0x009E, 0x00B9 and 0x00C0 each
+  crash the client on an empty payload and go SILENT carrying a real encoded string, two
+  of them naming a guard that is ABOUT the string -- and `record` is first-write-wins, so
+  nine runs that measured the clearance printed `recorded 0` and changed nothing. Only a
+  key with a regime in it could hold both, which is why re-running the recorder was never
+  going to fix it. **The axis is the PAYLOAD, not the flag**, read out of the capture's
+  own `plain` bytes: 87 opcodes carry a `string16`, only **86** can be filled -- 0x019D's
+  sits behind a `nested_struct`, which `degenerate` stops at, so an `--encstring` run of
+  it is an ALLZERO experiment; the field-scan version called it encstring and this
+  section's predictor-versus-wire check (974 comparisons, two code paths sharing nothing)
+  caught it on its first run -- and the remaining 401 go out byte-identically whatever the
+  flag says, so a flag-keyed ledger would file 401 duplicate rows for one experiment. The
+  load-bearing check is the SABOTAGE: the regime-less `record` is reproduced inline, run
+  on the same two fixtures, and required to lose one of the two results, on the TABLE path
+  and again on the CRASH path -- the four rows this item is about were written by the
+  crash branch, so a regime on the table rows alone would have fixed nothing. Five module
+  sabotages were built and run and all five redden (7, 1, 12, 1 and 1 check). Also: an
+  old-format row loads, is readable, and is named UNMIGRATED rather than read as
+  all-zero; `migrate` loses NO row, REFUSES a key collision instead of letting one win,
+  and writes `unknown` EXPLICITLY where a row's capture is a note rather than a file (10
+  of the 334 -- the hand-attributed table-less pass, and a refusal branch that fires ten
+  times on real data is why it is there); and the write is `os.replace` with a
+  stale-stamp refusal, with the positive control that a current stamp is allowed, because
+  the ledger is a live vault artifact another session reads while a sweep is running.
+  Floor 99, was 64; sections 0 and 2-7 and 9 need no vault and score 94).
+  **Section 10 (2026-08-13) is the one that is not about smsgsweep at all**, and it exists
   because every other section runs INSIDE the module: `plan()` resolves the `--set`
   overrides, `apply_set` applies them, `encodable()` encodes them, so the module agreed
   with itself perfectly while **`--set` was putting the DEGENERATE payload on the wire**.
@@ -1006,22 +1069,47 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `record` scores the capture, so a `--set` run reads as a measurement of the all-zero
   payload wearing the label of the experiment. **Five of `studies/smsgsweep/FINDINGS.md`
   §5c's gate experiments were retracted for it**, settled from the server's own `plain=`
-  hexdumps -- the bytes were recorded all along, nothing was reading them. The section
-  joins the two halves and goes through a REAL FILE,
-  which is not decoration -- five sabotages were BUILT AND RUN (3, 1, 2, 3 red; the
-  `rows[0]`-for-every-row one reddens the per-row check ALONE) and the fifth breaks the
-  TEST instead of the source: the same missing `int(k)` cast, handed an in-memory plan
-  with int keys, is invisible and **all 72 checks PASS** while the first real run raises
-  TypeError. The plan reaches the probe as JSON, so the fixture must too. That sabotage
-  also found a defect in the section's own draft -- an empty step list was indexed at
-  `got[0]`, so a caught defect printed a bare traceback and no verdict banner. Floor 72,
-  40 of which need no vault, no socket and no client),
+  hexdumps -- the bytes were recorded all along, nothing was reading them. Note what
+  section 9 above could NOT do: it checks `planned_regime` against smsgsweep's own
+  encoder, so it agrees with the module and never reaches the probe. The section joins
+  the two halves and goes through a REAL FILE, which is not decoration -- five sabotages
+  were BUILT AND RUN (3, 1, 2, 3 red; the `rows[0]`-for-every-row one reddens the per-row
+  check ALONE) and the fifth breaks the TEST instead of the source: the same missing
+  `int(k)` cast, handed an in-memory plan with int keys, is invisible and **every check
+  PASSES** while the first real run raises TypeError. The plan reaches the probe as JSON,
+  so the fixture must too. That sabotage also found a defect in the section's own draft --
+  an empty step list was indexed at `got[0]`, so a caught defect printed a bare traceback
+  and no verdict banner. Its 8 checks need no vault, no socket and no client, but they DO
+  need `content.load()` to succeed, since the builder lives in `probes.py`),
   Section 7b covers `sweeploop.py`, the unattended driver: its stop conditions are a
   PURE function so they can be checked without a client, and its control is that ONE
   barren round must NOT stop -- a single unlocalised crash is normal, and stopping at one
-  would end most sweeps early. The last check asks the SYNTAX TREE whether the loop
+  would end most sweeps early. One check asks the SYNTAX TREE whether the loop
   imports the cage or launches anything itself, because the grep version of that check
-  went red on the docstring explaining the rule),
+  went red on the docstring explaining the rule.
+  **And since 2026-08-13 it covers the PLANNER'S EXIT CODE, which the loop discarded.**
+  `smsgsweep --plan` exits 2 writing NO plan on all three refusals it had that day, and
+  `load_plan()` reads a file out of the vault that cannot tell this round's from the last
+  one's --
+  so a refusal left the loop launching a real client against a STALE plan and recording
+  what it measured under this round's opcodes, silently, since the plan parses and the
+  ledger grows. The gate is TWO signals because each covers a hole in the other: the exit
+  code, plus whether the plan file MOVED, which is what catches a planner that dies after
+  its own checks. The half that needed the most care is the EXEMPTION -- exit 1 is
+  "NOTHING TO SEND", which writes an empty plan and is the sweep's only good ending, so a
+  blunt `rc != 0` stop would rename completion as breakage, and that control is the one
+  the blunt sabotage reddens. **Two controls were VACUOUS in the first version and the
+  sabotages are what found it**: the crashed-planner case (Windows returns the exception
+  code, which arrives NEGATIVE, so an `rc >= 2` test accepts it) was written with the file
+  unmoved, where the freshness half refuses it anyway -- the `rc >= 2` sabotage went 0
+  red. Both now pass `moved=True`, and five sabotages redden five different sets. The
+  subprocess half points the loop at a planner that exits 2 with a stale plan on disk, and
+  asserts the difference between two live answers in one process: `plan_round` hands back
+  None while `load_plan()` still answers with the row the old loop would have launched
+  against. Last, the ORDER is asked of the syntax tree -- the guard must sit BEFORE the
+  launch statement in the round body, with the guard deleted AND the guard moved one past
+  the launch as controls, because a client that goes up and is stopped afterwards has
+  already measured the wrong opcodes),
   `toolkit/authsrv/test_shotlabel.py` (the SCREEN readout for the 239 SILENT opcodes,
   and the four defects it shipped with. `smsgsweep`'s `SILENT` means *no c2s reply*
   and is blind to anything the client DRAWS, so this joins a run's one send to the
@@ -1216,6 +1304,45 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   that it is excluded. Three sabotages built and run, three redden. 106 checks
   with capstone (was 83) and 35 without — §10 needs a disassembler for every
   claim and declares one skip, so the stdlib floor is unmoved),
+  `toolkit/clientscan/test_consttable.py` (the `Gw\Const\*.cpp` table locator, and
+  the correction it made to the recon that commissioned it. MSVC emits a translation
+  unit's static data and its string literals in source order, so every one of these
+  tables is followed immediately by a string -- its `__FILE__` path or an assert
+  expression -- and `base + count*stride` lands on that string's first byte. The recon
+  predicted **12 of 14** close with two 4-byte non-closures, "alignment padding, a
+  `-1` sentinel". Re-derived from the bytes: **24 of 24 close**, 17 flush against
+  their left neighbour, **four** at exactly +4 (MSVC 8-alignment, and all four are
+  alignment), and **no sentinel non-closure exists** -- `s_attribPoints`'s
+  `FF FF FF FF` is the fourteenth ELEMENT of the array and `arrsize` counts it, so
+  14 x 4 lands on the anchor. What sentinels really cause is a third shape, a table
+  whose left neighbour is not a string at all, which is why `s_skill`,
+  `s_missionClientData` and `s_attribPoints` declare no left edge. **The headline is
+  deliberately the WEAK half**, because `base + count*stride == anchor` is
+  definitional unless the two terms come from DIFFERENT witnesses: eight tables take
+  their count from their own ascending index column and their base from the previous
+  string, and all 24 bases are corroborated by the client's own accessor loading that
+  exact address (29 references, minimum 1). Two of those bases are checked against
+  implementations that share no method with the anchor -- `skilltable.locate_table`,
+  which finds `s_skill` by its SELF-DECLARED count in row 0, and
+  `reskin.locate_attrib`, which corroborates `s_attrib` with an id column and a
+  profession-range check. **The blind spot is measured rather than argued away**: a
+  stride that DIVIDES the true one closes on the same base with a multiple of the
+  count -- `s_eula` reads as 99 x 4 instead of 33 x 12 -- and only an index column can
+  refute it, so the surviving rival strides are printed per row (`s_effect` 0,
+  `s_eula` [4, 36, 44, 132]) and `s_worldData`'s stride is labelled UNSETTLED. That is
+  not hypothetical: `s_glow` was entered in this corpus as 2 x 44, CLOSED on the
+  correct base with a plausible record, and is 11 x 8. Three sabotages built and run
+  and three redden -- a first-hit anchor, a +/- 4 pad tolerance, and the code witness
+  dropped -- which is why `pad` is a declared exact number and never a tolerance
+  (4 bytes is a whole record for the eight stride-4 tables here). It is also the
+  first `source = "client-table"` extraction in this repo's history: `--emit-effect`
+  writes all **2,077** `s_effect` rows with provenance per row, keyed by the ARRAY
+  INDEX rather than the id column (one record's id is not its index, and keying by id
+  would drop row 2036 and mint a 2077), and the test loads them through `content.py`
+  and then REMOVES the build from one row and requires the load to FAIL, so the 2,077
+  are proved to have passed condition 2 rather than skipped it. Sections 0-4 build a
+  small PE32 image byte by byte and need no vault, scoring 28 against a floor of 61,
+  so a vault-less run goes red. ~15 s),
   `toolkit/test_checks.py` (the check on the checker — see below),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
