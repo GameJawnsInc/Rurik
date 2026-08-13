@@ -591,11 +591,45 @@ def build_page(results, out_dir, title="smsgsweep -- name the silent opcodes"):
             "frames": frames, "shared": ", ".join(r.get("shared_with") or []),
             "detail": detail,
         })
-    # Drop images this build did not write. The page is rebuilt as the loop adds runs,
-    # and a stale frame from an earlier scoring rule is worse than a missing one: it
-    # looks like evidence and is not. The labels themselves live in the browser's
-    # localStorage keyed by opcode+run, so they survive a rebuild -- which is the
-    # whole reason the page is regenerated in place rather than into a new directory.
+    # A PARTIAL BUILD IS ADDITIVE, and this is the correction to a destructive design.
+    # The cleanup below drops images the page no longer references, which is right in
+    # itself -- a stale frame from an earlier scoring rule looks like evidence and is
+    # not. But the first version took "referenced" to mean "written by THIS build", so
+    # scoring one run rebuilt index.html with ONE card and deleted the other 2,400
+    # images. It happened: a `--run` over a single opcode reduced a 238-card page to a
+    # single card, and only the run directories being untouched made it recoverable.
+    #
+    # So the cards are persisted beside the page and every build renders the UNION:
+    # this build's rows replace their own ids and everything else carries. That also
+    # makes adding a run CHEAP -- the 25 minutes is the SCORING, and re-scoring 237
+    # unchanged runs to add one was always the wrong shape.
+    ledger_path = os.path.join(out_dir, "cards.json")
+    prior = []
+    if os.path.isfile(ledger_path):
+        try:
+            with open(ledger_path, encoding="utf-8") as fh:
+                prior = json.load(fh)
+        except (OSError, ValueError):
+            prior = []                      # unreadable: this build is the whole page
+    fresh_ids = {c["id"] for c in cards}
+    merged = cards + [c for c in prior if c.get("id") not in fresh_ids]
+    merged.sort(key=lambda c: (c.get("verdict") != "CHANGED", c.get("op", "")))
+    # A card whose images are gone would render as broken boxes and read as a run that
+    # produced nothing, so a carried card is kept only while its frames are on disk.
+    def _present(c):
+        srcs = [f["src"] for f in c.get("frames") or []]
+        if c.get("detail"):
+            srcs.append(c["detail"]["src"])
+        return all(os.path.isfile(os.path.join(out_dir, s.replace("/", os.sep)))
+                   for s in srcs) if srcs else True
+    dropped = [c["id"] for c in merged if c.get("id") not in fresh_ids and not _present(c)]
+    if dropped:
+        print(f"  {len(dropped)} carried card(s) dropped -- their frames are gone from "
+              f"img/ (rebuild them with --from-state). First: {dropped[0]}")
+    merged = [c for c in merged if c.get("id") in fresh_ids or _present(c)]
+    cards = merged
+    with open(ledger_path, "w", encoding="utf-8") as fh:
+        json.dump(cards, fh)
     keep = {os.path.basename(f["src"]) for c in cards for f in c["frames"]}
     keep |= {os.path.basename(c["detail"]["src"]) for c in cards if c.get("detail")}
     for stale in os.listdir(img_dir):

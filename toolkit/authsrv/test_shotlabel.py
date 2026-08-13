@@ -73,7 +73,7 @@ import shotlabel                                                # noqa: E402
 # 46 is what a green run executes today, MEASURED rather than guessed. Every section
 # needs PIL; without it the whole file declares one skip and goes red, the way
 # test_keytap.py does off Windows -- the fixture is drawn, not stored.
-LEDGER = checks.Ledger("test_shotlabel", floor=46)
+LEDGER = checks.Ledger("test_shotlabel", floor=53)
 ok = LEDGER.ok
 
 UTC = datetime.timezone.utc
@@ -571,6 +571,67 @@ def section_10_page_is_readable(tmp):
         LEDGER.skip("10c", "the fixture row is not CHANGED with a bbox")
 
 
+def section_11_partial_build_is_additive(tmp):
+    """Scoring ONE run must not delete the rest of the page.
+
+    THE DEFECT, and it happened to a real 238-card page: the image cleanup dropped
+    every file "this build did not write", so `--run <one dir>` rewrote index.html with
+    a single card and deleted 2,400 images. Nothing about the build looked wrong -- it
+    printed a page path and a card count of 1, which is exactly what it was asked for.
+    Only the run directories being untouched made it recoverable.
+
+    The fix persists the cards beside the page and renders the UNION, so this section
+    builds a page from run A, then builds again from run B ALONE, and requires A to
+    still be there -- with the whole point being that the second build is the narrow one.
+    """
+    print("\n11. a partial build ADDS to the page rather than replacing it")
+    out = os.path.join(tmp, "page11")
+    a = shotlabel.score_run(_standard(tmp, "r11a"))
+    shotlabel.build_page([a], out, title="t")
+    b = shotlabel.score_run(_standard(tmp, "r11b"))
+    page, n = shotlabel.build_page([b], out, title="t")
+    h = open(page, encoding="utf-8").read()
+    ok(n == 2, "a build of ONE run renders both it and the card already there",
+       f"{n} card(s) -- 1 means the partial build replaced the page again")
+    ok('data-id="0x0031_r11a"' in h and 'data-id="0x0031_r11b"' in h,
+       "and both ids are in the html", "")
+    # The images of the CARRIED card must survive the cleanup, or the page is a set of
+    # broken boxes -- which reads as "this opcode produced nothing", the worst failure
+    # this module has, because it looks like a measurement.
+    fulls = re.findall(r'src="(img/[^"]+)"', h)
+    missing = [f for f in fulls
+               if not os.path.isfile(os.path.join(out, f.replace("/", os.sep)))]
+    ok(not missing, "and the carried card's images were not deleted",
+       f"{len(missing)} missing of {len(fulls)}")
+
+    # RE-SCORING THE SAME RUN REPLACES ITS CARD, never duplicates it -- the page is
+    # rebuilt as scoring rules change, and two cards for one opcode would put a stale
+    # verdict beside a fresh one with nothing to tell them apart.
+    _, n2 = shotlabel.build_page([b], out, title="t")
+    ok(n2 == 2, "re-scoring a run replaces its own card rather than adding one",
+       f"{n2} card(s) after rebuilding an id that was already there")
+
+    # A CARD WHOSE FRAMES ARE GONE IS DROPPED, not carried as broken boxes. This is the
+    # recovery path from the defect above: after images are lost, the page must shrink
+    # honestly rather than render evidence that is not on disk.
+    for f in os.listdir(os.path.join(out, "img")):
+        if f.startswith("0x0031_r11a"):
+            os.remove(os.path.join(out, "img", f))
+    _, n3 = shotlabel.build_page([b], out, title="t")
+    ok(n3 == 1, "a carried card whose frames are gone is DROPPED, not shown broken",
+       f"{n3} card(s)")
+
+    # CONTROL: the union must not be unconditional. A build that carried cards even
+    # when their ids match would never let a re-score take effect.
+    ok(_pil() is not None, "CONTROL: PIL present, so the section measured something", "")
+    bad = os.path.join(out, "cards.json")
+    with open(bad, "w", encoding="utf-8") as fh:
+        fh.write("{not json")
+    _, n4 = shotlabel.build_page([b], out, title="t")
+    ok(n4 == 1, "an unreadable cards.json degrades to this build alone, not a crash",
+       f"{n4} card(s)")
+
+
 def main():
     if _pil() is None:
         LEDGER.skip("every section", "PIL is missing -- the fixture is drawn with it, "
@@ -587,6 +648,7 @@ def main():
         section_8_provenance(tmp)
         section_9_drift(tmp)
         section_10_page_is_readable(tmp)
+        section_11_partial_build_is_additive(tmp)
     return LEDGER.verdict()
 
 
