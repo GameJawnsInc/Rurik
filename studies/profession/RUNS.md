@@ -6,11 +6,18 @@ found the routes, [`MODDABLE.md`](MODDABLE.md) designed for arbitrary N and
 [`ATTRIBUTES.md`](ATTRIBUTES.md) costed the hardest dimension. Between them: ~50 agents, four
 documents, and **not one packet sent**. This is the packet.
 
-Six sessions, 2026-08-12, loopback only, ours-DH build, verified cage, synthetic
+> **READ §10 FIRST.** The static dive of 2026-08-12 refutes this document's headline
+> (§1), its attribution (§3) and its mechanism (§4). **The crash was our own server
+> setting bit 0 of the unlock bitmap**; the client's skills panel enumerates that bitmap
+> and asserts on a zero id, and **the walk never reads a profession at all.** §§1–9 are
+> kept verbatim, with retraction notes in place, because how seven sessions produced a
+> profession explanation for a bug with no profession in it is worth more than a clean
+> document.
+
+Seven sessions, 2026-08-12, loopback only, ours-DH build, verified cage, synthetic
 credential. Runs 1 and 2 are §2–§3; the two `profession_skillbar` sessions are §8; the
-two `profession_spawn` sessions are §9. §8 and §9 correct §6's first two rows — and §9
-holds the arc's two biggest corrections: the byte carriers are NOT equivalent, and the
-skillbar's own profession is a live variable nobody was controlling.
+two `profession_spawn` sessions and the two discriminators are §9; `profession_trigger`
+is §9's T1. **§10 is the static dive that explains all of them at once.**
 
 ## Labels
 
@@ -21,13 +28,21 @@ first time: watched happening in a running client, by this repo, on a dated run.
 
 ## 1. The result
 
-> **Profession 12 — an id the client does not ship — rides `0x00A6` and the client keeps
+> **RETRACTED 2026-08-12 by §10.** Both sentences below are wrong. The panel does not
+> "open at 3 and assert at 12" — it asserted at every profession, because **our own
+> server set bit 0 of the unlock bitmap** and the panel's skill walk asserts on a zero
+> id. And `*skill` is **not a null pointer**: it is a zero VALUE test. The one thing
+> that survives is the first clause — profession 12 rides `0x00A6` and the client keeps
+> playing. Read §10 first; §§1–9 are kept verbatim as the record of how six sessions
+> were spent on a crash with no profession in it.
+
+> ~~**Profession 12 — an id the client does not ship — rides `0x00A6` and the client keeps
 > playing. It dies only when a profession-keyed UI surface reads it, and the first such
 > surface is the SKILLS PANEL.** Same key, same panel, one byte different: it opens at
-> profession 3 and asserts at profession 12.
+> profession 3 and asserts at profession 12.~~
 >
-> The assert is **`*skill` at `ChCliSkill.cpp:1022`** — a **NULL POINTER**, not a bound
-> check. That distinction is the most consequential thing in this document (§4).
+> ~~The assert is **`*skill` at `ChCliSkill.cpp:1022`** — a **NULL POINTER**, not a bound
+> check. That distinction is the most consequential thing in this document (§4).~~
 
 **MODDABLE.md's central premise survived contact.** Its claim was that 256 professions are
 reachable because the appearance nibble and the live profession byte are *different storage*,
@@ -71,11 +86,27 @@ probably mundane — the server sends no party state at all. Recorded, not relie
 Same operator action twice, either side of one changed byte: open the skills panel at
 profession 3, close it, send profession 12, open the **same** panel again.
 
-- **Arm A, profession 3 — the panel OPENS.** Normal.
-- **Arm B, profession 12 — the client asserts.**
+- ~~**Arm A, profession 3 — the panel OPENS.** Normal.~~
+- ~~**Arm B, profession 12 — the client asserts.**~~
 
-**That is clean attribution.** One byte differs between the arms; everything else — the key,
-the panel, the session, the map, the operator — is held constant.
+> **RETRACTED by §10 — and this retraction is the most useful thing in the arc.**
+> **Arm A CRASHED.** Measured from this run's own capture
+> (`authsrv-20260812T201439-c1.jsonl`) and harness dir: the arm-A K prompt fired at
+> t=11.30 s, the client's **last c2s is a ping reply at t=17.81 s**, `ping_summary`
+> records **4 missed pings**, `hold002.png` (t≈14 s) shows a live client with no panel
+> open, and `hold003.png` (t≈24 s) shows the fatal-error dialog **already on screen**.
+> Arm B's one changed byte was not sent until **t=31.30 s** — seven-plus seconds into a
+> client that was already dead behind a modal dialog — and its "open the panel AGAIN"
+> prompt at t=39.31 s went to a corpse.
+>
+> So the crash belongs to **arm A, at profession 3**, and the "one byte differs"
+> attribution was an artifact of the exact failure `test_smsgsweep.py` already fixed for
+> the opcode sweep: **an assert leaves the socket open and the process alive**, so
+> anything short of a proof-of-life fence scores a dead client as healthy. The probe
+> driver never inherited that fence. §10's fix list carries it.
+
+~~**That is clean attribution.** One byte differs between the arms; everything else — the key,
+the panel, the session, the map, the operator — is held constant.~~
 
 ### What the crash log gives, and it is more than the attribution
 
@@ -116,7 +147,15 @@ other direction.
 
 ---
 
-## 4. The mechanism is a null lookup, not a bound check — and that changes the plan
+## 4. ~~The mechanism is a null lookup, not a bound check~~ — REFUTED by §10
+
+> **RETRACTED 2026-08-12.** It is neither. `*skill` at `ChCliSkill.cpp:1022` is a
+> **zero-VALUE test** on an enumerated skill id (`test eax,eax` on `(word << 5) + bit`),
+> and the id is 0 because **our own unlock bitmap set bit 0**. Nothing is null, nothing
+> is out of bounds, and no profession is involved. Everything below reasons from the
+> word "null" and is wrong in the same direction — the section is kept because the
+> *shape* of the error matters: a plausible mechanism, stated in a heading, that four
+> documents then built on. §10 has the disassembly.
 
 Four documents modelled the failure as **29 bound checks, each of which ends the session.**
 What actually fired is a **null-pointer assert on a skill**, several frames below the panel.
@@ -457,3 +496,149 @@ object is null are all READABLE from the callers: GmDeckBuilder's open path
 **The next rung is that static dive, and NO client run until it is done.** Three
 refuted predictions is past the study-before-iterating threshold; the dive names the
 walked object and the filter, and then ONE run confirms it.
+
+---
+
+## 10. The dive (2026-08-12): it was our bit, and there was never a profession in it
+
+Eight agents — four parallel reads of the call chain, one synthesis, three adversarial
+verifiers that re-ran every disassembly independently. Two verdicts held; **the third
+refuted part of the proposed fix**, which is recorded below because it was right.
+
+### 10.1 The mechanism, end to end
+
+All static VAs, build 38797, OBSERVED — re-derived by at least two agents independently.
+
+| Step | What happens |
+|---|---|
+| `0x00502580` | panel refresh. Four gates (`0x005025CE`, `0x005025D9`, `0x0050263D`, `0x0050264F`) — **none reads a profession**. Enumeration cursor zeroed at `0x00502646` |
+| `0x00502779` | `call 0x816E50` (crash frame `0x0050277E`), three out-pointers, no profession argument |
+| `0x00816E50` | TLS context → `this = ctx[0x2c]+0x700` → `call 0x821790` (crash frame `0x00816E6F`) |
+| `0x00821790` | find-next-set-bit over words at `[this+0x10]`, count at `[this+0x18]` |
+| `0x008217CB` | `lea eax,[esi+ebx]` — **id = (word << 5) + bit** |
+| `0x008217D3` | `test eax,eax` → if ZERO, push `0x3FE` (=1022), `call 0x00487BC0` at `0x008217E6`; next instruction `0x008217EB` is the crash frame |
+
+> **`*skill` is a ZERO-VALUE test on the enumerated skill id. Nothing is null.**
+> The assert fires **iff the walked bitmap has bit 0 set**, because id 0 is not a skill.
+
+Four crash-stack frames land on four instructions that were disassembled — a chain our
+own decoder cannot force. Two supporting reads that could have killed it and did not:
+`0x0046E110` is literally `bsr eax,ecx; ret` — **zero-based**, so bit 0 really does
+enumerate as id 0 (1-based would have made this reading impossible); and the not-found
+exit (`mov esi,0x7fffffe` at `0x008217C3`, rejected by `cmp eax,0x7fffffff`) is clean,
+so an empty or bit-0-clear bitmap **ends the loop and opens the panel**.
+
+### 10.2 Which bitmap — a correction the reads got wrong and the synthesis caught
+
+Two read agents assigned the walked container to opcode `0x00D3`. Wrong, and the
+difference is one instruction: the shared bitmap setter `0x00473550` keeps words at
+container `+0`, capacity `+4`, count `+8`. The iterator reads `+0x10`/`+0x18` off base
+`+0x700` — i.e. a container embedded at **`+0x710`**. `0x00DB`'s writer `0x00822910`
+does `add ecx,0x10` at `0x00822916`; `0x00D3`'s writer `0x00821CC0` does not.
+`--xrefs` closes it: the `+0x710` container has **exactly one writer and one reader** in
+the whole image.
+
+**`0x00DB` is `GAME_SMSG_UPDATE_UNLOCKED_SKILLS` — the message this server sends.** The
+panel was doing the obvious thing: listing the skills we told it we own.
+
+### 10.3 The defect is ours, and it is one character
+
+`unlock_all_words()` iterated `range(SKILL_TABLE_ROWS)` — **from 0**. Every `0x00DB` this
+server ever sent carried bit 0: **242 of 242 sends across every capture in the vault**,
+all beginning `db 00 80 00 ff ff ff ff`. `build_unlock_bitmap`'s explicit-list arm has
+had `if sid <= 0: continue` since it was written; only the "all" arm was wrong.
+
+Fixed to `range(1, SKILL_TABLE_ROWS)`, with the pre-fix version rebuilt inline as a
+negative control (`test_agentlife.py`, unlock-bitmap section) — the two must differ in
+exactly bit 0, so a revert reddens.
+
+### 10.4 Why the "profession 3 opens" premise was false
+
+**The deductive argument is the strong one, and it needs no capture:** there is **no
+profession-dependent branch anywhere** between the panel's entry and the assert — zero
+conditional instructions between the profession getters' return at `0x00502768` and the
+call at `0x00502779`, none inside `0x00816E50`, none inside `0x00821790`. With an
+identical bitmap, a profession-dependent outcome is **not merely unobserved, it is
+unavailable.** And the one profession-indexed table in the story could not have helped:
+`s_profChapter` at `0x00A384F0` reads `[0,0,0,0,0,0,0,2,2,3,3]` — **entry[1] == entry[3]
+== 0**, Warrior and Monk identical.
+
+The evidential half agrees (§3's retraction). Scope it honestly, per the verifier: **no
+session shows the panel open**, and every session where the client demonstrably died
+after a K prompt died with bit 0 set — but a K press leaves no c2s trace, so most
+sessions cannot confirm one happened. Run 2 carries the refutation alone.
+
+*(The verifier flagged session `20260812T213215` as alive 215 s past a K prompt. That is
+run 3a — the unattended session where the echo defect sent the prompts to `gamesrv.log`
+and nobody was at the keyboard. Explained, not anomalous.)*
+
+### 10.5 What the verifier refuted, and it inverts the advice
+
+The synthesis proposed sending `0x00A6` for the player to fix what the panel *displays*.
+**Measured and refuted:** `0x00A6`'s setter `0x007F7330` writes only the agent object
+(`+0x10E`/`+0x10F`) and fires event `0x1000001D`, which only GmAgentCommander and
+AttribFrame listen to. The panel's profession getters read a 20-byte-record array at
+**`ctx[0x2c]+0x6BC`**, whose **only writer is `0x0081FD60`, reached only from `0x00B7`'s
+handler** — and that writer fires `0x1000004E`, the event GmDeckBuilder's own listener
+arm waits for (`0x00500659` → `0x0050067D`). `--field 0x6bc` finds no other route.
+
+> **So the panel's display is fixed by `0x00B7`, not `0x00A6` — and `0x00B7`'s handler
+> `0x00813AE0` makes a SECOND call, `call 0x819e60` at `0x00813B12`, which reaches the
+> attribute rebuild and feeds the primary to `s_profChapter`'s bound
+> (`ConstChar.cpp:1296`).** The sole writer of the panel's profession record and the
+> message that asserts on a profession ≥ 11 are **the same message, one call apart.**
+
+**No server-side message can make the panel display a custom profession.** That is not
+an unverified next wall — it is a measured dead end, and it is sharper than what the
+synthesis claimed. Widening the 11-entry table or R1's assert neuter is the only route,
+and both are client-side.
+
+Confirmed from our own wire: the `ConstChar:1296` session sent **zero** `0x00A6` and one
+`0x00B7(prof 12)`, last c2s at the same instant. The 1296 route is `0x00B7`'s alone.
+
+Two label corrections the verifiers forced, both worth keeping: "no profession is read"
+is **false** (two getters *are* called, at `0x00502758`/`0x00502763`) — the defensible
+claim is that **no profession value BRANCHES anything**; and those getters are read
+*before* the walk and used only after it.
+
+### 10.6 Where the arc stands
+
+| Claim | Now |
+|---|---|
+| `*skill` is a null lookup | **REFUTED** — a zero-value test on an enumerated id |
+| Profession 3 opens the panel, 12 asserts | **REFUTED** — the walk is profession-blind; arm A crashed |
+| The 29 bound checks are the profession wall | **One is REAL and OBSERVED**: `ConstChar.cpp:1296`, on `0x00B7` arrival |
+| `0x00A6(12)` lands and the client plays on | **STANDS** (runs 1, 2) — the one original finding that survives |
+| The byte carriers are not equivalent | **STANDS and is sharpened** — `0x00B7` validates, `0x00A6` does not |
+| A custom profession can be DISPLAYED by a server message | **REFUTED** — measured dead end (§10.5) |
+
+**Falsifiable prediction, stated before the run:** with bit 0 cleared and nothing else
+changed, the **pure default world** — primary 1, Warrior bar, no `0x00A6` — opens the
+Skills-and-Attributes panel on K, and the client keeps answering pings for the rest of
+the session. If it still asserts at `ChCliSkill.cpp:1022`, this whole reading is wrong.
+**Score it on c2s traffic after the K press, never on the socket.**
+
+```
+python toolkit/harness/session.py --keep-open --shots 10 \
+    --game-args '--probe profession_spawn'
+```
+
+### 10.7 Carried forward
+
+1. **The probe driver needs the proof-of-life fence** `test_smsgsweep.py` already has —
+   run 2's misattribution is that same defect, and it cost six sessions. A K press
+   leaves no c2s trace, so a probe prompt should also require the operator to
+   acknowledge that they acted.
+2. **`asserts.py --at` is a proximity window, not enclosing-function bounds** — querying
+   a RETURN address can omit the very assert that produced it. `--grep` on the
+   expression text is the reliable pin. (This is what let §4's "null lookup" stand.)
+3. **The 15-map whitelist is a landmine on other maps.** Where `[edi+8] & 0x10`,
+   GmDeckBuilder builds the secondary-profession dropdown (the WIKI mechanic of §8) and
+   carries `GmDeckBuilder:2321 agentPrimaryProf != agentSecondaryProf` and
+   `GmDeckBuilder:2334 entryIndex`, with its loop bounded `cmp edi,0xb`. With no `0x00B7`
+   both getters return 11, so primary == secondary and **2321 fires**; and 11 can never
+   have an entry, so **2334 fires**. Our map reaches the assert only because
+   `[edi+8] == 0`, so this does not affect the prediction above — but it will bite the
+   first time the arc changes map.
+4. **Unmeasured:** with bit 0 cleared the walk posts up to ~3,442 UI rows through msg
+   `0x57`; no bound on that list was established.

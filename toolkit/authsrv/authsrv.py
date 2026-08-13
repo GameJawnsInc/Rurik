@@ -531,9 +531,37 @@ SKILL_TABLE_ROWS = 3443
 
 
 def unlock_all_words():
-    """Every bit up to SKILL_TABLE_ROWS, and not one past it."""
+    """Every real skill id -- 1..SKILL_TABLE_ROWS-1. NOT id 0, and that is the
+    whole of studies/profession's six-session crash.
+
+    THE BIT THAT COST SIX CLIENT SESSIONS. This used to be
+    `range(SKILL_TABLE_ROWS)`, starting at 0, so every 0x00DB this server ever
+    sent carried bit 0 -- 242 of 242 sends across every capture in the vault,
+    all beginning `db 00 80 00 ff ff ff ff`. Skill id 0 is not a skill.
+
+    WHAT THE CLIENT DOES WITH IT (OBSERVED, build 38797, disassembly):
+    0x00DB's handler routes the payload to a bitmap container at
+    ctx[0x2c]+0x710, and the Skills-and-Attributes panel enumerates that
+    container with a find-next-set-bit iterator (0x00821790). The iterator
+    forms `id = (word << 5) + bit` and asserts the id is NON-ZERO --
+    `*skill`, ChCliSkill.cpp:1022. Bit 0 set means the first id enumerated is
+    0, so the panel asserts the instant it opens. Nothing is null: the assert
+    is a ZERO VALUE test, which is why studies/profession/RUNS.md's "null
+    lookup" reading was wrong for four documents.
+
+    The walk is PROFESSION-BLIND -- no profession value branches anything
+    between the panel's entry and the assert -- so this fired at every
+    profession we ever tried, and the arc's "profession 3 opens" premise was
+    an artifact of a misattributed crash. Six sessions were spent inventing
+    and refuting profession stories for a crash with no profession in it.
+
+    The explicit-list arm of build_unlock_bitmap has skipped id 0 since it was
+    written (`if sid <= 0: continue`); only this arm did not. Pinned by
+    test_agentlife.py's unlock-bitmap section, which reproduces the old
+    version as a negative control.
+    """
     words = [0] * UNLOCK_WORDS
-    for sid in range(SKILL_TABLE_ROWS):
+    for sid in range(1, SKILL_TABLE_ROWS):
         words[sid // 32] |= 1 << (sid % 32)
     return words
 
@@ -545,7 +573,8 @@ UNLOCK_LABEL = "all"
 def build_unlock_bitmap(spec):
     """--unlocks: 'all', 'none', 'bar', or an explicit comma-separated id list."""
     if spec == "all":
-        return unlock_all_words(), f"all ({SKILL_TABLE_ROWS} real skills)"
+        return (unlock_all_words(),
+                f"all ({SKILL_TABLE_ROWS - 1} real skills, ids 1..{SKILL_TABLE_ROWS - 1})")
     words = [0] * UNLOCK_WORDS
     if spec == "none":
         return words, "none"
