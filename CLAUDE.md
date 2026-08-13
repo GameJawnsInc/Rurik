@@ -711,19 +711,40 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   no vault and score 57 against a floor of 66. Default ~25 s and 66 checks; `--all` is
   67 checks and ~20 minutes — MEASURED 2026-08-12 at 1,205 s, so budget for that rather
   than for a round number),
-  `toolkit/mapdata/test_mapexport.py` (the neutral terrain interchange, and the
-  orientation checked against a chunk the exporter never reads: prop `z` from
-  `0x20000004` sampled against the exported height field, with three rival layouts
-  that must collapse — on Kamadan the fraction of props within 100 units is 0.304
+  `toolkit/mapdata/test_mapexport.py` (the neutral map interchange — terrain and,
+  since 2026-08-13, EVERY PROP PLACEMENT — with the orientation checked against the
+  props chunk `0x20000004` through the test's OWN 48-byte walker. The old framing
+  "a chunk the exporter never reads" died the day the props sidecar landed and the
+  independence that survives is narrower and stated: the terrain path never reads
+  props, the props path never touches the height arrays. Prop `z` sampled against
+  the exported height field, with three rival layouts that must collapse — on
+  Kamadan the fraction of props within 100 units is 0.304
   against 0.070 for the y-flip, 0.033 for the x-flip and **0.085 for not de-tiling
   at all**, which reproduces FINDINGS §4's 0.089 for the flat row-major rival from
   the other side; Pre-Searing is 0.734 against 0.078/0.139/0.137. Kamadan sits below
   FINDINGS' 0.504 corpus median and is reported at its real value rather than
   dropped. Every prop of both maps lands inside the grid under all four layouts, so
-  no control loses on sample size. Also: `detile` checked cell-for-cell against
+  no control loses on sample size. **The props sidecar (format_version 2) joins BOTH
+  streams and makes them check each other**: `StrippedProps` for the authoring bytes,
+  `BloatedProps` for the compiled basis, f32 scale and placement radius, through
+  `corresponds()` — retail satisfies it 349/349, so the exporter REFUSES a
+  disagreement, and the dep lists (`0x21000004`/`0x11000004`, measured identical)
+  resolve every model index to a file id plus the MFT's (size, crc), because a file
+  id is archive state. Section 7 pins the sidecar against the archive — every
+  position equal to the independent walk, every model resolving, the sidecar's own
+  props-vs-heights fraction reproducing section 5's number — **and the ROTATION
+  COMPOSITION, which `props.py` had open: z first, then x, then y (Blender 'ZXY'),
+  per-axis signs (−, +, −), reproducing the compiled basis on all 516 and 864
+  records, with the multi-axis populations (53, 179) pinned so the rival-order
+  control (zyx, which still fails 20 and 95 of them) cannot go vacuous.** The
+  12-map probe behind it closed 3,545/3,545 with the nearest rival at 2,070.
+  Section 4b's refusals each sit beside a live baseline built from a synthetic
+  pair whose Bloated half the test assembles out of `struct.pack`. Also: `detile`
+  checked cell-for-cell against
   `terrain.Terrain.index`, a different implementation in a module this rung does not
   own; a sha256 manifest whose negative control flips one mantissa bit of one height
-  and must be caught; and a refusal that keeps derived ArenaNet bytes out of the
+  and must be caught (and the same control on one byte of the props sidecar); and a
+  refusal that keeps derived ArenaNet bytes out of the
   working tree — which shipped broken, one `dirname` short, and wrote a 745 KB height
   field into the repo before the test pinned the resolved root.
   Section 6 lost its entry-count gate on 2026-08-13 and the reason is the lesson: it
@@ -734,16 +755,20 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   and redden the floor on `vault/client/2026-04-30_b174de1f2d8d`, which holds the same
   349 pairs at the same rows with the same crcs. What guards the section is the
   population assertion on the next line -- 349 rows with flags 259 -- which the
-  impostor archive of `test_mapfile`'s section 2b reddens at 1. Sections 0-4 need no
-  vault and score 65 against a floor of 108, so a vault-less run goes red. ~31 s, and
-  108 of 108 on BOTH vaulted archives),
+  impostor archive of `test_mapfile`'s section 2b reddens at 1. Sections 0-4b need no
+  vault and score 84 against a floor of 145, so a vault-less run goes red. ~48 s, and
+  145 of 145 on BOTH vaulted archives, MEASURED 2026-08-13),
   `toolkit/mapdata/test_blenderimport.py` (the Blender half: it runs
   `tools/blender/import_gwmap.py` headless as a SUBPROCESS — the test is stdlib-only
   and never imports `bpy`, which is why the importer may live outside `toolkit/` —
   and checks the mesh Blender actually built. 213,921 vertices and 212,992 quads for
   Pre-Searing, every face a quad, every normal +Z, and the bounding box equal to the
-  Map Parameters rect to the bit. The oracle is again a chunk neither tool reads:
-  prop `z` looked up in Blender's own vertex buffer **by world coordinate rather than
+  Map Parameters rect to the bit. The oracle is the props chunk read by the test's
+  own walker — the TERRAIN path through both tools never touches it, which since
+  2026-08-13 is the honest form of "a chunk neither tool reads", both tools now
+  handling props as a separate sidecar/collection sharing nothing with the height
+  path: prop `z` looked up in Blender's own vertex buffer **by world coordinate
+  rather than
   by lattice index**, scoring 0.7338 — identical to `test_mapexport`'s figure for the
   same map, which was the stated prediction — against 0.078 y-flip and 0.139 x-flip.
   Looking up by index is what the first version did, and an upside-down-map sabotage
@@ -760,8 +785,15 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   does off Windows; `RURIK_BLENDER` and `--blender` override the install path, and
   section 0 is that selector — an explicit path that does not exist is REFUSED
   rather than fallen through to the known install, because it fell through, and a
-  run that asked for one Blender measured another and printed green. Sections 0-2
-  need no vault and score 39 against a floor of 75. ~13 s),
+  run that asked for one Blender measured another and printed green. **And since
+  2026-08-13 the props sidecar reaches Blender as PROXY objects** — outlined props
+  as their measured footprint prisms, the rest as cylinders at the measured
+  placement radius, never ArenaNet geometry, the proxy height being the one
+  invented (display-only) number — checked at all 864 Pre-Searing proxies sitting
+  at (x, y, −z) exactly, the proxy OBJECTS scoring the chunk's own 0.7338 against
+  the mesh, the outlined population pinned at 34, and a `--no-props` control that
+  must import the terrain alone. Sections 0-2
+  need no vault and score 45 against a floor of 84. ~18 s),
   `toolkit/mapdata/test_blenderroundtrip.py` (the AUTHORING direction, and the
   first thing in this arc to come OUT of Blender: an interchange imported, saved
   to a `.blend`, and exported back by a SEPARATE Blender process — two processes,
@@ -792,8 +824,15 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   a tolerance would have hidden; the comparison reports byte-differs and
   value-differs separately so the next one names itself. Section 4 authors a mesh
   in Blender from NOTHING, with no stamp to carry, and `mapbuild` assembles it
-  into a map file that passes all 17 of the client's open-time gates. Sections 0-4
-  need no vault and score 65 against a floor of 77. ~39 s),
+  into a map file that passes all 17 of the client's open-time gates. **And since
+  2026-08-13 the exporter picks the terrain by IDENTITY, not census**: a props
+  import fills the scene with proxy objects, so "more than one mesh" stopped
+  being proof of ambiguity — the terrain is the one mesh carrying the importer's
+  stamp, which proxies never do, and the old two-mesh refusal split into an
+  unstamped-intruder POSITIVE control (the stamp picks the terrain, the dims pin
+  it) and a two-STAMPED-meshes refusal, since a duplicated terrain copies its
+  stamp and is genuine ambiguity. Sections 0-4
+  need no vault and score 67 against a floor of 79. ~49 s),
   `toolkit/mapdata/test_mapfile.py` (the WHOLE-FILE codec: a retail `ffna` map
   payload decoded to a typed container and re-encoded byte-identically — **349 of
   349 Bloated and 349 of 349 Stripped** under `--all`, 6 of each by default. The
