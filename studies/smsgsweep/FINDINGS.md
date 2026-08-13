@@ -500,3 +500,29 @@ string.
 twice cannot attribute a screen change to one send, so `score_run` refuses it, and no
 picture of `0x0191` is claimed. Reading it needs a probe that fires once per SESSION
 rather than once per spawn — which is a change to `authsrv.run_probe`, not to this pass.
+
+**READ 2026-08-13, and §7.5's closing paragraph above is now WRONG in the useful
+direction — `0x0191` CHANGES THE MAP.** The operator said one of the runs had switched
+maps; scored against the baseline before the send, the third attempt
+(`20260813T153707`) reads:
+
+| frame | vs baseline | what it is |
+|---|---|---|
+| +0.5 s | 0.26% | still the courtyard |
+| +1.7 s → +5.6 s | **93.73%** | a load screen |
+| +8.3 s → +12.2 s | **75.25%** | a DIFFERENT map — stone stairway and canyon wall, not Ascalon City's courtyard, with a different compass |
+
+So every part of the anomaly is one behaviour. The full-window repaint is the map load;
+the channel teardown at ~12.6 s and the reopen 65 ms later are the client connecting to
+the **new instance**; and the second send is our own probe firing on the new instance's
+spawn, because `run_probe` fires per SPAWN. Nothing here is contamination — it is the
+opcode doing something the sweep had no way to name from an all-zero payload.
+
+**The score is attributable even though the run has two sends**, because the second one
+is 16 s after the first and every frame above precedes it. What `score_run` refuses is
+the general case, and rightly: it cannot know that in advance. The reading is recorded
+here by hand rather than by loosening that refusal.
+
+`0x0191` is therefore a **map/instance change**, which makes it the most consequential
+row of this pass: it is the first opcode found that moves the player between maps, and
+`PLAN.md` §3.6's capture campaign wants exactly that.
