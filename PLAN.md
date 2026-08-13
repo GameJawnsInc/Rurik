@@ -2455,7 +2455,7 @@ parallel, with one safety change that is not optional — see its entry.
     `snap_field` with a negative control; and `--check-overlaps` is a read-only verb
     that returned 0 having written nothing while `deploy` reported success over
     ArenaNet's own map, so install now READS THE ROW BACK. Record: `vault/research/size-2026-08-13/`.
-    **(I)** 🔶 **THE NAVMESH JOIN — HALF DONE 2026-08-13 (FINDINGS 59), AND IT IS
+    **(I)** ✅ **DONE 2026-08-13 (FINDINGS 59). THE NAVMESH JOIN, AND IT IS
     A RETRACTION.** Every rung above says the client compiled our map and the
     character walked in it. True — and **the SERVER never once pathed on our
     geometry.** `load_pathmap`'s only call site was instance bring-up, i.e. after
@@ -2476,10 +2476,20 @@ parallel, with one safety change that is not optional — see its entry.
     is inherently TWO runs** (`--install` arms the head to zero, so the run that
     produces the mesh cannot serve it) and `deploy --serve` is the second, its
     verdict the server's own log line against a count `pathmap` read from the
-    archive. `test_deploy` §6, floor 25 → 34, sabotage reddens 2.
-    **What is NOT done: the --serve run itself.** The fix is verified offline and
-    by direct call; no client has yet been launched against it. FINDINGS 58's
-    "MEASURED" sentence is retracted in place.
+    archive. `test_deploy` §6, floor 25 → 35, sabotage reddens 2.
+    **THE RUN LANDED the same day, both predictions confirmed**: run 1 (armed)
+    pre-warmed against an empty head and said so (`not an FFNA file: b''` →
+    PRE-WARM FAILED, serves NO collision) — a SUCCESS there would have meant
+    stale geometry and a wrong fix — and run 2 (`--serve`, unarmed) logged
+    `[map] navmesh 0x287D3: 1 planes, 13 trapezoids`, matching what `pathmap`
+    reads from the archive. Exit 0, readback green throughout (4,096/4,096
+    heights, env and sound verbatim, 8 props, spawn in one trapezoid, 92.34%
+    ours). **The server and the client now agree about the ground.** A third
+    defect fell out: the two runs started **17 s apart under `--hold 40`**,
+    because `session.hold_open` is gated on `keep_open` and `deploy` passed
+    `--hold` alone — the flag named a wait that never happened. Fixed, pinned on
+    the syntax tree, sabotage reddens 1. FINDINGS 58's "MEASURED" sentence is
+    retracted in place.
 ### Naming the archive's map rows — 2026-08-13
 
 **[studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md), `toolkit/clientscan/maprows.py`.**

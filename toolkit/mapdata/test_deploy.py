@@ -55,9 +55,10 @@ BIOME_ROW = 7982               # Pre-Searing
 BORROWED_MAX = 900             # generous ceiling; the real figure is 770
 PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 
-# FLOOR: 25, MEASURED from a green run 2026-08-13 (sections 0,1,3,4,5 score 21
-# and need no vault; section 2 reads the archive).
-LEDGER = checks.Ledger("test_deploy", floor=34)
+# FLOOR: 35, MEASURED from a green run 2026-08-13 (sections 0,1,3,4,5,6 score 31
+# and need no vault; section 2 reads the archive for the borrowed halves, which
+# is the provenance rule rather than a convenience). Was 25 before section 6.
+LEDGER = checks.Ledger("test_deploy", floor=35)
 check = checks.adopt(LEDGER)
 
 
@@ -278,7 +279,22 @@ def section6():
           "serve_run compares against a count read from the archive, not a "
           "literal -- a predicted number would be a check that cannot fail")
 
-    # (d) the log parsing, behaviourally, against a log this test writes.
+    # (d) --hold only holds under --keep-open. `session.hold_open` is gated on
+    # it, and deploy passed --hold alone -- so the flag named a wait that never
+    # happened and both runs of the serve pair finished 17 s apart under
+    # `--hold 40`. Asked of the syntax tree because "both flags are in the same
+    # argument list" is what matters, and a grep for "--keep-open" would pass on
+    # this comment.
+    launch_fn = next(n for n in ast.walk(ast.parse(dep))
+                     if isinstance(n, ast.FunctionDef) and n.name == "launch")
+    flags = {n.value for n in ast.walk(launch_fn)
+             if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+    check("--hold" in flags and "--keep-open" in flags,
+          "launch() passes --keep-open beside --hold -- without it "
+          "session.hold_open never runs and --hold is decoration",
+          f"keep-open={'--keep-open' in flags}")
+
+    # (e) the log parsing, behaviourally, against a log this test writes.
     LINE = "[map] navmesh 0x287D3: 1 planes, 13 trapezoids"
     hits = deploy.NAVMESH_RE.findall(f"noise\n{LINE}\nmore noise\n")
     check(hits == [("287D3", "1", "13")],

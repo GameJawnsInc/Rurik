@@ -6789,5 +6789,37 @@ us to our geometry*, not *the server pathed on it*. And the retraction in §58 i
 the lesson — the word MEASURED was attached to a hazard nobody had measured, in
 a document whose whole purpose is to separate those.
 
-`test_deploy` §6 pins it (floor 25 → 34); the sabotage that deletes the one
+`test_deploy` §6 pins it (floor 25 → 35); the sabotage that deletes the one
 startup call was built and run and reddens exactly 2 checks.
+
+### 59.5 THE RUN: both predictions confirmed (2026-08-13)
+
+Stated before arming: run 1 (armed) must FAIL to pre-warm, since the head is
+zero and there is no compiled mesh yet; run 2 (`--serve`, unarmed) must succeed
+and name the archive's own count. A pre-warm that SUCCEEDED on run 1 would have
+meant something was serving stale geometry and the fix was wrong.
+
+| run | dir | the server's own log |
+|---|---|---|
+| 1, armed | `20260813T183010` | `no navmesh for 0x287D3: not an FFNA file: b''` → **PRE-WARM FAILED … serves NO collision** |
+| 2, `--serve` | `20260813T183027` | **`[map] navmesh 0x287D3: 1 planes, 13 trapezoids`** |
+
+`b''` is the load reading the armed head: empty, exactly as designed. Between
+the two, the client compiled a 3,016 B path chunk into that row, and run 2's
+server read it at startup. `serve_run` matched it against the 13 `pathmap` reads
+from the archive — two independent readers of the same bytes — and the command
+exited 0. **The server and the client now agree about the ground.**
+
+Full readback unchanged and green: heights 4,096/4,096, env 639 B and sound 89 B
+verbatim, 8 props, spawn in exactly one trapezoid, 92.34% ours.
+
+### 59.6 A third defect the run exposed: `--hold` was decoration
+
+The two runs started **17 seconds apart under `--hold 40`**. `session.hold_open`
+is gated on `keep_open`, which only the tape chain sets, and `deploy` passed
+`--hold` alone — so every run of this command has torn down as soon as the body
+reached the map. Nothing failed, because the client compiles during LOAD and
+that fits inside the un-held window; the flag was naming a wait that never
+happened, and a bigger map is where that stops being free. `launch()` passes
+`--keep-open` now, asked of the syntax tree rather than grepped (the comment
+explaining the rule would satisfy a grep), sabotage reddens 1.

@@ -431,8 +431,16 @@ def launch(exe, session, dat, map_id, hold):
     env = dict(os.environ)
     env["RURIK_DAT"] = os.path.abspath(dat)
     print(f"  server world: RURIK_DAT={env['RURIK_DAT']}")
+    # --keep-open IS WHAT MAKES --hold MEAN ANYTHING. `session.hold_open` is
+    # gated on `keep_open`, which otherwise only the tape chain sets -- so every
+    # run of this command before 2026-08-13 asked for 40 s of client time and
+    # held for none of it, tearing down as soon as the body reached the map
+    # (MEASURED: the two runs of the serve pair started 17 s apart under
+    # `--hold 40`). Nothing failed, because the client compiles the map during
+    # LOAD and that fits; the flag was describing a wait that was not happening,
+    # and a bigger map is exactly where that stops being free.
     return subprocess.run(
-        [sys.executable, session, "--replace", "--hold", str(hold),
+        [sys.executable, session, "--replace", "--keep-open", "--hold", str(hold),
          "--warn", "3", "--exe", exe,
          "--game-args", f"--map {map_id}"], text=True, env=env).returncode
 
