@@ -6006,6 +6006,9 @@ Two mechanisms the driver had to learn, both now written into it:
 
 The hill flank at ~22° compiled WALKABLE, consistent with both of FINDINGS
 34's candidate threshold sets; which set is in force is still undecided.
+The owner walked the compiled map in a live session the same day and
+confirmed it: the plaza, the trees, the rings and the climbable hill all
+read in-game the way the chunks say.
 NOT established: textures, sound, environment, lighting (the map renders
 with the default tile stretched over authored slopes — the owner has seen
 what that looks like); anything past one run of one scene.
