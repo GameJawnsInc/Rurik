@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=163)
+LEDGER = checks.Ledger("agent lifetime", floor=169)
 
 
 def main():
@@ -188,6 +188,7 @@ def main():
     section_constants()
     section_probe_encoding()
     section_spawn_profession()
+    section_unlock_bitmap()
     return LEDGER.verdict()
 
 
@@ -1303,6 +1304,75 @@ def section_probe_encoding():
               f"{failures} failures -- an unencodable step is only discovered "
               f"by launching a client, which is the most expensive way to find "
               f"a typo in this repo")
+
+
+def section_unlock_bitmap():
+    """Bit 0 of the unlock bitmap, which is the whole profession-arc crash.
+
+    OBSERVED (build 38797): 0x00DB's payload becomes a bitmap at
+    ctx[0x2c]+0x710, and the skills panel enumerates it with a
+    find-next-set-bit iterator that forms `id = (word << 5) + bit` and asserts
+    the id NON-ZERO -- `*skill`, ChCliSkill.cpp:1022. So a set bit 0 asserts
+    the client the instant the panel opens, at ANY profession: the walk reads
+    no profession, and no profession value branches anything on the path.
+
+    OBSERVED (our own vault): 242 of 242 0x00DB sends across every capture we
+    have ever taken carry bit 0 -- `db 00 80 00 ff ff ff ff`. Six client
+    sessions were spent building and refuting profession stories for it.
+
+    THE NEGATIVE CONTROL IS THE POINT. `range(1, N)` and `range(N)` differ by
+    one character, and a test that only reads the current output would pass
+    against either if it computed its expectation from the function under test
+    -- this file's own combat-constants section exists because twelve of
+    fourteen constants could be set wrong with every check green. So the OLD
+    version is rebuilt here and required to DIFFER, and the bit count is
+    asserted against a literal.
+    """
+    import authsrv
+
+    words = authsrv.unlock_all_words()
+    LEDGER.ok(not (words[0] & 1),
+              "bit 0 is CLEAR in the unlock bitmap -- skill id 0 is not a skill",
+              "a set bit 0 makes the client's own panel iterator enumerate id "
+              "0 and assert *skill (ChCliSkill.cpp:1022) the moment the "
+              "Skills panel opens, at every profession")
+    n_set = sum(bin(w).count("1") for w in words)
+    LEDGER.ok(n_set == 3442,
+              "and exactly 3442 ids are unlocked, ids 1..3442",
+              f"{n_set} -- literal, not computed from SKILL_TABLE_ROWS, so "
+              f"the count cannot move silently with the constant")
+    ids = [s for s in range(len(words) * 32)
+           if words[s // 32] >> (s % 32) & 1]
+    LEDGER.ok(ids[0] == 1 and ids[-1] == authsrv.SKILL_TABLE_ROWS - 1,
+              "the lowest unlocked id is 1 and the highest is the last table row",
+              f"{ids[0]}..{ids[-1]} against 1..{authsrv.SKILL_TABLE_ROWS - 1}")
+
+    # The old version, rebuilt. It must DIFFER, and differ in exactly bit 0 --
+    # a check that merely reproduced the current output would pass against the
+    # defect it exists to catch.
+    old = [0] * authsrv.UNLOCK_WORDS
+    for sid in range(authsrv.SKILL_TABLE_ROWS):
+        old[sid // 32] |= 1 << (sid % 32)
+    LEDGER.ok(old != words and (old[0] & 1) and old[0] ^ words[0] == 1,
+              "NEGATIVE CONTROL: the pre-fix version sets bit 0 and this one "
+              "does not, differing in exactly that bit",
+              f"old word0 {old[0]:#010x} vs {words[0]:#010x} -- if these ever "
+              f"match, the fix has been reverted and every session is back to "
+              f"asserting on panel open")
+
+    # The explicit-list arm has ALWAYS skipped id 0; the regression is that
+    # the two arms disagreed, so both are checked from here on.
+    explicit, _ = authsrv.build_unlock_bitmap("0,1,316")
+    LEDGER.ok(not (explicit[0] & 1) and (explicit[0] >> 1 & 1),
+              "and the explicit-list arm still drops id 0 while keeping id 1",
+              f"word0 {explicit[0]:#010x} -- this arm's `sid <= 0` guard was "
+              f"correct all along; only the 'all' arm was wrong")
+    _, label = authsrv.build_unlock_bitmap("all")
+    LEDGER.ok("3442" in label,
+              "and the banner reports 3442, so an operator reading the log "
+              "sees the real count",
+              f"{label!r} -- it said 3443 while sending a bit that is not a "
+              f"skill")
 
 
 def section_spawn_profession():

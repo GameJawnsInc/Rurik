@@ -1253,7 +1253,7 @@ of the five made of observations rather than readings, and it corrects the other
 | [`WORKAROUNDS.md`](studies/profession/WORKAROUNDS.md) | The routes. The 29 session-enders are **one 5-byte patch site**; the armour composite gate is a redirect, not art (professions 0/1/2/9 already share a row). |
 | [`MODDABLE.md`](studies/profession/MODDABLE.md) | The design for arbitrary N. Ceiling **256** via the `u8` carriers; the appearance nibble is real but different storage. Custom ids start at **12** (11 is the client's sentinel). |
 | [`ATTRIBUTES.md`](studies/profession/ATTRIBUTES.md) | **204** custom attributes (52–255), capped by a one-byte field. 191 same-length edits; custom attributes start at **52** (51 is the NONE sentinel). |
-| [`RUNS.md`](studies/profession/RUNS.md) | **OBSERVED.** Profession 12 rides `0x00A6` and the client plays on 5.1 s. It dies in the **skills panel**, on a **null-pointer** assert — not a bound check. |
+| [`RUNS.md`](studies/profession/RUNS.md) | **OBSERVED, and §10 corrects §§1–9.** Profession 12 rides `0x00A6` and the client plays on. The skills-panel crash was **ours**: bit 0 of our unlock bitmap, asserted as a zero skill id — **not** a null pointer, not a bound check, and **not profession-dependent at all**. |
 
 **The next rung, and why it is cheap.** `R1` — NOP the `call` at `0x00487C11`, five bytes,
 one site for all 19,758 asserts. The ABI it depends on is confirmed by a live crash
@@ -1261,45 +1261,45 @@ one site for all 19,758 asserts. The ABI it depends on is confirmed by a live cr
 asserts falling through, one client run yields the *ordering* of many profession-keyed
 surfaces instead of only the first.
 
-**The cheaper alternative that may not need patching at all.** The assert was
-`*skill` — nothing registered for profession 12, rather than "12 is invalid". **Send a
-skillbar for the custom profession before opening the panel** and see whether the null
-clears. If it does, the mechanism is population, not bounds, and most of `ATTRIBUTES.md`'s
-191 edits are not on the critical path. **The probe ran 2026-08-12 (`profession_skillbar`)
-and its CONTROL arm reddened** (`RUNS.md` §8): a mid-session skillbar re-send followed by
-opening the panel asserts the client at profession **3** — the SAME `*skill` null, with no
-out-of-band byte anywhere in the session — while the unattended session outlived all seven
-steps, so the re-send is harmless until the panel reads it. **The instrument is poisoned
-and the population question is UNANSWERED, not negative.** Spawn-time delivery was built
-(`authsrv.py --spawn-profession N` + the observation-only probe `profession_spawn`) and
-**ran the same evening — both sessions crashed, each a finding (`RUNS.md` §9):**
-`--spawn-profession 3` played 19 s and died on K with the SAME `*skill` null on run 2's
-exact frame chain — a shipping profession; `--spawn-profession 12` died **on the arrival
-of the burst's own `0x00B7`**, at `profession < arrsize(s_profChapter)`
-(`ConstChar.cpp:1296`) — the first of FINDINGS' 29 bound checks ever observed live, and
-proof the two byte carriers are NOT equivalent: `0x00A6(12)` lands silently, `0x00B7(12)`
-is lethal, and run 1 never actually tested it (its 0x00B7 step fired post-mortem).
-The bar-mismatch lead was
-tested the same evening and **refuted by its own predictions** — both matched
-configurations crashed — and the real finding is underneath (`RUNS.md` §9): **the PURE
-DEFAULT world cannot open the skills panel.** Six sessions pressed K without a prior
-`0x00A6` and all six died on the same null; the one that opened had one. And
-`studies/smsg` already measured the missing piece: retail sends `0x00A6` 136 times
-across 4 tapes and its handler notifies exactly the attributes panel (event
-`0x1000001d`) — our burst sends only `0x00B7` for the player. **This was never about
-custom professions.** `profession_trigger` (`0x00A6(1)` then K) ran and CRASHED — the
-third refuted prediction of the evening — so the run-and-guess loop is over and the
-next rung is a STATIC DIVE (`RUNS.md` §9, T1 result). What the disassembly already
-gave: the setter `0x007F7330` notifies unconditionally (no comparison — the event was
-never the variable), and the `*skill` assert at ChCliSkill.cpp:1022 sits inside a
-find-next-set-bit iterator — **the skills panel walks a skill bitmap and asserts a
-per-id object non-null**, the same family the unlock clamp already fixed once from
-the other direction. The one pattern surviving eight K observations: `0x00A6`-delivered
-primary 3 opened; 1, 12, and never-set crashed. **Next: read GmDeckBuilder's open path
-(`0x0050277E`/`0x0050106F` → ChCliApi `0x00816E6F` → the iterator's callers), name the
-walked bitmap and its filter — NO client run until then.** R1 stands as the other
-route. WIKI note (§8): the panel's secondary-profession drop-down means it enumerates
-professions (INFERRED as a frame).
+**SETTLED 2026-08-12 by a static dive — and the answer was ours.** The skills-panel
+crash had no profession in it. `*skill` (`ChCliSkill.cpp:1022`) is a **zero-VALUE test on
+an enumerated skill id**, not a null pointer and not a bound check: the panel walks the
+unlock bitmap `0x00DB` delivers (container `ctx[0x2c]+0x710`), forms `id = (word<<5)+bit`
+at `0x008217CB`, and asserts it non-zero at `0x008217D3`. **`unlock_all_words()` iterated
+from 0**, so every `0x00DB` this server ever sent carried bit 0 — 242 of 242 sends across
+every capture in the vault. Fixed to `range(1, SKILL_TABLE_ROWS)`, pinned by a negative
+control that rebuilds the old version and requires it to differ (`test_agentlife.py`).
+**The walk is profession-blind** — no profession value branches anything between the
+panel's entry and the assert — so it fired at every profession, and "profession 3 opens"
+was a misattributed crash (`RUNS.md` §3 retraction: arm A's client was dead 13 s before
+arm B's byte was sent). Full record and the three verifier corrections: `RUNS.md` §10.
+
+**The next action is ONE session, with the prediction already stated.** With bit 0
+cleared and nothing else changed, the pure default world opens the panel on K and keeps
+answering pings; if it still asserts at `ChCliSkill.cpp:1022`, the whole reading is
+wrong. Score it on c2s traffic after the K press, **never on the socket**:
+
+```
+python toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_spawn'
+```
+
+**What this changed for the arc's actual goal.** The custom-profession boundary is now
+sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has
+**exactly one writer**, reached only from `0x00B7`'s handler — and that same handler, one
+call later (`0x00813B12`), feeds the primary to `s_profChapter`'s bound
+(`ConstChar.cpp:1296`). **So no server-side message can make the panel DISPLAY a custom
+profession**; that is measured, not assumed. Clearing bit 0 should make the panel OPEN at
+any primary including 12 (profession-blind walk), but displaying one needs a client-side
+rung: widening the 11-entry table at `0x00A384F0`, or R1's assert neuter. `0x00A6` does
+NOT populate that record (its event `0x1000001D` reaches only GmAgentCommander and
+AttribFrame), so the "send `0x00A6` and the panel comes right" reading is refuted too.
+
+**Three things to carry, all in `RUNS.md` §10.7.** The probe driver still lacks the
+proof-of-life fence `test_smsgsweep.py` has, and that gap cost six sessions; `asserts.py
+--at` is a proximity window, so querying a RETURN address can omit the assert that
+produced it (use `--grep`); and on the 15 whitelisted map ids GmDeckBuilder builds the
+secondary-profession dropdown, whose `GmDeckBuilder:2321`/`2334` asserts both fire with
+our 11/11 getter defaults — a landmine the first time this arc changes map.
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`
