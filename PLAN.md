@@ -1276,138 +1276,43 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
-### Custom professions — a five-document arc, and one live result (2026-08-12)
+### Custom professions — the route is RESKIN, and the party window just opened
 
-**Read [`studies/profession/RUNS.md`](studies/profession/RUNS.md) first.** It is the only one
-of the five made of observations rather than readings, and it corrects the other four.
+**Read [`studies/profession/RESKIN.md`](studies/profession/RESKIN.md) first, then
+[`RUNS.md`](studies/profession/RUNS.md) §10.** RESKIN.md is the live document; RUNS.md
+§§1–9 are kept only as the record of seven sessions spent on a crash that turned out to
+be our own unlock bit 0.
 
-| Doc | What it settles |
-|---|---|
-| [`FINDINGS.md`](studies/profession/FINDINGS.md) | The limits. `CHAR_PROFESSIONS = 11` is a compiled array *dimension*, not a table row — 29 bound checks over 13 modules, and the assert reporter is **noreturn**. |
-| [`WORKAROUNDS.md`](studies/profession/WORKAROUNDS.md) | The routes. The 29 session-enders are **one 5-byte patch site**; the armour composite gate is a redirect, not art (professions 0/1/2/9 already share a row). |
-| [`MODDABLE.md`](studies/profession/MODDABLE.md) | The design for arbitrary N. Ceiling **256** via the `u8` carriers; the appearance nibble is real but different storage. Custom ids start at **12** (11 is the client's sentinel). |
-| [`ATTRIBUTES.md`](studies/profession/ATTRIBUTES.md) | **204** custom attributes (52–255), capped by a one-byte field. 191 same-length edits; custom attributes start at **52** (51 is the NONE sentinel). |
-| [`RUNS.md`](studies/profession/RUNS.md) | **OBSERVED, and §10 corrects §§1–9.** Profession 12 rides `0x00A6` and the client plays on. The skills-panel crash was **ours**: bit 0 of our unlock bitmap, asserted as a zero skill id — **not** a null pointer, not a bound check, and **not profession-dependent at all**. |
+**SETTLED.** Adding a 12th profession is refused on cost (zero slack in `.rdata`, and
+seven of the per-profession tables are `mov imm32` ladders — code, not data). **Repurposing
+a shipped id is the route**, host = **Ritualist (8)**, and it is validated in a running
+client: name, abbreviation, attribute ownership, attribute names and the primary marker
+are all same-length dword edits via `toolkit/clientpatch/reskin.py`, which locates every
+table structurally and writes out-of-place. A custom id can never be a SECONDARY (the
+builder loops `cmp edi, 0xb`) and `0x00B7` can never carry one (`ConstChar.cpp:1296`, on
+arrival, measured twice).
 
-**The next rung, and why it is cheap.** `R1` — NOP the `call` at `0x00487C11`, five bytes,
-one site for all 19,758 asserts. The ABI it depends on is confirmed by a live crash
-(`RUNS.md` §3), and `ret 4` is correct because there is exactly one stack argument. With
-asserts falling through, one client run yields the *ordering* of many profession-keyed
-surfaces instead of only the first.
+**Authored text is VIABLE and cheap.** ArenaNet ships 38,633 stored rows, and text file
+index **98 is 1,024 EMPTY records** (56 B on disk, 6,146 B decompressed, ids
+100352..101375) — so our own strings need a ~6 KB stored row, not the 84 KB one, and break
+nothing. `datplan` finds 96 usable runs for it. The encoder is built and re-encodes four
+of ArenaNet's own files byte-for-byte (`textrec.encode_file`).
 
-**SETTLED 2026-08-12 by a static dive — and the answer was ours.** The skills-panel
-crash had no profession in it. `*skill` (`ChCliSkill.cpp:1022`) is a **zero-VALUE test on
-an enumerated skill id**, not a null pointer and not a bound check: the panel walks the
-unlock bitmap `0x00DB` delivers (container `ctx[0x2c]+0x710`), forms `id = (word<<5)+bit`
-at `0x008217CB`, and asserts it non-zero at `0x008217D3`. **`unlock_all_words()` iterated
-from 0**, so every `0x00DB` this server ever sent carried bit 0 — 242 of 242 sends across
-every capture in the vault. Fixed to `range(1, SKILL_TABLE_ROWS)`, pinned by a negative
-control that rebuilds the old version and requires it to differ (`test_agentlife.py`).
-**The walk is profession-blind** — no profession value branches anything between the
-panel's entry and the assert — so it fired at every profession, and "profession 3 opens"
-was a misattributed crash (`RUNS.md` §3 retraction: arm A's client was dead 13 s before
-arm B's byte was sent). Full record and the three verifier corrections: `RUNS.md` §10.
+**THE PARTY WINDOW OPENS** (§17). Gate was `PyCliGetMyPartyId` (`0x00856250`), zero on our
+server, read by BOTH the outpost command router and the explorable frame builder — which
+is why forcing `is_explorable` moved the refusal without lifting it. Retail's four-message
+build (`0x01D2` / `0x01CB` / `0x01D3` / `0x01B2`, 20 bytes, 8 of 8 live connections) is in
+the burst now: **281,814 px against a 13,419 idle control.**
 
-**The next action is ONE session, with the prediction already stated.** With bit 0
-cleared and nothing else changed, the pure default world opens the panel on K and keeps
-answering pings; if it still asserts at `ChCliSkill.cpp:1022`, the whole reading is
-wrong. Score it on c2s traffic after the K press, **never on the socket**:
+**NEXT: it is Party SEARCH, not the party ROSTER.** The window that opens is dialog
+`0x1E`. The profession ABBREVIATION is drawn by `PtPartyEntry` — a different frame — so
+§16's target is still unmet. Find the roster frame's own open path and what it needs
+(likely party MEMBER rows beyond the one `0x01CB` adds). Same consumer-backwards method
+that named `0x00B6`, the abbreviation builder and this gate.
 
-```
-python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_spawn'
-```
-
-**RESULT 2026-08-13: the prediction SURVIVED and the bit-0 mechanism is CONFIRMED**
-(`RUNS.md` §11). On the correct tree, with `word0 = 0xfffffffe` on the wire, the
-`*skill` assert at `ChCliSkill.cpp:1022` **did not fire** — which was the stated
-refutation condition. The panel's skill walk gets past the zero id for the first time in
-the arc. (The first attempt, `20260813T000725`, was served by the parallel profession
-session's tree carrying the pre-fix loop — a pre-fix server cannot falsify a post-fix
-prediction. The banner now prints `source: <dir>`, `unlocks:` must read **3442**, and
-`refuse_skill_zero()` makes a bit-0 bitmap a startup failure naming
-`ChCliSkill.cpp:1022`, so an old tree dies before the socket opens.)
-
-**The next wall is the icons, and it is the same error one layer up.** The client now
-asserts **`fileId` at `File.cpp(367)`** — site `0x00471630`, pinned by the trace's own
-next-instruction frame `0x0047163F`, under the same `FrMsg`/`FrApi` UI frames.
-MEASURED: of the 3,442 ids we unlock, only **1,333 are player-usable skills**
-(`equip_family == 1`, PvP clear — `skilltable.player_corpus()`); the other **2,109 are
-weapon modifiers and non-player definitions** with no skill icon. INFERRED: the panel
-loads an icon per unlocked id and asserts on the first one that has none.
-
-**RESOLVED 2026-08-13: THE PANEL OPENED** (`RUNS.md` §11) — first time in the arc, on
-`--unlocks bar`. No crash dialog, c2s to +27.96 s, `ping_summary: missed 0`, and
-`hold002.png` shows "Skills and Attributes (Test Warrior)" with the Warrior attribute
-list, the profession drop-down, and the eight unlocked skills grouped by attribute. The
-icon hypothesis is corroborated, and §10.5's refutation is confirmed from the other
-side: the panel displays **Warrior** while the only player profession message this
-server sends is `0x00B7`.
-
-**The fix is in: `authsrv.py --unlocks corpus`** derives the set from the owner's own
-client at run time (`pinned.find()` + `skilltable.player_corpus()`) — **1,333
-player-usable ids of 3,443 rows**, build stamped in the banner, committed nowhere, bit 0
-clear, all bar skills included, 0.7 s at startup, and it SKIPS rather than passing
-silently with no client.
-
-**DISCRIMINATOR SETTLED 2026-08-13: membership, not magnitude.** `--unlocks corpus`
-opened the panel with the whole corpus listed — **43 attribute groups over 1,333
-skills**, matching `skilltable.py`'s own count for the same set, with no crash dialog,
-c2s to +32.98 s and `missed 0`. So the `fileId` assert was never about list length; it
-was the 2,109 non-player rows with no skill icon. **`--unlocks` now defaults to
-`corpus`** — `all` is measured to crash the client's own panel on K, and the derivation
-refuses with an actionable message (naming `--unlocks bar`) rather than falling back to
-the broken set when there is no client to read. Default pinned on the syntax tree.
-
-**THE ROUTE IS DECIDED: R-RESKIN** (`studies/profession/RESKIN.md`, 2026-08-13, nine
-agents; two of three verifiers refuted parts and both refutations changed the plan).
-**Repurpose a shipped profession id rather than adding a twelfth.** The id stays legal, so
-not one bound check, assert or `0..10` loop can fire — and on every axis that makes a class
-playable a reskin delivers what a 12th id would. **Five dwords, 20 bytes, zero code bytes**
-against ~60 sites for R-WIDEN. Three measurements decide it: `.rdata` has **zero slack**
-(every table is packed flush against the next live datum, so widening is always
-relocate-plus-repoint); **seven per-profession tables are CODE**, materialised as
-`mov imm32` ladders in a 240-byte stack frame with 36 callers; and a **bound-check-free**
-read of a fifth table at `0x00BEF4A4` that every census in this arc missed because they all
-keyed on `cmp reg, 0x0b`. **R-NEUTER should stop being listed as a route** — it is the
-global assert wrapper, and the fall-through reads are disqualifying (model scale collapses
-to ~0, chapter becomes 1.1 billion, the creation icon comes from an uninitialised stack
-slot).
-
-**Honest scope, stated because this arc has over-promised twice:** you get a playable class
-with its own name, campaign availability, attribute set and primary, skill roster, model
-scale, palettes, starter gear and borrowed armour — whose **skills keep their shipped names
-and icons** (identity text is 1 archive file; its skills' names are 19–22), wearing the
-host's in-game glyph. You lose a slot, not a capability.
-
-**Next: RUN 0, the control, on a PRISTINE exe.** Prove the character renders as a Ritualist
-everywhere before changing a byte — the experiment as first designed was untestable,
-because two of its five dwords are read only from the character-creation picker and our
-server has no creation flow (`studies/divergence` D10). Built for it: `--spawn-profession`
-now drives the **appearance nibble** on both carriers (the `0x0059` dword and the
-character-select blob disagreed), for in-band ids only — 12 still keeps the legal
-placeholder, since the nibble is asserted `< 0xB` at load.
-
-```
-python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_panel --spawn-profession 8 --map 796'
-```
-
-**What this changed for the arc's actual goal.** The custom-profession boundary is now
-sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has
-**exactly one writer**, reached only from `0x00B7`'s handler — and that same handler, one
-call later (`0x00813B12`), feeds the primary to `s_profChapter`'s bound
-(`ConstChar.cpp:1296`). **So no server-side message can make the panel DISPLAY a custom
-profession**; that is measured, not assumed. Clearing bit 0 should make the panel OPEN at
-any primary including 12 (profession-blind walk), but displaying one needs a client-side
-rung: widening the 11-entry table at `0x00A384F0`, or R1's assert neuter. `0x00A6` does
-NOT populate that record (its event `0x1000001D` reaches only GmAgentCommander and
-AttribFrame), so the "send `0x00A6` and the panel comes right" reading is refuted too.
-
-**Three things to carry, all in `RUNS.md` §10.7.** The probe driver still lacks the
-proof-of-life fence `test_smsgsweep.py` has, and that gap cost six sessions; `asserts.py
---at` is a proximity window, so querying a RETURN address can omit the assert that
-produced it (use `--grep`); and on the 15 whitelisted map ids GmDeckBuilder builds the
-secondary-profession dropdown, whose `GmDeckBuilder:2321`/`2334` asserts both fire with
-our 11/11 getter defaults — a landmine the first time this arc changes map.
+**Then, when a decision is wanted:** the text route's step 2 writes a ~6 KB row into a
+4.2 GB archive (journalled, byte-for-byte revert proven by `test_datmove`). It needs the
+owner's call on WHICH archive — study copy, a fresh copy, or the run client's own.
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`
