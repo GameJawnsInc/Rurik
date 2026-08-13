@@ -97,6 +97,11 @@ measures what an opcode does with an EMPTY payload, and a handler that early-out
 zero id is indistinguishable here from one that does nothing at all. That is a real
 ceiling on what a silent row means and it is stated rather than discovered later.
 
+AND THAT CEILING IS WHY A ROW HAS A REGIME. See the `ALLZERO`/`ENCSTRING` block below:
+a row is a measurement of an opcode AND of the payload it was sent with, the ledger had
+no field for the second half, and four opcodes spent a day filed as crashing because of
+it. Read that block before touching `record` or the ledger's key format.
+
 RESUME IS THE CAPTURE, NOT A CURSOR. The sweep survives a dropped channel by keeping a
 ledger of opcodes that have actually been MEASURED, rebuilt from captures rather than
 written as the probe goes: a cursor advanced at send time records opcodes the client may
@@ -109,6 +114,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -168,6 +174,48 @@ MEASURED = ("REPLIED", "UNDECODABLE", "CONTESTED", "SILENT")
 # What a single-suspect crash is filed as, once the dialog has been read.
 # ASSERTED is a guard ArenaNet wrote; FAULTED is the absence of one.
 CRASH_KINDS = ("ASSERTED", "FAULTED", "CRASHED", "DROPPED_CHANNEL")
+
+# ---------------------------------------------------------------- the regime
+# WHAT A ROW IS A MEASUREMENT OF, and the day it turned out to be two things at once.
+#
+# An all-zero send and an `--encstring` send are DIFFERENT EXPERIMENTS on the same
+# opcode. The ledger had no field for which one a row came from, `record` keyed a row by
+# opcode alone, and `record` is FIRST-WRITE-WINS -- so the second experiment's result was
+# dropped without a word. Measured 2026-08-12: 0x0033, 0x009E, 0x00B9 and 0x00C0 each
+# crashed the client on an all-zero payload, and each went SILENT when the same opcode
+# was sent carrying a real encoded string. Two of the four crash dialogs name the guard
+# that fires, and it is a guard ABOUT THE STRING -- `(codedString[0] & ~WORD_BIT_MORE) >=
+# WORD_VALUE_BASE`, TextApi -- so the empty string is not an incidental detail of that
+# run, it is its cause. Nine runs measured the clearance on 2026-08-12 and NOT ONE could
+# be recorded: `--record` printed `recorded 0` and changed nothing, because every key was
+# already in the ledger. Re-running the recorder could never have fixed it; only a key
+# with a regime in it can.
+#
+# THE AXIS IS THE PAYLOAD, NOT THE FLAG, and that distinction is load-bearing rather than
+# fastidious. Of the 487 catalogued opcodes only 87 carry a `string16` field at all; for
+# the other 400 an `--encstring` run puts BYTE-IDENTICAL bytes on the wire, so it is not
+# a second experiment and must not become a second row. Reading the regime out of the
+# bytes the capture recorded (`plain`) gets that right by construction, gets `--set` runs
+# right too, and is the only version that can be CHECKED -- a flag is something we told
+# ourselves and `plain` is what went out. It is also how the migration of 2026-08-13 was
+# able to give 324 historical rows an explicit regime rather than a hopeful default: they
+# were re-derived from their own captures, one row at a time.
+#
+# WHY NOT A SCHEMA SHORTCUT FOR THE TEN. It is true that an opcode with no `string16`
+# field cannot be moved by `--encstring`, so nine of the ten table-less rows could be
+# called `allzero` from the catalogue alone. They are `unknown` instead, because their
+# capture ("table-less pass 2026-08-12") is a hand-attributed note and not a file: no
+# payload was ever recorded for them, `--set` could have moved any field, and a regime
+# inferred from what the tool COULD have sent is exactly the kind of claim this repo
+# labels UNVERIFIED. One re-run closes them.
+ALLZERO = "allzero"
+ENCSTRING = "encstring"
+# A payload that is neither -- a `--set` run, or a string that is not the plan's.
+OTHER = "other"
+# Not determined. NEVER a synonym for `allzero`: a row that never said and a row that
+# said "all zero" must not share a key, or the first silently retires the second.
+UNKNOWN = "unknown"
+REGIMES = (ALLZERO, ENCSTRING, OTHER, UNKNOWN)
 
 
 def degenerate(codec, opcode, channel="GAME_SMSG", encstring=None):
@@ -250,6 +298,144 @@ def corpus_encstring():
                          "invent one, because the whole question is what the client "
                          "accepts and a guess would answer it wrong in both directions")
     return best
+
+
+def regime_of_payload(codec, opcode, payload, channel="GAME_SMSG"):
+    """Which experiment these bytes ARE, read off the wire rather than off a flag.
+
+    The capture records every sweep send's plaintext, so the regime of a row is a
+    MEASUREMENT and not a label we attached: `ALLZERO` when the payload is exactly the
+    degenerate encoding, `ENCSTRING` when the ONLY difference from it is that every
+    `string16` carries the same non-empty string, `OTHER` when any other field moved
+    (a `--set` run), and `UNKNOWN` when the bytes are missing or will not decode.
+
+    THE ENCSTRING ARM RE-ENCODES AND REQUIRES BYTE IDENTITY rather than eyeballing the
+    decoded fields. That is what makes it refutable: a payload whose strings look right
+    but whose third dword was also nudged fails the re-encode and comes back `OTHER`,
+    where a field-by-field comparison written by hand would have had to remember to look.
+    It also means this needs no corpus and no vault -- the string is recovered from the
+    bytes, so the check never has to know WHICH encoded string a run used, which is the
+    one thing about it that is ArenaNet's authored text.
+    """
+    if not payload:
+        return UNKNOWN
+    try:
+        zero = codec.encode(channel, opcode,
+                            list(degenerate(codec, opcode, channel, None)))
+    except Exception:
+        return UNKNOWN
+    if payload == zero:
+        return ALLZERO
+    try:
+        _op, values, _end = codec.decode_one(channel, payload)
+        fields = [f for f in codec.fields_for(channel, opcode)
+                  if f["type"] != "msg_header"]
+    except Exception:
+        return UNKNOWN
+    strings = [v for f, v in zip(fields, values[1:]) if f["type"] == "string16"]
+    if not strings or not all(isinstance(s, str) and s for s in strings):
+        return OTHER
+    if len(set(strings)) != 1:
+        return OTHER                       # two different strings is a third experiment
+    try:
+        again = codec.encode(channel, opcode,
+                             list(degenerate(codec, opcode, channel, strings[0])))
+    except Exception:
+        return OTHER
+    return ENCSTRING if again == payload else OTHER
+
+
+def fills_a_string(codec, opcode, channel="GAME_SMSG"):
+    """Whether an `--encstring` plan actually reaches a `string16` in this opcode.
+
+    NOT "does the field list contain one", and the difference is a measured one rather
+    than a hypothetical. `degenerate` STOPS at a `nested_struct` -- the tail after it is
+    the element layout, so an empty element list emits none of it -- and GAME_SMSG
+    `0x019D` puts its `string16` behind exactly that. 87 opcodes carry a `string16`;
+    **86** can be filled. The naive field scan called 0x019D an encstring experiment and
+    the bytes it produced were all-zero, which is a row filed under the wrong
+    experiment, which is this whole item over again one level down. Caught by the
+    predictor-versus-wire check in `test_smsgsweep.py` section 9, on its first run.
+    """
+    try:
+        fields = codec.fields_for(channel, opcode)
+    except Exception:
+        return False
+    for f in fields:
+        if f["type"] == "nested_struct":
+            return False
+        if f["type"] == "string16":
+            return True
+    return False
+
+
+def planned_regime(codec, opcode, encstring=None, sets=None, channel="GAME_SMSG"):
+    """The regime a plan with these flags will ACTUALLY put on the wire for this opcode.
+
+    Not "did the operator pass --encstring". An opcode whose payload `--encstring` cannot
+    move is sent byte-identically either way, so under the flag it is still an `ALLZERO`
+    measurement -- 401 of the 487 catalogued opcodes are in that position, and treating
+    the flag as the regime would have filed 401 duplicate rows describing one experiment.
+
+    This is a STRUCTURAL prediction: it walks the field list and never encodes anything,
+    where `regime_of_payload` encodes, decodes and re-encodes. Two paths that share no
+    code is what makes their agreement -- checked over every encodable opcode in both
+    regimes, 974 comparisons -- worth its exit code rather than a tautology.
+    """
+    if sets:
+        return OTHER
+    try:
+        codec.fields_for(channel, opcode)
+    except Exception:
+        return UNKNOWN
+    if encstring and fills_a_string(codec, opcode, channel):
+        return ENCSTRING
+    return ALLZERO
+
+
+def ledger_key(opcode, regime):
+    """One key per EXPERIMENT: the opcode, and the payload regime it was sent under.
+
+    `ALLZERO` keeps the bare `0x0033` key that all 334 historical rows already use, so a
+    migrated ledger stays readable by anything that only walks rows -- `--report`, and
+    the external scripts that scan for `effect == "SILENT"`. Every other regime is
+    suffixed `0x0033@encstring`, which is what keeps the two experiments apart.
+
+    THE SUFFIX BREAKS `int(key, 16)`, DELIBERATELY. Any reader that turns a key straight
+    into an opcode is a reader that would otherwise pool two regimes into one number, and
+    a ValueError naming the key is the loud version of that. `parse_key` is the fix and
+    it is one line.
+    """
+    if regime == ALLZERO:
+        return f"0x{opcode:04X}"
+    if regime not in REGIMES:
+        raise ValueError(f"{regime!r} is not one of {REGIMES}. Refusing to invent a "
+                         f"regime: an unrecognised one would key a row nothing looks up.")
+    return f"0x{opcode:04X}@{regime}"
+
+
+def parse_key(key):
+    """(opcode, regime) from a ledger key. A BARE key returns regime None.
+
+    None rather than ALLZERO, because a bare key is a key that never said, and the whole
+    defect this dimension fixes is a row that never said being read as though it had.
+    `regime_of_row` prefers the row's own field, which is what `migrate` writes.
+    """
+    op, _, reg = str(key).partition("@")
+    return int(op, 16), (reg or None)
+
+
+def regime_of_row(key, row):
+    """A row's regime: its own field first, then the key, then UNKNOWN.
+
+    An UNMIGRATED row -- bare key, no `regime` field -- is UNKNOWN and not ALLZERO. That
+    is why `--resume` refuses an unmigrated ledger instead of quietly treating 334 rows
+    as all-zero measurements: they almost all are, and "almost all" is not a measurement.
+    """
+    reg = (row or {}).get("regime")
+    if reg:
+        return reg
+    return parse_key(key)[1] or UNKNOWN
 
 
 def set_type(codec, opcode, idx, channel="GAME_SMSG"):
@@ -387,12 +573,14 @@ def plan(codec, seen=(), classified=None, done=(), table_less=False,
                 skipped["not_only"] += 1
                 continue
             c = (classified or {}).get(opcode) or {}
-            vals = apply_set(good[opcode], sets_for(sets or {}, opcode))
+            per_set = sets_for(sets or {}, opcode)
+            vals = apply_set(good[opcode], per_set)
             rows.append({"opcode": opcode,
                          "predicted": c.get("class", "UNKNOWN"),
                          "callee": (c.get("callees") or [None])[0],
-                         "set": {str(k): v for k, v in
-                                 sets_for(sets or {}, opcode).items()},
+                         "set": {str(k): v for k, v in per_set.items()},
+                         "regime": planned_regime(codec, opcode, encstring=encstring,
+                                                  sets=per_set),
                          "bytes": len(codec.encode("GAME_SMSG", opcode, list(vals)))})
             continue
         if opcode in seen:
@@ -408,6 +596,7 @@ def plan(codec, seen=(), classified=None, done=(), table_less=False,
         rows.append({"opcode": opcode,
                      "predicted": c.get("class", "UNKNOWN"),
                      "callee": c.get("callees", [None])[0] if c.get("callees") else None,
+                     "regime": planned_regime(codec, opcode, encstring=encstring),
                      "bytes": len(codec.encode("GAME_SMSG", opcode, list(good[opcode])))})
     remaining = len(rows)
     # REVERSE EXISTS FOR ONE CONTROL. The plan is sorted, so 0x0000 is always the FIRST
@@ -456,10 +645,54 @@ def _load_json(path):
         return json.load(fh)
 
 
-def _write_json(path, obj):
+def stamp(path):
+    """(size, mtime_ns) of a file, or None. The optimistic-concurrency token.
+
+    The ledger is a live vault artifact and more than one session reads it while a sweep
+    is running. Atomicity stops a reader seeing half a file; it does NOT stop this
+    process reading 334 rows, another session adding one, and this process writing its
+    334 back over the top. So the write path carries the stamp it read and refuses if the
+    file moved underneath it. Losing a measured row is silent and permanent; refusing is
+    neither.
+    """
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    return (st.st_size, st.st_mtime_ns)
+
+
+def _write_json(path, obj, expect=False):
+    """Write the whole file or none of it, and never hold the target open.
+
+    `os.replace` is atomic on Windows as well as POSIX, so a concurrent reader sees
+    either the old file or the new one -- never a truncated one, which is what
+    `open(path, "w")` exposes for as long as `json.dump` takes to run.
+
+    `expect` is the stamp read when this object was loaded. `False` means "do not check",
+    which is what the plan file passes; `None` means "there was no file"; a tuple means
+    the file must still look like that. The temp file is created in the SAME directory,
+    because `os.replace` across volumes is not atomic and `%TEMP%` routinely is one.
+    """
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(obj, fh, indent=1, sort_keys=True)
+    if expect is not False and stamp(path) != expect:
+        raise ValueError(
+            f"REFUSING to write {os.path.basename(path)}: it changed on disk since this "
+            f"process read it (was {expect}, now {stamp(path)}). Another session has "
+            f"written the ledger. Re-read it and merge, or you will drop whatever it "
+            f"recorded -- silently, and there is no second copy.")
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".tmp-",
+                               suffix=".json")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(obj, fh, indent=1, sort_keys=True)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 # ---------------------------------------------------------------- analysis
@@ -476,6 +709,12 @@ def read_capture(capture_jsonl):
     the client answering on an opcode we do not know -- the strongest evidence that
     something happened -- and folding it into "the connection died" loses exactly the
     result the sweep is for.
+
+    A SEND IS A TRIPLE (t, opcode, payload) SINCE 2026-08-13. The third member is the
+    `plain` bytes the recorder logged, and it is what makes a row's REGIME a measurement
+    instead of a flag we remembered -- see the ALLZERO/ENCSTRING block. A capture from a
+    recorder that logged no plaintext yields None, which reads back as regime UNKNOWN and
+    is refused by `record` rather than filed under a guess.
     """
     sends, replies, undec, gone, life, map_id = [], [], [], None, [], None
     with open(capture_jsonl, encoding="utf-8", errors="replace") as fh:
@@ -486,7 +725,11 @@ def read_capture(capture_jsonl):
                 continue
             kind, t = rec.get("kind"), float(rec.get("t", 0.0) or 0.0)
             if kind == "sent" and "PROBE[smsgsweep]" in (rec.get("label") or ""):
-                sends.append((t, int(rec.get("opcode", 0))))
+                try:
+                    body = bytes.fromhex(rec.get("plain") or "")
+                except ValueError:
+                    body = b""
+                sends.append((t, int(rec.get("opcode", 0)), body or None))
             elif kind == "sent" and int(rec.get("opcode", 0)) == MANIFEST_DONE:
                 # THE LABEL IS THE ONLY WITNESS, and that is a real weakness stated
                 # rather than hidden: `sent` records carry no decoded values, and the
@@ -512,6 +755,19 @@ def read_capture(capture_jsonl):
     return sends, replies, undec, gone, life, map_id
 
 
+def _suspect_regime(seen_regimes, suspects):
+    """The regime of a crash window of ONE, or UNKNOWN.
+
+    Only a single-suspect window is ever recorded, so only a single-suspect window needs
+    a regime; anything else is bisected first. UNKNOWN for a wider window keeps `record`
+    from filing a crash under an experiment the capture never pinned down.
+    """
+    if len(suspects or ()) != 1:
+        return UNKNOWN
+    regs = sorted(seen_regimes.get(suspects[0]) or {UNKNOWN})
+    return regs[0] if len(regs) == 1 else UNKNOWN
+
+
 def control_window(sends, replies, settle, control):
     """What the client said unprompted, measured in THIS run.
 
@@ -522,7 +778,7 @@ def control_window(sends, replies, settle, control):
     """
     if not sends:
         return None, None
-    t0 = min(t for t, _ in sends)
+    t0 = min(s[0] for s in sends)
     lo = t0 - float(control)
     got = {op for t, op in replies if lo <= t < t0}
     return got, (lo, t0)
@@ -565,11 +821,19 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
     fence = alive_until if alive_until is not None else -1.0
     if gone is not None:
         fence = min(fence, gone[0])
-    live = [(t, op) for t, op in sends if t < fence]
-    dead = [op for t, op in sends if t >= fence]
+    live = [(t, op, body) for t, op, body in sends if t < fence]
+    dead = [op for t, op, _b in sends if t >= fence]
+
+    # THE REGIME IS READ FROM THE BYTES OF THIS RUN, per opcode, over EVERY send of it --
+    # live or not, because the crash suspect below is by definition a send with no proof
+    # of life behind it and it still has to be filed under the experiment it was.
+    seen_regimes = {}
+    for _t, opcode, body in sends:
+        seen_regimes.setdefault(opcode, set()).add(
+            regime_of_payload(codec, opcode, body))
 
     out = {}
-    for i, (t, opcode) in enumerate(live):
+    for i, (t, opcode, _body) in enumerate(live):
         end = live[i + 1][0] if i + 1 < len(live) else float("inf")
         got = [op for rt, op in replies if t <= rt < end and op not in floor]
         contested = [op for rt, op in replies
@@ -583,6 +847,14 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
         row["undecodable"].extend(bad)
 
     for opcode, row in out.items():
+        # ONE ROW, ONE EXPERIMENT. A connection that sent the same opcode under two
+        # regimes has pooled two experiments into one score, and there is no honest way
+        # to split them after the fact -- so the regime is UNKNOWN, which `record`
+        # refuses, and both are named so the operator can see what happened.
+        regs = sorted(seen_regimes.get(opcode) or {UNKNOWN})
+        row["regime"] = regs[0] if len(regs) == 1 else UNKNOWN
+        if len(regs) > 1:
+            row["regime_mixed"] = regs
         if row["replies"]:
             row["effect"] = "REPLIED"
         elif row["undecodable"]:
@@ -635,7 +907,7 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
         # should have arrived", so every send after the last reply is equally implicated
         # and naming any of them is a guess. Run with authsrv --ping-seconds.
         due = (alive_until + heartbeat) if heartbeat else None
-        suspects = sorted({op for t, op in sends
+        suspects = sorted({op for t, op, _b in sends
                            if due is not None and alive_until < t <= due})
         crash = {"suspects": suspects,
                  "window": sorted(set(dead)),
@@ -644,6 +916,7 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
                  "alive_until": alive_until,
                  "socket_closed": gone[0] if gone else None,
                  "why": gone[1] if gone else "the client stopped answering"}
+        crash["regime"] = _suspect_regime(seen_regimes, suspects)
 
     # THE CHANNEL DROP IS A DIFFERENT SHAPE AND IT IS BETTER CONSTRAINED THAN A CRASH.
     # `died` above wants a long silence, which is what an assert behind a modal dialog
@@ -664,7 +937,7 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
     # opened a new one 42 ms later, and the caller can see that because the run produced
     # a second capture. Silence after the close means the harness ended the run.
     elif bool(dead) and gone is not None and reconnected:
-        suspects = sorted({op for t, op in sends if fence <= t < gone[0]})
+        suspects = sorted({op for t, op, _b in sends if fence <= t < gone[0]})
         crash = {"suspects": suspects,
                  "window": sorted(set(dead)),
                  "heartbeat": heartbeat,
@@ -674,6 +947,7 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
                  "socket_closed": gone[0],
                  "why": f"the client answered {quiet * 1000:.0f} ms before the socket "
                         f"closed, so it did not stop -- the channel did"}
+        crash["regime"] = _suspect_regime(seen_regimes, suspects)
 
     # A suspect is IMPLICATED, not unreached -- it demonstrably went out to a client that
     # was still answering. Listing it in both places let one run report 0x0017 as
@@ -681,7 +955,7 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
     # opcode and the sort of thing a later session picks the wrong one of.
     unreached = set(dead) - set(crash["suspects"] if crash else ())
     if planned:
-        unreached |= (set(planned) - {op for _, op in live}
+        unreached |= (set(planned) - {op for _t, op, _b in live}
                       - set(crash["suspects"] if crash else ()))
     unreached = sorted(unreached)
     # `noise` is EVERYTHING the client said unprompted, which makes the window a check on
@@ -712,11 +986,29 @@ def analyse(capture_jsonl, codec=None, settle=SETTLE, control=CONTROL, planned=N
 
 
 def record(result, ledger=None):
-    """Merge a scored run into the ledger. UNREACHED opcodes are never recorded.
+    """Merge a scored run into the ledger. Returns (ledger, added, kept, refused).
 
-    An opcode is in the ledger only if the capture shows it went out on a live channel.
-    That is the whole resume mechanism: a cursor advanced at send time would record
-    opcodes the client may never have received, and the sweep would walk past them.
+    UNREACHED opcodes are never recorded. An opcode is in the ledger only if the capture
+    shows it went out on a live channel. That is the whole resume mechanism: a cursor
+    advanced at send time would record opcodes the client may never have received, and
+    the sweep would walk past them.
+
+    FIRST-WRITE-WINS, AND IT IS NOW SAID OUT LOUD. A key already in the ledger is KEPT,
+    never overwritten, and the count comes back in `kept` so `--record` can print it.
+    That sentence used to be a bare `continue`, and the cost of the silence was a day:
+    nine runs on 2026-08-12 measured four opcodes going SILENT under `--encstring` where
+    the ledger had them ASSERTED, `--record` printed `recorded 0`, and the natural
+    reading of that line -- "there was nothing new" -- was wrong in the one way that
+    matters. Re-running the recorder can NEVER correct a row. What was missing was not a
+    merge policy but a KEY: the two runs were different experiments and the ledger had
+    no field to say so, so they collided. `test_smsgsweep.py` builds exactly that
+    collision as a sabotage and requires it to reappear the moment the regime leaves the
+    key.
+
+    `refused` is the rows whose REGIME the capture could not name -- no `plain` bytes, or
+    the same opcode sent under two regimes in one connection. They are reported and
+    dropped rather than filed under a guess, the same way `unreached` is: a row keyed
+    UNKNOWN would block the real measurement forever.
     """
     # THE WORLD HAS TO BE THE SAME ONE, and on 2026-08-12 it silently was not. An opcode
     # near 0x019B made the client drop its game channel; it reconnected 42 ms later and
@@ -743,14 +1035,21 @@ def record(result, ledger=None):
             f"Re-run with `authsrv.py --no-enemy`. First at t="
             f"{result['combat'][0][0]:.2f}s: {result['combat'][0][1]}")
     ledger = dict(ledger if ledger is not None else load_ledger())
-    added = 0
+    added, kept, refused = 0, [], []
     for opcode, row in result["table"].items():
         if row["effect"] not in MEASURED:
             continue
-        key = f"0x{opcode:04X}"
+        regime = row.get("regime") or UNKNOWN
+        if regime == UNKNOWN:
+            refused.append((opcode, row.get("regime_mixed") or "no plaintext in the "
+                                                              "capture"))
+            continue
+        key = ledger_key(opcode, regime)
         if key in ledger:
+            kept.append(key)
             continue
         ledger[key] = {"effect": row["effect"],
+                       "regime": regime,
                        "replies": sorted(set(row["replies"])),
                        "contested": sorted(set(row["contested"])),
                        "undecodable": row["undecodable"][:2],
@@ -763,25 +1062,139 @@ def record(result, ledger=None):
     # A window of two or more records NOTHING and must be bisected with --only.
     crash = result.get("crash")
     if crash and len(crash.get("suspects") or []) == 1:
-        key = f"0x{crash['suspects'][0]:04X}"
-        if key not in ledger:
-            # THE DEFAULT COMES FROM THE MEASUREMENT, NOT FROM THE CALLER. `crash_kind`
-            # is set by whoever read the crash dialog; without it a channel drop would
-            # file as ASSERTED, which is the wrong word for a client that re-established
-            # and kept playing. The `crash` dict already knows which shape it saw.
-            kind = result.get("crash_kind") or (
-                "DROPPED_CHANNEL" if crash.get("dropped") else "ASSERTED")
-            ledger[key] = {"effect": kind, "replies": [], "contested": [],
-                           "undecodable": [],
-                           "why": result.get("crash_detail") or crash["why"],
-                           "capture": result["capture"]}
-            added += 1
-    return ledger, added
+        opcode = crash["suspects"][0]
+        regime = crash.get("regime") or UNKNOWN
+        if regime == UNKNOWN:
+            refused.append((opcode, "the crash suspect's payload could not be read"))
+        else:
+            key = ledger_key(opcode, regime)
+            if key in ledger:
+                kept.append(key)
+            else:
+                # THE DEFAULT COMES FROM THE MEASUREMENT, NOT FROM THE CALLER.
+                # `crash_kind` is set by whoever read the crash dialog; without it a
+                # channel drop would file as ASSERTED, which is the wrong word for a
+                # client that re-established and kept playing. The `crash` dict already
+                # knows which shape it saw.
+                kind = result.get("crash_kind") or (
+                    "DROPPED_CHANNEL" if crash.get("dropped") else "ASSERTED")
+                ledger[key] = {"effect": kind, "regime": regime, "replies": [],
+                               "contested": [], "undecodable": [],
+                               "why": result.get("crash_detail") or crash["why"],
+                               "capture": result["capture"]}
+                added += 1
+    return ledger, added, kept, refused
 
 
-def done_opcodes(ledger=None):
+def done_opcodes(ledger=None, regime=None):
+    """Opcodes the ledger has a row for. `regime=None` means UNDER ANY REGIME.
+
+    Any-regime is the historical meaning and stays the default so nothing that already
+    calls this quietly changes behaviour. `measured_under` is the one a plan wants: it
+    asks whether the experiment THIS plan would run has already been done, which is a
+    different and narrower question.
+    """
     ledger = ledger if ledger is not None else load_ledger()
-    return {int(k, 16) for k in ledger}
+    return {parse_key(k)[0] for k, row in ledger.items()
+            if regime is None or regime_of_row(k, row) == regime}
+
+
+def unmigrated(ledger):
+    """Keys whose regime was never recorded. Non-empty means `--migrate` has not run."""
+    return sorted(k for k, row in ledger.items() if not (row or {}).get("regime"))
+
+
+def measured_under(codec, ledger, encstring=None, sets=None, channel="GAME_SMSG"):
+    """Opcodes whose payload UNDER THESE FLAGS is already in the ledger.
+
+    This is what `--resume` needs and `done_opcodes` is not. Under `--encstring` an
+    opcode with a `string16` field is a new experiment and one without is byte-identical
+    to a run already done -- so a resumed encstring sweep should replan the 87 and skip
+    the rest. The alternative was measured the hard way on 2026-08-13: an unattended
+    encstring pass launched a client for 238 opcodes, and for most of them sent exactly
+    the bytes an earlier run had already sent and already recorded.
+    """
+    out = set()
+    for key, row in ledger.items():
+        opcode = parse_key(key)[0]
+        want = planned_regime(codec, opcode, encstring=encstring,
+                              sets=sets_for(sets or {}, opcode), channel=channel)
+        if regime_of_row(key, row) == want:
+            out.add(opcode)
+    return out
+
+
+def migrate(ledger, resolve):
+    """Give every row an EXPLICIT regime, derived per row rather than defaulted.
+
+    `resolve(opcode, row) -> regime` is the derivation; `capture_resolver` builds the one
+    that re-reads each row's own capture and reports what the probe actually sent. Rows
+    that already carry a regime are left exactly as they are.
+
+    LOSING A MEASURED ROW WOULD BE FAR WORSE THAN THE DEFECT THIS FIXES. There are 334 of
+    them and they cost a day of client launches, so nothing here drops one: every input
+    key appears in the output, a key collision RAISES rather than overwriting, and a row
+    whose regime cannot be derived is written `unknown` -- which is a fact about our
+    records, not a guess about the run. Returns (new_ledger, changes), where a change is
+    (old_key, new_key, regime) and old_key == new_key for the ones that keep their name.
+    """
+    out, changes = {}, []
+    for key in sorted(ledger):
+        row = dict(ledger[key])
+        regime = row.get("regime") or resolve(parse_key(key)[0], ledger[key]) or UNKNOWN
+        if regime not in REGIMES:
+            raise ValueError(f"{key}: resolver returned {regime!r}, which is not one of "
+                             f"{REGIMES}")
+        row["regime"] = regime
+        new = ledger_key(parse_key(key)[0], regime)
+        if new in out:
+            raise ValueError(
+                f"REFUSING to migrate: {key} and the row already at {new} would both "
+                f"claim experiment {new}. Two rows for one experiment is the thing the "
+                f"regime exists to make impossible; resolve it by hand rather than "
+                f"letting one silently win.")
+        out[new] = row
+        changes.append((key, new, regime))
+    if len(out) != len(ledger):
+        raise ValueError(f"migration lost rows: {len(ledger)} in, {len(out)} out")
+    return out, changes
+
+
+def capture_resolver(codec, capture_dir=None):
+    """A `migrate` resolver that reads each row's regime out of its own capture.
+
+    THE DERIVATION IS THE POINT. Every historical row names the gamesrv capture it was
+    scored from, and those captures record the plaintext of every probe send -- so the
+    regime of a 2026-08-12 row is recoverable as a MEASUREMENT rather than assumed from
+    what the flags probably were. Measured 2026-08-13 over the 334-row ledger: 324 rows
+    resolved to `allzero` from their own bytes and 10 came back `unknown` -- the
+    hand-attributed table-less pass, whose `capture` is a note and not a file. That the
+    refusal branch fires ten times on real data, rather than never, is why it is here.
+
+    Captures are read once each and cached: 334 rows name 89 captures.
+    """
+    root = capture_dir or os.path.join(vaultpath.vault_path("captures"), "gamesrv")
+    cache = {}
+
+    def sends_in(name):
+        if name in cache:
+            return cache[name]
+        path = os.path.join(root, name)
+        found = {}
+        if os.path.isfile(path):
+            for _t, opcode, body in read_capture(path)[0]:
+                found.setdefault(opcode, set()).add(body)
+        cache[name] = found
+        return found
+
+    def resolve(opcode, row):
+        bodies = sends_in(str(row.get("capture") or "")).get(opcode)
+        if not bodies:
+            return UNKNOWN
+        regs = {regime_of_payload(codec, opcode, b) for b in bodies}
+        return regs.pop() if len(regs) == 1 else UNKNOWN
+
+    return resolve
 
 
 def observed_from_live():
@@ -929,6 +1342,17 @@ def print_run(result):
               f"Narrow it with authsrv --ping-seconds.")
     print(f"{len(table)} opcode(s) stimulated on a live channel -> "
           + ", ".join(f"{k} {v}" for k, v in sorted(by.items())))
+    # THE REGIME IS READ OFF THE WIRE, so it is reported rather than restated from the
+    # flags: a run launched with `--encstring` still sends an all-zero payload to every
+    # opcode with no string16 field, and that is the experiment those rows record.
+    regs = {}
+    for row in table.values():
+        regs[row.get("regime", UNKNOWN)] = regs.get(row.get("regime", UNKNOWN), 0) + 1
+    print("  payload regime (from the capture's own bytes): "
+          + ", ".join(f"{k} {v}" for k, v in sorted(regs.items())))
+    for opcode in sorted(o for o, r in table.items() if r.get("regime_mixed")):
+        print(f"  !! 0x{opcode:04X} was sent under {table[opcode]['regime_mixed']} in ONE "
+              f"connection -- two experiments in one row, and --record will refuse it")
     for want in ("REPLIED", "UNDECODABLE", "CONTESTED"):
         for opcode in sorted(o for o, r in table.items() if r["effect"] == want):
             row = table[opcode]
@@ -986,13 +1410,39 @@ def print_run(result):
 
 
 def print_report(ledger, codec):
+    """The ledger, split by REGIME, with the cross-regime disagreements first.
+
+    A row is a measurement of an opcode AND a payload, so a single histogram over all
+    rows is the wrong shape: it was the shape that let four opcodes read as "crashing"
+    when what they crash on is an EMPTY STRING. The disagreement list is the sweep's
+    highest-value output -- an opcode whose effect changes with the payload has had its
+    handler's gate located, which is more than a SILENT row ever says.
+    """
     total = len({int(k) for k in codec.channels["GAME_SMSG"]["messages"]})
-    by = {}
-    for row in ledger.values():
-        by[row["effect"]] = by.get(row["effect"], 0) + 1
-    print(f"ledger: {len(ledger)} opcode(s) measured of {total} catalogued")
-    for k, v in sorted(by.items()):
-        print(f"  {k:<16} {v}")
+    per, opcodes = {}, {}
+    for key, row in ledger.items():
+        reg = regime_of_row(key, row)
+        per.setdefault(reg, {})
+        per[reg][row["effect"]] = per[reg].get(row["effect"], 0) + 1
+        opcodes.setdefault(parse_key(key)[0], {})[reg] = row["effect"]
+    stale = unmigrated(ledger)
+    print(f"ledger: {len(ledger)} row(s) over {len(opcodes)} opcode(s) "
+          f"of {total} catalogued")
+    for reg in sorted(per):
+        n = sum(per[reg].values())
+        print(f"  {reg:<10} {n:>4}   "
+              + "  ".join(f"{k} {v}" for k, v in sorted(per[reg].items())))
+    if stale:
+        print(f"  !! {len(stale)} row(s) carry NO regime and are counted as `unknown`. "
+              f"Run --migrate: until then --resume refuses, because treating a row that "
+              f"never said as an all-zero measurement is the defect, not the fix.")
+    split = {o: r for o, r in opcodes.items() if len(set(r.values())) > 1}
+    if split:
+        print(f"\n  {len(split)} opcode(s) BEHAVE DIFFERENTLY BY PAYLOAD -- the sweep's "
+              f"strongest result, and what one histogram over all rows hides:")
+        for o in sorted(split):
+            print(f"    0x{o:04X}  "
+                  + "   ".join(f"{r}: {e}" for r, e in sorted(split[o].items())))
     for want in ("REPLIED", "UNDECODABLE", "DROPPED_CHANNEL", "CONTESTED"):
         for key in sorted(k for k, r in ledger.items() if r["effect"] == want):
             row = ledger[key]
@@ -1054,6 +1504,16 @@ def main():
                     help="plan exactly these (comma-separated, 0x ok), overriding every "
                          "filter. This is how a crash window is bisected down to the one "
                          "opcode that ended a run")
+    ap.add_argument("--migrate", action="store_true",
+                    help="give every ledger row an explicit payload regime, derived from "
+                         "its own capture. DRY BY DEFAULT: prints the change list and "
+                         "writes nothing unless --write is passed as well")
+    ap.add_argument("--write", action="store_true",
+                    help="with --migrate, actually replace the ledger. Kept separate "
+                         "because a migration rewrites every row of a live vault "
+                         "artifact that other sessions read while a sweep is running")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="with --record, score and print but write no ledger")
     ap.add_argument("--settle", type=float, default=SETTLE)
     ap.add_argument("--control", type=float, default=CONTROL)
     ap.add_argument("--dwell", type=float, default=DWELL)
@@ -1062,6 +1522,40 @@ def main():
 
     if a.report:
         return print_report(load_ledger(), codec)
+
+    if a.migrate:
+        before = load_ledger()
+        if not before:
+            print("no ledger to migrate", file=sys.stderr)
+            return 2
+        token = stamp(ledger_path())
+        try:
+            after, changes = migrate(before, capture_resolver(codec))
+        except (ValueError, SystemExit) as exc:
+            print(f"REFUSED: {exc}", file=sys.stderr)
+            return 2
+        by = {}
+        for _old, _new, reg in changes:
+            by[reg] = by.get(reg, 0) + 1
+        renamed = [(o, n) for o, n, _r in changes if o != n]
+        print(f"{len(before)} row(s) in, {len(after)} out; regime derived from each "
+              f"row's own capture: " + ", ".join(f"{k} {v}" for k, v in sorted(by.items())))
+        print(f"  {len(renamed)} key(s) change name:")
+        for o, n in renamed[:40]:
+            print(f"    {o} -> {n}")
+        if len(renamed) > 40:
+            print(f"    ... and {len(renamed) - 40} more")
+        if not a.write:
+            print("\nDRY RUN -- nothing written. Re-run with --write to replace "
+                  f"{ledger_path()}.")
+            return 0
+        try:
+            _write_json(ledger_path(), after, expect=token)
+        except ValueError as exc:
+            print(f"\n{exc}", file=sys.stderr)
+            return 3
+        print(f"\nwritten -> {ledger_path()}")
+        return 0
 
     if a.write_seen:
         seen, dirs = observed_from_live()
@@ -1081,7 +1575,13 @@ def main():
         caps = captures_from_report(a.from_report)
     if caps:
         p = load_plan() or {}
-        rc, total = 0, 0
+        rc, total, held, dropped = 0, 0, [], []
+        # READ THE LEDGER ONCE, and remember what it looked like. Scoring several
+        # connections used to reload it per connection and write it back per connection,
+        # which is three read-modify-write windows for another session to fall into
+        # instead of one. The stamp is checked at the single write below.
+        token = stamp(ledger_path())
+        ledger = load_ledger() if a.record else None
         for n, cap in enumerate(caps, 1):
             if len(caps) > 1:
                 print(f"\n--- connection {n} of {len(caps)}: {os.path.basename(cap)}")
@@ -1105,14 +1605,38 @@ def main():
             rc = rc or one
             if a.record and one == 0:
                 try:
-                    ledger, added = record(result)
+                    ledger, added, kept, refused = record(result, ledger)
                 except ValueError as exc:
                     print(f"\n{exc}", file=sys.stderr)
                     return 3
-                _write_json(ledger_path(), ledger)
                 total += added
+                held.extend(kept)
+                dropped.extend(refused)
         if a.record:
-            print(f"\nrecorded {total} newly measured opcode(s) -> {ledger_path()}")
+            if not a.dry_run:
+                try:
+                    _write_json(ledger_path(), ledger, expect=token)
+                except ValueError as exc:
+                    print(f"\n{exc}", file=sys.stderr)
+                    return 3
+            where = "DRY RUN, nothing written" if a.dry_run else str(ledger_path())
+            print(f"\nrecorded {total} newly measured experiment(s) -> {where}")
+            # THE LINE THAT WAS MISSING FOR A DAY. `recorded 0` reads as "there was
+            # nothing new", and on 2026-08-12 it meant "four rows already exist under
+            # these keys and your new measurement has been thrown away". First-write-wins
+            # is the right policy -- the ledger keeps the first measurement of an
+            # experiment -- but it has to SAY so, because --record can never correct a row.
+            if held:
+                print(f"  {len(held)} already measured under that exact regime and were "
+                      f"KEPT, not overwritten: " + " ".join(sorted(set(held))[:12])
+                      + (" ..." if len(set(held)) > 12 else ""))
+                print("  --record is append-only by design; a wrong row is fixed by "
+                      "hand, or by re-keying it, never by re-running this.")
+            if dropped:
+                print(f"  {len(dropped)} row(s) REFUSED -- their payload regime could not "
+                      f"be read, so there is no experiment to file them under:")
+                for opcode, why in dropped[:8]:
+                    print(f"    0x{opcode:04X}  {why}")
         return rc
 
     seen = set()
@@ -1122,7 +1646,6 @@ def main():
                 line = line.split("#", 1)[0].strip()
                 if line:
                     seen.add(int(line, 0))
-    done = done_opcodes() if a.resume else set()
     only = None
     if a.only:
         only = {int(x, 0) for x in a.only.replace(" ", "").split(",") if x}
@@ -1143,21 +1666,42 @@ def main():
         except ValueError as exc:
             print(f"REFUSED: {exc}", file=sys.stderr)
             return 2
+    # RESUME ASKS ABOUT THE EXPERIMENT, NOT THE OPCODE. `--encstring` and the default
+    # send byte-identical payloads to the 400 opcodes with no string16 field, so those
+    # are already measured and must stay skipped; the 87 that carry one are a genuinely
+    # new experiment and must come back into the plan. Asking `done_opcodes` instead
+    # would skip all 487 and print "nothing left" for a sweep that had never run.
+    encstring = corpus_encstring() if a.encstring else None
+    done = set()
+    if a.resume:
+        led = load_ledger()
+        stale = unmigrated(led)
+        if stale:
+            print(f"REFUSED: {len(stale)} ledger row(s) carry no payload regime, so this "
+                  f"cannot tell which experiment they were. Run `--migrate` first (dry "
+                  f"by default). Treating them as all-zero measurements is precisely the "
+                  f"conflation that filed four opcodes as crashing when what they crash "
+                  f"on is an empty string. First: {stale[:5]}", file=sys.stderr)
+            return 2
+        done = measured_under(codec, led, encstring=encstring, sets=sets)
     try:
         p = plan(codec, seen, _classify(), done=done, table_less=a.table_less,
                  settle=a.settle, control=a.control, dwell=a.dwell, limit=a.limit,
-                 only=only, sets=sets, reverse=a.reverse,
-                 encstring=corpus_encstring() if a.encstring else None)
+                 only=only, sets=sets, reverse=a.reverse, encstring=encstring)
     except ValueError as exc:
         print(f"REFUSED: {exc}", file=sys.stderr)
         return 2
     _write_json(plan_path(), p)
-    kinds = {}
+    kinds, regs = {}, {}
     for r in p["rows"]:
         kinds[r["predicted"]] = kinds.get(r["predicted"], 0) + 1
+        regs[r["regime"]] = regs.get(r["regime"], 0) + 1
     mode = "TABLE-LESS (below the message table)" if p["table_less"] else "receive table"
     print(f"{len(p['rows'])} opcode(s) planned of {p['remaining']} remaining [{mode}] "
           f"-> {plan_path()}")
+    print(f"  payload regime: {regs}"
+          + ("   (--encstring only moves the opcodes that HAVE a string16 field)"
+             if a.encstring else ""))
     print(f"  predicted: {kinds}")
     print(f"  skipped: {p['skipped']}")
     print(f"  settle {p['settle']}s, control window {p['control']}s, dwell {p['dwell']}s "

@@ -72,14 +72,17 @@ import checks  # noqa: E402
 import vaultpath  # noqa: E402
 
 MAP_FLAGS = 259
-MEASURED_ENTRY_COUNT = 177342
 
 PROPS_CHUNK = 0x20000004
 PROPS_SIG = 0x39583392
 PROPS_VERSION = 17
 
-# The two reference maps. Rows are pinned separately from file ids because only
-# the file id is portable; every row-indexed claim is gated on the entry count.
+# The two reference maps. Each is REACHED through its file id -- the portable
+# key -- and section 5 then asserts the row it landed on, so a copy where the
+# rows moved goes red and names both numbers instead of skipping. (It has not:
+# both ids resolve to these rows in `vault/dat_study` and in
+# `vault/client/2026-04-30_b174de1f2d8d`, MEASURED 2026-08-13.) Nothing in this
+# file is gated on the archive's MFT row count any more -- see `_section6`.
 KAMADAN_FILE_ID = 0x345CC
 KAMADAN_ROW = 22371
 KAMADAN_DIMS = (416, 448)
@@ -708,12 +711,23 @@ def _section5(check, led, ar, tmp):
 
 def _section6(check, led, ar, args):
     print("\n== 6. the exported extent equals the Map Parameters rect ==")
-    if ar.entry_count != MEASURED_ENTRY_COUNT:
-        led.skip("6. extent agreement across the corpus",
-                 f"this archive has {ar.entry_count} MFT rows, not the "
-                 f"{MEASURED_ENTRY_COUNT} these row constants were measured on")
-        return
-
+    # NO ENTRY-COUNT GATE HERE, and its removal on 2026-08-13 is worth the
+    # paragraph. This section used to skip whole unless the archive had exactly
+    # 177,342 MFT rows, "because these row constants were measured on it" -- and
+    # it has no row constants. Every row it touches comes from `sample_rows`,
+    # which selects on `flags == 259` and never on an index. The gate could not
+    # fail for the reason it was there and did nothing but hide the section:
+    # pointed at `vault/client/2026-04-30_b174de1f2d8d` (177,311 rows, and the
+    # same 349 map pairs at the same indices with the same sizes and crcs, 349
+    # of 349, MEASURED 2026-08-13) the run dropped four checks and went RED on
+    # its own floor.
+    #
+    # What actually guards this section is the check immediately below: an
+    # archive that is not a Guild Wars archive of the right vintage does not
+    # hold exactly CORPUS_MAPS rows with those flags, and that is a population
+    # assertion the artifact can refute rather than a fact about the copy. Same
+    # correction as `test_mapfile.py`'s `resolve_pinned` on the same day --
+    # identity of the thing being read, never a census of the file it sits in.
     picks, all_rows = sample_rows(ar, args.sample, args.all)
     check(len(all_rows) == CORPUS_MAPS,
           f"the archive holds {CORPUS_MAPS} map rows (flags {MAP_FLAGS})",
