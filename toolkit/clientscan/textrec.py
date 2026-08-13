@@ -224,6 +224,50 @@ def walk(blob: bytes):
     return recs, blob[p:], len(blob) - p == 2
 
 
+def encode_record(text=None, *, payload=None, base=0, bits=MAX_BITS) -> bytes:
+    """One text record: the 6-byte header then its payload.
+
+    The inverse of `walk`'s per-record step, and it lives beside it so the two
+    cannot drift. Header is `<HHH` = (length INCLUDING the header, base, bits).
+
+    The default (base 0, bits 0x10) is the PLAIN form -- `is_plain` above, and
+    the client's own memcpy path at 0x7CB16A takes it only when BOTH hold. So a
+    plain record's payload is just UTF-16LE, which is why authoring one needs no
+    encoder for the compressed symbol form at all.
+    """
+    if payload is None:
+        payload = ("" if text is None else text).encode("utf-16-le")
+    if len(payload) + HEADER_SIZE > 0xFFFF:
+        raise ValueError(f"record payload {len(payload)} B overflows the u16 "
+                         f"length field")
+    return struct.pack("<HHH", HEADER_SIZE + len(payload), base, bits) + payload
+
+
+def encode_file(strings=None, language=0, file_index=0,
+                count=RECORDS_PER_FILE) -> bytes:
+    """A whole text file: `count` records then the 2-byte (language, file) tail.
+
+    `strings` maps record index -> text; every index not named is written as an
+    EMPTY record, which is exactly what ArenaNet ships in the spare file 98
+    (1,024 of 1,024 empty, 6,146 B decompressed -- see
+    studies/profession/RESKIN.md 15).
+
+    THE TAIL IS NOT DECORATION. `walk` reports `tiled` only when the blob ends
+    exactly two bytes past the last record, and TextIndex refuses a file that
+    does not tile or does not hold exactly RECORDS_PER_FILE records. Both are
+    measured against all 99 language-0 files, so an authored file that omits
+    the tail or writes 1,023 records is one our own reader would reject before
+    the client ever saw it.
+    """
+    strings = strings or {}
+    for idx in strings:
+        if not 0 <= idx < count:
+            raise ValueError(f"record index {idx} outside 0..{count - 1}")
+    out = [encode_record(strings.get(i)) for i in range(count)]
+    out.append(struct.pack("<BB", language, file_index))
+    return b"".join(out)
+
+
 def find_escape_table(pe: PE) -> int:
     """File offset of the 32-entry symbol escape table.
 
