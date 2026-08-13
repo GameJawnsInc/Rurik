@@ -1315,15 +1315,14 @@ player-usable ids of 3,443 rows**, build stamped in the banner, committed nowher
 clear, all bar skills included, 0.7 s at startup, and it SKIPS rather than passing
 silently with no client.
 
-**Next run — it is also the discriminator `bar` could not be.** `bar` changed both which
-ids and how many (8 vs 3,442), so it cannot separate membership from magnitude. `corpus`
-holds membership correct at 1,333. **Prediction: the panel opens and lists 1,333 skills.**
-If it asserts `fileId` again, the wall is magnitude and the next read is the
-`0x008C`/`0x008D` subsystem under `File.cpp:367`.
-
-```
-python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_spawn --unlocks corpus'
-```
+**DISCRIMINATOR SETTLED 2026-08-13: membership, not magnitude.** `--unlocks corpus`
+opened the panel with the whole corpus listed — **43 attribute groups over 1,333
+skills**, matching `skilltable.py`'s own count for the same set, with no crash dialog,
+c2s to +32.98 s and `missed 0`. So the `fileId` assert was never about list length; it
+was the 2,109 non-player rows with no skill icon. **`--unlocks` now defaults to
+`corpus`** — `all` is measured to crash the client's own panel on K, and the derivation
+refuses with an actionable message (naming `--unlocks bar`) rather than falling back to
+the broken set when there is no client to read. Default pinned on the syntax tree.
 
 **Then the arc's own question, finally askable.** With a working panel,
 `--spawn-profession 12 --unlocks corpus` measures a profession rather than a bug of

@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=176)
+LEDGER = checks.Ledger("agent lifetime", floor=177)
 
 
 def main():
@@ -1431,6 +1431,26 @@ def section_unlock_bitmap():
                   f"{clabel!r} -- the ids are read from the owner's client at "
                   f"run time and committed nowhere, so the log line is the "
                   f"only provenance record the run leaves")
+
+    # THE DEFAULT, on the syntax tree. `all` is measured to crash the client's
+    # own Skills panel (fileId, File.cpp:367 -- it unlocks 2,109 rows with no
+    # icon), so it must not be what a session gets by not choosing.
+    import ast
+    with open(authsrv.__file__, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    default = None
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call)
+                and getattr(node.func, "attr", "") == "add_argument"
+                and node.args
+                and getattr(node.args[0], "value", None) == "--unlocks"):
+            for kw in node.keywords:
+                if kw.arg == "default":
+                    default = kw.value.value
+    LEDGER.ok(default == "corpus",
+              "--unlocks DEFAULTS to corpus, not all (syntax tree)",
+              f"{default!r} -- `all` asserts fileId the moment a player presses "
+              f"K, and a default that breaks the game is not a default")
 
     both_arms = 0
     for spec in ("all", "bar", "none", "316,317"):
