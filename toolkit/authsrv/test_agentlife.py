@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=177)
+LEDGER = checks.Ledger("agent lifetime", floor=179)
 
 
 def main():
@@ -1510,6 +1510,26 @@ def section_spawn_profession():
               "and the warning is silent when paired, and for other probes",
               "a warning that fires on a correctly-invoked run trains the "
               "operator to ignore it")
+
+    # profession_panel + out-of-band --spawn-profession is REFUSED, not warned:
+    # the burst's 0x00B7 kills the client at map load (ConstChar.cpp:1296,
+    # measured twice) and the probe's own steps never run.
+    lethal = None
+    try:
+        authsrv.spawn_probe_warning("profession_panel", True, True)
+    except SystemExit as ex:
+        lethal = str(ex)
+    LEDGER.ok(lethal is not None and "1296" in lethal,
+              "profession_panel with an out-of-band spawn profession is "
+              "REFUSED, naming the on-arrival assert",
+              f"{lethal!r} -- that pair spends a whole session re-measuring a "
+              f"result we have twice, and answers the probe's question not at all")
+    LEDGER.ok(authsrv.spawn_probe_warning("profession_panel", False, False) is None
+              and authsrv.spawn_probe_warning("profession_panel", True, False) is None,
+              "while profession_panel alone, and with an IN-BAND spawn "
+              "profession, are both allowed",
+              "an in-band id rides 0x00B7 safely -- the refusal is about the "
+              "custom range, not about the flag")
 
     # The send site, on the SYNTAX TREE: the call that sends 0x00B7 in the
     # spawn burst must take its values from spawn_profession_values(), not

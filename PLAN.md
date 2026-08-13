@@ -1324,11 +1324,25 @@ was the 2,109 non-player rows with no skill icon. **`--unlocks` now defaults to
 refuses with an actionable message (naming `--unlocks bar`) rather than falling back to
 the broken set when there is no client to read. Default pinned on the syntax tree.
 
-**Then the arc's own question, finally askable.** With a working panel,
-`--spawn-profession 12 --unlocks corpus` measures a profession rather than a bug of
-ours. §10 predicts the panel OPENS (the skill walk is profession-blind) with the
-drop-down reading blank/none, since a custom id must ride `0x00A6` and `0x00A6` does not
-write the panel's record.
+**THE ARC'S QUESTION IS NOW THE NEXT RUN.** `--spawn-profession 12` was re-run against
+the fixed server and reproduced the carrier asymmetry a second time — `0x00B7(prof 12)`
+at +3.39 s, last c2s at +3.39 s, `ConstChar.cpp(1296)`, dead on the loading screen
+(harness `20260813T003302`, matching run 4b's +3.42 s on a server where the panel is now
+known to work). So a custom id must ride `0x00A6`.
+
+**`--probe profession_panel`** does exactly that: profession 12 on `0x00A6` only, then
+K, then recovery. **Prediction in two independently-falsifiable halves: the panel OPENS
+(the walk is profession-blind), and the drop-down does NOT read 12 (its record's sole
+writer is `0x00B7`).** What the attributes box lists for an unshipped id is unpredicted
+and is the interesting part; a crash would be the first profession-keyed failure in this
+arc that is not a defect of ours.
+
+```
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_panel'
+```
+
+Pairing that probe with an out-of-band `--spawn-profession` is refused at startup naming
+the assert — it would spend the session re-measuring a result we have twice.
 
 **What this changed for the arc's actual goal.** The custom-profession boundary is now
 sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has

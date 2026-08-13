@@ -772,15 +772,49 @@ default. With no client to read, the derivation refuses with a message naming
 Pinned on the syntax tree (`test_agentlife.py`), because a default is one word and
 nothing else in the suite would notice it moving back.
 
+### The carrier asymmetry, measured a SECOND time
+
+`--spawn-profession 12` was run against the fixed server (harness
+`20260813T003302`). **`0x00B7(prof 12)` at +3.39 s, last c2s at +3.39 s, zero `0x00A6`
+sent, `profession < arrsize(s_profChapter)` / `ConstChar.cpp(1296)`** — dead on arrival
+at the loading screen, before any UI action. That reproduces run 4b (+3.42 s) exactly,
+on a server where the panel is now known to work, so it cannot be blamed on the bitmap.
+
+> **`0x00B7` cannot carry a custom profession, and it is now measured twice on two
+> different servers.** §10.5's reading — the record's sole writer is `0x00B7`'s handler,
+> which one call later feeds the primary to the 11-entry `s_profChapter` — predicted
+> exactly this, and the prediction was stated before the run.
+
+`--probe profession_panel` paired with an out-of-band `--spawn-profession` is now
+**refused at startup** naming the assert: that pair spends a whole session re-measuring
+a result we have twice and answers nothing. An in-band id is still allowed, because the
+refusal is about the custom range and not about the flag.
+
 ### And the arc's own question is finally askable
 
-With a working panel, `--spawn-profession` becomes meaningful again. §10 predicts the
-panel **opens at any primary including 12**, because the skill walk is profession-blind
-— but a custom id must ride `0x00A6` (never `0x00B7`, which asserts `ConstChar.cpp:1296`
-on arrival), and `0x00A6` does not populate the panel's record, so the profession
-drop-down should read blank/none rather than 12. **That is now a one-session experiment
-with a stated prediction**, and it is the first time in the arc it would measure a
-profession rather than a bug of ours.
+**`--probe profession_panel`** (added 2026-08-13) is that experiment: it delivers
+profession 12 on **`0x00A6` only** — never `0x00B7` — then prompts K, then recovers to
+3. One session, and the first in the arc that measures a profession rather than a defect
+of ours.
+
+**Prediction, stated before the run, in two halves that can fail independently:**
+
+1. **The panel OPENS.** The skill walk reads no profession and nothing between the
+   panel's entry and its enumeration branches on one (§10.4), so a custom id cannot
+   decide whether it opens.
+2. **The drop-down does NOT read 12** — blank, none, or a default. The panel's
+   profession record has exactly one writer, reached only from `0x00B7`'s handler
+   (§10.5), so with `0x00A6` alone the getters stay at their default of 11.
+
+What the ATTRIBUTES box lists for an id the client does not ship is unpredicted and is
+the interesting part. **A crash here would be the first profession-keyed failure in this
+arc that is not a bug of ours** — name the assert if it happens.
+
+```
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py     --keep-open --shots 10 --game-args '--probe profession_panel'
+```
+
+No `--spawn-profession`, and the server refuses the pair if it is passed.
 
 ---
 
