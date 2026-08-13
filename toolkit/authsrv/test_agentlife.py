@@ -1598,6 +1598,39 @@ def section_probe_encoding():
               f"{caught} failure(s) -- identical to the refusal but for the flag, so a "
               f"shape-based skip would have silently stopped catching broken probes")
 
+    # The flag is worth nothing if only the ENCODER honours it. `authsrv.run_probe`'s
+    # send loop is the thing that would actually put 0x0000 on the wire, and for one
+    # commit it did not know about `sends` at all: the refusal reached `send()`, raised,
+    # and printed "SEND FAILED" -- the correct outcome reported as a malfunction. Asked
+    # on the syntax tree because "the guard is before the send" and "the guard is in the
+    # except" are both invisible to a grep.
+    import ast
+    src = open(os.path.join(HERE, "authsrv.py"), encoding="utf-8").read()
+    loop = None
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.For):
+            continue
+        if any(isinstance(n, ast.Attribute) and n.attr == "steps"
+               for n in ast.walk(node.iter)):
+            loop = node
+            break
+    guarded = False
+    if loop is not None:
+        for stmt in loop.body:
+            # The guard must come BEFORE the try that sends: once we reach the try, a
+            # refusal has already been handed to send().
+            if isinstance(stmt, ast.Try):
+                break
+            if isinstance(stmt, ast.If) and any(
+                    isinstance(n, ast.Constant) and n.value == "sends"
+                    for n in ast.walk(stmt.test)):
+                guarded = any(isinstance(n, ast.Continue) for n in ast.walk(stmt))
+                break
+    LEDGER.ok(guarded,
+              "the probe SEND LOOP skips a refusal before it reaches send()",
+              "a refusal that reaches send() raises and is reported as SEND FAILED, "
+              "which is a correct outcome wearing a malfunction's name")
+
 
 def section_secondary_bits():
     """0x00B6, and the two ways it fails SILENTLY.

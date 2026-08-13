@@ -3113,6 +3113,22 @@ def run_probe(name, send, conn_id, stop, origin=None):
                 return
             print(f"\n  --- step {i}/{len(probe.steps)}: {step.label}",
                   flush=True)
+            if not getattr(step, "sends", True):
+                # A declared REFUSAL -- it carries a message to the operator and no
+                # packet. Printing it here rather than sending is the whole point: the
+                # smsgsweep probe returns one when its plan is empty, and the message
+                # says which command refills it.
+                #
+                # Without this arm the refusal reached `send(0x0000, [])`, which raises
+                # and lands in the handler below as "SEND FAILED" -- the correct outcome
+                # (nothing went on the wire) reported as a malfunction, with the one
+                # sentence the operator needed buried under a traceback name. The
+                # alternative considered and rejected was returning NO steps, which the
+                # runner already prints as "observation only": that is silent in the
+                # wrong direction, since a probe that measures nothing because its plan
+                # ran out looks identical to a probe designed to send nothing.
+                print(f"      NOT SENT: {step.watch}", flush=True)
+                continue
             try:
                 send(step.opcode, step.values, f"PROBE[{name}] {step.label}")
             except Exception as exc:
