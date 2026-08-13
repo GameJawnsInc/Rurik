@@ -997,9 +997,32 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   Section 7b covers `sweeploop.py`, the unattended driver: its stop conditions are a
   PURE function so they can be checked without a client, and its control is that ONE
   barren round must NOT stop -- a single unlocalised crash is normal, and stopping at one
-  would end most sweeps early. The last check asks the SYNTAX TREE whether the loop
+  would end most sweeps early. One check asks the SYNTAX TREE whether the loop
   imports the cage or launches anything itself, because the grep version of that check
-  went red on the docstring explaining the rule),
+  went red on the docstring explaining the rule.
+  **And since 2026-08-13 it covers the PLANNER'S EXIT CODE, which the loop discarded.**
+  `smsgsweep --plan` exits 2 writing NO plan on all three refusals it had that day, and
+  `load_plan()` reads a file out of the vault that cannot tell this round's from the last
+  one's --
+  so a refusal left the loop launching a real client against a STALE plan and recording
+  what it measured under this round's opcodes, silently, since the plan parses and the
+  ledger grows. The gate is TWO signals because each covers a hole in the other: the exit
+  code, plus whether the plan file MOVED, which is what catches a planner that dies after
+  its own checks. The half that needed the most care is the EXEMPTION -- exit 1 is
+  "NOTHING TO SEND", which writes an empty plan and is the sweep's only good ending, so a
+  blunt `rc != 0` stop would rename completion as breakage, and that control is the one
+  the blunt sabotage reddens. **Two controls were VACUOUS in the first version and the
+  sabotages are what found it**: the crashed-planner case (Windows returns the exception
+  code, which arrives NEGATIVE, so an `rc >= 2` test accepts it) was written with the file
+  unmoved, where the freshness half refuses it anyway -- the `rc >= 2` sabotage went 0
+  red. Both now pass `moved=True`, and five sabotages redden five different sets. The
+  subprocess half points the loop at a planner that exits 2 with a stale plan on disk, and
+  asserts the difference between two live answers in one process: `plan_round` hands back
+  None while `load_plan()` still answers with the row the old loop would have launched
+  against. Last, the ORDER is asked of the syntax tree -- the guard must sit BEFORE the
+  launch statement in the round body, with the guard deleted AND the guard moved one past
+  the launch as controls, because a client that goes up and is stopped afterwards has
+  already measured the wrong opcodes),
   `toolkit/authsrv/test_shotlabel.py` (the SCREEN readout for the 239 SILENT opcodes,
   and the four defects it shipped with. `smsgsweep`'s `SILENT` means *no c2s reply*
   and is blind to anything the client DRAWS, so this joins a run's one send to the
