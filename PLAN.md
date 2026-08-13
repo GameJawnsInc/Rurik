@@ -1265,11 +1265,16 @@ surfaces instead of only the first.
 `*skill` — nothing registered for profession 12, rather than "12 is invalid". **Send a
 skillbar for the custom profession before opening the panel** and see whether the null
 clears. If it does, the mechanism is population, not bounds, and most of `ATTRIBUTES.md`'s
-191 edits are not on the critical path. **That probe exists as of 2026-08-12:
-`profession_skillbar`**, run 2's A/B with the same bar delivered again AFTER the change
-to 12 — every prior run's bar arrived in the spawn burst, before the profession moved —
-and the re-send held constant across both arms so the arms still differ by one byte. It
-needs an operator and a loopback client run, nothing else.
+191 edits are not on the critical path. **The probe ran 2026-08-12 (`profession_skillbar`)
+and its CONTROL arm reddened** (`RUNS.md` §8): a mid-session skillbar re-send followed by
+opening the panel asserts the client at profession **3** — the SAME `*skill` null, with no
+out-of-band byte anywhere in the session — while the unattended session outlived all seven
+steps, so the re-send is harmless until the panel reads it. **The instrument is poisoned
+and the population question is UNANSWERED, not negative.** Two routes stand: spawn-time
+delivery (spawn the character AS profession 12, so bar/unlocks/attributes all arrive in
+the burst and K is the first provocation — needs a small server option and a second
+control session at 3), or R1 — now more attractive, since two distinct provocations reach
+the same noreturn assert and a neutered reporter yields the ordering for both in one run.
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_sentinel`, `profession_max`

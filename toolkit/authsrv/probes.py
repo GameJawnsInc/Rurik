@@ -2281,14 +2281,19 @@ PROBES = {
                  "an assert on the bar re-send itself, would be new: no run "
                  "has delivered a skillbar to an out-of-band profession.",
         steps=_profession_skillbar_steps(a, 12),
-        note="The 'cheaper alternative' of PLAN.md section 8, and the "
-             "load-bearing question RUNS.md section 6 opens with. Every run "
-             "so far delivered the bar in the spawn burst BEFORE the "
-             "profession changed; this delivers the same eight ids after. "
-             "Arm A re-sends the bar at profession 3 so the re-send itself "
-             "is held constant across arms. Custom id 12, not 11 -- 11 is "
-             "the client's reserved sentinel (profession_sentinel asks that "
-             "question on its own run).",
+        note="RAN 2026-08-12 AND THE CONTROL ARM REDDENED (RUNS.md section "
+             "8): the mid-session re-send followed by K asserts at "
+             "profession 3 -- the same *skill null, no out-of-band byte "
+             "anywhere -- so this instrument cannot answer the stated fork "
+             "and the question is UNANSWERED, not negative. Kept for the "
+             "record; do not re-run expecting the prediction's branches. "
+             "Original design: every prior run delivered the bar in the "
+             "spawn burst BEFORE the profession changed; this delivers the "
+             "same eight ids after, re-sent in arm A too so the re-send "
+             "itself is held constant across arms -- which is the control "
+             "that caught it. Custom id 12, not 11 -- 11 is the client's "
+             "reserved sentinel (profession_sentinel asks that question on "
+             "its own run).",
     ),
     "profession_sentinel": lambda a, o: Probe(
         question="Is profession 11 handled specially, being the client's own "
