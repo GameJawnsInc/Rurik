@@ -164,7 +164,7 @@ rebase; `keytap.py` already resolves module bases correctly and is the precedent
 
 | Question | Status | Next |
 |---|---|---|
-| Does populating a skill list for profession 12 clear the assert? | **The load-bearing question this run created** | Send a skillbar for the custom profession before opening the panel |
+| Does populating a skill list for profession 12 clear the assert? | **The load-bearing question this run created** | `profession_skillbar`, registered 2026-08-12: run 2's A/B with the same bar re-delivered AFTER the change, re-send held constant across arms |
 | Which surface fails *second*? | **UNMEASURED** — the skills panel died first | Neuter the assert (R1, 5 bytes) and re-run: fall-through turns one answer per run into many |
 | Do the other twelve profession-keyed surfaces fail by null or by bound? | **UNMEASURED** | Same |
 | Is profession 11 (the sentinel) different from 12? | **UNMEASURED** | `profession_sentinel`, already registered |
@@ -181,7 +181,7 @@ and the ABI it depends on is now confirmed by a live crash.
 ## 7. Reproduce
 
 ```
-python toolkit/authsrv/authsrv.py --list-probes          # profession_custom | _ab | _sentinel | _max
+python toolkit/authsrv/authsrv.py --list-probes    # profession_custom | _ab | _skillbar | _sentinel | _max
 python toolkit/harness/session.py --keep-open --shots 10 \
     --game-args '--probe profession_ab'
 ```

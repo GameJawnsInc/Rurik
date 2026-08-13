@@ -339,6 +339,77 @@ def _profession_ab_steps(agent_id, custom_id):
     ]
 
 
+def _profession_skillbar_steps(agent_id, custom_id):
+    """Does POPULATING skill state clear the skills-panel assert at 12?
+
+    THE LOAD-BEARING QUESTION RUN 2 CREATED (studies/profession/RUNS.md
+    section 6). The panel's death is a NULL POINTER -- `*skill`,
+    ChCliSkill.cpp:1022 -- not a bound check: the client did not object to the
+    id, it objected to finding nothing behind it. If that null is on state a
+    packet can populate, the mechanism is population and most of
+    ATTRIBUTES.md's 191 edits leave the critical path. If it is on the
+    compiled per-profession table, no packet can reach it, and R1's five-byte
+    neuter is the only route to the surface ordering.
+
+    WHAT IS ACTUALLY NEW HERE. Every run so far delivered the skillbar in the
+    SPAWN BURST, while the profession was still the server's own default --
+    the bar has always predated the profession change. This probe delivers the
+    SAME eight ids again AFTER the change to 12, so if skill state is keyed to
+    the profession current at delivery time, this run registers it under 12
+    where run 2 never could.
+
+    THE RE-SEND HAPPENS IN BOTH ARMS. Arm A re-sends the bar at the control
+    profession before opening the panel, so "a mid-session skillbar re-send"
+    is held constant and the arms still differ by ONE byte. Without it, a
+    death in arm B is unattributable between "12 still kills the panel" and
+    "re-sending a bar mid-session kills" -- and no run has ever re-sent one
+    mid-session either, so the second reading would have no control.
+    """
+    control = 3
+    bar = [PROBE_BAR_SKILL + i for i in range(8)]
+    return [
+        Step(2.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"A: control, profession {control}",
+             "nothing yet. Wait for the next line before touching anything."),
+        Step(4.0, 0x00DA, [agent_id, bar, [0] * 8, 1],
+             "A: the skillbar again, at the control profession",
+             "the bar. It should NOT change -- these are the same eight ids "
+             "the spawn burst already sent. This is the control half of the "
+             "re-send, so the arms differ by one byte and nothing else."),
+        Step(4.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"A: still {control} -- NOW open the skills menu (K)",
+             "open the skills and attributes panel with K, look at it, then "
+             "CLOSE it. You have about 20 seconds. If it does not open here, "
+             "stop: arm B means nothing without this."),
+        Step(20.0, 0x00A6, agent_set_profession(agent_id, custom_id, 0,
+                                                custom=True),
+             f"B: the ONE changed byte -- profession {custom_id}",
+             "wait about five seconds and do NOTHING. Run 1 shows the client "
+             "lives on this value while playing normally, so a death during "
+             "this wait would mean the packet is lethal on its own, which "
+             "run 1 says it is not."),
+        Step(8.0, 0x00DA, [agent_id, bar, [0] * 8, 1],
+             f"B: THE EXPERIMENT -- the same skillbar, delivered at {custom_id}",
+             "the bar. If the icons survive, the client accepted skill state "
+             "while its profession is one it does not ship. Do not open "
+             "anything yet."),
+        Step(4.0, 0x00A6, agent_set_profession(agent_id, custom_id, 0,
+                                               custom=True),
+             f"B: still {custom_id} -- NOW open the skills menu AGAIN",
+             "the SAME key, the SAME panel. If it OPENS, the null was "
+             "populatable state and the mechanism is population, not bounds "
+             "-- say so out loud. If it ASSERTS like run 2 (*skill, "
+             "ChCliSkill.cpp:1022), a bar re-send does not reach what the "
+             "panel reads, and R1 is the route. Either answer decides the "
+             "next rung."),
+        Step(20.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"RECOVERY: back to {control}",
+             "if you are reading this in the client's world, the client "
+             "survived arm B with a populated bar -- which run 2's client did "
+             "not. That difference IS the finding."),
+    ]
+
+
 def _armor_steps(agent_id):
     # EXPLORATORY, and labelled as such. 0x006F is {agent_id, dword, dword} and
     # which dword is the slot and which the model is NOT established -- the
@@ -2196,6 +2267,28 @@ PROBES = {
              "nobody opened the skills menu while the profession was legal. "
              "This is that missing control. Same action, same key, one byte "
              "different.",
+    ),
+    "profession_skillbar": lambda a, o: Probe(
+        question="Does populating skill state clear the skills-panel null at "
+                 "profession 12 -- is the mechanism population, not bounds?",
+        predicts="DECIDED EITHER WAY, and the fork is stated in advance. If "
+                 "the null at ChCliSkill.cpp:1022 is on per-profession state "
+                 "the wire can reach, the panel OPENS in arm B and most of "
+                 "ATTRIBUTES.md's 191 edits leave the critical path. If it is "
+                 "on the compiled table -- which no packet can populate -- the "
+                 "SAME assert fires despite the bar, and R1's five-byte neuter "
+                 "is the only route to the surface ordering. A THIRD outcome, "
+                 "an assert on the bar re-send itself, would be new: no run "
+                 "has delivered a skillbar to an out-of-band profession.",
+        steps=_profession_skillbar_steps(a, 12),
+        note="The 'cheaper alternative' of PLAN.md section 8, and the "
+             "load-bearing question RUNS.md section 6 opens with. Every run "
+             "so far delivered the bar in the spawn burst BEFORE the "
+             "profession changed; this delivers the same eight ids after. "
+             "Arm A re-sends the bar at profession 3 so the re-send itself "
+             "is held constant across arms. Custom id 12, not 11 -- 11 is "
+             "the client's reserved sentinel (profession_sentinel asks that "
+             "question on its own run).",
     ),
     "profession_sentinel": lambda a, o: Probe(
         question="Is profession 11 handled specially, being the client's own "
