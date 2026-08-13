@@ -433,6 +433,38 @@ class Stack:
         return self.echo is True or (bool(self.echo) and name in self.echo)
 
     def _pump(self, name, proc, logf):
+        """Relay one server's stdout to its log and, optionally, to our console.
+
+        THIS THREAD MAY NEVER DIE WHILE THE SERVER LIVES, and the reason is worse than
+        a lost log line. It is the only reader of that pipe: when it stops reading, the
+        pipe buffer fills, and the next `print(..., flush=True)` ANYWHERE in the server
+        blocks forever. The server does not crash and nothing says so.
+
+        MEASURED 2026-08-13, on the first run of the screenshot-labelling loop. One
+        server line carried U+FFFD -- our own `string16` decoder's replacement
+        character, which is what GW's encoded names produce when a code unit lands in
+        the UTF-16 surrogate range -- and this print raised UnicodeEncodeError against
+        a cp1252 console. The pump thread died, the gamesrv wedged on its next print,
+        and the probe never sent a single opcode. The run still reported **RUN VERDICT:
+        PASS**, because the one thing that kept working was the 20 Hz world tick: it
+        passes `quiet=True` and is the only send in the server that does NOT print. So
+        the capture filled with 649 plausible events, `gamesrv.log` stopped mid-startup
+        at 949 bytes, and three opcodes were recorded as run when nothing was sent.
+
+        The lesson was already written down in `toolkit/checks.py` -- "a test
+        instrument that dies on the data it is reading is not an instrument", after
+        `test_textrec.py` died the same way on cp1252 in 2026-08-06 -- and every test
+        prints through its `_say` for exactly this. The harness never got the same
+        treatment, and it is the one place where the failure blocks a SERVER rather
+        than ending a script.
+
+        `errors="replace"` on our OWN stdout is the fix rather than reconfiguring the
+        console encoding: the log file is already UTF-8 and keeps the real character,
+        and only the console -- whose encoding we do not choose -- degrades. The
+        `except` beneath it is not belt-and-braces for the same fault; it is for every
+        OTHER way a write can fail (a closed pipe when the terminal goes away), because
+        the rule is that NOTHING stops this loop reading.
+        """
         for line in proc.stdout:
             logf.write(line)
             logf.flush()
@@ -441,7 +473,13 @@ class Stack:
                 # formatted banners meant to be read at a glance, and a prefix on
                 # every line of one wrecks the alignment.
                 prefix = "" if self.echo is not True else f"[{name}] "
-                print(f"{prefix}{line}", end="", flush=True)
+                text = f"{prefix}{line}"
+                try:
+                    enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+                    sys.stdout.write(text.encode(enc, "replace").decode(enc, "replace"))
+                    sys.stdout.flush()
+                except Exception:
+                    pass                # never stop reading the pipe: see above
         logf.close()
 
     def start(self, timeout=20):
