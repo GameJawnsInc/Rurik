@@ -353,3 +353,60 @@ correctly. Caging costs an elevated shell. **So the backup-patch-run-restore cyc
 `Gw.exe` is the only unattended route**, and the uncaged copy was deleted immediately
 rather than left in `vault/run`, which is the hazard `isolate_client.ps1`'s own help text
 was written about.
+
+
+---
+
+## 10. RUN 3 (2026-08-13): the SKILL ROSTER — a countable prediction, hit exactly
+
+Harness `20260813T111051` and `20260813T111256`. Six dwords: identity, attributes, and
+two skills moved between attributes.
+
+**The design problem, and the fix.** The Skills panel groups by ATTRIBUTE, and with the
+full 1,333-skill corpus unlocked the interesting groups sit below the fold — run
+`111051` showed the rename working (*Communing* vanished from between *Command* and
+*Critical Strikes*, exactly where it had sat) but its counts were unreadable. So the
+second run shrank the list to the eight-skill bar with `--unlocks bar`, which makes
+every group visible at once and turns the test into arithmetic.
+
+**Edits:** attribute 26 → owned by profession 8, renamed to string 2094; skills **317 and
+318** moved from attribute 17 (*Strength*, 4 skills) to attribute 26.
+
+> **Predicted:** *Strength* falls 4 → **2**, a new group appears holding exactly **2**,
+> and the total stays 8.
+
+**Observed, `hold002.png`:**
+
+| group | skills |
+|---|---|
+| **Air Magic** (attribute 26, renamed) | **2** |
+| **Strength** (attribute 17) | **2** — was 4 |
+| Swordsmanship | 1 |
+| Tactics | 2 |
+| No Attribute | 1 (*Wild Blow*) |
+
+**Total 8.** Both counts moved by exactly the number of skills moved, in opposite
+directions. And the Attributes box lists **Air Magic** beside Soul Reaping, Restoration
+Magic, Channeling Magic and Spawning Power — the same row, owned and named.
+
+**`s_skill row+0x29` decides which attribute group a skill belongs to. OBSERVED.**
+
+A count that moves in both directions by the right amount is the strongest shape of
+check available here: a codec or a cache that merely *replayed* what it saw would leave
+the totals alone.
+
+### The reskin's core is now validated end to end
+
+| Piece | Field | Status |
+|---|---|---|
+| Profession name | `s_charProfession[N]` | **OBSERVED** (§8) |
+| Attribute names | `s_attrib +0x08` | **OBSERVED** (§9) |
+| Which attributes a profession owns | `s_attrib +0x00` | **OBSERVED** (§9) |
+| Which attribute a skill scales with | `s_skill +0x29` | **OBSERVED** (§10) |
+| Nine spare attribute rows available | — | **OBSERVED** (§9) |
+| Abbreviation | `s_charProfessionAbbrev[N]` | UNVERIFIED — party/nameplate only |
+| Picker label, `.data` table | — | UNVERIFIED — creation screen / unknown consumer |
+
+That is a profession with its own name, its own attributes with their own names, and its
+own skills grouped under them — **eleven bytes of same-length edits**, no code, no bound
+check touched, no assert neutered.

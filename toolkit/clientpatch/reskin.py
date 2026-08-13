@@ -234,6 +234,58 @@ def parse_pairs(specs, what):
     return out
 
 
+# The skill table. Located by skilltable.py's own structural scan rather than
+# a second implementation -- it already refuses on a non-unique candidate, and
+# two locators for one table is two things to keep in step.
+SKILL_PROF, SKILL_ATTR = 0x28, 0x29
+NO_ATTRIBUTE = 51              # the client's own "no attribute" marker
+
+
+def locate_skills(data):
+    """(file_offset, count, stride) for s_skill."""
+    import skilltable                                          # noqa: E402
+    base, count, _score = skilltable.locate_table(data)
+    return base, count, skilltable.RECORD_SIZE
+
+
+def skill_edits(data, base, count, stride, profs=(), attrs=()):
+    """Reassign skills. Two SINGLE-BYTE fields, so same-length is trivial here.
+
+    profs -- row+0x28, which profession owns the skill
+    attrs -- row+0x29, which attribute it scales with. This is the one the
+             Skills panel groups by, so it is the field with a countable
+             visible consequence: move N skills and the two group headers
+             must move by N in opposite directions.
+    """
+    out = bytearray(data)
+    log = []
+    for sid, prof in profs:
+        _check_skill(sid, count)
+        if not 0 <= prof <= SPARE_OWNER:
+            raise SystemExit(f"skill profession {prof} outside 0..{SPARE_OWNER}")
+        off = base + sid * stride + SKILL_PROF
+        log.append(("skill-prof", sid, out[off], prof))
+        out[off] = prof
+    for sid, attr in attrs:
+        _check_skill(sid, count)
+        if not 0 <= attr <= NO_ATTRIBUTE:
+            raise SystemExit(
+                f"skill attribute {attr} outside 0..{NO_ATTRIBUTE} "
+                f"({NO_ATTRIBUTE} is the client's own no-attribute marker)")
+        off = base + sid * stride + SKILL_ATTR
+        log.append(("skill-attr", sid, out[off], attr))
+        out[off] = attr
+    return bytes(out), log
+
+
+def _check_skill(sid, count):
+    if not 0 < sid < count:
+        raise SystemExit(
+            f"skill id {sid} outside 1..{count - 1}. Id 0 is not a skill -- "
+            f"setting its bit in the unlock bitmap is what asserted the client "
+            f"for seven sessions (studies/profession/RUNS.md s10).")
+
+
 def refuse_bad_output(src, out):
     """Out of place, outside C:\\gw, and outside every checkout of this repo."""
     out_abs = os.path.normcase(os.path.abspath(out))
@@ -310,6 +362,14 @@ def main(argv=None):
                          "exactly one primary, so moving it means clearing the "
                          "old one, and a set-only verb would leave two. "
                          "Repeatable.")
+    ap.add_argument("--skill-attr", action="append", metavar="SKILL=ATTR",
+                    help="reassign which attribute a skill scales with "
+                         "(row+0x29). The Skills panel groups by this, so it "
+                         "is the field with a countable visible effect. "
+                         "Repeatable.")
+    ap.add_argument("--skill-prof", action="append", metavar="SKILL=PROFESSION",
+                    help="reassign which profession owns a skill (row+0x28). "
+                         "Repeatable.")
     ap.add_argument("--attrs", action="store_true",
                     help="print the attribute table grouped by profession")
     a = ap.parse_args(argv)
@@ -341,11 +401,17 @@ def main(argv=None):
                    for r in groups[prof]]
             print(f"  prof {prof:>2}: {ids}{tag}")
 
+    sbase, scount, sstride = locate_skills(data)
+    print(f"located s_skill at file 0x{sbase:08X}, {scount} rows, "
+          f"stride 0x{sstride:X}")
+    skill_profs = parse_pairs(a.skill_prof, "skill-prof")
+    skill_attrs = parse_pairs(a.skill_attr, "skill-attr")
     renames = parse_pairs(a.attr_name, "attr-name")
     owners = parse_pairs(a.attr_owner, "attr-owner")
     primaries = parse_pairs(a.attr_primary, "attr-primary")
     edits = {t: getattr(a, t) for t in TABLES if getattr(a, t) is not None}
-    if a.show or a.attrs or not (edits or renames or owners or primaries):
+    if a.show or a.attrs or not (edits or renames or owners or primaries
+                                 or skill_profs or skill_attrs):
         if not (a.show or a.attrs):
             print("\nnothing to do: pass at least one of "
                   + ", ".join(f"--{t} ID" for t in TABLES)
@@ -359,7 +425,11 @@ def main(argv=None):
     patched, log = apply_edits(data, found, a.profession, edits)
     if renames or owners or primaries:
         patched, alog = attrib_edits(patched, arows, renames, owners, primaries)
-        log += [(t, off, old, new) for t, off, old, new in alog]
+        log += alog
+    if skill_profs or skill_attrs:
+        patched, slog = skill_edits(patched, sbase, scount, sstride,
+                                    skill_profs, skill_attrs)
+        log += slog
     assert len(patched) == len(data), "a reskin is same-length by construction"
     os.makedirs(os.path.dirname(os.path.abspath(a.out)) or ".", exist_ok=True)
     with open(a.out, "wb") as f:
@@ -371,7 +441,8 @@ def main(argv=None):
         # offset. Printing it as `file 0x...` reads as an address and is wrong
         # in exactly the way an operator would act on -- attribute 32 showed as
         # `file 0x00000020`.
-        loc = (f"attr {where:<4}" if str(table).startswith("attr-")
+        loc = (f"skill {where:<5}" if str(table).startswith("skill-")
+               else f"attr {where:<4}" if str(table).startswith("attr-")
                else f"file 0x{where:08X}")
         print(f"  {table:12s} {loc}  {old} -> {new}")
     # "at most", not "expected": a dword write disturbs only the bytes that
