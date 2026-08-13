@@ -3089,6 +3089,22 @@ def run_probe(name, send, conn_id, stop, origin=None):
     Failures are printed and swallowed. A probe is an experiment; a packet the
     client rejects is a result, not a crash, and it must not take the session
     down with it or we lose the rest of the sequence.
+
+    A step that declares `sends=False` is a REFUSAL and is not sent. That flag was
+    added for `probes.check_encodable` on 2026-08-13 and this loop -- the one that
+    puts bytes on a socket -- was not taught about it for the rest of the day, which
+    fails in BOTH directions. When the codec raises (the empty smsgsweep plan's
+    refusal is `0x0000` with no values, and 0x0000 wants one) the swallow above
+    prints `SEND FAILED ... that is a result too -- record it`, filing "there was no
+    plan" as an experimental result and `continue`ing PAST the `watch` line that
+    says what actually happened -- so the one message the step exists to carry is
+    the one thing the operator does not see. And when the codec does NOT raise -- a
+    refusal built on any opcode whose fields the degenerate encoder can fill -- the
+    packet goes on the wire underneath the words "nothing was sent". The second is
+    worse: it is a lie printed beside the bytes that contradict it.
+
+    Returns the Thread so a caller can join it. The live call site does not; the
+    suite does, because the alternative is a test that sleeps and hopes.
     """
     # origin is where the character is standing. A probe that places something
     # in the world needs it, and can only have it from here -- probes.py is a
@@ -3113,6 +3129,13 @@ def run_probe(name, send, conn_id, stop, origin=None):
                 return
             print(f"\n  --- step {i}/{len(probe.steps)}: {step.label}",
                   flush=True)
+            if not getattr(step, "sends", True):
+                # Declared refusal -- see this function's docstring. It is a DECLARED
+                # flag and never `if not step.values`, because a malformed step with
+                # no values is exactly what the encoder check exists to catch and the
+                # two are indistinguishable by shape (probes.Step's docstring).
+                print(f"      REFUSAL -- no packet sent. {step.watch}", flush=True)
+                continue
             try:
                 send(step.opcode, step.values, f"PROBE[{name}] {step.label}")
             except Exception as exc:
@@ -3123,7 +3146,9 @@ def run_probe(name, send, conn_id, stop, origin=None):
             print(f"      WATCH: {step.watch}", flush=True)
         print(f"\n  probe complete. What did you see?\n{bar}\n", flush=True)
 
-    threading.Thread(target=body, daemon=True).start()
+    thread = threading.Thread(target=body, daemon=True)
+    thread.start()
+    return thread
 
 
 class Recorder:
