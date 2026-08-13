@@ -642,6 +642,69 @@ would hide the next bad producer.
 
 ### 10.7 Carried forward
 
+---
+
+## 11. Run 5 (2026-08-13): the prediction SURVIVED, and the next wall is the icons
+
+Harness `20260813T001749`, capture `authsrv-20260813T001757-c1.jsonl`. **Both tells
+correct this time** — `source: …\sweet-euler-697883\toolkit\authsrv`, `unlocks: all
+(3442 real skills)`, and `0x00DB` on the wire with `word0 = 0xfffffffe`, **bit 0 clear**.
+
+> **The `*skill` assert at `ChCliSkill.cpp:1022` did NOT fire.** That was §10's stated
+> refutation condition — *"if it still asserts at ChCliSkill.cpp:1022, this whole reading
+> is wrong"* — and it did not happen. **The bit-0 mechanism is CONFIRMED.** The panel's
+> skill walk now enumerates real ids and gets past the zero-id assert for the first time
+> in the arc.
+
+The client still crashed, at a **different assert** — and that is the next wall, not a
+refutation:
+
+> **`Assertion: fileId` — `File.cpp(367)`**, site `0x00471630`, whose next instruction
+> `0x0047163F` **is the trace's second frame**. The crash site is pinned exactly, not
+> inferred.
+
+The rest of the trace is the UI: `0x008D1358`/`0x008C67B3`/`0x008D3907` under
+`FrMsg 0x0064CA24` and `FrApi 0x00633C7C` — the same UI plumbing frames the `*skill`
+crash carried, with a different subsystem beneath. The panel is asking the file system
+for a file id it cannot serve. Last c2s +7.45 s, 1 ping missed.
+
+### The hypothesis, and it is measurable before spending a run
+
+**OBSERVED (client table, build 38797, `skilltable.py`):** of the 3,442 ids we unlock,
+only **1,333 are player-usable skills** (`equip_family == 1`, PvP flag clear —
+`player_corpus()`, the rule `SKILL_EXTRACTION.md` §4 already established). The other
+**2,109 are not player skills at all** — weapon modifiers and other non-player
+definitions that happen to live in the same table. (`not_playable` is a red herring: only
+4 rows, 3418–3421.) `authsrv.py`'s own comment for the test bar already says a real
+skill has "both icon file ids present".
+
+**INFERRED:** the panel builds a row per unlocked id and loads each one's icon; a
+non-player definition has no skill icon, so the loader asserts `fileId`. We told the
+client it owns 2,109 things that are not skills — the same shape of error as bit 0, one
+layer up: **the bitmap is still wrong, just less wrong.**
+
+### The next run costs nothing to set up — the flag already exists
+
+`--unlocks bar` sends exactly the eight bar skills, all real, all with icons.
+
+**Prediction, stated first: the panel OPENS and lists eight Warrior skills**, and the
+client keeps answering pings. If it opens, the wall is *which ids* we unlock, and the fix
+is to derive the unlock set from `player_corpus()` rather than from `range()`. If it
+still asserts `fileId`, the icons are not about unlock membership and the next read is
+the `0x008C/0x008D` subsystem.
+
+```
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py \
+    --keep-open --shots 10 --game-args '--probe profession_spawn --unlocks bar'
+```
+
+**Do not build the `player_corpus` unlock set before this run.** Every wrong turn in this
+arc came from building on an untested story, and this one costs one flag to test.
+
+---
+
+## 10.7 (continued)
+
 0. **A parallel session is working this same arc** in worktree
    `friendly-kilby-fcaf57` (branch `claude/custom-profession-exploration-dead6c`), and
    its tree still carries the bit-0 loop. Anything it measures about the skills panel

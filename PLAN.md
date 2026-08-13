@@ -1283,15 +1283,35 @@ wrong. Score it on c2s traffic after the K press, **never on the socket**:
 python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_spawn'
 ```
 
-**Run it by ABSOLUTE PATH, and check two lines of `gamesrv.log` before believing the
-result.** `session.py` spawns `authsrv.py` from its OWN directory, so launching another
-worktree's copy runs that worktree's server: the first attempt (2026-08-13,
-`20260813T000725`) was served by the parallel profession session's tree, printed
-`all (3443 real skills)`, put `word0 = 0xffffffff` on the wire and crashed exactly as
-§10.1 says it must — **a pre-fix server cannot falsify a post-fix prediction, so the
-prediction is still UNTESTED.** The banner now prints `source: <dir>` and `unlocks:`
-must read **3442**; `refuse_skill_zero()` makes a bit-0 bitmap a startup failure naming
-`ChCliSkill.cpp:1022`, so an old tree dies before the socket opens.
+**RESULT 2026-08-13: the prediction SURVIVED and the bit-0 mechanism is CONFIRMED**
+(`RUNS.md` §11). On the correct tree, with `word0 = 0xfffffffe` on the wire, the
+`*skill` assert at `ChCliSkill.cpp:1022` **did not fire** — which was the stated
+refutation condition. The panel's skill walk gets past the zero id for the first time in
+the arc. (The first attempt, `20260813T000725`, was served by the parallel profession
+session's tree carrying the pre-fix loop — a pre-fix server cannot falsify a post-fix
+prediction. The banner now prints `source: <dir>`, `unlocks:` must read **3442**, and
+`refuse_skill_zero()` makes a bit-0 bitmap a startup failure naming
+`ChCliSkill.cpp:1022`, so an old tree dies before the socket opens.)
+
+**The next wall is the icons, and it is the same error one layer up.** The client now
+asserts **`fileId` at `File.cpp(367)`** — site `0x00471630`, pinned by the trace's own
+next-instruction frame `0x0047163F`, under the same `FrMsg`/`FrApi` UI frames.
+MEASURED: of the 3,442 ids we unlock, only **1,333 are player-usable skills**
+(`equip_family == 1`, PvP clear — `skilltable.player_corpus()`); the other **2,109 are
+weapon modifiers and non-player definitions** with no skill icon. INFERRED: the panel
+loads an icon per unlocked id and asserts on the first one that has none.
+
+**Next action is ONE run and it needs no code — the flag exists.** `--unlocks bar` sends
+the eight real Warrior skills. **Prediction: the panel OPENS and lists eight skills.**
+
+```
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_spawn --unlocks bar'
+```
+
+If it opens, the fix is to derive the unlock set from `player_corpus()` instead of
+`range()` — a client-table measurement, so it wants a `content/` row with the build
+stamped, per the provenance gate. **Do not build that before the run**; every wrong turn
+in this arc came from building on an untested story.
 
 **What this changed for the arc's actual goal.** The custom-profession boundary is now
 sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has
