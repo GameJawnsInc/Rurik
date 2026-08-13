@@ -1098,7 +1098,14 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   nothing. The output guards refuse in-place, `C:\gw`, and EVERY checkout of this repo
   (a worktree root is not the main checkout's -- it reports 2), each with a positive
   control that an ordinary path is allowed. Sections 0-2 build their own buffers and
-  need no vault; section 3 skips without one. ~2 s),
+  need no vault; section 3 skips without one. Since 2026-08-13 it also covers the
+  ATTRIBUTE table (`s_attrib`, located by the source path that follows it; the
+  primary-marker verb is SYMMETRIC because a set-only one would leave two primaries
+  on a profession, a state the client never ships), the SKILL roster (two
+  single-byte fields, with a check that NOTHING outside the targeted bytes moves --
+  a stride error would smear edits across neighbouring rows and still pass a spot
+  check), and the RECIPE file, where a profession design is versioned as numbers
+  only so no ArenaNet text enters the tree. ~2 s),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
   refused),
   `toolkit/harness/test_keytap.py` (the ReadProcessMemory key reader — RPM round-trip,

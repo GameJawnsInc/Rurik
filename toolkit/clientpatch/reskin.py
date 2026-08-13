@@ -220,6 +220,47 @@ def _row(by_id, aid):
     return by_id[aid]
 
 
+def load_recipe(path):
+    """A profession design as a versioned file, not eleven command-line flags.
+
+    Returns (host, {table: sid}, renames, owners, primaries, skill_profs,
+    skill_attrs). Every value is a NUMBER -- profession, attribute, skill and
+    string ids -- so a recipe carries no ArenaNet text and the client resolves
+    every string from the owner's own archive at run time.
+
+    tomllib is standard library from 3.11, so this adds no dependency.
+    """
+    import tomllib                                             # noqa: E402
+    with open(path, "rb") as f:
+        doc = tomllib.load(f)
+    prof = doc.get("profession") or {}
+    host = prof.get("host")
+    if host is None:
+        raise SystemExit(f"{path}: [profession] needs a host id")
+    names = {t: prof[t] for t in TABLES if t in prof}
+    renames, owners, primaries = [], [], []
+    for row in doc.get("attribute", ()):
+        if "id" not in row:
+            raise SystemExit(f"{path}: every [[attribute]] needs an id")
+        aid = row["id"]
+        if "name" in row:
+            renames.append((aid, row["name"]))
+        if "owner" in row:
+            owners.append((aid, row["owner"]))
+        if "primary" in row:
+            primaries.append((aid, 1 if row["primary"] else 0))
+    skill_profs, skill_attrs = [], []
+    for row in doc.get("skill", ()):
+        if "id" not in row:
+            raise SystemExit(f"{path}: every [[skill]] needs an id")
+        sid = row["id"]
+        if "profession" in row:
+            skill_profs.append((sid, row["profession"]))
+        if "attribute" in row:
+            skill_attrs.append((sid, row["attribute"]))
+    return host, names, renames, owners, primaries, skill_profs, skill_attrs
+
+
 def parse_pairs(specs, what):
     """['32=2092', ...] -> [(32, 2092), ...]"""
     out = []
@@ -341,7 +382,7 @@ def main(argv=None):
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--exe", help="client to read; default is the pinned pristine copy")
     ap.add_argument("--out", help="where to write the patched copy (out of place)")
-    ap.add_argument("--profession", type=int, default=8,
+    ap.add_argument("--profession", type=int, default=None,
                     help="the shipped id to repurpose (default 8, Ritualist -- "
                          "chosen because all its identity string ids live in ONE "
                          "archive text file, where other professions straddle 2-4)")
@@ -370,6 +411,11 @@ def main(argv=None):
     ap.add_argument("--skill-prof", action="append", metavar="SKILL=PROFESSION",
                     help="reassign which profession owns a skill (row+0x28). "
                          "Repeatable.")
+    ap.add_argument("--recipe", metavar="FILE.toml",
+                    help="apply a profession design from a file. Everything a "
+                         "recipe holds is a number (profession, attribute, "
+                         "skill and string ids), so it carries no ArenaNet "
+                         "text. See recipes/ritualist-demo.toml.")
     ap.add_argument("--attrs", action="store_true",
                     help="print the attribute table grouped by profession")
     a = ap.parse_args(argv)
@@ -410,6 +456,22 @@ def main(argv=None):
     owners = parse_pairs(a.attr_owner, "attr-owner")
     primaries = parse_pairs(a.attr_primary, "attr-primary")
     edits = {t: getattr(a, t) for t in TABLES if getattr(a, t) is not None}
+    if a.recipe:
+        # A recipe is the base; explicit flags layer on top, so a design can be
+        # versioned and still tweaked for one run without editing the file.
+        (rhost, rnames, rren, rown, rpri,
+         rsprof, rsattr) = load_recipe(a.recipe)
+        # Precedence, stated rather than implied: an explicit --profession
+        # beats the recipe's host, so a versioned design can be aimed at a
+        # different host for one run without editing the file.
+        if a.profession is None:
+            a.profession = rhost
+        edits = {**rnames, **edits}
+        renames, owners, primaries = rren + renames, rown + owners, rpri + primaries
+        skill_profs, skill_attrs = rsprof + skill_profs, rsattr + skill_attrs
+        print(f"recipe {a.recipe}: host profession {rhost}, "
+              f"{len(rnames)} name(s), {len(rren) + len(rown) + len(rpri)} "
+              f"attribute edit(s), {len(rsprof) + len(rsattr)} skill edit(s)")
     if a.show or a.attrs or not (edits or renames or owners or primaries
                                  or skill_profs or skill_attrs):
         if not (a.show or a.attrs):
@@ -422,6 +484,8 @@ def main(argv=None):
                          "patches in place.")
     refuse_bad_output(src, a.out)
 
+    if a.profession is None:
+        a.profession = 8            # Ritualist: the owner's chosen host
     patched, log = apply_edits(data, found, a.profession, edits)
     if renames or owners or primaries:
         patched, alog = attrib_edits(patched, arows, renames, owners, primaries)

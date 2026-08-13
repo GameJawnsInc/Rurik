@@ -24,7 +24,7 @@ import checks                                                  # noqa: E402
 import reskin                                                  # noqa: E402
 import vaultpath                                               # noqa: E402
 
-LEDGER = checks.Ledger("reskin", floor=40)
+LEDGER = checks.Ledger("reskin", floor=48)
 
 
 def synth(name_ids=None, abbrev_ids=None, picker_ids=None, data_ids=None,
@@ -355,6 +355,53 @@ def section_skills():
               "the client has a row for")
 
 
+def section_recipe():
+    print("\n6. the recipe file -- a profession design, versioned")
+    path = os.path.join(HERE, "recipes", "ritualist-demo.toml")
+    if not os.path.isfile(path):
+        LEDGER.skip("the recipe section", f"missing {path}")
+        return
+    host, names, renames, owners, primaries, sprof, sattr = reskin.load_recipe(path)
+    LEDGER.ok(host == 8,
+              "the shipped demo recipe hosts on Ritualist (8)",
+              f"host {host} -- the owner's chosen host, and the profession "
+              f"whose identity strings all live in ONE archive text file")
+    LEDGER.ok(set(names) <= set(reskin.TABLES) and "name" in names,
+              "its name section maps onto the real tables",
+              f"{sorted(names)} -- an unknown key here would be silently "
+              f"ignored, so the set is checked against TABLES")
+    LEDGER.ok(any(a == 26 for a, _ in owners) and any(a == 26 for a, _ in renames),
+              "it claims a spare attribute row AND names it",
+              f"owners {owners}, renames {renames} -- claiming without naming "
+              f"would show an attribute with the reserved profession's word")
+    LEDGER.ok(len(sattr) == 2 and all(t == 26 for _, t in sattr),
+              "and moves two skills onto that row, which is section 10's "
+              "countable check",
+              f"{sattr}")
+    everything = [v for _, v in renames] + [v for _, v in owners] + \
+                 list(names.values()) + [v for _, v in sattr]
+    LEDGER.ok(all(isinstance(v, int) for v in everything),
+              "every value in a recipe is a NUMBER",
+              "a recipe carries ids only -- no ArenaNet text enters the tree, "
+              "and the client resolves each string from the owner's archive")
+    for bad, needle in (("[profession]\nname = 1\n", "needs a host"),
+                        ("[profession]\nhost = 8\n[[attribute]]\nname = 1\n",
+                         "needs an id"),
+                        ("[profession]\nhost = 8\n[[skill]]\nattribute = 1\n",
+                         "needs an id")):
+        tmp = os.path.join(tempfile.gettempdir(), "rurik-bad-recipe.toml")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(bad)
+        try:
+            reskin.load_recipe(tmp)
+            ok = False
+        except SystemExit as ex:
+            ok = needle in str(ex)
+        LEDGER.ok(ok, f"a recipe missing {needle!r} is REFUSED",
+                  "a silently-skipped row is a design that half-applies, which "
+                  "reads as a client bug rather than a typo")
+
+
 def main():
     print("Reskin patcher: structural location, edits, and refusals.")
     section_locator()
@@ -363,6 +410,7 @@ def main():
     section_real_client()
     section_attributes()
     section_skills()
+    section_recipe()
     return LEDGER.verdict()
 
 
