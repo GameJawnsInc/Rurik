@@ -295,7 +295,15 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
-  go red ALONE, because a gate that reddens at everything is as useless as one
+  go red ALONE. **One of the ten was STRICTER THAN THE CLIENT and was corrected
+  2026-08-13**: "no row >= 16 with USED clear" refused ArenaNet's own shipped
+  archive -- the owner's `C:\gw\Gw.dat`, opened by the retail client every day,
+  carries row 35301 that way and pre-flight answered REFUSE, 9 of 10, while
+  `vault/dat_study/Gw.dat` has none and passed. A USED-clear row is a fault only
+  when something still POINTS at it; unreferenced, it is a SPARE, which is the
+  mechanism `datplan` already records the client using when it claimed 35301.
+  The pair that pins it is the same row in the same state differing only in the
+  reference, so a regression to reading the flag alone moves exactly one of them, because a gate that reddens at everything is as useless as one
   that reddens at nothing. The isolation half is what earns the run: the fixture
   was relaid twice to make it possible, and it caught the first sabotage of the
   reserved-row rule tripping two unrelated items. It also pins the four shapes of
@@ -992,6 +1000,36 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   would end most sweeps early. The last check asks the SYNTAX TREE whether the loop
   imports the cage or launches anything itself, because the grep version of that check
   went red on the docstring explaining the rule),
+  `toolkit/authsrv/test_shotlabel.py` (the SCREEN readout for the 239 SILENT opcodes,
+  and the four defects it shipped with. `smsgsweep`'s `SILENT` means *no c2s reply*
+  and is blind to anything the client DRAWS, so this joins a run's one send to the
+  hold screenshots that bracket it. Every headline it prints is a number a broken
+  version also prints, so the file is mostly negative controls and each defect is
+  REPRODUCED INLINE -- the passing number is a difference between two live answers.
+  **The join is by WALL CLOCK**: the obvious index reading uses the CAPTURE's clock,
+  which starts at the server connection and not at the hold, and scored `0x0033`'s
+  306x443 Message of the Day panel at **0.00008** because the baseline frame already
+  had the window in it (0.05043 joined correctly). **The noise floor is the MEDIAN of
+  the idle window**, not the max and not every pre-send pair: the first hold frames
+  are a loading screen, which against a world frame is 64% of pixels, and at that
+  floor ALL FOUR known positives read QUIET -- and the max fails too once a load
+  transition lands inside the window, measured at 81.86% with the flag threshold
+  above 100% where nothing can ever be CHANGED. Two pairs is refused, because a
+  median of two is their mean. **The stamp is only good to the SECOND**, so a frame
+  inside the send's second serves as neither baseline nor after-frame. And it scores
+  a STRIP rather than a pair, because `0x00C0`'s floating text fades in ~2 s and at a
+  2.3 s cadence lands BETWEEN frames -- one pair scored it 0.190%, below the same
+  run's idle noise -- with `sustained` separating a transient from a panel that stays
+  and a persistent-effect control that must NOT decay. Section 7 is the one that was
+  not in this module at all: `session.Stack._pump` died on a cp1252 console, the
+  gamesrv wedged on its next print, the probe sent NOTHING, and the run still
+  reported **RUN VERDICT: PASS** -- the only thing still working was the 20 Hz world
+  tick, the one send that does not print. Three opcodes were marked done having never
+  been sent, so `shotloop` records an opcode only when the run's OWN capture holds its
+  send. Section 8 refuses the page into every checkout, with the vault as the positive
+  control. No vault, no socket, no client -- the frames are drawn with PIL, which is
+  what lets the load-screen and ambiguous-second cases exist at all; without PIL the
+  file declares one skip and goes red. 33 checks),
   `toolkit/authsrv/test_rotate.py` (that GAME_CMSG 0x0040 really is ROTATE_PLAYER: the
   client's own assert text and the two ±inf constants are still at their addresses, both
   payload fields are still `dword` and not the `float` they look like, and the finite

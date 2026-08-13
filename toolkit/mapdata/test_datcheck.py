@@ -59,7 +59,7 @@ import checks  # noqa: E402
 # unconditionally -- the fixture is built by this file and there is no corpus to
 # be absent -- so a count under this means a section stopped executing, which on
 # a gate is indistinguishable from the gate being removed.
-LEDGER = checks.Ledger("dat pre-flight and detector", floor=67)
+LEDGER = checks.Ledger("dat pre-flight and detector", floor=69)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -107,7 +107,8 @@ ALL_ITEMS = ["0x1C bit 0 clear", "0x1C bit 1 clear", "header CRC over 0x00..0x0C
              "no overlapping reservations",
              "every USED|FIRST row >= 16 is named",
              "every file-id record names a USED row",
-             "no row below index 16 touched", "no row >= 16 with USED clear"]
+             "no row below index 16 touched",
+             "no USED-clear row that something points at"]
 
 
 def pattern(seed, n):
@@ -283,9 +284,36 @@ def run(tmp):
     expect_only(p, "a reserved row below 16 written",
                 "no row below index 16 touched")
 
+    # A PARTNER losing USED is corruption: nothing but `alloc.nextStream` reaches
+    # it, so the file-id record item cannot see it and this is the only item that
+    # can. It must still go red, alone.
     p = fresh(tmp, "unused.dat")
     poke_row(p, ROW_PARTNER, flags=0x0000)
-    expect_only(p, "a row >= 16 left USED-clear", "no row >= 16 with USED clear")
+    expect_only(p, "a referenced partner left USED-clear",
+                "no USED-clear row that something points at")
+
+    # THE CONTROL, and the reason this item was rewritten on 2026-08-13: a row that
+    # NOTHING points at is a SPARE, and refusing it refused ArenaNet's own shipped
+    # archive. The owner's install carries exactly one (row 35301, which `datplan`
+    # already records the client CLAIMING when it wanted a slot) and pre-flight
+    # answered REFUSE, 9 of 10, on a file the retail client opens every day. A gate
+    # that reddens on the real target is not a gate, it is a tool nobody can run.
+    #
+    # It is the SAME ROW in the SAME state as the sabotage above -- USED clear, on
+    # row 20 -- and the only difference is that the head no longer points at it. So
+    # this pair isolates the reference and nothing else: if the item ever goes back
+    # to reading the flag alone, exactly one of these two goes the wrong way.
+    p = fresh(tmp, "spare.dat")
+    poke_row(p, ROW_PARTNER, flags=0x0000)
+    poke_row(p, ROW_HEAD, nxt=0)
+    got, _facts = datcheck.preflight(p)
+    bad = [c.name for c in got if not c.ok]
+    check(not bad, "CONTROL: the same row, unreferenced, is a SPARE and not a fault",
+          "red: %s" % (bad or "none -- as on the owner's own install"))
+    item = [c for c in got
+            if c.name == "no USED-clear row that something points at"][0]
+    check("spare" in item.detail and str(ROW_PARTNER) in item.detail,
+          "and the spare is REPORTED rather than dropped", item.detail[:78])
 
     print("\n2. the baseline check compares the reserved rows byte for byte")
     base = fresh(tmp, "base.dat")

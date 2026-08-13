@@ -278,6 +278,18 @@ def directory_invariant(mft, records):
             named.add(row)
     orphans = [i for i in range(FIRST_CLAIMABLE_ROW, n)
                if first[i] and i not in named]
+    # Every row a LIVE row points at through alloc.nextStream. A map is two rows and
+    # the archive says so only here -- no partner is ever named by the file-id table
+    # (test_mapchunks: 349 partners, 0 named) -- so without this set a partner is
+    # indistinguishable from a row nothing references at all, and that difference is
+    # the whole of the spare-row rule below.
+    chained = set()
+    for i in range(n):
+        if used[i]:
+            nxt = struct.unpack_from("<I", mft, i * ENTRY_SIZE + 0x10)[0]
+            if nxt:
+                chained.add(nxt)
+    unused_high = [i for i in range(FIRST_CLAIMABLE_ROW, n) if not used[i]]
     return {
         "records": len(records),
         "released_records": released,
@@ -286,6 +298,12 @@ def directory_invariant(mft, records):
         "rows_named": len(named),
         "orphan_rows": orphans,
         "dangling_records": dangling,
+        # USED clear AND something still points here: a partner or a record lost its
+        # row. That is corruption. USED clear and nothing points here is a SPARE.
+        "unused_referenced": [i for i in unused_high
+                              if i in chained or i in named],
+        "unused_spares": [i for i in unused_high
+                          if i not in chained and i not in named],
     }
 
 
@@ -390,12 +408,37 @@ def preflight(path, baseline=None):
                         "descriptor, header row, id table, MFT row and 12 "
                         "all-zero spares as the client requires"))
 
-    unused_high = [i for i in range(FIRST_CLAIMABLE_ROW, n)
-                   if not (rows[i]["alloc_flags"] & FLAG_ENTRY_USED)]
-    checks.append(Check("no row >= 16 with USED clear", not unused_high,
-                        "%d row(s) would be spare-listed at the next open%s"
-                        % (len(unused_high),
-                           "" if not unused_high else " " + str(unused_high[:8]))))
+    # A USED-CLEAR ROW IS ONLY A FAULT IF SOMETHING STILL POINTS AT IT.
+    #
+    # This item used to refuse ANY row >= 16 with USED clear, and CORRECTED
+    # 2026-08-13 because it refuses ArenaNet's own shipped archive: `C:\gw\Gw.dat`,
+    # the owner's install, untouched by anything here and opened by the retail client
+    # every day, carries exactly one -- row 35301 -- and pre-flight called it
+    # REFUSE, 9 of 10. So the rule was stricter than the client's, which is the one
+    # direction a pre-flight gate must not be: a gate that reddens on the real target
+    # stops the tool running at all.
+    #
+    # It is not even an anomaly, it is the mechanism: `datplan.FIRST_CLAIMABLE_ROW`
+    # already records that when the client needed a free slot it TOOK row 35301,
+    # reaching past twelve nearer ones. A spare row is what the allocator consumes.
+    # `vault/dat_study/Gw.dat` has zero of them and passes 10 of 10, so the two
+    # copies differ by exactly this row and neither is broken.
+    #
+    # What the item still catches is what its own sabotage in `test_datcheck` builds:
+    # a row that something REFERENCES losing its USED flag. A partner is reachable
+    # only through `alloc.nextStream` and is never named by the file-id table, so
+    # "the file-id record check would have caught it" is false -- it would not, and
+    # that is why this item exists at all.
+    referenced = inv["unused_referenced"]
+    spares = inv["unused_spares"]
+    checks.append(Check(
+        "no USED-clear row that something points at", not referenced,
+        "%d referenced row(s) lost USED%s; %d unreferenced spare(s)%s"
+        % (len(referenced),
+           "" if not referenced else " " + str(referenced[:8]),
+           len(spares),
+           "" if not spares else " " + str(spares[:8])
+           + " -- normal, the client's allocator claims these")))
 
     if baseline is not None:
         base_mft = _snapshot_mft(baseline)
