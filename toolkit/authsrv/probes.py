@@ -2295,6 +2295,34 @@ PROBES = {
              "reserved sentinel (profession_sentinel asks that question on "
              "its own run).",
     ),
+    "profession_spawn": lambda a, o: Probe(
+        question="With the custom profession delivered IN the spawn burst -- "
+                 "bar, unlocks and attributes all arriving after it, zero "
+                 "mid-session sends -- does the skills panel open?",
+        predicts="The population fork of RUNS.md section 8, asked with the "
+                 "poisoned instrument removed. If the panel's null is on "
+                 "per-profession state built at DELIVERY time, everything this "
+                 "session delivers was keyed under 12 from the first packet "
+                 "and the panel may OPEN. If the lookup is against the "
+                 "compiled table, the same *skill assert fires "
+                 "(ChCliSkill.cpp:1022) with the cleanest provocation yet: "
+                 "K as the session's first UI action. WIKI (GWW, 'Skills and "
+                 "Attributes Panel'): the panel carries a drop-down of "
+                 "unlocked SECONDARY professions, so it enumerates "
+                 "professions and a per-profession walk is a plausible frame "
+                 "for the null -- INFERRED, the handler is unread.",
+        steps=[],
+        note="OBSERVATION ONLY -- no packets, and that is the design: the "
+             "whole point is that NOTHING is sent after the burst. Pair with "
+             "the server flag, TWO sessions: first --spawn-profession 3 (the "
+             "control -- spawn-time delivery of a non-default profession has "
+             "never been done either, so arm B means nothing without it), "
+             "then --spawn-profession 12. In each: wait until you are "
+             "standing in the map, press K as your FIRST action, look, close "
+             "it, say out loud what happened. The server refuses the flag's "
+             "invalid values at startup and announces an out-of-band id "
+             "loudly.",
+    ),
     "profession_sentinel": lambda a, o: Probe(
         question="Is profession 11 handled specially, being the client's own "
                  "reserved/none marker rather than merely out of range?",
