@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=172)
+LEDGER = checks.Ledger("agent lifetime", floor=176)
 
 
 def main():
@@ -1396,6 +1396,42 @@ def section_unlock_bitmap():
               "while the real bitmap and an empty one pass untouched",
               "the guard must not clear the bit or reject legitimate input -- "
               "it reports, it does not repair")
+    # --unlocks corpus: only ids the client draws an icon for. Needs the
+    # owner's client, so it SKIPS rather than failing on a bare machine --
+    # and skipping is printed, never silent.
+    try:
+        corpus, clabel = authsrv.build_unlock_bitmap("corpus")
+    except SystemExit as ex:
+        corpus, clabel = None, str(ex)
+    if corpus is None:
+        LEDGER.skip("the --unlocks corpus derivation",
+                    f"no client to read: {clabel.splitlines()[0]}")
+    else:
+        cids = {s for s in range(len(corpus) * 32)
+                if corpus[s // 32] >> (s % 32) & 1}
+        allids = {s for s in range(len(words) * 32)
+                  if words[s // 32] >> (s % 32) & 1}
+        LEDGER.ok(not (corpus[0] & 1) and cids < allids,
+                  "the corpus set is a STRICT SUBSET of all, and clears bit 0",
+                  f"{len(cids)} of {len(allids)} -- it must remove rows, not "
+                  f"add them; a derivation that returned everything would "
+                  f"reproduce the fileId assert it exists to avoid")
+        LEDGER.ok(len(cids) == 1333,
+                  "and it is 1333 player-usable skills on build 38797",
+                  f"{len(cids)} -- literal, so a change in the extraction rule "
+                  f"or the build has to be looked at rather than absorbed")
+        bar = set(authsrv.TEST_SKILLBAR)
+        LEDGER.ok(bar <= cids,
+                  "and every skill on the test bar is inside it",
+                  f"missing {sorted(bar - cids)} -- a corpus that dropped a bar "
+                  f"skill would leave the bar undrawable, which is the failure "
+                  f"--unlocks exists to investigate")
+        LEDGER.ok("38797" in clabel and "player-usable" in clabel,
+                  "and the label records the build it was derived from",
+                  f"{clabel!r} -- the ids are read from the owner's client at "
+                  f"run time and committed nowhere, so the log line is the "
+                  f"only provenance record the run leaves")
+
     both_arms = 0
     for spec in ("all", "bar", "none", "316,317"):
         w, _ = authsrv.build_unlock_bitmap(spec)

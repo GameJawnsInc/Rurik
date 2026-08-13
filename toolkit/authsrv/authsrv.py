@@ -570,6 +570,44 @@ UNLOCKED = unlock_all_words()
 UNLOCK_LABEL = "all"
 
 
+def unlock_corpus_words():
+    """Only the ids the client will draw a skill ICON for.
+
+    RUNS.md §11: with all 3,442 rows unlocked the panel gets past the skill
+    walk and then asserts `fileId` at File.cpp:367 loading an icon. Only
+    **1,333** of those rows are player-usable skills (`equip_family == 1`,
+    PvP flag clear -- the rule SKILL_EXTRACTION.md §4 established); the rest
+    are weapon modifiers and other non-player definitions that share the
+    table and have no skill icon.
+
+    DERIVED AT RUN TIME FROM THE OWNER'S OWN CLIENT, never committed. That is
+    the pattern `mapbuild.py` already proves for FINDINGS 14's constants: the
+    extractor is in this repo (`skilltable.py`), the build is recorded in the
+    label this returns, and no ArenaNet bytes enter the tree. Reading it costs
+    one pass over the table at startup.
+
+    Imported INSIDE the function on purpose: the default `--unlocks all` path
+    must keep working on a machine with no vault and no client, which is the
+    bare-machine rule the fixed-byte-pattern tools live under.
+    """
+    sys.path.insert(0, os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "clientscan"))
+    import pinned                                              # noqa: E402
+    import skilltable                                          # noqa: E402
+
+    path, why = pinned.find()
+    data = open(path, "rb").read()
+    base, count, _score = skilltable.locate_table(data)
+    rows = [skilltable.parse_record(data, base, i) for i in range(count)]
+    ids = [i for i in skilltable.player_corpus(rows) if i > 0]
+    words = [0] * UNLOCK_WORDS
+    for sid in ids:
+        if sid < UNLOCK_WORDS * 32:
+            words[sid // 32] |= 1 << (sid % 32)
+    return words, (f"corpus ({len(ids)} player-usable of {count} rows, "
+                   f"build {pinned.BUILD}, {why})")
+
+
 def refuse_skill_zero(words, spec):
     """Bit 0 set means the client asserts the moment the Skills panel opens.
 
@@ -597,6 +635,9 @@ def refuse_skill_zero(words, spec):
 
 def build_unlock_bitmap(spec):
     """--unlocks: 'all', 'none', 'bar', or an explicit comma-separated id list."""
+    if spec == "corpus":
+        words, label = unlock_corpus_words()
+        return refuse_skill_zero(words, spec), label
     if spec == "all":
         return (refuse_skill_zero(unlock_all_words(), spec),
                 f"all ({SKILL_TABLE_ROWS - 1} real skills, ids 1..{SKILL_TABLE_ROWS - 1})")
@@ -4785,11 +4826,18 @@ def main():
                          "(0..3442 here). Fewer than 8 are padded with zeros.")
     ap.add_argument("--unlocks", default="all",
                     help="Unlock bitmap sent as opcodes 29 and 219: 'all' "
-                         "(every bit set), 'none', 'bar' (exactly the --skills "
-                         "ids), or an explicit comma-separated id list. Whether "
-                         "the client REFUSES to draw a bar skill that is not "
-                         "unlocked is NOT FOUND in every source we have; this "
-                         "flag exists to settle it by experiment.")
+                         "(ids 1..3442 -- NOT 0, see refuse_skill_zero), "
+                         "'corpus' (only the 1,333 player-usable skills, "
+                         "derived from the owner's own client at run time), "
+                         "'none', 'bar' (exactly the --skills ids), or an "
+                         "explicit comma-separated id list. Whether the client "
+                         "REFUSES to draw a bar skill that is not unlocked is "
+                         "NOT FOUND in every source we have; this flag exists "
+                         "to settle it by experiment. 'all' is known to reach "
+                         "a `fileId` assert (File.cpp:367) when the Skills "
+                         "panel opens -- it unlocks 2,109 weapon modifiers and "
+                         "other non-player rows that have no skill icon "
+                         "(studies/profession/RUNS.md §11).")
     ap.add_argument("--keys")
     ap.add_argument("--vault", default=VAULT_DEFAULT)
     ap.add_argument("--host-encoding", choices=["sockaddr", "string"],

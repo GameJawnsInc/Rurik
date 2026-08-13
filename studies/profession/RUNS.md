@@ -701,6 +701,65 @@ python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.
 **Do not build the `player_corpus` unlock set before this run.** Every wrong turn in this
 arc came from building on an untested story, and this one costs one flag to test.
 
+### RESULT — **THE PANEL OPENED.** First time in the arc.
+
+Harness `20260813T002238`, capture `authsrv-20260813T002249-c1.jsonl`. Correct tree
+(`source:` banner), `unlocks: 316,…,323 (8 bit(s) set)`, **no `crash-dialog.txt`**, c2s
+traffic to **+27.96 s** and **`ping_summary: missed 0`** — proof of life by this repo's
+own standard, not an open socket.
+
+`hold002.png` is the artifact the arc spent seven sessions failing to produce:
+
+> **"Skills and Attributes (Test Warrior) [K]"**, open. **Profession: Warrior** with the
+> drop-down (§8's WIKI mechanic, seen at last). **Attributes (50 unused points)** —
+> Strength, Axe Mastery, Hammer Mastery, Swordsmanship, Tactics, the correct Warrior
+> list. **"Test Warrior's Skills"** grouped by attribute: Strength (4), Swordsmanship
+> (1), Tactics (2), No Attribute (1) — **exactly the eight ids we unlocked**, with Wild
+> Blow reading 5 energy / 8 recharge.
+
+Three things that fall out of one screenshot:
+
+1. **The icon hypothesis is CORROBORATED.** Eight real skills, no `fileId` assert.
+2. **§10.5's refutation is confirmed from the other side.** The panel displays
+   **Warrior** correctly, and the only profession message this server sends for the
+   player is **`0x00B7`** — the message the verifier identified as the sole writer of
+   the panel's record. `0x00A6` was never needed for the display.
+3. **The attribute list is per-profession and correct**, so the panel's profession-keyed
+   half works on a legal id — which is what makes the custom-id question askable again.
+
+### The fix, now that the story is tested: `--unlocks corpus`
+
+`authsrv.py --unlocks corpus` derives the unlock set from the owner's own client at run
+time (`pinned.find()` + `skilltable.player_corpus()`): **1,333 player-usable ids of
+3,443 rows**, build stamped in the banner, **committed nowhere** — the pattern
+`mapbuild.py` proves for FINDINGS 14's constants. Bit 0 clear, all eight bar skills
+inside it, 0.7 s at startup, and it SKIPS (never silently passes) on a machine with no
+client.
+
+**It is also the discriminator the bar run could not be.** `--unlocks bar` changed both
+*which* ids and *how many* (8 vs 3,442), so it cannot separate "non-player rows have no
+icon" from "the list has a magnitude limit" — the unmeasured magnitude §10.7 item 4
+flagged. The corpus run holds *which* correct and puts *how many* at 1,333:
+
+**Prediction: the panel opens and lists 1,333 skills grouped by attribute.** If it
+asserts `fileId` again, the wall is magnitude, not membership, and the next read is the
+`0x008C`/`0x008D` subsystem under `File.cpp:367`.
+
+```
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py \
+    --keep-open --shots 10 --game-args '--probe profession_spawn --unlocks corpus'
+```
+
+### And the arc's own question is finally askable
+
+With a working panel, `--spawn-profession` becomes meaningful again. §10 predicts the
+panel **opens at any primary including 12**, because the skill walk is profession-blind
+— but a custom id must ride `0x00A6` (never `0x00B7`, which asserts `ConstChar.cpp:1296`
+on arrival), and `0x00A6` does not populate the panel's record, so the profession
+drop-down should read blank/none rather than 12. **That is now a one-session experiment
+with a stated prediction**, and it is the first time in the arc it would measure a
+profession rather than a bug of ours.
+
 ---
 
 ## 10.7 (continued)

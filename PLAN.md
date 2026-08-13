@@ -1301,17 +1301,35 @@ MEASURED: of the 3,442 ids we unlock, only **1,333 are player-usable skills**
 weapon modifiers and non-player definitions** with no skill icon. INFERRED: the panel
 loads an icon per unlocked id and asserts on the first one that has none.
 
-**Next action is ONE run and it needs no code — the flag exists.** `--unlocks bar` sends
-the eight real Warrior skills. **Prediction: the panel OPENS and lists eight skills.**
+**RESOLVED 2026-08-13: THE PANEL OPENED** (`RUNS.md` §11) — first time in the arc, on
+`--unlocks bar`. No crash dialog, c2s to +27.96 s, `ping_summary: missed 0`, and
+`hold002.png` shows "Skills and Attributes (Test Warrior)" with the Warrior attribute
+list, the profession drop-down, and the eight unlocked skills grouped by attribute. The
+icon hypothesis is corroborated, and §10.5's refutation is confirmed from the other
+side: the panel displays **Warrior** while the only player profession message this
+server sends is `0x00B7`.
+
+**The fix is in: `authsrv.py --unlocks corpus`** derives the set from the owner's own
+client at run time (`pinned.find()` + `skilltable.player_corpus()`) — **1,333
+player-usable ids of 3,443 rows**, build stamped in the banner, committed nowhere, bit 0
+clear, all bar skills included, 0.7 s at startup, and it SKIPS rather than passing
+silently with no client.
+
+**Next run — it is also the discriminator `bar` could not be.** `bar` changed both which
+ids and how many (8 vs 3,442), so it cannot separate membership from magnitude. `corpus`
+holds membership correct at 1,333. **Prediction: the panel opens and lists 1,333 skills.**
+If it asserts `fileId` again, the wall is magnitude and the next read is the
+`0x008C`/`0x008D` subsystem under `File.cpp:367`.
 
 ```
-python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_spawn --unlocks bar'
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_spawn --unlocks corpus'
 ```
 
-If it opens, the fix is to derive the unlock set from `player_corpus()` instead of
-`range()` — a client-table measurement, so it wants a `content/` row with the build
-stamped, per the provenance gate. **Do not build that before the run**; every wrong turn
-in this arc came from building on an untested story.
+**Then the arc's own question, finally askable.** With a working panel,
+`--spawn-profession 12 --unlocks corpus` measures a profession rather than a bug of
+ours. §10 predicts the panel OPENS (the skill walk is profession-blind) with the
+drop-down reading blank/none, since a custom id must ride `0x00A6` and `0x00A6` does not
+write the panel's record.
 
 **What this changed for the arc's actual goal.** The custom-profession boundary is now
 sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has
