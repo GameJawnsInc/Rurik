@@ -6,9 +6,11 @@ found the routes, [`MODDABLE.md`](MODDABLE.md) designed for arbitrary N and
 [`ATTRIBUTES.md`](ATTRIBUTES.md) costed the hardest dimension. Between them: ~50 agents, four
 documents, and **not one packet sent**. This is the packet.
 
-Four sessions, 2026-08-12, loopback only, ours-DH build, verified cage, synthetic
-credential. Runs 1 and 2 are §2–§3; the two `profession_skillbar` sessions are §8, and
-§8 corrects §6's first row.
+Six sessions, 2026-08-12, loopback only, ours-DH build, verified cage, synthetic
+credential. Runs 1 and 2 are §2–§3; the two `profession_skillbar` sessions are §8; the
+two `profession_spawn` sessions are §9. §8 and §9 correct §6's first two rows — and §9
+holds the arc's two biggest corrections: the byte carriers are NOT equivalent, and the
+skillbar's own profession is a live variable nobody was controlling.
 
 ## Labels
 
@@ -166,8 +168,8 @@ rebase; `keytap.py` already resolves module bases correctly and is the precedent
 
 | Question | Status | Next |
 |---|---|---|
-| Does populating a skill list for profession 12 clear the assert? | **STILL UNANSWERED — the probe ran and its CONTROL arm reddened (§8)** | The re-send instrument is poisoned; spawn-time delivery or R1 (§8) |
-| Which surface fails *second*? | **UNMEASURED** — the skills panel died first | Neuter the assert (R1, 5 bytes) and re-run: fall-through turns one answer per run into many |
+| Does populating a skill list for profession 12 clear the assert? | **STILL UNANSWERED — both instruments reddened their controls (§8, §9)** | Settle the bar-mismatch story first (§9's three discriminators); 12 cannot even reach K via `0x00B7` (load gate, §9) |
+| Which surface fails *second*? | **PARTIALLY ANSWERED (§9)** — for `0x00B7`-delivered 12 the FIRST surface is the load gate `ConstChar.cpp:1296`, before any panel | R1 still turns one run into many for what sits past it |
 | Do the other twelve profession-keyed surfaces fail by null or by bound? | **UNMEASURED** | Same |
 | Is profession 11 (the sentinel) different from 12? | **UNMEASURED** | `profession_sentinel`, already registered |
 | Does 255 mask to 15 rather than failing? | **UNMEASURED** — the silent-failure check | `profession_max`, already registered |
@@ -285,3 +287,98 @@ mechanic and weak for internals — the frame is **INFERRED**; the handler is un
   ```
 - **R1, the five-byte neuter — now MORE attractive.** Two distinct provocations reach
   the same noreturn assert; with it neutered, one run yields the ordering for both.
+
+---
+
+## 9. Run 4 — `profession_spawn` (2026-08-12): two crashes, two different asserts
+
+Two sessions, spawn-time delivery via `--spawn-profession`, zero mid-session sends.
+Both crashed; **neither is the crash §8's route predicted, and each one is a finding.**
+
+**4a — `--spawn-profession 3` (control): the panel dies at a SHIPPING profession.**
+Harness `20260812T215649`, capture `authsrv-20260812T215658-c1.jsonl`. `0x00B7(prof 3)`
+in the burst at +2.89 s, the client plays normally for ~19 s (c2s until +22.42 s), the
+operator presses K, and the dialog (+23 s) is the SAME assert as runs 2 and 3: `*skill`,
+`ChCliSkill.cpp(1022)`. **The trace's rebased frames are IDENTICAL to run 2's chain** —
+`0x008217EB` (ChCliSkill) → `0x00816E6F` (ChCliApi) → `0x0050277E`/`0x0050106F`
+(GmDeckBuilder) → `0x0064CA24` (FrMsg) → `0x00633C7C` (FrApi) — same panel, same
+lookup, same line argument `0x3FE` = 1022.
+
+**4b — `--spawn-profession 12`: dead on arrival, at a BOUND CHECK.** Harness
+`20260812T215753`, capture `authsrv-20260812T215801-c1.jsonl`. The client's **last c2s
+is at +3.42 s — the same instant `0x00B7(prof 12)` was sent.** The operator saw the
+loading screen freeze at 0%. The dialog (+4 s):
+
+> **`Assertion: profession < arrsize(s_profChapter)` —
+> `P:\Code\Gw\Const\Programmer\ConstChar.cpp(1296)`**
+
+**The first bound check of FINDINGS.md's 29-family ever observed firing live.** The
+trace resolves through the message-dispatch layer — MsgConn-range frames with `0x00B7`
+sitting in the frame args — into ChCli-range frames and a ConstChar per-profession
+accessor whose sibling asserts are `chapter < 3`, `profession`, and
+`profession < CHAR_PROFESSIONS` (`ConstChar:844–846`, via `asserts.py --at
+0x005AB830`). A frame at `0x0091F0C7` sits in the same region as the appearance packer
+`0x0091D430`; noted, not claimed.
+
+### Correction 1 — the byte carriers are NOT equivalent
+
+`0x00A6(12)` lands silently and the client plays on (runs 1 and 2). **`0x00B7(12)` is
+lethal ON ARRIVAL**: its handler path validates the profession against the compiled
+chapter table. And run 1's step 3 — "the player-specific carrier, also 12" — **was
+never actually survived**: run 1's client was dead before that step fired (last c2s
++20.78 s, step ~+27.7 s), so the packet went to a corpse and the run could not have
+said otherwise. MODDABLE.md treats the two byte carriers as one storage class; that is
+now **CONTESTED** — a custom id must stay off `0x00B7` unless `ConstChar.cpp:1296` is
+widened or neutered.
+
+### Correction 2 — the skillbar's own profession was an uncontrolled variable
+
+Operator's hypothesis, mid-report: *"i have a warrior skillbar, maybe that's
+illegal?"* **OBSERVED (client table, build 38797, `skilltable.py`): skills 316–323 —
+the test bar every session sends — are ALL profession 1, Warrior.** (The enemy's elite
+276 is profession 3, matching its declared profession.) Now every K observation in the
+arc fits one story:
+
+| Session | Prof when skill data was DELIVERED | Bar prof | Prof at K | K result |
+|---|---|---|---|---|
+| run 2 arm A | 1 (burst) | 1 — match | 3 | **OPENS** |
+| run 2 arm B | 1 (burst) | 1 — match | 12 | `*skill` |
+| run 3b | bar REDELIVERED at 3 | 1 — mismatch | 3 | `*skill` |
+| run 4a | 3 (burst) | 1 — mismatch | 3 | `*skill` |
+
+**INFERRED:** the panel dereferences skill state built when the skill data arrived,
+keyed by the profession in effect at that moment; a bar whose skills do not belong to
+that profession leaves the pointer null. The one configuration that ever opened is the
+one where bar and delivery profession matched. Run 2 arm B still needs a second
+trigger (the current-profession walk at 12) — the story does not replace run 2's
+attribution, it sits beside it.
+
+### The discriminators — one session each, all in-band, no new tooling
+
+| # | Session | Prediction under the story | A crash refutes |
+|---|---|---|---|
+| 1 | default spawn (prof 1, Warrior bar), press K | OPENS | the pure-default control — never run in the arc's history; a crash here means our world breaks the panel regardless |
+| 2 | `--spawn-profession 3 --skills ""` (empty bar), press K | OPENS | delivery-time profession alone breaks the panel |
+| 3 | `--spawn-profession 3 --skills 276` (a profession-3 skill), press K | OPENS | the mismatch story itself — a matching bar should be safe |
+
+```
+python toolkit/harness/session.py --keep-open --shots 10 \
+    --game-args '--probe profession_spawn'
+python toolkit/harness/session.py --keep-open --shots 10 \
+    --game-args '--probe profession_spawn --spawn-profession 3 --skills ""'
+python toolkit/harness/session.py --keep-open --shots 10 \
+    --game-args '--probe profession_spawn --spawn-profession 3 --skills 276'
+```
+
+(Run 1's command will WARN about the missing flag — for that session the default IS
+the experiment; say so in the report.)
+
+### Where the population question stands
+
+Reframed, not dead. For profession 12 the panel is no longer even reachable by
+`0x00B7` spawn delivery — the load gate fires first. Reaching K at 12 with populated
+skill state now means **agent-carrier delivery inside the burst**: `0x00A6(12)` sent
+BEFORE the skill block, which no tooling does yet and which is worth building only
+after the bar-mismatch story is settled — if a matching bar is what makes the panel
+safe, "populated" may simply mean "a bar of skills the profession owns", and no
+profession-12 bar can exist in the compiled table.

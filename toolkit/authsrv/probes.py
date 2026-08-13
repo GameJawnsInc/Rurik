@@ -2312,16 +2312,22 @@ PROBES = {
                  "professions and a per-profession walk is a plausible frame "
                  "for the null -- INFERRED, the handler is unread.",
         steps=[],
-        note="OBSERVATION ONLY -- no packets, and that is the design: the "
-             "whole point is that NOTHING is sent after the burst. Pair with "
-             "the server flag, TWO sessions: first --spawn-profession 3 (the "
-             "control -- spawn-time delivery of a non-default profession has "
-             "never been done either, so arm B means nothing without it), "
-             "then --spawn-profession 12. In each: wait until you are "
-             "standing in the map, press K as your FIRST action, look, close "
-             "it, say out loud what happened. The server refuses the flag's "
-             "invalid values at startup and announces an out-of-band id "
-             "loudly.",
+        note="RAN 2026-08-12, BOTH SESSIONS CRASHED, EACH A FINDING (RUNS.md "
+             "section 9): 3 died on K with the same *skill null on run 2's "
+             "exact frame chain -- a SHIPPING profession -- and 12 died on "
+             "the ARRIVAL of the burst's own 0x00B7, at profession < "
+             "arrsize(s_profChapter), ConstChar.cpp:1296, the first bound "
+             "check of the 29-family seen live. So the byte carriers are not "
+             "equivalent, and the live lead is the BAR: skills 316-323 are "
+             "all Warrior (client table), and every K result in the arc fits "
+             "'the panel nulls when the bar's profession does not match the "
+             "profession in effect at skill delivery'. Re-run this probe "
+             "with the section-9 discriminator flags (pure default; "
+             "--spawn-profession 3 --skills ''; --spawn-profession 3 "
+             "--skills 276), K as the first action each time. "
+             "OBSERVATION ONLY -- no packets; the design is that nothing is "
+             "sent after the burst. The server refuses invalid flag values "
+             "at startup and announces an out-of-band id loudly.",
     ),
     "profession_sentinel": lambda a, o: Probe(
         question="Is profession 11 handled specially, being the client's own "

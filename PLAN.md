@@ -1270,16 +1270,22 @@ and its CONTROL arm reddened** (`RUNS.md` §8): a mid-session skillbar re-send f
 opening the panel asserts the client at profession **3** — the SAME `*skill` null, with no
 out-of-band byte anywhere in the session — while the unattended session outlived all seven
 steps, so the re-send is harmless until the panel reads it. **The instrument is poisoned
-and the population question is UNANSWERED, not negative.** Two routes stand, and the
-first is **built as of 2026-08-12**: spawn-time delivery — `authsrv.py
---spawn-profession N` puts the custom id in the burst's own `0x00B7` (validated through
-the guard, appearance nibble untouched), so bar/unlocks/attributes arrive after it,
-nothing is re-sent, and K is the session's first provocation; pair with the
-observation-only probe `profession_spawn`, control session at 3 first (`RUNS.md` §8 has
-the two commands). The other is R1 — now more attractive, since two distinct provocations
-reach the same noreturn assert and a neutered reporter yields the ordering for both in
-one run. WIKI note recorded in `RUNS.md` §8: the panel's secondary-profession drop-down
-means it ENUMERATES professions, a plausible frame for the null (INFERRED).
+and the population question is UNANSWERED, not negative.** Spawn-time delivery was built
+(`authsrv.py --spawn-profession N` + the observation-only probe `profession_spawn`) and
+**ran the same evening — both sessions crashed, each a finding (`RUNS.md` §9):**
+`--spawn-profession 3` played 19 s and died on K with the SAME `*skill` null on run 2's
+exact frame chain — a shipping profession; `--spawn-profession 12` died **on the arrival
+of the burst's own `0x00B7`**, at `profession < arrsize(s_profChapter)`
+(`ConstChar.cpp:1296`) — the first of FINDINGS' 29 bound checks ever observed live, and
+proof the two byte carriers are NOT equivalent: `0x00A6(12)` lands silently, `0x00B7(12)`
+is lethal, and run 1 never actually tested it (its 0x00B7 step fired post-mortem).
+**The live lead is the operator's: the test bar (316–323) is ALL Warrior — measured in
+the client table — and every K crash/open in the arc fits "the panel nulls when the bar's
+profession does not match the profession in effect when skill data was delivered".**
+`RUNS.md` §9 has the three one-session discriminators (pure default; empty bar at 3; a
+profession-3 bar at 3), each with its prediction stated. R1 stands as the other route.
+WIKI note (§8): the panel's secondary-profession drop-down means it enumerates
+professions (INFERRED as a frame).
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`
