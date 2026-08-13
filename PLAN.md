@@ -1324,25 +1324,27 @@ was the 2,109 non-player rows with no skill icon. **`--unlocks` now defaults to
 refuses with an actionable message (naming `--unlocks bar`) rather than falling back to
 the broken set when there is no client to read. Default pinned on the syntax tree.
 
-**THE ARC'S QUESTION IS NOW THE NEXT RUN.** `--spawn-profession 12` was re-run against
-the fixed server and reproduced the carrier asymmetry a second time — `0x00B7(prof 12)`
-at +3.39 s, last c2s at +3.39 s, `ConstChar.cpp(1296)`, dead on the loading screen
-(harness `20260813T003302`, matching run 4b's +3.42 s on a server where the panel is now
-known to work). So a custom id must ride `0x00A6`.
+**ANSWERED 2026-08-13 (`RUNS.md` §12).** `--probe profession_panel` put profession **12**
+on `0x00A6` into a working panel. **The client survived the whole session** — 104 c2s,
+last at +68.02 s, `missed 0`, no dialog — through the custom id, the panel opening and
+the recovery. Both halves of the stated prediction held: **the panel OPENS at a custom
+primary**, and **the drop-down does not read 12** — it reads *Warrior*, the value the
+burst's `0x00B7` wrote, because `0x00A6` never touches the panel's record. (The
+parenthetical guess of "blank/none/11" was wrong and is recorded as wrong; the falsifiable
+half was the claim.) `0x00B7(12)` was re-measured lethal on arrival the same evening,
++3.39 s, matching run 4b.
 
-**`--probe profession_panel`** does exactly that: profession 12 on `0x00A6` only, then
-K, then recovery. **Prediction in two independently-falsifiable halves: the panel OPENS
-(the walk is profession-blind), and the drop-down does NOT read 12 (its record's sole
-writer is `0x00B7`).** What the attributes box lists for an unshipped id is unpredicted
-and is the interesting part; a crash would be the first profession-keyed failure in this
-arc that is not a defect of ours.
-
-```
-python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_panel'
-```
-
-Pairing that probe with an out-of-band `--spawn-profession` is refused at startup naming
-the assert — it would spend the session re-measuring a result we have twice.
+**So the custom-PRIMARY route is open and the custom-SECONDARY route has a hard
+client-side wall.** The panel's profession drop-down is greyed because our server sends
+no secondary-unlock state — correct behaviour for our world per WIKI (GWW), and an open
+**server-side** question worth solving for legal professions regardless (nothing in
+`overrides.json` is named for it; start from the receive table via `msghandler.py`). And
+even populated it could not list a custom id: OBSERVED, GmDeckBuilder's builder at
+`0x00502380` loops `inc edi` / `cmp edi, 0xb` (`0x005024D6`) — **ids 0..10** — with
+`GmDeckBuilder:2321` at `0x005024E4` and `2334 entryIndex` below it. **A compiled bound;
+no server message moves it.** That promotes §10.7 item 3 from a future landmine to the
+first wall on the custom route that the wire cannot talk past, and it is exactly what
+`WORKAROUNDS.md`'s R1 and `ATTRIBUTES.md`'s same-length edits were costed for.
 
 **What this changed for the arc's actual goal.** The custom-profession boundary is now
 sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has

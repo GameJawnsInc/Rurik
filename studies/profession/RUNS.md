@@ -842,3 +842,86 @@ No `--spawn-profession`, and the server refuses the pair if it is passed.
    first time the arc changes map.
 4. **Unmeasured:** with bit 0 cleared the walk posts up to ~3,442 UI rows through msg
    `0x57`; no bound on that list was established.
+
+
+---
+
+## 12. Run 6 (2026-08-13): profession 12 in a WORKING panel — both halves held
+
+`--probe profession_panel`, harness `20260813T003731`, capture
+`authsrv-20260813T003741-c1.jsonl`. `0x00A6` carrying **12** on the wire
+(`plain=a600010000000c00`) at +5.36 s and +13.36 s, burst `0x00B7` carrying 1, **no
+`0x00B7` with a custom id at all**.
+
+> **The client survived the ENTIRE session: 104 c2s messages, last at +68.02 s,
+> `missed 0`, no crash dialog** — through the custom id, the panel opening, and the
+> recovery to 3. Profession 12 is survivable on the agent carrier across a full
+> panel cycle.
+
+**Prediction half 1 — the panel OPENS at profession 12: CONFIRMED.** §10.4's deductive
+argument (nothing on the path branches on a profession) predicted it and it held.
+
+**Prediction half 2 — the drop-down does NOT read 12: CONFIRMED.** It reads **Warrior**,
+and the attributes box lists the Warrior five.
+
+**My parenthetical guess was WRONG and the truth is a better confirmation.** I predicted
+"blank, none, or a default of 11". It shows *Warrior* — profession **1**, the value the
+burst's `0x00B7` wrote — because `0x00A6(12)` never touches the panel's record. The panel
+displays **the last value written by its only writer**, which is exactly §10.5's
+mechanism and a sharper demonstration of it than a blank would have been. Recorded as a
+wrong sub-prediction on purpose: the half that mattered was falsifiable and held, and the
+guess attached to it was not the claim.
+
+**Nothing visible changed at 12**, which is consistent rather than disappointing:
+`0x00A6` writes the agent object and fires an event the deck builder does not listen to,
+so its consumers are the nameplate, roster and hero panel — not this panel.
+
+### The drop-down is greyed out, and that is TWO separate walls
+
+Operator's observation, and it is right on the mechanic:
+
+**WIKI (GWW, "Skills and Attributes Panel" / "Profession changer"):** a character who
+cannot change secondary profession **cannot select the drop-down**; a roleplaying
+character lists only the secondaries unlocked *for that character*. **Our server sends no
+secondary-profession unlock state of any kind** — so a greyed box is the correct
+behaviour for the world we are serving, not a defect. Nothing in our catalog is named for
+it (searched `overrides.json` for prof/unlock/second: no hits), so **finding the message
+that unlocks a secondary is an open server-side question**, and it blocks the drop-down
+for LEGAL professions too.
+
+**And the second wall is client-side and hard. OBSERVED this run:** GmDeckBuilder's
+drop-down builder at `0x00502380` loops professions with
+`inc edi` / `cmp edi, 0xb` / `jne 0x502400` (`0x005024D6`–`0x005024DA`) — **ids 0..10,
+full stop** — and immediately after carries `push 0x911` (=2321) into the assert routine
+at `0x005024E4`, i.e. `GmDeckBuilder:2321 agentPrimaryProf != agentSecondaryProf`, with
+`2334 entryIndex` below it.
+
+> **A custom profession can never appear in that drop-down.** The list is built by a loop
+> bounded at 11, so id 12 has no entry to be selected, and `entryIndex` asserts on an id
+> that has none. This is §10.7 item 3 promoted from "landmine on other maps" to **the
+> wall on the custom-secondary route** — and it is a compiled bound, so no server message
+> moves it. Widening the table or R1's assert neuter are the only routes, both
+> client-side.
+
+*(It runs only where `[edi+8] & 0x10` — the 15 whitelisted map ids — which is why our map
+opens the panel at all. Changing map turns this from a future problem into an immediate
+one.)*
+
+### Where the arc stands after six sessions
+
+| Question | Answer |
+|---|---|
+| Does a custom PRIMARY survive on `0x00A6`? | **YES, OBSERVED** — full session, panel opened, recovered |
+| Does it survive on `0x00B7`? | **NO, OBSERVED twice** — `ConstChar.cpp:1296` on arrival |
+| Does the skills panel open at a custom primary? | **YES, OBSERVED** |
+| Does the panel DISPLAY a custom primary? | **NO** — the record's only writer is `0x00B7`, which cannot carry one |
+| Can a custom id be a SECONDARY via the drop-down? | **NO** — builder loop bounded 0..10, `entryIndex` asserts (client-side) |
+| Can the drop-down be used at all in our world? | **NOT YET** — no secondary-unlock state is sent; message UNKNOWN |
+
+**The two next rungs, and they are different kinds of work.** Server-side: find the
+message that unlocks a secondary profession (start from the client's receive table with
+`msghandler.py`, and from the `0x1000004E`/`GmDeckBuilder` listener side) — that makes
+the drop-down usable for legal professions and is worth having regardless. Client-side:
+the 11-bound in the drop-down builder is the first wall on the custom route that a server
+cannot talk its way past, which is what `WORKAROUNDS.md`'s R1 and `ATTRIBUTES.md`'s
+same-length edits were costed for.
