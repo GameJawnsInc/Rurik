@@ -2231,16 +2231,22 @@ parallel, with one safety change that is not optional — see its entry.
     population figures corrected in place (§45). And `stripbuild` learned the
     props-deps pairing: `0x11000004` present iff props, **349/349**, generated from
     run-time ids, both unpaired shapes refused (`test_stripbuild` §3d, floor 46).
-    **(e10d)** ⬜ **PLACE SOMETHING — STAGED 2026-08-12, holding for the owner's go.**
-    `vault/research/e10d-props-2026-08-12/`: builds A (prop, no outline) and B (same
-    prop, closed ±100 ring) — one variable, two runs — model file id 209883 picked by
-    corpus sweep, first authored `0x11000004`, predictions RECORDED before arming
-    (`PREDICTIONS.md`: compiled tag-0 sizes must be 50 and 90; radius must be
-    f32(592.6939697265625); A's mesh reproduces FINDINGS 43's 419 B / 2 trapezoids,
-    B's differs with the point probes flipping exactly one way), `readback.py` proven
-    against the untouched study archive. The harness is another session's; the client
-    run is the one thing that has not happened, and it is the claim FINDINGS 45
-    explicitly does not make.
+    **(e10d)** ✅ **DONE 2026-08-12 (FINDINGS 46). SOMETHING IS PLACED.** Two client
+    runs, one variable apart — the same authored prop (model file id 209883 via our
+    own `0x11000004`) without and with a closed ±100 outline — and every load-bearing
+    prediction hit: **the oracle on OUR input (compiled tag-0 sizes 50 and 90,
+    exactly)**, `corresponds()` CLEAN both runs with B's ring back EDGE-EXACT, the
+    +42 radius byte-identical to retail's own value for this model+scale, and the
+    deps chunk surviving to `0x21000004`. **The outline is collision geometry**: B's
+    navmesh hole is exactly the authored square, all four inside-ring probes flip,
+    no outside probe moves. **And a prop with NO outline still carves** — run A
+    found the compiler ALSO instances the model file's own collision sub-mesh
+    (~±40-unit irregular polygon), falsifying the outline-only reading in the branch
+    the predictions reserved. Predictions were recorded before arming and two
+    prediction defects are kept in the run record
+    (`vault/research/e10d-props-2026-08-12/`). Still open: visuals (screenshots
+    caught the loading crossfade), play-session collision, union-vs-replace of ring
+    and model footprint, generalisation past one model and one map.
     **(e10-next)** ⬜ Terrain and props are ours; Header (8 B) and Zones (34 B) are not.
     An end-to-end authored map — §32's Blender pipeline through `mapbuild.py` into a
     Stripped stream — has not been compiled by a client.

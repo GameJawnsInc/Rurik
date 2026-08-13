@@ -5914,3 +5914,55 @@ arming (`PREDICTIONS.md` — the oracle says the compiled tag-0 sizes must be
 **50** and **90**; the radius must be f32(592.6939697265625)), and
 `readback.py` proven end-to-end against the untouched study archive. The
 harness is another session's; nothing arms until the owner says go.
+
+## 46. OBSERVED: the client compiled a map with a prop WE placed — rung (e10d), both runs (2026-08-12)
+
+**PLACE SOMETHING is done.** Two client runs, one variable apart — the same
+authored prop with and without a closed outline — and every load-bearing
+prediction hit. Run record: `vault/research/e10d-props-2026-08-12/`
+(PREDICTIONS.md written before arming, RESULTS-A.md and RESULTS-B.md written
+immediately after each run, both compiled heads and path chunks saved).
+
+The prop: model index 0 → file id 209883 via our own `0x11000004`, at
+(2400, 2400, −13) on FINDINGS 43's map, scale byte 0x7F, flags 0. Run A: no
+outline. Run B: a closed ±100 square, 5 points. Procedure was rung E3's, on
+the C2 archive, re-cut and verified pristine before each arm.
+
+| | A (no outline) | B (±100 ring) |
+|---|---|---|
+| compiled head | 8,417 B, 8 chunks | 8,481 B, 8 chunks |
+| `0x21000004` | **[209883]** | **[209883]** |
+| tag-0 size (oracle: 50 / 90) | **50** | **90** |
+| `corresponds()` | **CLEAN** | **CLEAN**, ring back edge-exact |
+| radius +42 | `672c1444` | `672c1444` |
+| path chunk | 835 B, **7 trapezoids** | 739 B, **5 trapezoids** |
+
+What the pair establishes:
+
+* **The compiler keeps our props, bit-faithfully.** Positions bytewise, the
+  scale formula exact, and the +42 radius BYTE-IDENTICAL to what all 296
+  retail records of this model at this scale carry — the compiled record is
+  indistinguishable from ArenaNet's own pipeline output.
+* **The cross-stream oracle holds on OUR input**, not just retail's 349.
+* **The outline is collision geometry, edge for edge.** B's navmesh hole is
+  exactly the authored square — trapezoid boundaries at 2300/2500 on both
+  axes — with all four inside-ring probes flipping walkable→not and no
+  outside-ring probe moving.
+* **A prop with NO outline still carves** — run A's mesh holds an irregular
+  ~±40-unit polygon hole at the prop, so the compiler ALSO instances the
+  model file's own collision sub-mesh (§5). P5-A's "the outline is the props
+  chunk's only geometry" was falsified, in the branch the predictions
+  reserved. Retail gives this model ~149-unit outlines against its ~40-unit
+  intrinsic footprint, so the two are not redundant in retail data either.
+
+Two prediction defects, kept: the predicted radius NUMBER was derived from a
+ratio the corpus probe had rounded to three decimals (`round(x, 3)` printed
+"exactly 595.0" for ≈594.9998) — the compiled bytes matching retail's is the
+stronger, correct statement; and P5-A's mesh prediction was wrong as above.
+A constant quoted from a rounded probe is not a constant.
+
+NOT established: how the prop looks (screenshots caught the loading
+crossfade); server-side collision during play; whether the ring UNIONS with
+or REPLACES the model footprint (the ~±40 carve lies inside the ±100 ring,
+so the union IS the ring — a ring excluding the model footprint would
+distinguish); generalisation past one model, one map, one position each way.

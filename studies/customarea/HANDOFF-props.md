@@ -1,5 +1,13 @@
 # Handoff — the props arc, 2026-08-12
 
+> **(e10d) IS DONE — FINDINGS 46.** Both client runs happened the same day
+> with the owner driving the go/no-go: the compiler kept our prop
+> bit-faithfully in both, the oracle hit on OUR input (50 and 90), B's
+> authored ring came back as collision geometry edge-for-edge, and run A
+> discovered the compiler also instances the model's own collision
+> footprint. Run record: `vault/research/e10d-props-2026-08-12/`. The
+> banner below describes the state between the pickup and the runs.
+>
 > **PICKED UP the same day (FINDINGS 45), and both loose threads are closed.**
 > The Bloated props chunk `0x20000004` is read (`props.BloatedProps`,
 > READ-only, no encode) and **the cross-stream oracle is `test_props.py`
