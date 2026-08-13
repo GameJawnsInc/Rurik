@@ -2216,13 +2216,31 @@ parallel, with one safety change that is not optional — see its entry.
     run, passes the headline and is caught 3 of 3. What the corpus CANNOT decide is
     asserted as such: tag 4's largest table is 81 entries, so its count width is
     undecided, and the check reddens the day that changes. Still UNVERIFIED: the
-    `extra` u32 and the tag-4/6 `value` words are carried, not understood, and the
+    tag-4/6 `value` words are carried, not understood, and the
     client's tag walk below `0x00737B40` was not read.
-    **(e10d)** ⬜ **PLACE SOMETHING.** `props.py` can author a prop and
-    `stripbuild.build()` takes `props=`, but every map built so far passes
-    `minimal()` — the EMPTY chunk. That the client compiles a map carrying props WE
-    wrote, with a real model id and a real outline, is a client run that has not
-    happened, and it is the claim FINDINGS 44 explicitly does not make.
+    **(e10c-2)** ✅ **DONE 2026-08-12 (FINDINGS 45). THE BLOATED PROPS CHUNK IS READ
+    AND THE ORACLE IS A TEST.** `props.BloatedProps` (read-only, no encode, and the
+    test asserts that) + `test_props.py` section 9: the compiled tag-0 size equals
+    `2 + 48*props + 8*points` predicted from the Stripped side — **349/349 under
+    `--all`** (110 checks, 718 s measured, floor 99), five rival formulas 0/335,
+    record-for-record correspondence 285,670/285,670. Three of FINDINGS 44's
+    INFERRED readings are now compiler-corroborated: the scale formula holds
+    EXACTLY corpus-wide, the rot bytes single-axis-rotate a constant basis
+    (composition still unmeasured), and the `extra` u32's fourth byte is §5's
+    placement radius (595.0 × scale on all 414 instances of model 209883). Two §44
+    population figures corrected in place (§45). And `stripbuild` learned the
+    props-deps pairing: `0x11000004` present iff props, **349/349**, generated from
+    run-time ids, both unpaired shapes refused (`test_stripbuild` §3d, floor 46).
+    **(e10d)** ⬜ **PLACE SOMETHING — STAGED 2026-08-12, holding for the owner's go.**
+    `vault/research/e10d-props-2026-08-12/`: builds A (prop, no outline) and B (same
+    prop, closed ±100 ring) — one variable, two runs — model file id 209883 picked by
+    corpus sweep, first authored `0x11000004`, predictions RECORDED before arming
+    (`PREDICTIONS.md`: compiled tag-0 sizes must be 50 and 90; radius must be
+    f32(592.6939697265625); A's mesh reproduces FINDINGS 43's 419 B / 2 trapezoids,
+    B's differs with the point probes flipping exactly one way), `readback.py` proven
+    against the untouched study archive. The harness is another session's; the client
+    run is the one thing that has not happened, and it is the claim FINDINGS 45
+    explicitly does not make.
     **(e10-next)** ⬜ Terrain and props are ours; Header (8 B) and Zones (34 B) are not.
     An end-to-end authored map — §32's Blender pipeline through `mapbuild.py` into a
     Stripped stream — has not been compiled by a client.

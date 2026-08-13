@@ -1,5 +1,22 @@
 # Handoff — the props arc, 2026-08-12
 
+> **PICKED UP the same day (FINDINGS 45), and both loose threads are closed.**
+> The Bloated props chunk `0x20000004` is read (`props.BloatedProps`,
+> READ-only, no encode) and **the cross-stream oracle is `test_props.py`
+> section 9** — 349/349 under `--all` (110 checks, 718 s, floor 99), with
+> record-for-record correspondence 285,670/285,670 that took the scale
+> formula and the rot-basis reading from INFERRED to compiler-corroborated.
+> The "known trap" below is now a refusal: `stripbuild.build()` takes
+> `prop_dep_ids` and generates `0x11000004` (present iff props, 349/349 —
+> `test_stripbuild` §3d). **(e10d) is STAGED and holding for the owner's
+> go**: `vault/research/e10d-props-2026-08-12/` has builds A/B (one
+> variable: the outline), `PREDICTIONS.md` recorded before arming, and
+> `readback.py` proven against the study archive. Loose thread 1 (the silent
+> second gate) is covered by the prediction protocol: a compile with no path
+> chunk and no assert is read as the props chunk failing to bloat, not as
+> "the compiler ignored our navmesh". Two of §44's population figures were
+> corrected in place on the way (§45).
+
 Written at the end of the session that read `0x10000004`, for whoever picks it
 up. **Everything below is committed and merged to `main`** (`52c624f`, merged).
 Suite green: **61 of 61 in 934 s**.
