@@ -456,6 +456,43 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   passed against the defect),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
+  `toolkit/mapdata/test_soundchunk.py` (the Sound chunk `0x10000012`, the map's
+  ambient-sound layer -- the second of the two chunks rung E10 could only BORROW,
+  now decoded and re-encoded byte-identically, **349 of 349**, 27 checks under
+  `--all` and 23 by default. The record is a fixed 24 bytes, so byte-identity is
+  the WEAK half: section 2 builds the saboteur that stores the record count `k`
+  and replays it, and the mutation control appends an emitter and requires the
+  emitted `k`@14 and the payload length to move -- read back by a walker written
+  out of `int.from_bytes`. The load-bearing check is the cross-chunk oracle: every
+  emitter's `(x, y)` lands inside the map's Map Parameters rect (318/318), from a
+  chunk this codec never reads, with a 1-byte-shifted read as the control that
+  collapses to 0/318; and the client's own load-time invariant `r_lo <= r_mid <=
+  r_hi` holds 318/318. The whole layout was corroborated against the loader at VA
+  `0x0076afc0` -- the three radii are SQUARED at load for a sqrt-free distance
+  compare, and no magic dispatch means a texture-referencing emitter is not
+  decoded here. Sections 0-2 need no vault and score 18 against a floor of 21),
+  `toolkit/mapdata/test_envchunk.py` (the Environment chunk `0x10000009`, the sky,
+  fog, ambient light and horizon water -- the chunk rung (e10i) proved was the
+  difference between a black void and a lit world, borrowed whole then and now
+  decoded. Re-encodes **349 of 349** byte-identically, 25 checks under `--all` and
+  20 by default. The codec keeps record interiors opaque (the loader itself stores
+  tag0/1/3/5/6/8 records as raw {ptr,count} and decodes no colour and none of
+  tag6's ten floats -- there is NO `1/101` constant in the image, so the authored-
+  slider reading is authoring-time only), so byte-identity is the weak half and the
+  section COUNTS are what the codec must re-derive: section 2's saboteur stores and
+  replays them, and the mutation control grows the zone list and requires the
+  emitted count to move. The framing is a set of PARALLEL ARRAYS (tags 0-7) plus a
+  spatial ZONE list (tag9) that binds one record of each array to a world-space
+  circle -- confirmed against the loader at `0x0071ef70`, whose two `EnvDataImport`
+  asserts name the zone array `envArray`. Three corpus-only readings were CORRECTED
+  by the disassembly and each is a thing a wrong reading gets wrong on some map: the
+  header is 8 bytes not 5, the tag5-width `flag` is the header word at offset 6 not
+  tag0's count (they disagree on 168/349), and tag8 is a real 17-byte section not
+  part of tag7's tail. The oracle comes from a chunk this codec never reads: every
+  dep-reference field (tag0@8, tag4, tag5's four slots, tag6@53/@55) is 0xFFFF or
+  below the length of the sibling `0x11000009` dep list -- **0 of 5,897 out of
+  bounds**, while the same fields read one byte early blow the bound 5,087 times.
+  Sections 0-2 need no vault and score 15 against a floor of 20),
   `toolkit/mapdata/test_pathchunk.py` (the pathing chunk's WHOLE-CHUNK codec: a
   retail `0x20000008` decoded to typed values and re-encoded byte-identically,
   **349 of 349** under `--all`, 8 by default. Nothing declared is stored --

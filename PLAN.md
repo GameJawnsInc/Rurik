@@ -2410,3 +2410,23 @@ parallel, with one safety change that is not optional — see its entry.
     `stripbuild` takes the pair under the env rules (test §3e, floor 54). THE
     PRESENTATION LADDER IS WALKED — what remains is AUTHORING the borrowed
     payloads (env 639 B, sound 89 B) instead of wearing Pre-Searing's.
+    **(e10k)** ✅ **DONE 2026-08-13 (FINDINGS 53). THE TWO PAYLOADS ARE UNDERSTOOD.**
+    Both borrowed chunks are now decoded to typed fields and re-encoded **349/349
+    byte-identically** — corpus-derived, then CORROBORATED against the client
+    loaders (`0x0071ef70` env, `0x0076afc0` sound), which corrected the corpus
+    three times (env header is 8 B not 5; the tag5-width flag is the header word
+    not tag0's count; tag8 is a real 17 B section not tag7's tail).
+    `toolkit/mapdata/soundchunk.py` + `test_soundchunk.py` (floor 21) and
+    `envchunk.py` + `test_envchunk.py` (floor 20) land the codecs, each with a
+    cross-chunk oracle a codec cannot force (sound: emitters in the Map Parameters
+    rect 318/318; env: dep fields in bounds of `0x11000009` 0/5,897). **Sound is a
+    positioned-emitter layer** — `{dep, x, y, r_lo, r_hi, r_mid}`, radii squared at
+    load, sounds one hop deeper in `ffna8` descriptors — and is AUTHORABLE.
+    **Environment is parallel aspect arrays + a spatial zone list** — fog and zones
+    typed, tag6's ten floats carried opaque (no `1/101` constant in the image) — so
+    it is EDITABLE, not yet writable from nothing. NEXT RUNG (needs owner go-ahead +
+    harness): a client run authoring a sound chunk from scratch — Pre-Searing's same
+    sounds placed at custom `(x, y)`/radii, a minimal delta from (e10j)'s proven dep
+    list — and, if the compiler accepts it, promote authored sound (and fog/zones)
+    into `stripbuild` the way (e10j) promoted the borrowed pair. Still open:
+    naming tag6's main-environment floats. Record: `vault/research/envsound-2026-08-13/`.

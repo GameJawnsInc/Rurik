@@ -6149,3 +6149,118 @@ borrowed whole (§51, §52). What "borrowed whole" leaves open is authoring:
 the environment's 639 bytes and the sound chunk's 89 are carried, not
 understood, and understanding them is the difference between wearing
 Pre-Searing's weather and writing our own.
+
+## 53. OBSERVED: the two payloads, understood — env `0x10000009` and sound `0x10000012` (2026-08-13)
+
+The §52 close named the debt precisely — "carried, not understood" — and this
+section pays it. Both chunks are now decoded to typed fields and re-encoded
+**349 of 349 byte-identically** (`toolkit/mapdata/envchunk.py`,
+`soundchunk.py`); the corpus is the whole population, because Stripped equals
+Bloated 349/349 for both kinds, so the compiler provably never rewrites these
+bytes. Method was the house's: derive the framing from the 349-map corpus
+alone, then read the client's own loaders to settle what the bytes could not —
+and the client CORRECTED the corpus three times, which is why the disassembly
+was not optional.
+
+### Sound `0x10000012` — a positioned-emitter layer
+
+The corpus gave the outer shape to arithmetic: every payload is `17 + 24k`
+bytes (MEASURED 349/349), a 16-byte header plus `k` fixed 24-byte records plus a
+`0xFF` terminator. The loader at VA `0x00712EE0 → 0x0076afc0` named every field:
+
+    header:  u32 'msnd', u32 version 2, u8 0, u16 idx_a, u16 idx_b, u8 1, u16 k
+    record:  u16 dep_a, u16 dep_b, i32 x, i32 y, u32 r_lo, u32 r_hi, u32 r_mid
+
+`idx_a`/`idx_b` are the map's DEFAULT ambience — two indices into the sibling
+Dependencies chunk `0x11000012`, `0xFFFF` for none; the 20 maps whose pair is
+`(0xFFFF, 0xFFFF)` are EXACTLY the 20 with no dep chunk (MEASURED, both
+directions). A record is a positioned emitter: `(x, y)` lands inside the map's
+own Map Parameters rect in **318 of 318** records — the same cross-chunk oracle
+that cracked props (§45), from a chunk the sound codec never reads, and a
+±1-byte shift of the read collapses it to 0/318. The three radii are stored
+`lo, hi, mid` on disk but the loader enforces `lo ≤ mid ≤ hi` (`0x0076b2ed`)
+and **squares each with `fmul st,st`** (`0x0076b42a`) for a sqrt-free distance
+compare — so they are attenuation radii, MEASURED as squared distances,
+INFERRED as min/knee/max. The scout's guess that records and deps were separate
+subsystems was REFUTED — records index the dep list too. And the loader does NO
+magic dispatch on a dep's file type (`0x0076b190` just bounds-checks and
+addrefs), which is why the ~112 emitters naming a texture rather than an
+`ffna8` sound are a real open question and not a decode error. The sounds
+themselves are one hop deeper: a dep resolves to an `ffna8` descriptor whose own
+chunk-1 lists the raw MPEG / `AMP` audio — this chunk PLACES sounds, it does not
+contain them.
+
+### Environment `0x10000009` — parallel arrays and a spatial zone list
+
+The 639-byte mystery is a spatial environment SYSTEM. Framing (loader
+`0x00712750 → 0x0071ef70`, corpus 349/349):
+
+    header:  u32 0x92991030, u16 version 16, u16 flag        (8 bytes)
+    then sections {u8 tag, u16 count, count*record} ascending, then one 0xFF.
+
+Tags 0–7 are PARALLEL ARRAYS of environment aspects; **tag9 is a zone list**.
+A zone is a world-space circle `{u16 sel[8], i32 x, i32 y, u32 r_in, u32 r_out}`
+whose `sel[8]` names one record from each of the eight arrays, overriding the
+map default (array record 0) inside its blend band. The clincher, MEASURED: all
+73 maps with no zones have every aspect array at count exactly 1. "Several
+environments per map, blended" is SPATIAL, not day/night — day/night keyframes
+were NOT FOUND. Two arrays are fully typed: **tag2 is fog** —
+`{u8 r,g,b, u32 near, u32 far, i32, i32}`, `near < far` 1745/1745, Pre-Searing
+reading hazy-blue 6200/22500 over a bright map with one dark-fog corner —
+and tag12 is optional per-region boundary polygons. The other array interiors
+(tag0/1/3/5/6/8) are carried opaque, exactly as the loader itself carries them:
+it stores each as a raw `{ptr, count}` and decodes no colour and none of tag6's
+ten floats. The "authored 0–100 slider stored /101" reading is authoring-time
+only — **the float `1/101` occurs 0 times in the entire image** (f32 and f64),
+so the runtime reads raw f32.
+
+### The three corrections the client forced
+
+A corpus grammar can close 349/349 and still be wrong, and this one was, three
+times — each a thing that misparses some map:
+
+1. **The header is 8 bytes, not 5.** Offsets 4–7 are `{u16 version, u16 flag}`
+   (`0x0071f1ad`), not a 5-byte `{u32 sig, u8 ver}`.
+2. **The tag5-width flag is the header word at offset 6, not tag0's count.**
+   The loader branches on the header dword's high u16 (`0x0071f1d5`); the header
+   flag and tag0's count DISAGREE in 168 of 349 maps, and using tag0's count
+   would pick the wrong tag5 width in 92. tag0 is a real 10-byte aspect array.
+3. **tag8 is a real, always-present 17-byte section** — the map-global default
+   environment (`envGlobal`) — which the corpus grammar had folded into tag7's
+   tail as a phantom "18-byte tail whose leading u16 == 8." That 8 was the tag
+   byte.
+
+The `EnvDataImport` asserts also settled what `envArray` is: the strings at
+`0x0072032d` and `0x0072044a` read verbatim `tag->index < ...envArray.Count()`
+and bound tag11's and tag12's indices against the tag9 zone array — so
+`envArray` is the zone list, not tag6, closing a question the corpus could only
+guess at.
+
+### A cross-chunk fact worth keeping
+
+Pre-Searing's tag8 global-env record is 16 zero bytes and one angle byte `26`,
+which the loader scales by `π/128` (`0x0071fbd8`) to **0.638 rad = 36.5°** —
+the SAME sun elevation rung (e10h) measured from the terrain chunk's
+`angle_index` 103. The sun angle lives in both chunks: terrain bakes the
+lightmap from it, env tag8 carries it for the runtime sky. Two independent
+subsystems agreeing on one number is the shape that made §51's lightmap reading
+trustworthy, seen again here from the environment side (INFERRED that tag8's
+angle IS the sun rather than a coincident value, but corroborated numerically).
+
+### What this buys, and what it does not
+
+Sound is understood end to end at the map-chunk level — an emitter can be
+AUTHORED from `{dep, x, y, radii}` with the descriptor borrowed. Environment is
+understood as framing plus fog and zones — enough to author fog and to place
+zones, not enough to write a tag6 main-environment record from nothing (its ten
+floats are unnamed and the client stores them raw). So the honest state is:
+**sound is authorable; environment is editable** — and neither has yet been
+client-confirmed in an AUTHORED (rather than borrowed) form, so promoting the
+codecs into `stripbuild` as an authoring path waits on a client run the way
+every prior rung did. `soundchunk.py` +
+`test_soundchunk.py` (floor 21) and `envchunk.py` + `test_envchunk.py`
+(floor 20) land the codecs; the dep-reference oracle (env dep fields all in
+bounds of `0x11000009`, 0 of 5,897, versus 5,087 violations one byte off) and
+the emitter-in-rect oracle (sound, 318/318) are each a chunk the codec never
+reads refuting a wrong framing. Full record and probes:
+`vault/research/envsound-2026-08-13/`.
