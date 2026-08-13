@@ -1280,8 +1280,18 @@ answering pings; if it still asserts at `ChCliSkill.cpp:1022`, the whole reading
 wrong. Score it on c2s traffic after the K press, **never on the socket**:
 
 ```
-python toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_spawn'
+python C:\gd\Rurik\.claude\worktrees\sweet-euler-697883	oolkit\harness\session.py --keep-open --shots 10 --game-args '--probe profession_spawn'
 ```
+
+**Run it by ABSOLUTE PATH, and check two lines of `gamesrv.log` before believing the
+result.** `session.py` spawns `authsrv.py` from its OWN directory, so launching another
+worktree's copy runs that worktree's server: the first attempt (2026-08-13,
+`20260813T000725`) was served by the parallel profession session's tree, printed
+`all (3443 real skills)`, put `word0 = 0xffffffff` on the wire and crashed exactly as
+§10.1 says it must — **a pre-fix server cannot falsify a post-fix prediction, so the
+prediction is still UNTESTED.** The banner now prints `source: <dir>` and `unlocks:`
+must read **3442**; `refuse_skill_zero()` makes a bit-0 bitmap a startup failure naming
+`ChCliSkill.cpp:1022`, so an old tree dies before the socket opens.
 
 **What this changed for the arc's actual goal.** The custom-profession boundary is now
 sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has

@@ -618,13 +618,35 @@ Skills-and-Attributes panel on K, and the client keeps answering pings for the r
 the session. If it still asserts at `ChCliSkill.cpp:1022`, this whole reading is wrong.
 **Score it on c2s traffic after the K press, never on the socket.**
 
+**STATUS: UNTESTED.** The first attempt (harness `20260813T000725`) crashed and did
+**not** test it — the run was served by **another worktree**. `session.py` spawns
+`authsrv.py` from *its own* directory (`TOOLKIT` derives from `__file__`), so launching
+a different tree's `session.py` runs that tree's server: this one printed
+`all (3443 real skills)` and `MAP OVERRIDE: 143`, and its `0x00DB` still carried
+`word0 = 0xffffffff`. Bit 0 was set on the wire, so the client did exactly what §10.1
+says it must. **A pre-fix server cannot falsify a post-fix prediction.** Run it by
+ABSOLUTE PATH:
+
 ```
-python toolkit/harness/session.py --keep-open --shots 10 \
-    --game-args '--probe profession_spawn'
+python C:\gd\Rurik\.claude\worktrees\sweet-euler-697883\toolkit\harness\session.py \
+    --keep-open --shots 10 --game-args '--probe profession_spawn'
 ```
+
+**Two tells now make this self-diagnosing from `gamesrv.log` alone**, both added
+2026-08-13: the banner prints `source: <dir>` naming the tree that served the run, and
+`unlocks:` must read **3442**, not 3443. And the bitmap is now a **hard refusal** —
+`refuse_skill_zero()` raises at startup naming `ChCliSkill.cpp:1022`, so a tree carrying
+the old loop dies before the socket opens instead of twelve seconds into a client
+session. It refuses rather than repairing: a server that quietly fixed its own payload
+would hide the next bad producer.
 
 ### 10.7 Carried forward
 
+0. **A parallel session is working this same arc** in worktree
+   `friendly-kilby-fcaf57` (branch `claude/custom-profession-exploration-dead6c`), and
+   its tree still carries the bit-0 loop. Anything it measures about the skills panel
+   before it takes `main` is measuring the old defect. Whoever reads this first should
+   say so in that session rather than letting it spend more client runs.
 1. **The probe driver needs the proof-of-life fence** `test_smsgsweep.py` already has —
    run 2's misattribution is that same defect, and it cost six sessions. A K press
    leaves no c2s trace, so a probe prompt should also require the operator to
