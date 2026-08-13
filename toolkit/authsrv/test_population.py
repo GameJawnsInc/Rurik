@@ -39,15 +39,17 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "schema"))
 import authsrv  # noqa: E402
 import checks  # noqa: E402
 import content as content_mod  # noqa: E402
 import pathchunk  # noqa: E402
+from codec import Codec  # noqa: E402
 import pathmap  # noqa: E402
 
-# FLOOR: 33, MEASURED from a green run 2026-08-13. Every section is synthetic --
+# FLOOR: 38, MEASURED from a green run 2026-08-13. Every section is synthetic --
 # no vault, no socket, no client -- so there is nothing here that may skip.
-LEDGER = checks.Ledger("test_population", floor=33)
+LEDGER = checks.Ledger("test_population", floor=38)
 check = checks.adopt(LEDGER)
 
 AREA = "sculpt"
@@ -259,6 +261,66 @@ def section2():
           "machine without one would be worse than placing them on trust")
 
 
+def section2b():
+    """Every shipped row must produce a message the codec will actually ENCODE.
+
+    THIS IS THE SECTION THE FIRST RUN NEEDED AND DID NOT HAVE. Sections 0-2
+    check which rows are selected and where a body may stand -- neither touches
+    the ENTRY, so `spawn_population` reaching for `WORLD.get("npc", ...)`
+    instead of `agents.npc_template(...)` sailed through all of them. The raw
+    content row carries `enc_name` as a list of 16-bit string ids rather than an
+    encoded string, so `npc_properties` built a message the codec refused with
+    `string of 28 code units exceeds cap 8`.
+
+    What made it expensive is where the throw landed: inside instance bring-up,
+    on the connection thread, AFTER the map had loaded. The harness reported
+    PASS, `deploy`'s readback was green on all six map checks -- correctly, they
+    are about the map -- the serve check matched the navmesh, and the command
+    exited 0. The only evidence was a traceback in the gamesrv log and three
+    bodies that were not there. A run that reports success while doing nothing
+    is the failure mode this repo keeps paying for.
+
+    Encoding is the strongest thing checkable without a client: the codec is the
+    same one the server sends through, so a row that encodes here is a row that
+    goes on the wire.
+    """
+    print("\n2b. every shipped row builds a message the codec will encode")
+    codec = Codec()
+    world = content_mod.load(vault_dir="")
+    try:
+        rows = rows_for(AREA, world)
+    except authsrv.PopulationError:
+        rows = []
+    check(bool(rows), "there are rows to encode", f"{len(rows)}")
+
+    for key, r in rows:
+        npc = None
+        try:
+            npc = authsrv.agents.npc_template(r["npc"])
+            props = authsrv.agents.npc_properties(int(r["definition"]), npc)
+            blob = codec.encode("GAME_SMSG",
+                                authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES, props)
+            ok, why = len(blob) > 0, f"{len(blob)} B"
+        except Exception as exc:                              # noqa: BLE001
+            ok, why = False, f"{type(exc).__name__}: {exc}"
+        check(ok, f"{key!r} encodes an NPC definition", why)
+
+    # NEGATIVE CONTROL: the exact mistake, reproduced. A template taken straight
+    # from the content store must FAIL to encode -- otherwise this section is
+    # green against both the fix and the bug and proves nothing.
+    key, r = rows[0]
+    raw = world.get("npc", r["npc"])
+    try:
+        codec.encode("GAME_SMSG", authsrv.GAME_SMSG_NPC_UPDATE_PROPERTIES,
+                     authsrv.agents.npc_properties(int(r["definition"]), raw))
+        caught = False
+    except Exception:                                         # noqa: BLE001
+        caught = True
+    check(caught,
+          "and the RAW content row -- the bug, reproduced -- is refused by the "
+          "codec, so this section can tell the fix from the defect")
+
+
 def section3():
     print("\n3. an area REPLACES the global enemy; the wiring is not optional")
     src = open(authsrv.__file__, encoding="utf-8").read()
@@ -321,6 +383,7 @@ def main():
     section0()
     section1()
     section2()
+    section2b()
     section3()
     return LEDGER.verdict()
 

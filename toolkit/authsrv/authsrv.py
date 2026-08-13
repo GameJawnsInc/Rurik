@@ -2964,7 +2964,9 @@ def spawn_population(send, state, origin, conn_id, area=None):
 
     placed = 0
     for key, row in rows:
-        npc = agents.WORLD.get("npc", row["npc"])
+        # npc_template, NOT WORLD.get: the raw row carries `enc_name` as a
+        # list of string ids and the codec refuses the message built from it.
+        npc = agents.npc_template(row["npc"])
         # Absolute if the row says so, else the legacy offset-from-the-player.
         if row.get("x") is not None and row.get("y") is not None:
             wx, wy = float(row["x"]), float(row["y"])

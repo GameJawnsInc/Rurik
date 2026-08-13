@@ -477,6 +477,14 @@ def newest_harness_log(after):
 NAVMESH_RE = re.compile(
     r"\[map\] navmesh 0x([0-9A-Fa-f]+): (\d+) planes, (\d+) trapezoids")
 
+# `area 'sculpt': 3 of 3 placed`. Checked because the alternative was measured:
+# on the first populated run `spawn_population` threw inside instance bring-up,
+# every body was absent, and NOTHING said so -- harness rc 0, all six map
+# readback checks green (correctly, they are about the map), the serve check
+# matched the navmesh, exit 0. The only evidence was a traceback in a log
+# nobody was reading.
+PLACED_RE = re.compile(r"area '([^']+)': (\d+) of (\d+) placed")
+
 
 def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None):
     """A SECOND run, unarmed, that proves the SERVER read our mesh.
@@ -512,10 +520,29 @@ def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None):
     fid, planes, traps = hits[0]
     traps = int(traps)
     ok = traps == expect_traps
-    return ok, (f"  harness rc {rc}; {where}: server loaded 0x{fid} with "
-                f"{planes} plane(s), {traps} trapezoids "
-                f"({'MATCHES' if ok else 'DISAGREES WITH'} the "
-                f"{expect_traps} in the archive)")
+    note = (f"  harness rc {rc}; {where}: server loaded 0x{fid} with "
+            f"{planes} plane(s), {traps} trapezoids "
+            f"({'MATCHES' if ok else 'DISAGREES WITH'} the "
+            f"{expect_traps} in the archive)")
+
+    # AND THE POPULATION, if one was asked for. Separate from the mesh check
+    # because they fail separately: the bodies are created at instance
+    # bring-up, well after the navmesh is read, so a throw there leaves the
+    # mesh line correct and every map check green.
+    if area:
+        p = PLACED_RE.findall(text)
+        if not p:
+            ok = False
+            note += (f"\n  area {area!r}: NO population line -- the server "
+                     f"never got as far as placing bodies (look for a "
+                     f"traceback in {where}/gamesrv.log)")
+        else:
+            _, placed, total = p[0]
+            good = placed == total and int(total) > 0
+            ok = ok and good
+            note += (f"\n  area {area!r}: {placed} of {total} bodies placed"
+                     + ("" if good else "  <-- NOT ALL"))
+    return ok, note
 
 
 def resolve_rows(archive, file_id):
