@@ -1066,6 +1066,20 @@ GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
 #   entirely zero -- because nothing this server sends ever sets a bit. The 56
 #   non-zero ones are the interesting minority and were invisible until now.
 GAME_CMSG_MISSION_MASK_REPORT = 0x0092
+# 0x0079 -- the ONLY c2s reply any GAME_SMSG opcode in the sweep ledger provokes.
+#   334 rows, 3 REPLIED, and two of them (0x0166 and 0x0167) name opcode 121 as
+#   what came back; the third is the ping. Its layout is a `msg_header` and
+#   NOTHING ELSE -- declared_unpack_size 2, no fields -- so the message carries no
+#   information beyond its own arrival, and an arm can only record that it came.
+#   That is worth doing anyway: it is the one place where a message WE chose to
+#   send makes the retail client answer, so it is the shortest closed loop
+#   available to this server, and until now our side of it fell off the end of
+#   the dispatch chain into D9(a)'s counter.
+#   NOT NAMED on purpose. Two stimuli reaching one reply does not say what the
+#   reply MEANS, and 0x0166/0x0167's own names are unknown -- naming this
+#   `ACK_SOMETHING` would be the invention this repo keeps refusing. The arm
+#   records arrivals so the loop is visible; the name waits for evidence.
+GAME_CMSG_UNNAMED_ACK_0079 = 0x0079
 # 0x00C1 TARGET_SELECT -- [effective_selection, auto_selection]. Field 1 is what
 #   every subsequent target-bearing message names (53 of 53 on ArenaNet's wire);
 #   0 clears the selection. FREE CORROBORATION, and the reason this one is worth
@@ -3134,6 +3148,19 @@ def run_probe(name, send, conn_id, stop, origin=None):
                 # flag and never `if not step.values`, because a malformed step with
                 # no values is exactly what the encoder check exists to catch and the
                 # two are indistinguishable by shape (probes.Step's docstring).
+                #
+                # Without this arm the refusal reached `send(0x0000, [])`, which raises
+                # and lands in the handler below as "SEND FAILED" -- the correct outcome
+                # (nothing went on the wire) reported as a malfunction, with the one
+                # sentence the operator needed buried under a traceback name. The
+                # alternative considered and rejected was returning NO steps, which the
+                # runner already prints as "observation only": silent in the wrong
+                # direction, since a probe that measures nothing because its plan ran
+                # out would then look identical to one designed to send nothing.
+                #
+                # (Two sessions fixed this independently on 2026-08-13 and reached the
+                # same arm. This comment is the union of both; the print text is the
+                # one `test_agentlife` asserts on.)
                 print(f"      REFUSAL -- no packet sent. {step.watch}", flush=True)
                 continue
             try:
@@ -4181,6 +4208,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # the client, so the newest one supersedes rather than
                         # adds to its predecessor.
                         state["mission_mask"] = values[1]
+                    elif opcode == GAME_CMSG_UNNAMED_ACK_0079:
+                        # Payload-free, so arrival is the whole content and a
+                        # COUNTER is the only thing there is to store. That is the
+                        # opposite choice from the INTERACT and MISSION_MASK arms
+                        # above, and deliberately: those carry a value that
+                        # supersedes its predecessor, this one carries none, so
+                        # latest-wins would store the same 0 forever and could not
+                        # tell one arrival from a hundred.
+                        #
+                        # Counting is what makes the loop measurable: 0x0166 and
+                        # 0x0167 are the only GAME_SMSG opcodes in 334 ledger rows
+                        # that provoke a c2s reply, and "how many came back" is the
+                        # question a send-then-count experiment asks.
+                        state["ack_0079_count"] = state.get("ack_0079_count", 0) + 1
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through
                         # MOVE_TO_COORD: WASD sends a HEADING from where you
