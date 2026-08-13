@@ -5781,6 +5781,30 @@ with no assert. The props load handler has its own gate at `0x00712207`
 (`!map->props`, `MapData.cpp:976`), so the object hangs at `map+0x7C` and at
 `state+0x24`.
 
+### The correction the refutation earned: only tag 6 is optional
+
+The first read said every stage restores the cursor on a mismatch, so every
+section is optional. **That is false in both pipelines, and it was the one
+sentence an authoring tool would act on.** Only tag 6's stage saves and restores
+(`0x0073D891` / `0x0073D8A2`) and returns 1. Tags 0, 4 and 255 return 0 on a
+mismatch, and the driver turns any 0 into total failure at `0x0073E33D` — so
+`0x00712280` never builds the props object.
+
+**The failure is silent, and that is why this matters.** With no props object,
+`state+0x24` stays NULL, and the Path bloat gate at `0x00712678` returns 0
+before it ever reaches the decomposition. No assert, no log line: just a map
+that compiles with no navmesh. Our own tooling would have read that as "the
+compiler ignored our mesh" and looked in entirely the wrong place.
+
+`props.py` refused a chunk missing tag 0 or tag 4 as of this correction — it had
+been more permissive than the client, which for an AUTHORING tool is the
+dangerous direction. Retail carries both on 349 of 349, so the refusal cannot
+fire on ArenaNet's files; `test_props.py` builds both malformed chunks and a
+positive control (tag 0 + tag 4 + terminator with no tag 6, which 87 real maps
+ship). The same mechanism forces ORDER as well as presence: the shared reader
+advances the cursor *before* comparing the tag, so a stage that mismatches
+without a save/restore has already moved it.
+
 ### What is still UNVERIFIED
 
 1. **The rotation and scale readings are INFERRED**, from the client's

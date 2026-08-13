@@ -2169,7 +2169,7 @@ parallel, with one safety change that is not optional — see its entry.
     defect shipped and the test caught it — `cell_of` sent the `(0,0)` corner to row
     `dim_y`, one past the end, because grid row 0 is world maxY.
     **(e10c)** ✅ **DONE 2026-08-12 (FINDINGS 44). THE PROPS CHUNK IS READ.**
-    `props.py` + `test_props.py` (67 checks default / 76 under `--all` in ~200 s, floor
+    `props.py` + `test_props.py` (70 checks default / 79 under `--all` in ~200 s, floor
     measured, 61st test in the suite). **349 of 349 byte-identical**, and the record
     is VARIABLE LENGTH — 20 bytes plus four per outline point — which is why the
     survey in [studies/customarea/PROPS.md](studies/customarea/PROPS.md) found no

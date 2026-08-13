@@ -154,6 +154,14 @@ TERMINATOR = 0xFF
 #: The section order every retail map uses. Tag 6 is optional -- 262 of 349
 #: maps carry it -- and the other three are on all 349. Deviations are refused
 #: rather than replayed, so decoding all 349 is what proves the order.
+#:
+#: OPTIONAL MEANS TAG 6 AND NOTHING ELSE, and this cost a correction. Only its
+#: stage saves and restores the cursor on a mismatch (0x0073D891 / 0x0073D8A2);
+#: tags 0, 4 and 255 return 0, which aborts the parse. The shared reader also
+#: advances the cursor BEFORE comparing the tag, so ORDER is forced by the same
+#: mechanism as presence. A chunk missing tag 0 or tag 4 fails silently in the
+#: worst way -- no props object, and the Path bloat gate at 0x00712678 then
+#: emits no navmesh and no assert -- so `decode` refuses it here instead.
 ORDER = (TAG_PROPS, TAG_REFS4, TAG_REFS6)
 
 PROP_FIXED = 20                 # model(2) xyz(12) rot(3) scale flags points
@@ -356,6 +364,16 @@ class StrippedProps:
                 else:
                     refs6 = table
                 off = end
+
+        missing = [t for t in (TAG_PROPS, TAG_REFS4) if t not in seen]
+        if missing:
+            raise Undecodable(
+                f"props chunk is missing mandatory tag(s) {missing}. Only tag "
+                f"6 is optional -- it alone saves and restores the cursor on a "
+                f"mismatch (0x0073D891 / 0x0073D8A2). Tags 0 and 4 return 0, "
+                f"which aborts the whole parse, so no props object is built "
+                f"and the Path bloat gate at 0x00712678 then kills the navmesh "
+                f"WITH NO ASSERT. Retail carries both on 349 of 349.")
 
         self = cls(props, refs4, refs6, tag6_word, version, signature)
         self.check_references()

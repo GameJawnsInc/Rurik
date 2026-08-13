@@ -41,7 +41,7 @@ ArenaNet's format, and the floor turns that into the FAIL it is.
 
     python toolkit/mapdata/test_props.py
     python toolkit/mapdata/test_props.py --sample 20
-    python toolkit/mapdata/test_props.py --all     # 349 maps, 76 checks, ~200 s
+    python toolkit/mapdata/test_props.py --all     # 349 maps, 79 checks, ~200 s
 """
 
 import argparse
@@ -85,13 +85,13 @@ CORPUS_MAX_REFS6 = 611          # > 255: the tag-6 count width IS decided
 MINIMAL_ROW = 46197
 MINIMAL_SIZE = 12
 
-# FLOOR: 67, MEASURED from a green default run on 2026-08-12. Sections 0-3c
-# score 55 and need no vault, so a vault-less run goes red: a run with no
+# FLOOR: 70, MEASURED from a green default run on 2026-08-12. Sections 0-3c
+# score 58 and need no vault, so a vault-less run goes red: a run with no
 # archive has checked the codec against chunks this file wrote and nothing at
 # all about ArenaNet's format, which is where every claim in props.py lives.
-# `--all` adds section 6's nine population checks on top: 76, and the sweep
+# `--all` adds section 6's nine population checks on top: 79, and the sweep
 # was MEASURED at 201 s -- budget for that rather than for a round number.
-LEDGER = checks.Ledger("test_props", floor=67)
+LEDGER = checks.Ledger("test_props", floor=70)
 check = checks.adopt(LEDGER)
 
 
@@ -407,6 +407,25 @@ def section3(sp):
                              refs4=[PropRef(0, 0)])
     check(not refuses(good_ref.encode),
           "POSITIVE CONTROL: an in-range reference is accepted")
+
+    # Only tag 6 is optional. A chunk missing tag 0 or tag 4 is one the client
+    # refuses -- and refuses SILENTLY, which is why this is a decode error here.
+    no0 = bytearray(struct.pack("<IB", SIGNATURE, VERSION))
+    no0 += bytes([TAG_REFS4]) + struct.pack("<H", 0)
+    no0.append(TERMINATOR)
+    check(refuses(StrippedProps.decode, bytes(no0)),
+          "a chunk with no tag-0 section is refused",
+          "tag 0's stage returns 0 on a mismatch; the parse aborts and the "
+          "Path gate at 0x00712678 then kills the navmesh with no assert")
+    no4 = bytearray(struct.pack("<IB", SIGNATURE, VERSION))
+    no4 += bytes([TAG_PROPS]) + struct.pack("<H", 0)
+    no4.append(TERMINATOR)
+    check(refuses(StrippedProps.decode, bytes(no4)),
+          "a chunk with no tag-4 section is refused")
+    check(not refuses(StrippedProps.decode,
+                      StrippedProps.minimal().encode()),
+          "POSITIVE CONTROL: tag 0 + tag 4 + terminator, with NO tag 6, is "
+          "accepted", "87 retail maps ship exactly that")
 
     huge = StrippedProps(props=[Prop(1, 0.0, 0.0, 0.0,
                                      outline=[(0, 0)] * 256)])

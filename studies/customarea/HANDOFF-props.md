@@ -9,7 +9,7 @@ Suite green: **61 of 61 in 934 s**.
 | | |
 |---|---|
 | `toolkit/mapdata/props.py` | the codec. 349/349 byte-identical. |
-| `toolkit/mapdata/test_props.py` | 67 checks default, **76 under `--all` in 205 s**, floor 67. 61st test in the suite. |
+| `toolkit/mapdata/test_props.py` | 70 checks default, **79 under `--all` in ~205 s**, floor 70. 61st test in the suite. |
 | `stripbuild.BORROWED` | Header + Zones only. **42 bytes, 98.20% generated.** |
 | `PLAN.md` | (e10c) ✅ done, (e10d) ⬜ is the next rung. |
 | `studies/customarea/FINDINGS.md` §44 | the full write-up. |
@@ -97,8 +97,7 @@ revisit first.
   `git rev-parse --show-toplevel` first** — the trees drift.
 * A parallel session was writing in `C:\gd\Rurik` during this one. Stage by
   path there, never `git add -A`.
-* The workflow `wf_d72f637e-347` had two refutation agents still running when
-  this was written. Their transcripts are under the session's
-  `subagents/workflows/` directory; the one that finished confirmed everything.
-  **Nothing in this arc depends on the other two** — the codec, the tests and
-  §44 are all committed and green without them.
+* The workflow `wf_d72f637e-347` finished: six agents, zero errors. All three
+  refutations confirmed the framing. **One found a real defect in the codec and
+  it is fixed** — see "only tag 6 is optional" in §44. Transcripts are under the
+  session's `subagents/workflows/` directory if you want the VA detail.
