@@ -1055,3 +1055,59 @@ control that reddens on `0x00813AD1` is small and high-value.
 > an address built in more than one step. `test_codescan.py` §10 pins it: the
 > displacement-only rule reproduced inline must reach 14 and must miss `0x00813AD1`.
 > **OBSERVED.**
+
+---
+
+## 14. Run 7 (2026-08-13): **0x00B6 CONFIRMED — all three shots hit exactly**
+
+`--probe profession_secondary --map 796`, harness `20260813T013033`, capture
+`authsrv-20260813T013043-c1.jsonl`. No crash dialog; **48 c2s messages, last at
++77.76 s, `missed 0`** — the client lived through the whole sequence.
+
+| t | mask on the wire | predicted | **observed** |
+|---|---|---|---|
+| +3.74, +9.75 s | `0x07FE` | ungreys, **10** entries | **10 entries, selectable** |
+| +34.76 s | `0x0044` | exactly **3** | **3 options** |
+| +59.76 s | `0x0000` | **1**, greyed | **locked** |
+
+The screenshot of the first shot is the whole finding in one image: **Warrior,
+Warrior/Ranger, Warrior/Monk, Warrior/Necromancer, Warrior/Mesmer,
+Warrior/Elementalist, Warrior/Assassin, Warrior/Ritualist, Warrior/Paragon,
+Warrior/Dervish** — ten entries, the bare "Warrior" being the no-secondary case, and
+**every profession except the Warrior primary**, exactly as the builder's skip-the-primary
+guard requires.
+
+> **The bit index IS the profession id — OBSERVED, no longer inferred.** `0x0044` is bits
+> 2 and 6, and the client offered exactly Ranger and Elementalist. That is what the
+> two-shot design was for: a count-only or length-only reading of the field gives the same
+> list twice, and a wrong bit base gives Monk and Assassin. Both rivals are dead, and the
+> layout no capture could settle (all 11 live samples carry mask 0) is now settled by
+> construction.
+
+**The greying is confirmed as derived, not delivered.** Mask 0 put the control back to
+locked with no other change, so `cmp eax,2 / jb` on the built list's entry count is the
+whole enable rule — there is no "you may change secondary" flag on the wire.
+
+### Three open questions closed by one run
+
+1. **The arena gate bit IS set in map 796 under our server.** It is runtime `.data` and
+   could not be read statically; §13 named it the first suspect if nothing happened.
+   The builder ran, so it is set.
+2. **The mission-map field reads 0 under our server**, since the control enabled. That
+   is our own `0x0199`'s `is_explorable`, as the verifier predicted.
+3. **Codex Arena loads under our server.** Never tried before and flagged as an
+   unmeasured risk; geometry falls back to map 449 (796 is not in `MAP_STATIC_CONFIG`)
+   and the UI half worked regardless.
+
+### What this is, beyond a probe result
+
+**The secondary-profession mechanic now works end to end on this server** — a real
+feature, found by reading the client rather than by guessing, and driven by the message
+ArenaNet's own server sends. `--secondary-bits all|<ids>|<mask>` puts it in the burst.
+
+And it closes the custom route from both sides at once. The list the client builds is
+`cmp edi, 0xb` — ids 0..10 — and `secondary_bits()` refuses anything above 10, so
+**a custom profession can never be offered as a secondary by any server message.** §12
+saw that wall from the reading side; §13 from the writing side; this run confirms the
+reader in action. What remains for a custom id is client-side: widen the compiled tables,
+or R1's assert neuter.
