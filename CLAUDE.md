@@ -295,7 +295,15 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
-  go red ALONE, because a gate that reddens at everything is as useless as one
+  go red ALONE. **One of the ten was STRICTER THAN THE CLIENT and was corrected
+  2026-08-13**: "no row >= 16 with USED clear" refused ArenaNet's own shipped
+  archive -- the owner's `C:\gw\Gw.dat`, opened by the retail client every day,
+  carries row 35301 that way and pre-flight answered REFUSE, 9 of 10, while
+  `vault/dat_study/Gw.dat` has none and passed. A USED-clear row is a fault only
+  when something still POINTS at it; unreferenced, it is a SPARE, which is the
+  mechanism `datplan` already records the client using when it claimed 35301.
+  The pair that pins it is the same row in the same state differing only in the
+  reference, so a regression to reading the flag alone moves exactly one of them, because a gate that reddens at everything is as useless as one
   that reddens at nothing. The isolation half is what earns the run: the fixture
   was relaid twice to make it possible, and it caught the first sabotage of the
   reserved-row rule tripping two unrelated items. It also pins the four shapes of
