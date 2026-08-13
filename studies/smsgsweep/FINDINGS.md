@@ -471,3 +471,32 @@ opcodes; this makes six, four of them with a line number.
   that at a 2.3 s cadence, which is why this pass runs at 1 s.
 * **Still one state, one map.** Level-1 character, empty map, `--no-enemy`. Every §5d
   caveat applies unchanged.
+
+### 7.5 `0x0191` is a SECOND `DROPPED_CHANNEL`, and it is why one row has no reading
+
+`0x0191` is the one opcode of the 239 with no usable run, and the reason is the result.
+Both of its attempts were REFUSED by `shotloop` because the capture held **two** sends of
+it — and the second send is the client's doing, not the loop's:
+
+| | run 1 (`20260813T142120`) | run 2 (`20260813T151705`) |
+|---|---|---|
+| our send | t = 13.5 | t = 13.5 |
+| game channel gone | t = 26.436 | t = 25.963 |
+| reopened | t = 26.500 | t = 26.028 |
+| second gamesrv capture | `…-c2` | `…-c2` |
+
+The client tore the game channel down about **12.6 s after the send**, opened a new one
+64–65 ms later, and re-ran the spawn — at which point our probe, which fires on spawn,
+sent `0x0191` again on the new connection. **Two of 240 runs did this and both are
+`0x0191`**; the consistent offset across two independent runs is what makes it
+attributable rather than a coincidental timeout.
+
+That is the shape §2b records for `0x019B`, so the set now has **two** DROPPED_CHANNEL
+opcodes rather than one — and like the eight crashes of §7.3, `0x0191` was scored SILENT
+by the wire sweep on an all-zero payload and only behaves this way with a real encoded
+string.
+
+**It is UNMEASURED on the screen and stays that way honestly.** A run whose probe fires
+twice cannot attribute a screen change to one send, so `score_run` refuses it, and no
+picture of `0x0191` is claimed. Reading it needs a probe that fires once per SESSION
+rather than once per spawn — which is a change to `authsrv.run_probe`, not to this pass.
