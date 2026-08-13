@@ -1324,27 +1324,42 @@ was the 2,109 non-player rows with no skill icon. **`--unlocks` now defaults to
 refuses with an actionable message (naming `--unlocks bar`) rather than falling back to
 the broken set when there is no client to read. Default pinned on the syntax tree.
 
-**ANSWERED 2026-08-13 (`RUNS.md` §12).** `--probe profession_panel` put profession **12**
-on `0x00A6` into a working panel. **The client survived the whole session** — 104 c2s,
-last at +68.02 s, `missed 0`, no dialog — through the custom id, the panel opening and
-the recovery. Both halves of the stated prediction held: **the panel OPENS at a custom
-primary**, and **the drop-down does not read 12** — it reads *Warrior*, the value the
-burst's `0x00B7` wrote, because `0x00A6` never touches the panel's record. (The
-parenthetical guess of "blank/none/11" was wrong and is recorded as wrong; the falsifiable
-half was the claim.) `0x00B7(12)` was re-measured lethal on arrival the same evening,
-+3.39 s, matching run 4b.
+**ANSWERED 2026-08-13 (`RUNS.md` §12).** Profession **12** on `0x00A6` in a working
+panel: the client survived the whole session (104 c2s, +68.02 s, `missed 0`). Both
+prediction halves held — the panel OPENS at a custom primary, and the drop-down does not
+read 12 (it reads *Warrior*, what the burst's `0x00B7` wrote, because `0x00A6` never
+touches the panel's record). `0x00B7(12)` was re-measured lethal on arrival, +3.39 s.
 
-**So the custom-PRIMARY route is open and the custom-SECONDARY route has a hard
-client-side wall.** The panel's profession drop-down is greyed because our server sends
-no secondary-unlock state — correct behaviour for our world per WIKI (GWW), and an open
-**server-side** question worth solving for legal professions regardless (nothing in
-`overrides.json` is named for it; start from the receive table via `msghandler.py`). And
-even populated it could not list a custom id: OBSERVED, GmDeckBuilder's builder at
-`0x00502380` loops `inc edi` / `cmp edi, 0xb` (`0x005024D6`) — **ids 0..10** — with
-`GmDeckBuilder:2321` at `0x005024E4` and `2334 entryIndex` below it. **A compiled bound;
-no server message moves it.** That promotes §10.7 item 3 from a future landmine to the
-first wall on the custom route that the wire cannot talk past, and it is exactly what
-`WORKAROUNDS.md`'s R1 and `ATTRIBUTES.md`'s same-length edits were costed for.
+**THE SECONDARY-UNLOCK MESSAGE IS FOUND: `GAME_SMSG 0x00B6` (`RUNS.md` §13).** The
+client's own `OnProfessionSecondaryBits(agent, secondaryBits)` — SOURCED from the format
+string at `0xA95A70`, which names the message and both fields. `u32 agent_id, u32 mask`,
+10 bytes; `schema/messages.json` entry 182 already had the shape. Handler `0x0091F090` →
+`0x00813AC0` → `0x0081FD00` stores the mask at field `+0xC` of the per-agent record at
+`ctx[0x2c]+0x6BC`; the drop-down builder tests it `shl 1,cl / test edx,eax` over ids
+0..10, so **the bit index is the profession id**, attested at three independent read
+sites. Shipped: `--secondary-bits all|<ids>|<mask>` and `--probe profession_secondary`.
+
+**Two silent failure modes, both guarded.** `0x00B6` before that agent's first `0x00B7`
+is DROPPED (the handler logs and returns without storing), so the burst's order is pinned
+on the syntax tree; and the reader's loop is `cmp edi, 0xb`, so `secondary_bits()`
+refuses ids 0/11/12/255. **That closes the custom-secondary route from the writing side
+too: `0x00B6` physically cannot offer a custom id.**
+
+**Next run — TWO-SHOT, and it must be in an ARENA MAP.** The builder self-gates on a
+15-map whitelist (796 Codex Arena, 823–836); elsewhere panel init zeroes the gate and it
+never runs, so a null result outside them says nothing. Mask `0x07FE` predicts ten
+entries and an ungreyed control, `0x0044` predicts exactly three (None, Ranger,
+Elementalist), `0` predicts one and greyed. One shot cannot separate a bitmask from a
+count.
+
+```
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_secondary --map 796'
+```
+
+Loading an arena map under our server has never been tried — an unmeasured risk of its
+own. If the list populates but stays grey, suspect the mission-map field (`is_explorable`
+in our own `0x0199`), not the mask; if nothing happens at all, suspect the arena gate bit
+(runtime `.data`, unreadable statically) before doubting the opcode.
 
 **What this changed for the arc's actual goal.** The custom-profession boundary is now
 sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has

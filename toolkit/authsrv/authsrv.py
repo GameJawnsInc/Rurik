@@ -280,6 +280,14 @@ GAME_SMSG_WORLD_REMOVE_AGENT = 0x0021
 GAME_SMSG_WORLD_UPDATE_CONTROLLED_AGENT = 0x0022
 GAME_SMSG_PLAYER_INFO = 0x0059
 GAME_SMSG_PLAYER_UPDATE_PROFESSION = 0x00B7
+# 0x00B6, the client's own OnProfessionSecondaryBits: which professions this
+# agent may take as a SECONDARY. MUST be sent AFTER that agent's 0x00B7 -- the
+# handler looks the record up and drops the message silently if it is not there
+# yet (studies/profession/RUNS.md §13). Default 0, which is what ArenaNet's own
+# server sends for a character with nothing unlocked: 11 of 11 samples in our
+# live corpus carry mask 0.
+GAME_SMSG_PLAYER_UPDATE_SECONDARY_BITS = 0x00B6
+SECONDARY_BITS = 0
 
 # The 15-dword player attribute set. OBSERVED 2026-08-05: sending this with
 # field 9 = 15 moved the Hero window to Level 15 and it stayed there, so field 9
@@ -4460,6 +4468,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
                              spawn_profession_values(),
                              f"PLAYER_UPDATE_PROFESSION(prof {SPAWN_PROFESSION})")
+                        # STRICTLY AFTER the 0x00B7 above, which CREATES the
+                        # per-agent record 0x00B6 writes into. Reversed, the
+                        # client drops it with no error (RUNS.md §13).
+                        if SECONDARY_BITS:
+                            send(GAME_SMSG_PLAYER_UPDATE_SECONDARY_BITS,
+                                 agents.agent_set_secondary_bits(
+                                     PLAYER_AGENT_ID, SECONDARY_BITS),
+                                 f"PLAYER_UPDATE_SECONDARY_BITS"
+                                 f"(0x{SECONDARY_BITS:04X})")
                         # The skill block. Upstream's SendSkillsAndAttributes
                         # sends the bar (218) BEFORE the unlock list (219); we
                         # send the unlocks first, deliberately. Upstream never
@@ -4832,7 +4849,7 @@ def main():
     # so rebinding the module constants is enough and keeps
     # handle_request_game_instance free of plumbing it would only ever use once.
     global GAME_SRV_HOST, GAME_SRV_PORT, HOST_FIELD_ENCODING, SKILLBAR
-    global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION
+    global UNLOCKED, UNLOCK_LABEL, SPAWN_PROFESSION, SECONDARY_BITS
 
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -4945,6 +4962,17 @@ def main():
                     help="After the character spawns, fire a scripted experiment at "
                          "the client. See --list-probes. Only affects a session you "
                          "ask for it in; the default path is untouched.")
+    ap.add_argument("--secondary-bits", default=None, metavar="MASK|all|ids",
+                    help="Send GAME_SMSG 0x00B6 in the spawn burst: which "
+                         "professions the character may take as a SECONDARY. "
+                         "'all' = ids 1..10, or a comma-separated id list, or "
+                         "an integer mask (0x.. accepted). Default: not sent "
+                         "at all, which reproduces ArenaNet -- 11 of 11 live "
+                         "samples carry mask 0 for characters with nothing "
+                         "unlocked. THE DROP-DOWN THAT READS THIS ONLY EXISTS "
+                         "IN 15 ARENA MAPS (796 Codex Arena, 823-836), so "
+                         "expect no visible effect anywhere else "
+                         "(studies/profession/RUNS.md §13).")
     ap.add_argument("--spawn-profession", type=int, default=None, metavar="N",
                     help="Primary profession the SPAWN BURST's 0x00B7 carries "
                          f"(default {PROF_WARRIOR}). The clean delivery for a "
@@ -5171,6 +5199,24 @@ def main():
                 if SPAWN_PROFESSION > agents.CHAR_PROFESSIONS - 1
                 else "in band, non-default")
         print(f"SPAWN PROFESSION: {SPAWN_PROFESSION} ({band})")
+    if a.secondary_bits is not None:
+        spec = a.secondary_bits.strip()
+        try:
+            if spec == "all":
+                SECONDARY_BITS = agents.ALL_SECONDARIES
+            elif "," in spec or spec.isdigit() and len(spec) <= 2:
+                SECONDARY_BITS = agents.secondary_bits(
+                    *[int(s, 0) for s in spec.split(",") if s.strip()])
+            else:
+                SECONDARY_BITS = int(spec, 0)
+                agents.agent_set_secondary_bits(PLAYER_AGENT_ID, SECONDARY_BITS)
+        except ValueError as ex:
+            raise SystemExit(f"--secondary-bits {spec!r}: {ex}")
+        offered = [p for p in range(1, 32) if SECONDARY_BITS >> p & 1]
+        print(f"SECONDARY BITS: 0x{SECONDARY_BITS:04X} -- offers professions "
+              f"{offered} as secondaries. The drop-down that reads this exists "
+              f"ONLY in maps 796 and 823-836; elsewhere it is not built at all.")
+
     warning = spawn_probe_warning(
         a.probe, a.spawn_profession is not None,
         a.spawn_profession is not None

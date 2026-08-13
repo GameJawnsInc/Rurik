@@ -34,7 +34,8 @@ from agents import (                                        # noqa: E402
     AGENT_KIND_NPC, AGENT_KIND_PLAYER, AGENT_TYPE_LIVING, APPEARANCE_WARRIOR,
     CHAR_CLASS_MONSTER_BASE, CHAR_CLASS_PLAYER_BASE, DEFAULT_RUN_SPEED,
     ALLEGIANCE_HOSTILE, EFFECT_DEAD, EFFECT_TRANSITION, HATCHER, INF, WORLD,
-    agent_set_profession, create_agent, npc_model, npc_properties)
+    agent_set_profession, agent_set_secondary_bits, create_agent, npc_model,
+    npc_properties)
 
 # The hostile the normal map load spawns. Read from content, the same row
 # authsrv.py reads, so the removal probe cannot drift from what is in the world.
@@ -503,6 +504,64 @@ def _profession_panel_steps(agent_id, custom_id):
              "the panel, if it is still open. Does the drop-down or the "
              "attribute list change back? A live client here means the whole "
              "sequence was survivable on the agent carrier."),
+    ]
+
+
+def _profession_secondary_steps(agent_id):
+    """0x00B6: does the mask really drive the secondary-profession drop-down?
+
+    RUNS.md §13 found the message by walking backwards from the drop-down:
+    handler 0x0091F090 -> 0x00813AC0 -> 0x0081FD00 writes field +0xC of the
+    per-agent record at ctx[0x2c]+0x6BC, and the builder tests that field bit
+    by bit (`shl 1,cl / test edx,eax`, 0x00502414) over ids 0..10. The client's
+    own format string at 0xA95A70 names the message and both of its fields.
+
+    WHAT NO CAPTURE CAN SETTLE, which is why this probe exists: all 11 live
+    samples of 0x00B6 carry mask 0, because both captured characters are
+    early-Prophecies with no secondary unlocked. The bit layout therefore rests
+    on the read site alone. Two shots settle it.
+
+    THIS PROBE DELIBERATELY SENDS NO 0x00B7, and that is a correction rather
+    than an omission. The obvious opening move -- 0x00B7 {primary 0,
+    secondary 0} to "create the record" -- makes the pair EQUAL, and the
+    builder asserts `agentPrimaryProf != agentSecondaryProf`
+    (GmDeckBuilder:2321, site 0x005024E9) at the end of every run. In an arena
+    map with the panel open that crashes the client before the mask is ever
+    read, and the honest reading of such a run would be "0x00B6 crashed it".
+    The spawn burst has already created the record with an UNEQUAL pair
+    (primary 1, secondary 0), so nothing needs creating.
+
+    RUN IT IN AN ARENA MAP. The builder self-gates on a 15-map whitelist --
+    796 Codex Arena and 823-836 -- and outside them panel init zeroes the gate
+    and the builder returns immediately. `--map 796`.
+    """
+    all_but_warrior = agent_set_secondary_bits(agent_id, 0x07FE)
+    two_only = agent_set_secondary_bits(agent_id, 0x0044)
+    return [
+        Step(2.0, 0x00B6, all_but_warrior,
+             "mask 0x07FE -- every profession 1..10 offerable",
+             "nothing yet. The record already exists from the spawn burst's "
+             "0x00B7; this only sets the mask."),
+        Step(6.0, 0x00B6, all_but_warrior,
+             "still 0x07FE -- NOW open the skills menu (K)",
+             "the PROFESSION drop-down at the top of the panel. PREDICTION: it "
+             "is SELECTABLE (not greyed) and holds TEN entries -- None plus "
+             "the nine professions that are not Warrior. Warrior is absent "
+             "because the builder skips the primary. Open the list and COUNT "
+             "it, and say whether it greys or opens."),
+        Step(25.0, 0x00B6, two_only,
+             "mask 0x0044 -- ONLY Ranger (2) and Elementalist (6)",
+             "the SAME drop-down, reopened. PREDICTION: exactly THREE entries "
+             "-- None, Ranger, Elementalist. THIS IS THE MEASUREMENT: a "
+             "length-only or count-only reading of the field gives the same "
+             "list as the last step, and a wrong bit base gives Monk and "
+             "Assassin instead. One shot could not tell those apart."),
+        Step(25.0, 0x00B6, agent_set_secondary_bits(agent_id, 0),
+             "mask 0 -- the CONTROL, back to nothing unlocked",
+             "the drop-down. PREDICTION: back to ONE entry (None) and GREYED, "
+             "which is what every session before this one showed. That proves "
+             "the ungreying came from the mask and not from being in an arena "
+             "map."),
     ]
 
 
@@ -2468,6 +2527,29 @@ PROBES = {
              "0x00A6 ONLY -- do NOT pass --spawn-profession, which sends "
              "0x00B7, measured lethal on arrival at ConstChar.cpp:1296 in two "
              "separate sessions. Run with the default --unlocks corpus.",
+    ),
+    "profession_secondary": lambda a, o: Probe(
+        question="Is 0x00B6's payload a per-profession BITMASK driving the "
+                 "secondary-profession drop-down, one bit per id?",
+        predicts="Mask 0x07FE gives TEN entries (None + every profession but "
+                 "the Warrior primary) and the control UNGREYS; mask 0x0044 "
+                 "gives exactly THREE (None, Ranger, Elementalist); mask 0 "
+                 "gives ONE and greys again. The two-shot design is the point "
+                 "-- a count-only or length-only reading of the field gives "
+                 "the same list twice, and a wrong bit base gives Monk and "
+                 "Assassin. All 11 live samples of this opcode carry mask 0, "
+                 "so no capture can settle the layout and only this can.",
+        steps=_profession_secondary_steps(a),
+        note="MUST RUN IN AN ARENA MAP -- pass --map 796 (Codex Arena) or one "
+             "of 823-836. The builder self-gates on that 15-map whitelist and "
+             "outside it panel init zeroes the gate, so a null result "
+             "elsewhere says nothing about 0x00B6. Sends NO 0x00B7 on "
+             "purpose: an opening 0x00B7 with primary == secondary asserts "
+             "GmDeckBuilder:2321 at the end of every builder run and would "
+             "crash the client before the mask is read. The spawn burst has "
+             "already created the record with an unequal pair. If the list "
+             "populates but stays grey, the suspect is the mission-map field "
+             "(0x0084D9B0 must read 0), not the mask.",
     ),
     "profession_sentinel": lambda a, o: Probe(
         question="Is profession 11 handled specially, being the client's own "

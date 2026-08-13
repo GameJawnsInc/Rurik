@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=179)
+LEDGER = checks.Ledger("agent lifetime", floor=185)
 
 
 def main():
@@ -189,6 +189,7 @@ def main():
     section_probe_encoding()
     section_spawn_profession()
     section_unlock_bitmap()
+    section_secondary_bits()
     return LEDGER.verdict()
 
 
@@ -1304,6 +1305,76 @@ def section_probe_encoding():
               f"{failures} failures -- an unencodable step is only discovered "
               f"by launching a client, which is the most expensive way to find "
               f"a typo in this repo")
+
+
+def section_secondary_bits():
+    """0x00B6, and the two ways it fails SILENTLY.
+
+    RUNS.md §13. The message carries a per-profession bitmask into field +0xC
+    of the per-agent record at ctx[0x2c]+0x6BC, and the drop-down builder
+    tests it bit by bit over ids 0..10. Two failure modes leave no trace on
+    the wire and no error anywhere, which is why they are pinned here:
+
+    ORDER. The handler finds the record by binary search and, on a miss, logs
+    and returns WITHOUT STORING. The record is created by 0x00B7. So a 0x00B6
+    emitted before that agent's first 0x00B7 is dropped in silence.
+
+    RANGE. The consumer's loop is `cmp edi, 0xb` -- ids 0..10 -- so a bit
+    above 10 can never be read, and a custom profession cannot be offered as
+    a secondary however the mask is set.
+    """
+    import ast
+    import authsrv
+
+    LEDGER.ok(agents.secondary_bits(2, 6) == 0x0044,
+              "the mask is one bit per profession id: {2,6} -> 0x0044",
+              f"{agents.secondary_bits(2, 6):#06x} -- the builder does "
+              f"`shl 1,cl / test edx,eax` with cl = the profession id, so the "
+              f"bit index IS the id")
+    LEDGER.ok(agents.ALL_SECONDARIES == 0x07FE,
+              "and all ten shipping professions are 0x07FE",
+              f"{agents.ALL_SECONDARIES:#06x} -- bits 1..10, bit 0 unset "
+              f"because id 0 is skipped by the builder")
+    refused = []
+    for bad in (0, 11, 12, 255):
+        try:
+            agents.secondary_bits(bad)
+        except ValueError:
+            refused.append(bad)
+    LEDGER.ok(refused == [0, 11, 12, 255],
+              "and ids 0, 11, 12 and 255 are all REFUSED",
+              f"refused {refused} -- 11 and 12 are past the consumer's own "
+              f"`cmp edi, 0xb`, so a mask carrying them is a lie the client "
+              f"cannot read; 0 is skipped by the builder")
+    LEDGER.ok(agents.agent_set_secondary_bits(7, 0x07FE) == [7, 0x07FE],
+              "the payload is [agent_id, mask] and reaches the wire as sent",
+              "10 bytes: u16 opcode, u32 agent, u32 mask")
+
+    # ORDER, on the SYNTAX TREE. A grep cannot tell which send comes first,
+    # and reversing them costs nothing on the wire and everything in effect.
+    with open(authsrv.__file__, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    prof_line = sec_line = None
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "send" and node.args
+                and isinstance(node.args[0], ast.Name)):
+            name = node.args[0].id
+            if name == "GAME_SMSG_PLAYER_UPDATE_PROFESSION" and prof_line is None:
+                prof_line = node.lineno
+            if name == "GAME_SMSG_PLAYER_UPDATE_SECONDARY_BITS":
+                sec_line = node.lineno
+    LEDGER.ok(prof_line is not None and sec_line is not None
+              and prof_line < sec_line,
+              "the burst sends 0x00B7 BEFORE 0x00B6 (syntax tree)",
+              f"0x00B7 at line {prof_line}, 0x00B6 at line {sec_line} -- "
+              f"reversed, the client logs 'Agent not found in sort array' and "
+              f"drops the mask with no wire error and no visible effect")
+    LEDGER.ok(authsrv.SECONDARY_BITS == 0,
+              "and the default is 0 -- not sent at all",
+              f"{authsrv.SECONDARY_BITS} -- ArenaNet's own server sends mask 0 "
+              f"in 11 of 11 live samples, so an unlocked-by-default character "
+              f"would be us inventing state retail does not send")
 
 
 def section_unlock_bitmap():
