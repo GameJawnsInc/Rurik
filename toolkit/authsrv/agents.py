@@ -314,6 +314,52 @@ def agent_set_profession(agent_id, primary, secondary=0, custom=False):
     return [agent_id, primary, secondary]
 
 
+def secondary_bits(*professions):
+    """Build 0x00B6's mask from profession ids. Bit N = id N is offerable.
+
+    OBSERVED (build 38797): the drop-down builder tests the mask with
+    `mov eax,1 / shl eax,cl / test edx,eax` at 0x00502414 where cl is the loop
+    index, so the bit index IS the profession id. Bit 0 is effectively dead --
+    id 0 is skipped at 0x00502404 unless it is the current secondary.
+    """
+    mask = 0
+    for p in professions:
+        if not 1 <= p <= CHAR_PROFESSIONS - 1:
+            raise ValueError(f"profession {p} outside 1..{CHAR_PROFESSIONS - 1}: "
+                             f"the builder's loop is `cmp edi, 0xb` (ids 0..10), "
+                             f"so a bit above 10 can never be read and a custom "
+                             f"id cannot be offered as a secondary at all")
+        mask |= 1 << p
+    return mask
+
+
+ALL_SECONDARIES = secondary_bits(*range(1, CHAR_PROFESSIONS))
+
+
+def agent_set_secondary_bits(agent_id, mask):
+    """GAME_SMSG 0x00B6 -- which professions this agent may take as SECONDARY.
+
+    The client's own name for it, SOURCED from the format string at 0xA95A70
+    which names both fields: `OnProfessionSecondaryBits (agent %d,
+    secondaryBits %d)`. studies/profession/RUNS.md §13.
+
+    ORDER MATTERS AND THE FAILURE IS SILENT. The handler writes field +0xC of
+    the per-agent record at ctx[0x2c]+0x6BC, and it finds that record by
+    binary search: on a MISS it logs the string above and RETURNS WITHOUT
+    STORING (0x0081FD00). The record is created by 0x00B7, so a 0x00B6 sent
+    before this agent's first 0x00B7 is dropped with no wire error and no
+    visible effect. A later 0x00B7 does NOT clobber the mask -- the zeroing at
+    0x0081FD95 is on the record-CREATION path only.
+
+    WHAT IT CANNOT DO. The consumer loops `cmp edi, 0xb` (ids 0..10), so this
+    message cannot offer a custom profession as a secondary however the mask
+    is set. That bound is compiled in; no server message moves it.
+    """
+    if not 0 <= mask <= 0xFFFFFFFF:
+        raise ValueError(f"secondary mask {mask:#x} does not fit the u32 field")
+    return [agent_id, mask]
+
+
 def agent_set_tabard_visible(agent_id, visible):
     """GAME_SMSG 0x0048 -- gate the guild cape/tabard composite for one agent.
 

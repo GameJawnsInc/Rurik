@@ -925,3 +925,120 @@ the drop-down usable for legal professions and is worth having regardless. Clien
 the 11-bound in the drop-down builder is the first wall on the custom route that a server
 cannot talk its way past, which is what `WORKAROUNDS.md`'s R1 and `ATTRIBUTES.md`'s
 same-length edits were costed for.
+
+
+---
+
+## 13. The secondary-unlock message: **GAME_SMSG 0x00B6** (2026-08-13)
+
+Eight agents: four independent searches, synthesis, three adversarial verifiers.
+**All three verdicts held on the opcode**; all three corrected the probe, one of them
+in a way that would have cost a client session and produced a false result.
+
+### The answer
+
+> **`0x00B6` — the client's own `OnProfessionSecondaryBits(agent, secondaryBits)`.**
+> **SOURCED**: the format string at `0xA95A70` names the message *and both of its
+> fields*. Payload `u32 agent_id, u32 secondaryBits`; 10 bytes on the wire, and
+> `schema/messages.json` entry 182 already declared the shape.
+
+**Write chain, OBSERVED and re-verified independently by two agents:** receive table
+`0x00BC8F68` → handler `0x0091F090` → `0x00813AC0` (`add ecx, 0x6bc` at `0x00813AD1`) →
+`0x0081FD00`, which binary-searches the per-agent record array and stores the mask at
+**field `+0xC`** (`mov [ecx+0xc], eax`, `0x0081FD37`), then raises event `0x1000004D`.
+Single-caller at every hop.
+
+**Read side:** the drop-down builder tests it bit by bit —
+
+| addr | instruction |
+|---|---|
+| `0x00502414` | `mov eax, 1` |
+| `0x0050241B` | `shl eax, cl` — `cl` = the loop index, ids 0..10 |
+| `0x0050241D` | `test edx, eax` — `edx` = the mask |
+| `0x0050241F` | `je` — bit clear ⇒ the profession is not added to the list |
+
+**So the bit index IS the profession id.** A verifier chased the two call sites the
+synthesis had left open and found **two more independent bit tests of the same field**
+outside the arena builder, in a validator whose failure the client names
+`secondaryNotOwnedPvp` — so the semantics are attested at **three** read sites, not one.
+
+### Why our drop-down is grey, exactly
+
+We send `0x00B7` with secondary 0 and never send `0x00B6`, so the mask is 0. The loop
+then admits only the "None" entry, and the control enables **iff the list holds ≥ 2
+entries** (`cmp eax, 2 / jb`, `0x00502557`) **and** the mission-map field reads 0. One
+entry ⇒ greyed. **This fully explains the observed state with nothing else missing** —
+and ArenaNet's own server reproduces it: **11 of 11 live `0x00B6` samples carry mask 0**,
+because both captured characters are early-Prophecies with no secondary unlocked.
+
+### Two silent failure modes, both now guarded
+
+1. **ORDER.** `0x0081FD00` on a lookup MISS logs and **returns without storing**. The
+   record is created by `0x00B7`, so a `0x00B6` sent first is dropped with no wire error
+   and no visible effect. The burst sends `0x00B7` first, pinned **on the syntax tree**.
+   (A later `0x00B7` does *not* clobber the mask — the zeroing at `0x0081FD95` is on the
+   record-creation path only.)
+2. **RANGE.** The consumer's loop is `cmp edi, 0xb`. `secondary_bits()` refuses ids 0,
+   11, 12 and 255, because a bit above 10 is a lie the client cannot read.
+
+> **This closes the custom-secondary route for good.** `0x00B6` is the message that
+> offers secondaries, and it physically cannot offer a custom id: the reader stops at 10.
+> §12's wall is confirmed from the writing side as well as the reading side.
+
+### What the verifiers corrected — the probe, not the answer
+
+- **The obvious opening move crashes the client.** "Send `0x00B7 {primary 0, secondary
+  0}` to create the record" makes the pair EQUAL, and `GmDeckBuilder:2321
+  agentPrimaryProf != agentSecondaryProf` fires at the end of **every** builder run. In
+  an arena map with the panel open that asserts before the mask is ever read, and the
+  run would read as *"0x00B6 crashed the client"*. **The probe sends no `0x00B7` at
+  all** — the spawn burst already created the record with an unequal pair.
+- **"Per-character, decisively" was an over-claim.** The wire is **per-agent**; whether
+  the set is per-character or per-account is **undetermined from the client** and is a
+  server-side choice. Recorded as UNDETERMINED.
+- **One gate is ours already.** The enable rule's mission-map field is written only by
+  `0x0084EE40`, whose sole reference is the receive-table entry for **`0x0199` — which
+  our server already sends** as `INSTANCE_LOAD_INFO`, field for field. So that gate is
+  `is_explorable`, under our control, and it reads 0 in an outpost/arena.
+
+### The material caveat: WHERE it can be tested
+
+The builder self-gates on a **15-map whitelist**, resolved through `areatable.py`: **796
+Codex Arena and 823–836** (D'Alessio, Amnoon, Churranu Island, Fort Koga, Petrified,
+Heroes' Crypt, Seabed, Deldrimor, Brawler's Pit, The Crag, Sunspear, Shing Jea, Ascalon,
+Shiverpeak Arena). Outside them panel init **zeroes the gate** and the builder returns
+immediately. **Sending `0x00B6` in an ordinary outpost changes nothing, and that is not
+evidence against the opcode.** This is very likely the *arena* variant of the drop-down;
+which builder serves roleplaying characters is the largest open question.
+
+### The probe
+
+`--probe profession_secondary`, **in an arena map**, two-shot by design because one shot
+cannot separate a bitmask from a count:
+
+| mask | prediction |
+|---|---|
+| `0x07FE` | UNGREYS; **ten** entries — None + every profession but the Warrior primary |
+| `0x0044` | exactly **three** — None, Ranger, Elementalist |
+| `0` | **one**, greyed — our current behaviour, reproduced deliberately |
+
+A count-only reading gives the same list twice; a wrong bit base gives Monk and Assassin.
+
+```
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py     --keep-open --shots 10 --game-args '--probe profession_secondary --map 796'
+```
+
+Also shipped: `authsrv.py --secondary-bits all|<ids>|<mask>` sends it in the burst.
+
+**If the list populates but stays grey**, the suspect is the mission-map field, not the
+mask. **If nothing happens at all**, the first suspect is the arena gate bit — it is
+runtime `.data` and cannot be read statically — *not* the opcode. And loading an arena
+map under our server has never been tried; that is an unmeasured risk of its own.
+
+### Carried forward
+
+**`codescan.py --field` is blind to the `add reg, imm32` form** and therefore MISSED
+`0x00813AD1` — the writer of the very field this hunt was about. Its footer disclaims the
+disp8/disp16 encodings but not the arithmetic one, so it reads as complete when it is
+not. **Third under-reporting defect of this shape in that module.** A fix plus a negative
+control that reddens on `0x00813AD1` is small and high-value.
