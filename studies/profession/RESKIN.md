@@ -295,3 +295,61 @@ nameplate, neither of which renders in a solo session with no party. **UNVERIFIE
 one run with a party or a visible nameplate settles it. The picker and `.data` tables are
 likewise untested — the picker is character-creation only (§5.3), and the `.data` table's
 consumer is still unidentified.
+
+
+---
+
+## 9. RUN 2 (2026-08-13): the ATTRIBUTE tier — both claims confirmed
+
+Harness `20260813T110552`, unattended (`--walk 'wait:2 K:0.3'` presses K). Four dwords
+this time: the profession name again, plus three attribute edits testing two independent
+claims about `s_attrib`.
+
+**The table, measured first** (51 rows x 20 B, located by the source-path string that
+follows it; `+0x00` owner, `+0x04` attribute id, `+0x08` name id, `+0x0C` desc,
+`+0x10` primary):
+
+| profession | attributes |
+|---|---|
+| 8 (Ritualist) | 32, 33, 34, **36 primary** |
+| **11 (reserved)** | **26, 27, 28, 45, 46, 47, 48, 49, 50 — nine SPARE rows** |
+
+**The edits and the prediction, stated before the run:**
+
+| edit | claim under test |
+|---|---|
+| attr 32 name 2144 -> 2092 | does `+0x08` drive the displayed attribute name? |
+| attr 26 owner **11 -> 8** | is the panel's attribute list DERIVED from `+0x00`? |
+| attr 26 name 2122 -> 2112 | (so the new row arrives with a word I have seen render) |
+
+> Predicted: **five** attributes instead of four — one renamed, one newly present.
+
+**Observed, `hold002.png`:**
+
+> **Profession: Soul Reaping**
+> **Attributes (50 unused points): Strength · Soul Reaping · Restoration Magic ·
+> Channeling Magic · Spawning Power**
+
+**Five attributes. Both claims hold.**
+
+1. **`s_attrib +0x08` is the attribute's displayed name.** OBSERVED — *Communing* became
+   *Soul Reaping*.
+2. **`s_attrib +0x00` decides which profession's list an attribute appears in.** OBSERVED
+   — a row parked on the reserved profession 11 moved to 8 and **appeared in the panel**.
+   The attribute list is derived from this field, exactly as the costing predicted, and
+   needs no per-profession table.
+3. **The nine spare rows are usable.** A custom profession is not limited to its host's
+   four attributes: there is room for up to nine more.
+
+No crash, verdict PASS, and the run dir was restored byte-for-byte afterwards.
+
+### A harness finding worth keeping
+
+`session.py` already accepts `--exe`, so the obvious way to avoid touching the shared
+client is to drop a differently-named patched exe in the run directory (it must live
+there to find `Gw.dat`). **That does not work unattended:** the firewall cage is keyed
+per executable path, so a new filename is uncaged and `assert_launch_safe` refuses it —
+correctly. Caging costs an elevated shell. **So the backup-patch-run-restore cycle on
+`Gw.exe` is the only unattended route**, and the uncaged copy was deleted immediately
+rather than left in `vault/run`, which is the hazard `isolate_client.ps1`'s own help text
+was written about.

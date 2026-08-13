@@ -24,7 +24,7 @@ import checks                                                  # noqa: E402
 import reskin                                                  # noqa: E402
 import vaultpath                                               # noqa: E402
 
-LEDGER = checks.Ledger("reskin", floor=24)
+LEDGER = checks.Ledger("reskin", floor=33)
 
 
 def synth(name_ids=None, abbrev_ids=None, picker_ids=None, data_ids=None,
@@ -233,12 +233,91 @@ def section_real_client():
               f"{log}")
 
 
+def synth_attrib(owners=None, names=None):
+    """A buffer shaped like s_attrib: 51 rows, then its own source path.
+
+    Row layout: +0x00 owner, +0x04 attribute id, +0x08 name, +0x0C desc,
+    +0x10 primary. ids are 0..50 in order, which is the shape check.
+    """
+    owners = owners or ([5] * 4 + [4] * 4 + [8] * 4 + [11] * 39)
+    names = names or [2000 + i for i in range(reskin.ATTR_ROWS)]
+    out = bytearray(b"\x00" * 32)
+    for i in range(reskin.ATTR_ROWS):
+        out += struct.pack("<5I", owners[i], i, names[i], names[i] + 1,
+                           1 if i == 3 else 0)
+    return bytes(out + reskin.ATTR_ANCHOR + b"\x00" * 8)
+
+
+def section_attributes():
+    print("\n4. the attribute table")
+    data = synth_attrib()
+    base, rows = reskin.locate_attrib(data)
+    LEDGER.ok(len(rows) == 51 and [r["id"] for r in rows] == list(range(51)),
+              "s_attrib locates from its own source-path anchor, 51 rows",
+              f"base 0x{base:X} -- same locator shape as the name tables, and "
+              f"the id column is the shape check")
+    spare = [r["id"] for r in rows if r["owner"] == reskin.SPARE_OWNER]
+    LEDGER.ok(len(spare) == 39 and 8 in {r["owner"] for r in rows},
+              "and the reserved-profession rows are visible as spares",
+              f"{len(spare)} rows on profession {reskin.SPARE_OWNER} -- the "
+              f"real client has nine, which is the room a custom profession "
+              f"has for attributes of its own")
+
+    # Shape and range refusals, each breaking ONE assumption.
+    scrambled = bytearray(data)
+    struct.pack_into("<I", scrambled, 32 + 5 * reskin.ATTR_ROW + reskin.ATTR_ID, 99)
+    LEDGER.ok(_attr_refuses(bytes(scrambled), "not 0..50"),
+              "an out-of-order id column is REFUSED",
+              "the anchor and the shape are two witnesses; disagreement means "
+              "one assumption is wrong for this build")
+    bad_owner = bytearray(data)
+    struct.pack_into("<I", bad_owner, 32 + 2 * reskin.ATTR_ROW + reskin.ATTR_OWNER, 12)
+    LEDGER.ok(_attr_refuses(bytes(bad_owner), "owner above"),
+              "and an owner above the reserved profession is REFUSED",
+              "a reskin's whole premise is that every id stays legal")
+
+    out, log = reskin.attrib_edits(data, rows, renames=[(0, 777)],
+                                   owners=[(50, 8)], primaries=[(3, 0), (0, 1)])
+    LEDGER.ok(len(out) == len(data),
+              "attribute edits are SAME-LENGTH too", f"{len(out)}")
+    _, rows2 = reskin.locate_attrib(out)
+    LEDGER.ok(rows2[0]["name"] == 777 and rows2[50]["owner"] == 8,
+              "a rename lands on +0x08 and an owner change on +0x00",
+              f"name {rows2[0]['name']}, owner of 50 = {rows2[50]['owner']}")
+    LEDGER.ok(rows2[3]["primary"] == 0 and rows2[0]["primary"] == 1,
+              "and the primary marker MOVES -- cleared here, set there",
+              "a set-only verb would leave two primaries on one profession, "
+              "which is a state the client never ships")
+    LEDGER.ok(all(rows2[i]["owner"] == rows[i]["owner"]
+                  for i in range(reskin.ATTR_ROWS) if i != 50),
+              "and no other row's owner moved",
+              "the edit must be surgical; a table-wide rewrite would pass a "
+              "spot check and corrupt every other profession")
+    refused = None
+    try:
+        reskin.attrib_edits(data, rows, owners=[(0, 12)])
+    except SystemExit as ex:
+        refused = str(ex)
+    LEDGER.ok(refused is not None and "legal" in refused.lower(),
+              "assigning an attribute to an out-of-range profession is REFUSED",
+              f"{refused!r}")
+
+
+def _attr_refuses(data, needle):
+    try:
+        reskin.locate_attrib(data)
+    except SystemExit as ex:
+        return needle in str(ex)
+    return False
+
+
 def main():
     print("Reskin patcher: structural location, edits, and refusals.")
     section_locator()
     section_edits()
     section_output_guards()
     section_real_client()
+    section_attributes()
     return LEDGER.verdict()
 
 
