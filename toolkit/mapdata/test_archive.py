@@ -26,6 +26,7 @@ check is skipped rather than failed -- it is not a defect in the reader.
 """
 
 import argparse
+import struct
 import os
 import sys
 import time
@@ -58,7 +59,12 @@ SAMPLE_SIZE = 6
 # Measured on the run-dir Gw.dat, 2026-08-06: a green run prints eleven [PASS]
 # lines, nine of them mandatory. Scoring under nine means a map stopped being
 # sampled or a section stopped running, and the passes that remain prove nothing.
-LEDGER = checks.Ledger("dat archive", floor=9)
+#
+# RAISED 9 -> 14 on 2026-08-13: section 1b adds five more that hold against ANY
+# copy (the row/position conventions and the file-id table's row), because
+# confusing `entries[row]` with a row NUMBER returns a different file rather
+# than an error, and once cost a nearly-filed false refutation.
+LEDGER = checks.Ledger("dat archive", floor=14)
 check = checks.adopt(LEDGER)
 
 
@@ -81,6 +87,45 @@ def main():
               f"{ar.entry_count} entries x 24 == declared MFT size "
               f"{ar.mft_size}")
         check(ar.block_size == 512, f"block size is 512 (got {ar.block_size})")
+
+        # ROW NUMBER vs POSITION. `entries` is positional and `row()` is
+        # one-based, and confusing them returns a DIFFERENT FILE rather than an
+        # error -- on 2026-08-13 that silently resolved a text row to a texture
+        # and nearly produced a false refutation. Both conventions are pinned
+        # here so neither can drift into the other.
+        print("\n1b. row numbers are one-based; entries is positional")
+        check(ar.entries[0].index == 1 and ar.entries[9].index == 10,
+              "entries[k].index == k + 1 -- the list is POSITIONAL")
+        last = len(ar.entries)
+        check(ar.row(1).index == 1 and ar.row(10).index == 10
+              and ar.row(last).index == last,
+              f"row(n).index == n at both ends (1..{last:,})")
+        check(last == ar.entry_count - 1,
+              f"and entry_count ({ar.entry_count:,}) COUNTS the MFT header "
+              f"slot, so the highest row is one less ({last:,}) -- bounding on "
+              f"entry_count walks off the end, which is how this was found")
+        check(ar.row(2) is ar.entries[1],
+              "row(n) and entries[n - 1] are the SAME object -- the existing "
+              "call sites that write entries[row - 1] are correct")
+        refused = 0
+        for bad in (0, -1, last + 1):
+            try:
+                ar.row(bad)
+            except IndexError:
+                refused += 1
+        check(refused == 3,
+              f"row(0), row(-1) and row(last + 1) are all refused ({refused}/3) "
+              f"-- a negative index would otherwise wrap to the END of the table")
+        # The file-id table's row, MEASURED rather than assumed: it is the only
+        # row whose payload parses wholly as (file_id, row) pairs.
+        idtable = ar.row(2)
+        blob = ar.read(idtable)
+        pairs = len(blob) // 8
+        good = sum(1 for i in range(min(pairs, 4000))
+                   if 0 < struct.unpack_from("<II", blob, i * 8)[1] <= last)
+        check(pairs > 100000 and good == min(pairs, 4000),
+              f"MFT row 2 is the file-id table: {pairs:,} pairs, "
+              f"{good}/{min(pairs, 4000)} rows in range")
 
         print("\n2. map files are identifiable by flags alone")
         maps = [e for e in ar.entries if e.flags == MAP_FLAGS]
