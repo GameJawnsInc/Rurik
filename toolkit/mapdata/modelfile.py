@@ -61,21 +61,31 @@ apart because §A5's lesson is that conflating them manufactured a false theory:
     chosen parse; its rival parse is format 21, so THE RARE FORMAT'S VERY
     EXISTENCE rests on an ambiguous tie and is UNCONFIRMED.
 
-THE VERTEX STRIDE is computed from `dat_fvf` by a byte-cost rule derived in the
-survey (RECONSTRUCTION — it is our reading, not the client's own table, which
-is rung M2's target):
+THE VERTEX STRIDE IS THE CLIENT'S OWN, read out of its `.data` (rung M2,
+2026-08-13). Three tables at VA `0x00BF5B80` (16 u32), `0x00BF5BC0` (8) and
+`0x00BF5BE0` (16), summed by the accessor at `0x00688010`, which shifts its
+`fvf` argument by 12, 8, 4 and 0 and indexes them — SOURCE-CODE, build 38797.
+The caller's `dat_fvf` reaches it through the remap
+`((d & 0xFF0) << 4) | ((d >> 8) & 0x30) | (d & 0xF)`.
 
-    +12 for bit 0        +4 for bit 1        +12 for bit 2
-    +8 per set bit in 0xF0        +24 if any bit of 0x3000
+    stride = FVF0[(f>>12)&0xF] + FVF0[(f>>8)&0xF] + FVF1[(f>>4)&7] + FVF2[f&0xF]
 
-Its evidence is closure, not preference: the two-stage walk closes to the
-exact final byte through 3,834 sub-model records under this rule, and the
-thirteen (dat_fvf, stride) pairs it produces are pinned as literals in
-`test_modelfile.py`. GuildWarsMapBrowser's FVF lookup table agrees on 3,833 of
-3,834 and disagrees on the ONE 0x2C sub-model — which is the ambiguous parse
-above, so the disagreement itself rests on an uncertain read. No GWMB table is
-used or embedded here; the rule stands on the corpus and awaits the client's
-own dispatch (M2).
+**This REPLACED a byte-cost rule of our own** (M1: +12/+4/+12 for bits 0-2,
++8 per bit of 0xF0, +24 for any of 0x3000). The two agree on twelve of the
+thirteen (dat_fvf, stride) pairs the corpus appeared to hold and differ on
+**60,168 of 65,536 possible words** — they agreed exactly where the corpus
+lives and nowhere else, which is what made the wrong rule survive M1.
+
+**dat_fvf 0x2C NEVER EXISTED.** Its single corpus sighting was our rule's
+stride-20 misparse of file 0x1BAE2, the ambiguous file: under the client's
+table only offset 101 closes, the format there is the common 21, and the
+corpus holds TWELVE formats, not thirteen. The cross-file oracle confirms the
+correction from a source that shares nothing with the client binary — that
+model's props scored **f11 0 of 16 under the old rule and 16 of 16 under the
+client's**, which is the entire corpus-wide improvement from 12,766 to
+**12,782 of 12,875**. GuildWarsMapBrowser's FVF tables are these same client
+tables and were right where we were wrong; §B6's recorded disagreement is
+resolved in upstream's favour.
 
 THE LOAD-BEARING ORACLE, and why this module can be trusted at all: the
 Bloated prop record's `f11` field equals `scale * max(sqrt(x^2 + y^2))` over
@@ -87,11 +97,50 @@ over the 14-map sample; 474/474 and 664/664 on the reference maps' comparable
 props; the 3D-radius rival scores 103 of 12,875. `test_modelfile.py` pins all
 of it.
 
+THE VERTEX FIELD MAP (rung M2). The three tables are PERFECTLY ADDITIVE over
+their bits — each table entry is the sum of its set bits' costs, checked for
+all 40 entries — so the client's own data states the size of every field, and
+`dat_fvf` bit b maps to one of them:
+
+    bit 0        12  position f32 x, y, z        (offset 0; pinned by f11)
+    bit 1         4  a small INDEX, purpose UNVERIFIED (see below)
+    bit 2        12  NORMAL, unit f32 x, y, z
+    bit 3         4  UNVERIFIED (absent from every corpus format)
+    bits 12, 13  12  TANGENT FRAME, unit f32 x, y, z each
+    bits 4..11    8  texture coordinates, f32 u, v (up to eight sets)
+    bits 14, 15   —  DROPPED by the remap; they cost nothing
+
+Field ORDER within a vertex is the client's table order — the FVF2 group
+(bits 0-3), then FVF1 (bits 12-13), then the two FVF0 groups (bits 4-11) —
+and it is CORROBORATED rather than assumed, because a permutation gives the
+same stride: the unit-length tests below hold at the offsets this order
+computes and collapse four bytes away.
+
+Each name is a REFUTABLE PREDICTION the corpus was asked, never an inference
+from a field's size (the `envchunk.py` tag-6 lesson, where a name read off a
+size was wrong). MEASURED over 90,108 vertices of a 7-map sample:
+
+  * **bit 2 is the normal**: unit length within 1e-3 on **90,108 of 90,108**;
+    the same read four bytes early is unit on 2.7%.
+  * **bits 12/13 are a tangent frame**: unit on **10,017 of 10,017** each
+    (controls 6.5% and 3.6%), and bit 12 is orthogonal to bit 2 on **93.0%**
+    against a 26.0% control that pairs a normal with the NEXT vertex's
+    vector. 93% rather than 100% is what a tangent frame does at UV seams and
+    mirrored shells; the figure is reported rather than rounded up, and which
+    of the two is tangent vs binormal is NOT established.
+  * **bits 4-11 are texture coordinates**: two f32, 97.8% inside +/-16 with a
+    full range of -519.7 .. 520.4 — wrapped/atlased UVs, not normalised ones.
+  * **bit 1 is NOT a colour.** The D3DCOLOR reading is REFUTED: its high three
+    bytes are zero on 9,128 of 9,128 and the low byte takes ten values, all
+    <= 9. It is a small integer index and its PURPOSE IS UNVERIFIED — naming
+    it (matrix index? material slot?) would be the size-inference mistake
+    again.
+
 WHAT IS OPAQUE, so nobody reads more than was measured: the preamble, the
-sub-model `unk` word, every vertex byte past the position floats (normals,
-UVs and colours are rung M2), the trailing blocks, and the meaning of the
-texture-name chunks' contents. `SubModel.vertex_data` and `.trailing` carry
-the bytes; nothing interprets them.
+sub-model `unk` word, the trailing blocks, the meaning of the texture-name
+chunks' contents, and bits 1 and 3 of the format word. `SubModel.vertex_data`
+and `.trailing` carry the bytes; `field_offsets` says where the named fields
+sit and nothing interprets the rest.
 
 Corrections this module carries from the study (§A/§B): the format census was
 fitted and tested on the same sub-models (§B6), so the stride rule is labelled
@@ -154,21 +203,74 @@ class NoClose(Undecodable):
     """
 
 
+#: THE CLIENT'S OWN STRIDE TABLES, read from build 38797's `.data` at the VAs
+#: below and summed by the accessor at `FVF_ACCESSOR_VA`. MEASURED, not ours:
+#: `test_modelfile.py` re-reads them out of the vaulted image and requires
+#: these literals to match, so a build change is a red test rather than a
+#: silent drift. They are strides -- explicitly on the provenance gate's
+#: permitted side (PLAN §7 Q3) -- and the extractor is this repo's
+#: `clientscan/codescan.py` plus the test's own PE walk.
+FVF0_VA = 0x00BF5BE0
+FVF1_VA = 0x00BF5BC0
+FVF2_VA = 0x00BF5B80
+FVF_ACCESSOR_VA = 0x00688010
+FVF_BUILD = 38797
+
+FVF0 = (0, 8, 8, 16, 8, 16, 16, 24, 8, 16, 16, 24, 16, 24, 24, 32)
+FVF1 = (0, 12, 12, 24, 12, 24, 24, 36)
+FVF2 = (0, 12, 4, 16, 12, 24, 16, 28, 4, 16, 8, 20, 16, 28, 20, 32)
+
+#: Per-bit field sizes, DERIVED from the tables above by additivity (each of
+#: the 40 entries equals the sum of its set bits' costs -- checked, not
+#: assumed). The key is a `dat_fvf` bit; bits 14 and 15 are dropped by the
+#: remap and cost nothing.
+FIELD_SIZE = {0: 12, 1: 4, 2: 12, 3: 4,
+              4: 8, 5: 8, 6: 8, 7: 8, 8: 8, 9: 8, 10: 8, 11: 8,
+              12: 12, 13: 12}
+
+#: The order fields sit in a vertex: the client's table order. CORROBORATED
+#: by the unit-length tests at these offsets, not merely by the total (a
+#: permutation would give the same stride).
+FIELD_ORDER = (0, 1, 2, 3, 12, 13, 4, 5, 6, 7, 8, 9, 10, 11)
+
+#: Names for the bits a refutable corpus prediction established. Bits 1 and 3
+#: are deliberately absent -- see the docstring; bit 1's colour reading is
+#: REFUTED and its purpose is unverified.
+FIELD_POSITION = 0
+FIELD_NORMAL = 2
+FIELD_TANGENT_BITS = (12, 13)
+FIELD_TEXCOORD_BITS = (4, 5, 6, 7, 8, 9, 10, 11)
+
+
+def remap_fvf(dat_fvf):
+    """The file's format word to the accessor's argument. SOURCE-CODE: the
+    caller's shifts feeding `FVF_ACCESSOR_VA`."""
+    return ((dat_fvf & 0xFF0) << 4) | ((dat_fvf >> 8) & 0x30) | (dat_fvf & 0xF)
+
+
 def vertex_stride(dat_fvf):
-    """Bytes per vertex for a format word. RECONSTRUCTION — see the docstring:
-    pinned by walk closure over 3,834 sub-models and thirteen literal pairs in
-    the test, not by the client's own dispatch (that is rung M2)."""
-    s = 0
-    if dat_fvf & 1:
-        s += 12
-    if dat_fvf & 2:
-        s += 4
-    if dat_fvf & 4:
-        s += 12
-    s += 8 * bin(dat_fvf & 0xF0).count("1")
-    if dat_fvf & 0x3000:
-        s += 24
-    return s
+    """Bytes per vertex. THE CLIENT'S OWN TABLES (`FVF_ACCESSOR_VA`), not a
+    rule of ours -- see the module docstring for the byte-cost rule this
+    replaced and the phantom format it invented."""
+    f = remap_fvf(dat_fvf)
+    return (FVF0[(f >> 12) & 0xF] + FVF0[(f >> 8) & 0xF]
+            + FVF1[(f >> 4) & 7] + FVF2[f & 0xF])
+
+
+def field_offsets(dat_fvf):
+    """`{dat_fvf bit: byte offset}` for the fields a vertex carries.
+
+    Sums to `vertex_stride(dat_fvf)` by construction; which OFFSET each field
+    lands on is the corroborated claim (see the docstring's unit-length
+    measurements), not the total.
+    """
+    off = 0
+    out = {}
+    for bit in FIELD_ORDER:
+        if dat_fvf >> bit & 1:
+            out[bit] = off
+            off += FIELD_SIZE[bit]
+    return out
 
 
 class SubModel:
@@ -205,17 +307,72 @@ class SubModel:
         it = self.indices
         return [(it[i], it[i + 1], it[i + 2]) for i in range(0, len(it), 3)]
 
+    @property
+    def fields(self):
+        """`{dat_fvf bit: offset}` — where each named field sits."""
+        return field_offsets(self.dat_fvf)
+
     def positions(self):
-        """The f32 (x, y, z) at the head of each vertex. Everything after
-        them in the stride is rung M2's problem and stays bytes."""
+        """The f32 (x, y, z) at the head of each vertex."""
         out = []
         for i in range(self.nv):
             out.append(POSITION.unpack_from(self.vertex_data, i * self.stride))
         return out
 
+    def normals(self):
+        """Unit f32 (x, y, z) per vertex, or None when the format has none.
+
+        MEASURED unit on 90,108 of 90,108 sampled vertices, with the same
+        read four bytes early unit on 2.7% — that control is what makes this
+        the normal rather than three floats at a plausible offset.
+        """
+        return self._vec3(FIELD_NORMAL)
+
+    def tangent_frame(self):
+        """The unit vectors at bits 12/13 as a `(first, second)` tuple, each
+        a per-vertex list or None. WHICH IS TANGENT AND WHICH IS BINORMAL IS
+        NOT ESTABLISHED — bit 12 is orthogonal to the normal on 93.0% against
+        a 26.0% control, so they are a tangent frame; the naming is not ours
+        to assert."""
+        return tuple(self._vec3(b) for b in FIELD_TANGENT_BITS)
+
+    def texcoords(self, which=0):
+        """Texture-coordinate set `which` (0..7) as (u, v) pairs, or None.
+
+        Retail UVs are NOT normalised: 97.8% inside +/-16 over a full range
+        of -519.7 .. 520.4, so a consumer must wrap rather than clamp.
+        """
+        bit = FIELD_TEXCOORD_BITS[which]
+        off = self.fields.get(bit)
+        if off is None:
+            return None
+        return [struct.unpack_from("<2f", self.vertex_data,
+                                   i * self.stride + off)
+                for i in range(self.nv)]
+
+    @property
+    def texcoord_sets(self):
+        return sum(1 for b in FIELD_TEXCOORD_BITS if self.dat_fvf >> b & 1)
+
+    def _vec3(self, bit):
+        off = self.fields.get(bit)
+        if off is None:
+            return None
+        return [POSITION.unpack_from(self.vertex_data, i * self.stride + off)
+                for i in range(self.nv)]
+
     def __repr__(self):
+        has = []
+        if self.fields.get(FIELD_NORMAL) is not None:
+            has.append("N")
+        if any(b in self.fields for b in FIELD_TANGENT_BITS):
+            has.append("T")
+        if self.texcoord_sets:
+            has.append(f"UV x{self.texcoord_sets}")
         return (f"<SubModel {self.nv} verts stride {self.stride} "
-                f"(fvf 0x{self.dat_fvf:X}), {self.ti} indices>")
+                f"(fvf 0x{self.dat_fvf:X}: pos"
+                + (", " + ", ".join(has) if has else "")
+                + f"), {self.ti} indices>")
 
 
 class CollisionMesh:
