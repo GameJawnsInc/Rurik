@@ -6,7 +6,9 @@ found the routes, [`MODDABLE.md`](MODDABLE.md) designed for arbitrary N and
 [`ATTRIBUTES.md`](ATTRIBUTES.md) costed the hardest dimension. Between them: ~50 agents, four
 documents, and **not one packet sent**. This is the packet.
 
-Two runs, 2026-08-12, loopback only, ours-DH build, verified cage, synthetic credential.
+Four sessions, 2026-08-12, loopback only, ours-DH build, verified cage, synthetic
+credential. Runs 1 and 2 are §2–§3; the two `profession_skillbar` sessions are §8, and
+§8 corrects §6's first row.
 
 ## Labels
 
@@ -164,7 +166,7 @@ rebase; `keytap.py` already resolves module bases correctly and is the precedent
 
 | Question | Status | Next |
 |---|---|---|
-| Does populating a skill list for profession 12 clear the assert? | **The load-bearing question this run created** | `profession_skillbar`, registered 2026-08-12: run 2's A/B with the same bar re-delivered AFTER the change, re-send held constant across arms |
+| Does populating a skill list for profession 12 clear the assert? | **STILL UNANSWERED — the probe ran and its CONTROL arm reddened (§8)** | The re-send instrument is poisoned; spawn-time delivery or R1 (§8) |
 | Which surface fails *second*? | **UNMEASURED** — the skills panel died first | Neuter the assert (R1, 5 bytes) and re-run: fall-through turns one answer per run into many |
 | Do the other twelve profession-keyed surfaces fail by null or by bound? | **UNMEASURED** | Same |
 | Is profession 11 (the sentinel) different from 12? | **UNMEASURED** | `profession_sentinel`, already registered |
@@ -191,3 +193,70 @@ selected by whose DH it carries, and the account is synthetic. Arm A must open t
 it does not, the run has already answered a different question and arm B means nothing.
 
 To rebase a crash address to a static VA: `static = runtime − (BaseAddr − 0x00400000)`.
+
+---
+
+## 8. Run 3 — `profession_skillbar` (2026-08-12): the control arm reddened
+
+Two sessions the same evening, both loopback, driving the probe built for §6's first
+row: run 2's A/B plus the same eight-skill bar re-delivered mid-session in BOTH arms, so
+the arms still differ by one byte.
+
+**3a — unattended.** Harness `20260812T213205`, capture
+`authsrv-20260812T213215-c1.jsonl`. The harness echoed the gamesrv's stdout only for
+`--labelrun`, so the probe's prompts went to `gamesrv.log` alone and the operator sat at
+a silent terminal; all seven steps fired with nobody at the keys (fixed the same
+evening, `test_harness` §8). The burned run is still evidence: **the client outlived
+every packet** — steps ended at +64.9 s, last c2s at +227.7 s — so the mid-session
+re-send is not lethal at profession 3 (step 2) or at 12 (step 5), and profession 12 →
+recovery, unopened, replicates run 1's headline.
+
+**3b — operated.** Harness `20260812T213758`, capture
+`authsrv-20260812T213806-c1.jsonl`.
+
+| t | event |
+|---|---|
+| +4.73 s | step 1 — profession 3, the control |
+| +8.74 s | step 2 — bar re-send, still profession 3 |
+| +12.24 s | **last c2s from the client** |
+| +12.75 s | step 3 — "NOW open the skills menu (K)"; the operator pressed K (reported; the c2s window brackets it) |
+| ~+15 s | the assert — dialog `When:` 21:38:21 against capture start 21:38:06 |
+| +32.8→64.8 s | steps 4–7 fired into a dead client; 10 pings unanswered |
+
+**The client died in ARM A, at profession 3 — a shipping value — before the experiment
+ever ran.** The dialog, captured by the harness on the Ctrl-C teardown path (the
+capture-on-EVERY-run change earned its keep), is the SAME assert as run 2: `*skill`,
+`ChCliSkill.cpp(1022)`, base `0x00F20000` again.
+
+### What this measures
+
+One variable separates 3b's arm A from run 2's arm A, which opened: **the mid-session
+re-send.** The worlds are otherwise identical — same unlocks-all burst, same bar,
+checked line-for-line in both gamesrv logs. So, n=1 with run 2's arm A as its control:
+
+> **OBSERVED: a mid-session `SKILLBAR_UPDATE` followed by opening the skills panel
+> asserts the client at a LEGAL profession.** Same null, no out-of-band byte anywhere
+> in the session.
+
+Three consequences:
+
+- **The probe cannot answer its question with this instrument.** The re-send poisons
+  the panel on its own, so §6 row 1 — population vs bounds — is **UNANSWERED**, not
+  answered in the negative. Do not re-run `profession_skillbar` expecting its stated
+  fork; its arm-A control did exactly what a control is for.
+- **Run 2's attribution stands.** It contained no re-send in either arm; its one-byte
+  difference is untouched by this.
+- **INFERRED, leaning toward the population theory rather than against it:** the same
+  null is now reachable with the profession held legal, by an action that plausibly
+  rebuilds skill state. A profession bound check cannot fire at 3; whatever `*skill`
+  dereferences was left null by the REBUILD. Consistent with §4's "nothing registered
+  behind the id" — but it is one crash, and the client's re-send handler is unread.
+
+### The routes from here
+
+- **Spawn-time delivery.** A server option so the SPAWN BURST itself carries profession
+  12 — bar, unlocks and attributes then all arrive at 12 with zero mid-session sends,
+  and K is the session's first provocation. Control: a second session spawned at 3.
+  Loses run 2's one-byte-one-session purity; removes the poisoned instrument.
+- **R1, the five-byte neuter — now MORE attractive.** Two distinct provocations reach
+  the same noreturn assert; with it neutered, one run yields the ordering for both.
