@@ -327,21 +327,57 @@ share one client launch.
 
 ## 5c. Where a plausible value was NOT enough — and why guessing stopped
 
+> ## RETRACTED 2026-08-13 — these five experiments never ran
+>
+> **Every payload below went out ALL-ZERO.** `probes._smsgsweep_steps` read the plan's
+> field overrides from the top level; `plan()` had just been rewritten to write them per
+> ROW (`sets_for`, for the qualified `--set 0x0083:2=1` form these very runs were the first
+> to use), so `p.get("set")` was `{}` and `apply_set` returned the degenerate payload
+> untouched. The five re-sends were byte-identical to the plain sweep's, and "none of them
+> opened" is a restatement of the sweep result already in the ledger.
+>
+> This is OBSERVED, not inferred. The server records the plaintext of every send
+> (`authsrv.py` `rec.event("sent", …, plain=…)`), and across the whole of 2026-08-12
+> exactly 30 sweep sends carried a non-zero payload — `0x0017` at 10:59 (§5a) and the nine
+> `agent_id` opcodes at 11:44–11:47 (§5b), then nothing until the `--encstring` family at
+> 17:42. The §5c runs at 11:54–12:00 and 12:15–12:18 are all zeros, e.g. `0x0083` reads
+> `8300000000000000000000` in both the 11:01 plain sweep and the 11:54 "experiment".
+>
+> **§5a and §5b are UNAFFECTED** — both predate the rewrite and their captures carry the
+> value (`0x0017` ends `…01`; all nine of §5b's carry field 1 = 1). **The ledger is also
+> unaffected**: `record` scores the capture and is first-write-wins, and every row for
+> these five was already written from the 11:0x–11:36 sweep, so it correctly says these
+> opcodes assert on the DEGENERATE payload. Only the sentences below were wrong.
+>
+> **What is salvaged and what is not.** §5d disassembled the handlers afterwards and found
+> `0x0072` never reads field 2 and `0x0096` never reads field 1 — so those two conclusions
+> stand on the static read, which is the evidence that was doing the work anyway.
+> `0x0083` field 2, `0x005F` field 2 and `0x00A8` field 3 are **UNVERIFIED — never
+> tested**, and the "third gate" and "not the file id" readings are withdrawn.
+>
+> Fixed 2026-08-13 (`row.get("set")`), with the check in `test_smsgsweep.py` §9 — which
+> lives there because everything else in that file runs inside `smsgsweep`, and the module
+> agreed with itself perfectly the entire time.
+
 Five more opcodes, each re-sent with the field its assert pointed at set to something
 defensible. **None of them opened**, and that is the result:
 
-| opcode | tried | still |
-|---|---|---|
-| `0x005F` | field 1 = live agent, field 2 = 1 | FAULTED — its field 3 is a `string16`, so it belongs to the encoded-string family below |
-| `0x0072` | field 2 = live agent | ASSERTED — so hero data is NOT reached through the agent; its `word` field 1 is the index |
-| `0x0083` | field 1 = live agent, field 2 = 1 | ASSERTED — a third gate, its `dword` field 3 |
-| `0x0096` | field 1 = 1 | ASSERTED — the mask wants specific bits and bit 0 is not one of them |
-| `0x00A8` | field 3 = 1, then = `0x100000be` (a real resource id from `0x0017`'s path) | ASSERTED — so field 3 is not the file id, or neither value names a loadable file |
+| opcode | tried | still | 2026-08-13 |
+|---|---|---|---|
+| `0x005F` | field 1 = live agent, field 2 = 1 | FAULTED — its field 3 is a `string16`, so it belongs to the encoded-string family below | field 1 ran (§5b, 11:44); **field 2 never left** |
+| `0x0072` | field 2 = live agent | ASSERTED — so hero data is NOT reached through the agent; its `word` field 1 is the index | never left; conclusion re-derived in §5d |
+| `0x0083` | field 1 = live agent, field 2 = 1 | ASSERTED — a third gate, its `dword` field 3 | field 1 ran (§5b); **field 2 never left — "third gate" WITHDRAWN** |
+| `0x0096` | field 1 = 1 | ASSERTED — the mask wants specific bits and bit 0 is not one of them | never left; conclusion re-derived in §5d |
+| `0x00A8` | field 3 = 1, then = `0x100000be` (a real resource id from `0x0017`'s path) | ASSERTED — so field 3 is not the file id, or neither value names a loadable file | **never left — WITHDRAWN, untested** |
 
 **Six of fifteen gates closed on a value we could justify; the other nine did not, and the
 next attempt on each would be a guess costing a client launch.** `0x0017` was solved by
 reading its handler and predicting the gate before sending anything — that is the method
 that worked, and it is the one these nine want. `msghandler.py <op> --follow --annotate`.
+
+**Corrected denominator (2026-08-13): six of TEN, because five of the fifteen were never
+put on the wire.** The paragraph above is otherwise unchanged, and its recommendation is
+strengthened rather than weakened — the method that worked was reading the handler.
 
 A limit found while doing it: `--set` indexes into the VALUE list, and `degenerate` stops
 at a `nested_struct` because that type swallows the tail. `0x0019` declares four fields
@@ -389,9 +425,144 @@ anything deeper is inference and is marked as such above.
    `0x009E`) need a REAL encoded string, which `--set` deliberately will not fake; the
    file-id gates (`0x0019` `0x00A8`); `0x0096`'s flag mask; `0x0072` (`--set 2=`, its
    agent_id is field 2); and the three faults.
+   **Add back the three §5c retracted: `0x0083` field 2 (bag index), `0x005F` field 2 and
+   `0x00A8` field 3.** They were reported as tested and never left the server — see §5c's
+   retraction. `--set` works as of 2026-08-13; these are now one client launch, and the
+   qualified form puts all three in it.
 2. **Reorder the plan** so `0x0000` is not first, and settle §3.
 3. **Recover the three missing asserts** — re-send `0x005F`, `0x0060`, `0x006F` and expand
    the dialog's detail pane before reading it.
 4. **Finish the 237.** `sweeploop.py --rounds 20` did 71 opcodes and 20 asserts in about
    35 minutes; yield falls as the asserts cluster, so budget more rounds than opcodes.
 5. **The ten table-less opcodes**, `--table-less --limit 1`, deliberately.
+
+---
+
+## 7. The SCREEN pass — 238 SILENT opcodes re-sent one per client, with screenshots
+
+**Status: OBSERVED, 2026-08-13.** §3.4 measured this instrument's blind spot: `SILENT`
+means *no c2s reply*, and four of four opcodes tested with a meaningful payload were
+drawing windows while the wire stayed quiet. This is the conversion of the other 239.
+Method: `toolkit/authsrv/shotloop.py` (one opcode, one FRESH client, a screenshot every
+second through a 22 s hold), read by `toolkit/authsrv/shotlabel.py`, controls in
+`test_shotlabel.py` (38 checks). 162 minutes, 238 runs, **zero harness failures**.
+
+**One opcode per client launch, and it is a rule rather than a budget.** A window an
+earlier opcode opened is still on screen when the next one lands, so it sits inside the
+next opcode's own baseline frame; and an opcode may only act BECAUSE of state a previous
+one left, which would report a joint effect under one name. `score_run` refuses a
+multi-send run outright.
+
+### 7.1 What came back
+
+| | count |
+|---|---|
+| scored | **221** |
+| CHANGED — the screen moved beyond its own drift | **34** |
+| QUIET | 187 |
+| CRASHED — dialog captured, §7.3 | **8** |
+| lost the foreground, re-run | 9 |
+
+### 7.2 The three read so far, and two are NAMED by the client's own words
+
+Read by eye off the page, which is what this apparatus is for:
+
+| opcode | what the client did |
+|---|---|
+| `0x0101` | the screen goes black and reads **"A Cinematic is in Progress"** — the client's own text, so this is a NAME |
+| `0x00C3` `0x00C7` `0x00C8` `0x00C9` `0x00CA` | a modal dialog whose body text is the **account-name / ladder** prompt, with `Accept Name` and `Goodbye` buttons. Five opcodes, one contiguous block, all five scoring 11.10–11.16% over the SAME bounding box (715, 276, 1191, 783) — a family |
+| `0x006C` | a large golden burst centred on the player: a world EFFECT, not a panel |
+
+`0x0101` at 94.99% and `0x01AA` at 88.13% both repaint essentially the whole window
+(bbox (8, 31, 1928, 1032)); `0x01AA` has not been read yet.
+
+### 7.3 EIGHT OPCODES CRASH — and the wire sweep scored every one of them SILENT
+
+The eight `UNSCORABLE` rows are frames that changed SIZE mid-run, from 1936x1040 to
+646x237, **all eight at the same frame index**. That is the client window being replaced
+by its error dialog, and `capture_error_dialog` caught all eight:
+
+| opcode | the client's own assert | subsystem |
+|---|---|---|
+| `0x0105` | `context->script`, `Cinematic\Cli\CiCliApi.cpp(201)` | **cinematic** |
+| `0x0122` `0x0125` `0x0126` `0x0130` | `guild`, `GuCliApi.cpp` lines 340, 363, 384, 420 | **guild** |
+| `0x0170` | `IsBatching()`, `MsCliTourn.cpp(475)` | **tournament** |
+| `0x0172` `0x01B7` | `index < m_count`, `Base\rtl\Array.h(587)` | a bounds check |
+
+**The difference is the encoded string.** The wire sweep sent all-zero payloads; this
+pass runs `--encstring`, which puts a REAL encoded string from the owner's own captures
+into `string16` fields. So these eight are §5c's "second gate" arriving from the other
+side: with the string field valid the handler runs on past its format check and reaches
+a CLIENT-STATE gate — no guild, no cinematic script, no tournament batch. §5d's reading
+holds and now has eight more instances.
+
+**A contiguous guild block at `0x0122`–`0x0130`** joins §2b's inventory block
+(`0x0137`–`0x0163`) and party block (`0x01C4`–`0x01D1`). The census had two guild
+opcodes; this makes six, four of them with a line number.
+
+### 7.4 What this does not establish
+
+* **A changed screen is not a named opcode.** The score says pixels moved; whether they
+  moved because of this opcode is a judgement, and 34 rows are evidence awaiting a
+  reader. Only the three in §7.2 have been read.
+* **QUIET is not "nothing happened" either**, for a weaker version of the same reason:
+  an effect smaller than the client's own drift, or one that fades between two frames,
+  is under this instrument's floor. `0x00C0`'s floating text was measured doing exactly
+  that at a 2.3 s cadence, which is why this pass runs at 1 s.
+* **Still one state, one map.** Level-1 character, empty map, `--no-enemy`. Every §5d
+  caveat applies unchanged.
+
+### 7.5 `0x0191` is a SECOND `DROPPED_CHANNEL`, and it is why one row has no reading
+
+`0x0191` is the one opcode of the 239 with no usable run, and the reason is the result.
+Both of its attempts were REFUSED by `shotloop` because the capture held **two** sends of
+it — and the second send is the client's doing, not the loop's:
+
+| | run 1 (`20260813T142120`) | run 2 (`20260813T151705`) |
+|---|---|---|
+| our send | t = 13.5 | t = 13.5 |
+| game channel gone | t = 26.436 | t = 25.963 |
+| reopened | t = 26.500 | t = 26.028 |
+| second gamesrv capture | `…-c2` | `…-c2` |
+
+The client tore the game channel down about **12.6 s after the send**, opened a new one
+64–65 ms later, and re-ran the spawn — at which point our probe, which fires on spawn,
+sent `0x0191` again on the new connection. **Two of 240 runs did this and both are
+`0x0191`**; the consistent offset across two independent runs is what makes it
+attributable rather than a coincidental timeout.
+
+That is the shape §2b records for `0x019B`, so the set now has **two** DROPPED_CHANNEL
+opcodes rather than one — and like the eight crashes of §7.3, `0x0191` was scored SILENT
+by the wire sweep on an all-zero payload and only behaves this way with a real encoded
+string.
+
+**It is UNMEASURED on the screen and stays that way honestly.** A run whose probe fires
+twice cannot attribute a screen change to one send, so `score_run` refuses it, and no
+picture of `0x0191` is claimed. Reading it needs a probe that fires once per SESSION
+rather than once per spawn — which is a change to `authsrv.run_probe`, not to this pass.
+
+**READ 2026-08-13, and §7.5's closing paragraph above is now WRONG in the useful
+direction — `0x0191` CHANGES THE MAP.** The operator said one of the runs had switched
+maps; scored against the baseline before the send, the third attempt
+(`20260813T153707`) reads:
+
+| frame | vs baseline | what it is |
+|---|---|---|
+| +0.5 s | 0.26% | still the courtyard |
+| +1.7 s → +5.6 s | **93.73%** | a load screen |
+| +8.3 s → +12.2 s | **75.25%** | a DIFFERENT map — stone stairway and canyon wall, not Ascalon City's courtyard, with a different compass |
+
+So every part of the anomaly is one behaviour. The full-window repaint is the map load;
+the channel teardown at ~12.6 s and the reopen 65 ms later are the client connecting to
+the **new instance**; and the second send is our own probe firing on the new instance's
+spawn, because `run_probe` fires per SPAWN. Nothing here is contamination — it is the
+opcode doing something the sweep had no way to name from an all-zero payload.
+
+**The score is attributable even though the run has two sends**, because the second one
+is 16 s after the first and every frame above precedes it. What `score_run` refuses is
+the general case, and rightly: it cannot know that in advance. The reading is recorded
+here by hand rather than by loosening that refusal.
+
+`0x0191` is therefore a **map/instance change**, which makes it the most consequential
+row of this pass: it is the first opcode found that moves the player between maps, and
+`PLAN.md` §3.6's capture campaign wants exactly that.

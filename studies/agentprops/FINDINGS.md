@@ -496,3 +496,54 @@ revive means, from a pool the client's death path had zeroed.
 **Still not established:** whether the floor of 1 is the pool's own clamp (as §1's
 `PROP_DAMAGE` note says: "Floors at 1: cannot kill") or something in this path
 specifically. Both sends landed there, so this run cannot separate them.
+
+---
+
+## 1f. `Health non-zero on resurrect` — the client's own complaint, and what it checks
+
+**[OBSERVED] 2026-08-13.** `Gw.log` carries an `Error:` line our own s2c produces, and it
+has been there the whole time: **49 occurrences across the vault's harness reports** —
+47 `Test Warrior: Health non-zero on resurrect` (the player) and 2
+`Corpse of Hatcher [Collector]: …` (an NPC). `studies/reconstruction` §4.11 counted it at
+19 and listed it as one of three game-logic complaints worth reading; nothing had read it.
+
+**The check is measured, not inferred.** The string is UTF-16 in `.rdata` at
+`0x00A94044`, and exactly one instruction in the image references it —
+`push 0xa94044` at `0x007FE16C`, reached from:
+
+    007FE134  fld  dword ptr [edi + 0x134]      ; A
+    007FE13D  fld  dword ptr [edi + 0x130]      ; B
+    007FE14C  fcom st(1)                        ; ... selects the MINIMUM of A and B
+    007FE161  fldz
+    007FE163  fucompp                           ; min(A, B) == 0.0 ?
+    007FE16A  jnp  0x7fe183                     ; equal -> skip the log
+    007FE16C  push 0xa94044                     ; not equal -> log it, severity 2
+
+So the client requires **`min(f32 @ +0x130, f32 @ +0x134) == 0.0` at the moment a
+character is resurrected**, and says so when it is not. Two adjacent floats on the
+character object, both expected empty on a corpse: the shape of the two pools the death
+path zeroes at `0x008183F0` (§1c's `fldz`).
+
+**What we send, in both revive paths** (`revive_due`, `player_revive_due`):
+
+    AGENT_UPDATE_STATUS(agent, 0)        clears the death bit  -- the resurrect
+    AGENT_PROPERTY_UPDATE_INT(HEALTH_MAX)
+    AGENT_PROPERTY_UPDATE_FLOAT_TARGET(GV_HEALTH, fraction 1.0)
+
+**[UNVERIFIED] Why it fires is NOT established, and two readings survive.** Either the
+resurrect check runs deferred — a frame or a tick after the message that cleared the bit —
+by which time our two pool sends have already landed and refilled it; or something
+leaves a pool non-zero before the bit clears. The three messages leave in one burst
+microseconds apart, and nothing here can separate those from the log alone: `Gw.log`
+lines carry no timestamps, so they cannot be joined to the capture.
+
+**The experiment, which needs one client and about a minute.** Send the death-bit clear
+**alone**, wait a tick, then send `HEALTH_MAX` and the fraction; a run with an enemy
+(`--enemy`) produces a kill/revive cycle every ~13 s, so one hold gives several. The log
+line disappearing is the result; it staying is the more interesting one, because it
+would rule out ordering and point at the pools never having been zeroed.
+
+**Do not "fix" this by reordering on the strength of the reading above.** The severity is
+2 and nothing visible is wrong — the bar refills correctly, OBSERVED twice in §1e — so
+this is a correctness complaint from the client about our message order, not a symptom
+anybody has seen. It earns an experiment, not a guess.

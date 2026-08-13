@@ -171,20 +171,46 @@ lesson ports directly even though no code does.
 
 ---
 
-## 7. The replay oracle
+## 7. The replay oracle — ❌ REFUTED 2026-08-13, and struck
 
-This is the test strategy, and it is better than anything Dream World IX ever had.
+**This section was wrong, and it was wrong for eight days while calling itself the test
+strategy.** It is kept rather than deleted so nobody re-proposes it; the refutation is
+short and it is decisive. Full record:
+[studies/recon/FINDINGS.md](studies/recon/FINDINGS.md) §5.5.
 
-**Take a recorded session. Feed its CtoS stream to your server. Diff your emitted StoC stream
-against the recorded one.**
+*What it used to say:* take a recorded session, feed its CtoS stream to your server, diff
+your emitted StoC against the recorded one — a byte-level regression gate against genuine
+server output. Build it at R2, with a tolerance layer for nondeterministic fields
+(timestamps, ids, RNG) and a ledger of which sessions pass.
 
-That is a byte-level regression gate against genuine server output. It is as close to a real oracle
-as this kind of project gets, and it exists only because of the capture vault — another reason §2
-front-loads it.
+**ArenaNet's own server fails that gate against its own recording.** Same character, same
+account, same map, same session, minutes apart: **11 of 2,633 messages and 95 of 41,997
+bytes identical — 0.2%, diverging at message 6.** The comparison is not broken; the
+identical method reports **99.3% opcode-sequence agreement** (LCS 295/297, histogram cosine
+1.0000) on the very pair that is 5.4% byte-identical. **A gate that cannot go green cannot
+go red for a reason**, which is this project's own standing rule about checks that cannot
+fail, arriving from the other direction.
 
-Build it at R2, the moment you emit your first packet, and grow it continuously. Structure it as:
-per-session replay fixtures, a tolerance layer for legitimately nondeterministic fields (timestamps,
-ids, RNG), and a ledger of which sessions currently pass.
+**The tolerance layer does not save it, and the reason is worth keeping.** The obvious one —
+mask the first three dwords — lifts same-map agreement to 88–94%, but it blanks **45% of
+bytes and 60–68% of messages entirely**, and it scores **76.8–97.5% on *different maps***.
+It is vacuous by its own control. A non-vacuous layer must know which of **540 (opcode,
+field) slots** is an agent id, a timestamp or an RNG draw — and `schema/overrides.json`
+names **zero fields in the whole file**. `test_catalog`'s 477/477 pins field *types*, which
+is precisely the axis that does not help. So the oracle is a semantic-annotation project
+wearing a replay project's clothes, it is larger than the thing it enables, and it returns
+**noise, not partial value, from partial work**.
+
+**The prize was already banked by cheaper means.** `studies/divergence/FINDINGS.md` D1–D11
+*is* the oracle's intended output — the ranked, named list of where our server diverges from
+ArenaNet's — produced by histogram comparison, and `toolkit/authsrv/msgmix.py` is its tool.
+
+**What replaces it, and it must never be called an oracle:** a *structural* load-prefix
+conformance gate. Compare the opcode *sequence* of an instance load rather than its bytes,
+which needs no field semantics and has a built-in negative control — different-map pairs
+score 3.5–20% against same-map 99.3%. Scope caveat, stated because the number is seductive:
+**that 99.3% is n=2 connections on one map.** Segment a second map's load prefix before
+building anything on it.
 
 **But hold the line from Dream World IX: a green gate is not an oracle.** Measured over the Path-D
 arc, 0 of 13 playtest verdicts were predicted by a gate, because every gate scored against marginals

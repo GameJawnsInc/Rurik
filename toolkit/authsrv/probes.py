@@ -2097,11 +2097,24 @@ def _smsgsweep_steps(a, o, dwell=0.4):
     steps = []
     for i, row in enumerate(p["rows"], 1):
         opcode = row["opcode"]
+        # THE OVERRIDES ARE PER ROW, and reading them off `p` is not a near miss -- it is
+        # silent. `plan()` resolves `--set 5=1` and `--set 0x0083:2=1` against EACH opcode
+        # (sets_for) and writes the result into THAT ROW.
+        #
+        # It also wrote a top-level copy for about an hour on 2026-08-12 -- which is the
+        # whole story. `p.get("set")` was correct when --set shipped (280a29b, 10:59) and
+        # became a no-op when the qualified `0x0083:2=1` form replaced the top-level key
+        # with sets_for (fdb63e6, 12:00). This line was not updated, so from then on every
+        # --set run put the DEGENERATE payload on the wire while reporting the experiment.
+        # Nothing downstream could catch it: the plan file is right, the capture is right,
+        # and `record` scores the capture -- so the run reads as a measurement of a payload
+        # that was never sent, and five of studies/smsgsweep/FINDINGS.md 5c's experiments
+        # were retracted for it. Keys are strings because the plan is JSON.
         try:
             values = smsgsweep.apply_set(smsgsweep.degenerate(codec, opcode,
                                         encstring=p.get("encstring")),
                                         {int(k): v for k, v in
-                                         (p.get("set") or {}).items()})
+                                         (row.get("set") or {}).items()})
         except ValueError:
             continue                       # recorded in the plan's `refused` already
         steps.append(Step(quiet if i == 1 else dwell, opcode, values,

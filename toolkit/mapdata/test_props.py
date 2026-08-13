@@ -35,13 +35,25 @@ well and the corpus cannot separate them -- section 6 asserts BOTH bounds, so
 the day an archive holds a map with 256 tag-4 entries this file goes red and
 says the ambiguity is gone.
 
-A MISSING VAULT IS A FAILURE, NOT A SKIP. Sections 0-3 still run and their
+THE CROSS-STREAM ORACLE IS SECTION 9, promoted out of FINDINGS 44's prose:
+the Bloated tag-0 section's declared u32 equals 2 + 48*props + 8*points,
+PREDICTED from the Stripped chunk alone, and beneath the size the two streams
+must agree record for record -- model, position bytes, the scale FORMULA
+(exact, which is what took that reading from INFERRED to
+compiler-corroborated), flags, point count, and a world-coordinate ring.
+`BloatedProps` is read-only by design and section 3d asserts it has no
+encode: five of its six sections are opaque, so a round trip could only be a
+memcpy. Five rival formulas are kept as controls and must match nothing.
+
+A MISSING VAULT IS A FAILURE, NOT A SKIP. Sections 0-3d still run and their
 checks still print, but a run with no archive has measured nothing about
 ArenaNet's format, and the floor turns that into the FAIL it is.
 
     python toolkit/mapdata/test_props.py
     python toolkit/mapdata/test_props.py --sample 20
-    python toolkit/mapdata/test_props.py --all     # 349 maps, 79 checks, ~200 s
+    python toolkit/mapdata/test_props.py --all     # both streams of all 349
+                                                   # maps: 110 checks, 718 s
+                                                   # MEASURED 2026-08-12
 """
 
 import argparse
@@ -59,12 +71,14 @@ import mapbuild  # noqa: E402
 import mapfile as mfile  # noqa: E402
 import props as propmod  # noqa: E402
 from props import (Prop, PropRef, StrippedProps, Undecodable,  # noqa: E402
-                   SIGNATURE, VERSION, TERMINATOR, PROP_FIXED, REF_STRIDE,
-                   TAG_PROPS, TAG_REFS4, TAG_REFS6)
+                   BloatedProps, SIGNATURE, VERSION, TERMINATOR, PROP_FIXED,
+                   REF_STRIDE, TAG_PROPS, TAG_REFS4, TAG_REFS6,
+                   BLOATED_PROP_FIXED, BLOATED_RING_STRIDE)
 import checks  # noqa: E402
 import vaultpath  # noqa: E402
 
 PROPS_CHUNK = 0x10000004
+BLOATED_PROPS_CHUNK = 0x20000004
 MAP_PARAMS_CHUNK = 0x1000000C
 
 # MEASURED 2026-08-12 by a full 349-map sweep of vault/dat_study/Gw.dat. These
@@ -80,18 +94,27 @@ CORPUS_TAG6_MAPS = 262          # 87 maps carry no tag-6 section at all
 CORPUS_MAX_PROPS = 3776
 CORPUS_MAX_REFS4 = 81           # < 256: the tag-4 count width is UNDECIDED
 CORPUS_MAX_REFS6 = 611          # > 255: the tag-6 count width IS decided
+CORPUS_RING_POINTS = 334725     # outline points, so also Bloated ring points
+
+# The compiler's output for a prop with rot bytes (0,0,0): two basis vectors,
+# constant on every such record probed (1,544 of 1,544 over twelve maps;
+# asserted corpus-wide by section 9). MEASURED from the archive, and the kind
+# of measured fact the provenance gate permits in bulk.
+ZERO_ROT_BASIS = struct.pack("<6f", -0.0, -0.0, -1.0, 0.0, 1.0, -0.0)
 
 # The 12-byte chunk `minimal()` has to reproduce, and the row that carries it.
 MINIMAL_ROW = 46197
 MINIMAL_SIZE = 12
 
-# FLOOR: 70, MEASURED from a green default run on 2026-08-12. Sections 0-3c
-# score 58 and need no vault, so a vault-less run goes red: a run with no
-# archive has checked the codec against chunks this file wrote and nothing at
-# all about ArenaNet's format, which is where every claim in props.py lives.
-# `--all` adds section 6's nine population checks on top: 79, and the sweep
-# was MEASURED at 201 s -- budget for that rather than for a round number.
-LEDGER = checks.Ledger("test_props", floor=70)
+# FLOOR: 99, MEASURED from a green default run on 2026-08-12 (was 70 before
+# section 3d and section 9 existed). Sections 0-3d score 81 and need no vault,
+# so a vault-less run goes red: a run with no archive has checked both readers
+# against chunks this file wrote and nothing at all about ArenaNet's format,
+# which is where every claim in props.py lives. `--all` adds section 6's nine
+# population checks and section 9's two totals: 110, and the sweep now reads
+# BOTH streams of every map -- MEASURED 2026-08-12 at 718 s, against the
+# 201 s the Stripped-only sweep took. Budget for that, not for a round number.
+LEDGER = checks.Ledger("test_props", floor=99)
 check = checks.adopt(LEDGER)
 
 
@@ -448,18 +471,22 @@ def section3b(sp):
 
 
 def read_once(ar, mi, picks):
-    """Read every picked map ONCE: its props payload and its rect.
+    """Read every picked map ONCE: both props payloads and the rect.
 
-    Sections 4, 5 and 7 all want the same bytes, and decompressing 349 maps
-    three times cost 15 minutes against the 5 one pass takes. The props chunks
-    are ~4 MB in total, so holding them is cheap.
+    Sections 4, 5, 7 and 9 all want the same bytes, and decompressing 349
+    maps repeatedly cost 15 minutes against the one pass takes. Section 9 is
+    why the HEAD row is read too: the cross-stream oracle needs the Bloated
+    props chunk beside the Stripped one, and the head row is where it lives.
+    That read is what the sweep's extra minutes buy.
     """
     out = []
     for head in picks:
         m = mfile.MapFile.decode(ar.read(mi.partner(head)), strict=False)
         rect = mapbuild.decode_map_parameters(
             m.find(MAP_PARAMS_CHUNK).payload())[0]
-        out.append((mi.partner(head).index, m.find(PROPS_CHUNK).payload(), rect))
+        bm = mfile.MapFile.decode(ar.read(head), strict=False)
+        out.append((mi.partner(head).index, m.find(PROPS_CHUNK).payload(),
+                    rect, bm.find(BLOATED_PROPS_CHUNK).payload()))
     return out
 
 
@@ -471,7 +498,7 @@ def section4(corpus, complete):
     max_props = max_r4 = max_r6 = 0
     versions = set()
     words = set()
-    for _row, blob, _rect in corpus:
+    for _row, blob, _rect, _bl in corpus:
         p = StrippedProps.decode(blob)
         if p.encode() == blob:
             same += 1
@@ -516,7 +543,7 @@ def section5(corpus):
     rival_closed = real_closed = 0
     stride_ok = {s: 0 for s in (1, 2, 4, 6, 8, 20)}
     discriminating = 0
-    for _row, blob, _rect in corpus:
+    for _row, blob, _rect, _bl in corpus:
         if walk_rival(blob):
             rival_closed += 1
         if walk_raw(blob)["end"] == len(blob) - 1:
@@ -607,7 +634,7 @@ def section7(corpus):
     """The oracle: a chunk this codec never opens says where props stand."""
     print(f"\n-- 7. the rect oracle ({len(corpus)} maps) --")
     inside = outside = 0
-    for _row, blob, rect in corpus:
+    for _row, blob, rect, _bl in corpus:
         p = StrippedProps.decode(blob)
         x0, y0, x1, y1 = rect
         for pr in p.props:
@@ -668,6 +695,218 @@ def section3c():
           "props.py reaches the archive through vaultpath, at run time")
 
 
+def section9(corpus, complete):
+    """The cross-stream oracle, on retail: the compiler's own output agrees.
+
+    The strongest check in the arc (FINDINGS 44), promoted out of prose. The
+    prediction is computed from the STRIPPED chunk alone; the number it
+    predicts is a u32 the COMPILER wrote into the Bloated stream. Beneath the
+    size, `corresponds()` requires record-for-record agreement -- model,
+    position bytes, scale formula, flags, point count, world-coordinate ring
+    -- which is the read-back rung e10d will use on a map WE author.
+    """
+    print(f"\n-- 9. the cross-stream oracle ({len(corpus)} maps) --")
+    oracle_hit = oracle_miss = 0
+    clean = dirty = 0
+    n_records = n_ring = 0
+    zero_rot = zero_rot_basis = 0
+    tag6_agree = tag6_disagree = 0
+    discriminating = 0
+    rival_hits = {k: 0 for k in ("fixed 47", "fixed 49", "ring 4", "ring 12",
+                                 "no count word")}
+    for row, blob, _rect, bloated in corpus:
+        sp = StrippedProps.decode(blob)
+        bp = BloatedProps.decode(bloated)
+        n = len(sp.props)
+        pts = sum(p.points for p in sp.props)
+        want = sp.predicted_bloated_tag0_size()
+        if bp.tag0_size == want:
+            oracle_hit += 1
+        else:
+            oracle_miss += 1
+        mism = bp.corresponds(sp)
+        if mism:
+            dirty += 1
+            print(f"   row {row}: {mism[:3]}")
+        else:
+            clean += 1
+        n_records += len(bp.records)
+        n_ring += sum(r.points for r in bp.records)
+        if (bp.sections.get(6) is None) == (sp.refs6 is None):
+            tag6_agree += 1
+        else:
+            tag6_disagree += 1
+        for rec, spr in zip(bp.records, sp.props):
+            if spr.rot == (0, 0, 0):
+                zero_rot += 1
+                if struct.pack("<6f", *rec.basis) == ZERO_ROT_BASIS:
+                    zero_rot_basis += 1
+        if n > 0 and pts > 0:
+            discriminating += 1
+            rivals = {"fixed 47": 2 + 47 * n + 8 * pts,
+                      "fixed 49": 2 + 49 * n + 8 * pts,
+                      "ring 4": 2 + 48 * n + 4 * pts,
+                      "ring 12": 2 + 48 * n + 12 * pts,
+                      "no count word": 48 * n + 8 * pts}
+            for k, v in rivals.items():
+                if v == bp.tag0_size:
+                    rival_hits[k] += 1
+
+    check(oracle_miss == 0 and oracle_hit == len(corpus),
+          f"the oracle: {oracle_hit} of {len(corpus)} Bloated tag-0 sizes "
+          f"equal 2 + 48*props + 8*points, predicted from the Stripped "
+          f"chunk alone", f"{oracle_miss} miss")
+    check(dirty == 0 and clean == len(corpus),
+          f"corresponds(): {clean} of {len(corpus)} maps agree record for "
+          f"record across the two streams", f"{dirty} do not")
+    check(tag6_disagree == 0,
+          "tag-6 presence agrees between the streams on every map",
+          f"{tag6_disagree} disagree")
+    check(discriminating > 0,
+          "the sample contains a map with props AND outline points",
+          f"{discriminating} such maps; without one the oracle and its "
+          f"rivals are vacuous")
+    wrong = [k for k, v in rival_hits.items() if v]
+    check(not wrong,
+          f"no rival formula matches any of the {discriminating} "
+          f"discriminating maps", f"also matched: {wrong}")
+    check(zero_rot > 0 and zero_rot_basis == zero_rot,
+          f"all {zero_rot} zero-rot records carry the constant basis pair",
+          f"{zero_rot_basis} of {zero_rot}; a rot=(0,0,0) prop compiles to "
+          f"(-0,-0,-1),(0,1,-0) on every record probed")
+    if complete:
+        check(n_records == CORPUS_PROPS,
+              f"{CORPUS_PROPS} Bloated records over the corpus, equal to the "
+              f"Stripped prop population", f"got {n_records}")
+        check(n_ring == CORPUS_RING_POINTS,
+              f"{CORPUS_RING_POINTS} ring points over the corpus, equal to "
+              f"the Stripped outline-point population", f"got {n_ring}")
+    else:
+        LEDGER.skip("the Bloated population totals (section 9)",
+                    f"only {len(corpus)} of {CORPUS_MAPS} maps swept; "
+                    f"run with --all for the corpus numbers")
+
+
+def synth_bloated(points=2, tag6=True, scale_byte=0x7F):
+    """A Bloated props chunk built by hand, out of struct.pack.
+
+    Written here, not by props.py, so section 3d's refusal checks are against
+    bytes the module under test had no hand in framing.
+    """
+    ring = [(100.0 + d, 200.0 + d) for d in range(points)]
+    body = struct.pack("<H", 1)
+    body += struct.pack("<H", 5)                       # model
+    body += struct.pack("<fff", 100.0, 200.0, -13.0)   # xyz
+    body += ZERO_ROT_BASIS                             # basis vectors
+    body += struct.pack("<f", scale_byte * (255 / 128) / 256 + 1 / 128)
+    body += b"\x00" * 4                                # the NOT-FOUND tail
+    body += bytes([0, points])                         # flags, points
+    for x, y in ring:
+        body += struct.pack("<ff", x, y)
+    out = struct.pack("<IB", SIGNATURE, VERSION)
+    for tag in (0, 1, 2, 3, 4) + ((6,) if tag6 else ()):
+        sec = body if tag == 0 else b""
+        out += struct.pack("<BI", tag, len(sec)) + sec
+    out += struct.pack("<BI", TERMINATOR, 0)
+    return out
+
+
+def section3d():
+    """The Bloated reader, on bytes this file wrote: parse and refusals."""
+    print("\n-- 3d. the Bloated reader, on our own bytes --")
+    blob = synth_bloated()
+    bp = BloatedProps.decode(blob)
+    check(bp.count == 1 and len(bp.records) == 1,
+          "POSITIVE CONTROL: the synthetic Bloated chunk decodes")
+    rec = bp.records[0]
+    check(rec.model == 5 and (rec.x, rec.y, rec.z) == (100.0, 200.0, -13.0),
+          "model and position parse from their measured offsets")
+    check(rec.points == 2 and rec.ring[0] == (100.0, 200.0),
+          "the ring parses at 8 bytes per point after the 48-byte record")
+    check(struct.pack("<6f", *rec.basis) == ZERO_ROT_BASIS,
+          "the basis vectors parse from +14")
+    check(6 in bp.sections and bp.sections[6] == b"",
+          "an empty tag-6 section is kept, and kept apart from absence")
+
+    sp = StrippedProps(
+        props=[Prop(5, 100.0, 200.0, -13.0, scale=0x7F,
+                    outline=((0, 0), (1, 1)))],
+        refs4=(), refs6=())
+    check(sp.predicted_bloated_tag0_size()
+          == 2 + BLOATED_PROP_FIXED + 2 * BLOATED_RING_STRIDE,
+          "the oracle formula: 2 + 48*1 + 8*2 for one prop, two points")
+    check(bp.tag0_size == sp.predicted_bloated_tag0_size(),
+          "the synthetic pair agrees with the oracle")
+    check(bp.corresponds(sp) == [],
+          "corresponds() returns no mismatches on the matching pair")
+
+    # every way corresponds() must be able to disagree
+    wrong_model = StrippedProps(
+        props=[Prop(6, 100.0, 200.0, -13.0, scale=0x7F,
+                    outline=((0, 0), (1, 1)))], refs4=(), refs6=())
+    check(any("model" in m for m in bp.corresponds(wrong_model)),
+          "corresponds() names a wrong model")
+    wrong_ring = StrippedProps(
+        props=[Prop(5, 100.0, 200.0, -13.0, scale=0x7F,
+                    outline=((0, 0), (2, 1)))], refs4=(), refs6=())
+    check(any("ring" in m for m in bp.corresponds(wrong_ring)),
+          "corresponds() names a moved ring point")
+    fewer = StrippedProps(props=(), refs4=(), refs6=())
+    check(any("count" in m for m in bp.corresponds(fewer)),
+          "corresponds() names a count mismatch")
+    no6 = StrippedProps(
+        props=[Prop(5, 100.0, 200.0, -13.0, scale=0x7F,
+                    outline=((0, 0), (1, 1)))], refs4=(), refs6=None)
+    check(any("tag-6" in m for m in bp.corresponds(no6)),
+          "corresponds() names a tag-6 presence mismatch")
+
+    # refusals, each one byte from the accepted control above
+    bad = bytearray(blob)
+    bad[0] ^= 0xFF
+    check(refuses(BloatedProps.decode, bytes(bad)),
+          "a wrong Bloated signature is refused")
+    bad = bytearray(blob)
+    bad[4] = VERSION + 1
+    check(refuses(BloatedProps.decode, bytes(bad)),
+          "an unknown Bloated version is refused")
+    bad = bytearray(blob)
+    bad[5] = 5
+    check(refuses(BloatedProps.decode, bytes(bad)),
+          "an unknown Bloated tag is refused")
+    check(refuses(BloatedProps.decode, blob[:-5]),
+          "a chunk with its terminator section cut off is refused")
+    check(refuses(BloatedProps.decode, blob + b"\x00"),
+          "a byte of tail after the terminator section is refused")
+    bad = bytearray(blob)
+    bad[-4] = 1                       # terminator's size u32, low byte
+    check(refuses(BloatedProps.decode, bytes(bad)),
+          "a terminator declaring a non-zero size is refused")
+    bad = bytearray(blob)
+    bad[6] += 1                       # tag 0's declared size, low byte
+    check(refuses(BloatedProps.decode, bytes(bad)),
+          "a tag-0 size the record walk cannot close on is refused")
+    bad = bytearray(blob)
+    ring_off = 10 + 2 + 47            # header + count + points byte
+    bad[ring_off] = 3                 # claim 3 ring points, carry 2
+    check(refuses(BloatedProps.decode, bytes(bad)),
+          "a ring running off its section end is refused")
+    no2 = synth_bloated()
+    # rebuild without tag 2 by hand: drop its 5-byte empty section
+    i = no2.index(struct.pack("<BI", 2, 0))
+    check(refuses(BloatedProps.decode, no2[:i] + no2[i + 5:]),
+          "a chunk missing one mandatory section is refused")
+    swapped = bytearray(blob)
+    i1 = swapped.index(struct.pack("<BI", 1, 0))
+    i2 = swapped.index(struct.pack("<BI", 2, 0))
+    swapped[i1], swapped[i2] = swapped[i2], swapped[i1]
+    check(refuses(BloatedProps.decode, bytes(swapped)),
+          "sections out of order are refused")
+    check(not hasattr(BloatedProps, "encode"),
+          "BloatedProps has NO encode",
+          "read-only is the design: five of six sections are opaque, so an "
+          "encode could only be a memcpy wearing a round-trip headline")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description=__doc__.strip().splitlines()[0],
@@ -686,12 +925,13 @@ def main(argv=None):
         guarded(section3, sp)
         guarded(section3b, sp)
     guarded(section3c)
+    guarded(section3d)
 
     dat = args.dat
     if dat is None:
         dat = os.path.join(vaultpath.vault_path("dat_study"), "Gw.dat")
     if not os.path.isfile(dat):
-        LEDGER.skip("everything that needs the archive (sections 4-8)",
+        LEDGER.skip("everything that needs the archive (sections 4-9)",
                     f"no Gw.dat at {dat}; vault resolved to "
                     f"{vaultpath.vault_root()} ({vaultpath.vault_why()}). "
                     f"Sections 0-3 measured the codec against chunks this "
@@ -712,6 +952,7 @@ def main(argv=None):
         guarded(section6, pop)
         guarded(section7, corpus)
         guarded(section8, ar, mi)
+        guarded(section9, corpus, args.all)
     return LEDGER.verdict()
 
 

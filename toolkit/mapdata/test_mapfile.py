@@ -37,9 +37,35 @@ WHAT ELSE IS DELIBERATE.
     does not care about the framing inside a chunk" is measured rather than
     asserted.
 
-MEASURED VALUES ARE THIS ARCHIVE'S. File ids are content keys and travel; MFT
-row indices do not, so the row-pinned section declares a skip when the entry
-count differs.
+MEASURED VALUES ARE ONE FILE'S, AND THE GATE NOW SAYS SO PROPERLY. Sections 3
+and 6 pin a specific map, and something has to stop them measuring a different
+one. Until 2026-08-13 that something was `ar.entry_count == 177342` -- the whole
+archive's MFT row count -- reasoning that "file ids travel, row indices do not".
+The reasoning is right in general and was WRONG about what to gate on, in both
+directions at once:
+
+  * TOO STRICT. The vault's second client snapshot (`vault/client/
+    2026-04-30_b174de1f2d8d`, 177,311 rows) holds the same 349 map heads at the
+    same row indices with the same sizes and the same crcs, head AND partner,
+    349 of 349 -- MEASURED 2026-08-13, and the pinned map's two rows are
+    byte-for-byte the same file there. The gate skipped 13 checks on an archive
+    that could answer every one of them, so the repo's "349 of 349" ran on one
+    witness when a second was sitting in the vault.
+  * TOO LOOSE. An entry count is a property of the archive, not of the file
+    being read. Any copy with 177,342 rows passed it, including one whose row
+    46196 had been relocated, recycled or rewritten -- exactly the four shapes
+    `datcheck.py` exists to detect. The gate could not fail for the reason it
+    was there.
+
+So the gate is now IDENTITY, resolved the way `test_pathchunk.py` already
+resolves its two pins: look the map up by FILE ID, then require the row it lands
+on to be the file we measured -- the MFT's own (stored size, crc) for the head
+and for its Stripped partner. The row index is reported and never required.
+Section 2b is the control on that, and it runs on a bare machine: it builds an
+impostor archive with the old constant's row count and a different file at the
+pinned id, and requires the new gate to REFUSE it while the old rule --
+reproduced inline -- ACCEPTS it, then requires the opposite on a copy with the
+wrong row count and the right file. Both directions, two live answers.
 
 A MISSING VAULT IS A FAILURE HERE, NOT A SKIP. Sections 1 and 2 still run and
 their checks are still printed, but a run with no archive has measured nothing
@@ -52,15 +78,20 @@ about ArenaNet's format, so the floor rule turns them into the FAIL they are.
 
 import argparse
 import os
+import shutil
 import struct
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
-from archive import Archive, FFNA_MAGIC  # noqa: E402
+from archive import (Archive, FFNA_MAGIC, FILE_MAGIC, MFT_MAGIC,  # noqa: E402
+                     ENTRY_SIZE, COMPRESSION_STORED, file_id_table)
 from mapchunks import (MapIndex, compose, encode_dependencies,  # noqa: E402
+                       is_map_head, MAP_HEAD_FLAGS_U16,
+                       MAP_PARTNER_FLAGS_U16,
                        STAGE_BLOATED, STAGE_STRIPPED, TYPE_DATA,
                        TYPE_DEPENDENCIES)
 from terrain import Terrain, TERRAIN_CHUNK, STRIPPED_TERRAIN_CHUNK  # noqa: E402
@@ -72,16 +103,15 @@ import vaultpath  # noqa: E402
 # Corpus constants. MEASURED on this archive 2026-08-11 by a full 698-file
 # sweep. CORPUS_MAPS is not decoration -- it is what stops a wrong row filter
 # from printing "3 of 3" and going green.
-MEASURED_ENTRY_COUNT = 177342
 CORPUS_MAPS = 349
 CORPUS_CHUNKS_BLOATED = 8047
 CORPUS_CHUNKS_STRIPPED = 8047
 
-# Row 46196, the smallest complete map in the archive. The file id is the
-# portable key; the row is pinned separately and skipped on a different copy.
+# The smallest complete map in the archive, and the only thing sections 3 and 6
+# are about. THE FILE ID IS THE KEY -- it is what a server sends and what
+# `file_id_table` resolves -- and everything below is checked against the file
+# that id lands on, never against a row number.
 SMALL_FILE_ID = 0x22E2C
-SMALL_ROW = 46196
-SMALL_PARTNER_ROW = 46197
 SMALL_BYTES = 8471
 SMALL_PARTNER_BYTES = 2951
 SMALL_CHUNKS = 18
@@ -96,12 +126,29 @@ SMALL_TABLE = ((0x20000000, 8), (0x2000000C, 41), (0x20000004, 51),
 SMALL_DEP_REFS = (4, 32, 1)          # Terrain, Water, Environment
 SMALL_TERRAIN_DEP = 0x21000002
 
-KAMADAN_ROW = 22371
+# THE GATE. The MFT's own record of the two rows that map lives in -- stored
+# (compressed) size and crc, head first and Stripped partner second. These are
+# what say "the id landed on the file these constants were measured against",
+# and they are the archive's own bookkeeping rather than anything our decoder
+# produces: a relocated, recycled or rewritten row changes at least one of them,
+# and `datcheck.py`'s four Tier-1 shapes are exactly those events.
+#
+# MEASURED 2026-08-13, IDENTICAL IN THREE COPIES: `vault/dat_study` (177,342
+# rows, build 38797), `vault/client/2026-04-30_b174de1f2d8d` (177,311, the
+# previous build) and `vault/run-live/2026-07-29_221c13772c7a` (177,476). In all
+# three the id resolves to row 46196 with partner 46197 -- so for this pair of
+# builds row indices DO travel, which is the measurement that retired the
+# entry-count gate. The rows are reported, never required; if a later build
+# moves them the pinned sections keep running, and if it changes the FILE they
+# stop, which is the right way round.
+SMALL_STORED = (784, 2941375273)             # head:    size, crc
+SMALL_PARTNER_STORED = (584, 384025036)      # partner: size, crc
 
 # Set from a real green run: a default `python toolkit/mapdata/test_mapfile.py`
-# on this machine executes 50 checks, 25 of them on a bare machine with no
-# vault at all. `--all` adds the two sweep-population checks, for 52.
-LEDGER = checks.Ledger("map file codec", floor=50)
+# on this machine executes 59 checks, 34 of them on a bare machine with no
+# vault at all (section 2b's nine build their own archives). `--all` adds the
+# two sweep-population checks, for 61. Was 50/25 before section 2b existed.
+LEDGER = checks.Ledger("map file codec", floor=59)
 check = checks.adopt(LEDGER)
 
 
@@ -361,21 +408,252 @@ def section2():
           "positive control: the unmutated synthetic file still round-trips")
 
 
+# ------------------------------- section 2b: the control on the gate itself
+#
+# THE OLD RULE, kept as a live function rather than as prose. Section 2b runs it
+# beside the new gate on the same two fixtures and requires them to DISAGREE in
+# both directions -- 177342 was the MFT row count of `vault/dat_study` on
+# 2026-08-11, and comparing against it is exactly what sections 3 and 6 used to
+# do. "The new gate is better" is otherwise a claim about code nobody executed.
+OLD_MEASURED_ENTRY_COUNT = 177342
+
+
+def old_entry_count_gate(ar):
+    """The gate this file carried until 2026-08-13. Reproduced, not described."""
+    return ar.entry_count == OLD_MEASURED_ENTRY_COUNT
+
+
+def build_fake_archive(path, entry_count, rows, id_pairs):
+    """A real Gw.dat-shaped file with a chosen MFT. ZERO ArenaNet bytes.
+
+    Header, then MFT row 2's file-id table stored uncompressed, then the MFT.
+    `rows` is {row_index: (size, flags, next_stream, crc)} and every other row
+    is zeroed, so `alloc.flags` is 0 and `is_map_head` rejects it -- which is
+    what keeps these fixtures from accidentally looking like a 177,000-map
+    archive.
+
+    Row `r` sits at `mft_offset + r * ENTRY_SIZE`: `archive.entries[i]` carries
+    index `i + 1` and the blob starts one entry in. Getting that off by one puts
+    the planted head one row from where the id table says it is, which is a
+    fixture bug that would make the gate look right for the wrong reason -- so
+    section 2b's FIRST check is that the fixture opens and resolves at all.
+    """
+    idblob = b"".join(struct.pack("<II", fid, row) for fid, row in id_pairs)
+    header_size = 0x200
+    data_off = header_size
+    mft_off = data_off + ((len(idblob) + 511) // 512) * 512
+    mft_size = entry_count * ENTRY_SIZE
+
+    mft = bytearray(mft_size)
+    mft[0:4] = MFT_MAGIC
+    struct.pack_into("<I", mft, 0x0C, entry_count)
+    struct.pack_into("<QIHHII", mft, 2 * ENTRY_SIZE,
+                     data_off, len(idblob), COMPRESSION_STORED, 0, 0, 0)
+    for row, (size, flags, nxt, crc) in rows.items():
+        struct.pack_into("<QIHHII", mft, row * ENTRY_SIZE,
+                         0, size, COMPRESSION_STORED, flags, nxt, crc)
+
+    head = bytearray(header_size)
+    head[0:4] = FILE_MAGIC
+    struct.pack_into("<I", head, 0x04, header_size)
+    struct.pack_into("<I", head, 0x08, 512)
+    struct.pack_into("<I", head, 0x10, mft_off)
+    struct.pack_into("<I", head, 0x18, mft_size)
+
+    with open(path, "wb") as fh:
+        fh.write(head)
+        fh.write(idblob)
+        fh.write(bytes(mft_off - data_off - len(idblob)))
+        fh.write(mft)
+    return path
+
+
+def _map_rows(head_stored, partner_stored, head_row=46196, partner_row=46197):
+    return {head_row: (head_stored[0], MAP_HEAD_FLAGS_U16, partner_row,
+                       head_stored[1]),
+            partner_row: (partner_stored[0], MAP_PARTNER_FLAGS_U16, 0,
+                          partner_stored[1])}
+
+
+def _gate_verdict(path):
+    """(accepted_by_new_gate, accepted_by_old_rule, why) for one archive path."""
+    with Archive(path) as ar:
+        mi = MapIndex(ar)
+        head, why = resolve_pinned(ar, mi)
+        return head is not None, old_entry_count_gate(ar), why
+
+
+def section2b():
+    print("\n-- 2b. the gate that decides whether sections 3 and 6 run"
+          " (no vault needed)")
+    tmp = tempfile.mkdtemp(prefix="rurik-mapfile-gate-")
+    try:
+        # (a) THE IMPOSTOR: the old constant's row count, and a different file
+        # at the pinned id. This is the archive the retired gate could not tell
+        # from `dat_study` -- a relocated or rewritten row 46196 keeps the MFT
+        # exactly 177,342 rows long.
+        imp = build_fake_archive(
+            os.path.join(tmp, "impostor.dat"), OLD_MEASURED_ENTRY_COUNT,
+            _map_rows((SMALL_STORED[0] + 16, SMALL_STORED[1] ^ 0xFFFF),
+                      SMALL_PARTNER_STORED),
+            [(SMALL_FILE_ID, 46196)])
+        with Archive(imp) as ar:
+            mi = MapIndex(ar)
+            row = file_id_table(ar).get(SMALL_FILE_ID)
+            found = len(mi.heads)
+        check(row == 46196 and found == 1,
+              "positive control: the impostor opens as a real archive and its "
+              "id table resolves, so any refusal below is the GATE's and not "
+              "the reader's",
+              f"0x{SMALL_FILE_ID:X} -> row {row}, {found} map head(s)")
+
+        new_ok, old_ok, why = _gate_verdict(imp)
+        check(not new_ok,
+              "the gate REFUSES the impostor: right row count, wrong file",
+              (why or "")[:96])
+        check(old_ok,
+              "and the entry-count rule this replaced ACCEPTS it -- which is "
+              "the defect, run rather than described",
+              f"{OLD_MEASURED_ENTRY_COUNT} rows, so it never looked at the row")
+
+        # (b) THE SECOND WITNESS, in miniature: a different row count carrying
+        # the same file. `vault/client/2026-04-30_b174de1f2d8d` really is this
+        # shape -- 177,311 rows, byte-identical map pair -- and the retired gate
+        # skipped 13 checks on it.
+        wit = build_fake_archive(
+            os.path.join(tmp, "witness.dat"), 177311,
+            _map_rows(SMALL_STORED, SMALL_PARTNER_STORED),
+            [(SMALL_FILE_ID, 46196)])
+        new_ok, old_ok, why = _gate_verdict(wit)
+        check(new_ok,
+              "the gate ACCEPTS a copy with a different row count carrying the "
+              "same file", "177311 rows, pinned id resolves to the measured "
+                           "(size, crc)")
+        check(not old_ok,
+              "and the entry-count rule this replaced REFUSES that one, so the "
+              "two disagree in BOTH directions",
+              "177311 != 177342")
+
+        # (c) an archive that does not bind the id at all. `vault/run-live`
+        # binds nine of `dat_study`'s twenty-five bit-31 ids, so this is a real
+        # shape and not a hypothetical.
+        nob = build_fake_archive(
+            os.path.join(tmp, "noid.dat"), 4096,
+            _map_rows(SMALL_STORED, SMALL_PARTNER_STORED, 100, 101),
+            [(0x12345, 100)])
+        new_ok, _old, why = _gate_verdict(nob)
+        check(not new_ok and f"0x{SMALL_FILE_ID:X}" in (why or ""),
+              "an archive that does not bind the file id is refused, and the "
+              "message names the id", (why or "")[:80])
+
+        # (d) the id resolving to a row that is not a map head -- what a
+        # recycled row looks like from here.
+        wrong = build_fake_archive(
+            os.path.join(tmp, "notahead.dat"), 4096,
+            {100: (SMALL_STORED[0], 0, 0, SMALL_STORED[1])},
+            [(SMALL_FILE_ID, 100)])
+        new_ok, _old, why = _gate_verdict(wrong)
+        check(not new_ok and "not a Bloated map head" in (why or ""),
+              "an id resolving to a row that is not a map head is refused",
+              (why or "")[:80])
+
+        # (e) and (f) the reader's own refusals, upstream of the gate. A gate
+        # that only ever sees well-formed archives is not the last line.
+        junk = os.path.join(tmp, "junk.dat")
+        with open(junk, "wb") as fh:
+            fh.write(b"this is not a Guild Wars archive" * 64)
+        try:
+            Archive(junk).close()
+            ok, note = False, "opened anyway"
+        except ValueError as exc:
+            ok, note = True, str(exc)[:60]
+        check(ok, "a non-archive is refused before the gate is reached", note)
+
+        cut = os.path.join(tmp, "truncated.dat")
+        with open(wit, "rb") as fh:
+            body = fh.read()
+        with open(cut, "wb") as fh:
+            fh.write(body[:1024])       # header intact, MFT gone
+        try:
+            Archive(cut).close()
+            ok, note = False, "opened anyway"
+        except ValueError as exc:
+            ok, note = True, str(exc)[:60]
+        check(ok, "a truncated archive is refused before the gate is reached",
+              note)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # ------------------------------------------------- sections 3-7: the archive
 
+def resolve_pinned(ar, mi):
+    """The pinned map's head row, or (None, why) -- BY FILE ID, verified BY FILE.
+
+    The gate sections 3 and 6 stand on. Three questions in order, and each one
+    can genuinely go either way on an archive that is not `dat_study`:
+
+      1. does this archive BIND file id 0x22E2C at all? (`vault/run-live` binds
+         only nine of `dat_study`'s twenty-five bit-31 ids, so "an id every copy
+         carries" is not something to assume);
+      2. is the row it names a Bloated map head?
+      3. is that row THE FILE these constants were measured on -- the MFT's own
+         stored size and crc for the HEAD?
+
+    Only (3) is new, and it is the whole point: the rule it replaced compared
+    the archive's total MFT row count, which is a fact about the copy rather
+    than about the file, so it refused a second witness that agrees to the byte
+    and accepted any tampered copy that still had 177,342 rows. Identity beats
+    census. `test_pathchunk.py` already resolves its two pins through
+    `file_id_table` for the first half of this; what it does not do is check
+    the row it lands on, and section 2b is the control that says why that half
+    matters too.
+
+    THE PARTNER IS DELIBERATELY NOT PART OF THE GATE. The first version of this
+    function verified both rows here -- and that made section 3's partner check
+    unfalsifiable, because nothing that reached it could disagree with it. The
+    head decides whether we are looking at the right map; the partner is then a
+    CLAIM the archive can refute, and section 3 makes it.
+    """
+    row = file_id_table(ar).get(SMALL_FILE_ID)
+    if row is None:
+        return None, (f"this archive does not bind file id 0x{SMALL_FILE_ID:X}")
+    head = mi.by_row.get(row)
+    if head is None or not is_map_head(head):
+        return None, (f"file id 0x{SMALL_FILE_ID:X} names row {row}, which is "
+                      f"not a Bloated map head in this archive")
+    if (head.size, head.crc) != SMALL_STORED:
+        return None, (f"file id 0x{SMALL_FILE_ID:X} resolves to row {row}, "
+                      f"whose stored (size, crc) is {(head.size, head.crc)} "
+                      f"and not the {SMALL_STORED} these values were measured "
+                      f"on -- that is a DIFFERENT FILE, not just a different "
+                      f"copy")
+    return head, None
+
+
 def pinned(ar, mi):
-    print("\n-- 3. the pinned map, row 46196 (smallest complete map)")
-    if ar.entry_count != MEASURED_ENTRY_COUNT:
-        LEDGER.skip("row-pinned checks",
-                    f"archive has {ar.entry_count} rows, these values were "
-                    f"measured on {MEASURED_ENTRY_COUNT}; file ids travel, "
-                    f"row indices do not")
+    print("\n-- 3. the pinned map, file id 0x%X (smallest complete map)"
+          % SMALL_FILE_ID)
+    head, why = resolve_pinned(ar, mi)
+    if head is None:
+        LEDGER.skip("the pinned map's checks", why)
         return
-    head = mi.by_row[SMALL_ROW]
     partner = mi.partner(head)
-    check(partner is not None and partner.index == SMALL_PARTNER_ROW,
-          "the map's Stripped partner is the row nextStream names",
-          f"row {partner.index if partner else '-'}")
+    print(f"    resolved to row {head.index}, partner row "
+          f"{partner.index if partner else '-'}, "
+          f"in a {ar.entry_count}-row archive")
+    # The partner is reached through `nextStream` and is then required to BE the
+    # file we measured. Pinning its row index (which is what this check used to
+    # do) would say the same thing on this archive and nothing at all on any
+    # other; pinning its stored bytes says it on every copy, and a misread
+    # `nextStream` lands on some other row whose crc is not this one.
+    told = ("no partner" if partner is None else
+            f"row {partner.index}, {partner.size} stored B, "
+            f"crc 0x{partner.crc:08X}")
+    check(partner is not None
+          and (partner.size, partner.crc) == SMALL_PARTNER_STORED,
+          "the map's Stripped partner is the row nextStream names, and the MFT "
+          "says it is the file we measured", told)
 
     data = ar.read(head)
     mf = MapFile.decode(data)
@@ -544,13 +822,13 @@ def section45(ar, mi, picks, want_all):
 
 
 def section6(ar, mi):
-    print("\n-- 6. the same controls on ArenaNet's bytes, row 46196")
-    if ar.entry_count != MEASURED_ENTRY_COUNT:
-        LEDGER.skip("retail negative controls",
-                    f"pinned to row {SMALL_ROW} on a {MEASURED_ENTRY_COUNT}-row "
-                    f"archive; this one has {ar.entry_count}")
+    print("\n-- 6. the same controls on ArenaNet's bytes, file id 0x%X"
+          % SMALL_FILE_ID)
+    head, why = resolve_pinned(ar, mi)
+    if head is None:
+        LEDGER.skip("retail negative controls", why)
         return
-    data = ar.read(mi.by_row[SMALL_ROW])
+    data = ar.read(head)
 
     bad = set_size_field(data, len(SMALL_TABLE) - 1, SMALL_TABLE[-1][1] + 4)
     try:
@@ -596,6 +874,20 @@ def section6(ar, mi):
 def section7(cen_b, cen_s, n_maps):
     print("\n-- 7. what the round-trip is actually evidence about")
     both = add_census(dict(cen_b), cen_s)
+    # `corpus()` only accumulates a census for a file it DECODED, so a sweep
+    # where every file failed leaves this dict empty and every lookup below is a
+    # KeyError. That is a red run reported as a traceback, with no verdict line
+    # and no ledger -- which is what happened the first time anything pointed
+    # `--dat` at a walkable archive holding no maps (section 2b's impostor, run
+    # end to end 2026-08-13). An instrument that dies on its input is not an
+    # instrument, so an empty census is a FAILING CHECK that names itself.
+    if "total" not in both:
+        check(False,
+              "the byte census accounts for every byte of every file swept",
+              f"the census is EMPTY: not one of the {n_maps} sampled maps "
+              f"decoded, so sections 4-5 have already gone red and there is "
+              f"nothing here to weigh")
+        return
     tot = both["total"]
     check(tot > 0 and both["reconstructed"] + both["carried"] + both["framing"]
           == tot,
@@ -638,6 +930,7 @@ def main(argv=None):
     print(__doc__.strip().splitlines()[0])
     section1()
     section2()
+    section2b()
 
     dat = args.dat
     if dat is None:

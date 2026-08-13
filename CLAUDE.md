@@ -295,7 +295,15 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
-  go red ALONE, because a gate that reddens at everything is as useless as one
+  go red ALONE. **One of the ten was STRICTER THAN THE CLIENT and was corrected
+  2026-08-13**: "no row >= 16 with USED clear" refused ArenaNet's own shipped
+  archive -- the owner's `C:\gw\Gw.dat`, opened by the retail client every day,
+  carries row 35301 that way and pre-flight answered REFUSE, 9 of 10, while
+  `vault/dat_study/Gw.dat` has none and passed. A USED-clear row is a fault only
+  when something still POINTS at it; unreferenced, it is a SPARE, which is the
+  mechanism `datplan` already records the client using when it claimed 35301.
+  The pair that pins it is the same row in the same state differing only in the
+  reference, so a regression to reading the flag alone moves exactly one of them, because a gate that reddens at everything is as useless as one
   that reddens at nothing. The isolation half is what earns the run: the fixture
   was relaid twice to make it possible, and it caught the first sabotage of the
   reserved-row rule tripping two unrelated items. It also pins the four shapes of
@@ -312,6 +320,45 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   is a result, so an archive too broken to have findings must exit 2 -- it exited
   1 from an uncaught traceback, and a reader of the code would have reported the
   crash as "the row moved"),
+  `toolkit/mapdata/test_atex.py` (the ATEX texture container, and first the write
+  guard `--make` never had: `atex.py` was the only binary writer in
+  `toolkit/mapdata/` reaching `open(path, "wb")` straight off argv with no refusal
+  of any kind, so `--make C:\gw\Gw.dat` would have truncated the owner's 4.2 GB
+  archive. Three refusals -- `C:\gw`, `vault/dat_study`, EVERY checkout of this
+  repo -- each with a POSITIVE CONTROL that an ordinary scratch path is still
+  allowed, because a guard that refuses everything protects nothing and the tool
+  then never runs. **The check that would have caught the original defect is the
+  syntax-tree one, not the refusals**: a guard can exist, be documented and be
+  greppable while never being CALLED, so section 3 asks the AST whether every
+  write-mode `open()` takes a `resolve_out`'d path, and BUILDS two saboteurs out of
+  one-line edits to the live source -- the pre-fix file restored verbatim from git
+  (4 FAILs, naming `open(a.make, "wb")` by line) and the subtler one where the guard
+  IS called and its result discarded (2 FAILs, with section 2's eight refusal checks
+  all still GREEN, which is the whole argument for the section). A third sabotage, a
+  `resolve_out` that refuses everything, reddens exactly the three positive controls
+  -- and it found a real defect here, since `Refused` is a SystemExit and a bare call
+  in a control is NOT caught by `except Exception`; it killed the run and printed no
+  banner, the same trap `vaultpath.require_dir` set for `test_stripbuild.py`.
+  `atex.parse` had no test at all and sections 4-5 are its first. The load-bearing
+  claim is deliberately not "it parsed": `parse` RETURNS a non-closing container
+  rather than refusing one, so the assertion is that the record walk closes to the
+  EXACT final byte, checked by a second walker written here out of `int.from_bytes`,
+  with the same walk started at 11, 13 and 20 as controls -- **400 of 400 close at 12
+  and 0 of 400 at any of the three**, and 20 is the header size `atex.py`'s own
+  docstring records as REFUTED, so it is ArenaNet's bytes killing a rival rather than
+  our decoder agreeing with itself. **The ATTX asymmetry is the finding**: `parse`
+  raises on 106 of 106 ATTX rows and 0 of the 400 ATEX beside them, and the cause is
+  NOT the magic -- a relabelled synthetic ATEX parses and closes. An ATTX row is an
+  ATEX container with a `ffna` type-7 trailer of **exactly 21,923 bytes on 106 of
+  106**, whose CONTENTS are 106 distinct sha256s -- a fixed-size per-texture payload,
+  not one shared blob, asserted both ways because the loose reading would have been
+  filed as a shared constant -- and cutting the trailer off leaves a container that
+  closes exactly, 106 of 106. Nothing here teaches `parse` about ATTX; the day
+  someone does, this file goes red and names what changed. Rows are found by a
+  partial decompression (`gwdat.decompress(head, out_size=16)`, ~0.5 ms a row against
+  ~30 ms), which is what makes the strided sweep affordable. Sections 0-3 need no
+  vault and score 33 against a floor of 50. ~26 s; `--all` peeks all 177,341 rows and
+  is ESTIMATED, not measured, at ~30 minutes),
   `toolkit/mapdata/test_rebloat.py` (rung E3's driver, which is the only tool
   here that deliberately DESTROYS a payload — it zeroes a map's Bloated stream
   so the client is forced down the re-bloat path — so almost every check is a
@@ -358,9 +405,29 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   percentage; the generated dependency chunk lands byte-identical to ArenaNet's,
   which the archive could have refused. **Since 2026-08-12 props is GENERATED**,
   so BORROWED is Header and Zones alone -- 42 bytes, down from 54, and 98.20%
-  of the map ours. Sections 0-3c score 27 on placeholder constants of our own
-  and need no vault, against a floor of 40 -- and 27 is the first number that
-  path ever printed, because `vaultpath.require_dir` raises SystemExit, a
+  of the map ours. **And since the same day the props-deps pairing is a rule
+  with teeth (section 3d, for rung e10d): a build placing a prop must pass
+  `prop_dep_ids` -- `model` is an INDEX into chunk 0x11000004, generated from
+  run-time file ids into retail's own slot right after the props chunk -- and
+  a build without props must NOT, because the three zero-prop retail maps are
+  exactly the three without the chunk. Both directions refuse, and a model
+  index past the list is refused too, since the client's failure mode for an
+  unresolvable model has never been measured. And since 2026-08-13 section 3e
+  pins the ENVIRONMENT pair (rung e10i): env_payload and env_dep_ids together
+  or not at all, landing after the Path chunk in retail's slot, the payload
+  counted BORROWED because the chunk is not understood — and since
+  2026-08-13 the SOUND pair (rung e10j) under the same rules. Section 3f
+  (rung e10l) pins the AUTHORED path: the same two parameters also take a
+  typed `EnvChunk`/`SoundChunk`, encoded here and counted GENERATED, with
+  raw bytes still counted BORROWED as the control -- one path swallowing
+  the other would make the census meaningless. That is earned rather than
+  assumed: the client compiled an env chunk this toolkit assembled with a
+  GROWN zone list, so every byte after tag9 shifted, and carried it
+  verbatim.** Sections 0-3f
+  score 46 on
+  placeholder constants of our own and need no vault, against a floor of 59 --
+  and the vault-less score (27 then, 46 now) was the first number that path
+  ever printed, because `vaultpath.require_dir` raises SystemExit, a
   BaseException, so the `except Exception` around it never fired: a vault-less
   run died before the verdict, its `LEDGER.skip` had never executed once (one
   argument where it takes two), and the 30 the comment claimed was a number
@@ -386,9 +453,21 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   is 285,670 of 285,670 prop positions inside their map's rect. What the corpus
   CANNOT decide is asserted too: tag 6's count must be a u16 because one map
   holds 611 entries, while tag 4's largest is 81, so its width is undecided and
-  the check says so -- if it ever reddens the ambiguity is gone. Sections 0-3c
-  need no vault and score 58 against a floor of 70; `--all` is 79 checks in
-  ~200 s, one pass over the archive rather than the three the first draft took.
+  the check says so -- if it ever reddens the ambiguity is gone.
+  **And since 2026-08-12 section 9 is the CROSS-STREAM oracle, FINDINGS 44's
+  strongest result promoted out of prose**: the Bloated `0x20000004` tag-0
+  section's declared u32 equals `2 + 48*props + 8*points` PREDICTED from the
+  Stripped chunk alone -- 349/349 under `--all`, five rival formulas matching
+  0 of 335 discriminating maps -- and beneath the size the two streams agree
+  record for record via `BloatedProps.corresponds()` (model, position bytes,
+  flags, point count, world-coordinate ring, and the scale FORMULA holding
+  EXACTLY, which took that reading from INFERRED to compiler-corroborated).
+  `BloatedProps` is READ-ONLY and section 3d asserts it has no encode --
+  five of its six sections are opaque, so a round trip could only be a
+  memcpy. Sections 0-3d
+  need no vault and score 81 against a floor of 99; `--all` is 110 checks
+  reading BOTH streams of every map, MEASURED 2026-08-12 at 718 s against the
+  201 s the Stripped-only sweep took.
   **The client was read AFTERWARDS and agreed**, which is the shape that makes
   this worth trusting: the framing came out of the archive alone, and the
   disassembly of `0x0073E260` -- a DIFFERENT pipeline from the one `PROPS.md`
@@ -430,7 +509,107 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   down the file, which is what the broken code produced, so the ordering check
   passed against the defect),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
-  `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
+  `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
+  2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
+  its worst case in the band a hostile chases in was **336 ms, 6.7 tick periods, 11 of
+  1,500 routes over a whole 50 ms tick**, which is an intermittent world freeze and the
+  hardest failure here to attribute. Section 10 re-measures that rather than quoting
+  it: the pre-fix `walkable`, `_string_pull` and component pre-check are reconstructed
+  IN the test, three instance attributes over the SAME route() body, so BEFORE and
+  AFTER are two live answers in one process. p50 0.395 -> 0.163 ms, max 346.6 -> 19.8,
+  **0 of 1,500 over a tick**. The timing table is deliberately the LEAST of it, because
+  a router that quietly returns None or a path through a wall is FASTER: every returned
+  path is re-run through route()'s own consecutive-`clip` gate over the WHOLE set, the
+  None rate is measured before and after on the same pairs and must be EQUAL, and path
+  length is compared mean and worst. The sabotage is built and run -- a route() that
+  skips smoothing entirely is faster than the real one (max 10.5 ms against 19.8) and
+  PASSES the timing check, so the length check is the only thing standing there, and it
+  goes red at mean 2.80 and worst 52.6. Five further sabotages were built against the
+  fix and five redden; the sixth, `CELL_SLACK = 0.0`, SURVIVED, and `pathmap.py` says
+  so at the constant rather than implying a check nobody has. The load-bearing claim is
+  that none of it changed an answer: **0 of 1,500 paths differ from what the old code
+  returned**, on Kamadan too. Two checks earned their own design notes -- the vacuity
+  guard is a TOTAL-time ratio because the `max(before) > 3 ticks` version reddened on
+  SAMPLE SIZE and was the only red in a sabotage that broke nothing, and the latency
+  assertion re-times its candidates best-of-5 because the first version read 17.9 ms
+  green and 52.4 ms red on identical code while four other agents' suites ran in the
+  same worktree. Floor 62 against a green 64; ~105 s, `--routes` shrinks section 10),
+  `toolkit/mapdata/test_deploy.py` (rung G's one command, `deploy.py`, which
+  takes an area row in `content/areas.toml` from geometry to a map the retail
+  client compiles. It is an ORCHESTRATOR -- nearly every line it runs belongs to
+  a module with its own test -- so this file checks only what is true of the
+  COMPOSITION, and each of its three sections is a defect the first runs of the
+  command actually had. **The two kinds of borrowing are different**: structural
+  constants (Header, Zones) must come from a map shaped like ours, the biome
+  (textures, sun, env, sound) from wherever you like, and taking both from
+  Pre-Searing pulled in its 7,208-byte Zones chunk and built an 11,115-byte map
+  for a 4,608-byte reservation. **The client must own the archive you armed** --
+  every run directory has its own `Gw.dat`, and arming the C2 copy while
+  launching the default client compiled nothing. That one is asserted on the
+  SYNTAX TREE, and its NEGATIVE CONTROL is the check that earns the section: the
+  first version asked whether `main()` contained any `join(dirname(dat), ...)`,
+  which it does TWICE because the output path defaults that way, so it returned
+  True against a sabotaged source and could not fail. The test now runs that
+  exact sabotage and requires the answer to flip. Sections 0-1 and 3 need no
+  vault and score 10 against a floor of 14),
+  `toolkit/mapdata/test_soundchunk.py` (the Sound chunk `0x10000012`, the map's
+  ambient-sound layer -- the second of the two chunks rung E10 could only BORROW,
+  now decoded and re-encoded byte-identically, **349 of 349**, 27 checks under
+  `--all` and 23 by default. The record is a fixed 24 bytes, so byte-identity is
+  the WEAK half: section 2 builds the saboteur that stores the record count `k`
+  and replays it, and the mutation control appends an emitter and requires the
+  emitted `k`@14 and the payload length to move -- read back by a walker written
+  out of `int.from_bytes`. The load-bearing check is the cross-chunk oracle: every
+  emitter's `(x, y)` lands inside the map's Map Parameters rect (318/318), from a
+  chunk this codec never reads, with a 1-byte-shifted read as the control that
+  collapses to 0/318; and the client's own load-time invariant `r_lo <= r_mid <=
+  r_hi` holds 318/318. The whole layout was corroborated against the loader at VA
+  `0x0076afc0` -- the three radii are SQUARED at load for a sqrt-free distance
+  compare, and no magic dispatch means a texture-referencing emitter is not
+  decoded here. Sections 0-2 need no vault and score 18 against a floor of 21),
+  `toolkit/mapdata/test_envchunk.py` (the Environment chunk `0x10000009`, the sky,
+  fog, ambient light and horizon water -- the chunk rung (e10i) proved was the
+  difference between a black void and a lit world, borrowed whole then and now
+  decoded. Re-encodes **349 of 349** byte-identically, 40 checks under `--all` and
+  28 by default. The codec keeps record interiors opaque (the loader itself stores
+  tag0/1/3/5/6/8 records as raw {ptr,count} and decodes no colour and none of
+  tag6's ten floats -- there is NO `1/101` constant in the image, so the authored-
+  slider reading is authoring-time only), so byte-identity is the weak half and the
+  section COUNTS are what the codec must re-derive: section 2's saboteur stores and
+  replays them, and the mutation control grows the zone list and requires the
+  emitted count to move. The framing is a set of PARALLEL ARRAYS (tags 0-7) plus a
+  spatial ZONE list (tag9) that binds one record of each array to a world-space
+  circle -- confirmed against the loader at `0x0071ef70`, whose two `EnvDataImport`
+  asserts name the zone array `envArray`. Three corpus-only readings were CORRECTED
+  by the disassembly and each is a thing a wrong reading gets wrong on some map: the
+  header is 8 bytes not 5, the tag5-width `flag` is the header word at offset 6 not
+  tag0's count (they disagree on 168/349), and tag8 is a real 17-byte section not
+  part of tag7's tail -- and tag8 turned out to be the map's DEFAULT SELECTOR TUPLE
+  (eight u16, one per aspect array) plus the sun byte, which is what makes the
+  architecture close: a default and a zone are the same kind of object.
+  **A fourth correction is the one to learn from**: tag6, the 57-byte record, was
+  called "the main environment record" on the strength of its SIZE alone, and the
+  consumer disassembly says it is the WATER record -- `MapWater`'s parameter block,
+  whose `+0x05` is the water plane height (the one float the zone blender refuses
+  to interpolate) and whose `+0x00` is a 0..3 mode enum the loader validates with
+  `cmp eax,3; ja <abort>`. Inferring a name from a size is not a measurement.
+  Two oracles, each from a chunk this codec never reads: every dep-reference field
+  (tag0@8, tag4, tag5's four slots, tag6@53/@55) is 0xFFFF or below the length of
+  the sibling `0x11000009` dep list -- **0 of 5,897 out of bounds**, while the same
+  fields read one byte early blow the bound 5,087 times; and **tag8's sun byte
+  predicts the STRIPPED TERRAIN chunk's own `angle_index`** (the two quantise one
+  authored angle at a ratio of exactly 127/32) on **313 of 349** maps within a
+  quantum, with the neighbouring byte scaled identically scoring 0/349 as the
+  control. That second one is quoted as the tolerance figure on purpose: the
+  exact-match count is ROUNDING-DEPENDENT (`b=48` lands on exactly 190.5, and two
+  maps carry it), so the file states the tie rather than picking 307 or 308 quietly.
+  Sections 0-2 need no vault and score 17 against a floor of 28. Since
+  2026-08-13 it also pins the NAMED aspects (FINDINGS 55): tag1 is post-process
+  and tag3 the directional light, named from the client's own shader-constant
+  strings rather than by us, and the two checks that carry those names are corpus
+  population facts -- saturation is 1.0 on 648 of 741 records and the tint is off
+  on 571, which is the shape of a DEFAULT and is what a rival reading would not
+  produce),
   `toolkit/mapdata/test_pathchunk.py` (the pathing chunk's WHOLE-CHUNK codec: a
   retail `0x20000008` decoded to typed values and re-encoded byte-identically,
   **349 of 349** under `--all`, 8 by default. Nothing declared is stored --
@@ -546,8 +725,18 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   own; a sha256 manifest whose negative control flips one mantissa bit of one height
   and must be caught; and a refusal that keeps derived ArenaNet bytes out of the
   working tree — which shipped broken, one `dirname` short, and wrote a 745 KB height
-  field into the repo before the test pinned the resolved root. Sections 0-4 need no
-  vault and score 65 against a floor of 108, so a vault-less run goes red. ~31 s),
+  field into the repo before the test pinned the resolved root.
+  Section 6 lost its entry-count gate on 2026-08-13 and the reason is the lesson: it
+  skipped whole unless the archive had exactly 177,342 MFT rows "because these row
+  constants were measured on it", and it has no row constants -- every row it touches
+  comes from `sample_rows`, which selects on `flags == 259` and never on an index. The
+  gate could not fail for the reason it was there and did nothing but hide four checks
+  and redden the floor on `vault/client/2026-04-30_b174de1f2d8d`, which holds the same
+  349 pairs at the same rows with the same crcs. What guards the section is the
+  population assertion on the next line -- 349 rows with flags 259 -- which the
+  impostor archive of `test_mapfile`'s section 2b reddens at 1. Sections 0-4 need no
+  vault and score 65 against a floor of 108, so a vault-less run goes red. ~31 s, and
+  108 of 108 on BOTH vaulted archives),
   `toolkit/mapdata/test_blenderimport.py` (the Blender half: it runs
   `tools/blender/import_gwmap.py` headless as a SUBPROCESS — the test is stdlib-only
   and never imports `bpy`, which is why the importer may live outside `toolkit/` —
@@ -621,7 +810,33 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   different encoding and must come back CARRIED. Sections 1-2 build a whole map file
   out of nothing and need no vault; the run reports the reconstructed/carried byte
   split, which is 34.92% / 65.07% and is the honest half of the result.
-  `--all` is ~13 minutes),
+  **And since 2026-08-13 the pinned sections are gated on
+  IDENTITY rather than on a census, which is what let a second archive in.** The old
+  gate compared the whole archive's MFT row count to 177,342 and skipped 13 checks
+  otherwise, reasoning that "file ids travel, row indices do not" -- right in general
+  and wrong in both directions here. TOO STRICT: `vault/client/2026-04-30_b174de1f2d8d`
+  (177,311 rows) holds the same 349 map heads at the same indices with the same sizes
+  AND the same crcs, head and partner, **349 of 349**, and its pinned pair is
+  byte-for-byte the same file -- MEASURED 2026-08-13, and `vault/run-live` agrees as a
+  third. TOO LOOSE: a row count is a fact about the COPY, so any tampered archive with
+  177,342 rows passed -- relocation, recycle, rewrite and sibling relink all leave it
+  alone. `resolve_pinned` now looks the map up by FILE ID (`test_pathchunk`'s pattern)
+  and requires the row it lands on to carry the MFT's own measured (stored size, crc);
+  the row is printed, never required. The PARTNER is deliberately NOT in the gate --
+  the first version verified both rows there and made section 3's partner check
+  unfalsifiable, so partner identity is now a claim the archive can refute. Section 2b
+  is the control and needs no vault: it BUILDS an impostor archive carrying the old
+  constant's row count and a different file at the pinned id, requires the new gate to
+  REFUSE it while the retired rule -- reproduced inline as a live function -- ACCEPTS
+  it, then requires the opposite on a 177,311-row copy holding the right file, so the
+  two disagree in both directions from two live answers rather than from prose. Four
+  more refusals sit under it (an unbound id, an id landing on a non-head, a
+  non-archive, a truncated archive), and running the impostor END TO END is what found
+  section 7's KeyError -- a sweep where every file failed left the census empty and
+  reported a red run as a traceback with no verdict and no ledger. Default is 59 checks
+  against a floor of 59, 34 of them on a bare machine (was 50/25). `--all` is
+  ~13 minutes, and **has not yet been run against the second archive** -- the gate
+  makes the 698-file second witness reachable, it does not make it measured),
   `toolkit/mapdata/test_mapbuild.py` (the AUTHORING direction: a whole Bloated map
   assembled from typed parameters -- dims, a height field, a tile table, a navmesh --
   and row 46196 coming back BYTE-IDENTICAL, 8,471 B. That equality is the weaker half
@@ -685,7 +900,35 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   arm's formatting and went red on a line break. Four negative controls must
   go red, including an `elif` in the else's place and an `else` that calls
   something else, since `else: pass` satisfies "has an else" while restoring
-  the exact silence D9(a) is about. No vault, no socket, no client),
+  the exact silence D9(a) is about. **And since 2026-08-13 it checks the OTHER half
+  of D9(a), which is that making a drop VISIBLE is not the same as not dropping it**:
+  2,858 of 17,770 framed c2s (16.1%) reached that `else` over 425 loopback
+  connections, and FOUR of them were opcodes `overrides.json` had already NAMED --
+  `0x0039` INTERACT (3.2% of ArenaNet's own live c2s and NO arm at all, while
+  `0x0033`, which HAS one, has been sent ZERO times in all 17,770 since 2026-08-06
+  and is kept anyway because nobody knows why it stopped), `0x0092`
+  MISSION_MASK_REPORT (803), `0x00C1` TARGET_SELECT (363) and `0x0040` ROTATE_PLAYER
+  (108). It is 8.9% after the arms. The tripwire that would have caught the class is
+  ASYMMETRIC on purpose: an arm on an opcode the SCHEMA does not know is a hard
+  failure, since the framer refuses the message and the arm is dead code that reads
+  as coverage; while a NAMED opcode with no arm is a REPORT against
+  `DROPPED_ON_PURPOSE`, six rows each carrying its reason -- 194 layouts against
+  sixteen arms means demanding an arm per layout would be a permanently red test that
+  gets deleted, but a name costs somebody a binary read or a narrated live session and
+  losing one silently is the defect. The allowlist is checked in BOTH directions,
+  because a row for an opcode that IS handled is inert today and silently re-permits
+  the drop the day the arm goes. Existence and EFFECT are asked apart:
+  `elif opcode == X: pass` satisfies "0x00C1 has an arm" and drops the message just as
+  completely -- section 5's `else: pass` lesson one level down -- so a separate check
+  requires each new arm's OWN body to assign into `state`. Seven sabotages were BUILT
+  AND RUN and all seven redden, three of them reddening exactly ONE check each. The
+  one behavioural check is on the trap that has now cost this project three times:
+  `0x0040`'s two fields are `dword` and hold float32, so the +inf sentinel reads as
+  2,139,095,040 if you take the number instead of the bits. No vault, no socket, no
+  client -- deliberately, and it constrains what may be asserted: the capture tree is
+  append-only and GROWS WHILE THE TEST RUNS (`0x00C1` went 363 to 429 between two
+  reads minutes apart), so every corpus count above is dated prose and not one of them
+  is an assertion. 45 checks, ~1 s),
   `toolkit/authsrv/test_ping.py` (the `0x000C`→`0x0009`→`0x000D` round trip that
   drives the client's net graph, and the three places a plausible
   implementation quietly LIES: sending a second request while one is
@@ -786,13 +1029,117 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   **155 opcodes over 12 live connections, and 324 remaining**. Its control is the defect
   that was made writing it -- filtering channels by `:6112` cut the corpus to 52 and said
   so without complaint, because ArenaNet serves the GAME channel on port 80 in 10 of the
-  12 canon connections),
+  12 canon connections.
+  **Section 9 (2026-08-13) is the REGIME**, and it exists because a row was a
+  measurement of two things while its key named one. An all-zero send and an
+  `--encstring` send are different experiments -- 0x0033, 0x009E, 0x00B9 and 0x00C0 each
+  crash the client on an empty payload and go SILENT carrying a real encoded string, two
+  of them naming a guard that is ABOUT the string -- and `record` is first-write-wins, so
+  nine runs that measured the clearance printed `recorded 0` and changed nothing. Only a
+  key with a regime in it could hold both, which is why re-running the recorder was never
+  going to fix it. **The axis is the PAYLOAD, not the flag**, read out of the capture's
+  own `plain` bytes: 87 opcodes carry a `string16`, only **86** can be filled -- 0x019D's
+  sits behind a `nested_struct`, which `degenerate` stops at, so an `--encstring` run of
+  it is an ALLZERO experiment; the field-scan version called it encstring and this
+  section's predictor-versus-wire check (974 comparisons, two code paths sharing nothing)
+  caught it on its first run -- and the remaining 401 go out byte-identically whatever the
+  flag says, so a flag-keyed ledger would file 401 duplicate rows for one experiment. The
+  load-bearing check is the SABOTAGE: the regime-less `record` is reproduced inline, run
+  on the same two fixtures, and required to lose one of the two results, on the TABLE path
+  and again on the CRASH path -- the four rows this item is about were written by the
+  crash branch, so a regime on the table rows alone would have fixed nothing. Five module
+  sabotages were built and run and all five redden (7, 1, 12, 1 and 1 check). Also: an
+  old-format row loads, is readable, and is named UNMIGRATED rather than read as
+  all-zero; `migrate` loses NO row, REFUSES a key collision instead of letting one win,
+  and writes `unknown` EXPLICITLY where a row's capture is a note rather than a file (10
+  of the 334 -- the hand-attributed table-less pass, and a refusal branch that fires ten
+  times on real data is why it is there); and the write is `os.replace` with a
+  stale-stamp refusal, with the positive control that a current stamp is allowed, because
+  the ledger is a live vault artifact another session reads while a sweep is running.
+  Floor 99, was 64; sections 0 and 2-7 and 9 need no vault and score 94).
+  **Section 10 (2026-08-13) is the one that is not about smsgsweep at all**, and it exists
+  because every other section runs INSIDE the module: `plan()` resolves the `--set`
+  overrides, `apply_set` applies them, `encodable()` encodes them, so the module agreed
+  with itself perfectly while **`--set` was putting the DEGENERATE payload on the wire**.
+  The consumer is `probes._smsgsweep_steps`, and the regression is the shape worth
+  remembering -- `p.get("set")` was CORRECT when `--set` shipped and became a no-op an
+  hour later when the qualified `--set 0x0083:2=1` form moved the overrides per ROW; one
+  side of a two-module contract moved and the other was not touched, so nothing errored
+  and nothing downstream could tell: the plan file is right, the capture is right, and
+  `record` scores the capture, so a `--set` run reads as a measurement of the all-zero
+  payload wearing the label of the experiment. **Five of `studies/smsgsweep/FINDINGS.md`
+  §5c's gate experiments were retracted for it**, settled from the server's own `plain=`
+  hexdumps -- the bytes were recorded all along, nothing was reading them. Note what
+  section 9 above could NOT do: it checks `planned_regime` against smsgsweep's own
+  encoder, so it agrees with the module and never reaches the probe. The section joins
+  the two halves and goes through a REAL FILE, which is not decoration -- five sabotages
+  were BUILT AND RUN (3, 1, 2, 3 red; the `rows[0]`-for-every-row one reddens the per-row
+  check ALONE) and the fifth breaks the TEST instead of the source: the same missing
+  `int(k)` cast, handed an in-memory plan with int keys, is invisible and **every check
+  PASSES** while the first real run raises TypeError. The plan reaches the probe as JSON,
+  so the fixture must too. That sabotage also found a defect in the section's own draft --
+  an empty step list was indexed at `got[0]`, so a caught defect printed a bare traceback
+  and no verdict banner. Its 8 checks need no vault, no socket and no client, but they DO
+  need `content.load()` to succeed, since the builder lives in `probes.py`),
   Section 7b covers `sweeploop.py`, the unattended driver: its stop conditions are a
   PURE function so they can be checked without a client, and its control is that ONE
   barren round must NOT stop -- a single unlocalised crash is normal, and stopping at one
-  would end most sweeps early. The last check asks the SYNTAX TREE whether the loop
+  would end most sweeps early. One check asks the SYNTAX TREE whether the loop
   imports the cage or launches anything itself, because the grep version of that check
-  went red on the docstring explaining the rule),
+  went red on the docstring explaining the rule.
+  **And since 2026-08-13 it covers the PLANNER'S EXIT CODE, which the loop discarded.**
+  `smsgsweep --plan` exits 2 writing NO plan on all three refusals it had that day, and
+  `load_plan()` reads a file out of the vault that cannot tell this round's from the last
+  one's --
+  so a refusal left the loop launching a real client against a STALE plan and recording
+  what it measured under this round's opcodes, silently, since the plan parses and the
+  ledger grows. The gate is TWO signals because each covers a hole in the other: the exit
+  code, plus whether the plan file MOVED, which is what catches a planner that dies after
+  its own checks. The half that needed the most care is the EXEMPTION -- exit 1 is
+  "NOTHING TO SEND", which writes an empty plan and is the sweep's only good ending, so a
+  blunt `rc != 0` stop would rename completion as breakage, and that control is the one
+  the blunt sabotage reddens. **Two controls were VACUOUS in the first version and the
+  sabotages are what found it**: the crashed-planner case (Windows returns the exception
+  code, which arrives NEGATIVE, so an `rc >= 2` test accepts it) was written with the file
+  unmoved, where the freshness half refuses it anyway -- the `rc >= 2` sabotage went 0
+  red. Both now pass `moved=True`, and five sabotages redden five different sets. The
+  subprocess half points the loop at a planner that exits 2 with a stale plan on disk, and
+  asserts the difference between two live answers in one process: `plan_round` hands back
+  None while `load_plan()` still answers with the row the old loop would have launched
+  against. Last, the ORDER is asked of the syntax tree -- the guard must sit BEFORE the
+  launch statement in the round body, with the guard deleted AND the guard moved one past
+  the launch as controls, because a client that goes up and is stopped afterwards has
+  already measured the wrong opcodes),
+  `toolkit/authsrv/test_shotlabel.py` (the SCREEN readout for the 239 SILENT opcodes,
+  and the four defects it shipped with. `smsgsweep`'s `SILENT` means *no c2s reply*
+  and is blind to anything the client DRAWS, so this joins a run's one send to the
+  hold screenshots that bracket it. Every headline it prints is a number a broken
+  version also prints, so the file is mostly negative controls and each defect is
+  REPRODUCED INLINE -- the passing number is a difference between two live answers.
+  **The join is by WALL CLOCK**: the obvious index reading uses the CAPTURE's clock,
+  which starts at the server connection and not at the hold, and scored `0x0033`'s
+  306x443 Message of the Day panel at **0.00008** because the baseline frame already
+  had the window in it (0.05043 joined correctly). **The noise floor is the MEDIAN of
+  the idle window**, not the max and not every pre-send pair: the first hold frames
+  are a loading screen, which against a world frame is 64% of pixels, and at that
+  floor ALL FOUR known positives read QUIET -- and the max fails too once a load
+  transition lands inside the window, measured at 81.86% with the flag threshold
+  above 100% where nothing can ever be CHANGED. Two pairs is refused, because a
+  median of two is their mean. **The stamp is only good to the SECOND**, so a frame
+  inside the send's second serves as neither baseline nor after-frame. And it scores
+  a STRIP rather than a pair, because `0x00C0`'s floating text fades in ~2 s and at a
+  2.3 s cadence lands BETWEEN frames -- one pair scored it 0.190%, below the same
+  run's idle noise -- with `sustained` separating a transient from a panel that stays
+  and a persistent-effect control that must NOT decay. Section 7 is the one that was
+  not in this module at all: `session.Stack._pump` died on a cp1252 console, the
+  gamesrv wedged on its next print, the probe sent NOTHING, and the run still
+  reported **RUN VERDICT: PASS** -- the only thing still working was the 20 Hz world
+  tick, the one send that does not print. Three opcodes were marked done having never
+  been sent, so `shotloop` records an opcode only when the run's OWN capture holds its
+  send. Section 8 refuses the page into every checkout, with the vault as the positive
+  control. No vault, no socket, no client -- the frames are drawn with PIL, which is
+  what lets the load-screen and ambiguous-second cases exist at all; without PIL the
+  file declares one skip and goes red. 33 checks),
   `toolkit/authsrv/test_rotate.py` (that GAME_CMSG 0x0040 really is ROTATE_PLAYER: the
   client's own assert text and the two ±inf constants are still at their addresses, both
   payload fields are still `dword` and not the `float` they look like, and the finite
@@ -827,8 +1174,70 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   raw they make the angle check compare garbage to pi AND make the turn-rate check pass
   vacuously — and the third conflated "arrives before its create" with "names an agent
   never created", which are different facts),
+  `toolkit/authsrv/test_msgmix.py` (the tool that ranks what to build next, and the
+  three ways it answered confidently about a corpus it had not read: it took the
+  newest **6 of 439** gamesrv captures, it read the c2s direction off the server's
+  OUTBOUND `sent` log so the whole client-to-server half was **0 of 18,668**
+  messages, and `948` -- a count of `unhandled` LOG RECORDS, one per (session,
+  opcode) FIRST OCCURRENCE -- was in circulation as a message count, two digs having
+  disagreed by exactly it. The population split is the half with teeth: **257 of 439
+  captures are unattended `smsgsweep` runs**, whose server emits **381 distinct s2c
+  opcodes against a played session's 101**, so pooling them makes ours look like it
+  sends 421 of 487 and the NEVER-SENT list -- the reason the tool exists -- collapses.
+  The split is exercised THROUGH `population()` the way `main()` does it, because the
+  first version handed the section two pre-sorted lists and the pooling sabotage broke
+  the classifier with every aggregate check still green. A drop is what the server
+  ITSELF flagged in THAT session, never an opcode imputed from another:
+  `note_unhandled` landed partway through the corpus (2026-08-12T00:19:42Z; 94 older
+  captures, 0 of which carry one of its records), so those messages are unmeasurable
+  rather than zero and get their own bucket -- and `0x000C` is flagged in 2 messages
+  and handled in the other 42, so imputing by opcode over-attributes it 21x. The
+  oracle is the server's own `unhandled_summary.total` against the count rebuilt from
+  the `decoded` stream, 326 of 326 agreeing on the real vault with no shared code
+  between them. Six sabotages BUILT AND RUN as scratch copies through `--module`, all
+  six red (4, 11, 9, 5, 2 and 4 checks) against 56 green -- and the first attempt at
+  them went red on a FileNotFoundError rather than on a check, which is a control that
+  proves nothing while looking like it proved everything. No vault, no socket, no
+  client. ~1 s),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
+  `toolkit/clientscan/test_maprows.py` (the footprint join that NAMES archive map
+  rows, and the negative the arc turned on. `s_missionClientData` -- the client's
+  own name for the 888x124 table, out of its accessor's assert at 0x005A8580,
+  where `cmp esi, 0x378` and `imul eax, esi, 0x7c` make 888 and 124 ArenaNet's
+  numbers rather than our structural inference -- carries the map's FOOTPRINT on
+  its continent at +0x48/+0x58, a rect in terrain cells whose SIZE equals the map
+  file's own dims at the known 96.0 pitch, **319 of 319**. The headline is the
+  weak half: a two-number key over an 84-value alphabet, and random sizes already
+  score ~41%. Which checks are load-bearing was MEASURED by setting the pitch to
+  64.0 -- six go red and **section 5 is not one of them**, because the random null
+  is a ratio and a wrong pitch moves both terms. What catches it is the one-cell
+  control (319/319 -> 0/319) and the two ANCHORS, which go to zero candidates:
+  row 7982, whose three names came off ArenaNet's own wire in 9 of 9 live
+  connections, and row 22371 from `archive.py`'s measured note. Neither was
+  derived from the join. **And that sentence held only on a COLD cache, which is
+  what section 2 is for (2026-08-13).** `map_dims` caches 349 decompressions and
+  its stamp named the archive alone, while `CELL_PITCH` is consumed BEFORE the
+  cache is written -- so WARM, the way anyone runs it, the pitch set to 64.0,
+  48.0, 100.0, 112.0, 97.0, 96.5, 96.1, 96.01, 96.001 or 96.0000001 each printed
+  ALL CHECKS PASSED (23 checks) and exited 0 in 9.2 s. Only `--all`, which
+  deletes the cache file, ever saw the six. The fix FOLDS the coding parameters
+  into the stamp rather than adding a hand-bumped version integer beside
+  `mapchunks.archive_stamp`'s -- a number somebody must remember to bump is the
+  same bet that just lost, and a folded value cannot go stale -- and section 2
+  asserts the drop BEHAVIOURALLY, moving each parameter and asking `map_dims`,
+  because a test reading the stamp's field NAMES passes against a stamp that
+  carries them and compares only the old three. Four sabotages, four different
+  red sets; the one that earns the section is a `map_dims` that never loads the
+  cache, where all five refusals go vacuously GREEN and only the positive control
+  reddens. Its wrong values are DERIVED from the live ones, because the literal
+  64.0 stops being a mutation in the very arm that sabotages the pitch to 64.0.
+  Section 6 pins the refutation -- no dword column of the
+  table resolves to a map-flagged row in either the raw or the packed reading --
+  so a future build that gains a map-id -> file-id table fails here loudly. The
+  tool returns a SET per row on purpose: 888 named areas over 349 files means at
+  least 539 must share one. 29 checks; ~9 min on a cold vault cache
+  (MEASURED 558.6 s), ~9 s warm),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first),
@@ -870,7 +1279,70 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   therefore silently WIDENS `--in PrApi` to 2.4 MB — with `--in AvChar`, which
   legitimately catches the adjacent `AvCharAnim.cpp`, as the control that must
   keep reading differently, since a warning that fires the same way on both is
-  noise),
+  noise. **§10 (2026-08-13) is the same defect a THIRD time, from the direction
+  that makes the footer's encoding list not enough.** `--field` searched MEMORY
+  OPERANDS and nothing else, so `--field 0x6bc` answered **14** without
+  `0x00813AD1 add ecx, 0x6bc` — the writer reached from GAME_SMSG 0x00B6's
+  handler, i.e. the writer of the very field studies/profession/RUNS.md §13 was
+  hunting — plus four more `add ecx` sites and an `add ebx`. Five of 19, from a
+  report whose footer disclaimed disp8 and disp16 and therefore read as
+  complete. The constant is not a displacement at all: `81 c1 bc 06 00 00`
+  carries 0x6BC in its IMMEDIATE field, which the test reads off the bytes
+  (`disp_size == 0`) rather than asking the scanner about. The old
+  displacement-only rule is REPRODUCED inline out of capstone and struct and
+  required both to reach 14 and to MISS that address, so 14 against 19 is a
+  difference between two live answers — §8's pattern. The other half is the
+  controls on the new `A` (address-taking) class, because widening `A` is the
+  lazy way to pass: a real load stays `R`, a real store stays `W`, no `A` row
+  may claim `is_write` (§2's two-writers claim reads that field), and `lea`
+  moved from `R` to `A` because it touches no memory. `sub reg, -imm` is
+  searched too and pinned against real bytes — `sub ecx, -0x19` at 0x00622199,
+  whose immediate byte is 0xE7 and which therefore needs its own anchor and its
+  own sweep; 265 sites of `sub eax, -0x80` are why that sweep is paid for. The
+  one filter is NAMED and controlled: a narrow destination is dropped, and
+  `add al, 0xe` at 0x00479BC8 is decoded and proved to exist before the check
+  that it is excluded. Three sabotages built and run, three redden. 106 checks
+  with capstone (was 83) and 35 without — §10 needs a disassembler for every
+  claim and declares one skip, so the stdlib floor is unmoved),
+  `toolkit/clientscan/test_consttable.py` (the `Gw\Const\*.cpp` table locator, and
+  the correction it made to the recon that commissioned it. MSVC emits a translation
+  unit's static data and its string literals in source order, so every one of these
+  tables is followed immediately by a string -- its `__FILE__` path or an assert
+  expression -- and `base + count*stride` lands on that string's first byte. The recon
+  predicted **12 of 14** close with two 4-byte non-closures, "alignment padding, a
+  `-1` sentinel". Re-derived from the bytes: **24 of 24 close**, 17 flush against
+  their left neighbour, **four** at exactly +4 (MSVC 8-alignment, and all four are
+  alignment), and **no sentinel non-closure exists** -- `s_attribPoints`'s
+  `FF FF FF FF` is the fourteenth ELEMENT of the array and `arrsize` counts it, so
+  14 x 4 lands on the anchor. What sentinels really cause is a third shape, a table
+  whose left neighbour is not a string at all, which is why `s_skill`,
+  `s_missionClientData` and `s_attribPoints` declare no left edge. **The headline is
+  deliberately the WEAK half**, because `base + count*stride == anchor` is
+  definitional unless the two terms come from DIFFERENT witnesses: eight tables take
+  their count from their own ascending index column and their base from the previous
+  string, and all 24 bases are corroborated by the client's own accessor loading that
+  exact address (29 references, minimum 1). Two of those bases are checked against
+  implementations that share no method with the anchor -- `skilltable.locate_table`,
+  which finds `s_skill` by its SELF-DECLARED count in row 0, and
+  `reskin.locate_attrib`, which corroborates `s_attrib` with an id column and a
+  profession-range check. **The blind spot is measured rather than argued away**: a
+  stride that DIVIDES the true one closes on the same base with a multiple of the
+  count -- `s_eula` reads as 99 x 4 instead of 33 x 12 -- and only an index column can
+  refute it, so the surviving rival strides are printed per row (`s_effect` 0,
+  `s_eula` [4, 36, 44, 132]) and `s_worldData`'s stride is labelled UNSETTLED. That is
+  not hypothetical: `s_glow` was entered in this corpus as 2 x 44, CLOSED on the
+  correct base with a plausible record, and is 11 x 8. Three sabotages built and run
+  and three redden -- a first-hit anchor, a +/- 4 pad tolerance, and the code witness
+  dropped -- which is why `pad` is a declared exact number and never a tolerance
+  (4 bytes is a whole record for the eight stride-4 tables here). It is also the
+  first `source = "client-table"` extraction in this repo's history: `--emit-effect`
+  writes all **2,077** `s_effect` rows with provenance per row, keyed by the ARRAY
+  INDEX rather than the id column (one record's id is not its index, and keying by id
+  would drop row 2036 and mint a 2077), and the test loads them through `content.py`
+  and then REMOVES the build from one row and requires the load to FAIL, so the 2,077
+  are proved to have passed condition 2 rather than skipped it. Sections 0-4 build a
+  small PE32 image byte by byte and need no vault, scoring 28 against a floor of 61,
+  so a vault-less run goes red. ~15 s),
   `toolkit/test_checks.py` (the check on the checker — see below),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
@@ -887,9 +1359,49 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   one field it CANNOT clean — a `plain` frame payload, which carries the account email as
   UTF-16 and is therefore invisible to the ASCII leak check — is reported rather than
   silently passed through, and that its record arithmetic is pinned to a snapshot so a
-  live server appending to `vault/captures/` cannot make it disagree with itself),
+  live server appending to `vault/captures/` cannot make it disagree with itself, and
+  -- since 2026-08-13 -- that `vault/state`, the portal's issued-session store, is
+  EXCLUDED BY CONSTRUCTION rather than merely unwalked. Five cleartext records sat
+  outside the scrub root, each with an `email`, a 36-character `user_id` and a
+  36-character `token`, and the trap the shape carries is that `sessionstore.issue()`
+  keys the map BY THE TOKEN, so the credential is present twice and only one of the
+  two is a value -- a scrubber that reused `scrub_record` alone emits a record whose
+  `token` field reads `tokn1xxx...` under a key that is still the real token, with
+  every record-level check green. That sabotage is built and run and reddens three
+  checks including the leak check. Nine sabotages in total, all nine red against a
+  green baseline, and the two that earn the sections are the paired ones: a scrub that
+  BLANKS every field passes the leak check perfectly and is caught only by the positive
+  control that `issued_utc` survives byte-identical, and section 10's positive control
+  is GREEN under a deleted `state/` refusal and RED under a refusal that matches
+  everything -- either alone would be satisfied by the wrong tool. The race answer is
+  deliberately NOT a `Snapshot`: `sessionstore._write` replaces the whole file via
+  `os.replace` and prunes 200 records to 100, so a legitimate rewrite SHRINKS it and a
+  size pin would report the server doing its job as corruption; `audit_state_text` is
+  pure over a string, the file is read once, and the harvest and the census both come
+  from that one read. Sections 9-11 are synthetic throughout and need no vault; the
+  only claim about the real store is that its census carries no value out of it. 47
+  checks against a floor of 45, the two vault-dependent ones declaring a skip. ~3m25s),
   `toolkit/test_content.py` (the content store, and that its provenance and licence
   refusals actually refuse),
+  `toolkit/test_contentids.py` (the pre-flight that a run's TWO archives agree
+  about what `content/maps.toml`'s file ids NAME. **A file id is archive STATE,
+  not a property of the map** -- bit 31 means `FcArchive` renamed that row away
+  pending a replacement, so the same map is `0x8001B97D` in one copy and
+  `0x1B97D` on a different row in another, and both are right for their own copy
+  (`studies/maprows/FINDINGS.md` §8). The server reads one archive for the
+  navmesh and the client opens its own for the geometry, and nothing checked they
+  matched. The POSITIVE CONTROL is what earns the file and it is not synthetic:
+  `vault/run-live/`, a copy a client really played live from, genuinely does not
+  bind `0x8001B97D`, and the check must go FATAL on EXACTLY the two Pre-Searing
+  rows while the other eight stay green -- a guard that reddens on all ten says
+  nothing. Identity is the MFT entry's size and crc, never the row, because row
+  indices do not survive a patch; a one-bit crc mutation must be caught, since
+  two archives resolving one id to different FILES is worse than a failed launch
+  (the run produces data and looks like it worked). Section 4 asserts the
+  LOOPBACK GATE on the syntax tree -- a live run answers to ArenaNet's own ids
+  and must never be refused on our rows, and "the call is inside the RUN_ROOT
+  branch" is invisible to a grep; the sabotage that removes the gate reddens it
+  alone. ~3 s),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same

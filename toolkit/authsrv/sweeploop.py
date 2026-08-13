@@ -35,6 +35,11 @@ THREE THINGS EVERY ROUND PASSES, and none of them is optional:
 WHEN IT STOPS, and why each is a stop rather than a retry:
 
     plan empty          nothing left. The only good ending.
+    planner refused     it exited non-zero, or it wrote no plan. `load_plan()` reads a
+                        file out of the vault and cannot tell this round's plan from the
+                        last one's, so a refusal used to leave the loop holding a STALE
+                        plan and launching a real client against it -- measuring one set
+                        of opcodes and recording them as another. See `accept_plan`.
     no new rows twice   the sweep is stuck. Two rounds in a row that record nothing means
                         the crash is not being localised -- raise --ping-seconds or widen
                         the dwell -- and a third round would only burn another client.
@@ -70,6 +75,10 @@ SWEEP = os.path.join(HERE, "smsgsweep.py")
 GAME_ARGS = "--probe smsgsweep --ping-seconds 0.5 --no-enemy"
 PING_SECONDS = 0.5
 
+# `smsgsweep --plan`'s ONE non-zero exit that still leaves a plan behind: "NOTHING TO
+# SEND", written and empty. Every other non-zero is a refusal that writes nothing.
+PLAN_EMPTY_RC = 1
+
 
 def decide(planned, recorded, dry_rounds, failed, rounds_left):
     """(go, why) -- whether to run another round. Pure, so it can be tested.
@@ -92,6 +101,74 @@ def decide(planned, recorded, dry_rounds, failed, rounds_left):
     return True, ""
 
 
+def accept_plan(rc, moved, err=""):
+    """(ok, why) -- whether the plan on disk is THIS round's. Pure, so it can be tested.
+
+    `load_plan()` reads a file out of the vault and answers just as confidently from the
+    PREVIOUS round's plan as from this one's. `smsgsweep --plan` exits 2 WITHOUT writing
+    one on all three refusals in the tree on 2026-08-13 -- `--set` without `--only`, a
+    `check_sets` disagreement, any ValueError out of `plan()` -- so the loop was launching
+    a real client against a stale plan and recording what it measured under this round's
+    opcodes. That failure is silent from the inside: the plan parses, the client runs, the
+    ledger grows. The gate below is written against the CLASS rather than that list, which
+    is the point: a refusal added later (an unmigrated ledger under `--resume` was on its
+    way when this was written) needs no line here.
+
+    Two signals, because each covers a hole in the other. The exit code alone misses a
+    planner that dies after its own checks or a future refusal that forgets to exit 2 --
+    "it refused and the file did not move" is the shape of the whole failure, so the file
+    is what gets asked. The stamp alone would stop without naming a reason.
+
+    And `rc != 0` is wrong in the other direction: exit 1 is "NOTHING TO SEND", which
+    WRITES an empty plan and is the sweep's only good ending. Reporting it here would
+    rename completion as breakage; it belongs to `decide`, which stops on an empty plan.
+    """
+    if rc not in (0, PLAN_EMPTY_RC):
+        tail = " ".join((err or "").split())[:300] or "(it printed nothing on stderr)"
+        return False, (f"the planner exited {rc} and wrote no plan, so the file in the "
+                       f"vault is an earlier round's and a client launched against it "
+                       f"would measure opcodes nobody planned this round. Its stderr: "
+                       f"{tail}")
+    if not moved:
+        return False, (f"the planner exited {rc} but the plan file did not move, so "
+                       f"whatever `load_plan()` would answer with was written by an "
+                       f"earlier round. Nothing launches on a plan this round did not "
+                       f"produce")
+    return True, ""
+
+
+def plan_stamp():
+    """(mtime_ns, size) of the plan file, or None when there is none.
+
+    The freshness probe, and it is deliberately of the FILE rather than of its contents:
+    the question is whether the planner wrote this round, not whether it changed its mind.
+    Two rounds are a client launch apart, so no clock granularity here can make two real
+    writes look like one.
+    """
+    try:
+        st = os.stat(smsgsweep.plan_path())
+    except OSError:
+        return None
+    return st.st_mtime_ns, st.st_size
+
+
+def plan_round(seen, limit, dwell, sweep=None):
+    """(plan, why) -- this round's plan, or (None, why to stop) with nothing launched.
+
+    `sweep` names the planner so a test can point the loop at one that refuses; the loop
+    itself always uses `SWEEP`.
+    """
+    before = plan_stamp()
+    rc, out, err = run([sys.executable, sweep or SWEEP, "--plan", "--resume",
+                        "--seen", seen, "--limit", str(limit), "--dwell", str(dwell)])
+    if out.strip():
+        print("    " + "\n    ".join(out.strip().splitlines()[:4]), flush=True)
+    ok, why = accept_plan(rc, plan_stamp() != before, err)
+    if not ok:
+        return None, why
+    return smsgsweep.load_plan() or {}, ""
+
+
 def newest_report(before):
     """The harness run directory that appeared during this round, by NAME not by mtime.
 
@@ -111,11 +188,17 @@ def newest_report(before):
 
 
 def run(cmd, echo=True):
+    """(rc, both streams, stderr alone).
+
+    Kept apart because a refusal's REASON arrives on stderr and the loop has to name it:
+    a stop that says only "exit 2" sends the operator back to the planner to find out
+    what it already said.
+    """
     if echo:
         print("    $ " + " ".join(os.path.basename(c) if c.endswith(".py") else c
                                   for c in cmd[1:]), flush=True)
     p = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
-    return p.returncode, (p.stdout or "") + (p.stderr or "")
+    return p.returncode, (p.stdout or "") + (p.stderr or ""), (p.stderr or "")
 
 
 def main():
@@ -151,12 +234,17 @@ def main():
 
     codec = Codec()
     dry_rounds, done_before = 0, len(smsgsweep.load_ledger())
+    stop_rc = 0
     for i in range(1, a.rounds + 1):
         print(f"\n=== round {i}/{a.rounds} " + "=" * 46, flush=True)
-        rc, out = run([sys.executable, SWEEP, "--plan", "--resume", "--seen", seen,
-                       "--limit", str(a.limit), "--dwell", str(a.dwell)])
-        print("    " + "\n    ".join(out.strip().splitlines()[:4]), flush=True)
-        plan = smsgsweep.load_plan() or {}
+        plan, why = plan_round(seen, a.limit, a.dwell)
+        if plan is None:
+            # Before the launch, deliberately: this is the one stop whose whole point is
+            # that the client must not go up. Non-zero out of an unattended run, because a
+            # round that planned nothing did not do what it was asked.
+            print(f"  STOP: {why}", flush=True)
+            stop_rc = 2
+            break
         planned = plan.get("rows") or []
         go, why = decide(planned, 0, dry_rounds, False, a.rounds - i + 1)
         if not go:
@@ -171,8 +259,8 @@ def main():
                           + a.dwell * len(planned) + 20.0)
         before = set(glob.glob(os.path.join(
             vaultpath.vault_path("captures", "harness"), "*")))
-        rc, out = run([sys.executable, SESSION, "--game-args", GAME_ARGS,
-                       "--keep-open", "--hold", f"{hold:.0f}"])
+        rc, out, _ = run([sys.executable, SESSION, "--game-args", GAME_ARGS,
+                          "--keep-open", "--hold", f"{hold:.0f}"])
         for line in out.splitlines():
             if "Assertion" in line or "RUN VERDICT" in line or "ERROR DIALOG" in line:
                 print("    " + line.strip(), flush=True)
@@ -183,7 +271,7 @@ def main():
             print(f"  STOP: {exc}", flush=True)
             break
 
-        rc, out = run([sys.executable, SWEEP, "--from-report", report, "--record"])
+        rc, out, _ = run([sys.executable, SWEEP, "--from-report", report, "--record"])
         for line in out.splitlines():
             if any(k in line for k in ("SUSPECT", "REPLIED", "UNDECODABLE", "recorded",
                                        "REFUSING", "NOT QUIET", "stimulated")):
@@ -199,7 +287,9 @@ def main():
             break
 
     print()
-    return smsgsweep.print_report(smsgsweep.load_ledger(), codec)
+    # The report still prints -- the ledger is what earlier rounds bought -- but a refusal
+    # keeps the exit code, so an unattended run cannot end 0 having stopped early.
+    return smsgsweep.print_report(smsgsweep.load_ledger(), codec) or stop_rc
 
 
 if __name__ == "__main__":

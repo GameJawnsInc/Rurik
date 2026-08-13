@@ -543,6 +543,29 @@ because the operator said what was on screen: the default hostile was killing th
 throughout, so sixteen `SILENT` rows meant "silent on a corpse". `record()` refuses such
 a run outright.
 
+**IN PROGRESS 2026-08-13 — reading the OTHER channel, the screen.** `SILENT` means *no
+c2s reply* and is blind to anything the client draws, so the 239 SILENT rows are unread
+rather than empty. `toolkit/authsrv/shotloop.py` re-sends each one to a FRESH client with
+screenshots through the hold, and `toolkit/authsrv/shotlabel.py` joins the send to the
+frames that bracket it and builds a local page (vault only — the frames are the retail
+client) where a person types the name. **One opcode per client launch**, owner's call: a
+window an earlier opcode opened is still on screen when the next lands, so it sits in the
+next opcode's own baseline. ~40 s each, ~2.5 h for the set; `score_run` refuses a
+multi-send run outright. Controls in `test_shotlabel.py` (33 checks).
+
+**And it found the defect that had been silently wrecking harness runs.**
+`session.Stack._pump` is the only reader of a server's stdout pipe. One gamesrv line
+carried U+FFFD — our own `string16` replacement character — the print raised
+`UnicodeEncodeError` against a cp1252 console, the pump thread died, the pipe filled, and
+the gamesrv **blocked forever on its next print**. The probe sent nothing. The run still
+reported **RUN VERDICT: PASS**, because the one send that kept working is the 20 Hz world
+tick — the only send in the server that does not print — so the capture filled with 649
+plausible events while three opcodes were recorded as run. `checks.py` had written this
+lesson down for tests in 2026-08-06 (`_say`, after `test_textrec` died the same way); the
+harness never got it, and it is the one place the failure blocks a SERVER rather than
+ending a script. Fixed, and `shotloop` now records an opcode only when the run's own
+capture holds its send.
+
 ### 3.2 R4b and R4c, rewritten as counts
 
 The old criteria could not be evaluated. R4b's was *"one skill from each mechanical
@@ -671,11 +694,21 @@ timestamped raw-packet writing is roughly one function.
 100% of game-server↔client traffic to disk **[measured — mirrored]**, and `Fournux/Tyria-Extractor`
 (MIT) ships an injected sniffer alongside its `Gw.dat` extractor.
 
-Layer the shadow-server idea on top once capture works: feed your server the real CtoS stream and
+~~Layer the shadow-server idea on top once capture works: feed your server the real CtoS stream and
 diff its would-be output against the real server's while still forwarding the real answer. That is
 HANDOFF §7's replay oracle at R0 instead of R2, open-loop, self-updating as you play. Then stop
 forwarding message types that diff clean and answer them yourself, so the system stays playable
-throughout and the project becomes incremental replacement rather than a cold start.
+throughout and the project becomes incremental replacement rather than a cold start.~~
+**❌ STRUCK 2026-08-13 with HANDOFF §7, which it depended on.** The byte-diff at its centre is
+refuted by its own subject: **ArenaNet's server is 0.2% byte-identical against its own recording**
+of the same character on the same map minutes apart, diverging at message 6, while the same method
+scores 99.3% on opcode *sequence*. A gate that cannot go green cannot go red for a reason, and its
+tolerance layer is vacuous by its own control (masking three dwords blanks 45% of bytes and still
+scores 76.8–97.5% on *different* maps). The prize is already banked by §8's `msgmix.py` and
+`studies/divergence` D1–D11, which is what the shadow diff was for. See HANDOFF §7 and
+[studies/recon/FINDINGS.md](studies/recon/FINDINGS.md) §5.5 for the measurement and for the
+structural load-prefix gate that replaces it. **The rest of A1 stands** — capture was and remains
+the right first move, and R0b/R1.5 are met.
 *Wasted if:* nothing obvious — this is required under every strategic option, it does not depend on
 the language decision, and building it is how you find out how good the rest of the prior art
 really is. **Build it first regardless of every other choice in this document.**
@@ -787,7 +820,8 @@ prior art.
   every session from then on, including sessions played for fun. Begin the WASM symbolization
   pipeline (A4, A7).
 - **Days 46–90** — Tape player (R1.5). Skill-table extraction and the referee'd data pipeline (A6).
-  First shadow-server diffs on real traffic.
+  ~~First shadow-server diffs on real traffic.~~ **Struck 2026-08-13** — see §4 A1 and
+  HANDOFF §7; the byte-diff is refuted and `msgmix.py` already delivers what it was for.
 
 Capture still starts immediately and never stops — the wasting-asset argument is right. What
 changes is that capture is now cheap enough to leave running rather than a project in itself.
@@ -1683,7 +1717,13 @@ which is the defect `CLAUDE.md` already names from the other side.*
     leaves -- `Gw.log` does not record asserts, no dump file is written anywhere
     findable, and a ConnectionResetError appears on clean teardowns too.
 
-0n. **NAME THE SILENT OPCODES — 239 candidates, tooling done, needs only harness time.**
+0n. **NAME THE SILENT OPCODES — 239 candidates. RUNNING 2026-08-13, ~2.5 h of harness.**
+    `shotloop.py` (one opcode per fresh client, screenshots through the hold) +
+    `shotlabel.py` (joins the send to the frames, builds the local labelling page).
+    See §3.6. The text below is the manual procedure it replaced, kept because the
+    `--encstring` note and the four already-named opcodes still apply.
+
+0n-old. **The manual procedure.**
     [studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md) §3.4. The sweep's
     `SILENT` means *no c2s reply* and is BLIND to anything the client draws: four of four
     opcodes retested with a meaningful payload turned out to be opening windows and
@@ -1699,8 +1739,11 @@ which is the defect `CLAUDE.md` already names from the other side.*
 
     `--encstring` reads a real encoded string from the owner's own captures at plan time
     (`corpus_encstring`), so string-gated opcodes get past their format check; it never
-    writes ArenaNet's text into the repo. About 40 s per opcode unattended. **Deferred
-    2026-08-12 at the owner's request — the harness is wanted elsewhere.** Four are done:
+    writes ArenaNet's text into the repo. About 40 s per opcode unattended. Deferred
+    2026-08-12 at the owner's request, **and taken up 2026-08-13 — see 0n above, which
+    automates exactly this.** Note the corpus string is picked fresh at plan time and one
+    of them (U+3D64) is not encodable in cp1252, which is how the harness pump defect in
+    §3.6 was found. Four are done:
     `0x0033` is Message of the Day by the client's own title bar, `0x009E` is a chat line,
     `0x00B9` a framed world callout, `0x00C0` unframed floating world text.
 
@@ -2325,13 +2368,266 @@ parallel, with one safety change that is not optional — see its entry.
     run, passes the headline and is caught 3 of 3. What the corpus CANNOT decide is
     asserted as such: tag 4's largest table is 81 entries, so its count width is
     undecided, and the check reddens the day that changes. Still UNVERIFIED: the
-    `extra` u32 and the tag-4/6 `value` words are carried, not understood, and the
+    tag-4/6 `value` words are carried, not understood, and the
     client's tag walk below `0x00737B40` was not read.
-    **(e10d)** ⬜ **PLACE SOMETHING.** `props.py` can author a prop and
-    `stripbuild.build()` takes `props=`, but every map built so far passes
-    `minimal()` — the EMPTY chunk. That the client compiles a map carrying props WE
-    wrote, with a real model id and a real outline, is a client run that has not
-    happened, and it is the claim FINDINGS 44 explicitly does not make.
-    **(e10-next)** ⬜ Terrain and props are ours; Header (8 B) and Zones (34 B) are not.
-    An end-to-end authored map — §32's Blender pipeline through `mapbuild.py` into a
-    Stripped stream — has not been compiled by a client.
+    **(e10c-2)** ✅ **DONE 2026-08-12 (FINDINGS 45). THE BLOATED PROPS CHUNK IS READ
+    AND THE ORACLE IS A TEST.** `props.BloatedProps` (read-only, no encode, and the
+    test asserts that) + `test_props.py` section 9: the compiled tag-0 size equals
+    `2 + 48*props + 8*points` predicted from the Stripped side — **349/349 under
+    `--all`** (110 checks, 718 s measured, floor 99), five rival formulas 0/335,
+    record-for-record correspondence 285,670/285,670. Three of FINDINGS 44's
+    INFERRED readings are now compiler-corroborated: the scale formula holds
+    EXACTLY corpus-wide, the rot bytes single-axis-rotate a constant basis
+    (composition still unmeasured), and the `extra` u32's fourth byte is §5's
+    placement radius (595.0 × scale on all 414 instances of model 209883). Two §44
+    population figures corrected in place (§45). And `stripbuild` learned the
+    props-deps pairing: `0x11000004` present iff props, **349/349**, generated from
+    run-time ids, both unpaired shapes refused (`test_stripbuild` §3d, floor 46).
+    **(e10d)** ✅ **DONE 2026-08-12 (FINDINGS 46). SOMETHING IS PLACED.** Two client
+    runs, one variable apart — the same authored prop (model file id 209883 via our
+    own `0x11000004`) without and with a closed ±100 outline — and every load-bearing
+    prediction hit: **the oracle on OUR input (compiled tag-0 sizes 50 and 90,
+    exactly)**, `corresponds()` CLEAN both runs with B's ring back EDGE-EXACT, the
+    +42 radius byte-identical to retail's own value for this model+scale, and the
+    deps chunk surviving to `0x21000004`. **The outline is collision geometry**: B's
+    navmesh hole is exactly the authored square, all four inside-ring probes flip,
+    no outside probe moves. **And a prop with NO outline still carves** — run A
+    found the compiler ALSO instances the model file's own collision sub-mesh
+    (~±40-unit irregular polygon), falsifying the outline-only reading in the branch
+    the predictions reserved. Predictions were recorded before arming and two
+    prediction defects are kept in the run record
+    (`vault/research/e10d-props-2026-08-12/`). Still open: visuals (screenshots
+    caught the loading crossfade), play-session collision, union-vs-replace of ring
+    and model footprint, generalisation past one model and one map.
+    **(e10-next)** ✅ **DONE 2026-08-12 (FINDINGS 47). THE BLENDER LOOP IS CLOSED.**
+    A scene authored in headless Blender (plaza, rolling ground, a landmark hill),
+    exported through §32's pipeline, LATTICE-SNAPPED (`snap_block` first — a free
+    field is essentially never on the transform's sublattice; worst move 4 units)
+    and assembled by `stripbuild` with five ringed trees, was compiled by the
+    retail client in one run with **every prediction hit**: heights back
+    **1,024/1,024** through the BLOATED codec, oracle 442 exact, `corresponds()`
+    clean, radii retail-exact ×5, and 12 of 12 mesh probes — five carved tree
+    rings, walkable plaza and hill. Header (8 B) and Zones (34 B) remain the two
+    borrowed constants. Still open: textures/sound/environment/light.
+    **(e10e)** ✅ **DONE 2026-08-12 (FINDINGS 48). THE THRESHOLD SET IS MEASURED:
+    15/35/30, walkable boundary 35.** The ramp map — five strips bracketing every
+    candidate cutoff — compiled its 32.0° strip walkable and its 36.1° strip not,
+    so the cut sits in (32.0°, 36.1°) and only 35 is inside; every number of
+    10/45/40 is excluded. Free second result: walkable area is CONNECTIVITY-PRUNED
+    from the flood seed — a flat plateau above a too-steep ramp is absent from the
+    mesh, 5 of 5. `stripbuild`'s 30° seed refusal stays as a measured 5° margin.
+    Unread still: the roles of 15 and 30, and whether the mode flag ever selects
+    the other set.
+    **(e10f)** ✅ **DONE 2026-08-12 (FINDINGS 49). THE TERRAIN WEARS OUR PAINT.**
+    Old rung F2, one variable against the walked map: tag 2 painted by height band,
+    tags 4/5 and tex_word read from the donor at run time (table_b is a property of
+    the TEXTURE — inventing it is wrong when reading it is free). Compiled tag 2
+    came back VERBATIM, everything else carried, and the owner walked the four
+    bands. Still NOT FOUND: table_a's grouping, table_b's 7 bits.
+    **(e10g)** ✅ **DONE 2026-08-12 (FINDINGS 50). ANOTHER BIOME'S GROUND RENDERS.**
+    Pre-Searing's four most-used textures (by its own census, read at run time)
+    on the walked map's geometry, table_b travelling with its files. One run, all
+    readback HIT, owner confirmed. Texture files are ordinary archive files;
+    nothing ties a map to its biome's set.
+    **(e10h)** ✅ **DONE 2026-08-12 (FINDINGS 51). THE SUN IS OURS.** One byte —
+    tag 0's angle, 68.7° → 36.5° — re-baked 985 of 1,024 lightmap bytes, and the
+    elevation sweep orders with the byte. The pre-registered N·L inequality missed
+    on its own model (no cast shadows — recorded as the model's defect), and the
+    visual was masked by the missing environment, which (e10i) then explained.
+    **(e10i)** ✅ **DONE 2026-08-13 (FINDINGS 51). THE SKY ARRIVES.** The
+    environment pair 0x10000009/0x11000009 — never carried by our maps, present on
+    every retail one — added in retail's slot with Pre-Searing's 639 B payload
+    borrowed at run time. The compiler carried it VERBATIM; the owner: "yep that's
+    a sky, and it was key to the lighting. the ocean looks much better now." The
+    payload is 639 bytes NOT UNDERSTOOD, counted borrowed. `stripbuild` takes the
+    pair as of this rung (test §3e, floor 51). Presentation still open: SOUND, and
+    understanding the environment payload.
+    **(e10j)** ✅ **DONE 2026-08-13 (FINDINGS 52). THE MAP HAS A VOICE.** The sound
+    pair 0x10000012/0x11000012, Pre-Searing's 89 B payload borrowed at run time,
+    carried VERBATIM; the owner: "background audio plays birds and wind."
+    `stripbuild` takes the pair under the env rules (test §3e, floor 54). THE
+    PRESENTATION LADDER IS WALKED — what remains is AUTHORING the borrowed
+    payloads (env 639 B, sound 89 B) instead of wearing Pre-Searing's.
+    **(e10k)** ✅ **DONE 2026-08-13 (FINDINGS 53). THE TWO PAYLOADS ARE UNDERSTOOD.**
+    Both borrowed chunks are now decoded to typed fields and re-encoded **349/349
+    byte-identically** — corpus-derived, then CORROBORATED against the client
+    loaders (`0x0071ef70` env, `0x0076afc0` sound), which corrected the corpus
+    three times (env header is 8 B not 5; the tag5-width flag is the header word
+    not tag0's count; tag8 is a real 17 B section not tag7's tail).
+    `toolkit/mapdata/soundchunk.py` + `test_soundchunk.py` (floor 21) and
+    `envchunk.py` + `test_envchunk.py` (floor 20) land the codecs, each with a
+    cross-chunk oracle a codec cannot force (sound: emitters in the Map Parameters
+    rect 318/318; env: dep fields in bounds of `0x11000009` 0/5,897). **Sound is a
+    positioned-emitter layer** — `{dep, x, y, r_lo, r_hi, r_mid}`, radii squared at
+    load, sounds one hop deeper in `ffna8` descriptors — and is AUTHORABLE.
+    **Environment is parallel aspect arrays + a spatial zone list**, where a
+    configuration is a SELECTOR TUPLE — tag8 is the map default, a tag9 zone is the
+    same tuple plus a circle. Fog (tag2) and zones typed; **tag6 is the WATER
+    record**, not the "main environment" a size-based guess called it, which is why
+    (e10i)'s "the ocean looks much better now" was literally true. **The sun is
+    written twice**: tag8's angle byte predicts the terrain chunk's own
+    `angle_index` on 313/349 maps (ratio exactly 127/32), so our authored maps —
+    which moved the terrain byte and borrowed the env chunk — had a baked lightmap
+    and a runtime sky that disagreed. NEXT RUNG (needs owner go-ahead + harness): a
+    client run authoring a sound chunk from scratch — Pre-Searing's same sounds at
+    custom `(x, y)`/radii, a minimal delta from (e10j)'s proven dep list — and, if
+    the compiler accepts it, promote authored sound (and fog/zones/sun) into
+    `stripbuild` the way (e10j) promoted the borrowed pair. Still open: tag6's
+    floats at +0x21/+0x25, and what tag0/tag1/tag3 ARE as aspects (their fields are
+    read out; their purpose is NOT FOUND). Record: `vault/research/envsound-2026-08-13/`.
+    **(e10l)** ✅ **DONE 2026-08-13 (FINDINGS 54). OUR OWN BYTES COMPILE.** The gate
+    (e10k) named, run and passed: a map whose env and sound chunks were ASSEMBLED BY
+    OUR CODECS — three emitters at our positions, fog recoloured, and **the zone list
+    grown 11 → 12** so every byte after tag9 shifted — compiled clean and both
+    payloads came back VERBATIM (env 671 B, sound 89 B, sha-matched), no assert.
+    The zone growth is the load-bearing delta: a codec replaying stored counts (the
+    saboteur `test_envchunk` §2 builds) would have declared 11 while carrying 12 and
+    desynced ArenaNet's parser, so **the count re-derivation is now checked against
+    the real consumer** rather than only against our decoder. `stripbuild.build()`
+    accepts typed `EnvChunk`/`SoundChunk` and counts them GENERATED, raw bytes still
+    BORROWED (`test_stripbuild` §3f, floor 54 → 59). Owner was away and none of this
+    needed eyes or ears. Three procedural defects are recorded in FINDINGS 54 rather
+    than scrubbed — wrong archive armed, `ar.entries[row]` off by one, and a harness
+    PASS that meant "reached A map" while the client never loaded ours; the second
+    was caught only because `datcheck --diff` CONTRADICTED the readback.
+    Record: `vault/research/e10l-authored-2026-08-13/`.
+    **(e10m)** ✅ **DONE 2026-08-13 (FINDINGS 55). ARENANET NAMES THE FIELDS.**
+    §53's two loose threads closed offline, no client. The client looks its shader
+    constants up BY NAME and the strings are in the image, so tag6 `+0x21` is
+    **`waterFresnel`** (string `0x00A6C430`) and `+0x25` is **`waterSpecularColor`**
+    (`0x00A6C474`) — our labels replaced by ArenaNet's. Both are also GATES: each
+    promotes the water technique, so the path that reads a field is unlocked by that
+    field. **tag1 is POST-PROCESS** {BloomAmount, PostProcSaturation, tint .w, B,G,R}
+    from the constant table at `0xBF7DA8`, corpus-corroborated (saturation 1.0 on
+    648/741, tint off on 571/741) and correcting this repo's "raw u16" to two thirds
+    of a packed colour; **tag3 is the DIRECTIONAL LIGHT**, two {rgb, intensity} pairs
+    to `GrLight`, which REFUTES the idea its u16s were dep indices. Still NOT FOUND
+    and deliberately unnamed: tag0 (consumer at `0x0071A4C0` unattempted), tag4,
+    tag7 — naming tag7 "wind" is precisely the move that mis-named tag6 once already.
+    Two of ten namings were REFUTED on audit, one of them a false "no correlation"
+    contradicted by its own numbers (χ²=92.4, 0/2000 permutations).
+    `envchunk` gains `postproc()`/`lights()`; test floor 25 → 28, 40 under `--all`.
+    **(G)** ✅ **DONE 2026-08-13 (FINDINGS 56). THE LADDER IS CLIMBED.** Rung G of
+    the original ladder — *"someone models a shape in Blender, runs one command,
+    and walks around it in the retail client"*, dependencies **all of the above** —
+    is one command: `deploy.py --area plaza --install --launch --dat <copy>`, with
+    the recipe in `content/areas.toml` (`source = "invented"`). Geometry → borrow →
+    assemble → verify → install → launch → read back, refusing at each step. The
+    client compiled it and every readback check is green: **55 trapezoids built
+    from our terrain** (against 22 for the flat map), heights **1024/1024**, env and
+    sound VERBATIM, 5 props, and the spawn in **exactly one** trapezoid with two
+    retail spawns as 0-scoring controls. **3,941 B, 77.90% ours**, 770 borrowed
+    bytes every one named. Three defects, all in the JOINS rather than in any
+    component (every one of which was green): structural constants must come from a
+    map SHAPED like ours (Pre-Searing's Zones is 7,208 B against 34, which blew the
+    reservation), the client must OWN the archive you armed, and a documented stage
+    that no line runs is a docstring. `test_deploy.py` (floor 14) pins all three —
+    and its own syntax check was VACUOUS at first, passing against a sabotaged
+    source, so it now runs that sabotage as a negative control.
+    Not a hot reload: the client compiles at load, so iterating means running it
+    again. Record: `vault/research/rungG-2026-08-13/`.
+    **(H)** ✅ **DONE 2026-08-13 (FINDINGS 57). THE SIZE CEILING IS BROKEN.** Every map this toolkit built was 32x32 because `datwrite` cannot grow
+    a reservation — not because of the format, whose cap is 16,777,216 cells.
+    `deploy --install` now picks the verb from the size, and a **96x96 map, 21,926 B,
+    was relocated into a row reserving 4,608**: terrain 9,216/9,216 exact, **96.03%
+    ours**, 10/10 open-time rules, 0 overlaps, exactly two rows changed. **THE RUN
+    LANDED the same day**: the client re-bloated, built **88 trapezoids over 9,216
+    cells** (the 32x32 plaza gave 55 over 1,024), matched our height field
+    9,216/9,216, carried env and sound verbatim, kept all 12 props and put the spawn
+    in exactly one trapezoid — no assert. **It also answers FINDINGS 39's standing
+    question: a relocated row SURVIVES a play session** (10/10 rules, 0 overlaps, our
+    row byte-untouched at 0x6FF0A00 afterwards). Two defects worth carrying:
+    `snap_block` is a ONE-TILE function and a whole-field caller loses only
+    CURVATURE (a 400-unit cliff round-trips, a smooth hill loses 2,752 samples), now
+    `snap_field` with a negative control; and `--check-overlaps` is a read-only verb
+    that returned 0 having written nothing while `deploy` reported success over
+    ArenaNet's own map, so install now READS THE ROW BACK. Record: `vault/research/size-2026-08-13/`.
+### Naming the archive's map rows — 2026-08-13
+
+**[studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md), `toolkit/clientscan/maprows.py`.**
+The arc was opened to find the join `s_missionClientData` index → map file id.
+**There is none, and that is now REFUTED rather than assumed** — three methods
+that share nothing: an exhaustive packed-dword sweep against a 500-trial null
+(21 hits, null mean 21.4, and *below* chance on distinctness); a backwards walk
+of every producer of the file-id argument, which finds exactly two and both are
+the network; and a sweep of every field of every map chunk, whose positive
+control fires on the content UUID and on nothing else.
+
+**What replaced it does not need a file id.** The table carries each map's
+FOOTPRINT on its continent at `+0x48`/`+0x58` — a rect in terrain cells, unnamed
+in every mirror — and its size equals the map file's terrain dims at the known
+96.0 pitch, **319 of 319**, with a one-cell shift scoring **0 of 319** and a
+random-size null at 41%. Against gw-preservation's hand-typed table (verification
+only): **350 of 353, versus a 5.4% shuffle control**; on the rows named outright,
+**15 agree, 0 differ, 5 are named that no upstream names**.
+
+**Three corrections land on other documents.** The table is
+`s_missionClientData` and **888/124 are ArenaNet's own numbers**, out of its
+accessor's assert at `0x005A8580`. `textrec.combine()` moves from UPSTREAM to
+**CORROBORATED** — the client computes exactly it at `0x004702B0`. And
+`FORMAT.md`'s "the client does not mask" is **CONTESTED**: ArenaNet's own server
+sent the MASKED `0x1B97D` in 9 of 9 live instance loads.
+
+**(1) IS DONE, SAME DAY, AND IT REFUTED THE SESSION'S OWN CORRECTION.** The
+client never masks — the index stores the id verbatim (`0x0047C027`), the lookup
+is an exact 32-bit compare (`0x0047AA20`), and no retry exists on the map path.
+**Bit 31 is a RENAME**: `FcArchive` binds `id | 0x80000000` and deletes the plain
+name when a replacement has been requested (`0x007D7B70`), and `DnArchive`
+re-links the plain id once it is installed (`0x004766F0`). The question open
+since 2026-08-06 is closed.
+
+What settled it was not the disassembly but a question nobody had asked: **which
+archive the live client was reading.** It was `vault/run-live/`, and that copy
+binds the PLAIN `0x1B97D` — to row 177262, not 7982 — and carries 9 bit-31 ids
+against `dat_study`'s 25. So ArenaNet sends the plain logical id, our study copy
+cannot answer it, and both "the masked form is refused" and "the masked form
+works" were true of different copies.
+
+**Operational consequence, and it touches `content/maps.toml`:** a `file_id` is
+archive STATE, not a property of the map. `0x8001B97D` is right for `dat_study`
+and wrong for `run-live`. Any content row carrying a bit-31 id records a
+transient state of one copy, and a server should send the plain id and serve from
+an archive that binds it. Nothing was changed on that basis yet.
+
+**(B) IS DONE 2026-08-13.** `toolkit/contentids.py` + `test_contentids.py`
+(floor 15) check that every `content/maps.toml` file id names the SAME FILE in
+both archives a run uses -- identity by MFT size and crc, never by row, since row
+indices do not survive a patch -- and `drive_client.assert_safe` refuses a
+loopback launch when it does not. Gated to `RUN_ROOT`: a live run answers to
+ArenaNet's own ids and must never be refused on our rows. The positive control is
+`vault/run-live/`, which genuinely fails on exactly the two Pre-Searing rows.
+Today the real pair is 10 of 10 clean.
+
+**(C) IS PLANNED, NOT BUILT -- make content archive-INDEPENDENT.** (B) is a guard;
+it tells you the two copies disagree, it does not let a content row survive the
+disagreement. The defect it guards is real and structural: `content/maps.toml`
+records a file id, and a file id is a fact about one copy of `Gw.dat`.
+
+  *What C would do.* Record a durable KEY per map instead of (or beside) the id,
+  and resolve the id at launch against the archive the CLIENT will open. The key
+  has to be something both copies agree on when the bytes are the same map.
+  Candidates, cheapest first: the MFT entry's `crc` + `size` over the stored
+  bytes (already proven sufficient for identity by `contentids.py`, and free --
+  no decompression); the map's dims from chunk `0x2000000C` (weak alone, 104
+  distinct over 349 rows -- see the footprint work above); or the content UUID in
+  the same chunk, which is per-map and stable but which `mapbuild.py` records as
+  never read by the client, so nothing guarantees ArenaNet keeps it stable across
+  a patch. **The crc is the one to try, and it needs measuring across a patch
+  before it is trusted** -- a re-bloated map changed both size and crc between
+  `dat_study` and `run-live` (1,300,036 B vs 1,300,044 B), so crc identifies a
+  FILE, and whether it identifies a MAP across an ArenaNet update is exactly the
+  open question.
+
+  *Why it is not urgent.* The exposure is two content rows and one id, it is
+  correct for the current pair, and (B) now makes any future divergence a refusal
+  rather than a client assert. Do C when a second archive state actually has to
+  be supported -- e.g. serving a live-updated copy -- not before.
+
+  *What C must not do.* Silently pick an id. If two archives disagree the right
+  answer is still to refuse; C only widens the set of pairs that can agree.
+
+**Next.** (2) The remaining 296 rows are limited by information, not
+effort: the archive carries a map's dims and nothing that places it on a
+continent. A live capture on a known-named zone yields one exact `(map id, file
+id)` pair at zero ambiguity, which is the cheapest evidence left and needs only
+play, not analysis.

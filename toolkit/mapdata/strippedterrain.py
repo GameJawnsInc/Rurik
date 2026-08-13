@@ -599,6 +599,37 @@ def snap_block(samples):
     return out, worst
 
 
+def snap_field(samples, dim_x, dim_y):
+    """`snap_block` over a WHOLE map, tile by tile. Returns `(snapped, worst)`.
+
+    THIS EXISTS BECAUSE ITS ABSENCE COST A RUN. `snap_block` takes exactly one
+    32x32 tile -- its docstring says "1024 integer samples" and it strides by
+    CHUNK_SIZE -- and a caller with a bigger field who hands it the whole list
+    gets tile 0 snapped and every other tile left alone. That fails SILENTLY in
+    the direction that matters: a linear field is exactly representable without
+    snapping, so ramps and cliffs still round-trip and only CURVATURE is lost,
+    which is precisely what an authored landscape is made of. At 96x96 a smooth
+    hill lost 2,752 of 9,216 samples while a 400-unit cliff lost none, and the
+    lost slots all sat past index 1024 -- the end of the first tile.
+
+    A map's samples are stored tile-major (`terrain.Terrain.index`), so each
+    consecutive run of 1024 is one whole tile and can be projected on its own.
+    """
+    cells = dim_x * dim_y
+    if len(samples) != cells:
+        raise ValueError(f"{len(samples)} samples for {dim_x}x{dim_y} = {cells}")
+    if dim_x % CHUNK_SIZE or dim_y % CHUNK_SIZE:
+        raise ValueError(f"dims {dim_x}x{dim_y} are not both multiples of "
+                         f"{CHUNK_SIZE}; the tiling this walks does not apply")
+    out, worst = [], 0
+    per = CHUNK_SIZE * CHUNK_SIZE
+    for start in range(0, cells, per):
+        tile, w = snap_block(samples[start:start + per])
+        out.extend(tile)
+        worst = max(worst, w)
+    return out, worst
+
+
 class HeightBlock:
     """One 32x32 terrain tile of the height field: 1024 integer samples.
 

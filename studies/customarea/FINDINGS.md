@@ -5729,9 +5729,12 @@ What the code settles that the archive could not:
   addresses. Three (`0x0073DE88`, `0x0073DE6D`, `0x0073DE5D`) are `fild`-scaled
   and feed `0x0073B4C0`, which fills two 12-byte vectors: a packed rotation,
   INFERRED. The fourth (`0x0073DE2D`) is scaled into a float: a scale, INFERRED.
-  The widths are measured; the meanings are not. The corpus agrees without
-  confirming: the scale byte is 0x7F on 35,593 props and the rotation bytes are
-  zero on 180,391 — which is what the old "high half clusters at 0x7F00" was.
+  The widths are measured; the meanings are not. *(Both readings are now
+  CORROBORATED by the compiler's own output, and this sentence's two counts
+  were corrected on the same day — §45: the scale byte is 0x7F on **135,079**
+  props, not the 35,593 this line first claimed, which reproduces under no
+  population; and "the rotation bytes are zero on 180,391" counts props with
+  rot[0]==rot[1]==0 — a pure yaw — while all-three-zero is 46,371.)*
 * **The outline is in PROP-LOCAL coordinates.** The client sign-extends each
   pair and adds the prop's own x and y back (`0x0073DF4F`, `0x0073DF67`).
 * **The client's version gate accepts 0x11 AND 0x12** (`0x0073E224`,
@@ -5828,3 +5831,856 @@ test out of `int.from_bytes` that imports nothing from the module.
 
 `minimal()` — a props chunk authored from nothing, no archive and no donor —
 is byte-identical to row 46197's, the smallest in the archive.
+
+## 45. The Bloated props chunk, read — the oracle becomes a test, and (e10d) is staged (2026-08-12)
+
+**Chunk `0x20000004` is read, read-only, and the cross-stream oracle is now
+section 9 of `test_props.py`** — 349 of 349 under `--all` (110 checks, 718 s
+measured), where it had lived only in §44's prose and a workflow scratchpad.
+`props.BloatedProps` is the reader; it deliberately has NO `encode` (the test
+asserts that), because five of its six sections are carried opaquely and a
+round trip could only be a memcpy wearing a headline.
+
+### The framing, measured from the archive
+
+Header is **5 bytes** — u32 `0x39583392`, u8 version 17, the SAME pair the
+Stripped chunk opens with, where Bloated TERRAIN has an 8-byte `<II>` header.
+(§5's earlier "u16 version, u32 array size" read the same bytes with the tag
+byte folded into the version; both close because the tag is 0.) Then
+`{u8 tag, u32 size}` sections in the order **0, 1, 2, 3, 4, [6], 255**, tag 6
+optional and present EXACTLY when the Stripped chunk carries its tag-6
+section — 349/349 — terminator declaring size 0 and ending the payload.
+
+### The record, and the corroborations it carries
+
+Tag 0: u16 count == the Stripped prop count, then records **in the same order
+as the Stripped array**, 48 bytes + 8 per ring point:
+
+    +0x00 u16    model    == Stripped          \
+    +0x02 f32[3] x,y,z    == Stripped, bytewise | 285,670 of 285,670
+    +0x2E u8     flags    == Stripped           | records, corpus-wide,
+    +0x2F u8     points   == Stripped          /  via corresponds()
+    +0x0E f32[3] basis_a, +0x1A f32[3] basis_b -- from the rot bytes
+    +0x26 f32    scale    == f32(b*(255/128)/256 + 1/128)  EXACTLY
+    +0x2A f32    radius   == §5's cross-file identity (see below)
+    +0x30..      ring     == f32(prop.x+dx), f32(prop.y+dy)  BYTE-EXACT
+
+**Three of §44's INFERRED readings are now corroborated by the compiler's own
+output:**
+
+* **The scale formula is exact on every record in the corpus.** Not close —
+  the f32 the compiler wrote equals the formula of the Stripped byte to the
+  bit, 285,670/285,670.
+* **The rot bytes are single-axis rotations of a constant basis.** At rot
+  (0,0,0) the two vectors are (−0,−0,−1),(0,1,−0) on **46,371 of 46,371**
+  corpus-wide. On the twelve-map probe, single-nonzero-byte records close
+  against `b·2π/256` about x (sign −, 94/94), y (+, 72/72), z (−, 400/400)
+  at 2e-3. **Composition order for multi-byte rotations is NOT measured.**
+* **The +42 float is §5's placement radius.** New evidence at model
+  granularity: file id 209883's radius/scale is **exactly 595.0 on all 414
+  retail instances**.
+
+The ring is world-space: byte-exact `f32(prop.x+dx)` — the client's
+add-the-position-back (`0x0073DF4F/67`), done at compile time. Corpus ring
+population equals the Stripped outline-point population: **334,725**.
+
+### Two corrections to §44's prose, from the same sweep
+
+* "the rotation bytes are zero on 180,391" — the NUMBER is real, the
+  POPULATION was misnamed: 180,391 counts `rot[0]==rot[1]==0` (pure yaw,
+  which is also §5's 180,393 for `vecA==(0,0,-1)` seen from the other side —
+  a z-rotation leaves the vertical axis fixed). All-three-zero is **46,371**.
+* "the scale byte is 0x7F on 35,593" — **does not reproduce under any
+  population tried**: measured 135,079 (scale==0x7F), 30,174 (∧ rot zero).
+  §44 and `props.py` are corrected in place.
+
+### The props-deps pairing, and stripbuild learned it
+
+**`0x11000004` (Stripped props dependencies) is present EXACTLY when the map
+has props — 349/349**, closing the loop monsterai's study saw from the
+Bloated side (the three zero-prop maps are exactly the three absentees; the
+map-143 target row 71496 is one of them). `stripbuild.build()` now takes
+`prop_dep_ids` and generates the chunk into retail's slot, immediately after
+the props chunk; both unpaired configurations are REFUSED, as is a `model`
+index past the list — the handoff's known trap, turned into a refusal
+(`test_stripbuild` §3d, floor 40 → 46).
+
+### (e10d) is STAGED and holds for the owner's go
+
+`vault/research/e10d-props-2026-08-12/`: two builds identical but for the
+prop's outline (A none, B a closed ±100 square), model 209883 chosen by
+corpus sweep, first authored `0x11000004`, predictions RECORDED before
+arming (`PREDICTIONS.md` — the oracle says the compiled tag-0 sizes must be
+**50** and **90**; the radius must be f32(592.6939697265625)), and
+`readback.py` proven end-to-end against the untouched study archive. The
+harness is another session's; nothing arms until the owner says go.
+
+## 46. OBSERVED: the client compiled a map with a prop WE placed — rung (e10d), both runs (2026-08-12)
+
+**PLACE SOMETHING is done.** Two client runs, one variable apart — the same
+authored prop with and without a closed outline — and every load-bearing
+prediction hit. Run record: `vault/research/e10d-props-2026-08-12/`
+(PREDICTIONS.md written before arming, RESULTS-A.md and RESULTS-B.md written
+immediately after each run, both compiled heads and path chunks saved).
+
+The prop: model index 0 → file id 209883 via our own `0x11000004`, at
+(2400, 2400, −13) on FINDINGS 43's map, scale byte 0x7F, flags 0. Run A: no
+outline. Run B: a closed ±100 square, 5 points. Procedure was rung E3's, on
+the C2 archive, re-cut and verified pristine before each arm.
+
+| | A (no outline) | B (±100 ring) |
+|---|---|---|
+| compiled head | 8,417 B, 8 chunks | 8,481 B, 8 chunks |
+| `0x21000004` | **[209883]** | **[209883]** |
+| tag-0 size (oracle: 50 / 90) | **50** | **90** |
+| `corresponds()` | **CLEAN** | **CLEAN**, ring back edge-exact |
+| radius +42 | `672c1444` | `672c1444` |
+| path chunk | 835 B, **7 trapezoids** | 739 B, **5 trapezoids** |
+
+What the pair establishes:
+
+* **The compiler keeps our props, bit-faithfully.** Positions bytewise, the
+  scale formula exact, and the +42 radius BYTE-IDENTICAL to what all 296
+  retail records of this model at this scale carry — the compiled record is
+  indistinguishable from ArenaNet's own pipeline output.
+* **The cross-stream oracle holds on OUR input**, not just retail's 349.
+* **The outline is collision geometry, edge for edge.** B's navmesh hole is
+  exactly the authored square — trapezoid boundaries at 2300/2500 on both
+  axes — with all four inside-ring probes flipping walkable→not and no
+  outside-ring probe moving.
+* **A prop with NO outline still carves** — run A's mesh holds an irregular
+  ~±40-unit polygon hole at the prop, so the compiler ALSO instances the
+  model file's own collision sub-mesh (§5). P5-A's "the outline is the props
+  chunk's only geometry" was falsified, in the branch the predictions
+  reserved. Retail gives this model ~149-unit outlines against its ~40-unit
+  intrinsic footprint, so the two are not redundant in retail data either.
+
+Two prediction defects, kept: the predicted radius NUMBER was derived from a
+ratio the corpus probe had rounded to three decimals (`round(x, 3)` printed
+"exactly 595.0" for ≈594.9998) — the compiled bytes matching retail's is the
+stronger, correct statement; and P5-A's mesh prediction was wrong as above.
+A constant quoted from a rounded probe is not a constant.
+
+NOT established at readback time — the first two CLOSED the same day by the
+owner's own session (build B re-staged, owner in the map): **model 209883 is
+a TREE, rendered standing at (2400, 2400)** — which retroactively explains
+every number (visual radius ~595 is the canopy, intrinsic ~±40 collision is
+the trunk, retail's ~149 outlines are a canopy footprint) — and **the felt
+collision in-client is a small square box around it**: the authored ±100
+ring, walked into. Still open: whether the ring UNIONS with or REPLACES the
+model footprint (the ~±40 carve lies inside the ±100 ring, so the union IS
+the ring — a ring excluding the model footprint would distinguish);
+generalisation past one model, one map, one position each way.
+
+## 47. OBSERVED: the Blender loop is CLOSED — rung (e10-next), one run, all predictions hit (2026-08-12)
+
+**A terrain a human tool authored came back bit-faithful through ArenaNet's
+own compiler, with five placed trees carving the navmesh where we drew their
+rings.** Run record: `vault/research/e10next-blender-2026-08-12/`
+(PREDICTIONS.md before arming, RESULTS.md immediately after; one run).
+
+The scene: `author_scene.py` in headless Blender — a flat plaza around the
+spawn, rolling sines, one gaussian landmark hill, every height integer —
+through `export_gwmap.py` to the interchange, then `build_map.py` into
+`stripbuild` with five trees (model 209883) on near-flat cells, each with
+the proven ±100 ring. 3,045 B staged, 98.59% generated.
+
+| | predicted | observed |
+|---|---|---|
+| compiled head | — | 11,749 B, 8 chunks, `0x21000004` = [209883] |
+| **heights, via the BLOATED codec** | **1,024/1,024** | **1,024/1,024** |
+| props tag-0 (oracle) | 442 | **442** |
+| `corresponds()` | clean | **CLEAN**, radii `672c1444` ×5 |
+| mesh probes | 12 stated | **12 of 12** — spawn and hill flank walkable, five tree centres not, five outside probes are |
+
+Two mechanisms the driver had to learn, both now written into it:
+
+* **The export was PROVEN against the design before anything else** — all
+  1,024 samples equal the formula, which pins the interchange's world
+  row-major order and the stored-z sign in one check.
+* **A freely authored field is essentially never on the terrain transform's
+  lattice.** The first build quietly moved 610 samples; `snap_block()` FIRST
+  (worst move: 4 stored units against a 96-unit cell) makes the round trip
+  exact and puts the quantisation error in the record instead of in-game.
+  Tree heights are computed from the SNAPPED field, not the design.
+
+The hill flank at ~22° compiled WALKABLE, consistent with both of FINDINGS
+34's candidate threshold sets; which set is in force is still undecided.
+The owner walked the compiled map in a live session the same day and
+confirmed it: the plaza, the trees, the rings and the climbable hill all
+read in-game the way the chunks say.
+NOT established: textures, sound, environment, lighting (the map renders
+with the default tile stretched over authored slopes — the owner has seen
+what that looks like); anything past one run of one scene.
+
+## 48. OBSERVED: the slope-threshold set is 15/35/30, boundary 35 — rung (e10e), the ramp map (2026-08-12)
+
+**FINDINGS 34's open question is measured.** The flood classifier reads slope
+against `10/45/40°` or `15/35/30°` on a mode flag; the sets share no values,
+so one map answers both which set and which number. Five ramp strips whose
+snapped interior slopes bracket every candidate cutoff (26.6..29.4, 32.0,
+36.1..37.6, 41.5..41.9, 46.5..47.8 degrees), a flat apron with the seed and
+spawn, a flat plateau atop each strip. Predictions before arming; one run;
+run record `vault/research/e10e-threshold-2026-08-12/`.
+
+**Pattern `WW...`: the 32.0° strip compiled WALKABLE and the 36.1° strip did
+not.** The cut is measured inside (32.0°, 36.1°); **35 is the only candidate
+in the window**, every number of the `10/45/40` set is excluded, and the set
+in force is **`15/35/30`**. The apron control walked; the anchors agree (22°
+walkable in §47, 86° not in §38/43).
+
+Second result, free: **walkable area is connectivity-pruned from the flood
+seed.** The plateau row repeats the ramp row 5 of 5 — a FLAT plateau above a
+too-steep ramp is absent from the mesh entirely. "Walkable" in the compiled
+chunk means *reachable and gentle*, not gentle alone.
+
+`stripbuild.SEED_UNWALKABLE_DEG` stays at 30, now a measured 5° margin
+rather than the value merely safe under both readings; its comment records
+the measurement. What the run does NOT settle: the roles of the set's other
+two numbers (15 and 30 — candidate "unsure"/"amble" boundaries, unread), and
+whether the mode flag can select the other set on some map kind; every map
+this toolkit compiles goes through the path measured here.
+
+## 49. OBSERVED: the terrain wears our paint — rung (e10f), textures (2026-08-12)
+
+**Rung F2 is done, one variable against the map the owner had just walked.**
+Heights and all five trees extracted byte-for-byte from (e10-next)'s
+NEXT.bin; only the texturing fields changed: tag 2 painted by height band
+(plaza / low rolling / high rolling / hill top — census 84/363/472/105),
+tags 4/5 and tex_word taken from the DONOR's own tables at run time
+([0,1,2,3], [11,21,17,7], 8421) — ArenaNet's pairing for the four
+dependency files the map already ships, because table_b is a property of
+the TEXTURE (a function of the file, 17,083/17,089) and inventing one is
+wrong when reading it is free.
+
+Readback, all predictions HIT: the compiled Bloated terrain carries the
+painted tag 2 **VERBATIM**, both tables and tex_word carried, deps
+unchanged, props oracle 442 and `corresponds()` clean, heights 1,024/1,024.
+**And the owner walked it: the ground wears the four painted bands.** The
+tile table is what selects among the terrain dependency files, per cell,
+and the whole chain — paint in this toolkit, compile in the retail client,
+render on screen — is closed. Run record:
+`vault/research/e10f-textures-2026-08-12/`.
+
+Kept honest: tables/tex_word changed alongside the paint (to
+correct-by-retail values), so the claim rests on the SPATIAL pattern, which
+only tag 2 can produce. Still NOT FOUND: what table_a's staircase grouping
+means, and what table_b's 7 bits classify. Not tried: dependency ids from a
+DIFFERENT biome (the four textures here are the template's own set).
+
+## 50. OBSERVED: another biome's ground — rung (e10g), Pre-Searing grass on Ascalon geometry (2026-08-12)
+
+One variable past §49: WHICH FILES. GRASS.bin is (e10f)'s map byte-for-byte
+in heights, trees, paint and staircase; the four dependency ids were swapped
+to Pre-Searing's four most-used ground textures — ranked by its OWN tile
+census at run time, slots [12, 19, 15, 18] of its 59 → files
+[112780, 112787, 112786, 112784] — with table_b following its files
+([17, 17, 23, 17] from Pre-Searing's own pairing), because §49's reading
+says table_b is the texture's property and must travel with it.
+
+One run, readback all HIT (deps carried, tiles VERBATIM, oracle 442,
+corresponds clean, heights 1,024/1,024), **and the owner walked it: Pre-
+Searing ground on Ascalon-template geometry.** Texture files are ordinary
+archive files selected per-slot by the dependency list; nothing ties a map
+to its biome's set. With §49 this closes the texturing mechanism at the
+level an authoring tool needs: the tile byte selects the slot, the slot
+names the file, both under our control, both compiling and rendering. Run
+record: `vault/research/e10g-grass-2026-08-12/`.
+
+Still NOT FOUND, unchanged: table_a's grouping semantics, table_b's 7 bits.
+
+## 51. OBSERVED: the sun moves and the sky arrives — rungs (e10h) and (e10i) (2026-08-12/13)
+
+Two runs, one variable each, run records
+`vault/research/e10h-light-2026-08-12/` and `…/e10i-environment-2026-08-12/`.
+
+### (e10h) the sun: tag 0's angle byte re-bakes the lightmap
+
+One byte against the grass map — angle index 194 → 103, 68.7° → 36.5° by
+the client's own expression — and the compiler re-baked **985 of 1,024**
+tag-9 bytes. The elevation sweep orders correctly: each compile's lightmap
+best-fits a sun on ITS OWN side (the low-angle compile fits low, the
+high-angle fits high), which is the §49-era lightmap reading measured from
+the AUTHORING side for the first time. **The pre-registered two-way
+inequality itself MISSED, and the defect is the prediction model's**: a
+pure N·L fit carries no CAST SHADOWS, which dominate at a low sun and drag
+a Lambertian best-fit far below the true elevation (best |r| 0.93 at 5°
+against a true 36.5°). Kept as a model defect beside the mechanism's HIT.
+Owner's eyes: "hard to tell" — and (e10i) explains why.
+
+### (e10i) the environment chunk brings the sky, the ambient light, and the horizon
+
+The pair our maps never carried — `0x10000009` + `0x11000009`, present on
+every retail map sampled — added in retail's slot after the Path chunk:
+Pre-Searing's 639 B payload BORROWED at run time (not understood, named in
+the census), the deps regenerated from its 10 ids. The compiler accepted
+the ten-chunk configuration and carried the payload **VERBATIM** to
+`0x20000009`. **Owner, verbatim: "yep that's a sky, and it was key to the
+lighting. the ocean looks much better now."** Three facts in one: the sky
+was the missing environment chunk all along; ambient/light colors ride in
+it, which is why (e10h)'s visual was masked under the void; and the
+horizon water plane reads from it too, on a map with no water chunk of its
+own.
+
+`stripbuild.build()` now takes `env_payload`/`env_dep_ids` — together or
+not at all, counted BORROWED (`test_stripbuild` §3e, floor 46 → 51). The
+presentation ladder now stands: textures painted (§49), biomes swapped
+(§50), the sun ours (§51), the sky borrowed whole (§51). Still not
+understood: the environment payload's 639 bytes; still absent: sound.
+
+## 52. OBSERVED: the map has a voice — rung (e10j), sound (2026-08-13)
+
+The last presentation pair: `0x10000012` + `0x11000012`, present on most
+retail maps and never on ours. Pre-Searing's 89 B payload BORROWED at run
+time (not understood, named in the census), its 3 audio-file ids (`ffna`
+type 8) regenerated as ours, the pair after the environment pair — the file
+stays a subsequence of retail's total order. One run: the compiler carried
+the payload VERBATIM to `0x20000012`. **Owner, verbatim: "background audio
+plays birds and wind."** Pre-Searing's ambience on our authored map.
+
+`stripbuild.build()` takes `sound_payload`/`sound_dep_ids` under the
+environment pair's rules (together or not at all, counted BORROWED —
+`test_stripbuild` §3e, floor 51 → 54). Run record:
+`vault/research/e10j-sound-2026-08-12/`.
+
+**The presentation ladder is walked**: textures painted per cell (§49),
+biomes swapped (§50), the sun authored (§51), the sky and now the ambience
+borrowed whole (§51, §52). What "borrowed whole" leaves open is authoring:
+the environment's 639 bytes and the sound chunk's 89 are carried, not
+understood, and understanding them is the difference between wearing
+Pre-Searing's weather and writing our own.
+
+## 53. OBSERVED: the two payloads, understood — env `0x10000009` and sound `0x10000012` (2026-08-13)
+
+The §52 close named the debt precisely — "carried, not understood" — and this
+section pays it. Both chunks are now decoded to typed fields and re-encoded
+**349 of 349 byte-identically** (`toolkit/mapdata/envchunk.py`,
+`soundchunk.py`); the corpus is the whole population, because Stripped equals
+Bloated 349/349 for both kinds, so the compiler provably never rewrites these
+bytes. Method was the house's: derive the framing from the 349-map corpus
+alone, then read the client's own loaders to settle what the bytes could not —
+and the client CORRECTED the corpus three times, which is why the disassembly
+was not optional.
+
+### Sound `0x10000012` — a positioned-emitter layer
+
+The corpus gave the outer shape to arithmetic: every payload is `17 + 24k`
+bytes (MEASURED 349/349), a 16-byte header plus `k` fixed 24-byte records plus a
+`0xFF` terminator. The loader at VA `0x00712EE0 → 0x0076afc0` named every field:
+
+    header:  u32 'msnd', u32 version 2, u8 0, u16 idx_a, u16 idx_b, u8 1, u16 k
+    record:  u16 dep_a, u16 dep_b, i32 x, i32 y, u32 r_lo, u32 r_hi, u32 r_mid
+
+`idx_a`/`idx_b` are the map's DEFAULT ambience — two indices into the sibling
+Dependencies chunk `0x11000012`, `0xFFFF` for none; the 20 maps whose pair is
+`(0xFFFF, 0xFFFF)` are EXACTLY the 20 with no dep chunk (MEASURED, both
+directions). A record is a positioned emitter: `(x, y)` lands inside the map's
+own Map Parameters rect in **318 of 318** records — the same cross-chunk oracle
+that cracked props (§45), from a chunk the sound codec never reads, and a
+±1-byte shift of the read collapses it to 0/318. The three radii are stored
+`lo, hi, mid` on disk but the loader enforces `lo ≤ mid ≤ hi` (`0x0076b2ed`)
+and **squares each with `fmul st,st`** (`0x0076b42a`) for a sqrt-free distance
+compare — so they are attenuation radii, MEASURED as squared distances,
+INFERRED as min/knee/max. The scout's guess that records and deps were separate
+subsystems was REFUTED — records index the dep list too. And the loader does NO
+magic dispatch on a dep's file type (`0x0076b190` just bounds-checks and
+addrefs), which is why the ~112 emitters naming a texture rather than an
+`ffna8` sound are a real open question and not a decode error. The sounds
+themselves are one hop deeper: a dep resolves to an `ffna8` descriptor whose own
+chunk-1 lists the raw MPEG / `AMP` audio — this chunk PLACES sounds, it does not
+contain them.
+
+### Environment `0x10000009` — parallel arrays and a spatial zone list
+
+The 639-byte mystery is a spatial environment SYSTEM. Framing (loader
+`0x00712750 → 0x0071ef70`, corpus 349/349):
+
+    header:  u32 0x92991030, u16 version 16, u16 flag        (8 bytes)
+    then sections {u8 tag, u16 count, count*record} ascending, then one 0xFF.
+
+Tags 0–7 are PARALLEL ARRAYS of environment aspects; **tag9 is a zone list**.
+A zone is a world-space circle `{u16 sel[8], i32 x, i32 y, u32 r_in, u32 r_out}`
+whose `sel[8]` names one record from each of the eight arrays, overriding the
+map default inside its blend band. The clincher, MEASURED: all 73 maps with no
+zones have every aspect array at count exactly 1. "Several environments per map,
+blended" is SPATIAL, not day/night — day/night keyframes were NOT FOUND. **tag2
+is fog** — `{u8 r,g,b, u32 near, u32 far, i32, i32}`, `near < far` 1745/1745,
+Pre-Searing reading hazy-blue 6200/22500 over a bright map with one dark-fog
+corner — and tag12 is optional per-region boundary polygons.
+
+**And `tag8` is the map's DEFAULT selector tuple**, which is what makes the
+architecture close: its 17 bytes are EIGHT u16 selectors, one per aspect array in
+tag order, plus one byte. So the default environment and a zone's environment are
+the same kind of object — a pick from each array — and a zone is that tuple plus
+a circle. The slot-to-array mapping is forced by the resolver at `0x0071F2F0`,
+which bounds each slot against its own array's count and indexes with that
+array's stride (`imul ecx, eax, 0x39` for tag6's 57 bytes, and so on), and by the
+corpus: all 20,936 zone slot reads are in bounds, while rotating the assignment
+by one puts 3,562 out and the full 8×8 discrimination matrix has a zero diagonal
+with 55 of 56 off-diagonal cells non-zero.
+
+### The three corrections the client forced
+
+A corpus grammar can close 349/349 and still be wrong, and this one was, three
+times — each a thing that misparses some map:
+
+1. **The header is 8 bytes, not 5.** Offsets 4–7 are `{u16 version, u16 flag}`
+   (`0x0071f1ad`), not a 5-byte `{u32 sig, u8 ver}`.
+2. **The tag5-width flag is the header word at offset 6, not tag0's count.**
+   The loader branches on the header dword's high u16 (`0x0071f1d5`); the header
+   flag and tag0's count DISAGREE in 168 of 349 maps, and using tag0's count
+   would pick the wrong tag5 width in 92. tag0 is a real 10-byte aspect array.
+3. **tag8 is a real, always-present 17-byte section** — the map-global default
+   environment (`envGlobal`) — which the corpus grammar had folded into tag7's
+   tail as a phantom "18-byte tail whose leading u16 == 8." That 8 was the tag
+   byte.
+
+The `EnvDataImport` asserts also settled what `envArray` is: the strings at
+`0x0072032d` and `0x0072044a` read verbatim `tag->index < ...envArray.Count()`
+and bound tag11's and tag12's indices against the tag9 zone array — so
+`envArray` is the zone list, not tag6, closing a question the corpus could only
+guess at.
+
+### THE SUN IS WRITTEN TWICE, and the two copies agree
+
+`tag8`'s seventeenth byte is the SUN ELEVATION, stored as a byte-turn: the
+loader multiplies it by the f64 at `0xA6EE50` = `float32(2π)/256`
+(`fmul` at `0x0071FBD8`). The Stripped TERRAIN chunk's tag-0 `angle_index`
+encodes the same authored angle under its own scaling
+(`b × 282.74334716796875/45720`), and the ratio between the two quantisations is
+exactly `127/32`. So one chunk predicts the other, and it does:
+
+- **313 of 349 maps agree within one terrain quantum** (0.354°), median residual
+  +0.011°; 308 agree EXACTLY under `floor(b₈ × 3.96875 + 0.5) == angle_index`.
+  The tolerance figure is the one to quote because the exact one is
+  **rounding-dependent**: `b₈ = 48` lands on exactly 190.5, two maps carry it,
+  and banker's rounding scores 307 where round-half-up scores 308 — one of those
+  two maps really does store 191. A number that moves with your rounding mode is
+  not the number to put in a headline.
+- Controls all collapse: the same byte read at +0x0E or +0x0F → 0/349; every
+  other one of tag8's 17 bytes → 0/349 each; the NEIGHBOURING byte scaled
+  identically → 0/349 (this one is in the test); shuffled map pairing → 42/349;
+  rival scalings `π/256` and `π/64` → 0/349.
+- **The 34 disagreements are not scattered**: 28 carry terrain byte 127 —
+  exactly 45.00°, the modal default — against an authored env angle, i.e. the
+  terrain copy was left unset. That is a story about ArenaNet's tools, not a
+  failure of the reading.
+
+Two independent subsystems, written by different code, storing one physical
+quantity — the shape that made §51's lightmap reading trustworthy, now measured
+from the environment side. Terrain bakes the lightmap from its copy; the env
+copy drives the runtime sky. This also explains a thing (e10h) could not: our
+authored maps moved the terrain byte and left the env chunk borrowed, so the
+baked lightmap and the runtime sky disagreed about where the sun was.
+
+### tag6 is the WATER record — a correction worth stating loudly
+
+An earlier draft of this section called tag6 "the main environment record",
+which was inferred from nothing but its size (57 bytes, the largest). The
+consumer disassembly refutes it: the selected tag6 record reaches `MapWater`'s
+parameter setter as one struct, and its floats are a water shader's. `+0x05` is
+the water plane's base height — **the one float the zone blender refuses to
+interpolate**, copied from the dominant zone instead (`fld [ecx+0x98]` at
+`0x00717B01`) — `+0x09` is a wave amplitude scaling a five-sine surface sum, and
+two `(tiling-scale, scroll-speed)` pairs drive texture matrices through
+`GrTrans`. `+0x00` is a mode enum the loader VALIDATES rather than tolerates:
+`cmp eax, 3; ja <abort>` at `0x0071F6F3` into a four-arm jump table, so a value
+above 3 aborts the entire import. `+0x02..+0x04` are padding, zero in 865 of 865
+records. The two u32s are D3DCOLOR `0xAARRGGBB`.
+
+This is why the owner's (e10i) observation — "**the ocean looks much better
+now**" — was literally true and not a side effect of the sky: the environment
+chunk carries the water parameters, and our maps had none until that rung.
+
+### What the audit caught, and why the pass is worth trusting
+
+Fifteen namings went to independent skeptics that re-disassembled the cited VA
+*and* re-ran the corpus claim. **Three came back REFUTED, and all three in the
+same way**: the offsets and mechanics reproduced exactly, and the NAME
+overreached its evidence. tag6's `+0x00` really is a validated 0..3 enum with a
+real four-arm jump table, but "water technique" rested on a downstream citation
+the disassembly did not support; tag5's `+0x05` really does map to zone+0x7c,
+but "layer texture slot 2" claimed more than the code showed; tag1's three bytes
+really are each normalised `/256`, but "an RGB triple" is ruled against by the
+corpus, which carries typed colour triples with a different profile. Those are
+recorded as structure-without-a-name rather than quietly promoted, which is the
+difference between this pass and a plausible story.
+
+## 54. OBSERVED: our own bytes compile — rung (e10l), authored env + sound (2026-08-13)
+
+Every rung to (e10j) put ArenaNet's environment and sound payloads in front of
+the client BYTE-FOR-BYTE, because nobody could read them. §53 decoded both. This
+rung is the consequence and the gate: a map whose env and sound chunks were
+**assembled by `envchunk.py` and `soundchunk.py` from typed fields**, carrying
+bytes that exist in no retail map. Owner away, so the verdict is entirely
+MECHANICAL — no screenshot, no listening.
+
+Three deltas against (e10j)'s map, ten chunks untouched: three sound emitters at
+our own positions and radii; fog record 0 recoloured to (198,150,96) at
+1200/7000; and **the zone list grown 11 → 12**. The client compiled it —
+`Perf: Map file '0x0287d3' failed to load.  Attempting to re-bloat.` — produced a
+2,695 B Path chunk (22 trapezoids), asserted nothing, and carried **both payloads
+verbatim**: env 671 B sha `20cd4337d0f71d1d`, sound 89 B sha `ebc366325090eb2f`,
+identical to what we wrote.
+
+**The zone growth is the load-bearing delta**, and the reason this run is worth
+more than "it still works". Growing the list changed a section COUNT, so every
+byte downstream of tag9 shifted. A codec that replayed stored counts — precisely
+the saboteur `test_envchunk` §2 builds and runs — would have emitted a chunk
+declaring 11 zones while carrying 12, and ArenaNet's own parser would have
+desynced into tag11. It did not. **The count re-derivation is now checked against
+the real consumer rather than against our own decoder**, which is the one thing a
+round-trip test structurally cannot do.
+
+The sun came out a corroboration instead of a delta: our terrain carries
+`angle_index` 103, §53's 127/32 ratio predicts env sun byte 26, and the map
+already carried 26 — the cross-chunk agreement reproduced on an authored map.
+
+### Three procedural defects, all mine, and what caught each
+
+None was a defect in the map or the codecs; all three printed something
+confident and wrong, which is why they are recorded rather than quietly fixed.
+
+1. **The wrong archive was armed.** `vault/dat_c2/Gw.dat` is a throwaway copy;
+   the client reads `vault/run/…-c2/Gw.dat`, a SEPARATE REAL FILE. The earlier
+   rungs' own journals record the run-dir path and settled it in one command.
+2. **`ar.entries[row]` is off by one** — `entries` is a list, `entry.index` is
+   the MFT row. Positional indexing read the NEIGHBOURING row, so the first
+   readback reported a "compiled head" that was really our own stripped input.
+   That reads as *the client ignored us*, not as a lookup bug.
+3. **The client was never sent to the map.** The harness spawns in the default
+   map; map 143 needs `--game-args "--map 143"`. Two runs passed the harness
+   verdict — *"body is in the map"* — while loading a map that needed no
+   compile. **A harness PASS is a claim about reaching A map, not OURS**; only
+   `Gw.log`'s re-bloat line says the compile happened, and its ABSENCE is what
+   named this.
+
+What caught (2) is worth keeping: **`datcheck --diff` said the client had changed
+nothing, contradicting the readback, and the diff was right.** Two instruments
+disagreeing is how a wrong confident number gets found; one instrument alone
+would have shipped the story.
+
+### State
+
+`stripbuild.build()` now takes typed `sound` and `env` objects alongside the
+borrowed-payload parameters, so a map can carry ambience and weather it authored
+rather than inherited. What is still borrowed by necessity: the dependency
+FILES themselves (an `ffna8` sound descriptor, a sky texture) are ArenaNet
+assets referenced by run-time id, which is the `borrowed_constants` pattern and
+not a gap. Run record: `vault/research/e10l-authored-2026-08-13/`.
+
+## 55. OBSERVED: ArenaNet names three of the fields itself (2026-08-13)
+
+§53 left two threads: tag6's two unnamed floats, and what tag0/tag1/tag3 ARE as
+aspects. A consumer-side pass closed most of it — offline, no client — and the
+best evidence in the whole arc turned up here, because **the client looks its
+shader constants up BY NAME and the name strings are in the image**. These are
+not our labels.
+
+| field | name | how we know |
+|---|---|---|
+| tag6 `+0x21` | **`waterFresnel`** | string `0x00A6C430`, bound to the handle uploaded at `0x0070B0F2` |
+| tag6 `+0x25` | **`waterSpecularColor`** (scales an RGB triple) | string `0x00A6C474`, upload at `0x0070B134` |
+| tag6 `+0x29` | projective texture-matrix scale, used as `0.5 / value` | `0x0070AD21`, installed on `GrTrans` slot 3 |
+
+Both water coefficients are 0..1 in 865/865 and both are also **gates**:
+`+0x21 > 0` and `+0x25 != 0` each promote the water technique, so the only path
+that reads a field is unlocked by that same field. A pleasing consequence: 128
+records set the specular strength but only 72 also set fresnel, so **56 records
+carry a value the technique gate can never reach** — a fact about ArenaNet's
+authoring tool, not about the format.
+
+**tag1 is the POST-PROCESS aspect**, named the same way, from the client's own
+19-entry constant table at `0xBF7DA8`: `{u8 BloomAmount, u8 PostProcSaturation,
+u8 PostProcTintColor.w, u8 B, u8 G, u8 R}`. The corpus is what makes those the
+*right* names rather than plausible ones — saturation is 255 (i.e. 1.0) on **648
+of 741** records, which is what a defaulted parameter looks like and what a
+second bloom scalar would not, and the tint strength is 0 on **571 of 741**.
+It also corrects this repo: the earlier reading called bytes 3–4 "a raw u16",
+and it is not an index at all, it is two thirds of a packed colour stored B,G,R.
+
+**tag3 is the DIRECTIONAL LIGHT**: two `{u8 r, u8 g, u8 b, u8 intensity}` pairs
+fed to `GrLight` setters (`0x0067B560`, `0x0067B6A0`), with the direction set
+beside them asserting `GrLight:400 m_type == GR_LIGHT_DIRECTIONAL`. Colour-ness
+is forced independently of the call: the zone blender reads `+0x50/+0x51/+0x52`
+as **three separate bytes**, which a u16 id could not survive. That also
+**REFUTES** a standing suspicion — tag3's u16s are not dep-list indices, they are
+the low bytes of a colour.
+
+### What stayed NOT FOUND, and why that is the right answer
+
+**tag0** (ten bytes, fully read out), **tag4** (a bare dep reference) and
+**tag7** (two angles, a weight and a magnitude — a direction and a distance in
+shape) have no name here. For tag0 the consumer was never reached: the
+dispatcher hands its zone index to `0x0071A4C0`, which nobody disassembled. That
+is recorded as *unattempted*, not as absence — the ranges actually searched are
+in the run record. Naming tag7 "wind" would have been easy and is exactly the
+move that made tag6 "the main environment record" in the first place.
+
+### The audit earned its keep again
+
+Ten positive namings went to skeptics; **two came back REFUTED**. One is a
+lesson about statistics rather than disassembly: an agent reported "no
+correlation between the water coefficients and the mode enum" as MEASURED, and
+its own numbers refute it — the fresnel rate by mode is 6.2% / 60.4% / 20.4% /
+20.3%, χ² = 92.4, and 0 of 2000 cluster-preserving permutations reach it. The
+other trimmed tag1's umbrella name from "bloom" to post-process and replaced one
+inferred sub-name with the constant table above. A third verdict corrected *my
+own* handoff: the `EnvApi:165` sites I flagged as a getter family are not
+getters.
+
+`envchunk.py` gains `postproc()` and `lights()`; `test_envchunk` pins the two
+population facts that carry the names (floor 25 → 28, 40 checks under `--all`).
+
+### What this buys, and what it does not
+
+Sound is understood end to end at the map-chunk level — an emitter can be
+AUTHORED from `{dep, x, y, radii}` with the descriptor borrowed. Environment is
+understood as framing plus fog and zones — enough to author fog and to place
+zones, not enough to write a tag6 main-environment record from nothing (its ten
+floats are unnamed and the client stores them raw). So the honest state is:
+**sound is authorable; environment is editable** — and neither has yet been
+client-confirmed in an AUTHORED (rather than borrowed) form, so promoting the
+codecs into `stripbuild` as an authoring path waits on a client run the way
+every prior rung did. `soundchunk.py` +
+`test_soundchunk.py` (floor 21) and `envchunk.py` + `test_envchunk.py`
+(floor 20) land the codecs; the dep-reference oracle (env dep fields all in
+bounds of `0x11000009`, 0 of 5,897, versus 5,087 violations one byte off) and
+the emitter-in-rect oracle (sound, 318/318) are each a chunk the codec never
+reads refuting a wrong framing. Full record and probes:
+`vault/research/envsound-2026-08-13/`.
+
+
+## 56. OBSERVED: RUNG G — one command, from `content/` to a map you walk (2026-08-13)
+
+Rung G is the top of the ladder in §"the rungs": *"someone models a shape in
+Blender, runs one command, and walks around it in the retail client."* Its
+dependency column reads **all of the above**, and as of today all of the above
+is done. This is the integration, and it is one command:
+
+    python toolkit/mapdata/deploy.py --area plaza --install --launch --dat <copy>
+
+`content/areas.toml` holds the recipe — geometry, seed, donors, what to borrow,
+how many trees — with `source = "invented"`, which is the honest label: the
+geometry is ours, chosen rather than observed. `deploy.py` does geometry →
+borrow → assemble → verify → install → launch → **read back**, refusing at each
+step rather than continuing.
+
+**The run.** The client compiled it: `Perf: Map file '0x0287d3' failed to load.
+Attempting to re-bloat.` Compiled head 17,731 B, and every readback check green:
+
+| check | result |
+|---|---|
+| the client re-compiled | 6,627 B path chunk, **55 trapezoids built from our terrain** |
+| compiled height field == authored | **1024/1024** samples |
+| our environment carried VERBATIM | 639 B |
+| our sound carried VERBATIM | 89 B |
+| our props are in the compiled map | 5 of 5 |
+| the spawn lands in exactly ONE trapezoid | 1, with Kamadan's and Ascalon's spawns scoring **0** as controls |
+
+The map is **3,941 B, 77.90% generated by us** — 770 borrowed bytes, every one
+named: Header 8, Zones 34, environment 639, sound 89. The 55 trapezoids are
+worth a second look: (e10l)'s flat map compiled to 22, and this one has a
+plaza, a rise and a dip. The client's own compiler is reading a shape we
+designed.
+
+### Three defects the composition had, and none of them was in a component
+
+Every module this command drives has its own test and all of them were green.
+The bugs were in the JOINS, which is what an integration rung is for:
+
+1. **The two kinds of borrowing are not the same kind.** The first run took the
+   structural constants (Header, Zones) from the biome donor, and Pre-Searing's
+   Zones chunk is **7,208 bytes** against the 32×32 reference map's 34 — an
+   11,115-byte map for a 4,608-byte reservation. Zones is per-map; structure
+   must come from a map shaped like ours and only the biome should come from
+   somewhere pretty. The schema now has two fields, because one field invited
+   the mistake.
+2. **The client you launch must own the archive you armed.** Every run
+   directory has its own `Gw.dat`. The first launch armed the C2 copy and ran
+   the DEFAULT client — FINDINGS 54's defect from the other side, and it failed
+   loudly only by luck (a file lock). `deploy.py` now derives the exe from
+   `--dat` and refuses if no client sits beside it.
+3. **A documented stage that no line runs is a docstring.** The command's own
+   docstring promised a readback stage that did not exist; it exists now, and
+   the test asserts `main()` actually calls it.
+
+### The check that could not fail
+
+Worth recording on its own. Section 3 of `test_deploy` asserts on the syntax
+tree that the exe is derived from the archive path — and its first version
+asked whether `main()` contained any `join(dirname(dat), …)`. It does, **twice**,
+because the output path defaults the same way. Sabotaging the exe to a constant
+left the check answering True: a check that could not fail, sitting in a file
+whose whole job is catching this. It now targets the assignment to `exe`
+specifically, and **runs the sabotage as a negative control** so it can never go
+vacuous again. The lesson is the repo's own and it keeps needing relearning —
+a symbol appearing in a test is not a check.
+
+### What rung G does not do
+
+It is **not a hot reload**. The client compiles a map when it loads one, so
+iterating means running the command again. And the dependency FILES stay
+ArenaNet's: an `ffna8` sound descriptor, a sky texture, a tree model are
+referenced by run-time id out of the owner's own archive, which is the
+`borrowed_constants` pattern rather than a gap. What is ours is the terrain,
+the navmesh seed, the prop placement, the surface, and now the recipe.
+
+Run record: `vault/research/rungG-2026-08-13/`.
+
+
+## 57. OBSERVED: the size ceiling was the ROW, not the format (2026-08-13, offline)
+
+Every map this toolkit ever built was 32x32, and it was easy to assume the
+codec imposed that. It does not: `terrain._gate_dims` caps at **16,777,216
+cells**, so 96x96's 9,216 is not close to a limit. The cap was the ROW.
+`datwrite` writes UNCOMPRESSED and refuses to grow a reservation — correctly,
+since its invariant is same row, same offset, same length — so an authored map
+only fit where it was SMALLER than what ArenaNet had compressed into that row.
+`datmove` was built for this in FINDINGS 38 and had never been used from the
+authoring path.
+
+| dims | payload | map 143's row |
+|---|---|---|
+| 32x32 | 3,941 B | fits |
+| 64x64 | 10,654 B | **no** |
+| 96x96 | 21,926 B | **no** |
+
+`deploy.py --area vale --install` now picks the VERB from the size — replace in
+place when it fits, relocate when it does not — and a **96x96 map, 21,926 B,
+went into a row reserving 4,608**. Offline verification, all green: terrain
+round trip **9,216/9,216** exact, **96.03% ours** (770 borrowed bytes, every one
+named), row 71497 relocated `0x63C66800 → 0x6FF0A00`, `datcheck --preflight`
+**10 of 10** open-time rules clear, **0 overlapping row pairs**, and the
+`--diff` showing exactly the two rows we touched. **No client run** — the
+harness was in use by another session — so this is staged, not walked.
+
+### `snap_block` is a one-tile function, and that is the finding
+
+The verifier refused the first 96x96 build: **134 of 9,216 samples lost** after
+snapping. `snap_block` takes exactly one 32x32 tile — its docstring says "1024
+integer samples" and it strides by `CHUNK_SIZE` — and I handed it a whole map,
+so tile 0 was projected and the other eight were not.
+
+**It fails in the worst possible direction.** A linear field is exactly
+representable *without* snapping, so the failure is invisible to every obvious
+test: a gentle ramp lost 0, a steep ramp lost 0, a **400-unit cliff** lost 0,
+and a smooth curve lost 2,752. Only CURVATURE goes missing — which is precisely
+what an authored landscape is made of, and precisely what a Blender sculpt
+produces. The reported worst error stayed at 2 units while a sixth of the map
+was wrong, and every lost slot sat past index 1024.
+
+`strippedterrain.snap_field(samples, dim_x, dim_y)` now walks tile by tile.
+`test_deploy` §4 pins 32/64/96 at exact round trips and runs `snap_block` alone
+as the NEGATIVE CONTROL, asserting both that it still loses samples and that the
+losses start past the first tile — the fingerprint rather than a coincidence.
+
+### An exit code is not evidence
+
+`deploy` passed `--check-overlaps` to `datmove`. That is a READ-ONLY verb which
+returns before any move: it exited **0** having written nothing, `deploy`
+reported *"installed and armed"*, and the archive still held ArenaNet's own
+64x64 map — while the head had been armed, so the next client run would have
+recompiled **retail's map** and every readback check would have described it.
+The install path now READS THE ROW BACK and compares it against what it wrote,
+because a writer returning success and an archive disagreeing is a case where
+the archive wins.
+
+A third defect rode along and is worth one line: the test written to pin the
+second one first GREPPED THE SOURCE TEXT for `--check-overlaps` and went red on
+its own explanatory comment about the flag. It reads the argument list off the
+syntax tree now. A grep cannot tell an argument from prose — the same lesson
+`test_cmsgnames.py` recorded, relearned.
+
+### THE RUN: every prediction hit
+
+Executed the same day once the harness freed up, harness-driven (no owner
+input). **A 96x96 map, relocated into a row reserving 4,096 bytes, compiled in
+the retail client.**
+
+    [PASS] the client re-compiled the map            10,459 B path chunk
+           mesh: 88 trapezoids the client built from our terrain
+    [PASS] the compiled height field equals ours     9,216/9,216 samples
+    [PASS] our environment payload carried VERBATIM  639 B
+    [PASS] our sound payload carried VERBATIM         89 B
+    [PASS] our 12 props are in the compiled map
+    [PASS] the spawn (4608, 4608) lands in exactly one trapezoid
+
+No assert, no crash dialog. Baseline for scale: the 32x32 plaza compiled to
+**55 trapezoids over 1,024 cells**, this to **88 over 9,216**.
+
+### And it answers FINDINGS 39's standing question
+
+FINDINGS 39 moved a real map's partner 1.6 GB and the client found it, compiled
+from it and emitted ArenaNet's own bytes — but whether a relocated row SURVIVES
+a play session was left explicitly unmeasured. **It does.** After the session:
+`datcheck --preflight` **10 of 10**, `datmove --check-overlaps` **0 overlapping
+pairs**, and our relocated partner still sits at `0x6FF0A00`, 21,926 B,
+byte-untouched. The client relocated its OWN compiled head to a new extent,
+which is the client doing what it always does rather than a symptom.
+
+Run record: `vault/research/size-2026-08-13/`.
+
+
+## 58. OBSERVED: a shape sculpted in Blender, standing in the client (2026-08-13)
+
+Rung G's sentence is *"someone models a shape in Blender, runs one command, and
+walks around it"*, and the rung shipped with that proved by a PYTHON GENERATOR
+— `--blend` was wired and had never run. It has now, through the artist's own
+round trip: export an area to interchange, import it into Blender, **sculpt it
+by moving vertices** (a radial basin with a smoothstep falloff, 620 vertices;
+a hard-crested ridge, 455), save the `.blend`, and deploy it.
+
+    terrain round trip 4,096/4,096 samples exact       92.34% ours
+    [PASS] the client re-compiled the map     3,016 B path chunk
+           mesh: 13 trapezoids built from our terrain
+    [PASS] the compiled height field equals ours    4,096/4,096
+    [PASS] environment 639 B and sound 89 B carried VERBATIM
+    [PASS] our 8 props present; spawn in exactly one trapezoid
+
+**13 trapezoids against the plaza's 55 over the same 4,096 cells** — the sculpt
+made most of the map unwalkable, which is what a 900-unit ridge and a steep
+basin rim do. That is a fact about the shape, not a defect. The basin was the
+edit worth making: it is CURVATURE, the thing §57's one-tile snap defect
+destroyed silently while cliffs round-tripped perfectly.
+
+### A brush produces fractions, and the pipeline forbade them
+
+`deploy` REFUSED the first sculpt — *"a non-integer height reached the
+exporter"*. That refusal was correct while the only producer was a generator
+emitting integers, and **wrong the moment a real sculpt arrived**: 1,004 of
+4,096 heights came back fractional, which is simply what moving a vertex with a
+falloff does. It now ROUNDS and REPORTS, exactly as the lattice snap does —
+worst residual 0.500 against a 96-unit cell pitch, against a snap that moves
+samples by up to 4 anyway. Non-finite values are still refused, because there
+is no value to round them to. A rule written for one producer became a wall in
+front of the only workflow the rung is named for.
+
+### The sculpt that never ran
+
+The scene script imported the area with `runpy.run_path`. The importer ends in
+`sys.exit()`, `run_path` propagated the `SystemExit`, and the script ended
+there — **silently, with Blender exiting 0 and a `.blend` saved by nobody**.
+The scene on disk was the unsculpted import. Deploying it would have shipped
+the generator's own terrain under the name of a Blender sculpt and every check
+downstream would have passed, because every check downstream is about the
+pipeline rather than about provenance of the shape. It was caught only because
+the `sculpt:` report lines were missing from the output — i.e. by a print, not
+by a check. `SystemExit` is a `BaseException`, which is the same family of trap
+`test_stripbuild`'s vault gate hit in §43.
+
+### Two more, briefly
+
+`gen_plaza` has a cliff built into it: at `gx == mid` the dip side (+4/cell)
+meets the rise side (−8/cell), a 168-unit step measuring **61°**. The first
+seed sat on that seam and `stripbuild` refused it, correctly, naming
+PathData:365.
+
+And the harness now refuses to launch when the server's archive and the
+client's bind one file id to different files — a guard from the parallel
+map-rows arc, and a good one, which the arm-and-recompile loop trips BY DESIGN.
+Pointing `RURIK_DAT` at the client's own run archive makes them agree; the
+exclusive-lock worry did not materialise. That deserves a real answer inside
+`deploy` rather than an env var typed into a shell.
+
+Run record: `vault/research/blender-2026-08-13/`.

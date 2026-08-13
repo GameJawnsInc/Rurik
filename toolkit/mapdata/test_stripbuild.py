@@ -26,9 +26,35 @@ syntax-tree scan (that is how `test_mapbuild.py` caught one).
 
 Sections 0-3 need no vault: they run on PLACEHOLDER constants of our own, which
 is also the only way to check that `NoConstants` refuses rather than falling
-back to something. Sections 4-6 need `vault/dat_study/Gw.dat`, and score 27
-against a floor of 40 without it -- a number that could not be observed at all
+back to something. Sections 4-6 need `vault/dat_study/Gw.dat`, and score 41
+against a floor of 54 without it -- a number that could not be observed at all
 until the SystemExit bug in section 4's vault gate was fixed on 2026-08-12.
+
+SECTION 3D IS THE PROPS-DEPS PAIRING (2026-08-12, for rung e10d): a build
+placing a prop must list its model file ids for chunk 0x11000004 -- `model` is
+an INDEX into that list -- and a build without props must not. Both directions
+refuse, the positive control carries all eight chunks with the deps chunk
+immediately after props (retail's slot), and a model index past the list is
+refused because the client's failure mode for an unresolvable model has never
+been measured.
+
+SECTION 3E IS THE ENVIRONMENT PAIR (2026-08-13, rung e10i): `env_payload`
+and `env_dep_ids` go together or not at all, the pair lands after the Path
+chunk in retail's slot, and RAW BYTES count BORROWED in the census, because
+a borrowed byte reporting as generated is a census lie. FINDINGS 51's run
+carried a borrowed environment VERBATIM through the compiler and it brought
+the sky; FINDINGS 52's did the same for the SOUND pair and the map played
+Pre-Searing's birds and wind.
+
+SECTION 3F IS THE AUTHORED PATH (2026-08-13, rung e10l): the same two
+parameters also accept a typed `envchunk.EnvChunk` / `soundchunk.SoundChunk`,
+which are ENCODED here and counted GENERATED. That is earned rather than
+assumed -- FINDINGS 54 put our own bytes in front of the client, including an
+env chunk with a GROWN zone list so every byte after tag9 shifted, and the
+compiler carried both verbatim with no assert. The section checks the census
+flips to generated, that the grown zone list survives the build, and -- the
+control -- that RAW BYTES are still counted borrowed, since one path
+swallowing the other would make the census meaningless.
 
 THE BORROWED SET SHRANK on 2026-08-12: props is GENERATED now, by `props.py`,
 so `BORROWED` is Header and Zones alone -- 42 bytes, down from 54, and 98.20%
@@ -51,20 +77,25 @@ sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive  # noqa: E402
 import mapbuild  # noqa: E402
 import mapchunks  # noqa: E402
+import envchunk  # noqa: E402
 import mapfile  # noqa: E402
 import pathchunk  # noqa: E402
 import props  # noqa: E402
+import soundchunk  # noqa: E402
 import stripbuild as sb  # noqa: E402
 import strippedterrain as stx  # noqa: E402
 import terrain as trn_mod  # noqa: E402
 import checks  # noqa: E402
 import vaultpath  # noqa: E402
 
-# FLOOR: 40, MEASURED from a green run on 2026-08-12 (guessed 44 first, which
+# FLOOR: 51, MEASURED from a green run on 2026-08-13 (guessed 44 first, which
 # reddened the run at 39 -- which is what the floor is for; 40 since props left
-# the borrowed set). Sections 0 to 3c score 27 and need no vault, so a
-# vault-less run goes red rather than reporting a smaller success -- the corpus
-# half is where "byte-identical to ArenaNet's" lives.
+# the borrowed set, 46 since section 3d pinned the props-deps pairing, 51
+# since 3e pinned the environment pair, 54 since 3e grew the sound pair,
+# 59 since 3f pinned the AUTHORED path).
+# Sections 0 to 3f score 46 and need no vault, so a vault-less run goes red
+# rather than reporting a smaller success -- the corpus half is where
+# "byte-identical to ArenaNet's" lives.
 #
 # 27 is MEASURED too, and it had to be: the vault-less path could not run at
 # all until 2026-08-12. `vaultpath.require_dir` raises SystemExit, a
@@ -72,7 +103,7 @@ import vaultpath  # noqa: E402
 # died before the verdict -- and the `LEDGER.skip` in that handler had never
 # executed once, being called with one argument where it takes two. The 30 this
 # comment used to claim was a number nobody had ever seen printed.
-LEDGER = checks.Ledger("stripbuild", floor=40)
+LEDGER = checks.Ledger("stripbuild", floor=59)
 check = checks.adopt(LEDGER)
 
 DIMS = 32
@@ -88,6 +119,26 @@ PLACEHOLDER = {
     sb.ZONES: bytes(34),
 }
 PLACEHOLDER_IDS = [1, 2, 3, 4]
+
+
+def minimal_env():
+    """A framing-valid environment chunk: one record per aspect array, no zones.
+
+    Shaped like the 73 retail maps that carry no zones. Record interiors are
+    zeros -- this is a FRAMING fixture for the authoring path, not a weather.
+    """
+    sizes = {0: 10, 1: 6, 2: 19, 3: 8, 4: 2, 5: 15, 6: 57, 7: 4, 9: 32, 11: 5}
+    secs = []
+    for tag in envchunk.ORDER:
+        if tag == envchunk.TAG_POLYGONS:
+            continue
+        if tag == envchunk.TAG_GLOBAL:
+            secs.append(envchunk.Section(tag, [bytes(envchunk.GLOBAL_SIZE)]))
+        elif tag == envchunk.TAG_ZONES:
+            secs.append(envchunk.Section(tag, []))
+        else:
+            secs.append(envchunk.Section(tag, [bytes(sizes[tag])]))
+    return envchunk.EnvChunk(envchunk.VERSION, flag=0, sections=secs).encode()
 
 
 def flat_heights(dim=DIMS, h=FLAT):
@@ -130,7 +181,9 @@ def sections():
         boundary=[(1536.0, 1536.0)]).encode()
     blob = sb.encode(payload)
     ids = [c.chunk_id for c in mapfile.MapFile.decode(blob).chunks]
-    check(ids == list(sb.ORDER), f"encode() emits ORDER  {len(ids)} chunks")
+    check(ids == [c for c in sb.ORDER if c not in sb.OPTIONAL],
+          f"encode() emits ORDER  {len(ids)} chunks -- no props and no env, "
+          f"so none of the OPTIONAL chunks, which is retail's own pairing")
     check(ids.index(sb.ZONES) < ids.index(sb.TERRAIN),
           "and Zones precedes Terrain, which terrain bloat asserts on")
     short = dict(payload)
@@ -234,6 +287,145 @@ def sections():
     check(len(rep.blob) > sum(rep.sizes.values()),
           "the file is larger than its payloads -- there is a chunk table")
 
+    print("\n3d. props and their model list are PAIRED, the way retail "
+          "pairs them")
+    one_prop = props.StrippedProps(
+        props=[props.Prop(0, 1536.0, 1536.0, float(FLAT))],
+        refs4=(), refs6=None)
+    refused = False
+    try:
+        sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0), PLACEHOLDER,
+                 PLACEHOLDER_IDS, props=one_prop)
+    except ValueError:
+        refused = True
+    check(refused,
+          "a build placing a prop with NO prop_dep_ids is refused",
+          "`model` is an index into 0x11000004; a map that does not list the "
+          "model cannot resolve it, and the client failure mode is unmeasured")
+    refused = False
+    try:
+        sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0), PLACEHOLDER,
+                 PLACEHOLDER_IDS, prop_dep_ids=[77])
+    except ValueError:
+        refused = True
+    check(refused,
+          "and a prop_dep_ids list with NO props is refused too",
+          "the three zero-prop retail maps are exactly the three without the "
+          "chunk, so this configuration has no retail precedent")
+    refused = False
+    try:
+        sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0), PLACEHOLDER,
+                 PLACEHOLDER_IDS,
+                 props=props.StrippedProps(
+                     props=[props.Prop(3, 1536.0, 1536.0, float(FLAT))],
+                     refs4=(), refs6=None),
+                 prop_dep_ids=[77])
+    except ValueError:
+        refused = True
+    check(refused,
+          "a model index past the end of the list is refused",
+          "index 3 into a one-entry list")
+    rep_p = sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0),
+                     PLACEHOLDER, PLACEHOLDER_IDS, props=one_prop,
+                     prop_dep_ids=[77])
+    ids_p = [c.chunk_id for c in mapfile.MapFile.decode(rep_p.blob).chunks]
+    check(ids_p == [c for c in sb.ORDER
+                    if c == sb.PROPS_DEPS or c not in sb.OPTIONAL],
+          f"POSITIVE CONTROL: a props-bearing build carries the props-deps "
+          f"chunk in ORDER (and no other optional pair it was not given)")
+    check(ids_p.index(sb.PROPS_DEPS) == ids_p.index(sb.PROPS) + 1,
+          "and the props-deps chunk rides immediately after the props chunk, "
+          "where retail puts it")
+    dep_chunk = next(c for c in mapfile.MapFile.decode(rep_p.blob).chunks
+                     if c.chunk_id == sb.PROPS_DEPS)
+    back_ids = list(mapchunks.decode_dependencies(
+        dep_chunk.payload()).file_ids)
+    check(back_ids == [77],
+          f"the generated list decodes back to the same file id  {back_ids}")
+
+    print("\n3e. the environment pair goes together, or not at all")
+    refused = False
+    try:
+        sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0), PLACEHOLDER,
+                 PLACEHOLDER_IDS, env_payload=b"\x00" * 16)
+    except ValueError:
+        refused = True
+    check(refused, "an env payload with NO id list is refused")
+    refused = False
+    try:
+        sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0), PLACEHOLDER,
+                 PLACEHOLDER_IDS, env_dep_ids=[9])
+    except ValueError:
+        refused = True
+    check(refused, "an env id list with NO payload is refused")
+    rep_e = sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0),
+                     PLACEHOLDER, PLACEHOLDER_IDS,
+                     env_payload=b"\x00" * 16, env_dep_ids=[9])
+    ids_e = [c.chunk_id for c in mapfile.MapFile.decode(rep_e.blob).chunks]
+    check(ids_e == [c for c in sb.ORDER
+                    if c in (sb.ENV, sb.ENV_DEPS) or c not in sb.OPTIONAL],
+          "POSITIVE CONTROL: the pair lands after the Path chunk, in ORDER")
+    check(rep_e.origin[sb.ENV] == "borrowed"
+          and sb.ENV not in sb.GENERATED,
+          "and the env payload is counted BORROWED",
+          "the chunk is not understood; a borrowed byte that reports as "
+          "generated is a census lie")
+    check(rep_e.borrowed == 42 + 16,
+          f"the census moves by exactly the payload  ({rep_e.borrowed})")
+    refused = False
+    try:
+        sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0), PLACEHOLDER,
+                 PLACEHOLDER_IDS, sound_payload=bytes(1) * 8)
+    except ValueError:
+        refused = True
+    check(refused, "a sound payload with NO id list is refused")
+    rep_s = sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0),
+                     PLACEHOLDER, PLACEHOLDER_IDS,
+                     env_payload=bytes(1) * 16, env_dep_ids=[9],
+                     sound_payload=bytes(1) * 8, sound_dep_ids=[5])
+    ids_s = [c.chunk_id for c in mapfile.MapFile.decode(rep_s.blob).chunks]
+    check(ids_s == [c for c in sb.ORDER if c != sb.PROPS_DEPS],
+          "POSITIVE CONTROL: env and sound pairs both land in ORDER")
+    check(rep_s.origin[sb.SOUND] == "borrowed"
+          and rep_s.borrowed == 42 + 16 + 8,
+          f"and the sound payload counts BORROWED  ({rep_s.borrowed})")
+
+    print("\n3f. AUTHORED env and sound: typed objects, counted GENERATED")
+    # Rung (e10l) is what makes this legal: the client compiled an env chunk
+    # this toolkit assembled -- with a GROWN zone list, so every byte after
+    # tag9 moved -- and a sound chunk built from nothing, and carried both
+    # verbatim. Before that run these were bytes we could only copy.
+    sc = soundchunk.SoundChunk(soundchunk.VERSION, idx_a=0, idx_b=1,
+                               emitters=[soundchunk.Emitter(
+                                   2, soundchunk.NONE, 1536, 1536,
+                                   200, 900, 500)])
+    ec = envchunk.EnvChunk.decode(minimal_env())
+    n_zones = len(ec.zones())
+    ec.section(envchunk.TAG_ZONES).records.append(bytes(32))
+    rep_a = sb.build(DIMS, DIMS, flat_heights(), (1536.0, 1536.0),
+                     PLACEHOLDER, PLACEHOLDER_IDS,
+                     env_payload=ec, env_dep_ids=[9],
+                     sound_payload=sc, sound_dep_ids=[5])
+    back = mapfile.MapFile.decode(rep_a.blob)
+    check(rep_a.origin[sb.ENV] == "generated"
+          and rep_a.origin[sb.SOUND] == "generated",
+          "a typed EnvChunk/SoundChunk is counted GENERATED, not borrowed",
+          "the census distinction is the point: our bytes are ours")
+    check(rep_a.borrowed == 42,
+          f"so the borrowed census drops back to Header+Zones  "
+          f"({rep_a.borrowed})")
+    got_e = envchunk.EnvChunk.decode(back.find(sb.ENV).payload())
+    check(len(got_e.zones()) == n_zones + 1,
+          "the GROWN zone list survives the build -- the count is re-derived",
+          f"{len(got_e.zones())} zones")
+    got_s = soundchunk.SoundChunk.decode(back.find(sb.SOUND).payload())
+    check(len(got_s.emitters) == 1
+          and (got_s.emitters[0].x, got_s.emitters[0].y) == (1536, 1536),
+          "and our emitter is in the built map at our coordinates")
+    # raw bytes must STILL be borrowed -- one path must not swallow the other
+    check(rep_s.origin[sb.ENV] == "borrowed",
+          "CONTROL: raw bytes are still counted BORROWED")
+
     print("\n4. against the archive: the borrowed two and the generated deps")
     # NOT `require_dir`, and that is the fix rather than the style. It raises
     # SystemExit, which is a BaseException -- so `except Exception` never caught
@@ -301,8 +493,10 @@ def sections():
     check(rep.fraction_generated > 0.97,
           f"{100 * rep.fraction_generated:.2f}% generated")
     mf = mapfile.MapFile.decode(rep.blob)
-    check([c.chunk_id for c in mf.chunks] == list(sb.ORDER),
-          "the assembled map carries exactly the seven, in ORDER")
+    check([c.chunk_id for c in mf.chunks]
+          == [c for c in sb.ORDER if c not in sb.OPTIONAL],
+          "the assembled map carries exactly the seven, in ORDER -- a "
+          "zero-prop, no-env map has none of the OPTIONAL chunks")
     check(mf.encode() == rep.blob, "and round-trips")
     again = stx.StrippedTerrain.decode(
         next(c for c in mf.chunks if c.chunk_id == sb.TERRAIN).payload())

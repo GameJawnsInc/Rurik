@@ -21,6 +21,13 @@ FINDINGS 42 removed each one against a live client, one run apiece:
   0x11000002 Terrain Deps GENERATED   absent -> assert `deps`, TrnCreate:242
   0x10000008 Path         GENERATED   absent -> compiles, but NO MESH
 
+An EIGHTH chunk exists exactly when the map places props: 0x11000004 Props
+Dependencies, GENERATED from run-time file ids, rides immediately after the
+props chunk the way retail carries it. FINDINGS 42's removal ladder ran on a
+zero-prop map, which is why it is not in the table above; its absence has
+never been client-measured against a props-bearing map and `build()` refuses
+to produce that configuration.
+
 FINDINGS 34's list, taken from the dispatch, had Collision in it (it is not
 required) and did not have Terrain Dependencies (it is). This module follows the
 measurement.
@@ -83,23 +90,47 @@ import terrain as trn_mod  # noqa: E402
 HEADER = 0x10000000
 MAP_PARAMS = 0x1000000C
 PROPS = 0x10000004
+PROPS_DEPS = 0x11000004
 ZONES = 0x10000003
 TERRAIN = 0x10000002
 TERRAIN_DEPS = 0x11000002
 PATH = 0x10000008
+ENV = 0x10000009
+ENV_DEPS = 0x11000009
+SOUND = 0x10000012
+SOUND_DEPS = 0x11000012
 
-# The donor's own order. Zones before Terrain is the load-bearing part.
-ORDER = (HEADER, MAP_PARAMS, PROPS, ZONES, TERRAIN, TERRAIN_DEPS, PATH)
+# The donor's own order, which is also the corpus's single total order
+# (FINDINGS §5: 321 ordered pairs, 0 contradictions). Zones before Terrain is
+# the load-bearing part. PROPS_DEPS rides immediately after PROPS, exactly
+# where retail puts it, and is present EXACTLY when the props chunk holds a
+# prop -- `props.model` is an INDEX into it (0x0073DE0E), so a map with props
+# and no list has models that cannot resolve, and a map without props never
+# carries the list (the three zero-prop retail maps are exactly the three
+# with no props-deps chunk).
+ORDER = (HEADER, MAP_PARAMS, PROPS, PROPS_DEPS, ZONES, TERRAIN, TERRAIN_DEPS,
+         PATH, ENV, ENV_DEPS, SOUND, SOUND_DEPS)
+#: The chunks encode() allows a payload to omit, each with its pairing rule
+#: enforced in build(): PROPS_DEPS goes with props (retail 349/349), and the
+#: ENV pair goes together or not at all -- FINDINGS 51's run put a borrowed
+#: environment through the compiler and it carried VERBATIM, but the payload
+#: is not understood, so it stays opt-in and BORROWED rather than generated.
+OPTIONAL = (PROPS_DEPS, ENV, ENV_DEPS, SOUND, SOUND_DEPS)
 BORROWED = (HEADER, ZONES)
-GENERATED = (MAP_PARAMS, PROPS, TERRAIN, TERRAIN_DEPS, PATH)
+GENERATED = (MAP_PARAMS, PROPS, PROPS_DEPS, TERRAIN, TERRAIN_DEPS, PATH)
 
 CELL = terrain_pitch = trn_mod.CELL_PITCH        # 96.0, and the client's XY_DIST
 REFERENCE_PARTNER = 46197                        # the 32x32 template's stripped row
 
 # FINDINGS 34 read two threshold sets off the classifier, 10/45/40 and
-# 15/35/30 degrees, and could not say which is in force. 30 is the smallest
-# "unwalkable above this" value in either, so refusing above it is the choice
-# that is correct under both. Between 10 and 30 we cannot say, and say so.
+# 15/35/30 degrees, and could not say which is in force. MEASURED 2026-08-12
+# by the ramp map (FINDINGS 48): the set is 15/35/30 and the walkable
+# boundary is 35 -- a 32.0-degree strip compiled walkable and a 36.1-degree
+# one did not, so the cut sits in (32.0, 36.1) and only 35 is inside it.
+# The refusal below stays at 30 DELIBERATELY: it is now a measured 5-degree
+# margin rather than merely the value safe under both readings, and a seed
+# this close to the boundary would make every build a bet on the snap not
+# steepening its cell.
 SEED_UNWALKABLE_DEG = 30.0
 SEED_UNSURE_DEG = 10.0
 
@@ -258,10 +289,11 @@ class BuildReport:
         return self.generated / total if total else 0.0
 
     def borrowed_chunks(self):
-        return tuple(c for c in ORDER if self.origin[c] == "borrowed")
+        return tuple(c for c in ORDER
+                     if c in self.origin and self.origin[c] == "borrowed")
 
     def show(self):
-        print(f"stripped map: {len(self.blob)} B, {len(ORDER)} chunks, "
+        print(f"stripped map: {len(self.blob)} B, {len(self.sizes)} chunks, "
               f"sha256 {hashlib.sha256(self.blob).hexdigest()[:16]}")
         print(f"  dims {self.dims[0]}x{self.dims[1]}  rect {self.rect}  "
               f"pitch {(self.rect[2] - self.rect[0]) / self.dims[0]:.1f}")
@@ -271,6 +303,8 @@ class BuildReport:
                  "  (10..30 -- walkable under one threshold set, unknown "
                  "under the other)"))
         for cid in ORDER:
+            if cid not in self.sizes:
+                continue
             print(f"    0x{cid:08X} {mapchunks.chunk_label(cid)[:26]:<28}"
                   f"{self.sizes[cid]:>6} B   {self.origin[cid]}")
         print(f"  GENERATED {self.generated} B "
@@ -280,12 +314,57 @@ class BuildReport:
 
 
 def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
-          tiles=None, sync_hash=0, sync_flag=0, props=None):
+          tiles=None, sync_hash=0, sync_flag=0, props=None,
+          prop_dep_ids=None, env_payload=None, env_dep_ids=None,
+          sound_payload=None, sound_dep_ids=None,
+          table_a=None, table_b=None, angle_index=None, tex_word=None):
     """A whole Stripped map. `heights` is in `Terrain.index` order, integers.
 
     `props` is a `props.StrippedProps`, or None for an empty one. Empty is not
     the same as absent: FINDINGS 42 removed the chunk and the client refused the
     map, so `minimal()` is the floor rather than a shortcut.
+
+    `prop_dep_ids` is the model file-id list for chunk 0x11000004, REQUIRED
+    exactly when `props` holds a prop and REFUSED when it does not -- retail's
+    own pairing. Every prop's `model` is an index into this list, and an index
+    past its end is refused here because the client-side failure mode of an
+    unresolvable model has never been measured and this module is not the
+    place to find out by accident.
+
+    `env_payload` + `env_dep_ids` are chunk 0x10000009 and its dependency
+    ids, TOGETHER OR NOT AT ALL. The payload may be either RAW BYTES borrowed
+    from a donor map at run time (FINDINGS 51: Pre-Searing's carried VERBATIM
+    through the compiler and brought the sky, the ambient light and the
+    horizon water with it) or an `envchunk.EnvChunk` this toolkit assembled,
+    which is encoded here. The census distinguishes them -- borrowed bytes are
+    named as borrowed, ours are GENERATED -- because that distinction is the
+    whole point of the report.
+
+    `sound_payload` + `sound_dep_ids` are chunk 0x10000012 and its ids, the
+    same shape and the same rules (FINDINGS 52: Pre-Searing's carried VERBATIM
+    and the map played its birds and wind), and likewise accept a
+    `soundchunk.SoundChunk`.
+
+    `table_a` / `table_b` / `angle_index` / `tex_word` are the terrain chunk's
+    SURFACE parameters, passed through to `StrippedTerrain.build`. They are here
+    because rungs (e10f)-(e10h) each proved one of them in the client and then
+    reached it by SURGERY -- build a map, decode its terrain chunk, change the
+    field, re-encode -- which works and is not something a caller should have to
+    know. `table_a`/`table_b` pair 1:1 with the terrain dependency ids in
+    `dep_ids` (FINDINGS 49: `table_b` is a property of the TEXTURE and must
+    travel with its source file), `angle_index` is the sun (FINDINGS 51, and see
+    `envchunk.SUN_TURN` -- the environment chunk carries the SAME angle under a
+    different quantisation, so a map that sets one should set the other), and
+    `tex_word` is the terrain's texture selector word. None of them is a new
+    capability; they are the ones already proven, made declarative.
+
+    AUTHORING EITHER ONE IS EARNED, NOT ASSUMED. FINDINGS 53 decoded both
+    chunks and FINDINGS 54 put our own bytes in front of the client: an env
+    chunk with a GROWN zone list -- so every byte after tag9 shifted -- and a
+    sound chunk built from nothing, both carried verbatim through the
+    compiler with no assert. Until that run these were bytes we could only
+    copy. The dependency FILES are still ArenaNet's, referenced by run-time
+    id, which is the borrowed_constants pattern rather than a gap.
     """
     for cid in BORROWED:
         if cid not in constants:
@@ -305,7 +384,40 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
     payload[PROPS] = sp.encode()
     origin[PROPS] = f"generated, {len(sp.props)} props"
 
-    trn = stx.StrippedTerrain.build(dim_x, dim_y, heights, tiles=tiles)
+    dep_list = list(prop_dep_ids or ())
+    if sp.props and not dep_list:
+        raise ValueError(
+            f"{len(sp.props)} props but no prop_dep_ids. Every prop's `model` "
+            f"is an INDEX into chunk 0x11000004 (0x0073DE0E), so a map that "
+            f"places props must list the model files they resolve to. Pass "
+            f"the file ids -- ids are measurements and are read at run time.")
+    if dep_list and not sp.props:
+        raise ValueError(
+            f"{len(dep_list)} prop_dep_ids but no props. Retail never ships "
+            f"the list without the props: the three zero-prop maps are "
+            f"exactly the three with no props-deps chunk.")
+    over = [(i, p.model) for i, p in enumerate(sp.props)
+            if p.model >= len(dep_list)]
+    if over:
+        i, m = over[0]
+        raise ValueError(
+            f"prop {i} names model {m} but prop_dep_ids lists only "
+            f"{len(dep_list)} file(s); an index past the list cannot resolve "
+            f"and the client's failure mode for that has never been measured")
+    if dep_list:
+        payload[PROPS_DEPS] = mapchunks.encode_dependencies(dep_list)
+        origin[PROPS_DEPS] = f"generated from {len(dep_list)} run-time ids"
+
+    tkw = {}
+    if table_a is not None:
+        tkw["table_a"] = bytes(table_a)
+    if table_b is not None:
+        tkw["table_b"] = bytes(table_b)
+    if angle_index is not None:
+        tkw["angle_index"] = int(angle_index)
+    if tex_word is not None:
+        tkw["tex_word"] = int(tex_word)
+    trn = stx.StrippedTerrain.build(dim_x, dim_y, heights, tiles=tiles, **tkw)
     payload[TERRAIN] = trn.encode()
     origin[TERRAIN] = "generated"
 
@@ -317,19 +429,63 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
         sync_hash=sync_hash, sync_flag=sync_flag).encode()
     origin[PATH] = "generated"
 
+    if (env_payload is None) != (env_dep_ids is None):
+        raise ValueError(
+            "env_payload and env_dep_ids go together or not at all: the "
+            "payload references files only the id list can resolve, and an "
+            "id list with no payload describes nothing")
+    if env_payload is not None:
+        # An EnvChunk is accepted here as well as raw bytes, and the difference
+        # is provenance rather than convenience: bytes we borrowed from a donor
+        # are BORROWED, bytes our own codec emitted are GENERATED, and the
+        # census has to say which. Rung (e10l) is what earns the second case --
+        # the client compiled an env chunk this codec assembled, including a
+        # GROWN zone list, and carried it verbatim.
+        if hasattr(env_payload, "encode"):
+            payload[ENV] = env_payload.encode()
+            origin[ENV] = "generated"
+        else:
+            payload[ENV] = bytes(env_payload)
+            origin[ENV] = "borrowed"
+        payload[ENV_DEPS] = mapchunks.encode_dependencies(list(env_dep_ids))
+        origin[ENV_DEPS] = (f"generated from {len(list(env_dep_ids))} "
+                            f"run-time ids")
+
+    if (sound_payload is None) != (sound_dep_ids is None):
+        raise ValueError(
+            "sound_payload and sound_dep_ids go together or not at all, "
+            "the environment pair's rule for the same reason")
+    if sound_payload is not None:
+        if hasattr(sound_payload, "encode"):        # a SoundChunk -- see ENV
+            payload[SOUND] = sound_payload.encode()
+            origin[SOUND] = "generated"
+        else:
+            payload[SOUND] = bytes(sound_payload)
+            origin[SOUND] = "borrowed"
+        payload[SOUND_DEPS] = mapchunks.encode_dependencies(
+            list(sound_dep_ids))
+        origin[SOUND_DEPS] = (f"generated from {len(list(sound_dep_ids))} "
+                              f"run-time ids")
+
     blob = encode(payload)
-    return BuildReport(blob, origin, {c: len(payload[c]) for c in ORDER},
+    return BuildReport(blob, origin, {c: len(payload[c]) for c in payload},
                        slope, rect, (dim_x, dim_y))
 
 
 def encode(payload):
-    """The container, in ORDER. Refuses any other, because order is a gate."""
+    """The container, in ORDER. Refuses any other, because order is a gate.
+
+    The OPTIONAL chunks may be absent -- `build()` enforces their pairing
+    rules. Everything else is FINDINGS 42's measured requirement, one client
+    run per removal.
+    """
     ids = tuple(payload)
-    if set(ids) != set(ORDER):
-        raise BadOrder(f"expected exactly {[f'0x{c:08X}' for c in ORDER]}, "
+    want = set(ORDER) - {c for c in OPTIONAL if c not in ids}
+    if set(ids) != want:
+        raise BadOrder(f"expected exactly {[f'0x{c:08X}' for c in sorted(want)]}, "
                        f"got {[f'0x{c:08X}' for c in ids]}")
     chunks = [mapfile.Chunk(cid, payload[cid], mapfile.FORM_OPAQUE)
-              for cid in ORDER]
+              for cid in ORDER if cid in payload]
     return mapfile.MapFile(chunks=chunks).encode()
 
 

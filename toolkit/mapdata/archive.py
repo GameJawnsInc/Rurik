@@ -43,10 +43,29 @@ count, and count * 24 == size only if the 24-byte entry stride is right.
 TWO ARCHIVES ARE NOT THE SAME ARCHIVE. A running client writes to the Gw.dat it
 was launched from. Our install copy holds 177,335 entries and the copy our
 patched client has actually run holds 177,342 -- same allocated size, same MFT
-offset, seven more files. File ids are content keys and should survive that; raw
-MFT row indices do not. Any row index recorded in a study is only meaningful
-against the copy it was measured on, which is why open() below wants an explicit
-path rather than guessing one.
+offset, seven more files. Raw MFT row indices do not survive that. Any row index
+recorded in a study is only meaningful against the copy it was measured on,
+which is why open() below wants an explicit path rather than guessing one.
+
+**AND NEITHER DO FILE IDS, WHICH THIS USED TO SAY THEY DID.** The sentence above
+read "File ids are content keys and should survive that" until 2026-08-13. It is
+false, and the correction is the whole of `contentids.py`: bit 31 on a stored id
+means `FcArchive` has renamed that row away because it requested a replacement,
+and the plain id binds only after `DnArchive` installs it and re-links. So the
+same map is `0x8001B97D` in one copy and `0x1B97D` on a different row in another,
+and both are right for their own copy. **A file id is archive STATE.**
+
+MEASURED, and it is why `dat_study` is no longer the copy this file once claimed:
+`vault/dat_study/Gw.dat` carries 25 bit-31 ids, `vault/run/` carries 29, and
+`vault/run-live/` -- a copy a client actually played live from -- carries 9 and
+does not bind `0x8001B97D` at all, holding that map on row 177262 under the plain
+id instead. A comment here previously described `dat_study` as "a copy of the
+run-dir archive"; the two have drifted and it is not.
+
+Because a run uses TWO copies -- the server reads one for the navmesh, the client
+opens its own for the geometry -- `toolkit/contentids.py` checks that every id in
+`content/maps.toml` names the SAME FILE in both, by size and crc rather than by
+row, and `drive_client.assert_safe` refuses a loopback launch when it does not.
 """
 
 import os
@@ -242,15 +261,30 @@ def file_id_table(archive):
     under both its raw and its masked form, plain ids first so that a real id can
     never be shadowed by another entry's masked one.
 
-    Why the bit is set is NOT ESTABLISHED. We have not read the client's own
-    lookup path in the binary.
+    WHY THE BIT IS SET -- ANSWERED 2026-08-13, by reading the client's own
+    lookup path. **It is a RENAME, not a spelling.** `FcArchive` binds
+    `id | 0x80000000` to the row and deletes the plain name when it has requested
+    a replacement (Gw.exe 0x007D7B70, twelve instructions); `DnArchive` re-links
+    the plain id once the replacement is installed (0x004766F0). So a bit-31 id
+    means "this row's replacement is pending", and the plain id genuinely stops
+    resolving until it lands. The count moves with play: 25 in `dat_study`, 29 in
+    the owner's live install, **9** in `vault/run-live/`, the copy a live client
+    actually played from -- where `0x1B97D` binds PLAINLY, to a different row.
 
-    But "the client masks it" is now FALSIFIED for build 38797, measured by
-    handing the client each form: 0x1B97D is refused with `Map file '0x01b97d'
-    failed to load` and then an assert, while 0x8001B97D loads Ascalon City
-    Pre-Searing. Masking is right HERE, for finding the row; it is wrong on the
-    wire. A server must send the id exactly as the archive stores it. See
-    studies/mapdata/FORMAT.md.
+    **THE CLIENT DOES NOT MASK.** The index it builds from this table stores the
+    id verbatim (0x0047C027) and the lookup is an exact 32-bit compare
+    (0x0047AA20), with no retry on the map path. So the dual registration below
+    is OUR convenience for finding a row, and it is NOT a model of the client:
+    it will answer `0x1B97D` where the client would miss. That difference is not
+    hypothetical -- it put a wrong MFT row into a study draft, because the id was
+    resolved here against an archive the client was never reading.
+
+    "The client masks it" was FALSIFIED for build 38797 by handing the client each
+    form, and the falsification stands; the RULE drawn from it did not. A server
+    should send the **plain logical id** and serve from an archive that binds it.
+    `0x8001B97D` works against `dat_study` only because that copy has the map
+    renamed away. **A file id recorded anywhere is archive STATE, not a property
+    of the map.** See studies/maprows/FINDINGS.md §8 and studies/mapdata/FORMAT.md.
     """
     blob = archive.read(archive.entries[1])
     out = {}

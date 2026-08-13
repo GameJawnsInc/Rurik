@@ -64,6 +64,25 @@ def _f32(x):
     return struct.unpack("<I", struct.pack("<f", x))[0]
 
 
+def _f32_of(dword):
+    """`_f32` backwards: the float a `dword` field the client sent us is carrying.
+
+    THE SAME TRAP, from the receive side, and it has now cost this project three
+    times (GAME_SMSG 0x002E's "cos, sin", GAME_CMSG 0x0027's field order, and
+    GAME_CMSG 0x0040 sitting unnamed for days). A dword-typed field is four
+    bytes; whether they are an integer or a float is a fact about the MESSAGE,
+    not about the marshalling, and reading one as the other never errors -- it
+    hands back a confident wrong number. 0x0040's +inf sentinel reads as
+    2,139,095,040 if you take `values[1]` at face value.
+
+    Out-of-range input is masked rather than raised on. The codec only ever
+    produces 0..2^32-1 here, so the mask is unreachable in practice; what it
+    buys is that a future caller cannot turn a malformed field into a
+    struct.error that tears down a live session inside the read loop.
+    """
+    return struct.unpack("<f", struct.pack("<I", int(dword) & 0xFFFFFFFF))[0]
+
+
 def _fraction(x, prop, what):
     """A pool fraction for the 0x00A3 float channel, refused loudly if out of range.
 
@@ -944,7 +963,37 @@ GAME_CMSG_ATTACK_AGENT = 0x0026
 # attacking in a town, so the client will not issue an attack there, but it will
 # still say "I clicked that". What we do about it is our decision, not the
 # client's.
+#
+# AND THE CLIENT HAS NOT SENT ONE SINCE 2026-08-06. MEASURED 2026-08-13 over
+# every `vault/captures/gamesrv/*.jsonl` -- 425 connections, 17,770 framed c2s
+# messages -- 0x0033 occurs ZERO times. Its 206 recorded occurrences all sit in
+# `vault/captures/authsrv/`, the older capture tree, and the last one is stamped
+# 2026-08-06T19:04:40Z. ArenaNet's own two live sessions carry none either
+# (0 of 919 c2s). The arm below is kept anyway, on purpose: WE DO NOT KNOW WHY
+# IT STOPPED. The paragraph above is the reasoning that put it there and it was
+# not wrong when written; deleting the constant would delete the evidence that
+# the reasoning has since been overtaken, and a future session would rediscover
+# arm 1 from scratch. What changed around that date is unidentified -- the arm-0
+# finding of 2026-08-11 (see GAME_CMSG_ATTACK_AGENT) is the leading candidate
+# and is not proof, because it explains 0x0026 appearing and not 0x0033 ceasing.
 GAME_CMSG_INTERACT_PLAYER = 0x0033
+
+# Arm 2 of that same six-arm world-action switch, and the one the client
+# ACTUALLY sends: 29 of 919 c2s messages (3.2%) across ArenaNet's own two live
+# sessions, against zero 0x0033. `schema/overrides.json` names it INTERACT from
+# that traffic -- sent when the operator clicked and then talked to a friendly
+# NPC, always carrying that NPC's agent id, and never produced by clicking
+# another PLAYER.
+#
+# IT IS NOT AN ATTACK, and that is why it gets its own arm below rather than
+# joining 0x0026/0x0033. The separation is falsifiable and was measured on
+# ArenaNet's wire (overrides.json, GAME_CMSG 38): 4 of 5 distinct 0x0026 targets
+# enter a GAME_SMSG 0x00A0 kind-4 auto-attack exchange, 0 of 10 distinct 0x0039
+# targets ever do, and streams carrying 0x0039 with no 0x0026 contain no combat
+# at all. Folding it into the attack arm would make this server start swinging
+# at every quest giver the player talks to -- inventing a behaviour ArenaNet's
+# own server demonstrably does not have.
+GAME_CMSG_INTERACT_AGENT = 0x0039
 
 # The client asks to use a skill and then WAITS to be told it worked. Pressing a
 # skill plays the bar animation and never casts, which is the same shape as every
@@ -1001,6 +1050,43 @@ GAME_SMSG_SKILL_ACTIVATED = 0x00E3
 GAME_CMSG_TURN_TO_DIRECTION = 0x003D
 GAME_CMSG_MOVE_TO_COORD = 0x003E
 GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
+
+# THE THREE PURE-INBOUND ONES. Each is fully named in `schema/overrides.json`
+# with the client-side evidence beside it, each is among the largest single
+# drops on our own wire, and each costs one dict assignment to stop dropping.
+# Nothing below them SENDS anything or acts on what it stores: the point is that
+# a measured fact the client hands us stops going on the floor, not that this
+# server grows missions, targeting or a facing model. Storing is the whole
+# handler; the day one of these drives behaviour it needs its own study.
+#
+# 0x0092 MISSION_MASK_REPORT -- a 112-byte progress bitmask, one bit per mission
+#   id, bounded by the client's own MsCliMsg.cpp:181 assert
+#   `missionMaskBytes <= MISSION_MASK_BYTES`. MEASURED 2026-08-13 over the whole
+#   loopback tree: 803 samples, 803 of them exactly 112 bytes, and 747 of 803
+#   entirely zero -- because nothing this server sends ever sets a bit. The 56
+#   non-zero ones are the interesting minority and were invisible until now.
+GAME_CMSG_MISSION_MASK_REPORT = 0x0092
+# 0x00C1 TARGET_SELECT -- [effective_selection, auto_selection]. Field 1 is what
+#   every subsequent target-bearing message names (53 of 53 on ArenaNet's wire);
+#   0 clears the selection. FREE CORROBORATION, and the reason this one is worth
+#   writing down rather than merely handling: the override entry was written
+#   from 75 live sends and says `field1 == field2 nonzero occurs 0 of 75`, which
+#   the client's own `je -> xor ebx,ebx` branch predicts. Our loopback tree now
+#   holds 363 of them, a 4.8x larger sample from a different server, and field 2
+#   is 0 in 363 of 363 with 0 collisions. Nothing was arranged to make that come
+#   out; the messages were being decoded and discarded the entire time.
+GAME_CMSG_TARGET_SELECT = 0x00C1
+# 0x0040 ROTATE_PLAYER -- [angle, turn_amount], and THE TRAP IS THE TYPING. Both
+#   payload fields are marshalled `dword` and hold IEEE-754 float32 VALUES; the
+#   client's own SEND table says u32, so the catalog is correct and must not be
+#   "fixed" to float (test_rotate.py exists to make that edit go red). Reading
+#   values[1] as a number rather than as bits gives 2139095040 where the answer
+#   is +inf. MEASURED 2026-08-13 over the loopback tree, 108 samples: 64 finite
+#   angles, every one inside +/-pi (max 3.0183), 28 exactly +inf and 16 exactly
+#   -inf -- the two .rdata sentinels the override entry names, meaning "turning
+#   continuously, sign gives the direction". The raw dword is kept beside the
+#   float so nothing is lost to the reinterpretation.
+GAME_CMSG_ROTATE_PLAYER = 0x0040
 
 GAME_SMSG_AGENT_MOVE_TO_POINT = 0x0029
 GAME_SMSG_AGENT_UPDATE_POSITION = 0x002C
@@ -3982,7 +4068,94 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # (swing at it); the day interaction means anything
                         # other than combat, 0x0033 has to split back out.
                         # values[1] is the target agent id in both layouts.
+                        #
+                        # 0x0033 IS NOW DEAD ON OUR WIRE and is kept anyway --
+                        # see its constant for the 0-of-17,770 measurement and
+                        # for why deleting it would destroy the evidence.
                         begin_attack(send, state, values[1], conn_id)
+                    elif opcode == GAME_CMSG_INTERACT_AGENT:
+                        # "I clicked that agent meaning to interact with it" --
+                        # arm 2 of the same switch, and 3.2% of ArenaNet's own
+                        # live c2s while this server dropped every one.
+                        #
+                        # DELIBERATELY NOT `begin_attack`. The constant carries
+                        # the falsifiable separation this rests on; the short
+                        # version is that 0 of 10 distinct 0x0039 targets on
+                        # ArenaNet's wire ever enter an auto-attack exchange, so
+                        # sharing the arm above would have this server swinging
+                        # at NPCs the player is talking to. Recording the target
+                        # is all we can honestly do until an NPC-service study
+                        # says what an interaction should ANSWER -- and 0x003B
+                        # NPC_SERVICE_SELECT, the message that carries what the
+                        # player then picked, is still unhandled too.
+                        #
+                        # Layout is [msg_header, agent_id, byte], 7 bytes. The
+                        # trailing byte is 0 in every sample we hold (4 of 4
+                        # loopback) and is stored under its POSITION rather than
+                        # under a name: nothing has established what it means,
+                        # and `interact_kind` would be a reading nobody made.
+                        #
+                        # NO ARRIVAL COUNTER HERE, and that is deliberate. The
+                        # obvious `state["interact_n"] += 1` would be a number
+                        # this server knows and never shows anyone, which is what
+                        # `report_ping`'s docstring calls D9(a) in miniature. The
+                        # recorder already writes a `decoded` event per arrival
+                        # with its values, so the count is in the capture; what
+                        # belongs in `state` is the CURRENT interaction, not a
+                        # statistic about how many there have been.
+                        state["interacting"] = values[1]
+                        state["interact_byte"] = values[2]
+                    elif opcode == GAME_CMSG_TARGET_SELECT:
+                        # The client TELLS us the selection; it does not ask.
+                        # Measured on ArenaNet's wire: nothing target-shaped
+                        # replies within 300 ms over 75 sends. So this arm sends
+                        # nothing, and that silence is the correct behaviour
+                        # rather than a gap waiting to be filled.
+                        #
+                        # Field 1 is the EFFECTIVE selection (manual if nonzero,
+                        # else auto) and 0 clears it -- so `or None` would be
+                        # wrong here in a way that matters: 0 is a real value
+                        # meaning "nothing selected", not a missing one.
+                        # Field 2 is the auto-selection and is 0 in 363 of 363
+                        # of our own samples; it is stored because a corpus that
+                        # has never seen a value is not evidence the value
+                        # cannot occur.
+                        state["target"] = values[1]
+                        state["target_auto"] = values[2]
+                    elif opcode == GAME_CMSG_ROTATE_PLAYER:
+                        # THE DWORD/FLOAT TRAP -- read the constant before
+                        # touching this. values[1] and values[2] are integers
+                        # here and floats in meaning, and `_f32_of` is the only
+                        # correct way to look at them.
+                        #
+                        # The raw dword is kept alongside because the +/-inf
+                        # sentinels are the interesting case and a consumer that
+                        # only ever sees `inf` cannot tell a sentinel from a
+                        # decode that went wrong. Nothing reads these yet: the
+                        # server owns facing (GAME_SMSG 0x002E) and adopting the
+                        # client's angle here would be a movement change, which
+                        # is a different piece of work with its own study.
+                        state["rotate_raw"] = (values[1], values[2])
+                        state["rotate_angle"] = _f32_of(values[1])
+                        state["rotate_amount"] = _f32_of(values[2])
+                    elif opcode == GAME_CMSG_MISSION_MASK_REPORT:
+                        # 112 bytes of mission progress, one bit per mission id,
+                        # bounded by the client's own MISSION_MASK_BYTES = 112.
+                        # Stored whole: the bit MEANING is open (whether a set
+                        # bit is "completed" or merely "the server named it") and
+                        # a handler that reduced this to a summary would throw
+                        # away the only artifact that can settle it.
+                        #
+                        # 747 of 803 samples are entirely zero because we set no
+                        # bits. That is a fact about this server, not about the
+                        # message, which is exactly why the non-zero minority is
+                        # worth keeping instead of dropping all 803.
+                        #
+                        # Latest wins, and no arrival counter -- same reasoning
+                        # as the INTERACT arm above. The mask is cumulative in
+                        # the client, so the newest one supersedes rather than
+                        # adds to its predecessor.
+                        state["mission_mask"] = values[1]
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through
                         # MOVE_TO_COORD: WASD sends a HEADING from where you
@@ -4732,8 +4905,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                     elif opcode == GAME_CMSG_CLIENT_PERF_REPORT:
                         handle_perf_report(values, send, state, conn_id)
                     else:
-                        # D9(a), game half. Nine arms against 194 schema layouts,
-                        # so this is the common path and not an exception.
+                        # D9(a), game half. Sixteen opcodes over fourteen arms
+                        # against 194 schema layouts, so this is still the common
+                        # path and not an exception.
+                        #
+                        # MEASURED 2026-08-13 over the whole loopback tree (425
+                        # connections, 17,770 framed c2s): this branch took 2,858
+                        # messages, 16.1%, before the 2026-08-13 arms and 1,584,
+                        # 8.9%, after them. The remainder is real -- 0x000A, 0x000B
+                        # and 0x000D are the three largest -- and it is visible
+                        # rather than silent, which is the whole point of D9(a).
+                        # test_dispatch.py reports any opcode `overrides.json`
+                        # has NAMED that lands here without an allowlist row.
                         note_unhandled(state, conn_id, "GAME_CMSG", opcode,
                                        name, rec)
                 elif opcode == AUTH_CMSG_SEND_COMPUTER_INFO:
