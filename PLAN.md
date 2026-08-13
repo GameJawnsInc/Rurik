@@ -2437,6 +2437,22 @@ parallel, with one safety change that is not optional — see its entry.
     `stripbuild` the way (e10j) promoted the borrowed pair. Still open: tag6's
     floats at +0x21/+0x25, and what tag0/tag1/tag3 ARE as aspects (their fields are
     read out; their purpose is NOT FOUND). Record: `vault/research/envsound-2026-08-13/`.
+    **(e10l)** ✅ **DONE 2026-08-13 (FINDINGS 54). OUR OWN BYTES COMPILE.** The gate
+    (e10k) named, run and passed: a map whose env and sound chunks were ASSEMBLED BY
+    OUR CODECS — three emitters at our positions, fog recoloured, and **the zone list
+    grown 11 → 12** so every byte after tag9 shifted — compiled clean and both
+    payloads came back VERBATIM (env 671 B, sound 89 B, sha-matched), no assert.
+    The zone growth is the load-bearing delta: a codec replaying stored counts (the
+    saboteur `test_envchunk` §2 builds) would have declared 11 while carrying 12 and
+    desynced ArenaNet's parser, so **the count re-derivation is now checked against
+    the real consumer** rather than only against our decoder. `stripbuild.build()`
+    accepts typed `EnvChunk`/`SoundChunk` and counts them GENERATED, raw bytes still
+    BORROWED (`test_stripbuild` §3f, floor 54 → 59). Owner was away and none of this
+    needed eyes or ears. Three procedural defects are recorded in FINDINGS 54 rather
+    than scrubbed — wrong archive armed, `ar.entries[row]` off by one, and a harness
+    PASS that meant "reached A map" while the client never loaded ours; the second
+    was caught only because `datcheck --diff` CONTRADICTED the readback.
+    Record: `vault/research/e10l-authored-2026-08-13/`.
 
 ### Naming the archive's map rows — 2026-08-13
 

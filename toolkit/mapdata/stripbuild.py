@@ -331,16 +331,26 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
     place to find out by accident.
 
     `env_payload` + `env_dep_ids` are chunk 0x10000009 and its dependency
-    ids, TOGETHER OR NOT AT ALL. The payload is an environment chunk this
-    toolkit cannot author -- it is not understood -- so callers BORROW one
-    from a donor map at run time (FINDINGS 51: Pre-Searing's carried
-    VERBATIM through the compiler and brought the sky, the ambient light
-    and the horizon water with it). It counts as borrowed in the report,
-    named like every borrowed byte.
+    ids, TOGETHER OR NOT AT ALL. The payload may be either RAW BYTES borrowed
+    from a donor map at run time (FINDINGS 51: Pre-Searing's carried VERBATIM
+    through the compiler and brought the sky, the ambient light and the
+    horizon water with it) or an `envchunk.EnvChunk` this toolkit assembled,
+    which is encoded here. The census distinguishes them -- borrowed bytes are
+    named as borrowed, ours are GENERATED -- because that distinction is the
+    whole point of the report.
 
-    `sound_payload` + `sound_dep_ids` are chunk 0x10000012 and its ids,
-    the same shape and the same rules (FINDINGS 52: Pre-Searing's carried
-    VERBATIM and the map played its birds and wind).
+    `sound_payload` + `sound_dep_ids` are chunk 0x10000012 and its ids, the
+    same shape and the same rules (FINDINGS 52: Pre-Searing's carried VERBATIM
+    and the map played its birds and wind), and likewise accept a
+    `soundchunk.SoundChunk`.
+
+    AUTHORING EITHER ONE IS EARNED, NOT ASSUMED. FINDINGS 53 decoded both
+    chunks and FINDINGS 54 put our own bytes in front of the client: an env
+    chunk with a GROWN zone list -- so every byte after tag9 shifted -- and a
+    sound chunk built from nothing, both carried verbatim through the
+    compiler with no assert. Until that run these were bytes we could only
+    copy. The dependency FILES are still ArenaNet's, referenced by run-time
+    id, which is the borrowed_constants pattern rather than a gap.
     """
     for cid in BORROWED:
         if cid not in constants:
@@ -402,8 +412,18 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
             "payload references files only the id list can resolve, and an "
             "id list with no payload describes nothing")
     if env_payload is not None:
-        payload[ENV] = bytes(env_payload)
-        origin[ENV] = "borrowed"
+        # An EnvChunk is accepted here as well as raw bytes, and the difference
+        # is provenance rather than convenience: bytes we borrowed from a donor
+        # are BORROWED, bytes our own codec emitted are GENERATED, and the
+        # census has to say which. Rung (e10l) is what earns the second case --
+        # the client compiled an env chunk this codec assembled, including a
+        # GROWN zone list, and carried it verbatim.
+        if hasattr(env_payload, "encode"):
+            payload[ENV] = env_payload.encode()
+            origin[ENV] = "generated"
+        else:
+            payload[ENV] = bytes(env_payload)
+            origin[ENV] = "borrowed"
         payload[ENV_DEPS] = mapchunks.encode_dependencies(list(env_dep_ids))
         origin[ENV_DEPS] = (f"generated from {len(list(env_dep_ids))} "
                             f"run-time ids")
@@ -413,8 +433,12 @@ def build(dim_x, dim_y, heights, seed, constants, dep_ids, sequence=0,
             "sound_payload and sound_dep_ids go together or not at all, "
             "the environment pair's rule for the same reason")
     if sound_payload is not None:
-        payload[SOUND] = bytes(sound_payload)
-        origin[SOUND] = "borrowed"
+        if hasattr(sound_payload, "encode"):        # a SoundChunk -- see ENV
+            payload[SOUND] = sound_payload.encode()
+            origin[SOUND] = "generated"
+        else:
+            payload[SOUND] = bytes(sound_payload)
+            origin[SOUND] = "borrowed"
         payload[SOUND_DEPS] = mapchunks.encode_dependencies(
             list(sound_dep_ids))
         origin[SOUND_DEPS] = (f"generated from {len(list(sound_dep_ids))} "

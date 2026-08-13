@@ -369,10 +369,17 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   pins the ENVIRONMENT pair (rung e10i): env_payload and env_dep_ids together
   or not at all, landing after the Path chunk in retail's slot, the payload
   counted BORROWED because the chunk is not understood — and since
-  2026-08-13 the SOUND pair (rung e10j) under the same rules.** Sections 0-3e
-  score 41 on
-  placeholder constants of our own and need no vault, against a floor of 54 --
-  and the vault-less score (27 then, 41 now) was the first number that path
+  2026-08-13 the SOUND pair (rung e10j) under the same rules. Section 3f
+  (rung e10l) pins the AUTHORED path: the same two parameters also take a
+  typed `EnvChunk`/`SoundChunk`, encoded here and counted GENERATED, with
+  raw bytes still counted BORROWED as the control -- one path swallowing
+  the other would make the census meaningless. That is earned rather than
+  assumed: the client compiled an env chunk this toolkit assembled with a
+  GROWN zone list, so every byte after tag9 shifted, and carried it
+  verbatim.** Sections 0-3f
+  score 46 on
+  placeholder constants of our own and need no vault, against a floor of 59 --
+  and the vault-less score (27 then, 46 now) was the first number that path
   ever printed, because `vaultpath.require_dir` raises SystemExit, a
   BaseException, so the `except Exception` around it never fired: a vault-less
   run died before the verdict, its `LEDGER.skip` had never executed once (one
