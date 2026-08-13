@@ -233,3 +233,65 @@ the host profession's animations**, so a custom class animates like a Ritualist 
 coherent, if not bespoke. A twelfth id would index that table at 11 or 12 instead, and
 since it is read with a bound and no assert, the failure would be silent rather than
 loud. One more axis on which the legal-id route wins by not being clever.
+
+---
+
+## 8. RUN 1 (2026-08-13): **the reskin works — "Profession: Soul Reaping"**
+
+Harness `20260813T105623`. The first successful profession reskin in this project.
+
+**Donors, picked so a sighting attributes to a table and cannot be confused with a real
+profession.** Both are ATTRIBUTE name ids, which belong to no profession, and both were
+confirmed to render by direct observation in earlier panel screenshots rather than
+assumed:
+
+| table | patched | donor | why this one |
+|---|---|---|---|
+| `s_charProfession[8]` | 2048 → **2092** | *Soul Reaping* | Necromancer's primary attribute (`s_attrib` row 6, `+0x10 = 1`) |
+| `s_charProfessionAbbrev[8]` | 2057 → **2078** | *Fast Casting* | Mesmer's primary (row 0) |
+
+Neither belongs to the Ritualist, so neither can be confused with the host's own attribute
+list — which the panel displays a few pixels below.
+
+**The result, from `hold002.png`:**
+
+> **`Profession: Soul Reaping`** — where the client had written *Ritualist*.
+>
+> And below it, unchanged: **Communing, Restoration Magic, Channeling Magic, Spawning
+> Power** — the Ritualist's own four attributes, correct and untouched, because the
+> attribute rows were not part of this patch.
+
+**No crash, no assert, run verdict PASS.** Exactly as §1 predicted: the id never left
+0..10, so nothing had a bound to check.
+
+### What this settles
+
+1. **`s_charProfession[N]` drives the in-world "Profession:" label.** OBSERVED, by
+   changing it and watching the label change.
+2. **The reskin route is proven end to end** — locate structurally, patch two dwords out
+   of place, launch, read the new name off the screen.
+3. **A same-length string-id edit is invisible to the client's own machinery**: the
+   attributes, the skill list and the panel all behaved normally around it.
+
+### Method notes worth keeping
+
+- **The patched client must be the ours-DH RUN build**, not the pristine one — a pristine
+  client cannot key against our server. `dhbuild.py` was re-run after patching and still
+  read **`ours`**: two bytes of string ids leave the DH parameters, the updater kill, the
+  mutex NOP and the rename intact.
+- **The run client is deliberately read-only** (mode 0555). It was backed up, patched,
+  launched, then **restored byte-for-byte** (sha256 compared) with its read-only bit put
+  back and the backup deleted. The run directory is exactly as found — it is a shared
+  artifact and other sessions launch from it.
+- **The harness can open the panel without an operator**: `--walk 'wait:2 K:0.3'` presses
+  K, because `parse_walk` accepts any single character as a key. That turns a
+  human-in-the-loop probe into an unattended, screenshot-verified run.
+
+### Still open from this run
+
+**The abbreviation donor was not observed.** *Fast Casting* was patched into
+`s_charProfessionAbbrev[8]` but the abbreviated form shows in the party window and
+nameplate, neither of which renders in a solo session with no party. **UNVERIFIED**, and
+one run with a party or a visible nameplate settles it. The picker and `.data` tables are
+likewise untested — the picker is character-creation only (§5.3), and the `.data` table's
+consumer is still unidentified.
