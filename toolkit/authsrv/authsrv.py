@@ -317,7 +317,42 @@ GAME_SMSG_INSTANCE_LOADED = 0x00F2
 # face:5, primary_profession:4, hair_style:6, race:2, packed low bits first. A
 # Warrior is profession 1, so it lands at bits 20-23.
 PROF_WARRIOR = 1
-APPEARANCE = PROF_WARRIOR << 20
+APPEARANCE_PROFESSION_SHIFT = 20
+APPEARANCE = PROF_WARRIOR << APPEARANCE_PROFESSION_SHIFT
+
+
+def appearance_for(profession):
+    """The 0x0059 appearance dword, with the nibble following an IN-BAND id only.
+
+    THE NIBBLE IS DIFFERENT STORAGE AND IS BOUND-CHECKED. It is 4 bits at 20-23
+    and the client asserts it `< 0xB` at load, which is why
+    `--spawn-profession 12` deliberately leaves this alone: the custom id
+    rides the byte carriers and the nibble keeps a legal placeholder
+    (studies/profession/MODDABLE.md, and RUNS.md §12 where 12 on 0x00A6 ran a
+    whole session with the nibble still at Warrior).
+
+    But for an id the client DOES ship, the nibble must follow, or the
+    character is a Warrior everywhere the appearance dword is read while
+    being profession N everywhere the byte carriers are read -- a split that
+    would make a reskin experiment uninterpretable, since the two halves
+    would disagree about which profession is on screen.
+    """
+    if 1 <= profession <= agents.CHAR_PROFESSIONS - 1:
+        return profession << APPEARANCE_PROFESSION_SHIFT
+    return APPEARANCE
+
+
+def char_settings_for(profession, settings=None):
+    """The character-select blob with its appearance field agreeing with 0x0059.
+
+    Same field, second carrier: the roster screen reads this blob while the
+    in-world avatar reads 0x0059's dword. They were independent constants, so
+    `--spawn-profession 8` produced a Ritualist in the world and a Warrior on
+    the character-select screen. Bytes 8..11, little-endian.
+    """
+    blob = bytearray(TEST_CHAR_SETTINGS if settings is None else settings)
+    blob[8:12] = appearance_for(profession).to_bytes(4, "little")
+    return bytes(blob)
 
 # What the SPAWN BURST's 0x00B7 carries as the primary profession. Rebound by
 # --spawn-profession, and the point of that flag is RUNS.md section 8: a
@@ -3169,7 +3204,8 @@ def handle_portal_login(values, send, store, conn_id, allow_any, rec):
     rec.event("login_ok", who=who, email=(session or {}).get("email"))
 
     send(AUTH_SMSG_CHARACTER_INFO,
-         [req_id, TEST_CHAR_UUID, 0, TEST_CHAR_NAME, TEST_CHAR_SETTINGS],
+         [req_id, TEST_CHAR_UUID, 0, TEST_CHAR_NAME,
+          char_settings_for(SPAWN_PROFESSION)],
          "CHARACTER_INFO")
     send(AUTH_SMSG_ACCOUNT_SETTINGS, [req_id, b""], "ACCOUNT_SETTINGS")
     send(AUTH_SMSG_FRIEND_STREAM_END, [req_id, req_id], "FRIEND_STREAM_END")
@@ -4427,7 +4463,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         send(GAME_SMSG_WORLD_UPDATE_LOAD_TIME, [0],
                              "WORLD_UPDATE_LOAD_TIME")
                         send(GAME_SMSG_PLAYER_INFO,
-                             [PLAYER_NUMBER, PLAYER_AGENT_ID, APPEARANCE,
+                             [PLAYER_NUMBER, PLAYER_AGENT_ID, appearance_for(SPAWN_PROFESSION),
                               0, 0, 0, TEST_CHAR_NAME], "PLAYER_CREATE")
                         # Field names carrying hex offsets (h000B, h001E, h0023,
                         # h0027, h003B, h004B, h0059) let the 23 schema fields be

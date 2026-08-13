@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=185)
+LEDGER = checks.Ledger("agent lifetime", floor=189)
 
 
 def main():
@@ -1601,6 +1601,35 @@ def section_spawn_profession():
               "profession, are both allowed",
               "an in-band id rides 0x00B7 safely -- the refusal is about the "
               "custom range, not about the flag")
+
+    # THE APPEARANCE NIBBLE, which is DIFFERENT STORAGE from the byte carriers
+    # and is bound-checked `< 0xB` at load. It must follow an in-band spawn
+    # profession (or the roster and the avatar disagree about who you are, and
+    # a reskin experiment becomes uninterpretable) and must NOT follow an
+    # out-of-band one (12 rides the byte carriers; the nibble keeps a legal
+    # placeholder -- RUNS.md §12 ran a whole session that way).
+    LEDGER.ok(authsrv.appearance_for(1) == 1 << 20
+              and authsrv.appearance_for(8) == 8 << 20,
+              "the appearance nibble FOLLOWS an in-band spawn profession",
+              f"prof 8 -> {authsrv.appearance_for(8):#010x}; a Ritualist by byte "
+              f"carrier and a Warrior by appearance is two answers to one question")
+    LEDGER.ok(authsrv.appearance_for(12) == authsrv.APPEARANCE
+              and authsrv.appearance_for(11) == authsrv.APPEARANCE,
+              "and REFUSES an out-of-band one, keeping the legal placeholder",
+              f"prof 12 -> {authsrv.appearance_for(12):#010x} -- the nibble is 4 "
+              f"bits asserted < 0xB at load, so a custom id there is a crash, "
+              f"not an experiment")
+    LEDGER.ok(authsrv.char_settings_for(8)[8:12] == (8 << 20).to_bytes(4, "little")
+              and authsrv.char_settings_for(1) == authsrv.TEST_CHAR_SETTINGS,
+              "and the character-select blob carries the SAME value",
+              f"{authsrv.char_settings_for(8)[8:12].hex()} -- the roster screen "
+              f"reads this blob while the avatar reads 0x0059's dword; they were "
+              f"independent constants and disagreed")
+    LEDGER.ok(len(authsrv.char_settings_for(8)) == len(authsrv.TEST_CHAR_SETTINGS),
+              "without changing the blob's length",
+              f"{len(authsrv.char_settings_for(8))} vs "
+              f"{len(authsrv.TEST_CHAR_SETTINGS)} -- the field is in place, and a "
+              f"length change would desync every field after it")
 
     # The send site, on the SYNTAX TREE: the call that sends 0x00B7 in the
     # spawn burst must take its values from spawn_profession_values(), not
