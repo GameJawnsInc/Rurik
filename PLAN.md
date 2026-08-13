@@ -1345,21 +1345,22 @@ on the syntax tree; and the reader's loop is `cmp edi, 0xb`, so `secondary_bits(
 refuses ids 0/11/12/255. **That closes the custom-secondary route from the writing side
 too: `0x00B6` physically cannot offer a custom id.**
 
-**Next run — TWO-SHOT, and it must be in an ARENA MAP.** The builder self-gates on a
-15-map whitelist (796 Codex Arena, 823–836); elsewhere panel init zeroes the gate and it
-never runs, so a null result outside them says nothing. Mask `0x07FE` predicts ten
-entries and an ungreyed control, `0x0044` predicts exactly three (None, Ranger,
-Elementalist), `0` predicts one and greyed. One shot cannot separate a bitmask from a
-count.
+**CONFIRMED 2026-08-13 (`RUNS.md` §14) — all three shots hit exactly.** In map 796:
+mask `0x07FE` ungreyed the control with **ten** entries (Warrior, Warrior/Ranger …
+Warrior/Dervish — every profession but the primary), `0x0044` gave **exactly three**
+(None, Ranger, Elementalist), `0x0000` **locked** it again. 48 c2s, +77.76 s, `missed 0`,
+no dialog. **The bit index IS the profession id, OBSERVED** — the two-shot design killed
+the count-only and wrong-bit-base rivals, and the layout no capture could settle (all 11
+live samples are mask 0) is settled. Three open questions closed with it: the arena gate
+bit is set in 796 under our server, the mission-map field reads 0 (our own `0x0199`'s
+`is_explorable`), and Codex Arena loads at all.
 
-```
-python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_secondary --map 796'
-```
-
-Loading an arena map under our server has never been tried — an unmeasured risk of its
-own. If the list populates but stays grey, suspect the mission-map field (`is_explorable`
-in our own `0x0199`), not the mask; if nothing happens at all, suspect the arena gate bit
-(runtime `.data`, unreadable statically) before doubting the opcode.
+**So the secondary-profession mechanic works end to end on this server** — a real feature
+driven by the message ArenaNet's own server sends, via `--secondary-bits all|<ids>|<mask>`.
+And the custom route is now closed from both sides and confirmed in action: the reader is
+`cmp edi, 0xb` and `secondary_bits()` refuses above 10, so **no server message can ever
+offer a custom profession as a secondary.** What remains for a custom id is client-side —
+widening the compiled tables, or R1's assert neuter.
 
 **What this changed for the arc's actual goal.** The custom-profession boundary is now
 sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has
