@@ -87,9 +87,25 @@ def split_args(text):
     posix=False keeps backslashes but leaves quote characters attached to the
     token, so surrounding quotes are stripped here; that pair is what lets a quoted
     path containing spaces survive as well.
+
+    AN UNBALANCED QUOTE IS REFUSED WITH ITS CAUSE NAMED, not left to shlex's
+    bare ValueError. PowerShell 5.1 rewrites a trailing `""` inside a
+    single-quoted argument into ONE double quote -- measured 2026-08-12:
+    `--game-args '... --skills ""'` reached Python as `... --skills "` -- and
+    the resulting traceback pointed at this module rather than at the shell.
+    Same rule as parse_walk: a typo in an argument must be found before the
+    stack starts, and found with a message that says what to type instead.
     """
     out = []
-    for tok in shlex.split(text or "", posix=False):
+    try:
+        toks = shlex.split(text or "", posix=False)
+    except ValueError as ex:
+        raise SystemExit(
+            f"--game-args {text!r}: {ex}. An unbalanced quote usually means "
+            f"PowerShell rewrote a nested \"\" -- it collapses a trailing "
+            f'`""` inside single quotes into one `"`. For an empty skillbar '
+            f"use --skills 0 (a bar of zeroes) instead of --skills \"\".")
+    for tok in toks:
         if len(tok) >= 2 and tok[0] == tok[-1] and tok[0] in ("'", '"'):
             tok = tok[1:-1]
         out.append(tok)

@@ -1279,13 +1279,20 @@ of the burst's own `0x00B7`**, at `profession < arrsize(s_profChapter)`
 (`ConstChar.cpp:1296`) — the first of FINDINGS' 29 bound checks ever observed live, and
 proof the two byte carriers are NOT equivalent: `0x00A6(12)` lands silently, `0x00B7(12)`
 is lethal, and run 1 never actually tested it (its 0x00B7 step fired post-mortem).
-**The live lead is the operator's: the test bar (316–323) is ALL Warrior — measured in
-the client table — and every K crash/open in the arc fits "the panel nulls when the bar's
-profession does not match the profession in effect when skill data was delivered".**
-`RUNS.md` §9 has the three one-session discriminators (pure default; empty bar at 3; a
-profession-3 bar at 3), each with its prediction stated. R1 stands as the other route.
-WIKI note (§8): the panel's secondary-profession drop-down means it enumerates
-professions (INFERRED as a frame).
+The bar-mismatch lead was
+tested the same evening and **refuted by its own predictions** — both matched
+configurations crashed — and the real finding is underneath (`RUNS.md` §9): **the PURE
+DEFAULT world cannot open the skills panel.** Six sessions pressed K without a prior
+`0x00A6` and all six died on the same null; the one that opened had one. And
+`studies/smsg` already measured the missing piece: retail sends `0x00A6` 136 times
+across 4 tapes and its handler notifies exactly the attributes panel (event
+`0x1000001d`) — our burst sends only `0x00B7` for the player. **This was never about
+custom professions: our server is missing a message retail always sends.** The next
+session is `profession_trigger` — `0x00A6(1)`, the value the burst already declared,
+then K; opens → send the player's `0x00A6` in the burst and re-ask every profession
+question on top of a working panel. R1 stands as the other route. WIKI note (§8): the
+panel's secondary-profession drop-down means it enumerates professions (INFERRED as a
+frame).
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`

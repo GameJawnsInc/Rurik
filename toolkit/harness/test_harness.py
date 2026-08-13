@@ -44,7 +44,7 @@ import checks  # noqa: E402
 # needed it. hold_key earned its own section the hard way -- see the comment in
 # it -- and the camera floor was declared as 67 from a miscount and reddened the
 # run at 65 until it was measured, which is what the floor is for.
-LEDGER = checks.Ledger("harness", floor=88)
+LEDGER = checks.Ledger("harness", floor=89)
 check = checks.adopt_named(LEDGER)
 
 
@@ -399,6 +399,20 @@ if __name__ == "__main__":
               "and a quoted path with spaces stays ONE argument", repr(spaced))
     LEDGER.ok(_sess.split_args("") == [] and _sess.split_args(None) == [],
               "and an empty --game-args yields no arguments at all")
+    # PowerShell 5.1 collapses a trailing `""` inside single quotes into ONE
+    # double quote, so the harness receives an unbalanced quote. Measured
+    # 2026-08-12: it burned a run as a bare shlex ValueError traceback that
+    # pointed at session.py rather than at the shell.
+    refusal = None
+    try:
+        _sess.split_args('--probe profession_spawn --skills "')
+    except SystemExit as ex:
+        refusal = str(ex)
+    LEDGER.ok(refusal is not None and "--skills 0" in refusal,
+              "an unbalanced quote is REFUSED naming the PowerShell trap "
+              "and what to type instead",
+              f"{refusal!r} -- a bare shlex ValueError blames this module "
+              f"for the shell's rewrite and says nothing actionable")
 
     # --- --labelrun prompts must reach the operator's screen ---------------------
     # The gamesrv is a CHILD process whose stdout session.py normally sends only to
