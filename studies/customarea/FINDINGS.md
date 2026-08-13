@@ -6592,12 +6592,31 @@ its own explanatory comment about the flag. It reads the argument list off the
 syntax tree now. A grep cannot tell an argument from prose — the same lesson
 `test_cmsgnames.py` recorded, relearned.
 
-### What is left
+### THE RUN: every prediction hit
 
-One client run, prediction stated: the client re-bloats, builds a navmesh over
-9,216 cells (the 32x32 plaza compiled to 55 trapezoids over 1,024), carries env
-and sound verbatim, and the spawn at (4608, 4608) lands in exactly one
-trapezoid. It would also be a second data point on the standing unmeasured
-question from FINDINGS 39 — whether a relocated row SURVIVES a play session.
+Executed the same day once the harness freed up, harness-driven (no owner
+input). **A 96x96 map, relocated into a row reserving 4,096 bytes, compiled in
+the retail client.**
+
+    [PASS] the client re-compiled the map            10,459 B path chunk
+           mesh: 88 trapezoids the client built from our terrain
+    [PASS] the compiled height field equals ours     9,216/9,216 samples
+    [PASS] our environment payload carried VERBATIM  639 B
+    [PASS] our sound payload carried VERBATIM         89 B
+    [PASS] our 12 props are in the compiled map
+    [PASS] the spawn (4608, 4608) lands in exactly one trapezoid
+
+No assert, no crash dialog. Baseline for scale: the 32x32 plaza compiled to
+**55 trapezoids over 1,024 cells**, this to **88 over 9,216**.
+
+### And it answers FINDINGS 39's standing question
+
+FINDINGS 39 moved a real map's partner 1.6 GB and the client found it, compiled
+from it and emitted ArenaNet's own bytes — but whether a relocated row SURVIVES
+a play session was left explicitly unmeasured. **It does.** After the session:
+`datcheck --preflight` **10 of 10**, `datmove --check-overlaps` **0 overlapping
+pairs**, and our relocated partner still sits at `0x6FF0A00`, 21,926 B,
+byte-untouched. The client relocated its OWN compiled head to a new extent,
+which is the client doing what it always does rather than a symptom.
 
 Run record: `vault/research/size-2026-08-13/`.

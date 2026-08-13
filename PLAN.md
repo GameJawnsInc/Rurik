@@ -2526,21 +2526,22 @@ parallel, with one safety change that is not optional — see its entry.
     source, so it now runs that sabotage as a negative control.
     Not a hot reload: the client compiles at load, so iterating means running it
     again. Record: `vault/research/rungG-2026-08-13/`.
-    **(H)** 🟡 **STAGED 2026-08-13 (FINDINGS 57). THE SIZE CEILING IS BROKEN,
-    OFFLINE.** Every map this toolkit built was 32x32 because `datwrite` cannot grow
+    **(H)** ✅ **DONE 2026-08-13 (FINDINGS 57). THE SIZE CEILING IS BROKEN.** Every map this toolkit built was 32x32 because `datwrite` cannot grow
     a reservation — not because of the format, whose cap is 16,777,216 cells.
     `deploy --install` now picks the verb from the size, and a **96x96 map, 21,926 B,
     was relocated into a row reserving 4,608**: terrain 9,216/9,216 exact, **96.03%
-    ours**, 10/10 open-time rules, 0 overlaps, exactly two rows changed. **No client
-    run — the harness was in use**, so this is staged. Two defects worth carrying:
+    ours**, 10/10 open-time rules, 0 overlaps, exactly two rows changed. **THE RUN
+    LANDED the same day**: the client re-bloated, built **88 trapezoids over 9,216
+    cells** (the 32x32 plaza gave 55 over 1,024), matched our height field
+    9,216/9,216, carried env and sound verbatim, kept all 12 props and put the spawn
+    in exactly one trapezoid — no assert. **It also answers FINDINGS 39's standing
+    question: a relocated row SURVIVES a play session** (10/10 rules, 0 overlaps, our
+    row byte-untouched at 0x6FF0A00 afterwards). Two defects worth carrying:
     `snap_block` is a ONE-TILE function and a whole-field caller loses only
     CURVATURE (a 400-unit cliff round-trips, a smooth hill loses 2,752 samples), now
     `snap_field` with a negative control; and `--check-overlaps` is a read-only verb
     that returned 0 having written nothing while `deploy` reported success over
-    ArenaNet's own map, so install now READS THE ROW BACK. **Next: one run** —
-    `deploy --area vale --install --launch` — which also gives a second data point on
-    FINDINGS 39's open question, whether a relocated row survives a play session.
-    Record: `vault/research/size-2026-08-13/`.
+    ArenaNet's own map, so install now READS THE ROW BACK. Record: `vault/research/size-2026-08-13/`.
 ### Naming the archive's map rows — 2026-08-13
 
 **[studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md), `toolkit/clientscan/maprows.py`.**
