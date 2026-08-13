@@ -55,9 +55,9 @@ BIOME_ROW = 7982               # Pre-Searing
 BORROWED_MAX = 900             # generous ceiling; the real figure is 770
 PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 
-# FLOOR: 14, MEASURED from a green run 2026-08-13. Sections 0, 1 and 3 score 10
-# and need no vault.
-LEDGER = checks.Ledger("test_deploy", floor=14)
+# FLOOR: 22, MEASURED from a green run 2026-08-13 (sections 0,1,3,4,5 score 18
+# and need no vault; section 2 reads the archive).
+LEDGER = checks.Ledger("test_deploy", floor=22)
 check = checks.adopt(LEDGER)
 
 
@@ -146,6 +146,76 @@ def section3():
                   "no line runs is a docstring, not a check")
 
 
+def section4():
+    """The size ceiling, and the one-tile snap that hid behind it."""
+    print("\n4. bigger than one tile: snap_field, and what snap_block alone does")
+    for dim in (32, 64, 96):
+        raw = deploy.gen_plaza(dim)
+        snapped, worst = stx.snap_field(raw, dim, dim)
+        trn = stx.StrippedTerrain.build(dim, dim, snapped)
+        back = stx.StrippedTerrain.decode(trn.encode())
+        same = sum(1 for a, b in zip(back.heights, snapped) if a == b)
+        check(same == dim * dim,
+              f"{dim}x{dim} round-trips exactly after snap_field",
+              f"{same}/{dim * dim}, worst moved {worst}")
+
+    # NEGATIVE CONTROL. snap_block takes ONE 32x32 tile; handing it a whole
+    # multi-tile field snaps tile 0 and silently leaves the rest, which is how
+    # a 96x96 map lost 134 samples while reporting a 2-unit worst error. If
+    # this ever stops losing samples, snap_block grew a whole-field meaning and
+    # snap_field's reason to exist needs re-reading.
+    dim = 64
+    raw = deploy.gen_plaza(dim)
+    one_tile, _w = stx.snap_block(raw)
+    trn = stx.StrippedTerrain.build(dim, dim, one_tile)
+    back = stx.StrippedTerrain.decode(trn.encode())
+    lost = sum(1 for a, b in zip(back.heights, one_tile) if a != b)
+    check(lost > 0,
+          "snap_block ALONE on a 64x64 field still loses samples -- it is a "
+          "one-tile function, and that is what snap_field is for",
+          f"{lost} lost past the first 1024-sample tile")
+
+    # and the loss is past tile 0, not scattered -- the signature of the defect
+    idx = [i for i, (a, b) in enumerate(zip(back.heights, one_tile)) if a != b]
+    check(idx and min(idx) >= stx.CHUNK_SIZE * stx.CHUNK_SIZE,
+          "and every lost sample sits past the first tile, which is the "
+          "fingerprint rather than a coincidence", f"first at {min(idx)}")
+
+
+def section5(area):
+    """Size selects a VERB: replace when it fits, relocate when it does not."""
+    print("\n5. the size ceiling selects replace vs relocate")
+    src = open(deploy.__file__, encoding="utf-8").read()
+    fn = next(n for n in ast.walk(ast.parse(src))
+              if isinstance(n, ast.FunctionDef) and n.name == "main")
+    dumped = ast.dump(fn)
+    check("datmove.py" in dumped and "datwrite.py" in dumped,
+          "install can reach BOTH writers -- datwrite fits in place, datmove "
+          "relocates, and an authored map bigger than its row needs the second")
+    # Read the ARGUMENT LIST, not the source text: the first version grepped
+    # the text and went red on this file's own explanatory COMMENT about the
+    # flag. A grep cannot tell an argument from prose.
+    datmove_args = []
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.List):
+            continue
+        # the whole SUBTREE: the script name arrives as
+        # os.path.join(HERE, "datmove.py"), so it is not a direct element
+        strs = [n.value for n in ast.walk(node)
+                if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+        if any(s.endswith("datmove.py") for s in strs):
+            datmove_args = strs
+    check(datmove_args and "--check-overlaps" not in datmove_args,
+          "and does NOT pass --check-overlaps to datmove, which is a read-only "
+          "verb that returns before moving -- it returned 0 with nothing "
+          "written and the run reported success over ArenaNet's own map",
+          f"{[a for a in datmove_args if a.startswith('--')]}")
+    # the readback-after-install guard, which is what caught that
+    check("the row does not hold what we wrote" in src,
+          "install verifies by READING THE ROW BACK rather than by trusting an "
+          "exit code")
+
+
 def section2(area):
     print("\n2. the two donors, and the census that separates them")
     try:
@@ -186,6 +256,8 @@ def main():
     area = section0()
     section1(area)
     section3()
+    section4()
+    section5(area)
     section2(area)
     return LEDGER.verdict()
 

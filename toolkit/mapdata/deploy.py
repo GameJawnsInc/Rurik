@@ -321,11 +321,18 @@ def verify(report, area, heights, dim, reservation=None):
         raise Refused("the authored path chunk carries no boundary point; the "
                       "client's flood fill has no seed and will build no mesh")
 
-    if reservation is not None and len(report.blob) > reservation:
-        raise Refused(f"map is {len(report.blob)} B, over the row's "
-                      f"{reservation} B reservation")
-    notes.append(f"{len(report.blob)} B"
-                 + (f" fits {reservation} B reservation" if reservation else ""))
+    # NOT a refusal any more, and the change is the point: over-reservation used
+    # to be fatal because `datwrite` is the only writer that fits in place. The
+    # install path relocates instead when it must, so size selects a VERB rather
+    # than ending the run.
+    if reservation is None:
+        notes.append(f"{len(report.blob)} B")
+    elif len(report.blob) <= reservation:
+        notes.append(f"{len(report.blob)} B fits the {reservation} B "
+                     f"reservation -- replace in place")
+    else:
+        notes.append(f"{len(report.blob)} B exceeds the {reservation} B "
+                     f"reservation -- install will RELOCATE the row")
     notes.append(f"{report.generated} B generated, {report.borrowed} B borrowed "
                  f"({100.0 * report.generated / max(1, len(report.blob)):.2f}% ours)")
     return notes
@@ -451,7 +458,7 @@ def main(argv=None):
                           f"known: {', '.join(sorted(GENERATORS))}")
         heights = GENERATORS[gen](dim)
         print(f"  geometry: generator {gen!r}")
-    heights, worst = stx.snap_block(heights)
+    heights, worst = stx.snap_field(heights, dim, dim)
     print(f"  lattice snap: worst sample moved {worst}")
 
     # 2. borrow
@@ -488,16 +495,51 @@ def main(argv=None):
         return 0
 
     if args.install:
-        head_row, partner_row, _res = rows
+        head_row, partner_row, reservation = rows
         print(f"\ninstalling into {dat}: head {head_row}, partner {partner_row}")
         here = os.path.dirname(out)
-        rc = subprocess.run(
-            [sys.executable, os.path.join(HERE, "datwrite.py"), "--dat", dat,
-             "--replace", str(partner_row), "--data", out,
-             "--journal", os.path.join(here, f"{args.area}_replace.json"),
-             "--verify"], text=True).returncode
+        # REPLACE if it fits, RELOCATE if it does not. `datwrite` writes
+        # UNCOMPRESSED and refuses to grow a reservation -- correctly, since its
+        # invariant is same row, same offset, same length -- so an authored map
+        # only fits where it is smaller than what ArenaNet compressed into that
+        # row. That is what capped every map this toolkit built at 32x32; the
+        # terrain codec's own cap is 16,777,216 cells, nowhere near it.
+        if len(report.blob) <= reservation:
+            print(f"  {len(report.blob)} B fits the {reservation} B "
+                  f"reservation -- replacing in place")
+            rc = subprocess.run(
+                [sys.executable, os.path.join(HERE, "datwrite.py"), "--dat", dat,
+                 "--replace", str(partner_row), "--data", out,
+                 "--journal", os.path.join(here, f"{args.area}_replace.json"),
+                 "--verify"], text=True).returncode
+        else:
+            print(f"  {len(report.blob)} B does NOT fit the {reservation} B "
+                  f"reservation -- RELOCATING the row")
+            # NO --check-overlaps here: it is a READ-ONLY verb that returns
+            # before any move, so passing it got rc 0 with nothing written and
+            # this function reported "installed". datmove runs the overlap
+            # check itself after a real move.
+            rc = subprocess.run(
+                [sys.executable, os.path.join(HERE, "datmove.py"), "--dat", dat,
+                 "--row", str(partner_row), "--data", out, "--move", "--confirm",
+                 "--journal", os.path.join(here, f"{args.area}_move.json")],
+                text=True).returncode
         if rc != 0:
-            raise Refused(f"datwrite refused (rc {rc})")
+            raise Refused(f"the archive writer refused (rc {rc})")
+
+        # AN EXIT CODE IS NOT EVIDENCE. Read the row back and compare. This
+        # exists because rc 0 above once meant "your flags selected a different
+        # verb and nothing happened", and the run went on to arm the head and
+        # print success over an archive that still held ArenaNet's own map.
+        with Archive(dat) as ar:
+            got = ar.read(mapchunks.MapIndex(ar).partner(
+                next(e for e in ar.entries if e.index == head_row)))
+        if got != report.blob:
+            raise Refused(
+                f"the row does not hold what we wrote: {len(got)} B back "
+                f"against {len(report.blob)} B written. The writer returned "
+                f"success and the archive disagrees, so the archive wins")
+        print(f"  verified: the row reads back the {len(got)} B we wrote")
         rc = subprocess.run(
             [sys.executable, os.path.join(HERE, "rebloat.py"), "--dat", dat,
              "--file-id", hex(file_id), "--arm", "--confirm",
