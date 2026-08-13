@@ -1,0 +1,329 @@
+r"""An authored area's POPULATION: the rows, the set rules, and the placement.
+
+R5's criterion is "a new zone in TOML, hot-reloaded, walked". The toolkit could
+author the GROUND of a zone long before it could author anything standing on it,
+and an area with a tree in it and nothing alive is a diorama. `--area NAME`
+serves the `content/world.toml` spawn rows bound to that area.
+
+WHY THIS COULD NOT HAVE BEEN WRITTEN BEFORE RUNG (I). The load-bearing rule here
+is that a body is placed only where the navmesh says there is ground -- and
+until 2026-08-13 the server on an authored map held either ArenaNet's geometry
+for the same map id or no mesh at all (FINDINGS 59), so this check would have
+been measuring the wrong map or nothing. It matters because an authored area can
+be sparse: the sculpt map is 1.2% walkable by area, so a coordinate picked by eye
+is ground about one time in eighty.
+
+WHAT IS ACTUALLY CHECKED, and it is mostly refusals with positive controls
+beside them, because a rule that refuses everything protects nothing and a rule
+that refuses nothing is not a rule:
+
+  * the set rules, which exist because their cost is a WASTED CLIENT RUN --
+    `create_agent_world` already refuses a duplicate id, but by then half the
+    population is in the world;
+  * that a shared `definition` is ALLOWED within one npc template and REFUSED
+    across two, which is the distinction retail itself draws;
+  * that placement nudges and REPORTS, or refuses, and never silently invents;
+  * that an area REPLACES the global test enemy rather than adding to it.
+
+NO VAULT, NO SOCKET, NO CLIENT. The mesh is `pathchunk.minimal()`, a mesh
+authored from nothing, so the placement half needs no archive.
+
+    python toolkit/authsrv/test_population.py
+"""
+
+import ast
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "mapdata"))
+import authsrv  # noqa: E402
+import checks  # noqa: E402
+import content as content_mod  # noqa: E402
+import pathchunk  # noqa: E402
+import pathmap  # noqa: E402
+
+# FLOOR: 33, MEASURED from a green run 2026-08-13. Every section is synthetic --
+# no vault, no socket, no client -- so there is nothing here that may skip.
+LEDGER = checks.Ledger("test_population", floor=33)
+check = checks.adopt(LEDGER)
+
+AREA = "sculpt"
+
+
+def rows_for(area, table):
+    """`area_population` against a table we built, not the live store.
+
+    Takes the table so a sabotage can be a dict rather than an edit to
+    `content/`, which is what lets every refusal below be exercised on data
+    designed to break exactly one rule.
+    """
+    saved = authsrv.agents.WORLD
+    try:
+        authsrv.agents.WORLD = table
+        return authsrv.area_population(area)
+    finally:
+        authsrv.agents.WORLD = saved
+
+
+class FakeWorld:
+    """Just enough of content.World for area_population: rows() and get()."""
+
+    def __init__(self, spawn):
+        self._spawn = spawn
+
+    def rows(self, kind):
+        return dict(self._spawn) if kind == "spawn" else {}
+
+    def get(self, kind, key):
+        return self._spawn[key]
+
+
+def row(**kw):
+    base = {"area": AREA, "npc": "hatcher", "agent_id": 20, "definition": 5,
+            "x": 0.0, "y": 0.0, "enabled": True}
+    base.update(kw)
+    return base
+
+
+def accepts(spawn):
+    """The accepted keys, or None if the population was refused.
+
+    EVERY call in this file goes through here or `refuses`, and that is not
+    style. A positive control that calls `area_population` directly turns a
+    sabotage which refuses too much into an uncaught PopulationError -- bare
+    traceback, no verdict banner, no ledger. That is exactly what the
+    "refuse ANY shared definition" sabotage did to the first version of this
+    file: 0 checks reported, which reads as a broken test rather than as a
+    caught defect.
+    """
+    try:
+        return [k for k, _ in rows_for(AREA, FakeWorld(spawn))]
+    except authsrv.PopulationError:
+        return None
+
+
+def refuses(spawn, why):
+    """True iff area_population refuses this table."""
+    return accepts(spawn) is None
+
+
+def section0():
+    print("\n0. the rows load, and an area's population is BOUND to that area")
+    world = content_mod.load(vault_dir="")
+    spawn = world.rows("spawn")
+    check(bool(spawn), "content carries a spawn table", f"{len(spawn)} row(s)")
+
+    mine = {k: v for k, v in spawn.items() if v.get("area") == AREA}
+    check(len(mine) >= 3,
+          f"area {AREA!r} declares at least three bodies -- a population of two "
+          f"is satisfied by code that handles exactly two",
+          f"{sorted(mine)}")
+
+    # THE LEGACY ROW MUST NOT BE IN ANY POPULATION. It is placed by offset from
+    # the player, so serving it inside an authored zone drops a body in the
+    # middle of somebody's arrangement.
+    globals_ = [k for k, v in spawn.items() if v.get("area") is None]
+    check(globals_ == ["test_enemy"],
+          "the one area-less spawn row is the legacy global enemy",
+          f"{globals_}")
+    # CATCH IT. A PopulationError here is a FAIL, not a crash: the sabotage that
+    # refuses any shared `definition` makes the REAL rows unloadable (all three
+    # sculpt bodies are hatchers sharing index 5), and the first version of this
+    # let that escape -- bare traceback, no verdict banner, 0 checks reported.
+    # Same trap `vaultpath.require_dir` set for test_stripbuild: a caught defect
+    # that prints no verdict reads as a broken test rather than a caught defect.
+    try:
+        got = [k for k, _ in rows_for(AREA, world)]
+        loaded = True
+    except authsrv.PopulationError as exc:
+        got, loaded = [], False
+        print(f"       PopulationError: {exc}")
+    check(loaded, "the SHIPPED rows in content/world.toml load as a set -- if "
+                  "this is red the rules and the content disagree and every "
+                  "check below is measuring the wrong thing")
+    check(loaded and "test_enemy" not in got,
+          "and the global enemy is NOT returned as part of an area's population",
+          f"{got}")
+    check(loaded and sorted(got) == sorted(mine),
+          "while every row that names the area IS", f"{sorted(got)}")
+
+    for key, r in sorted(mine.items()):
+        check(r.provenance["source"] == "invented",
+              f"placement {key!r} is provenance 'invented' -- ours, chosen "
+              f"rather than observed", r.provenance["source"])
+        check(r["npc"] in world.rows("npc"),
+              f"and names a real npc template", r["npc"])
+
+
+def section1():
+    print("\n1. the set rules, checked before a single body goes out")
+    ok = {"a": row(agent_id=20, definition=5),
+          "b": row(agent_id=21, definition=6, npc="lakeside_worm")}
+    check(accepts(ok) == ["a", "b"],
+          "POSITIVE CONTROL: a well-formed population of two is accepted -- "
+          "without this every refusal below is satisfied by refusing all input")
+
+    check(refuses({"a": row(agent_id=20), "b": row(agent_id=20, definition=6)},
+                  "dup id"),
+          "two rows sharing an agent_id are REFUSED -- one agent's state under "
+          "another's name is a collision the wire cannot express")
+
+    # THE ASYMMETRY IS THE POINT, and both halves must hold.
+    same = {"a": row(agent_id=20, definition=5, npc="hatcher"),
+            "b": row(agent_id=21, definition=5, npc="hatcher")}
+    check(accepts(same) == ["a", "b"],
+          "two rows of the SAME npc may share a definition -- it is per-instance "
+          "and outlives its agents (ArenaNet: one 0x0056 for 140 re-creates), so "
+          "demanding one each would invent a rule retail does not follow")
+    diff = {"a": row(agent_id=20, definition=5, npc="hatcher"),
+            "b": row(agent_id=21, definition=5, npc="lakeside_worm")}
+    check(refuses(diff, "dup def across templates"),
+          "but two DIFFERENT npcs sharing one are REFUSED -- the definition "
+          "array is a raw index, so the second silently overwrites the first "
+          "and a body wears the wrong model")
+
+    for field in ("agent_id", "definition"):
+        bad = {"a": row(**{field: None})}
+        check(refuses(bad, f"missing {field}"),
+              f"a row with no {field} is REFUSED rather than allocated -- this "
+              f"server does not invent ids")
+
+    off = {"a": row(enabled=False), "b": row(agent_id=21, definition=6,
+                                             npc="lakeside_worm")}
+    check(accepts(off) == ["b"],
+          "a disabled row is left out without disturbing the rest")
+
+    other = {"a": row(area="somewhere_else")}
+    check(accepts(other) == [],
+          "and a row naming a DIFFERENT area is not this area's problem")
+
+
+def mesh(rect=(0.0, 0.0, 3072.0, 3072.0)):
+    """A one-trapezoid mesh covering `rect`, authored from nothing."""
+    return pathmap.PathingMap.from_chunk(
+        pathchunk.PathChunk.minimal(rect=rect).encode())
+
+
+def section2():
+    print("\n2. placement: on the mesh, nudged onto it, or refused")
+    pm = mesh()
+    inside = (1536.0, 1536.0)
+    check(pm.walkable(*inside),
+          "POSITIVE CONTROL: the synthetic mesh calls its own middle ground -- "
+          "otherwise every refusal below is refusing a broken fixture",
+          f"{inside}")
+
+    x, y, moved = authsrv.place_on_mesh(pm, *inside, "probe")
+    check((x, y) == inside and moved == 0.0,
+          "a point already on the mesh is left exactly where the author put it",
+          f"moved {moved}")
+
+    # JUST OUTSIDE: must be nudged ON, and the distance REPORTED. A search that
+    # only ever answers "fine" or "refused" has never been shown to work.
+    near = (-24.0, 1536.0)
+    got = authsrv.place_on_mesh(pm, *near, "probe")
+    check(got is not None and got[2] > 0.0 and pm.walkable(got[0], got[1]),
+          "a point just off the mesh is nudged ONTO it, and the move is a "
+          "non-zero distance the caller can report",
+          f"{near} -> {None if got is None else (round(got[0]), round(got[1]), got[2])}")
+
+    far = (-100000.0, -100000.0)
+    check(authsrv.place_on_mesh(pm, *far, "probe") is None,
+          "a point nowhere near the mesh is REFUSED, not placed -- a body where "
+          "the server's own collision says nothing exists makes everything "
+          "downstream reason about it wrongly")
+
+    # THE SEARCH IS BOUNDED, and the bound is asserted against a LITERAL written
+    # HERE. The first version computed its probe point as
+    # `-(PLACE_SEARCH_RADIUS + 2*PLACE_SEARCH_STEP)` -- so raising the radius to
+    # 100,000 moved the probe with it and the check stayed GREEN. A symbol
+    # appearing in a test file is not a check; that is the same defect
+    # test_agentlife records, where twelve of fourteen combat constants could be
+    # set to a wrong value with all 125 checks passing, because every section
+    # computed its expectation FROM the symbol under test.
+    check(authsrv.PLACE_SEARCH_RADIUS == 480.0,
+          "the search radius is 480 units", f"{authsrv.PLACE_SEARCH_RADIUS}")
+    check(authsrv.PLACE_SEARCH_STEP == 48.0,
+          "and the search step is 48", f"{authsrv.PLACE_SEARCH_STEP}")
+    check(authsrv.place_on_mesh(pm, -600.0, 1536.0, "probe") is None,
+          "and a point 600 units off the mesh is REFUSED -- a body found "
+          "thousands of units from where it was written is not that body, so "
+          "the bound must hold rather than widen until something is found")
+
+    check(authsrv.place_on_mesh(None, 7.0, 9.0, "probe") == (7.0, 9.0, 0.0),
+          "with NO mesh at all the point is passed through unchanged -- an "
+          "archive is not required to be present, and refusing every body on a "
+          "machine without one would be worse than placing them on trust")
+
+
+def section3():
+    print("\n3. an area REPLACES the global enemy; the wiring is not optional")
+    src = open(authsrv.__file__, encoding="utf-8").read()
+    tree = ast.parse(src)
+
+    # The call site: `if AREA_NAME: spawn_population(...) elif SPAWN_ENEMY: ...`
+    # Both firing would drop the offset-placed test enemy into the middle of an
+    # authored arrangement. Asked of the syntax tree because "the enemy is in
+    # the else" is invisible to a grep.
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        if not (isinstance(node.test, ast.Name) and node.test.id == "AREA_NAME"):
+            continue
+        calls = {getattr(n.func, "id", "") for n in ast.walk(node)
+                 if isinstance(n, ast.Call)}
+        orelse = {getattr(n.func, "id", "") for e in node.orelse
+                  for n in ast.walk(e) if isinstance(n, ast.Call)}
+        found.append((calls, orelse))
+    check(len(found) == 1, "there is exactly one `if AREA_NAME:` spawn branch",
+          f"{len(found)}")
+    calls, orelse = found[0] if found else (set(), set())
+    check("spawn_population" in calls,
+          "it calls spawn_population when an area is named")
+    check("spawn_enemy" in orelse,
+          "and the global enemy is in its ELSE, so the two can never both fire")
+
+    # NEGATIVE CONTROL: make them siblings rather than alternatives, which is
+    # the shape of the bug, and require the check to notice.
+    broken = src.replace("                        elif SPAWN_ENEMY:",
+                         "                        if SPAWN_ENEMY:")
+    ok = False
+    if broken != src:
+        for node in ast.walk(ast.parse(broken)):
+            if (isinstance(node, ast.If) and isinstance(node.test, ast.Name)
+                    and node.test.id == "AREA_NAME"):
+                ok = not any(
+                    getattr(n.func, "id", "") == "spawn_enemy"
+                    for e in node.orelse for n in ast.walk(e)
+                    if isinstance(n, ast.Call))
+    check(ok, "and turning that elif into a second `if` makes the check go red "
+              "-- both bodies would then spawn and nothing would say so")
+
+    # The set rules must run at STARTUP, not at instance load: a run that dies
+    # on the fourth of five bodies has already put three in the world.
+    main_fn = next(n for n in ast.walk(tree)
+                   if isinstance(n, ast.FunctionDef) and n.name == "main")
+    check(any(isinstance(n, ast.Call)
+              and getattr(n.func, "id", "") == "area_population"
+              for n in ast.walk(main_fn)),
+          "main() resolves the population at startup, so a bad row costs a "
+          "refusal rather than a client run")
+
+
+def main():
+    print("=" * 70)
+    print("POPULATION -- what lives in an authored area")
+    print("=" * 70)
+    section0()
+    section1()
+    section2()
+    section3()
+    return LEDGER.verdict()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

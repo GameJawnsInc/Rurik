@@ -993,6 +993,43 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   append-only and GROWS WHILE THE TEST RUNS (`0x00C1` went 363 to 429 between two
   reads minutes apart), so every corpus count above is dated prose and not one of them
   is an assertion. 45 checks, ~1 s),
+  `toolkit/authsrv/test_population.py` (what LIVES in an authored area -- the
+  `content/world.toml` spawn rows carrying `area = NAME`, served by
+  `authsrv --area`. R5's criterion is "a new zone in TOML, hot-reloaded,
+  walked", and the toolkit could author a zone's GROUND long before anything
+  standing on it. **It could not have been written before rung (I)**: its
+  load-bearing rule is that a body goes out only where the navmesh says there is
+  ground, and until 2026-08-13 the server on an authored map held either
+  ArenaNet's geometry for that map id or no mesh at all (FINDINGS 59), so the
+  check would have been measuring the wrong map or nothing. It matters because
+  an authored area is SPARSE -- the sculpt map is **1.2% walkable by area**, 13
+  trapezoids over 64x64, so a coordinate picked by eye is ground about one time
+  in eighty, and the shipped positions are trapezoid centres read out of the
+  mesh the client itself compiled. The set rules are checked at STARTUP because
+  their cost is a wasted client run: `create_agent_world` already refuses a
+  duplicate agent id, but by then half the population is in the world. The
+  DEFINITION rule is the one with a shape -- sharing an index is ALLOWED within
+  one npc template (a definition is per-instance and outlives its agents;
+  ArenaNet sends one for 140 re-creates of one worm) and REFUSED across two,
+  since the array is a raw index and the second row would silently overwrite the
+  first. Placement nudges and REPORTS the distance, or refuses; it never
+  silently invents, because a body standing where the server's own collision
+  says nothing exists makes everything downstream reason about it wrongly.
+  Seven sabotages were BUILT AND RUN and all seven redden, but the two that
+  earn the file are the ones that did NOT at first. **One CRASHED instead**:
+  refusing any shared definition makes the real rows unloadable, and the
+  positive controls called `area_population` directly, so the run died with a
+  bare traceback, no verdict banner and no ledger -- the same trap
+  `vaultpath.require_dir` set for `test_stripbuild`, and it reads as a broken
+  test rather than a caught defect. Every call goes through `accepts()` now.
+  **One passed GREEN**: the bounded-search check computed its probe point as
+  `-(PLACE_SEARCH_RADIUS + 2*PLACE_SEARCH_STEP)`, so raising the radius to
+  100,000 moved the probe with it -- a check that cannot fail, the same defect
+  `test_agentlife` records where twelve of fourteen combat constants could be
+  set wrong with all 125 checks green. Both constants are now asserted against
+  LITERALS written in the test file and the probe distance is a literal too.
+  No vault, no socket, no client: the mesh is `pathchunk.minimal()`, authored
+  from nothing. 33 checks, ~2 s),
   `toolkit/authsrv/test_ping.py` (the `0x000C`→`0x0009`→`0x000D` round trip that
   drives the client's net graph, and the three places a plausible
   implementation quietly LIES: sending a second request while one is

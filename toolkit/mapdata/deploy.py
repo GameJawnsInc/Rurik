@@ -421,7 +421,7 @@ def readback(dat, file_id, staged_blob, area):
 
 # --------------------------------------------------------------- launch
 
-def launch(exe, session, dat, map_id, hold):
+def launch(exe, session, dat, map_id, hold, area=None):
     """Run the harness once, with the server pointed at OUR archive.
 
     `--dat` already decides which client runs, so it decides which world the
@@ -439,10 +439,17 @@ def launch(exe, session, dat, map_id, hold):
     # `--hold 40`). Nothing failed, because the client compiles the map during
     # LOAD and that fits; the flag was describing a wait that was not happening,
     # and a bigger map is exactly where that stops being free.
+    # --area rides in --game-args, which session.py forwards to the gamesrv. It
+    # is what makes the zone POPULATED rather than empty ground: the server
+    # serves this area's spawn rows at their own coordinates and checks each one
+    # against the navmesh it pre-warmed. Passed always, so an area with no rows
+    # says so in the log rather than quietly serving the global test enemy in
+    # the middle of somebody's arrangement.
+    game_args = f"--map {map_id}" + (f" --area {area}" if area else "")
     return subprocess.run(
         [sys.executable, session, "--replace", "--keep-open", "--hold", str(hold),
          "--warn", "3", "--exe", exe,
-         "--game-args", f"--map {map_id}"], text=True, env=env).returncode
+         "--game-args", game_args], text=True, env=env).returncode
 
 
 def trapezoid_count(dat, file_id):
@@ -471,7 +478,7 @@ NAVMESH_RE = re.compile(
     r"\[map\] navmesh 0x([0-9A-Fa-f]+): (\d+) planes, (\d+) trapezoids")
 
 
-def serve_run(exe, session, dat, map_id, hold, expect_traps):
+def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None):
     """A SECOND run, unarmed, that proves the SERVER read our mesh.
 
     WHY TWO RUNS, and it is not a scheduling detail. `--install` arms the head
@@ -489,7 +496,7 @@ def serve_run(exe, session, dat, map_id, hold, expect_traps):
     same bytes, ours through `pathmap` and the server's through its own load.
     """
     t0 = time.time()
-    rc = launch(exe, session, dat, map_id, hold)
+    rc = launch(exe, session, dat, map_id, hold, area=area)
     log = newest_harness_log(t0)
     if log is None:
         return False, f"  harness rc {rc}, but no gamesrv log was written"
@@ -724,7 +731,7 @@ def main(argv=None):
     # only moment the archive both holds our map and is unlocked -- and that is
     # why serving an authored mesh takes TWO runs. See serve_run().
     print(f"launching {exe} at map {map_id}")
-    rc = launch(exe, session, dat, map_id, args.hold)
+    rc = launch(exe, session, dat, map_id, args.hold, area=args.area)
     print(f"\nharness rc {rc}")
 
     # 7. read back. A harness PASS says the client reached a map; only this
@@ -744,7 +751,8 @@ def main(argv=None):
         traps = trapezoid_count(dat, file_id)
         print(f"\nserve -- a second run, unarmed, so the server reads the "
               f"{traps}-trapezoid mesh the client just built:")
-        ok, note = serve_run(exe, session, dat, map_id, args.hold, traps)
+        ok, note = serve_run(exe, session, dat, map_id, args.hold, traps,
+                             area=args.area)
         print(note)
         if not ok:
             print("\nSERVE CHECK FAILED -- the client walked on our map and "

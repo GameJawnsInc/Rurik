@@ -1371,6 +1371,15 @@ ENEMY_RESEND_DEFINITION = bool(_ENEMY.get("resend_definition", False))
 # named here and in spawn_enemy.
 ENEMY_ATTACKS_BACK = bool(_ENEMY.get("attacks_back", True))
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
+# Allegiance BY NAME, so a content row can say what a body is without carrying a
+# FourCC. The three values are the client's own constants (agents.py, read out
+# of the image); "hostile" is any unrecognised value, which is why it is the
+# default here and why a typo in a row reads as an enemy rather than as nothing.
+ALLEGIANCE_BY_NAME = {
+    "hostile": agents.ALLEGIANCE_HOSTILE,
+    "player": agents.ALLEGIANCE_PLAYER,
+    "noncombatant": agents.ALLEGIANCE_NONCOMBATANT,
+}
 ENEMY_OFFSET = (_ENEMY["offset_x"], _ENEMY["offset_y"])
 # A PLACEHOLDER, and it has to be non-zero rather than right. WIKI (GWW,
 # "Attack speed") says a creature that wields no weapon takes its rate from its
@@ -2814,6 +2823,193 @@ def enemy_spot(state, ox, oy):
         if pm.walkable(ox + dx, oy + dy):
             return ox + dx, oy + dy
     return ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
+
+
+# ------------------------------------------------------- the area population
+
+# Set by --area. None means the legacy world: one global test enemy placed by
+# offset, exactly as before, which is what every probe and every earlier rung
+# expects.
+AREA_NAME = None
+
+# How far from its declared spot a body may be nudged to find ground, and how
+# fine the search is. A NUDGE IS REPORTED, NEVER SILENT: an author who wrote a
+# coordinate deserves to know it was not usable, and "it appeared 400 units
+# from where I put it" is otherwise indistinguishable from a placement bug.
+PLACE_SEARCH_RADIUS = 480.0
+PLACE_SEARCH_STEP = 48.0
+
+
+class PopulationError(Exception):
+    """An area's declared population cannot be placed as written."""
+
+
+def area_population(area):
+    """The spawn rows bound to one area, checked AS A SET rather than one by one.
+
+    The set checks are the point. An agent id reused for a second body leaves
+    the client holding one agent's state under another's name and nothing on the
+    wire says so -- `create_agent_world` already refuses that at spawn time, but
+    by then half the population is in the world and the run is wasted. A
+    definition index collision is worse and quieter: definitions are a raw array
+    on the client, so two rows sharing one index means the second body silently
+    wears the first's model.
+
+    Rows with no `area` are the legacy global spawn and are never returned here.
+    """
+    rows = []
+    for key, row in sorted(agents.WORLD.rows("spawn").items()):
+        if row.get("area") != area:
+            continue
+        if not row.get("enabled", True):
+            continue
+        rows.append((key, row))
+
+    for field in ("agent_id", "definition"):
+        for key, row in rows:
+            if row.get(field) is None:
+                raise PopulationError(
+                    f"spawn row {key!r} in area {area!r} has no {field}. Ids are "
+                    f"allocator choices and this server does not invent them -- "
+                    f"write one, or the client gets a body it was never told about")
+
+    seen = {}
+    for key, row in rows:
+        v = row["agent_id"]
+        if v in seen:
+            raise PopulationError(
+                f"spawn rows {seen[v]!r} and {key!r} in area {area!r} share "
+                f"agent_id {v}. Two bodies under one id leaves the client "
+                f"holding one agent's state under another's name, and nothing "
+                f"on the wire would say so")
+        seen[v] = key
+
+    # DEFINITIONS MAY BE SHARED -- but only by rows naming the SAME npc. A
+    # definition is per-instance and outlives the agents using it (measured:
+    # ArenaNet sends one 0x0056 for 140 re-creates of the same worm), so ten
+    # identical hatchers legitimately share an index and demanding ten would be
+    # inventing a rule retail does not follow. Two DIFFERENT templates sharing
+    # one index is the real fault: the definition array is raw, so the second
+    # row silently overwrites the first and a body wears the wrong model.
+    seen = {}
+    for key, row in rows:
+        v, npc = row["definition"], row["npc"]
+        if v in seen and seen[v][1] != npc:
+            raise PopulationError(
+                f"spawn rows {seen[v][0]!r} ({seen[v][1]}) and {key!r} ({npc}) "
+                f"in area {area!r} share definition {v} while naming DIFFERENT "
+                f"npc templates. The definition array is a raw index on the "
+                f"client, so one would silently wear the other's model")
+        seen[v] = (key, npc)
+    return rows
+
+
+def place_on_mesh(pm, x, y, what):
+    """The nearest spot the navmesh calls ground, or None, and how far it moved.
+
+    Returns `(x, y, moved)`. This exists because of rung (I): until 2026-08-13
+    the server on an authored map held either ArenaNet's geometry for the same
+    map id or no mesh at all, so a placement check here would have been
+    measuring the wrong map or nothing. With the mesh actually loaded, an
+    authored area can be sparse -- the sculpt map is 1.2% walkable by area --
+    and a coordinate an author picked off a Blender screenshot very often is
+    not standable.
+
+    None means REFUSE. A body placed off-mesh stands somewhere the server's own
+    collision says does not exist, and everything downstream reasons about it
+    wrongly; a missing NPC is a smaller lie than a present one nobody can reach.
+    """
+    if pm is None:
+        return x, y, 0.0                       # no mesh: nothing to check against
+    if pm.walkable(x, y):
+        return x, y, 0.0
+    step = PLACE_SEARCH_STEP
+    r = step
+    while r <= PLACE_SEARCH_RADIUS:
+        n = max(8, int(2 * math.pi * r / step))
+        for i in range(n):
+            a = 2.0 * math.pi * i / n
+            cx, cy = x + r * math.cos(a), y + r * math.sin(a)
+            if pm.walkable(cx, cy):
+                return cx, cy, r
+        r += step
+    return None
+
+
+def spawn_population(send, state, origin, conn_id, area=None):
+    """Everything that lives in an authored area, from `content/world.toml`.
+
+    R5's criterion is "a new zone in TOML, hot-reloaded, walked", and until now
+    the toolkit could author the GROUND of a zone and nothing that stands on it.
+    An area with a tree in it and nothing alive is a diorama.
+
+    Nothing here is new protocol: each body goes out through `create_agent_world`,
+    the same call `spawn_enemy` has used since the enemy rung, so every message
+    is one already proven against our own client. What is new is that the set of
+    bodies, their positions, their allegiances and their health come from content
+    rows rather than from module constants.
+    """
+    area = area or AREA_NAME
+    ox, oy, plane = origin
+    rows = area_population(area)
+    if not rows:
+        print(f"[c{conn_id}] area {area!r}: no population rows; the world is "
+              f"the player and the geometry", flush=True)
+        return 0
+
+    pm = state.get("pathmap")
+    if pm is None:
+        print(f"[c{conn_id}] area {area!r}: NO NAVMESH, so no placement can be "
+              f"checked -- every body below is placed on trust", flush=True)
+
+    placed = 0
+    for key, row in rows:
+        npc = agents.WORLD.get("npc", row["npc"])
+        # Absolute if the row says so, else the legacy offset-from-the-player.
+        if row.get("x") is not None and row.get("y") is not None:
+            wx, wy = float(row["x"]), float(row["y"])
+            how = "absolute"
+        else:
+            wx, wy = ox + float(row.get("offset_x", 0.0)), \
+                     oy + float(row.get("offset_y", 0.0))
+            how = "offset from the player"
+
+        spot = place_on_mesh(pm, wx, wy, key)
+        if spot is None:
+            print(f"[c{conn_id}] REFUSED {key!r}: ({wx:.0f}, {wy:.0f}) is not on "
+                  f"the navmesh and nothing within {PLACE_SEARCH_RADIUS:.0f} "
+                  f"units is either. Not placing a body the server's own "
+                  f"collision says is nowhere.", flush=True)
+            continue
+        x, y, moved = spot
+
+        allegiance = ALLEGIANCE_BY_NAME[row.get("allegiance", "hostile")]
+        hp = float(row.get("max_health", ENEMY_MAX_HEALTH))
+        entry = {
+            "pos": (x, y), "plane": plane,
+            "health": hp, "max_health": hp,
+            "dead": False,
+            "name": npc["name"],
+            "npc": npc,
+            "definition": int(row["definition"]),
+            "allegiance": allegiance,
+            "attack_speed": ENEMY_ATTACK_SPEED,
+            "effects": 0,
+            "resend_definition": bool(row.get("resend_definition", False)),
+            "attacks_back": bool(row.get("attacks_back", False)),
+            "skills": ENEMY_SKILLS,
+            "skill_ready": [0.0] * len(ENEMY_SKILLS),
+        }
+        create_agent_world(send, state, int(row["agent_id"]), entry, key,
+                           conn_id=conn_id)
+        placed += 1
+        note = (f" (MOVED {moved:.0f} units to reach ground)" if moved else "")
+        print(f"[c{conn_id}] {key!r}: {npc['name']} at ({x:.0f}, {y:.0f}) "
+              f"{how}, {row.get('allegiance', 'hostile')}, {hp:.0f} hp{note}",
+              flush=True)
+    print(f"[c{conn_id}] area {area!r}: {placed} of {len(rows)} placed",
+          flush=True)
+    return placed
 
 
 def spawn_enemy(send, state, origin, conn_id):
@@ -4986,7 +5182,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     if NETGRAPH_FLAGS
                                     & UI_OVERLAY_FLAG_NETGRAPH_LATENCY
                                     else "") + ")")
-                        if SPAWN_ENEMY:
+                        # An AREA brings its own population and replaces the
+                        # single global enemy outright. Both would be wrong:
+                        # the global one is placed by offset from the player,
+                        # so it would appear in the middle of an authored zone
+                        # that has its own idea of what stands where.
+                        if AREA_NAME:
+                            spawn_population(send, state,
+                                             (pos[0], pos[1], cfg[2]), conn_id)
+                        elif SPAWN_ENEMY:
                             spawn_enemy(send, state,
                                         (pos[0], pos[1], cfg[2]), conn_id)
                         if PROBE_NAME:
@@ -5393,6 +5597,15 @@ def main():
                          "under --tape: the tape's own 0x0195 decides what the "
                          "client loads, and it will happily draw a map it never "
                          "asked for.")
+    ap.add_argument("--area", metavar="NAME",
+                    help="Serve the POPULATION of this authored area: the "
+                         "`content/world.toml` spawn rows carrying "
+                         "`area = NAME`, at their own coordinates, each checked "
+                         "against the navmesh before a body goes out. Replaces "
+                         "the single global test enemy rather than adding to "
+                         "it, since that one is placed by offset from the "
+                         "player and would land in the middle of a zone that "
+                         "has its own idea of what stands where.")
     ap.add_argument("--no-enemy", action="store_true",
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
@@ -5534,6 +5747,21 @@ def main():
         # serve, and nothing has opened the archive yet -- both halves are only
         # true at startup. See prewarm_pathmap() for what reading it late cost.
         prewarm_pathmap(a.map if known else FALLBACK_MAP_ID)
+
+    if a.area:
+        global AREA_NAME
+        AREA_NAME = a.area
+        # RESOLVE THE POPULATION NOW, not at instance load. The set checks --
+        # duplicate agent ids, duplicate definition indices, a missing id -- are
+        # exactly the ones whose cost is a wasted client run, and a run that
+        # dies on the fourth of five bodies has already put three in the world.
+        try:
+            pop = area_population(a.area)
+        except PopulationError as exc:
+            raise SystemExit(f"--area {a.area}: {exc}")
+        print(f"AREA: {a.area} -- {len(pop)} spawn row(s): "
+              + (", ".join(k for k, _ in pop) or "none")
+              + ". This REPLACES the standing test enemy.")
 
     if a.no_enemy:
         global SPAWN_ENEMY

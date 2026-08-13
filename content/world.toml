@@ -135,3 +135,98 @@ These are the rates the game uses, not rates we chose. A Hatcher's real swing ra
 not among them -- nothing has measured what a collector swings at -- so any code
 standing an axe's 1.33 in for a monster is using a labelled placeholder.
 """
+
+# ---------------------------------------------------------------------------
+# AREA POPULATIONS -- what lives in a zone this toolkit authored.
+#
+# A row carrying `area` belongs to that authored area and is served by
+# `authsrv --area NAME`, which REPLACES the single global test enemy above
+# rather than adding to it: that one is placed by offset from the player, so in
+# a zone with its own idea of what stands where it would appear in the middle
+# of the arrangement.
+#
+# THE COORDINATES CAME OUT OF THE COMPILED NAVMESH, not off a screenshot, and
+# that is the whole reason this could not have been written before rung (I).
+# The sculpt map is **1.2% walkable by area** -- 13 trapezoids over a 64x64
+# map, because a Blender basin and a hard-crested ridge leave most of the
+# terrain steeper than the client's own walkable band. Picking a spot by eye
+# gives ground about one time in eighty. Each position below is the CENTRE of a
+# trapezoid the client itself built from our terrain, and the server re-checks
+# every one against the mesh before a body goes out -- a position that is not
+# ground is refused rather than placed, because a body standing where the
+# server's own collision says nothing exists makes everything downstream reason
+# about it wrongly.
+#
+# `definition` may be shared by rows naming the SAME npc and never by rows
+# naming different ones; `agent_id` is unique always. Both are allocator
+# choices, like the ones above, and are deliberately clear of the probes
+# (agents 2..7, definition 2) and of `test_enemy` (agent 10, definition 3).
+
+[spawn.sculpt_watcher]
+area = "sculpt"
+npc = "hatcher"
+agent_id = 20
+definition = 5
+max_health = 100
+# Trapezoid 10's centre, 140 units from the arrival point -- the body you see
+# without turning round. Probe bodies placed far out read as "nothing appeared".
+x = 2934.0
+y = 3046.5
+allegiance = "noncombatant"
+attacks_back = false
+enabled = true
+
+[spawn.sculpt_watcher.provenance]
+source = "invented"
+verified = """Ours, chosen rather than observed, like every placement in an \
+authored area. What is NOT invented is that the spot is standable: (2934, \
+3046.5) is the centre of trapezoid 10 of the navmesh the retail client compiled \
+from our own terrain, read back out of the archive after the run that built it, \
+and the server re-checks it against that same mesh before creating the body. \
+The npc template it names carries its own provenance in npcs.toml."""
+
+[spawn.sculpt_hostile]
+area = "sculpt"
+npc = "hatcher"
+agent_id = 21
+definition = 5              # same template as the watcher, so one definition
+max_health = 100
+# Trapezoid 1's centre, ~478 units out: something to walk toward across ground
+# that is walkable at both ends and mostly not in between.
+x = 2618.6
+y = 2921.0
+allegiance = "hostile"
+attacks_back = true
+enabled = true
+
+[spawn.sculpt_hostile.provenance]
+source = "invented"
+verified = """Ours. The position is trapezoid 1's centre in the client-compiled \
+navmesh, chosen because it is walkable, roughly 478 units from the arrival \
+point, and separated from it by terrain that is not -- which is what makes it a \
+test of the ground rather than of the spawn. Shares `definition` with \
+sculpt_watcher deliberately: both are hatchers, a definition is per-instance and \
+outlives the agents using it (ArenaNet sends one for 140 re-creates of one \
+worm), and this exercises the rule that sharing is allowed within a template."""
+
+[spawn.sculpt_farside]
+area = "sculpt"
+npc = "hatcher"
+agent_id = 22
+definition = 5
+max_health = 100
+# Trapezoid 7, ~654 units. Three bodies rather than two so the population is
+# visibly a SET -- a pair can be produced by code that handles exactly two.
+x = 2595.5
+y = 3520.0
+allegiance = "hostile"
+attacks_back = false
+enabled = true
+
+[spawn.sculpt_farside.provenance]
+source = "invented"
+verified = """Ours; trapezoid 7's centre in the client-compiled navmesh. It \
+exists so the area holds THREE bodies rather than two -- a population of two is \
+satisfied by code that handles exactly two, and the count is the claim here. \
+`attacks_back = false` so that one of the two hostiles is passive, which keeps \
+a run readable when both are in aggro range at once."""
