@@ -41,7 +41,7 @@ import agents  # noqa: E402
 import checks  # noqa: E402
 from codec import Codec  # noqa: E402
 
-LEDGER = checks.Ledger("agent lifetime", floor=185)
+LEDGER = checks.Ledger("agent lifetime", floor=214)
 
 
 def main():
@@ -186,10 +186,13 @@ def main():
     section_facing()
     section_enemy_skill()
     section_constants()
+    section_opcode_pins()
+    section_opcode_catalog()
     section_probe_encoding()
     section_spawn_profession()
     section_unlock_bitmap()
     section_secondary_bits()
+    section_party_of_one()
     return LEDGER.verdict()
 
 
@@ -1155,6 +1158,266 @@ def section_constants():
                   "non-arbitrary thing about this selection")
 
 
+def section_opcode_pins():
+    """Every opcode this file names, against a LITERAL written here.
+
+    THE SAME DEFECT AS section_constants, ONE LAYER DOWN, and it survived that
+    section by a year of nobody looking. That section exists because twelve of
+    fourteen combat constants could be set to a wrong value with every check
+    green. On 2026-08-13 a sweep did the same thing to the OPCODES -- moving one
+    GAME_SMSG constant in authsrv.py by one and re-running this file, fifteen
+    times, with each patch verified twice (the line on disk, and getattr on the
+    imported module, because an earlier attempt matched the constants by DECIMAL
+    text while authsrv.py writes hex and scored eleven non-edits as caught):
+
+        3 of 15 caught, 12 MISSED
+
+    and of the three, exactly ONE was a check: section 1's
+    `WORLD_REMOVE_AGENT == 0x0021`. The other two died on a TRACEBACK rather
+    than a named failure and never reached the ledger at all -- 0x00B0 on a
+    `KeyError: 176` out of `sizes[0x00B0]`, a dict keyed by the symbol and read
+    by a literal, and 0x00B1 on the codec's own arity guard. Both are accidents
+    of how those checks happen to be written; neither would survive a tidy-up.
+
+    Everything else computed its expectation FROM the symbol under test, so the
+    symbol was free to move and the file moved with it. A symbol appearing in a
+    test file is not a check.
+
+    THE SECOND COLUMN IS WHAT MAKES THE FIRST ONE MORE THAN A COPY. A literal
+    that only agrees with the constant it guards is two copies of one belief, so
+    each row also carries the wire SHAPE `schema/messages.json` holds at that
+    opcode, and the checks below read it out of the catalog rather than out of
+    authsrv. The catalog is not ours -- `test_catalog.py` scores it 477/477
+    field-for-field against build 38797's own message-format tables -- so a
+    wrong literal here has to be wrong in the client's tables too, which is an
+    assertion the artifact can refuse. Eight of the fifteen carry a NAME in
+    `schema/overrides.json` as well and that is checked separately.
+
+    IT IS NOT A CLAIM THAT EVERY NUMBER IS RIGHT. Two of the fifteen are
+    INFERRED and the `why` column says which. It is a claim that they cannot
+    change silently.
+    """
+    import json
+    import authsrv
+
+    # (symbol, opcode, catalog field types after the header, why)
+    #
+    # `shape` is `schema/messages.json`'s own field list minus the msg_header.
+    # NOTE 0x00A0 and 0x00A3 share a shape exactly -- that is the evidence
+    # authsrv.py's own comment calls INFERRED, and it means shape alone cannot
+    # separate those two. The literal opcode is what separates them.
+    PINNED = (
+        ("GAME_SMSG_WORLD_REMOVE_AGENT", 0x0021, ("dword",),
+         "overrides.json names it, confidence high; OBSERVED 416 times in the "
+         "first live capture. Also asserted in section 1, which is left alone: "
+         "that section is ABOUT this message"),
+        ("GAME_SMSG_AGENT_MOVE_TO_POINT", 0x0029,
+         ("dword", "vec2", "word", "word"),
+         "overrides.json, high -- the destination half of the chase"),
+        ("GAME_SMSG_AGENT_UPDATE_SPEED", 0x002B, ("dword", "float", "byte"),
+         "overrides.json, high; 163 of them in ArenaNet's own tapes"),
+        ("GAME_SMSG_AGENT_UPDATE_ROTATION", 0x002E,
+         ("dword", "dword", "dword"),
+         "overrides.json, high. The two dwords hold float32 bits, which is the "
+         "trap section_facing is built around"),
+        ("GAME_SMSG_PLAYER_INFO", 0x0059,
+         ("dword", "agent_id", "dword", "byte", "dword", "dword", "string16"),
+         "overrides.json, high -- PLAYER_CREATE, and the record 0x00B0/0x00B1 "
+         "need to exist first"),
+        ("GAME_SMSG_AGENT_PROPERTY_UPDATE_INT", 0x009F,
+         ("dword", "agent_id", "dword"),
+         "no catalog name. GWCA's GenericValue; test_msghandler.py CORROBORATES "
+         "the pairing from the client's own dispatch -- 0x009F/0x00A0 share one "
+         "callee and 0x00A2/0x00A3 another, splitting the four shapes on the "
+         "int/float line"),
+        ("GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET", 0x00A0,
+         ("dword", "agent_id", "agent_id", "dword"),
+         "no catalog name, and INFERRED: authsrv.py's own comment says the "
+         "shape match with 0x00A3 is the whole argument. Same dispatch pairing"),
+        ("GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET", 0x00A3,
+         ("dword", "agent_id", "agent_id", "dword"),
+         "no catalog name. OBSERVED from the other end on 2026-08-11: the "
+         "client's CharPool.cpp:84 crash trace carries OUR 0x00A3 three frames "
+         "under the assert (section_pool_fraction)"),
+        ("GAME_SMSG_AGENT_SET_PROFESSION", 0x00A6, ("agent_id", "byte", "byte"),
+         "overrides.json, high; 387 live samples, primary 1..6 and never 0"),
+        ("GAME_SMSG_PLAYER_PARTY_SIZE", 0x00B0, ("word", "byte"),
+         "no catalog name. 5 wire bytes and the handler reads +4; caught before "
+         "today only by a KeyError out of section_party_of_one's size dict"),
+        ("GAME_SMSG_PLAYER_SET_PARTY", 0x00B1, ("word", "word"),
+         "overrides.json, confidence MEDIUM -- the weakest name of the eight, "
+         "which is a reason to pin it rather than not to"),
+        ("GAME_SMSG_PLAYER_UPDATE_SECONDARY_BITS", 0x00B6,
+         ("agent_id", "dword"),
+         "no catalog name; the client's own OnProfessionSecondaryBits "
+         "(studies/profession/RUNS.md 13). Its neighbour 0x00B7 is the message "
+         "it must be sent AFTER, so a +1 slip here is the exact confusion"),
+        ("GAME_SMSG_PLAYER_UPDATE_PROFESSION", 0x00B7,
+         ("agent_id", "byte", "byte", "byte"),
+         "no catalog name. 9 wire bytes carrying profession as one byte"),
+        ("GAME_SMSG_SKILL_ACTIVATED", 0x00E3, ("agent_id", "word", "dword"),
+         "no catalog name, and 0x00E3 rather than 0x00E4 is MEASURED: 0x00E4's "
+         "handler compares the agent against your own and returns early"),
+        ("GAME_SMSG_AGENT_UPDATE_STATUS", 0x00F1, ("agent_id", "dword"),
+         "overrides.json, high. Its create-time sibling 0x00F0 is one below and "
+         "carries the same two fields, so a +1 slip is silent on the wire"),
+    )
+
+    for name, opcode, _shape, why in PINNED:
+        got = getattr(authsrv, name)
+        LEDGER.ok(got == opcode,
+                  f"{name} is still {opcode:#06x}",
+                  f"{got:#06x} against the literal in this file -- {why}")
+
+    # AXIS 2: the catalog's own field list, read from the file rather than from
+    # authsrv. A literal that agrees only with the constant it guards is one
+    # belief written twice.
+    with open(os.path.join(os.path.dirname(os.path.dirname(HERE)),
+                           "schema", "messages.json"), encoding="utf-8") as f:
+        catalog = json.load(f)["channels"]["GAME_SMSG"]["messages"]
+    wrong_shape = []
+    for name, opcode, shape, _why in PINNED:
+        entry = catalog.get(str(opcode))
+        got = None if entry is None else tuple(
+            fld["type"] for fld in entry["fields"][1:])
+        if got != shape:
+            wrong_shape.append(f"{name} {opcode:#06x}: catalog {got}, "
+                               f"pinned {shape}")
+    LEDGER.ok(not wrong_shape,
+              "and each pinned opcode has the wire shape written beside it",
+              f"{wrong_shape}" if wrong_shape else
+              f"{len(PINNED)} of {len(PINNED)} agree with schema/messages.json, "
+              "which test_catalog.py scores 477/477 against build 38797's own "
+              "format tables -- so a wrong literal here would have to be wrong "
+              "in ArenaNet's tables too")
+
+    # AXIS 3: the eight the catalog NAMES. overrides.json's names came off
+    # ArenaNet's recorded traffic joined to the client's dispatch handlers
+    # (studies/smsg), i.e. from outside this repo's own opinions.
+    with open(os.path.join(os.path.dirname(os.path.dirname(HERE)),
+                           "schema", "overrides.json"), encoding="utf-8") as f:
+        ov = json.load(f)["channels"]["GAME_SMSG"]
+    named = {int(k): v["name"] for k, v in ov.items()
+             if isinstance(v, dict) and v.get("name")}
+    disagree = [f"{name} -> catalog says {named[opcode]}"
+                for name, opcode, _s, _w in PINNED
+                if opcode in named and name != "GAME_SMSG_" + named[opcode]]
+    hits = [name for name, opcode, _s, _w in PINNED if opcode in named]
+    LEDGER.ok(not disagree and len(hits) == 8,
+              "and the eight the catalog names are named the same thing here",
+              f"{disagree or len(hits)} of 8 -- 0x0021, 0x0029, 0x002B, 0x002E, "
+              "0x0059, 0x00A6, 0x00B1, 0x00F1. The other seven have no name in "
+              "overrides.json at all, which is why their `why` column has to "
+              "carry the evidence instead")
+
+
+def section_opcode_catalog():
+    """Every send site in authsrv.py, against the catalog's field count.
+
+    THE PINS ABOVE PROTECT FIFTEEN OPCODES. authsrv.py declares SIXTY-TWO, and
+    the other forty-seven have no pin anywhere in the suite. This is the cheap
+    control that reaches them, and it is deliberately not a second table of
+    literals: it walks authsrv.py's own `send(GAME_SMSG_X, [...])` sites, counts
+    the payload, and requires that count to equal the number of fields
+    `schema/messages.json` declares at that opcode. Nothing is written down, so
+    nothing has to be maintained, and the comparison is between two artifacts
+    rather than between a value and itself.
+
+    READ THE COVERAGE BEFORE TRUSTING IT. Measured 2026-08-13 by shifting each
+    of the 62 constants by +1 one at a time: **42 of 62 detected, 20 blind**,
+    and the blind set is named because a control read as total coverage is
+    worse than no control. Fourteen constants have no literal-list send site to
+    measure at all -- AGENT_SET_PROFESSION, AGENT_SET_TABARD_VISIBLE,
+    AGENT_UPDATE_ALLEGIANCE, AGENT_UPDATE_FLAGS, AGENT_UPDATE_POSITION,
+    AGENT_UPDATE_SPEED, CHARACTER_UPDATE_FACTIONS, CREATE_NAMED_ITEM,
+    MONSTER_COMPOSITE, NPC_UPDATE_PROPERTIES, PLAYER_PARTY_SIZE,
+    PLAYER_SET_PARTY, PLAYER_UPDATE_PROFESSION, PLAYER_UPDATE_SECONDARY_BITS
+    (they are sent through a builder, or with a computed list) -- and six more
+    land on a NEIGHBOUR OF THE SAME ARITY and are invisible to this mechanism:
+    AGENT_INITIAL_STATUS 0x00F0, MAP_UPDATE_CURRENT 0x0099,
+    PVP_UPDATE_UNLOCKED_SKILLS 0x001D, SKILL_ACTIVATED 0x00E3,
+    WORLD_SIMULATION_TICK 0x001E, WORLD_UPDATE_CONTROLLED_AGENT 0x0022. Nine of
+    the twenty are pinned by name in the section above; the remaining eleven are
+    protected by nothing, and saying so is the point of this paragraph.
+
+    WHAT IT IS GOOD AT, which is not the same question: a payload whose length
+    disagrees with the catalog is a message the codec refuses at the moment it
+    is first sent, which for a rarely-taken branch means a live session. All 48
+    measurable sites agree today. The second check is the negative control --
+    the walk is re-run against a map with every opcode shifted -- because a
+    comparison that has never reported anything is not a comparison, and the
+    third is that the walk found sites at all, which is test_codec.py's own
+    fixture-glob failure written down.
+    """
+    import ast
+    import json
+    import authsrv
+
+    with open(authsrv.__file__, encoding="utf-8") as f:
+        src = f.read()
+    with open(os.path.join(os.path.dirname(os.path.dirname(HERE)),
+                           "schema", "messages.json"), encoding="utf-8") as f:
+        catalog = json.load(f)["channels"]["GAME_SMSG"]["messages"]
+
+    def fields_at(opcode):
+        entry = catalog.get(str(opcode))
+        return None if entry is None else len(entry["fields"]) - 1
+
+    # every `send(GAME_SMSG_*, [ ... ])` whose payload is a literal list
+    arity = {}
+    for node in ast.walk(ast.parse(src)):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "send" and len(node.args) >= 2
+                and isinstance(node.args[0], ast.Name)
+                and node.args[0].id.startswith("GAME_SMSG_")
+                and isinstance(node.args[1], ast.List)):
+            arity.setdefault(node.args[0].id, set()).add(len(node.args[1].elts))
+    # a symbol sent with two different payload lengths cannot be measured this
+    # way; it is dropped rather than guessed at, and it counts as a blind spot.
+    sites = {k: v.pop() for k, v in
+             ((k, set(v)) for k, v in arity.items()) if len(v) == 1}
+
+    def disagreements(values):
+        out = []
+        for name, n in sorted(sites.items()):
+            want = fields_at(values[name])
+            if want != n:
+                out.append(f"{name} {values[name]:#06x}: sends {n}, "
+                           f"catalog wants {want}")
+        return out
+
+    live = {name: getattr(authsrv, name) for name in sites}
+    bad = disagreements(live)
+    LEDGER.ok(not bad,
+              "every measurable send site's payload length matches the catalog",
+              f"{bad}" if bad else f"{len(sites)} site(s) of "
+              f"{len(live)} symbol(s) agree -- a payload the catalog does not "
+              "want is a ValueError out of codec.encode the first time that "
+              "branch is taken, which for a rare branch is a live session")
+
+    # THE NEGATIVE CONTROL. Shift each opcode by one, ALONE, and count how many
+    # the comparison notices. A control that shifted everything at once would
+    # measure a bulk edit nobody makes; one at a time is the mistake that
+    # happens, and the number it produces IS the coverage claim above.
+    detected = [name for name in sites
+                if disagreements(dict(live, **{name: live[name] + 1}))]
+    LEDGER.ok(len(detected) >= 35,
+              "and a one-opcode shift is NOTICED for most of them (control)",
+              f"{len(detected)} of {len(sites)} measurable symbols detected "
+              f"under a +1 shift; 42 of the full 62 measured 2026-08-13. The "
+              f"floor is 35 rather than the measured number because adding a "
+              f"send site moves it -- what must not happen is this collapsing "
+              f"toward zero, which is what a broken walk looks like. Blind: "
+              f"{sorted(set(sites) - set(detected))}")
+
+    LEDGER.ok(len(sites) >= 40,
+              "and the walk actually found the send sites it claims to check",
+              f"{len(sites)} symbols with an unambiguous literal payload, 48 "
+              "on 2026-08-13. A walk matching nothing reports zero "
+              "disagreements and looks green -- test_codec.py printed ALL "
+              "CHECKS PASSED with its fixture glob matching no files")
+
+
 def section_named_builders(codec):
     """The five messages named 2026-08-10 and first sent 2026-08-11.
 
@@ -1375,6 +1638,104 @@ def section_secondary_bits():
               f"{authsrv.SECONDARY_BITS} -- ArenaNet's own server sends mask 0 "
               f"in 11 of 11 live samples, so an unlocked-by-default character "
               f"would be us inventing state retail does not send")
+
+
+def section_party_of_one():
+    """The party pair, and the player's own AGENT profession.
+
+    Both are messages the real server sends and ours never did. The party pair
+    (0x00B0 size, 0x00B1 leader) writes the per-PLAYER array at ChCliApi
+    ctx+0x80C that PLAYER_CREATE already makes; 0x00A6 for the player's own
+    agent is the SOLE write path to the agent's profession bytes, which is what
+    the party/roster label builder reads -- so the profession ABBREVIATION had
+    nothing to draw from and has never appeared in any session.
+
+    The ORDER is the measured part and the reason this has a section: 0x00B0
+    fires no event for a fresh entry while 0x00B1 fires only on a LEADER
+    CHANGE. Leader-first makes the change a no-op against the default and
+    nothing is notified, so the pair must go size-then-leader.
+    """
+    import ast
+    import authsrv
+
+    LEDGER.ok(agents.player_party_size(3, 1) == [3, 1]
+              and agents.player_set_party(3, 3) == [3, 3],
+              "the party-of-one payloads are [player, 1] and [player, player]",
+              "a solo player is their own leader; both fields are the player's "
+              "own number, which is what makes the self-link a party")
+    refused = None
+    try:
+        agents.player_party_size(3, 0)
+    except ValueError as ex:
+        refused = str(ex)
+    LEDGER.ok(refused is not None,
+              "and a party size of 0 is REFUSED",
+              f"{refused!r} -- the local player is always a member of their own "
+              f"party, so 0 is not a state the client is ever sent")
+
+    codec = _codec()
+    # The dict is keyed by the SYMBOL and read by a LITERAL, which is the shape
+    # that makes this the only thing in the file that used to notice 0x00B0 or
+    # 0x00B1 moving -- and it noticed by CRASHING (`KeyError: 176`, or the
+    # codec's arity guard), so the run died here and the sections after it never
+    # executed. section_opcode_pins now names the constant properly; this is
+    # kept, because the wire SIZE is a separate claim from the opcode, and the
+    # encode is wrapped so a moved constant leaves a red check and a verdict
+    # rather than a traceback.
+    sizes = {}
+    for op, vals in ((authsrv.GAME_SMSG_PLAYER_PARTY_SIZE,
+                      agents.player_party_size(1, 1)),
+                     (authsrv.GAME_SMSG_PLAYER_SET_PARTY,
+                      agents.player_set_party(1, 1))):
+        try:
+            sizes[op] = len(codec.encode("GAME_SMSG", op, vals))
+        except ValueError as ex:                               # pragma: no cover
+            sizes[op] = f"REFUSED: {ex}"
+    LEDGER.ok(sizes.get(0x00B0) == 5 and sizes.get(0x00B1) == 6,
+              "and they encode to the 5 and 6 bytes their handlers read",
+              f"{sizes} -- the handlers read fields at +4 and +8; a wrong width "
+              f"would desync the next message rather than error")
+
+    # THE ORDER, on the syntax tree. A comment cannot enforce it and a grep
+    # cannot tell which send comes first.
+    with open(authsrv.__file__, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    order = []
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == "send" and node.args
+                and isinstance(node.args[0], ast.Name)):
+            name = node.args[0].id
+            if name in ("GAME_SMSG_PLAYER_INFO", "GAME_SMSG_PLAYER_PARTY_SIZE",
+                        "GAME_SMSG_PLAYER_SET_PARTY"):
+                order.append((node.lineno, name))
+    order.sort()
+    names = [n for _, n in order]
+    LEDGER.ok(names == ["GAME_SMSG_PLAYER_INFO", "GAME_SMSG_PLAYER_PARTY_SIZE",
+                        "GAME_SMSG_PLAYER_SET_PARTY"],
+              "PLAYER_CREATE, then SIZE, then LEADER (syntax tree)",
+              f"{names} -- leader-first is a no-op against the default, and "
+              f"both need the player record PLAYER_CREATE makes")
+
+    # And the player's own agent must get 0x00A6, which is what the roster reads.
+    sends = [n.args[0].id for n in ast.walk(tree)
+             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+             and n.func.id == "send" and n.args
+             and isinstance(n.args[0], ast.Name)]
+    LEDGER.ok(sends.count("GAME_SMSG_AGENT_SET_PROFESSION") >= 2,
+              "and the player's OWN agent gets 0x00A6, not just NPCs",
+              f"{sends.count('GAME_SMSG_AGENT_SET_PROFESSION')} send site(s) -- "
+              f"0x00A6's setter is the sole write path to the agent's "
+              f"profession bytes, which the roster label builder reads")
+
+
+def _codec():
+    import os
+    import sys as _sys
+    _sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                     "..", "schema"))
+    from codec import Codec
+    return Codec()
 
 
 def section_unlock_bitmap():
@@ -1601,6 +1962,35 @@ def section_spawn_profession():
               "profession, are both allowed",
               "an in-band id rides 0x00B7 safely -- the refusal is about the "
               "custom range, not about the flag")
+
+    # THE APPEARANCE NIBBLE, which is DIFFERENT STORAGE from the byte carriers
+    # and is bound-checked `< 0xB` at load. It must follow an in-band spawn
+    # profession (or the roster and the avatar disagree about who you are, and
+    # a reskin experiment becomes uninterpretable) and must NOT follow an
+    # out-of-band one (12 rides the byte carriers; the nibble keeps a legal
+    # placeholder -- RUNS.md §12 ran a whole session that way).
+    LEDGER.ok(authsrv.appearance_for(1) == 1 << 20
+              and authsrv.appearance_for(8) == 8 << 20,
+              "the appearance nibble FOLLOWS an in-band spawn profession",
+              f"prof 8 -> {authsrv.appearance_for(8):#010x}; a Ritualist by byte "
+              f"carrier and a Warrior by appearance is two answers to one question")
+    LEDGER.ok(authsrv.appearance_for(12) == authsrv.APPEARANCE
+              and authsrv.appearance_for(11) == authsrv.APPEARANCE,
+              "and REFUSES an out-of-band one, keeping the legal placeholder",
+              f"prof 12 -> {authsrv.appearance_for(12):#010x} -- the nibble is 4 "
+              f"bits asserted < 0xB at load, so a custom id there is a crash, "
+              f"not an experiment")
+    LEDGER.ok(authsrv.char_settings_for(8)[8:12] == (8 << 20).to_bytes(4, "little")
+              and authsrv.char_settings_for(1) == authsrv.TEST_CHAR_SETTINGS,
+              "and the character-select blob carries the SAME value",
+              f"{authsrv.char_settings_for(8)[8:12].hex()} -- the roster screen "
+              f"reads this blob while the avatar reads 0x0059's dword; they were "
+              f"independent constants and disagreed")
+    LEDGER.ok(len(authsrv.char_settings_for(8)) == len(authsrv.TEST_CHAR_SETTINGS),
+              "without changing the blob's length",
+              f"{len(authsrv.char_settings_for(8))} vs "
+              f"{len(authsrv.TEST_CHAR_SETTINGS)} -- the field is in place, and a "
+              f"length change would desync every field after it")
 
     # The send site, on the SYNTAX TREE: the call that sends 0x00B7 in the
     # spawn burst must take its values from spawn_profession_values(), not

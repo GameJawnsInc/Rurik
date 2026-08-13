@@ -2,7 +2,7 @@
 """Check the footprint join that names archive map rows.
 
     python toolkit/clientscan/test_maprows.py
-    python toolkit/clientscan/test_maprows.py --all      # every map row, ~7 min
+    python toolkit/clientscan/test_maprows.py --all      # every map row, ~9 min
 
 WHAT EARNS THIS FILE, because the headline number is the weak half. "319 of 319
 footprints have a size the archive carries" is a claim about a two-number key
@@ -10,38 +10,51 @@ over an 84-value alphabet, and a two-number key matches a lot by accident: sizes
 drawn at RANDOM from the observed ranges already score ~41%. So the round number
 proves much less than it looks like, and three controls carry the file instead:
 
-  * Section 3 shifts every footprint by ONE CELL and requires the match to
+  * Section 4 shifts every footprint by ONE CELL and requires the match to
     COLLAPSE. 319/319 -> 0/319 is what says the relation is the arithmetic and
     not the alphabet. A version of this test without it would pass against a
     join that had the pitch wrong by a factor it happened to absorb.
-  * Section 4 requires the random-size null to stay far below the real rate.
+  * Section 5 requires the random-size null to stay far below the real rate.
     It is the number that makes "100%" mean something, and it is asserted
     rather than printed, because a control nobody compares against is a comment.
-  * Section 6 is the ANCHOR: two rows whose identity was established WITHOUT
+  * Section 7 is the ANCHOR: two rows whose identity was established WITHOUT
     this join -- row 7982 from ArenaNet's own wire (three named zones, 9 of 9
     live connections) and row 22371 from `archive.py`'s own measured note. The
     join must admit both. It never saw either.
 
 WHICH OF THOSE IS LOAD-BEARING WAS MEASURED, not assumed. `CELL_PITCH` was set
-to 64.0 and the file re-run: **6 checks go red, and section 4 is not one of
+to 64.0 and the file re-run: **6 checks go red, and section 5 is not one of
 them.** The random null falls with the real rate (3.9% against 9.1%), so it
 still "passes" -- it is a ratio, and a wrong pitch moves both terms. What
-catches the sabotage is section 3's one-cell control and, decisively, the
+catches the sabotage is section 4's one-cell control and, decisively, the
 anchors: both go to **0 candidates**. A version of this test built only out of
 corpus statistics would have called a wrong pitch green.
 
-Section 5 is the negative result that the arc turned on, and it is asserted so
+AND THAT PARAGRAPH WAS TRUE ONLY ON A COLD CACHE, WHICH IS WHY SECTION 2 EXISTS.
+`maprows.map_dims` caches 349 decompressions, and its stamp named the archive and
+nothing else while `CELL_PITCH` was consumed BEFORE the cache was written -- so a
+dims table computed at 96.0 was served back under any other pitch. MEASURED
+2026-08-13, warm: 64.0, 48.0, 100.0, 112.0, 97.0, 96.5, 96.1, 96.01, 96.001 and
+96.0000001 each printed ALL CHECKS PASSED (23 checks) and exited 0 in 9.2 s. Only
+`--all`, which deletes the cache file, ever saw the six. The paragraph above is a
+claim about the six checks; section 2 is the claim that they get the chance to
+run, and it asserts the drop directly rather than trusting the stamp's field list.
+It needs no archive and no vault, so it is also one of the few things this file
+can still measure on a machine without one.
+
+Section 6 is the negative result that the arc turned on, and it is asserted so
 it can go red if a future build changes: NO dword column of the 888-record table
 resolves to a map-flagged row, in either the raw or the packed reading. If that
 ever fails, the client gained a map-id -> file-id table and
 `studies/maprows/FINDINGS.md` §2 needs rewriting.
 
-Section 2 pins the pitch as a DERIVATION rather than a constant: every map's
+Section 3 pins the pitch as a DERIVATION rather than a constant: every map's
 terrain extent must be a whole number of 96-unit cells, which the archive could
 refuse and which is what makes `/96` legitimate.
 
-Sections 0-2 need no archive sweep and are cheap; sections 3-6 read every map's
-Map Parameters chunk and are cached in the vault after the first run.
+Sections 0-2 need no archive and no vault; sections 3-7 all rest on `map_dims`,
+which reads every map's Map Parameters chunk and is cached in the vault after
+the first run (~9 min cold, ~9 s warm).
 
 Four real place names appear below as the anchor oracle, the same way
 `test_areatable.py` carries a few: without a concrete expected string an anchor
@@ -52,9 +65,12 @@ on screen and they are the EVIDENCE for a claim, not an extracted table -- the
 
 import argparse
 import collections
+import json
 import os
 import random
+import shutil
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -70,11 +86,12 @@ import vaultpath                                              # noqa: E402
 from archive import Archive, file_id_table, DEFAULT_DAT       # noqa: E402
 from gwpe import PE                                           # noqa: E402
 
-# MEASURED on build 38797 + dat_study, 2026-08-13: a healthy run executes 23.
+# MEASURED on build 38797 + dat_study, 2026-08-13: a healthy run executes 29 --
+# the 23 this file ran before section 2 existed, plus that section's 6.
 # Set from a real green run and not from a guess -- the first value here was 24,
 # picked by counting `check(` calls in the source, and a vault-backed run went
-# red naming the shortfall. Which is the guard working, and is why it is 23.
-FLOOR = 23
+# red naming the shortfall. Which is the guard working, and is why it is 29.
+FLOOR = 29
 
 # The two anchors. Neither was derived from the join under test.
 #   7982  -- GAME_SMSG 0x0195 carried file 0x1B97D in 9 of 9 live connections
@@ -138,15 +155,112 @@ def main():
     check(not bad, "every footprint has a positive span in x and y",
           f"{len(bad)} malformed" if bad else "")
 
-    # -- 2. the pitch, derived rather than assumed ---------------------------
-    print("\n2. the cell pitch is a derivation the archive could refuse")
+    # -- 2. the dims cache cannot outlive the parameters that produced it ----
+    # THE CHECK THAT WOULD HAVE CAUGHT IT. Everything from section 3 on reads
+    # `map_dims`, which caches 349 decompressions; its stamp used to name the
+    # archive alone, so a wrong `CELL_PITCH` was absorbed by the cache and the
+    # docstring's six red checks became 23 green ones. The assertion is
+    # deliberately BEHAVIOURAL rather than a look at the stamp's field names: a
+    # test that read `"cell_pitch" in maprows._stamp(...)` would pass against a
+    # stamp that carried the key and compared it loosely, and against a
+    # `map_dims` that built the stamp and then ignored it. So each parameter is
+    # actually moved and `map_dims` is actually asked.
+    #
+    # The fixture is a few bytes in a temp directory, because the stamp only
+    # STATS its archive -- and a cache MISS then falls through to opening those
+    # bytes as an archive, which raises `not a GW archive`. That raise is the
+    # observable: "the cache did not answer". No vault, no client, no 4.2 GB.
+    #
+    # FOUR SABOTAGES WERE BUILT AND RUN against this section, 2026-08-13, and
+    # each reddens a DIFFERENT set, which is what says the six checks are six
+    # checks and not one repeated:
+    #   * `_stamp` restored to `{dat, size, mtime}` -- the real defect -- 5 red.
+    #   * `_stamp` rounding the pitch to 3 decimals: 1 red, and it is the
+    #     96.0000001 row alone. That is what pays for having a second pitch.
+    #   * `_stamp` carrying every field while `map_dims` compares only the old
+    #     three: 5 red. A test asserting the stamp's field NAMES would have
+    #     called this fixed, which is why nothing here looks at the field names.
+    #   * `map_dims` never loading the cache at all: the five refusals all go
+    #     vacuously GREEN and only the positive control reddens. That is the
+    #     one measuring whether this section can fail for the wrong reason.
+    print("\n2. the dims cache moves when a coding parameter moves")
+    tmp = tempfile.mkdtemp(prefix="rurik-maprows-")
+    try:
+        fakedat = os.path.join(tmp, "NotReallyAnArchive.dat")
+        with open(fakedat, "wb") as fh:
+            fh.write(b"not an archive")
+        cachefile = os.path.join(tmp, "dims.json")
+        planted = {"7982": [128, 128]}
+
+        def replant():
+            """Write a cache that is valid for the CURRENT parameter values."""
+            with open(cachefile, "w", encoding="utf-8") as fh:
+                json.dump({"stamp": maprows._stamp(fakedat), "dims": planted}, fh)
+
+        def cache_answered():
+            """True only if map_dims served the planted table without reading."""
+            try:
+                got = maprows.map_dims(fakedat, cachefile, verbose=False)
+            except Exception:                                  # noqa: BLE001
+                return False        # fell through to the archive -- dropped
+            return got == {7982: (128, 128)}
+
+        # THE POSITIVE CONTROL COMES FIRST, and it is not decoration. Every
+        # check under it asserts that the cache did NOT answer, and all of them
+        # would pass vacuously against a cache that can never answer at all --
+        # a mistyped path, a stamp that never matches itself. This is the one
+        # check here that requires the cache to work.
+        replant()
+        check(cache_answered(),
+              "CONTROL: an untouched stamp does serve the planted cache",
+              "so the refusals below are refusals and not vacuum")
+
+        # EVERY WRONG VALUE IS DERIVED FROM THE LIVE ONE, and that is not
+        # fastidiousness -- it is what the control run taught. The first version
+        # wrote the literal `64.0`, which is the pitch `test_maprows`'s docstring
+        # sabotages with; running the fix's own control arm, i.e. this file
+        # against `CELL_PITCH = 64.0`, turned that row into `64.0 -> 64.0`, a
+        # mutation that mutates nothing, and it went red for a reason that had
+        # nothing to do with the cache. A parameter check whose "wrong" value can
+        # coincide with the right one is a check that reddens on a legitimate
+        # edit, so `x * 2/3` lands on the documented 64.0 from 96.0 and can never
+        # land on the value it started from. `+ 1e-7` is the small end of the
+        # same idea: it reproduces 96.0000001, the smallest wrong pitch the old
+        # stamp was measured to swallow, and a stamp storing the pitch any
+        # lossier than a round-trip float lets exactly that one back through.
+        for param, mutate in (("CELL_PITCH", lambda v: v * 2 / 3),
+                              ("CELL_PITCH", lambda v: v + 1e-7),
+                              ("MAP_FLAGS", lambda v: v + 1),
+                              ("MAP_PARAMS_CHUNK", lambda v: v + 1),
+                              ("CACHE_FORMAT", lambda v: v + 1)):
+            was = getattr(maprows, param)
+            wrong = mutate(was)
+            if wrong == was:
+                raise RuntimeError(
+                    f"{param}: the mutation is a no-op ({was!r}), so this row "
+                    "would assert that an UNCHANGED parameter drops the cache. "
+                    "Fix the expression rather than the expectation.")
+            replant()                       # valid for `was`, asked under `wrong`
+            setattr(maprows, param, wrong)
+            try:
+                served = cache_answered()
+            finally:
+                setattr(maprows, param, was)
+            check(not served,
+                  f"a cache written under a different {param} is DROPPED",
+                  f"{was!r} -> {wrong!r}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    # -- 3. the pitch, derived rather than assumed ---------------------------
+    print("\n3. the cell pitch is a derivation the archive could refuse")
     cache = str(vaultpath.vault_path("areatable", "maprows-dims.json"))
     if a.all and os.path.isfile(cache):
         os.remove(cache)
     try:
         dims = maprows.map_dims(a.dat, cache, verbose=False)
     except OSError as exc:
-        LEDGER.skip("everything from section 2 on",
+        LEDGER.skip("everything from section 3 on",
                     f"cannot read the archive: {exc}")
         return LEDGER.verdict()
     check(len(dims) == 349, "349 map rows yield a terrain rect", str(len(dims)))
@@ -159,8 +273,8 @@ def main():
           "map dims are NOT unique per map -- the join's central limitation",
           f"{ndims} distinct dims over {len(dims)} rows")
 
-    # -- 3. the join, and the one-cell control -------------------------------
-    print("\n3. the join, and the control that makes it a measurement")
+    # -- 4. the join, and the one-cell control -------------------------------
+    print("\n4. the join, and the control that makes it a measurement")
     c = maprows.check(rows, dims)
     check(c["matched"] == c["footprints"],
           "every footprint's size exists in the archive",
@@ -174,8 +288,8 @@ def main():
     check(not c["missing"], "no footprint size is absent from the archive",
           str(c["missing"]) if c["missing"] else "")
 
-    # -- 4. the random null --------------------------------------------------
-    print("\n4. the null: how well do random sizes do?")
+    # -- 5. the random null --------------------------------------------------
+    print("\n5. the null: how well do random sizes do?")
     real = c["matched"] / c["footprints"]
     check(c["random_mean"] < 0.75 * real,
           "random sizes score far below the real rate",
@@ -184,8 +298,8 @@ def main():
           "even the 95th percentile of the null is under the real rate",
           f"{100*c['random_p95']:.1f}%")
 
-    # -- 5. the negative result the arc turned on ----------------------------
-    print("\n5. no column of the table resolves to a map row")
+    # -- 6. the negative result the arc turned on ----------------------------
+    print("\n6. no column of the table resolves to a map row")
     with Archive(a.dat) as ar:
         maprowset = {e.index for e in ar.entries if e.flags == maprows.MAP_FLAGS}
         fid = file_id_table(ar)
@@ -216,8 +330,8 @@ def main():
           "no dword column is a PACKED map-file-id column",
           f"best column scores {worst_packed} of {n}")
 
-    # -- 6. the anchors ------------------------------------------------------
-    print("\n6. anchors established without this join")
+    # -- 7. the anchors ------------------------------------------------------
+    print("\n7. anchors established without this join")
     sol = maprows.solve(rows, dims)
     import textrec
     with textrec.TextIndex(exe=exe, dat=a.dat) as ix:

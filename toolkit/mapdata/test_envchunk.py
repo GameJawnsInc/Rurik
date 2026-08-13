@@ -77,6 +77,13 @@ CORPUS_SHIFT_VIOL = 5087       # same fields read one byte early: violations
 CORPUS_SUN_EXACT = 308         # maps where tag8's sun byte predicts terrain's
 CORPUS_SUN_NEAR = 313          # ... within one terrain quantum (0.354 deg)
 CORPUS_ZONE_SLOTS = 20936      # zone selector reads, 0 out of bounds
+# The named aspects, and the two population facts that make the NAMES right
+# rather than merely plausible. A parameter pinned at maximum on 87% of records
+# is a defaulted saturation; a second bloom scalar would not look like this.
+CORPUS_POSTPROC = 741
+CORPUS_SATURATION_MAX = 648    # byte 1 == 255, i.e. saturation 1.0
+CORPUS_TINT_OFF = 571          # byte 2 == 0, i.e. no tint
+CORPUS_LIGHTS = 1324
 
 # The Stripped terrain chunk's angle_index sits at a fixed offset: the 5-byte
 # header, the tag-0 byte, then 4 into tag 0's body. Computed from the terrain
@@ -94,12 +101,12 @@ SUN_RATIO = 127.0 / 32.0
 ALIGNED_REFS = ((0, (8,)), (4, (0,)), (5, (1, 3, 5, 7)), (6, (53, 55)))
 SHIFT_REFS = ((0, (7,)), (4, (0,)), (5, (0, 2, 4, 6)), (6, (52, 54)))
 
-# FLOOR: 25, MEASURED from a green default run 2026-08-13 (which executes 25; a
-# --all run executes 33, adding eight corpus-total checks). Sections 0-2 score 15
-# and need no vault, so a vault-less run stops at 15 and the floor turns that into
+# FLOOR: 28, MEASURED from a green default run 2026-08-13 (which executes 28; a
+# --all run executes 40, adding twelve corpus-total checks). Sections 0-2 score 17
+# and need no vault, so a vault-less run stops there and the floor turns that into
 # the FAIL it is. The floor equals what a sampled run produces, which is its
 # mandatory core.
-LEDGER = checks.Ledger("test_envchunk", floor=25)
+LEDGER = checks.Ledger("test_envchunk", floor=28)
 check = checks.adopt(LEDGER)
 
 
@@ -227,6 +234,15 @@ def section1():
           "independent walker reads one zone")
     check(back.global_env() == bytes(GLOBAL_SIZE),
           "tag8 global record is 17 bytes, carried")
+    # the two named aspects, authored and read back through their accessors
+    ec.section(env.TAG_POSTPROC).records = [bytes([152, 255, 0, 3, 2, 1])]
+    ec.section(env.TAG_LIGHT).records = [bytes([9, 8, 7, 200, 6, 5, 4, 100])]
+    back2 = EnvChunk.decode(ec.encode())
+    check(back2.postproc()[0] == (152, 255, 0, (1, 2, 3)),
+          "post-process reads back, and the tint un-swaps B,G,R -> r,g,b",
+          f"{back2.postproc()[0]}")
+    check(back2.lights()[0] == (((9, 8, 7), 200), ((6, 5, 4), 100)),
+          "the directional-light pair reads back", f"{back2.lights()[0]}")
 
 
 def section2():
@@ -293,6 +309,8 @@ def section3(corpus):
     print(f"\n-- 3. {len(corpus)} retail maps: decode, re-encode, compare --")
     same = diff = 0
     flag1 = fog = zones = tag12 = 0
+    n_pp = sat_max = tint_off = n_light = 0
+    rgb_ok = True
     versions = set()
     global_ok = True
     for _row, blob, _n, _a in corpus:
@@ -311,12 +329,37 @@ def section3(corpus):
         g = ec.global_env()
         if g is None or len(g) != GLOBAL_SIZE:
             global_ok = False
+        for bloom, sat, tint, rgb in ec.postproc():
+            n_pp += 1
+            sat_max += (sat == 255)
+            tint_off += (tint == 0)
+            if len(rgb) != 3 or max(rgb) > 255:
+                rgb_ok = False
+        n_light += len(ec.lights())
     check(diff == 0, f"{same} of {len(corpus)} re-encode byte-identically",
           f"{diff} differ")
     check(versions == {VERSION}, "every version is 16", f"{sorted(versions)}")
     check(global_ok, "every map's tag8 global record is exactly 17 bytes")
+    check(rgb_ok, "every post-process tint unpacks to three bytes in range")
     complete = len(corpus) == CORPUS_MAPS
     if complete:
+        # The NAMES, not just the layout. ArenaNet's own shader-constant table
+        # says byte 1 is PostProcSaturation; these two counts are what make that
+        # the right name rather than a plausible one -- a defaulted saturation
+        # sits at maximum, and a tint sits off. If a future build moves them the
+        # naming needs re-reading, which is exactly when this should go red.
+        check(n_pp == CORPUS_POSTPROC,
+              f"corpus post-process records == {CORPUS_POSTPROC}", f"{n_pp}")
+        check(sat_max == CORPUS_SATURATION_MAX,
+              f"saturation is 1.0 on {CORPUS_SATURATION_MAX} of {CORPUS_POSTPROC}"
+              f" -- the shape of a DEFAULT, which is the corpus half of the name",
+              f"{sat_max}")
+        check(tint_off == CORPUS_TINT_OFF,
+              f"tint strength is 0 on {CORPUS_TINT_OFF} of {CORPUS_POSTPROC}",
+              f"{tint_off}")
+        check(n_light == CORPUS_LIGHTS,
+              f"corpus directional-light records == {CORPUS_LIGHTS}",
+              f"{n_light}")
         check(flag1 == CORPUS_FLAG1,
               f"{CORPUS_FLAG1} maps have flag>=1 (16-B tag5)", f"{flag1}")
         check(zones == CORPUS_ZONES, f"corpus zone total == {CORPUS_ZONES}",

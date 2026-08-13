@@ -694,11 +694,21 @@ timestamped raw-packet writing is roughly one function.
 100% of game-server↔client traffic to disk **[measured — mirrored]**, and `Fournux/Tyria-Extractor`
 (MIT) ships an injected sniffer alongside its `Gw.dat` extractor.
 
-Layer the shadow-server idea on top once capture works: feed your server the real CtoS stream and
+~~Layer the shadow-server idea on top once capture works: feed your server the real CtoS stream and
 diff its would-be output against the real server's while still forwarding the real answer. That is
 HANDOFF §7's replay oracle at R0 instead of R2, open-loop, self-updating as you play. Then stop
 forwarding message types that diff clean and answer them yourself, so the system stays playable
-throughout and the project becomes incremental replacement rather than a cold start.
+throughout and the project becomes incremental replacement rather than a cold start.~~
+**❌ STRUCK 2026-08-13 with HANDOFF §7, which it depended on.** The byte-diff at its centre is
+refuted by its own subject: **ArenaNet's server is 0.2% byte-identical against its own recording**
+of the same character on the same map minutes apart, diverging at message 6, while the same method
+scores 99.3% on opcode *sequence*. A gate that cannot go green cannot go red for a reason, and its
+tolerance layer is vacuous by its own control (masking three dwords blanks 45% of bytes and still
+scores 76.8–97.5% on *different* maps). The prize is already banked by §8's `msgmix.py` and
+`studies/divergence` D1–D11, which is what the shadow diff was for. See HANDOFF §7 and
+[studies/recon/FINDINGS.md](studies/recon/FINDINGS.md) §5.5 for the measurement and for the
+structural load-prefix gate that replaces it. **The rest of A1 stands** — capture was and remains
+the right first move, and R0b/R1.5 are met.
 *Wasted if:* nothing obvious — this is required under every strategic option, it does not depend on
 the language decision, and building it is how you find out how good the rest of the prior art
 really is. **Build it first regardless of every other choice in this document.**
@@ -810,7 +820,8 @@ prior art.
   every session from then on, including sessions played for fun. Begin the WASM symbolization
   pipeline (A4, A7).
 - **Days 46–90** — Tape player (R1.5). Skill-table extraction and the referee'd data pipeline (A6).
-  First shadow-server diffs on real traffic.
+  ~~First shadow-server diffs on real traffic.~~ **Struck 2026-08-13** — see §4 A1 and
+  HANDOFF §7; the byte-diff is refuted and `msgmix.py` already delivers what it was for.
 
 Capture still starts immediately and never stops — the wasting-asset argument is right. What
 changes is that capture is now cheap enough to leave running rather than a project in itself.
@@ -1347,43 +1358,38 @@ was the 2,109 non-player rows with no skill icon. **`--unlocks` now defaults to
 refuses with an actionable message (naming `--unlocks bar`) rather than falling back to
 the broken set when there is no client to read. Default pinned on the syntax tree.
 
-**ANSWERED 2026-08-13 (`RUNS.md` §12).** Profession **12** on `0x00A6` in a working
-panel: the client survived the whole session (104 c2s, +68.02 s, `missed 0`). Both
-prediction halves held — the panel OPENS at a custom primary, and the drop-down does not
-read 12 (it reads *Warrior*, what the burst's `0x00B7` wrote, because `0x00A6` never
-touches the panel's record). `0x00B7(12)` was re-measured lethal on arrival, +3.39 s.
+**THE ROUTE IS DECIDED: R-RESKIN** (`studies/profession/RESKIN.md`, 2026-08-13, nine
+agents; two of three verifiers refuted parts and both refutations changed the plan).
+**Repurpose a shipped profession id rather than adding a twelfth.** The id stays legal, so
+not one bound check, assert or `0..10` loop can fire — and on every axis that makes a class
+playable a reskin delivers what a 12th id would. **Five dwords, 20 bytes, zero code bytes**
+against ~60 sites for R-WIDEN. Three measurements decide it: `.rdata` has **zero slack**
+(every table is packed flush against the next live datum, so widening is always
+relocate-plus-repoint); **seven per-profession tables are CODE**, materialised as
+`mov imm32` ladders in a 240-byte stack frame with 36 callers; and a **bound-check-free**
+read of a fifth table at `0x00BEF4A4` that every census in this arc missed because they all
+keyed on `cmp reg, 0x0b`. **R-NEUTER should stop being listed as a route** — it is the
+global assert wrapper, and the fall-through reads are disqualifying (model scale collapses
+to ~0, chapter becomes 1.1 billion, the creation icon comes from an uninitialised stack
+slot).
 
-**THE SECONDARY-UNLOCK MESSAGE IS FOUND: `GAME_SMSG 0x00B6` (`RUNS.md` §13).** The
-client's own `OnProfessionSecondaryBits(agent, secondaryBits)` — SOURCED from the format
-string at `0xA95A70`, which names the message and both fields. `u32 agent_id, u32 mask`,
-10 bytes; `schema/messages.json` entry 182 already had the shape. Handler `0x0091F090` →
-`0x00813AC0` → `0x0081FD00` stores the mask at field `+0xC` of the per-agent record at
-`ctx[0x2c]+0x6BC`; the drop-down builder tests it `shl 1,cl / test edx,eax` over ids
-0..10, so **the bit index is the profession id**, attested at three independent read
-sites. Shipped: `--secondary-bits all|<ids>|<mask>` and `--probe profession_secondary`.
+**Honest scope, stated because this arc has over-promised twice:** you get a playable class
+with its own name, campaign availability, attribute set and primary, skill roster, model
+scale, palettes, starter gear and borrowed armour — whose **skills keep their shipped names
+and icons** (identity text is 1 archive file; its skills' names are 19–22), wearing the
+host's in-game glyph. You lose a slot, not a capability.
 
-**Two silent failure modes, both guarded.** `0x00B6` before that agent's first `0x00B7`
-is DROPPED (the handler logs and returns without storing), so the burst's order is pinned
-on the syntax tree; and the reader's loop is `cmp edi, 0xb`, so `secondary_bits()`
-refuses ids 0/11/12/255. **That closes the custom-secondary route from the writing side
-too: `0x00B6` physically cannot offer a custom id.**
+**Next: RUN 0, the control, on a PRISTINE exe.** Prove the character renders as a Ritualist
+everywhere before changing a byte — the experiment as first designed was untestable,
+because two of its five dwords are read only from the character-creation picker and our
+server has no creation flow (`studies/divergence` D10). Built for it: `--spawn-profession`
+now drives the **appearance nibble** on both carriers (the `0x0059` dword and the
+character-select blob disagreed), for in-band ids only — 12 still keeps the legal
+placeholder, since the nibble is asserted `< 0xB` at load.
 
-**CONFIRMED 2026-08-13 (`RUNS.md` §14) — all three shots hit exactly.** In map 796:
-mask `0x07FE` ungreyed the control with **ten** entries (Warrior, Warrior/Ranger …
-Warrior/Dervish — every profession but the primary), `0x0044` gave **exactly three**
-(None, Ranger, Elementalist), `0x0000` **locked** it again. 48 c2s, +77.76 s, `missed 0`,
-no dialog. **The bit index IS the profession id, OBSERVED** — the two-shot design killed
-the count-only and wrong-bit-base rivals, and the layout no capture could settle (all 11
-live samples are mask 0) is settled. Three open questions closed with it: the arena gate
-bit is set in 796 under our server, the mission-map field reads 0 (our own `0x0199`'s
-`is_explorable`), and Codex Arena loads at all.
-
-**So the secondary-profession mechanic works end to end on this server** — a real feature
-driven by the message ArenaNet's own server sends, via `--secondary-bits all|<ids>|<mask>`.
-And the custom route is now closed from both sides and confirmed in action: the reader is
-`cmp edi, 0xb` and `secondary_bits()` refuses above 10, so **no server message can ever
-offer a custom profession as a secondary.** What remains for a custom id is client-side —
-widening the compiled tables, or R1's assert neuter.
+```
+python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_panel --spawn-profession 8 --map 796'
+```
 
 **What this changed for the arc's actual goal.** The custom-profession boundary is now
 sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has
@@ -2485,7 +2491,56 @@ parallel, with one safety change that is not optional — see its entry.
     PASS that meant "reached A map" while the client never loaded ours; the second
     was caught only because `datcheck --diff` CONTRADICTED the readback.
     Record: `vault/research/e10l-authored-2026-08-13/`.
-
+    **(e10m)** ✅ **DONE 2026-08-13 (FINDINGS 55). ARENANET NAMES THE FIELDS.**
+    §53's two loose threads closed offline, no client. The client looks its shader
+    constants up BY NAME and the strings are in the image, so tag6 `+0x21` is
+    **`waterFresnel`** (string `0x00A6C430`) and `+0x25` is **`waterSpecularColor`**
+    (`0x00A6C474`) — our labels replaced by ArenaNet's. Both are also GATES: each
+    promotes the water technique, so the path that reads a field is unlocked by that
+    field. **tag1 is POST-PROCESS** {BloomAmount, PostProcSaturation, tint .w, B,G,R}
+    from the constant table at `0xBF7DA8`, corpus-corroborated (saturation 1.0 on
+    648/741, tint off on 571/741) and correcting this repo's "raw u16" to two thirds
+    of a packed colour; **tag3 is the DIRECTIONAL LIGHT**, two {rgb, intensity} pairs
+    to `GrLight`, which REFUTES the idea its u16s were dep indices. Still NOT FOUND
+    and deliberately unnamed: tag0 (consumer at `0x0071A4C0` unattempted), tag4,
+    tag7 — naming tag7 "wind" is precisely the move that mis-named tag6 once already.
+    Two of ten namings were REFUTED on audit, one of them a false "no correlation"
+    contradicted by its own numbers (χ²=92.4, 0/2000 permutations).
+    `envchunk` gains `postproc()`/`lights()`; test floor 25 → 28, 40 under `--all`.
+    **(G)** ✅ **DONE 2026-08-13 (FINDINGS 56). THE LADDER IS CLIMBED.** Rung G of
+    the original ladder — *"someone models a shape in Blender, runs one command,
+    and walks around it in the retail client"*, dependencies **all of the above** —
+    is one command: `deploy.py --area plaza --install --launch --dat <copy>`, with
+    the recipe in `content/areas.toml` (`source = "invented"`). Geometry → borrow →
+    assemble → verify → install → launch → read back, refusing at each step. The
+    client compiled it and every readback check is green: **55 trapezoids built
+    from our terrain** (against 22 for the flat map), heights **1024/1024**, env and
+    sound VERBATIM, 5 props, and the spawn in **exactly one** trapezoid with two
+    retail spawns as 0-scoring controls. **3,941 B, 77.90% ours**, 770 borrowed
+    bytes every one named. Three defects, all in the JOINS rather than in any
+    component (every one of which was green): structural constants must come from a
+    map SHAPED like ours (Pre-Searing's Zones is 7,208 B against 34, which blew the
+    reservation), the client must OWN the archive you armed, and a documented stage
+    that no line runs is a docstring. `test_deploy.py` (floor 14) pins all three —
+    and its own syntax check was VACUOUS at first, passing against a sabotaged
+    source, so it now runs that sabotage as a negative control.
+    Not a hot reload: the client compiles at load, so iterating means running it
+    again. Record: `vault/research/rungG-2026-08-13/`.
+    **(H)** 🟡 **STAGED 2026-08-13 (FINDINGS 57). THE SIZE CEILING IS BROKEN,
+    OFFLINE.** Every map this toolkit built was 32x32 because `datwrite` cannot grow
+    a reservation — not because of the format, whose cap is 16,777,216 cells.
+    `deploy --install` now picks the verb from the size, and a **96x96 map, 21,926 B,
+    was relocated into a row reserving 4,608**: terrain 9,216/9,216 exact, **96.03%
+    ours**, 10/10 open-time rules, 0 overlaps, exactly two rows changed. **No client
+    run — the harness was in use**, so this is staged. Two defects worth carrying:
+    `snap_block` is a ONE-TILE function and a whole-field caller loses only
+    CURVATURE (a 400-unit cliff round-trips, a smooth hill loses 2,752 samples), now
+    `snap_field` with a negative control; and `--check-overlaps` is a read-only verb
+    that returned 0 having written nothing while `deploy` reported success over
+    ArenaNet's own map, so install now READS THE ROW BACK. **Next: one run** —
+    `deploy --area vale --install --launch` — which also gives a second data point on
+    FINDINGS 39's open question, whether a relocated row survives a play session.
+    Record: `vault/research/size-2026-08-13/`.
 ### Naming the archive's map rows — 2026-08-13
 
 **[studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md), `toolkit/clientscan/maprows.py`.**
@@ -2532,6 +2587,43 @@ archive STATE, not a property of the map. `0x8001B97D` is right for `dat_study`
 and wrong for `run-live`. Any content row carrying a bit-31 id records a
 transient state of one copy, and a server should send the plain id and serve from
 an archive that binds it. Nothing was changed on that basis yet.
+
+**(B) IS DONE 2026-08-13.** `toolkit/contentids.py` + `test_contentids.py`
+(floor 15) check that every `content/maps.toml` file id names the SAME FILE in
+both archives a run uses -- identity by MFT size and crc, never by row, since row
+indices do not survive a patch -- and `drive_client.assert_safe` refuses a
+loopback launch when it does not. Gated to `RUN_ROOT`: a live run answers to
+ArenaNet's own ids and must never be refused on our rows. The positive control is
+`vault/run-live/`, which genuinely fails on exactly the two Pre-Searing rows.
+Today the real pair is 10 of 10 clean.
+
+**(C) IS PLANNED, NOT BUILT -- make content archive-INDEPENDENT.** (B) is a guard;
+it tells you the two copies disagree, it does not let a content row survive the
+disagreement. The defect it guards is real and structural: `content/maps.toml`
+records a file id, and a file id is a fact about one copy of `Gw.dat`.
+
+  *What C would do.* Record a durable KEY per map instead of (or beside) the id,
+  and resolve the id at launch against the archive the CLIENT will open. The key
+  has to be something both copies agree on when the bytes are the same map.
+  Candidates, cheapest first: the MFT entry's `crc` + `size` over the stored
+  bytes (already proven sufficient for identity by `contentids.py`, and free --
+  no decompression); the map's dims from chunk `0x2000000C` (weak alone, 104
+  distinct over 349 rows -- see the footprint work above); or the content UUID in
+  the same chunk, which is per-map and stable but which `mapbuild.py` records as
+  never read by the client, so nothing guarantees ArenaNet keeps it stable across
+  a patch. **The crc is the one to try, and it needs measuring across a patch
+  before it is trusted** -- a re-bloated map changed both size and crc between
+  `dat_study` and `run-live` (1,300,036 B vs 1,300,044 B), so crc identifies a
+  FILE, and whether it identifies a MAP across an ArenaNet update is exactly the
+  open question.
+
+  *Why it is not urgent.* The exposure is two content rows and one id, it is
+  correct for the current pair, and (B) now makes any future divergence a refusal
+  rather than a client assert. Do C when a second archive state actually has to
+  be supported -- e.g. serving a live-updated copy -- not before.
+
+  *What C must not do.* Silently pick an id. If two archives disagree the right
+  answer is still to refuse; C only widens the set of pairs that can agree.
 
 **Next.** (2) The remaining 296 rows are limited by information, not
 effort: the archive carries a map's dims and nothing that places it on a

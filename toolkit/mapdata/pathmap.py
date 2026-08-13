@@ -84,6 +84,56 @@ walkable() therefore asks "walkable on ANY plane", which is right for flat
 ground and wrong under a bridge. Said plainly because it will matter later --
 and it is exactly why an (x, y) overlap rule for cross-plane links is dangerous:
 a bridge and the ground beneath it overlap perfectly.
+
+THE TAIL, AND WHY IT MATTERS BEFORE THERE IS A CALL SITE. route() has zero
+callers in the server today -- `enemy_move_tick` walks a straight line and stops
+at the first wall -- but it is the substrate the monster AI needs, and the world
+runs on ONE thread with a 50 ms tick. So its worst case is not a nicety: a route
+that takes six tick periods is six ticks in which nothing in the world moves,
+and an intermittent whole-world freeze is the hardest kind of failure to
+attribute to anything.
+
+MEASURED on Pre-Searing (file id 0x1B97D, 6,120 trapezoids), 1,500 routes whose
+endpoints are 150 to 1,200 units apart -- the band `enemy_move_tick` actually
+chases in, between ENEMY_MELEE_RANGE and AGGRO_RANGE:
+
+    p50 0.377 ms   p90 2.04   p99 32.1   p99.9 313.1   max 336.0 ms
+
+336 ms is 6.7 tick periods, and 11 of the 1,500 (0.73%) blew a whole tick.
+Eight hostiles re-pathing once a second reaches that about every seventeen
+seconds.
+
+**The A* was not the cause, and neither was any one thing.** A per-phase split
+put the search at 3.5% and the string pull at 94.2%, and a previous attempt that
+reported a "50.7x heapq speedup" is recorded as REFUTED -- the variant it timed
+had skipped the smoothing pass entirely. Three things were measured one at a
+time (all 1,500 pairs, same seed) and each is kept because it earned its place:
+
+  * walkable() over a 2-D bucket of flattened trapezoids instead of a y-band of
+    objects. 5.82 us -> 1.23 us a call on Pre-Searing, 3.34 -> 1.04 on Kamadan.
+    Alone: max 336 -> 69.6 ms, still 2 routes over a tick.
+  * the smoother's line test asks its samples COARSEST FIRST rather than
+    front to back. The sample SET is unchanged, so the verdict is unchanged; a
+    blocked line is simply refuted after a handful of samples instead of after
+    walking all the way up to the wall, and most of the smoother's line tests
+    are blocked. Alone: max 336 -> 64.3 ms, 1 route over a tick.
+  * a connected-component pre-check, so a goal in another component costs O(1)
+    instead of exhausting the component. This one measured NOTHING on its own
+    (max 323.7 ms, still 11 over a tick) and looked worthless -- the failed
+    searches were hiding underneath the smoother. With the other two in place it
+    is the whole remaining tail: the five slowest routes left were all failed
+    searches popping ~5,100 trapezoids each.
+
+Together: **p50 0.185 ms, p90 0.733, p99 3.97, p99.9 9.96, max 16.6 ms, and 0
+of 1,500 over a tick** -- and 0 of 1,500 returned paths differ from what the
+old code returned, which is the claim that makes the rest of it safe. All three
+are answer-preserving by construction: the bucket is the same point test with
+the arithmetic pulled flat, the reordering does not change a set, and union-find
+over the UNDIRECTED form of adjacent()'s relation OVER-approximates reachability,
+so "different components" implies unreachable and never the reverse.
+
+What is NOT answer-preserving is PULL_SAMPLE_BUDGET, and it is deliberately set
+where nothing measured reaches it: see the constant.
 """
 
 import os
@@ -119,6 +169,54 @@ PLANE_LAYOUT = ((0, None, None), (11, "polyData", 8), (1, "edgeVectors", 8),
 # Trapezoids are short in y -- Kamadan's are tens of units tall -- so bucketing
 # on y turns the point test into a handful of comparisons instead of 1,270.
 BAND = 256.0
+
+# The same idea in two dimensions, for walkable() only. A y band alone still
+# hands the point test every trapezoid at that latitude, which on Pre-Searing is
+# tens of them across 40,000 units of longitude. MEASURED at 128/256/512 on both
+# maps: 256 wins on Pre-Searing (1.41 / 1.23 / 1.44 us) and is within noise of
+# 128 on Kamadan (0.90 / 1.04 / 1.51), so one number serves both. Build cost is
+# 26 ms for Pre-Searing and 4 ms for Kamadan, paid lazily on the first
+# walkable() -- the map corpus sweep in test_pathmap.py constructs a PathingMap
+# for every map in the archive just to check the layout walks, and charging all
+# 349 of them for a grid nothing asks about would be minutes of nothing.
+CELL = 256.0
+
+# How much x slack a trapezoid gets when it is filed into that grid, in map
+# units. The bucket range comes from the record's own corner x values, but the x
+# the point test compares against is a LERP between them, and a lerp is not
+# guaranteed by IEEE to land inside the hull of its endpoints once rounding is
+# involved. At map magnitudes (~1e4) the error is around 1e-12, so a whole unit
+# of slack is free against a 256-unit cell and makes the question moot. Without
+# it walkable() could miss a trapezoid containing() would have found, on one
+# point in an eternity -- which is precisely the defect nobody can reproduce
+# afterwards.
+#
+# AND NOTHING CHECKS IT, which is said here rather than left to be discovered.
+# Setting this to 0.0 was built as a sabotage and RUN, and test_pathmap.py went
+# green: 120,000 random points, 349 maps and 1,500 routes never produced the
+# rounding case. So this is belt-and-braces on an argument, not a measured
+# property, and it is the one line in this file with no experiment behind it.
+CELL_SLACK = 1.0
+
+# The most walkable() samples ONE _string_pull may spend before it stops trying
+# to shorten the path and simply copies the rest of the waypoints through.
+#
+# This is the only thing here that can change an answer, so it is set from the
+# measurement rather than from taste: over 1,500 routes in the chase band the
+# worst pull spent 7,351 samples on Pre-Searing and 1,368 on Kamadan, so 20,000
+# is 2.7x above anything observed and NOTHING in the corpus reaches it (0 of
+# 1,463 returned paths change length). It is a backstop, not a policy -- the
+# smoother is still quadratic in waypoints in the worst case, Pre-Searing is one
+# sample of map-shape space, and a ceiling nobody hits is the difference between
+# "fast on the maps we measured" and "cannot blow the tick".
+#
+# When it does bite, it degrades the way a smoother should: the remaining
+# waypoints are the A*'s own, each on an edge shared by two trapezoids, so the
+# path gets LONGER and never invalid. It cannot make route() return None that
+# would otherwise have returned a path unless the un-smoothed tail contains a
+# segment route()'s own final gate rejects -- which is why the None rate is
+# asserted equal before and after in test_pathmap.py rather than assumed.
+PULL_SAMPLE_BUDGET = 20000
 
 
 NO_NEIGHBOUR = 0xFFFFFFFF
@@ -251,6 +349,11 @@ class PathingMap:
         for i, t in enumerate(trapezoids):
             self._base.setdefault(t.plane, i)
         self._cross = self._build_cross_links()
+        # Both built on first use, never here: from_chunk() runs on every map
+        # in the archive during the corpus sweep, and neither of these is worth
+        # a millisecond to a caller that only wants to know the layout walked.
+        self._grid = None            # walkable()'s bucket; _build_grid
+        self._component = None       # route()'s reachability; _build_components
 
     def _build_cross_links(self):
         """Trapezoid-to-trapezoid links through paired portals.
@@ -291,17 +394,69 @@ class PathingMap:
                 links.setdefault(j, []).extend(ta)
         return links
 
+    def _build_grid(self):
+        """walkable()'s 2-D bucket: (cell y, cell x) -> flattened trapezoids.
+
+        This is `Trapezoid.contains` with the arithmetic pulled out flat and the
+        candidate set narrowed in x as well as y. It exists because walkable()
+        is the inner loop of everything: a single route() in the chase band
+        spends up to 73,908 calls in here, and at the 5.82 us an attribute-and-
+        method-call version costs that is 284 ms on the thread that owns the
+        world. Flat tuples take it to 1.23 us.
+
+        THE ARITHMETIC IS BIT-FOR-BIT `contains`. `dxl` is `x_top_left -
+        x_bottom_left` computed once instead of once per call, and IEEE
+        subtraction is deterministic, so `xbl + f * dxl` is the same float
+        `contains` computes. That matters more than the speed: this is a SECOND
+        implementation of the point test, and `containing()` deliberately still
+        runs the first one, so test_pathmap.py can put the two against each
+        other over a large random sample and get a real answer rather than a
+        tautology.
+
+        The x span is padded by CELL_SLACK -- see the constant for the one way
+        this could otherwise disagree with `contains`.
+        """
+        grid = {}
+        for t in self.trapezoids:
+            yb, yt = t.y_bottom, t.y_top
+            xmn = min(t.x_bottom_left, t.x_top_left) - CELL_SLACK
+            xmx = max(t.x_bottom_right, t.x_top_right) + CELL_SLACK
+            rec = (yb, yt, yt - yb,
+                   t.x_bottom_left, t.x_bottom_right,
+                   t.x_top_left - t.x_bottom_left,
+                   t.x_top_right - t.x_bottom_right,
+                   xmn, xmx)
+            # An inverted y span files into no cell at all, which agrees with
+            # `contains` -- it can never satisfy y_bottom <= y <= y_top either.
+            for cy in range(int(yb // CELL), int(yt // CELL) + 1):
+                for cx in range(int(xmn // CELL), int(xmx // CELL) + 1):
+                    grid.setdefault((cy, cx), []).append(rec)
+        return {k: tuple(v) for k, v in grid.items()}
+
     # -- queries ---------------------------------------------------------
 
     def containing(self, x, y):
-        """Every trapezoid holding this point. Usually zero or one."""
+        """Every trapezoid holding this point. Usually zero or one.
+
+        Still the y-band walk over Trapezoid objects. walkable() has its own
+        faster path and this one is the control on it; keeping both is the
+        point, and this one is called twice per route() rather than tens of
+        thousands of times.
+        """
         return [t for t in self._bands.get(int(y // BAND), ())
                 if t.contains(x, y)]
 
     def walkable(self, x, y):
-        for t in self._bands.get(int(y // BAND), ()):
-            if t.contains(x, y):
-                return True
+        """Is this point inside any trapezoid, on any plane? See _build_grid."""
+        grid = self._grid
+        if grid is None:
+            grid = self._grid = self._build_grid()
+        for (yb, yt, span, xbl, xbr, dxl, dxr, xmn, xmx) in \
+                grid.get((int(y // CELL), int(x // CELL)), ()):
+            if xmn <= x <= xmx and yb <= y <= yt:
+                f = 0.0 if span <= 0.0 else (y - yb) / span
+                if xbl + f * dxl <= x <= xbr + f * dxr:
+                    return True
         return False
 
     def plane_at(self, x, y, prefer=None):
@@ -373,6 +528,53 @@ class PathingMap:
     def _flat_index(self, t):
         return self._base[t.plane] + t.index
 
+    def _build_components(self):
+        """Which trapezoids can reach which, as one root index per trapezoid.
+
+        Union-find over EXACTLY the relation `adjacent()` walks -- this asks
+        `adjacent()` itself rather than re-deriving the edges, so the two cannot
+        drift apart. Pre-Searing comes out in 15 components with the largest
+        holding 4,795 of 6,120; Kamadan's largest holds 93%.
+
+        WHY THIS CANNOT CHANGE AN ANSWER, which is the only reason route() is
+        allowed to skip a search on it. Union-find ignores direction, so it
+        merges at least as much as directed reachability does: two trapezoids in
+        DIFFERENT components have no undirected path and therefore no directed
+        one, so the A* would have failed. Two in the same component may still be
+        unreachable in principle, and the A* runs exactly as before. The
+        over-approximating direction is the safe one and this is on that side.
+
+        It measured NOTHING on its own -- max 323.7 ms, still 11 routes over a
+        tick -- because the failed searches were sitting underneath the
+        smoother. Once the smoother stopped costing 94% the five slowest routes
+        left were all searches that popped ~5,100 trapezoids and then returned
+        None, and this is what removes them. Recorded because a lever that
+        measures zero in isolation is normally one to drop.
+        """
+        n = len(self.trapezoids)
+        parent = list(range(n))
+
+        def find(a):
+            while parent[a] != a:
+                parent[a] = parent[parent[a]]          # path halving
+                a = parent[a]
+            return a
+
+        for i, t in enumerate(self.trapezoids):
+            for j in self.adjacent(t, i):
+                # An out-of-range neighbour index is a broken file, and the A*
+                # would raise on it. Skipping it here only ever splits a
+                # component, which is the direction that costs a search rather
+                # than the one that skips a real route -- and it keeps
+                # from_chunk() over the whole corpus from gaining a new way to
+                # die at load time.
+                if not 0 <= j < n:
+                    continue
+                ri, rj = find(i), find(j)
+                if ri != rj:
+                    parent[rj] = ri
+        return [find(i) for i in range(n)]
+
     def route(self, x0, y0, x1, y1):
         """A walkable path from start to goal, or None if there is not one.
 
@@ -388,6 +590,13 @@ class PathingMap:
         file, so a wrong cross-plane link would route a player through a bridge
         rather than over it -- a silent, plausible-looking error of exactly the
         kind this project refuses to ship.
+
+        THIS RUNS ON THE WORLD THREAD, so its worst case is a budget and not a
+        curiosity: MEASURED on Pre-Searing over 1,500 routes in the chase band,
+        p50 0.163 ms and max 19.8 ms against a 50 ms tick, down from p50 0.395
+        and max 346.6 -- see the module header for the three measurements and
+        test_pathmap.py section 10 for the controls, of which the load-bearing
+        one is that none of it changed a single returned path.
         """
         starts = self.containing(x0, y0)
         goals = self.containing(x1, y1)
@@ -398,6 +607,18 @@ class PathingMap:
         si = self._flat_index(start)
         if si in goal_set:
             return [(x0, y0), (x1, y1)]
+        # A goal in another component is the A*'s WORST case, not a cheap miss:
+        # it pops every trapezoid it can reach before giving up, which on
+        # Pre-Searing is ~5,100 of them and was the entire remaining tail once
+        # the smoother stopped dominating. Answering it here is the same None,
+        # arrived at without the search -- see _build_components for why that is
+        # a theorem rather than a bet.
+        comp = self._component
+        if comp is None:
+            comp = self._component = self._build_components()
+        home = comp[si]
+        if all(comp[g] != home for g in goal_set):
+            return None
         gi = next(iter(goal_set))
         gx, gy = x1, y1
 
@@ -502,18 +723,94 @@ class PathingMap:
             return b.centre
         return ((left + right) * 0.5, y)
 
-    def _string_pull(self, pts):
+    def _sightline(self, x0, y0, x1, y1, step=16.0):
+        """(is every sample walkable, how many samples that took).
+
+        THE SAMPLE SET IS EXACTLY clip()'s -- the same `n`, the same `f = k / n`,
+        the same two multiply-adds -- so this answers exactly
+        `clip(x0, y0, x1, y1) == (x1, y1)` and could be written that way. What
+        differs is the ORDER the samples are asked in, and only for the segments
+        that are going to be refused.
+
+        clip() has to walk front to back because it returns HOW FAR you get. A
+        yes/no question does not, and the smoother above asks nothing else. So
+        this visits the midpoint first, then the quarter points, then the
+        eighths -- every index in 1..n exactly once, coarsest first. A line that
+        is walkable to the end costs exactly what it cost before; a line blocked
+        somewhere in the middle is refuted in a handful of samples instead of
+        after walking the whole way up to the wall. Most of the smoother's line
+        tests are blocked ones -- it starts at the far end of the path and works
+        back -- so this alone took the 1,500-route worst case from 336 ms to
+        64.3.
+
+        The order is a permutation, which is the part worth checking rather than
+        believing: level `s` visits the ODD multiples of `s`, and over
+        s = 2^k, 2^(k-1), ... 1 every index in 1..n is written exactly one way as
+        odd * 2^v. test_pathmap.py asserts that against range(1, n+1) directly,
+        and asserts the verdict against clip() on real segments, because a
+        reordering that quietly DROPPED a sample would be faster and would
+        happily approve a path through a wall.
+        """
+        dx, dy = x1 - x0, y1 - y0
+        dist = (dx * dx + dy * dy) ** 0.5
+        if dist <= 0.0:
+            return True, 0            # clip() returns (x0, y0), which is (x1, y1)
+        n = max(1, int(dist / step))
+        walkable = self.walkable
+        s = 1
+        while s * 2 <= n:
+            s *= 2
+        spent = 0
+        while s >= 1:
+            k = s
+            while k <= n:
+                spent += 1
+                f = k / n
+                if not walkable(x0 + dx * f, y0 + dy * f):
+                    return False, spent
+                k += 2 * s
+            s //= 2
+        return True, spent
+
+    def _visible(self, x0, y0, x1, y1):
+        """`clip(x0, y0, x1, y1) == (x1, y1)`, without building the point."""
+        return self._sightline(x0, y0, x1, y1)[0]
+
+    def _string_pull(self, pts, budget=None):
         """Drop waypoints that the previous kept point can already reach.
 
         Uses the same sampling clip() does, so a segment survives only if every
         sample along it is walkable.
+
+        THIS IS WHERE THE TIME WENT -- 94.2% of route(), against 3.5% for the
+        A*. It is quadratic in waypoints and each of those tests is a line up to
+        the length of the whole path: the worst pair in the chase-band sweep
+        handed it 157 waypoints spanning 56,350 units, for two points 1,200
+        units apart, and it spent 285 ms on them. The module header has the
+        three measurements; `budget` is the only one of them that can change
+        this function's answer, and PULL_SAMPLE_BUDGET says where it sits and
+        why nothing measured reaches it.
+
+        Out of budget, the loop takes pts[i + 1] every time and copies the rest
+        of the A*'s own waypoints through. That is the un-smoothed path, which
+        is longer and no less walkable -- route()'s final gate still has the
+        last word on whether it goes out.
         """
+        if budget is None:
+            budget = PULL_SAMPLE_BUDGET
         out = [pts[0]]
         i = 0
-        while i < len(pts) - 1:
-            j = len(pts) - 1
+        n = len(pts)
+        spent = 0
+        while i < n - 1:
+            j = n - 1
             while j > i + 1:
-                if self.clip(*out[-1], *pts[j]) == pts[j]:
+                if spent >= budget:
+                    j = i + 1               # stop shortening; keep walking
+                    break
+                ok, used = self._sightline(*out[-1], *pts[j])
+                spent += used
+                if ok:
                     break
                 j -= 1
             out.append(pts[j])

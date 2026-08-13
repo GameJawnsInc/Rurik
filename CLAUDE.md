@@ -320,6 +320,45 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   is a result, so an archive too broken to have findings must exit 2 -- it exited
   1 from an uncaught traceback, and a reader of the code would have reported the
   crash as "the row moved"),
+  `toolkit/mapdata/test_atex.py` (the ATEX texture container, and first the write
+  guard `--make` never had: `atex.py` was the only binary writer in
+  `toolkit/mapdata/` reaching `open(path, "wb")` straight off argv with no refusal
+  of any kind, so `--make C:\gw\Gw.dat` would have truncated the owner's 4.2 GB
+  archive. Three refusals -- `C:\gw`, `vault/dat_study`, EVERY checkout of this
+  repo -- each with a POSITIVE CONTROL that an ordinary scratch path is still
+  allowed, because a guard that refuses everything protects nothing and the tool
+  then never runs. **The check that would have caught the original defect is the
+  syntax-tree one, not the refusals**: a guard can exist, be documented and be
+  greppable while never being CALLED, so section 3 asks the AST whether every
+  write-mode `open()` takes a `resolve_out`'d path, and BUILDS two saboteurs out of
+  one-line edits to the live source -- the pre-fix file restored verbatim from git
+  (4 FAILs, naming `open(a.make, "wb")` by line) and the subtler one where the guard
+  IS called and its result discarded (2 FAILs, with section 2's eight refusal checks
+  all still GREEN, which is the whole argument for the section). A third sabotage, a
+  `resolve_out` that refuses everything, reddens exactly the three positive controls
+  -- and it found a real defect here, since `Refused` is a SystemExit and a bare call
+  in a control is NOT caught by `except Exception`; it killed the run and printed no
+  banner, the same trap `vaultpath.require_dir` set for `test_stripbuild.py`.
+  `atex.parse` had no test at all and sections 4-5 are its first. The load-bearing
+  claim is deliberately not "it parsed": `parse` RETURNS a non-closing container
+  rather than refusing one, so the assertion is that the record walk closes to the
+  EXACT final byte, checked by a second walker written here out of `int.from_bytes`,
+  with the same walk started at 11, 13 and 20 as controls -- **400 of 400 close at 12
+  and 0 of 400 at any of the three**, and 20 is the header size `atex.py`'s own
+  docstring records as REFUTED, so it is ArenaNet's bytes killing a rival rather than
+  our decoder agreeing with itself. **The ATTX asymmetry is the finding**: `parse`
+  raises on 106 of 106 ATTX rows and 0 of the 400 ATEX beside them, and the cause is
+  NOT the magic -- a relabelled synthetic ATEX parses and closes. An ATTX row is an
+  ATEX container with a `ffna` type-7 trailer of **exactly 21,923 bytes on 106 of
+  106**, whose CONTENTS are 106 distinct sha256s -- a fixed-size per-texture payload,
+  not one shared blob, asserted both ways because the loose reading would have been
+  filed as a shared constant -- and cutting the trailer off leaves a container that
+  closes exactly, 106 of 106. Nothing here teaches `parse` about ATTX; the day
+  someone does, this file goes red and names what changed. Rows are found by a
+  partial decompression (`gwdat.decompress(head, out_size=16)`, ~0.5 ms a row against
+  ~30 ms), which is what makes the strided sweep affordable. Sections 0-3 need no
+  vault and score 33 against a floor of 50. ~26 s; `--all` peeks all 177,341 rows and
+  is ESTIMATED, not measured, at ~30 minutes),
   `toolkit/mapdata/test_rebloat.py` (rung E3's driver, which is the only tool
   here that deliberately DESTROYS a payload — it zeroes a map's Bloated stream
   so the client is forced down the re-bloat path — so almost every check is a
@@ -470,7 +509,49 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   down the file, which is what the broken code produced, so the ordering check
   passed against the defect),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
-  `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A* and line of sight),
+  `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
+  2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
+  its worst case in the band a hostile chases in was **336 ms, 6.7 tick periods, 11 of
+  1,500 routes over a whole 50 ms tick**, which is an intermittent world freeze and the
+  hardest failure here to attribute. Section 10 re-measures that rather than quoting
+  it: the pre-fix `walkable`, `_string_pull` and component pre-check are reconstructed
+  IN the test, three instance attributes over the SAME route() body, so BEFORE and
+  AFTER are two live answers in one process. p50 0.395 -> 0.163 ms, max 346.6 -> 19.8,
+  **0 of 1,500 over a tick**. The timing table is deliberately the LEAST of it, because
+  a router that quietly returns None or a path through a wall is FASTER: every returned
+  path is re-run through route()'s own consecutive-`clip` gate over the WHOLE set, the
+  None rate is measured before and after on the same pairs and must be EQUAL, and path
+  length is compared mean and worst. The sabotage is built and run -- a route() that
+  skips smoothing entirely is faster than the real one (max 10.5 ms against 19.8) and
+  PASSES the timing check, so the length check is the only thing standing there, and it
+  goes red at mean 2.80 and worst 52.6. Five further sabotages were built against the
+  fix and five redden; the sixth, `CELL_SLACK = 0.0`, SURVIVED, and `pathmap.py` says
+  so at the constant rather than implying a check nobody has. The load-bearing claim is
+  that none of it changed an answer: **0 of 1,500 paths differ from what the old code
+  returned**, on Kamadan too. Two checks earned their own design notes -- the vacuity
+  guard is a TOTAL-time ratio because the `max(before) > 3 ticks` version reddened on
+  SAMPLE SIZE and was the only red in a sabotage that broke nothing, and the latency
+  assertion re-times its candidates best-of-5 because the first version read 17.9 ms
+  green and 52.4 ms red on identical code while four other agents' suites ran in the
+  same worktree. Floor 62 against a green 64; ~105 s, `--routes` shrinks section 10),
+  `toolkit/mapdata/test_deploy.py` (rung G's one command, `deploy.py`, which
+  takes an area row in `content/areas.toml` from geometry to a map the retail
+  client compiles. It is an ORCHESTRATOR -- nearly every line it runs belongs to
+  a module with its own test -- so this file checks only what is true of the
+  COMPOSITION, and each of its three sections is a defect the first runs of the
+  command actually had. **The two kinds of borrowing are different**: structural
+  constants (Header, Zones) must come from a map shaped like ours, the biome
+  (textures, sun, env, sound) from wherever you like, and taking both from
+  Pre-Searing pulled in its 7,208-byte Zones chunk and built an 11,115-byte map
+  for a 4,608-byte reservation. **The client must own the archive you armed** --
+  every run directory has its own `Gw.dat`, and arming the C2 copy while
+  launching the default client compiled nothing. That one is asserted on the
+  SYNTAX TREE, and its NEGATIVE CONTROL is the check that earns the section: the
+  first version asked whether `main()` contained any `join(dirname(dat), ...)`,
+  which it does TWICE because the output path defaults that way, so it returned
+  True against a sabotaged source and could not fail. The test now runs that
+  exact sabotage and requires the answer to flip. Sections 0-1 and 3 need no
+  vault and score 10 against a floor of 14),
   `toolkit/mapdata/test_soundchunk.py` (the Sound chunk `0x10000012`, the map's
   ambient-sound layer -- the second of the two chunks rung E10 could only BORROW,
   now decoded and re-encoded byte-identically, **349 of 349**, 27 checks under
@@ -489,8 +570,8 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/mapdata/test_envchunk.py` (the Environment chunk `0x10000009`, the sky,
   fog, ambient light and horizon water -- the chunk rung (e10i) proved was the
   difference between a black void and a lit world, borrowed whole then and now
-  decoded. Re-encodes **349 of 349** byte-identically, 33 checks under `--all` and
-  25 by default. The codec keeps record interiors opaque (the loader itself stores
+  decoded. Re-encodes **349 of 349** byte-identically, 40 checks under `--all` and
+  28 by default. The codec keeps record interiors opaque (the loader itself stores
   tag0/1/3/5/6/8 records as raw {ptr,count} and decodes no colour and none of
   tag6's ten floats -- there is NO `1/101` constant in the image, so the authored-
   slider reading is authoring-time only), so byte-identity is the weak half and the
@@ -522,7 +603,13 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   control. That second one is quoted as the tolerance figure on purpose: the
   exact-match count is ROUNDING-DEPENDENT (`b=48` lands on exactly 190.5, and two
   maps carry it), so the file states the tie rather than picking 307 or 308 quietly.
-  Sections 0-2 need no vault and score 15 against a floor of 25),
+  Sections 0-2 need no vault and score 17 against a floor of 28. Since
+  2026-08-13 it also pins the NAMED aspects (FINDINGS 55): tag1 is post-process
+  and tag3 the directional light, named from the client's own shader-constant
+  strings rather than by us, and the two checks that carry those names are corpus
+  population facts -- saturation is 1.0 on 648 of 741 records and the tint is off
+  on 571, which is the shape of a DEFAULT and is what a rival reading would not
+  produce),
   `toolkit/mapdata/test_pathchunk.py` (the pathing chunk's WHOLE-CHUNK codec: a
   retail `0x20000008` decoded to typed values and re-encoded byte-identically,
   **349 of 349** under `--all`, 8 by default. Nothing declared is stored --
@@ -777,7 +864,35 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   arm's formatting and went red on a line break. Four negative controls must
   go red, including an `elif` in the else's place and an `else` that calls
   something else, since `else: pass` satisfies "has an else" while restoring
-  the exact silence D9(a) is about. No vault, no socket, no client),
+  the exact silence D9(a) is about. **And since 2026-08-13 it checks the OTHER half
+  of D9(a), which is that making a drop VISIBLE is not the same as not dropping it**:
+  2,858 of 17,770 framed c2s (16.1%) reached that `else` over 425 loopback
+  connections, and FOUR of them were opcodes `overrides.json` had already NAMED --
+  `0x0039` INTERACT (3.2% of ArenaNet's own live c2s and NO arm at all, while
+  `0x0033`, which HAS one, has been sent ZERO times in all 17,770 since 2026-08-06
+  and is kept anyway because nobody knows why it stopped), `0x0092`
+  MISSION_MASK_REPORT (803), `0x00C1` TARGET_SELECT (363) and `0x0040` ROTATE_PLAYER
+  (108). It is 8.9% after the arms. The tripwire that would have caught the class is
+  ASYMMETRIC on purpose: an arm on an opcode the SCHEMA does not know is a hard
+  failure, since the framer refuses the message and the arm is dead code that reads
+  as coverage; while a NAMED opcode with no arm is a REPORT against
+  `DROPPED_ON_PURPOSE`, six rows each carrying its reason -- 194 layouts against
+  sixteen arms means demanding an arm per layout would be a permanently red test that
+  gets deleted, but a name costs somebody a binary read or a narrated live session and
+  losing one silently is the defect. The allowlist is checked in BOTH directions,
+  because a row for an opcode that IS handled is inert today and silently re-permits
+  the drop the day the arm goes. Existence and EFFECT are asked apart:
+  `elif opcode == X: pass` satisfies "0x00C1 has an arm" and drops the message just as
+  completely -- section 5's `else: pass` lesson one level down -- so a separate check
+  requires each new arm's OWN body to assign into `state`. Seven sabotages were BUILT
+  AND RUN and all seven redden, three of them reddening exactly ONE check each. The
+  one behavioural check is on the trap that has now cost this project three times:
+  `0x0040`'s two fields are `dword` and hold float32, so the +inf sentinel reads as
+  2,139,095,040 if you take the number instead of the bits. No vault, no socket, no
+  client -- deliberately, and it constrains what may be asserted: the capture tree is
+  append-only and GROWS WHILE THE TEST RUNS (`0x00C1` went 363 to 429 between two
+  reads minutes apart), so every corpus count above is dated prose and not one of them
+  is an assertion. 45 checks, ~1 s),
   `toolkit/authsrv/test_ping.py` (the `0x000C`→`0x0009`→`0x000D` round trip that
   drives the client's net graph, and the three places a plausible
   implementation quietly LIES: sending a second request while one is
@@ -949,6 +1064,31 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   raw they make the angle check compare garbage to pi AND make the turn-rate check pass
   vacuously — and the third conflated "arrives before its create" with "names an agent
   never created", which are different facts),
+  `toolkit/authsrv/test_msgmix.py` (the tool that ranks what to build next, and the
+  three ways it answered confidently about a corpus it had not read: it took the
+  newest **6 of 439** gamesrv captures, it read the c2s direction off the server's
+  OUTBOUND `sent` log so the whole client-to-server half was **0 of 18,668**
+  messages, and `948` -- a count of `unhandled` LOG RECORDS, one per (session,
+  opcode) FIRST OCCURRENCE -- was in circulation as a message count, two digs having
+  disagreed by exactly it. The population split is the half with teeth: **257 of 439
+  captures are unattended `smsgsweep` runs**, whose server emits **381 distinct s2c
+  opcodes against a played session's 101**, so pooling them makes ours look like it
+  sends 421 of 487 and the NEVER-SENT list -- the reason the tool exists -- collapses.
+  The split is exercised THROUGH `population()` the way `main()` does it, because the
+  first version handed the section two pre-sorted lists and the pooling sabotage broke
+  the classifier with every aggregate check still green. A drop is what the server
+  ITSELF flagged in THAT session, never an opcode imputed from another:
+  `note_unhandled` landed partway through the corpus (2026-08-12T00:19:42Z; 94 older
+  captures, 0 of which carry one of its records), so those messages are unmeasurable
+  rather than zero and get their own bucket -- and `0x000C` is flagged in 2 messages
+  and handled in the other 42, so imputing by opcode over-attributes it 21x. The
+  oracle is the server's own `unhandled_summary.total` against the count rebuilt from
+  the `decoded` stream, 326 of 326 agreeing on the real vault with no shared code
+  between them. Six sabotages BUILT AND RUN as scratch copies through `--module`, all
+  six red (4, 11, 9, 5, 2 and 4 checks) against 56 green -- and the first attempt at
+  them went red on a FileNotFoundError rather than on a check, which is a control that
+  proves nothing while looking like it proved everything. No vault, no socket, no
+  client. ~1 s),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
   `toolkit/clientscan/test_maprows.py` (the footprint join that NAMES archive map
@@ -960,16 +1100,34 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   file's own dims at the known 96.0 pitch, **319 of 319**. The headline is the
   weak half: a two-number key over an 84-value alphabet, and random sizes already
   score ~41%. Which checks are load-bearing was MEASURED by setting the pitch to
-  64.0 -- six go red and **section 4 is not one of them**, because the random null
+  64.0 -- six go red and **section 5 is not one of them**, because the random null
   is a ratio and a wrong pitch moves both terms. What catches it is the one-cell
   control (319/319 -> 0/319) and the two ANCHORS, which go to zero candidates:
   row 7982, whose three names came off ArenaNet's own wire in 9 of 9 live
   connections, and row 22371 from `archive.py`'s measured note. Neither was
-  derived from the join. Section 5 pins the refutation -- no dword column of the
+  derived from the join. **And that sentence held only on a COLD cache, which is
+  what section 2 is for (2026-08-13).** `map_dims` caches 349 decompressions and
+  its stamp named the archive alone, while `CELL_PITCH` is consumed BEFORE the
+  cache is written -- so WARM, the way anyone runs it, the pitch set to 64.0,
+  48.0, 100.0, 112.0, 97.0, 96.5, 96.1, 96.01, 96.001 or 96.0000001 each printed
+  ALL CHECKS PASSED (23 checks) and exited 0 in 9.2 s. Only `--all`, which
+  deletes the cache file, ever saw the six. The fix FOLDS the coding parameters
+  into the stamp rather than adding a hand-bumped version integer beside
+  `mapchunks.archive_stamp`'s -- a number somebody must remember to bump is the
+  same bet that just lost, and a folded value cannot go stale -- and section 2
+  asserts the drop BEHAVIOURALLY, moving each parameter and asking `map_dims`,
+  because a test reading the stamp's field NAMES passes against a stamp that
+  carries them and compares only the old three. Four sabotages, four different
+  red sets; the one that earns the section is a `map_dims` that never loads the
+  cache, where all five refusals go vacuously GREEN and only the positive control
+  reddens. Its wrong values are DERIVED from the live ones, because the literal
+  64.0 stops being a mutation in the very arm that sabotages the pitch to 64.0.
+  Section 6 pins the refutation -- no dword column of the
   table resolves to a map-flagged row in either the raw or the packed reading --
   so a future build that gains a map-id -> file-id table fails here loudly. The
   tool returns a SET per row on purpose: 888 named areas over 349 files means at
-  least 539 must share one. ~7 min on a cold vault cache, ~10 s warm),
+  least 539 must share one. 29 checks; ~9 min on a cold vault cache
+  (MEASURED 558.6 s), ~9 s warm),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first),
@@ -1052,9 +1210,49 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   one field it CANNOT clean — a `plain` frame payload, which carries the account email as
   UTF-16 and is therefore invisible to the ASCII leak check — is reported rather than
   silently passed through, and that its record arithmetic is pinned to a snapshot so a
-  live server appending to `vault/captures/` cannot make it disagree with itself),
+  live server appending to `vault/captures/` cannot make it disagree with itself, and
+  -- since 2026-08-13 -- that `vault/state`, the portal's issued-session store, is
+  EXCLUDED BY CONSTRUCTION rather than merely unwalked. Five cleartext records sat
+  outside the scrub root, each with an `email`, a 36-character `user_id` and a
+  36-character `token`, and the trap the shape carries is that `sessionstore.issue()`
+  keys the map BY THE TOKEN, so the credential is present twice and only one of the
+  two is a value -- a scrubber that reused `scrub_record` alone emits a record whose
+  `token` field reads `tokn1xxx...` under a key that is still the real token, with
+  every record-level check green. That sabotage is built and run and reddens three
+  checks including the leak check. Nine sabotages in total, all nine red against a
+  green baseline, and the two that earn the sections are the paired ones: a scrub that
+  BLANKS every field passes the leak check perfectly and is caught only by the positive
+  control that `issued_utc` survives byte-identical, and section 10's positive control
+  is GREEN under a deleted `state/` refusal and RED under a refusal that matches
+  everything -- either alone would be satisfied by the wrong tool. The race answer is
+  deliberately NOT a `Snapshot`: `sessionstore._write` replaces the whole file via
+  `os.replace` and prunes 200 records to 100, so a legitimate rewrite SHRINKS it and a
+  size pin would report the server doing its job as corruption; `audit_state_text` is
+  pure over a string, the file is read once, and the harvest and the census both come
+  from that one read. Sections 9-11 are synthetic throughout and need no vault; the
+  only claim about the real store is that its census carries no value out of it. 47
+  checks against a floor of 45, the two vault-dependent ones declaring a skip. ~3m25s),
   `toolkit/test_content.py` (the content store, and that its provenance and licence
   refusals actually refuse),
+  `toolkit/test_contentids.py` (the pre-flight that a run's TWO archives agree
+  about what `content/maps.toml`'s file ids NAME. **A file id is archive STATE,
+  not a property of the map** -- bit 31 means `FcArchive` renamed that row away
+  pending a replacement, so the same map is `0x8001B97D` in one copy and
+  `0x1B97D` on a different row in another, and both are right for their own copy
+  (`studies/maprows/FINDINGS.md` §8). The server reads one archive for the
+  navmesh and the client opens its own for the geometry, and nothing checked they
+  matched. The POSITIVE CONTROL is what earns the file and it is not synthetic:
+  `vault/run-live/`, a copy a client really played live from, genuinely does not
+  bind `0x8001B97D`, and the check must go FATAL on EXACTLY the two Pre-Searing
+  rows while the other eight stay green -- a guard that reddens on all ten says
+  nothing. Identity is the MFT entry's size and crc, never the row, because row
+  indices do not survive a patch; a one-bit crc mutation must be caught, since
+  two archives resolving one id to different FILES is worse than a failed launch
+  (the run produces data and looks like it worked). Section 4 asserts the
+  LOOPBACK GATE on the syntax tree -- a live run answers to ArenaNet's own ids
+  and must never be refused on our rows, and "the call is inside the RUN_ROOT
+  branch" is invisible to a grep; the sabotage that removes the gate reddens it
+  alone. ~3 s),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same
@@ -1093,6 +1291,32 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   `toolkit/clientpatch/test_keytap_patch.py` (the R0b key-tap code cave: build_cave's
   edges resolve, the planted client changes only the tap and the cave, and the patcher
   refuses a changed or already-tapped binary),
+  `toolkit/clientpatch/test_reskin.py` (the profession reskin -- repointing a SHIPPED
+  profession's name string ids, which `studies/profession/RESKIN.md` chose over adding a
+  twelfth id because `.rdata` has zero slack and seven of the profession tables are
+  `mov imm32` ladders rather than data. Four tables are located STRUCTURALLY, never by
+  address: each `.rdata` one by the assert expression the compiler emitted immediately
+  after it (each occurring exactly once) and then corroborated by shape, with the
+  ANCHOR AND THE SHAPE REQUIRED TO AGREE -- five negative controls break one assumption
+  each and must be refused alone, including a duplicated anchor, a missing one, and an
+  ambiguous match on the fourth table, which is the `.data` one read at `0x004D128E`
+  with NO bound check at all and therefore the most dangerous edit here. The headline
+  is deliberately NOT "4 bytes changed": that was this file's first version and it went
+  red for the right reason -- 2048 to 2041 is `00 08` to `F9 07`, so the high bytes are
+  zero in both and only TWO bytes move. How many bytes a dword write disturbs depends
+  on the values, so the invariant is CONTAINMENT (every changed byte inside the intended
+  dword) plus a read-back, since containment alone also passes a write that changed
+  nothing. The output guards refuse in-place, `C:\gw`, and EVERY checkout of this repo
+  (a worktree root is not the main checkout's -- it reports 2), each with a positive
+  control that an ordinary path is allowed. Sections 0-2 build their own buffers and
+  need no vault; section 3 skips without one. Since 2026-08-13 it also covers the
+  ATTRIBUTE table (`s_attrib`, located by the source path that follows it; the
+  primary-marker verb is SYMMETRIC because a set-only one would leave two primaries
+  on a profession, a state the client never ships), the SKILL roster (two
+  single-byte fields, with a check that NOTHING outside the targeted bytes moves --
+  a stride error would smear edits across neighbouring rows and still pass a spot
+  check), and the RECIPE file, where a profession design is versioned as numbers
+  only so no ArenaNet text enters the tree. ~2 s),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
   refused),
   `toolkit/harness/test_keytap.py` (the ReadProcessMemory key reader — RPM round-trip,

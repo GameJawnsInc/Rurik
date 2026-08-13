@@ -43,10 +43,29 @@ count, and count * 24 == size only if the 24-byte entry stride is right.
 TWO ARCHIVES ARE NOT THE SAME ARCHIVE. A running client writes to the Gw.dat it
 was launched from. Our install copy holds 177,335 entries and the copy our
 patched client has actually run holds 177,342 -- same allocated size, same MFT
-offset, seven more files. File ids are content keys and should survive that; raw
-MFT row indices do not. Any row index recorded in a study is only meaningful
-against the copy it was measured on, which is why open() below wants an explicit
-path rather than guessing one.
+offset, seven more files. Raw MFT row indices do not survive that. Any row index
+recorded in a study is only meaningful against the copy it was measured on,
+which is why open() below wants an explicit path rather than guessing one.
+
+**AND NEITHER DO FILE IDS, WHICH THIS USED TO SAY THEY DID.** The sentence above
+read "File ids are content keys and should survive that" until 2026-08-13. It is
+false, and the correction is the whole of `contentids.py`: bit 31 on a stored id
+means `FcArchive` has renamed that row away because it requested a replacement,
+and the plain id binds only after `DnArchive` installs it and re-links. So the
+same map is `0x8001B97D` in one copy and `0x1B97D` on a different row in another,
+and both are right for their own copy. **A file id is archive STATE.**
+
+MEASURED, and it is why `dat_study` is no longer the copy this file once claimed:
+`vault/dat_study/Gw.dat` carries 25 bit-31 ids, `vault/run/` carries 29, and
+`vault/run-live/` -- a copy a client actually played live from -- carries 9 and
+does not bind `0x8001B97D` at all, holding that map on row 177262 under the plain
+id instead. A comment here previously described `dat_study` as "a copy of the
+run-dir archive"; the two have drifted and it is not.
+
+Because a run uses TWO copies -- the server reads one for the navmesh, the client
+opens its own for the geometry -- `toolkit/contentids.py` checks that every id in
+`content/maps.toml` names the SAME FILE in both, by size and crc rather than by
+row, and `drive_client.assert_safe` refuses a loopback launch when it does not.
 """
 
 import os
@@ -142,9 +161,46 @@ class Archive:
     def __exit__(self, *exc):
         self.close()
 
+    def row(self, n):
+        """The entry for MFT ROW n, one-based -- the id studies quote.
+
+        USE THIS WHENEVER YOU HAVE A ROW NUMBER. `entries` is a POSITIONAL
+        list: `entries[k].index == k + 1`, so `entries[row]` is off by one and
+        silently returns a DIFFERENT FILE. That is not hypothetical -- on
+        2026-08-13 an archive census mixed `archive.entries[row]` with
+        `textrec.TextIndex._rows[row]` (which is keyed by row number, not
+        position), silently resolved a text row to a TEXTURE, and nearly filed
+        a false refutation of the text-authoring plan off the back of it.
+
+        Most callers in this tree already write `entries[row - 1]` and are
+        correct; this exists so the correct thing is also the obvious thing.
+        """
+        # NOTE THE BOUND, which is its own instance of the confusion above:
+        # `entry_count` is mft_size/24 and COUNTS THE HEADER SLOT, while
+        # `entries` excludes it. So the last addressable row is
+        # entry_count - 1, and bounding on entry_count walks off the end --
+        # which is exactly how this was found, by the test written with it.
+        last = len(self.entries)
+        if not 1 <= n <= last:
+            raise IndexError(
+                f"MFT row {n} outside 1..{last}. Rows are ONE-based -- row 0 "
+                f"does not exist, because the MFT's slot 0 is the header "
+                f"rather than a file. (entry_count is {self.entry_count}, "
+                f"which COUNTS that header slot and is therefore one more "
+                f"than the highest row.)")
+        e = self.entries[n - 1]
+        # Cheap, and it is the whole point of the method: if the positional
+        # convention ever changes, this fires here instead of returning a
+        # plausible wrong file to a caller that cannot tell.
+        assert e.index == n, f"row {n} resolved to entry {e.index}"
+        return e
+
     @property
     def entries(self):
-        """Every MFT row. About 4 MB in memory; read once, kept."""
+        """Every MFT row, POSITIONALLY. `entries[k].index == k + 1`.
+
+        NOT keyed by row number -- see `row()`, and use it if you have one.
+        """
         if self._entries is None:
             self.fh.seek(self.mft_offset + ENTRY_SIZE)
             blob = self.fh.read(self.mft_size - ENTRY_SIZE)

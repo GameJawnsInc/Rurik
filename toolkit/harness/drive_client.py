@@ -224,6 +224,21 @@ def assert_safe(exe, args):
             f"{' --live' if real.startswith(LIVE_ROOT + os.sep) else ''}\n"
             f"  (with every Guild Wars client closed -- a running one holds the\n"
             f"  source file open exclusively).")
+
+    # Do the two archives this run uses agree about what our content ids NAME?
+    # A file id is archive STATE, not a property of the map (studies/maprows/
+    # FINDINGS.md 8): the server reads its own copy for the navmesh and the
+    # client opens THIS one for the geometry, and nothing checked they match.
+    # They do today, and the two copies have already drifted in the very field
+    # that decides it (25 bit-31 ids against 29), so it is measured rather than
+    # assumed. The failure it refuses is loud on the client and silent here.
+    #
+    # LOOPBACK ONLY, and that gate is the point: a live run answers to
+    # ArenaNet's server, which sends its own ids, so `content/maps.toml` says
+    # nothing about it and refusing on our rows would be wrong.
+    if real.startswith(RUN_ROOT + os.sep) and os.path.isfile(dat):
+        import contentids
+        contentids.preflight(dat)
     return intended_target(args)
 
 

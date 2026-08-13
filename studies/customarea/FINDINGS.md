@@ -6369,6 +6369,69 @@ FILES themselves (an `ffna8` sound descriptor, a sky texture) are ArenaNet
 assets referenced by run-time id, which is the `borrowed_constants` pattern and
 not a gap. Run record: `vault/research/e10l-authored-2026-08-13/`.
 
+## 55. OBSERVED: ArenaNet names three of the fields itself (2026-08-13)
+
+§53 left two threads: tag6's two unnamed floats, and what tag0/tag1/tag3 ARE as
+aspects. A consumer-side pass closed most of it — offline, no client — and the
+best evidence in the whole arc turned up here, because **the client looks its
+shader constants up BY NAME and the name strings are in the image**. These are
+not our labels.
+
+| field | name | how we know |
+|---|---|---|
+| tag6 `+0x21` | **`waterFresnel`** | string `0x00A6C430`, bound to the handle uploaded at `0x0070B0F2` |
+| tag6 `+0x25` | **`waterSpecularColor`** (scales an RGB triple) | string `0x00A6C474`, upload at `0x0070B134` |
+| tag6 `+0x29` | projective texture-matrix scale, used as `0.5 / value` | `0x0070AD21`, installed on `GrTrans` slot 3 |
+
+Both water coefficients are 0..1 in 865/865 and both are also **gates**:
+`+0x21 > 0` and `+0x25 != 0` each promote the water technique, so the only path
+that reads a field is unlocked by that same field. A pleasing consequence: 128
+records set the specular strength but only 72 also set fresnel, so **56 records
+carry a value the technique gate can never reach** — a fact about ArenaNet's
+authoring tool, not about the format.
+
+**tag1 is the POST-PROCESS aspect**, named the same way, from the client's own
+19-entry constant table at `0xBF7DA8`: `{u8 BloomAmount, u8 PostProcSaturation,
+u8 PostProcTintColor.w, u8 B, u8 G, u8 R}`. The corpus is what makes those the
+*right* names rather than plausible ones — saturation is 255 (i.e. 1.0) on **648
+of 741** records, which is what a defaulted parameter looks like and what a
+second bloom scalar would not, and the tint strength is 0 on **571 of 741**.
+It also corrects this repo: the earlier reading called bytes 3–4 "a raw u16",
+and it is not an index at all, it is two thirds of a packed colour stored B,G,R.
+
+**tag3 is the DIRECTIONAL LIGHT**: two `{u8 r, u8 g, u8 b, u8 intensity}` pairs
+fed to `GrLight` setters (`0x0067B560`, `0x0067B6A0`), with the direction set
+beside them asserting `GrLight:400 m_type == GR_LIGHT_DIRECTIONAL`. Colour-ness
+is forced independently of the call: the zone blender reads `+0x50/+0x51/+0x52`
+as **three separate bytes**, which a u16 id could not survive. That also
+**REFUTES** a standing suspicion — tag3's u16s are not dep-list indices, they are
+the low bytes of a colour.
+
+### What stayed NOT FOUND, and why that is the right answer
+
+**tag0** (ten bytes, fully read out), **tag4** (a bare dep reference) and
+**tag7** (two angles, a weight and a magnitude — a direction and a distance in
+shape) have no name here. For tag0 the consumer was never reached: the
+dispatcher hands its zone index to `0x0071A4C0`, which nobody disassembled. That
+is recorded as *unattempted*, not as absence — the ranges actually searched are
+in the run record. Naming tag7 "wind" would have been easy and is exactly the
+move that made tag6 "the main environment record" in the first place.
+
+### The audit earned its keep again
+
+Ten positive namings went to skeptics; **two came back REFUTED**. One is a
+lesson about statistics rather than disassembly: an agent reported "no
+correlation between the water coefficients and the mode enum" as MEASURED, and
+its own numbers refute it — the fresnel rate by mode is 6.2% / 60.4% / 20.4% /
+20.3%, χ² = 92.4, and 0 of 2000 cluster-preserving permutations reach it. The
+other trimmed tag1's umbrella name from "bloom" to post-process and replaced one
+inferred sub-name with the constant table above. A third verdict corrected *my
+own* handoff: the `EnvApi:165` sites I flagged as a getter family are not
+getters.
+
+`envchunk.py` gains `postproc()` and `lights()`; `test_envchunk` pins the two
+population facts that carry the names (floor 25 → 28, 40 checks under `--all`).
+
 ### What this buys, and what it does not
 
 Sound is understood end to end at the map-chunk level — an emitter can be
@@ -6386,3 +6449,155 @@ bounds of `0x11000009`, 0 of 5,897, versus 5,087 violations one byte off) and
 the emitter-in-rect oracle (sound, 318/318) are each a chunk the codec never
 reads refuting a wrong framing. Full record and probes:
 `vault/research/envsound-2026-08-13/`.
+
+
+## 56. OBSERVED: RUNG G — one command, from `content/` to a map you walk (2026-08-13)
+
+Rung G is the top of the ladder in §"the rungs": *"someone models a shape in
+Blender, runs one command, and walks around it in the retail client."* Its
+dependency column reads **all of the above**, and as of today all of the above
+is done. This is the integration, and it is one command:
+
+    python toolkit/mapdata/deploy.py --area plaza --install --launch --dat <copy>
+
+`content/areas.toml` holds the recipe — geometry, seed, donors, what to borrow,
+how many trees — with `source = "invented"`, which is the honest label: the
+geometry is ours, chosen rather than observed. `deploy.py` does geometry →
+borrow → assemble → verify → install → launch → **read back**, refusing at each
+step rather than continuing.
+
+**The run.** The client compiled it: `Perf: Map file '0x0287d3' failed to load.
+Attempting to re-bloat.` Compiled head 17,731 B, and every readback check green:
+
+| check | result |
+|---|---|
+| the client re-compiled | 6,627 B path chunk, **55 trapezoids built from our terrain** |
+| compiled height field == authored | **1024/1024** samples |
+| our environment carried VERBATIM | 639 B |
+| our sound carried VERBATIM | 89 B |
+| our props are in the compiled map | 5 of 5 |
+| the spawn lands in exactly ONE trapezoid | 1, with Kamadan's and Ascalon's spawns scoring **0** as controls |
+
+The map is **3,941 B, 77.90% generated by us** — 770 borrowed bytes, every one
+named: Header 8, Zones 34, environment 639, sound 89. The 55 trapezoids are
+worth a second look: (e10l)'s flat map compiled to 22, and this one has a
+plaza, a rise and a dip. The client's own compiler is reading a shape we
+designed.
+
+### Three defects the composition had, and none of them was in a component
+
+Every module this command drives has its own test and all of them were green.
+The bugs were in the JOINS, which is what an integration rung is for:
+
+1. **The two kinds of borrowing are not the same kind.** The first run took the
+   structural constants (Header, Zones) from the biome donor, and Pre-Searing's
+   Zones chunk is **7,208 bytes** against the 32×32 reference map's 34 — an
+   11,115-byte map for a 4,608-byte reservation. Zones is per-map; structure
+   must come from a map shaped like ours and only the biome should come from
+   somewhere pretty. The schema now has two fields, because one field invited
+   the mistake.
+2. **The client you launch must own the archive you armed.** Every run
+   directory has its own `Gw.dat`. The first launch armed the C2 copy and ran
+   the DEFAULT client — FINDINGS 54's defect from the other side, and it failed
+   loudly only by luck (a file lock). `deploy.py` now derives the exe from
+   `--dat` and refuses if no client sits beside it.
+3. **A documented stage that no line runs is a docstring.** The command's own
+   docstring promised a readback stage that did not exist; it exists now, and
+   the test asserts `main()` actually calls it.
+
+### The check that could not fail
+
+Worth recording on its own. Section 3 of `test_deploy` asserts on the syntax
+tree that the exe is derived from the archive path — and its first version
+asked whether `main()` contained any `join(dirname(dat), …)`. It does, **twice**,
+because the output path defaults the same way. Sabotaging the exe to a constant
+left the check answering True: a check that could not fail, sitting in a file
+whose whole job is catching this. It now targets the assignment to `exe`
+specifically, and **runs the sabotage as a negative control** so it can never go
+vacuous again. The lesson is the repo's own and it keeps needing relearning —
+a symbol appearing in a test is not a check.
+
+### What rung G does not do
+
+It is **not a hot reload**. The client compiles a map when it loads one, so
+iterating means running the command again. And the dependency FILES stay
+ArenaNet's: an `ffna8` sound descriptor, a sky texture, a tree model are
+referenced by run-time id out of the owner's own archive, which is the
+`borrowed_constants` pattern rather than a gap. What is ours is the terrain,
+the navmesh seed, the prop placement, the surface, and now the recipe.
+
+Run record: `vault/research/rungG-2026-08-13/`.
+
+
+## 57. OBSERVED: the size ceiling was the ROW, not the format (2026-08-13, offline)
+
+Every map this toolkit ever built was 32x32, and it was easy to assume the
+codec imposed that. It does not: `terrain._gate_dims` caps at **16,777,216
+cells**, so 96x96's 9,216 is not close to a limit. The cap was the ROW.
+`datwrite` writes UNCOMPRESSED and refuses to grow a reservation — correctly,
+since its invariant is same row, same offset, same length — so an authored map
+only fit where it was SMALLER than what ArenaNet had compressed into that row.
+`datmove` was built for this in FINDINGS 38 and had never been used from the
+authoring path.
+
+| dims | payload | map 143's row |
+|---|---|---|
+| 32x32 | 3,941 B | fits |
+| 64x64 | 10,654 B | **no** |
+| 96x96 | 21,926 B | **no** |
+
+`deploy.py --area vale --install` now picks the VERB from the size — replace in
+place when it fits, relocate when it does not — and a **96x96 map, 21,926 B,
+went into a row reserving 4,608**. Offline verification, all green: terrain
+round trip **9,216/9,216** exact, **96.03% ours** (770 borrowed bytes, every one
+named), row 71497 relocated `0x63C66800 → 0x6FF0A00`, `datcheck --preflight`
+**10 of 10** open-time rules clear, **0 overlapping row pairs**, and the
+`--diff` showing exactly the two rows we touched. **No client run** — the
+harness was in use by another session — so this is staged, not walked.
+
+### `snap_block` is a one-tile function, and that is the finding
+
+The verifier refused the first 96x96 build: **134 of 9,216 samples lost** after
+snapping. `snap_block` takes exactly one 32x32 tile — its docstring says "1024
+integer samples" and it strides by `CHUNK_SIZE` — and I handed it a whole map,
+so tile 0 was projected and the other eight were not.
+
+**It fails in the worst possible direction.** A linear field is exactly
+representable *without* snapping, so the failure is invisible to every obvious
+test: a gentle ramp lost 0, a steep ramp lost 0, a **400-unit cliff** lost 0,
+and a smooth curve lost 2,752. Only CURVATURE goes missing — which is precisely
+what an authored landscape is made of, and precisely what a Blender sculpt
+produces. The reported worst error stayed at 2 units while a sixth of the map
+was wrong, and every lost slot sat past index 1024.
+
+`strippedterrain.snap_field(samples, dim_x, dim_y)` now walks tile by tile.
+`test_deploy` §4 pins 32/64/96 at exact round trips and runs `snap_block` alone
+as the NEGATIVE CONTROL, asserting both that it still loses samples and that the
+losses start past the first tile — the fingerprint rather than a coincidence.
+
+### An exit code is not evidence
+
+`deploy` passed `--check-overlaps` to `datmove`. That is a READ-ONLY verb which
+returns before any move: it exited **0** having written nothing, `deploy`
+reported *"installed and armed"*, and the archive still held ArenaNet's own
+64x64 map — while the head had been armed, so the next client run would have
+recompiled **retail's map** and every readback check would have described it.
+The install path now READS THE ROW BACK and compares it against what it wrote,
+because a writer returning success and an archive disagreeing is a case where
+the archive wins.
+
+A third defect rode along and is worth one line: the test written to pin the
+second one first GREPPED THE SOURCE TEXT for `--check-overlaps` and went red on
+its own explanatory comment about the flag. It reads the argument list off the
+syntax tree now. A grep cannot tell an argument from prose — the same lesson
+`test_cmsgnames.py` recorded, relearned.
+
+### What is left
+
+One client run, prediction stated: the client re-bloats, builds a navmesh over
+9,216 cells (the 32x32 plaza compiled to 55 trapezoids over 1,024), carries env
+and sound verbatim, and the spawn at (4608, 4608) lands in exactly one
+trapezoid. It would also be a second data point on the standing unmeasured
+question from FINDINGS 39 — whether a relocated row SURVIVES a play session.
+
+Run record: `vault/research/size-2026-08-13/`.

@@ -1,0 +1,98 @@
+# AUTHORED AREAS -- rung G.
+#
+# A `map` row in maps.toml says where a RETAIL map is and where you arrive in it.
+# An `area` row says how to BUILD one of ours: the geometry, the surface, the
+# weather, the ambience. `toolkit/mapdata/deploy.py` reads one of these rows and
+# does the whole ladder in one command -- assemble, verify, install, launch.
+#
+# Every row here is `source = "invented"`, and that is the honest label rather
+# than a formality: the geometry is ours, chosen rather than observed. What the
+# row BORROWS is named per field (`donor_row`), and the borrowed bytes are read
+# from the owner's own archive at run time and never stored here -- the same
+# `borrowed_constants` pattern `mapbuild.py` has used since FINDINGS 14.
+#
+# `map_id` points at a maps.toml row, which is what the SERVER serves. The two
+# tables are deliberately separate: a map row is a fact about where something
+# is, an area row is a recipe for making one.
+
+[area.plaza]
+name = "Plaza"
+map_id = 143
+dims = 32
+
+# The geometry. `heights` selects a generator by name; `deploy.py --blend PATH`
+# overrides it with a real Blender scene, which is rung G's headline path and
+# needs no row change to use.
+heights = "plaza"
+
+# Where the flood seed goes, and where the player arrives. Both must stand on
+# walkable ground -- deploy verifies the seed against the slope classifier and
+# the spawn against the compiled mesh, because a seed on a steep cell makes the
+# client build NO navmesh at all (FINDINGS 43, PathData:365).
+seed_x = 1536.0
+seed_y = 1536.0
+
+# Everything below is BORROWED from one donor map, read at run time. 7982 is
+# Pre-Searing Ascalon: sunny morning grassland, birds and wind. Naming one donor
+# rather than four keeps the map coherent -- its textures, its sun, its sky and
+# its ambience agree with each other because they came from one place.
+donor_row = 7982
+# The STRUCTURAL constants -- Header and Zones -- come from a map shaped like
+# ours, NOT from the biome donor. Zones is per-map: Pre-Searing's is 7,208 bytes
+# against this reference map's 34, and borrowing it built an 11,115-byte map for
+# a 4,608-byte reservation the first time this ran. Two fields, because one
+# field invited the mistake.
+constants_row = 46196
+textures = true      # terrain dependency ids + table_a/table_b from the donor
+sun = true           # angle_index from the donor's terrain, env sun byte to match
+environment = true   # 0x10000009 + deps: sky, fog, ambient light, water
+sound = true         # 0x10000012 + deps: ambient audio
+
+# Props: how many trees to scatter, and the donor model to use. 0 disables.
+trees = 5
+
+[area.plaza.provenance]
+source = "invented"
+verified = """The geometry, the seed and the tree placement are OURS -- chosen, \
+not observed -- which is what `invented` means and why this row carries it. \
+Everything the row borrows is named in a field beside it (`donor_row = 7982`, \
+Pre-Searing) and is read from the owner's own archive at run time, never stored \
+in this repo. The row was checked end to end by `deploy.py --area plaza`, which \
+assembles the map, verifies the seed stands on walkable ground under the \
+15/35/30 slope classifier measured in FINDINGS 48, verifies the spawn lands in \
+exactly one trapezoid of the compiled mesh -- the same test every maps.toml row \
+carries -- and then delivers it to an archive COPY and reads back what the \
+client's own compiler produced."""
+
+# The area that broke the size ceiling. Every map this toolkit authored before
+# it was 32x32 for ONE reason, and the reason was never the format: the terrain
+# codec caps at 16,777,216 cells, so 9,216 is not close to a limit. The cap was
+# the ROW -- `datwrite` writes uncompressed and refuses to grow a reservation,
+# so an authored map only fit where it was SMALLER than what ArenaNet had
+# compressed into that row. 96x96 needs 22,016 B against map 143's 4,096, so
+# installing this one RELOCATES the row (`datmove`) instead of replacing it.
+[area.vale]
+name = "The Vale"
+map_id = 143
+dims = 96
+heights = "plaza"
+seed_x = 4608.0
+seed_y = 4608.0
+donor_row = 7982
+constants_row = 46196
+textures = true
+sun = true
+environment = true
+sound = true
+trees = 12
+
+[area.vale.provenance]
+source = "invented"
+verified = """Ours, chosen rather than observed, like every area row. What this \
+one adds over `plaza` is SIZE: at 96x96 the assembled map is 21,786 B against \
+the 4,096 B its target row reserves, so it cannot be written in place and the \
+install path must relocate the row. That is the whole point of the row -- it \
+exercises the branch a 32x32 map never reaches. Verified offline: the terrain \
+round-trips 9,216/9,216 samples exact, the seed stands on walkable ground, and \
+the relocation was planned and executed against a throwaway archive copy with \
+every open-time rule re-checked and no overlapping reservations afterwards."""

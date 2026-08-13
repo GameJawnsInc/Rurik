@@ -22,17 +22,20 @@ two `EnvDataImport` asserts name the pieces. Both are cited per claim.
     each handler's stride, VAs in _SECTIONS):
 
       tag  size  what it is
-       0   10    an aspect array: {u8 a/256, u8 b/256, u32 raw f32, u8 gain
-                 1+d*15/256, u8 e/256, u16 dep ref} -- purpose NOT FOUND
-       1    6    an aspect array: three /256 scalars + a u16 + a byte
+       0   10    {u8 a/256, u8 b/256, u32 raw f32, u8 gain 1+d*15/256, u8 e/256,
+                 u16 dep ref} -- layout MEASURED, PURPOSE NOT FOUND
+       1    6    POST-PROCESS: {u8 BloomAmount, u8 PostProcSaturation,
+                 u8 tint strength, u8 B, u8 G, u8 R} -- see below
        2   19    FOG: {u8 r, g, b, u32 near, u32 far, i32, i32}, near<far 349/349
-       3    8    an aspect array: two {u16 raw, u8 raw, u8 /256} groups
-       4    2    a u16 dep-list index -- an indirection table
+       3    8    DIRECTIONAL LIGHT: two {u8 r, u8 g, u8 b, u8 intensity} pairs,
+                 fed to GrLight setters -- see below
+       4    2    a bare u16 dep-list index (0xFFFF NULL); PURPOSE NOT FOUND
        5   15 or 16   ONE SKY-LAYER configuration; the WIDTH is chosen by `flag`,
                  and the 16th byte is one more /256 scalar
        6   57    the WATER record -- see below
-       7    4    {u8 azimuth byte-turn, ...} -- not the opaque u32 array a first
-                 pass took it for
+       7    4    {u8 angle, u8 wrapped angle, u8 /256, u8 x1000/256} -- two angles
+                 plus a weight and a magnitude, all weight-blended so none is an
+                 id. PURPOSE NOT FOUND (no read site reached)
        8   17    FIXED, no count: the map-GLOBAL default environment --
                  EIGHT u16 selectors (one per aspect array, tag order) plus
                  the SUN ELEVATION byte at +0x10
@@ -71,9 +74,44 @@ VALIDATES -- `cmp eax, 3; ja <abort>` at `0x0071F6F3` then a four-arm jump table
 so a value above 3 aborts the whole import. `+0x02..+0x04` are padding (zero in
 865 of 865 records). The two u32s at `+0x2D`/`+0x31` are D3DCOLOR `0xAARRGGBB`.
 
-WHAT IS STILL NOT NAMED: the purpose of tag0/tag1/tag3 as aspects (their record
-FIELDS are read out above, but what the aspect IS is NOT FOUND), tag6's floats at
-`+0x21`/`+0x25` (normalised 0..1 coefficients), and tag7 beyond its azimuth byte.
+**THREE OF ITS FLOATS ARE NAMED BY ARENANET, NOT BY US**, which is the strongest
+form the evidence takes anywhere in this chunk: the client uploads them to shader
+constants it looks up BY NAME, and the name strings are in the image.
+`+0x21` is **`waterFresnel`** (string at `0x00A6C430`, bound to the handle the
+upload at `0x0070B0F2` uses) and `+0x25` scales an RGB triple into
+**`waterSpecularColor`** (string at `0x00A6C474`, upload at `0x0070B134`). Both
+are 0..1 in 865/865, and both also act as GATES -- `+0x21 > 0` and `+0x25 != 0`
+each promote the water technique, so the only path that reads a field is unlocked
+by that same field. `+0x29` is read as `0.5 / value` and installed as the x and y
+scale of a projective texture matrix on `GrTrans` slot 3 (`0x0070AD21`).
+
+TAG1 IS THE POST-PROCESS ASPECT, and its six bytes are likewise named by the
+client's own 19-entry shader-constant name table at `0xBF7DA8`:
+`{u8 BloomAmount, u8 PostProcSaturation, u8 PostProcTintColor.w, u8 B, u8 G,
+u8 R}` -- the last three a packed tint colour stored **B, G, R**. Corpus
+corroboration that these are the right names rather than plausible ones: byte 1
+is 255 (saturation 1.0) in **648 of 741** records, which is what a defaulted
+saturation looks like and what a second bloom scalar would not; and byte 2, the
+tint strength, is 0 in 571 of 741 -- tint off by default. NOTE the correction:
+this module's earlier docstring called bytes 3-4 "a raw u16", and it is not an
+index at all, it is two thirds of a packed colour.
+
+TAG3 IS THE DIRECTIONAL LIGHT: two `{u8 r, u8 g, u8 b, u8 intensity}` pairs fed
+straight to `GrLight` setters (`0x0067B560`, `0x0067B6A0`), with the direction
+set alongside them asserting `GrLight:400 m_type == GR_LIGHT_DIRECTIONAL`.
+Colour-ness is forced independently of that: the zone blender reads `+0x50/+0x51/
++0x52` as THREE SEPARATE BYTES, which a u16 id could not survive. This also
+REFUTES a standing suspicion -- tag3's u16s are NOT dep-list indices; they are
+the low two bytes of a colour.
+
+WHAT IS STILL NOT NAMED, stated so nobody quotes this module for more than it
+did: **tag0**, whose ten bytes are fully read out but whose consumer was never
+reached (the dispatcher hands its zone index to `0x0071A4C0`, undisassembled);
+**tag4**, a bare dep reference with no scalar beside it; and **tag7**, whose four
+bytes decode to two angles plus a weight and a magnitude -- a direction and a
+distance in shape -- with no read site found. Absence here is a statement about
+the ranges searched, which are recorded in
+`vault/research/envsound-2026-08-13/`, not a claim that no consumer exists.
 
 WHAT `flag` IS, and the correction it cost. `flag` is the header u16 at offset 6,
 and it selects `tag5`'s record width: 15 bytes when 0, 16 when >=1 (the loader
@@ -107,7 +145,9 @@ TERMINATOR = 0xFF
 NONE = 0xFFFF
 
 TAG_GLOBAL = 8                  # the one section with no count field (17 bytes)
+TAG_POSTPROC = 1                # bloom / saturation / tint -- ArenaNet's names
 TAG_FOG = 2
+TAG_LIGHT = 3                   # two {rgb, intensity} directional-light pairs
 TAG_ZONES = 9
 TAG_POLYGONS = 12
 TAG_WATER = 6                   # named for what MapWater does with it, not size
@@ -201,6 +241,33 @@ class EnvChunk:
         for r in (s.records if s else []):
             v = _ZONE.unpack(r)
             out.append((v[:8], v[8], v[9], v[10], v[11]))
+        return out
+
+    def postproc(self):
+        """The post-process array as
+        `(bloom, saturation, tint_strength, (r, g, b))` tuples.
+
+        The record stores the tint as B, G, R; this returns it in the r, g, b
+        order every other colour accessor here uses, so a caller never has to
+        remember the storage order. Values are raw bytes -- the client's own
+        remap for bloom and saturation is `b/256 * 0.98 + 0.008`, which is an
+        authoring detail rather than something to bake in here.
+        """
+        s = self.section(TAG_POSTPROC)
+        out = []
+        for r in (s.records if s else []):
+            out.append((r[0], r[1], r[2], (r[5], r[4], r[3])))
+        return out
+
+    def lights(self):
+        """The directional-light array as two `((r, g, b), intensity)` pairs
+        per record. Which pair is diffuse and which is ambient is NOT FOUND --
+        both reach GrLight setters, and the corpus cannot separate them."""
+        s = self.section(TAG_LIGHT)
+        out = []
+        for r in (s.records if s else []):
+            out.append((((r[0], r[1], r[2]), r[3]),
+                        ((r[4], r[5], r[6]), r[7])))
         return out
 
     def polygons(self):
