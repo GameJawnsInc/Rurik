@@ -1401,8 +1401,15 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   overlay killed the section at its third check and the two after it never ran. What the
   contribution check CANNOT decide is stated at the call site rather than implied by its
   label: it is a total, so one file of several renamed aside does not move it, and there
-  is nothing tracked to check a per-file expectation against. Floor 39, the MEASURED
-  vault-less score; 42 with the vault),
+  is nothing tracked to check a per-file expectation against. **And the mutation target
+  is chosen by PARSING for a source in `EXTRACTED`, never by grepping for
+  `extractor = "`**, because an extractor on a row outside that set is INERT -- `capture`
+  rows carry the field and nothing validates it -- so the grep version picked a row with
+  no condition-1 claim to break, got no refusal, and reddened naming the gate while the
+  gate was fine. It did that within minutes of landing, when a parallel session removed
+  `effects.toml` and left `npcs.toml`, whose rows are all `capture`; the honest answer
+  there is the skip it now declares. Floor 39, the MEASURED vault-less score; 40 on an
+  overlay with no extracted-source row, 42 with one),
   `toolkit/test_contentids.py` (the pre-flight that a run's TWO archives agree
   about what `content/maps.toml`'s file ids NAME. **A file id is archive STATE,
   not a property of the map** -- bit 31 means `FcArchive` renamed that row away

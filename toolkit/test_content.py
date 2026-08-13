@@ -43,7 +43,15 @@ import content  # noqa: E402
 # The four checks added 2026-08-13 are the first here to read the REAL `vault/content/`
 # overlay, which is gitignored and machine-local -- so the floor is the VAULT-LESS score:
 # a bare machine declares one skip and scores 39 (MEASURED with RURIK_VAULT pointed at an
-# empty directory), a machine with the vault scores 42.
+# empty directory), a machine whose overlay carries a row with a source in EXTRACTED
+# scores 42, and one whose overlay has rows but no such row scores 40 and declares the
+# mutation skip. That last case is not hypothetical and is why the mutation target is
+# chosen by PARSING rather than by grepping for `extractor = "`: an extractor on a row
+# OUTSIDE `EXTRACTED` is inert -- `capture` rows carry the field and nothing validates
+# it -- so the grep version picked a row with no condition-1 claim to break, got no
+# refusal, and reddened naming the gate while the gate was fine. It did that within
+# minutes of landing, when a parallel session removed `effects.toml` and left
+# `npcs.toml`, whose rows are all `capture`.
 #
 # They exist because every other check in this file passes `vault_dir=""` or a temp dir.
 # For the whole life of the file the store's own overlay -- the input the server, the
