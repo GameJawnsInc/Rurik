@@ -286,6 +286,59 @@ def _profession_steps(agent_id, custom_id):
     ]
 
 
+def _profession_ab_steps(agent_id, custom_id):
+    """The SAME operator action, twice, either side of one changed byte.
+
+    RUN 1 (2026-08-12) got the headline and missed the attribution. Profession 12
+    rode 0x00A6 and the client kept sending c2s for 5.1 s -- so the packet is
+    not what kills it. Then the operator opened the skills menu and the session
+    ended. That is a lead with n=1 and NO CONTROL: nobody had opened the skills
+    menu while the profession was legal, so "the skills panel reads a
+    profession-keyed table out of bounds" and "the skills panel was going to
+    fail in this session anyway" are both consistent with what was seen.
+
+    Our loopback world is thin -- no party, no roster, no unlocks -- so a panel
+    refusing to open proves nothing on its own. The A/B is what separates the
+    two, and it is the whole design of this probe: open the panel, close it,
+    change ONE byte, open the SAME panel again.
+
+    THE DELAYS ARE LONG ON PURPOSE. Run 1's steps were 10-12 s apart and the
+    operator was still deciding what to click when the next one landed. Twenty
+    seconds is enough to open a panel, look at it, and close it without racing.
+    """
+    control = 3
+    return [
+        Step(2.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"A: control, profession {control}",
+             "nothing yet. Wait for the next line before touching anything."),
+        Step(6.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"A: still {control} -- NOW open the skills menu (K)",
+             "open the skills and attributes panel with K. Does it open? Look at "
+             "it, then CLOSE it. You have about 20 seconds. This is the control "
+             "arm: if the panel does not open even at a legal profession, then "
+             "run 1's crash was never about profession 12 and this probe has "
+             "already answered its question."),
+        Step(20.0, 0x00A6, agent_set_profession(agent_id, custom_id, 0, custom=True),
+             f"B: the ONE changed byte -- profession {custom_id}",
+             "wait about five seconds and do NOTHING. Run 1 shows the client "
+             "lives ~5 s on this value while moving normally, so a death during "
+             "this wait would mean the packet is lethal on its own, which run 1 "
+             "says it is not."),
+        Step(8.0, 0x00A6, agent_set_profession(agent_id, custom_id, 0, custom=True),
+             f"B: still {custom_id} -- NOW open the skills menu AGAIN",
+             "the SAME key, the SAME panel, one byte different. If it opened in "
+             "arm A and kills the client here, the skills panel is the first "
+             "profession-keyed table to read out of bounds -- and that is the "
+             "ordering four documents of static analysis could not produce."),
+        Step(20.0, 0x00A6, agent_set_profession(agent_id, control, 0),
+             f"RECOVERY: back to {control}",
+             "if you are reading this in the client's world and not on a "
+             "Connecting screen, the client SURVIVED both arms -- and the skills "
+             "panel is NOT the killer. Say so; a negative here is as useful as "
+             "the positive and it sends us to the next panel."),
+    ]
+
+
 def _armor_steps(agent_id):
     # EXPLORATORY, and labelled as such. 0x006F is {agent_id, dword, dword} and
     # which dword is the slot and which the model is NOT established -- the
@@ -2125,6 +2178,24 @@ PROBES = {
              "profession_sentinel. Expect ONE out-of-band answer per run: every "
              "profession bound check ends the session, so there is nothing "
              "after the first failure.",
+    ),
+    "profession_ab": lambda a, o: Probe(
+        question="Does the SKILLS panel specifically kill a client whose "
+                 "profession is out of band -- or was run 1's crash unrelated?",
+        predicts="The panel OPENS at profession 3 and the client DIES when the "
+                 "same key is pressed at profession 12. Mechanism if so: the "
+                 "skills panel filters by profession, GmSkTome is one of the 29 "
+                 "bound-check sites, and GmDeckBuilder asserts on the profession "
+                 "pair. The informative alternative is that the panel does not "
+                 "open in arm A either -- our loopback world has no unlocks -- "
+                 "in which case run 1's crash is unattributed and the skills "
+                 "menu was never implicated.",
+        steps=_profession_ab_steps(a, 12),
+        note="Run 1 measured the headline (profession 12 rides 0x00A6 and the "
+             "client lives 5.1 s) and could not attribute the death, because "
+             "nobody opened the skills menu while the profession was legal. "
+             "This is that missing control. Same action, same key, one byte "
+             "different.",
     ),
     "profession_sentinel": lambda a, o: Probe(
         question="Is profession 11 handled specially, being the client's own "
