@@ -723,3 +723,60 @@ consumes that update in the client's current state, not a property of the messag
 would have recorded the frame that happened to be listening on a level-1 character in an
 empty map as the meaning of the opcode. §7.6 declined to name them from the picture; the
 binary now says the picture was showing a consequence two steps removed from the message.
+
+### 7.8 The frame registration table, and why `0x100000B5` cannot name an opcode
+
+**Status: OBSERVED, 2026-08-13, binary only.** §7.7 stopped at "naming the five needs the
+registration table". Here it is.
+
+#### The mechanism
+
+Two structures, not one:
+
+* **The frame table** — an array of frames at `0xBF5924` with its count at `0xBF592C`,
+  read by `0x0064CA60`, which bounds-checks the index, refuses a NULL slot, and asserts
+  otherwise. Frame ids are small; `0x00633D70` rejects anything below `0x56` as one.
+* **The message map** at `0xC11BC4`, keyed by the 32-bit message id.
+
+And two entry points, which are the API:
+
+| | |
+|---|---|
+| **REGISTER** | `0x00633BD0(frameId, messageId)` — looks the frame up by id, then binds `messageId` in the map to that frame's sub-object at `+0xA8` (`0x0064CD60` → insert `0x00474200`) |
+| **SEND** | `0x00633D70(messageId, data, flags)` — tail-calls `0x0064CA30`, which looks `messageId` up in the map (`0x00491F20`) and invokes the bound object (`0x0064C7D0`) |
+
+**An unregistered id is a SILENT NO-OP.** `0x0064CA30` tests the lookup result and
+branches straight to `ret` — no assert, no log, no error. That is a fact worth carrying
+into any future probe: sending a UI message nothing is bound to produces no wire traffic
+*and* no screen change *and* no complaint, which is indistinguishable from an opcode that
+does nothing.
+
+#### `0x100000B5` has exactly ONE consumer, and it is not a dialog
+
+§7.7 found 9 pushes of the id and no `cmp`. Following each push to its call resolves them
+cleanly: **eight are SEND, one is REGISTER** — `0x004ECEFC`, the site whose neighbourhood
+named `GmView:3737` and which §7.7 could only call "not a dialog".
+
+That registration sits in a registrar at `0x004ECBD0` that binds **90 message ids to a
+single frame**, from `0x10000001` to `0x1000014B`. A frame subscribing to ninety messages
+is a root, not a panel — and `GmView` is the game view.
+
+**So the id identifies a DESTINATION, not a meaning.** The five opcodes of §7.7 deliver
+character data to the main game-view frame, which routes it onward by its own state. The
+dialog the operator saw is that routing's outcome on a level-1 character in an empty map,
+two steps removed from the message — exactly the caution §7.7 raised, now measured rather
+than suspected. **Naming any of the five `ACCOUNT_NAME_*` would have been wrong**, and
+§7.6's refusal to name them from the picture was the correct call for a reason neither
+§7.6 nor §7.7 could yet state.
+
+**A corroboration falls out of it.** The party notices' ids — `0x10000117`, `0x10000119`,
+`0x1000012C` — are **not among the 90**. They bind to a different frame, which is
+independent evidence for §7.7's split of the cluster into two subsystems: the selectors
+reach the game view, the notices do not.
+
+#### What would actually name them
+
+The remaining step is inside the view frame: the per-message handler behind the object at
+`frame+0xA8`, reached via `0x0064C7D0`. That is a routing read, not a naming one, and it
+is the same cost for all 90 ids — so it is worth doing once for the family rather than
+five times for these opcodes. **Nothing here needs the harness.**
