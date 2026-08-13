@@ -80,7 +80,11 @@ KEY_PROBE_RECORDS = 400
 # stop executing, which is exactly the failure this file could not previously
 # report: sections 4 and 7 loop over dicts, and a loop over an empty dict prints
 # a heading, asserts nothing and looks identical to a pass.
-LEDGER = checks.Ledger("text records", floor=35)
+# RAISED 35 -> 43 on 2026-08-13: section 0 adds seven encoder checks that need
+# no vault at all, and section 10 adds the byte-identity re-encode of ArenaNet's
+# own files, which is the one that makes the encoder trustworthy -- round-tripping
+# our own output only proves it inverts itself.
+LEDGER = checks.Ledger("text records", floor=43)
 check = checks.adopt(LEDGER)
 
 
@@ -94,6 +98,52 @@ def entropy(counter):
 def main():
     t0 = time.perf_counter()
     pe = PE(textrec.find_exe()[0])
+
+    # THE ENCODER, checked against the decoder AND against ArenaNet's own bytes.
+    # These need no archive and no vault -- a codec defect is not a property of
+    # any one file -- except the last, which re-encodes a real file and skips
+    # without one.
+    print("\n0. the record encoder inverts the walker")
+    empty = textrec.encode_record()
+    check(empty == bytes.fromhex("060000001000"),
+          "an empty record is the six bytes ArenaNet's spare file is made of",
+          empty.hex())
+    one = textrec.encode_record("Rurik")
+    check(one[textrec.HEADER_SIZE:] == "Rurik".encode("utf-16-le")
+          and struct.unpack_from("<HHH", one, 0) == (16, 0, 0x10),
+          "a plain record is UTF-16LE behind a (length, base=0, bits=0x10) header",
+          f"{struct.unpack_from('<HHH', one, 0)}, {len(one)} B")
+    blob = textrec.encode_file({0: "Rurik", 3: "Spirit Binder"}, 0, 98)
+    recs, tail, tiled = textrec.walk(blob)
+    check(len(recs) == textrec.RECORDS_PER_FILE and tiled,
+          f"an authored file walks back to {textrec.RECORDS_PER_FILE} records "
+          f"and TILES",
+          f"{len(recs)} records, tiled={tiled} -- TextIndex refuses a file that "
+          f"does not, so a missing tail fails our own reader before the client")
+    check(len(blob) == textrec.RECORDS_PER_FILE * textrec.HEADER_SIZE + 2
+          + len("Rurik".encode("utf-16-le"))
+          + len("Spirit Binder".encode("utf-16-le")),
+          "and its length is the empty-file size plus exactly our text",
+          f"{len(blob)} B against the 6,146 B ArenaNet ships for 1,024 empties")
+    check(recs[0] == (0x10, 0, "Rurik".encode("utf-16-le"))
+          and recs[3] == (0x10, 0, "Spirit Binder".encode("utf-16-le"))
+          and recs[1][2] == b"" and recs[1023][2] == b"",
+          "the named records carry our text and every other one is empty",
+          "an encoder that shifted records would still tile, so the INDEX of "
+          "each string is what this checks")
+    check(tail == bytes([0, 98]),
+          "the tail is (language, file_index), matching every shipped file",
+          f"{tail!r} -- measured b'\\x00b' on the real file 98")
+    refused = 0
+    for bad in ({textrec.RECORDS_PER_FILE: "x"}, {-1: "x"}):
+        try:
+            textrec.encode_file(bad, 0, 98)
+        except ValueError:
+            refused += 1
+    check(refused == 2,
+          f"an out-of-range record index is refused ({refused}/2)",
+          "silently dropping one would author a file missing the very string "
+          "it was built for")
 
     print("\n1. the escape table is bounded at both ends")
     off = textrec.find_escape_table(pe)
@@ -292,6 +342,44 @@ def main():
               "every skill id needing a key belongs to a dead row",
               f"{len(need)} need a key, {len(from_dead)} from dead rows, "
               f"{len(ids)} ids total")
+
+    # THE CHECK THAT MAKES THE ENCODER TRUSTWORTHY: re-encode ArenaNet's OWN
+    # file from its decoded records and require the bytes back. Round-tripping
+    # our own output only proves the encoder inverts itself; this proves it
+    # produces what the client actually ships.
+    print("\n9. the encoder reproduces ArenaNet's own files byte for byte")
+    try:
+        import vaultpath
+        dat = vaultpath.vault_path("dat_study", "Gw.dat")
+        have = os.path.exists(dat)
+    except Exception:                                          # noqa: BLE001
+        have = False
+    if not have:
+        LEDGER.skip("the byte-identity half",
+                    "no vault/dat_study/Gw.dat to read")
+    else:
+        with textrec.TextIndex(dat=dat, language=0) as ti:
+            exact = 0
+            tried = 0
+            for fi in (98, 79, 28, 1):
+                row = ti.file_ids.get(ti.archive_id(fi))
+                if row is None:
+                    continue
+                original = ti.archive.read(ti.archive.row(row))
+                recs, tail, tiled = textrec.walk(original)
+                if not tiled:
+                    continue
+                tried += 1
+                rebuilt = b"".join(
+                    textrec.encode_record(payload=p, base=b, bits=k)
+                    for k, b, p in recs) + tail
+                exact += (rebuilt == original)
+            LEDGER.ok(tried >= 3 and exact == tried,
+                      f"{exact} of {tried} shipped text files re-encode exactly",
+                      "these include compressed records (bits != 0x10), which "
+                      "the encoder carries verbatim rather than re-deriving -- "
+                      "so this checks the FRAMING, and the plain-text check "
+                      "above checks the payload")
 
     dt = time.perf_counter() - t0
     print(f"\nread the image and all four languages in {dt:.1f}s")
