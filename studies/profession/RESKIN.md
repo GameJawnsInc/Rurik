@@ -659,3 +659,66 @@ self-description, and the row itself, with every touched crc recomputed.
 stored, so step 1's output has never been fed to the client. Steps 2-4 are all proven
 machinery. The honest statement is that the mechanism is measured, the precedent is not,
 and one run settles it.
+
+
+---
+
+## 16. The party pair is delivered and nothing draws (2026-08-13) -- NEGATIVE
+
+Harness `20260813T152111`, capture `authsrv-20260813T152121-c1.jsonl`, **stock patched
+client** (no reskin -- `pinned.identify` reports the ordinary 9-byte .text difference), so
+the server change is the only variable. Driven with scripted input, no operator.
+
+All five messages OBSERVED on the wire at +3.36 s, in the intended order:
+
+| opcode | payload | |
+|---|---|---|
+| `0x0059` | PLAYER_CREATE | the player record |
+| `0x00B0` | `b000010001` | party size 1 |
+| `0x00B1` | `b10001000100` | self is leader |
+| `0x00B7` | prof 8 | the player record's profession |
+| `0x00A6` | `a600010000000800` | **the player's own AGENT profession -- new** |
+
+Client healthy throughout: 36 c2s messages, last at +52.92 s, `missed 0`, no crash dialog.
+The skills panel opens and reads **Ritualist** with the four Ritualist attributes, so
+profession 8 is live everywhere it was before.
+
+> **NO PARTY ENTRY DREW, AND THE ABBREVIATION DID NOT RENDER.**
+
+Measured rather than eyeballed. The harness captures a frame per walk step, and the
+top-left party region is **byte-identical across every in-world frame** -- one hash,
+2430457683, before and after the `P` press and for the whole hold. Whole-frame diffs:
+
+| transition | pixels changed |
+|---|---|
+| wait -> **P press** | 15,595 |
+| wait -> wait (idle control) | 16,496 |
+| wait -> **K press** | **308,636** |
+
+`P` moved the same number of pixels as an idle frame -- that is the animating world, not a
+window -- while `K` moved twenty times as many. **`P` did nothing**, and `K` demonstrably
+works, so the input path is fine and the null is real.
+
+### What this does and does not settle
+
+**It does not refute §14.3.** The verifier explicitly downgraded that claim in advance to
+"the array and the event are correct", never "an entry draws", and this run is exactly the
+case it reserved judgement for. The messages are right; the drawing is not established.
+
+**Three candidates, none eliminated by this run, and they are cheap to separate:**
+
+1. **`P` may simply not be the party-window key on this build.** Nothing in this project
+   ever measured it -- I assumed it. The frame diff proves the key did nothing, which is
+   equally consistent with an unbound key and with a window that refuses to open.
+   Cheapest check is offline: find the key binding, or the panel's toggle, in the client.
+2. **The style bit.** The verifier measured the abbreviation's render gate as
+   `[edi+8] != 0` plus style bits `0x10000` (abbreviation on/off) and `0x1000` (level
+   suffix). Whether our frame carries `0x10000` is UNTESTED and nothing we send would set
+   it.
+3. **The party window may need state beyond the per-player array** -- membership rows,
+   an outpost/party context -- that neither `0x00B0` nor `0x00B1` supplies.
+
+The honest summary: **`0x00A6` for the player's own agent and the party pair are now sent
+and correct, and they buy nothing visible yet.** They are still worth keeping -- `0x00A6`
+is the sole write path to the agent profession bytes that six documents of this arc
+wanted, and it costs two messages.
