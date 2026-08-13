@@ -591,3 +591,71 @@ to section 2.3: indices **1..10** duplicate `s_charProfession` exactly, not 1..8
 index 0 differing. Repointing the name table therefore leaves the Store panel showing the
 host's original name -- a cosmetic divergence on a screen our server has no opcodes for.
 **Dropped from the reskin patch list.**
+
+
+---
+
+## 15. The cheap home for authored text: ArenaNet ships 1,024 EMPTY string slots
+
+§14 costed authored text as expensive: the eleven profession names span three text files,
+and the main one is 21,376 B compressed against ~83,961 B stored, needing a relocation
+into an archive whose free space is 88.5% live container generations. **That costing
+assumed we must rewrite a file that already holds shipped text. We do not.**
+
+String ids map to text files by `id // 1024`, and each file holds exactly 1,024 records.
+An inventory of all 99 language-0 text files by on-disk size (read-only, this session):
+
+| file_index | MFT row | on disk | string ids |
+|---|---|---|---|
+| **98** | **8295** | **56 B** | **100352..101375** |
+| 28 | 3997 | 5,060 B | 28672..29695 |
+| 79 | 7994 | 8,208 B | 80896..81919 |
+| … | | | |
+| 1 | 1911 | 21,376 B | 1024..2047 (holds nine profession names) |
+| 30 | 3999 | 69,160 B | 30720..31743 (holds the other two) |
+
+> **File index 98 is 1,024 records and EVERY ONE has an empty payload.** OBSERVED:
+> 1,024 of 1,024 empty, and the arithmetic closes exactly — 1024 x 6-byte record header
+> + 2-byte (language, file) tail = **6,146 bytes**, which is precisely its decompressed
+> size. Empty in language 0, 1 and 2 alike, 56 B on disk in each.
+
+**So ArenaNet ships 1,024 unused string slots, and they are the natural home for our
+text.** That changes every term of §14's cost:
+
+- **Size.** A stored replacement is ~6,146 B plus whatever text we write, against
+  ~83,961 B for file 1 — about one fourteenth, and comfortably under the 19,292 B
+  largest ordinary stored row that already exists.
+- **Risk.** The file contains **nothing**, so authoring it cannot break a shipped string.
+  §14's plan would have rewritten a file holding nine profession names and everything
+  else in its 1,024-record range.
+- **Reach.** One file instead of three. The eleven names span files 1, 2 and 30; ids
+  100352..101375 are all in one place, and a reskin only needs to repoint
+  `s_charProfession[8]` and `s_charProfessionAbbrev[8]` at ids inside it.
+
+### Placement is not a blocker either
+
+`datplan --insert 6400` against the study archive (read-only):
+
+> **best fit of 96 usable runs** — a 13-block run at `0x000003B58E00`, 6,400 bytes plus
+> 256 bytes of block padding.
+
+It withheld 6 runs totalling 29.2 MB as live container generations (shadow MFTs and
+file-id tables), which is the trap `test_datplan` exists for, and still found 96
+candidates. The full diff is computable: payload, MFT header count, MFT row 3's
+self-description, and the row itself, with every touched crc recomputed.
+
+### The route, end to end
+
+1. Encode text file 98 as a **stored** (compression-0) payload: 1,024 records, ours in
+   the first few slots. Needs a record encoder — the decoder already exists in
+   `textrec.py`, so the round trip is testable offline with no archive write.
+2. Relocate MFT row 8295 into one of the 96 runs (`datmove`, journalled, byte-for-byte
+   revert proven by `test_datmove`), clear `datcheck`'s ten open-time rules.
+3. Repoint `s_charProfession[8]` and `s_charProfessionAbbrev[8]` at ids in
+   100352..101375 with `reskin.py`, which already does exactly this.
+4. One client run: the profession renders **our** word.
+
+**Still UNVERIFIED, and it is the same one §14 named:** no text file has ever shipped
+stored, so step 1's output has never been fed to the client. Steps 2-4 are all proven
+machinery. The honest statement is that the mechanism is measured, the precedent is not,
+and one run settles it.
