@@ -143,6 +143,97 @@ def locate(data):
     return found
 
 
+# The attribute definition table. 51 rows of 20 bytes, immediately followed by
+# its own source path -- the same locator shape the name tables use.
+ATTR_ANCHOR = b"P:\\Code\\Gw\\Const\\ConstAttrib.cpp\x00"
+ATTR_ROWS = 51
+ATTR_ROW = 20
+ATTR_OWNER, ATTR_ID, ATTR_NAME, ATTR_DESC, ATTR_PRIMARY = 0x00, 0x04, 0x08, 0x0C, 0x10
+SPARE_OWNER = 11               # rows parked on the reserved profession
+
+
+def locate_attrib(data):
+    """(file_offset, [row dicts]) for s_attrib, or SystemExit."""
+    hits = data.count(ATTR_ANCHOR)
+    if hits != 1:
+        raise SystemExit(f"the s_attrib anchor occurs {hits} times, expected 1")
+    base = data.find(ATTR_ANCHOR) - ATTR_ROWS * ATTR_ROW
+    if base < 0:
+        raise SystemExit("s_attrib anchor has no room for the table before it")
+    rows = []
+    for i in range(ATTR_ROWS):
+        o = base + i * ATTR_ROW
+        owner, aid, name, desc, primary = struct.unpack_from("<5I", data, o)
+        rows.append({"row": i, "off": o, "owner": owner, "id": aid,
+                     "name": name, "desc": desc, "primary": primary})
+    # Shape check, independent of the anchor: attribute ids are 0..50 in order,
+    # and every owner is a legal profession or the reserved 11.
+    if [r["id"] for r in rows] != list(range(ATTR_ROWS)):
+        raise SystemExit(
+            "s_attrib's id column is not 0..50 in order. The anchor and the "
+            "shape disagree, so one assumption is wrong for this build.")
+    if any(r["owner"] > SPARE_OWNER for r in rows):
+        raise SystemExit(
+            f"s_attrib has an owner above {SPARE_OWNER}: "
+            f"{sorted({r['owner'] for r in rows})}. Refusing.")
+    return base, rows
+
+
+def attrib_edits(data, rows, renames=(), owners=(), primaries=()):
+    """Apply attribute edits. Same-length by construction, like the names.
+
+    Three verbs, because they are three different claims about the client:
+      rename  -- row+0x08, the name string id: does the panel read THIS row?
+      owner   -- row+0x00, the profession: is the panel's attribute list
+                 DERIVED from this field rather than from a per-profession
+                 table? Nine rows sit on profession 11 with zero skills, so
+                 there is somewhere to take one FROM.
+      primary -- row+0x10, which of a profession's attributes is primary.
+    """
+    out = bytearray(data)
+    log = []
+    by_id = {r["id"]: r for r in rows}
+    for aid, sid in renames:
+        r = _row(by_id, aid)
+        struct.pack_into("<I", out, r["off"] + ATTR_NAME, sid)
+        log.append(("attr-name", aid, r["name"], sid))
+    for aid, prof in owners:
+        if not 0 <= prof <= SPARE_OWNER:
+            raise SystemExit(
+                f"attribute owner {prof} outside 0..{SPARE_OWNER}. The reskin "
+                f"premise is that every id stays legal.")
+        r = _row(by_id, aid)
+        struct.pack_into("<I", out, r["off"] + ATTR_OWNER, prof)
+        log.append(("attr-owner", aid, r["owner"], prof))
+    for aid, flag in primaries:
+        if flag not in (0, 1):
+            raise SystemExit(f"--attr-primary wants ATTR=0 or ATTR=1, got {flag}")
+        r = _row(by_id, aid)
+        struct.pack_into("<I", out, r["off"] + ATTR_PRIMARY, flag)
+        log.append(("attr-primary", aid, r["primary"], flag))
+    return bytes(out), log
+
+
+def _row(by_id, aid):
+    if aid not in by_id:
+        raise SystemExit(f"no attribute with id {aid} (0..{ATTR_ROWS - 1})")
+    return by_id[aid]
+
+
+def parse_pairs(specs, what):
+    """['32=2092', ...] -> [(32, 2092), ...]"""
+    out = []
+    for spec in specs or ():
+        head, _, tail = spec.partition("=")
+        if not tail:
+            raise SystemExit(f"--{what} wants ID=VALUE, got {spec!r}")
+        try:
+            out.append((int(head, 0), int(tail, 0)))
+        except ValueError:
+            raise SystemExit(f"--{what} {spec!r}: both sides must be numbers")
+    return out
+
+
 def refuse_bad_output(src, out):
     """Out of place, outside C:\\gw, and outside every checkout of this repo."""
     out_abs = os.path.normcase(os.path.abspath(out))
@@ -207,6 +298,20 @@ def main(argv=None):
     for t in TABLES:
         ap.add_argument(f"--{t}", type=int, metavar="STRING_ID",
                         help=f"new string id for the {t} table")
+    ap.add_argument("--attr-name", action="append", metavar="ATTR=STRING_ID",
+                    help="rename an attribute (row+0x08). Repeatable.")
+    ap.add_argument("--attr-owner", action="append", metavar="ATTR=PROFESSION",
+                    help="reassign which profession owns an attribute "
+                         "(row+0x00). Nine rows sit on profession 11 with zero "
+                         "skills and are the natural donors. Repeatable.")
+    ap.add_argument("--attr-primary", action="append", metavar="ATTR=0|1",
+                    help="set or CLEAR an attribute's primary marker "
+                         "(row+0x10). Symmetric on purpose: a profession has "
+                         "exactly one primary, so moving it means clearing the "
+                         "old one, and a set-only verb would leave two. "
+                         "Repeatable.")
+    ap.add_argument("--attrs", action="store_true",
+                    help="print the attribute table grouped by profession")
     a = ap.parse_args(argv)
 
     src, why = (a.exe, "given with --exe") if a.exe else pinned.find()
@@ -224,11 +329,27 @@ def main(argv=None):
         mark = " <- UNGUARDED (no bound check at its read site)" if t == "data" else ""
         print(f"  {t:7s} file 0x{base:08X}  {vals}{mark}")
 
+    abase, arows = locate_attrib(data)
+    print(f"located s_attrib at file 0x{abase:08X}, {len(arows)} rows")
+    if a.attrs:
+        groups = {}
+        for r in arows:
+            groups.setdefault(r["owner"], []).append(r)
+        for prof in sorted(groups):
+            tag = "  <- SPARE (reserved)" if prof == SPARE_OWNER else ""
+            ids = [(r["id"], r["name"], "P" if r["primary"] else "")
+                   for r in groups[prof]]
+            print(f"  prof {prof:>2}: {ids}{tag}")
+
+    renames = parse_pairs(a.attr_name, "attr-name")
+    owners = parse_pairs(a.attr_owner, "attr-owner")
+    primaries = parse_pairs(a.attr_primary, "attr-primary")
     edits = {t: getattr(a, t) for t in TABLES if getattr(a, t) is not None}
-    if a.show or not edits:
-        if not a.show:
+    if a.show or a.attrs or not (edits or renames or owners or primaries):
+        if not (a.show or a.attrs):
             print("\nnothing to do: pass at least one of "
-                  + ", ".join(f"--{t} ID" for t in TABLES))
+                  + ", ".join(f"--{t} ID" for t in TABLES)
+                  + ", --attr-name, --attr-owner, --attr-primary")
         return 0
     if not a.out:
         raise SystemExit("--out is required when writing. This tool never "
@@ -236,14 +357,23 @@ def main(argv=None):
     refuse_bad_output(src, a.out)
 
     patched, log = apply_edits(data, found, a.profession, edits)
+    if renames or owners or primaries:
+        patched, alog = attrib_edits(patched, arows, renames, owners, primaries)
+        log += [(t, off, old, new) for t, off, old, new in alog]
     assert len(patched) == len(data), "a reskin is same-length by construction"
     os.makedirs(os.path.dirname(os.path.abspath(a.out)) or ".", exist_ok=True)
     with open(a.out, "wb") as f:
         f.write(patched)
     changed = sum(1 for x, y in zip(data, patched) if x != y)
-    print(f"\nprofession {a.profession}, {len(log)} table(s):")
-    for table, off, old, new in log:
-        print(f"  {table:7s} file 0x{off:08X}  {old} -> {new}")
+    print(f"\nprofession {a.profession}, {len(log)} edit(s):")
+    for table, where, old, new in log:
+        # An attribute edit's second element is an ATTRIBUTE ID, not a file
+        # offset. Printing it as `file 0x...` reads as an address and is wrong
+        # in exactly the way an operator would act on -- attribute 32 showed as
+        # `file 0x00000020`.
+        loc = (f"attr {where:<4}" if str(table).startswith("attr-")
+               else f"file 0x{where:08X}")
+        print(f"  {table:12s} {loc}  {old} -> {new}")
     # "at most", not "expected": a dword write disturbs only the bytes that
     # actually differ, so 2 changed bytes for 2 edits is correct when both ids
     # share their high bytes (2048 -> 2092 is 00 08 -> 2C 08). The invariant
