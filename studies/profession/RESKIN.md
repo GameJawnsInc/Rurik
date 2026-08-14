@@ -483,33 +483,74 @@ cheapest host to rename once authored text is possible.
 
 ## 13. Where this stands, and what is left
 
-**Working, validated in a running client, eleven bytes of same-length edits:**
+**REWRITTEN 2026-08-14.** The version this replaces ended "the one real wall left is
+TEXT", which was true when written and false eight sections later (section 19). It also
+listed the abbreviation as "patched and unexercised" -- it renders (18.14). A standing
+list that describes a finished task as the next one is the failure `CLAUDE.md` opens
+with, so this section is dated and the runs are named.
+
+### Working, validated in a running client
 
 | | field | run |
 |---|---|---|
-| Profession name, in world and on the roster | `s_charProfession[N]` | §8, §11 |
-| Attribute names | `s_attrib +0x08` | §9 |
-| Which attributes the profession owns (nine spare rows) | `s_attrib +0x00` | §9 |
-| Which attribute a skill scales with | `s_skill +0x29` | §10 |
-| Model, hair, skin, starter gear | appearance nibble | §11, free |
-| Animations | — | §7, inherited from the host |
+| Profession name | `s_charProfession[N]` -- **authored** | 19 |
+| Abbreviation, on the party roster | `s_charProfessionAbbrev[N]` -- **authored** | 18.14, 19 |
+| Attribute names, all five | `s_attrib +0x08` -- **authored** | 9, 19.5 |
+| Attribute descriptions, all five | `s_attrib +0x0C` -- **authored** | 20.2 |
+| Which attributes the profession owns | `s_attrib +0x00` (nine spare rows to take from) | 9 |
+| Which attribute is PRIMARY | `s_attrib +0x10`, moved off the host onto our claimed row | 19.7 |
+| Which attribute a skill scales with | `s_skill +0x29` | 10 |
+| Model, hair, skin, starter gear | appearance nibble | 11, free |
+| Animations | -- | 7, inherited from the host |
+| **Inherent primary passive** | **none -- it is SERVER work** | 20 |
 
-**Blocked on the world, not on the client:**
+Eleven same-length dword edits plus one archive row. No code caves, no injected DLLs, no
+grown tables, and every profession id stays inside 0..10 so not one bound check can fire.
 
-- **The abbreviation** renders only in the party window and over nameplates. Our server
-  sends no party state, so the dword is patched and unexercised.
-- **The picker label** is character-creation only, and this server has no creation flow.
+### The two walls that are actually left
+
+1. **Skill icons.** 3,292 of 3,439 are DXTL, a format with no DirectX equivalent, and
+   skill-icon rows never ship stored -- so the compression escape hatch that made authored
+   TEXT cheap does not exist here. This is now the hardest thing on the list.
+2. **The profession glyph.** Still **NOT FOUND**, carried unresolved since `FINDINGS.md`.
+   A reskin inherits the host's, which remains an argument FOR the route: a
+   wrong-but-present glyph beats a missing one.
+
+### Skill NAMES are no longer a wall -- RECONSTRUCTION, and untested
+
+Section 4 filed skill names under DOES NOT WORK, reasoning that a profession's 122-199
+skills draw their name ids from **19-22 different archive text files** while its own
+identity lives in one. That was a fact about REPLACING those files. Authored text points
+AWAY from them instead, and both halves already exist:
+
+* `repoint_skill.py` repoints a skill's **name, description and icon ids** -- it was built
+  for a different question and never aimed at authored strings.
+* Text file 98 has **1,012 records still free** (1,024 minus the 12 we wrote), against the
+  ~244-398 a full roster needs at name-plus-description per skill.
+
+**Nothing has been run.** The arithmetic fits and the tools exist; that is a plan, not a
+result, and it is labelled so deliberately -- section 4's original claim was also
+reasonable and was wrong for a reason nobody had tested.
+
+### Unexercised rather than blocked
+
+- **The picker label** is character-creation only and this server has no creation flow.
 - **The `.data` table's consumer** is still unidentified; a split-donor run would name it
   the moment a second profession-name surface appears.
+- **Campaign availability** is decoded, but 5.2 measured the cost: the naive one-dword
+  patch yields a profession offered in Prophecies with no hair colours, no skin tones and
+  no starter gear, because those tables are empty for the host outside its own campaign.
+- **Armour redirection** -- four dwords, and ArenaNet already ships row sharing between
+  professions 0, 1, 2 and 9, so the mechanism is proven in their data and untried in ours.
+- **The attribute description RENDER.** Written, resolvable, and never seen: descriptions
+  are hover tooltips and the harness drives keys (20.3).
 
-**The one real wall left is TEXT.** Every name above is BORROWED — the client will only
-show words it already ships strings for. A profession called what you want needs a text
-file authored into `Gw.dat`, and the open question is whether the client accepts a row
-whose compression flag reads 0, since this repo has no compression-8 encoder. The archive
-layer already has journalled writes with byte-for-byte revert (`datwrite`, `test_datwrite`),
-so the mechanism exists and is tested — but no text file has ever been served stored, and
-it is the first edit in this arc that touches the 8 GB archive rather than a 10 MB
-executable.
+### What a cold session should do first
+
+Read section 20 before proposing any client patch for a game-mechanic effect. The single
+most expensive mistake available here is costing a passive as a binary patch when the
+client cannot read an attribute rank outside its own UI and never computes damage,
+healing, energy or cast time at all.
 
 
 ---
