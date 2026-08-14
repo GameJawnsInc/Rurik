@@ -53,7 +53,7 @@ The headline results:
   is GWCA-versus-ldufr; our catalog is on the same lineage as this build. Do not shift it.
 
 A proposed correction file accompanies this study at
-[proposed_overrides.json](studies/msgtable/proposed_overrides.json) — 24 entries. Applying it
+[proposed_overrides.json](proposed_overrides.json) — 24 entries. Applying it
 alongside the live schema leaves **zero residual disagreement** with the binary. It is a
 proposal only; `schema/messages.json` and `schema/overrides.json` were not modified.
 
@@ -482,7 +482,7 @@ mean two different things depending on the row. It will bite anyone who trusts t
 
 ### The proposed corrections
 
-[proposed_overrides.json](studies/msgtable/proposed_overrides.json) — 24 entries: 3 field-shape
+[proposed_overrides.json](proposed_overrides.json) — 24 entries: 3 field-shape
 fixes, 3 new messages, and 18 `variable_length` fixes (GAME_SMSG 421 is both a shape fix and a
 flag fix). Every `why` cites the `cmds` array and the VA it came from.
 

@@ -128,7 +128,9 @@ eight different sabotages, six of them GAME_SMSG opcode numbers —
 
 The mechanism is exactly the shape `CLAUDE.md` already records from 2026-08-11: the file
 references **9 opcode symbols and pins exactly one** to a hex literal — and that one
-symbol is the only opcode absent from the survivor list. ✔MAIN: still 1 of 9.
+symbol is the only opcode absent from the survivor list. ✔MAIN: was 1 of 9 —
+**CLOSED 2026-08-13** (`97892f9`), see §8 Lane A item 3: `test_agentlife.py`'s second
+PINNED tuple now binds 15 GAME_SMSG opcode symbols to literals.
 
 **A documented check is silently disarmed.** `CLAUDE.md` records for `test_maprows` that
 *"CELL_PITCH was set to 64.0 — six go red"*. True on a **cold** cache (554–557 s per arm:

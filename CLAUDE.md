@@ -85,10 +85,14 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
   `vault/run-live/` and verified byte-identical to the source. **The driver exists as of
   2026-08-07** (`toolkit/harness/livesession.py`), the whole pipeline is proven end to end
   on loopback (`dryrun_keycapture.py`, elevated, green), and the live build is key-tapped
-  and staged. What has not happened is the run, and it is human-driven on purpose: the
-  driver launches, sniffs and taps, and sends **no** keystrokes or clicks — the operator
-  logs in and plays, because the scripted input the loopback harness uses is precisely the
-  traffic pattern the rule above is about. `RUNBOOK.md` §"Capturing a live session" is the
+  and staged. **The run itself is human-driven by design**: the driver launches, sniffs
+  and taps, and sends **no** keystrokes or clicks — the operator logs in and plays,
+  because the scripted input the loopback harness uses is precisely the traffic pattern
+  the rule above is about. (This paragraph used to end "what has not happened is the
+  run", written 2026-08-07 12:41 and still saying it a week later — the run landed at
+  14:30 **that same day** and six live captures sit in the vault. Status of the live
+  campaign is `PLAN.md` §3's R0b row and nowhere else; that is what the top of this file
+  is about, and this sentence is the file breaking its own rule for seven days.) `RUNBOOK.md` §"Capturing a live session" is the
   procedure; do not pass `--host` (it is refused, and why is worth reading).
   **The launch rule is no longer "is it caged".** It is a binding, enforced from the
   bytes by `toolkit/clientpatch/dhbuild.py` and `cage.assert_launch_safe(exe, host)`: a
@@ -681,31 +685,6 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   floor of 26; 36 with a vault. **The floor comment first said "MEASURED" over two
   GUESSED numbers** -- 30/38 against a real 26/36 -- in a file already citing the
   two earlier times that happened, which makes it the third. ~3 s),
-  `toolkit/mapdata/test_png.py` (the stdlib PNG codec rung M5's texture
-  export writes through -- `zlib` and `struct` and nothing else, because
-  `toolkit/` takes no third-party dependency and a test needing PIL to check
-  it would defeat the module's only reason to exist. NO vault, no archive, no
-  client, no PIL: every image is built in the file out of `bytes`. The round
-  trip is deliberately the WEAK half -- two functions that agree prove they
-  are inverses and nothing about whether either is PNG -- so section 2 reads
-  the emitted bytes with a walker written HERE out of `struct` and `zlib`,
-  recomputing every CRC, and section 3 feeds the reader images the WRITER
-  CANNOT PRODUCE: the writer only ever emits filter 0, the reader claims all
-  five, so a PNG is hand-built for each and one more mixing a different
-  filter per row (which is what catches a stale `prev` scanline). Six
-  one-edit sabotages were BUILT AND RUN and all six redden -- 8, 4, 2, 1, 2
-  and 2 -- and the counts are MEASURED, an earlier draft having carried
-  guessed ones of which four were wrong. Two rows earn their place: the
-  Paeth predictor is invisible to every round trip here (the writer never
-  emits filter 4) so only the hand-built images reach it, and **a reader
-  that trusts the stored CRC reddens exactly ONE check**, section 4's
-  tamper. The width/height swap reddening only 2 is reported rather than
-  tuned, and the reason is stated -- a transposed IHDR gives the reader a
-  wrong stride so it REFUSES, and the section aborts into one named failure,
-  which is `main()`'s guard working rather than thin coverage. Refusals are
-  asserted as `BadPNG` and not as "raises", because a truncated file left as
-  `struct.error` in the first version and the difference to a caller is a
-  refusal versus a crash in the exporter. 45 checks, ~1 s),
   `toolkit/mapdata/test_rebloat.py` (rung E3's driver, which is the only tool
   here that deliberately DESTROYS a payload — it zeroes a map's Bloated stream
   so the client is forced down the re-bloat path — so almost every check is a
@@ -2359,7 +2338,7 @@ reasoning about it. Two of the three hardest questions so far were settled that 
 |---|---|
 | `toolkit/portal/`, `toolkit/authsrv/` | The server: portal (6601), auth + ARC4 channel (6112) |
 | `toolkit/schema/` | Codec and the message-catalog importer |
-| `schema/messages.json`, `overrides.json` | The wire schema, tracked in git |
+| `schema/messages.json`, `schema/overrides.json` | The wire schema, tracked in git |
 | `content/*.toml` | The world: maps, NPCs, items, spawns. One row per fact, each carrying its own provenance. Loaded by `toolkit/content.py`; the server holds no content literals. Bulk extraction goes to `vault/content/` and is merged over these. |
 | `toolkit/clientscan/`, `toolkit/clientpatch/` | Read-only client analysis; patching and the firewall cage |
 | `toolkit/mapdata/` | `Gw.dat` reader, planner (`datplan`), writer (`datwrite`), textures (`atex`, `dxt1`) |
