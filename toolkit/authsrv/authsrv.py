@@ -1912,10 +1912,12 @@ def revive_due(send, state, conn_id):
         # vault's 49 `Health non-zero on resurrect` lines name `Corpse of Hatcher
         # [Collector]` rather than the player.
         #
-        # UNMEASURED HERE, and that is a property of the world rather than an
-        # omission. Nothing in an unattended run kills an agent -- the hostile kills
-        # the PLAYER and the player does not fight back, so `hit agent` is 0 and this
-        # branch never runs. The two NPC lines above come from human-played runs
+        # UNMEASURED HERE, and that is the world's BALANCE rather than an omission.
+        # `hit agent` is 0 in an unattended run because the player is DEAD: the
+        # Hatcher deals 25 into a 100 HP player (dead in 4 hits) and killing it takes
+        # 7, so the player loses the race and this branch never runs. It is not an
+        # input problem -- C (closest) and Tab (next) then Space both select and
+        # attack. The two NPC lines above come from human-played runs
         # 20260811T141114 and 20260811T141332 (7 `hit agent` lines each), and they are
         # the standing CONTROL: they were produced by the burst order this replaces,
         # so confirming the fix here costs ONE human-played run, not two. The
