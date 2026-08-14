@@ -99,6 +99,31 @@ geometry ends up ABOVE the ground it stands on: 0.961 of Pre-Searing's real
 props against 0.032 for the reflected control, pinned by
 `test_blenderimport.py` section 4.
 
+THE GROUND'S MATERIAL (rung T5, 2026-08-14). When the export carries the
+`terrain_textures` block (rung T4), every terrain face gets a material: one
+Blender material per DISTINCT texture image, `material_index` per face from
+the `gw_tile` attribute's value through the manifest's tile table -- the same
+pattern the props use, and the binding is the archive's
+(`file_id = dep[tile + dep_offset]`, measured 349/349; see `mapexport.py`).
+Three deliberate limits, stated so a render is read for what it is:
+
+  * **One opaque layer per cell.** Retail terrain is THREE blended layers per
+    cell with the texture's alpha as the mask (only 7 of 192 tiles are fully
+    opaque -- `studies/terrain/FINDINGS.md` §3.5), so this ground has hard
+    edges at tile boundaries and no alpha wired anywhere. That is honest and
+    far better than grey; blending is T6, deferred.
+  * **Every cell samples quadrant 0.** A terrain texture is four 128x128
+    variants; the per-cell selector is terrain tag 3 plus a per-cell PRNG
+    draw (FINDINGS §3.2), and the interchange does not carry tag 3. The UV
+    window below is T3's MEASURED arithmetic -- one cell = one variant's
+    inner 111x111 texels, corners inset 8.5 texels -- with the variation
+    pinned to 0. Which world axis maps to +u is a CONVENTION chosen here;
+    nothing measured orients the quadrant yet.
+  * **A tile whose texture did not decode gets its OWN empty material**
+    (`gw_untextured_<fid>`), never slot 0 -- the prop fall-through defect
+    (31.6% of Kamadan's prop area silently drawing whichever image landed
+    first) is exactly what this refuses to repeat.
+
 PROPS (format_version 2, 2026-08-13). When the export carries a props sidecar,
 every placement becomes a PROXY object in a `<name>.props` collection --
 **never ArenaNet's geometry**, which nothing in this tree decodes. A prop with
@@ -130,9 +155,10 @@ except ImportError:                                          # pragma: no cover
     bpy = None
 
 FORMAT = "rurik.gwmap"
-# 1 is the terrain-only interchange; 2 adds the OPTIONAL props sidecar and
-# changes nothing else, so both load here.
-FORMAT_VERSIONS = (1, 2)
+# 1 is the terrain-only interchange; 2 adds the OPTIONAL props sidecar; 3 adds
+# the OPTIONAL terrain-texture block (rung T4). Each addition changes nothing
+# else, so all three load here.
+FORMAT_VERSIONS = (1, 2, 3)
 # The MODEL interchange (rung M3), read when a prop's model has one beside
 # the map export.
 MODEL_FORMAT = "rurik.gwmodel"
@@ -228,6 +254,11 @@ class GwMap(object):
         out.extend(out[-(dx + 1):])
         return out
 
+    @property
+    def terrain_textures(self):
+        """The manifest's terrain-texture block (rung T4), or None."""
+        return self.meta.get("terrain_textures")
+
     def __repr__(self):
         return ("<GwMap %s %dx%d cells, rect %r, pitch %r>"
                 % (self.name, self.dim_x, self.dim_y, self.rect, self.pitch))
@@ -308,6 +339,24 @@ def load_export(json_path):
         else:
             raise ValueError("%s: unknown dtype %r"
                              % (side["name"], side["dtype"]))
+
+    # The terrain-texture images (format_version 3) verify exactly like
+    # sidecars; their digests live in their own block because the PNGs are
+    # keyed by file id and shared between maps.
+    for img in (meta.get("terrain_textures") or {}).get("images", []):
+        path = os.path.join(base, img["name"])
+        if not os.path.isfile(path):
+            raise ValueError("%s: terrain texture %s is missing"
+                             % (json_path, img["name"]))
+        size = os.path.getsize(path)
+        if size != img["bytes"]:
+            raise ValueError("%s: %d bytes on disk, the manifest says %d"
+                             % (img["name"], size, img["bytes"]))
+        digest = _sha256_file(path)
+        if digest != img["sha256"]:
+            raise ValueError("%s: sha256 %s... does not match the manifest's "
+                             "%s..." % (img["name"], digest[:16],
+                                        img["sha256"][:16]))
 
     if "heights" not in arrays:
         raise ValueError("%s: no heights sidecar" % json_path)
@@ -480,9 +529,13 @@ def _stamp(obj, gwmap):
     and a disagreement is worth reporting rather than silently resolving.
     """
     # `props_state` goes with `sidecars`: both describe the file that was
-    # imported, and the way OUT rebuilds both from what is in the scene.
+    # imported, and the way OUT rebuilds both from what is in the scene. The
+    # terrain-texture block goes with them for the same reason -- its digests
+    # describe PNGs beside the file that was imported, and a scene cannot
+    # vouch for files it does not contain.
     stamp = {k: v for k, v in gwmap.meta.items()
-             if k not in ("sidecars", "props_state")}
+             if k not in ("sidecars", "props_state", "terrain_textures",
+                          "terrain_textures_state")}
     # THE PROPS SIDECAR'S NON-PER-PROP HALF, carried so a round trip can
     # rebuild it. The model table maps a prop's `model` index to an archive
     # file id and that row's (size, crc) -- ARCHIVE STATE, which a Blender
@@ -497,6 +550,119 @@ def _stamp(obj, gwmap):
             {k: v for k, v in gwmap.props.items() if k != "props"},
             sort_keys=True)
     obj[STAMP] = json.dumps(stamp, sort_keys=True)
+
+
+# T3's measured cell window (`studies/terrain/FINDINGS.md` §3.1): one cell is
+# one 128x128 variant of the 256x256 texture, sampling its inner 111x111
+# texels -- corners inset 8.5 texels, algebraically 128 - 17. Quadrant 0's
+# window; the module docstring says why the variation is pinned to 0.
+TEX_TILE_TEXELS = 256.0
+TEX_UV_LO = 8.5 / TEX_TILE_TEXELS
+TEX_UV_HI = 119.5 / TEX_TILE_TEXELS
+
+
+def apply_terrain_textures(obj, gwmap):
+    """The ground's materials, per-face indices and UVs (rung T5).
+
+    Returns the summary block the dump carries, or None when the export has
+    no texture block. Every claim a checker needs is in the block: the slot
+    order, each tile's slot, and a digest over EVERY face's material index --
+    so a test outside Blender can tie all 186,368 faces to the sidecar's tile
+    bytes without trusting this function's own loop.
+    """
+    block = gwmap.terrain_textures
+    if block is None:
+        return None
+    mesh = obj.data
+    base = os.path.dirname(os.path.abspath(gwmap.path))
+    if gwmap.tiles is None:
+        # The block names textures but the export carried no tiles array, so
+        # there is nothing to bind a face BY. Reported, not guessed.
+        return {"state": "no tiles array"}
+
+    # One material per DISTINCT image, in first-appearance tile order; a tile
+    # whose texture did not decode gets its own EMPTY material rather than
+    # falling through to slot 0 (the prop fall-through defect, refused).
+    slot_of_name = {}
+    materials = []
+    tile_slot = []
+    untextured = []
+    for entry in block["tiles"]:
+        image_name = entry.get("image")
+        if image_name is None:
+            mat_name = "gw_untextured_%X" % entry["file_id"]
+            untextured.append(entry["tile"])
+        else:
+            mat_name = os.path.basename(image_name)
+        if mat_name in slot_of_name:
+            tile_slot.append(slot_of_name[mat_name])
+            continue
+        mat = bpy.data.materials.get(mat_name)
+        if mat is None:
+            mat = bpy.data.materials.new(mat_name)
+            if image_name is None:
+                # Loudly unbound: flat magenta, no nodes, no image. The
+                # render gets worse and the scene gets honest.
+                mat.use_nodes = False
+                mat.diffuse_color = (1.0, 0.0, 1.0, 1.0)
+            else:
+                mat.use_nodes = True
+                nodes = mat.node_tree.nodes
+                links = mat.node_tree.links
+                bsdf = nodes.get("Principled BSDF")
+                tex = nodes.new("ShaderNodeTexImage")
+                image = bpy.data.images.get(mat_name)
+                if image is None:
+                    image = bpy.data.images.load(
+                        os.path.join(base, image_name))
+                tex.image = image
+                tex.extension = "REPEAT"
+                if bsdf is not None:
+                    links.new(tex.outputs["Color"],
+                              bsdf.inputs["Base Color"])
+                # NO alpha wired, deliberately: the alpha is a three-layer
+                # blend MASK (FINDINGS §3.5), and one opaque layer is the
+                # honest simplification. Wiring it would punch holes in the
+                # ground where the retail client blends.
+        slot_of_name[mat_name] = len(materials)
+        tile_slot.append(len(materials))
+        materials.append(mat)
+    for mat in materials:
+        mesh.materials.append(mat)
+
+    # material_index per face from the tiles array -- the SAME world
+    # row-major order as the faces, so the mapping is the identity.
+    indices = [tile_slot[t] for t in gwmap.tiles]
+    mesh.polygons.foreach_set("material_index", indices)
+
+    # T3's UV window, identical on every face. Loop order is the quad winding
+    # from build_geometry: (i,j) -> (i,j+1) -> (i+1,j+1) -> (i+1,j), with j
+    # increasing as world y DECREASES; v is flipped for Blender exactly as
+    # the prop UVs are (Direct3D puts v=0 at the top of an image).
+    lo, hi = TEX_UV_LO, TEX_UV_HI
+    quad = [(lo, 1.0 - lo), (lo, 1.0 - hi), (hi, 1.0 - hi), (hi, 1.0 - lo)]
+    layer = mesh.uv_layers.new(name="UVMap")
+    flat = [c for uv in quad for c in uv] * len(mesh.polygons)
+    layer.data.foreach_set("uv", flat)
+
+    # Read the indices BACK off the built mesh for the digest, so anything
+    # Blender did on the way in shows up in it.
+    got = [0] * len(mesh.polygons)
+    mesh.polygons.foreach_get("material_index", got)
+    digest = hashlib.sha256(struct.pack("<%dH" % len(got), *got)).hexdigest()
+    counts = {}
+    for s in got:
+        counts[s] = counts.get(s, 0) + 1
+    return {
+        "state": "bound",
+        "materials": [m.name for m in materials],
+        "tile_slot": tile_slot,
+        "untextured_tiles": untextured,
+        "faces_per_slot": {str(k): v for k, v in sorted(counts.items())},
+        "material_index_digest": digest,
+        "uv_layer": "UVMap",
+        "uv_window": [lo, hi],
+    }
 
 
 def _attach_cell_attributes(mesh, gwmap):
@@ -993,13 +1159,24 @@ def main(argv=None):
     ap.add_argument("--no-textures", action="store_true",
                     help="build prop meshes without materials or UVs -- the "
                          "control for the texture path")
+    ap.add_argument("--no-terrain-textures", action="store_true",
+                    help="leave the ground unmaterialed even when the export "
+                         "carries the texture block -- the control for the "
+                         "T5 path")
     ap.add_argument("--proxies-only", action="store_true",
                     help="force the measured proxies even where a real mesh "
                          "is available -- the control for the real-mesh path")
     args = ap.parse_args(_script_argv(argv))
 
     obj, gwmap = import_gwmap(args.json, name=args.name, clear=args.clear)
+    terrain_tex = None
+    if not args.no_terrain_textures:
+        terrain_tex = apply_terrain_textures(obj, gwmap)
     summary = mesh_summary(obj, gwmap)
+    if terrain_tex is not None:
+        summary["terrain_textures"] = terrain_tex
+    elif gwmap.terrain_textures is not None:
+        summary["terrain_textures"] = {"state": "skipped"}
     prop_objs = []
     if not args.no_props and gwmap.props is not None:
         _coll, prop_objs = build_prop_objects(
@@ -1021,6 +1198,20 @@ def main(argv=None):
     print("  heights       %.1f .. %.1f  (world z, the stored heights NEGATED: "
           "a greater stored value is LOWER in the world, FINDINGS 25)"
           % (summary["bbox"]["min"][2], summary["bbox"]["max"][2]))
+    if terrain_tex is not None and terrain_tex.get("state") == "bound":
+        print("  ground        %d materials over %d tiles, every face bound "
+              "(one opaque layer, quadrant 0 -- retail blends THREE layers "
+              "per cell, T6)"
+              % (len(terrain_tex["materials"]),
+                 len(terrain_tex["tile_slot"])))
+        if terrain_tex["untextured_tiles"]:
+            print("                tiles %r have NO decodable texture and "
+                  "draw flat magenta rather than impersonating slot 0"
+                  % (terrain_tex["untextured_tiles"],))
+    elif gwmap.terrain_textures is not None:
+        print("  ground        texture block present, NOT applied (%s)"
+              % ("--no-terrain-textures" if args.no_terrain_textures
+                 else summary["terrain_textures"]["state"]))
     if prop_objs:
         ps = summary["props"]
         print("  props         %d placed: %d REAL meshes sharing %d "
