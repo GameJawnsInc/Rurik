@@ -1160,3 +1160,44 @@ retire a control for no gain.
    member row renders as a RED bar, which nothing in §18 explains. Note `asserts.py --file
    PyCliParty` shows no account-name assert in its readable set, and that set is a FLOOR
    rather than a census, so its silence refutes nothing.
+
+### 18.10 The red row is not a fault -- it is a full HEALTH BAR (2026-08-13)
+
+§18.9 filed "why is the member row a red bar" as unexplained and floated an
+account-name lead for it. **The question dissolves: red is what a healthy party member
+looks like.** No client launch, no disassembly -- the game's own documentation says so.
+
+> **WIKI (GWW, "User interface" §Health bar, rev. 2026-07-15):** "The '''health bar'''
+> is a red bar that indicates the status of the character's current health relative to
+> their maximum health."
+>
+> **WIKI (GWW, "User interface" §Party window, rev. 2026-07-15):** "It displays health
+> bars for party members, animal companions and some quest and mission allies. **The red
+> bars represent the allies' or party members' health.** A disconnected player will have
+> its health bar greyed out."
+
+This is the wiki at its strongest by `browse-gw-wiki`'s own test -- *could a player have
+seen this from the game window?* -- and it is corroborated inside our own screenshot: the
+HUD health bar at the bottom of the frame reads `100` on red and the energy bar reads `25`
+on blue. Red is this UI's colour for health everywhere, not a state on the row.
+
+**So the row is CORRECT.** `W0 Test Warrior` on a full-width red bar is a party member at
+full health, drawn exactly as retail draws one. The arc has more working than §18 claimed.
+
+**Two things this retires:**
+
+1. **The disconnected reading is refuted, not merely unsupported.** A disconnected player
+   is **greyed out**; ours is saturated red. Whatever else an unnamed account may break,
+   it is not what colours this row -- and framing that lead as "the first candidate for
+   the RED member row" in §18.9 was my error, not the other session's claim. Their lead
+   was about party ACTIONS being refused, which is a different question and still open.
+2. **The bar's fullness is a readout we were not using.** It is a live per-member health
+   display that this server has never deliberately driven.
+
+**The confirmation, when a client is free -- one run, and it is falsifiable.** Set the
+player's health to roughly half and the red bar must shrink to roughly half width while
+the name stays put. Threshold: the party region moves well above the 0.007% within-arm
+floor §18.9 measured, and the change is a horizontal shortening rather than a colour
+shift. If instead the bar stays full, the row is drawing a constant and not this player's
+health, which would be a different and more interesting result -- so the run is worth its
+minute either way.
