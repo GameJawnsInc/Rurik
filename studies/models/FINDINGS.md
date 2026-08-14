@@ -479,6 +479,29 @@ city renders as mottled stone instead.
 Still open: which of the remaining layers is detail versus lightmap versus
 specular, and the alpha-masked decals need a viewer blend mode to cut out.
 
+### 6.6 The blend byte, and portals as identifiable props
+
+A material's second byte (`blend`) is NON-ZERO on the materials that need real
+alpha blending. MEASURED on Kamadan: **16 of 194** layered sub-models, and 14
+of those draw one texture — a 512×128 mist band with 164 distinct alpha values
+and **not one fully opaque pixel**. What the individual values mean (5, 6, 8,
+9, 10 occur) is NOT DECODED; that it separates blended from opaque is what a
+consumer can act on, and `import_gwmap.py` now sets Blender's blend mode from
+it. Note this is invisible in a Workbench render, which ignores the property.
+
+**Portals are identifiable props, and there is more than one kind.** Owner's
+observation, 2026-08-14, confirmed from the archive: Kamadan carries model
+`0x35140` — 10 triangles, placed **3×** — whose texture `0x28892` is the
+Nightfall/EotN radial vortex. Prophecies/Factions use a different, flat
+"scene-in-a-doorway" portal, so a census keyed to one texture would miss half
+the game. The portal materials' `blend` is ZERO, so they are alpha-TESTED
+rather than blended and the mist finding above does not cover them.
+
+This matters beyond rendering: `studies/customarea/FINDINGS.md` §5 lists
+"spawn points, portals or map links" as NOT FOUND in map files. A portal is a
+prop with a known model at a known world position, so the geometry names WHERE
+a map link is even though nothing yet says where it leads.
+
 ### 6.4 AMAT is not the answer either
 
 The obvious next hypothesis was **sub-model → an AMAT material (`0x00000FAD`)
