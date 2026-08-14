@@ -1293,7 +1293,8 @@ crops of ONE per-continent atlas of ATEX tiles compiled into the client — **49
 over three tiers, 484 resolving identically in all three vaulted archives** — cropped by
 the area row's footprint rect at **exactly one texel per terrain cell** (OBSERVED from
 the client's own `add`/`shr 9` and from a five-scale population test with four rivals at
-zero). A map file contributes nothing to the picture.
+zero). **No map file supplies a pixel of it** — though it does bound how much of it is
+ever asked for, which this paragraph denied until S9 corrected it (below).
 
 **The one result that reorders everything, and it was not predicted.** Rung S5 rendered
 the crops offline and went to compare them against the compass frames we already have —
@@ -1304,9 +1305,29 @@ sessions, chromatic ratio +1.081..+1.110 against the fallback's +1.164 and the c
 across a walk and no rotation improving it while the bezel visibly turns. **It fires on
 retail map 148 too, with all four of that map's tiles present in the archive the client
 opened** — so it is not our authored maps' fault, and the customarea "featureless brown
-disc" is now positively identified rather than explained. **Why it fires is NOT FOUND**,
-with two separable hypotheses (a world index latched before the instance load, or a
-failed texture load) and a `Gw.log` line that tells them apart for free.
+disc" is now positively identified rather than explained.
+
+**S9 then killed BOTH hypotheses this paragraph used to name, and the `Gw.log` line it
+called a free discriminator.** *It read: "Why it fires is NOT FOUND, with two separable
+hypotheses (a world index latched before the instance load, or a failed texture load)
+and a `Gw.log` line that tells them apart for free."* Two agents each owned one
+hypothesis and were told to refute their own; both died. The **stale index** cannot
+happen — the sentinel in `missionContext+0x230` is **888**, not 0 (`0x00855E3E`, teardown
+`0x00856119`), so row 0 is unreachable, and the sentinel path does not fall back at all:
+it hands a garbage world to the `s_worldData` accessor and dereferences ~`0x53A00000`, an
+access violation nowhere in our record. The **failed load** cannot be it either — the
+fallback tile the compass is drawing was loaded by that same loader, from the same
+archive, in the same process, on the same frame. And **the log line can never fire**: it
+sits on the *conversion* arm (`0x008C21EB cmp dword [ebp-4], 0xf; jne`), which is skipped
+because all 484 resolvable tiles are already DXT1 — absence of the line is exactly what a
+perfect load produces. **Do not budget it as evidence.**
+
+**What replaced them (H3, mechanism OBSERVED, cause UNVERIFIED):** `0x008C28D0` is a
+latch-once init that copies the **loaded map file's** world rect out of `Engine\Map`,
+divides by the 96.0 cell pitch and stores `(0, 0, mapCellsX, mapCellsY)`; the crop clamps
+every request to that rect **before** adding the footprint origin, and an empty
+intersection goes straight to the fallback tiler. Hence the correction above — the art is
+archive-only, the *addressing* is not.
 
 Four things landed underneath that:
 
@@ -1336,13 +1357,25 @@ Four things landed underneath that:
   `knotCount > 16` process-kill hazard is RETRACTED** — the generic unpacker refuses the
   message before dispatch, so an over-range send is inert, not dangerous.
 
-Next, in order: **S11** land the six `overrides.json` names (c2s `0x002B` at *medium* —
-DRAW is ArenaNet's word but only on the s2c side — s2c `0x0091` at high) **with the
-`DROPPED_ON_PURPOSE` row for `0x002B` in the same commit**, or `test_dispatch.py` goes
-red; **S9** the static half of "why is the compass NULL"; **C1** re-scoped from a picture
-comparison into that diagnosis, on retail map 148, which **gates C2 and C3** — an arm
-whose two halves both draw the fallback is satisfied vacuously. `worldmap.py` and its
-test are written and audited (floor 78, 19 sabotages, all redden) but **uncommitted**.
+**Next, in order (S1-S11 are all LANDED as of 2026-08-14; `worldmap.py` and its test are
+committed, floor 78, 19 sabotages all reddening; the suite is 83/83 green, 4,035
+checks):**
+
+1. **S12 — static, ~1-2 h, NO go-ahead needed, and it can kill the surviving hypothesis
+   for free.** Find the writer of `[globalCtx+0x14] + 4..0x10` and establish whether the
+   map rect is set inside the synchronous map parse or later. If the parse must precede
+   any render, H3a dies at no cost. Use a **directory** prefix with `codescan --in` —
+   `--in Map` bare pulls the whole geometry tree.
+2. **C1 — one loopback run, NEEDS OWNER GO-AHEAD, and it now settles all three at
+   once.** Retail map 148, our DH, caged, no probe, no `--enemy`. A cross-process
+   `ReadProcessMemory` of the live `CompassMap` (instance at `[compass+0x4C]`, lazy
+   create `0x008BC426`; `toolkit/harness/keytap.py` already does ASLR-correct RPM in
+   pure `ctypes`) reads three dwords: `+0x84` ≠ 1 revives the index family, `+0x84 == 1`
+   with `+0x58/+0x5c` ≠ (416, 512) **confirms H3**, and both correct kills all three and
+   puts the fault downstream of the crop or in rung S5's metric. Take the χ measurement
+   in the same run as the control — **the χ measurement ALONE can no longer discriminate
+   anything.** C1 still **gates C2 and C3**: an arm whose two halves both draw the
+   fallback is satisfied vacuously.
 **Owner flag for Tier 3 is unchanged**: an authored map's compass showing OUR terrain
 needs both an archive tile write (A1) and a client patch repointing the footprint (A2) —
 it is not a free consequence of good authoring, and it is worth nothing until C1 explains
