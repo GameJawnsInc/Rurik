@@ -114,6 +114,23 @@ python toolkit/authsrv/summarize_capture.py
 Always. A red test names the broken thing; the game says `Connecting…` for thirty
 seconds and then `Code=058`, which tells you nothing.
 
+**The whole suite is one command**, and it is the only way to report a count you can
+trust — `CLAUDE.md`'s rule is *run all of it and name the count*, and every "the suite
+is green" in this repo's history before 2026-08-13 was a human pasting paths into a
+shell:
+
+```bash
+python toolkit/run_suite.py
+```
+
+One process per file, discovered from **the disk** rather than from any document, and
+`rc == 0` with no `ALL CHECKS PASSED` banner is reported `SUSPECT` rather than laundered
+into a pass. `--only <substring>` filters, `--list` enumerates and stops. Baseline
+2026-08-14: **85 green / 0 red / 0 suspect of 85, 4,161 checks, ~40 minutes.** Budget
+for that wall clock — `test_modelexport` alone is ~9 minutes and `test_scrub` ~5.
+
+Individual files, when you want one answer fast:
+
 ```bash
 python toolkit/authsrv/test_handshake.py
 ```
@@ -231,7 +248,7 @@ Then heartbeats with a rising tick counter, which is a healthy idle client.
 | Symptom | Meaning | Do this |
 |---|---|---|
 | Stuck on `Connecting to ArenaNet`, no sockets, servers see nothing | The cage is blocking the pre-login patcher's update check — which means this build has no updater kill switch | `python toolkit/clientpatch/dhbuild.py`. If `updater=LIVE`, rebuild with `make_custom_client.py` rather than opening the cage. See below |
-| `REFUSING to launch … carries OUR Diffie-Hellman parameters` | A DH-patched client was aimed at a non-loopback host | Correct — that is the account-ending case. Use the `--live-capture` build under `vault/run-live` |
+| `REFUSING to launch … carries OUR Diffie-Hellman parameters` | A DH-patched client was aimed at a non-loopback host | Correct — that is the account-ending case. Use the `--no-dh-patch` build under `vault/run-live` |
 | `REFUSING to launch … carries ArenaNet's Diffie-Hellman parameters, not ours` | The live-capture build was aimed at loopback | Use the copy under `vault/run`; the live build cannot key against our server |
 | `REFUSING to launch … no Gw.dat, so staging did not finish` | `make_run_dir.py` could not copy the 4 GB source | Close every `Gw.exe` (a running one holds it open exclusively) and re-run `make_run_dir.py` |
 | `Unexpected token '-authsrv'` | PowerShell parsed the quoted path as a value | Add the leading `&`. Nothing launched; the flags are fine |

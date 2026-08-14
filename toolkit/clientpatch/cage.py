@@ -192,7 +192,7 @@ def assert_launch_safe(exe, host, why="launch"):
             f"  to ArenaNet's auth server. The account-visible event happens before\n"
             f"  the patch matters.\n"
             f"  Build the live-capture configuration instead:\n"
-            f"      python toolkit/clientpatch/make_custom_client.py --live-capture")
+            f"      python toolkit/clientpatch/make_custom_client.py --no-dh-patch")
 
     if dh == dhbuild.STOCK and not live:
         raise CageError(

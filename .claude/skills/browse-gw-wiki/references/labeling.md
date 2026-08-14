@@ -99,7 +99,7 @@ Page title and section, plus which wiki. The section matters — these pages are
 long and a bare page name is not checkable.
 
 ```
-WIKI (GuildWiki, "Adrenaline" §Gaining adrenaline): 25 adrenaline points per
+WIKI (GWW, "Adrenaline" §Gaining adrenaline): 25 adrenaline points per
 successful hit; +1 point per 1% of maximum health lost.
 ```
 
@@ -107,7 +107,7 @@ For a value pulled from a skill box, cite the template, since that is the page
 the value actually lives on:
 
 ```
-WIKI (GuildWiki, Template:Battle Rage): adrenaline = 4.
+WIKI (GWW, Template:Battle Rage): adrenaline = 4.
 ```
 
 When the wiki contradicts itself — and it does — record both sides as
