@@ -198,17 +198,29 @@ def section_against_the_real_tree():
     # Note the scan takes the whole document and not just its backticked spans: that is
     # defect 2 in one line, since `test_handshake.py` is named only inside a code fence
     # and any list built from backticks alone is short by exactly that file.
+    # BOTH documents, since 2026-08-14. The catalog moved to TESTS.md when it had
+    # grown to 90% of CLAUDE.md, but `test_handshake.py` is still named ONLY inside
+    # CLAUDE.md's code fence -- defect 2, the same file that proved it -- so a scan of
+    # the catalog alone is short by exactly that one, which is how this check would
+    # have failed for the wrong reason.
     import re
-    doc = os.path.join(rs.ROOT, "CLAUDE.md")
-    with open(doc, encoding="utf-8") as fh:
-        named = set(re.findall(r"toolkit/(?:[\w/]+/)?test_\w+\.py", fh.read()))
-    LEDGER.ok(named,
-              "CLAUDE.md yields a non-empty suite list to compare against",
-              f"{len(named)} names -- a scan matching nothing would make the next "
-              f"check pass by comparing two empty sets")
+    named = set()
+    for name in ("TESTS.md", "CLAUDE.md"):
+        path = os.path.join(rs.ROOT, name)
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as fh:
+                named |= set(re.findall(r"toolkit/(?:[\w/]+/)?test_\w+\.py", fh.read()))
+    # The vacuity guard is a PLAUSIBLE MINIMUM, not `> 0`. It used to be the latter,
+    # and when the catalog moved out of CLAUDE.md the scan fell to **2** names and
+    # this guard still passed -- leaving the real comparison below to do all the
+    # work of noticing. A guard that survives a 94 -> 2 collapse is not a guard.
+    LEDGER.ok(len(named) > 60,
+              "the documents yield a plausible suite list to compare against",
+              f"{len(named)} names -- a scan matching little or nothing would make "
+              f"the next check pass by comparing two near-empty sets")
     LEDGER.ok(set(found) == named,
               "and the runner's disk walk equals it exactly, both directions",
-              f"disk {len(found)}, CLAUDE.md {len(named)}, difference "
+              f"disk {len(found)}, docs {len(named)}, difference "
               f"{sorted(set(found) ^ named)}")
 
 
