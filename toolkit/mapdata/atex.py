@@ -228,6 +228,110 @@ def parse(data):
     return Atex(magic, fourcc, width, height, levels, len(data))
 
 
+#: An ATTX row's trailer is an `ffna` container -- the same magic the map files
+#: use, at a different type. MEASURED at 21,923 bytes on 106 of 106 rows by
+#: `test_atex.py`, and on 51 of 51 terrain textures by a second population.
+#: **That size is deliberately NOT used to find the trailer**; see
+#: `split_trailer`.
+TRAILER_MAGIC = b"ffna"
+
+#: The last 12 bytes of an ATTX row: `{u32 head length, u32 0, b"XTTA"}` --
+#: the ATTX magic byte-reversed. MEASURED on **1,648 of 1,648** ATTX rows in
+#: the archive (the whole population, not a sample), and CORROBORATED from the
+#: client's own writer at VA 0x007582A0, which appends exactly this after the
+#: `ffna` riff it builds.
+#:
+#: **This is an independent witness for the boundary**, which is what makes it
+#: worth reading: ArenaNet declares where her container ends, so our walk can
+#: be REFUTED by her number rather than merely agreeing with itself. The
+#: controls are 0 of 1,648 -- the word equals neither the total length nor the
+#: head minus 12 -- and the head length is not a constant to begin with (578
+#: distinct values from 368 to 68,156), so the agreement is not free.
+TRAILER_FOOTER = struct.Struct("<II4s")
+TRAILER_TAG = b"XTTA"
+
+
+def trailer_declared_end(trailer):
+    """The head length a trailer DECLARES, or None if it carries no footer.
+
+    None is a real answer: a plain ATEX has no trailer at all, and nothing
+    obliges a future one to carry this footer.
+    """
+    if len(trailer) < TRAILER_FOOTER.size:
+        return None
+    declared, zero, tag = TRAILER_FOOTER.unpack_from(
+        trailer, len(trailer) - TRAILER_FOOTER.size)
+    if tag != TRAILER_TAG or zero != 0:
+        return None
+    return declared
+
+
+def container_end(data):
+    """The first byte the level-record walk does NOT account for.
+
+    On a well-formed ATEX that is `len(data)`. On an ATTX it is the first byte
+    of the trailer. Separated from `parse` because on an ATTX the OFFSET is the
+    measurement and the refusal is not: `parse` can only say the walk died,
+    while this says where.
+
+    Shares its rule with `parse` and nothing else -- a record's `size` counts
+    its own 8-byte header, and the next record begins `size` bytes on.
+    """
+    off = HEADER_SIZE
+    while off + RECORD_SIZE <= len(data):
+        size, = struct.unpack_from("<I", data, off)
+        if size <= RECORD_SIZE or off + size > len(data):
+            return off
+        off += size
+        if off == len(data):
+            return off
+    return off
+
+
+def split_trailer(data):
+    """`(body, trailer)` -- the ATEX container, and whatever follows it.
+
+    **The boundary is found by WALKING, never by searching.** Two rejected
+    alternatives, because both look reasonable and both are wrong:
+
+      - `data.rfind(b"ffna")` finds the LAST occurrence, and compressed level
+        payloads are arbitrary bytes that may contain that sequence. A search
+        can only ever be right by luck; the container already knows where it
+        ends.
+      - the measured 21,923 is a fact about the rows measured so far, and a
+        constant nothing re-derives is a landmine the day a build ships a
+        different one. It is asserted as a CENSUS in the test instead, where a
+        second value is a finding rather than a crash.
+
+    A plain ATEX comes back unchanged with an empty trailer, because its walk
+    closes on the last byte -- so callers may split unconditionally.
+
+    Raises ValueError when the leftover is not a container we recognise. That
+    refusal is the point: a TRUNCATED ATEX also leaves the walk short, and its
+    leftover is level data, so without this check truncation would be silently
+    reported as a body that closes exactly plus a garbage trailer.
+    """
+    end = container_end(data)
+    trailer = data[end:]
+    if trailer and trailer[:4] != TRAILER_MAGIC:
+        raise ValueError(
+            f"the record walk stopped at {end} with {len(trailer)} bytes left "
+            f"over, and they do not begin with {TRAILER_MAGIC!r} "
+            f"({bytes(trailer[:4])!r}) -- this is a damaged or truncated "
+            f"container, not one carrying a trailer")
+    # AND THE SECOND WITNESS. The walk LOCATES the boundary; the footer is
+    # ArenaNet's own statement of where it is, so a disagreement means one of
+    # the two is wrong and neither may be preferred silently.
+    declared = trailer_declared_end(trailer)
+    if declared is not None and declared != end:
+        raise ValueError(
+            f"the record walk stopped at {end} but the trailer's footer "
+            f"declares the container is {declared} bytes -- two witnesses "
+            f"disagreeing, which is a finding and not something to resolve "
+            f"by preferring one of them")
+    return data[:end], trailer
+
+
 def fill_uniform(n_bytes, dword):
     """n_bytes of one repeated dword.
 
@@ -556,7 +660,17 @@ def decode_level(data, container, index):
 
     THE ORDER OF WORK, and every step is the client's:
       1. `PASS_TERRAIN_BORDERS` pre-marks the border blocks (256x256 DXT2/3
-         only; 0 of 49,800 sampled levels actually use it).
+         only).
+
+         **CORRECTED 2026-08-14, and the reason is the lesson.** This line
+         used to read "0 of 49,800 sampled levels actually use it", which was
+         true of the sample and false of the archive: **51 of 51** of one
+         map's terrain textures carry the bit at level 0, and so does every
+         ATTX row. The sample could not have contained one -- `parse` RAISED
+         on all 1,648 ATTX rows until `split_trailer` landed, so the only
+         files that use the pass named for terrain were exactly the files the
+         parser refused. A population measured through a filter that excludes
+         the phenomenon reports zero and looks like evidence.
       2. The four run-coded passes run IN BIT ORDER, sharing one rack.
       3. The literal cursor backs up ONE DWORD from wherever the rack
          stopped (`0x006C2E73`) and the record end is rounded DOWN so the
@@ -822,7 +936,15 @@ def blocks_to_rgba(blocks, stride, fourcc, width, height):
 
 
 def decode_rgba(data, container=None, level=0):
-    """One ATEX level straight to `(rgba, width, height)`."""
+    """One ATEX level straight to `(rgba, width, height)`.
+
+    **ATTX is accepted here, and this is the only place it is.** `parse` stays
+    strict on purpose -- refusing a container whose walk does not close is what
+    catches damage, and softening it would cost that -- so the trailer is split
+    off first. On a plain ATEX the split is a no-op, so this costs nothing and
+    branches on nothing.
+    """
+    data, _trailer = split_trailer(data)
     if container is None:
         container = parse(data)
     blocks, stride = decode_level(data, container, level)
