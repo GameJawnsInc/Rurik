@@ -402,6 +402,62 @@ existed in either tree** (the recon survey noted the same dangling name at
 `studies/recon/FINDINGS.md`:304). Both now point at this document, §1 and §4. A safety warning
 whose citation resolves to nothing is the half of a guard that does no work.
 
+### 4e. The bit-31 watchlist across a play session — PREDICTION, stated before the run
+
+**Why this run and not §4d item 1 on its own.** A long idle session is the weakest of the
+three remaining items *by itself*: the arm forces one write at map LOAD, so everything after
+the first ~30 s has nothing making the client write, and "nothing changed in minutes 2–15"
+cannot separate *our row is safe* from *the client wrote nothing at all*. §4c's MFT
+alternation fires per RUN, not per minute, so it does not fill the gap either. The bit-31 set
+does: it is a population the client rewrites **unprompted**, which is exactly the liveness a
+duration test cannot generate for itself. So the two are one run.
+
+**What bit 31 is — already answered, and that is what makes this cheap.** `archive.py`:486,
+read out of the client: `FcArchive` binds `id | 0x80000000` and **deletes the plain name when
+it has requested a replacement** (`0x007D7B70`); `DnArchive` re-links the plain id once the
+replacement is installed (`0x004766F0`). A bit-31 id means *this row's replacement is
+pending*. **No arm is needed and nothing is left armed** — our side of this experiment is
+read-only, which is also why it does not wait on §4d item 3.
+
+**Why it is load-bearing on our own content**, rather than a curiosity about ArenaNet's cache:
+
+- **Row 7982 is `donor_row` for all three `content/areas.toml` rows** — plaza, vale and
+  sculpt every one of them — and it is named by **two** bit-31 ids, `0x8001B97D` and
+  `0x8005E728`.
+- **`0x8001B97D` is the recorded `file_id` of two `content/maps.toml` rows**, Ascalon City
+  (Pre-Searing) and Lakeside County. If a session resolves that rename, the id our own
+  content is written down under stops binding. This is the mechanism `test_contentids.py`
+  already exists for, from the other side: `vault/run-live/` binds `0x1B97D` **plainly, to a
+  different row**, and carries 9 bit-31 ids where the study copy carries 25.
+
+**Census before the run**, `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat`: **29 bit-31 ids
+over 171,025 pairs**, MFT at `0xF8FFF000` (one of §4c's two slots), 177,335 rows. **Four land
+on map-flagged rows** — 7982 and 20118, each named twice — which corroborates
+`customarea/FINDINGS.md`:967's correction of "two" to **four** from an archive that file never
+read. Eight further rows are named by two ids each; those are the aliases `datwrite` saw
+zeroed.
+
+**PREDICTION.**
+
+1. **The authored rows survive byte-identical.** High confidence — §4b and §4c both. Fifteen
+   minutes adds time, not new client behaviour, unless there is a periodic task nobody has found.
+2. **The MFT alternates to `0xF8BEFE00`.** This is the liveness signal, and it is close to a
+   coin flip: §4c measured the flip at roughly every other run. **If it does not fire, the run
+   needs another liveness witness before any negative below may be reported.**
+3. **NONE of the 29 clear.** This is the load-bearing prediction and it is deliberately the
+   boring one: the two ids observed clearing did so across a **build update**, which is when
+   new content arrives, and a loopback client **has no content source**. A replacement cannot
+   install if nothing can deliver it, so the request should stay pending.
+4. **The rival, and what it would mean.** If any bit-31 id clears on loopback with no content
+   source, then the client resolves replacements from **local** content — generated or
+   transcoded, which `datwrite/FINDINGS.md` labels RECONSTRUCTION either way — and bit 31
+   becomes a **live hazard for our recorded file ids** rather than an update-time curiosity.
+   That is the result that would change what `content/maps.toml` is allowed to store.
+
+**What would make this INCONCLUSIVE**, stated now so it cannot be rationalised later: no MFT
+move, no `descriptor_counter` advance and no bit-31 change, all three together, mean the client
+wrote nothing and the run measures nothing.
+
 ---
 
 ## 5. What this changes elsewhere
