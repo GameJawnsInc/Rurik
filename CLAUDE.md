@@ -491,7 +491,7 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   completes the plan before the first write call), because otherwise a refusal
   lands after some of the file is written. Sections 0-4 build their own 1,024-record
   files out of `struct` and need no vault, no archive and no client, scoring 31
-  against a floor of 31; 41 with a vault, the last two being the cross-module
+  against a floor of 31; 43 with a vault, two of them being the cross-module
   JOIN -- every skill's recipe string id resolving to its own generated name,
   188 of 188, read back through reskin's own recipe loader rather than compared
   in memory, with a one-id shift collapsing it to 0 of 188. ~2 s),

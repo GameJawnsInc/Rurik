@@ -268,7 +268,18 @@ def section_roster():
                     "armable-order reproduction all need the real artifacts")
         return
     import iconset                                               # noqa: E402
-    mapping = iconset.skill_glyphs(PROFESSION, str(exe), str(dat))
+    # A RUNNING CLIENT holds its own archive exclusively, which is a normal state
+    # during a session and not a fault. SKIP, not FAIL: "could not read it" and
+    # "read it and it was wrong" are different results, and `guarded()` reports
+    # the first as the second. Same handling as test_textwrite.py section 5 --
+    # which got it first, and then this file went red on the very next run for
+    # exactly the reason the fix next door was about.
+    try:
+        mapping = iconset.skill_glyphs(PROFESSION, str(exe), str(dat))
+    except PermissionError:
+        LEDGER.skip("section 5: the archive is locked",
+                    "a client is running and holds Gw.dat exclusively")
+        return
     named = sn.assign(mapping)
     check(len(named) == 188, "profession 8 names 188 skills", len(named))
     check(len(set(named.values())) == len(named),

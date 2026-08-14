@@ -2136,11 +2136,87 @@ Planned, read-only: text file 98 -> id `0x5C0C8` -> row 8295, **7,134 B -> 12,23
 existing + 5,102 names) and the per-record cost is **zero** -- all 1,024 six-byte headers
 are paid whether used or not.
 
-**NOT YET RUN.** No byte has been written to any archive and no client has been launched.
-What remains is the relocation, one `reskin.py` invocation layering both recipes, and one
-caged run to read the names off the bar.
+**RUN AND OBSERVED -- see 24.4.** The relocation, the layered `reskin.py` invocation and
+the caged run all happened on 2026-08-14.
 
 Two hazards inherited rather than introduced, both from `crossbuild/FINDINGS.md` §4c:
 the run archive is **already armed** with 125 icon rows plus three expired-journal rows,
 and **a journal expires the moment a client runs**, so revert before launching anything
 else rather than after.
+
+### 24.4 OBSERVED (2026-08-14): the names are on screen, and they match the pictures
+
+Harness `20260814T124138`, reskinned client, `--spawn-profession 8`, four runs.
+
+**The panel reads:**
+
+```
+Skills and Attributes (Test Warrior) [K]
+  Profession: Stormcaller
+  Attributes (50 unused points)
+      Tempest   Galecraft   Windward   Thunderhead   Storm Calling
+  Test Warrior's Skills
+    - Galecraft (3 Skills)
+        Nimble Cross
+        Sly Vortex
+        Veering Trident
+    + Storm Calling (3 Skills)
+    + Thunderhead (3 Skills)
+    + Windward (3 Skills)
+```
+
+Four groups and no others, which is the run's own control: `--unlocks` was given
+the twelve ids explicitly, so an attribute group that is not ours could not appear.
+The three names under Galecraft are exactly the three predicted before the run.
+
+**The stronger half is the BAR.** Its eight slots read, left to right: trident,
+vortex, cross, starburst, vortex, wedge, drop, trident -- against *Veering Trident,
+Sly Vortex, Nimble Cross, Sheltering Starburst, Patient Vortex, Watchful Wedge,
+Looming Drop, Massing Trident*. **Eight of eight, name matching picture**, because
+both are computed from the same index: the noun is `NOUNS[i % 22]` and the icon is
+`glyphs.icon(i)`. That agreement is the whole design of §24.2 and it is the one
+thing no amount of programmatic checking could have shown -- the test proves the
+ids resolve, the screen proves they resolve to the right *shape*.
+
+**How it was made visible is worth keeping.** The Skills panel groups by attribute
+across every profession the character has unlocked, and with the default `corpus`
+unlock set that is 1,333 skills in ~38 groups, so ours sit far down an
+unscrollable-by-script list. Two runs were spent trying to drive the panel's own
+sort/display toggles: the clicks land (their tooltips, *"Sorting by Attribute"* and
+*"Displaying as a list"*, appear in `3-click.png` and `4-click.png`) and the list
+does not change. That is unexplained and is left as a NEGATIVE result rather than
+worked around silently. What worked was removing the need to navigate at all:
+`--unlocks <12 ids>` makes the list four rows long, and the panel opens at a
+repeatable position so a fractional click on the first group's `[+]` is reliable.
+
+**A caution recorded on the way.** `Tempest (2 Skills)` holds *Battle Rage* and
+*Defy Pain* -- ArenaNet's names, and correctly so. `stormcaller.toml` moves skills
+317 and 318 onto attribute 26, and those are Warrior skills outside profession 8's
+roster (ids 772..3429), so they were never among the 188 and were never renamed.
+Read quickly it looks like the rung failed on its own primary attribute.
+
+### 24.5 Three defects this run found, none of them in the names
+
+1. **`press_key` sent `bScan=0`, so every scripted key did nothing.** The harness
+   printed `action 18:key:K: sent` and the panel never opened; the owner pressed K
+   by hand and it opened at once. This is the defect `test_harness.py` section 9
+   exists for -- `hold_key` held W for 65 s into a client that ignored every event
+   -- present in a SECOND function, because the 2026-08-11 fix landed on `hold_key`
+   and `press_vk` and missed the third copy of the same send, which was in no test
+   at all. **The blast radius is every scripted skill press since 2026-08-11**: any
+   run that concluded something from `key:1` was reading a dropped input rather than
+   a client behaviour. Fixed by delegating to `press_vk`; verified against a real
+   client, same script and timing, the 0.6 s frame going from no panel to panel.
+
+2. **`reskin.py` died with `UnboundLocalError` on its first real invocation** --
+   `skill_strings` was extended by the recipe block and initialised nowhere, because
+   it is the one edit list with no CLI flag beside it. It located all six tables
+   first, so the failure looked like a table problem.
+
+3. **This session's own test tracked mutable vault state.** `test_textwrite.py`
+   section 5 asserted `used == 12` records and `relocate is True` -- both true of the
+   archive that morning and both FALSE the moment `textwrite --arm` ran, so three
+   checks went red at the tool working exactly as designed. The invariants are now
+   the identity tier being intact and `relocate == (new > reserved)`, which hold in
+   both states. It is the defect `test_agentlife.py`'s probe section is named for,
+   two entries away in CLAUDE.md's own list.

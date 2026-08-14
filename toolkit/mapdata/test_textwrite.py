@@ -35,7 +35,7 @@ import textrec                                                   # noqa: E402
 import textwrite as tw                                           # noqa: E402
 import vaultpath                                                 # noqa: E402
 
-# MEASURED 2026-08-14 by running it both ways: 31 with no vault, 41 with one.
+# MEASURED 2026-08-14 by running it both ways: 31 with no vault, 43 with one.
 # (The draft of this line said 29/34 and both were guesses, in the same session
 # that had already recorded three of those -- see test_skillnames.py's floor
 # comment. Run it, read the banner, paste the number.)
@@ -273,9 +273,24 @@ def section_real():
     recs, _t, tiled = textrec.walk(blob)
     check(tiled and len(recs) == N,
           "the live file tiles at %d records" % N, (len(recs), tiled))
+    # THE IDENTITY TIER IS INTACT -- and note what this does NOT say. The draft
+    # asserted `used == 12`, which was true of the archive on the day it was
+    # written and FALSE the moment textwrite armed the names into it: 12 -> 200,
+    # and three checks in this section went red at the tool working exactly as
+    # designed. A test whose colour tracks mutable vault state is the defect
+    # `test_agentlife.py`'s probe section exists for, two entries over in
+    # CLAUDE.md's own list. So the invariant is that records 0..11 still carry
+    # text, which holds before and after any number of name writes and is the
+    # thing an accidental clobber would actually break.
     used = sum(1 for _b, _ba, p in recs if p)
-    check(used == 12,
-          "12 records are written -- the identity tier, and nothing else", used)
+    identity = [i for i in range(tw.FIRST_FREE_RECORD) if not recs[i][2]]
+    check(not identity,
+          "every record of the identity tier still carries text -- the property "
+          "a clobber would break, and the one that does not move when names are "
+          "armed", "%d written overall, %d empty below record %d"
+          % (used, len(identity), tw.FIRST_FREE_RECORD))
+    check(used >= tw.FIRST_FREE_RECORD,
+          "and the file holds at least the identity tier", used)
     # The size model, from the module docstring, verified against the artifact.
     empty = N * textrec.HEADER_SIZE + 2
     chars = sum(len(p) for _b, _ba, p in recs) // 2
@@ -286,15 +301,25 @@ def section_real():
     check(len(strings) == 188, "188 names to write", len(strings))
     check(min(strings) == tw.FIRST_FREE_RECORD,
           "starting at the first free record", min(strings))
+    # The size model applied to the MERGED record set, which is state-independent:
+    # the draft compared against `len(blob) + 2*chars(new names)`, true only while
+    # those names were absent, and a second arm of the same names adds nothing.
     p = tw.plan(str(dat), str(exe), strings)
-    added = 2 * sum(len(v) for v in strings.values())
-    check(p["new"] == len(blob) + added,
-          "the planned size is the old size plus 2 bytes per character, with "
-          "no per-record cost -- the 6-byte headers are already paid",
-          "%d = %d + %d" % (p["new"], len(blob), added))
-    check(p["relocate"] and p["placement"] is not None,
-          "it is a relocation and datmove will place it",
-          "%d B vs a %d B reservation" % (p["new"], p["reserved"]))
+    merged, _mt, _mok = textrec.walk(p["blob"])
+    mchars = sum(len(pl) for _b, _ba, pl in merged) // 2
+    check(p["new"] == empty + 2 * mchars,
+          "the planned size obeys the same model as the live file -- 1024*6 + 2 "
+          "+ 2*chars over the MERGED records, no per-record cost",
+          "%d == %d + %d" % (p["new"], empty, 2 * mchars))
+    check(p["relocate"] == (p["new"] > p["reserved"]),
+          "and relocate is decided by the reservation, not assumed -- this file "
+          "arms the very names it plans, so whether THIS write moves the row "
+          "depends on whether it has already been armed",
+          "new %d vs reservation %d -> relocate=%s"
+          % (p["new"], p["reserved"], p["relocate"]))
+    check(p["placement"] is not None or not p["relocate"],
+          "a relocation always comes with a placement datmove will accept",
+          p["relocate"])
 
     # THE JOIN. The archive gets a string at a record; the client gets that
     # record's string ID in the skill's row+0x98. NOTHING joins them at run time
