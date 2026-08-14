@@ -1699,6 +1699,78 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   only so no ArenaNet text enters the tree. ~2 s),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
   refused),
+  `toolkit/harness/test_marks.py` (the pre-registered operator-mark channel — §10.5.1's
+  {t, kind, text} writer on `wire.jsonl`'s own clock, which two studies call a
+  precondition for the next live run. Its criterion is that a mark taken at a segment's
+  instant lands on THAT SEGMENT'S own `t`, against a capture the REAL `wirecapture.
+  open_capture` wrote — two modules, two epochs, one answer, and nothing this file
+  computes can force it. **Every headline here is a number a broken version also prints**,
+  so 25 one-edit sabotages of `marks.py` and 5 of `wirecapture.py` were BUILT AND RUN; all
+  30 redden, thirteen redden exactly ONE check, and the file's floor comment names each.
+  The three that earn the file are the three a skeptic passed with **all 139 checks green,
+  exit 0**: `self.user32["Send" + "Input"](...)`, `attrgetter("Send" + "Input")` and an
+  ALIASED subscript — working keyboard writers on a real `ctypes.WinDLL`, past the very
+  control CLAUDE.md's live-automation rule turns on, because detector 3 scanned
+  `ast.Attribute` off a base spelled `user32` and matched `getattr`/`setattr` by name. The
+  scan was widened (subscripts, aliases, 20 dynamic-lookup spellings, a `"<computed>"` key
+  that can never be whitelisted) but the answer is the CAPABILITY: `Hotkeys.__init__` now
+  BINDS its four functions and lets the handle go out of scope, and the check is on the
+  OBJECT — a scan says what it noticed, a class with no handle says what exists.
+  **Three constants were free to move the same way**: `VK_F9/F10/F11` were compared
+  against the module's own symbols, so a `marks.py` taking GLOBAL hotkeys on ESCAPE,
+  ENTER and SPACE — swallowed away from Guild Wars for a whole session — passed
+  everything, and even the refusal message relabelled 0x1B as "VK_F9". They are literals
+  now, with the binding ORDER beside them. `test_agentlife.py`'s twelve-of-fourteen, in
+  the file that cites it twenty lines earlier. **The module was also a writer with NO
+  destination guard**: one `open(self.path, "w")` off argv, zero guard calls, and `--out`
+  at a 4,096-byte file named `Gw.dat` replaced it with 533 bytes before the first mark —
+  `atex.py --make C:\gw\Gw.dat` in a new module. Four refusals now (the owner's install,
+  `vault/dat_study` before the vault allow, EVERY checkout, and any path that ALREADY
+  EXISTS), each with a positive control, and the syntax tree is asked whether
+  `resolve_out` runs BEFORE the `open`. **The check that tests that guard wrote into the
+  tree**: aimed at the TEST's `HERE` rather than the module's own `working_tree_roots()`,
+  it created `toolkit/harness/plan_marks.jsonl` on 24 sabotage runs — the exact write the
+  guard exists to prevent, through the check that tests it. **Five hotkey leaks are
+  measured, not argued**, against a fake keeping its OWN OS-side ledger: `RegisterHotKey`
+  RAISING (the branch only fired on a falsy RETURN and the `atexit` hook went on AFTER the
+  loop, so there was no net at all), the same through `with Hotkeys()`, Ctrl-C mid-loop,
+  `UnregisterHotKey` returning 0 (discarded — and a real one returns 0 with WinError 1419
+  on a key that is still held), and Ctrl-C INSIDE teardown, where `except Exception` misses
+  the BaseException and the id had already been popped so `atexit`'s retry could never
+  reach it. The backstop under all five is now MEASURED: a hard-killed process releases
+  VK_F24 at +0.0 s, with a live 1409 control while it lived. **The clock claim was two
+  witnesses restating each other.** `t_perf` and `t_wall` are sampled adjacently in ONE
+  process, so their difference only ever measures the OS-wide (QPC − system time) offset
+  against itself — a capture whose published epoch was 0.9 s off the epoch its segments
+  were stamped from BOUND, with both channels reporting 0.0001 ms of skew — and 0.250 s is
+  ~50,000x the phenomenon it is named for (two processes agree to 5 µs over 12 spawns,
+  drifting at −0.004 ppm). So `wire_t` is restored as the THIRD channel, the only one on
+  the segment axis; the boundary is pinned at 250 ms binds / 250.001 ms refuses, because
+  any value in (0.249, 0.600) used to leave every behavioural check green; the marks
+  file's own epoch sits 31 s after the capture's, because with them equal a binder reading
+  either epoch from the WRONG FILE passed 139 green; and the diagnosis grew a third word —
+  fed one +0.5 s wall step it answered "a stamping fault at those marks" (it was one clock
+  event) AND "it is a RATE" (it was a step), the two hypotheses it could express, both
+  wrong. **And a mark an HOUR after a capture that ended at t=12.0 bound silently**, which
+  is reachable because the sniffer has a `--seconds` ceiling and `livesession` keeps the
+  session going when it dies: disjoint is now REFUSED, a partial overlap is REPORTED,
+  because "the network went quiet" and "the sniff stopped" are not separable from the
+  artifact. The readout's own vacuity is fixed too — zero marks printed "worst |dperf −
+  dwall| = 0.0 ms", a run that measured nothing reporting the best possible measurement.
+  **The failure MODE was the structural problem, not coverage**: of 109 sabotages against
+  the old file, twelve died with a traceback at checks 17–126 and FOUR HUNG past 120 s —
+  no banner, no ledger, no floor line, so the declared floor was unreachable as a guard
+  and any one of four one-line defects in `run()` blocked the whole suite. `guarded()`
+  turns a section crash into a NAMED failing check and `BoundedHotkeys` bounds the one
+  call `run()` makes every pass, so all four are red now and the floor prints its
+  shortfall. Four `any(got)` rows were DELETED as strictly weaker restatements of the line
+  above them — a check that cannot fail independently is floor, not coverage. No vault, no
+  socket, no client, no Windows: every hotkey check runs on a fake `user32` and every
+  clock is injected, which is the shape `test_keytap.py` could not have. 179 checks
+  against a floor of 179; ~1.2 s. **`bind()` has still never run against a byte ArenaNet
+  sent** — `wire_epoch` refuses all ten `wire.jsonl` in the vault, and not for the reason
+  the refusal used to give: measured, every one carries NEITHER epoch, because `t0_wall`
+  landed 2026-08-11 and the newest live capture is 2026-08-10),
   `toolkit/harness/test_keytap.py` (the ReadProcessMemory key reader — RPM round-trip,
   ASLR-correct module-base resolution, cross-process, and a clean failure on an unmapped
   address; Windows-only, skips whole otherwise),

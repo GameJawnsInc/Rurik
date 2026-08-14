@@ -183,6 +183,17 @@ def open_capture(path, client, server, pid, server_ports, clock, wall=time.time)
     UTC timestamp for every segment. That IS a legitimate use of `perf_counter`: the
     subtraction stays inside this process, and the absolute clock only pins its origin.
 
+    `t0_perf` IS THE RAW `perf_counter()` READING, and writing it down is what makes the
+    paragraph above a measurement instead of a hope. Added 2026-08-13 for
+    `toolkit/harness/marks.py`. On its own it is meaningless outside this process -- that
+    is CPython's contract, only differences taken within one call site are defined -- and
+    that is exactly why it is here: a mark taken in ANOTHER process carries its own
+    `t_perf` and `t_wall`, so `marks.bind` can compute `t_perf - t0_perf` for the wire
+    time AND check it against `t_wall - t0_wall`, refusing past 250 ms. Publishing only
+    `t0_wall` left the cross-process comparability of `perf_counter` on Windows as an
+    assumption nothing in the artifact could refute; publishing both makes it a claim the
+    two clocks can contradict. It costs one number per capture.
+
     WRITTEN AFTER THE CLOCKS ARE TAKEN, which reorders two lines. `dryrun_keycapture.py`
     and `livesession.py` both use the PRESENCE of the `wire_meta` line as proof the sniff
     opened, and that still holds -- open_capture is only reached once WinDivert is up, so
@@ -215,7 +226,7 @@ def open_capture(path, client, server, pid, server_ports, clock, wall=time.time)
     t0_wall = wall()
     fh.write(json.dumps({"kind": "wire_meta", "client": client, "server": server,
                          "pid": pid, "server_ports": sorted(server_ports),
-                         "t0_wall": t0_wall}) + "\n")
+                         "t0_perf": t0, "t0_wall": t0_wall}) + "\n")
     fh.flush()
 
     def record(direction, seq, payload, pkt=None):
