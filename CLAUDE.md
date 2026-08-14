@@ -395,6 +395,31 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   ~30 ms), which is what makes the strided sweep affordable. Sections 0-3 need no
   vault and score 33 against a floor of 50. ~26 s; `--all` peeks all 177,341 rows and
   is ESTIMATED, not measured, at ~30 minutes),
+  `toolkit/mapdata/test_png.py` (the stdlib PNG codec rung M5's texture
+  export writes through -- `zlib` and `struct` and nothing else, because
+  `toolkit/` takes no third-party dependency and a test needing PIL to check
+  it would defeat the module's only reason to exist. NO vault, no archive, no
+  client, no PIL: every image is built in the file out of `bytes`. The round
+  trip is deliberately the WEAK half -- two functions that agree prove they
+  are inverses and nothing about whether either is PNG -- so section 2 reads
+  the emitted bytes with a walker written HERE out of `struct` and `zlib`,
+  recomputing every CRC, and section 3 feeds the reader images the WRITER
+  CANNOT PRODUCE: the writer only ever emits filter 0, the reader claims all
+  five, so a PNG is hand-built for each and one more mixing a different
+  filter per row (which is what catches a stale `prev` scanline). Six
+  one-edit sabotages were BUILT AND RUN and all six redden -- 8, 4, 2, 1, 2
+  and 2 -- and the counts are MEASURED, an earlier draft having carried
+  guessed ones of which four were wrong. Two rows earn their place: the
+  Paeth predictor is invisible to every round trip here (the writer never
+  emits filter 4) so only the hand-built images reach it, and **a reader
+  that trusts the stored CRC reddens exactly ONE check**, section 4's
+  tamper. The width/height swap reddening only 2 is reported rather than
+  tuned, and the reason is stated -- a transposed IHDR gives the reader a
+  wrong stride so it REFUSES, and the section aborts into one named failure,
+  which is `main()`'s guard working rather than thin coverage. Refusals are
+  asserted as `BadPNG` and not as "raises", because a truncated file left as
+  `struct.error` in the first version and the difference to a caller is a
+  refusal versus a crash in the exporter. 45 checks, ~1 s),
   `toolkit/mapdata/test_atexlevel.py` (the ATEX LEVEL CODEC, solved
   2026-08-14 -- kept apart from `test_atex.py`, which owns the container. A
   level's `code` was never a compression method: it is a 5-BIT MASK OF

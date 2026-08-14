@@ -753,6 +753,133 @@ def resolve_out(path):
     return full
 
 
+# --------------------------------------------------------------------------
+# Blocks to pixels. `decode_level` hands back DXT BLOCKS; this turns them
+# into RGBA8, which is what an exporter and an image writer both want.
+# --------------------------------------------------------------------------
+
+def _alpha_table(a0, a1):
+    """BC3/BC4's eight-entry alpha ramp. The `a0 > a1` branch is the one with
+    six interpolants; the other reserves indices 6 and 7 for 0 and 255."""
+    if a0 > a1:
+        return [a0, a1] + [((7 - k) * a0 + k * a1) // 7 for k in range(1, 7)]
+    return ([a0, a1] + [((5 - k) * a0 + k * a1) // 5 for k in range(1, 5)]
+            + [0, 255])
+
+
+def blocks_to_rgba(blocks, stride, fourcc, width, height):
+    """RGBA8 pixels, top row first, from one decoded level's blocks.
+
+    The per-format layout comes from `block_layout` rather than from the
+    stride, which is what stops DXTA -- 8 bytes a block, like DXT1, and NO
+    COLOUR HALF -- being read as colour. That mistake is recorded in
+    `test_atexlevel.py`: it scored DXTA at the noise floor and read as a
+    broken decoder when the decoder was right.
+
+    DXT2/DXT4 carry PREMULTIPLIED alpha and are returned as stored, i.e. NOT
+    un-premultiplied, because whether a consumer wants that is its decision
+    and undoing it is lossy. They are 2 of 1,533 sampled containers.
+    """
+    _block_dw, colour_off, has_alpha, has_colour, fmt = block_layout(fourcc)
+    bw = max(1, (width + 3) // 4)
+    bh = max(1, (height + 3) // 4)
+    out = bytearray(width * height * 4)
+    colour_byte = colour_off * 4
+    explicit = fourcc in (b"DXT2", b"DXT3")
+    for index in range(bw * bh):
+        base = index * stride
+        if has_colour:
+            c0, c1 = struct.unpack_from("<HH", blocks, base + colour_byte)
+            bits, = struct.unpack_from("<I", blocks, base + colour_byte + 4)
+            texels = dxt1.decode_block(c0, c1, bits)
+        else:
+            texels = [(255, 255, 255, 255)] * 16
+        if has_alpha and fmt != 0x15:
+            if explicit:
+                # BC2: four bits per texel, no ramp.
+                raw = int.from_bytes(blocks[base:base + 8], "little")
+                alpha = [((raw >> (4 * n)) & 0xF) * 17 for n in range(16)]
+            else:
+                ramp = _alpha_table(blocks[base], blocks[base + 1])
+                raw = int.from_bytes(blocks[base + 2:base + 8], "little")
+                alpha = [ramp[(raw >> (3 * n)) & 7] for n in range(16)]
+        else:
+            alpha = [t[3] for t in texels]
+        by, bx = divmod(index, bw)
+        by = index // bw
+        for n in range(16):
+            x = bx * 4 + (n % 4)
+            y = by * 4 + (n // 4)
+            if x >= width or y >= height:
+                continue
+            r, g, b, _a = texels[n]
+            at = (y * width + x) * 4
+            out[at] = r
+            out[at + 1] = g
+            out[at + 2] = b
+            out[at + 3] = alpha[n]
+    return bytes(out)
+
+
+def decode_rgba(data, container=None, level=0):
+    """One ATEX level straight to `(rgba, width, height)`."""
+    if container is None:
+        container = parse(data)
+    blocks, stride = decode_level(data, container, level)
+    width, height = level_dims(container.width, container.height, level)
+    return (blocks_to_rgba(blocks, stride, bytes(container.fourcc),
+                           width, height), width, height)
+
+
+#: The one uncompressed DDS shape the prop corpus uses. MEASURED: of 1,795
+#: texture references on the two reference maps, 10 are DDS and all ten name
+#: the SAME file -- 128x128 A8R8G8B8 with 8 mip levels.
+DDS_MAGIC = b"DDS "
+
+
+def dds_rgba(data):
+    """`(rgba, width, height)` for an uncompressed 32-bit DDS, or None.
+
+    Deliberately narrow: this exists because ten prop texture references are
+    DDS rather than ATEX, and returning None for anything else keeps the
+    exporter honest about what it skipped instead of guessing at a format.
+    """
+    if len(data) < 128 or data[:4] != DDS_MAGIC:
+        return None
+    height, width = struct.unpack_from("<2I", data, 12)
+    pf_flags, = struct.unpack_from("<I", data, 80)
+    fourcc = data[84:88]
+    bit_count, = struct.unpack_from("<I", data, 88)
+    masks = struct.unpack_from("<4I", data, 92)
+    if pf_flags & 0x4 and fourcc != b"\0\0\0\0":
+        return None                       # a compressed DDS; not handled
+    if bit_count != 32:
+        return None
+    need = width * height * 4
+    body = data[128:128 + need]
+    if len(body) < need:
+        return None
+    r_mask, g_mask, b_mask, a_mask = masks
+
+    def shift_of(mask):
+        if not mask:
+            return None
+        s = 0
+        while not (mask >> s) & 1:
+            s += 1
+        return s
+
+    rs, gs, bs, a_s = (shift_of(m) for m in (r_mask, g_mask, b_mask, a_mask))
+    out = bytearray(need)
+    for i in range(width * height):
+        pixel, = struct.unpack_from("<I", body, i * 4)
+        out[i * 4] = (pixel & r_mask) >> rs if rs is not None else 0
+        out[i * 4 + 1] = (pixel & g_mask) >> gs if gs is not None else 0
+        out[i * 4 + 2] = (pixel & b_mask) >> bs if bs is not None else 0
+        out[i * 4 + 3] = ((pixel & a_mask) >> a_s) if a_s is not None else 255
+    return bytes(out), width, height
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__,

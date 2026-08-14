@@ -161,6 +161,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive, ffna_chunks, ffna_type, file_id_table, \
     DEFAULT_DAT  # noqa: E402
+import mapchunks  # noqa: E402
 
 #: The chunk ids a model file carries (MEASURED census, 14-map sample).
 GEOMETRY_CHUNK = 0x00000FA0
@@ -805,6 +806,59 @@ class ModelFile:
         if payload is None:
             return None
         return ModelGeometry.decode(payload)
+
+    def texture_refs(self):
+        """The model's texture file ids, in slot order. `None` per NULL slot.
+
+        Chunk `0x00000FA5` is `u32 count` then `count` VARIABLE-LENGTH slots:
+        a `u16 id0`, and if that is zero the slot ENDS there (two bytes, a
+        null reference); otherwise `u16 id1, u16 pad` follows and the pair is
+        the same encoding a map's Dependencies chunk uses
+        (`mapchunks.dependency_file_id`).
+
+        MEASURED 2026-08-14: the walk closes on the exact final byte for
+        857/857 FA5 chunks over a strided corpus sweep and 315/315 on the two
+        reference maps, where eight rival framings close 0/315 -- including
+        the fixed-6-byte reading, which closes only 642/857 corpus-wide, so
+        the 2-byte null slot is what explains the other 215. Every non-null
+        reference resolves through the file-id table AND lands on a texture:
+        1,795/1,795 on the reference maps.
+
+        **`0x00000FA1` is NOT this.** The upstream claim that FA1 and FA5 are
+        both "texture filenames" is refuted for FA1: this framing closes
+        0/615 on it, its length is usually not 4-aligned, and sliding every
+        6-byte window of every FA1 yields exactly 1 texture-decoding hit in
+        89,013 against FA5's 1,795 of 1,798. FA1's contents are NOT DECODED.
+        """
+        payload = self.find(TEXNAME_CHUNK_B)
+        if payload is None:
+            return []
+        if len(payload) < 4:
+            raise Undecodable(f"texture chunk is {len(payload)} bytes, under "
+                              f"its 4-byte count")
+        count, = struct.unpack_from("<I", payload, 0)
+        out = []
+        at = 4
+        for slot in range(count):
+            if at + 2 > len(payload):
+                raise Undecodable(f"texture slot {slot} of {count} runs past "
+                                  f"the chunk's {len(payload)} bytes")
+            id0, = struct.unpack_from("<H", payload, at)
+            at += 2
+            if id0 == 0:
+                out.append(None)
+                continue
+            if at + 4 > len(payload):
+                raise Undecodable(f"texture slot {slot} of {count} is "
+                                  f"truncated")
+            id1, _pad = struct.unpack_from("<HH", payload, at)
+            at += 4
+            out.append(mapchunks.dependency_file_id(id0, id1))
+        if at != len(payload):
+            raise Undecodable(
+                f"the texture-slot walk ends at {at} of {len(payload)} "
+                f"bytes; {count} slots do not account for the chunk")
+        return out
 
     def __repr__(self):
         ids = ", ".join(f"0x{cid:X}" for cid, _p in self.chunks)
