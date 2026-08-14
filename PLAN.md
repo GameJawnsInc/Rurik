@@ -1364,8 +1364,8 @@ is still armed on rows 174150/174487/174861 for that reason.
 **NEXT, and it is a design question rather than a mechanism one.** The identity tier is
 done, the primary marker moved onto our own claimed row (§19.7, `cb53a9b`), and the icon
 path is open. What is left is what makes the class *play* differently. In rough order of
-value: the skill roster is 1 byte per skill row and only two skills have been moved
-(§10's countable check); the 132 icons need drawing; and armour, model scale and palettes
+value: **the 132 icons are DRAWN and 125 are armed** (RESKIN 13.1, `glyphs.py` + `iconset.py`, eight of eight predictions held on screen); the skill roster is 1 byte per skill row and only two skills have been moved
+(§10's countable check); and armour, model scale and palettes
 are all same-length dwords that nothing has exercised yet. None of these is blocked —
 they need a design, not a discovery. The one thing that *is* server work is the primary
 attribute's inherent passive (RESKIN §20): the client never computes damage, healing,
