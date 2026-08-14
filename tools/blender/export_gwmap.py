@@ -74,6 +74,28 @@ by exactly the negated amount, which is what an exporter that re-emitted the
 stamped manifest cannot do. Without the sculpt control the identity round trip
 is satisfied by a memcpy.
 
+PROPS ROUND-TRIP (2026-08-14). Every prop object in the scene comes back out
+as a props sidecar, so placements can be AUTHORED in Blender and not merely
+looked at. The rule is the terrain's: GEOMETRY WINS. Position, rotation and
+scale are read off `matrix_world`, so moving or turning a prop is what gets
+written; the model index, flags and outline ring come from the custom
+properties the importer wrote, because a transform cannot hold them and
+inventing them would be fiction. The model TABLE -- which maps a prop's index
+to an archive file id and that row's (size, crc) -- is carried from the
+importer's `gwprops` stamp for the same reason: a file id is ARCHIVE STATE and
+a Blender scene has no archive to re-derive one from.
+
+ONE PLACE THE STAMP WINS, and it is because the geometry provably does not
+carry the answer: an OUTLINE proxy is imported UNROTATED on purpose (the
+compiled ring is `(x + dx, y + dy)`, the client's own add-back with no
+rotation term), so deriving a basis from its identity matrix would write an
+identity basis over the real one. MEASURED: 31 of Pre-Searing's 864 props took
+that path before the branch existed, and every one would have had its
+orientation silently flattened.
+
+An EMPTY prop list writes no sidecar at all -- a mesh authored from nothing has
+no prop layer, and emitting an empty one would claim a different fact.
+
 WHERE THE OUTPUT MAY GO. An exported height field derived from a retail map is
 derived ArenaNet data, and `CLAUDE.md`'s provenance gate keeps it out of the
 repo permanently. `toolkit/mapdata/mapexport.py`'s `resolve_outdir()` is the
@@ -94,6 +116,7 @@ second implementation of the one in `mapexport.py` on purpose.
 import argparse
 import hashlib
 import json
+import math
 import os
 import struct
 import sys
@@ -108,7 +131,8 @@ FORMAT_VERSION = 1
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
 
-STAMP = "gwmap"                 # the object custom property the importer writes
+STAMP = "gwmap"
+PROPS_STAMP = "gwprops"                 # the object custom property the importer writes
 
 # The pitch every shipped map uses. As in the importer, NOT used to place
 # anything -- the pitch is derived from the mesh -- only to say so when the
@@ -335,7 +359,7 @@ def resolve_outdir(outdir):
 
 def build_manifest(name, lattice, heights, tiles=None, shade=None, stamp=None,
                    disagreements=(), edge_unstorable=(), stamped=None,
-                   blend=None):
+                   blend=None, props=None, prop_report=None):
     """The JSON body and the sidecar payloads, with no file touched yet.
 
     Geometry comes from `lattice`; everything a mesh cannot carry comes from
@@ -350,6 +374,35 @@ def build_manifest(name, lattice, heights, tiles=None, shade=None, stamp=None,
 
     payloads = [("heights", "%s.heights.f32" % name, DTYPE_F32,
                  struct.pack("<%df" % cells, *heights), cells)]
+    # An EMPTY prop list writes NO sidecar. A mesh authored from nothing has
+    # no props, and emitting an empty sidecar for it would claim the scene
+    # carried a prop layer that happened to be empty -- a different fact, and
+    # one that makes "only a heights sidecar is written" untestable.
+    if props:
+        # The props sidecar, rebuilt from the OBJECTS. Model identity comes
+        # from the stamp's own model table -- a Blender scene has no archive
+        # to resolve a file id against, and re-deriving one would be
+        # inventing archive state.
+        stamp_props = {}
+        holder = pick_object(None)
+        raw = holder.get(PROPS_STAMP) if holder else None
+        if raw:
+            try:
+                stamp_props = json.loads(raw)
+            except ValueError:
+                stamp_props = {}
+        body = {
+            "format": "rurik.gwprops",
+            "count": len(props),
+            "conventions": stamp_props.get("conventions", {}),
+            "models": stamp_props.get("models", []),
+            "props": props,
+            "refs4": stamp_props.get("refs4", []),
+            "refs6": stamp_props.get("refs6"),
+        }
+        blob = json.dumps(body, indent=2, sort_keys=True).encode("utf-8")
+        payloads.append(("props", "%s.props.json" % name, "json", blob,
+                         len(props)))
     if tiles is not None:
         payloads.append(("tiles", "%s.tiles.u8" % name, DTYPE_U8,
                          bytes(tiles), cells))
@@ -618,9 +671,104 @@ def pick_object(name=None):
     return meshes[0]
 
 
+def game_basis(matrix):
+    """The compiler's `(basis_a, basis_b)` back out of a Blender rotation.
+
+    The exact inverse of `import_gwmap.basis_matrix_blender`, and it has to
+    be: that function conjugates the game rotation through the z-mirror
+    `M = diag(1, 1, -1)` as `B = M R M`, and `M` is its own inverse, so
+    `R = M B M` -- the same sign flip applied again. R's columns are
+    `(b x -a, b, -a)`, so `b` is column 1 and `a` is the NEGATED column 2.
+
+    `matrix` is the object's 3x3 with scale divided out; a matrix that still
+    carries scale gives basis vectors of the wrong length and the identity
+    the client compiles from would not hold.
+    """
+    r = [[matrix[i][j] for j in range(3)] for i in range(3)]
+    for i in range(3):
+        for j in range(3):
+            if (i == 2) != (j == 2):
+                r[i][j] = -r[i][j]
+    b = (r[0][1], r[1][1], r[2][1])
+    a = (-r[0][2], -r[1][2], -r[2][2])
+    return [list(a), list(b)]
+
+
+def read_prop_objects(name=None):
+    """Every prop object in the scene, as props-sidecar records.
+
+    Geometry wins over the stamp, exactly as it does for terrain: the
+    POSITION, ROTATION and SCALE come from `matrix_world`, so moving or
+    turning a prop in Blender is what the export carries. Everything a
+    transform cannot hold -- the model index, the flags, the outline ring --
+    comes from the custom properties the importer wrote, because inventing
+    them would be writing fiction.
+
+    Returns `(records, report)`. `report` names the props whose derived
+    transform DISAGREES with the carried stamp, which is how a rotated prop
+    announces itself rather than slipping through.
+    """
+    import mathutils                                   # noqa: F401
+
+    objs = [o for o in bpy.data.objects
+            if o.type == "MESH" and "gw_model" in o.keys()]
+    objs.sort(key=lambda o: o.get("gw_index", 0))
+    records, moved, rotated = [], [], []
+    for obj in objs:
+        mw = obj.matrix_world
+        loc = mw.translation
+        # Scale is the length of a rotation column; the importer wrote
+        # basis * s, so every column carries it.
+        cols = [(mw[0][c], mw[1][c], mw[2][c]) for c in range(3)]
+        lengths = [math.sqrt(sum(v * v for v in col)) for col in cols]
+        scale = sum(lengths) / 3.0
+        if scale <= 0:
+            raise NotATerrainMesh(
+                "prop %r has a zero or negative scale, which no prop record "
+                "can express" % obj.name)
+        pure = [[mw[i][j] / lengths[j] for j in range(3)] for i in range(3)]
+        stamp_basis = list(obj.get("gw_basis") or [])
+
+        # AN OUTLINE PROXY CARRIES NO ROTATION, BY DESIGN. `import_gwmap.py`
+        # leaves those objects unrotated because the compiled ring is
+        # literally `(x + dx, y + dy)` -- the client's own add-back with no
+        # rotation term -- so rotating the proxy would move measured points
+        # to invented ones. Deriving a basis from that identity matrix would
+        # therefore write an IDENTITY basis over the real one and silently
+        # flatten every outlined prop's orientation. MEASURED: 31 of
+        # Pre-Searing's 864 props took that path before this branch existed.
+        # For them the stamp is the only witness, so the stamp wins -- the
+        # one place in this file where it does, and it is because the
+        # geometry provably does not carry the answer.
+        if obj.get("gw_proxy") == "outline" and stamp_basis:
+            basis = [list(stamp_basis[0:3]), list(stamp_basis[3:6])]
+        else:
+            basis = game_basis(pure)
+            if stamp_basis:
+                flat = [c for v in basis for c in v]
+                if any(abs(x - y) > 1e-4 for x, y in zip(flat, stamp_basis)):
+                    rotated.append(obj.name)
+        outline = list(obj.get("gw_outline") or [])
+        record = {
+            "model": int(obj["gw_model"]),
+            "position": [loc.x, loc.y, -loc.z],
+            "basis": basis,
+            "scale": scale,
+            "rot_bytes": list(obj.get("gw_rot_bytes") or [0, 0, 0]),
+            "scale_byte": int(obj.get("gw_scale_byte", 0x7F)),
+            "radius": float(obj.get("gw_radius", 0.0)),
+            "flags": int(obj.get("gw_flags", 0)),
+            "outline": [[outline[i], outline[i + 1]]
+                        for i in range(0, len(outline) - 1, 2)],
+        }
+        records.append(record)
+    return records, {"count": len(records), "rotated": rotated,
+                     "moved": moved}
+
+
 def export_gwmap(outdir, name=None, obj_name=None, blend=None,
                  xy_tolerance=LATTICE_TOL, refuse_unstorable_edge=False,
-                 tiles=True, shade=True):
+                 tiles=True, shade=True, props=True):
     """Read the scene's terrain mesh and write an interchange. `(path, report)`."""
     if bpy is None:                                          # pragma: no cover
         raise RuntimeError("this is not Blender's interpreter")
@@ -674,11 +822,22 @@ def export_gwmap(outdir, name=None, obj_name=None, blend=None,
     name = name or stamp.get("name") or obj.name
     tile_bytes = read_cell_attribute(obj, lattice, "gw_tile") if tiles else None
     shade_bytes = read_cell_attribute(obj, lattice, "gw_shade") if shade else None
+    prop_records, prop_report = ([], None)
+    if props:
+        prop_records, prop_report = read_prop_objects()
+        if prop_report["rotated"]:
+            sys.stderr.write(
+                "[warn] %d prop(s) carry a rotation that differs from the one "
+                "they were imported with; the OBJECT is what gets written. "
+                "First: %r\n" % (len(prop_report["rotated"]),
+                                 prop_report["rotated"][:4]))
     meta, payloads = build_manifest(name, lattice, heights, tiles=tile_bytes,
                                     shade=shade_bytes, stamp=stamp,
                                     disagreements=disagreements,
                                     edge_unstorable=edge_unstorable,
-                                    stamped=stamped, blend=blend)
+                                    stamped=stamped, blend=blend,
+                                    props=prop_records if props else None,
+                                    prop_report=prop_report)
     path = write_export(meta, payloads, outdir)
     return path, meta
 
