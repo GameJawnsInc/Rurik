@@ -51,25 +51,30 @@ abbrev = 100353   # text file 98, record 1 -- authored, two characters
 [[attribute]]
 id      = 36      # the host's OLD primary -- marker cleared below by 26 claiming it
 name    = 100354  # authored
+desc    = 100363  # authored
 primary = 0
 
 [[attribute]]
 id      = 26      # a spare row on the reserved profession 11
 owner   = 8       # claim it -- the panel derives from this
 name    = 100355  # authored
+desc    = 100359  # authored -- the PASSIVE, announced
 primary = 1       # THE PRIMARY IS OURS, not the host's
 
 [[attribute]]
 id   = 32
 name = 100356     # authored
+desc = 100360     # authored
 
 [[attribute]]
 id   = 33
 name = 100357     # authored
+desc = 100361     # authored
 
 [[attribute]]
 id   = 34
 name = 100358     # authored
+desc = 100362     # authored
 
 [[skill]]
 id        = 317

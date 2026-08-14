@@ -361,11 +361,39 @@ def section_recipe():
     if not os.path.isfile(path):
         LEDGER.skip("the recipe section", f"missing {path}")
         return
-    host, names, renames, owners, primaries, sprof, sattr = reskin.load_recipe(path)
+    (host, names, renames, owners, primaries, descs,
+     sprof, sattr) = reskin.load_recipe(path)
     LEDGER.ok(host == 8,
               "the shipped demo recipe hosts on Ritualist (8)",
               f"host {host} -- the owner's chosen host, and the profession "
               f"whose identity strings all live in ONE archive text file")
+
+    # The DESC verb, added 2026-08-13. `desc` (row+0x0C) was parsed from the
+    # first day and never written, and the gap shipped: RESKIN.md 19.7 rendered
+    # our authored attribute name above ArenaNet's string 2147, which explains an
+    # inherent effect our profession does not have. The check is on EFFECT, not
+    # on the flag existing -- `attrib_edits` must move the dword at +0x0C and
+    # NOTHING else in the row, because a stride or offset slip here would smear
+    # into `primary` at +0x10 and silently give a profession two primaries.
+    dsyn = synth_attrib()
+    rows_before = reskin.locate_attrib(dsyn)[1]
+    target = rows_before[3]
+    patched, log = reskin.attrib_edits(dsyn, rows_before, descs=[(target["id"], 4242)])
+    rows_after = reskin.locate_attrib(patched)[1]
+    after = rows_after[3]
+    LEDGER.ok(after["desc"] == 4242,
+              "--attr-desc writes the description string id",
+              f"row {target['id']}: desc {target['desc']} -> {after['desc']}")
+    LEDGER.ok(all(after[k] == target[k] for k in ("owner", "id", "name", "primary")),
+              "and moves NOTHING else in the row",
+              f"owner/id/name/primary unchanged -- a slip here would land on "
+              f"primary at +0x10 and give the profession two primaries")
+    LEDGER.ok(len(patched) == len(dsyn)
+              and sum(1 for x, y in zip(dsyn, patched) if x != y) <= 4,
+              "same length, and at most one dword differs",
+              f"{sum(1 for x, y in zip(dsyn, patched) if x != y)} byte(s) -- "
+              f"how many a dword write disturbs depends on the VALUES, so the "
+              f"invariant is containment rather than a fixed 4")
     LEDGER.ok(set(names) <= set(reskin.TABLES) and "name" in names,
               "its name section maps onto the real tables",
               f"{sorted(names)} -- an unknown key here would be silently "

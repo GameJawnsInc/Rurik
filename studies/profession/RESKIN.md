@@ -1561,3 +1561,94 @@ marker. Whether a CUSTOM passive is reachable is a different question and is und
 investigation; the architectural hinge is that Guild Wars is server-authoritative for
 combat and **we are the server**, so any passive the retail client does not itself compute
 is ordinary server work rather than a patch.
+
+
+---
+
+## 20. Custom primary PASSIVES are server work (2026-08-13)
+
+Eleven agents, five lenses each attacked by a skeptic, no client launches. The owner's
+question was whether a custom profession could carry an inherent primary effect the way
+every shipped one does -- Strength's armor penetration, Soul Reaping's energy on a nearby
+death, Energy Storage's larger pool.
+
+> **All nine effect shapes are SERVER work. No code cave, no hook DLL, no patched
+> instruction -- for the mechanic.**
+
+### 20.1 The two structural results that carry it
+
+**No client code outside the UI can read an attribute rank.** Seven accessor wrappers,
+**27 direct callers and 0 stored references**, and every caller is an Attributes panel,
+build-template, PvP-equipment, skill-list or tooltip module. **And there is no
+per-profession dispatch table**: an `FF /2` SIB-disp32 sweep of `.text` finds **0** real
+sites against an `FF /4` control finding **1,278** genuine switch tables. The control is
+what makes that absence a measurement rather than a failed search -- this project's
+recorded failure mode is a confident zero from the wrong range.
+
+**The client's whole health/energy arithmetic is one `fmul` against a maximum we also
+set.** The float dispatch has nine non-default arms and every one is `fld [esi+0x24]`
+(max health) or `fld [esi+4]` (max energy), `fmul` the wire value -- or a raw absolute.
+Damage arrives RESOLVED: there is no armor term anywhere on the path, and **armor
+penetration has no wire representation at all**. Critical is a wire FLAG (property 17's
+body is `push 1` where 16's is `push 0`), not a client roll. Fast Casting's activation
+time is REPLACED wholesale by property 61 in absolute seconds, with no multiply on that
+path.
+
+So a custom passive is ordinary server code: decide the number, send the property we
+already send. **We are the server, and the client only ever displays what it is told.**
+
+### 20.2 The one genuine client-side cost was TEXT, and it was unpaid
+
+`s_attrib` rows carry a DESCRIPTION at row+0x0C. `reskin.py` parsed that field from its
+first day and **never wrote it**, so section 19.7 shipped a profession whose attribute
+rendered our authored name `Storm Calling` above ArenaNet's string 2147, which explains
+Spawning Power's inherent effect -- an effect our profession does not have.
+
+That matters more than a cosmetic gap, because of 20.1: since the passive itself is
+server code, **the description is the only place a custom passive is ever announced to
+the player, and the only part of one that lives in the client at all.**
+
+Fixed: `--attr-desc`, plus recipe support, plus three checks in `test_reskin.py`
+(51 green). The load-bearing one is not that the flag exists but that the write **moves
+nothing else in the row** -- an offset slip lands on `primary` at +0x10 and silently
+gives a profession two primaries, a state the client never ships.
+
+All five descriptions are now authored, records 7-11 (ids 100359..100363), and the
+primary announces a real effect -- id 100359, "For each rank of Tempest, you gain 2
+Energy whenever a nearby creature dies." Resolved from the run archive through
+`textrec`'s own reader, which walks the same pointer array the client does
+(`0x00BF0210`, located structurally).
+
+### 20.3 Status, stated precisely
+
+| | |
+|---|---|
+| desc field written in the binary | **OBSERVED** -- 5 `attr-desc` edits, 17 dwords, length unchanged |
+| the strings resolve from the archive at those ids | **OBSERVED** -- `textrec --dat`, file 98 records 7-11 |
+| the client loads and runs with all of it | **OBSERVED** -- `RUN VERDICT: PASS`, no error dialog |
+| **the description RENDERS on screen** | **UNVERIFIED** |
+
+The last row is honest rather than cautious: attribute descriptions are TOOLTIPS, shown
+on hover, and the harness drives keys rather than a hovering mouse -- so no frame in this
+run could contain one. The names above them do render (19.5) out of the same file, which
+makes the descriptions very likely; likely is not measured. One hover settles it.
+
+### 20.4 The cheapest demonstration, not yet run
+
+Implement the passive the tooltip now claims: **2 Energy per rank of Tempest when a
+nearby creature dies.** Every piece already exists -- the server owns the death event
+(`EFFECT_DEAD`, sent by us), and the dive names the two messages: float property **52**
+for the floating "+N" and float property **33** to move the bar, because 52 alone draws a
+number and refills nothing.
+
+Two hazards to respect, both crashes rather than bugs: `CharPool.cpp:98 range > 0` means
+int property 41/42 = 0 kills the client (and a NEGATIVE passes the `test edi,edi` guard
+unchallenged), and `CharPool.cpp:84 fraction <= 1.0f` means float property 33/34 above
+1.0 kills it.
+
+**One correction this dive makes to another arc, recorded and NOT acted on:**
+`studies/skillcast/FINDINGS.md` section 16.2 infers a property ordering from
+`agent+0x124`, a field with no reader on that struct while its neighbours +0x11C and
++0x120 both have one; ArenaNet's own wire says parameter-before-trigger, **11 of 11**
+with no counter-examples. That is another arc's document and this session did not
+re-derive it, so it is flagged here rather than edited there.

@@ -179,16 +179,29 @@ def locate_attrib(data):
     return base, rows
 
 
-def attrib_edits(data, rows, renames=(), owners=(), primaries=()):
+def attrib_edits(data, rows, renames=(), owners=(), primaries=(), descs=()):
     """Apply attribute edits. Same-length by construction, like the names.
 
-    Three verbs, because they are three different claims about the client:
+    Four verbs, because they are four different claims about the client:
       rename  -- row+0x08, the name string id: does the panel read THIS row?
       owner   -- row+0x00, the profession: is the panel's attribute list
                  DERIVED from this field rather than from a per-profession
                  table? Nine rows sit on profession 11 with zero skills, so
                  there is somewhere to take one FROM.
       primary -- row+0x10, which of a profession's attributes is primary.
+      desc    -- row+0x0C, the DESCRIPTION string id.
+
+    `desc` is the field this module parsed from the first day and never wrote,
+    and the gap was visible in game: RESKIN.md 19.7 shipped a profession whose
+    attribute rendered our authored name `Storm Calling` above string 2147, which
+    begins "For each rank of Spawning Power you have..." -- ArenaNet's text,
+    describing an inherent effect our profession does not have. An attribute is
+    its name AND what the tooltip claims it does; only the first half was ours.
+
+    It matters more than it looks. The primary-attribute passive turns out to be
+    SERVER work (RESKIN.md 20), so the description is the ONLY place a custom
+    passive is ever announced to the player, and the only part of one that lives
+    in the client at all.
     """
     out = bytearray(data)
     log = []
@@ -197,6 +210,10 @@ def attrib_edits(data, rows, renames=(), owners=(), primaries=()):
         r = _row(by_id, aid)
         struct.pack_into("<I", out, r["off"] + ATTR_NAME, sid)
         log.append(("attr-name", aid, r["name"], sid))
+    for aid, sid in descs:
+        r = _row(by_id, aid)
+        struct.pack_into("<I", out, r["off"] + ATTR_DESC, sid)
+        log.append(("attr-desc", aid, r["desc"], sid))
     for aid, prof in owners:
         if not 0 <= prof <= SPARE_OWNER:
             raise SystemExit(
@@ -238,13 +255,15 @@ def load_recipe(path):
     if host is None:
         raise SystemExit(f"{path}: [profession] needs a host id")
     names = {t: prof[t] for t in TABLES if t in prof}
-    renames, owners, primaries = [], [], []
+    renames, owners, primaries, descs = [], [], [], []
     for row in doc.get("attribute", ()):
         if "id" not in row:
             raise SystemExit(f"{path}: every [[attribute]] needs an id")
         aid = row["id"]
         if "name" in row:
             renames.append((aid, row["name"]))
+        if "desc" in row:
+            descs.append((aid, row["desc"]))
         if "owner" in row:
             owners.append((aid, row["owner"]))
         if "primary" in row:
@@ -258,7 +277,8 @@ def load_recipe(path):
             skill_profs.append((sid, row["profession"]))
         if "attribute" in row:
             skill_attrs.append((sid, row["attribute"]))
-    return host, names, renames, owners, primaries, skill_profs, skill_attrs
+    return (host, names, renames, owners, primaries, descs,
+            skill_profs, skill_attrs)
 
 
 def parse_pairs(specs, what):
@@ -397,6 +417,12 @@ def main(argv=None):
                     help="reassign which profession owns an attribute "
                          "(row+0x00). Nine rows sit on profession 11 with zero "
                          "skills and are the natural donors. Repeatable.")
+    ap.add_argument("--attr-desc", action="append", metavar="ATTR=STRING_ID",
+                    help="repoint an attribute's DESCRIPTION (row+0x0C). The "
+                         "field this tool parsed and never wrote: a reskin that "
+                         "renames an attribute but not its description ships our "
+                         "word above ArenaNet's explanation of an effect the "
+                         "profession does not have. Repeatable.")
     ap.add_argument("--attr-primary", action="append", metavar="ATTR=0|1",
                     help="set or CLEAR an attribute's primary marker "
                          "(row+0x10). Symmetric on purpose: a profession has "
@@ -455,12 +481,13 @@ def main(argv=None):
     renames = parse_pairs(a.attr_name, "attr-name")
     owners = parse_pairs(a.attr_owner, "attr-owner")
     primaries = parse_pairs(a.attr_primary, "attr-primary")
+    descs = parse_pairs(a.attr_desc, "attr-desc")
     edits = {t: getattr(a, t) for t in TABLES if getattr(a, t) is not None}
     if a.recipe:
         # A recipe is the base; explicit flags layer on top, so a design can be
         # versioned and still tweaked for one run without editing the file.
         (rhost, rnames, rren, rown, rpri,
-         rsprof, rsattr) = load_recipe(a.recipe)
+         rdescs, rsprof, rsattr) = load_recipe(a.recipe)
         # Precedence, stated rather than implied: an explicit --profession
         # beats the recipe's host, so a versioned design can be aimed at a
         # different host for one run without editing the file.
@@ -468,16 +495,19 @@ def main(argv=None):
             a.profession = rhost
         edits = {**rnames, **edits}
         renames, owners, primaries = rren + renames, rown + owners, rpri + primaries
+        descs = rdescs + descs
         skill_profs, skill_attrs = rsprof + skill_profs, rsattr + skill_attrs
         print(f"recipe {a.recipe}: host profession {rhost}, "
-              f"{len(rnames)} name(s), {len(rren) + len(rown) + len(rpri)} "
+              f"{len(rnames)} name(s), "
+              f"{len(rren) + len(rown) + len(rpri) + len(rdescs)} "
               f"attribute edit(s), {len(rsprof) + len(rsattr)} skill edit(s)")
     if a.show or a.attrs or not (edits or renames or owners or primaries
-                                 or skill_profs or skill_attrs):
+                                 or descs or skill_profs or skill_attrs):
         if not (a.show or a.attrs):
             print("\nnothing to do: pass at least one of "
                   + ", ".join(f"--{t} ID" for t in TABLES)
-                  + ", --attr-name, --attr-owner, --attr-primary")
+                  + ", --attr-name, --attr-desc, --attr-owner, "
+                    "--attr-primary")
         return 0
     if not a.out:
         raise SystemExit("--out is required when writing. This tool never "
@@ -487,8 +517,9 @@ def main(argv=None):
     if a.profession is None:
         a.profession = 8            # Ritualist: the owner's chosen host
     patched, log = apply_edits(data, found, a.profession, edits)
-    if renames or owners or primaries:
-        patched, alog = attrib_edits(patched, arows, renames, owners, primaries)
+    if renames or owners or primaries or descs:
+        patched, alog = attrib_edits(patched, arows, renames, owners,
+                                     primaries, descs)
         log += alog
     if skill_profs or skill_attrs:
         patched, slog = skill_edits(patched, sbase, scount, sstride,
