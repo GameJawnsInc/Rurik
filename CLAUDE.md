@@ -888,7 +888,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   does off Windows; `RURIK_BLENDER` and `--blender` override the install path, and
   section 0 is that selector — an explicit path that does not exist is REFUSED
   rather than fallen through to the known install, because it fell through, and a
-  run that asked for one Blender measured another and printed green. **And since
+  run that asked for one Blender measured another and printed green.
+  **Section 4 (rung M4, 2026-08-13) is REAL prop geometry**: a `.gwmodel`
+  family beside the map export gives each prop ArenaNet's own mesh, instanced
+  one datablock per model file id — 664 real props over **152** datablocks on
+  Pre-Searing, none shared across different ids, with the 200 whose model does
+  not decode keeping their proxy so no placement is lost. **THE Z SIGN IS THE
+  MEASUREMENT**: prop geometry must reach ABOVE the terrain under it, scored
+  off the objects Blender actually built — **0.961 against 0.032** for a
+  control that reflects each mesh about its own placement point (and 73.2%/
+  83.3% vs 23.8%/6.5% measured the other way, from the exports, before any of
+  this was built). A null that shuffles which model a prop points at does NOT
+  collapse, and the file says so rather than burying it — the metric tests the
+  SIGN, not identity, and the sign flip is what has to fail. Section 3 passes
+  `--proxies-only` EXPLICITLY, because it was getting proxies only from the
+  absence of a `models/` directory beside its temp export, so exporting one
+  there would have turned the section into a test of something else with every
+  check green. **And since
   2026-08-13 the props sidecar reaches Blender as PROXY objects** — outlined props
   as their measured footprint prisms, the rest as cylinders at the measured
   placement radius, never ArenaNet geometry, the proxy height being the one
@@ -896,7 +912,7 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   at (x, y, −z) exactly, the proxy OBJECTS scoring the chunk's own 0.7338 against
   the mesh, the outlined population pinned at 34, and a `--no-props` control that
   must import the terrain alone. Sections 0-2
-  need no vault and score 45 against a floor of 84. ~18 s),
+  need no vault and score 45 against a floor of 92. ~25 s),
   `toolkit/mapdata/test_blenderroundtrip.py` (the AUTHORING direction, and the
   first thing in this arc to come OUT of Blender: an interchange imported, saved
   to a `.blend`, and exported back by a SEPARATE Blender process — two processes,
