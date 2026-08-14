@@ -1299,17 +1299,40 @@ index **98 is 1,024 EMPTY records** (56 B on disk, 6,146 B decompressed, ids
 nothing. `datplan` finds 96 usable runs for it. The encoder is built and re-encodes four
 of ArenaNet's own files byte-for-byte (`textrec.encode_file`).
 
-**THE PARTY WINDOW OPENS** (§17). Gate was `PyCliGetMyPartyId` (`0x00856250`), zero on our
-server, read by BOTH the outpost command router and the explorable frame builder — which
-is why forcing `is_explorable` moved the refusal without lifting it. Retail's four-message
-build (`0x01D2` / `0x01CB` / `0x01D3` / `0x01B2`, 20 bytes, 8 of 8 live connections) is in
-the burst now: **281,814 px against a 13,419 idle control.**
+**THE PARTY ROSTER DRAWS A MEMBER ROW, WITH ITS ABBREVIATION** (§§17–18). The gate was
+`PyCliGetMyPartyId` (`0x00856250`), zero on our server; retail's four-message build
+(`0x01D2` / `0x01CB` / `0x01D3` / `0x01B2`, 20 bytes, 8 of 8 live connections) is in the
+burst now. **But the gate is a PAIR, and each half had been tested alone** — the party
+record AND an explorable instance. §16.1's explorable run predated the build; §17.3's
+build ran in an outpost and got Party *Search* (dialog `0x1E`, 281,814 px). Together:
+`Party Members [P]` carrying the row `W0 Test Warrior`.
 
-**NEXT: it is Party SEARCH, not the party ROSTER.** The window that opens is dialog
-`0x1E`. The profession ABBREVIATION is drawn by `PtPartyEntry` — a different frame — so
-§16's target is still unmet. Find the roster frame's own open path and what it needs
-(likely party MEMBER rows beyond the one `0x01CB` adds). Same consumer-backwards method
-that named `0x00B6`, the abbreviation builder and this gate.
+`is_explorable` turns out to be the mission **MAP TYPE** — that dword is `context->map`,
+`MISSION_MAP_GAME` is ArenaNet's own name for `1` (asserted 9× in MsCliApi), and PtFrame's
+child builder does `cmp eax,1 / jne`, loading PtRoster's proc on equal and **PtFormation**
+on not-equal. In an outpost the roster is never the frame that *exists*. The member row is
+**`PtPlayer`** (proc `0x00574F30`, asserts PtPlayer.cpp:442/445), **not** `PtPartyEntry`,
+which is the row for a whole *party* — §§16.1/17.4 had that wrong.
+
+**The row's red bar is HEALTH, and this server drives both terms** (§§18.10–18.13). Red is
+not a state — WIKI (GWW, "User interface", rev. 2026-07-15): red bars are members' health,
+a *disconnected* player greys out. Measured: `0x00A3 [16, …]` (a fraction of maximum) took
+the bar to **49.7%** then **24.0%** against a prediction of 50/25; `0x009F [42, …]` is
+maximum health and **`health += (new_max − old_max)`** — 25/100 with max set to 200 read
+**125**, not 200, refuting ldufr/Headquarter's "refills" (UPSTREAM) and this arc's own
+fraction guess. `agents.py`'s `PROP_HEALTH_MAX` comment is corrected.
+
+**`0x003C` is a measured NULL** (§§18.8–18.9): 423 sends over 12 of 12 live connections and
+never sent by us, so it looked load-bearing. Swept 0/4/7 both late and at retail's own
+load-time slot (before `0x0020`, behind `--player-flags`): party region **0.000%** against
+control on every matched frame, client traffic identical. Off by default. Untested with
+more than one player.
+
+**NEXT: put a RESKINNED profession on that row.** The abbreviation is drawn from the very
+tables `reskin.py` edits, and it now renders — so a client reskinned to host Ritualist (8),
+spawned with `--spawn-profession 8`, should show the CUSTOM abbreviation in the roster.
+That is the first place a custom profession's identity appears outside the panels, and it
+is one run.
 
 **Then, when a decision is wanted:** the text route's step 2 writes a ~6 KB row into a
 4.2 GB archive (journalled, byte-for-byte revert proven by `test_datmove`). It needs the
