@@ -41,6 +41,25 @@ The interesting fields, and what each is worth:
     +0x00 campaign   +0x04 continent   +0x08 region   +0x0C type
     +0x18/+0x1C party size min/max     +0x20/+0x24 player size min/max
     +0x30/+0x34 level min/max
+
+    +0x04 IS NO LONGER UPSTREAM, as of 2026-08-14 (studies/minimap rung S4,
+    build 38797). It is the WORLD index -- the index into `s_worldData` -- and
+    three of the client's own witnesses say so. `0x0084DE50` is four
+    instructions long and is exactly
+    `s_missionClientData[missionContext+0x230] + 0x04`; its return value goes
+    straight into `[CompassMap+0x84]` (`0x008C1C78`, the constructor) and from
+    there, unmodified, into the tier getter at `0x005A93E0`, whose FIRST act is
+    `cmp edi, 0xa` guarding `ConstWorldMap:1313 world < WORLDS`. Separately,
+    `GmMapWorld` at `0x0054E900` compares another row's `+0x04` against that
+    same return value as "same world". Over all 888 rows the field takes
+    {0,1,2,3,4,5,9}, every one below WORLDS=10 -- and that range test is
+    deliberately the WEAK witness, because FIVE of the record's dword fields
+    are always < 10 (+0x00, +0x04, +0x18, +0x20, +0x2C), so a bound identifies
+    nothing and only the code does.
+
+    The NAME "continent" is still ArenaNet-unattested: `asserts.py --grep
+    '(?i)continent'` returns 0 sites (against that tool's 370-site floor).
+    Everywhere the client speaks, its word is `world`.
     +0x68 file_id       -- the archive file. UPSTREAM says it is zero for
                            outposts and "many maps"; §"census" below measures
                            how true that is on our build.
@@ -70,7 +89,9 @@ RECORD_SIZE = 0x7C  # 124
 
 # Field offsets. UPSTREAM -- see the module docstring on how much that is worth.
 OFF_CAMPAIGN = 0x00
-OFF_CONTINENT = 0x04
+OFF_CONTINENT = 0x04   # CORROBORATED from client code, not UPSTREAM -- it is the
+                       # index into s_worldData. See the docstring; the blanket
+                       # "UPSTREAM" on the line above does not cover this one.
 OFF_REGION = 0x08
 OFF_TYPE = 0x0C
 OFF_FLAGS = 0x10

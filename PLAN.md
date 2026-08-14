@@ -1277,34 +1277,70 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
-### The minimap — mechanism solved on paper, one lever held, one unnamed drop (2026-08-14)
+### The minimap — Tier 1 complete, and the compass on our server is drawing the client's FALLBACK (2026-08-14)
 
 **Read [`studies/minimap/FINDINGS.md`](studies/minimap/FINDINGS.md), then its
-[`PLAN.md`](studies/minimap/PLAN.md) ladder.** Static recon over build 38797 and the
-full live corpus; no client was launched. The pathing-map hypothesis is REFUTED: the
-compass, mission map and world map are three crops of ONE per-continent atlas of
-512×512 ATEX tiles compiled into the client (409 tiles over 7 worlds, 401 resolving in
-both vaulted archives), cropped by the area row's footprint rect — so a map file
-contributes nothing to the picture, and the customarea "featureless brown disc" is the
-continent-crop fallback, not missing art. Two things follow:
+[`PLAN.md`](studies/minimap/PLAN.md) ladder.** Static recon over build 38797 plus the
+full live corpus; **no client was launched by any of the eleven agents on this arc**.
+The pathing-map hypothesis is REFUTED: the compass, mission map and world map are three
+crops of ONE per-continent atlas of ATEX tiles compiled into the client — **492 tiles
+over three tiers, 484 resolving identically in all three vaulted archives** — cropped by
+the area row's footprint rect at **exactly one texel per terrain cell** (OBSERVED from
+the client's own `add`/`shr 9` and from a five-scale population test with four rivals at
+zero). A map file contributes nothing to the picture.
 
-- **We hold a lever already**: the map-type byte our server sends in `0x0199` selects
-  FOOTPRINT_A vs B (`maprows.py` §9 item 4, now answered from the compass's own branch
-  at `0x008C2770`). Rung C3 proves it on screen; it does not make our terrain appear.
-- **A genuine unnamed drop**: GAME_CMSG `0x002B` is the compass draw/ping (sole
-  producer `CompassCanvas.cpp`; s2c partner `0x0091`), our client has already sent it
-  5× on loopback, and `authsrv.py` discards it with no arm, no allowlist row, no name —
-  invisible to the D9(a) tripwire because the tripwire keys on *named* opcodes.
+**The one result that reorders everything, and it was not predicted.** Rung S5 rendered
+the crops offline and went to compare them against the compass frames we already have —
+and **every compass frame in the vault is the client's NULL-image fallback tile (archive
+file 9153, 64×64, tiled), not any crop of the atlas.** Six frames, three maps, four
+sessions, chromatic ratio +1.081..+1.110 against the fallback's +1.164 and the crops'
+−1.718..+0.286, with 0 of 7,948 atlas windows in band, no translation improving the fit
+across a walk and no rotation improving it while the bezel visibly turns. **It fires on
+retail map 148 too, with all four of that map's tiles present in the archive the client
+opened** — so it is not our authored maps' fault, and the customarea "featureless brown
+disc" is now positively identified rather than explained. **Why it fires is NOT FOUND**,
+with two separable hypotheses (a world index latched before the instance load, or a
+failed texture load) and a `Gw.log` line that tells them apart for free.
 
-Next, in order: **S1** fix `consttable.py:539`'s `s_worldData` row (stride 24 → 48,
-count 10 — a correction to a committed claim, measurement in hand); **S3** commit the
-atlas reader as `toolkit/clientscan/worldmap.py` (the reusable asset; enables the
-offline compass render S5); **S6 + overrides**: name `0x002B`/`0x0091` and either give
-`0x002B` an arm or a `DROPPED_ON_PURPOSE` row. Before naming the fog opcodes
-(`0x0089`/`0x008B`/`0x008C`), resolve FINDINGS §4.2's CONTESTED attribution — two dives
-put the same assert VA under different handlers. **Owner flag for Tier 3**: an authored
-map's compass showing OUR terrain needs both an archive tile write (A1) and a client
-patch repointing the footprint (A2) — it is not a free consequence of good authoring.
+Four things landed underneath that:
+
+- **The lever is confirmed and its population shrank by 8×.** The `0x0199` map-type byte
+  selects FOOTPRINT_A vs B, and the enum is now named from the binary — 0 =
+  `MISSION_MAP_OUTPOST`, 1 = `MISSION_MAP_GAME`. **Six** readers apply it image-wide, not
+  the one the rung predicted, closable because the table base occurs exactly once in the
+  image. And of the 172 rows where A ≠ B, **136 have A all-zero and 16 have B all-zero —
+  only 20 carry two real rects**, which is C3's actual population.
+- **The continent → world map is the IDENTITY**, closing this study's leading NOT FOUND
+  and promoting `areatable.OFF_CONTINENT` from UPSTREAM to CORROBORATED. But the
+  prediction's supporting argument is REFUTED: the seven area-table values are not the
+  seven tile-bearing worlds, world 6's art is orphaned, and five map ids point at a world
+  with no tiles at all.
+- **The fog contest is CLOSED** — two agents from opposite ends with the rival answers
+  withheld, agreeing on every VA and all five live counts: `0x008B` declare + `0x008A`
+  payload + `0x008C` incremental mark; `0x0089` is an AgentView mannequin message and not
+  in the subsystem. The wrong reading was manufactured by `asserts.py --at`'s fixed
+  2,000-byte window over four functions occupying 998 bytes — the same class of trap that
+  made `codescan --in CompassMap` hide the very branch rung S2 was run to find. **Both
+  locators answer confidently and wrongly outside their range and neither can warn.**
+- **A genuine unnamed drop, with its name now attacked as well as confirmed**: GAME_CMSG
+  `0x002B` is the compass draw (sole producer re-established by a value-first sweep of all
+  134 materialisations of `0x2b`, exactly one inside any of the **214** send-call bodies —
+  the earlier 174 missed a second send entry), our client has already sent it 5× on
+  loopback, and `authsrv.py` discards it with no arm, no allowlist row, no name. **The
+  `knotCount > 16` process-kill hazard is RETRACTED** — the generic unpacker refuses the
+  message before dispatch, so an over-range send is inert, not dangerous.
+
+Next, in order: **S11** land the six `overrides.json` names (c2s `0x002B` at *medium* —
+DRAW is ArenaNet's word but only on the s2c side — s2c `0x0091` at high) **with the
+`DROPPED_ON_PURPOSE` row for `0x002B` in the same commit**, or `test_dispatch.py` goes
+red; **S9** the static half of "why is the compass NULL"; **C1** re-scoped from a picture
+comparison into that diagnosis, on retail map 148, which **gates C2 and C3** — an arm
+whose two halves both draw the fallback is satisfied vacuously. `worldmap.py` and its
+test are written and audited (floor 78, 19 sabotages, all redden) but **uncommitted**.
+**Owner flag for Tier 3 is unchanged**: an authored map's compass showing OUR terrain
+needs both an archive tile write (A1) and a client patch repointing the footprint (A2) —
+it is not a free consequence of good authoring, and it is worth nothing until C1 explains
+the fallback.
 
 ### Custom professions — the route is RESKIN, and the party window just opened
 
