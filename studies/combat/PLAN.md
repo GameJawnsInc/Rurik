@@ -490,6 +490,74 @@ Time-base note: the two capture readers cite the same Ranger cast events at
 different absolute times (t≈21.5 s vs t≈276.7 s) — a connection-relative vs
 session-clock artifact, not a contradiction; inter-event deltas agree.
 
-## §6. Step 0 results
+## §6. Step 0 results (measured 2026-08-14, four offline agents over the existing corpus)
 
-*(reserved — filled by the step 0 verification runs)*
+All four ran read-only over `vault/captures/live/20260807T143055` +
+`20260810T235916` (all 10 game connections decode consumed==total via `tape.py` +
+`codec.py`) and the 636 harness run records. Corrections below OVERRIDE the prose
+above where they conflict.
+
+**0a — `0x00E4` names the player, 7 of 7 (C1 CLOSED).** Every `0x00E4` in the live
+corpus carries agent_id 31 — the connection's own player agent, identified two
+independent ways (first `0x0037` at load; `0x0022` [agent, 3]). OBSERVED, e.g.
+`e4001f000000990000000000` (agent 31, skill 153) at t=8.741, conn `:64103`. So the
+real server broadcasts `0x00E4` uniformly and relies on the client's self-discard —
+our `authsrv.py:1101-1103` measurement models real behavior. `0x00E4` contributes
+NOTHING to the caster's own feedback; step 3 emits it for wire fidelity only and
+attributes animation to `0x00E3`/`0x00E5`/property 60. Counts correction: **7 raw
+`0x00E4`s, not 6** (on exactly 2 of 10 connections; zero name an NPC), one of them
+an ORPHAN with no E5/E3/E6 tail anywhere after it — a cast attempt with no
+confirmed activation, n=1. Which E4 is the orphan is CONTESTED between the two
+readers (0a says t=21.543, 0b says t=5.027 on conn `:49163`); 0b's pairing gives
+uniform ~1.1 s E4→E5 gaps and is the better reading, but the disagreement is
+recorded rather than resolved.
+
+**0b — E6−E5 == recharge on ALL complete cycles, and n is 6, not 14 (C2 CLOSED).**
+The corpus holds exactly **6 complete cycles** — H1's "six plus 8 Necromancer" was
+wrong; the Necromancer cycles ARE four of the six (skills 153×2, 105×2, cap
+20260807T143055 conn `:64103`), the Ranger the other two (394×2, cap 20260810T235916
+conn `:49163`). **Session identities were swapped in this file's §3 framing and are
+corrected here**: 20260807 is the NECROMANCER session, 20260810 the Ranger —
+per `authsrv.py:1070-1079` and independently per the client table's own profession
+field (153/105 → profession 4, 394 → profession 2). On all 6 cycles
+|delta − recharge| ≤ 13.7 ms (spread −0.3 ms to +13.7 ms, mean +5.3 ms); no cycle
+supports E6-keyed-to-cast-end or tick quantization. Recharge units are whole
+seconds, triple-witnessed: wire field, client table +0x4C, and the E6 timing.
+Zero E5s lack an E6; no cycle was cut by zoning. Step 3's scheduler is therefore
+**E6 at E5 + recharge**, OBSERVED n=6.
+
+**0c — the `0x00EE` census rewrites step 9 (C3 CLOSED, and then some).** 17
+occurrences total, exactly two payload shapes: `[10, 0]` (7×) and `[0, X]`,
+X ∈ {26, 100, 126, 250, 500} (10×); attr_id is NEVER anything but {0, 10}. Every
+`[10,0]` is immediately followed byte-adjacent by an `[0,X]` — a fixed PAIR, always
+in that order. The death trio (`0x00F1` bit 0x10 + `0x0026`=8 + `0x00EE`, same tick,
+same agent) fired on **4 of 4 kills** — a fourth kill nobody had catalogued sits on
+conn `:62994` (agent 38, t=19.912, single `[0,26]`). 3 of 4 kills carry a single
+`[0,26]`; only the Wolf carries the pair (`[10,0]`+`[0,126]`). **And the pair is not
+a kill shape**: 6 of its 7 occurrences are 6.8–31.5 s from any death marker, inside
+a recurring ~20-message other-player broadcast burst (name blobs "character C" /
+"character D", 0x005D/0x005E, 0x007E pairs) that is always preceded by
+`0x009C [agent, 100]` — and `0x009C` fires 13× (once per connection at load, once
+before each non-kill burst), never near a lone kill. The X values {100, 250, 500}
+reproduce EXACTLY at matching map/slot positions across the two independently
+played sessions — structural, not incidental. **Step 9 as amended: emit a single
+`[0, N]` at the kill tick (the 3-of-4 shape); the pair belongs to a different,
+non-kill mechanism and must NOT be modeled as kill reward.**
+
+**0d — Gw.log is not a combat log (C5 CLOSED, negative).** 636 run records,
+11,368 lines, 49 distinct shapes: zero lines for skill activation, cast fail, or
+attribute anything. The one candidate death line (`Health non-zero on resurrect`)
+fires in only 25/636 runs AND in bare spawn probes with no combat, so it tracks
+some resurrect/spawn-state desync, not a kill. **H5 stands in full**: rendered
+acceptances stay operator-confirmed; the automated weight stays on wire and state
+assertions. (Incidental: `frames-*` dirs carry no Gw.log of their own — they pair
+with the report.json run ~2 s later; and the two harness generations write
+different report.json shapes into the same tree, for any future cataloger.)
+
+### Progress ledger
+| Step | Status |
+|---|---|
+| 0 | ✅ 2026-08-14, this section |
+| 1 | ✅ 2026-08-14, `07c22b0` — 0x0037 → [0,0], binding check proven red-then-green |
+| 2 | ✅ 2026-08-14, `cdefe83`…`e9f7b7d` (10 commits) — extraction, red-first guard contract on all seven `_fraction` functions, connection-thread catch, overkill clamp-to-kill (`_damage_fraction`), first two-thread test. `test_guards.py`, floor 35 |
+| 3–10 | ⬜ |
