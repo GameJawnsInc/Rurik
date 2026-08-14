@@ -1174,8 +1174,12 @@ Every one of these, in the order they were written:
   which must get its OWN named empty slot rather than falling through to slot 0 —
   the prop-material fall-through defect, refused on the ground — and
   `--no-terrain-textures` is the control on both the synthetic and the real map.
-  Sections 0-2b need no vault and score 53 against a floor of 108, so a vault-less
-  run goes red. ~46 s),
+  One check per section also pins the mask's CHANNEL_PACKED alpha mode and
+  all-faces-smooth shading, read back off the built scene — the first human look
+  at the delivered .blend found Blender premultiplying the un-wired blend mask
+  into the Color output, a dark band over clean ground colour on every cell.
+  Sections 0-2b need no vault and score 54 against a floor of 110, so a vault-less
+  run goes red. ~61 s),
   `toolkit/mapdata/test_blenderroundtrip.py` (the AUTHORING direction, and the
   first thing in this arc to come OUT of Blender: an interchange imported, saved
   to a `.blend`, and exported back by a SEPARATE Blender process — two processes,
