@@ -283,7 +283,27 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   asserts it on the SYNTAX TREE, because "in the finally" and "before
   `close_client`, which destroys the dialog" are both invisible to a grep, with a
   control that the ordering check fails on a reversed finally),
-  `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
+  `toolkit/portal/test_webgate.py`,
+  `toolkit/mapdata/test_archive.py` (the archive reader, and since 2026-08-14
+  section 1c: that `archive.py` and `datcheck.py` share ONE row convention --
+  ArenaNet's raw MFT index -- measured over the whole table in both directions. It
+  exists because the OPPOSITE was written down and labelled CORROBORATED:
+  `studies/crossbuild/FINDINGS.md` section 4b.1 read `entries[71495]` as a row number,
+  concluded the two tools number rows differently, and left the standing instruction
+  "never compare a row number printed by one tool against one printed by another".
+  Every fact it cited is true and the inference is false -- `entries` is POSITIONAL and
+  skips the descriptor, so `entries[k]` IS row k+1 in both tools' numbering, and the
+  count that differs is `len(entries)` against `row_count`. The 0-mismatch headline is
+  the WEAK half and the file says so twice over: the same sweep runs a second time
+  through `datcheck.row_bytes` ITSELF, because the first version compared against a
+  struct walker written in the test and a datcheck that changed convention printed
+  "0 mismatches over 177,341 rows" and PASSED; and the off-by-one reading must agree on
+  exactly 11 rows, all of them the all-zero reserved spares at 4..14, checked both by
+  count and by contents. The floor is the other lesson: 26 against a green run of 29 let
+  two reviews delete exactly the three checks the section calls load-bearing and still
+  print ALL CHECKS PASSED, so it is 31 -- the copy-independent green, MEASURED on five
+  archives -- with section 4 raising it to 33 when it runs, because a fixed 31 would hand
+  `dat_study` two checks of slack. Both shapes have ZERO headroom. ~30 s),
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_datwrite.py` (the only tool that opens the archive `r+b`,
   against a small archive the test builds: that `--verify --replace` actually
@@ -319,7 +339,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   held apart through the CLI: `--diff` exits 1 to mean the archive CHANGED, which
   is a result, so an archive too broken to have findings must exit 2 -- it exited
   1 from an uncaught traceback, and a reader of the code would have reported the
-  crash as "the row moved"),
+  crash as "the row moved".
+  **And since 2026-08-14 section 3b pins the OUTPUT, which is the half that prevents
+  the mistake and had no checks at all.** `row_identity` was pinned and `format_diff`
+  -- the only thing an operator ever reads -- was referenced by no test in the tree, so
+  a sabotage reverting it and the `--preflight` banner to their exact pre-fix bare form
+  left this file 75/75 and `test_archive` 29/29, both exit 0: the whole human-facing fix
+  could be deleted green. EVERY `row N` line in the output must now carry its file id
+  and role, asserted over all of them rather than over the one row the fixture changed,
+  because the pre-fix `   row 18      relocated` contains the substring `row 18` and
+  satisfied the obvious predicate. Section 7 adds the `--preflight` banner through the
+  REAL CLI, since that is a separate `print` in `_main` no function-level check can see
+  and the revert sabotage's six reds did not include it. It also closes a trap the fix
+  itself introduced: `diff(before, path=X, after=<snapshot of Y>)` took its rows from Y
+  and its identity from X and reported `identified: True` -- MEASURED, 308 of 315
+  changed rows naming a file the after-image does not hold -- and the gate is the MFT
+  BYTE FOR BYTE rather than a path compare, because a stale snapshot of the same path is
+  the same defect wearing the right name. Floor 75 -> 84),
   `toolkit/mapdata/test_atex.py` (the ATEX texture container, and first the write
   guard `--make` never had: `atex.py` was the only binary writer in
   `toolkit/mapdata/` reaching `open(path, "wb")` straight off argv with no refusal
@@ -661,7 +697,19 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   rotates through -- so the planner aimed every insert at a complete shadow MFT.
   Its own fixture had to be relaid: the first version's runs ran largest-first
   down the file, which is what the broken code produced, so the ordering check
-  passed against the defect),
+  passed against the defect.
+  **And since 2026-08-14 section 8 asks where an edit POINTS, which thirty checks of
+  placement policy never did.** `datplan` carried its own row arithmetic and got three
+  of four MFT sites wrong: `mft_offset + (row - 1) * 24` under a line reading "MFT row
+  N", "MFT row 3 (the table describing itself)" addressing row 2 -- the FILE-ID TABLE
+  -- and "MFT row 2" addressing row 1, the file header. The tool applies nothing, so
+  those addresses were handed to a human to apply BY HAND, and this file was green at 30
+  the whole time. Every "MFT row N" edit of every plan is now resolved to the 24 BYTES
+  THE FIXTURE WROTE THERE by a reader written in the test, with the shipped
+  `(row - 1) * 24` kept as the control that must land on row N-1 -- and the bound is
+  refused AS a bound, since row 0 reached `entries[-1]` and planned a write to the LAST
+  row of the table, which a "some blocker" predicate passes because that row's
+  reservation is 0 bytes. Floor 30 -> 38),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
   2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and

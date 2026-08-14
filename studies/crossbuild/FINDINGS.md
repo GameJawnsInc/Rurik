@@ -42,13 +42,17 @@ that survives. (A file id is archive *state*, not a property of the map — bit 
 `FcArchive` renamed that row away pending a replacement — so the pair is recorded rather
 than one id; `toolkit/test_contentids.py` is the same fact enforced from the other side.)
 
-**One offset disagreement is recorded rather than resolved.** `datwrite` and `datcheck`
-agree row 46196 is stored at `0x437F6800`; `archive.Archive().entries[46196].offset`
-reports 1,132,424,192, **exactly 1,024 higher**. The read above used the `datwrite`/
-`datcheck` offset and found the marker there, so that pair is right for this purpose and
-`archive.py`'s reading is the one to chase. UNVERIFIED which is correct in general — the
-constant 1,024 smells like a header or block-base convention rather than a bug, and nobody
-has looked.
+**~~One offset disagreement is recorded rather than resolved.~~ RESOLVED 2026-08-14: there
+was no disagreement.** This paragraph read `entries[46196]` as row 46196 and, when it landed
+1,024 bytes past where `datwrite` and `datcheck` said row 46196 was, guessed at "a header or
+block-base convention". `Archive.entries` is a **positional list that skips the descriptor**,
+so `entries[46196]` is row **46197** — a different, 584-byte file that merely happens to sit
+1,024 bytes later. MEASURED on `vault/dat_durability/Gw.dat`:
+`entries[46195].offset == archive.row(46196).offset == 0x437F6800`, exactly `datwrite`'s and
+`datcheck`'s number, and the 25-byte marker `RURIK-DURABILITY-20260813` is in **that** extent
+and not in the other. All three readers agreed all along. See §4b.1's retraction; the same
+misreading is still standing, unamended, in `vault/dat_durability/ARMED.json`'s
+`offset_note`, where it tells the next operator a false reason for a true instruction.
 
 ---
 
@@ -267,7 +271,67 @@ a compression-8 payload back, and `--overwrite` is same-length only — so the t
 above were **left armed on purpose**, with the original payloads still recoverable from the
 journals' `before` fields if anyone wants them.
 
-### 4b.1 THE TRAP, and it nearly produced the opposite conclusion
+### 4b.1 THE TRAP — RETRACTED 2026-08-14. There is one row convention and both tools use it
+
+> **RETRACTION.** This section originally concluded *"the two tools number MFT rows
+> differently, off by exactly one"*, labelled that cause **CORROBORATED**, and left the
+> standing instruction *"never compare a row number printed by one tool against one
+> printed by another"*. **All three are wrong.** `archive.py` and `datcheck.py` agree on
+> every one of the 24 bytes of every row of every archive in the vault. The original text
+> is kept below the line because the *shape* of the mistake is the finding, and because
+> two later documents were written on top of the wrong version. `test_archive.py` §1c now
+> measures the agreement in both directions on a real archive, so this can never again be
+> settled by argument.
+
+**What the bytes say**, re-measured 2026-08-14 on `vault/dat_study`, `vault/dat_c2` and
+`vault/run/2026-07-29_221c13772c7a-c2`, all three agreeing:
+
+| row | dat_study | dat_c2 (armed) | run copy (after play) | role |
+|---|---|---|---|---|
+| 71495 | 3,564 B | 3,564 B | 3,564 B | **stream partner of row 71493** — a different map |
+| 71496 | 9,284 B | **0 B** | **6,452 B** | **stream head**, file ids `0x5CF20` / `0x287D3` |
+| 71497 | 4,544 B | 21,926 B | 11,370 B | stream partner of row 71496 — our authored bytes |
+
+So `--diff` naming **71496** and `deploy.py` naming **head 71496** were naming *the same
+row*, correctly, in the same convention. 71496 is the Bloated head `deploy` arms to zero on
+purpose so the client must recompile it; the size going 0 → 6,452 B is that recompile
+working. Our authored bytes are in the partner, 71497, which is absent from the diff because
+nothing touched it. **Both tools were right and there was never a disagreement to explain.**
+
+**Every fact the original cited is true; only the inference is false**, which is the hardest
+kind to catch:
+
+* `archive.py[71495]` really is bit for bit what `datcheck` calls row 71496 — because
+  `Archive.entries` is a **positional list that skips the descriptor**, so `entries[71495]`
+  *is* row 71496 in both tools' numbering. A list subscript was read as a row number.
+* `archive.py` really does "report 177,334 rows where datcheck reports 177,335" — because
+  that is `len(entries)` against a row count. `Archive.row_count` is the comparable number
+  and it is **equal on all ten archives in the vault**.
+* `archive.py[2]` really is the MFT row — and so is `datcheck`'s row 3 and `archive.row(3)`.
+  Same row. `MFT_SELF_ROW = 3` in both.
+
+**The instruction is withdrawn.** Comparing a row number printed by one tool against one
+printed by another is correct and always was. What is *worth* doing, and is now done, is
+matching on the **file id** as well: `deploy.py` prints its file id on its own first line and
+`datcheck --diff` now prints every row as `row 71496 [file id 0x5CF20, 0x287D3; stream head]`,
+so the two outputs carry a token that a bare integer does not — and both verbs print the
+convention above their numbers (`datcheck.ROW_CONVENTION`).
+
+**What the wrong version cost, because the point is not the off-by-one:** it was written up
+as a fact about the format and then *believed twice more*.
+`vault/dat_durability/ARMED.json` carries a note calling the same subscript's 1,024-byte gap
+"a header or block-base convention" and telling the next operator which pair to trust
+(measured: `entries[46195].offset` **is** `0x437F6800`, the marker is in that extent, and
+`entries[46196]` is row 46197 — a different 584-byte file); and §4 of this document repeated
+it as an open question. A plausible explanation invented for an off-by-one is more durable
+than the off-by-one.
+
+`mapchunks.py`:117's lesson still stands on its own terms — a row index is meaningful only
+against the archive copy it was measured on — and that is a fact about **copies**, not about
+readers. `test_contentids.py` and `test_mapfile.py` moved to file-id identity for that
+reason and were right to.
+
+<details><summary>The original text, kept verbatim. Refuted above.</summary>
 
 `datcheck --diff` reported **row 71496 changed from 0 B to 6,012 B** — and `deploy.py` had
 just printed *"installing … head 71496, partner 71497"*. Read together those say the client
@@ -295,6 +359,8 @@ only against the **reader** it was measured with. `test_contentids.py` and `test
 both moved to file-id identity for the first reason, and the same fix applies here. Until it
 lands: **never compare a row number printed by one tool against one printed by another.**
 
+</details>
+
 ---
 
 ## 5. What this changes elsewhere
@@ -321,5 +387,7 @@ lands: **never compare a row number printed by one tool against one printed by a
 | 334 rows change across one update, in the four named shapes | **OBSERVED** — one update, n=1 |
 | The authored row will survive an update | **RECONSTRUCTION**, low confidence, §3 |
 | The patcher holds no external content manifest | **UNVERIFIED** — never looked for, and it is the assumption the prediction rests on |
-| `archive.py`'s offset for row 46196 is wrong by 1,024 | **CONTESTED** — two tools disagree; the marker was found at the `datwrite` offset |
+| ~~`archive.py`'s offset for row 46196 is wrong by 1,024~~ | **REFUTED** 2026-08-14 — `archive.row(46196).offset == 0x437F6800`, identical to `datwrite`/`datcheck`, marker in that extent. The 1,024 came from reading `entries[46196]`, which is row 46197. §4, §4b.1 |
+| ~~`archive.py` and `datcheck.py` number MFT rows differently, off by one~~ | **REFUTED** 2026-08-14 — all 24 bytes of every row agree on all ten vault archives; pinned by `test_archive.py` §1c. The number that differs is `len(entries)` vs `row_count`. §4b.1 |
+| There is ONE row convention, ArenaNet's raw MFT index, and every reader and every recorded constant is in it | **OBSERVED** — 10 archives by an independent `struct` walker; 65 recorded constants ≥ 16 re-resolved in both conventions, 26 map-flagged under `row(N)` and 1 under `entries[N]`, zero overlap |
 | Rung 6 is deliverable | **NOT FOUND** — no update can reach this copy (§4) |

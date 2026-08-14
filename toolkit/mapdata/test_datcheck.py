@@ -42,6 +42,7 @@ import binascii
 import importlib
 import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -59,7 +60,23 @@ import checks  # noqa: E402
 # unconditionally -- the fixture is built by this file and there is no corpus to
 # be absent -- so a count under this means a section stopped executing, which on
 # a gate is indistinguishable from the gate being removed.
-LEDGER = checks.Ledger("dat pre-flight and detector", floor=69)
+#
+# RAISED 69 -> 75 on 2026-08-13 with section 0b, which pins `row_identity` --
+# the file id and role every row named by `--diff` now carries. It is six more
+# checks on the SAME fixture (no vault, no client), so the floor moves by
+# exactly six and the bare-machine property is unchanged.
+#
+# RAISED 75 -> 83 on 2026-08-14 with section 3b, and that one is the correction:
+# 0b pinned the LOGIC and nothing pinned the OUTPUT. `format_diff` -- the only
+# thing an operator ever reads -- was referenced by no test in this tree, so a
+# sabotage reverting it and the `--preflight` banner to their exact pre-fix bare
+# form left this file at 75/75 and `test_archive.py` at 29/29, both exit 0. The
+# whole human-facing half of the fix could be deleted green. Eight more checks
+# in 3b plus one in §7 -- the `--preflight` banner is a separate `print` in
+# `_main` that no function-level check can see, and the revert sabotage's six
+# reds did not include it until §7 ran the real CLI. Same fixture, still no
+# vault and no client. MEASURED, not counted by hand: a green run prints 84.
+LEDGER = checks.Ledger("dat pre-flight and detector", floor=84)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -113,6 +130,27 @@ ALL_ITEMS = ["0x1C bit 0 clear", "0x1C bit 1 clear", "header CRC over 0x00..0x0C
 
 def pattern(seed, n):
     return bytes(1 + ((i * 37 + seed * 101) % 255) for i in range(n))
+
+
+def role_of(ident, row):
+    """`ident[row]["role"]`, or a string saying the row is absent.
+
+    NEVER a bare `ident[row]`. A `row_identity` that has LOST a row -- which is
+    exactly what a reader changing convention produces -- raises KeyError here
+    and kills the run before `LEDGER.verdict()`: no banner, no floor, no ledger,
+    the one failure `checks.py` cannot see. MEASURED on the
+    consistent-renumber sabotage: four [FAIL] lines had already printed and the
+    run then died at the fifth check with a traceback. A broken module has to
+    score as WRONG, not as absent.
+    """
+    rec = ident.get(row)
+    return "NO SUCH ROW %d in the identity map" % row if rec is None         else rec["role"]
+
+
+def ids_of(ident, row):
+    """`ident[row]["file_ids"]`, or None if the row is absent. See `role_of`."""
+    rec = ident.get(row)
+    return None if rec is None else rec["file_ids"]
 
 
 def build_archive(path):
@@ -234,6 +272,71 @@ def run(tmp):
     check(not inv["orphan_rows"],
           "a USED non-first stream needs no file-id record",
           f"orphans={inv['orphan_rows']}")
+
+    print("\n0b. every row this tool names carries its own identity")
+    # WHY THIS IS HERE AND NOT ONLY IN test_archive. `row_identity` exists
+    # because two bare integers were the whole of the evidence in
+    # `studies/crossbuild/FINDINGS.md` §4b.1: `--diff` said row 71496 changed
+    # and `deploy.py` said "head 71496, partner 71497", and the pair was read as
+    # the client having eaten an authored map. It had not -- 71496 is the
+    # Bloated HEAD that `deploy` arms to zero on purpose, and the re-bloat is
+    # the experiment working. `test_archive.py` §1c checks the labels against a
+    # 4 GB archive; this checks the LOGIC on a 5.5 KB fixture whose head,
+    # partner, spare and reserved rows are known by construction, so it runs on
+    # a bare machine and can be wrong for exactly one reason.
+    mft = datcheck.read_mft(good)
+    records, _blob = datcheck.file_id_records(good, mft,
+                                              datcheck.read_header(good))
+    ident = datcheck.row_identity(mft, records)
+    check(role_of(ident, ROW_HEAD) == "stream head"
+          and ids_of(ident, ROW_HEAD) == [0x1002],
+          "the head row is a stream head and carries its file id",
+          f"{role_of(ident, ROW_HEAD)!r} {ids_of(ident, ROW_HEAD)}")
+    # The partner is the whole point: it is USED, it has NO file-id record, and
+    # `alloc.nextStream` is the only thing in the archive that names it. A
+    # labeller reading the directory alone would call it anonymous, which is
+    # precisely the row a reader most needs told apart from its head.
+    check(role_of(ident, ROW_PARTNER) == f"stream partner of row {ROW_HEAD}"
+          and not ids_of(ident, ROW_PARTNER),
+          "the partner names the head that points at it, from nextStream alone",
+          f"{role_of(ident, ROW_PARTNER)!r} {ids_of(ident, ROW_PARTNER)}")
+    check(role_of(ident, 0) == "MFT descriptor"
+          and role_of(ident, datcheck.MFT_SELF_ROW) == "the MFT itself"
+          and role_of(ident, datcheck.FILE_ID_TABLE_ROW) == "file-id table"
+          and role_of(ident, 7) == "reserved spare",
+          "rows 0..15 get the client's own structural names",
+          f"0={role_of(ident, 0)!r} 7={role_of(ident, 7)!r}")
+    # A (0, 0) record is a RELEASED slot. Filing it under row 0 would put file
+    # id 0 on the MFT descriptor and make the descriptor read as a file.
+    check(ids_of(ident, 0) == [],
+          "the released (0, 0) record does not name row 0",
+          f"{ids_of(ident, 0)}")
+    check(datcheck.label_row(ident, ROW_HEAD)
+          == f"row {ROW_HEAD} [file id 0x1002; stream head]"
+          and datcheck.label_row(None, ROW_HEAD) == f"row {ROW_HEAD}",
+          "label_row prints the identity, and a BARE row when it has none",
+          datcheck.label_row(ident, ROW_HEAD))
+    # A spare and a row something still points at are the two USED-clear shapes,
+    # and the pre-flight treats them differently -- one is the allocator working
+    # (row 35301 in the owner's own install), one is corruption. The label must
+    # separate them too, or a diff line contradicts the gate above it.
+    spare = fresh(tmp, "ident_spare.dat")
+    poke_row(spare, ROW_D, flags=0x0002)         # USED clear, nothing points here
+    s_mft = datcheck.read_mft(spare)
+    s_ident = datcheck.row_identity(
+        s_mft, datcheck.file_id_records(spare, s_mft,
+                                        datcheck.read_header(spare))[0])
+    lost = fresh(tmp, "ident_lost.dat")
+    poke_row(lost, ROW_PARTNER, flags=0x0000)    # USED clear, the head points here
+    l_mft = datcheck.read_mft(lost)
+    l_ident = datcheck.row_identity(
+        l_mft, datcheck.file_id_records(lost, l_mft,
+                                        datcheck.read_header(lost))[0])
+    check(role_of(s_ident, ROW_D) == "free spare"
+          and role_of(l_ident, ROW_PARTNER)
+          == f"USED CLEAR but row {ROW_HEAD} points here",
+          "a free spare and a referenced row that lost USED are labelled apart",
+          f"{role_of(s_ident, ROW_D)!r} vs {role_of(l_ident, ROW_PARTNER)!r}")
 
     print("\n1. every pre-flight item goes red on its own")
 
@@ -417,6 +520,85 @@ def run(tmp):
     check(not d["unchanged"],
           "but a corroboration-only diff is still not 'unchanged'")
 
+    print("\n3b. the OUTPUT a human reads, which nothing was checking")
+    # THE HALF THAT PREVENTS THE MISTAKE IS THE HALF THAT GETS PRINTED, and it
+    # had zero checks on it. `row_identity` was pinned in §0b, `label_row` too,
+    # and `format_diff` -- which is the only thing an operator ever sees -- was
+    # referenced by no test in the tree. MEASURED: a sabotage that reverted
+    # `format_diff` and the `--preflight` banner to the exact pre-fix bare
+    # output (no convention line, no NOT IDENTIFIED banner, `row %-7d`, a bare
+    # `[0, 2, 3]` corroboration list) left this file at 75/75 and
+    # `test_archive.py` at 29/29, both exit 0. A straight revert of the fix was
+    # green in both directions, which means the fix was documentation.
+    p = fresh(tmp, "fmt.dat")
+    poke_row(p, ROW_HEAD, offset=0x1600, size=6012, crc=0xAABBCCDD)
+    poke_row(p, ROW_SELF, crc=0x55555555)          # a corroboration row too
+    text = datcheck.format_diff(datcheck.diff(before, path=p))
+    check(datcheck.ROW_CONVENTION in text,
+          "--diff names the row convention above its numbers",
+          text.splitlines()[1][:72] + "...")
+    # The changed row must arrive WEARING its identity. `ROW_HEAD` is the
+    # fixture's map head and 0x1002 is its file id -- the two tokens `deploy.py`
+    # prints on its own first line, which is what makes the two outputs
+    # matchable at all.
+    check(f"row {ROW_HEAD} [file id 0x1002; stream head]" in text,
+          "and the changed row carries its file id and role, not a bare number",
+          [ln.strip() for ln in text.splitlines()
+           if str(ROW_HEAD) in ln][:1])
+    # ...and NO row line anywhere in the output may be bare. Asserted over every
+    # `row N` line rather than over the one row this fixture changed, because
+    # the pre-fix formatter printed `   row 18      relocated` -- which contains
+    # the substring `row 18` and would satisfy a check written the obvious way.
+    # A label is a claim about identity; a padded integer is the thing that cost
+    # the afternoon.
+    row_lines = [ln for ln in text.splitlines()
+                 if re.match(r"^\s+row \d+", ln)]
+    check(len(row_lines) >= 2 and all("[" in ln for ln in row_lines),
+          f"and EVERY row line in the output is labelled ({len(row_lines)} "
+          f"lines, changed and corroboration alike) -- none is the bare padded "
+          f"integer the pre-fix formatter printed",
+          [ln.strip() for ln in row_lines if "[" not in ln][:2])
+    check(f"row {datcheck.MFT_SELF_ROW} [" in text
+          and "[0, 2, 3]" not in text and "[3]" not in text,
+          "and the corroboration rows are labelled too, not printed as a list "
+          "of integers")
+    check("NOT IDENTIFIED" not in text,
+          "a diff taken against a live archive does NOT wear the banner")
+
+    # THE TWO-SNAPSHOT CASE, which is the one that has no archive behind it.
+    two = datcheck.diff(before, after=datcheck.snapshot(p))
+    two_text = datcheck.format_diff(two)
+    check(not two["identified"] and "NOT IDENTIFIED" in two_text
+          and f"row {ROW_HEAD} [" not in two_text,
+          "two snapshots compared: NOT IDENTIFIED, and no row invents an "
+          "identity it does not have", f"identified={two['identified']}")
+
+    # THE TRAP THE FIX INTRODUCED. `diff(before, path=X, after=<snapshot of Y>)`
+    # took its ROWS from Y and its IDENTITY from X and reported identified=True.
+    # On a measured pair of vault archives 308 of 343 labels named a file the
+    # after-image does not hold -- the exact "a label that names the wrong file
+    # reads as identification" failure this whole change exists to prevent. No
+    # shipped caller reaches it, which is why it survived review.
+    #
+    # The guard is the MFT ITSELF, byte for byte, so the POSITIVE CONTROL is not
+    # optional: `other` is a DIFFERENT archive, and `p` is the SAME one, and the
+    # gate has to tell them apart from the bytes rather than from the path.
+    other = fresh(tmp, "fmt-other.dat")
+    poke_row(other, ROW_A, offset=0x1000, size=310, crc=0x11223344)
+    crossed = datcheck.diff(before, path=p, after=datcheck.snapshot(other))
+    check(not crossed["identified"] and crossed["identity_note"]
+          and "NOT IDENTIFIED" in datcheck.format_diff(crossed)
+          and not any("file id" in r["label"] for r in crossed["changes"]),
+          "an `after` from a DIFFERENT archive than `path` is refused a label, "
+          "and the banner says which archive disagreed",
+          (crossed["identity_note"] or "")[:60] + "...")
+    same_again = datcheck.diff(before, path=p, after=datcheck.snapshot(p))
+    check(same_again["identified"] and same_again["identity_note"] is None
+          and any("file id 0x1002" in r["label"]
+                  for r in same_again["changes"]),
+          "and the SAME archive passed both ways still labels -- a gate that "
+          "refused every explicit `after` would protect nothing")
+
     print("\n4. the snapshot is a real record, and it refuses a stale one")
     snap = datcheck.snapshot(before_path)
     mft = datcheck._snapshot_mft(snap)
@@ -520,9 +702,28 @@ def run(tmp):
     snap_path = os.path.join(tmp, "exit.json")
     datcheck.write_snapshot(clean, snap_path)
 
-    def cli(*argv):
+    def run_cli(*argv):
         return subprocess.run([sys.executable, tool] + list(argv),
-                              capture_output=True, text=True).returncode
+                              capture_output=True, text=True)
+
+    def cli(*argv):
+        return run_cli(*argv).returncode
+
+    # BOTH VERBS, THROUGH THE REAL CLI. §3b checks `format_diff` as a function;
+    # this is the only place the `--preflight` banner is reached at all, and it
+    # is a separate `print` in `_main` that the function-level checks cannot
+    # see -- the revert sabotage deleted it and §3b's six reds did not include
+    # it. A convention line nobody prints is a convention line nobody reads.
+    banner_dat = fresh(tmp, "exit-banner.dat")
+    poke_row(banner_dat, ROW_A, offset=0x1000)
+    pre_out = run_cli("--dat", clean, "--preflight").stdout
+    diff_out = run_cli("--dat", banner_dat, "--diff", snap_path).stdout
+    check(datcheck.ROW_CONVENTION in pre_out
+          and datcheck.ROW_CONVENTION in diff_out,
+          "both verbs print the row convention through the real CLI, not just "
+          "through format_diff()",
+          f"preflight={datcheck.ROW_CONVENTION in pre_out} "
+          f"diff={datcheck.ROW_CONVENTION in diff_out}")
 
     check(cli("--dat", clean, "--preflight") == 0,
           "a clean archive exits 0", "--preflight")

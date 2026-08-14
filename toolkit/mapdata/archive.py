@@ -85,6 +85,178 @@ COMPRESSION_HUFFMAN = 8
 # Some file ids are stored in the id table with bit 31 set. See file_id_table().
 FILE_ID_HIGH_BIT = 0x80000000
 
+
+# --------------------------------------------------------- MFT ROW NUMBERS --
+#
+# THERE IS ONE ROW CONVENTION IN THIS REPO AND IT IS ARENANET'S. A row number
+# is the record's index in the RAW table: row 0 is the `Mft\x1a` descriptor,
+# row 1 the file header, row 2 the file-id table, row 3 the MFT itself, 4..15
+# reserved spares, and `INDEX_FIRST_FILE = 16` -- the client's own constant --
+# is the first claimable one.
+#
+# Every row number this project has ever recorded is in that convention,
+# because every one of them came out of a structure that already uses it: the
+# file-id table's own `row` column, `alloc.nextStream`, `datcheck.py`'s slice of
+# the table, and `Entry.index` below.
+#
+# AUDITED 2026-08-14, and the counting rule is written down because the first
+# version of this paragraph quoted three numbers ("119 distinct constants, 41 of
+# them in `diff-38519-to-38797.txt`, six archives in the vault") that nobody
+# could reproduce and two of which were simply wrong. RULE: the regex
+# `\brows?\s+(\d{1,7})\b`, case-insensitive, over every `.py`/`.md`/`.toml`/
+# `.json`/`.txt` under `toolkit/ studies/ content/ schema/ tools/` plus
+# `PLAN.md CLAUDE.md HANDOFF.md RUNBOOK.md`. It yields **79 distinct row numbers
+# over 536 mentions in 69 files, 65 of them >= 16**; `diff-38519-to-38797.txt`
+# names **40** distinct rows on its `row N` lines (43 counting its `[0, 2, 3]`
+# corroboration list); and there are **TEN** `Gw.dat` copies in the vault, all
+# ten readable on 2026-08-14. The rule is coarse on purpose -- it catches
+# `entries[46196]` prose and English like "row 3 is the MFT" alike -- so treat
+# the count as a floor, not a census.
+#
+# The substance is what matters and it is checkable: of those 65, **26 resolve
+# to a map-flagged row (259) under `Archive.row(N)` and exactly 1 does under
+# `entries[N]`, with ZERO overlap**. Every document that calls a number a map is
+# therefore written in the raw-MFT convention and still resolves to what it says.
+# Renumbering either reader would silently invalidate all of them, which is why
+# everything here is ADDITIVE and nothing below moves a number anyone has
+# written down.
+#
+# THE TRAP IS NOT A SECOND CONVENTION -- EXCEPT WHERE IT WAS. IT IS THAT
+# `entries` IS A LIST.
+#
+# `Archive.entries` is POSITIONAL, and it skips the descriptor: `entries[0]` is
+# row 1. So `entries[row]` is off by one and returns a DIFFERENT FILE rather
+# than raising. FOUR times so far, and two of the four were written up as facts
+# about the format:
+#
+#   * `vault/dat_durability/ARMED.json` records `entries[46196].offset` as
+#     1,132,424,192 against `datwrite`/`datcheck`'s `0x437F6800`, calls the
+#     1,024-byte gap a "header or block-base convention" and tells the next
+#     operator which pair to trust. RE-MEASURED 2026-08-14:
+#     `entries[46195].offset` IS `0x437F6800` exactly and the 25-byte marker
+#     `RURIK-DURABILITY-20260813` is in that extent; `entries[46196]` is row
+#     46197 -- a different, 584-byte file with no marker that merely happens to
+#     sit 1,024 bytes later. A plausible explanation was invented for an
+#     off-by-one and written into a live experiment's own metadata as guidance.
+#     **STILL STANDING**: the vault is gitignored, so nothing in this commit can
+#     amend it. Its advice ("use datwrite/datcheck offsets for this row") is
+#     right; its stated REASON is false, and a reader who believes the reason
+#     distrusts `archive.py` generally. Amend it by hand.
+#   * `studies/crossbuild/FINDINGS.md` §4b.1 read the same subscript as evidence
+#     that "the two tools number MFT rows differently, off by exactly one", and
+#     quoted `len(entries)` against `datcheck`'s row count as corroboration.
+#     Both readings are refuted below and in `test_archive.py` §1c: the tools
+#     agree on all 24 bytes of every row of all ten archives in the vault
+#     (measured by hand 2026-08-14; §1c re-measures the copy a run is pointed
+#     at), and the count they disagree on is `len(entries)` versus `row_count`,
+#     not row against row. §4b.1 now carries the retraction and the table.
+#   * An archive census mixed `entries[row]` with `textrec.TextIndex._rows[row]`,
+#     which IS keyed by row number, resolved a text row to a TEXTURE, and nearly
+#     filed a false refutation of the text-authoring plan.
+#   * `datplan.py` DID hold a second convention, at three live sites, and the
+#     first version of this comment missed it because it audited recorded
+#     CONSTANTS and not arithmetic. `plan_overwrite` printed "MFT row 46196:
+#     size and crc" against `mft_offset + (46196 - 1) * 24`, i.e. row 46195's
+#     bytes; `plan_insert` printed "MFT row 3 (the table describing itself)"
+#     against row 2, the FILE-ID TABLE, and "MFT row 2: file-id table size and
+#     crc" against row 1, the file header. The planner applies nothing, so those
+#     three addresses were handed to a human to apply by hand, to the two most
+#     load-bearing rows in the archive. Fixed 2026-08-14 by routing every one of
+#     them through `mft_row_offset` below; `test_datplan.py` §8 pins each edit's
+#     address against the fixture's own bytes.
+#
+# USE `Archive.row(n)`. Where a position into `entries` is genuinely wanted, go
+# through the two METHODS below so the direction is written at the call site
+# instead of living in a `- 1` that reads as a typo. Where a BYTE ADDRESS is
+# wanted, `mft_row_offset` is the only correct expression and both `datwrite`
+# and `datplan` now call it.
+
+#: The MFT row that `Archive.entries[0]` carries. Not a tunable -- it is the
+#: descriptor slot the reader skips -- but naming it is what lets the two
+#: conversions below and `test_archive.py` §1c state the same fact once.
+MFT_ROW_OF_ENTRIES_0 = 1
+
+# The structural rows, in the convention above. They live HERE, in the module
+# that owns the convention, because `datcheck.py` and `datplan.py` each declared
+# their own copies and one of the three was then used with the wrong arithmetic
+# for months. Both import these now, so the names and the numbers are one fact.
+FILE_HEADER_ROW = 1          # the 32-byte file header
+FILE_ID_TABLE_ROW = 2        # the stored array of (file_id u32, row u32) pairs
+MFT_SELF_ROW = 3             # the table describing itself; its crc skips its own
+                             # 24 bytes -- see datwrite.py:mft_self_crc
+# INDEX_FIRST_FILE, ArenaNet's own constant. Rows 4..15 are erased in every
+# archive on this machine and stayed that way -- and when the client needed a
+# free slot it took row 35301, reaching past twelve nearer ones. Twelve zeroed
+# rows sitting immediately after the three container rows, which a working
+# allocator declines to use, are reserved. Claiming one would look fine right up
+# until it did not.
+FIRST_CLAIMABLE_ROW = 16
+
+
+def _as_row(value, what):
+    """Refuse anything that is not an int.
+
+    `row_to_position(1.5)` used to return 0.5 and `row_label(1.5)` used to print
+    `row 1`, because `%d` truncates. A fractional row number is always a bug
+    upstream, and silently renaming it to a DIFFERENT row is the whole failure
+    class this section exists for. `bool` is an `int` and `True` really is row 1,
+    so it is allowed rather than special-cased.
+    """
+    if not isinstance(value, int):
+        raise TypeError(f"{what} must be an int, got {type(value).__name__} "
+                        f"{value!r}: a fractional or textual row number would "
+                        f"be truncated into a different, real row")
+    return value
+
+
+def mft_row_offset(mft_offset, row):
+    """Byte address of MFT row `row`. `mft_offset + row * 24`, and nothing else.
+
+    THE ONE EXPRESSION. `entries` skips the descriptor and the MFT on disk does
+    not, so a `- 1` belongs in a subscript and NEVER in an address -- which is
+    exactly the confusion `datplan.py` shipped for months at three sites, two of
+    them naming the file-id table and the file header while claiming to name row
+    3 and row 2. `datwrite.row_offset` delegates here so the two writers cannot
+    drift apart again.
+    """
+    row = _as_row(row, "row")
+    if row < 0:
+        raise IndexError(f"MFT row {row} is negative; there is no row before "
+                         f"the descriptor at row 0")
+    return mft_offset + row * ENTRY_SIZE
+
+
+def row_label(row, file_ids=(), role=None):
+    """`row 71496 [file id 0x287D3; stream head]` -- a row number carrying its
+    own identity.
+
+    A BARE ROW NUMBER IS AMBIGUOUS BY CONSTRUCTION and this is the cheapest
+    thing that fixes it. On 2026-08-13 `datcheck --diff` reported "row 71496
+    changed from 0 B to 6,012 B" while `deploy.py` had just printed "installing
+    ... head 71496, partner 71497". Read together those say the client ate our
+    authored map. They do not: 71496 is the map's Bloated HEAD, which `deploy`
+    arms to zero on purpose so the client is forced to recompile it, and 6,012 B
+    is that recompile succeeding. Our bytes went to the partner, 71497, which is
+    absent from the diff because nothing touched it. The whole misreading turns
+    on the two numbers looking interchangeable in a line of output.
+
+    A file id survives a patch where a row index does not (`contentids.py`), and
+    a role says which half of a two-row map you are looking at, so a line
+    carrying both cannot be crossed with another tool's by accident. `deploy.py`
+    prints its file id on its first line; that is the token to match on.
+
+    Refuses a non-int row: `row_label(1.5)` printed `row 1` before 2026-08-14,
+    which is the one thing a labeller must never do -- name a real row that is
+    not the row it was handed.
+    """
+    row = _as_row(row, "row")
+    bits = []
+    if file_ids:
+        bits.append("file id " + ", ".join("0x%X" % f for f in file_ids))
+    if role:
+        bits.append(role)
+    return "row %d%s" % (row, (" [" + "; ".join(bits) + "]") if bits else "")
+
 # The study copy, which nothing ever locks. See RUNBOOK.md.
 #
 # `RURIK_DAT` overrides it, and the reason is a hard constraint rather than a
@@ -195,6 +367,56 @@ class Archive:
         assert e.index == n, f"row {n} resolved to entry {e.index}"
         return e
 
+    def position_of_row(self, n):
+        """MFT row number -> index into `entries`. Bounded at BOTH ends.
+
+        A METHOD rather than a free function, and that is the correction: the
+        first version of this pair was pure -- `row - 1` with a low-end refusal
+        -- so it could not see the high end at all, and `position_to_row(
+        len(entries))` cheerfully minted row 177,342 on an archive whose highest
+        row is 177,341. A conversion between a row number and a position is only
+        meaningful against a table of known length, so it now takes one.
+        """
+        n = _as_row(n, "row")
+        last = len(self.entries)
+        if not MFT_ROW_OF_ENTRIES_0 <= n <= last:
+            raise IndexError(
+                f"MFT row {n} has no position in `entries` (rows "
+                f"{MFT_ROW_OF_ENTRIES_0}..{last}). Row 0 is the descriptor slot "
+                f"the reader skips -- `row - 1` there is -1, the LAST row of the "
+                f"table. Use datcheck.row_bytes() to see row 0.")
+        return n - MFT_ROW_OF_ENTRIES_0
+
+    def row_of_position(self, k):
+        """Index into `entries` -> MFT row number. Same as `entries[k].index`."""
+        k = _as_row(k, "position")
+        last = len(self.entries) - 1
+        if not 0 <= k <= last:
+            raise IndexError(
+                f"position {k} is outside `entries` (0..{last}). A negative one "
+                f"wraps to the END of the table and resolves to a plausible "
+                f"wrong file; one past the end names a row that does not exist.")
+        return k + MFT_ROW_OF_ENTRIES_0
+
+    @property
+    def row_count(self):
+        """Rows in the raw MFT, COUNTING the descriptor at row 0.
+
+        Equal to `entry_count`, to the descriptor's own count at +0x0C, and --
+        the reason this name exists -- to `datcheck.row_count(mft)`. MEASURED
+        2026-08-14 on all TEN archives in the vault (the earlier note said six;
+        there are ten and all ten open): equal on every one.
+
+        `len(self.entries)` is one LESS and is NOT a row count; it is the length
+        of a list that skips the descriptor. Quoting the two against each other
+        is what put "archive.py reports 177,334 rows where datcheck reports
+        177,335" into `studies/crossbuild/FINDINGS.md` §4b.1 as evidence that
+        the two tools number rows differently. They do not. The highest
+        addressable row is `row_count - 1`, which is `len(entries)`, and that
+        coincidence is exactly what makes the confusion survive a spot check.
+        """
+        return self.entry_count
+
     @property
     def entries(self):
         """Every MFT row, POSITIONALLY. `entries[k].index == k + 1`.
@@ -286,7 +508,7 @@ def file_id_table(archive):
     renamed away. **A file id recorded anywhere is archive STATE, not a property
     of the map.** See studies/maprows/FINDINGS.md §8 and studies/mapdata/FORMAT.md.
     """
-    blob = archive.read(archive.entries[1])
+    blob = archive.read(archive.row(FILE_ID_TABLE_ROW))
     out = {}
     high = []
     for i in range(len(blob) // 8):
@@ -343,7 +565,13 @@ if __name__ == "__main__":
         print(f"  block size     {ar.block_size}")
         print(f"  MFT offset     0x{ar.mft_offset:08X}")
         print(f"  MFT size       {ar.mft_size}")
-        print(f"  entries        {ar.entry_count}")
+        # BOTH numbers, labelled, because printing one of them under the word
+        # "entries" is how they came to be quoted against each other. The row
+        # count is the one another tool can be compared with.
+        print(f"  MFT rows       {ar.row_count}  (rows 0..{ar.row_count - 1}; "
+              f"row 0 is the descriptor)")
+        print(f"  len(entries)   {len(ar.entries)}  (positional; entries[0] is "
+              f"row {MFT_ROW_OF_ENTRIES_0} -- NOT a row count)")
         print(f"  0x0C unknown   0x{ar.unknown_0c:08X}")
         comp = {}
         for e in ar.entries:

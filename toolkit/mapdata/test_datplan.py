@@ -43,6 +43,7 @@ import binascii
 import contextlib
 import io
 import os
+import re
 import shutil
 import struct
 import sys
@@ -55,12 +56,19 @@ from archive import Archive, ENTRY_SIZE  # noqa: E402
 import datplan  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR: the thirty checks below. Every one runs unconditionally -- this file
-# builds its own fixture, so there is no corpus to be missing and no section that
-# can legitimately not run. Measured from a green run on 2026-08-10, not counted
-# by hand: the first version of this line said 24 because that is what counting
-# the call sites in the editor produced.
-LEDGER = checks.Ledger("dat planner", floor=30)
+# FLOOR: the checks below. Every one runs unconditionally -- this file builds its
+# own fixture, so there is no corpus to be missing and no section that can
+# legitimately not run. Measured from a green run on 2026-08-10, not counted by
+# hand: the first version of this line said 24 because that is what counting the
+# call sites in the editor produced.
+#
+# RAISED 30 -> 38 on 2026-08-14 with section 8, and the eight are an indictment
+# of the thirty. This file asserted the placement POLICY exhaustively and never
+# once asked where an edit POINTED, so `datplan` printed three wrong MFT
+# addresses -- row N-1 for "MFT row N", the file-id table for "MFT row 3", the
+# file header for "MFT row 2" -- and was green here the whole time, on a tool
+# whose output a human applies by hand. Same fixture, no vault, no client.
+LEDGER = checks.Ledger("dat planner", floor=38)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -368,6 +376,114 @@ def sections(tmp):
         check(f"{gap_rows} more rows" not in note,
               f"and NOT the {gap_rows} rows the gap-between-reservations measure "
               f"claims by counting the shadow generation as headroom")
+
+    print("\n8. every 'MFT row N' edit lands on row N -- three of four did not")
+    # THE DEFECT THIS SECTION EXISTS FOR, in a tool whose entire output is bytes
+    # a human applies BY HAND. `datplan` carried its own row arithmetic and got
+    # it wrong at three of its four MFT sites:
+    #
+    #   plan_overwrite  mft_offset + (row - 1) * 24  -> row N-1, printed on the
+    #                                                   line AFTER a payload
+    #                                                   edit that named row N
+    #                                                   correctly
+    #   plan_insert     (MFT_SELF_ROW - 1) * 24      -> row 2, the FILE-ID
+    #                                                   TABLE, labelled "row 3"
+    #   plan_insert     1 * ENTRY_SIZE               -> row 1, the FILE HEADER,
+    #                                                   labelled "row 2"
+    #
+    # MEASURED on the real 4.2 GB archive before the fix: `--overwrite 46196`
+    # put its MFT edit at 0xF8CFE8C8 where `datwrite.row_offset` says
+    # 0xF8CFE8E0, and `--insert` aimed its "row 3" edit at 0xF8BEFE30 where row
+    # 3 is at 0xF8BEFE48. Nothing errored, the two conventions appeared in one
+    # plan with nothing to tell them apart, and this file was GREEN at 30
+    # checks -- because it asserted the placement POLICY and never once asked
+    # where an edit pointed.
+    #
+    # The claim is deliberately NOT "the arithmetic matches `mft_row_offset`",
+    # which would only compare the module against the function it now calls.
+    # Every address is resolved to the 24 BYTES THE FIXTURE WROTE THERE, by a
+    # reader written in this file, over every plan the module can produce.
+    def rows_at(dat, mft_offset, offset):
+        """Which row(s) of the raw table carry the 24 bytes sitting at `offset`."""
+        with open(dat, "rb") as fh:
+            fh.seek(offset)
+            want = fh.read(ENTRY_SIZE)
+            fh.seek(mft_offset)
+            table = fh.read(os.path.getsize(dat) - mft_offset)
+        return [i for i in range(len(table) // ENTRY_SIZE)
+                if table[i * ENTRY_SIZE:(i + 1) * ENTRY_SIZE] == want]
+
+    def mft_edits(plan):
+        """(row, offset) for every edit whose own label names an MFT row."""
+        return [(int(m.group(1)), e.offset) for e in plan.edits
+                for m in [re.match(r"MFT row (\d+)\b", e.what)] if m]
+
+    for label, path, count in (("A (reuses an erased row)", dat, COUNT_ERASED),
+                               ("B (appends a row)", dat_b, COUNT_FULL)):
+        with Archive(path) as ar:
+            plans = [datplan.plan_insert(ar, 1200, file_id=0x3000),
+                     datplan.plan_overwrite(ar, LAST_USED_ROW, 100),
+                     datplan.plan_overwrite(ar, ROW_IDTABLE, 8)]
+            edits = [pair for p in plans for pair in mft_edits(p)]
+            named = sorted({r for r, _ in edits})
+            wrong = [(r, off) for r, off in edits
+                     if off != ar.mft_offset + r * ENTRY_SIZE]
+            check(len(edits) >= 4 and not wrong,
+                  f"fixture {label}: all {len(edits)} 'MFT row N' edits, over "
+                  f"rows {named}, land at mft_offset + N*24",
+                  f"wrong: {[(r, hex(o)) for r, o in wrong]}")
+
+            # IDENTITY, not arithmetic. A row the fixture actually WROTE is
+            # unique in the table, so matching its 24 bytes pins the row without
+            # asking either module where it thinks the row is. Appended and
+            # erased rows are all-zero and match in many places, so they are
+            # left to the arithmetic check above and said so here.
+            real = [(r, off) for r, off in edits if r in ROWS and r <= count - 1]
+            landed = [(r, rows_at(path, ar.mft_offset, off)) for r, off in real]
+            check(real and all(hits == [r] for r, hits in landed),
+                  f"and each of the {len(real)} edits naming a row the fixture "
+                  f"WROTE finds exactly that row's bytes there",
+                  f"{[(r, h) for r, h in landed if h != [r]]}")
+
+            # THE CONTROL: the expression datplan shipped. It has to land on a
+            # DIFFERENT row for every one of them, or the right answer and the
+            # wrong one are indistinguishable here and the section proves
+            # nothing.
+            shifted = [(r, rows_at(path, ar.mft_offset,
+                                   ar.mft_offset + (r - 1) * ENTRY_SIZE))
+                       for r, _ in real]
+            check(shifted and all(hits == [r - 1] for r, hits in shifted),
+                  f"while the `(row - 1) * 24` datplan shipped finds row N-1's "
+                  f"bytes for all {len(shifted)} of them -- the file-id table "
+                  f"where it said the MFT, the file header where it said the "
+                  f"table", f"{[(r, h) for r, h in shifted if h != [r - 1]]}")
+
+    # And the bound at both ends. `plan_overwrite(ar, 0, ...)` reached
+    # `entries[-1]` and planned a real overwrite of the LAST row of the table;
+    # the CLI's own `row <= entry_count` was one too loose at the other end,
+    # since `entry_count` counts the descriptor.
+    with Archive(dat) as ar:
+        refused = [datplan.plan_overwrite(ar, r, 8)
+                   for r in (0, -1, ar.row_count, ar.row_count + 1)]
+        # "no such row", not merely "some blocker". Under the pre-fix code row 0
+        # reached `entries[-1]` -- an ERASED slot with a 0-byte reservation --
+        # and was refused for not FITTING it, which produces a blocker and no
+        # edits and satisfies the obvious predicate. That was this check's first
+        # version and the sabotage passed it, 0 red. The bound has to be refused
+        # AS a bound, or a fixture whose last row happened to be roomy would let
+        # a write to it straight through.
+        check(all(p.blockers and not p.edits
+                  and any("no such row" in b for b in p.blockers)
+                  for p in refused),
+              f"rows 0, -1, {ar.row_count} and {ar.row_count + 1} are refused "
+              f"AS OUT OF RANGE with no edits -- row 0 used to reach "
+              f"entries[-1] and address the LAST row of the table",
+              f"{[(len(p.edits), p.blockers[0][:30]) for p in refused]}")
+        ok = datplan.plan_overwrite(ar, LAST_USED_ROW, 8)
+        check(bool(ok.edits) and not ok.blockers,
+              f"and row {LAST_USED_ROW} is still planned -- a bound that "
+              f"refused everything would protect nothing, because the tool "
+              f"would then never run")
 
 
 def main():

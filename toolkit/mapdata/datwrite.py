@@ -52,11 +52,12 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from archive import Archive, ENTRY_SIZE  # noqa: E402
+from archive import (Archive, ENTRY_SIZE,  # noqa: E402
+                     mft_row_offset, MFT_SELF_ROW)
 
 LIVE_INSTALL = os.path.normcase(os.path.abspath(r"C:\gw"))
 
-MFT_SELF_ROW = 3
+# MFT_SELF_ROW (3) is imported from `archive.py`, which owns the row convention.
 SELF_ROW_START = MFT_SELF_ROW * ENTRY_SIZE          # 0x48
 SELF_ROW_END = SELF_ROW_START + ENTRY_SIZE          # 0x60
 
@@ -117,8 +118,13 @@ def guard_source(path):
 
 
 def row_offset(ar, row):
-    """Where row N's 24 bytes start. Row N sits at mft_offset + N*24."""
-    return ar.mft_offset + row * ENTRY_SIZE
+    """Where row N's 24 bytes start. Row N sits at mft_offset + N*24.
+
+    Delegates to `archive.mft_row_offset` so this and `datplan.py` cannot drift:
+    the planner carried its own expression with a `- 1` in it and printed three
+    wrong addresses for months while this one was right. One function now.
+    """
+    return mft_row_offset(ar.mft_offset, row)
 
 
 def mft_self_crc(mft, entry_count):
@@ -288,7 +294,7 @@ class Writer:
         row cannot begin before offset + reservation. Past the end of the file it
         is put()'s short-read guard that refuses, not this.
         """
-        e = self.ar.entries[row - 1]
+        e = self.ar.row(row)
         block = self.ar.block_size
         reserved = -(-e.size // block) * block
         if len(new) > reserved:
@@ -358,7 +364,7 @@ def check_rows(path, rows):
     bad = 0
     with Archive(path) as ar:
         for row in rows:
-            e = ar.entries[row - 1]
+            e = ar.row(row)
             want = binascii.crc32(ar.raw(e))
             ok = want == e.crc
             bad += not ok
@@ -525,7 +531,7 @@ def main():
     try:
         if args.corrupt_crc is not None:
             row = args.corrupt_crc
-            e = w.ar.entries[row - 1]
+            e = w.ar.row(row)
             print(f"corrupting the crc of row {row} "
                   f"({e.size} B, comp={e.compression}, flags={e.flags})")
             print("  content is NOT touched -- this isolates the crc as a gate")
@@ -536,7 +542,7 @@ def main():
             if not args.data:
                 raise SystemExit("--overwrite needs --data")
             row = args.overwrite
-            e = w.ar.entries[row - 1]
+            e = w.ar.row(row)
             new = open(args.data, "rb").read()
             if len(new) != e.size:
                 raise SystemExit(

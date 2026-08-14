@@ -139,7 +139,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive, ffna_chunks, ffna_type, file_id_table  # noqa: E402
-from archive import DEFAULT_DAT  # noqa: E402
+from archive import DEFAULT_DAT, FILE_ID_TABLE_ROW  # noqa: E402
 import vaultpath  # noqa: E402
 
 
@@ -395,7 +395,7 @@ def stored_file_ids(archive):
     rows behind a high-bit id, when the table stores two. This reads MFT row 2 as
     it sits, because the claim being checked is about what the archive holds.
     """
-    blob = archive.read(archive.entries[1])
+    blob = archive.read(archive.row(FILE_ID_TABLE_ROW))
     out = {}
     for i in range(len(blob) // FILE_ID_RECORD.size):
         fid, row = FILE_ID_RECORD.unpack_from(blob, i * FILE_ID_RECORD.size)

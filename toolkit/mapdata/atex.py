@@ -487,7 +487,7 @@ def main():
             row = file_id_table(ar).get(a.file_id)
             if row is None:
                 raise SystemExit(f"file id {a.file_id} is not in the table")
-        e = ar.entries[row - 1]
+        e = ar.row(row)
         data = ar.read(e)
         print(f"row {row}  stored {e.size} B comp={e.compression} "
               f"flags={e.flags} -> {len(data)} B")
