@@ -2044,3 +2044,193 @@ RURIK_DAT=<run>/Gw.dat session.py --exe <run>/Gw.exe --keep-open --hold 300 \
 Row 71496 read 0 B before the first run and **6,012 B** after it, with our authored
 10,714 B Stripped map in the partner row -- so the client compiled our geometry and the
 server then pathed against it.
+
+---
+
+## 24. THE SKILL TIER (2026-08-14): names are built, the passive is not what §20.4 thought
+
+Two rungs were scoped here. One is built and tested; the other turned out to rest on a
+wire lever nobody has ever seen work, and saying so is the more valuable half.
+
+### 24.1 S1 -- the primary passive is NOT the cheap demonstration §20.4 called it
+
+§20.4 says *"every piece already exists"* and names float property **52** for the
+floating `+N` and **33** to move the bar. Re-measured against the schema, the pinned
+client and all twelve live captures:
+
+| | |
+|---|---|
+| property 33 on any wire, ever | **0 probes, 0 server call sites, 0 of 22,524 live GAME_SMSG** |
+| property 52 | identical -- **0 / 0 / 0** |
+| property 62 (the only energy-moving float observed) | **6 occurrences, all NEGATIVE** |
+
+**Nobody has ever observed energy GAIN on a Guild Wars wire**, ours or ArenaNet's. Every
+argument for property 33 is structural inference from an arm nothing has exercised. And
+§20.4's premise for 52 -- *"52 alone draws a number and refills nothing"* -- has **no
+citation anywhere in this repo**; `studies/agentprops/FINDINGS.md` §418's "what it does"
+cell is blank. It is a plausible sentence that has been read as a measurement.
+
+Two things the server does not have, either:
+
+* **No attribute rank, in any form.** Not in `state`, not in `content/*.toml`, and no
+  c2s arm in `authsrv.py`'s chain receives one. **`2 * rank` evaluates to 0 today.**
+* **No live energy.** `agents.PLAYER_ENERGY` is one integer sent once as int property 41
+  at *instance load* and then forgotten -- by `player_pools()`, the function that exists
+  *because* the server used to send a value and forget it (`authsrv.py:2048`).
+
+And `GAME_SMSG_AGENT_UPDATE_ATTRIBUTES` goes out as **42 zeros** (`authsrv.py:5196`),
+which the client reads as fourteen `(0,0,0)` triples. So a passive shipped against
+today's server would compute with rank R while the Attributes panel showed 0, and **any
+result would be unattributable** -- the failure mode this repo keeps recording.
+
+**The tooltip on screen today promises "2 Energy per rank of Tempest". Both nouns in
+that sentence are unbacked.** That is not a reason to rush it; it is a reason to run the
+probe first. Three hazards are named in the recon and one of them is new: `hit_enemy` has
+**two** callers, and the USE_SKILL arm at `authsrv.py:4460` is on the **connection
+thread**, whose only handler catches `ConnectionError`/`socket.timeout`/`OSError` -- so a
+`_fraction` refusal there escapes and **disconnects the client**, on precisely the path a
+Stormcaller demonstration uses. With `PLAYER_ENERGY = 25` and +2 a kill, an uncapped
+accumulator crosses fraction 1.0 on the **13th kill**: twelve look fine, then the
+connection drops.
+
+**Verdict: S1 is a PROBE first, not a feature.** One step list -- `41`, then `62` to
+spend, then `33` at 1.0 and 0.0, then `52` -- fired into a client that is already up for
+another reason. Prediction stated first, per the house rule: **33 SETS current energy to
+`fraction x max`**, mirroring 34 on health.
+
+### 24.2 S2 -- 188 authored skill names, built and tested
+
+The bar has carried our art and ArenaNet's words since the icon arc. The generator for
+the other half is `toolkit/mapdata/skillnames.py`.
+
+**A name is two words and each is an axis that already existed.** The NOUN comes from
+the **motif** of the icon the skill draws (`glyphs.py`, `i % 22`), so it agrees with the
+picture by construction rather than by a mapping somebody maintains. The ADJECTIVE comes
+from the **attribute**, which is what the Skills panel groups by. 188 names, 188
+distinct, median 14 characters against retail's 15, **5,102 B** of UTF-16.
+
+**Neither axis is unique and neither is the pair** -- measured, and this is the finding
+that shaped the design:
+
+| key | distinct groups | worst | skills needing a discriminator |
+|---|---|---|---|
+| motif alone | 22 | 12 | 154 |
+| glyph index (motif x palette) | 125 | 7 | 51 |
+| motif x attribute | 76 | 8 | 100 |
+| glyph index x attribute | 126 | 6 | **50** |
+
+Adding the attribute buys almost nothing, because skills sharing an icon overwhelmingly
+share an attribute too -- the 7-skill icon is six Thunderhead and one Galecraft. **So a
+per-skill discriminator is mandatory**; it indexes the noun, which makes uniqueness
+structural rather than hoped for.
+
+**A cosmetic defect found while doing this, and not yet fixed.** `glyphs.py`'s six
+palettes are *named after this profession's five attributes* -- `tempest`, `galecraft`,
+`windward`, `stormcall`, `thunderhead` -- but `iconset.py` assigns icons by POSITION, so
+a Galecraft skill can draw a Windward-palette icon. The two axes were designed to be one
+axis and the arming does not respect it. It cannot be fully fixed: 41 of the 125 icons
+are shared by skills of different attributes, so one texture cannot carry both palettes.
+The 84 solo icons could.
+
+### 24.3 What is built, and what one run would still need
+
+Committed and green: `skillnames.py` (36 checks / 26 vault-less), `textwrite.py`
+(41 / 31), `iconset.armable` and `skill_glyphs` extracted, `reskin.py`'s
+`[[skill]] name/concise/desc` dword verb, `--recipe` repeatable, and
+`stormcaller-skills.toml` emitted.
+
+**The join is the risk and it is checked.** Nothing pairs the archive record with the
+skill row at run time -- the client reads whatever number is in `row+0x98` -- so a
+disagreement labels every skill with another skill's name and nothing reports it. Both
+halves are read back through their own parsers: **188 of 188** resolve to their own name,
+**0 of 188** under a one-id shift.
+
+Planned, read-only: text file 98 -> id `0x5C0C8` -> row 8295, **7,134 B -> 12,236 B**, a
+`datmove` relocation to `0x75B1200`. The arithmetic closes exactly (6,146 empty + 988
+existing + 5,102 names) and the per-record cost is **zero** -- all 1,024 six-byte headers
+are paid whether used or not.
+
+**RUN AND OBSERVED -- see 24.4.** The relocation, the layered `reskin.py` invocation and
+the caged run all happened on 2026-08-14.
+
+Two hazards inherited rather than introduced, both from `crossbuild/FINDINGS.md` §4c:
+the run archive is **already armed** with 125 icon rows plus three expired-journal rows,
+and **a journal expires the moment a client runs**, so revert before launching anything
+else rather than after.
+
+### 24.4 OBSERVED (2026-08-14): the names are on screen, and they match the pictures
+
+Harness `20260814T124138`, reskinned client, `--spawn-profession 8`, four runs.
+
+**The panel reads:**
+
+```
+Skills and Attributes (Test Warrior) [K]
+  Profession: Stormcaller
+  Attributes (50 unused points)
+      Tempest   Galecraft   Windward   Thunderhead   Storm Calling
+  Test Warrior's Skills
+    - Galecraft (3 Skills)
+        Nimble Cross
+        Sly Vortex
+        Veering Trident
+    + Storm Calling (3 Skills)
+    + Thunderhead (3 Skills)
+    + Windward (3 Skills)
+```
+
+Four groups and no others, which is the run's own control: `--unlocks` was given
+the twelve ids explicitly, so an attribute group that is not ours could not appear.
+The three names under Galecraft are exactly the three predicted before the run.
+
+**The stronger half is the BAR.** Its eight slots read, left to right: trident,
+vortex, cross, starburst, vortex, wedge, drop, trident -- against *Veering Trident,
+Sly Vortex, Nimble Cross, Sheltering Starburst, Patient Vortex, Watchful Wedge,
+Looming Drop, Massing Trident*. **Eight of eight, name matching picture**, because
+both are computed from the same index: the noun is `NOUNS[i % 22]` and the icon is
+`glyphs.icon(i)`. That agreement is the whole design of §24.2 and it is the one
+thing no amount of programmatic checking could have shown -- the test proves the
+ids resolve, the screen proves they resolve to the right *shape*.
+
+**How it was made visible is worth keeping.** The Skills panel groups by attribute
+across every profession the character has unlocked, and with the default `corpus`
+unlock set that is 1,333 skills in ~38 groups, so ours sit far down an
+unscrollable-by-script list. Two runs were spent trying to drive the panel's own
+sort/display toggles: the clicks land (their tooltips, *"Sorting by Attribute"* and
+*"Displaying as a list"*, appear in `3-click.png` and `4-click.png`) and the list
+does not change. That is unexplained and is left as a NEGATIVE result rather than
+worked around silently. What worked was removing the need to navigate at all:
+`--unlocks <12 ids>` makes the list four rows long, and the panel opens at a
+repeatable position so a fractional click on the first group's `[+]` is reliable.
+
+**A caution recorded on the way.** `Tempest (2 Skills)` holds *Battle Rage* and
+*Defy Pain* -- ArenaNet's names, and correctly so. `stormcaller.toml` moves skills
+317 and 318 onto attribute 26, and those are Warrior skills outside profession 8's
+roster (ids 772..3429), so they were never among the 188 and were never renamed.
+Read quickly it looks like the rung failed on its own primary attribute.
+
+### 24.5 Three defects this run found, none of them in the names
+
+1. **`press_key` sent `bScan=0`, so every scripted key did nothing.** The harness
+   printed `action 18:key:K: sent` and the panel never opened; the owner pressed K
+   by hand and it opened at once. This is the defect `test_harness.py` section 9
+   exists for -- `hold_key` held W for 65 s into a client that ignored every event
+   -- present in a SECOND function, because the 2026-08-11 fix landed on `hold_key`
+   and `press_vk` and missed the third copy of the same send, which was in no test
+   at all. **The blast radius is every scripted skill press since 2026-08-11**: any
+   run that concluded something from `key:1` was reading a dropped input rather than
+   a client behaviour. Fixed by delegating to `press_vk`; verified against a real
+   client, same script and timing, the 0.6 s frame going from no panel to panel.
+
+2. **`reskin.py` died with `UnboundLocalError` on its first real invocation** --
+   `skill_strings` was extended by the recipe block and initialised nowhere, because
+   it is the one edit list with no CLI flag beside it. It located all six tables
+   first, so the failure looked like a table problem.
+
+3. **This session's own test tracked mutable vault state.** `test_textwrite.py`
+   section 5 asserted `used == 12` records and `relocate is True` -- both true of the
+   archive that morning and both FALSE the moment `textwrite --arm` ran, so three
+   checks went red at the tool working exactly as designed. The invariants are now
+   the identity tier being intact and `relocate == (new > reserved)`, which hold in
+   both states. It is the defect `test_agentlife.py`'s probe section is named for,
+   two entries away in CLAUDE.md's own list.

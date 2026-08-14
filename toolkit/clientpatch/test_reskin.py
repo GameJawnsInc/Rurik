@@ -24,7 +24,14 @@ import checks                                                  # noqa: E402
 import reskin                                                  # noqa: E402
 import vaultpath                                               # noqa: E402
 
-LEDGER = checks.Ledger("reskin", floor=48)
+# MEASURED 2026-08-14: 68, and 68 again with RURIK_VAULT pointed at an empty
+# directory -- which is worth a line, because this file's entry in CLAUDE.md says
+# section 3 "skips without one" and no skip was declared on that run. Either
+# `pinned.find()` does not honour RURIK_VAULT or it found a client another way;
+# the claim is UNTESTED rather than false, and is left as found rather than
+# asserted here, since it belongs to `pinned.py` and not to the reskin verb this
+# commit adds.
+LEDGER = checks.Ledger("reskin", floor=68)
 
 
 def synth(name_ids=None, abbrev_ids=None, picker_ids=None, data_ids=None,
@@ -354,6 +361,64 @@ def section_skills():
               "51 is the client's own 'no attribute'; above it is not a value "
               "the client has a row for")
 
+    # ---- the STRING verb (2026-08-14). Unlike the two above it writes a DWORD,
+    # so it is the first thing in skill_edits that can disturb a byte outside the
+    # field it names. The check that matters is CONTAINMENT: at a 0xA4 stride a
+    # four-byte write at a wrong offset lands inside the NEXT skill's row, which
+    # reads on screen as a different skill quietly changing its name -- and with
+    # 188 rows nobody diffs it.
+    import repoint_skill                                          # noqa: E402
+    for field in reskin.SKILL_STRING_FIELDS:
+        patched, log = reskin.skill_edits(bytes(data), 0, count, stride,
+                                          strings=[(2, field, 100364)])
+        off = 2 * stride + repoint_skill.FIELDS[field]
+        got = struct.unpack_from("<I", patched, off)[0]
+        LEDGER.ok(got == 100364, f"skill {field!r} writes the string id at +0x%02X"
+                  % repoint_skill.FIELDS[field], f"{got}")
+        moved = [i for i in range(len(data)) if data[i] != patched[i]]
+        LEDGER.ok(moved and min(moved) >= off and max(moved) < off + 4,
+                  f"and every changed byte for {field!r} is inside that dword",
+                  f"{len(moved)} byte(s) at {moved[:4]}, field spans "
+                  f"[{off}, {off + 4})")
+        LEDGER.ok(len(patched) == len(data),
+                  f"and the {field!r} edit is same-length", len(patched))
+    # The three fields must be DISTINCT offsets, or one verb silently overwrites
+    # another and a roster write loses every concise description.
+    offs = {f: repoint_skill.FIELDS[f] for f in reskin.SKILL_STRING_FIELDS}
+    LEDGER.ok(len(set(offs.values())) == len(offs),
+              "the three text fields sit at three distinct offsets", offs)
+    # ...and none of them may collide with the two BYTE fields this function
+    # already writes, which would make an attribute edit clobber a name.
+    LEDGER.ok(all(o >= 4 for o in offs.values())
+              and reskin.SKILL_PROF not in range(min(offs.values()), stride)
+              or all(o > reskin.SKILL_ATTR for o in offs.values()),
+              "and all of them sit past the profession/attribute bytes",
+              (reskin.SKILL_PROF, reskin.SKILL_ATTR, sorted(offs.values())))
+    # Refusals.
+    try:
+        reskin.skill_edits(bytes(data), 0, count, stride,
+                           strings=[(2, "icon", 1)])
+        ok = False
+    except SystemExit as ex:
+        ok = "not one of" in str(ex)
+    LEDGER.ok(ok, "a non-text field name is REFUSED",
+              "icons belong to iconset.py; stats are a different experiment")
+    try:
+        reskin.skill_edits(bytes(data), 0, count, stride,
+                           strings=[(2, "name", 1 << 33)])
+        ok = False
+    except SystemExit as ex:
+        ok = "dword" in str(ex)
+    LEDGER.ok(ok, "a string id too big for a dword is REFUSED")
+    try:
+        reskin.skill_edits(bytes(data), 0, count, stride,
+                           strings=[(count, "name", 100364)])
+        ok = False
+    except SystemExit as ex:
+        ok = "outside" in str(ex)
+    LEDGER.ok(ok, "and a skill id past the table is REFUSED by the same "
+                  "_check_skill the other two verbs use")
+
 
 def section_recipe():
     print("\n6. the recipe file -- a profession design, versioned")
@@ -362,7 +427,7 @@ def section_recipe():
         LEDGER.skip("the recipe section", f"missing {path}")
         return
     (host, names, renames, owners, primaries, descs,
-     sprof, sattr) = reskin.load_recipe(path)
+     sprof, sattr, sstr) = reskin.load_recipe(path)
     LEDGER.ok(host == 8,
               "the shipped demo recipe hosts on Ritualist (8)",
               f"host {host} -- the owner's chosen host, and the profession "
@@ -428,6 +493,41 @@ def section_recipe():
         LEDGER.ok(ok, f"a recipe missing {needle!r} is REFUSED",
                   "a silently-skipped row is a design that half-applies, which "
                   "reads as a client bug rather than a typo")
+
+    # UNKNOWN KEYS in [[skill]] (2026-08-14). They were dropped silently, which
+    # is survivable with two skill rows and is not with 188: a typo'd `names =`
+    # writes nothing, changes no byte, prints no warning, and the run reports
+    # success. `[profession]` has had this check since it shipped -- the check
+    # above at "its name section maps onto the real tables" is that one -- and
+    # [[skill]] did not, which is the asymmetry the string verb made expensive.
+    for bad, needle in (
+            ("[profession]\nhost = 8\n[[skill]]\nid = 5\nnames = 100364\n",
+             "unknown key"),
+            ("[profession]\nhost = 8\n[[skill]]\nid = 5\nName = 100364\n",
+             "unknown key")):
+        tmp = os.path.join(tempfile.gettempdir(), "rurik-bad-skill.toml")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(bad)
+        try:
+            reskin.load_recipe(tmp)
+            ok = False
+        except SystemExit as ex:
+            ok = needle in str(ex)
+        LEDGER.ok(ok, f"a [[skill]] with an unknown key is REFUSED ({bad.splitlines()[-1]!r})",
+                  "with 188 rows nobody reads the diff, so a no-op typo has to "
+                  "be loud")
+    # POSITIVE CONTROL: the four real keys are still accepted together, or the
+    # refusal above just makes the verb unusable.
+    good = ("[profession]\nhost = 8\n[[skill]]\nid = 5\nattribute = 26\n"
+            "name = 100364\nconcise = 100365\ndesc = 100366\n")
+    tmp = os.path.join(tempfile.gettempdir(), "rurik-good-skill.toml")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(good)
+    got = reskin.load_recipe(tmp)
+    LEDGER.ok(got[7] == [(5, 26)] and sorted(got[8]) == [
+        (5, "concise", 100365), (5, "desc", 100366), (5, "name", 100364)],
+        "and every real key is parsed -- the positive control",
+        f"attrs {got[7]}, strings {sorted(got[8])}")
 
 
 def main():

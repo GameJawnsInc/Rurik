@@ -592,19 +592,23 @@ def press_key(hwnd, pid, vk):
     skill reachable from a script: GAME_CMSG 0x0027 exists in ArenaNet's traffic
     and our server had no arm for it until today, and nothing in this harness
     could provoke one to check the fix.
-    """
-    if not _force_foreground(hwnd):
-        return False
-    fg = user32.GetForegroundWindow()
-    owner = wintypes.DWORD()
-    user32.GetWindowThreadProcessId(fg, ctypes.byref(owner))
-    if owner.value != pid:
-        return False                      # someone else has focus - stay silent
 
-    user32.keybd_event(vk, 0, 0, 0)
-    time.sleep(0.06)
-    user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
-    return True
+    IT SENT bScan=0 UNTIL 2026-08-14, AND THAT MEANT IT DID NOTHING IN WORLD.
+    This function was written before `hold_key` found the scan-code trap, and
+    when `hold_key` and `press_vk` were fixed it was left behind -- `keybd_event`
+    was still called as `(vk, 0, 0, 0)`. A zero scan code is accepted by a UI
+    reader and DROPPED by the raw input path the client reads in-world input
+    through, so every scripted `key:` action since 2026-08-11 was delivered to
+    nothing while this returned True and the harness printed "sent". Found when a
+    `key:K` action reported sent and the Skills panel never opened; the owner
+    pressed K by hand and it opened immediately.
+
+    Everything reachable this way is in-world -- skill slots and panel hotkeys --
+    so there is no case here that wants the zero. It now DELEGATES to `press_vk`
+    rather than keeping a third copy of the send: three copies is how two of them
+    got fixed and one did not.
+    """
+    return press_vk(hwnd, pid, vk)
 
 
 def hold_key(hwnd, pid, vk, seconds, check_every=0.5):

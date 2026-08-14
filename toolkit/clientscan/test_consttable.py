@@ -68,12 +68,30 @@ import pinned                                                   # noqa: E402
 import vaultpath                                                # noqa: E402
 from gwpe import PE                                             # noqa: E402
 
-# Set from a real green run on the pinned pristine client: 61. Sections 0-4
-# score 28 without a vault, so a vault-less run goes RED and says so -- the
-# synthetic half cannot refute anything about ArenaNet's own layout, and a
-# green exit code that measured only the fixtures would be the exact defect
-# `checks.py` exists for.
-LEDGER = checks.Ledger("consttable", floor=61)
+# Set from a real green run on the pinned pristine client: 69 (was 61 before
+# section 7b). Sections 0-4 score 28 without a vault, so a vault-less run goes
+# RED and says so -- the synthetic half cannot refute anything about ArenaNet's
+# own layout, and a green exit code that measured only the fixtures would be
+# the exact defect `checks.py` exists for.
+#
+# Which of 7b's checks are load-bearing was MEASURED, by patching the live
+# corpus row and running this file against each. The counts below are what the
+# runs printed; a first draft of this comment GUESSED them and had three of the
+# four wrong, which is the mistake test_png.py and test_glyphs.py both record.
+#   the EXACT pre-fix row, 20 x 24 ........................ 3 red
+#   right stride, wrong declared count, 20 x 48 ........... 5 red (refused at
+#                                                           load by the pad)
+#   stride 16, a divisor of 48 that also closes ........... 2 red
+#   the declared count dropped, left edge derives it ...... 1 red
+# The last is not a defect and reddens on purpose: the number is unchanged and
+# the PROVENANCE is not, which is the entire subject of the section.
+#
+# What the pre-fix row does NOT redden is the more useful half. The left-edge
+# corroboration check passes under it, because 24 divides 480 and both
+# witnesses then agree on 20 -- a corroboration between two readings of the
+# SAME 480 bytes cannot see a divisor stride, by construction. Only the two
+# checks that read the client's own code can, which is the section's point.
+LEDGER = checks.Ledger("consttable", floor=69)
 
 IMAGE_BASE = 0x00400000
 TEXT_RVA, TEXT_OFF, TEXT_SIZE = 0x1000, 0x400, 0x400
@@ -503,7 +521,7 @@ EXPECTED = {
     "s_npcBang":            (0x7A2BE8,      8,  16),
     "s_missionClientData":  (0x56CE38,    888, 124),
     "s_glow":               (0x7A2B58,     11,   8),
-    "s_worldData":          (0x635210,     20,  24),
+    "s_worldData":          (0x635210,     10,  48),
     "s_dayStr":             (0x63738C,      7,   4),
     "s_charCondition":      (0x637580,      9,   4),
     "s_charDamage":         (0x6375CC,     14,   4),
@@ -545,6 +563,122 @@ def section_census(pe, by):
               "live rival",
               f"{by['s_eula'].rival_strides(pe)} -- 33 x 12 and 99 x 4 close "
               "identically, and this module cannot choose")
+
+
+def section_worlddata(pe, by):
+    """The row this corpus got WRONG, and the witness that settled it.
+
+    `s_worldData` shipped here as 20 x 24 with `stride_from="record shape,
+    UNSETTLED"`. It closed, on the correct base, with a code reference
+    corroborating it -- and it is 10 x 48. 24 divides 48, so every check this
+    module owns was satisfied by the wrong answer, which is the blind spot
+    doing exactly what the docstring says it does.
+
+    So the checks here deliberately come from OUTSIDE the anchor arithmetic:
+    the client's own accessor, read as BYTES. No disassembler -- CLAUDE.md
+    carve-out (1) scopes capstone to `msghandler.py` and `codescan.py`, and
+    this is neither -- which is the same reason `refs_to` is a raw byte search.
+    """
+    print("\n7b. s_worldData: the corrected row, against the client's own code")
+    w = by["s_worldData"]
+    base_va = pe.off_to_rva(w.base) + pe.image_base
+
+    # `lea eax,[esi+esi*2]` ; `shl eax,4` ; `add eax, imm32`  -- index*3 << 4.
+    # Found by SHAPE, not at a remembered address: an address copied out of a
+    # study doc is a fact about one build, and the whole point of this module
+    # is predictions that survive a rebuild.
+    ACC = bytes([0x8D, 0x04, 0x76, 0xC1, 0xE0, 0x04, 0x05])
+    text = pe.section(".text")
+    lo, hi = text["rawptr"], text["rawptr"] + text["rawsize"]
+    sites, i = [], pe.data.find(ACC, lo, hi)
+    while i != -1:
+        sites.append(i)
+        i = pe.data.find(ACC, i + 1, hi)
+    LEDGER.ok(len(sites) == 1,
+              "exactly one site in .text scales an index by 3, shifts it left "
+              "4 (x48) and adds an absolute base",
+              f"{len(sites)} site(s) -- the `lea`+`shl` pair alone occurs 22 "
+              f"times, so it is the trailing absolute `add` that makes this a "
+              f"witness and not a coincidence")
+
+    if len(sites) != 1:
+        LEDGER.skip("the accessor's base and bound",
+                    "the accessor pattern is not unique on this build, so "
+                    "nothing below could name which site is meant")
+        return
+
+    site = sites[0]
+    acc_va = pe.off_to_rva(site) + pe.image_base
+    imm = struct.unpack_from("<I", pe.data, site + 7)[0]
+    LEDGER.ok(imm == base_va,
+              "and the base IT loads is the base the anchor arithmetic "
+              "produced -- two witnesses sharing no method, meeting on one byte",
+              f"accessor at 0x{acc_va:08X} loads 0x{imm:08X}; the anchor gives "
+              f"0x{base_va:08X}. This is the check the old row also passed: the "
+              f"base was never in question, only the stride")
+
+    # The bound, in the same function: `cmp esi, imm8` above the lea.
+    win = pe.data[site - 32:site]
+    g = win.rfind(bytes([0x83, 0xFE]))
+    bound = win[g + 2] if g != -1 else None
+    LEDGER.ok(bound == w.count,
+              "the same function bounds the index with the count this row "
+              "declares, so 10 is ArenaNet's own arrsize and not our division",
+              f"`cmp esi, {bound}` at 0x{pe.off_to_rva(site - 32 + g) + pe.image_base:08X}"
+              f", guarding `index < arrsize(s_worldData)` at ConstWorld.cpp:41 "
+              f"-- whose __FILE__ string IS this row's anchor, so the assert "
+              f"and the table are the same measurement from two directions")
+    LEDGER.ok(pe.data.count(b"index < arrsize(s_worldData)") == 1,
+              "and that assert expression occurs exactly once, so the symbol "
+              "naming this table is ArenaNet's own",
+              "the row is no longer inferred from a record shape")
+
+    # WHERE the 10 came from is the whole subject of this section, so the row
+    # is required to still be recording it. Dropping the declaration would put
+    # the count back to our own division of the left edge -- the weaker state
+    # this row shipped in -- without changing the number, and nothing else
+    # here would notice.
+    LEDGER.ok(w.count_from == "declared",
+              "the row DECLARES its count rather than dividing the left edge, "
+              "so what is recorded is ArenaNet's bound and not our arithmetic",
+              f"count_from = {w.count_from!r}, the s_missionClientData shape "
+              f"(888 off `cmp esi, 0x378`) rather than the s_eula one")
+    row = dict(consttable.BY_SYMBOL["s_worldData"])
+    row.pop("count", None)
+    derived = consttable.locate(pe, **row)
+    LEDGER.ok(derived.count == w.count and derived.base == w.base
+              and derived.count_from == "left edge",
+              "and it is corroborated rather than merely trusted: drop the "
+              "declaration and the left edge re-derives the SAME 10 by itself",
+              f"left edge alone gives {derived.count} x {derived.stride} at "
+              f"0x{derived.base:X}; the client's bound gives {w.count}. Two "
+              f"witnesses meeting on one number is what the old 20 never had "
+              f"-- it came from the left edge with nothing to meet")
+
+    # 24 is still a rival, and saying so is the doctrine rather than a defect.
+    LEDGER.ok(24 in w.rival_strides(pe),
+              "24 -- what this row USED to carry -- is STILL a live rival, "
+              "because every divisor of 48 closes on the same base",
+              f"{w.rival_strides(pe)} -- reported, not hidden. What settled "
+              f"this row was the code; the closure arithmetic never could")
+
+    # But the RECORDS can refute it, which `rival_strides` does not know.
+    # The retired reading is reproduced live so this is a difference between
+    # two answers rather than a sentence claiming one.
+    at48 = [struct.unpack_from("<I", pe.data, w.base + r * 48 + 0x14)[0]
+            for r in range(10)]
+    at24 = [struct.unpack_from("<I", pe.data, w.base + r * 24 + 0x14)[0]
+            for r in range(20)]
+    LEDGER.ok(set(at48) == {512} and set(at24) != {512},
+              "and a COLUMN refutes 24 even though the closure cannot: +0x14 "
+              "is 512 on all ten 48-byte records and ragged on the twenty "
+              "24-byte ones",
+              f"at 48: {sorted(set(at48))}; at 24: {sorted(set(at24))} -- 512 "
+              f"is the client's own CONST_WORLD_CHUNK_SIZE (`CompassMap:472 "
+              f"m_imageDims == CONST_WORLD_CHUNK_SIZE`). `rival_strides` tests "
+              f"CLOSURE and the index column, never column coherence, so it "
+              f"keeps 24 and is right to -- this is the limit of that report, "
+              f"measured rather than argued")
 
 
 def section_effect_toml(pe, by):
@@ -687,6 +821,7 @@ def main():
             by = section_corpus(pe)
             section_cross_tools(pe, by)
             section_census(pe, by)
+            section_worlddata(pe, by)
             section_effect_toml(pe, by)
             section_judgements(pe, by)
     finally:

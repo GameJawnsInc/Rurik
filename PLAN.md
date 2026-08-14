@@ -1277,6 +1277,35 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
+### The minimap — mechanism solved on paper, one lever held, one unnamed drop (2026-08-14)
+
+**Read [`studies/minimap/FINDINGS.md`](studies/minimap/FINDINGS.md), then its
+[`PLAN.md`](studies/minimap/PLAN.md) ladder.** Static recon over build 38797 and the
+full live corpus; no client was launched. The pathing-map hypothesis is REFUTED: the
+compass, mission map and world map are three crops of ONE per-continent atlas of
+512×512 ATEX tiles compiled into the client (409 tiles over 7 worlds, 401 resolving in
+both vaulted archives), cropped by the area row's footprint rect — so a map file
+contributes nothing to the picture, and the customarea "featureless brown disc" is the
+continent-crop fallback, not missing art. Two things follow:
+
+- **We hold a lever already**: the map-type byte our server sends in `0x0199` selects
+  FOOTPRINT_A vs B (`maprows.py` §9 item 4, now answered from the compass's own branch
+  at `0x008C2770`). Rung C3 proves it on screen; it does not make our terrain appear.
+- **A genuine unnamed drop**: GAME_CMSG `0x002B` is the compass draw/ping (sole
+  producer `CompassCanvas.cpp`; s2c partner `0x0091`), our client has already sent it
+  5× on loopback, and `authsrv.py` discards it with no arm, no allowlist row, no name —
+  invisible to the D9(a) tripwire because the tripwire keys on *named* opcodes.
+
+Next, in order: **S1** fix `consttable.py:539`'s `s_worldData` row (stride 24 → 48,
+count 10 — a correction to a committed claim, measurement in hand); **S3** commit the
+atlas reader as `toolkit/clientscan/worldmap.py` (the reusable asset; enables the
+offline compass render S5); **S6 + overrides**: name `0x002B`/`0x0091` and either give
+`0x002B` an arm or a `DROPPED_ON_PURPOSE` row. Before naming the fog opcodes
+(`0x0089`/`0x008B`/`0x008C`), resolve FINDINGS §4.2's CONTESTED attribution — two dives
+put the same assert VA under different handlers. **Owner flag for Tier 3**: an authored
+map's compass showing OUR terrain needs both an archive tile write (A1) and a client
+patch repointing the footprint (A2) — it is not a free consequence of good authoring.
+
 ### Custom professions — the route is RESKIN, and the party window just opened
 
 **Read [`studies/profession/RESKIN.md`](studies/profession/RESKIN.md) first, then
@@ -1374,15 +1403,49 @@ structurally blind rather than unlucky. Authoring costs a partial overwrite of o
 region plus a `datmove` — the row ships compressed at 35,460 B and we would write stored
 at 131,200 B, which does not fit its 35,840 B reservation.
 
+**THE SKILL TIER IS NAMED (2026-08-14, RESKIN §24, `ccdf82a`).** **188 authored skill
+names**, generated rather than typed, on screen in the retail client: the noun comes from
+the MOTIF of the icon the skill draws (`glyphs.py`, `i % 22`) and the adjective from the
+ATTRIBUTE the Skills panel groups by, so a name agrees with its picture by construction.
+Eight of eight bar icons matched their names on screen — a violet starburst called
+*Sheltering Starburst*, reading `(Attrib: Windward)` from the client's own tooltip.
+`skillnames.py` generates, `textwrite.py` writes text file 98 (**7,134 B → 12,236 B**, a
+journalled `datmove`), `reskin.py`'s `[[skill]] name/concise/desc` dword verb points the
+rows at them, and `--emit-recipe` keeps both halves on ONE definition of the
+record↔skill assignment (`textwrite.name_assignment`) — nothing joins them at run time, so
+a disagreement would label every skill with another skill's name silently. Checked both
+directions: 188/188 resolve to their own name, 0/188 under a one-id shift.
+
+**A per-skill discriminator turned out to be MANDATORY, and that is measured.** Over
+profession 8: motif alone gives 22 groups worst-case 12; the whole glyph index gives 125
+worst-case 7; adding the attribute moves that only to 126 and 6, because skills sharing an
+icon overwhelmingly share an attribute too. **50 names would have collided.**
+
 **NEXT, and it is a design question rather than a mechanism one.** The identity tier is
-done, the primary marker moved onto our own claimed row (§19.7, `cb53a9b`), and the icon
-path is open. What is left is what makes the class *play* differently. In rough order of
-value: **the 132 icons are DRAWN and 125 are armed** (RESKIN 13.1, `glyphs.py` + `iconset.py`, eight of eight predictions held on screen); the skill roster is 1 byte per skill row and only two skills have been moved
-(§10's countable check); and armour, model scale and palettes
-are all same-length dwords that nothing has exercised yet. None of these is blocked —
-they need a design, not a discovery. The one thing that *is* server work is the primary
-attribute's inherent passive (RESKIN §20): the client never computes damage, healing,
-energy or cast time, and reads an attribute rank nowhere outside its own UI.
+done, the primary marker moved onto our own claimed row (§19.7, `cb53a9b`), the icon path
+is open and the names are authored. What is left is what makes the class *play*
+differently. In rough order of value: skill DESCRIPTIONS are still ArenaNet's — RESKIN
+§24's "the tooltip still lies", and the `concise`/`desc` verbs exist and are unexercised;
+the skill roster is 1 byte per skill row and only two skills have been moved (§10's
+countable check); and armour, model scale and palettes are all same-length dwords that
+nothing has exercised yet. None of these is blocked — they need a design, not a discovery.
+
+**The one thing that *is* server work is COMBAT, and its cost was re-measured 2026-08-14
+(RESKIN §24.1) against what §20 assumed.** The client never computes damage, healing,
+energy or cast time, and reads an attribute rank nowhere outside its own UI. Beyond that:
+**property 33 and property 52 have ZERO observations on any wire, ever** — 0 probes, 0
+server call sites, 0 of 22,524 live GAME_SMSG over twelve connections — and property 62,
+the only energy-moving float ever seen, is NEGATIVE in all 6 occurrences. Nobody has
+observed energy *gain* on a Guild Wars wire. The server also models **no attribute rank in
+any form** (`2 * rank` evaluates to 0) and no live energy, and sends `0x003A` as 42 zeros,
+so a passive shipped today would compute with rank R against a panel showing 0 and be
+unattributable. **So the passive is a PROBE first, not a feature.** Two hazards to respect:
+`hit_enemy`'s USE_SKILL caller is on the **connection thread**, whose only handler catches
+`ConnectionError`/`socket.timeout`/`OSError`, so a `_fraction` refusal there disconnects
+the client on exactly the path a demonstration uses; and at 25 max energy and +2 a kill an
+uncapped accumulator crosses fraction 1.0 on the **13th kill**. The cheapest real rung is
+`s_skill +0x44`–`+0x68`, the rank-0/rank-15 scaling, still undecoded — it would replace
+`ENEMY_SKILL_FRACTION = 0.25`, which `authsrv.py` itself labels an invention.
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`
