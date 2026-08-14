@@ -385,6 +385,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   alone reaches 1.6% of the corpus and the other 98.4% sit behind ATEX level
   compression codes nothing here decodes yet. Sections 1-5 need no vault and
   score 30; 32 by default, 33 under `--all`),
+  `toolkit/mapdata/test_iconset.py` (the 132-row icon ARMER, which is an
+  orchestrator over five tested modules -- so this checks only the composition,
+  and every section is a way it can destroy 4 GB or arm the wrong rows. Two
+  write guards, each with a POSITIVE control, because a guard that refuses
+  everything protects nothing: `C:\gw`, and `vault/dat_study`, which `datwrite`
+  does NOT refuse -- that refusal exists only here. The row indexing is asked of
+  the SYNTAX TREE: `file_id_table` returns one-based ROW NUMBERS while
+  `Archive.entries` is POSITIONAL, so `entries[row]` reads the row BEFORE the
+  one named, and on 2026-08-14 that put two authored icons into the wrong rows
+  with no checksum, no verify and no client able to tell -- it was found only
+  because `datwrite` refused a third arm as a relocation and quoted a
+  reservation that did not match the row it named. A grep cannot separate
+  `a.row(r)` from `a.entries[r]`, so the check counts Subscripts on an
+  `entries` attribute and a sabotage must flip it. Section 3 pins that the
+  WHOLE plan is checked before the Writer opens, on the AST, because otherwise
+  the reservation refusal lands on row 87 of 132 with 86 already written.
+  Sections 1-3 need no vault and score 16 against a floor of 16; 20 with one),
   `toolkit/mapdata/test_glyphs.py` (the 132 procedural skill icons a custom
   profession needs -- and mostly, the ARITHMETIC THAT INDEXES THEM, because
   "132 icons came out and they are all different" stayed green through every

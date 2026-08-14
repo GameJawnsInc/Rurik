@@ -588,7 +588,38 @@ revertible. **What has NOT been done is the roster**: this run authored three ic
 132, and nothing in the toolkit yet generates 132 distinct pictures worth looking at. That
 is now an art problem rather than a format one, which is a much better place to be stuck.
 
-> **`vault/run/reskin-roster/Gw.dat` IS STILL ARMED**, deliberately. Rows 174150 and 174487
+### 13.1 The roster is drawn, and the client drew it (2026-08-14)
+
+Harness `20260814T051447`. `glyphs.py` draws **132 procedural icons**, `iconset.py`
+joins them to the rows profession 8's skills actually point at and arms **125** of them
+in place -- the other 7 are icons another profession's skills also use, and are held
+back by default. Archive verifies, `datcheck --preflight` **10 of 10**, RUN VERDICT
+PASS.
+
+**Eight predictions were written down before the launch and all eight held** -- motif,
+palette, polarity and accent, per slot:
+
+| slot | skill | glyph | predicted | OBSERVED |
+|---|---|---|---|---|
+| 1 | 772 | 11 | starburst, violet, dark-on-lit | as predicted |
+| 2 | 773 | 5 | trident, violet, dark-on-lit | as predicted |
+| 3 | 787 | 6 | vortex, violet, light-on-deep | as predicted |
+| 4 | 788 | 9 | triangle, violet, dark-on-lit | as predicted |
+| 5 | 789 | 10 | drop, violet, light-on-deep | as predicted |
+| 6 | 790 | 17 | tau, violet, dark-on-lit | as predicted |
+| 7 | 791 | 42 | funnel, **galecraft blue**, dark-on-lit | as predicted |
+| 8 | 792 | 71 | trident, **stormcall magenta**, light-on-deep, **dot-triad accent** | as predicted |
+
+Slots 2 and 8 are the same motif in different palettes with different polarity and a
+different accent frame, which is the case the whole index design exists for -- and it is
+the case that was BROKEN twice before it worked (13's own note, and `test_glyphs.py`).
+
+**So the icon tier is closed.** A custom profession can now carry a name, an
+abbreviation, five attribute names, five descriptions, a primary marker and 125 skill
+icons, none of which is ArenaNet's.
+
+> **`vault/run/reskin-roster/Gw.dat` IS STILL ARMED**, deliberately -- now with 125 icon
+> rows as well. Rows 174150 and 174487
 > (skills 317 and 318) and 174861 (skill 773) hold authored 64x64/64x64/128x128 icons, so a
 > later profession run in that directory will draw a sunset in slots 2 and 8 and a
 > calibration ruler in slot 3 -- that is us, not a fault. They were left because **the
