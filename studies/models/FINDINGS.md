@@ -409,18 +409,50 @@ that much: file `0x35140` reads `[2, 3]` over four slots (an ordinal starts at
 0) and `0x2D831` reads `[0,1,2,3,1,1,3,3,1,3,4,5,5]` over nine (an ordinal
 never repeats).
 
-**But it does NOT select the diffuse texture.** Rendering Kamadan with that
-binding puts a specular/gloss map — black with soft highlights — on most
-building surfaces, while awnings, foliage and terrain-adjacent props come out
-correct. So FA5 is a MIXED list of map kinds and this index does not name the
-colour one. Nor is it a fixed grouping: `ntex/nsub` ranges 0.53–1.69 and is
-non-integer on 146 of 316 models, so "N maps per material" is refuted too.
+**Rendering Kamadan with that binding puts what looks like a specular/gloss
+map — black with soft highlights — on most building surfaces**, while awnings,
+foliage and terrain-adjacent props come out correct.
 
-The likely chain is **sub-model → an AMAT material (`0x00000FAD`, 457/457
-resolving to files with that magic) → the FA5 slot**, and AMAT is not decoded.
-That is the next step, and it is what M5's scope meant by "no strong UV/material
-oracle" — except the outcome is sharper than "unverified": it is refuted, by a
-render, which is exactly the evidence the scope said would have to serve.
+**CORRECTED 2026-08-14, and the correction matters: that render does NOT
+refute the index.** The first version of this section read "it does NOT select
+the diffuse texture", which claims more than a render can show. **62.4% of
+sub-models carry MORE THAN ONE UV set** (346 with two, 223 with three, 102
+with four, over 1,076) — so the client multi-textures, and a render that
+applies ONE image per surface would look wrong even with a perfectly correct
+index. The render is evidence that single-texturing is not what the client
+does; it is not evidence about which slot the index names.
+
+What IS refuted is the simple grouping story. `ntex/nsub` ranges 0.53–1.69 and
+is non-integer on 146 of 316 models, so FA5 is not "N maps per material". And
+the natural stage-group reading — each sub-model consuming as many textures as
+it has UV sets, in order — scores worse than the control: `sum(uv_sets) ==
+texture count` on **140/315 (44.4%)** and the index equalling the running
+consumption base on **129/315 (41.0%)**, against a plain-ordinal control at
+**257/315 (81.6%)**.
+
+So the index behaves mostly like a sub-model ordinal that occasionally skips
+(file `0x3C5AC` reads `[0, 1, 2, 5]`), and how a surface reaches its texture
+STAGES is **NOT FOUND**.
+
+### 6.4 AMAT is not the answer either
+
+The obvious next hypothesis was **sub-model → an AMAT material (`0x00000FAD`)
+→ the FA5 slot**. MEASURED 2026-08-14, and it fails on coverage before it
+even gets to structure: **`0x00000FAD` is present on 13 of 315 prop models on
+the two reference maps — 4.1%** (26.4% over a strided corpus sweep of 387
+geometry-carrying models), and those 13 reference just **3 distinct AMAT
+files**. A chunk 96% of the props we render do not carry cannot be how they
+find their textures.
+
+`0x00000FA1`, which IS on 315/315 reference-map models, is not it either: its
+payload is model-level scalars — a `u32` version 0x26, then floats in the
+thousands and 1.0-like values (bounds and LOD distances by shape) — with no
+per-sub-model array.
+
+AMAT is still worth decoding for the quarter of the corpus that has it (it is
+a RIFF-style container: `"AMAT"`, `u32` version 4, then `char[4] tag, u32
+size` sub-chunks — `GRMT` and `GRSN` observed), but it is **not** the material
+binding this rung needs.
 
 Textures are still attached in Blender, because a scene with them is far more
 useful than one without and `--no-textures` is the control — but a render from
