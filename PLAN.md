@@ -1277,6 +1277,35 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
+### The minimap — mechanism solved on paper, one lever held, one unnamed drop (2026-08-14)
+
+**Read [`studies/minimap/FINDINGS.md`](studies/minimap/FINDINGS.md), then its
+[`PLAN.md`](studies/minimap/PLAN.md) ladder.** Static recon over build 38797 and the
+full live corpus; no client was launched. The pathing-map hypothesis is REFUTED: the
+compass, mission map and world map are three crops of ONE per-continent atlas of
+512×512 ATEX tiles compiled into the client (409 tiles over 7 worlds, 401 resolving in
+both vaulted archives), cropped by the area row's footprint rect — so a map file
+contributes nothing to the picture, and the customarea "featureless brown disc" is the
+continent-crop fallback, not missing art. Two things follow:
+
+- **We hold a lever already**: the map-type byte our server sends in `0x0199` selects
+  FOOTPRINT_A vs B (`maprows.py` §9 item 4, now answered from the compass's own branch
+  at `0x008C2770`). Rung C3 proves it on screen; it does not make our terrain appear.
+- **A genuine unnamed drop**: GAME_CMSG `0x002B` is the compass draw/ping (sole
+  producer `CompassCanvas.cpp`; s2c partner `0x0091`), our client has already sent it
+  5× on loopback, and `authsrv.py` discards it with no arm, no allowlist row, no name —
+  invisible to the D9(a) tripwire because the tripwire keys on *named* opcodes.
+
+Next, in order: **S1** fix `consttable.py:539`'s `s_worldData` row (stride 24 → 48,
+count 10 — a correction to a committed claim, measurement in hand); **S3** commit the
+atlas reader as `toolkit/clientscan/worldmap.py` (the reusable asset; enables the
+offline compass render S5); **S6 + overrides**: name `0x002B`/`0x0091` and either give
+`0x002B` an arm or a `DROPPED_ON_PURPOSE` row. Before naming the fog opcodes
+(`0x0089`/`0x008B`/`0x008C`), resolve FINDINGS §4.2's CONTESTED attribution — two dives
+put the same assert VA under different handlers. **Owner flag for Tier 3**: an authored
+map's compass showing OUR terrain needs both an archive tile write (A1) and a client
+patch repointing the footprint (A2) — it is not a free consequence of good authoring.
+
 ### Custom professions — the route is RESKIN, and the party window just opened
 
 **Read [`studies/profession/RESKIN.md`](studies/profession/RESKIN.md) first, then
