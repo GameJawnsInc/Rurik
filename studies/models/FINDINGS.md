@@ -357,7 +357,76 @@ oracle. All 24 new disagreements are in the newly recovered models (6 of 42,
 arc's sharpest open question. The two populations are pinned **apart**, per
 §A5's lesson that conflating failure populations manufactures false theories.
 
-## 6. What is still unknown
+## 6. Textures (M5)
+
+**The texture layer is open, and the material binding is not.** Those are two
+different results and the rung delivered one of them.
+
+### 6.1 `0x00000FA5` is the texture list, and `0x00000FA1` is not
+
+MEASURED. FA5 is `u32 count` then `count` **variable-length** slots: a
+`u16 id0`, and if that is zero the slot ENDS there (a null reference);
+otherwise `u16 id1, u16 pad` follows, and the pair is the same encoding a
+map's Dependencies chunk uses. The walk closes on the exact final byte for
+**857/857** chunks over a strided corpus sweep and **315/315** on the two
+reference maps, where eight rival framings close **0/315**.
+
+The 2-byte null slot is what separates it from the obvious fixed-6-byte
+reading — but **not on the reference maps**, which carry zero null slots, so
+both framings close there. `test_modelexport.py` says so explicitly and
+measures the discrimination on a strided sweep instead (rival closes 154 of
+205 chunks, 105 null slots seen). Asserting the rival's failure on a sample
+that cannot show it would have been a check that passes for the wrong reason.
+
+**The upstream claim that FA1 is also "texture filenames" is REFUTED**: this
+framing closes 0/615 on FA1, its length is usually not 4-aligned, and sliding
+every 6-byte window of every FA1 yields **1** texture-decoding hit in 89,013
+against FA5's 1,795 of 1,798. FA1's contents are NOT DECODED.
+
+Every non-null reference resolves and lands on a texture: **1,795/1,795** over
+both reference maps, magic census `{ATEX: 1785, DDS: 10}`. The magic is the
+check a wrong pair formula fails — a wrong radix resolves 888 rows of which
+only 387 are textures.
+
+### 6.2 Full-resolution export
+
+Every slot decodes to a PNG at level 0 — possible only because the ATEX level
+codec landed, since 98.4% of containers carry a compressed level 0. Both
+reference maps: **472 distinct textures, 28.0 MB**, zero decode errors.
+Written stdlib-only through `png.py` (`zlib` + `struct`), and named by file id
+rather than by model, because naming per model wrote 1,783 files and 110.6 MB
+for the same 472 images.
+
+### 6.3 What the render REFUTED, and it is the honest half
+
+A sub-model's header word (`unk`, exported as `material_index`) is a real
+per-sub-model index: over 1,076 sub-models it lands in `[0, slot count)` on
+**1,048 (97.4%)** where the count fields score 2–5%; on the 210 models with
+several sub-models AND several textures it varies on **208** and reaches ≥2 on
+157. The only rival the range test could not separate, `u2`, is **all zero on
+all 210** — trivially in range, therefore not an index. Its exceptions settle
+that much: file `0x35140` reads `[2, 3]` over four slots (an ordinal starts at
+0) and `0x2D831` reads `[0,1,2,3,1,1,3,3,1,3,4,5,5]` over nine (an ordinal
+never repeats).
+
+**But it does NOT select the diffuse texture.** Rendering Kamadan with that
+binding puts a specular/gloss map — black with soft highlights — on most
+building surfaces, while awnings, foliage and terrain-adjacent props come out
+correct. So FA5 is a MIXED list of map kinds and this index does not name the
+colour one. Nor is it a fixed grouping: `ntex/nsub` ranges 0.53–1.69 and is
+non-integer on 146 of 316 models, so "N maps per material" is refuted too.
+
+The likely chain is **sub-model → an AMAT material (`0x00000FAD`, 457/457
+resolving to files with that magic) → the FA5 slot**, and AMAT is not decoded.
+That is the next step, and it is what M5's scope meant by "no strong UV/material
+oracle" — except the outcome is sharper than "unverified": it is refuted, by a
+render, which is exactly the evidence the scope said would have to serve.
+
+Textures are still attached in Blender, because a scene with them is far more
+useful than one without and `--no-textures` is the control — but a render from
+this pipeline is **not evidence about which texture a surface should carry**.
+
+## 7. What is still unknown
 
 - **The preamble** (+0x54 → sub-model array) — located by search, so ~15% of
   files never close (Kamadan 15/86 models, Pre-Searing **77/229**). Per-map
