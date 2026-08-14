@@ -1357,25 +1357,35 @@ Four things landed underneath that:
   `knotCount > 16` process-kill hazard is RETRACTED** — the generic unpacker refuses the
   message before dispatch, so an over-range send is inert, not dangerous.
 
-**Next, in order (S1-S11 are all LANDED as of 2026-08-14; `worldmap.py` and its test are
+**Next, in order (S1-S12 are all LANDED as of 2026-08-14; `worldmap.py` and its test are
 committed, floor 78, 19 sabotages all reddening; the suite is 83/83 green, 4,035
 checks):**
 
-1. **S12 — static, ~1-2 h, NO go-ahead needed, and it can kill the surviving hypothesis
-   for free.** Find the writer of `[globalCtx+0x14] + 4..0x10` and establish whether the
-   map rect is set inside the synchronous map parse or later. If the parse must precede
-   any render, H3a dies at no cost. Use a **directory** prefix with `codescan --in` —
-   `--in Map` bare pulls the whole geometry tree.
-2. **C1 — one loopback run, NEEDS OWNER GO-AHEAD, and it now settles all three at
-   once.** Retail map 148, our DH, caged, no probe, no `--enemy`. A cross-process
+1. ~~**S12**~~ **DONE 2026-08-14, and it over-delivered — `studies/minimap/FINDINGS.md`
+   §6c.** **H3a is DEAD three ways**: the rect writer is chunk `0x2000000C` —
+   `mapbuild.py`'s own `MAP_PARAMS_CHUNK`, met from the client side (`0x007129D0` →
+   `0x0070D780`, one caller image-wide) — running inside the synchronous chunk loop
+   before the object is ever installed into the per-thread slot (`0x00707CC4`, one of
+   exactly two writers); the compass's copy (`0x0070A5C0`) has **no NULL path**, so a
+   too-early paint crashes rather than latching zeros; and the build runs inside the
+   synchronous dispatch of frame msg `0x10000098`, posted only by the MsCliApi
+   instance-load path, with the HUD a later message. **And the file-side measurement
+   found the arc's new leading explanation for every fallback frame**: map 148's own
+   file is **64×64 cells, rect ±3072** (the 416×512 footprint is the *region*), and
+   `content/maps.toml` spawns its player at **(9826, 8077) — outside the file's rect**,
+   so the latch-clamped crop window around the player intersects nothing and the disc
+   tiles the fallback. Mechanism OBSERVED; cause-of-the-frames RECONSTRUCTION pending
+   one live step.
+2. **C1 — one loopback run, NEEDS OWNER GO-AHEAD, re-scoped a third time with exact
+   numbers.** Retail map 148, our DH, caged, no probe, no `--enemy`. A cross-process
    `ReadProcessMemory` of the live `CompassMap` (instance at `[compass+0x4C]`, lazy
    create `0x008BC426`; `toolkit/harness/keytap.py` already does ASLR-correct RPM in
-   pure `ctypes`) reads three dwords: `+0x84` ≠ 1 revives the index family, `+0x84 == 1`
-   with `+0x58/+0x5c` ≠ (416, 512) **confirms H3**, and both correct kills all three and
-   puts the fault downstream of the crop or in rung S5's metric. Take the χ measurement
-   in the same run as the control — **the χ measurement ALONE can no longer discriminate
-   anything.** C1 still **gates C2 and C3**: an arm whose two halves both draw the
-   fallback is satisfied vacuously.
+   pure `ctypes`) reads: predicted `+0x84 == 1`, **`+0x58/+0x5c == (64, 64)`** and
+   `+0x60..0x6c == (−3072, −3072, 3072, 3072)` — zeros are no longer a live prediction.
+   **Plus the decisive arm S12 added: move map 148's spawn inside ±3072 and the compass
+   should draw Pre-Searing atlas art with no other change; restore it and the fallback
+   returns.** Two runs, one content-row edit, and the leading question goes OBSERVED
+   either way. χ alone still discriminates nothing; C1 still **gates C2 and C3**.
 **Owner flag for Tier 3 is unchanged**: an authored map's compass showing OUR terrain
 needs both an archive tile write (A1) and a client patch repointing the footprint (A2) —
 it is not a free consequence of good authoring, and it is worth nothing until C1 explains
