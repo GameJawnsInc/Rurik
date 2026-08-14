@@ -136,7 +136,7 @@ FORMAT_VERSIONS = (1, 2)
 # The MODEL interchange (rung M3), read when a prop's model has one beside
 # the map export.
 MODEL_FORMAT = "rurik.gwmodel"
-MODEL_VERSIONS = (1, 2)
+MODEL_VERSIONS = (1, 2, 3)
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
 DTYPE_JSON = "json"
@@ -605,7 +605,28 @@ def gwmodel_materials(meta, models_dir):
                     links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
         by_image[image_name] = mat
     for s, sm in enumerate(meta["submodels"]):
-        slot = sm.get("material_index", sm.get("texture"))
+        # THE BINDING, and it is a chain rather than an index (format 3):
+        # sub-model -> material -> layers -> texPathIndex -> FA5 slot.
+        # Layer 0 is the BASE layer. Using material_index as an FA5 index
+        # directly -- which is what this did before the material table was
+        # decoded -- is what put specular maps on Kamadan's buildings.
+        mat = sm.get("material") or {}
+        layers = mat.get("layers") or []
+        slot = None
+        if layers:
+            # THE DIFFUSE IS THE FIRST LAYER SAMPLING A STORED UV SET, not
+            # simply layer 0. A layer whose `uv` is NEGATIVE has GENERATED
+            # coordinates -- a reflection/environment effect, which is what
+            # renders as black with soft highlights and is exactly what was
+            # landing on Kamadan's walls. MEASURED: 92 of 1,063 layered
+            # sub-models put such a layer FIRST, and the two largest wall
+            # models on Kamadan are both among them.
+            stored = [lay for lay in layers if (lay.get("uv") or 0) >= 0]
+            slot = (stored or layers)[0].get("texpath")
+        elif mat.get("kind") in (None, "none"):
+            # format 2 and earlier carried no material table; fall back to
+            # the old reading so an old export still shows something.
+            slot = sm.get("material_index", sm.get("texture"))
         if slot is None or slot >= len(slots):
             continue
         name = slots[slot].get("image")

@@ -537,6 +537,200 @@ def _u32(p, o):
     return struct.unpack_from("<I", p, o)[0]
 
 
+def material_block_start(payload):
+    """Where block C -- the MATERIAL TABLE -- begins: past blocks A and B.
+
+    Split out of `preamble_end` rather than re-derived, so the material
+    reader and the sub-model walk can never drift apart on the same file.
+    """
+    n = len(payload)
+    if n < PREAMBLE_MIN:
+        raise Undecodable(f"geometry chunk is {n} bytes, under the "
+                          f"{PREAMBLE_MIN}-byte header region")
+    version = _u32(payload, 0)
+    if version != GEOMETRY_VERSION:
+        raise Undecodable(
+            f"geometry chunk version 0x{version:X} != 0x{GEOMETRY_VERSION:X}; "
+            f"MdlLoad.cpp refuses it at 0x00794586")
+    w = _Cursor(payload)
+    w.at = PREAMBLE_MIN
+    if _u8(payload, 0x30):                                          # A
+        w.take(28 * _u8(payload, 0x30), "block A")
+    for _ in range(_u16(payload, 0x50)):                            # B
+        rec = w.at
+        w.take(0x18, "block B header")
+        w.take(7 * _u32(payload, rec + 8)
+               + 8 * (_u32(payload, rec + 0x0C) + _u32(payload, rec + 0x10)
+                      + _u32(payload, rec + 0x14)), "block B payload")
+    return w.at
+
+
+class Material:
+    """One LAYERED material: a run of layers in the model's layer arrays."""
+
+    __slots__ = ("flags", "blend", "opaque", "pixel_shader_id",
+                 "layer_count", "layer_base")
+
+    def __init__(self, flags, blend, opaque, pixel_shader_id, layer_count,
+                 layer_base):
+        self.flags = flags
+        self.blend = blend
+        self.opaque = opaque
+        self.pixel_shader_id = pixel_shader_id
+        self.layer_count = layer_count
+        self.layer_base = layer_base
+
+    def __repr__(self):
+        return (f"Material({self.layer_count} layer(s) from "
+                f"{self.layer_base}, shader={self.pixel_shader_id})")
+
+
+class Layer:
+    """One texture layer of a material.
+
+    `texpath` is ArenaNet's own `texPathIndex` -- an index into the model's
+    `0x00000FA5` texture list, bounded against `texPathCount` by
+    `MdlCombine:568`. `texarray` is the UV SET it samples; a NEGATIVE value
+    means the coordinates are generated rather than stored.
+    """
+
+    __slots__ = ("flags", "texarray", "opaque", "conv", "texpath",
+                 "tex_flag", "slot")
+
+    def __init__(self, flags, texarray, opaque, conv, texpath, tex_flag,
+                 slot):
+        self.flags = flags
+        self.texarray = texarray
+        self.opaque = opaque
+        self.conv = conv
+        self.texpath = texpath
+        self.tex_flag = tex_flag
+        self.slot = slot
+
+    def __repr__(self):
+        return (f"Layer(tex={self.texpath}, uv={self.texarray}, "
+                f"flags={self.flags:#06x})")
+
+
+class MaterialTable:
+    """A model's layered materials and their layers, from block C.
+
+    **THIS IS WHAT BINDS A SUB-MODEL TO ITS TEXTURES**, and it is the thing
+    rungs M4 and M5 were missing. `SubModel.unk` is ArenaNet's `mtlIndex`
+    (its low 16 bits; the high half is zero on every sub-model measured), and
+    it selects a material here -- NOT a texture directly, which is why using
+    it as an `0x00000FA5` index put specular maps on Kamadan's buildings.
+
+    The chain is `sub-model -> material -> layers -> texPathIndex -> FA5`.
+    ArenaNet's own asserts name every step: `MdlTex:2823`
+    `geosets.Count() == materials.Count()` (one material per sub-model),
+    `MdlCombine:565` `mtlData->shaderCount < arrsize(combo->texPathIndex)`
+    and `MdlCombine:568` `texPathIndex < texPathCount`.
+
+    THE ORACLE, and it is one this decoder cannot force: a material's layers
+    name the UV SETS they sample, and the highest one must match the number
+    of sets the SUB-MODEL's vertex format actually carries --
+
+        max(layer.texarray >= 0) + 1 == submodel.texcoord_sets
+
+    which crosses from the material table to the vertex declaration, two
+    structures written by different parts of the exporter. MEASURED
+    **1,063 of 1,063** over both reference maps, against **926 of 1,022** for
+    a rival that binds by sub-model POSITION instead of by `mtlIndex`, and
+    **621 of 1,064** for a random material. A material whose every layer has
+    a negative `texarray` samples no stored set at all, so the identity is
+    undefined there and those are excluded rather than counted as failures.
+    """
+
+    __slots__ = ("materials", "layers")
+
+    def __init__(self, materials, layers):
+        self.materials = materials
+        self.layers = layers
+
+    def __len__(self):
+        return len(self.materials)
+
+    def layers_of(self, index):
+        """The layers of material `index`, in order. Layer 0 is the base."""
+        m = self.materials[index]
+        return self.layers[m.layer_base:m.layer_base + m.layer_count]
+
+    def for_submodel(self, sub):
+        """`(kind, layers)` for a sub-model. `kind` is 'layered' or 'binary'.
+
+        A `mtlIndex` past the layered array names a BINARY material, which
+        lives in the AMAT files of the model's `0x00000FAD` list -- a
+        different mechanism this returns None for rather than guessing at.
+        """
+        index = sub.unk & 0xFFFF
+        if index >= len(self.materials):
+            return "binary", None
+        return "layered", self.layers_of(index)
+
+    def __repr__(self):
+        return (f"MaterialTable({len(self.materials)} material(s), "
+                f"{len(self.layers)} layer(s))")
+
+
+def _i8(payload, off):
+    value = payload[off]
+    return value - 256 if value > 127 else value
+
+
+def material_table(payload):
+    """A geometry chunk's `MaterialTable`, or None when it has no layered one.
+
+    None is a real answer, not an absence: 12 of the two reference maps' 315
+    models carry no layered material and use the AMAT (`0x00000FAD`) path
+    instead.
+    """
+    count = _u8(payload, 0x18)
+    layer_total = _u8(payload, 0x1C)
+    has_slots = _u32(payload, 0x20) != 0
+    if count == 0:
+        return None
+    at = material_block_start(payload)
+    layers_at = at + 8 * count
+
+    materials = []
+    base = 0
+    for i in range(count):
+        rec = payload[at + 8 * i:at + 8 * i + 8]
+        if len(rec) != 8:
+            raise Undecodable(f"material {i} of {count} runs past the chunk")
+        materials.append(Material(rec[0], rec[1],
+                                  struct.unpack_from("<I", rec, 2)[0],
+                                  rec[6], rec[7], base))
+        base += rec[7]
+    # THE CLIENT'S OWN GATE, at 0x007959B3: the per-material layer counts
+    # must sum to the total the header declares. Refused, never repaired --
+    # a mismatch means the arrays below would be misaligned and every
+    # texture index after it silently wrong.
+    if base != layer_total:
+        raise Undecodable(
+            f"the material layer counts sum to {base} but the header "
+            f"declares {layer_total}")
+
+    need = layers_at + (9 if has_slots else 8) * layer_total
+    if need > len(payload):
+        raise Undecodable(f"the layer arrays need {need} bytes of "
+                          f"{len(payload)}")
+    layers = []
+    for j in range(layer_total):
+        tex_byte = _u8(payload, layers_at + 8 * layer_total + j)
+        layers.append(Layer(
+            _u16(payload, layers_at + 2 * j),
+            _i8(payload, layers_at + 2 * layer_total + j),
+            _u32(payload, layers_at + 3 * layer_total + 4 * j),
+            _u8(payload, layers_at + 7 * layer_total + j),
+            tex_byte & 0x7F,
+            tex_byte >> 7,
+            _u8(payload, layers_at + 9 * layer_total + j) if has_slots
+            else None))
+    return MaterialTable(materials, layers)
+
+
 def preamble_end(payload):
     """Where the sub-model array starts. COMPUTED, exactly as the client does.
 
@@ -575,17 +769,7 @@ def preamble_end(payload):
             f"geometry chunk version 0x{version:X} != 0x{GEOMETRY_VERSION:X}; "
             f"MdlLoad.cpp refuses it at 0x00794586")
     w = _Cursor(payload)
-    w.at = PREAMBLE_MIN
-
-    if _u8(payload, 0x30):                                          # A
-        w.take(28 * _u8(payload, 0x30), "block A")
-
-    for _ in range(_u16(payload, 0x50)):                            # B
-        rec = w.at
-        w.take(0x18, "block B header")
-        w.take(7 * _u32(payload, rec + 8)
-               + 8 * (_u32(payload, rec + 0x0C) + _u32(payload, rec + 0x10)
-                      + _u32(payload, rec + 0x14)), "block B payload")
+    w.at = material_block_start(payload)
 
     a, b, c = _u8(payload, 0x18), _u8(payload, 0x1C), _u32(payload, 0x20)
     if a > 0xFE:

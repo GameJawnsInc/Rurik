@@ -434,6 +434,51 @@ So the index behaves mostly like a sub-model ordinal that occasionally skips
 (file `0x3C5AC` reads `[0, 1, 2, 5]`), and how a surface reaches its texture
 STAGES is **NOT FOUND**.
 
+### 6.5 SOLVED — the material table, and it was never in a material file
+
+**The binding is in the geometry chunk's own preamble**, in the block-C region
+`preamble_end` already walked past. Three header fields it already reads as
+gates turn out to describe it: `u8@0x18` is the material count, `u8@0x1C` the
+total layer count, `u32@0x20` a slot-array gate.
+
+The chain, with ArenaNet's own names from its own asserts:
+
+```
+sub-model.unk & 0xFFFF   = mtlIndex       (MdlTex:2823 geosets == materials)
+  -> material            = 8 bytes: flags, blend, shaderCount, layer base
+  -> layers              = six parallel arrays, shaderCount of them
+  -> layer.texPathIndex  (MdlCombine:568 texPathIndex < texPathCount)
+  -> the 0x00000FA5 slot
+```
+
+**THE ORACLE, and this decoder cannot force it.** A material's layers name the
+UV SETS they sample; the highest must equal what the sub-model's own vertex
+format carries — two structures on opposite sides of the file:
+
+```
+max(layer.texarray >= 0) + 1  ==  submodel.texcoord_sets
+```
+
+| | score |
+|---|---|
+| **real (`mtlIndex`)** | **1063 / 1063** |
+| bind by sub-model position | 925 / 1021 |
+| random material | 628 / 1063 |
+
+Binding by position is *nearly* right — 90.6% — which is exactly why it had to
+be measured rather than dismissed. Every layer's `texPathIndex` is also inside
+its model's FA5 list, **2,275 of 2,275**, which is the client's own bound.
+
+**And the diffuse is not simply layer 0.** A layer whose `texarray` is
+NEGATIVE has GENERATED coordinates — a reflection/environment effect — and 92
+of 1,063 sub-models put one FIRST, including both of Kamadan's largest wall
+models. That is what had been rendering as black with soft highlights. The
+diffuse is the first layer sampling a STORED UV set, and with that fix the
+city renders as mottled stone instead.
+
+Still open: which of the remaining layers is detail versus lightmap versus
+specular, and the alpha-masked decals need a viewer blend mode to cut out.
+
 ### 6.4 AMAT is not the answer either
 
 The obvious next hypothesis was **sub-model → an AMAT material (`0x00000FAD`)
