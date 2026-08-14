@@ -1369,23 +1369,27 @@ checks):**
    exactly two writers); the compass's copy (`0x0070A5C0`) has **no NULL path**, so a
    too-early paint crashes rather than latching zeros; and the build runs inside the
    synchronous dispatch of frame msg `0x10000098`, posted only by the MsCliApi
-   instance-load path, with the HUD a later message. **And the file-side measurement
-   found the arc's new leading explanation for every fallback frame**: map 148's own
-   file is **64×64 cells, rect ±3072** (the 416×512 footprint is the *region*), and
-   `content/maps.toml` spawns its player at **(9826, 8077) — outside the file's rect**,
-   so the latch-clamped crop window around the player intersects nothing and the disc
-   tiles the fallback. Mechanism OBSERVED; cause-of-the-frames RECONSTRUCTION pending
-   one live step.
-2. **C1 — one loopback run, NEEDS OWNER GO-AHEAD, re-scoped a third time with exact
-   numbers.** Retail map 148, our DH, caged, no probe, no `--enemy`. A cross-process
-   `ReadProcessMemory` of the live `CompassMap` (instance at `[compass+0x4C]`, lazy
-   create `0x008BC426`; `toolkit/harness/keytap.py` already does ASLR-correct RPM in
-   pure `ctypes`) reads: predicted `+0x84 == 1`, **`+0x58/+0x5c == (64, 64)`** and
-   `+0x60..0x6c == (−3072, −3072, 3072, 3072)` — zeros are no longer a live prediction.
-   **Plus the decisive arm S12 added: move map 148's spawn inside ±3072 and the compass
-   should draw Pre-Searing atlas art with no other change; restore it and the fallback
-   returns.** Two runs, one content-row edit, and the leading question goes OBSERVED
-   either way. χ alone still discriminates nothing; C1 still **gates C2 and C3**.
+   instance-load path, with the HUD a later message. **The file-side half also killed
+   H3 for retail 148 — after first getting it wrong and catching it.** The rung
+   exported `0x0287d3` (the id in the `Gw.log` re-bloat line), read 64×64 / ±3072, and
+   proposed that our spawn falls outside the map's rect and causes the fallback;
+   **`0x0287d3` is the authored SCULPT map**, which is why re-bloat names it, and map
+   148's id was in `content/maps.toml` all along (`0x1B97D`). Corrected: map 148 is
+   **416×512 cells — exactly the footprint** — with our spawn at cell (294, 340), well
+   inside, so **the latch covers the whole footprint and H3 is dead here too.** All
+   three named hypotheses are now refuted on retail 148 and the fault is **downstream
+   of the crop**. H3b stands for authored maps, now quantified.
+2. **C1 — one loopback run, NEEDS OWNER GO-AHEAD, re-scoped a third time and its
+   numbers then corrected.** Retail map 148, our DH, caged, no probe, no `--enemy`. A
+   cross-process `ReadProcessMemory` of the live `CompassMap` (instance at
+   `[compass+0x4C]`, lazy create `0x008BC426`; `toolkit/harness/keytap.py` already does
+   ASLR-correct RPM in pure `ctypes`) reads: predicted `+0x84 == 1`,
+   **`+0x58/+0x5c == (416, 512)`**, `+0x60..0x6c == (−18432, −24576, 21504, 24576)`.
+   That outcome **confirms the upstream half healthy by measurement** and leaves the
+   whole question downstream — the per-slot load at `0x008C21C0`, the blit at
+   `0x008C2077`, or rung S5's metric. **The spawn arm an earlier draft proposed is
+   VOID** (the spawn is inside the rect). χ alone still discriminates nothing; C1 still
+   **gates C2 and C3**.
 **Owner flag for Tier 3 is unchanged**: an authored map's compass showing OUR terrain
 needs both an archive tile write (A1) and a client patch repointing the footprint (A2) —
 it is not a free consequence of good authoring, and it is worth nothing until C1 explains
