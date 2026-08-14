@@ -85,6 +85,7 @@ from terrain import CELL_PITCH  # noqa: E402
 from mapexport import (build_manifest, export_row, load_export,  # noqa: E402
                        retile, write_export)
 from mapfile import MapFile  # noqa: E402
+import mapexport  # noqa: E402
 import mapbuild  # noqa: E402
 # The Blender selector, its measured version and the exit-code trap, imported
 # from the file that established them. One copy of a measured constant: if the
@@ -131,8 +132,14 @@ AUTHORED_X, AUTHORED_Y = 32, 32
 AUTHORED_PROBE_IJ = (3, 4)
 AUTHORED_PROBE_STORED = -292.0
 
-# FLOOR: 79, from a real green run on vault/dat_study/Gw.dat with Blender 5.1.1,
-# 2026-08-13 (48.6 s; was 77). Sections 0-4 alone score 67 -- MEASURED by
+# FLOOR: 94, from a real green run on vault/dat_study/Gw.dat with Blender
+# 5.1.1, 2026-08-14 (was 79). Sections 0-4 alone score 67 -- UNCHANGED by
+# section 6, which is vault-gated, so the vault-less shortfall grew from 12 to
+# 27. 79 -> 94 is the PROPS round trip: import a retail map's 864 props into
+# Blender, export them back, and require the sidecar to match -- then EDIT two
+# of them and require exactly those two records to move.
+#
+# The old comment said sections 0-4 score 67 -- MEASURED by
 # running with --dat pointed at nothing, not counted by eye, and the first guess
 # written here was 56 -- so a vault-less run lands 12 short and goes RED. That is
 # deliberate and it is the rule test_blenderimport.py states: a round trip on a
@@ -144,7 +151,12 @@ AUTHORED_PROBE_STORED = -292.0
 # case: the two-mesh refusal split into the unstamped-intruder POSITIVE control
 # (the stamp picks the terrain) and the two-stamped-meshes refusal (genuine
 # ambiguity still refuses).
-FLOOR = 79
+#: Which props section 6 edits. Two DIFFERENT ones, so 'moved' and
+#: 'rotated' cannot both be satisfied by a single record changing.
+MOVE_INDEX = 7
+ROTATE_INDEX = 11
+
+FLOOR = 94
 
 
 # ------------------------------------------------------------------ helpers
@@ -395,6 +407,7 @@ def main(argv=None):
         _section3(check, led, blender, tmp, base, edit)
         _section4(check, led, blender, tmp, author)
         _section5(check, led, blender, tmp, args)
+        _section6(check, led, blender, tmp, args)
 
     print("\n(%.1fs)" % (time.perf_counter() - t0))
     return led.verdict()
@@ -921,6 +934,176 @@ def _section5(check, led, blender, tmp, args):
           "was authored in Blender" % len(results),
           "; ".join("%s (%s)" % (n, d) for n, d in failed) if failed
           else "%d gates" % len(results))
+
+
+
+
+# --- 6. the PROPS round trip ----------------------------------------------
+
+MOVE_PROP_SCRIPT = _argv_preamble() + """
+import math
+import mathutils
+ARGV = _argv()
+blend, out, move_i, rot_i = ARGV[0], ARGV[1], int(ARGV[2]), int(ARGV[3])
+bpy.ops.wm.open_mainfile(filepath=blend)
+props = sorted([o for o in bpy.data.objects if "gw_model" in o.keys()],
+               key=lambda o: o["gw_index"])
+target = props[move_i]
+target.location.x += 1000.0
+target.location.y -= 500.0
+target.location.z += 250.0
+# Rotate about the object's OWN origin, not the world's -- the world-origin
+# form MOVES the prop as well, which would make the position check below
+# ambiguous. Measured while writing this: it displaced the prop by
+# (-20344, +15804), and the exporter correctly reported both changes.
+rot = props[rot_i]
+loc = rot.matrix_world.translation.copy()
+turn = mathutils.Matrix.Rotation(math.radians(90.0), 4, "Z")
+rot.matrix_world = (mathutils.Matrix.Translation(loc) @ turn
+                    @ mathutils.Matrix.Translation(-loc) @ rot.matrix_world)
+bpy.ops.wm.save_as_mainfile(filepath=out)
+print("EDITED", target.name, rot.name)
+"""
+
+
+def _props_of(path):
+    """A props sidecar read from disk. `sidecar()` returns BYTES, so the
+    source side uses json.loads on those instead -- two shapes, one format."""
+    with open(path, "r", encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _section6(check, led, blender, tmp, args):
+    """Props survive the round trip, and an EDIT to one is carried out."""
+    print("\n== 6. the PROPS round trip, and the edit control ==")
+    dat = args.dat or os.path.join(vaultpath.vault_root(), "dat_study",
+                                   "Gw.dat")
+    if not os.path.isfile(dat):
+        led.skip("6. the props round trip", "no archive at %s" % dat)
+        return
+
+    work = os.path.join(tmp, "props")
+    os.makedirs(work, exist_ok=True)
+    with Archive(dat) as ar:
+        src = mapexport.export_file_id(PRESEARING_FILE_ID, ar, outdir=work,
+                                       name="rt", props=True)
+    original = sidecar(src, "props")
+    if original is None:
+        led.skip("6. the props round trip", "the export carried no props")
+        return
+    before = json.loads(original.decode("utf-8"))
+    check(before["count"] > 800,
+          "the source export carries a real prop population",
+          "%d props" % before["count"])
+
+    blend = os.path.join(work, "scene.blend")
+    rc, out, _summary = do_import(blender, src, blend)
+    check(rc == 0, "the import runs", "rc=%d %s" % (rc, out.strip()[-120:]))
+    if rc != 0:
+        return
+
+    rc, out, _meta = do_export(blender, blend, work, "rtprops")
+    check(rc == 0, "the export runs and writes a props sidecar",
+          "rc=%d %s" % (rc, out.strip()[-120:]))
+    after_path = os.path.join(work, "rtprops.props.json")
+    if rc != 0 or not os.path.isfile(after_path):
+        check(False, "a props sidecar came back out", after_path)
+        return
+    after = _props_of(after_path)
+
+    # THE IDENTITY IS THE WEAK HALF and is labelled as such: an exporter that
+    # re-emitted a stamped sidecar would pass every line in this block. The
+    # edit control below is what it cannot pass.
+    check(after["count"] == before["count"],
+          "every prop comes back", "%d -> %d" % (before["count"],
+                                                 after["count"]))
+    check(len(after["models"]) == len(before["models"]),
+          "and the model table -- ARCHIVE STATE a Blender scene cannot "
+          "re-derive -- is carried intact",
+          "%d -> %d" % (len(before["models"]), len(after["models"])))
+    same = sum(1 for a, b in zip(before["props"], after["props"])
+               if a["model"] == b["model"] and a["flags"] == b["flags"]
+               and a["outline"] == b["outline"])
+    check(same == before["count"],
+          "model index, flags and the outline ring are identical on all of "
+          "them", "%d/%d" % (same, before["count"]))
+    worst_pos = max(abs(a["position"][k] - b["position"][k])
+                    for a, b in zip(before["props"], after["props"])
+                    for k in range(3))
+    worst_basis = max(abs(a["basis"][u][k] - b["basis"][u][k])
+                      for a, b in zip(before["props"], after["props"])
+                      for u in range(2) for k in range(3))
+    check(worst_pos == 0.0,
+          "every position is EXACT -- not within a tolerance, identical",
+          "worst |dposition| %g" % worst_pos)
+    check(worst_basis < 1e-5,
+          "and every rotation basis survives to float32 precision",
+          "worst |dbasis| %g" % worst_basis)
+
+    # THE EDIT CONTROL, and it is the whole reason this section is worth its
+    # runtime. Move one prop by a known amount and turn a DIFFERENT one by 90
+    # degrees about its own origin, then require EXACTLY those two records to
+    # change and exactly as asked. An exporter re-emitting the stamp cannot do
+    # it; nor can one that reads an object's location but not its rotation,
+    # which is why the two edits are on two different props.
+    script = os.path.join(tmp, "moveprop.py")
+    with open(script, "w", encoding="utf-8") as fh:
+        fh.write(MOVE_PROP_SCRIPT)
+    moved_blend = os.path.join(work, "moved.blend")
+    rc, out = run_blender(blender, script,
+                          [blend, moved_blend, str(MOVE_INDEX),
+                           str(ROTATE_INDEX)])
+    check(rc == 0, "the edit script runs", "rc=%d %s" % (rc, out[-120:]))
+    if rc != 0:
+        return
+    rc, out, _meta = do_export(blender, moved_blend, work, "rtmoved")
+    check(rc == 0, "the edited scene exports", "rc=%d" % rc)
+    edited_path = os.path.join(work, "rtmoved.props.json")
+    if not os.path.isfile(edited_path):
+        check(False, "the edited scene wrote a props sidecar", edited_path)
+        return
+    edited = _props_of(edited_path)
+
+    changed = []
+    for i, (a, b) in enumerate(zip(before["props"], edited["props"])):
+        dpos = [b["position"][k] - a["position"][k] for k in range(3)]
+        dbasis = max(abs(a["basis"][u][k] - b["basis"][u][k])
+                     for u in range(2) for k in range(3))
+        if any(abs(x) > 1e-3 for x in dpos) or dbasis > 1e-3:
+            changed.append((i, dpos, dbasis))
+    check(len(changed) == 2,
+          "EXACTLY two prop records changed -- the two that were edited, and "
+          "no other of the %d" % before["count"],
+          "%d changed: %r" % (len(changed), [c[0] for c in changed]))
+    by_index = {c[0]: c for c in changed}
+
+    # The z sign is the sharp end: Blender +250 must land as stored -250, the
+    # same negation the terrain half applies, now measured on a PROP.
+    if MOVE_INDEX in by_index:
+        dpos = by_index[MOVE_INDEX][1]
+        check(abs(dpos[0] - 1000.0) < 1e-3 and abs(dpos[1] + 500.0) < 1e-3
+              and abs(dpos[2] + 250.0) < 1e-3,
+              "the moved prop moved by exactly (+1000, -500) and by -250 in "
+              "STORED z for +250 in Blender -- the negation, on props",
+              "%r" % [round(x, 3) for x in dpos])
+        check(by_index[MOVE_INDEX][2] < 1e-3,
+              "and moving it did NOT disturb its rotation",
+              "max|dbasis| %g" % by_index[MOVE_INDEX][2])
+    else:
+        check(False, "the moved prop is among the changed records",
+              "index %d not in %r" % (MOVE_INDEX, sorted(by_index)))
+
+    if ROTATE_INDEX in by_index:
+        dpos, dbasis = by_index[ROTATE_INDEX][1], by_index[ROTATE_INDEX][2]
+        check(dbasis > 0.5,
+              "the rotated prop's BASIS moved substantially -- a 90-degree "
+              "turn is not a rounding difference", "max|dbasis| %g" % dbasis)
+        check(all(abs(x) < 1e-3 for x in dpos),
+              "and rotating it about its own origin did NOT move it",
+              "%r" % [round(x, 3) for x in dpos])
+    else:
+        check(False, "the rotated prop is among the changed records",
+              "index %d not in %r" % (ROTATE_INDEX, sorted(by_index)))
 
 
 if __name__ == "__main__":

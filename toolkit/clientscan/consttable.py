@@ -89,6 +89,19 @@ path can see that -- only an index column can, and rows without one carry
 `stride_from` naming what fixed the stride. `test_consttable.py` pins the blind
 spot as a check so that closing it later reddens something.
 
+`s_worldData` is what that costs when nothing closes it, and it is the reason
+`stride_from` is a required field rather than a nicety. It shipped here as
+`20 x 24` with `stride_from="record shape, UNSETTLED"` -- a guess at a record
+shape, closing perfectly on the correct base, corroborated by the code
+reference, and wrong. It is `10 x 48`, and what settled it was not this module:
+the table's own accessor at `0x005A93B0` multiplies by 48 (`lea eax,[esi+esi*2];
+shl eax,4`), bounds the index with `cmp esi, 0xa`, and asserts
+`index < arrsize(s_worldData)` at `ConstWorld.cpp:41`. 24 divides 48, so no
+amount of left-edge arithmetic could ever have refuted it, and 24 is still in
+its rival list today -- which is the doctrine working, not failing. A row whose
+`stride_from` does not name a witness outside this file is a row nobody has
+checked.
+
 Output is JSON on stdout or to --out. Never write extracted client values into
 the repo: the provenance gate is absolute and bulk extraction goes to `vault/`.
 
@@ -536,11 +549,21 @@ CORPUS = [
          note="entered here first as 2 x 44 -- which CLOSED, on the correct base, "
               "with a plausible-looking record -- and the index column refuted it. "
               "It is (id, colour) pairs: 11 x 8"),
-    dict(symbol="s_worldData", anchor=CONST + b"ConstWorld.cpp\x00", stride=24,
-         pad=4, stride_from="record shape, UNSETTLED -- see the rival strides",
-         note="+4 (MSVC 8-aligned). No index column, so nothing here can choose "
-              "between 24 and its rivals; the base is the one the client loads "
-              "either way, and only the count is in question"),
+    dict(symbol="s_worldData", anchor=CONST + b"ConstWorld.cpp\x00", stride=48,
+         count=10, pad=4,
+         stride_from="the table's OWN accessor at 0x005A93B0, off the client's "
+                     "`lea eax,[esi+esi*2]; shl eax,4` (x48) at 0x005A93CD and "
+                     "`add eax, 0xa36210` at 0x005A93D3",
+         note="+4 (MSVC 8-aligned). Both numbers are ArenaNet's, so this row is "
+              "on the same footing as s_missionClientData: the accessor guards "
+              "itself with `cmp esi, 0xa` at 0x005A93B7 and asserts "
+              "`index < arrsize(s_worldData)` at ConstWorld.cpp:41, which makes "
+              "10 its own arrsize rather than our division -- and the __FILE__ "
+              "string that assert needs IS this anchor, so base + 10 x 48 lands "
+              "on it from two independent witnesses. Entered here first as "
+              "20 x 24, which CLOSED on the same base: 24 divides 48, so the "
+              "left edge could never have refuted it and 24 is still in the "
+              "rival list. What settled it was the code, not the corpus"),
     dict(symbol="s_dayStr", anchor=CONST + b"Programmer\\ConstTime.cpp\x00",
          stride=4, stride_from="u32 string-id array",
          note="7 rows, and there are 7 days"),

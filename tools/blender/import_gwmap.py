@@ -136,7 +136,7 @@ FORMAT_VERSIONS = (1, 2)
 # The MODEL interchange (rung M3), read when a prop's model has one beside
 # the map export.
 MODEL_FORMAT = "rurik.gwmodel"
-MODEL_VERSIONS = (1, 2)
+MODEL_VERSIONS = (1, 2, 3)
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
 DTYPE_JSON = "json"
@@ -145,6 +145,8 @@ DTYPE_JSON = "json"
 # back by `tools/blender/export_gwmap.py`; the two agree on this name and on
 # nothing else.
 STAMP = "gwmap"
+#: The props sidecar's non-per-prop half, for the round trip.
+PROPS_STAMP = "gwprops"
 
 # The pitch the interchange is expected to carry. Not used to place a vertex --
 # see convention 1 -- only to say so when a file disagrees with the measurement.
@@ -478,10 +480,22 @@ def _stamp(obj, gwmap):
     and a disagreement is worth reporting rather than silently resolving.
     """
     # `props_state` goes with `sidecars`: both describe the file that was
-    # imported, and the way OUT (a terrain-only manifest today) carries
-    # neither honestly.
+    # imported, and the way OUT rebuilds both from what is in the scene.
     stamp = {k: v for k, v in gwmap.meta.items()
              if k not in ("sidecars", "props_state")}
+    # THE PROPS SIDECAR'S NON-PER-PROP HALF, carried so a round trip can
+    # rebuild it. The model table maps a prop's `model` index to an archive
+    # file id and that row's (size, crc) -- ARCHIVE STATE, which a Blender
+    # scene has no way to re-derive and an exporter must therefore never
+    # invent. `refs4`/`refs6` are the Stripped-side reference arrays, whose
+    # meaning is UNVERIFIED (`props.PropRef`); they are transported, not
+    # understood. The per-prop records are deliberately NOT stamped: those
+    # are what the objects carry, and stamping them would let an exporter
+    # re-emit the map that was imported no matter what was done to it.
+    if gwmap.props is not None:
+        obj[PROPS_STAMP] = json.dumps(
+            {k: v for k, v in gwmap.props.items() if k != "props"},
+            sort_keys=True)
     obj[STAMP] = json.dumps(stamp, sort_keys=True)
 
 
@@ -577,6 +591,22 @@ def gwmodel_materials(meta, models_dir):
     """
     slots = meta.get("textures") or []
     by_image, per_sub = {}, {}
+    # Which images are drawn by a BLENDED material. The archive says which
+    # materials need it (`blend` non-zero) and that is better evidence than
+    # guessing from pixels -- a texture can carry alpha and still be drawn
+    # opaque. Portals and mist are the visible case: without this they are
+    # black rectangles, because their texture has no fully opaque pixel.
+    blended = set()
+    for sm in meta["submodels"]:
+        mat = sm.get("material") or {}
+        if not mat.get("blend"):
+            continue
+        for lay in (mat.get("layers") or []):
+            slot = lay.get("texpath")
+            if slot is not None and slot < len(slots):
+                name = slots[slot].get("image")
+                if name:
+                    blended.add(name)
     for entry in slots:
         image_name = entry.get("image")
         if not image_name:
@@ -603,9 +633,40 @@ def gwmodel_materials(meta, models_dir):
                 links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
                 if "Alpha" in bsdf.inputs:
                     links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+        if image_name in blended:
+            # Blender 4.2+ renamed these; older builds want 'BLEND'. Try in
+            # order and leave the default alone if none is accepted, rather
+            # than failing the whole import over a display setting.
+            for value in ("BLENDED", "BLEND"):
+                try:
+                    mat.blend_method = value
+                    break
+                except TypeError:
+                    continue
         by_image[image_name] = mat
     for s, sm in enumerate(meta["submodels"]):
-        slot = sm.get("material_index", sm.get("texture"))
+        # THE BINDING, and it is a chain rather than an index (format 3):
+        # sub-model -> material -> layers -> texPathIndex -> FA5 slot.
+        # Layer 0 is the BASE layer. Using material_index as an FA5 index
+        # directly -- which is what this did before the material table was
+        # decoded -- is what put specular maps on Kamadan's buildings.
+        mat = sm.get("material") or {}
+        layers = mat.get("layers") or []
+        slot = None
+        if layers:
+            # THE DIFFUSE IS THE FIRST LAYER SAMPLING A STORED UV SET, not
+            # simply layer 0. A layer whose `uv` is NEGATIVE has GENERATED
+            # coordinates -- a reflection/environment effect, which is what
+            # renders as black with soft highlights and is exactly what was
+            # landing on Kamadan's walls. MEASURED: 92 of 1,063 layered
+            # sub-models put such a layer FIRST, and the two largest wall
+            # models on Kamadan are both among them.
+            stored = [lay for lay in layers if (lay.get("uv") or 0) >= 0]
+            slot = (stored or layers)[0].get("texpath")
+        elif mat.get("kind") in (None, "none"):
+            # format 2 and earlier carried no material table; fall back to
+            # the old reading so an old export still shows something.
+            slot = sm.get("material_index", sm.get("texture"))
         if slot is None or slot >= len(slots):
             continue
         name = slots[slot].get("image")
@@ -776,6 +837,13 @@ def build_prop_objects(gwmap, name=None, models_dir=None,
         obj["gw_flags"] = rec["flags"]
         obj["gw_proxy"] = kind
         obj["gw_real"] = real
+        # CARRIED FOR THE ROUND TRIP, because a mesh cannot hold them and an
+        # exporter that had to invent them would be writing fiction. The
+        # OUTLINE especially: a real-mesh prop draws none of it, so without
+        # this the footprint the client compiles from would be lost the first
+        # time a scene went back out.
+        obj["gw_outline"] = [c for pt in rec["outline"] for c in pt]
+        obj["gw_basis"] = [c for v in rec["basis"] for c in v]
         objs.append(obj)
     return coll, objs
 

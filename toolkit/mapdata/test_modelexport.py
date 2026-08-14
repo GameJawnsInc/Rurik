@@ -179,7 +179,7 @@ RING_POPULATION = {
 #
 # That last pair is why `_sidecar_positions` exists and why it must never be
 # routed through the module's loader.
-FLOOR = 58
+FLOOR = 63
 
 DEFAULT_SAMPLE = 12
 
@@ -607,6 +607,100 @@ def _section7(check, ar, table, by_row, tmp):
     check(ordinal < models,
           "and it is not always the bare ordinal 0..n-1, which is what a "
           "sub-model counter would be", f"{ordinal}/{models} are ordinals")
+
+    _section8(check, ar, table, by_row)
+
+
+def _section8(check, ar, table, by_row):
+    """THE MATERIAL TABLE, and the oracle that binds a surface to a texture."""
+    print("\n== 8. the material table: sub-model -> material -> texture ==")
+    import random
+    from modelfile import material_table
+
+    rnd = random.Random(5)
+    stat = collections.Counter()
+    for fid in (KAMADAN_FILE_ID, PRESEARING_FILE_ID):
+        for model_id in modelexport.map_model_ids(fid, ar, table=table):
+            row = table.get(model_id)
+            if row is None:
+                continue
+            mf = ModelFile.decode(ar.read(by_row[row]))
+            geo = mf.geometry()
+            if geo is None:
+                continue
+            mtable = material_table(mf.find(0x00000FA0))
+            if mtable is None:
+                stat["amat_only"] += 1
+                continue
+            stat["models"] += 1
+            ntex = len(mf.texture_refs())
+            for pos, sub in enumerate(geo.submodels):
+                kind, layers = mtable.for_submodel(sub)
+                if kind != "layered":
+                    stat["binary"] += 1
+                    continue
+                stat["layered"] += 1
+                for lay in layers:
+                    stat["layers"] += 1
+                    stat["texpath_in_range"] += lay.texpath < ntex
+
+                # THE ORACLE. The material's layers name the UV SETS they
+                # sample; the highest must match what the SUB-MODEL's vertex
+                # format actually carries. That crosses the material table
+                # and the vertex declaration -- two structures this decoder
+                # does not derive from one another.
+                for name, index in (("real", sub.unk & 0xFFFF),
+                                    ("position", pos),
+                                    ("random", rnd.randrange(
+                                        len(mtable.materials)))):
+                    if index >= len(mtable.materials):
+                        continue
+                    lay_n = mtable.layers_of(index)
+                    used = [x.texarray for x in lay_n if x.texarray >= 0]
+                    if not used:
+                        continue          # samples no stored set: undefined
+                    stat[name + "_n"] += 1
+                    stat[name + "_ok"] += (max(used) + 1 == sub.texcoord_sets)
+
+    print(f"    {stat['models']} models with a layered table "
+          f"(+{stat['amat_only']} AMAT-only), {stat['layered']} layered "
+          f"sub-models, {stat['layers']} layers")
+    check(stat["models"] > 250 and stat["layered"] > 900,
+          "both reference maps yield a layered material table",
+          f"{stat['models']} models, {stat['layered']} sub-models")
+
+    # ArenaNet's own bound, MdlCombine:568 texPathIndex < texPathCount.
+    check(stat["texpath_in_range"] == stat["layers"],
+          "every layer's texPathIndex is inside the model's FA5 texture "
+          "list -- the client's own bound at MdlCombine:568",
+          f"{stat['texpath_in_range']}/{stat['layers']}")
+
+    real = stat["real_ok"] / max(stat["real_n"], 1)
+    pos_r = stat["position_ok"] / max(stat["position_n"], 1)
+    rnd_r = stat["random_ok"] / max(stat["random_n"], 1)
+    print(f"    UV-set oracle: real {stat['real_ok']}/{stat['real_n']}, "
+          f"position {stat['position_ok']}/{stat['position_n']}, "
+          f"random {stat['random_ok']}/{stat['random_n']}")
+    check(stat["real_ok"] == stat["real_n"] and stat["real_n"] > 900,
+          "a material's layers name exactly the UV sets its sub-model "
+          "carries: max(texarray) + 1 == texcoord_sets, on ALL of them",
+          f"{stat['real_ok']}/{stat['real_n']}")
+
+    # THE CONTROLS. Binding by POSITION is the obvious wrong implementation
+    # and it is nearly right, which is precisely why it has to be measured
+    # rather than dismissed -- and a random material sets the floor.
+    check(pos_r < 0.95 and rnd_r < 0.75 and real > pos_r > rnd_r,
+          "and both rivals collapse -- binding by sub-model POSITION, and a "
+          "RANDOM material",
+          f"real {real:.3f} > position {pos_r:.3f} > random {rnd_r:.3f}")
+
+    # The client's own consistency gate, exercised through real files: the
+    # per-material layer counts must sum to the header's total. A model
+    # where they do not would have every texture index after it misaligned.
+    check(stat["models"] + stat["amat_only"] > 300,
+          "and no model in either map fails the layer-count sum gate -- a "
+          "refusal would have raised Undecodable above",
+          f"{stat['models']} + {stat['amat_only']} AMAT-only")
 
 
 def _section3(check, ar, table, by_row, tmp, args):

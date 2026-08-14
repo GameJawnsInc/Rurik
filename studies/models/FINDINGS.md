@@ -409,18 +409,126 @@ that much: file `0x35140` reads `[2, 3]` over four slots (an ordinal starts at
 0) and `0x2D831` reads `[0,1,2,3,1,1,3,3,1,3,4,5,5]` over nine (an ordinal
 never repeats).
 
-**But it does NOT select the diffuse texture.** Rendering Kamadan with that
-binding puts a specular/gloss map — black with soft highlights — on most
-building surfaces, while awnings, foliage and terrain-adjacent props come out
-correct. So FA5 is a MIXED list of map kinds and this index does not name the
-colour one. Nor is it a fixed grouping: `ntex/nsub` ranges 0.53–1.69 and is
-non-integer on 146 of 316 models, so "N maps per material" is refuted too.
+**Rendering Kamadan with that binding puts what looks like a specular/gloss
+map — black with soft highlights — on most building surfaces**, while awnings,
+foliage and terrain-adjacent props come out correct.
 
-The likely chain is **sub-model → an AMAT material (`0x00000FAD`, 457/457
-resolving to files with that magic) → the FA5 slot**, and AMAT is not decoded.
-That is the next step, and it is what M5's scope meant by "no strong UV/material
-oracle" — except the outcome is sharper than "unverified": it is refuted, by a
-render, which is exactly the evidence the scope said would have to serve.
+**CORRECTED 2026-08-14, and the correction matters: that render does NOT
+refute the index.** The first version of this section read "it does NOT select
+the diffuse texture", which claims more than a render can show. **62.4% of
+sub-models carry MORE THAN ONE UV set** (346 with two, 223 with three, 102
+with four, over 1,076) — so the client multi-textures, and a render that
+applies ONE image per surface would look wrong even with a perfectly correct
+index. The render is evidence that single-texturing is not what the client
+does; it is not evidence about which slot the index names.
+
+What IS refuted is the simple grouping story. `ntex/nsub` ranges 0.53–1.69 and
+is non-integer on 146 of 316 models, so FA5 is not "N maps per material". And
+the natural stage-group reading — each sub-model consuming as many textures as
+it has UV sets, in order — scores worse than the control: `sum(uv_sets) ==
+texture count` on **140/315 (44.4%)** and the index equalling the running
+consumption base on **129/315 (41.0%)**, against a plain-ordinal control at
+**257/315 (81.6%)**.
+
+So the index behaves mostly like a sub-model ordinal that occasionally skips
+(file `0x3C5AC` reads `[0, 1, 2, 5]`), and how a surface reaches its texture
+STAGES is **NOT FOUND**.
+
+### 6.5 SOLVED — the material table, and it was never in a material file
+
+**The binding is in the geometry chunk's own preamble**, in the block-C region
+`preamble_end` already walked past. Three header fields it already reads as
+gates turn out to describe it: `u8@0x18` is the material count, `u8@0x1C` the
+total layer count, `u32@0x20` a slot-array gate.
+
+The chain, with ArenaNet's own names from its own asserts:
+
+```
+sub-model.unk & 0xFFFF   = mtlIndex       (MdlTex:2823 geosets == materials)
+  -> material            = 8 bytes: flags, blend, shaderCount, layer base
+  -> layers              = six parallel arrays, shaderCount of them
+  -> layer.texPathIndex  (MdlCombine:568 texPathIndex < texPathCount)
+  -> the 0x00000FA5 slot
+```
+
+**THE ORACLE, and this decoder cannot force it.** A material's layers name the
+UV SETS they sample; the highest must equal what the sub-model's own vertex
+format carries — two structures on opposite sides of the file:
+
+```
+max(layer.texarray >= 0) + 1  ==  submodel.texcoord_sets
+```
+
+| | score |
+|---|---|
+| **real (`mtlIndex`)** | **1063 / 1063** |
+| bind by sub-model position | 925 / 1021 |
+| random material | 628 / 1063 |
+
+Binding by position is *nearly* right — 90.6% — which is exactly why it had to
+be measured rather than dismissed. Every layer's `texPathIndex` is also inside
+its model's FA5 list, **2,275 of 2,275**, which is the client's own bound.
+
+**And the diffuse is not simply layer 0.** A layer whose `texarray` is
+NEGATIVE has GENERATED coordinates — a reflection/environment effect — and 92
+of 1,063 sub-models put one FIRST, including both of Kamadan's largest wall
+models. That is what had been rendering as black with soft highlights. The
+diffuse is the first layer sampling a STORED UV set, and with that fix the
+city renders as mottled stone instead.
+
+Still open: which of the remaining layers is detail versus lightmap versus
+specular, and the alpha-masked decals need a viewer blend mode to cut out.
+
+### 6.6 The blend byte, and portals as identifiable props
+
+A material's second byte (`blend`) is NON-ZERO on the materials that need real
+alpha blending. MEASURED on Kamadan: **16 of 194** layered sub-models, and 14
+of those draw one texture — a 512×128 mist band with 164 distinct alpha values
+and **not one fully opaque pixel**. What the individual values mean (5, 6, 8,
+9, 10 occur) is NOT DECODED; that it separates blended from opaque is what a
+consumer can act on, and `import_gwmap.py` now sets Blender's blend mode from
+it. Note this is invisible in a Workbench render, which ignores the property.
+
+**Portals are identifiable props, and there is more than one kind.** Owner's
+observation, 2026-08-14, confirmed from the archive: Kamadan carries model
+`0x35140` — 10 triangles, placed **3×** — whose texture `0x28892` is the
+Nightfall/EotN radial vortex. Prophecies/Factions use a different, flat
+"scene-in-a-doorway" portal, so a census keyed to one texture would miss half
+the game. The portal materials' `blend` is ZERO, so they are alpha-TESTED
+rather than blended and the mist finding above does not cover them.
+
+This matters beyond rendering: `studies/customarea/FINDINGS.md` §5 lists
+"spawn points, portals or map links" as NOT FOUND in map files. A portal is a
+prop with a known model at a known world position, so the geometry names WHERE
+a map link is even though nothing yet says where it leads.
+
+**The corpus census is in [PORTALS.md](PORTALS.md)** (2026-08-14): seven portal
+models in two DISJOINT families — `0x605E` (Prophecies/Factions, 4 models) and
+`0x28892` (Nightfall/EotN, 3) — found by reading the FA5 list of all 8,420
+referenced prop models. **175 of 346 maps carry a portal, 656 placements**, and
+3 maps carry both families. The edge-proximity control is reported there as
+suggestive rather than decisive (median 0.307 against 0.449 for ordinary
+props), because the identification rests on the texture.
+
+### 6.4 AMAT is not the answer either
+
+The obvious next hypothesis was **sub-model → an AMAT material (`0x00000FAD`)
+→ the FA5 slot**. MEASURED 2026-08-14, and it fails on coverage before it
+even gets to structure: **`0x00000FAD` is present on 13 of 315 prop models on
+the two reference maps — 4.1%** (26.4% over a strided corpus sweep of 387
+geometry-carrying models), and those 13 reference just **3 distinct AMAT
+files**. A chunk 96% of the props we render do not carry cannot be how they
+find their textures.
+
+`0x00000FA1`, which IS on 315/315 reference-map models, is not it either: its
+payload is model-level scalars — a `u32` version 0x26, then floats in the
+thousands and 1.0-like values (bounds and LOD distances by shape) — with no
+per-sub-model array.
+
+AMAT is still worth decoding for the quarter of the corpus that has it (it is
+a RIFF-style container: `"AMAT"`, `u32` version 4, then `char[4] tag, u32
+size` sub-chunks — `GRMT` and `GRSN` observed), but it is **not** the material
+binding this rung needs.
 
 Textures are still attached in Blender, because a scene with them is far more
 useful than one without and `--no-textures` is the control — but a render from
