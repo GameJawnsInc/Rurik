@@ -96,14 +96,15 @@ WIKI_ENERGY_25 = {
     3013, 3009, 1592,
 }
 
-# FLOOR 18 = every check this file executes on a real client binary, counted
-# from a green run on 2026-08-06 against Gw.exe: 3 structural (§1) + 4 corpus
+# FLOOR 26 = every check this file executes on a real client binary, counted
+# from a green run on 2026-08-14 against Gw.exe: 3 structural (§1) + 4 corpus
 # (§2) + 5 wiki joins (§3: two adrenaline, one rival-rule refutation, and the
-# 15/25-energy pair) + 4 text-resolution (§4) + 2 build counts (§5). None of
-# them is conditional once the binary opens, so a run that reports fewer has
-# lost a section rather than passed -- which is exactly the failure §3 would
-# hide, since dropping the wiki join is what turns this file back into our
-# decoder agreeing with itself.
+# 15/25-energy pair) + 4 text-resolution (§4) + 2 build counts (§5) + 8
+# content-emitter checks (§6, added with --emit-content). None of them is
+# conditional once the binary opens, so a run that reports fewer has lost a
+# section rather than passed -- which is exactly the failure §3 would hide,
+# since dropping the wiki join is what turns this file back into our decoder
+# agreeing with itself.
 LEDGER = checks.Ledger("skill table", floor=26)
 check = checks.adopt(LEDGER)
 
