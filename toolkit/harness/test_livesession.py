@@ -93,6 +93,34 @@ these through the identical 75-check file and every one printed ALL CHECKS PASSE
     the second witness was never spent on the live path at all, and its verdict was a
     `print` that reached no artifact.
 
+ALL SIX REDDEN NOW, and so do nine more built the same way. MEASURED 2026-08-13 by
+injecting each sabotaged module under THIS file (pre-binding `sys.modules["livesession"]`,
+so both `import livesession as ls` and `open(ls.__file__)` read the saboteur) against a
+green baseline of 106; every one exits 1 and every one reaches its verdict banner:
+
+  a relaunch spawned above the seal                                12 red
+  the seal deferred into a nested def, executed after the launch    8 red
+  `if plan` truthiness instead of `if plan is not None`             6 red
+  `write_seal_file`'s only call site deleted                        3 red
+  `plan_manifest`'s branch-specific keys, back to asymmetric        2 red
+  `seal_plan` catching only `marks.MarksError` again                2 red
+  the manifest-time `compare_plan_seals` removed                    2 red
+  `"plan_sha256": sha256(seal.path)` in the manifest literal        2 red
+  the same plus `plan_steps` re-derived                             2 red
+  `write_seal_file` no longer archiving `plan_body`                 1 red
+  `internal_seal_conflict` never firing                             1 red
+  `reassemble()` printing the verdict without writing it back       1 red
+  the DISAGREE message asserting one cause again                    1 red
+  `seal_plan` back to two independent reads                         1 red
+  `update_manifest` willing to CREATE a manifest                    1 red
+
+Three of those first runs went red with a TRACEBACK rather than a verdict, and fixing that
+is why `refusal()` exists: a bare `except ls.LiveError` around a call that escapes as
+`UnicodeDecodeError` or `OSError` kills the process before `LEDGER.verdict()`, so a test
+that caught a real defect printed a stack trace and no ledger, no floor and no banner --
+`test_content.py`'s failure, one file over. The escaping exception IS the finding in two of
+these sabotages, so it has to arrive as a red check that names it.
+
 THE COMMON SHAPE, and it is the lesson rather than the list: every check in the 75 either
 compared two LINE NUMBERS or called a function in ISOLATION. Nothing read a manifest that
 `run()` produced, nothing observed `run()` running, and nothing compared the two seal
@@ -130,13 +158,13 @@ from gwcrypto import ARC4, arc4_hash  # noqa: E402
 # the same class the module under test raises even when a sabotage is injected in its place.
 LiveErrorType = ls.LiveError
 
-# 105 is the MEASURED count of a full green run on a vaulted machine (42 before the plan
-# seal landed, 33 added by §5a-5e, and 30 more on 2026-08-13 when two adversarial reviews
+# 106 is the MEASURED count of a full green run on a vaulted machine (42 before the plan
+# seal landed, 33 added by §5a-5e, and 31 more on 2026-08-13 when two adversarial reviews
 # put SIX green sabotages through the 75-check version -- see the header). Sections 2/3
 # and the stock gate declare skips without a vault, so a vault-less run goes red -- the
 # same choice this file has made since the floor was 42, and the reason is that its
 # headline claims are about REAL captured bytes.
-LEDGER = checks.Ledger("livesession", floor=105)
+LEDGER = checks.Ledger("livesession", floor=106)
 
 
 # --------------------------------------------------- the syntax-tree readout --
@@ -1244,6 +1272,20 @@ def main():
                   "and a manifest predating the flag is named as that, not as a false",
                   "unsealed by construction and unsealed by choice are different facts "
                   "about a capture")
+        # THE THIRD REASON, which the two above would otherwise swallow. An UNREADABLE
+        # manifest is not a manifest older than --plan, and reporting it as one is a
+        # confident wrong statement about provenance -- the same defect as a DISAGREE
+        # asserting one cause of two. This is the case the first draft of `seal_records`
+        # got wrong on its way to fixing something else.
+        torn = os.path.join(tmp, "torn")
+        os.makedirs(torn)
+        with open(os.path.join(torn, "manifest.json"), "w", encoding="utf-8") as fh:
+            fh.write('{"stamp": "20260813T1200')          # the run died mid-write
+        v, why = ls.compare_plan_seals(torn)
+        LEDGER.ok(v == ls.SEAL_UNCHECKED and "cannot be read as JSON" in why
+                  and "before --plan existed" not in why,
+                  "and a TRUNCATED manifest is named as unreadable, not as pre-flag",
+                  why[:100])
         # The fallback that makes write_seal_file worth having: a run killed before its
         # manifest still answers.
         died = capture("died", manifest=None)

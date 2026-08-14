@@ -709,6 +709,16 @@ def marks_instructions(seal, outdir, pid=None):
         "  That hash was taken BEFORE this client launched and is already in the manifest.",
         "  marks.py prints its own on startup, from its own read -- if the two differ, the",
         "  plan changed in between and neither run is a pre-registration any more.",
+        # The one failure this driver can warn about and cannot prevent: marks.py is handed
+        # the capture directory that already holds plan_seal.json and does not read it, so
+        # a RETYPED --plan naming a different file starts cleanly and is only contradicted
+        # afterwards, in the manifest's plan_seals field. Adversarial review 2026-08-13
+        # built exactly that (seal plan_A, mark against plan_B) and got a manifest reading
+        # plan_sealed true with nothing in it disagreeing. Copying the line is the fix an
+        # operator can apply today; a refusal inside marks.py is the one that belongs.
+        "  COPY the line above -- do not retype it. A different file with the same name",
+        "  seals nothing, and marks.py cannot tell: the mismatch is only reported after",
+        "  the run, in manifest.json's plan_seals field.",
         "  Start it before you log in. Its keys are SWALLOWED and never reach the client.",
     ]
 
@@ -721,7 +731,7 @@ SEAL_FILES = ("manifest.json", "plan_seal.json")
 
 
 def seal_records(outdir):
-    """{filename: record} for every artifact in `outdir` that carries a `plan_sealed` key.
+    """({filename: record}, {filename: why-not}) over `manifest.json` and `plan_seal.json`.
 
     Split out of `recorded_seal` so the two seals this DRIVER writes can be compared
     against each other, which is a claim nobody was making. Both are rendered from one
@@ -730,8 +740,15 @@ def seal_records(outdir):
     the plan at the end wrote a manifest certifying the EDITED plan while `plan_seal.json`
     sat in the same directory still holding the original. The evidence was on disk, in two
     files, and nothing read the second one. See `compare_plan_seals`.
+
+    THE SECOND DICT IS NOT TIDINESS. "No seal here" has three causes and they are three
+    different facts about a capture: the file is absent, the file is UNREADABLE, or the
+    file is a manifest written before `--plan` existed. The first draft of this split
+    collapsed the middle one into the last and would have reported a truncated manifest as
+    "written before --plan existed" -- a confident wrong statement about provenance, which
+    is the same defect as the DISAGREE message that asserted one cause of two.
     """
-    out = {}
+    out, notes = {}, {}
     for name in SEAL_FILES:
         path = os.path.join(outdir, name)
         if not os.path.isfile(path):
@@ -739,11 +756,18 @@ def seal_records(outdir):
         try:
             with open(path, encoding="utf-8", errors="replace") as fh:
                 rec = json.load(fh)
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
+            notes[name] = f"{name} cannot be read as JSON ({exc}), so it answers nothing"
             continue
-        if isinstance(rec, dict) and "plan_sealed" in rec:
+        if not isinstance(rec, dict):
+            notes[name] = f"{name} is not a JSON object, so it answers nothing"
+        elif "plan_sealed" not in rec:
+            notes[name] = (f"{name} carries no plan_sealed key, so it was written "
+                           f"before --plan existed -- unsealed by construction, not "
+                           f"by choice")
+        else:
             out[name] = rec
-    return out
+    return out, notes
 
 
 def recorded_seal(outdir):
@@ -760,7 +784,7 @@ def recorded_seal(outdir):
     older than the flag rather than an answer -- so the older reason is remembered and
     only returned if nothing better turns up.
     """
-    recs = seal_records(outdir)
+    recs, notes = seal_records(outdir)
     for name in SEAL_FILES:
         if name not in recs:
             continue
@@ -769,13 +793,12 @@ def recorded_seal(outdir):
             return None, (f"{name} records plan_sealed false: this run was driven without "
                           f"--plan and there is no pre-launch seal to compare")
         return rec, name
+    # Nothing carried a seal. Say WHICH of the three reasons, in file order -- a capture
+    # from a driver older than --plan and one whose manifest is truncated are not the same
+    # finding, and the second must not be reported as the first.
     for name in SEAL_FILES:
-        if os.path.isfile(os.path.join(outdir, name)) and name not in recs:
-            # Written before --plan existed. Not a fault and not a false: it is a capture
-            # from a run whose driver could not have sealed anything.
-            return None, (f"{name} carries no plan_sealed key, so it was written "
-                          f"before --plan existed -- unsealed by construction, not "
-                          f"by choice")
+        if name in notes:
+            return None, notes[name]
     return None, f"no manifest.json and no plan_seal.json in {outdir}"
 
 
@@ -794,7 +817,7 @@ def internal_seal_conflict(outdir):
     driver contradicts itself, "which of the two does marks.py agree with" is the wrong
     question and answering it would launder a broken driver into an AGREE.
     """
-    recs = {n: r for n, r in seal_records(outdir).items() if r.get("plan_sealed")}
+    recs = {n: r for n, r in seal_records(outdir)[0].items() if r.get("plan_sealed")}
     if len(recs) < 2:
         return False, (f"only {len(recs)} sealed record here, so there is nothing for this "
                        f"driver to contradict itself with")

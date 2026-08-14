@@ -1402,3 +1402,75 @@ is an owner action and cost one UAC prompt. That is the control working as desig
 what stops an ours-DH client sitting uncaged, which happened for a day once. Budget the
 prompt when adding a run directory; the alternative is mutating a shared binary while
 somebody else may launch it.
+
+
+---
+
+## 19. AUTHORED TEXT WORKS: a profession named by our own word (2026-08-13)
+
+Harness `20260813T222031`, explorable, `--spawn-profession 8`, reskinned client reading a
+modified archive.
+
+> **`Profession: Stormcaller`** in the Skills and Attributes panel.
+> **`Sc0 Test Warrior`** in the party roster.
+
+Neither string exists in anything ArenaNet ships. **We wrote them.** §15's route is
+complete, and with it the last blocker on the reskin: until now a custom profession could
+only be NAMED things the client already had strings for, and every document in this arc
+said so.
+
+### 19.1 The step that had never been taken
+
+§15 was explicit about which part was unproven: *"no text file has ever shipped stored, so
+step 1's output has never been fed to the client. Steps 2-4 are all proven machinery. The
+honest statement is that the mechanism is measured, the precedent is not, and one run
+settles it."*
+
+**Settled. The client reads a compression-0 text file.** Row 8295 went from 56 B
+compressed to 6,172 B stored, and the client resolved both ids out of it.
+
+### 19.2 The four steps, each with the check that made it safe
+
+1. **Encode.** `textrec.encode_file` with no strings is **BYTE-IDENTICAL to ArenaNet's own
+   row 8295** -- 6,146 B, 1,024 empty records, tail `00 62`. That equality is what says the
+   encoder is right *before* anything is written, and the archive could have refused it.
+   Ours with two strings is 6,172 B and walks to 1,024 records, tiled, with the strings at
+   records 0 and 1.
+2. **Relocate.** `datmove` moved the row (`0x8517000` -> `0x3B58E00`, reservation 512 ->
+   6,656), journalled to `vault/run/reskin-roster/row8295.journal`, with **0 overlapping
+   row pairs** afterwards. `datcheck --preflight` then cleared **10 of 10** of the client's
+   own open-time rules on the modified archive.
+3. **Repoint.** `recipes/stormcaller.toml`, a new recipe: `name -> 100352`,
+   `abbrev -> 100353`. 10 bytes differ, length unchanged. The id map is arithmetic --
+   `id = file_index * 1024 + record`, so file 98 starts at 100352.
+4. **Run.** Both strings on screen, no crash dialog, `RUN VERDICT: PASS`.
+
+### 19.3 What this does and does not settle
+
+**Does:** authored text is real, not merely viable. A profession can now carry a name and
+an abbreviation of the owner's choosing, and the same 1,022 remaining records are available
+for attribute names, descriptions and anything else keyed by string id.
+
+**Does not:** the attribute names in this run are still BORROWED (`2094`, `2092` --
+visible as "Air Magic" and "Soul Reaping" in the panel). That was deliberate, to keep the
+run a single-variable change; they are the same mechanism and cost two more records.
+
+**Provenance is unchanged and worth restating:** no ArenaNet text entered this repo. The
+recipe holds numbers, the strings were written by us into the owner's own archive COPY, and
+`vault/` is gitignored. This is the pattern `mapbuild.py` already proves -- commit the id,
+resolve the string at run time.
+
+### 19.4 The archive question, answered by accident
+
+`PLAN.md` §8 carried an open decision: the text route writes into a 4.2 GB archive and
+"needs the owner's call on WHICH archive -- study copy, a fresh copy, or the run client's
+own." **The dedicated run directory built for §18.14 answered it.**
+`vault/run/reskin-roster/` is a throwaway 4 GB copy that only its own caged client reads,
+so the write risked nothing shared and needed no decision at all. Its cost is one UAC
+prompt for the per-binary cage (§18.14) and 4 GB of disk.
+
+The journal makes it reversible byte-for-byte:
+
+```
+python toolkit/mapdata/datwrite.py --revert C:/gd/Rurik/vault/run/reskin-roster/row8295.journal
+```

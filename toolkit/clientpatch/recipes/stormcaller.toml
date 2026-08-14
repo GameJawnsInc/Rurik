@@ -1,0 +1,51 @@
+# The first profession named by OUR OWN text, not by a borrowed ArenaNet string.
+#
+# `ritualist-demo.toml` could only NAME the profession things the client already
+# ships strings for -- it borrows attribute names, and says so. This one points at
+# string ids 100352 and 100353, which live in archive text file 98: the spare file
+# ArenaNet ships as 1,024 EMPTY records (studies/profession/RESKIN.md 15).
+#
+# Those ids are ours because we WROTE them. The route, all four steps measured:
+#
+#   1. `textrec.encode_file` builds the file. Its empty output is BYTE-IDENTICAL
+#      to ArenaNet's own row 8295 (6,146 B), which is the check that says the
+#      encoder is right before anything is written.
+#   2. `datmove` relocates row 8295 (56 B compressed -> 6,172 B stored), journalled,
+#      byte-for-byte revertible. `datcheck --preflight` then clears 10 of 10 of the
+#      client's own open-time rules.
+#   3. This recipe repoints the name and abbrev tables at the authored ids.
+#   4. One caged run reads them back off the screen.
+#
+# STILL NO ArenaNet TEXT IN THIS REPO. Every value here is a number, and the two
+# strings live in the owner's own archive copy, written by us. The id -> record map
+# is arithmetic: id = file_index * 1024 + record, so file 98 starts at 100352.
+#
+# THE ABBREV DONOR IS TWO CHARACTERS ON PURPOSE. RESKIN.md 18.14 measured what
+# happens otherwise: the "abbrev" table is a STRING ID, not a length-limited field,
+# so a long donor renders in full and overflows the space a code like `W` or `Rt`
+# occupies. ArenaNet's own entries are short; ours should be too.
+
+[profession]
+host   = 8        # Ritualist -- stays legal, so no bound check can ever fire
+name   = 100352   # text file 98, record 0 -- authored
+abbrev = 100353   # text file 98, record 1 -- authored, two characters
+
+# Unchanged from ritualist-demo: the attribute and skill edits still borrow
+# shipped string ids. They are a different question from "can we author text at
+# all", and keeping them constant makes this run a single-variable change.
+[[attribute]]
+id    = 26        # a spare row on the reserved profession 11
+owner = 8         # claim it -- the panel derives from this
+name  = 2094
+
+[[attribute]]
+id   = 32         # the host's own "Communing"
+name = 2092
+
+[[skill]]
+id        = 317
+attribute = 26
+
+[[skill]]
+id        = 318
+attribute = 26
