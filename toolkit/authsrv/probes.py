@@ -238,8 +238,13 @@ def _party_health_steps(agent_id):
              "RECOVERY: int property 42 = 100 (sets max AND refills)",
              "the bar must grow back to full width. A bar that never returns was "
              "not tracking health -- damage floors at 1 and cannot have killed "
-             "the character. UNRUN as of 2026-08-13: the step it replaced "
-             "crashed the client before this path was ever exercised."),
+             "the character. RUN 2026-08-13 and it DOES NOT REFILL: the row "
+             "stayed at 24.0% and the HUD kept reading 25 for nine frames. The "
+             "'assigns health_max AND health = 1.f' reading is ldufr/Headquarter's "
+             "-- UPSTREAM, not a retail observation -- and this is the run that "
+             "shows it does not reproduce when the value EQUALS the existing "
+             "maximum. Try 200 to separate a same-value no-op from a wrong "
+             "reading; see RESKIN.md 18.12."),
     ]
 
 

@@ -1236,10 +1236,14 @@ separates "the bar shortened" from "the row was redrawn".
 > from the fatal-error dialog.
 
 My recovery step sent damage `+0.75`, reading property 16 as a signed health delta. It is
-not: it is DAMAGE, and **the client asserts the sign**. A design error, and a bound this
-project did not have -- the probe now recovers with int property 42 = 100 instead, which
-assigns `health_max` AND refills, and is OBSERVED behaviour here since 2026-08-06. That
-path is **UNRUN**: the step it replaced crashed before it was ever reached.
+not: it is DAMAGE, and **the client asserts the sign**.
+
+**And this was already known -- the claim that it was new is retracted.** The `damage`
+probe's own note, in the same file I was editing, has said since **2026-08-06** that "a
+positive value crashes the client on ArenaNet's own `damage.amount <= 0`". I rediscovered
+a documented bound by crashing a client, and then wrote it up as a finding. The measurement
+stands (the address `AvChar.cpp:5893` and the build are now on the record beside the
+claim); what does not stand is calling it ours. **Read the probe you are editing.**
 
 It costs nothing here. The recovery was a control for "the bar stopped tracking" versus
 "the character died", and two cuts landing within 0.3 and 1.0 points of prediction settle
@@ -1251,3 +1255,57 @@ was alive the whole time, behind a modal dialog with its message pump stopped, w
 exactly the state `studies/smsgsweep` documents a socket fence cannot see. The crash was
 caught because the harness extracts the dialog on **every** run since 2026-08-12; before
 that change this would have been a silent 98% frame diff with no explanation.
+
+### 18.12 The recovery step: it does NOT refill, and the prediction failed
+
+Harness `20260813T214241`. The two cuts reproduce EXACTLY -- 100.0%, 49.7%, 24.0%, the
+same three numbers as §18.11 on a fresh client -- and then:
+
+| stage | wall | party row | HUD bar |
+|---|---|---|---|
+| baseline | 21:42:55 | 100.0% | reads 100 |
+| damage `-0.5` | 21:42:58 | **49.7%** | reads 50 |
+| damage `-0.25` | 21:43:05 | **24.0%** | reads 25 |
+| **int property 42 = 100** | 21:43:11 | **24.0%** | **reads 25** |
+
+> **The bar did not move.** Thirteen seconds and nine frames after the recovery, the party
+> row is still 24.0% and the HUD still reads **25**. No crash dialog; the client was
+> healthy throughout.
+
+**Both readouts agree, which is the useful half.** The party row and the HUD health bar
+track each other through every stage -- so the row is not a second, independent copy of
+health that we could desynchronise, and the recovery's failure is about the PROPERTY, not
+about the row.
+
+#### Where the failed prediction came from, and it is a labelling failure
+
+The step was built on this, from the `damage` probe's docstring:
+
+> Setting health (int property 42) assigns `health_max = value` and `health = 1.f`
+
+That sentence cites **ldufr/Headquarter**, `code/client/agent.c` -- a REIMPLEMENTATION.
+Under this repo's own vocabulary that is **UPSTREAM**, not OBSERVED, and I built a
+prediction on it as though it were a fact about the retail client. The arc's own rule
+(`CLAUDE.md`: "OpenTyria says so is UPSTREAM, not a fact about retail Guild Wars") exists
+for exactly this.
+
+There IS a real observation from 2026-08-06 -- "Int property 42 raised a health bar
+reading 100" -- and it is compatible with both explanations below, because on that run the
+max was being SET rather than re-set to the value it already held.
+
+**Two candidates, and one run separates them:**
+
+1. **Same-value no-op.** Our player's `health_max` is already 100, so assigning 100 changes
+   nothing and whatever triggers the refill never fires. This predicts that int property
+   42 = **200** refills the bar AND widens what "full" means.
+2. **The upstream reading is wrong for retail.** Property 42 does not carry the refill at
+   all, and 2026-08-06's observation was the max being established rather than health being
+   restored. This predicts 200 changes the maximum with the bar still at a quarter -- or
+   does nothing.
+
+The discriminator is one send of int property 42 = 200, watching both bars. **NOT RUN** --
+the harness is gated on the owner's go-ahead, and this is a new question rather than the
+one that was authorised.
+
+**What is unaffected:** §18.11's confirmation. The bar is this member's health, measured
+twice on two clients at 100.0/49.7/24.0. Nothing about the recovery touches that.
