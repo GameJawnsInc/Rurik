@@ -259,11 +259,127 @@ reproduce it, and should say so rather than look broken.
 
 ---
 
-## 4. What is still open
+## 4. Rung T4 — the textures exported beside the map (2026-08-14, MEASURED)
 
-- **T3**: how a cell samples its 128×128 quadrant, and the UV scale. §2.1 gives
-  the mechanism; the arithmetic is unmeasured.
-- **T4**: the two 512×512 V8U8 bump maps nothing decodes.
+**Landed.** `mapexport.build_terrain_textures` resolves every tile byte to a
+PNG under `terrain/` (keyed by file id, shared between maps like `models/`),
+and the `.gwmap` manifest (format_version 3) gains a `terrain_textures` block:
+one row per tile naming its file id, the MFT's (size, crc), and its image or
+the reason it has none. `test_mapexport.py` sections 4c and 8.
+
+### 4.1 The resolution law, measured whole and enforced as a refusal
+
+Over **all 349 maps** (this rung's scan, 2026-08-14):
+
+| fact | result |
+|---|---|
+| `len(dep) == len(table_a) + (1 if tag3b else 0)` | **349 / 349** |
+| `max(tiles) < len(table_a)` | **349 / 349** |
+| maps carrying the second tag-3 record | **24**, = the offset-1 maps |
+
+So the exporter's rule is `file_id = dep[tile + offset]`, with the offset
+decided by the second tag-3 record's presence — T2's DIRECT binding plus
+`terrain.py`'s tag-5 realignment, now confirmed as the *texture* binding on
+the whole corpus. Both equalities are REFUSALS in the exporter, not warnings.
+
+> **A CORRECTION.** `PLAN.md` §2's scoping table recorded
+> `len(table_a) == len(terrain dep list)` on "80 of 80" map heads. That is
+> true only of maps WITHOUT the second tag-3 record; on the 24 that carry it
+> the dep list is one longer. The 80-head sample either missed all 24 or the
+> probe read the wrong pair; either way the corpus-wide law is the one above.
+
+### 4.2 The mixed population is entirely the LEADING entry
+
+T1 found the terrain set MIXED — 1,648 ATTX + 4 plain ATEX + 4 DDS — and the
+rung brief said T4 must handle three shapes. Where those shapes actually sit
+is now MEASURED, and it collapses the worry:
+
+- **Every tile-position entry on every map is ATTX: 17,089 of 17,089.**
+- **All 8 non-ATTX files appear ONLY as the extra leading entry** of the 24
+  tag3b maps — the 4 plain ATEX on 16 maps, the 4 DDS on 8 maps (e.g. row
+  56835 leads with `0x475C8`, 494,516 bytes, plausibly one of the two
+  512×512 V8U8 bump maps).
+
+So **no retail tile byte can name an undecodable texture** — the V8U8 problem
+lives entirely in the slot the binding never indexes. The exporter records
+the leading entry with its archive identity and does NOT decode it: what it
+is for is UNVERIFIED (the tag3b record's four floats arrive beside it, which
+smells like a detail/far-texture pairing, and that is a smell, not a
+measurement). The skipped-tile path (reason recorded, never dropped, and in
+Blender its own empty slot) is kept and exercised synthetically, because a
+future archive owes us nothing.
+
+### 4.3 What the export is and is not
+
+Kamadan: 51 tiles → 51 images, `dep_offset` 0, census `{ATTX: 51}`, every
+distinct tile byte in use resolving — the rung criterion, checked from the
+tiles sidecar rather than the block's claim about itself. The sha256 negative
+control: one flipped byte in one PNG refuses the whole export at load. The
+PNGs are derived ArenaNet bytes and land in the vault; `resolve_outdir`'s
+working-tree refusal covers them unchanged.
+
+---
+
+## 5. Rung T5 — the ground gets a material (2026-08-14, MEASURED)
+
+**Landed.** `import_gwmap.apply_terrain_textures`: one Blender material per
+distinct texture image, `material_index` per face from the `gw_tile`
+attribute through the manifest's tile table — the props pattern on the
+ground. `test_blenderimport.py` sections 2b and 5; the criterion is asserted
+against the SIDECAR: every tile's slot material equals the image the manifest
+names for it, and the per-face indices — recomputed outside Blender from
+`tiles.u8` through the dump's slot table — sha256-match what Blender read
+back off its own built polygons (212,992 of 212,992 faces on Pre-Searing).
+`--no-terrain-textures` is the control, on both the synthetic and the real
+map.
+
+Three stated limits, all deliberate:
+
+- **One opaque layer per cell, no alpha wired.** §3.5 stands: only 7 of 192
+  tiles are fully opaque, retail blends three layers per cell with alpha as
+  the mask, so tiles that are authored as alpha OVERLAYS (Kamadan's plaza
+  pavement, rock edges) render their unwritten regions as opaque white-grey.
+  Blending is T6.
+  > **CORRECTED the same day, after the first human look at the scene.**
+  > This section first blamed ALL the visible striping on that content
+  > limitation, and most of it was OURS: Blender premultiplies a
+  > STRAIGHT-mode image for rendering, so the un-wired Color output was
+  > arriving as RGB × alpha and every cell drew its blend mask as a dark
+  > band over clean ground colour — the same in-cell band position across
+  > different tile types, which a content explanation cannot produce and
+  > which is what exposed it. MEASURED on the exported PNGs: window
+  > luminance flat (e.g. 139..158), window alpha banded (25–52 of 112 rows
+  > below 128). The images are now loaded CHANNEL_PACKED — alpha is DATA,
+  > exactly what a splat mask is — and the terrain is smooth-shaded, since
+  > both vertex layouts T3 read carry per-vertex normals and the faceted
+  > stair-step look was the importer's artifact, not the archive's. What
+  > remains after the fix is the real content limit above, plus the
+  > per-cell quadrant repetition.
+- **Every cell samples quadrant 0** through T3's measured window — inner
+  111×111 texels, corners inset 8.5 — because the interchange does not carry
+  tag 3 and nothing reproduces the per-cell PRNG draw. Which world axis maps
+  to +u is a CONVENTION chosen in the importer and named there; nothing
+  measured orients the quadrant yet.
+- **A tile with no decodable texture gets its OWN empty magenta slot**
+  (`gw_untextured_<fid>`), never slot 0 — the prop material fall-through
+  (31.6% of Kamadan's prop area silently drawing whichever image landed
+  first) is the defect this refuses to repeat. §4.2 says retail can never hit
+  this path; the check exists for the archive that ships next.
+
+---
+
+## 6. What is still open
+
+- **T6**: blending between tiles — the three per-cell layers, the alpha
+  mask, and which corner-tile combination selects the two overlay layers.
+  DEFERRED with the reason in PLAN.md §3.
+- The per-cell variation: tag 3 is decoded (§2.1, §3.3) but not exported,
+  and the PRNG draw is not reproduced, so T5 pins quadrant 0. Also the
+  quadrant's ORIENTATION (which axis is +u) is a convention, not a
+  measurement.
+- The extra leading dependency's MEANING (§4.2): 8 files — 4 plain ATEX, 4
+  DDS of which two are 512×512 V8U8 bump maps nothing decodes — paired with
+  tag3b's four floats. UNVERIFIED.
 - `table_b` — Kamadan's values are `{5, 7, 13, 15, 17, 19, 21, 23, 81, 85}`,
   all odd. UNVERIFIED, and not on the critical path.
 - Terrain tag 0's `tex_word`, `tex_f12`, `tex_f16`. Named, not understood.

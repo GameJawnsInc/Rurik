@@ -1357,25 +1357,39 @@ Four things landed underneath that:
   `knotCount > 16` process-kill hazard is RETRACTED** — the generic unpacker refuses the
   message before dispatch, so an over-range send is inert, not dangerous.
 
-**Next, in order (S1-S11 are all LANDED as of 2026-08-14; `worldmap.py` and its test are
+**Next, in order (S1-S12 are all LANDED as of 2026-08-14; `worldmap.py` and its test are
 committed, floor 78, 19 sabotages all reddening; the suite is 83/83 green, 4,035
 checks):**
 
-1. **S12 — static, ~1-2 h, NO go-ahead needed, and it can kill the surviving hypothesis
-   for free.** Find the writer of `[globalCtx+0x14] + 4..0x10` and establish whether the
-   map rect is set inside the synchronous map parse or later. If the parse must precede
-   any render, H3a dies at no cost. Use a **directory** prefix with `codescan --in` —
-   `--in Map` bare pulls the whole geometry tree.
-2. **C1 — one loopback run, NEEDS OWNER GO-AHEAD, and it now settles all three at
-   once.** Retail map 148, our DH, caged, no probe, no `--enemy`. A cross-process
-   `ReadProcessMemory` of the live `CompassMap` (instance at `[compass+0x4C]`, lazy
-   create `0x008BC426`; `toolkit/harness/keytap.py` already does ASLR-correct RPM in
-   pure `ctypes`) reads three dwords: `+0x84` ≠ 1 revives the index family, `+0x84 == 1`
-   with `+0x58/+0x5c` ≠ (416, 512) **confirms H3**, and both correct kills all three and
-   puts the fault downstream of the crop or in rung S5's metric. Take the χ measurement
-   in the same run as the control — **the χ measurement ALONE can no longer discriminate
-   anything.** C1 still **gates C2 and C3**: an arm whose two halves both draw the
-   fallback is satisfied vacuously.
+1. ~~**S12**~~ **DONE 2026-08-14, and it over-delivered — `studies/minimap/FINDINGS.md`
+   §6c.** **H3a is DEAD three ways**: the rect writer is chunk `0x2000000C` —
+   `mapbuild.py`'s own `MAP_PARAMS_CHUNK`, met from the client side (`0x007129D0` →
+   `0x0070D780`, one caller image-wide) — running inside the synchronous chunk loop
+   before the object is ever installed into the per-thread slot (`0x00707CC4`, one of
+   exactly two writers); the compass's copy (`0x0070A5C0`) has **no NULL path**, so a
+   too-early paint crashes rather than latching zeros; and the build runs inside the
+   synchronous dispatch of frame msg `0x10000098`, posted only by the MsCliApi
+   instance-load path, with the HUD a later message. **The file-side half also killed
+   H3 for retail 148 — after first getting it wrong and catching it.** The rung
+   exported `0x0287d3` (the id in the `Gw.log` re-bloat line), read 64×64 / ±3072, and
+   proposed that our spawn falls outside the map's rect and causes the fallback;
+   **`0x0287d3` is the authored SCULPT map**, which is why re-bloat names it, and map
+   148's id was in `content/maps.toml` all along (`0x1B97D`). Corrected: map 148 is
+   **416×512 cells — exactly the footprint** — with our spawn at cell (294, 340), well
+   inside, so **the latch covers the whole footprint and H3 is dead here too.** All
+   three named hypotheses are now refuted on retail 148 and the fault is **downstream
+   of the crop**. H3b stands for authored maps, now quantified.
+2. **C1 — one loopback run, NEEDS OWNER GO-AHEAD, re-scoped a third time and its
+   numbers then corrected.** Retail map 148, our DH, caged, no probe, no `--enemy`. A
+   cross-process `ReadProcessMemory` of the live `CompassMap` (instance at
+   `[compass+0x4C]`, lazy create `0x008BC426`; `toolkit/harness/keytap.py` already does
+   ASLR-correct RPM in pure `ctypes`) reads: predicted `+0x84 == 1`,
+   **`+0x58/+0x5c == (416, 512)`**, `+0x60..0x6c == (−18432, −24576, 21504, 24576)`.
+   That outcome **confirms the upstream half healthy by measurement** and leaves the
+   whole question downstream — the per-slot load at `0x008C21C0`, the blit at
+   `0x008C2077`, or rung S5's metric. **The spawn arm an earlier draft proposed is
+   VOID** (the spawn is inside the rect). χ alone still discriminates nothing; C1 still
+   **gates C2 and C3**.
 **Owner flag for Tier 3 is unchanged**: an authored map's compass showing OUR terrain
 needs both an archive tile write (A1) and a client patch repointing the footprint (A2) —
 it is not a free consequence of good authoring, and it is worth nothing until C1 explains
@@ -1552,7 +1566,7 @@ ladder in [studies/models/PLAN.md](studies/models/PLAN.md)** (a proposal until a
 format is half-read in customarea §5, the radius identity is a ready-made oracle, and the
 missing piece is committed code plus the client's own FVF dispatch.
 
-### The terrain texturing arc — T1 and T3 landed, T4/T5 are the visible payoff (2026-08-14)
+### The terrain texturing arc — T1, T3, T4 and T5 landed; T6 (blending) deferred (2026-08-14)
 
 **Read [`studies/terrain/PLAN.md`](studies/terrain/PLAN.md), then
 [`FINDINGS.md`](studies/terrain/FINDINGS.md).** The props round trip landed on a map
@@ -1561,8 +1575,9 @@ object in the scene with no material slot — **186,368 of 326,708 faces (57%)**
 nearly all of the visible area. Every one of the 516 props is textured; the map surface
 is not, because nothing mapped a tile byte to a texture.
 
-Six rungs, T1–T6. **T1 done** (`5bf5a20`) and **T3 done** (`44e0f78`); T2 was answered
-early out of the client rather than run as a rung.
+Six rungs, T1–T6. **T1 done** (`5bf5a20`), **T3 done** (`44e0f78`), **T4 and T5 done
+2026-08-14** (`a337c5c`); T2 was answered early out of the client rather than run as
+a rung. T6 (blending) is deferred with its reason in the study PLAN §3.
 
 - **T1.** `atex.split_trailer` splits an ATTX row and `decode_rgba` reads one end to
   end. `parse` still REFUSES ATTX and that is the design. Criterion met on the whole
@@ -1595,16 +1610,34 @@ tile VARIATION selector (0 = take the PRNG's pick, Lehmer/MINSTD reseeded per 32
 tile with `(tile.x << 16) ^ tile.y`), and `bits_at`'s `(i & 3) * 2` guess was already
 exactly the client's convention.
 
-**Next is T4 (export the terrain textures beside the map) then T5 (Blender: one
-material per tile texture, `material_index` from the `gw_tile` attribute the importer
-already writes).** Three things a T4/T5 session must not rediscover: the terrain set is
-**MIXED** (1,648 ATTX + 4 plain ATEX + 4 DDS, two of them V8U8 bump maps nothing
-decodes); terrain is genuinely **three blended layers per cell** with alpha as a mask
-(only 7 of 192 tiles fully opaque), so a single opaque layer per cell will not
-reproduce it and must say so rather than look broken; and **the prop fall-through is
-still open** — unbound faces keep `material_index = 0` and silently draw whichever
-image landed first, 31.6% of prop screen area on Kamadan, which is why its rocks render
-near-black (`studies/terrain/PLAN.md` §4).
+- **T4** (2026-08-14). `mapexport.build_terrain_textures` — manifest format_version 3,
+  PNGs under `terrain/` keyed by file id, one table row per tile byte with the MFT's
+  (size, crc), the corrupt-a-byte control refusing the whole export. The binding is
+  `dep[tile + (1 if tag3b else 0)]`, its law MEASURED **349/349** and enforced as
+  refusals — which **corrected the study's own "len(table_a) == len(dep) on 80 of 80"**
+  (true only without the second tag-3 record). And the mixed population T1 found is
+  **entirely the 24 tag3b maps' extra LEADING entry**: 17,089/17,089 tile positions are
+  ATTX, so no retail tile can be undecodable — the V8U8 pair lives in the slot the
+  binding never indexes, meaning UNVERIFIED. `studies/terrain/FINDINGS.md` §4.
+- **T5** (2026-08-14). The ground has a material: one per distinct texture,
+  `material_index` per face from `gw_tile` through the manifest table, T3's UV window
+  (inner 111×111 texels, quadrant 0 pinned — tag 3 is not exported and the PRNG not
+  reproduced). Criterion met at full coverage against the SIDECAR: all 212,992
+  Pre-Searing face indices sha256-match a recomputation from `tiles.u8` outside
+  Blender; `--no-terrain-textures` is the control. A tile with no decodable texture
+  gets its OWN magenta slot, never slot 0. Kamadan renders as a place: base tiles read
+  as ground; **alpha-overlay tiles draw their unwritten regions opaque and stripe**,
+  which is §3.5's three-layer blend not being reproduced — T6's problem, visible on
+  the scene rather than hidden. FINDINGS §5.
+
+**What a T6 session must not rediscover**: terrain is genuinely **three blended layers
+per cell** with alpha as a mask (only 7 of 192 tiles fully opaque), and the layer
+count is decided by COMPARING `tileTypes` between a cell's four corners (T2) — the
+blending question starts there. **The prop fall-through is still open** — unbound
+faces keep `material_index = 0` and silently draw whichever image landed first, 31.6%
+of prop screen area on Kamadan, which is why its rocks render near-black
+(`studies/terrain/PLAN.md` §4); the GROUND now refuses that pattern, the props still
+don't.
 
 ### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks — a FROZEN snapshot; the suite is 85 files / 4,161 checks as of 2026-08-14, `python toolkit/run_suite.py`)
 ### Cross-build resilience — the arc that cost the update risk (2026-08-12)

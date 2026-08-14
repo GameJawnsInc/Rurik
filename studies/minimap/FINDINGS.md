@@ -416,6 +416,73 @@ Images in `vault/exports/worldmap/` (never the repo): `area449_w4_s1_416x448.png
 
 ---
 
+## 6c. When the map rect is written — H3a is DEAD, and the latch's numbers on map 148 are now known (rung S12, 2026-08-14)
+
+**The rung's question was "is `[globalCtx+0x14]`'s rect populated by the synchronous map parse, before the compass's first paint?" The answer is yes, three independent ways — and the measurement kept going and produced the arc's first complete candidate explanation for the whole-disc fallback.**
+
+### 6c.1 The context slot, and its exactly-two writers
+
+`0x0047F660` — the getter `0x0070A5C0` opens with — is not a global read; it is **per-thread**: `mov ecx, [0xC0F300]` (a TLS index), `fs:[0x2C]`, then `[slot + 8]`. The setter is its twin at `0x0047F680`. It has **1,089 direct call sites** image-wide, so the slot was found by the rung-S10 method — a conservative forward window from every call site, tracking which registers hold the returned context (copies propagate, calls clobber eax/ecx/edx, any other def kills the track). Result, over all 1,089 windows:
+
+- **`[ctx+0x14]` is WRITTEN at exactly two sites**: `0x00707CC4 mov [eax+0x14], esi` (the install) and `0x0070984C mov [eax+0x14], 0` (the clear). 72 sites read it.
+- The install lives in `P:\Code\Engine\Map\Map.cpp` (its own assert: `Map.cpp:730 map`), in the function at `0x00707BB0`: `call 0x713360` (build), assert the result non-NULL, destroy any old map (`0x007140C0`), **then** store the new pointer. **The object enters the slot only after it is fully built.**
+- The window method's stated limit: a writer that receives ctx as an *argument* is invisible to it. Mitigated two ways — a four-displacement `--writes` sweep over all of `P:\Code\Engine\Map\` (below) found no other candidate, and `MapIsCreated()` (`0x007098A0`, the function `UiGame:1051 !MapIsCreated()` calls) reads the same slot, which is what makes the two-writer count consistent with everything UiGame asserts.
+
+**A spelling correction that cost this rung twenty minutes and will cost the next reader more: the module prefix is `P:\Code\Engine\Map\`, not `P:\Code\Gw\Engine\Map\`.** PLAN S12's own procedure line had the `Gw\` form; `codescan --bounds` answers *"no asserts, so no bounds"* for it — a silence, not an error — and every `--in` scoped to it returns a confident zero. The real prefix spans `0x00707434..0x00775976`, 77 source files, 721 assert sites.
+
+### 6c.2 The build is a synchronous chunk loop, and the rect writer is chunk `0x2000000C` — the chunk `mapbuild.py` already encodes
+
+`0x00713360` (MapData.cpp) is the **map build driver**: it allocates the 0x138-byte Map object (`Map.cpp`'s ctor `0x00707280` — which initializes array headers at `+0x2C..` and `+0x90..` and **never touches `+4..0x10`**), then walks the file's chunk records **in a loop, dispatching direct calls** through `s_chunkInfo` (`0xA6CF78`, stride 0x28, 23 rows, bound by MapData's own `ptr->id < arrsize(s_chunkInfo)`), with an `MsProgress.h` task list driving the loading bar. No thread hop, no completion callback: the driver returns the finished object, and `Map.cpp:730` installs it.
+
+The rect writer is **chunk id 12**, and its handler is three instructions:
+
+```
+007129D0  mov ecx, [ebp+0x18]     ; the Map object (5th handler arg)
+007129D6  push dword [ebp+8]
+007129D9  lea ecx, [ecx+4]        ; &map->rect
+007129DC  call 0x70d780           ; MapParams.cpp -- the ONE caller image-wide
+```
+
+`0x0070D780` (MapParams.cpp, asserts at `:198`-class lines) divides the chunk's dims by **3072.0** (= 32 cells × 96.0 — one terrain chunk in world units, the double at `0xA6C7B0`), asserts the result is a whole number of chunks, multiplies back, and writes the four floats to `[map+4..0x10]` plus flags to `[map+0x14]` — the flags the terrain handler then passes to `TrnCreate`. `codescan --xrefs 0x0070D780`: **1 direct reference, 0 data words.** And the parser beside it (`0x0070D920`) checks magic `0x5943EEEF` and version byte 2 at offset +4, floats at the unaligned +5 —
+
+**which is `toolkit/mapdata/mapbuild.py`'s `MAP_PARAMS_CHUNK = 0x2000000C`, sig `MAP_PARAMS_SIG = 0x5943EEEF`, `MAP_PARAMS_VERSION = 2`, `_MP_RECT` at +5, byte for byte.** The client-side rect writer and our file-side encoder are one chunk read from two directions; the file-format arc (customarea FINDINGS 17.4) and this arc meet here. Consequences carried:
+
+- **Our authored maps DO write the rect** — mapbuild generates `0x2000000C` with the authored dims, so an authored map's latch gets our dims. That is H3b's premise, now with the writer named rather than presumed.
+- Corroboration from structure: chunk 2 (terrain) asserts `!map->terrain`, passes **`&map->rect` and `[map+0x14]`** into `0x00758540`, and derives its chunk grid from the rect (`>>5` on the cell dims). A rect-less build would malform terrain; every vault frame that shows terrain rendering is therefore also evidence the rect ran.
+- Residuals, named: the driver has an **empty-chunk-list early return** (`0x007133F9 je 0x713625`) that hands back an object whose rect no chunk ever wrote — unreachable for retail 148 and for our builds (mapbuild always emits `0x2000000C`), but it exists; and whether the allocator (`0x0047F490`, flags=2) zero-fills is **UNVERIFIED**, which only matters on that path.
+
+### 6c.3 The ordering, three legs, all static
+
+1. **The compass's own source has no NULL path.** `0x0070A5C0` is `getter → [ctx+0x14] → read [+4..0x10]` with **no test of the pointer** — a paint before any install dereferences address 4 and crashes. 26 sessions in the vault, zero such crashes, and the §23 fallback frame is `CompassMap` *itself* painting — so the latch ran, so the slot held a **fully-built** map at every first paint that ever happened. The NULL-deref is the guard that makes the ordering self-proving for a populated rect.
+2. **The build is driven synchronously from the instance-load network path.** The map build runs in UiGame's frame proc (`0x004A69C0`, the proc `UiRoot` registers at `0x004A369A`) on **frame message `0x10000098`** (two-level MSVC jump table at `0x004A76A0`/`0x004A76D4`; case `[3]` at `0x004A6E23` → `call 0x707bb0` at `0x004A6E45`). That message has **one poster**: `0x00853BFD` in `0x00853BA0` (MsCli*, beside `MsCliProgress.cpp`'s asserts), called from `0x0084ED90` and `0x0084F271` — the same MsCliApi region whose `+0x230` store rung S9 pinned for the `0x0199` family. And the send is **synchronous, not queued**: `0x00633D70` asserts the id and tail-jumps into the broadcast walk (`0x0064CA30`), and the poster passes **stack-local out-slots** in the args and reads the answer the instruction after the call returns — a queued dispatch would be a use-after-return. So build + install complete inside the network dispatch of the instance-load family.
+3. **The HUD is a later message.** Rung S9 already measured the compass's creation downstream of the controlled-character notify, and `0x0199` preceding every character/agent message by 0.56–0.91 s on the wire, 17 of 17. First paint ≥ constructor. UiGame's create arm also **asserts `!MapIsCreated()`** (`UiGame:1051`, calling `0x007098A0`) and then subscribes to the message set including `0x10000098` — no map exists when UiGame arrives; the map arrives on the wire's schedule; the compass arrives after that.
+
+**H3a — "the latch runs before the rect is populated and captures zeros" — is DEAD.** The rect is final before the object is visible to any reader; a paint before the object exists crashes rather than latching; and the paint provably comes later anyway. The re-bloat lines in 12 of 26 logs move *when* the build succeeds, never the order — a failed build installs nothing (`UiGame` bails on the NULL), so re-bloat cannot open a window where the latch sees a half-built map.
+
+### 6c.4 What the latch actually latched on map 148 — and it kills H3 for retail 148 too
+
+**READ THE ERROR FIRST, because it was committed, merged, and caught by the next measurement rather than by review.** This section first claimed map 148's file is **64 × 64 cells, rect ±3072**, that the 416×512 footprint was therefore a region-sized borrow the latch would clip to a corner, and — building on that — that our server's spawn at `(9826, 8077)` lands *outside* the map's own rect and is the cause of every fallback frame. **All of it was wrong, and from a single root cause: `0x0287d3` is not map 148.** It is the customarea arc's **authored sculpt map** — which is exactly why the re-bloat line names it (our authored maps are the ones that fail to load and re-bloat; retail maps do not), and the `Gw.log` quote in PLAN S12's own procedure line is what made it look like map 148's id. Map 148's file id is in the content row all along: `file_id = 0x8001B97D`, masked `0x1B97D`. The lesson is the arc's own house rule turned on itself — **a file id read out of a log line is a claim, not an identity**, and the row that carries the id was one `grep` away.
+
+**The corrected measurement.** `mapexport.py --file-id 0x1B97D`:
+
+- **grid 416 × 512 cells; rect `(−18432, −24576, 21504, 24576)`; extent 39936 × 49152 at pitch 96.0.**
+- `(21504 − (−18432)) / 96 = 416` and `(24576 − (−24576)) / 96 = 512` — **exactly the area row's footprint.** Map 148 *is* one of `maprows.py`'s 319-of-319 join rows; the previous text's "148 is simply not among them" was an artefact of the wrong file.
+- Our spawn `(9826, 8077)` sits at cell **(294, 340)** of that 416×512 grid — comfortably inside, and consistent with the content row's own provenance note (it lands in exactly 1 trapezoid of that mesh, 0 of Kamadan's).
+
+**So the latch on map 148 holds `[+0x58]/[+0x5c] = (416, 512)` and `[+0x60..0x6c] = (−18432, −24576, 21504, 24576)` — the FULL footprint, not a clipped corner.** — OBSERVED on the file side; the memory read is still C1's.
+
+**Consequence, and it is the real result of this rung's second half: H3 cannot explain the fallback on retail map 148 either.** The crop window clamps against a rect that covers the whole footprint, so the intersection is non-empty everywhere the compass asks — there is no degenerate crop to take. With S9 having refuted H1 and H2, and S12 refuting H3a (ordering) and now H3 itself (dims, on this map), **all three named hypotheses are dead for retail 148**, which is C1's own third branch reached statically and for free:
+
+> `[+0x84] == 1` **and** `[+0x58]/[+0x5c] == (416, 512)` → all three hypotheses dead; the fault is downstream of the crop, in the blit at `0x008C2077` or in rung S5's own metric.
+
+**H3b survives untouched for AUTHORED maps, and the sculpt-map export quantifies it** — that file really is **64 × 64 cells, rect ±3072**, against a borrowed 416×512 footprint, so an authored map's compass can only ever crop a 64×64 corner. PLAN C2's hazard note stands; only its retail-148 half is withdrawn.
+
+**What C1 should now predict, and what it is really for:** `[+0x84] == 1`, `[+0x58]/[+0x5c] == (416, 512)`, `[+0x60..0x6c] == (−18432, −24576, 21504, 24576)`. If the live object reads that way, the memory half has *confirmed everything upstream is healthy* and the entire remaining question is downstream — the per-slot tile load at `0x008C21C0`, the blit at `0x008C2077`, or S5's metric. Any other reading is a genuinely new finding and names its own next rung. **The spawn arm proposed here is VOID** — the spawn is inside the rect and there is nothing to move.
+
+**One lead closed in passing, so the next reader does not chase it:** `[CompassMap+0x80]` — §7's "UNREAD", loaded at `0x008C1FF9` immediately before the tier getter — is **not** an input to the getter. It is written into the per-slot cache record at `[ebx + esi*8 + 0x14]` while the getter's arguments are `[+0x84]` (world) and `edi` (the chunk pair); the constructor zeroes it (`0x008C1C6B`, with `edx` already decremented to 0 by the init loop above it) and `0x008C2A9E inc dword [edi+0x80]` bumps it. It is a **cache generation stamp**. — OBSERVED.
+
+---
+
 ## 7. Contradictions and open questions
 
 **Cross-report contradictions, surfaced rather than silently resolved:**
@@ -455,7 +522,7 @@ Images in `vault/exports/worldmap/` (never the repo): `area449_w4_s1_416x448.png
 
 **Opened by the rung S9 adjudication (2026-08-14):**
 
-- **WHEN is `[globalCtx+0x14]`'s map rect populated, relative to the compass's first paint?** `0x0070A5C0` copies it with no validity check and no return code; `0x008C28D0` latches it once and never asks again. **This is the cheapest thing left in the whole arc and it is STATIC** — `codescan --field 0x14` for the context slot, then `--field 0x4/0x8/0xc/0x10 --in 'P:\Code\Gw\Engine\Map\'` (a **directory** prefix; `--in Map` bare pulls the whole geometry tree). If the rect is written by the parse that must precede any render, **H3a dies for free**. NOT FOUND.
+- ~~**WHEN is `[globalCtx+0x14]`'s map rect populated, relative to the compass's first paint?**~~ **CLOSED 2026-08-14 (rung S12) — by the synchronous chunk loop of the map build, before the object is installed into the slot, and the compass cannot observe the in-between: `0x0070A5C0` crashes on an empty slot rather than reading zeros.** §6c carries the whole chain (two slot writers image-wide; chunk `0x2000000C` = `mapbuild.py`'s own `MAP_PARAMS_CHUNK` is the rect writer via `0x0070D780`, one caller; the build runs inside the synchronous dispatch of frame msg `0x10000098` posted by the MsCliApi instance-load path). **H3a is dead** — and §6c.4's file-side measurement of map 148 (416×512 cells, rect (−18432,−24576,21504,24576), **exactly the footprint**, with our spawn at cell (294,340) well inside) **kills H3 for retail 148 as well**, so all three named hypotheses are now dead on that map and the fault is downstream of the crop. §6c.4 also records a wrong claim this rung committed and then caught: `0x0287d3` is the authored sculpt map, not map 148.
 - **`[CompassMap+0x80]` is UNREAD.** `0x008C1FF9 mov eax, [ebx+0x80]` loads it immediately before the tile-getter call at `0x008C200A` and nothing in this arc has traced it. NOT FOUND.
 - **`0x00470F50` / `0x00470B60` — the archive open/read under `0x00679A90` — are not disassembled**, and they carry hypothesis 2's one named residual: a size- or id-dependent refusal that would fail on a ~110 KB atlas tile while succeeding on the 1,936 B fallback. ~1 h static, no client. **UNDECIDABLE STATICALLY** until then.
 - **Rung S9's frame corpus grew from six to eight, and two of the eight are attributable to a surviving `Gw.log`** — `20260813T185442/final.png` (χ = +1.0965, paired with `vault/run/…-c2/Gw.log`) and `20260814T100327/final.png` (χ = +1.0954, paired with `vault/run/…-probe/Gw.log`), by the criterion "a run directory's `Gw.log` belongs to the last harness session naming that directory's `Gw.exe`", swept over all 719 sessions from `20260813T185442` forward. Both logs carry `Perf: AuthSrv (127.0.0.1)` (the sink works), no minimap line and no texture error. Given §6 that is evidence for nothing, but it closes the "we never had a log for a session we measured" gap. Both frames are load-overlay-contaminated, so the two χ figures are **ADVISORY**; the load-bearing χ result stays rung S5's.

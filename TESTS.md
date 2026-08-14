@@ -1089,9 +1089,27 @@ Every one of these, in the order they were written:
   and redden the floor on `vault/client/2026-04-30_b174de1f2d8d`, which holds the same
   349 pairs at the same rows with the same crcs. What guards the section is the
   population assertion on the next line -- 349 rows with flags 259 -- which the
-  impostor archive of `test_mapfile`'s section 2b reddens at 1. Sections 0-4b need no
-  vault and score 84 against a floor of 145, so a vault-less run goes red. ~48 s, and
-  145 of 145 on BOTH vaulted archives, MEASURED 2026-08-13),
+  impostor archive of `test_mapfile`'s section 2b reddens at 1.
+  **Sections 4c and 8 are rung T4 (2026-08-14), the terrain textures**: the manifest
+  (format_version 3) gains a tile→texture table, one row per tile byte naming its
+  file id, the MFT's (size, crc) and its PNG under `terrain/` — or the REASON it has
+  none, because a table with silent holes cannot be audited. The binding is
+  `dep[tile + (1 if tag3b else 0)]` and both halves of the law it rests on are
+  REFUSALS the test fires live (dep list too short, too long, tag3b with no extra
+  entry, a used tile byte off the table), because the law is MEASURED at 349/349 and
+  a map violating it has no honest binding. Section 4c runs the whole thing on a bare
+  machine — synthetic ATEX rows behind a fake two-method archive, a hand-packed
+  uncompressed DDS for the decode path and a compressed-flagged one for the refusal
+  path, the corrupt-a-byte and missing-file negative controls on the PNG digests,
+  and a restore that proves the controls measured the corruption rather than the
+  fixture. Section 8 exports Kamadan whole — 51 tiles → 51 ATTX images, every
+  distinct tile byte in use resolving, checked from the TILES SIDECAR rather than
+  the block's claim about itself — plus row 56835, one of the 24 tag3b maps, whose
+  extra LEADING dependency is DDS row 0x475C8 and must reach no tile (the corpus's
+  8 non-ATTX terrain files are ALL leading entries, 17,089/17,089 tile positions
+  being ATTX), and the resolution law over the sampled maps. Sections 0-4c need no
+  vault and score 111 against a floor of 185, so a vault-less run goes red. ~74 s,
+  MEASURED on `dat_study` 2026-08-14),
   `toolkit/mapdata/test_blenderimport.py` (the Blender half: it runs
   `tools/blender/import_gwmap.py` headless as a SUBPROCESS — the test is stdlib-only
   and never imports `bpy`, which is why the importer may live outside `toolkit/` —
@@ -1142,8 +1160,26 @@ Every one of these, in the order they were written:
   invented (display-only) number — checked at all 864 Pre-Searing proxies sitting
   at (x, y, −z) exactly, the proxy OBJECTS scoring the chunk's own 0.7338 against
   the mesh, the outlined population pinned at 34, and a `--no-props` control that
-  must import the terrain alone. Sections 0-2
-  need no vault and score 45 against a floor of 92. ~25 s),
+  must import the terrain alone.
+  **Sections 2b and 5 are rung T5 (2026-08-14), the ground's material**: one Blender
+  material per distinct terrain texture, `material_index` per face from the
+  `gw_tile` attribute through the manifest's tile table, and T3's measured UV
+  window (the inner 111×111 texels of quadrant 0, corners inset 8.5). The criterion
+  is against the SIDECAR rather than the importer's own loop — every tile's slot
+  material must be the image the manifest names for that tile byte, and every
+  FACE's index, recomputed outside Blender from tiles.u8 through the dump's slot
+  table, must sha256-match what Blender read back off its own built polygons: all
+  212,992 Pre-Searing faces, not a sample. Section 2b runs it vault-less on
+  synthetic textures with one tile whose file id deliberately resolves to nothing,
+  which must get its OWN named empty slot rather than falling through to slot 0 —
+  the prop-material fall-through defect, refused on the ground — and
+  `--no-terrain-textures` is the control on both the synthetic and the real map.
+  One check per section also pins the mask's CHANNEL_PACKED alpha mode and
+  all-faces-smooth shading, read back off the built scene — the first human look
+  at the delivered .blend found Blender premultiplying the un-wired blend mask
+  into the Color output, a dark band over clean ground colour on every cell.
+  Sections 0-2b need no vault and score 54 against a floor of 110, so a vault-less
+  run goes red. ~61 s),
   `toolkit/mapdata/test_blenderroundtrip.py` (the AUTHORING direction, and the
   first thing in this arc to come OUT of Blender: an interchange imported, saved
   to a `.blend`, and exported back by a SEPARATE Blender process — two processes,
