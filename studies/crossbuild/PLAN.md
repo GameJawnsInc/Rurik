@@ -17,9 +17,26 @@ class §0 says this arc exists to hunt — and it was sitting one command away t
 Results go to `studies/crossbuild/FINDINGS.md`. This file is the plan and gets struck
 through as it lands.
 
+> **THE UPDATE LANDED — build 38833, 2026-08-14. Results in
+> [FINDINGS.md](FINDINGS.md) §7, and read that before re-quoting anything below.**
+> The arc's tooling met a build nobody had measured and mostly held: **8 of 8 signatures
+> at exact hit counts**, `msgshape`/`asserts`/`buildid`/`srctree`/`dump_dh_params` all read
+> it, and the one class-(a) site this plan left outstanding — `genericvalue.py` — is the one
+> that broke, taking `avevents.py` with it. It refused loudly and named the address, which
+> is §6.1's hard-gate pattern working.
+> **Three things below are now wrong and are corrected in FINDINGS §7:** §2's "any patch
+> anchored to a raw address is broken by the next build" is **too strong** (this 15-day
+> patch left the exe the same length and moved almost nothing — §7.2); the DH struct did
+> **not** move this time, though its parameters rotated (§7.3); and `updatecheck.py`, this
+> arc's own deliverable 8, **printed a vacuous pass about the new build** on its first real
+> firing (§7.4a, fixed). The pin stays at **38797** — 38833 is registered, not pinned.
+>
 > **Landed 2026-08-12/13: every section — deliverables 1-8 complete, 9 ARMED.** §9 is the
 > only one that cannot be finished on demand: it needs an ArenaNet content patch to land,
 > and the trap is set with its prediction written down first ([DURABILITY.md](DURABILITY.md)).
+> **The 38833 patch did NOT spring it**, exactly as §4 of FINDINGS predicted — the tracer
+> sits on an inert copy no updater reaches. Nothing was lost; the owner's standing answer is
+> to rebase mods over an update.
 > `msgshape.py` derives the message tables (`db26a00`), `asserts.py` derives its callee
 > (`458b79d`), `pinned.find()` verifies what it returns and fails closed (`25cd1c4`), the
 > census is measured (`06bfcc3`), `genericvalue.py` is gated (`0a5b501`), `avevents.py`

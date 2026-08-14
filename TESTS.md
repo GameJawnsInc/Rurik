@@ -1823,8 +1823,15 @@ Every one of these, in the order they were written:
   one observed on the wire shares no lineage at all. It also pins that the
   schema's stamp is nested under `provenance` and NOT a top-level key, which is
   how the first version of that check "failed". §4 requires `pinned.BUILDS` to
-  match a fresh read, so the registry stays derived rather than hand-edited.
-  Needs the vault. Floor 23, ~6 s),
+  match a fresh read, so the registry stays derived rather than hand-edited —
+  which is what let build **38833** be added on 2026-08-14 as a measurement
+  rather than a typed-in row. That build is the sharpest case for §1's argument:
+  its getter is at `0x004729E0`, the SAME address as 38797's, with the same 54
+  candidate shapes, so the returned immediate is the *only* thing separating the
+  two images and the read still lands on exactly one in-range candidate. The
+  ascending-numbers check was also respelled as a sort, because the two-build
+  spelling had to be edited the moment a third arrived.
+  Needs the vault. Floor 29 (was 23; 38833 adds 6), ~6 s),
   `toolkit/clientscan/test_avevents.py` (the two AgentView event allocators,
   located by ArenaNet's own asserts — `studies/crossbuild/FINDINGS.md` §2.5, and
   the last two addresses in that census. They were literals used to match call
@@ -1841,11 +1848,19 @@ Every one of these, in the order they were written:
   resolves to one function, and §2 measures both numbers rather than asserting
   the rule. §4 reproduces the ambiguous anchor and requires a refusal, with the
   real anchors resolving afterwards as the positive control. §3 is the half a
-  lookup cannot fake: the older build derives a different pair — **not one
+  lookup cannot fake: the 38519 build derives a different pair — **not one
   address shared** — and still reproduces the census, 23 action call sites and 22
-  kinds on both. The function-boundary walk is reimplemented in the test out of
-  `int3` padding, so it is a second witness rather than a second call to the
-  module. Needs the vault. Floor 19, ~50 s),
+  kinds on all three. The function-boundary walk is reimplemented in the test out
+  of `int3` padding, so it is a second witness rather than a second call to the
+  module. **§3 was rewritten 2026-08-14 when 38833 arrived and broke it twice:**
+  it unpacked exactly two images (`a, b = [...]`, a ValueError on three), and its
+  claim that NOT ONE address is shared *between the builds* is **false** for the
+  38797/38833 pair, which derives the same two addresses because that 15-day
+  patch did not move them. Read literally it said a derivation returning the same
+  answer on two builds has degenerated into a lookup, which does not follow. Now
+  pairwise: at least ONE pair must be disjoint — a lookup could not manage that —
+  and agreeing pairs are printed as the measurement they are.
+  Needs the vault. Floor 26 (was 19; 38833 adds 7), ~50 s),
   `toolkit/clientscan/test_genericvalue.py` (the property-id switches, and that a
   moved build cannot be read as a map — `studies/crossbuild/PLAN.md` §6.
   `genericvalue.py`'s docstring claimed "a build that moves them fails loudly
@@ -1915,7 +1930,18 @@ Every one of these, in the order they were written:
   client — a genuine pristine build — is `unknown` when asked about AS 38797,
   while identifying as itself unscoped, so the refusal is the scoping rather than
   a broken hash; and that each stamp is its own pristine sha256 prefix, so a
-  mistyped hash cannot sit in the registry looking plausible. `LIVE_INSTALL` is
+  mistyped hash cannot sit in the registry looking plausible. **The size
+  invariant was INVERTED 2026-08-14 and the old one is the lesson.** It asserted
+  "the two builds differ in SIZE, so size separates them" and went red the day
+  38833 was registered, because 38833 ships at 10,483,904 B — byte-for-byte
+  38797's length — while being a different build. The red was right and the
+  claim was wrong: size never separated the two copies *within* a build, and it
+  no longer separates builds either. It now asserts the invariant that actually
+  holds, **sha256 is the discriminator**, prints any size collision as a
+  measurement, and proves the collision is survivable by requiring `identify()`
+  to name each build from its own image — the behaviour the registry's safety
+  now rests on, rather than a property of what the vault happens to hold.
+  `LIVE_INSTALL` is
   monkeypatched to a temp path so both fallback branches run on every machine
   rather than only one with `C:\gw`. **§5 and §6 are the PROBE GATE**
   (`studies/crossbuild/FINDINGS.md` §2.1): `itemprobe.py` and `agentprobe.py`
@@ -1933,8 +1959,9 @@ Every one of these, in the order they were written:
   rejected and a correct one that must be accepted. `--any-build` is the
   deliberate override, because a gate that makes a tool unusable the day a build
   ships is one somebody deletes. Without a vault §4 skips and the run scores 43
-  against a floor of 55, so it goes red — measured with `RURIK_VAULT` pointed at
-  an empty directory, not derived by subtraction. ~2 s),
+  against a floor of **61** (was 55; 38833 adds 6), so it goes red — the 43 was
+  measured with `RURIK_VAULT` pointed at an empty directory, not derived by
+  subtraction. ~2 s),
   `toolkit/clientscan/test_msghandler.py` (the receive-handler classifier, which is
   the loopback opcode sweep's PREDICTION stated before it runs. Three corrections it
   pins, each to a claim that was in circulation: **477 of 477 table entries carry a

@@ -305,19 +305,44 @@ def section_build():
         return
     found = []
     for base, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in ("captures-scrubbed",)]
+        # `selftest` joined `captures-scrubbed` here on 2026-08-14, and the
+        # reason is the one test_handshake.py already gives for the directory
+        # existing at all: its output "used to share vault/captures/authsrv/
+        # with real client sessions ... two self-test captures were read as
+        # evidence of successful client logins that never happened." The files
+        # were split out so they could not be mistaken for research data -- and
+        # this census then walked the whole tree and counted them as exactly
+        # that, re-creating the contamination one level up.
+        #
+        # It surfaced the moment the numbers could disagree: build 38833 was
+        # patched, `test_handshake.py` began announcing 38833 (it had been
+        # claiming a hardcoded 38797 while driving whatever client the newest
+        # key matched -- see studies/crossbuild/FINDINGS.md §7.7), and three
+        # runs of the SUITE ITSELF put three 38833-stamped files in the vault.
+        # The corpus then read {38797: 1828, 38833: 3} and this check went red
+        # over its own test fixtures.
+        #
+        # THE GUARD KEEPS ITS TEETH. The claim below is about the corpus the
+        # figures in studies/ are computed over, and a self-test artifact is
+        # not one of those. The day a REAL capture is taken on a second build,
+        # this still goes red -- which is the whole point, since opcodes drift
+        # between builds and pooling two builds' captures is the error
+        # `origin.py` exists to prevent.
+        dirs[:] = [d for d in dirs if d not in ("captures-scrubbed", "selftest")]
         found += [os.path.join(base, f) for f in files if f.endswith(".jsonl")]
     groups = origin.partition_builds(found)
     known = {b: v for b, v in groups.items() if b is not origin.BUILD_UNKNOWN}
     LEDGER.ok(len(known) <= 1,
-              "the whole vault is at most ONE client build",
+              "the research corpus is at most ONE client build (selftest excluded)",
               f"{ {b: len(v) for b, v in known.items()} } "
               f"+ {len(groups.get(origin.BUILD_UNKNOWN, []))} unknown")
     if known:
         LEDGER.ok(set(known) == {38797},
                   "and that build is 38797",
-                  "MEASURED 2026-08-13; the corpus figures in studies/ are not "
-                  "pooling builds, which resolves PLAN.md §10's UNVERIFIED flag")
+                  "MEASURED 2026-08-13, still true on 2026-08-14 after build "
+                  "38833 shipped: no capture has yet been taken on it. The "
+                  "corpus figures in studies/ are not pooling builds, which "
+                  "resolves PLAN.md §10's UNVERIFIED flag")
 
 
 if __name__ == "__main__":
