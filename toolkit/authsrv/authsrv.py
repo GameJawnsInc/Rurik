@@ -556,9 +556,15 @@ GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
 # Whether a 42-zero array is even well-formed is open: one lineage reads this as
 # triplets, and another never sends this message at all.
 ATTRIBUTE_COUNT = 42
-# UPSTREAM, and an uncited literal at that (GmPlayer.c:125). Two other lineages
-# send 0/0 here, and whether the two bytes mean used/max or max/used is contested.
-ATTRIBUTE_POINTS = 50
+# OBSERVED: every 0x0037 ArenaNet sent in the vault's two live captures carries
+# [0, 0] -- 8 of 8 connections, once each at load, naming the player agent (e.g.
+# 20260807T143055 conn :64103 t=0.722 hex 37001f0000000000). The 50 this used to
+# be was UPSTREAM and uncited (GmPlayer.c:125), contradicted by all eight.
+# STATE-CONDITIONAL, not universal: all eight samples are characters in unknown
+# spend state, so what a character with genuinely unspent points gets is open --
+# capture shopping-list item 1, studies/combat/PLAN.md section 3. Whether the two
+# bytes mean used/max or max/used is still CONTESTED, and moot only at zero.
+ATTRIBUTE_POINTS = 0
 
 # ---------------------------------------------------------------- skills ----
 # The server owns WHICH and WHEN; the client owns WHAT. A skill's name, icon,

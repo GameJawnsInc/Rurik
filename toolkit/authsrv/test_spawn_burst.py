@@ -66,7 +66,11 @@ BURST = [
               0, 0,
               (INF, INF),
               0], "WORLD_CREATE_AGENT"),
-    (0x0037, [PLAYER_AGENT_ID, 50, 50], "AGENT_UPDATE_ATTRIBUTE_POINTS"),
+    # [0, 0] is what ArenaNet sent on all 8 live connections (state-conditional
+    # -- see the constant's comment in authsrv.py). This row is a hand-copy like
+    # every other row here, so it binds nothing by itself; the check that
+    # actually reddens on an ATTRIBUTE_POINTS edit is in section 3.
+    (0x0037, [PLAYER_AGENT_ID, 0, 0], "AGENT_UPDATE_ATTRIBUTE_POINTS"),
     (0x00B7, [PLAYER_AGENT_ID, PROF_WARRIOR, 0, 0], "PLAYER_UPDATE_PROFESSION"),
     (0x003A, [PLAYER_AGENT_ID, [0] * 42], "AGENT_UPDATE_ATTRIBUTES"),
     (0x0022, [PLAYER_AGENT_ID, 3], "WORLD_UPDATE_CONTROLLED_AGENT"),
@@ -88,7 +92,7 @@ NAMED_OFFSETS = {0x0B: "h000B", 0x1E: "h001E", 0x23: "h0023", 0x27: "h0027",
 # fewer, a section stopped executing -- most likely the section 2 field walk
 # hitting an unhandled type and breaking out early, which drops the offset
 # checks that are the whole reason this file exists.
-LEDGER = checks.Ledger("spawn burst", floor=21)
+LEDGER = checks.Ledger("spawn burst", floor=22)
 check = checks.adopt(LEDGER)
 
 
@@ -133,6 +137,17 @@ def main():
     # profession occupies bits 20-23: sex 1 + height 4 + skin 5 + hair 5 + face 5
     check(APPEARANCE == 0x00100000 and (APPEARANCE >> 20) & 0xF == PROF_WARRIOR,
           "appearance packs Warrior into bits 20-23")
+
+    # The 0x0037 payload, bound to the MODULE rather than to this file's
+    # hand-copied table: ArenaNet sent [0, 0] on 8 of 8 live connections
+    # (both captures, once per connection at load -- the constant's comment
+    # in authsrv.py carries the hex and the state-conditional caveat).
+    # Editing ATTRIBUTE_POINTS goes red here until the new value cites its
+    # own wire evidence.
+    import authsrv
+    check(authsrv.ATTRIBUTE_POINTS == 0,
+          "ATTRIBUTE_POINTS is 0, the 8-of-8 live-capture value, not "
+          "OpenTyria's uncited 50")
 
     return LEDGER.verdict()
 
