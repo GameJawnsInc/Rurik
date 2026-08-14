@@ -473,7 +473,7 @@ def file_id_table(archive):
     previously corroborate.
 
     TWENTY-FIVE IDS CARRY BIT 31, and an exact-match lookup silently misses
-    every one of them. MEASURED on this copy: 25 of the 171,023 ids have
+    every one of them. MEASURED on this copy: 25 of the 171,025 ids have
     0x80000000 set, and for none of them is the masked form also present, so the
     two never compete. Two of the 25 land on map-flagged rows -- 0x8001B97D to
     row 7982 and 0x8001C539 to row 20118 -- and those are the Pre-Searing maps.

@@ -878,6 +878,64 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   refused AS a bound, since row 0 reached `entries[-1]` and planned a write to the LAST
   row of the table, which a "some blocker" predicate passes because that row's
   reservation is 0 bytes. Floor 30 -> 38),
+  `toolkit/mapdata/test_bit31.py` (the REPLACEMENT-PENDING census -- the file ids
+  carrying bit 31, which `FcArchive` binds when it has requested a replacement
+  and deleted the plain name (`archive.py`:486, read out of the client). The
+  population is small, it MOVES, and it moves under our own content: **two
+  `content/maps.toml` rows are recorded under `0x8001B97D`**, and row 7982 --
+  `donor_row` for every `content/areas.toml` row -- is named by two bit-31 ids.
+  **The headline is deliberately not the count.** "29 bit-31 ids" is a number an
+  almost-right census also prints, and the tool's whole job is to be believed
+  when it says NOTHING CHANGED: the 900 s session of 2026-08-14 reported
+  `29 -> 29`, and that reading is only worth anything because the two SETS were
+  compared -- four ids clearing while four others are newly set leaves the count
+  identical and describes a different archive. So `diff` never consults
+  `len(bit31)`, and the control is the **count-comparing reading REPRODUCED
+  INLINE** as a live function that must answer "no change" on the same pair the
+  real one catches, with every one of the five scalars asserted IDENTICAL across
+  that swap so none of them could have carried the signal either. The fixture
+  holds every shape at once -- a plain id, a bit-31 id on a map-flagged row, two
+  ids aliasing ONE row, an id whose MASKED form also binds, and an id naming a
+  row the archive does not have. The last is required to be REPORTED rather than
+  raised, because the tool describes copies we did not make; the second-to-last
+  exists because `archive.py`:475 claims the masked form is never separately
+  present, and a census that could not report it could not check it. Two
+  sabotages are built and run: dropping `sha256` from `ROW_FIELDS` makes a
+  flipped payload byte vanish, and censusing on the wrong high bit finds NOTHING
+  and prints **a clean confident zero**, which is why section 0 asserts the exact
+  id SET. Section 7 reproduces the cross-copy population from real archives --
+  **29 install / 25 study / 9 run-live**, install->study clearing exactly 4 ids
+  over TWO rows with NEITHER a map row while install->run-live clears row 7982 --
+  and corroborates `customarea/FINDINGS.md`:967's correction of "two map rows" to
+  **four** from an archive that file never read.
+  **Section 3 is the one an adversarial pass forced, and it is the file's
+  argument**: the first version pinned 3 of ROW_FIELDS' entries, and a
+  six-lens audit MEASURED that **seven of ten could be deleted with all 63
+  checks green** -- including `offset`, which alone is a ROW RELOCATION
+  reporting "NO CHANGE", and `masked_also_binds`, the field whose whole
+  justification is refuting `archive.py`:477. So there is now one fixture per
+  field, each a real archive edit; nine of eleven move their field ALONE and
+  the two that cannot are NAMED rather than faked (`size` co-varies with
+  `sha256` because a shorter read is a different hash; `row` cannot be
+  isolated because pointing an id at another row brings that row's every
+  field with it). Then each isolated field is dropped from `ROW_FIELDS` in
+  turn and its own fixture is required to go BLIND -- all nine. A
+  COMPLETENESS check unions the keys of a live census and requires each to be
+  in `ROW_FIELDS` or in a declared `DERIVED` set, which is what would have
+  caught the defect the same audit found in the module: **`counter` --
+  `alloc.nextStream`, the sibling link -- was censused and never diffed**, so
+  a relink on a map row printed "NO CHANGE" and exited 0. The other module
+  defects it found were all the same shape, exit 2 leaking out as exit 1: a
+  malformed baseline, an archive with no row 2, and a `struct.error` each
+  escaped a narrow `except` and left the CLI at 1, which is this tool's word
+  for "the population CHANGED". **And the write guard refused checkouts while
+  ALLOWING `C:\gw`** -- `--json C:\gw\Gw.dat` would have truncated the
+  owner's 4.2 GB archive, the identical defect `atex.py --make` shipped with,
+  reintroduced in a new module three days later. Floors are two shapes with
+  ZERO headroom each, both MEASURED: 76 bare (`RURIK_VAULT` pointed at
+  nothing), 86 with a vault, section 7 raising the floor itself as its last
+  act -- because a single fixed floor left the vaulted run eight checks of
+  slack and the audit deleted the whole sabotage section inside it. ~5 s),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
   2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
