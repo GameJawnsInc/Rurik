@@ -1523,3 +1523,41 @@ rather than a command line, since the recipe is the only thing that accumulates.
 
 It also means a reskinned client cannot be inspected with `--attrs` or `--show`. Read the
 clean build for that; the patched one is an output, not a source.
+
+### 19.7 The primary marker moved off the host (2026-08-13)
+
+Harness `20260813T225039`. Ritualist's own primary is attribute 36 (Spawning Power);
+`stormcaller.toml` now puts it on **26** -- the row claimed off the reserved profession 11
+-- so the primary belongs to our profession rather than being inherited.
+
+Verified in the BYTES of the patched binary, which is where this claim lives:
+
+| attr | name id | |
+|---|---|---|
+| **26** | 100355 `Tempest` | **PRIMARY** |
+| 32 | 100356 `Galecraft` | |
+| 33 | 100357 `Windward` | |
+| 34 | 100358 `Thunderhead` | |
+| 36 | 100354 `Storm Calling` | *(marker cleared)* |
+
+**Exactly one primary**, which is the check that matters: `--attr-primary` is symmetric on
+purpose, because a profession with two primaries is a state the client never ships.
+
+**The panel is visually IDENTICAL, and that is the predicted result rather than a
+disappointment.** WIKI (GWW, "Attribute" §Primary and secondary attributes) describes the
+primary as a MECHANICAL property -- "effects beyond the linked skills", and unavailable to
+a character who takes the profession as secondary -- and describes no panel marker. The
+list sorts by attribute id, so the order does not move either.
+
+**What the run actually tested** is therefore not the picture: it is whether the client
+ACCEPTS a primary marker on a row ArenaNet ships as a profession-11 spare. It does --
+loaded clean, `RUN VERDICT: PASS`, no error dialog. A state the client never ships itself
+turns out to be one it tolerates.
+
+**What moving the marker does NOT buy: the inherent passive.** Every shipped primary
+carries an effect beyond its skills -- Strength adds armor penetration, Energy Storage adds
+maximum energy, Soul Reaping gives energy on a nearby death. Moving the marker moves the
+marker. Whether a CUSTOM passive is reachable is a different question and is under
+investigation; the architectural hinge is that Guild Wars is server-authoritative for
+combat and **we are the server**, so any passive the retail client does not itself compute
+is ordinary server work rather than a patch.

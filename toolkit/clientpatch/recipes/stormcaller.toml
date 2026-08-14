@@ -35,17 +35,29 @@ abbrev = 100353   # text file 98, record 1 -- authored, two characters
 # marker 'P'), and 26 is the spare claimed off the reserved profession 11 -- so
 # these five rows are the whole attribute set the Skills panel derives.
 #
-# The PRIMARY keeps its marker where the host had it (36). Moving it is a
-# separate one-line change (`--attr-primary`, symmetric so a profession never
-# ends up with two) and is deliberately not bundled here.
+# THE PRIMARY IS MOVED OFF THE HOST. Ritualist's own primary is 36 (Spawning
+# Power); this design puts it on 26 -- the row claimed off the reserved
+# profession 11 -- so the primary attribute belongs to OUR profession rather than
+# being inherited. Both rows are named here because the verb is SYMMETRIC: a
+# profession has exactly one primary, so setting 26 must clear 36 or the client
+# ships a state it never ships itself.
+#
+# WHAT THIS DOES NOT BUY, and it is worth writing down: the primary attribute's
+# INHERENT PASSIVE. WIKI (GWW, "Attribute" section List of attributes): every
+# primary carries an effect beyond its skills -- Strength adds armor penetration,
+# Energy Storage adds maximum energy, Soul Reaping gives energy on a nearby
+# death. Moving the marker moves the marker. Whether a CUSTOM passive is possible
+# is a separate question, under investigation.
 [[attribute]]
-id    = 36        # the host's primary
-name  = 100354    # authored
+id      = 36      # the host's OLD primary -- marker cleared below by 26 claiming it
+name    = 100354  # authored
+primary = 0
 
 [[attribute]]
-id    = 26        # a spare row on the reserved profession 11
-owner = 8         # claim it -- the panel derives from this
-name  = 100355    # authored
+id      = 26      # a spare row on the reserved profession 11
+owner   = 8       # claim it -- the panel derives from this
+name    = 100355  # authored
+primary = 1       # THE PRIMARY IS OURS, not the host's
 
 [[attribute]]
 id   = 32
