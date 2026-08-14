@@ -543,6 +543,40 @@ lines carry no timestamps, so they cannot be joined to the capture.
 line disappearing is the result; it staying is the more interesting one, because it
 would rule out ordering and point at the pools never having been zeroed.
 
+### 1f-RESULT. The experiment ran, and it is ORDERING
+
+**[OBSERVED] 2026-08-13.** Three harness runs of the same shape (`--enemy --keep-open
+--hold 150..180`, so the hostile kills the player every ~14 s and each run gives a dozen
+revives), differing ONLY in how long the two pool refills wait after the death bit
+clears:
+
+| refill defer | session | revives | `Health non-zero on resurrect` |
+|---|---|---|---|
+| **0.00 s** (the shipped burst) | 196.6 s | 13 | **13** |
+| 0.05 s (one tick) | 167.7 s | 11 | **0** |
+| 0.25 s (five ticks) | 197.7 s | 13 | **0** |
+
+**One complaint per revive with the burst, none with a single tick between.** So of §1f's
+two surviving readings the FIRST is right: the client's resurrect check runs after the
+message that clears the death bit is processed, and our refills were landing before it,
+refilling the pools the client was about to inspect. The pools were being zeroed
+correctly all along -- nothing was ever wrong with the death path.
+
+**The death counts scale with session length** (14 in 196 s, 12 in 167 s), which is the
+control that matters: a deferred refill that failed to arrive would leave the player
+standing up empty and dying instantly, and the cycle would speed up. It did not.
+
+`REVIVE_REFILL_DEFER` is now `TICK_SECONDS` by default -- expressed as one tick rather
+than 0.05 so it stays one tick if the rate moves -- and `RURIK_REVIVE_DEFER=0` restores
+the burst, which is what keeps the control above reproducible. `test_agentlife` pins both
+halves as a PAIR: the revive must not carry the refill, and the deferred half must
+actually send it. Either check alone is satisfied by a broken server.
+
+**STILL UNMEASURED: the agent path.** `revive_due` sends the same three messages in the
+same burst and 2 of the vault's 49 complaints are an NPC's (`Corpse of Hatcher
+[Collector]`). The mechanism is surely identical, but it was not the thing measured here
+and has not been changed -- for the same reason the paragraph below gives.
+
 **Do not "fix" this by reordering on the strength of the reading above.** The severity is
 2 and nothing visible is wrong — the bar refills correctly, OBSERVED twice in §1e — so
 this is a correctness complaint from the client about our message order, not a symptom

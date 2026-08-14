@@ -1473,6 +1473,23 @@ ATTACK_RANGE = 1500.0      # units. Ours entirely; nothing measured it.
 # close enough. Nothing here is a claim about retail.
 AGGRO_RANGE = 1200.0       # units. Ours. Inside ATTACK_RANGE so a fight is mutual.
 ENEMY_HIT_FRACTION = 0.10  # of the PLAYER's maximum, so ~10 swings to drop them
+# ONE TICK between the death bit clearing and the two pool refills, and the value is
+# MEASURED rather than chosen. The client checks
+# `min(f32 @ +0x130, +0x134) == 0.0` when a character is resurrected and logs
+# `Health non-zero on resurrect` when it is not; sending the three messages in one
+# burst failed that check on EVERY revive. Three runs of the same length, differing
+# only in this constant (studies/agentprops 1f):
+#
+#     0.00s (burst)   13 revives, 13 complaints
+#     0.05s (1 tick)  11 revives,  0 complaints
+#     0.25s (5 ticks) 13 revives,  0 complaints
+#
+# So the check runs after our clear is processed and before the next tick's messages,
+# and one tick is enough. Expressed as TICK_SECONDS rather than 0.05 so it stays one
+# tick if the rate moves. RURIK_REVIVE_DEFER overrides it; 0 restores the old burst,
+# which is what makes the control reproducible.
+REVIVE_REFILL_DEFER = float(os.environ.get("RURIK_REVIVE_DEFER", "") or TICK_SECONDS)
+
 PLAYER_REVIVE_AFTER = 10.0 # seconds face-down. Longer than an agent's 8.0 on
                            # purpose: this one interrupts a person.
 
@@ -2387,6 +2404,20 @@ def player_revive_due(send, state, conn_id):
     state["player_dead"] = False
     state["player_health"] = float(agents.PLAYER_HEALTH)
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
+    # THE EXPERIMENT of studies/agentprops 1f, off by default. The client logs
+    # `Health non-zero on resurrect` on every revive we send -- 49 times across the
+    # vault -- because at the moment the death bit clears it requires
+    # min(f32 @ +0x130, +0x134) == 0.0, and our three messages leave in one burst.
+    # Two readings survive the log alone (deferred check vs. a pool never zeroed) and
+    # `Gw.log` has no timestamps to separate them, so this defers the two refills by
+    # `REVIVE_REFILL_DEFER` seconds and the complaint's presence is the answer.
+    # A SWITCH rather than a reorder: the fix is only known once the two runs differ,
+    # and 1f says in as many words not to reorder on the strength of the reading.
+    if REVIVE_REFILL_DEFER > 0.0:
+        state["player_refill_due_at"] = time.time() + REVIVE_REFILL_DEFER
+        print(f"[c{conn_id}] the player is back up "
+              f"(refill deferred {REVIVE_REFILL_DEFER:.2f}s)", flush=True)
+        return
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
          "restore the player's maximum")
@@ -2398,6 +2429,27 @@ def player_revive_due(send, state, conn_id):
           _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
          "refill the player's bar")
     print(f"[c{conn_id}] the player is back up", flush=True)
+
+
+def player_refill_due(send, state, conn_id):
+    """The deferred half of 1f's experiment: the two pool refills, a tick later.
+
+    Only ever armed when REVIVE_REFILL_DEFER > 0, so the shipped path is byte-for-byte
+    what it was and a run with the switch off is a real control rather than a rebuild
+    of the same code.
+    """
+    due = state.get("player_refill_due_at")
+    if not due or time.time() < due:
+        return
+    state["player_refill_due_at"] = None
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
+         "restore the player's maximum (deferred)")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
+          _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
+         "refill the player's bar (deferred)")
+    print(f"[c{conn_id}] deferred refill sent", flush=True)
 
 
 def frame_pending(codec_obj, channel, pending, mask):
@@ -3768,6 +3820,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # state["player_dead"], which player_revive_due is the
                         # only thing that clears.
                         player_revive_due(send, state, conn_id)
+                        player_refill_due(send, state, conn_id)
                         # Walk BEFORE swinging, so an agent that arrives on this
                         # tick can open its swing on the same tick rather than
                         # standing in reach for one interval doing nothing.
