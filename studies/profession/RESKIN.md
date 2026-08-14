@@ -1201,3 +1201,53 @@ floor §18.9 measured, and the change is a horizontal shortening rather than a c
 shift. If instead the bar stays full, the row is drawing a constant and not this player's
 health, which would be a different and more interesting result -- so the run is worth its
 minute either way.
+
+### 18.11 CONFIRMED: the bar is this player's health, to within half a percent
+
+§18.10's falsifiable run, executed. Harness `20260813T212610`, capture
+`authsrv-20260813T212617-c1.jsonl`, explorable, roster open before the first send.
+Property 16 (DAMAGE) is a FRACTION of maximum health, so `-0.5` then `-0.25` predicts a
+bar at 50% then 25% of its width.
+
+The bar's extent is DETECTED from the baseline frame rather than assumed -- the first
+measurement used a hand-placed crop box and read the full bar as "66.7%", which is the
+box being wrong, not the bar:
+
+| stage | bar fill | predicted |
+|---|---|---|
+| baseline | 167 px -- **100.0%** | -- |
+| after `-0.5` | 83 px -- **49.7%** | 50% |
+| after `-0.25` | 40 px -- **24.0%** | 25% |
+
+> **The party row's red bar IS this member's health.** The row is a live per-member
+> health display, it tracks a fraction of maximum exactly as documented, and this server
+> can drive it.
+
+Corroborated by the region diffs, which are a second instrument over the same frames: the
+party region moved 2.561% on the first cut and a further 1.201% on the second, a ratio of
+2.13 against the 2.0 that halving-then-quartering predicts. Both are far above §18.9's
+0.007% within-arm floor. The colour never changed and the name never moved, which is what
+separates "the bar shortened" from "the row was redrawn".
+
+#### The third step killed the client, and that is a finding too
+
+> **`Assertion: damage.amount <= 0` -- `P:\Code\Gw\AgentView\AvChar.cpp(5893)`**, build
+> 38797, 21:26:38, which is the recovery step's own wall clock. Captured automatically
+> from the fatal-error dialog.
+
+My recovery step sent damage `+0.75`, reading property 16 as a signed health delta. It is
+not: it is DAMAGE, and **the client asserts the sign**. A design error, and a bound this
+project did not have -- the probe now recovers with int property 42 = 100 instead, which
+assigns `health_max` AND refills, and is OBSERVED behaviour here since 2026-08-06. That
+path is **UNRUN**: the step it replaced crashed before it was ever reached.
+
+It costs nothing here. The recovery was a control for "the bar stopped tracking" versus
+"the character died", and two cuts landing within 0.3 and 1.0 points of prediction settle
+the tracking on their own.
+
+**Worth noting about the instrument:** the run reported `RUN VERDICT: PASS`. That is
+correct and not a bug -- the spawn checkpoints passed and the walk completed. The client
+was alive the whole time, behind a modal dialog with its message pump stopped, which is
+exactly the state `studies/smsgsweep` documents a socket fence cannot see. The crash was
+caught because the harness extracts the dialog on **every** run since 2026-08-12; before
+that change this would have been a silent 98% frame diff with no explanation.

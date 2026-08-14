@@ -194,6 +194,55 @@ def _agent_removal_steps(agent_id, origin):
     ]
 
 
+def _party_health_steps(agent_id):
+    """Is the party row's red bar THIS player's health, or a constant?
+
+    RESKIN.md 18.10: the row `W0 Test Warrior` draws on a full-width red bar, and
+    the red is not a fault -- WIKI (GWW, "User interface" section Party window,
+    rev. 2026-07-15): "The red bars represent the allies' or party members'
+    health. A disconnected player will have its health bar greyed out." So the row
+    is correct, and the bar is a live per-member readout this server has never
+    deliberately driven.
+
+    Property 16 is DAMAGE and is a FRACTION of the agent's maximum health -- it
+    multiplies by `[esi+0x24]`, which is why -0.5 takes a full bar to half rather
+    than removing half a point. Two cuts rather than one, because a single step
+    cannot tell a bar that TRACKS health from one that merely reacts once: after
+    -0.5 then -0.25 the bar must be at roughly a quarter, not back at a half and
+    not empty.
+
+    The recovery step matters as much as the cuts. Damage floors at 1 (it cannot
+    kill), so a bar that empties and STAYS empty would mean the row stopped
+    tracking rather than that the character died -- and healing back is the only
+    way to tell those apart from outside.
+    """
+    a = agent_id
+    return [
+        Step(4.0, 0x00A3, [16, a, a, _f32(-0.5)],
+             "damage -0.5 on the PLAYER (half of maximum)",
+             "the PARTY ROW's red bar, not the HUD bar at the bottom. It must "
+             "shorten to about half its width with the name still in place."),
+        Step(7.0, 0x00A3, [16, a, a, _f32(-0.25)],
+             "damage -0.25 more (quarter of maximum)",
+             "about a quarter of the original width. If it went back to half, "
+             "the bar is reacting to the message rather than tracking health."),
+        # RECOVERY, and the first version of this step KILLED THE CLIENT.
+        # `0x00A3 [16, a, a, +0.75]` -- damage as a signed health delta -- is
+        # refused fatally: `Assertion: damage.amount <= 0`, AvChar.cpp:5893,
+        # OBSERVED 2026-08-13 (harness 20260813T212610, crash dialog captured).
+        # Property 16 is DAMAGE, not health, and the client asserts the sign.
+        # Int property 42 is the documented refill instead: it assigns
+        # health_max = value AND health = 1.0, which this repo has observed
+        # since 2026-08-06.
+        Step(7.0, 0x009F, [42, a, 100],
+             "RECOVERY: int property 42 = 100 (sets max AND refills)",
+             "the bar must grow back to full width. A bar that never returns was "
+             "not tracking health -- damage floors at 1 and cannot have killed "
+             "the character. UNRUN as of 2026-08-13: the step it replaced "
+             "crashed the client before this path was ever exercised."),
+    ]
+
+
 def _player_flags_steps(agent_id):
     """GAME_SMSG 0x003C -- the player-record flag word this server has never sent.
 
@@ -2448,6 +2497,30 @@ PROBES = {
              "would let the server stop worrying about a message it has never "
              "sent. Any visible effect refutes the read and is more "
              "interesting still.",
+    ),
+    "party_health": lambda a, o: Probe(
+        question="Is the party row's red bar this player's HEALTH, or a constant "
+                 "the row draws whatever we send?",
+        predicts="It SHRINKS. WIKI (GWW, 'User interface' section Party window) "
+                 "says the party window's red bars are party members' health, and "
+                 "property 16 is a fraction of maximum -- so -0.5 then -0.25 must "
+                 "leave the bar at about half then about a quarter of its width, "
+                 "horizontally, with the name in place and the colour unchanged. "
+                 "The party region must move well above the 0.007% within-arm "
+                 "floor measured in RESKIN.md 18.9. A bar that stays FULL is the "
+                 "more interesting result: the row would be drawing a constant "
+                 "rather than this member's health.",
+        steps=_party_health_steps(a),
+        note="ANSWERED 2026-08-13 -- IT IS HEALTH, and to within half a percent: "
+             "the bar measured 100.0%, then 49.7%, then 24.0% of its own detected "
+             "extent against a prediction of 100/50/25. Kept because the third "
+             "step is still UNRUN: the original recovery sent damage +0.75 and "
+             "killed the client on `damage.amount <= 0` (AvChar.cpp:5893), which "
+             "is a bound worth knowing and was a design error -- property 16 is "
+             "DAMAGE, not a signed health delta. Press P first; with no roster on "
+             "screen this measures nothing. Watch the PARTY ROW, not the HUD bar "
+             "at the bottom -- both are red, both track health, and the HUD one "
+             "is not what is being asked about.",
     ),
     "player_flags": lambda a, o: Probe(
         question="What does GAME_SMSG 0x003C do? It is in 12 of 12 live ArenaNet "
