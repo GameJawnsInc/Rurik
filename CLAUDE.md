@@ -443,6 +443,38 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   healthy set. Floor 32, MEASURED -- the first version guessed 41 and reported
   "9 did not execute" on a run where nothing was skipped. No vault, no
   archive, no client; ~40 s),
+  `toolkit/mapdata/test_textwrite.py` (the FIRST COMMITTED writer of authored
+  strings into the archive -- `textrec.encode_file` had existed since the text
+  arc with exactly one caller, its own test, using two strings, so every string
+  this project has put on a retail screen was written by an ad-hoc script that
+  was never committed, which is why `RESKIN.md` can quote the words but not the
+  arithmetic. **The claim that earns the file is that `merge` keeps untouched
+  records VERBATIM** -- payload, base and bits straight out of the archive, never
+  decode-then-re-encode -- because 4 of the 12 records already on screen are
+  written down nowhere and re-deriving them from text is how you lose them
+  silently. That check is worthless without its control, and the control is the
+  point: our records are ALL plain (base 0, bits 0x10, `encode_record`'s own
+  defaults), so a merge that drops base and bits is a perfect identity on
+  everything this project has ever written. So section 1 builds a fixture with
+  146 NON-DEFAULT records, runs both versions, and requires them to differ --
+  reported as the first differing OFFSET, because the two are the same LENGTH
+  (base and bits live in the header, so dropping them corrupts in place) and a
+  length comparison would read as agreement. The identity-tier refusal is
+  symmetric: records 0-11 are the profession name, abbreviation and five
+  attribute names already on screen, so writing them is refused without
+  `--allow-identity` and PERMITTED with it, since a guard that only refuses makes
+  the tool unusable. The row is RESOLVED through the client's own text pointer
+  table (`textrec.TextIndex.archive_id`) and never remembered -- `RESKIN.md` says
+  row 8295 and that is true of one copy, a file id being archive STATE. The size
+  model is verified against the artifact rather than quoted: `1024*6 + 2 +
+  2*chars` lands on 7,134 B exactly, and the planned write is 12,236 = 7,134 +
+  5,102 with no per-record cost, because all 1,024 six-byte headers are already
+  paid whether a record is used or not. Plan-before-write is asked of the SYNTAX
+  TREE (`plan()` constructs no Writer and calls no move/replace; `main()`
+  completes the plan before the first write call), because otherwise a refusal
+  lands after some of the file is written. Sections 0-4 build their own 1,024-record
+  files out of `struct` and need no vault, no archive and no client, scoring 31
+  against a floor of 31; 39 with a vault. ~2 s),
   `toolkit/mapdata/test_skillnames.py` (the 188 authored skill names a custom
   profession needs -- the text sibling of `glyphs.py`, and like it the file is
   mostly about the INDEX ARITHMETIC, because "188 names came out and they are

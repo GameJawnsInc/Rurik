@@ -47,8 +47,14 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "clientscan"))
 sys.path.insert(0, os.path.join(HERE, ".."))
+sys.path.insert(0, HERE)        # explicit: this file is imported as well as run
 
 import pinned                                                  # noqa: E402
+# FIELDS only -- deliberately NOT find_table. This module locates s_skill through
+# skilltable.py's own scan and refuses a second locator (see locate_skills), but
+# the three text-field OFFSETS are one table and having two copies of it is a
+# second thing to get wrong.
+import repoint_skill                                           # noqa: E402
 import vaultpath                                               # noqa: E402
 
 PROFESSIONS = 11               # ids 0..10; the compiled array dimension
@@ -240,8 +246,8 @@ def _row(by_id, aid):
 def load_recipe(path):
     """A profession design as a versioned file, not eleven command-line flags.
 
-    Returns (host, {table: sid}, renames, owners, primaries, skill_profs,
-    skill_attrs). Every value is a NUMBER -- profession, attribute, skill and
+    Returns (host, {table: sid}, renames, owners, primaries, descs,
+    skill_profs, skill_attrs, skill_strings). Every value is a NUMBER -- profession, attribute, skill and
     string ids -- so a recipe carries no ArenaNet text and the client resolves
     every string from the owner's own archive at run time.
 
@@ -268,17 +274,29 @@ def load_recipe(path):
             owners.append((aid, row["owner"]))
         if "primary" in row:
             primaries.append((aid, 1 if row["primary"] else 0))
-    skill_profs, skill_attrs = [], []
+    skill_profs, skill_attrs, skill_strings = [], [], []
     for row in doc.get("skill", ()):
         if "id" not in row:
             raise SystemExit(f"{path}: every [[skill]] needs an id")
         sid = row["id"]
+        # UNKNOWN KEYS ARE REFUSED. They used to be dropped silently, so a
+        # typo'd `names = 100364` was a no-op that looked like a working recipe
+        # -- and with 188 rows nobody reads the diff. `[profession]` has had this
+        # check since it shipped; `[[skill]]` did not.
+        unknown = set(row) - set(SKILL_KEYS) - {"id"}
+        if unknown:
+            raise SystemExit(
+                f"{path}: [[skill]] id {sid} has unknown key(s) "
+                f"{sorted(unknown)}. Known: {sorted(SKILL_KEYS)}")
         if "profession" in row:
             skill_profs.append((sid, row["profession"]))
         if "attribute" in row:
             skill_attrs.append((sid, row["attribute"]))
+        for field in SKILL_STRING_FIELDS:
+            if field in row:
+                skill_strings.append((sid, field, row[field]))
     return (host, names, renames, owners, primaries, descs,
-            skill_profs, skill_attrs)
+            skill_profs, skill_attrs, skill_strings)
 
 
 def parse_pairs(specs, what):
@@ -299,6 +317,18 @@ def parse_pairs(specs, what):
 # a second implementation -- it already refuses on a non-unique candidate, and
 # two locators for one table is two things to keep in step.
 SKILL_PROF, SKILL_ATTR = 0x28, 0x29
+
+# The three DWORD string ids in a skill row. `repoint_skill.py` has written these
+# since the icon question was settled, but only donor-to-target -- pointing one
+# skill at another skill's existing text. These are the same fields aimed at ids
+# WE authored, which is the difference between borrowing a name and having one.
+#
+# The offsets are repoint_skill.FIELDS' own and are not re-derived here; a second
+# copy of a table is a second thing to get wrong. Only the three text fields are
+# exposed: +0x8c/0x90/0x94 are icons and belong to `iconset.py`, and everything
+# else in the row is a stat, which is a different experiment.
+SKILL_STRING_FIELDS = ("name", "concise", "desc")
+SKILL_KEYS = ("profession", "attribute") + SKILL_STRING_FIELDS
 NO_ATTRIBUTE = 51              # the client's own "no attribute" marker
 
 
@@ -309,14 +339,22 @@ def locate_skills(data):
     return base, count, skilltable.RECORD_SIZE
 
 
-def skill_edits(data, base, count, stride, profs=(), attrs=()):
-    """Reassign skills. Two SINGLE-BYTE fields, so same-length is trivial here.
+def skill_edits(data, base, count, stride, profs=(), attrs=(), strings=()):
+    """Reassign skills.
 
     profs -- row+0x28, which profession owns the skill
     attrs -- row+0x29, which attribute it scales with. This is the one the
              Skills panel groups by, so it is the field with a countable
              visible consequence: move N skills and the two group headers
              must move by N in opposite directions.
+    strings -- (id, field, string id) over SKILL_STRING_FIELDS. DWORDS, unlike
+             the two above, so this is the first thing in this function that can
+             disturb a byte outside the field it names. Same LENGTH regardless --
+             `struct.pack_into("<I", ...)` writes exactly four -- so the module's
+             `len(patched) == len(data)` invariant still covers it; what it does
+             not cover is writing four bytes at the wrong OFFSET, which at a
+             0xA4 stride lands inside the NEXT skill's row and would look like a
+             different skill quietly changing its name.
     """
     out = bytearray(data)
     log = []
@@ -336,6 +374,17 @@ def skill_edits(data, base, count, stride, profs=(), attrs=()):
         off = base + sid * stride + SKILL_ATTR
         log.append(("skill-attr", sid, out[off], attr))
         out[off] = attr
+    for sid, field, val in strings:
+        _check_skill(sid, count)
+        if field not in SKILL_STRING_FIELDS:
+            raise SystemExit(f"skill field {field!r} is not one of "
+                             f"{list(SKILL_STRING_FIELDS)}")
+        if not 0 <= val <= 0xFFFFFFFF:
+            raise SystemExit(f"string id {val} does not fit a dword")
+        off = base + sid * stride + repoint_skill.FIELDS[field]
+        was = struct.unpack_from("<I", out, off)[0]
+        log.append(("skill-%s" % field, sid, was, val))
+        struct.pack_into("<I", out, off, val)
     return bytes(out), log
 
 
@@ -487,7 +536,7 @@ def main(argv=None):
         # A recipe is the base; explicit flags layer on top, so a design can be
         # versioned and still tweaked for one run without editing the file.
         (rhost, rnames, rren, rown, rpri,
-         rdescs, rsprof, rsattr) = load_recipe(a.recipe)
+         rdescs, rsprof, rsattr, rsstr) = load_recipe(a.recipe)
         # Precedence, stated rather than implied: an explicit --profession
         # beats the recipe's host, so a versioned design can be aimed at a
         # different host for one run without editing the file.
@@ -497,12 +546,16 @@ def main(argv=None):
         renames, owners, primaries = rren + renames, rown + owners, rpri + primaries
         descs = rdescs + descs
         skill_profs, skill_attrs = rsprof + skill_profs, rsattr + skill_attrs
+        skill_strings = rsstr + skill_strings
         print(f"recipe {a.recipe}: host profession {rhost}, "
               f"{len(rnames)} name(s), "
               f"{len(rren) + len(rown) + len(rpri) + len(rdescs)} "
-              f"attribute edit(s), {len(rsprof) + len(rsattr)} skill edit(s)")
+              f"attribute edit(s), "
+              f"{len(rsprof) + len(rsattr) + len(rsstr)} skill edit(s) "
+              f"({len(rsstr)} authored string id(s))")
     if a.show or a.attrs or not (edits or renames or owners or primaries
-                                 or descs or skill_profs or skill_attrs):
+                                 or descs or skill_profs or skill_attrs
+                                 or skill_strings):
         if not (a.show or a.attrs):
             print("\nnothing to do: pass at least one of "
                   + ", ".join(f"--{t} ID" for t in TABLES)
@@ -521,9 +574,9 @@ def main(argv=None):
         patched, alog = attrib_edits(patched, arows, renames, owners,
                                      primaries, descs)
         log += alog
-    if skill_profs or skill_attrs:
+    if skill_profs or skill_attrs or skill_strings:
         patched, slog = skill_edits(patched, sbase, scount, sstride,
-                                    skill_profs, skill_attrs)
+                                    skill_profs, skill_attrs, skill_strings)
         log += slog
     assert len(patched) == len(data), "a reskin is same-length by construction"
     os.makedirs(os.path.dirname(os.path.abspath(a.out)) or ".", exist_ok=True)
