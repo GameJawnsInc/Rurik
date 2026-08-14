@@ -350,8 +350,35 @@ more of its edge than a 128x128 does, and renders the same picture.**
 
 **Consequence.** `pattern_icon`'s 16-pixel border was written for 128x128 and is
 a *fraction* to be preserved, not a pixel count — 12.5%, so 8 px at 64x64.
-`pattern_icon` divides by `safe` and therefore raises ZeroDivisionError at
-32x32, where `min(w,h)/2 - 16` is 0; it is only valid at 40x40 and above.
+`pattern_icon` divided by `safe` and therefore raised ZeroDivisionError at
+32x32, where `min(w,h)/2 - 16` is 0; it was only valid at 40x40 and above.
+
+**FIXED 2026-08-14** (`toolkit/mapdata/dxt1.py`). `safe` is now
+`min(w,h) * 0.375` — the same 12.5% margin expressed as a proportion, which
+reproduces 48.0 at 128x128 exactly, so *this section's arm S is unchanged
+byte for byte* and only the sizes it was never valid at moved. Below
+`MIN_ICON = 12` the function refuses rather than dividing by zero or a
+negative; 12 is derived, being where the sun disc stops spanning one DXT1 4x4
+block (`2 * 0.46 * 0.375 * n >= 4`), not chosen.
+
+The fix carries an offline version of arm Q's argument, and it is worth
+recording because it is the same measurement without a client. Under the
+proportional rule a 2:1 box filter of the 128 and a direct call at 64 are the
+same picture to **2.04/255** mean absolute; under the pixel-count rule they
+are **17.74/255** apart, 8.7x. The residual is not zero and it is not one
+thing: stubbing the ground dither out takes 2.04 to **1.25**, so the dither
+(which indexes absolute pixel coordinates) is ~40% of it and the rest is the
+box filter — averaging four samples is not the same as evaluating the picture
+at half resolution, and the sun's rim, the horizon and the vignette all fall
+between samples. So the reason arm Q had to
+ship a *mipmap* of arm S rather than a second call to `pattern_icon` — see
+above — no longer applies; a future roster arm can call the function at 64
+directly and get arm S's picture.
+
+`toolkit/mapdata/test_dxt1.py` section 6 pins all of it, with the retired rule
+reproduced in the test file as a live function so both halves ("128 unchanged",
+"64 changed") are differences between two live answers. Seven one-edit
+sabotages were built and run and all seven redden.
 
 **Still open:** whether a 256x256 buys detail. The quad is ~61 px wide on this
 window, so a 128x128 is already supersampling it roughly 2:1 and a 256 would be
