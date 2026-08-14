@@ -1293,11 +1293,21 @@ table structurally and writes out-of-place. A custom id can never be a SECONDARY
 builder loops `cmp edi, 0xb`) and `0x00B7` can never carry one (`ConstChar.cpp:1296`, on
 arrival, measured twice).
 
-**Authored text is VIABLE and cheap.** ArenaNet ships 38,633 stored rows, and text file
-index **98 is 1,024 EMPTY records** (56 B on disk, 6,146 B decompressed, ids
-100352..101375) — so our own strings need a ~6 KB stored row, not the 84 KB one, and break
-nothing. `datplan` finds 96 usable runs for it. The encoder is built and re-encodes four
-of ArenaNet's own files byte-for-byte (`textrec.encode_file`).
+**AUTHORED TEXT WORKS — the whole identity tier is ours** (§19). Text file index 98 is
+1,024 EMPTY records (ids 100352..101375); we wrote seven of them and the client resolved
+every one: **`Profession: Stormcaller`** over attributes **Tempest, Galecraft, Windward,
+Thunderhead, Storm Calling**. Nothing on that screen is ArenaNet's text. This retires the
+arc's standing limit that a custom profession could only be *named* things the client
+already shipped strings for.
+
+The unproven step was step 1 — no text file had ever shipped **stored**, so the client had
+never been handed one. It reads them. Each step kept a check: `encode_file` with no strings
+is **byte-identical to ArenaNet's own row 8295** (6,146 B) *before* anything is written;
+`datmove` relocated 56 B compressed → 6,172 B stored with **0 overlapping pairs** and
+`datcheck --preflight` **10 of 10**; a second `datwrite --replace` fitted 6,268 B into the
+same reservation, still 10 of 10. Both journals revert byte-for-byte.
+`recipes/stormcaller.toml` is the design; **`reskin.py` refuses to re-patch its own output**
+(the locator requires anchor and shape to agree), so always patch from a clean client.
 
 **THE PARTY ROSTER DRAWS A MEMBER ROW, WITH ITS ABBREVIATION** (§§17–18). The gate was
 `PyCliGetMyPartyId` (`0x00856250`), zero on our server; retail's four-message build
@@ -1328,15 +1338,20 @@ load-time slot (before `0x0020`, behind `--player-flags`): party region **0.000%
 control on every matched frame, client traffic identical. Off by default. Untested with
 more than one player.
 
-**NEXT: put a RESKINNED profession on that row.** The abbreviation is drawn from the very
-tables `reskin.py` edits, and it now renders — so a client reskinned to host Ritualist (8),
-spawned with `--spawn-profession 8`, should show the CUSTOM abbreviation in the roster.
-That is the first place a custom profession's identity appears outside the panels, and it
-is one run.
+**The archive decision this list carried is CLOSED, and by accident** (§19.4). It asked the
+owner to choose which 4.2 GB archive the text route should write into. The dedicated run
+directory built for §18.14 — `vault/run/reskin-roster/` — is a throwaway copy only its own
+caged client reads, so the write risked nothing shared and needed no decision. Cost: 4 GB
+of disk and one UAC prompt, because **the firewall cage is per BINARY** and a new client
+under `vault/run/` has no rule until `isolate_client.ps1` runs elevated.
 
-**Then, when a decision is wanted:** the text route's step 2 writes a ~6 KB row into a
-4.2 GB archive (journalled, byte-for-byte revert proven by `test_datmove`). It needs the
-owner's call on WHICH archive — study copy, a fresh copy, or the run client's own.
+**NEXT, and it is a design question rather than a mechanism one.** The identity tier is
+done; what is left is what makes the class *play* differently. In rough order of value:
+the PRIMARY marker still sits on the host's attribute 36 (`--attr-primary` is symmetric and
+is one line); the skill roster is 1 byte per skill row and only two skills have been moved
+(§10's countable check); and armour, model scale and palettes are all same-length dwords
+that nothing has exercised yet. None of these is blocked — they need a design, not a
+discovery.
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`
