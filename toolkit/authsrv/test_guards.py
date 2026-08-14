@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("guard contract", floor=6)
+LEDGER = checks.Ledger("guard contract", floor=9)
 check = LEDGER.ok
 
 
@@ -90,8 +90,51 @@ def section_hit_enemy():
           f"health={state['agents'][10]['health']}")
 
 
+def section_skill_press():
+    """The connection thread survives a refusal -- world_tick's contract."""
+    import authsrv
+
+    print("\n2. handle_skill_press: a refusal costs the value, not the socket")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = {"agents": {10: _fresh_agent()}, "pos": (0.0, 0.0)}
+    press = [0, 42, 7, 10]   # header slot, skill 42, copy 7, target agent 10
+
+    saved = authsrv.HIT_FRACTION
+    authsrv.HIT_FRACTION = 1.5
+    try:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            authsrv.handle_skill_press(press, send, state, 0,
+                                       authsrv.GAME_CMSG_USE_SKILL)
+        # No raise reached us -- that IS the check; an escaping ValueError
+        # here is what handle's except tuple turns into a socket close.
+        check("REFUSED a value" in out.getvalue(),
+              "the refusal is LOGGED, not silent",
+              out.getvalue().strip().splitlines()[-1] if out.getvalue() else
+              "(nothing printed)")
+        ops = [op for op, _, _ in sent]
+        check(ops == [authsrv.GAME_SMSG_SKILL_ACTIVATED],
+              "the valid echo went out; the refused effect sent NOTHING",
+              f"ops={ops} -- the echo precedes the effect and is a valid "
+              f"message; refusing it too would un-answer the client's "
+              f"pending-skill key over a number it never saw")
+    finally:
+        authsrv.HIT_FRACTION = saved
+
+    sent.clear()
+    state["agents"][10] = _fresh_agent()
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        authsrv.handle_skill_press(press, send, state, 0,
+                                   authsrv.GAME_CMSG_USE_SKILL)
+    check(len(sent) == 4, "control: the in-range press sends echo + swing",
+          f"{len(sent)} messages: {[op for op, _, _ in sent]}")
+
+
 def main():
     section_hit_enemy()
+    section_skill_press()
     return LEDGER.verdict()
 
 

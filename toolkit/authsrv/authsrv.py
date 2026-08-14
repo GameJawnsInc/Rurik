@@ -2017,8 +2017,20 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # skill should damage at all, and by how much, is OURS -- the client
     # carries every real number (studies/skills/FINDINGS.md) and we do not
     # read it yet.
+    #
+    # THE SAME ValueError CONTRACT world_tick has, because this runs on the
+    # CONNECTION thread: handle's except tuple is ConnectionError /
+    # socket.timeout / OSError only, so an escaping refusal would run the
+    # finally, close the socket, and disconnect the client over a number that
+    # was -- by design -- never sent. The world tick logs and keeps ticking
+    # (its except at the tick body); a skill press logs and keeps the
+    # connection. Refusing the VALUE must never cost more than the value.
     if target:
-        hit_enemy(send, state, target, conn_id)
+        try:
+            hit_enemy(send, state, target, conn_id)
+        except ValueError as ex:
+            print(f"[c{conn_id}] skill press REFUSED a value: {ex}",
+                  flush=True)
 
 
 def revive_due(send, state, conn_id):
