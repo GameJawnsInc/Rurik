@@ -260,6 +260,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   reads movement through, so the first version held W for 65 seconds into a
   live client that ignored every one of them while the harness reported
   `held 8.0s of 8.0s` six times. Only the capture could tell the two apart.
+  **And section 9a (2026-08-14) is that same defect in the SIBLING the fix
+  missed, which is the more useful half of the story.** `hold_key` was fixed
+  and `press_vk` was written correct; `press_key` — the one EVERY `key:` action
+  goes through, including skill slots 1..8 — kept `keybd_event(vk, 0, 0, 0)`
+  and was in **no test at all**, so the trap this section exists for stayed live
+  in a second function for three days under a check that could never see it. A
+  fix applied to two of three copies of one send is not a fix, and a symbol
+  appearing in a test file is not a check. It surfaced only because a `key:K`
+  action printed `sent` while the Skills panel never opened and the owner
+  pressed K by hand; the blast radius is every scripted skill press since
+  2026-08-11, i.e. any run that concluded something from `key:1` was reading a
+  DROPPED INPUT rather than a client behaviour. `press_key` now delegates to
+  `press_vk` instead of keeping a third copy, a key with no scan code on this
+  layout sends nothing rather than falling back to zero (that fallback is the
+  original defect wearing a guard), and the fix was verified against a real
+  client rather than the fake `user32`: same action script and timing, the
+  0.6 s-after frame went from no panel to the panel open.
   **And since 2026-08-12 the harness spawns NO HOSTILE unless `--enemy` is
   passed**, because the standing enemy had wrecked two unrelated tests -- most
   recently FINDINGS 40's movement session, where it killed the character 10 s in
