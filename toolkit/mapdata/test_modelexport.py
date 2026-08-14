@@ -69,6 +69,7 @@ import hashlib
 import json
 import math
 import os
+import collections
 import struct
 import sys
 import tempfile
@@ -134,12 +135,18 @@ RING_POPULATION = {
                              both=0),
 }
 
-# FLOOR: 48, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
-# (85 s). Sections 0-2 alone score 27 -- MEASURED by pointing --dat at a
-# missing file, not counted by eye -- so a vault-less run lands 21 short and
-# goes RED. `--all` widens sections 3-4 from a sample to every model of both
-# reference maps and adds ONE check (the pinned sub-model census), so a green
-# `--all` run is 49.
+# FLOOR: 58, from a real green run on `vault/dat_study/Gw.dat` 2026-08-14
+# (427 s -- section 7's strided corpus sweep is most of it). Sections 0-2
+# alone score 27 -- MEASURED by pointing --dat at a missing file, not counted
+# by eye -- so a vault-less run lands 31 short and goes RED. `--all` widens
+# sections 3-4 from a sample to every model of both reference maps and adds
+# ONE check (the pinned sub-model census).
+#
+# 48 -> 58 on 2026-08-14 with rung M5's section 7: the FA5 walk, the
+# resolution oracle (every reference lands on a texture MAGIC, which is what
+# a wrong pair formula fails), the PNG round trip and its sha256 refusal, and
+# the two checks that pin what the per-sub-model index IS without claiming
+# what it SELECTS.
 #
 # WHICH CHECKS ARE LOAD-BEARING WAS MEASURED, by building eight sabotaged
 # exporters and running this file against each. Results, for the next person
@@ -172,7 +179,7 @@ RING_POPULATION = {
 #
 # That last pair is why `_sidecar_positions` exists and why it must never be
 # routed through the module's loader.
-FLOOR = 48
+FLOOR = 63
 
 DEFAULT_SAMPLE = 12
 
@@ -414,6 +421,7 @@ def _vault_sections(check, led, args, tmp):
         led.skip("4. the f11 oracle through the export", why)
         led.skip("5. the collision/ring population", why)
         led.skip("6. the collision-mesh invariants", why)
+        led.skip("7. the texture layer", why)
         return
     with Archive(dat) as ar:
         table = file_id_table(ar)
@@ -422,6 +430,277 @@ def _vault_sections(check, led, args, tmp):
         _section4(check, ar, table, by_row, tmp, args)
         _section5(check, ar, table, by_row)
         _section6(check, ar, table, by_row)
+        try:
+            _section7(check, ar, table, by_row, tmp)
+        except Exception as exc:                       # noqa: BLE001
+            # A section that dies must be a NAMED failing check, never a
+            # bare traceback with no verdict and no floor line.
+            check(False, "section 7 (textures) completed",
+                  f"{type(exc).__name__}: {exc}")
+
+
+def _section7(check, ar, table, by_row, tmp):
+    """The TEXTURE layer (rung M5), and what it does NOT establish."""
+    print("\n== 7. textures: FA5 -> the archive -> PNG ==")
+    import modelfile
+    import png as pngmod
+
+    # (a) THE CHUNK WALK. `texture_refs` closes on the exact final byte, and
+    # the rival framing -- fixed 6-byte slots, i.e. no NULL sentinel -- must
+    # NOT, or the null slot is a rule with no evidence behind it.
+    walked = rival = 0
+    total_refs = 0
+    for fid in (KAMADAN_FILE_ID, PRESEARING_FILE_ID):
+        for model_id in modelexport.map_model_ids(fid, ar, table=table):
+            row = table.get(model_id)
+            if row is None:
+                continue
+            mf = ModelFile.decode(ar.read(by_row[row]))
+            payload = mf.find(modelfile.TEXNAME_CHUNK_B)
+            if payload is None:
+                continue
+            try:
+                refs = mf.texture_refs()
+            except Undecodable:
+                continue
+            walked += 1
+            total_refs += len(refs)
+            count, = struct.unpack_from("<I", payload, 0)
+            if 4 + 6 * count == len(payload):
+                rival += 1
+    check(walked > 250 and total_refs > 1500,
+          "every reference-map model's FA5 chunk closes on its exact final "
+          "byte", f"{walked} chunks, {total_refs} slots")
+    # THE NULL SLOT IS NOT TESTABLE ON THESE MAPS, and saying so is the
+    # point: both reference maps carry ZERO null slots (0 of 1,795), so the
+    # fixed-6-byte rival closes on all 315 chunks too. Asserting that the
+    # rival fails here would be asserting evidence this sample cannot
+    # provide. The discrimination is a CORPUS fact, so it is measured on a
+    # strided sweep of ffna type-2 rows instead.
+    check(rival == walked,
+          "on the reference maps the fixed-6-byte rival closes too -- they "
+          "hold no null slot, so they cannot decide the sentinel",
+          f"{rival}/{walked}")
+    nulls = swept = rival_closes = 0
+    for entry in ar.entries[::97]:
+        try:
+            data = ar.read(entry)
+        except Exception:                              # noqa: BLE001
+            continue
+        if len(data) < 4 or data[:4] != b"ffna":
+            continue
+        try:
+            mf = ModelFile.decode(data)
+            payload = mf.find(modelfile.TEXNAME_CHUNK_B)
+            if payload is None or len(payload) < 4:
+                continue
+            refs = mf.texture_refs()
+        except (Undecodable, ValueError, struct.error, IndexError):
+            continue
+        swept += 1
+        nulls += sum(1 for r in refs if r is None)
+        count, = struct.unpack_from("<I", payload, 0)
+        if 4 + 6 * count == len(payload):
+            rival_closes += 1
+    print(f"    strided sweep: {swept} FA5 chunks, {nulls} null slots")
+    if swept > 30 and nulls:
+        check(rival_closes < swept,
+              "and over a strided CORPUS sweep the fixed-6-byte rival fails "
+              "on the chunks carrying a null slot",
+              f"rival closes {rival_closes}/{swept}, {nulls} nulls seen")
+    else:
+        check(swept > 30,
+              "the strided sweep found FA5 chunks to test the sentinel on",
+              f"{swept} chunks, {nulls} nulls")
+
+    # (b) THE RESOLUTION ORACLE, and it is the strong one here: a decoded
+    # reference must land on a row that IS a texture. A wrong pair formula
+    # would still resolve some rows -- it is the MAGIC that refutes it.
+    magics = collections.Counter()
+    resolved = unresolved = 0
+    for fid in (KAMADAN_FILE_ID, PRESEARING_FILE_ID):
+        for model_id in modelexport.map_model_ids(fid, ar, table=table):
+            row = table.get(model_id)
+            if row is None:
+                continue
+            try:
+                refs = ModelFile.decode(ar.read(by_row[row])).texture_refs()
+            except Undecodable:
+                continue
+            for file_id in refs:
+                if file_id is None:
+                    continue
+                trow = table.get(file_id)
+                if trow is None:
+                    unresolved += 1
+                    continue
+                resolved += 1
+                magics[bytes(ar.read(by_row[trow])[:4])] += 1
+    known = magics[b"ATEX"] + magics[b"ATTX"] + magics[b"DDS "]
+    check(unresolved == 0 and resolved > 1500,
+          "every non-null texture reference resolves to an archive row",
+          f"{resolved} resolved, {unresolved} not")
+    check(known == resolved,
+          "and EVERY resolved row carries a texture magic -- the check a "
+          "wrong pair formula fails", f"{dict(magics)}")
+
+    # (c) THE EXPORT. Decode to PNG and read it back with the codec's own
+    # reader, then require the dimensions to match the container's header --
+    # which the PNG writer never sees.
+    outdir = os.path.join(tmp, "tex")
+    fid = modelexport.map_model_ids(KAMADAN_FILE_ID, ar, table=table)[0]
+    path = modelexport.export_file_id(fid, ar, outdir=outdir, table=table)
+    exp = modelexport.load_model(path)
+    entries = [t for t in exp.meta.get("textures", []) if t.get("image")]
+    check(entries, f"model 0x{fid:X} exported {len(entries)} texture(s)")
+    checked = 0
+    for entry in entries:
+        pixels, width, height, _colour = pngmod.read(
+            os.path.join(outdir, entry["image"]))
+        if width == entry["width"] and height == entry["height"] \
+                and len(pixels) == width * height * 4:
+            checked += 1
+    check(checked == len(entries),
+          "every PNG reads back at the size the manifest claims",
+          f"{checked}/{len(entries)}")
+
+    # (d) The sidecar digests cover the PNGs too -- a corrupted texture must
+    # be caught by the same manifest rule the geometry arrays get.
+    victim = [s for s in exp.meta["sidecars"]
+              if s["kind"] == "texture"][0]
+    blob = bytearray(open(os.path.join(outdir, victim["name"]), "rb").read())
+    blob[len(blob) // 2] ^= 0xFF
+    open(os.path.join(outdir, victim["name"]), "wb").write(bytes(blob))
+    try:
+        modelexport.load_model(path)
+        check(False, "a corrupted PNG sidecar is refused by its sha256")
+    except ValueError as exc:
+        check(victim["name"] in str(exc),
+              "a corrupted PNG sidecar is refused by its sha256, by name",
+              str(exc)[:56])
+
+    # (e) WHAT THIS DOES NOT ESTABLISH, asserted so nobody later reads the
+    # binding as settled. `material_index` is a real per-sub-model index --
+    # it must vary and must not be a bare ordinal -- but WHICH FA5 slot is
+    # the DIFFUSE is refuted, not merely unknown (a render puts specular
+    # maps on buildings). The check is on the property that IS measured.
+    varies = ordinal = models = 0
+    for model_id in modelexport.map_model_ids(KAMADAN_FILE_ID, ar,
+                                              table=table):
+        row = table.get(model_id)
+        if row is None:
+            continue
+        mf = ModelFile.decode(ar.read(by_row[row]))
+        geo = mf.geometry()
+        if geo is None or len(geo.submodels) < 2:
+            continue
+        if len(mf.texture_refs()) < 2:
+            continue
+        models += 1
+        vals = [sm.unk for sm in geo.submodels]
+        varies += len(set(vals)) > 1
+        ordinal += vals == list(range(len(vals)))
+    check(models > 40 and varies > models * 0.9,
+          "the per-sub-model index VARIES on over 90% of multi-texture "
+          "models -- it is an index, not a constant",
+          f"{varies}/{models}")
+    check(ordinal < models,
+          "and it is not always the bare ordinal 0..n-1, which is what a "
+          "sub-model counter would be", f"{ordinal}/{models} are ordinals")
+
+    _section8(check, ar, table, by_row)
+
+
+def _section8(check, ar, table, by_row):
+    """THE MATERIAL TABLE, and the oracle that binds a surface to a texture."""
+    print("\n== 8. the material table: sub-model -> material -> texture ==")
+    import random
+    from modelfile import material_table
+
+    rnd = random.Random(5)
+    stat = collections.Counter()
+    for fid in (KAMADAN_FILE_ID, PRESEARING_FILE_ID):
+        for model_id in modelexport.map_model_ids(fid, ar, table=table):
+            row = table.get(model_id)
+            if row is None:
+                continue
+            mf = ModelFile.decode(ar.read(by_row[row]))
+            geo = mf.geometry()
+            if geo is None:
+                continue
+            mtable = material_table(mf.find(0x00000FA0))
+            if mtable is None:
+                stat["amat_only"] += 1
+                continue
+            stat["models"] += 1
+            ntex = len(mf.texture_refs())
+            for pos, sub in enumerate(geo.submodels):
+                kind, layers = mtable.for_submodel(sub)
+                if kind != "layered":
+                    stat["binary"] += 1
+                    continue
+                stat["layered"] += 1
+                for lay in layers:
+                    stat["layers"] += 1
+                    stat["texpath_in_range"] += lay.texpath < ntex
+
+                # THE ORACLE. The material's layers name the UV SETS they
+                # sample; the highest must match what the SUB-MODEL's vertex
+                # format actually carries. That crosses the material table
+                # and the vertex declaration -- two structures this decoder
+                # does not derive from one another.
+                for name, index in (("real", sub.unk & 0xFFFF),
+                                    ("position", pos),
+                                    ("random", rnd.randrange(
+                                        len(mtable.materials)))):
+                    if index >= len(mtable.materials):
+                        continue
+                    lay_n = mtable.layers_of(index)
+                    used = [x.texarray for x in lay_n if x.texarray >= 0]
+                    if not used:
+                        continue          # samples no stored set: undefined
+                    stat[name + "_n"] += 1
+                    stat[name + "_ok"] += (max(used) + 1 == sub.texcoord_sets)
+
+    print(f"    {stat['models']} models with a layered table "
+          f"(+{stat['amat_only']} AMAT-only), {stat['layered']} layered "
+          f"sub-models, {stat['layers']} layers")
+    check(stat["models"] > 250 and stat["layered"] > 900,
+          "both reference maps yield a layered material table",
+          f"{stat['models']} models, {stat['layered']} sub-models")
+
+    # ArenaNet's own bound, MdlCombine:568 texPathIndex < texPathCount.
+    check(stat["texpath_in_range"] == stat["layers"],
+          "every layer's texPathIndex is inside the model's FA5 texture "
+          "list -- the client's own bound at MdlCombine:568",
+          f"{stat['texpath_in_range']}/{stat['layers']}")
+
+    real = stat["real_ok"] / max(stat["real_n"], 1)
+    pos_r = stat["position_ok"] / max(stat["position_n"], 1)
+    rnd_r = stat["random_ok"] / max(stat["random_n"], 1)
+    print(f"    UV-set oracle: real {stat['real_ok']}/{stat['real_n']}, "
+          f"position {stat['position_ok']}/{stat['position_n']}, "
+          f"random {stat['random_ok']}/{stat['random_n']}")
+    check(stat["real_ok"] == stat["real_n"] and stat["real_n"] > 900,
+          "a material's layers name exactly the UV sets its sub-model "
+          "carries: max(texarray) + 1 == texcoord_sets, on ALL of them",
+          f"{stat['real_ok']}/{stat['real_n']}")
+
+    # THE CONTROLS. Binding by POSITION is the obvious wrong implementation
+    # and it is nearly right, which is precisely why it has to be measured
+    # rather than dismissed -- and a random material sets the floor.
+    check(pos_r < 0.95 and rnd_r < 0.75 and real > pos_r > rnd_r,
+          "and both rivals collapse -- binding by sub-model POSITION, and a "
+          "RANDOM material",
+          f"real {real:.3f} > position {pos_r:.3f} > random {rnd_r:.3f}")
+
+    # The client's own consistency gate, exercised through real files: the
+    # per-material layer counts must sum to the header's total. A model
+    # where they do not would have every texture index after it misaligned.
+    check(stat["models"] + stat["amat_only"] > 300,
+          "and no model in either map fails the layer-count sum gate -- a "
+          "refusal would have raised Undecodable above",
+          f"{stat['models']} + {stat['amat_only']} AMAT-only")
 
 
 def _section3(check, ar, table, by_row, tmp, args):

@@ -42,13 +42,17 @@ that survives. (A file id is archive *state*, not a property of the map — bit 
 `FcArchive` renamed that row away pending a replacement — so the pair is recorded rather
 than one id; `toolkit/test_contentids.py` is the same fact enforced from the other side.)
 
-**One offset disagreement is recorded rather than resolved.** `datwrite` and `datcheck`
-agree row 46196 is stored at `0x437F6800`; `archive.Archive().entries[46196].offset`
-reports 1,132,424,192, **exactly 1,024 higher**. The read above used the `datwrite`/
-`datcheck` offset and found the marker there, so that pair is right for this purpose and
-`archive.py`'s reading is the one to chase. UNVERIFIED which is correct in general — the
-constant 1,024 smells like a header or block-base convention rather than a bug, and nobody
-has looked.
+**~~One offset disagreement is recorded rather than resolved.~~ RESOLVED 2026-08-14: there
+was no disagreement.** This paragraph read `entries[46196]` as row 46196 and, when it landed
+1,024 bytes past where `datwrite` and `datcheck` said row 46196 was, guessed at "a header or
+block-base convention". `Archive.entries` is a **positional list that skips the descriptor**,
+so `entries[46196]` is row **46197** — a different, 584-byte file that merely happens to sit
+1,024 bytes later. MEASURED on `vault/dat_durability/Gw.dat`:
+`entries[46195].offset == archive.row(46196).offset == 0x437F6800`, exactly `datwrite`'s and
+`datcheck`'s number, and the 25-byte marker `RURIK-DURABILITY-20260813` is in **that** extent
+and not in the other. All three readers agreed all along. See §4b.1's retraction; the same
+misreading is still standing, unamended, in `vault/dat_durability/ARMED.json`'s
+`offset_note`, where it tells the next operator a false reason for a true instruction.
 
 ---
 
@@ -264,10 +268,88 @@ which is a revert that reports success and restores nothing.
 before launching, or accept that the row stays as armed. `datwrite` has no verb for the
 explicit restore its own refusal recommends — `--replace` writes uncompressed and cannot put
 a compression-8 payload back, and `--overwrite` is same-length only — so the three icon rows
-above were **left armed on purpose**, with the original payloads still recoverable from the
-journals' `before` fields if anyone wants them.
+above were **left armed on purpose**.
 
-### 4b.1 THE TRAP, and it nearly produced the opposite conclusion
+> **CORRECTED 2026-08-14, and this sentence used to be the reassurance.** It read *"with the
+> original payloads still recoverable from the journals' `before` fields if anyone wants
+> them"*. **No journal for those rows exists.** `datwrite`'s default journal path is
+> `DAT.journal.json`, there is no such file beside that archive, and a grep of the **whole
+> 45 GB vault** returns nothing mentioning row 174150. The claim was inferred from how
+> `--replace` normally behaves rather than checked, and it is the kind of error that only
+> surfaces when somebody needs the thing.
+>
+> **Two further things it got wrong**, both measured the same day: the armed set is **127
+> rows, not three** (174150–175682, every one 2,068 B at compression 0 — the profession arc
+> armed 124 more after this section was written), and row 174861 is 2,068 B rather than the
+> 8,212 B recorded above, having been re-armed since.
+>
+> **The gap it named is now closed**: `datwrite --restore ROW --from DONOR` is the in-place
+> grow `datmove.plan_move`:186 names and refuses. A pristine copy is a better source than a
+> journal for exactly this reason — every checkout has one, and it cannot quietly go missing.
+> All 127 originals are intact and identical in `vault/client/2026-07-29` **and**
+> `vault/dat_study`, two witnesses.
+
+### 4b.1 THE TRAP — RETRACTED 2026-08-14. There is one row convention and both tools use it
+
+> **RETRACTION.** This section originally concluded *"the two tools number MFT rows
+> differently, off by exactly one"*, labelled that cause **CORROBORATED**, and left the
+> standing instruction *"never compare a row number printed by one tool against one
+> printed by another"*. **All three are wrong.** `archive.py` and `datcheck.py` agree on
+> every one of the 24 bytes of every row of every archive in the vault. The original text
+> is kept below the line because the *shape* of the mistake is the finding, and because
+> two later documents were written on top of the wrong version. `test_archive.py` §1c now
+> measures the agreement in both directions on a real archive, so this can never again be
+> settled by argument.
+
+**What the bytes say**, re-measured 2026-08-14 on `vault/dat_study`, `vault/dat_c2` and
+`vault/run/2026-07-29_221c13772c7a-c2`, all three agreeing:
+
+| row | dat_study | dat_c2 (armed) | run copy (after play) | role |
+|---|---|---|---|---|
+| 71495 | 3,564 B | 3,564 B | 3,564 B | **stream partner of row 71493** — a different map |
+| 71496 | 9,284 B | **0 B** | **6,452 B** | **stream head**, file ids `0x5CF20` / `0x287D3` |
+| 71497 | 4,544 B | 21,926 B | 11,370 B | stream partner of row 71496 — our authored bytes |
+
+So `--diff` naming **71496** and `deploy.py` naming **head 71496** were naming *the same
+row*, correctly, in the same convention. 71496 is the Bloated head `deploy` arms to zero on
+purpose so the client must recompile it; the size going 0 → 6,452 B is that recompile
+working. Our authored bytes are in the partner, 71497, which is absent from the diff because
+nothing touched it. **Both tools were right and there was never a disagreement to explain.**
+
+**Every fact the original cited is true; only the inference is false**, which is the hardest
+kind to catch:
+
+* `archive.py[71495]` really is bit for bit what `datcheck` calls row 71496 — because
+  `Archive.entries` is a **positional list that skips the descriptor**, so `entries[71495]`
+  *is* row 71496 in both tools' numbering. A list subscript was read as a row number.
+* `archive.py` really does "report 177,334 rows where datcheck reports 177,335" — because
+  that is `len(entries)` against a row count. `Archive.row_count` is the comparable number
+  and it is **equal on all ten archives in the vault**.
+* `archive.py[2]` really is the MFT row — and so is `datcheck`'s row 3 and `archive.row(3)`.
+  Same row. `MFT_SELF_ROW = 3` in both.
+
+**The instruction is withdrawn.** Comparing a row number printed by one tool against one
+printed by another is correct and always was. What is *worth* doing, and is now done, is
+matching on the **file id** as well: `deploy.py` prints its file id on its own first line and
+`datcheck --diff` now prints every row as `row 71496 [file id 0x5CF20, 0x287D3; stream head]`,
+so the two outputs carry a token that a bare integer does not — and both verbs print the
+convention above their numbers (`datcheck.ROW_CONVENTION`).
+
+**What the wrong version cost, because the point is not the off-by-one:** it was written up
+as a fact about the format and then *believed twice more*.
+`vault/dat_durability/ARMED.json` carries a note calling the same subscript's 1,024-byte gap
+"a header or block-base convention" and telling the next operator which pair to trust
+(measured: `entries[46195].offset` **is** `0x437F6800`, the marker is in that extent, and
+`entries[46196]` is row 46197 — a different 584-byte file); and §4 of this document repeated
+it as an open question. A plausible explanation invented for an off-by-one is more durable
+than the off-by-one.
+
+`mapchunks.py`:117's lesson still stands on its own terms — a row index is meaningful only
+against the archive copy it was measured on — and that is a fact about **copies**, not about
+readers. `test_contentids.py` and `test_mapfile.py` moved to file-id identity for that
+reason and were right to.
+
+<details><summary>The original text, kept verbatim. Refuted above.</summary>
 
 `datcheck --diff` reported **row 71496 changed from 0 B to 6,012 B** — and `deploy.py` had
 just printed *"installing … head 71496, partner 71497"*. Read together those say the client
@@ -295,6 +377,211 @@ only against the **reader** it was measured with. `test_contentids.py` and `test
 both moved to file-id identity for the first reason, and the same fix applies here. Until it
 lands: **never compare a row number printed by one tool against one printed by another.**
 
+</details>
+
+### 4d. What is left after 4b and 4c — and why this question got asked twice
+
+**Play-session durability is CLOSED for the ordinary case**, on two witnesses that differ in
+archive copy, edit shape and payload kind. It should not be re-opened as an open item, and on
+**2026-08-14 it was** — by the same session that had run §4b the day before, which listed it
+back onto its own next-actions list and started staging a third run before finding this
+section.
+
+The cause was not forgetfulness. `CLAUDE.md`'s `test_datmove` entry ended *"what is still
+unmeasured is DURABILITY across a play session"* — the exact sentence §4b quotes as the
+question it answered — and nothing updated it when the answer landed. That is this repo's
+own opening rule arriving from a new direction: the top of `CLAUDE.md` says status lives in
+`PLAN.md` §3 *"and nowhere else"* because three files once disagreed, and here a **result**
+did the same thing. A cold session reads the house-rules file, not the study. Corrected
+2026-08-14, in the entry itself rather than by adding a pointer. **The general form: when a
+study closes a question that a suite entry states as open, the suite entry is part of the
+deliverable.**
+
+**What genuinely remains**, none of it blocking and none of it re-running the above:
+
+1. ~~**Session length.**~~ **CLOSED by §4e-ter** the same day: 900 s produced **2** changed
+   rows against 120 s's **3**, with the 29 unmoved and the authored rows byte-identical.
+   Duration is the wrong axis — the churn is per RUN, not per minute. What is still unmeasured
+   is **many sessions**, and a session that loads **many different maps**, which would exercise
+   the allocator far harder than any run in this arc has.
+2. **The bit-31 watchlist is unprobed**, and neither run could have probed it: our rows are
+   not on it. Testing it means deliberately arming a row that *is*, which is a different
+   experiment with a different risk profile.
+3. **`datwrite` has no explicit-restore verb**, and that is a live state rather than a
+   hypothetical — §4c left three skill-icon rows **armed on purpose** in
+   `vault/run/reskin-roster/Gw.dat`, because `--replace` writes uncompressed and cannot put a
+   compression-8 payload back and `--overwrite` is same-length only, while `--revert` correctly
+   refuses once the client has moved the table. The payloads are still recoverable from the
+   journals' `before` fields. This is the one item here with an owner.
+
+**One dangling pointer was fixed alongside.** `vault/dat_durability/ARMED.json` cited
+`studies/crossbuild/DURABILITY.md` twice — once in `why`, once inside the `NOT_PLAYABLE`
+safety warning that says to read it *"before handing it to any client"*. **That file has never
+existed in either tree** (the recon survey noted the same dangling name at
+`studies/recon/FINDINGS.md`:304). Both now point at this document, §1 and §4. A safety warning
+whose citation resolves to nothing is the half of a guard that does no work.
+
+### 4e. The bit-31 watchlist across a play session — PREDICTION, stated before the run
+
+**Why this run and not §4d item 1 on its own.** A long idle session is the weakest of the
+three remaining items *by itself*: the arm forces one write at map LOAD, so everything after
+the first ~30 s has nothing making the client write, and "nothing changed in minutes 2–15"
+cannot separate *our row is safe* from *the client wrote nothing at all*. §4c's MFT
+alternation fires per RUN, not per minute, so it does not fill the gap either. The bit-31 set
+does: it is a population the client rewrites **unprompted**, which is exactly the liveness a
+duration test cannot generate for itself. So the two are one run.
+
+**What bit 31 is — already answered, and that is what makes this cheap.** `archive.py`:486,
+read out of the client: `FcArchive` binds `id | 0x80000000` and **deletes the plain name when
+it has requested a replacement** (`0x007D7B70`); `DnArchive` re-links the plain id once the
+replacement is installed (`0x004766F0`). A bit-31 id means *this row's replacement is
+pending*. **No arm is needed and nothing is left armed** — our side of this experiment is
+read-only, which is also why it does not wait on §4d item 3.
+
+**Why it is load-bearing on our own content**, rather than a curiosity about ArenaNet's cache:
+
+- **Row 7982 is `donor_row` for all three `content/areas.toml` rows** — plaza, vale and
+  sculpt every one of them — and it is named by **two** bit-31 ids, `0x8001B97D` and
+  `0x8005E728`.
+- **`0x8001B97D` is the recorded `file_id` of two `content/maps.toml` rows**, Ascalon City
+  (Pre-Searing) and Lakeside County. If a session resolves that rename, the id our own
+  content is written down under stops binding. This is the mechanism `test_contentids.py`
+  already exists for, from the other side: `vault/run-live/` binds `0x1B97D` **plainly, to a
+  different row**, and carries 9 bit-31 ids where the study copy carries 25.
+
+**Census before the run**, `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat`: **29 bit-31 ids
+over 171,025 pairs**, MFT at `0xF8FFF000` (one of §4c's two slots), 177,335 rows. **Four land
+on map-flagged rows** — 7982 and 20118, each named twice — which corroborates
+`customarea/FINDINGS.md`:967's correction of "two" to **four** from an archive that file never
+read. Eight further rows are named by two ids each; those are the aliases `datwrite` saw
+zeroed.
+
+**PREDICTION.**
+
+1. **The authored rows survive byte-identical.** High confidence — §4b and §4c both. Fifteen
+   minutes adds time, not new client behaviour, unless there is a periodic task nobody has found.
+2. **The MFT alternates to `0xF8BEFE00`.** This is the liveness signal, and it is close to a
+   coin flip: §4c measured the flip at roughly every other run. **If it does not fire, the run
+   needs another liveness witness before any negative below may be reported.**
+3. **NONE of the 29 clear.** This is the load-bearing prediction and it is deliberately the
+   boring one: the two ids observed clearing did so across a **build update**, which is when
+   new content arrives, and a loopback client **has no content source**. A replacement cannot
+   install if nothing can deliver it, so the request should stay pending.
+4. **The rival, and what it would mean.** If any bit-31 id clears on loopback with no content
+   source, then the client resolves replacements from **local** content — generated or
+   transcoded, which `datwrite/FINDINGS.md` labels RECONSTRUCTION either way — and bit 31
+   becomes a **live hazard for our recorded file ids** rather than an update-time curiosity.
+   That is the result that would change what `content/maps.toml` is allowed to store.
+
+**What would make this INCONCLUSIVE**, stated now so it cannot be rationalised later: no MFT
+move, no `descriptor_counter` advance and no bit-31 change, all three together, mean the client
+wrote nothing and the run measures nothing.
+
+#### 4e-bis. A cross-copy census taken WHILE the client ran — and it weakens prediction 3
+
+Recorded separately and with its ordering stated, because it was gathered **after** the
+prediction above was committed (`0e23b34`) and **before** the result: it is evidence, not a
+revision. Ten vault copies, censused read-only. `run/-probe` refused with `PermissionError`,
+which is itself the liveness witness — the client had the archive open exclusively.
+
+| copies | bit-31 | id pairs | rows | `0x1B97D` |
+|---|---|---|---|---|
+| `client/2026-07-29` (pristine install), `run/main`, `run/reskin-roster` | **29** | 171,025 | 177,335 | renamed away |
+| `dat_study`, `dat_c2`, `dat_durability`, `run/-c2` | **25** | 171,025 | 177,342 | renamed away |
+| `client/2026-04-30` | 25 | 170,999 | 177,311 | renamed away |
+| **`run-live`** | **9** | **171,138** | **177,476** | **PLAINLY** |
+
+**The population is not constant and the count is not arbitrary**: 29 goes with 177,335 rows
+and 25 with 177,342, so the copies that gained 7 rows are exactly the ones that lost 4 renames.
+
+Diffing the SETS rather than the counts is what makes it a mechanism instead of a correlation:
+
+- **Install → study: exactly 4 cleared, and they are TWO ROWS each named twice** — row 11957
+  (`0x80022EB3`, `0x8005575D`) and row 177254 (`0x8005D4CA`, `0x8005EC1E`). That reproduces
+  `datwrite/FINDINGS.md`:589's *"cleared bit 31 on two of them in place … and zeroed two
+  aliases"* from the bytes, and adds what that account does not say: **neither row is a map
+  row** — both are `flags 3`.
+- **Install → run-live: 20 cleared**, including **both of row 7982's ids** (`0x8001B97D`,
+  `0x8005E728`). Row 20118's pair survives, which is why that copy still shows 2 on map rows.
+
+**This weakens prediction 3 and the honest thing is to say so before the result, not after.**
+Prediction 3 leaned on *"a loopback client has no content source"*, and `datwrite`:585 already
+records a clearing in a session where *"this content was not downloaded"* because the cage
+blocked everything non-loopback. That was under-weighted when the prediction was written.
+
+**The sharper, data-derived sub-prediction**, which the run can refute cleanly: the probe copy
+sits at the pristine 29 and still carries all four of the loopback-volatile ids. **If anything
+clears in this session it will be those four — rows 11957 and 177254 — and NOT the map rows.**
+Row 7982's pair should require a real content source, which loopback does not have.
+
+#### 4e-ter. RESULT — harness `20260814T100327`, 900 s unarmed. OBSERVED
+
+The session ran the full 900 s in **our** world, which is asserted rather than assumed: the
+server's own log reads `[map] navmesh 0x287D3: 1 planes, 64 trapezoids` and
+`area 'sculpt': 3 of 3 placed`.
+
+**The vacuity control passed first**, and it had to, because every headline below is a
+negative:
+
+| liveness witness | before | after |
+|---|---|---|
+| `descriptor_counter` | 26,792 | **26,795** (+3) |
+| MFT sha256 | `4a8c691cc1285bde` | `8c9cac19feb6299d` |
+| Tier 1 changed rows | — | **2**, both *new extent (silent relocation)* — 8315 (96 B → **92 B**, new crc) and 8316 (28 B, new crc) |
+| archive lock | — | `PermissionError` on a mid-run read: the client held it exclusively |
+
+So the client demonstrably wrote — it **rewrote and moved two rows** — and the negatives below
+are about a session in which it did.
+
+**RESULTS against the four committed predictions.**
+
+1. ✅ **The authored rows are byte-identical.** Bloated row 71496, 6,012 B at `0x3D80400`,
+   sha `284dca56…`; Stripped row 71497, 10,714 B at `0x388A000`, sha `f827165e…` — offset,
+   size, crc and sha256 all equal on both. Third witness after §4b and §4c.
+2. ❌ **The MFT did NOT alternate** — `0xF8FFF000` on both sides. §4c put the flip at roughly
+   every other run and this run did not flip, which is unremarkable at n=1 but has a
+   consequence worth carrying: **the alternation is not a usable liveness signal.**
+   `descriptor_counter` is, it moved every time, and it is the one to check.
+3. ✅ **NONE of the 29 cleared.** Population, rows, slots, offsets, sizes, crcs, flags and
+   sha256s all identical — the diff prints *no change in the bit-31 population or any row it
+   names*. Prediction 3 held, and it held **after** §4e-bis argued against it.
+4. The sub-prediction was **not exercised**: nothing cleared at all, so "if any clears it will
+   be rows 11957 and 177254" is untested rather than confirmed. Recorded as untested.
+
+**This answers §4d item 1, and the answer is that duration is the wrong axis.** §4b held for
+120 s and saw **3** changed rows; this run held for **900 s** and saw **2**. Seven and a half
+times the session length produced no additional disturbance, no bit-31 movement and no
+approach to the authored rows. The churn is **per run, not per minute** — which is also what
+the MFT alternation's per-run cadence says. §4d item 1 is closed in its stated form; what
+remains unmeasured is many SESSIONS, not one long one.
+
+**And it puts `datwrite/FINDINGS.md`:585 into CONTESTED.** That passage attributes the
+install→study clearing of 4 ids to a session in which *"this content was not downloaded"*
+because the cage blocked all non-loopback traffic. The change is real — §4e-bis reproduces it
+from the bytes — but **a controlled loopback session that demonstrably wrote to the archive
+cleared nothing**, so "an ordinary loopback play session does it" is not supported. Either it
+needs a specific trigger nobody has isolated, or many more sessions than one. n=1 against
+n=1; what is now known is that the two disagree, and this is the only one of the two with a
+before-census.
+
+**The practical answer for our content.** `0x8001B97D` — the id `content/maps.toml` records
+for Ascalon City (Pre-Searing) and Lakeside County, and one of the two names on the
+`donor_row = 7982` every `areas.toml` row borrows — **did not move in a loopback session, and
+does move in a live one** (§4e-bis: cleared in `run-live`, where `0x1B97D` binds plainly to a
+different row). So the hazard is real, live-only, and already gated: that is exactly what
+`test_contentids.py` refuses on, and this measurement is the first evidence for *when* the
+state it guards actually changes.
+
+**Honest scope.** One session, one map, one client, one archive copy. The negatives are only
+as strong as the liveness witness, which is `descriptor_counter` +3 and two rewritten rows —
+real, but small. A session that loaded many different maps would exercise the allocator far
+harder, and no run in this arc has done that.
+
+**Incidental, not chased**: the gamesrv log carries 10 × `navmesh does not cover` and 7 ×
+`ignoring a … jump in the client's reported position` (largest 4,116 u, ours `(5950, 111)` vs
+theirs `(1994, 1248)`). A server/client position disagreement on the sculpt map, which is 1.2%
+walkable. Unrelated to durability and left for whoever owns movement.
+
 ---
 
 ## 5. What this changes elsewhere
@@ -320,6 +607,15 @@ lands: **never compare a row number printed by one tool against one printed by a
 | Revert is byte-identical | **OBSERVED** — `datcheck --diff` exit 0, recorded in `ARMED.json`; not independently re-run here |
 | 334 rows change across one update, in the four named shapes | **OBSERVED** — one update, n=1 |
 | The authored row will survive an update | **RECONSTRUCTION**, low confidence, §3 |
+| An authored row survives a PLAY SESSION in which the client demonstrably rewrote the archive | **OBSERVED** — two witnesses, §4b (relocated row, 10,714 B over a 4,608 B reservation, client recompiled from it) and §4c (three in-place rows, different archive copy). n=2 sessions, ~70–120 s each |
+| The MFT alternates between two offsets rather than drifting | **OBSERVED** — §4c, seven vault copies at exactly two values, copies with identical entry counts at both |
+| A session longer than ~120 s leaves an authored row alone | **OBSERVED** — §4e-ter, 900 s, third witness; and duration is the wrong axis, 900 s produced 2 changed rows against 120 s's 3 |
+| A loopback play session clears no bit-31 id | **OBSERVED**, n=1 with a before-census — §4e-ter, 29 of 29 unmoved in a session where the client rewrote and relocated two rows |
+| An ordinary loopback session is what cleared the install→study 4 | **CONTESTED** — `datwrite/FINDINGS.md`:585 says so; §4e-ter's controlled run cleared nothing. The change is real (§4e-bis reproduces it), the cause is not established |
+| A LIVE session clears bit-31 map-row ids, including row 7982's | **OBSERVED** — §4e-bis, `run-live` cleared 20 of 29 including `0x8001B97D` and `0x8005E728`; `0x1B97D` then binds plainly to a different row |
+| The MFT alternation is a usable liveness signal | **REFUTED** — §4e-ter did not flip; `descriptor_counter` moved and is the one to use |
 | The patcher holds no external content manifest | **UNVERIFIED** — never looked for, and it is the assumption the prediction rests on |
-| `archive.py`'s offset for row 46196 is wrong by 1,024 | **CONTESTED** — two tools disagree; the marker was found at the `datwrite` offset |
+| ~~`archive.py`'s offset for row 46196 is wrong by 1,024~~ | **REFUTED** 2026-08-14 — `archive.row(46196).offset == 0x437F6800`, identical to `datwrite`/`datcheck`, marker in that extent. The 1,024 came from reading `entries[46196]`, which is row 46197. §4, §4b.1 |
+| ~~`archive.py` and `datcheck.py` number MFT rows differently, off by one~~ | **REFUTED** 2026-08-14 — all 24 bytes of every row agree on all ten vault archives; pinned by `test_archive.py` §1c. The number that differs is `len(entries)` vs `row_count`. §4b.1 |
+| There is ONE row convention, ArenaNet's raw MFT index, and every reader and every recorded constant is in it | **OBSERVED** — 10 archives by an independent `struct` walker; 65 recorded constants ≥ 16 re-resolved in both conventions, 26 map-flagged under `row(N)` and 1 under `entries[N]`, zero overlap |
 | Rung 6 is deliverable | **NOT FOUND** — no update can reach this copy (§4) |

@@ -53,24 +53,23 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from archive import Archive, DEFAULT_DAT, ENTRY_SIZE, MFT_MAGIC  # noqa: E402
+from archive import (Archive, DEFAULT_DAT, ENTRY_SIZE,  # noqa: E402
+                     MFT_MAGIC, mft_row_offset,
+                     FILE_ID_TABLE_ROW, MFT_SELF_ROW, FIRST_CLAIMABLE_ROW)
 
 # Offsets into the 32-byte file header and the 24-byte MFT header, for the
 # fields a growing table forces us to touch.
 HDR_MFT_SIZE = 0x18
 MFT_HDR_COUNT = 0x0C
 
-# The MFT's own row. Growing the table means restating its size here too, and
-# its crc covers the table with this very row skipped -- see datwrite.py.
-MFT_SELF_ROW = 3
-
-# Rows 1, 2 and 3 are the file header, the file-id table and the MFT itself.
-# Rows 4..15 are erased in BOTH archives on this machine and stayed that way --
-# and when the client needed a free slot it took row 35301, the only other erased
-# row in the file, reaching past twelve nearer ones. Twelve zeroed rows sitting
-# immediately after the three container rows, which a working allocator declines
-# to use, are reserved. Claiming one would look fine right up until it did not.
-FIRST_CLAIMABLE_ROW = 16
+# FILE_ID_TABLE_ROW (2), MFT_SELF_ROW (3) and FIRST_CLAIMABLE_ROW (16) are
+# imported from `archive.py`, which owns the row convention. This module used to
+# declare its own copies of the last two, and THEN USED THEM WITH THE WRONG
+# ARITHMETIC: `mft_offset + (MFT_SELF_ROW - 1) * ENTRY_SIZE` is row 2, not row 3.
+# `entries` skips the descriptor and the table on disk does not, so a `- 1`
+# belongs in a subscript and never in an address. Every MFT address below now
+# goes through `archive.mft_row_offset`, which is the same function
+# `datwrite.row_offset` calls. See test_datplan.py §8.
 
 # How many (file_id, row) pairs must all name a live MFT row before we call a
 # block the head of a file-id table. MEASURED on vault/dat_study/Gw.dat: at every
@@ -404,19 +403,20 @@ def plan_insert(ar, payload_size, flags=3, compression=0, file_id=None,
     erased = free_rows(ar)
     if erased:
         row = erased[0]
-        row_off = ar.mft_offset + row * ENTRY_SIZE
-        plan.add(row_off, ENTRY_SIZE, f"MFT row {row} (reusing an erased slot)",
+        plan.add(mft_row_offset(ar.mft_offset, row), ENTRY_SIZE,
+                 f"MFT row {row} (reusing an erased slot)",
                  f"{len(erased)} erased rows available; no table growth needed")
     else:
-        row = ar.entry_count
-        row_off = ar.mft_offset + row * ENTRY_SIZE
-        plan.add(row_off, ENTRY_SIZE, f"MFT row {row} (appended)")
+        # The appended row is `row_count`, because rows run 0..row_count-1. This
+        # one was always right; the two below were not.
+        row = ar.row_count
+        plan.add(mft_row_offset(ar.mft_offset, row), ENTRY_SIZE,
+                 f"MFT row {row} (appended)")
         plan.add(ar.mft_offset + MFT_HDR_COUNT, 4, "MFT header entry count",
                  f"{ar.entry_count} -> {ar.entry_count + 1}")
         plan.add(HDR_MFT_SIZE, 4, "file header: MFT size",
                  f"{ar.mft_size} -> {ar.mft_size + ENTRY_SIZE}")
-        self_row = ar.entries[MFT_SELF_ROW - 1]
-        plan.add(ar.mft_offset + (MFT_SELF_ROW - 1) * ENTRY_SIZE, ENTRY_SIZE,
+        plan.add(mft_row_offset(ar.mft_offset, MFT_SELF_ROW), ENTRY_SIZE,
                  f"MFT row {MFT_SELF_ROW} (the table describing itself)",
                  "its size field must restate the new table size")
         # Does the table have room to grow where it sits?
@@ -457,7 +457,7 @@ def plan_insert(ar, payload_size, flags=3, compression=0, file_id=None,
             plan.notes.append(note)
 
     # The file-id table, so the client can address it at all.
-    tbl = ar.entries[1]
+    tbl = ar.row(FILE_ID_TABLE_ROW)
     tbl_reserved = blocks_for(tbl.size, block) * block
     if file_id is None:
         plan.notes.append("no file id requested; skipping the file-id table edit")
@@ -467,8 +467,8 @@ def plan_insert(ar, payload_size, flags=3, compression=0, file_id=None,
                  f"fits in the table's existing reservation "
                  f"({tbl_reserved - tbl.size} bytes spare = "
                  f"{(tbl_reserved - tbl.size) // 8} pairs)")
-        plan.add(ar.mft_offset + 1 * ENTRY_SIZE, ENTRY_SIZE,
-                 "MFT row 2: file-id table size and crc",
+        plan.add(mft_row_offset(ar.mft_offset, FILE_ID_TABLE_ROW), ENTRY_SIZE,
+                 f"MFT row {FILE_ID_TABLE_ROW}: file-id table size and crc",
                  f"{tbl.size} -> {tbl.size + 8}")
     else:
         plan.blockers.append(
@@ -485,13 +485,23 @@ def plan_insert(ar, payload_size, flags=3, compression=0, file_id=None,
 
 
 def plan_overwrite(ar, row_index, new_size):
-    """Replace an existing file's contents. The cheap case."""
+    """Replace an existing file's contents. The cheap case.
+
+    THE TWO LINES BELOW USED TO DISAGREE ABOUT WHICH ROW THIS IS, and the plan
+    printed both without a word: the payload line resolved the row correctly
+    through `entries[row - 1]`, and the MFT line addressed
+    `mft_offset + (row - 1) * 24`, which is the row BEFORE it. `--overwrite 18`
+    emitted "payload of row 18" and "MFT row 18: size and crc" on consecutive
+    lines, and the second pointed at row 17's 24 bytes. This module applies
+    nothing, so that address was handed to a human to apply by hand.
+    """
     block = ar.block_size
     try:
-        e = ar.entries[row_index - 1]
-    except IndexError:
+        e = ar.row(row_index)
+    except (IndexError, TypeError):
         plan = Plan(f"OVERWRITE row {row_index}")
-        plan.blockers.append(f"no such row (archive has {ar.entry_count})")
+        plan.blockers.append(f"no such row (archive has rows "
+                             f"1..{len(ar.entries)}; row_count {ar.row_count})")
         return plan
     reserved = blocks_for(e.size, block) * block
     plan = Plan(f"OVERWRITE row {row_index}: {e.size} -> {new_size} bytes "
@@ -504,7 +514,7 @@ def plan_overwrite(ar, row_index, new_size):
         return plan
     plan.add(e.offset, new_size, f"payload of row {row_index}",
              f"in place; {reserved - new_size} bytes of the reservation unused")
-    plan.add(ar.mft_offset + (row_index - 1) * ENTRY_SIZE, ENTRY_SIZE,
+    plan.add(mft_row_offset(ar.mft_offset, row_index), ENTRY_SIZE,
              f"MFT row {row_index}: size and crc",
              f"crc = CRC-32 of the new stored bytes")
     plan.notes.append(
@@ -572,7 +582,7 @@ def main():
             if reserved:
                 print(f"  reserved (rows < {FIRST_CLAIMABLE_ROW}, never used by "
                       f"the client): {reserved}")
-            tbl = ar.entries[1]
+            tbl = ar.row(FILE_ID_TABLE_ROW)
             spare = blocks_for(tbl.size, block) * block - tbl.size
             print(f"\nfile-id table: {tbl.size // 8} pairs, {spare} bytes spare "
                   f"in its reservation = {spare // 8} more pairs in place")
@@ -586,7 +596,14 @@ def main():
             row = args.overwrite
             size = args.new_size
             if size is None:
-                size = ar.entries[row - 1].size if row <= ar.entry_count else 0
+                # `row <= ar.entry_count` was one too loose: `entry_count`
+                # COUNTS the descriptor, so the highest real row is one less and
+                # the top of the range raised IndexError out of a bound that had
+                # just said the row was fine. `Archive.row` owns the bound.
+                try:
+                    size = ar.row(row).size
+                except (IndexError, TypeError):
+                    size = 0
             plan_overwrite(ar, row, size).show(block)
     return 0
 

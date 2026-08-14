@@ -300,7 +300,27 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   asserts it on the SYNTAX TREE, because "in the finally" and "before
   `close_client`, which destroys the dialog" are both invisible to a grep, with a
   control that the ordering check fails on a reversed finally),
-  `toolkit/portal/test_webgate.py`, `toolkit/mapdata/test_archive.py`,
+  `toolkit/portal/test_webgate.py`,
+  `toolkit/mapdata/test_archive.py` (the archive reader, and since 2026-08-14
+  section 1c: that `archive.py` and `datcheck.py` share ONE row convention --
+  ArenaNet's raw MFT index -- measured over the whole table in both directions. It
+  exists because the OPPOSITE was written down and labelled CORROBORATED:
+  `studies/crossbuild/FINDINGS.md` section 4b.1 read `entries[71495]` as a row number,
+  concluded the two tools number rows differently, and left the standing instruction
+  "never compare a row number printed by one tool against one printed by another".
+  Every fact it cited is true and the inference is false -- `entries` is POSITIONAL and
+  skips the descriptor, so `entries[k]` IS row k+1 in both tools' numbering, and the
+  count that differs is `len(entries)` against `row_count`. The 0-mismatch headline is
+  the WEAK half and the file says so twice over: the same sweep runs a second time
+  through `datcheck.row_bytes` ITSELF, because the first version compared against a
+  struct walker written in the test and a datcheck that changed convention printed
+  "0 mismatches over 177,341 rows" and PASSED; and the off-by-one reading must agree on
+  exactly 11 rows, all of them the all-zero reserved spares at 4..14, checked both by
+  count and by contents. The floor is the other lesson: 26 against a green run of 29 let
+  two reviews delete exactly the three checks the section calls load-bearing and still
+  print ALL CHECKS PASSED, so it is 31 -- the copy-independent green, MEASURED on five
+  archives -- with section 4 raising it to 33 when it runs, because a fixed 31 would hand
+  `dat_study` two checks of slack. Both shapes have ZERO headroom. ~30 s),
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_datwrite.py` (the only tool that opens the archive `r+b`,
   against a small archive the test builds: that `--verify --replace` actually
@@ -308,7 +328,38 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   its whole block reservation and zeroes the freed tail, that revert restores
   byte-for-byte even after something else took the freed blocks, and that the
   reservation refusal holds from both sides. Four defects, none of which could
-  fail a checksum -- the archive verified perfectly through all of them),
+  fail a checksum -- the archive verified perfectly through all of them.
+  **Section 7 (2026-08-14) is `--restore`, the IN-PLACE GROW `datmove.plan_move`
+  names and refuses** -- its own docstring ends *"write the in-place grow as its
+  own verb with its own test"*, and this is that verb. It puts a row back from a
+  DONOR ARCHIVE rather than from a journal, which is the whole design: `--revert`
+  expires the moment a client runs (the MFT moves, FINDINGS 4c) **and a journal is
+  a file somebody has to still have** -- 127 icon rows were left armed in
+  `vault/run/reskin-roster/` on the recorded understanding that their originals
+  were "recoverable from the journals' `before` fields", and NO SUCH JOURNAL
+  EXISTS anywhere in the vault. A pristine copy cannot go missing that way, and
+  two of them agree byte-for-byte. Three things `--replace` cannot do and each is
+  a check: it writes **compression 0** and there is no compressor here, so an
+  ArenaNet row comes back flattened; it computes the reservation from the row's
+  CURRENT size, so a shrunk row can never grow back (2,068 B reserves 2,560 when
+  the original needs 7,680) even though the blocks were never handed to anyone;
+  and `--overwrite` is same-length only. The donor's WHOLE RESERVATION is copied,
+  tail included, because a zero-filled tail verifies and still differs from every
+  pristine copy. **Identity is by FILE ID, never by row** -- a row index is a fact
+  about the copy, so a donor from another build can hold a valid, wrong file at
+  row N and every checksum agrees afterwards; the refusal names both ids, and when
+  either row is not addressable it SAYS the check could not run rather than
+  implying it passed. **The donor is deliberately NOT guarded** -- `guard()`
+  protects what is written, and `vault/dat_study` (refused as a target) is exactly
+  what you want as a source, asserted behaviourally in both directions AND on the
+  syntax tree, with `Writer.__init__` as the control so "not guarded" is a decision
+  rather than an omission. Three sabotages are BUILT AND RUN by rebinding one
+  module global each: `claimants()` stubbed to `[]` lets a restore into stolen
+  blocks through, `check_identity()` stubbed lets the wrong file through, and a
+  donor whose compression is flattened leaves the row at 0 **while the payload
+  stays byte-identical** -- which is why the compression field is checked
+  separately, since the stored bytes cannot tell those two apart. No vault, no
+  client. 66 checks against a floor of 66, was 34),
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must
@@ -336,7 +387,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   held apart through the CLI: `--diff` exits 1 to mean the archive CHANGED, which
   is a result, so an archive too broken to have findings must exit 2 -- it exited
   1 from an uncaught traceback, and a reader of the code would have reported the
-  crash as "the row moved"),
+  crash as "the row moved".
+  **And since 2026-08-14 section 3b pins the OUTPUT, which is the half that prevents
+  the mistake and had no checks at all.** `row_identity` was pinned and `format_diff`
+  -- the only thing an operator ever reads -- was referenced by no test in the tree, so
+  a sabotage reverting it and the `--preflight` banner to their exact pre-fix bare form
+  left this file 75/75 and `test_archive` 29/29, both exit 0: the whole human-facing fix
+  could be deleted green. EVERY `row N` line in the output must now carry its file id
+  and role, asserted over all of them rather than over the one row the fixture changed,
+  because the pre-fix `   row 18      relocated` contains the substring `row 18` and
+  satisfied the obvious predicate. Section 7 adds the `--preflight` banner through the
+  REAL CLI, since that is a separate `print` in `_main` no function-level check can see
+  and the revert sabotage's six reds did not include it. It also closes a trap the fix
+  itself introduced: `diff(before, path=X, after=<snapshot of Y>)` took its rows from Y
+  and its identity from X and reported `identified: True` -- MEASURED, 308 of 315
+  changed rows naming a file the after-image does not hold -- and the gate is the MFT
+  BYTE FOR BYTE rather than a path compare, because a stale snapshot of the same path is
+  the same defect wearing the right name. Floor 75 -> 84),
   `toolkit/mapdata/test_atex.py` (the ATEX texture container, and first the write
   guard `--make` never had: `atex.py` was the only binary writer in
   `toolkit/mapdata/` reaching `open(path, "wb")` straight off argv with no refusal
@@ -376,6 +443,66 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   ~30 ms), which is what makes the strided sweep affordable. Sections 0-3 need no
   vault and score 33 against a floor of 50. ~26 s; `--all` peeks all 177,341 rows and
   is ESTIMATED, not measured, at ~30 minutes),
+  `toolkit/mapdata/test_png.py` (the stdlib PNG codec rung M5's texture
+  export writes through -- `zlib` and `struct` and nothing else, because
+  `toolkit/` takes no third-party dependency and a test needing PIL to check
+  it would defeat the module's only reason to exist. NO vault, no archive, no
+  client, no PIL: every image is built in the file out of `bytes`. The round
+  trip is deliberately the WEAK half -- two functions that agree prove they
+  are inverses and nothing about whether either is PNG -- so section 2 reads
+  the emitted bytes with a walker written HERE out of `struct` and `zlib`,
+  recomputing every CRC, and section 3 feeds the reader images the WRITER
+  CANNOT PRODUCE: the writer only ever emits filter 0, the reader claims all
+  five, so a PNG is hand-built for each and one more mixing a different
+  filter per row (which is what catches a stale `prev` scanline). Six
+  one-edit sabotages were BUILT AND RUN and all six redden -- 8, 4, 2, 1, 2
+  and 2 -- and the counts are MEASURED, an earlier draft having carried
+  guessed ones of which four were wrong. Two rows earn their place: the
+  Paeth predictor is invisible to every round trip here (the writer never
+  emits filter 4) so only the hand-built images reach it, and **a reader
+  that trusts the stored CRC reddens exactly ONE check**, section 4's
+  tamper. The width/height swap reddening only 2 is reported rather than
+  tuned, and the reason is stated -- a transposed IHDR gives the reader a
+  wrong stride so it REFUSES, and the section aborts into one named failure,
+  which is `main()`'s guard working rather than thin coverage. Refusals are
+  asserted as `BadPNG` and not as "raises", because a truncated file left as
+  `struct.error` in the first version and the difference to a caller is a
+  refusal versus a crash in the exporter. 45 checks, ~1 s),
+  `toolkit/mapdata/test_atexlevel.py` (the ATEX LEVEL CODEC, solved
+  2026-08-14 -- kept apart from `test_atex.py`, which owns the container. A
+  level's `code` was never a compression method: it is a 5-BIT MASK OF
+  OPTIONAL DECODE PASSES over the block grid, which is why the client's
+  validator gates it with `test [eax+4], 0xffffffe0`. Each set bit
+  run-length-codes WHICH BLOCKS are one flat colour or alpha; everything
+  unclaimed is copied verbatim from the payload tail into three planes, and
+  `code == 0` is that copy with no pass at all. **The headline is explicitly
+  the weak half**: `decode_level` allocates `blocks * stride` and returns
+  exactly that, so "19,175 levels produced the right number of bytes" is TRUE
+  BY CONSTRUCTION and an all-zero decoder passes it. The load-bearing check is
+  a CODED level scored against its RAW neighbour -- a `code == 0` level needs
+  no pass logic, so it is independent ground truth, and mip k+1 is a
+  downsample of k: colour median 3.27 against a NULL of 12.47, alpha 2.45
+  against 38.63. **The oracle had to be made FORMAT-AWARE and that cost a
+  measurement**: scoring every 8-byte format as DXT1 colour put DXTA at 59.19
+  against a null of 59.88 -- indistinguishable from noise, reading as "broken
+  for 349 of 1,533 containers" -- when the truth is that **DXTA has NO COLOUR
+  HALF** and the oracle was reading alpha as colour; scored on its own channel
+  it is median 2.36, 472/474 under 8. The decoder was right and the
+  MEASUREMENT was wrong, so section 2 pins `has_colour` per format. Sections
+  0-4 need no vault and BUILD their own coded containers, hand-encoding runs
+  through the client's prefix table. Nine one-edit sabotages were built and
+  run; seven redden (12, 7, 6, 5, 4, 3, 3) and **the two that did NOT are why
+  the file grew**: "skipped blocks spend run" was invisible because the alpha
+  passes run first with the colour bitmap empty (code 9 occurs 4 times in the
+  corpus), so section 3(f) builds a two-pass level by hand; and "naive
+  nearest-565" was invisible under a one-quantum tolerance, so the bound is
+  now 4 -- the client's interpolated index reaches worst-4 where naive is
+  worst-7 -- with naive REPRODUCED as a live function. One sabotage still
+  reddens nothing and it is NOT a gap: bit 0's gate is "has colour and not
+  alpha", so its marking of the alpha bitmap can never be read back, and
+  section 2 asserts the gate instead. `--rows` exists so the matrix is
+  affordable to re-run. 63 checks with the vault, 48 with neither it nor a
+  client image, against a floor of 63),
   `toolkit/mapdata/test_dxt1.py` (the DXT1 codec, which shipped in the texture
   arc with an ENCODER and NO test file at all -- this is the first either
   direction has had, added with rung M5's `decode`/`unpack`/`decode_block`.
@@ -790,8 +917,27 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   zeroing reddens exactly ONE check. No vault and no client -- and the client half
   is no longer missing: FINDINGS 39 moved a real map's Stripped partner **1.6 GB**
   and the retail client found it, compiled from it and emitted ArenaNet's own bytes,
-  with 0 overlapping pairs afterwards on the real 4.2 GB archive. What is still
-  unmeasured is DURABILITY across a play session),
+  with 0 overlapping pairs afterwards on the real 4.2 GB archive. **DURABILITY
+  across a play session is MEASURED as of 2026-08-13, and this line said it was
+  not until 2026-08-14** -- which is how a session re-opened it as an open item a
+  day after running it, so the answer lives here rather than only in the study.
+  Two witnesses, `studies/crossbuild/FINDINGS.md` 4b and 4c: an authored row
+  survives a session in which the client demonstrably rewrote the archive, on the
+  RELOCATED case (10,714 B that did not fit its 4,608 B reservation, byte-identical
+  afterwards while the client recompiled its Bloated partner FROM it, 64 trapezoids
+  and 4,096/4,096 height samples exact) and on the IN-PLACE case (three icon rows,
+  a different archive copy, all three byte-identical). **The arm is what makes the
+  vacuity control free** and is the method point worth carrying: a zeroed head
+  REQUIRES the client to write, so the run measures survival rather than whether
+  the client happened to touch anything -- without it, "nothing changed" is
+  INCONCLUSIVE and not a pass. What is still unmeasured is a session long enough to
+  trigger whatever rotation the 29-member set participates in, and the bit-31
+  watchlist is unprobed because our rows are not on it. **And the MFT ALTERNATES
+  between two offsets rather than drifting** -- copies with identical entry counts
+  sit at both, so it is a phase and not a function of table size -- which means a
+  journal is only good until the client next runs: `--revert` refuses afterwards,
+  correctly, because replaying MFT edits into abandoned bytes restores nothing and
+  leaves all three checksum rules PASSING),
   `toolkit/mapdata/test_datplan.py` (where a new file may be PUT, against an
   archive the test builds with two shadow containers in it: that placement is
   best fit rather than the head of the largest run, that a run carrying a live
@@ -802,7 +948,77 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   rotates through -- so the planner aimed every insert at a complete shadow MFT.
   Its own fixture had to be relaid: the first version's runs ran largest-first
   down the file, which is what the broken code produced, so the ordering check
-  passed against the defect),
+  passed against the defect.
+  **And since 2026-08-14 section 8 asks where an edit POINTS, which thirty checks of
+  placement policy never did.** `datplan` carried its own row arithmetic and got three
+  of four MFT sites wrong: `mft_offset + (row - 1) * 24` under a line reading "MFT row
+  N", "MFT row 3 (the table describing itself)" addressing row 2 -- the FILE-ID TABLE
+  -- and "MFT row 2" addressing row 1, the file header. The tool applies nothing, so
+  those addresses were handed to a human to apply BY HAND, and this file was green at 30
+  the whole time. Every "MFT row N" edit of every plan is now resolved to the 24 BYTES
+  THE FIXTURE WROTE THERE by a reader written in the test, with the shipped
+  `(row - 1) * 24` kept as the control that must land on row N-1 -- and the bound is
+  refused AS a bound, since row 0 reached `entries[-1]` and planned a write to the LAST
+  row of the table, which a "some blocker" predicate passes because that row's
+  reservation is 0 bytes. Floor 30 -> 38),
+  `toolkit/mapdata/test_bit31.py` (the REPLACEMENT-PENDING census -- the file ids
+  carrying bit 31, which `FcArchive` binds when it has requested a replacement
+  and deleted the plain name (`archive.py`:486, read out of the client). The
+  population is small, it MOVES, and it moves under our own content: **two
+  `content/maps.toml` rows are recorded under `0x8001B97D`**, and row 7982 --
+  `donor_row` for every `content/areas.toml` row -- is named by two bit-31 ids.
+  **The headline is deliberately not the count.** "29 bit-31 ids" is a number an
+  almost-right census also prints, and the tool's whole job is to be believed
+  when it says NOTHING CHANGED: the 900 s session of 2026-08-14 reported
+  `29 -> 29`, and that reading is only worth anything because the two SETS were
+  compared -- four ids clearing while four others are newly set leaves the count
+  identical and describes a different archive. So `diff` never consults
+  `len(bit31)`, and the control is the **count-comparing reading REPRODUCED
+  INLINE** as a live function that must answer "no change" on the same pair the
+  real one catches, with every one of the five scalars asserted IDENTICAL across
+  that swap so none of them could have carried the signal either. The fixture
+  holds every shape at once -- a plain id, a bit-31 id on a map-flagged row, two
+  ids aliasing ONE row, an id whose MASKED form also binds, and an id naming a
+  row the archive does not have. The last is required to be REPORTED rather than
+  raised, because the tool describes copies we did not make; the second-to-last
+  exists because `archive.py`:475 claims the masked form is never separately
+  present, and a census that could not report it could not check it. Two
+  sabotages are built and run: dropping `sha256` from `ROW_FIELDS` makes a
+  flipped payload byte vanish, and censusing on the wrong high bit finds NOTHING
+  and prints **a clean confident zero**, which is why section 0 asserts the exact
+  id SET. Section 7 reproduces the cross-copy population from real archives --
+  **29 install / 25 study / 9 run-live**, install->study clearing exactly 4 ids
+  over TWO rows with NEITHER a map row while install->run-live clears row 7982 --
+  and corroborates `customarea/FINDINGS.md`:967's correction of "two map rows" to
+  **four** from an archive that file never read.
+  **Section 3 is the one an adversarial pass forced, and it is the file's
+  argument**: the first version pinned 3 of ROW_FIELDS' entries, and a
+  six-lens audit MEASURED that **seven of ten could be deleted with all 63
+  checks green** -- including `offset`, which alone is a ROW RELOCATION
+  reporting "NO CHANGE", and `masked_also_binds`, the field whose whole
+  justification is refuting `archive.py`:477. So there is now one fixture per
+  field, each a real archive edit; nine of eleven move their field ALONE and
+  the two that cannot are NAMED rather than faked (`size` co-varies with
+  `sha256` because a shorter read is a different hash; `row` cannot be
+  isolated because pointing an id at another row brings that row's every
+  field with it). Then each isolated field is dropped from `ROW_FIELDS` in
+  turn and its own fixture is required to go BLIND -- all nine. A
+  COMPLETENESS check unions the keys of a live census and requires each to be
+  in `ROW_FIELDS` or in a declared `DERIVED` set, which is what would have
+  caught the defect the same audit found in the module: **`counter` --
+  `alloc.nextStream`, the sibling link -- was censused and never diffed**, so
+  a relink on a map row printed "NO CHANGE" and exited 0. The other module
+  defects it found were all the same shape, exit 2 leaking out as exit 1: a
+  malformed baseline, an archive with no row 2, and a `struct.error` each
+  escaped a narrow `except` and left the CLI at 1, which is this tool's word
+  for "the population CHANGED". **And the write guard refused checkouts while
+  ALLOWING `C:\gw`** -- `--json C:\gw\Gw.dat` would have truncated the
+  owner's 4.2 GB archive, the identical defect `atex.py --make` shipped with,
+  reintroduced in a new module three days later. Floors are two shapes with
+  ZERO headroom each, both MEASURED: 76 bare (`RURIK_VAULT` pointed at
+  nothing), 86 with a vault, section 7 raising the floor itself as its last
+  act -- because a single fixed floor left the vaulted run eight checks of
+  slack and the audit deleted the whole sabotage section inside it. ~5 s),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
   2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
@@ -1142,8 +1358,27 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   stamp, which proxies never do, and the old two-mesh refusal split into an
   unstamped-intruder POSITIVE control (the stamp picks the terrain, the dims pin
   it) and a two-STAMPED-meshes refusal, since a duplicated terrain copies its
-  stamp and is genuine ambiguity. Sections 0-4
-  need no vault and score 67 against a floor of 79. ~49 s),
+  stamp and is genuine ambiguity. **And since 2026-08-14 PROPS ROUND-TRIP** (section 6): a
+  retail map's 864 prop placements go into Blender and come back out as a
+  props sidecar -- 864/864 on model index, flags and outline, positions
+  EXACT and bases to 3.6e-07. That identity is the WEAK half, so the section
+  EDITS two different props and requires exactly those two records to move:
+  one translated by (+1000, -500, +250) in Blender, which must land as
+  (+1000, -500, **-250**) stored -- the terrain's negation, now measured on a
+  prop -- and a DIFFERENT one turned 90 degrees about its OWN origin, which
+  must move its basis by 1.35 and its position by zero. Two props rather than
+  one, because an exporter reading location but not rotation would satisfy a
+  single-prop check. The rotation is about the object's own origin on purpose:
+  the world-origin form displaced the prop by (-20344, +15804) and would have
+  made the position check ambiguous. **It found a real defect**: an OUTLINE
+  proxy is imported UNROTATED by design, so deriving its basis from an
+  identity matrix wrote an identity basis over the real one -- 31 of 864 props
+  silently flattened -- and the stamp now wins for exactly that case, the one
+  place in the exporter where it does. An EMPTY prop list writes no sidecar,
+  because a mesh authored from nothing has no prop layer and an empty one is a
+  different claim; the check that reddened when it did is section 4's "only a
+  heights sidecar is written". Sections 0-4
+  need no vault and score 67 against a floor of 94. ~62 s),
   `toolkit/mapdata/test_mapfile.py` (the WHOLE-FILE codec: a retail `ffna` map
   payload decoded to a typed container and re-encoded byte-identically — **349 of
   349 Bloated and 349 of 349 Stripped** under `--all`, 6 of each by default. The
@@ -1741,19 +1976,46 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   stride that DIVIDES the true one closes on the same base with a multiple of the
   count -- `s_eula` reads as 99 x 4 instead of 33 x 12 -- and only an index column can
   refute it, so the surviving rival strides are printed per row (`s_effect` 0,
-  `s_eula` [4, 36, 44, 132]) and `s_worldData`'s stride is labelled UNSETTLED. That is
+  `s_eula` [4, 36, 44, 132]). That is
   not hypothetical: `s_glow` was entered in this corpus as 2 x 44, CLOSED on the
   correct base with a plausible record, and is 11 x 8. Three sabotages built and run
   and three redden -- a first-hit anchor, a +/- 4 pad tolerance, and the code witness
   dropped -- which is why `pad` is a declared exact number and never a tolerance
-  (4 bytes is a whole record for the eight stride-4 tables here). It is also the
+  (4 bytes is a whole record for the eight stride-4 tables here).
+  **And since 2026-08-14 section 7b is the blind spot's OTHER victim, caught rather
+  than survived.** `s_worldData` shipped here as **20 x 24** with
+  `stride_from="record shape, UNSETTLED"` -- it closed, on the CORRECT base, with the
+  code reference corroborating it, so every check this module owns was satisfied by
+  the wrong answer for as long as the row existed. It is **10 x 48**, and what
+  settled it is not arithmetic available to this file: the table's own accessor at
+  `0x005A93B0` scales the index by 3 and shifts it left 4, and the section finds that
+  site by its SHAPE rather than at a remembered address -- the `lea`+`shl` pair alone
+  occurs 22 times, so it is the trailing absolute `add` that makes it a witness, and
+  the whole 7-byte pattern occurs exactly **once**, loading the very base the anchor
+  arithmetic produced. Read as BYTES, since carve-out (1) scopes capstone to two named
+  files and this is neither. **The count is ArenaNet's too** -- `cmp esi, 0xa` guards
+  `index < arrsize(s_worldData)` at `ConstWorld.cpp:41`, whose `__FILE__` string IS
+  this row's anchor, so the assert and the table are one measurement from two
+  directions -- and the row DECLARES it (the `s_missionClientData` shape) with a check
+  that dropping the declaration reddens, because the number would be unchanged and the
+  provenance would not. **24 is still in the rival list and saying so is the doctrine
+  working**: every divisor of 48 closes on the same base, and the closure never could
+  have refuted it. What can is a COLUMN -- `+0x14` is 512, the client's own
+  `CONST_WORLD_CHUNK_SIZE`, on all ten 48-byte records and ragged on the twenty
+  24-byte ones -- and that is a stated LIMIT of `rival_strides`, which tests closure
+  and the index column and never column coherence. Four sabotages built and run
+  (3, 5, 2 and 1 red); a draft of the floor comment GUESSED those counts and had three
+  of four wrong. The one that does NOT redden under the pre-fix row is the informative
+  one: the left-edge corroboration passes at 20 x 24, because 24 divides 480 and two
+  readings of the SAME 480 bytes cannot see a divisor stride. Only the code witness
+  can. Floor 61 -> 69. It is also the
   first `source = "client-table"` extraction in this repo's history: `--emit-effect`
   writes all **2,077** `s_effect` rows with provenance per row, keyed by the ARRAY
   INDEX rather than the id column (one record's id is not its index, and keying by id
   would drop row 2036 and mint a 2077), and the test loads them through `content.py`
   and then REMOVES the build from one row and requires the load to FAIL, so the 2,077
   are proved to have passed condition 2 rather than skipped it. Sections 0-4 build a
-  small PE32 image byte by byte and need no vault, scoring 28 against a floor of 61,
+  small PE32 image byte by byte and need no vault, scoring 28 against a floor of 69,
   so a vault-less run goes red. ~15 s),
   `toolkit/test_checks.py` (the check on the checker — see below),
   `toolkit/test_run_suite.py` (the suite RUNNER, which did not exist until

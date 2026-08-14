@@ -629,10 +629,24 @@ icons, none of which is ArenaNet's.
 > later profession run in that directory will draw a sunset in slots 2 and 8 and a
 > calibration ruler in slot 3 -- that is us, not a fault. They were left because **the
 > journals expired**: the client moved the MFT during the session, `--revert` correctly
-> refused all three rather than write into dead space, and `datwrite` has no verb for the
-> explicit restore it recommends. The original payloads are still in the journals' `before`
-> fields. Full account in [`../crossbuild/FINDINGS.md`](../crossbuild/FINDINGS.md) §4c --
-> and the procedural rule it yields is **revert before you launch, not after**.
+> refused all three rather than write into dead space, and `datwrite` had no verb for the
+> explicit restore it recommends.
+>
+> **CORRECTED 2026-08-14. "The original payloads are still in the journals' `before` fields"
+> was the line here, and it is FALSE** -- no journal for these rows exists anywhere in the
+> vault (grepped whole; `datwrite`'s default path `DAT.journal.json` is not beside that
+> archive). Nothing was lost, because a pristine copy is a better source than a journal and
+> every checkout has one: all **127** armed rows -- 174150..175682, not the three
+> `crossbuild` §4c named, this arc having armed 124 more since -- are intact and byte-identical
+> in `vault/client/2026-07-29` **and** `vault/dat_study`.
+>
+> **The verb now exists**: `datwrite.py --dat <copy> --restore ROW --from <pristine>`
+> re-grows the row in place, restores compression 8, and refuses if the blocks it freed have
+> been taken since, naming the claimant. Dry-run first; it prints the plan without `--confirm`.
+> **This archive has deliberately NOT been restored** -- 127 rows are this arc's working
+> state and reverting them is its call, not a passing session's. Full account in
+> [`../crossbuild/FINDINGS.md`](../crossbuild/FINDINGS.md) §4c -- and the procedural rule it
+> yields is **revert before you launch, not after**.
 
 ### Skill NAMES are no longer a wall -- RECONSTRUCTION, and untested
 

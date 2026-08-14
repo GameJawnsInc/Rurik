@@ -58,12 +58,21 @@ against the prop records in a map file this module never opens -- so a wrong
 vertex range, a dropped sub-model, a byte-order slip or a truncated array all
 move a number that two different files have to agree on.
 
+TEXTURES (format_version 2, rung M5). Every `0x00000FA5` slot is resolved to
+an archive row and decoded to a PNG sidecar at FULL RESOLUTION -- which only
+became possible when the ATEX level codec landed, since 98.4% of containers
+carry a compressed level 0. A sub-model names its slot in `texture`, from the
+header word this module used to carry unnamed as `unk`. A slot that is null,
+unresolvable or in a refused format is recorded WITH ITS REASON rather than
+dropped.
+
 WHAT IS NOT EXPORTED, so nobody reads absence as emptiness: the geometry
-chunk's undecoded preamble, the sub-model `unk` word's meaning (the value is
-carried), the trailing blocks, the texture-name chunks (`0xFA1`/`0xFA5`) and
-the AMAT materials (`0xFAD`). Textures are rung M5. `NoClose` models -- ~15%
-of the corpus, and 77 of Pre-Searing's 229 -- cannot be exported at all and
-are REPORTED per map rather than silently skipped.
+chunk's undecoded preamble, the trailing blocks, `0xFA1` (whose "texture
+filenames" reading is REFUTED -- see `modelfile.texture_refs`) and the AMAT
+materials (`0xFAD`), so a model's shading beyond its diffuse image is not
+here. `NoClose` models cannot be exported at all and are REPORTED per map
+rather than silently skipped -- a population M6 reduced to zero on both
+reference maps.
 
 CONVENTIONS THE MANIFEST STATES, because a consumer must never guess:
 
@@ -84,6 +93,7 @@ CONVENTIONS THE MANIFEST STATES, because a consumer must never guess:
 """
 
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -99,17 +109,24 @@ from props import BloatedProps  # noqa: E402
 import modelfile  # noqa: E402
 from modelfile import (ModelFile, NoClose, Undecodable,  # noqa: E402
                        FIELD_NORMAL, FIELD_POSITION, FIELD_TEXCOORD_BITS,
-                       FIELD_SIZE)
+                       FIELD_SIZE, material_table)
 import mapexport  # noqa: E402
+import atex  # noqa: E402
+import png  # noqa: E402
 import vaultpath  # noqa: E402
 
 FORMAT = "rurik.gwmodel"
-FORMAT_VERSION = 1
-FORMAT_VERSIONS_READ = (1,)
+FORMAT_VERSION = 3
+#: 1 is geometry only; 2 adds the OPTIONAL texture sidecars and the
+#: per-sub-model binding, and changes nothing else, so both load.
+FORMAT_VERSIONS_READ = (1, 2, 3)
 
 DTYPE_F32 = "float32-le"
 DTYPE_U16 = "uint16-le"
 DTYPE_BYTES = "bytes"
+#: A texture sidecar is a PNG written by `png.py` -- stdlib zlib, no
+#: third-party dependency, and any tool opens it.
+DTYPE_PNG = "png"
 
 #: Where a model export lands by default. Inside the vault, like every other
 #: derived-ArenaNet artifact in this repo.
@@ -202,7 +219,103 @@ def resolve_outdir(outdir=None):
 
 # ------------------------------------------------------------- the manifest
 
-def build_manifest(geo, name, source):
+def texture_payloads(model, name, archive, table=None):
+    """Decode a model file's textures to PNG. `(entries, payloads, census)`.
+
+    Each `0x00000FA5` slot becomes one entry naming its file id, the archive
+    identity of the row it resolved to (size and crc -- a file id is archive
+    STATE, so the id alone does not pin the bytes), and the PNG sidecar it
+    was written to. A slot that is NULL, unresolvable, or in a format this
+    decoder does not handle is recorded with a `skipped` reason rather than
+    dropped, because a texture list with silent holes cannot be audited.
+
+    Level 0 is exported -- the full-resolution image. That is only possible
+    since the ATEX level codec landed: before it, 98.4% of containers had a
+    compressed level 0 and the best available was a small raw mip.
+    """
+    if table is None:
+        table = file_id_table(archive)
+    by_row = getattr(archive, "_row_index", None)
+    entries, payloads = [], []
+    census = collections.Counter()
+    written = {}
+    for slot, file_id in enumerate(model.texture_refs()):
+        entry = {"slot": slot, "file_id": file_id}
+        if file_id is None:
+            entry["skipped"] = "null slot"
+            census["null"] += 1
+            entries.append(entry)
+            continue
+        row = table.get(file_id)
+        if row is None:
+            entry["skipped"] = "file id not in the archive's table"
+            census["unresolved"] += 1
+            entries.append(entry)
+            continue
+        mft = archive.row(row)
+        entry["row"] = row
+        entry["size"] = mft.size
+        entry["crc"] = mft.crc
+        if file_id in written:
+            entry["image"] = written[file_id]
+            census["shared"] += 1
+            entries.append(entry)
+            continue
+        try:
+            data = archive.read(mft)
+            if data[:4] == atex.DDS_MAGIC:
+                got = atex.dds_rgba(data)
+                if got is None:
+                    entry["skipped"] = "a DDS shape this decoder refuses"
+                    census["dds_refused"] += 1
+                    entries.append(entry)
+                    continue
+                rgba, width, height = got
+                census["dds"] += 1
+            else:
+                rgba, width, height = atex.decode_rgba(data)
+                census["atex"] += 1
+        except Exception as exc:                       # noqa: BLE001
+            entry["skipped"] = f"{type(exc).__name__}: {exc}"
+            census["error"] += 1
+            entries.append(entry)
+            continue
+        # NAMED BY FILE ID ALONE, not by the model. 80.1% of prop models
+        # are shared between maps and they share TEXTURES harder still --
+        # naming these per model wrote 1,783 files and 110 MB for 485
+        # distinct images. Same argument as one mesh datablock per model.
+        fname = f"tex_{file_id:X}.png"
+        payloads.append((fname, png.encode(rgba, width, height)))
+        written[file_id] = fname
+        entry.update(image=fname, width=width, height=height)
+        entries.append(entry)
+    return entries, payloads, census
+
+
+def _material_entry(mtable, sub):
+    """One sub-model's material, as the manifest carries it."""
+    if mtable is None:
+        return {"kind": "none"}
+    kind, layers = mtable.for_submodel(sub)
+    if kind != "layered":
+        return {"kind": kind, "index": sub.unk & 0xFFFF}
+    material = mtable.materials[sub.unk & 0xFFFF]
+    return {"kind": "layered", "index": sub.unk & 0xFFFF,
+            # `blend` is NON-ZERO on the materials that need real alpha
+            # blending rather than opaque rendering. MEASURED on Kamadan:
+            # 16 of 194 layered sub-models, and 14 of those draw one texture
+            # -- a 512x128 mist band with 164 distinct alpha values and NOT
+            # ONE fully opaque pixel. What the individual values MEAN (5, 6,
+            # 8, 9, 10 occur) is NOT DECODED; that it separates blended from
+            # opaque is what a consumer can use.
+            "blend": material.blend,
+            "material_flags": material.flags,
+            "layers": [{"texpath": lay.texpath, "uv": lay.texarray,
+                        "flags": lay.flags, "slot": lay.slot}
+                       for lay in layers]}
+
+
+def build_manifest(geo, name, source, mtable=None):
     """The JSON body and the sidecar payloads, with no file touched yet.
 
     Split out so the whole interchange can be built from a `ModelGeometry`
@@ -225,6 +338,40 @@ def build_manifest(geo, name, source):
             "counts": list(sm.counts),
             "u_counts": list(sm.u_counts),
             "unk": sm.unk,
+            # A PER-SUB-MODEL INDEX, and what it indexes is NOT ESTABLISHED.
+            # Same word as `unk`, kept beside it so the raw value stays
+            # visible and a format-1 consumer is not broken.
+            #
+            # What IS measured: it is a real index rather than an ordinal or
+            # a count. Over 1,076 sub-models of the two reference maps it
+            # lands in [0, FA5 slot count) on 1,048 (97.4%) where the count
+            # fields score 2-5%; on the 210 models carrying both several
+            # sub-models and several textures it VARIES on 208 and reaches
+            # >= 2 on 157. The one rival the range test could not separate,
+            # `u2`, is ALL ZERO on all 210 and so is trivially in range
+            # rather than an index. The exceptions are the shape that
+            # settles that much: file 0x35140 reads [2, 3] over four slots
+            # (an ordinal starts at 0) and 0x2D831 reads
+            # [0,1,2,3,1,1,3,3,1,3,4,5,5] over nine (an ordinal never
+            # repeats).
+            #
+            # **What is REFUTED is that it selects the DIFFUSE texture.**
+            # Rendering Kamadan with this binding puts a specular/gloss map
+            # on most building surfaces -- black with soft highlights --
+            # while awnings and foliage come out right. So FA5 is a mixed
+            # list of map kinds and this index does not name the colour one.
+            # The likely chain is sub-model -> an AMAT material (chunk
+            # 0xFAD, 457/457 resolving to files with that magic) -> the FA5
+            # slot, and AMAT is NOT DECODED. Nothing here should be read as
+            # "the diffuse texture is slot `material_index`".
+            "material_index": sm.unk,
+            # THE MATERIAL'S LAYERS, which is what actually binds a surface
+            # to its textures (`modelfile.MaterialTable`). Each layer names
+            # an FA5 slot (`texpath`, ArenaNet's texPathIndex) and the UV
+            # SET it samples (`uv`; negative means generated, not stored).
+            # A `kind` of "binary" means the material lives in the model's
+            # AMAT list instead and no layers are given.
+            "material": _material_entry(mtable, sm),
             "vertex_base": len(pos),
             "index_base": len(idx),
             "field_offsets": {str(b): o for b, o in sorted(fields.items())},
@@ -438,6 +585,13 @@ def load_model(json_path):
             arrays[side["kind"]] = list(struct.unpack(f"<{n}H", blob))
         elif side["dtype"] == DTYPE_BYTES:
             arrays[side["kind"]] = blob
+        elif side["dtype"] == DTYPE_PNG:
+            # Verified by `_verify_meta` above (size and sha256) and then
+            # left ON DISK. Decoding every texture into memory would cost a
+            # model's whole texture set on every load, and every consumer of
+            # a PNG wants a path -- Blender loads the file itself. The
+            # manifest's `textures` list is the index.
+            continue
         else:
             raise ValueError(f"{side['name']}: unknown dtype "
                              f"{side['dtype']!r}")
@@ -449,7 +603,8 @@ def load_model(json_path):
 
 # ------------------------------------------------------------- the export
 
-def export_file_id(file_id, archive, outdir=None, name=None, table=None):
+def export_file_id(file_id, archive, outdir=None, name=None, table=None,
+                   textures=True):
     """One model file to an interchange on disk. Returns the JSON path."""
     table = file_id_table(archive) if table is None else table
     row = table.get(file_id)
@@ -465,7 +620,21 @@ def export_file_id(file_id, archive, outdir=None, name=None, table=None):
     source = {"archive": os.path.basename(archive.path), "file_id": file_id,
               "row": row, "size": entry.size, "crc": entry.crc,
               "chunks": [f"0x{cid:X}" for cid, _p in mf.chunks]}
-    meta, payloads = build_manifest(geo, name, source)
+    meta, payloads = build_manifest(geo, name, source,
+                                    mtable=material_table(
+                                        mf.find(
+                                            modelfile.GEOMETRY_CHUNK)))
+    if textures:
+        entries, tex_payloads, census = texture_payloads(
+            mf, name, archive, table=table)
+        meta["textures"] = entries
+        meta["texture_census"] = dict(census)
+        payloads = payloads + tex_payloads
+        for side_name, blob in tex_payloads:
+            meta["sidecars"].append(
+                {"kind": "texture", "name": side_name, "dtype": DTYPE_PNG,
+                 "count": 1, "bytes": len(blob),
+                 "sha256": hashlib.sha256(blob).hexdigest()})
     return write_export(meta, payloads, outdir)
 
 
@@ -486,7 +655,8 @@ def map_model_ids(map_file_id, archive, table=None):
             if i < len(ids)]
 
 
-def export_map_models(map_file_id, archive, outdir=None, table=None):
+def export_map_models(map_file_id, archive, outdir=None, table=None,
+                      textures=True):
     """Every model a map references. Returns (written, skipped).
 
     `skipped` names the models that could not be decoded and why -- the ~15%
@@ -499,7 +669,7 @@ def export_map_models(map_file_id, archive, outdir=None, table=None):
     for fid in map_model_ids(map_file_id, archive, table=table):
         try:
             written.append(export_file_id(fid, archive, outdir=outdir,
-                                          table=table))
+                                          table=table, textures=textures))
         except NoClose as exc:
             skipped.append((fid, "NoClose", str(exc)[:90]))
         except (Undecodable, ValueError, KeyError) as exc:

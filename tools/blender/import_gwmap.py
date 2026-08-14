@@ -136,7 +136,7 @@ FORMAT_VERSIONS = (1, 2)
 # The MODEL interchange (rung M3), read when a prop's model has one beside
 # the map export.
 MODEL_FORMAT = "rurik.gwmodel"
-MODEL_VERSIONS = (1,)
+MODEL_VERSIONS = (1, 2, 3)
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
 DTYPE_JSON = "json"
@@ -145,6 +145,8 @@ DTYPE_JSON = "json"
 # back by `tools/blender/export_gwmap.py`; the two agree on this name and on
 # nothing else.
 STAMP = "gwmap"
+#: The props sidecar's non-per-prop half, for the round trip.
+PROPS_STAMP = "gwprops"
 
 # The pitch the interchange is expected to carry. Not used to place a vertex --
 # see convention 1 -- only to say so when a file disagrees with the measurement.
@@ -478,10 +480,22 @@ def _stamp(obj, gwmap):
     and a disagreement is worth reporting rather than silently resolving.
     """
     # `props_state` goes with `sidecars`: both describe the file that was
-    # imported, and the way OUT (a terrain-only manifest today) carries
-    # neither honestly.
+    # imported, and the way OUT rebuilds both from what is in the scene.
     stamp = {k: v for k, v in gwmap.meta.items()
              if k not in ("sidecars", "props_state")}
+    # THE PROPS SIDECAR'S NON-PER-PROP HALF, carried so a round trip can
+    # rebuild it. The model table maps a prop's `model` index to an archive
+    # file id and that row's (size, crc) -- ARCHIVE STATE, which a Blender
+    # scene has no way to re-derive and an exporter must therefore never
+    # invent. `refs4`/`refs6` are the Stripped-side reference arrays, whose
+    # meaning is UNVERIFIED (`props.PropRef`); they are transported, not
+    # understood. The per-prop records are deliberately NOT stamped: those
+    # are what the objects carry, and stamping them would let an exporter
+    # re-emit the map that was imported no matter what was done to it.
+    if gwmap.props is not None:
+        obj[PROPS_STAMP] = json.dumps(
+            {k: v for k, v in gwmap.props.items() if k != "props"},
+            sort_keys=True)
     obj[STAMP] = json.dumps(stamp, sort_keys=True)
 
 
@@ -543,10 +557,126 @@ def load_gwmodel(json_path):
     if "idx" in blobs:
         blob, n = blobs["idx"]
         idx = list(struct.unpack("<%dH" % n, blob))
-    return meta, positions, idx
+    uvs = []
+    if "uv0" in blobs:
+        blob, n = blobs["uv0"]
+        flat = struct.unpack("<%df" % (2 * n), blob)
+        uvs = [(flat[i * 2], flat[i * 2 + 1]) for i in range(n)]
+    return meta, positions, idx, uvs
 
 
-def gwmodel_mesh(meta, positions, idx, mesh_name):
+def gwmodel_materials(meta, models_dir):
+    """`(materials_by_image, image_per_submodel)` for one model.
+
+    One Blender material per distinct PNG the model names, reused across
+    every model that shares it -- 316 exported models reference 472 distinct
+    images, so per-model copies would multiply both.
+
+    Alpha is wired to the shader so cut-out textures (foliage, fences,
+    grates) are not solid rectangles; blend mode is left at Blender's default
+    rather than guessed per texture, because nothing measured says which
+    textures are meant to be alpha-tested and which alpha-blended -- that
+    lives in the AMAT materials this export does not decode.
+
+    **THE SLOT THIS PICKS IS NOT THE ESTABLISHED DIFFUSE.** A sub-model's
+    `material_index` is a real per-sub-model index (see `modelexport`), but
+    rendering Kamadan with it puts a specular/gloss map on most building
+    surfaces while awnings and foliage come out correct -- so `0xFA5` is a
+    MIXED list of map kinds and this index does not name the colour one. The
+    material chain almost certainly runs through the AMAT chunk `0xFAD`,
+    which nothing here decodes. Textures are attached anyway because the
+    scene is far more useful with them than without, and `--no-textures` is
+    the control; but a render from this file is NOT evidence about which
+    texture a surface should carry.
+    """
+    slots = meta.get("textures") or []
+    by_image, per_sub = {}, {}
+    # Which images are drawn by a BLENDED material. The archive says which
+    # materials need it (`blend` non-zero) and that is better evidence than
+    # guessing from pixels -- a texture can carry alpha and still be drawn
+    # opaque. Portals and mist are the visible case: without this they are
+    # black rectangles, because their texture has no fully opaque pixel.
+    blended = set()
+    for sm in meta["submodels"]:
+        mat = sm.get("material") or {}
+        if not mat.get("blend"):
+            continue
+        for lay in (mat.get("layers") or []):
+            slot = lay.get("texpath")
+            if slot is not None and slot < len(slots):
+                name = slots[slot].get("image")
+                if name:
+                    blended.add(name)
+    for entry in slots:
+        image_name = entry.get("image")
+        if not image_name:
+            continue
+        if image_name in by_image:
+            continue
+        path = os.path.join(models_dir, image_name)
+        if not os.path.isfile(path):
+            continue
+        mat = bpy.data.materials.get(image_name)
+        if mat is None:
+            mat = bpy.data.materials.new(image_name)
+            mat.use_nodes = True
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+            bsdf = nodes.get("Principled BSDF")
+            tex = nodes.new("ShaderNodeTexImage")
+            image = bpy.data.images.get(image_name)
+            if image is None:
+                image = bpy.data.images.load(path)
+            tex.image = image
+            tex.extension = "REPEAT"          # texcoords are not normalised
+            if bsdf is not None:
+                links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+                if "Alpha" in bsdf.inputs:
+                    links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+        if image_name in blended:
+            # Blender 4.2+ renamed these; older builds want 'BLEND'. Try in
+            # order and leave the default alone if none is accepted, rather
+            # than failing the whole import over a display setting.
+            for value in ("BLENDED", "BLEND"):
+                try:
+                    mat.blend_method = value
+                    break
+                except TypeError:
+                    continue
+        by_image[image_name] = mat
+    for s, sm in enumerate(meta["submodels"]):
+        # THE BINDING, and it is a chain rather than an index (format 3):
+        # sub-model -> material -> layers -> texPathIndex -> FA5 slot.
+        # Layer 0 is the BASE layer. Using material_index as an FA5 index
+        # directly -- which is what this did before the material table was
+        # decoded -- is what put specular maps on Kamadan's buildings.
+        mat = sm.get("material") or {}
+        layers = mat.get("layers") or []
+        slot = None
+        if layers:
+            # THE DIFFUSE IS THE FIRST LAYER SAMPLING A STORED UV SET, not
+            # simply layer 0. A layer whose `uv` is NEGATIVE has GENERATED
+            # coordinates -- a reflection/environment effect, which is what
+            # renders as black with soft highlights and is exactly what was
+            # landing on Kamadan's walls. MEASURED: 92 of 1,063 layered
+            # sub-models put such a layer FIRST, and the two largest wall
+            # models on Kamadan are both among them.
+            stored = [lay for lay in layers if (lay.get("uv") or 0) >= 0]
+            slot = (stored or layers)[0].get("texpath")
+        elif mat.get("kind") in (None, "none"):
+            # format 2 and earlier carried no material table; fall back to
+            # the old reading so an old export still shows something.
+            slot = sm.get("material_index", sm.get("texture"))
+        if slot is None or slot >= len(slots):
+            continue
+        name = slots[slot].get("image")
+        if name in by_image:
+            per_sub[s] = name
+    return by_image, per_sub
+
+
+def gwmodel_mesh(meta, positions, idx, mesh_name, uvs=(),
+                 materials=None, sub_images=None):
     """A Blender mesh for one model, in Blender's world-up convention.
 
     **z is NEGATED, exactly as the terrain's is, and that is MEASURED rather
@@ -566,14 +696,49 @@ def gwmodel_mesh(meta, positions, idx, mesh_name):
     """
     verts = [(x, y, -z) for x, y, z in positions]
     faces = []
-    for sm in meta["submodels"]:
+    face_sub = []
+    for s, sm in enumerate(meta["submodels"]):
         vb, ib, ti = sm["vertex_base"], sm["index_base"], sm["ti"]
         tri = idx[ib:ib + ti]
         for i in range(0, len(tri) - 2, 3):
             faces.append((vb + tri[i], vb + tri[i + 1], vb + tri[i + 2]))
+            face_sub.append(s)
     mesh = bpy.data.meshes.new(mesh_name)
     mesh.from_pydata(verts, [], faces)
     mesh.update()
+
+    # UVs, per LOOP. The exporter's texcoords are per VERTEX, so each face
+    # corner takes its own vertex's pair.
+    #
+    # **v IS FLIPPED.** Direct3D puts v=0 at the TOP of an image and Blender
+    # puts it at the bottom, so `v_blender = 1 - v`. That is a convention of
+    # the two tools rather than a fact about the archive, which is why it is
+    # applied HERE and not in the interchange -- `modelexport` carries
+    # ArenaNet's own numbers unchanged.
+    #
+    # Texcoords are NOT normalised (97.8% inside +/-16 over a measured range
+    # of -519.7..520.4), so materials must WRAP. Nothing is clamped here.
+    if uvs:
+        layer = mesh.uv_layers.new(name="UVMap")
+        for poly in mesh.polygons:
+            for li in poly.loop_indices:
+                vi = mesh.loops[li].vertex_index
+                if vi < len(uvs):
+                    u, v = uvs[vi]
+                    layer.data[li].uv = (u, 1.0 - v)
+
+    # One material slot per sub-model TEXTURE SLOT, so a face draws with the
+    # image its sub-model names. See `modelexport`'s `texture` field for how
+    # well supported that binding is -- it is INFERRED, not proven.
+    if materials:
+        slot_of = {}
+        for image_name, mat in materials.items():
+            slot_of[image_name] = len(mesh.materials)
+            mesh.materials.append(mat)
+        for poly, s in zip(mesh.polygons, face_sub):
+            name = sub_images.get(s)
+            if name in slot_of:
+                poly.material_index = slot_of[name]
     return mesh
 
 
@@ -585,7 +750,8 @@ def _model_dir(gwmap, explicit=None):
     return os.path.join(os.path.dirname(os.path.abspath(gwmap.path)), "models")
 
 
-def build_prop_objects(gwmap, name=None, models_dir=None, proxies_only=False):
+def build_prop_objects(gwmap, name=None, models_dir=None,
+                       proxies_only=False, no_textures=False):
     """Every placement as an object in its own collection.
 
     Returns `(collection, objects)`, or `(None, [])` when the export carries
@@ -614,13 +780,17 @@ def build_prop_objects(gwmap, name=None, models_dir=None, proxies_only=False):
             if not os.path.isfile(path):
                 continue                  # the ~15% that never decoded
             try:
-                meta, positions, idx = load_gwmodel(path)
+                meta, positions, idx, uvs = load_gwmodel(path)
             except (ValueError, KeyError, struct.error) as exc:
                 sys.stderr.write("[warn] %s: %s\n"
                                  % (os.path.basename(path), exc))
                 continue
+            mats, sub_images = ({}, {})
+            if not no_textures:
+                mats, sub_images = gwmodel_materials(meta, mdir)
             shared[m["index"]] = gwmodel_mesh(
-                meta, positions, idx, "gwmodel_%X" % m["file_id"])
+                meta, positions, idx, "gwmodel_%X" % m["file_id"],
+                uvs=uvs, materials=mats, sub_images=sub_images)
 
     objs = []
     for i, rec in enumerate(pd["props"]):
@@ -667,6 +837,13 @@ def build_prop_objects(gwmap, name=None, models_dir=None, proxies_only=False):
         obj["gw_flags"] = rec["flags"]
         obj["gw_proxy"] = kind
         obj["gw_real"] = real
+        # CARRIED FOR THE ROUND TRIP, because a mesh cannot hold them and an
+        # exporter that had to invent them would be writing fiction. The
+        # OUTLINE especially: a real-mesh prop draws none of it, so without
+        # this the footprint the client compiles from would be lost the first
+        # time a scene went back out.
+        obj["gw_outline"] = [c for pt in rec["outline"] for c in pt]
+        obj["gw_basis"] = [c for v in rec["basis"] for c in v]
         objs.append(obj)
     return coll, objs
 
@@ -700,6 +877,10 @@ def props_summary(objs, gwmap):
             # One datablock per model, shared: the count of DISTINCT meshes
             # among real-mesh props is what proves the instancing.
             "real_meshes": len({o.data.name for o in objs if o["gw_real"]}),
+            "materials": len({m.name for o in objs if o["gw_real"]
+                              for m in o.data.materials if m}),
+            "uv_meshes": len({o.data.name for o in objs if o["gw_real"]
+                              and o.data.uv_layers}),
             "objects": out}
 
 
@@ -809,6 +990,9 @@ def main(argv=None):
     ap.add_argument("--models", default=None, metavar="DIR",
                     help="where the .gwmodel family lives (default: models/ "
                          "beside the map export)")
+    ap.add_argument("--no-textures", action="store_true",
+                    help="build prop meshes without materials or UVs -- the "
+                         "control for the texture path")
     ap.add_argument("--proxies-only", action="store_true",
                     help="force the measured proxies even where a real mesh "
                          "is available -- the control for the real-mesh path")
@@ -820,7 +1004,7 @@ def main(argv=None):
     if not args.no_props and gwmap.props is not None:
         _coll, prop_objs = build_prop_objects(
             gwmap, name=args.name, models_dir=args.models,
-            proxies_only=args.proxies_only)
+            proxies_only=args.proxies_only, no_textures=args.no_textures)
         summary["props"] = props_summary(prop_objs, gwmap)
 
     print("imported %s" % gwmap)

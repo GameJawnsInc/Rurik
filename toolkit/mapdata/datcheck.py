@@ -98,6 +98,31 @@ WHAT THE SNAPSHOT HOLDS (FINDINGS 18.5):
     python toolkit/mapdata/datcheck.py --dat DAT --snapshot before.json
     python toolkit/mapdata/datcheck.py --dat DAT --diff before.json
 
+ROW NUMBERS, AND WHY EVERY ONE PRINTED HERE CARRIES ITS FILE ID. This tool and
+`archive.py` use ONE convention -- the raw MFT index, row 0 the descriptor, 16
+the client's `INDEX_FIRST_FILE` -- and they agree on every row of the archive a
+run is pointed at (`test_archive.py` §1c, measured over the whole table, both
+readings). MEASURED 2026-08-14 on all TEN copies in the vault by hand; §1c
+re-measures one per run, which is the copy whose answer matters. That is
+worth saying out loud because `studies/crossbuild/FINDINGS.md` §4b.1 concluded
+the opposite: `--diff` said "row 71496 changed from 0 B to 6,012 B", `deploy.py`
+had said "head 71496, partner 71497", and the pair was read as the client having
+eaten an authored map. Both tools were right. 71496 is that map's Bloated HEAD,
+which `deploy` arms to zero so the client MUST recompile it; 6,012 B is the
+recompile succeeding; the authored bytes are in 71497 and never moved. What
+failed was two bare integers being the whole of the evidence. So `row_identity`
+gives every row named here the file id and the role that tell it apart from its
+neighbour, and both verbs print `ROW_CONVENTION` above their numbers.
+
+ONE CONSEQUENCE WORTH KNOWING BEFORE YOU DIFF TWO OUTPUTS. The `--diff` layout
+CHANGED on 2026-08-13: one line per changed row became two (the label, then the
+kind), and the corroboration list `[0, 2, 3]` became one labelled line each. So
+`vault/dat_durability/diff-38519-to-38797.txt`, which was produced by the old
+formatter, is no longer line-comparable with a re-run. Its CONTENT still holds --
+40 distinct rows on its `row N` lines, 43 counting the corroboration list -- and
+those numbers are in this same convention. Nothing in the tree consumes
+`format_diff` programmatically, so nothing else moved.
+
 Exit codes: `--preflight` 0 all clear, 1 something failed. `--diff` 0 the archive
 is byte-for-byte the same table it was, 1 something changed (which is a RESULT,
 not an error -- "loaded, but the row changed" is a first-class outcome), 2 the
@@ -119,9 +144,26 @@ import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from archive import Archive, ENTRY_SIZE, MFT_MAGIC  # noqa: E402
+from archive import (Archive, ENTRY_SIZE, MFT_MAGIC,  # noqa: E402
+                     MFT_ROW_OF_ENTRIES_0, row_label,
+                     FILE_HEADER_ROW, FILE_ID_TABLE_ROW, MFT_SELF_ROW,
+                     FIRST_CLAIMABLE_ROW)
 
 SNAPSHOT_VERSION = 1
+
+# Printed above any list of row numbers this tool produces. It is three lines of
+# output against the afternoon it cost: `studies/crossbuild/FINDINGS.md` §4b.1
+# is a written-up conclusion that this tool and `archive.py` number rows
+# differently, drawn from a `deploy.py` line and a `--diff` line that were in
+# fact naming the SAME row correctly. They agree -- `test_archive.py` §1c
+# measures it over every row of the copy it is pointed at -- and the number
+# that differs is `len(archive.entries)`, which is a list length rather than a
+# row count. Naming the convention costs nothing and removes the question.
+ROW_CONVENTION = (
+    "rows are RAW MFT indices: 0 is the Mft descriptor, %d is entries[0], "
+    "16 is INDEX_FIRST_FILE. archive.Archive.row(n) resolves the same n; "
+    "archive.Archive.entries is POSITIONAL and entries[n] is a DIFFERENT row."
+    % MFT_ROW_OF_ENTRIES_0)
 
 HDR_CRC_SPAN = 0x0C          # the header CRC covers exactly bytes 0x00..0x0C
 HDR_CRC_OFF = 0x0C
@@ -136,12 +178,12 @@ MOD_BIT_DISASSEMBLY = 0x2    # FINDINGS 18.4's `test byte [esi+0x1c],2`
 DESCRIPTOR_COUNTER_OFF = 0x04    # the u32 the flush increments
 DESCRIPTOR_COUNT_OFF = 0x0C
 
-FIRST_CLAIMABLE_ROW = 16     # INDEX_FIRST_FILE, ArenaNet's own constant
+# FILE_HEADER_ROW, FILE_ID_TABLE_ROW, MFT_SELF_ROW and FIRST_CLAIMABLE_ROW are
+# imported from `archive.py` above rather than restated here. They used to be
+# declared in three modules, and `datplan.py`'s copy was then used with the wrong
+# arithmetic for months -- see the MFT ROW NUMBERS block in archive.py.
 FLAG_ENTRY_USED = 0x01
 FLAG_FIRST_STREAM = 0x02
-FILE_ID_TABLE_ROW = 2
-MFT_SELF_ROW = 3
-FILE_HEADER_ROW = 1
 FILE_HEADER_SIZE = 0x20
 
 FILE_ID_RECORD = struct.Struct("<II")
@@ -307,6 +349,89 @@ def directory_invariant(mft, records):
     }
 
 
+def row_identity(mft, records):
+    """row -> {"file_ids": [...], "role": str}, for every row worth naming.
+
+    WHY A DIFF LINE NEEDS MORE THAN A NUMBER. On 2026-08-13 `--diff` reported
+    "row 71496 changed from 0 B to 6,012 B" while `deploy.py` had printed
+    "installing ... head 71496, partner 71497", and the pair was read as the
+    client having overwritten an authored map. It had not: 71496 is the map's
+    Bloated HEAD, which `deploy` arms to zero length precisely so the client is
+    forced to recompile it, and 6,012 B is that recompile working. The authored
+    bytes are in the partner, 71497, which does not appear in the diff at all
+    because nothing touched it. Both tools were right and the reader had two
+    bare integers to tell them apart with.
+
+    So each row this tool names now carries the two things that disambiguate it:
+    the FILE ID, which survives a patch where a row index does not
+    (`toolkit/contentids.py`, `studies/maprows/FINDINGS.md` §8) and which
+    `deploy.py` prints on its own first line, and the ROLE, which says which
+    half of a two-row map you are looking at.
+
+    A row may carry SEVERAL file ids: `archive.file_id_table` registers a bit-31
+    id under both forms for lookup, but this reads the table's raw records, so
+    what comes back is what the archive actually stores -- both ids where the
+    archive really stores both, and never a masked form we invented.
+
+    Roles below index 16 are the client's own structural assignment
+    (`INDEX_FIRST_FILE`); above it they are read from the flags and from
+    `alloc.nextStream`, which is the only thing that names a partner -- no
+    partner is ever named by the file-id table (test_mapchunks: 349 of 349).
+    """
+    n = row_count(mft)
+    ids = {}
+    for file_id, row in records:
+        if file_id == 0 and row == 0:
+            continue                      # a RELEASED slot, not a name
+        ids.setdefault(row, []).append(file_id)
+
+    used = bytearray(n)
+    first = bytearray(n)
+    for i in range(n):
+        flags = mft[i * ENTRY_SIZE + 0x0E]
+        used[i] = flags & FLAG_ENTRY_USED
+        first[i] = (flags & (FLAG_ENTRY_USED | FLAG_FIRST_STREAM)) == \
+            (FLAG_ENTRY_USED | FLAG_FIRST_STREAM)
+    points_at = {}                        # partner row -> the row pointing at it
+    for i in range(n):
+        if used[i]:
+            nxt = struct.unpack_from("<I", mft, i * ENTRY_SIZE + 0x10)[0]
+            if nxt:
+                points_at.setdefault(nxt, i)
+
+    fixed = {0: "MFT descriptor", FILE_HEADER_ROW: "file header",
+             FILE_ID_TABLE_ROW: "file-id table", MFT_SELF_ROW: "the MFT itself"}
+    out = {}
+    for i in range(n):
+        if i in fixed:
+            role = fixed[i]
+        elif i < FIRST_CLAIMABLE_ROW:
+            role = "reserved spare"
+        elif not used[i]:
+            role = ("USED CLEAR but row %d points here" % points_at[i]
+                    if i in points_at else "free spare")
+        elif first[i]:
+            role = "stream head" if i in ids else "stream head, UNNAMED"
+        elif i in points_at:
+            role = "stream partner of row %d" % points_at[i]
+        else:
+            role = "used, no first-stream flag and nothing points here"
+        out[i] = {"file_ids": ids.get(i, []), "role": role}
+    return out
+
+
+def label_row(identity, row):
+    """`row_label` over a `row_identity` map, tolerant of not having one.
+
+    Returns a bare `row N` when identity is unavailable rather than inventing
+    one, because `diff()` can be handed two snapshots with no archive behind
+    them and a confident label there would be a guess.
+    """
+    if not identity or row not in identity:
+        return row_label(row)
+    return row_label(row, identity[row]["file_ids"], identity[row]["role"])
+
+
 # --------------------------------------------------------------- pre-flight --
 
 def preflight(path, baseline=None):
@@ -468,11 +593,40 @@ def preflight(path, baseline=None):
 
 # ----------------------------------------------------------------- snapshot --
 
-def snapshot(path):
-    """Tier 0 + Tier 1 + Tier 2, with the header read before the MFT."""
+def scan(path):
+    """(header, mft, records, id_blob) -- every raw structure, read ONCE.
+
+    Extracted 2026-08-14 because `diff()` needs the file-id RECORDS to label its
+    rows and `snapshot()` had already parsed them in the same call.
+
+    WHAT LABELLING COSTS, MEASURED on `vault/dat_study/Gw.dat` (4.2 GB, 177,342
+    rows), best of two runs each, `tracemalloc` peak:
+
+        1.51 s /  36.9 MB   no labels at all (the pre-2026-08-13 diff)
+        3.77 s / 117.3 MB   labels, re-reading and re-parsing the id table
+        3.06 s / 121.4 MB   labels, sharing this one scan
+
+    So the duplicate read was ~0.7 s of the 2.3 s and this removes it. The rest
+    is `row_identity` itself, and the memory is nearly all of it: a dict of
+    177,342 dicts. Both are RECORDED rather than optimised away, because `--diff`
+    is the verb run around a timed client session and the next person to wonder
+    should find a number instead of a shrug. Making the identity map lazy would
+    buy the memory back and is not worth doing until something needs it.
+    """
     header = read_header(path)
     mft = read_mft(path, header)
     records, id_blob = file_id_records(path, mft, header)
+    return header, mft, records, id_blob
+
+
+def snapshot(path, scanned=None):
+    """Tier 0 + Tier 1 + Tier 2, with the header read before the MFT.
+
+    `scanned` is a `scan()` result a caller already paid for. It is never a
+    DIFFERENT archive's -- `diff()` is the only caller that passes one and it
+    passes the one it just took from `path`.
+    """
+    header, mft, records, id_blob = scanned if scanned else scan(path)
     inv = directory_invariant(mft, records)
     desc = row_bytes(mft, 0)
     return {
@@ -575,11 +729,53 @@ def diff(before, path=None, after=None):
     Returns a dict. `changes` is one record per changed row, classified; rows 0,
     2 and 3 change on any flush and are separated out as corroboration rather
     than counted as findings.
+
+    Every changed row is labelled by `row_identity` when `path` is given -- read
+    from the LIVE archive rather than from the snapshot, because a snapshot
+    carries only a digest of the file-id table and not its pairs. Comparing two
+    snapshots is still allowed and still works; it reports `identified: False`
+    and the formatter says so, rather than printing a row number that looks
+    identified and is not.
+
+    AND THE LABELS ARE GATED ON THE ARCHIVE BEING THE ONE `after` DESCRIBES.
+    The sentence above was false for one parameter combination when it was
+    written: `diff(before, path=X, after=<snapshot of Y>)` took its ROWS from Y
+    and its IDENTITY from X and reported `identified: True`. MEASURED 2026-08-14
+    with X = `vault/dat_study` and Y = `vault/client/2026-04-30_b174de1f2d8d`:
+    **308 of 315 changed rows carried a label naming a file the after-image does
+    not hold** -- row 3721 labelled `file id 0x5EE9A, 0x2D459` where the
+    after-image's own table says `0x2D451, 0x5E503`. Guarded, the same call now
+    reports `identified: False` and 0 labels carry a file id at all.
+    No shipped caller reaches it -- `_main` never passes `after` -- which
+    is exactly why it survived review: it is a latent trap in a public function,
+    and it is the precise failure `row_label`'s own docstring exists to prevent.
+    The gate is the MFT ITSELF, byte for byte, not a comparison of path strings:
+    a stale snapshot of the very same path is the same defect wearing the right
+    name, and the archive is the only thing that can refute it.
     """
-    after = after if after is not None else snapshot(path)
+    scanned = None
+    if after is None:
+        scanned = scan(path)
+        after = snapshot(path, scanned)
     b_mft = _snapshot_mft(before)
     a_mft = _snapshot_mft(after)
     nb, na = row_count(b_mft), row_count(a_mft)
+
+    identity = None
+    identity_note = None
+    if path is not None:
+        if scanned is None:
+            scanned = scan(path)
+        _hdr, live_mft, records, _blob = scanned
+        if bytes(live_mft) == bytes(a_mft):
+            identity = row_identity(live_mft, records)
+        else:
+            identity_note = (
+                "the archive at %s is NOT the one `after` describes -- its MFT "
+                "differs (%d rows on disk, %d in the snapshot) -- so no row "
+                "below carries a file id or a role. Labelling from the wrong "
+                "archive is worse than a bare number: it reads as "
+                "identification." % (path, row_count(live_mft), na))
 
     tier0 = {}
     for key in ("mft_offset", "mft_size", "header_flags_0x1C",
@@ -594,16 +790,20 @@ def diff(before, path=None, after=None):
         kind = classify_row(rb, ra)
         if kind is None:
             continue
-        rec = {"row": i, "kind": kind,
+        rec = {"row": i, "kind": kind, "label": label_row(identity, i),
                "before": row_fields(rb), "after": row_fields(ra),
                "before_hex": rb.hex(), "after_hex": ra.hex()}
         (corroboration if i in CORROBORATION_ROWS else changes).append(rec)
     for i in range(na, nb):
-        changes.append({"row": i, "kind": REMOVED,
+        # A REMOVED row is gone from the after-image, so it has no identity
+        # there. Labelling it from the before-image would be the one place this
+        # could print a file id that no longer resolves.
+        changes.append({"row": i, "kind": REMOVED, "label": row_label(i),
                         "before": row_fields(row_bytes(b_mft, i)), "after": None,
                         "before_hex": row_bytes(b_mft, i).hex(), "after_hex": None})
     for i in range(nb, na):
-        changes.append({"row": i, "kind": ADDED, "before": None,
+        changes.append({"row": i, "kind": ADDED, "label": label_row(identity, i),
+                        "before": None,
                         "after": row_fields(row_bytes(a_mft, i)),
                         "before_hex": None, "after_hex": row_bytes(a_mft, i).hex()})
 
@@ -621,6 +821,8 @@ def diff(before, path=None, after=None):
     return {
         "before": before.get("dat"), "after": after.get("dat"),
         "rows_before": nb, "rows_after": na,
+        "identified": identity is not None,
+        "identity_note": identity_note,
         "tier0": tier0, "tier2": tier2,
         "changes": changes, "counts": counts,
         "corroboration": corroboration,
@@ -636,6 +838,13 @@ def diff(before, path=None, after=None):
 def format_diff(d):
     out = []
     out.append("rows %d -> %d" % (d["rows_before"], d["rows_after"]))
+    out.append("(%s)" % ROW_CONVENTION)
+    if not d.get("identified"):
+        out.append("NOT IDENTIFIED: %s Match these numbers against another "
+                   "tool's with care."
+                   % (d.get("identity_note")
+                      or "two snapshots were compared with no archive behind "
+                         "them, so no row below carries its file id or role."))
     if d["tier0"]:
         out.append("TIER 0 changed:")
         for k, v in sorted(d["tier0"].items()):
@@ -649,7 +858,8 @@ def format_diff(d):
         out.append("TIER 1: %d changed row(s) %s"
                    % (len(d["changes"]), d["counts"]))
         for rec in d["changes"][:40]:
-            out.append("   row %-7d %s" % (rec["row"], rec["kind"]))
+            out.append("   %s" % rec.get("label", row_label(rec["row"])))
+            out.append("      %s" % rec["kind"])
             if rec["before"] and rec["after"]:
                 out.append("      before 0x%X %dB extra=%d flags=%d/%d next=%d "
                            "crc=0x%08X"
@@ -668,8 +878,9 @@ def format_diff(d):
         if len(d["changes"]) > 40:
             out.append("   ... %d more" % (len(d["changes"]) - 40))
     if d["corroboration"]:
-        out.append("corroboration only (rows 0/2/3 change on any flush): %s"
-                   % [r["row"] for r in d["corroboration"]])
+        out.append("corroboration only (rows 0/2/3 change on any flush):")
+        for r in d["corroboration"]:
+            out.append("   %s" % r.get("label", row_label(r["row"])))
     if d["tier2"]:
         out.append("TIER 2 changed:")
         for k, v in sorted(d["tier2"].items()):
@@ -727,6 +938,7 @@ def _main(argv=None):
         print("  %d rows, %d bytes on disk, MFT at 0x%X"
               % (facts["rows"], facts["size_on_disk"],
                  facts["header"]["mft_offset"]))
+        print("  %s" % ROW_CONVENTION)
         for c in checks:
             print("  " + c.line())
         bad = [c for c in checks if not c.ok]

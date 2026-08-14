@@ -44,6 +44,7 @@ differently than we do. No derivation-register row is owed for this file.
     python toolkit/mapdata/test_datwrite.py
 """
 
+import ast
 import binascii
 import contextlib
 import io
@@ -61,14 +62,22 @@ from archive import Archive, ENTRY_SIZE  # noqa: E402
 import datwrite  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR: the thirty-four checks below, every one of which runs unconditionally --
+# FLOOR: the sixty-six checks below, every one of which runs unconditionally --
 # the fixture is built by this file, so there is no corpus to be missing and no
 # section that can legitimately not run. Measured from a green run on
-# 2026-08-10, and again on 2026-08-12 when section 0b took it from 31 to 34.
+# 2026-08-10, again on 2026-08-12 when section 0b took it from 31 to 34, and
+# again on 2026-08-14 when section 7 (--restore) took it from 34 to 66.
 # Anything under this means a section stopped executing, and on a file whose
 # defects all present as silent success that is exactly the report we must not
 # accept.
-LEDGER = checks.Ledger("dat writer", floor=34)
+#
+# Section 7's three sabotages are the measurement of which of ITS checks matter,
+# and they are run rather than argued: stubbing `claimants()` to [] lets the
+# claimed-extent restore through, stubbing `check_identity()` lets a wrong-file
+# restore through, and a donor whose compression is flattened to 0 leaves the row
+# at 0 while the PAYLOAD stays byte-identical -- the last one is why 7b checks the
+# compression field separately, since the stored bytes cannot tell the two apart.
+LEDGER = checks.Ledger("dat writer", floor=66)
 check = checks.adopt(LEDGER)
 
 FILE_MAGIC = b"3AN\x1a"
@@ -425,11 +434,290 @@ def sections(tmp):
     check(bad == 0, "and all three checksum rules hold again afterwards")
 
 
+def mft_field(path, row, off, fmt, value):
+    """Hand-edit one MFT field and fix the self-crc. The fixture's own writer.
+
+    Deliberately not datwrite's: a control built with the code under test agrees
+    with it by construction, and the refusals below would be checking nothing.
+    """
+    with open(path, "r+b") as fh:
+        fh.seek(MFT_OFF)
+        mft = bytearray(fh.read(MFT_SIZE))
+        struct.pack_into(fmt, mft, row * ENTRY_SIZE + off, value)
+        struct.pack_into("<I", mft, ROW_SELF * ENTRY_SIZE + ENTRY_CRC, 0)
+        struct.pack_into("<I", mft, ROW_SELF * ENTRY_SIZE + ENTRY_CRC,
+                         self_crc(mft))
+        fh.seek(MFT_OFF)
+        fh.write(bytes(mft))
+
+
+def row_bytes(path, row, n):
+    """`n` bytes at row `row`'s offset, read straight off disk."""
+    with Archive(path) as ar:
+        e = ar.row(row)
+    with open(path, "rb") as fh:
+        fh.seek(e.offset)
+        return fh.read(n)
+
+
+def row_entry_of(path, row):
+    with Archive(path) as ar:
+        e = ar.row(row)
+        return e.offset, e.size, e.compression, e.crc
+
+
+def section_restore(tmp):
+    """7. --restore: the in-place grow datmove.plan_move names and refuses.
+
+    Every check here is about something --replace and --revert cannot do, and
+    the section exists because the alternative was measured: three skill-icon
+    rows were left armed in vault/run/reskin-roster on the recorded
+    understanding that their originals were "recoverable from the journals'
+    before fields", and NO JOURNAL FOR THOSE ROWS EXISTS ANYWHERE IN THE VAULT
+    (grepped whole, 2026-08-14). A pristine copy is the source that cannot go
+    missing.
+    """
+    print("\n7. --restore, from a donor archive")
+    donor, _ = fresh(tmp, "donor.dat")
+    target, payloads = fresh(tmp, "restore-target.dat")
+    original = row_bytes(donor, ROW_SHRINK, reservation(1000))
+
+    # Shrink it the way the icon arms did: --replace, which writes compression 0
+    # and leaves the row unable to grow back under its own rules.
+    small = spill(tmp, "small.bin", pattern(9, 100))
+    with quiet():
+        run_cli("--dat", target, "--journal", os.path.join(tmp, "j7a.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    off, size, comp, _crc = row_entry_of(target, ROW_SHRINK)
+    check(size == 100 and comp == 0,
+          f"setup: --replace left row {ROW_SHRINK} at {size} B compression "
+          f"{comp} -- 1000 B compression 8 is what has to come back")
+    check(reservation(size) < reservation(1000),
+          f"and its reservation shrank {reservation(1000)} -> "
+          f"{reservation(size)} B, so restoring it is a GROW: this is exactly "
+          f"the case datmove.plan_move refuses and names")
+
+    print("\n7a. the dry run writes nothing")
+    before = blob(target)
+    code, out = run_cli("--dat", target, "--restore", str(ROW_SHRINK),
+                        "--from", donor)
+    check(code != 0, f"without --confirm it exits non-zero (got {code})")
+    check("would restore" in out, "and says 'would restore' rather than doing it")
+    check(blob(target) == before, "and the archive is byte-for-byte untouched")
+
+    print("\n7b. --confirm puts the row back, compression and all")
+    code, out = run_cli("--dat", target, "--journal",
+                        os.path.join(tmp, "j7b.json"),
+                        "--restore", str(ROW_SHRINK), "--from", donor,
+                        "--confirm")
+    check(code == 0, f"exits 0 (got {code})")
+    off2, size2, comp2, crc2 = row_entry_of(target, ROW_SHRINK)
+    dcrc = row_entry_of(donor, ROW_SHRINK)[3]
+    check(size2 == 1000, f"size is back to 1000 (got {size2})")
+    check(comp2 == 8,
+          f"COMPRESSION is back to 8 (got {comp2}) -- the field --replace "
+          f"flattens to 0 and has no compressor to restore")
+    check(crc2 == dcrc,
+          f"and the crc is the donor's 0x{dcrc:08X} (got 0x{crc2:08X})")
+    check(off2 == off, "the row did not move; this is an in-place grow")
+    check(row_bytes(target, ROW_SHRINK, reservation(1000)) == original,
+          "the WHOLE reservation is byte-identical to the donor's, tail "
+          "included -- a zero-filled tail would verify and still differ from "
+          "every pristine copy")
+    with quiet():
+        bad = datwrite.verify(target) + datwrite.check_rows(
+            target, list(PAYLOAD_ROWS))
+    check(bad == 0, "and all three checksum rules hold afterwards")
+    check("verified" in out, "the tool read the bytes back and said so")
+
+    print("\n7c. it is idempotent, and the journal still works")
+    code, out = run_cli("--dat", target, "--journal",
+                        os.path.join(tmp, "j7c.json"),
+                        "--restore", str(ROW_SHRINK), "--from", donor,
+                        "--confirm")
+    check(code == 0 and "nothing to do" in out,
+          "a second restore is a no-op that says so")
+    code, _ = run_cli("--revert", os.path.join(tmp, "j7b.json"))
+    _, size3, comp3, _ = row_entry_of(target, ROW_SHRINK)
+    check(code == 0 and size3 == 100 and comp3 == 0,
+          f"and --revert of the restore returns the armed state "
+          f"({size3} B comp {comp3})")
+
+    print("\n7d. REFUSED: the row names a different file in the two archives")
+    t2, _ = fresh(tmp, "restore-ident.dat")
+    with quiet():
+        run_cli("--dat", t2, "--journal", os.path.join(tmp, "j7d.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    code, out = run_cli("--dat", t2, "--journal", os.path.join(tmp, "j7dz.json"),
+                        "--restore", str(ROW_SHRINK), "--from", donor,
+                        "--confirm")
+    check(code == 0, "CONTROL: with matching file ids the restore is allowed")
+    # Now repoint the TARGET's id table so row 4 is a different file.
+    t3, _ = fresh(tmp, "restore-ident2.dat")
+    with open(t3, "r+b") as fh:
+        fh.seek(ROWS[ROW_IDTABLE][0])
+        fh.write(struct.pack("<II", 0x2000, ROW_SHRINK))
+    with Archive(t3) as ar:
+        e = ar.row(ROW_IDTABLE)
+        with open(t3, "rb") as fh:
+            fh.seek(e.offset)
+            idb = fh.read(e.size)
+    mft_field(t3, ROW_IDTABLE, ENTRY_CRC, "<I", binascii.crc32(idb))
+    code, out = run_cli("--dat", t3, "--journal", os.path.join(tmp, "j7d2.json"),
+                        "--restore", str(ROW_SHRINK), "--from", donor,
+                        "--confirm")
+    check(code != 0 and "DIFFERENT FILE" in out,
+          "a donor whose row 4 is file 0x1000 is REFUSED against a target "
+          "whose row 4 is file 0x2000")
+    check("0x2000" in out and "0x1000" in out,
+          "and the refusal names BOTH ids, so the operator can tell which copy "
+          "is the odd one")
+
+    print("\n7e. REFUSED: the freed blocks have been taken since")
+    t4, _ = fresh(tmp, "restore-claimed.dat")
+    with quiet():
+        run_cli("--dat", t4, "--journal", os.path.join(tmp, "j7e.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    code, _ = run_cli("--dat", t4, "--journal", os.path.join(tmp, "j7e0.json"),
+                      "--restore", str(ROW_SHRINK), "--from", donor, "--confirm")
+    check(code == 0, "CONTROL: with the blocks free the restore is allowed")
+    # Move ROW_SMALL into the extent row 4 gave up, the way the client's own
+    # allocator would. Its payload moves too, so its crc still holds.
+    t5, _ = fresh(tmp, "restore-claimed2.dat")
+    with quiet():
+        run_cli("--dat", t5, "--journal", os.path.join(tmp, "j7e1.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    stolen = ROWS[ROW_SHRINK][0] + reservation(100)
+    body = row_bytes(t5, ROW_SMALL, ROWS[ROW_SMALL][1])
+    with open(t5, "r+b") as fh:
+        fh.seek(stolen)
+        fh.write(body)
+    mft_field(t5, ROW_SMALL, 0x00, "<Q", stolen)
+    code, out = run_cli("--dat", t5, "--journal", os.path.join(tmp, "j7e2.json"),
+                        "--restore", str(ROW_SHRINK), "--from", donor,
+                        "--confirm")
+    check(code != 0 and "CLAIMED" in out,
+          "a grow into blocks another row now owns is REFUSED")
+    check(f"row {ROW_SMALL}" in out,
+          f"and the refusal NAMES row {ROW_SMALL} as the claimant, rather than "
+          f"saying the archive is full")
+    check("datmove" in out,
+          "and points at datmove.py, which is the tool that can relocate")
+
+    print("\n7f. REFUSED: a donor that fails its own checksum")
+    bad_donor, _ = fresh(tmp, "donor-bad.dat")
+    with open(bad_donor, "r+b") as fh:
+        fh.seek(ROWS[ROW_SHRINK][0])
+        fh.write(b"\x00")               # payload changed, crc left alone
+    t6, _ = fresh(tmp, "restore-baddonor.dat")
+    with quiet():
+        run_cli("--dat", t6, "--journal", os.path.join(tmp, "j7f.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    code, out = run_cli("--dat", t6, "--journal", os.path.join(tmp, "j7f2.json"),
+                        "--restore", str(ROW_SHRINK), "--from", bad_donor,
+                        "--confirm")
+    check(code != 0 and "FAILS ITS OWN CRC" in out,
+          "a donor row that does not match its own crc is REFUSED -- it is a "
+          "worse source than the armed row it would replace")
+
+    print("\n7g. the donor is READ-ONLY, so the write guards must not apply to it")
+    # vault/dat_study is refused as a TARGET by guard_source and is exactly the
+    # archive an operator would reach for as a DONOR. If read_donor were guarded,
+    # the best source in the vault would be unusable.
+    study = os.path.join(tmp, "vault", "dat_study", "Gw.dat")
+    t7, _ = fresh(tmp, "restore-fromstudy.dat")
+    with quiet():
+        run_cli("--dat", t7, "--journal", os.path.join(tmp, "j7g.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    code, out = run_cli("--dat", t7, "--journal", os.path.join(tmp, "j7g2.json"),
+                        "--restore", str(ROW_SHRINK), "--from", study,
+                        "--confirm")
+    check(code == 0,
+          "restoring FROM vault/dat_study is allowed, though writing TO it is "
+          "refused")
+    code, out = run_cli("--dat", study, "--journal",
+                        os.path.join(tmp, "j7g3.json"),
+                        "--restore", str(ROW_SHRINK), "--from", donor,
+                        "--confirm")
+    check(code != 0,
+          "and the same path as the TARGET is still refused -- the asymmetry is "
+          "the point, not an oversight")
+    # And on the syntax tree, because "it happened not to be guarded" and "it is
+    # deliberately not guarded" look identical from the outside.
+    tree = ast.parse(open(datwrite.__file__, encoding="utf-8").read())
+    fns = {n.name: n for n in ast.walk(tree)
+           if isinstance(n, ast.FunctionDef)}
+    def calls(node):
+        return {c.func.id for c in ast.walk(node)
+                if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)}
+    check(not ({"guard", "guard_source"} & calls(fns["read_donor"])),
+          "read_donor calls neither guard nor guard_source, on the syntax tree")
+    check({"guard", "guard_source"} <= calls(fns["__init__"]),
+          "CONTROL: Writer.__init__ calls both -- so the absence above is a "
+          "decision about the donor and not a missing guard everywhere")
+
+    print("\n7h. the parser refuses half a command")
+    code, _ = run_cli("--dat", target, "--restore", str(ROW_SHRINK))
+    check(code == 2, f"--restore without --from exits 2 (got {code})")
+    code, _ = run_cli("--dat", target, "--from", donor)
+    check(code == 2, f"--from without --restore exits 2 (got {code})")
+
+    print("\n7i. WHICH CHECKS ARE LOAD-BEARING, measured by sabotage")
+    # Three one-binding edits to the LIVE module, each run against the fixtures
+    # above. A check nobody can redden is floor, not coverage.
+    real_claimants, real_identity, real_donor = (
+        datwrite.claimants, datwrite.check_identity, datwrite.read_donor)
+    try:
+        datwrite.claimants = lambda ar, lo, hi, exclude: []
+        code, _ = run_cli("--dat", t5, "--journal",
+                          os.path.join(tmp, "j7i1.json"),
+                          "--restore", str(ROW_SHRINK), "--from", donor,
+                          "--confirm")
+        check(code == 0,
+              "SABOTAGE: with claimants() stubbed to [], the claimed-extent "
+              "refusal passes -- so 7e is load-bearing and not decorative")
+    finally:
+        datwrite.claimants = real_claimants
+
+    try:
+        datwrite.check_identity = lambda *a, **k: None
+        code, _ = run_cli("--dat", t3, "--journal",
+                          os.path.join(tmp, "j7i2.json"),
+                          "--restore", str(ROW_SHRINK), "--from", donor,
+                          "--confirm")
+        check(code == 0,
+              "SABOTAGE: with check_identity() stubbed out, the wrong-file "
+              "restore goes through -- so 7d is load-bearing")
+    finally:
+        datwrite.check_identity = real_identity
+
+    t8, _ = fresh(tmp, "restore-nocomp.dat")
+    with quiet():
+        run_cli("--dat", t8, "--journal", os.path.join(tmp, "j7i3.json"),
+                "--replace", str(ROW_SHRINK), "--data", small)
+    try:
+        def flatten(path, row):
+            d = real_donor(path, row)
+            d.compression = 0           # the --replace defect, reintroduced
+            return d
+        datwrite.read_donor = flatten
+        with quiet():
+            run_cli("--dat", t8, "--journal", os.path.join(tmp, "j7i4.json"),
+                    "--restore", str(ROW_SHRINK), "--from", donor, "--confirm")
+    finally:
+        datwrite.read_donor = real_donor
+    check(row_entry_of(t8, ROW_SHRINK)[2] == 0,
+          "SABOTAGE: a restore that carries compression 0 leaves the row at 0 "
+          "-- which is what 7b's compression check catches and byte-identity "
+          "of the payload does NOT, because the stored bytes are the same")
+
+
 def main():
     tmp = tempfile.mkdtemp(prefix="rurik-datwrite-")
     print(f"synthetic archive: {FILE_SIZE} B, {ENTRY_COUNT} rows, in {tmp}")
     try:
         sections(tmp)
+        section_restore(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return LEDGER.verdict()

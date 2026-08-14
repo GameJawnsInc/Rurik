@@ -904,9 +904,7 @@ class PathingMap:
             row = table.get(map_file_id)
             if row is None:
                 raise KeyError(f"no file id 0x{map_file_id:X} in the archive")
-            entry = ar.entries[row - 1]
-            if entry.index != row:
-                entry = next(e for e in ar.entries if e.index == row)
+            entry = ar.row(row)
             data = ar.read(entry)
             for chunk_id, off, size in ffna_chunks(data):
                 if chunk_id == PATHING_CHUNK:
