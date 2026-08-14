@@ -577,25 +577,42 @@ actually send it. Either check alone is satisfied by a broken server.
 check is on the CHARACTER rather than on whose it is -- 2 of the vault's 49 complaints
 name `Corpse of Hatcher [Collector]`. It has the same one-tick defer as of 2026-08-13.
 
-**Why it is not measured: the player loses the fight.** `hit agent` is 0 in an
-unattended run because the player is DEAD, not because the player never tries. The
-Hatcher deals 25 into a 100 HP player -- four hits -- while killing it took seven player
-hits in the only runs where it happened. The default world is balanced against the
-player winning, so the agent revive branch never runs.
+**MEASURED 2026-08-13, unattended.** Two runs identical but for the constant, each
+21 player hits and 3 agent deaths:
 
-**That cause was got wrong twice before it was got right**, and both wrong answers were
-about INPUT: first "the keybind is wrong" (it was not -- `C` selects the closest target,
-`Tab` the next, and `Space` attacks with either), then "synthetic keys miss the client's
-raw input path" (also not it). Each `agent deaths: 0` was answered with another run
-instead of with the question *why would a dead player land a hit*. Anything unattended
-here needs the BALANCE changed -- more player health, a weaker hostile, or one that does
-not aggro -- and no amount of better input will do it.
+| refill defer | agent revives | `Corpse of Hatcher [Collector]: Health non-zero on resurrect` |
+|---|---|---|
+| **0.00 s** (burst) | 3 | **3** |
+| 0.05 s (one tick) | 3 | **0** |
 
-**The control already exists**, which is what makes the remaining step cheap: runs
-`20260811T141114` and `20260811T141332` are human-played, carry 7 `hit agent` lines each,
-and produced the two NPC complaints under the burst order this replaces. So confirming
-the agent half costs ONE human-played run -- attack the Hatcher, kill it, watch for the
-line -- and not two.
+So the agent path is the player path: same check, same cause, same fix, and now the same
+standard of evidence.
+
+**Getting there needed two things, and both were mis-diagnosed first.** `hit agent` was
+0 for four runs, read first as a wrong keybind and then as synthetic keys missing the
+client's raw input path. Neither:
+
+1. **The player loses the fight.** The Hatcher deals 25 into a 100 HP player -- four
+   hits -- while killing it takes seven, so the player is dead before landing one.
+   `--practice-target` makes the standing hostile neither chase nor attack, which is a
+   real creature's behaviour rather than a test switch: WIKI (GWW, "Practice target",
+   rev. 2014-02-07) -- practice targets are stationary NPCs, there are allied and
+   hostile ones, "They do not use any skills", and a slain hostile one resurrects after
+   30 s at full health. The content field it sets, `attacks_back`, already existed and
+   already gated both the attack tick and the chase; only the switch was missing.
+2. **An OUTPOST forbids attacking.** With a passive target the player survived and STILL
+   landed nothing -- `0x00C1` TARGET_SELECT went out on every `C` press and no attack
+   followed. `--explorable` fixes it and the run went from 0 hits to 21, with the
+   client's attack arriving as `0x0026`.
+
+**The recipe, which is the reusable part** (also in `RUNBOOK.md`):
+
+```
+python toolkit/harness/session.py --enemy --keep-open --game-args "--practice-target --explorable" --hold 30   --actions "0:play 20:vk:0x43 1:vk:0x20 25:vk:0x43 1:vk:0x20 25:vk:0x43 1:vk:0x20"
+```
+
+`0x43` is `C` (select closest), `0x20` is `Space` (attack). `Tab` (`0x09`) also works and
+selects the NEXT target. Three attack commands gave 21 hits and 3 kills in 30 s.
 
 **Do not "fix" this by reordering on the strength of the reading above.** The severity is
 2 and nothing visible is wrong — the bar refills correctly, OBSERVED twice in §1e — so

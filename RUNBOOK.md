@@ -967,3 +967,31 @@ session — it always does — and the journal only covers our own edits.
   It would not be: this map's Stripped terrain is ArenaNet's. That is the
   **next** experiment, and it only becomes worth running if this one says
   REBUILT.
+
+
+## Killing something unattended (agent death, revive, loot)
+
+Two flags, and without either the player never lands a hit. Found the hard way on
+2026-08-13, after four runs blamed keybinds and input plumbing:
+
+```bash
+python toolkit/harness/session.py --enemy --keep-open   --game-args "--ping-seconds 0.5 --practice-target --explorable" --hold 30   --actions "0:play 20:vk:0x43 1:vk:0x20 25:vk:0x43 1:vk:0x20 25:vk:0x43 1:vk:0x20"
+```
+
+* **`--practice-target`** -- the standing hostile neither chases nor attacks. Without it
+  the player LOSES: the Hatcher deals 25 into a 100 HP player (four hits) while killing
+  it takes seven, so `hit agent` stays 0 because the player is dead. This is a real
+  creature's behaviour, not a test switch -- WIKI (GWW, "Practice target",
+  rev. 2014-02-07): stationary NPCs, allied and hostile variants, "They do not use any
+  skills", slain hostile ones resurrect after 30 s at full health.
+* **`--explorable`** -- an OUTPOST forbids attacking. In one the client selects a target
+  (`0x00C1` goes out on every press) and no attack ever follows.
+
+`0x43` is `C`, select CLOSEST target; `0x09` is `Tab`, select NEXT; `0x20` is `Space`,
+attack. Three attack commands gave **21 hits and 3 kills in 30 s**, with the client's
+attack arriving as `0x0026`.
+
+The authentic Practice Target NPC is not in `content/npcs.toml` -- its model and name
+string ids are not in the vault, and getting them means capturing a map that has one
+(Isle of the Nameless, Churrhir Fields) and running `npcdefs.py` over it. What the flag
+reproduces is its BEHAVIOUR, on the Hatcher's body, and the row says so.
