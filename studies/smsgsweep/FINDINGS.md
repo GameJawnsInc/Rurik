@@ -829,3 +829,37 @@ in §7.8, and it means each id has its own handler chain rather than 90 handlers
 **Nothing further here is worth doing statically.** The next honest step for these five is
 a live capture from ArenaNet's server, where the surrounding traffic names the context —
 not another disassembly and not another loopback run.
+
+### 7.10 The party window subscribes to `0x01BC`'s message — a measured link, not a lead
+
+**Status: OBSERVED, 2026-08-13, binary only.** §7.7 offered the party-window arc an
+UNVERIFIED lead. §7.8's method turns it into a measurement, and it is cheap: resolve each
+push of a UI message id to its call, and REGISTER sites name the frames that consume it.
+
+| message | sent by | REGISTER sites | the frames |
+|---|---|---|---|
+| `0x10000117` | `0x01B8` | **none** | nothing is bound |
+| `0x10000119` | `0x01BC` (and 3 more senders) | **5** | `PtSearch.cpp`+`PtFrame.cpp`, `PtMission.cpp`, `PtButtons.cpp`, `GmDoll.cpp`+`GmView.cpp`, one unnamed |
+| `0x1000012C` | `0x01D6` | **none** | nothing is bound |
+| `0x10000116` | `0x0170` (and 8 more) | 2 | one at `0x0056014D`, one at `0x008AB8D9` |
+
+**Four of the five subscribers to `0x10000119` are the party window** —
+`P:\Code\Gw\Ui\Game\Party\PtFrame.cpp`, `PtButtons.cpp`, `PtMission.cpp`, `PtSearch.cpp`.
+So the opcode that says "Your account must be named" delivers a message the party frame,
+its buttons, its mission panel and its search panel are all registered to receive.
+
+**And the split predicts the pictures.** §7.6 recorded from the screen that `0x01BC` drew
+a centre-screen popup *as well as* a chat line, while `0x01B8` and `0x01D6` drew only the
+line. That is exactly the row with five registered consumers against the two rows with
+none — and per §7.8 an unbound id is a silent no-op, so `0x01B8`/`0x01D6`'s chat lines
+must come from elsewhere in their workers, not from the message they post. **The operator
+read the difference off two screenshots before anything here was disassembled**, which is
+the strongest kind of agreement this project gets: two instruments, no shared assumption.
+
+**For the party-window arc.** This does not explain a red member row and is not offered as
+that. What it does establish is that the account-name state reaches the party UI **by a
+path that exists in the image**, so the connection is now a question about behaviour
+rather than about whether any coupling exists at all. Note also that an assert census
+cannot see this: the notice text is a UI string a message carries, not an assert
+expression, so `asserts.py --file PyCliParty` finding nothing is the EXPECTED result and
+its silence was never evidence either way.

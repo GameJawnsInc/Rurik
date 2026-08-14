@@ -405,10 +405,28 @@ def section_swing_back():
     LEDGER.ok(cleared == [[authsrv.PLAYER_AGENT_ID, 0]],
               "clearing the effects bit it set",
               f"{cleared}")
+    # THE REFILL IS A TICK LATER, and that is the fix of studies/agentprops 1f rather
+    # than a weakening of this check. The client requires both pools EMPTY at the
+    # moment the death bit clears and logs `Health non-zero on resurrect` when they
+    # are not -- MEASURED at 13 of 13 revives with the burst order and 0 of 11 with
+    # one tick between. So the revive must NOT carry the refill...
+    early = [v for op, v in rev
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    LEDGER.ok(not early,
+              "the revive does NOT refill the pool in the same burst",
+              f"{early} -- a refill here is what the client complained about, "
+              f"13 of 13 revives")
+    # ...and the deferred half must actually send it, or a body stands up empty. The
+    # two checks are a pair on purpose: either alone is satisfied by a broken server.
+    state["player_refill_due_at"] = time.time() - 1.0
+    late = []
+    authsrv.player_refill_due(
+        lambda op, v, label="", quiet=False: late.append((op, v)), state, 1)
+    rev = late
     refill = [struct.unpack("<f", struct.pack("<I", v[-1]))[0] for op, v in rev
               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
     LEDGER.ok(refill == [1.0],
-              "and refilling the pool with 1.0, the SETTER's full-bar value",
+              "and the DEFERRED half refills the pool with 1.0, the SETTER's value",
               f"{refill} -- max_health here is what crashed the client on "
               "2026-08-11, and the same guard covers this call site")
 
