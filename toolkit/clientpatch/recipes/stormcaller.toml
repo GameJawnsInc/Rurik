@@ -30,17 +30,34 @@ host   = 8        # Ritualist -- stays legal, so no bound check can ever fire
 name   = 100352   # text file 98, record 0 -- authored
 abbrev = 100353   # text file 98, record 1 -- authored, two characters
 
-# Unchanged from ritualist-demo: the attribute and skill edits still borrow
-# shipped string ids. They are a different question from "can we author text at
-# all", and keeping them constant makes this run a single-variable change.
+# All five attribute names are AUTHORED too, in the same text file: records 2-6,
+# ids 100354..100358. Profession 8 owns 32, 33, 34 and 36 (36 carries the primary
+# marker 'P'), and 26 is the spare claimed off the reserved profession 11 -- so
+# these five rows are the whole attribute set the Skills panel derives.
+#
+# The PRIMARY keeps its marker where the host had it (36). Moving it is a
+# separate one-line change (`--attr-primary`, symmetric so a profession never
+# ends up with two) and is deliberately not bundled here.
+[[attribute]]
+id    = 36        # the host's primary
+name  = 100354    # authored
+
 [[attribute]]
 id    = 26        # a spare row on the reserved profession 11
 owner = 8         # claim it -- the panel derives from this
-name  = 2094
+name  = 100355    # authored
 
 [[attribute]]
-id   = 32         # the host's own "Communing"
-name = 2092
+id   = 32
+name = 100356     # authored
+
+[[attribute]]
+id   = 33
+name = 100357     # authored
+
+[[attribute]]
+id   = 34
+name = 100358     # authored
 
 [[skill]]
 id        = 317

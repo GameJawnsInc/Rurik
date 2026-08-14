@@ -1474,3 +1474,52 @@ The journal makes it reversible byte-for-byte:
 ```
 python toolkit/mapdata/datwrite.py --revert C:/gd/Rurik/vault/run/reskin-roster/row8295.journal
 ```
+
+### 19.5 The whole identity tier, authored (2026-08-13)
+
+Harness `20260813T222809`. Seven strings, all ours, all on one screen:
+
+```
+Profession: Stormcaller
+Attributes (50 unused points)
+    Tempest         Galecraft        Windward
+    Thunderhead     Storm Calling
+```
+
+| record | id | string | consumer |
+|---|---|---|---|
+| 0 | 100352 | `Stormcaller` | `s_charProfession[8]` -- panel heading |
+| 1 | 100353 | `Sc` | `s_charProfessionAbbrev[8]` -- party roster |
+| 2 | 100354 | `Storm Calling` | attr 36, the host's PRIMARY |
+| 3 | 100355 | `Tempest` | attr 26, claimed off reserved profession 11 |
+| 4 | 100356 | `Galecraft` | attr 32 |
+| 5 | 100357 | `Windward` | attr 33 |
+| 6 | 100358 | `Thunderhead` | attr 34 |
+
+**Nothing on that screen is ArenaNet's text.** §19's run still borrowed the five attribute
+names; this one does not. The profession's whole identity tier -- name, abbreviation and
+every attribute it owns -- is now authored, and the panel derives the five-attribute set
+from `attr-owner` exactly as §4 predicted.
+
+**The second write needed no relocation.** 6,268 B against the 6,656 B reservation §19.2
+took, so `datwrite --replace` wrote it in place (388 B of reservation tail zeroed) and
+`datcheck --preflight` stayed **10 of 10**. Second journal beside the first; both revert
+byte-for-byte.
+
+### 19.6 A limitation found by tripping over it: reskin.py cannot re-patch its own output
+
+Reading the attribute table out of the ALREADY-patched client failed:
+
+> `name: the 11 dwords before its anchor are [2040, ..., 2047, 100352, 31548, 31549], whose
+> first nine are not consecutive. The anchor and the shape disagree, so one of the two
+> assumptions is wrong for this build. Refusing.`
+
+That is §5's structural locator working exactly as designed -- it requires the anchor AND
+the shape to agree, and our own patch broke the shape by design. **The consequence is a
+workflow rule: always patch from a CLEAN client, and express the design cumulatively in
+the recipe.** That is what this arc has done by accident so far; now it is a constraint
+with a reason, and it is an argument for the recipe file being the versioned artifact
+rather than a command line, since the recipe is the only thing that accumulates.
+
+It also means a reskinned client cannot be inspected with `--attrs` or `--show`. Read the
+clean build for that; the patched one is an output, not a source.
