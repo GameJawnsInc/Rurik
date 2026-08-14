@@ -560,4 +560,49 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 0 | ✅ 2026-08-14, this section |
 | 1 | ✅ 2026-08-14, `07c22b0` — 0x0037 → [0,0], binding check proven red-then-green |
 | 2 | ✅ 2026-08-14, `cdefe83`…`e9f7b7d` (10 commits) — extraction, red-first guard contract on all seven `_fraction` functions, connection-thread catch, overkill clamp-to-kill (`_damage_fraction`), first two-thread test. `test_guards.py`, floor 35 |
-| 3–10 | ⬜ |
+| 3 | 🔶 offline half ✅ 2026-08-14, `f5f65b2`+`77b65d1` — emitter (1,333 client-table rows, build stamped from bytes), the four-opcode cycle on the observed template, THE QUEUE LAW (E4 at accept, cast begins when the caster frees — fits 4/4 Necro cycles ≤14 ms; the naive press+activation model is refuted by +0.64 s/+0.57 s residuals), overrides names 227–230, cross-thread cast-timer test (200 presses → exactly 200 of each phase). Attack-skill E5 timing rides the weapon — recorded as unmodeled divergence. GV 58 deliberately unsent (0 of 21,543 live). **Loopback acceptance BLOCKED — see §7** |
+| 4–10 | ⬜ |
+
+## §7. The loopback validation is blocked on a vault archive-state mismatch (2026-08-14)
+
+Step 3's acceptance has two halves: an automated loopback run (does the client
+accept E4/E5/E6 without asserting; does a second press after E6 produce a second
+full cycle) and an operator's rendered check (recharge sweep on the bar,
+animation) — the second is manual by design (H5). **Neither ran: the harness
+refuses to launch, for a reason entirely outside combat.**
+
+`session.py`'s pre-flight compares `content/maps.toml` against the client archive
+and refuses the whole run when any map's id will not bind. Maps 146 and 148 carry
+`file_id = 0x8001B97D` — bit 31 set, "replacement pending" — which is **committed
+content** (HEAD, working tree clean; the row's own `verified` note explains the
+masked-vs-pending distinction). It binds only after `DnArchive` installs the
+replacement into the client archive, and the archive the harness selects
+(`vault/run/2026-08-13_64fae3b1369b/Gw.dat`, the newest) does **not** have it
+installed. The refusal fires for ANY `--map`, because the guard validates the
+whole table, not the map being loaded.
+
+This is the shared-vault / parallel-sessions hazard the memory notes name, in the
+custom-map/datwrite arc's territory. **Combat must not "fix" it** by rewriting a
+shared client archive or masking the committed id — that mutates state other
+sessions depend on and is another arc's call.
+
+**What unblocks it (operator, or the map arc):** install the pending replacement
+for 146/148 into a client run archive with `DnArchive` (per `studies/maprows`),
+OR point the run at a client archive already carrying it, then run the loopback
+acceptance:
+
+```bash
+python toolkit/harness/session.py --enemy --keep-open \
+  --game-args "--ping-seconds 0.5 --practice-target --explorable" --hold 32 \
+  --shots 2.0 \
+  --actions "0:play 20:vk:0x43 1:vk:0x20 4:key:7 3:key:6 6:key:7 3:key:7"
+```
+
+Slot 7 is skill 322, recharge 3 s; the two presses are 9 s apart so the second
+falls AFTER the first's E6 (the repeat-press acceptance — amendment C10's
+positive control is slot 6, skill 321, pressed between them). Watch the gamesrv
+log for `SKILL_RECHARGE`/`SKILL_RECHARGED` pairs and the client for the recharge
+sweep; confirm the second slot-7 press produces a full second cycle. The offline
+tests already pin every message shape, order and the timing law, so this run adds
+only the two things offline cannot: the client's acceptance of the opcodes, and
+the rendered sweep.
