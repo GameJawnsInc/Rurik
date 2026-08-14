@@ -987,6 +987,32 @@ Four separate pieces of work, in dependency order:
 4. **Choose animation ids** from whatever the client already has, since nothing
    we have resolves an animation id to an asset.
 
+> **SUPERSEDED 2026-08-14. Read this before costing anything below.** The blocker
+> named in the next paragraph has FALLEN, and the paragraph is left standing only
+> because the reasoning around it is still good. It says writing to `Gw.dat` is
+> "not a demonstrated capability in our entire evidence base" — true of the
+> *mirrors*, and no longer true of this repo:
+>
+> * **step 2 (text records) is done** — `toolkit/mapdata/textwrite.py` wrote 188
+>   authored skill-name records into text file 98 and the retail client read them
+>   back off the bar (`studies/profession/RESKIN.md` §24);
+> * **step 3 (icon textures) is done** — `toolkit/mapdata/iconset.py` armed 125
+>   ATEX rows with generated art, on screen since 2026-08-14;
+> * **step 1 (grow the PE table)** this document already calls tractable, and the
+>   repo now patches six tables in that image (`toolkit/clientpatch/reskin.py`).
+>
+> **Only step 4 is still open**, and it is the one this document independently
+> flags as the real gap: nothing anywhere resolves an animation id to an asset
+> (§"Cast animations"). That is now the binding constraint on a genuinely new
+> skill id, not the archive.
+>
+> The §5 table above should be read the same way: its "Can a server change it?"
+> column is about what a server can change **at run time over the wire**, and
+> every "No" in it is still correct in that sense. Four of those rows have since
+> been changed **out of band** — name, icon, attribute and profession — by
+> patching the PE row and writing the archive. Do not read that column as "cannot
+> be changed".
+
 **The blocker is step 2 and step 3, and it is concrete: neither mirrored dat tool
 can write.** Tyria-Extractor and GuildWarsMapBrowser both open the archive
 strictly read-only. There is no repack, no MFT insert and no hash-row insert
