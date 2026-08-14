@@ -2055,6 +2055,12 @@ def revive_due(send, state, conn_id):
             continue
         if not agent["dead"] or now - agent["died_at"] < REVIVE_AFTER:
             continue
+        # Guard before the body stands up: a refused refill must leave the
+        # agent DEAD so next tick retries the whole revive, not half-alive
+        # with a status sent and no bar behind it (test_guards section 5).
+        # The refill itself may still be deferred below -- validating a value
+        # the defer branch won't use this tick is the cheap direction.
+        frac = _fraction(1.0, agents.GV_HEALTH, "refill to a full pool")
         agent["dead"] = False
         agent["health"] = agent["max_health"]
         agent["last_hit"] = 0.0
@@ -2106,8 +2112,7 @@ def revive_due(send, state, conn_id):
         # exceed the maximum, so `max_health` here was never merely too large, it
         # was the wrong KIND of number.
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-             [agents.GV_HEALTH, agent_id, agent_id,
-              _fraction(1.0, agents.GV_HEALTH, "refill to a full pool")],
+             [agents.GV_HEALTH, agent_id, agent_id, frac],
              f"refill bar on agent {agent_id}")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)

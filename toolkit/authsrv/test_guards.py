@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("guard contract", floor=15)
+LEDGER = checks.Ledger("guard contract", floor=18)
 check = LEDGER.ok
 
 
@@ -221,11 +221,51 @@ def section_land_skill():
           f"{[op for op, _, _ in sent]}, casting={agent['casting']}")
 
 
+def section_revive_due():
+    import authsrv
+
+    print("\n5. revive_due: a refused refill leaves the body DEAD and retryable")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    agent = _fresh_agent()
+    agent["dead"], agent["died_at"] = True, 0.0   # long past REVIVE_AFTER
+    state = {"agents": {10: agent}}
+
+    saved = authsrv._fraction
+    authsrv._fraction = _refusing_fraction(authsrv)
+    try:
+        raised = False
+        try:
+            authsrv.revive_due(send, state, 0)
+        except ValueError:
+            raised = True
+        check(raised and sent == [],
+              "a refused revive raises with NOTHING sent",
+              f"raised={raised}, sent={sent!r} -- pre-hoist the status went "
+              f"out first: a body stood up with no bar behind it")
+        check(agent["dead"] is True,
+              "and the agent is still dead, so next tick retries the WHOLE "
+              "revive", f"dead={agent['dead']}")
+    finally:
+        authsrv._fraction = saved
+
+    sent.clear()
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        authsrv.revive_due(send, state, 0)
+    revived_ops = [op for op, _, _ in sent]
+    check(agent["dead"] is False and len(sent) in (1, 3),
+          "control: the in-range revive stands the body up",
+          f"dead={agent['dead']}, ops={revived_ops} (1 with the refill "
+          f"deferred, 3 with it inline -- REVIVE_REFILL_DEFER decides)")
+
+
 def main():
     section_hit_enemy()
     section_skill_press()
     section_land_swing()
     section_land_skill()
+    section_revive_due()
     return LEDGER.verdict()
 
 
