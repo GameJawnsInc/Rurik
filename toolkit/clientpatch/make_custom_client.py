@@ -65,8 +65,13 @@ import vaultpath  # noqa: E402
 # load-bearing place. What actually justifies this signature is that we re-derive
 # it from the owner's own binary every run (dump_dh_params.py) and check the
 # struct's shape; upstream agreement is a convenience, not the evidence.
-SIG_KEYS = bytes.fromhex("8B4508C70088000000B8")
-SIG_KEYS_PTR_OFF = 0x0A
+# RE-EXPORTED, not re-typed. These bytes were spelled out in three modules --
+# here, `dhbuild.py` and `clientscan/dump_dh_params.py` -- and three copies of a
+# signature is the same defect as three copies of a policy, one level down: they
+# agree until one of them is edited. `dhbuild` owns them because `cage.py`
+# already trusts it to answer ours/stock from these very bytes.
+SIG_KEYS = dhbuild.SIG_KEYS
+SIG_KEYS_PTR_OFF = dhbuild.SIG_KEYS_PTR_OFF
 
 # The single-instance guard around CreateMutexA.
 SIG_MUTEX = bytes.fromhex("8BF885FF7411FFD63DB7")
@@ -135,21 +140,23 @@ def gen_keys(bits=512, generator=4):
 
 # ---------------------------------------------------------------- patching --
 def locate(pe):
-    hits = pe.find(SIG_KEYS, ".text")
-    if not hits:
-        raise SystemExit(
-            "Could not find the DH accessor signature.\n"
-            "The client was recompiled, or the scheme changed. This is a real R1\n"
-            "finding, not a tool bug -- re-derive the signature before patching.")
-    if len(hits) > 1:
-        print(f"  note: {len(hits)} accessor matches; using the first")
-    import struct
-    va = struct.unpack_from("<I", pe.data, hits[0] + SIG_KEYS_PTR_OFF)[0]
-    rva = va - pe.image_base
-    off = pe.rva_to_off(rva)
-    if off is None:
-        raise SystemExit(f"DH struct RVA 0x{rva:x} is not backed by file bytes")
-    return va, rva, off
+    """(va, rva, file offset) of the DH struct, via `dhbuild.locate_keys`.
+
+    DELEGATED 2026-08-13 -- `studies/crossbuild/PLAN.md` §7 rule 1. This function
+    used to carry its own copy of the search and, on more than one match, print
+    `note: N accessor matches; using the first` and patch that one. Of the three
+    modules holding these bytes it was the one that mattered most: it WRITES
+    CLIENT BINARIES, and picking the wrong struct means patching a decoy while
+    the client keeps reading ArenaNet's parameters -- a build that would then be
+    filed as ours and, per `cage.assert_launch_safe`, cleared for loopback while
+    behaving like stock.
+
+    `dhbuild` is already the module `cage.py` trusts to answer ours/stock, so it
+    is the one implementation and this is a call site. It refuses on 0 matches,
+    on matches that point at nothing DH-shaped, and on 2+ resolving to different
+    structs.
+    """
+    return dhbuild.locate_keys(pe)[:3]
 
 
 def main():

@@ -349,6 +349,26 @@ def channel_of_stream(c2s_stream):
     return VERSION_CHANNEL.get(int.from_bytes(c2s_stream[0:4], "little"))
 
 
+def build_for(wire_path, connection):
+    """The client build for one connection, or None. NEVER a guess.
+
+    Closes the asymmetry `tape.client_version`'s own docstring records: the
+    decrypted `game-*.jsonl` did not carry the build, so `origin.build_of` had
+    nothing to infer from and every live capture in the vault classifies as
+    build-unknown. The number is the CLIENT's, parsed from its own VERSION frame
+    in `wire.jsonl` -- not from anything we wrote, and not from `pinned.BUILD`,
+    which would be us telling ourselves what we already assumed.
+
+    Any failure returns None and the field is omitted. An unstamped capture is a
+    known gap; a wrongly stamped one is a fact nobody can refute later.
+    """
+    try:
+        import tape                                          # noqa: PLC0415
+        return tape.client_version(os.path.dirname(wire_path), connection)["build"]
+    except Exception:                                        # noqa: BLE001
+        return None
+
+
 def assemble_live(wire_path, keyring, out_dir):
     """Turn ONE live wire capture (several connections) + a keyring into decrypted files.
 
@@ -424,12 +444,15 @@ def assemble_live(wire_path, keyring, out_dir):
         # here would produce artifacts that classify UNKNOWN and look like a defect.
         who = origin.OURS if all(origin.is_loopback(h) for h in str(key_name).split("->")
                                  if origin.is_address(h)) else origin.LIVE
+        build = build_for(wire_path, key_name)
+        stamp = {} if build is None else {"build": build}
         with open(out_path, "w", encoding="utf-8") as fh:
             fh.write(json.dumps(origin.record("toolkit/harness/livesession.py", who,
                                               note=f"decrypted from an off-wire capture of "
-                                                   f"{key_name}")) + "\n")
+                                                   f"{key_name}", **stamp)) + "\n")
             fh.write(json.dumps({"kind": "version", "channel": channel,
-                                 "connection": key_name, "key_from": label}) + "\n")
+                                 "connection": key_name, "key_from": label,
+                                 **stamp}) + "\n")
             fh.write(json.dumps({"kind": "session_key", "arc4_key": key.hex()}) + "\n")
             fh.write(json.dumps({"kind": "client_seed", "a": A.hex()}) + "\n")
             fh.write(json.dumps({"kind": "server_seed", "sent": seed.hex()}) + "\n")

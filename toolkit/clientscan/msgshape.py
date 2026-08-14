@@ -6,7 +6,10 @@
     python toolkit/clientscan/msgshape.py --census --exe <pinned exe>
 
 WHY THIS EXISTS. `schema/messages.json` is a byte-faithful import of OpenTyria's
-`msgdefs.c` and carries `"validated_against_build": null`. Where it and the
+`msgdefs.c`. It carried `"validated_against_build": null` when this module was
+written -- the stamp now reads 38797, filled in by the work this module made
+possible, and `test_buildid.py` §3 checks it against the number read out of the
+binary. Where it and the
 client disagree, the client is the thing we actually talk to, and this reads the
 shape straight out of the image so a disagreement can be seen rather than argued.
 
@@ -53,6 +56,7 @@ READ ONLY. Opens the exe for reading and nothing else.
 """
 
 import argparse
+import collections
 import os
 import struct
 import sys
@@ -73,7 +77,23 @@ find_exe = pinned.find
 # (VA, entry count, direction). SOURCED: studies/msgtable/FINDINGS.md section 3,
 # recovered from the 14 callers of MsgChannel::RegisterMsgs at VA 0x007de010.
 # Measured on build 38797; a different build moves every one of these.
-TABLES = (
+#
+# THIS IS NO LONGER THE LOOKUP. It is a CROSS-CHECK, and the difference is the
+# whole of `studies/crossbuild/PLAN.md` §3. Used as the lookup it made this tool
+# answer confidently and wrongly on any other build: MEASURED on
+# 2026-04-30_b174de1f2d8d, `--census` reported `cmd slots 0` and `descriptor
+# invariant violations: 0` -- a line printed after examining ZERO descriptors,
+# byte-identical to the healthy build's -- and exited 0, while
+# `msgshape.py 0x00E5` answered "opcode 0x00e5 is in no table on this build",
+# which is a claim about ArenaNet's client when the truth is a claim about these
+# 25 numbers. 651 of the 751 table entries died at the unmapped-`cmds_va` check
+# in `_enumerate`, silently, because a `continue` is not a refusal.
+#
+# `derive_tables()` now recovers these from the image on whatever build it is
+# given. This tuple stays so the derivation can be checked against a known-good
+# answer on 38797 -- a class-(c) expectation under §6 of that plan, and going red
+# on a new build is the correct behaviour rather than a defect.
+TABLES_38797 = (
     (0x00A52D70, 18, "RECV"),    # AgMsg -- agents and movement
     (0x00A52E48, 2, "SEND"),
     (0x00A96598, 1, "SEND"), (0x00A965A0, 1, "RECV"),
@@ -92,6 +112,37 @@ TABLES = (
     (0x00BEC3D0, 46, "SEND"),    # ch3 AUTH_CMSG
     (0x00BEC540, 32, "RECV"),    # ch3 AUTH_SMSG
 )
+
+
+class NoTables(SystemExit):
+    """The message tables could not be located. Never a silent empty result."""
+
+
+# MsgChannel::RegisterMsgs, anchored by byte shape rather than by address --
+# `studies/crossbuild/PLAN.md` §7 rule 2: encode the bytes that have a reason to
+# stay put, never an address. These seventeen are the middle of the routine:
+#
+#   8b f0            mov esi,eax        <- the anchor starts here, entry+0x22
+#   83 c4 08         add esp,8
+#   8b 45 14         mov eax,[ebp+0x14]     ; sendCount
+#   85 c0            test eax,eax
+#   74 0d            jz  +0xd
+#   50               push eax
+#   ff 75 10         push [ebp+0x10]        ; sendMsgs
+#   56               push esi
+#
+# Not one address, not one rel32, not one byte that differs between the two
+# vaulted builds -- the routine's own prologue loads a /GS cookie by absolute
+# address, which is exactly the kind of byte left OUT. MEASURED: one hit in
+# `.text` on both builds, and one in the whole file.
+REGISTER_SIG = bytes.fromhex("8bf083c4088b451485c0740d50ff751056")
+REGISTER_SIG_DELTA = 0x22
+REGISTER_PROLOGUE = bytes.fromhex("558bec")      # push ebp / mov ebp,esp
+
+# The six arguments are pushed right-to-left by a __cdecl caller, so in ADDRESS
+# order they read: recvCount, recvMsgs, sendCount, sendMsgs, arg1, chanSel.
+PUSH_IMM8, PUSH_IMM32 = 0x6A, 0x68
+ARG_WINDOW = 40                  # how far back a six-push run can start
 
 HEADER_BYTES = 2                 # the opcode on the wire; not a field type
 
@@ -232,18 +283,180 @@ def describe(cmds):
             f"wire {size} bytes")
 
 
+Registration = collections.namedtuple(
+    "Registration", "va count direction caller chan")
+
+
+def measured_nothing(img):
+    """Did this run establish anything at all about the client?
+
+    Lifted out of `main()` so it can be driven against a doctored image, because
+    the defect it guards is precisely a run that prints zeros and exits 0. The
+    two terms are not redundant: a table set can resolve slots that all decode
+    to nothing, and a descriptor count of zero is what makes
+    `invariant violations: 0` a vacuous line rather than a pass.
+    """
+    return not img.slots or not img.invariant_coverage()[1]
+
+
+def find_register_msgs(pe):
+    """(entry_va, entry_off) of MsgChannel::RegisterMsgs, located by byte shape.
+
+    REFUSES on 0 hits and on 2+ hits rather than taking the first --
+    `studies/crossbuild/PLAN.md` §7 rule 1. Taking the first hit is how a tool
+    keeps returning a number after the thing it was looking for moved.
+
+    The -0x22 delta is then VERIFIED rather than assumed: the bytes it lands on
+    must be the routine's prologue and must be preceded by MSVC's `int3` pad.
+    That matters because the prologue is NOT usable as the anchor -- MEASURED,
+    `55 8b ec 83 ec 20 a1` occurs 56 times in `.text` on 38797 and 57 times on
+    the older build, so a tool that searched on it and took the first hit would
+    resolve to the wrong routine in silence.
+    """
+    hits = pe.find(REGISTER_SIG, ".text")
+    if not hits:
+        raise NoTables(
+            "MsgChannel::RegisterMsgs is not in this client -- the routine was "
+            "recompiled or its shape changed.\n"
+            "  That is a real finding, not a crash: every message shape this "
+            "module reports comes from\n"
+            "  the tables that routine installs. Re-derive the anchor in "
+            "studies/msgtable/ before\n"
+            "  trusting any shape against this build.")
+    if len(hits) > 1:
+        raise NoTables(
+            f"{len(hits)} matches for the RegisterMsgs anchor, expected 1; "
+            f"refusing to guess which is the real one.")
+    off = hits[0] - REGISTER_SIG_DELTA
+    if pe.data[off:off + len(REGISTER_PROLOGUE)] != REGISTER_PROLOGUE:
+        raise NoTables(
+            "the RegisterMsgs anchor matched but the routine entry is not where "
+            "it should be:\n"
+            f"  expected {REGISTER_PROLOGUE.hex()} at file offset {off:#x}, found "
+            f"{pe.data[off:off + len(REGISTER_PROLOGUE)].hex()}.\n"
+            "  The anchor's offset into the routine has moved; re-measure it.")
+    if off > 0 and pe.data[off - 1] != 0xCC:
+        raise NoTables(
+            f"the byte before the RegisterMsgs entry at {off:#x} is "
+            f"{pe.data[off - 1]:#04x}, not an int3 pad -- this is the middle of "
+            f"something, not a function entry.")
+    return pe.image_base + pe.off_to_rva(off), off
+
+
+def callers_of(pe, entry_va):
+    """Every file offset in `.text` holding a `call rel32` to `entry_va`."""
+    sec = pe.section(".text")
+    lo, hi = sec["rawptr"], sec["rawptr"] + sec["rawsize"]
+    base_va = pe.image_base + sec["vaddr"]
+    data, out, p = pe.data, [], lo
+    while True:
+        p = data.find(b"\xe8", p, hi - 5)
+        if p == -1:
+            return out
+        rel = struct.unpack_from("<i", data, p + 1)[0]
+        if base_va + (p - lo) + 5 + rel == entry_va:
+            out.append(p)
+        p += 1
+
+
+def _six_pushes(data, call_off):
+    """The six pushed immediates before a __cdecl call site, or None.
+
+    Parsed FORWARD with backtracking and accepted only if a run of exactly six
+    push-immediates lands exactly on the call. Ambiguity is refused rather than
+    resolved: if two start offsets both parse, we cannot tell which is the real
+    argument list from the bytes alone.
+    """
+    found = []
+    for start in range(max(0, call_off - ARG_WINDOW), call_off):
+        vals, p = [], start
+        for _ in range(6):
+            if p >= call_off:
+                break
+            b = data[p]
+            if b == PUSH_IMM8:
+                vals.append(int.from_bytes(data[p + 1:p + 2], "little", signed=True))
+                p += 2
+            elif b == PUSH_IMM32:
+                vals.append(int.from_bytes(data[p + 1:p + 5], "little"))
+                p += 5
+            else:
+                break
+        if len(vals) == 6 and p == call_off:
+            found.append(vals)
+    return found[0] if len(found) == 1 else None
+
+
+def derive_tables(pe):
+    """Every message table this image registers, recovered from the image.
+
+    Returns a tuple of `Registration`. This is what replaced the hardcoded
+    `TABLES_38797` as the lookup -- see that constant's comment for what the
+    hardcoded version did on a build it was not measured on.
+
+    MEASURED 2026-08-12: on build 38797 this reproduces `TABLES_38797` exactly,
+    all 25 entries, same VAs, same counts, same directions. On
+    2026-04-30_b174de1f2d8d it recovers 25 tables and 751 declared entries --
+    the same count per table, in the same order, with every VA moved.
+    """
+    entry_va, _ = find_register_msgs(pe)
+    out = []
+    for call_off in callers_of(pe, entry_va):
+        vals = _six_pushes(pe.data, call_off)
+        if vals is None:
+            raise NoTables(
+                f"the argument list at call site {call_off:#x} could not be read "
+                f"as six pushed immediates.\n"
+                f"  The calling convention or the compiler's scheduling changed. "
+                f"Refusing to report a\n"
+                f"  partial table set, because a missing table reads downstream "
+                f"as 'that opcode does not exist'.")
+        recv_count, recv_va, send_count, send_va, _arg1, chan = vals
+        caller_va = pe.image_base + pe.off_to_rva(call_off)
+        if send_va:
+            out.append(Registration(send_va, send_count, "SEND", caller_va, chan))
+        if recv_va:
+            out.append(Registration(recv_va, recv_count, "RECV", caller_va, chan))
+    if not out:
+        raise NoTables(
+            f"RegisterMsgs was found at {entry_va:#010x} but has no callers that "
+            f"register a table.")
+    return tuple(sorted(out, key=lambda r: r.va))
+
+
 class Image:
     """The exe, with the load-time cmd writes resolved."""
 
-    def __init__(self, path=None):
+    def __init__(self, path=None, tables=None):
         path = path or find_exe()[0]
         self.pe = PE(path)
         self.path = path
         self.base = self.pe.image_base
+        # Derived from THIS image, never from a constant. `tables` is an
+        # override for tests that want to drive the walk with a known set.
+        self.tables = derive_tables(self.pe) if tables is None else tuple(tables)
         self.entries = []            # (table_va, direction, cmds_va, count)
         self.slots = set()
+        # Why each rejected entry was rejected. `_enumerate` skips with a bare
+        # `continue`, which is fine as long as somebody counts: 651 of 751
+        # entries vanished into the first of these on the older build and the
+        # tool reported an empty census as though it were a finding.
+        self.skipped_unmapped = 0
+        self.skipped_count = 0
         self._enumerate()
         self.stores = self._recover_stores()
+
+    @property
+    def agmsg_table(self):
+        """The AgMsg RECV table -- the one the four oracles live in.
+
+        Identified as the RECV table registered by the LOWEST call site, which
+        is what it is on both vaulted builds. It used to be the literal
+        `0x00A52D70`, which made `oracle_check()` fail on any other build for a
+        reason that had nothing to do with the oracles.
+        """
+        recv = [r for r in self.tables if r.direction == "RECV"]
+        return min(recv, key=lambda r: r.caller).va if recv else None
 
     # -- raw reads ------------------------------------------------------
     def u32(self, va):
@@ -257,14 +470,17 @@ class Image:
 
     # -- table walk -----------------------------------------------------
     def _enumerate(self):
-        for tva, n, direction in TABLES:
+        for reg in self.tables:
+            tva, n, direction = reg.va, reg.count, reg.direction
             stride = 12 if direction == "RECV" else 8
             for i in range(n):
                 e = tva + stride * i
                 cmds_va, count = self.u32(e), self.u32(e + 4)
                 if not cmds_va or not self.mapped(cmds_va):
+                    self.skipped_unmapped += 1
                     continue
                 if not count or count > 64:
+                    self.skipped_count += 1
                     continue
                 self.entries.append((tva, direction, e, cmds_va, count))
                 for k in range(count):
@@ -357,15 +573,32 @@ class Image:
 
     def oracle_check(self):
         """[(opcode, ok, got)] for the four known-good AgMsg messages."""
+        agmsg = self.agmsg_table
         out = []
         for op, want in sorted(ORACLE.items()):
             got = None
             for o, d, tva, disp, cmds in self.messages():
-                if o == op and tva == 0x00A52D70 and d == "RECV":
+                if o == op and tva == agmsg and d == "RECV":
                     got = cmds
                     break
             out.append((op, got == want, got))
         return out
+
+    def invariant_coverage(self):
+        """(messages, descriptors) the invariant check actually examined.
+
+        Reported beside the violation count, always. "0 violations" over 0
+        descriptors is not a pass, it is the shape of a run that measured
+        nothing -- and it printed byte-identically to a healthy run on the
+        older build while every table address was wrong.
+        """
+        msgs = descs = 0
+        for op, d, tva, disp, cmds in self.messages():
+            if any(c is None for c in cmds[1:]):
+                continue
+            msgs += 1
+            descs += len(cmds) - 1
+        return msgs, descs
 
     def invariants(self):
         """Violations of the six rules the client asserts about descriptors."""
@@ -419,19 +652,57 @@ def main():
     img = Image(a.exe)
 
     if a.census:
+        rc = 0
+        declared = sum(r.count for r in img.tables)
+        print(f"tables {len(img.tables)} (derived), declared entries {declared}, "
+              f"usable {len(img.entries)}, skipped {img.skipped_unmapped} unmapped "
+              f"+ {img.skipped_count} bad-count")
         c = img.census()
         print(f"cmd slots {c['slots']}, statically present {c['static']}, "
               f"zero in file {c['zero']}, recovered {c['recovered']}, "
               f"unaccounted {c['zero'] - c['recovered']}")
-        for op, ok, got in img.oracle_check():
+
+        # The cross-check, not the lookup. Only meaningful against the build the
+        # constant was measured on, so it is scoped by hash rather than assumed.
+        what, _ = pinned.identify(a.exe, build=pinned.BUILD)
+        if what in ("pristine", "patched"):
+            derived = sorted((r.va, r.count, r.direction) for r in img.tables)
+            if derived == sorted(TABLES_38797):
+                print(f"  cross-check: the derivation reproduces the pinned "
+                      f"build-{pinned.BUILD} table exactly ({len(derived)} tables)")
+            else:
+                print(f"  cross-check: DISAGREES with the pinned build-"
+                      f"{pinned.BUILD} table -- derived {len(derived)}, pinned "
+                      f"{len(TABLES_38797)}")
+                rc = max(rc, 1)
+
+        oracles = img.oracle_check()
+        for op, ok, got in oracles:
             print(f"  oracle 0x{op:04X}  {'PASS' if ok else 'FAIL'}")
             if not ok:
                 print(f"    got {[hex(x) if x is not None else '?' for x in got or []]}")
+        if not all(ok for _, ok, _ in oracles):
+            rc = max(rc, 1)
+
         bad = img.invariants()
-        print(f"  descriptor invariant violations: {len(bad)}")
+        msgs, descs = img.invariant_coverage()
+        print(f"  descriptor invariant violations: {len(bad)}  "
+              f"(over {descs} descriptor(s) in {msgs} message(s))")
         for b in bad[:10]:
             print(f"    {b}")
-        return 0
+        if bad:
+            rc = max(rc, 1)
+
+        # A run that measured nothing FAILED. This is the whole point of the
+        # section: the older build used to print an empty census, four FAILing
+        # oracles and `violations: 0` and then exit 0.
+        if measured_nothing(img):
+            print("\nNOTHING WAS MEASURED. The tables were located but no usable "
+                  "descriptor came out of\n"
+                  "them, so every count above is a fact about this tool and not "
+                  "about the client.")
+            rc = 2
+        return rc
 
     if a.all or a.table:
         want = int(a.table, 0) if a.table else None
@@ -445,7 +716,15 @@ def main():
     want = int(a.opcode, 0)
     hits = img.lookup(want)
     if not hits:
-        sys.exit(f"opcode 0x{want:04x} is in no table on this build")
+        # Say what was actually established. The old wording -- "is in no table
+        # on this build" -- is a claim about ArenaNet's client, and when the
+        # table addresses were wrong it was a false one; the tool had walked
+        # 25 addresses that no longer named tables and reported the client's
+        # message set as missing an opcode it has.
+        sys.exit(f"opcode 0x{want:04x} is in none of the {len(img.tables)} tables "
+                 f"this build registers\n"
+                 f"  ({len(img.entries)} usable entries, {len(img.slots)} cmd "
+                 f"slots). Run --census to check the tables resolved at all.")
     for op, direction, tva, disp, cmds in hits:
         print(_line(op, direction, tva, disp, cmds))
     return 0

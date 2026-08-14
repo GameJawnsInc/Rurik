@@ -1989,7 +1989,165 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   scores a fixed count however many archives a vault holds. ~2.5 s),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
-  vaulted builds — and it proves its own negative result can go red first),
+  vaulted builds — and it proves its own negative result can go red first. Since
+  2026-08-12 it takes the two STAMPS from `pinned.BUILDS` rather than spelling
+  them again, and a build added to that registry with no expected path count here
+  FAILS rather than being skipped: this is the only cross-ArenaNet-build test in
+  the tree, so an unmeasured build sitting in the registry would leave it claiming
+  a coverage nothing provides),
+  `toolkit/clientscan/test_sigcorpus.py` (every byte-shape anchor in the repo,
+  counted on both vaulted builds — `studies/crossbuild/PLAN.md` §7.2. It is where
+  that plan's two derived-but-never-landed signatures live: `WORKAROUNDS.md` §3.5
+  derived the attribute accessors (4 hits) and the `imul`-stride colour tables
+  (2 hits), recorded the counts in prose, and put neither in code, so nothing
+  could re-check them. With `REGISTER_SIG` and `ASSERT_SIG` derived since, the
+  corpus is **eight, all reproducing their exact hit counts on both builds** while
+  every address they resolve to moved — the two profession signatures by exactly
+  0x2350 (9,040) bytes, the figure §3.5 recorded. Exact counts, not "at least
+  one": a signature that has quietly become ambiguous still resolves and still
+  answers. §2 is rule 2 — no build-specific address in a pattern — and the honest
+  version of it: the obvious scan ("no 4-byte window lands in the image range")
+  was written, run and **REFUTED by its own output**, flagging `SIG_KEYS` and
+  `ASSERT_SIG` on windows straddling instruction boundaries in signatures that
+  match both builds. The sound argument replaced it — one byte string matching two
+  images whose addresses all moved cannot contain a build-varying byte — plus the
+  narrow scan that IS sound, that no signature embeds an address it resolves to.
+  §3 is the point: the resolved addresses must be DISJOINT across the builds, or
+  the corpus is evidence of nothing. It must NOT be read as "signatures are
+  stable" — n=2 over one build gap. Needs the vault. Floor 34, ~4 s),
+  `toolkit/clientscan/test_buildid.py` (the client's own build number, read out
+  of the binary — `studies/crossbuild/FINDINGS.md` §3, which closes what §8 of
+  that plan had recorded as NOT FOUND. `pinned.BUILD` was typed in and the older
+  vaulted build's number appeared NOWHERE in the tree, so half the corpus could
+  not satisfy `HANDOFF.md`:237's day-one rule that every capture manifest records
+  a build id. The obvious place was refuted first: the PE version resource reads
+  `FileVersion '1, 0, 0, 1'` on BOTH builds and on four sibling DLLs. The client
+  compiles its build as a whole function — `mov eax, <build>; ret`, int3-padded —
+  and **the shape is common while the value is not**: 54 such getters on 38797
+  and 56 on the older build, exactly ONE of each in the five-digit build range.
+  Both counts are asserted, because "one candidate" says nothing without the
+  number rejected. The older build is **38519**, which it had never been called
+  before. §2 drives the zero-candidate and many-candidate refusals by moving
+  `BUILD_MIN`/`BUILD_MAX` on a real image, each with a positive control that the
+  real range still resolves. **§3 is what makes the range assumption checkable
+  rather than circular**: for 38797 the client says the same number over the
+  NETWORK — the schema's stamp, `authsrv.py`'s VERSION frame, the live
+  `User-Agent: Gw/38797.0 (Win32)` — and a value derived from bytes agreeing with
+  one observed on the wire shares no lineage at all. It also pins that the
+  schema's stamp is nested under `provenance` and NOT a top-level key, which is
+  how the first version of that check "failed". §4 requires `pinned.BUILDS` to
+  match a fresh read, so the registry stays derived rather than hand-edited.
+  Needs the vault. Floor 23, ~6 s),
+  `toolkit/clientscan/test_avevents.py` (the two AgentView event allocators,
+  located by ArenaNet's own asserts — `studies/crossbuild/FINDINGS.md` §2.5, and
+  the last two addresses in that census. They were literals used to match call
+  targets, so on any other build nothing matched and the tool reported that
+  NOTHING ALLOCATES ANYTHING: a confident empty answer, not an error. Neither
+  allocator contains an assert, but each sits immediately beside a function that
+  does, so ACTION is the function immediately BEFORE the one asserting
+  `AvChar.cpp:1243` and `:1251`, EFFECT the one immediately AFTER `:2433` and
+  `:2438`, with boundaries from MSVC's `int3` padding — the inference that named
+  them is now also the locator. **§2 is the check that earns the file**:
+  `AvChar:1243` ALONE sits in three distinct functions on both builds, so a
+  version taking the first hit is right on 38797 *by luck*, and the first draft
+  of this derivation did exactly that and passed; it is the PAIR of lines that
+  resolves to one function, and §2 measures both numbers rather than asserting
+  the rule. §4 reproduces the ambiguous anchor and requires a refusal, with the
+  real anchors resolving afterwards as the positive control. §3 is the half a
+  lookup cannot fake: the older build derives a different pair — **not one
+  address shared** — and still reproduces the census, 23 action call sites and 22
+  kinds on both. The function-boundary walk is reimplemented in the test out of
+  `int3` padding, so it is a second witness rather than a second call to the
+  module. Needs the vault. Floor 19, ~50 s),
+  `toolkit/clientscan/test_genericvalue.py` (the property-id switches, and that a
+  moved build cannot be read as a map — `studies/crossbuild/PLAN.md` §6.
+  `genericvalue.py`'s docstring claimed "a build that moves them fails loudly
+  instead of returning a stale map that still looks plausible"; that was true of
+  `CHAINS`, which carries `verify` bytes, and FALSE of the other 30 addresses in
+  the file — the five table switches stored a jump-table and index-table address
+  each and checked neither, `read_switch` verified only that an index landed
+  inside the table it had just read (internal consistency, which catches a
+  corrupt read and not a moved one), and `MAIN_SWITCH_GATE` printed
+  "MOVED — results are suspect" and carried on. The table addresses are now read
+  out of the `movzx`/`jmp` pair that jumps through them, so they are derived from
+  the instruction rather than remembered beside it: 10 addresses gone, 32 → 27,
+  and the rest gated. §1 is the load-bearing positive claim — the derivation must
+  land on the exact ten addresses that used to be hardcoded, which now live in
+  the test as class-(c) expectations. §3 is the half a lookup cannot fake: on the
+  older vaulted build every switch, both chains and the gate must REFUSE, and the
+  CLI must exit **2 with no traceback**, because a refusal that reads as a crash
+  gets debugged as one. §4 doctors a site by ONE byte and requires a refusal,
+  with the real site still resolving as the positive control — a checker that
+  refuses everything would pass §3 on its own. Why gated and not converted is
+  MEASURED, not preferred: the `movzx`/`jmp` switch shape occurs **596 times** in
+  `.text`, so it identifies "a switch" and never "this switch", and converting
+  means anchoring the dispatchers first. Needs the vault throughout. Floor 33,
+  ~4 s),
+  `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
+  DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
+  and the reason that plan put this file first. `msgshape` underpins
+  `msghandler.py` and `test_catalog.py`'s 477/477, and its 25 table addresses
+  were measured on build 38797, so on the other vaulted build it printed
+  `cmd slots 0`, four FAILing oracles, `descriptor invariant violations: 0` — a
+  line vacuous over ZERO descriptors and byte-identical to the healthy build's —
+  and **exited 0**, while `msgshape.py 0x00E5` answered "opcode 0x00e5 is in no
+  table on this build", which is a claim about ArenaNet's client and was false.
+  651 of 751 entries had died at one `continue`, and a `continue` is not a
+  refusal. `RegisterMsgs` is now anchored by a 17-byte shape carrying no address,
+  its 14 callers are enumerated, and the six pushed `__cdecl` immediates give
+  back every table. The headline — the derivation reproduces `TABLES_38797`
+  EXACTLY on 38797 — is deliberately the WEAK half, since a function that
+  returned the constant would pass it; §2 is the half that cannot be faked, the
+  same code recovering 25 tables and 751 entries from a build sharing **not one**
+  table address, with every entry COUNT identical (the tables moved, the protocol
+  did not). §0's negative control is the routine's own 7-byte prologue at 56 and
+  57 hits, so "take the first hit" would resolve the wrong routine silently —
+  which is why the −0x22 delta is VERIFIED after a match rather than searched
+  for, and both the zero-hit and many-hit refusals are driven by swapping the
+  pattern, each with a positive control that the real one still resolves
+  afterwards. §3 drives `measured_nothing()` with a doctored table set and pairs
+  it with real builds, because a predicate answering True to everything would
+  pass the vacuity check alone. Needs the vault throughout. Floor 37, ~35 s),
+  `toolkit/clientscan/test_pinned.py` (which `Gw.exe` a tool actually reads, and
+  the guard on it going red — `studies/crossbuild/PLAN.md` §5. `pinned.find()`
+  used to answer with `os.path.isfile` and return, so `identify()`, the only
+  function that hashes anything, was reachable from `main()` and two unrelated
+  tests and from NOTHING on the path the twelve static-analysis tools take; its
+  last fallback was the auto-updating install at `C:\gw`, returned with the string
+  "may not be 38797" and no refusal, which for build-specific addresses is a
+  confident wrong number rather than an error. The load-bearing checks are the
+  ones a size gate cannot pass: a file of build 38797's EXACT size with wrong
+  bytes must be refused — that is the module's founding defect, since the vault
+  holds two copies of 38797 at the same length 144 bytes apart — and `find()`
+  given an empty vault and a live install that EXISTS must refuse rather than
+  substitute it, which is the configuration the old code got wrong. Each refusal
+  carries a positive control, and the one that earns the file is running the SAME
+  planted file with `verify=False` and requiring it BACK: without it, "it refused"
+  is satisfied by a `find()` that refuses everything, and a guard that refuses
+  everything protects nothing because the tool never runs. Also that the older
+  client — a genuine pristine build — is `unknown` when asked about AS 38797,
+  while identifying as itself unscoped, so the refusal is the scoping rather than
+  a broken hash; and that each stamp is its own pristine sha256 prefix, so a
+  mistyped hash cannot sit in the registry looking plausible. `LIVE_INSTALL` is
+  monkeypatched to a temp path so both fallback branches run on every machine
+  rather than only one with `C:\gw`. **§5 and §6 are the PROBE GATE**
+  (`studies/crossbuild/FINDINGS.md` §2.1): `itemprobe.py` and `agentprobe.py`
+  hold three raw RVAs and did not import `pinned` at all, and they read a LIVE
+  client at `module_base + RVA` — so on another build they do not compute a wrong
+  answer, they dereference whatever else is mapped there and print it as an agent
+  array. `pinned.assert_build()` now hashes the running process's own `Gw.exe`
+  (via `keytap.module_info`) and refuses. §5's decisive check is that it refuses
+  the OTHER vaulted client — a genuine ArenaNet build and still the wrong one —
+  which caught a real defect while the gate was being written: the first version
+  called `identify()` unscoped, and unscoped it considers every registered build,
+  so it accepted the older client. §6 asserts the ORDERING on the syntax tree,
+  because "gates before it reads" is invisible to a grep — a file with both names
+  in the wrong order greps identically — with a reversed probe that must be
+  rejected and a correct one that must be accepted. `--any-build` is the
+  deliberate override, because a gate that makes a tool unusable the day a build
+  ships is one somebody deletes. Without a vault §4 skips and the run scores 43
+  against a floor of 55, so it goes red — measured with `RURIK_VAULT` pointed at
+  an empty directory, not derived by subtraction. ~2 s),
   `toolkit/clientscan/test_msghandler.py` (the receive-handler classifier, which is
   the loopback opcode sweep's PREDICTION stated before it runs. Three corrections it
   pins, each to a claim that was in circulation: **477 of 477 table entries carry a
@@ -2119,6 +2277,62 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   are proved to have passed condition 2 rather than skipped it. Sections 0-4 build a
   small PE32 image byte by byte and need no vault, scoring 28 against a floor of 69,
   so a vault-less run goes red. ~15 s),
+  noise. **§10, added 2026-08-12, is the both-build run** —
+  `studies/crossbuild/PLAN.md` §4. `asserts.py` compared every site's call target
+  against `ASSERT_VA_38797`, a literal, so the older vaulted build came back
+  `single-routine=False` with a warning and `studies/srvtree/FINDINGS.md`:262-268
+  recorded its assert corpus as not trustworthy — which matters downstream,
+  because `codescan --in` takes its module ranges from here and an under-count
+  narrows every search inside it silently. The callee is now derived two ways
+  that must agree: the modal call target of ~19,700 sites (**one** distinct
+  callee, 100.0000%, on both builds) and a 27-byte signature carrying no address.
+  The assertion is the SHAPE COUNTS — 19,758 = 19,620 + 75 + 63 on 38797,
+  19,680 = 19,544 + 74 + 62 on the older build — because a bare
+  `single-routine=True` is satisfied by a scan that found two sites, and all
+  three shapes must be present or the consensus is over one spelling of the idiom
+  rather than the idiom. Its negative control is that the routine's own prologue
+  is NOT unique, 56 hits, which is why the signature anchors in the body and the
+  −11 delta is verified after a match rather than searched for. Both floors were
+  re-measured rather than incremented: 93 with capstone, 45 stdlib-only),
+  `toolkit/test_buildpins.py` (the build-coupled census — `studies/crossbuild/`
+  `PLAN.md` §6, and the number that replaces `PLAN.md` §6:803's "ongoing":
+  **68 live constants across 7 files**, against 360 prose citations and 133 test
+  expectations. The one thing it must prove is that those three are told apart,
+  because class (a) and class (b) are **the same string** — `0x00487BC0` in a
+  docstring is provenance that `PLAN.md` §7 Q3 protects, and in an assignment it
+  is a per-build liability. §1 puts the same address in a docstring and in code
+  in one synthetic module, requires opposite verdicts, then reproduces the grep
+  inline and shows it returns 2 and cannot say which is which. That is not
+  pedantry: citations outnumber live constants 360 to 68, so a grep-built census
+  is 84% noise and invites "scrub the addresses", which is the reading that cost
+  a session of rewrites and all 46 reverted. Every exclusion was MEASURED from a
+  real false positive in the first run — bit flags, the image base, all-ones
+  masks, two-digit literals, and the map file id `0x345CC` cited in five modules;
+  dropping the RVA bucket moved the count 104 → 68 and 21 files → 7 — and every
+  exclusion carries a positive control that a real address survives it, since a
+  filter that drops everything produces a very clean census of zero. The
+  instrument excludes itself and says so. `--diff` exits **1 for a changed
+  census, which is a result**, 0 for unchanged, the same contract `datcheck.py`
+  draws. No vault, no client, no socket. Floor 40, ~2 s),
+  `toolkit/test_updatecheck.py` (the before/after update commands —
+  `studies/crossbuild/PLAN.md` §11, and the one deliverable of that arc that
+  expires if nobody runs it in time: an update is not schedulable and half the
+  arc's measurements need a BEFORE state. **§1 is provenance and is the check
+  that would matter most if it failed** — the baseline records the DH parameters
+  as a FINGERPRINT (generator, bit length, sha256 prefix) and never the values,
+  so the test reads the REAL prime and B out of the vaulted client and requires
+  neither to appear anywhere in the serialised baseline, in decimal or either hex
+  spelling. §2 pins the distinction the report exists to draw: a signature that
+  moved to a NEW ADDRESS with the same hit count still resolves and must NOT be
+  flagged, because that is what a healthy update looks like and a report that
+  shouted about it would be deleted after the first real one — while a changed
+  HIT COUNT is flagged `RE-DERIVE`. §3 drives all three exit codes **through the
+  process**, which is how the exit-2 contract was found broken: `CannotRun`
+  subclasses `SystemExit`, and `SystemExit("some text")` carries the text as its
+  code, so the process was exiting 1 and "could not run" was indistinguishable
+  from "something moved" to anything reading the code. Asking the exception for
+  its `.code` had passed. §4 refuses the baseline into any checkout of this repo,
+  including the other one. Floor 26, ~60 s),
   `toolkit/test_checks.py` (the check on the checker — see below),
   `toolkit/test_run_suite.py` (the suite RUNNER, which did not exist until
   2026-08-13 — 66 test files and **0 scripts that ran them**, so every "the suite is
@@ -2444,7 +2658,28 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   when the right key is absent; and that the guards refuse the primary account, an ours-DH
   client aimed live, and a run with no `--confirm`),
   `toolkit/test_origin.py` (whose server a capture came from, and that ours and
-  ArenaNet's can never be pooled).
+  ArenaNet's can never be pooled — **and since 2026-08-13 which BUILD, which is
+  the same argument one level down**. `HANDOFF.md`:237 has required a build id in
+  every capture manifest since day one and `origin.py` carried no build field at
+  all; that was survivable only while there was one build, and `MOVE_TO_COORD` is
+  `0x003C` in one client and `0x003E` in another, so a figure pooled across two
+  is about neither. `build_of` mirrors `origin_of` including the part it learned
+  the hard way: a build stated on the origin record is CHECKED against the file's
+  own `version` record and REFUSED when they disagree, because a stamp nothing
+  checks is an unfalsifiable self-declaration. `BUILD_UNKNOWN` is a distinct third
+  value, never "probably the pinned one", and `require_single_build` refuses a
+  two-build corpus — `test_movement_fidelity.py`, the pooling consumer, calls it.
+  Unknown is TOLERATED by default and that is measured rather than lax: 556 of
+  the vault's 1,678 capture files name no build, because a frame log names it once
+  per SESSION not once per file, so refusing on unknown would refuse nearly every
+  real corpus and the guard would be deleted in a week — it may never be silent,
+  so the count comes back in the reason, and `allow_unknown=False` exists.
+  **The vault census answers what `studies/crossbuild/PLAN.md` §10 left
+  UNVERIFIED: every capture that names a build names 38797** — 1,122 files — so
+  no existing corpus figure is pooling builds, and that is asserted as an
+  invariant so the first capture from a second build turns it red. A vault-less
+  run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
+  empty directory rather than derived by subtraction).
 
   **This list is the suite.** A test in the tree but not named here is a test
   nobody runs: `test_pathmap.py`, `test_skillcast.py` and `test_textrec.py` were

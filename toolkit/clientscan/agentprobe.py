@@ -42,6 +42,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "harness"))
 import keytap  # noqa: E402
+import pinned  # noqa: E402
 
 IMAGE_BASE = 0x00400000
 RVA_ARRAY = 0x00BF96CC - IMAGE_BASE
@@ -97,8 +98,28 @@ def u32(b):
     return struct.unpack("<I", b)[0]
 
 
-def probe(pid, want=None, limit=64):
-    base = keytap.module_base(pid, "Gw.exe")
+def gate(pid, allow_any=False):
+    """(base, path) once the client is confirmed to be the build RVA_* came from.
+
+    Called BEFORE the first read, which is the whole point: every offset below
+    was measured on one build, and against another one they do not produce a
+    wrong number, they dereference whatever else is mapped there. This module
+    did not import `pinned` at all until 2026-08-12 --
+    `studies/crossbuild/FINDINGS.md` §2.1, where it and `itemprobe.py` are the
+    top of the class-(a) table for exactly this reason.
+    """
+    base, path = keytap.module_info(pid, "Gw.exe")
+    what = pinned.assert_build(
+        path, why=f"reading agent memory out of pid {pid}", allow_any=allow_any)
+    if what not in ("pristine", "patched"):
+        print(f"  !! --any-build: pid {pid} is running {path},\n"
+              f"     which is not a build {pinned.BUILD} copy we recorded. Every\n"
+              f"     address below may be reading something else entirely.")
+    return base, path
+
+
+def probe(pid, want=None, limit=64, allow_any=False):
+    base, _path = gate(pid, allow_any)
     arr = u32(keytap.read_at(pid, base + RVA_ARRAY, 4))
     count = u32(keytap.read_at(pid, base + RVA_COUNT, 4))
     print(f"pid {pid}  Gw.exe base 0x{base:08X}")
@@ -129,6 +150,10 @@ def main():
     ap.add_argument("--pid", type=int, help="client pid; default = the running Gw.exe")
     ap.add_argument("--agent", type=int, help="one agent id, instead of a sweep")
     ap.add_argument("--limit", type=int, default=64)
+    ap.add_argument("--any-build", action="store_true",
+                    help="read a client that is NOT the build these RVAs were "
+                         "measured on. Every address below may then be pointing "
+                         "at something else; the run says so on every line it can")
     a = ap.parse_args()
 
     pid = a.pid
@@ -140,7 +165,7 @@ def main():
             return 1
         pid = pids[-1]
 
-    rows = probe(pid, a.agent, a.limit)
+    rows = probe(pid, a.agent, a.limit, allow_any=a.any_build)
     if not rows:
         return 1
     header = (f"{'agent':>6} {'+0x9C':>10} {'char?':<6} {'+0x1B5':>6} "

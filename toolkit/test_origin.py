@@ -19,6 +19,16 @@ two-valued scheme would force an unstamped file to be called one or the other, a
 whichever default you pick is wrong exactly when it matters -- the first live capture
 written by a tool that forgot to stamp.
 
+AND SINCE 2026-08-13, WHICH BUILD, which is the same argument one level down.
+`HANDOFF.md`:237 has required a build id in every capture manifest since day one and
+nothing recorded one; that was survivable only while there was one build, and
+`MOVE_TO_COORD` is 0x003C in one client and 0x003E in another. The stamp is CHECKED the
+same way the origin stamp is -- a stated build the file's own VERSION record refutes is
+REFUSED -- and UNKNOWN is again a distinct third value rather than "probably the pinned
+one". The vault census answers the question `studies/crossbuild/PLAN.md` §10 left
+UNVERIFIED: every capture that names a build names 38797, so no existing corpus figure
+is pooling two of them.
+
     python toolkit/test_origin.py
 """
 import json
@@ -33,9 +43,13 @@ import origin  # noqa: E402
 import vaultpath  # noqa: E402
 
 # 5 classification + 4 stamp-vs-contents + 4 refusal + 3 vault-corpus = 16, measured green
-# 2026-08-07. The vault section declares a skip when there are no captures, so the floor
-# sits at 14 -- two below, not seven, because the census now finds real live files.
-LEDGER = checks.Ledger("capture origin", floor=14)
+# 2026-08-07. 2026-08-13 added the BUILD stamp: 11 constructed + 2 vault-census, for 28
+# with a vault. Both vault sections declare a skip when there are no captures, and a
+# vault-less run scores 23 -- MEASURED with RURIK_VAULT pointed at an empty directory,
+# not derived by subtraction, because a floor computed from a floor is how a section
+# quietly stops running. The floor sits at 23 so a vault-less run still passes; the two
+# census checks are the only ones that need real captures.
+LEDGER = checks.Ledger("capture origin", floor=23)
 
 
 def write(path, records):
@@ -199,7 +213,111 @@ def main():
                       "every capture the movement score pools is ours",
                       f"{len(picked)} game-channel files")
 
+    section_build()
     return LEDGER.verdict()
+
+
+def _write(tmp, name, records):
+    p = os.path.join(tmp, name)
+    with open(p, "w", encoding="utf-8") as fh:
+        for r in records:
+            fh.write(json.dumps(r) + "\n")
+    return p
+
+
+def section_build():
+    """WHICH BUILD -- the same argument as WHICH SERVER, one level down.
+
+    `HANDOFF.md`:237 has required a build id in every capture manifest since day
+    one and nothing recorded one. It was survivable only while there was one
+    build, and the risk is not hypothetical: `MOVE_TO_COORD` is 0x003C in one
+    client and 0x003E in another, so a figure pooled across two builds is about
+    neither -- exactly what this module already refuses for two servers.
+    """
+    print("\nbuild stamp")
+    with tempfile.TemporaryDirectory() as tmp:
+        ver = {"kind": "version", "channel": "game", "build": 38797}
+
+        p = _write(tmp, "inferred.jsonl", [origin.record("t"), ver])
+        b, why = origin.build_of(p)
+        LEDGER.ok(b == 38797, "a build is inferred from the client's own VERSION record", why)
+
+        p = _write(tmp, "stamped.jsonl", [origin.record("t", build=38797), ver])
+        b, why = origin.build_of(p)
+        LEDGER.ok(b == 38797 and "corroborated" in why,
+                  "an explicit stamp is corroborated by the contents", why)
+
+        # THE control, and the lesson origin_of learned the hard way: a stamp
+        # nothing checks is an unfalsifiable self-declaration.
+        p = _write(tmp, "lying.jsonl", [origin.record("t", build=38519), ver])
+        b, why = origin.build_of(p)
+        LEDGER.ok(b is origin.BUILD_UNKNOWN and "CONTRADICTED" in why,
+                  "a stamp the file's own contents refute is REFUSED, not believed", why)
+
+        p = _write(tmp, "two.jsonl", [origin.record("t"), ver,
+                                      {"kind": "version", "build": 38519}])
+        b, why = origin.build_of(p)
+        LEDGER.ok(b is origin.BUILD_UNKNOWN and "CONTRADICTED" in why,
+                  "and one capture naming two builds is refused", why)
+
+        p = _write(tmp, "silent.jsonl", [origin.record("t"), {"kind": "frame"}])
+        b, why = origin.build_of(p)
+        LEDGER.ok(b is origin.BUILD_UNKNOWN,
+                  "a capture naming no build is UNKNOWN, not the pinned one", why)
+        LEDGER.ok(origin.BUILD_UNKNOWN is None and 38797 is not origin.BUILD_UNKNOWN,
+                  "and UNKNOWN is a distinct third value, as it is for origin")
+
+        # Pooling.
+        old = _write(tmp, "old.jsonl", [origin.record("t"),
+                                        {"kind": "version", "build": 38519}])
+        new = _write(tmp, "new.jsonl", [origin.record("t"), ver])
+        try:
+            origin.require_single_build([old, new], what="a test")
+            LEDGER.ok(False, "two builds in one corpus are REFUSED", "it pooled them")
+        except origin.MixedBuilds as exc:
+            LEDGER.ok("MOVE_TO_COORD" in str(exc),
+                      "two builds in one corpus are REFUSED",
+                      "and the message says why it matters")
+
+        # POSITIVE CONTROL: without it, the refusal above is satisfied by a
+        # function that refuses every corpus.
+        b, kept = origin.require_single_build([new, _write(
+            tmp, "new2.jsonl", [origin.record("t"), ver])], what="a test")
+        LEDGER.ok(b == 38797 and len(kept) == 2,
+                  "while one build passes and keeps every file", str(b))
+
+        # UNKNOWN is tolerated by default -- 555 of the vault's 1,675 files name
+        # no build, because a frame log names it once per SESSION -- but never
+        # silently, and a caller can refuse it.
+        b, kept = origin.require_single_build([new, p], what="a test")
+        LEDGER.ok(b == 38797 and len(kept) == 2,
+                  "an unknown-build file does not break a single-build corpus")
+        try:
+            origin.require_single_build([new, p], what="a test", allow_unknown=False)
+            LEDGER.ok(False, "and allow_unknown=False refuses it", "it allowed it")
+        except origin.MixedBuilds:
+            LEDGER.ok(True, "and allow_unknown=False refuses it")
+
+    try:
+        root = vaultpath.require_dir("captures", why="build census")
+    except BaseException as exc:                             # noqa: BLE001
+        LEDGER.skip("the vault build census", f"no captures: {exc}")
+        return
+    found = []
+    for base, dirs, files in os.walk(root):
+        dirs[:] = [d for d in dirs if d not in ("captures-scrubbed",)]
+        found += [os.path.join(base, f) for f in files if f.endswith(".jsonl")]
+    groups = origin.partition_builds(found)
+    known = {b: v for b, v in groups.items() if b is not origin.BUILD_UNKNOWN}
+    LEDGER.ok(len(known) <= 1,
+              "the whole vault is at most ONE client build",
+              f"{ {b: len(v) for b, v in known.items()} } "
+              f"+ {len(groups.get(origin.BUILD_UNKNOWN, []))} unknown")
+    if known:
+        LEDGER.ok(set(known) == {38797},
+                  "and that build is 38797",
+                  "MEASURED 2026-08-13; the corpus figures in studies/ are not "
+                  "pooling builds, which resolves PLAN.md §10's UNVERIFIED flag")
 
 
 if __name__ == "__main__":

@@ -119,8 +119,31 @@ def read_params(exe):
     is out of scope for a bytes-only reader and would need code-reference analysis, but
     it can no longer win merely by sorting first.
     """
-    pe = PE(exe)
+    return locate_keys(PE(exe))[3]
+
+
+def locate_keys(pe, exe=None):
+    """(va, rva, file offset, (g, p, B)) for THE Diffie-Hellman struct.
+
+    THE ONE IMPLEMENTATION. `studies/crossbuild/PLAN.md` §7 rule 1 says a
+    signature must be unique and the tool must refuse on 0 or 2+ rather than
+    taking the first -- and the same `SIG_KEYS` bytes were carried in three
+    modules with three different policies:
+
+        dhbuild.py            refused on ambiguity          (this)
+        make_custom_client.py took the first, with a NOTE   -- the PATCHER
+        dump_dh_params.py     did not check at all          -- the go/no-go
+
+    The two weaker ones now call this. That is the fix rather than making three
+    implementations agree, because three implementations that agree today are
+    three that can drift tomorrow, and the one most worth getting right was the
+    one that wrote client binaries.
+
+    Three refusals, and the middle one is why "unique in .text" is not enough on
+    its own: a signature can match and point at bytes that are not this scheme.
+    """
     hits = pe.find(SIG_KEYS, ".text")
+    exe = exe or getattr(pe, "path", "this image")
     if not hits:
         raise SystemExit(
             f"{exe}: the DH accessor signature is not in .text.\n"
@@ -152,7 +175,9 @@ def read_params(exe):
             f"  the client actually reads cannot be decided from the bytes alone, so this\n"
             f"  is REFUSED rather than guessed -- picking one could file an OURS build as\n"
             f"  stock and clear it for the live service. Investigate before launching.")
-    return shaped[0][1]
+    va, params = shaped[0]
+    rva = va - pe.image_base
+    return va, rva, pe.rva_to_off(rva), params
 
 
 def _ours_records():

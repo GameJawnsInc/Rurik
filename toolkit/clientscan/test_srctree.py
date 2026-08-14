@@ -40,16 +40,25 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 
 import checks                                                # noqa: E402
+import pinned                                                # noqa: E402
 import srctree as st                                         # noqa: E402
 import vaultpath                                             # noqa: E402
 
 SEP = st.SEP
 
 # Both vaulted builds. The finding must hold on both, not just the pinned one.
-BUILDS = [
-    ("2026-04-30_b174de1f2d8d", 936),
-    ("2026-07-29_221c13772c7a", 937),
-]
+#
+# The STAMPS are no longer spelled here -- they come from `pinned.BUILDS`, which
+# is the vault's build registry (`studies/crossbuild/PLAN.md` §5). This is the
+# only cross-ArenaNet-build test in the tree, so a build added to the registry
+# and missed here would leave the registry claiming a coverage nothing provides.
+# The path COUNT stays here: it is a build-specific expectation, and a new build
+# turning this red is the correct outcome rather than a defect.
+EXPECT_PATHS = {
+    "2026-04-30_b174de1f2d8d": 936,
+    "2026-07-29_221c13772c7a": 937,
+}
+BUILDS = [(b.stamp, EXPECT_PATHS.get(b.stamp)) for b in pinned.BUILDS]
 
 # The twelve subsystems whose client half shipped, so whose server half exists
 # and is the missing work. MEASURED on both builds.
@@ -118,6 +127,14 @@ check(not false_pos, "the detector does not fire on client-side paths",
 for name, expect_paths in BUILDS:
     print()
     print("2. build %s" % name)
+    if expect_paths is None:
+        # A build reached `pinned.BUILDS` and nobody gave this test a number for
+        # it. Failing beats skipping: the registry is what other tools consult
+        # to answer "which builds do we cover", and an unmeasured build sitting
+        # in it silently is the coverage gap this wiring exists to close.
+        check(False, "build %s has no expected path count in EXPECT_PATHS" % name,
+              "add one, measured from a real run -- never from a guess")
+        continue
     blob = load(name)
     paths = st.source_paths(blob)
     check(len(paths) == expect_paths,

@@ -83,30 +83,53 @@ import pinned                                                # noqa: E402
 # build every address in the studies is measured against.
 find_exe = pinned.find
 
-# Build 38797. Each entry: (dispatcher VA, first id, last id, jump-table VA,
-# byte-index-table VA, default-case VA). MEASURED from the two
-# `movzx eax,[idx table]; jmp [jt + eax*4]` sites; a different build moves all
-# of them, which is why the tool re-derives the mapping rather than storing it.
+# Build 38797. Each entry: (dispatcher VA, first id, last id, the switch's own
+# dispatch site, default-case VA).
+#
+# THE TABLE ADDRESSES ARE NO LONGER STORED -- `studies/crossbuild/PLAN.md` §6.
+# They used to be, as `jt=` and `bt=`, and nothing checked them: this module's
+# docstring claimed "a build that moves them fails loudly instead of returning a
+# stale map that still looks plausible", which was true of `CHAINS` below and
+# false of everything here. `read_switch` verified only that an index landed
+# inside the table it had just read -- internal consistency, which catches a
+# corrupt read and not a moved one.
+#
+# `at` is the switch's own `movzx`/`jmp` pair, and the two table addresses are
+# read OUT of it:
+#
+#     0f b6 80 <bt32>       movzx eax, byte [eax + byte-index table]
+#     ff 24 85 <jt32>       jmp   [jump table + eax*4]
+#
+# so the tables are derived from the instruction that references them rather
+# than remembered beside it, and the opcode framing is what makes `at` refutable.
+# That removes 10 of this file's hardcoded addresses and gates the rest.
+#
+# WHY `at` IS STILL PINNED, measured rather than assumed: this instruction shape
+# occurs **596 times** in `.text` on build 38797, so it is not an anchor. Making
+# these fully derived means anchoring the DISPATCHERS first -- they are reached
+# from the message handler -- which is a separate job and is not this one.
 INT_SWITCH = dict(name="int-main", dispatch=0x008128F0, lo=0, hi=66,
-                  jt=0x00812F20, bt=0x00812FE0, default=0x00812EC7)
+                  at=0x008129CC, default=0x00812EC7)
 FLOAT_SWITCH = dict(name="float-main", dispatch=0x00813040, lo=0x10, hi=0x3F,
-                    jt=0x00813250, bt=0x0081328C, default=0x00813249)
+                    at=0x008130DB, default=0x00813249)
 
 # A second, earlier switch inside the INT dispatcher, taken before the main one.
 PRE_SWITCH = dict(name="int-pre", dispatch=0x008128F0, lo=4, hi=64,
-                  jt=0x00812ED0, bt=0x00812EE0, default=0x008129B0)
+                  at=0x0081298B, default=0x008129B0)
 
 # The AgentView switch each dispatcher runs BEFORE its pre-switch, and only when
 # the message's agent resolves to an object of type 1. `int-agentview` is where
 # property 8 lives -- the id the first version of this module called unhandled.
 INT_AGENTVIEW = dict(name="int-agentview", dispatch=0x0081BC60, lo=4, hi=60,
-                     jt=0x0081BD30, bt=0x0081BD44, default=0x0081BD29)
+                     at=0x0081BC78, default=0x0081BD29)
 
 # The per-agent record store each dispatcher runs first, on the 0x34-byte record
 # at charContext+0x7C indexed by AGENT id. The float one is a table; the int one
-# is a three-way compare chain (see CHAINS).
+# is a three-way compare chain (see CHAINS). Note its dispatch site indexes
+# through edx rather than eax -- `0f b6 92` / `ff 24 95` -- which is why the
+# framing check below tests the opcode bytes and not the whole instruction.
 FLOAT_STORE = dict(name="float-store", dispatch=0x00818210, lo=0x10, hi=0x3E,
-                   jt=0x00818394, bt=0x008183B8, default=0x0081838B)
+                   at=0x0081822E, default=0x0081838B)
 
 TABLE_SWITCHES = [INT_AGENTVIEW, PRE_SWITCH, INT_SWITCH, FLOAT_STORE,
                   FLOAT_SWITCH]
@@ -188,6 +211,45 @@ class Image:
             raise ValueError(f"0x{va:08x} is not backed by file bytes")
         return self.pe.data[off:off + n]
 
+    def mapped(self, va):
+        """Is `va` backed by file bytes? Asked before trusting an address the
+        image itself named, so a wild pointer is a refusal and not a traceback
+        from somewhere further down."""
+        return self.pe.rva_to_off(va - self.base) is not None
+
+
+# `movzx r32, byte ptr [r32 + disp32]` then `jmp dword ptr [disp32 + r32*4]`.
+# The register bytes differ per switch (`float-store` goes through edx), so the
+# framing is checked on the opcodes and the modrm's addressing form, not on the
+# whole instruction.
+MOVZX = bytes.fromhex("0fb6")
+JMP_TABLE = bytes.fromhex("ff24")
+SWITCH_SITE_LEN = 14
+
+
+def switch_tables(img, spec):
+    """(jump-table VA, byte-index-table VA), read out of the dispatch site.
+
+    Raises rather than returning a remembered pair when the site no longer holds
+    the switch: the addresses live INSIDE the instruction, so if these bytes are
+    not that instruction there is nothing to read and the recorded answer would
+    be a guess about a build we are not looking at.
+    """
+    blob = img.read(spec["at"], SWITCH_SITE_LEN)
+    if blob[0:2] != MOVZX or blob[7:9] != JMP_TABLE:
+        raise ValueError(
+            f"{spec['name']}: the switch site at 0x{spec['at']:08x} is "
+            f"{blob.hex()}, which is not a `movzx`/`jmp [table]` pair -- this "
+            f"build moved or restructured the switch, so any id map read here "
+            f"would describe something else")
+    bt = struct.unpack_from("<I", blob, 3)[0]
+    jt = struct.unpack_from("<I", blob, 10)[0]
+    if not img.mapped(jt) or not img.mapped(bt):
+        raise ValueError(
+            f"{spec['name']}: the tables the site names (jt 0x{jt:08x}, "
+            f"bt 0x{bt:08x}) are not backed by file bytes")
+    return jt, bt
+
 
 def read_switch(img, spec):
     """id -> case-body VA, for one MSVC dense switch.
@@ -196,13 +258,18 @@ def read_switch(img, spec):
     tables have different lengths and the jump table's length is implied by
     the gap between them. Deriving it that way rather than hardcoding a count
     means a build whose switch grew a case is read correctly or not at all.
+
+    Both table addresses now come from `switch_tables`, i.e. out of the
+    instruction that jumps through them, so this can no longer read a stale map
+    from addresses that moved.
     """
     n_ids = spec["hi"] - spec["lo"] + 1
-    n_jumps = (spec["bt"] - spec["jt"]) // 4
+    jt_va, bt_va = switch_tables(img, spec)
+    n_jumps = (bt_va - jt_va) // 4
     if n_jumps <= 0:
         raise ValueError("jump table must sit before the index table")
-    jt = struct.unpack(f"<{n_jumps}I", img.read(spec["jt"], n_jumps * 4))
-    bt = img.read(spec["bt"], n_ids)
+    jt = struct.unpack(f"<{n_jumps}I", img.read(jt_va, n_jumps * 4))
+    bt = img.read(bt_va, n_ids)
     out = {}
     for i, b in enumerate(bt):
         if b >= n_jumps:
@@ -259,10 +326,27 @@ def handled_by_nothing(img):
     return sorted(i for i, c in consumers(img).items() if not c)
 
 
-def gate_bytes(img):
-    """[(va, ok)] for the `test byte [ctx+0x53C], 2` that gates each main switch."""
-    return [(va, img.read(va, len(h) // 2) == bytes.fromhex(h))
-            for va, h in MAIN_SWITCH_GATE]
+def gate_bytes(img, strict=True):
+    """[(va, ok)] for the `test byte [ctx+0x53C], 2` that gates each main switch.
+
+    `strict` RAISES when a gate has moved, rather than reporting it and letting
+    the caller print "results are suspect" and carry on. That warning was the
+    last soft check in this file: the gate decides whether the main switch runs
+    at all, so if it is not where we think it is, every `classify()` answer
+    below is about a control flow we have not actually read.
+    `studies/crossbuild/PLAN.md` §6.
+    """
+    out = [(va, img.read(va, len(h) // 2) == bytes.fromhex(h))
+           for va, h in MAIN_SWITCH_GATE]
+    bad = [va for va, ok in out if not ok]
+    if bad and strict:
+        raise ValueError(
+            "the main-switch gate is not at " +
+            ", ".join(f"0x{va:08x}" for va in bad) +
+            " on this build -- the bytes there are not `test byte [ctx+0x53C], 2`, "
+            "so which switches run is no longer established. Re-derive the gate "
+            "before trusting any classification from this image.")
+    return out
 
 
 def classify(img):
@@ -358,5 +442,24 @@ def main():
     return 0
 
 
+def cli(argv=None):
+    """`main()`, with a moved switch reported as a FINDING rather than a crash.
+
+    Exit 0 the map was read, 2 this build moved something and the recorded
+    addresses do not describe it. A traceback would be the same information, but
+    a reader takes a traceback for a broken tool and this is a fact about the
+    client -- the same distinction `datcheck.py` draws between "the archive
+    changed" and "the run could not be made".
+    """
+    try:
+        return main()
+    except ValueError as exc:
+        print(f"\nCANNOT READ THIS BUILD: {exc}", file=sys.stderr)
+        print("  This is a finding, not a crash. Every address in this module was "
+              "measured on\n  build 38797; re-derive them before trusting any "
+              "property map from this image.", file=sys.stderr)
+        return 2
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(cli())

@@ -840,7 +840,7 @@ changes is that capture is now cheap enough to leave running rather than a proje
 |---|---|---|
 | A prior-art repo disappears | **Already happening** — `gwdevhub/gw_in_browser` 404s today while `gwnative` still names it upstream **[measured]**. `toolkit/mirror_priorart.py` clones the field into `vault/mirrors/` with a manifest recording each HEAD; run it monthly. | done |
 | Service closes or changes | Record every live session from inside the instrumented client; zero marginal cost once built. *The hedge is unbuilt, so the risk is currently unhedged — and this row said "leave the proxy on", which was never a thing that could exist (§3 R0b).* | hours |
-| **Client auto-patches over ground truth, and the DH keys rotate with it** | **This happened during the session that wrote this document.** The updater replaced `Gw.exe` (10,404,032 → 10,483,904 bytes) and `Gw.dat`, moved the DH struct from RVA `0x6843e8` to `0x6910d8`, and **changed both the prime and the server's public key**. ArenaNet rotates the Diffie-Hellman parameters per build — which is why Headquarter stores 107 server keys rather than one constant. Consequences: the client patch is a permanent recurring step, not a one-time one; every capture and schema revision must carry a build id (free, per §2); and re-snapshot *before* accepting an update prompt, never after. Both builds are now vaulted. | ongoing |
+| **Client auto-patches over ground truth, and the DH keys rotate with it** | **This happened during the session that wrote this document.** The updater replaced `Gw.exe` (10,404,032 → 10,483,904 bytes) and `Gw.dat`, moved the DH struct from RVA `0x6843e8` to `0x6910d8`, and **changed both the prime and the server's public key**. ArenaNet rotates the Diffie-Hellman parameters per build — which is why Headquarter stores 107 server keys rather than one constant. Consequences: the client patch is a permanent recurring step, not a one-time one; every capture and schema revision must carry a build id (free, per §2); and re-snapshot *before* accepting an update prompt, never after. Both builds are now vaulted. **COSTED 2026-08-12, [studies/crossbuild/FINDINGS.md](studies/crossbuild/FINDINGS.md): 64 build-coupled addresses in `toolkit/`, 7 files** — not the 409 one draft claimed nor the 30 §1c of the review estimated, both of which reproduce under no stated method. **28 are converted** and re-verified against both vaulted builds by tests — `msgshape`'s 25 tables, `asserts`' callee, and `avevents`' two allocators, the last of which are now located by ArenaNet's own `AvChar.cpp` asserts rather than by address; **30 are GATED** — `genericvalue.py`'s 27, which read their jump tables out of the instruction that jumps through them and REFUSE on a build they were not measured on (exit 2, not a traceback), and the 3 RVAs in `itemprobe`/`agentprobe`, which dereference into a *running* client and refuse unless the target hashes to the right build; **5 are ACCEPTED**, hash-scoped facts about our own patch. **Zero outstanding: the per-update cost of this surface is now nil** — every site either re-derives or refuses, and none can return a silent wrong answer. What still recurs is not in the census: the DH parameters rotate every build, so the client patch is permanent, and the schema and captures still need a build stamp. The recurring cost that no census can see still dominates: the DH parameters rotate every build, so the client patch is permanent. | **68 addresses, 37 outstanding, 3 jobs** |
 | **The client phones home when it crashes** | `Gw.exe` embeds Sentry: `SENTRY_DSN`, `sentry.native`, `getsentry`, `x-sentry-rate-limits` are all present **[measured]**. The working method here is inject, patch, malform, crash — so the client's own outbound reporting channel is a posture problem HANDOFF §9 never considered, since §9 reasons only about server-side visibility. Neutralise it before the first malformed packet: block the endpoint at the firewall or null the DSN in the patched copy. Minutes, and it belongs on the R0 checklist next to the vault snapshot. | minutes |
 | **The captures contain the owner's real ArenaNet credential** | The client sends its saved password to our own webgate on every login, and `vault/captures/portal/*.jsonl` records it as base64 — `<Password>…</Password>`, reversible in one command **[measured 2026-08-04]**. It has never been in git: `vault/` was gitignored in the first commit, before any content existed, so there is no history to rewrite and "private repo" does not bear on it either way. **Owner's decision, 2026-08-05: the repo stays private, and a credential-scrubbing / anonymising pass is a gate before any public push** — not a change to capture fidelity now, since the whole method depends on recording what the client actually sent. Until then the vault is the only copy and stays local. | deferred, by decision |
 | Account loss | Never automate on the primary account — now enforceable rather than aspirational, because a second account exists (§7 Q4). **The old reason given here was wrong and is replaced:** it said "the proxy posture — watching your own traffic — is milder than injecting a DLL", but A1's instrument is Headquarter, a third-party client that logs into the live service. That is not a proxy. **SOURCED:** *MDY v. Blizzard* turned on unattended automation of gameplay, and Warden targeted automated play *patterns* rather than the presence of third-party code — which is why addons and injected tooling coexisted with it for years, and why `HANDOFF.md` can record that "GWToolbox is tolerated precisely because of how it has behaved". So the control is behavioural: human cadence, human hours, one client, never in a competitive context. §6.2 | one account |
@@ -1607,6 +1607,44 @@ image landed first, 31.6% of prop screen area on Kamadan, which is why its rocks
 near-black (`studies/terrain/PLAN.md` §4).
 
 ### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks — a FROZEN snapshot; the suite is 85 files / 4,161 checks as of 2026-08-14, `python toolkit/run_suite.py`)
+### Cross-build resilience — the arc that cost the update risk (2026-08-12)
+
+**[studies/crossbuild/PLAN.md](studies/crossbuild/PLAN.md), results in
+[FINDINGS.md](studies/crossbuild/FINDINGS.md).** Maintenance, not a rung, so no R-number —
+§6's risk row above is what it changes. Four of nine deliverables landed:
+
+- **`msgshape.py` derives the message tables** (`db26a00`). It had 25 addresses from build
+  38797 and used them as the lookup, so on the older vaulted build it printed `cmd slots 0`,
+  `descriptor invariant violations: 0` — vacuous over ZERO descriptors, byte-identical to a
+  healthy run — and **exited 0**, while `msgshape.py 0x00E5` claimed the opcode "is in no
+  table on this build", which is a statement about ArenaNet's client and was false. 651 of
+  751 entries were dying at one `continue`. `RegisterMsgs` is now anchored by byte shape and
+  its 14 callers parsed; the older build yields 25 tables, 666 messages and four passing
+  oracles. `test_msgshape.py`, 37 checks — the gate `studies/review/FINDINGS.md`:585 called
+  the cheapest in the repo and left un-wired.
+- **`asserts.py` derives its callee** (`458b79d`). Both builds now return
+  `single-routine=True`; the older one's corpus was untrustworthy and feeds `codescan --in`.
+- **`pinned.find()` verifies and fails closed** (`25cd1c4`), and knows there is more than
+  one build. It used to hand back the auto-updating `C:\gw` install with a warning string
+  and no refusal.
+- **The census** (`buildpins.py`): **68 build-coupled addresses, 7 files** — 26 converted,
+  5 accepted, **37 outstanding in three jobs**. Neither figure previously in circulation
+  reproduces; both are corrected at their source.
+
+**Next in that arc, cheapest first:** the three RVAs in `itemprobe`/`agentprobe` that
+dereference into a *running* client with no build check at all; `genericvalue.py`'s 32,
+which already contains the gated pattern it needs; `SIG_KEYS`' three implementations
+disagreeing on the refuse-on-2+ rule, one of them the patcher; then the build-id reader and
+the `origin.py` build stamp, without which "stamp every capture with its build" is
+unsatisfiable for half the corpus.
+
+### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks)
+
+**Arc status, 2026-08-14:** the tooling below was cherry-picked onto `main` from
+`claude/studies-crossbuild-plan-e32afb`; that branch's *study docs* were NOT, because
+`main` continued the same arc independently through 2026-08-14 (11 further commits,
+and `studies/crossbuild/FINDINGS.md` on `main` is the live record). Read the
+deliverable list below as the state of the TOOLING, not of the research.
 
 *1,927 is **derived, not re-summed**, and says so: the 1,878 below was measured over 50 files, and this session added `test_behaviourrun.py` (35, new) and took `test_wirecapture.py` from 28 to 42 — both counted from real green runs. 1,878 − 28 + 42 + 35 = 1,927. The suite runner reports 51/51 green in 611 s; its per-file log truncates, which is what made the earlier 965 wrong, so the arithmetic is shown rather than a figure quoted from a partial log. The 1,878 figure's own method:* Method, because the gap is
 large enough to want one: run each of the 50 files in `toolkit/**/test_*.py` as its own

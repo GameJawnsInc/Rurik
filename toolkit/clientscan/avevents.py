@@ -23,16 +23,22 @@ SKILL families repeat the shape at 0x15 / 0x11 / 0x13 and 0x19 / 0x16 / 0x17.
 TWO ALLOCATORS, AND WHY THEY ARE CALLED WHAT THEY ARE. Their id spaces are
 separate, so "kind 3" is ambiguous until you say which queue:
 
-    0x007F2E90   payload written from +0x30 up.  ACTION.
-    0x007F5340   payload written from +0x1C up.  EFFECT.
+    0x007F2E90   payload written from +0x30 up.  ACTION.   (build 38797)
+    0x007F5340   payload written from +0x1C up.  EFFECT.   (build 38797)
+
+Those addresses are the answer on ONE build and are no longer how the tool finds
+them -- see `ANCHORS` below; on `2026-04-30_b174de1f2d8d` the same pair derives
+to 0x007ECB90 and 0x007EF040, and the census reproduces there identically.
 
 Those two names are INFERRED, not quoted, and the inference is worth stating so
 it can be attacked. Neither allocator contains an assert. The function that
-begins at the next byte after 0x007F2E90's `ret` asserts
+begins at the next byte after ACTION's `ret` asserts
 `action->queueLink.IsLinked()` (AvChar:1243) and
 `action->sequenceLink.IsLinked()` (AvChar:1251); the function that ends just
-before 0x007F5340 asserts `effect->effectLink.IsLinked()` (AvChar:2433) and
-`effect->queueLink.IsLinked()` (AvChar:2438). Adjacency alone would be thin.
+before EFFECT asserts `effect->effectLink.IsLinked()` (AvChar:2433) and
+`effect->queueLink.IsLinked()` (AvChar:2438). That inference is now also the
+LOCATOR, which is the useful part: those file-and-line pairs are ArenaNet's own
+and survive a rebuild, where an address does not. Adjacency alone would be thin.
 What makes it more than that: each of those assert pairs names exactly TWO
 links, and each allocator, in its own code, links its fresh record onto exactly
 TWO intrusive lists. `AvChar:2646-2648` names three of them outright --
@@ -120,11 +126,37 @@ import pinned                                                  # noqa: E402
 # build every address in the studies is measured against.
 find_exe = pinned.find
 
-# Build 38797. MEASURED: the two AgentView event allocators. See the docstring
-# for the asserts that name what each one allocates.
-ACTION = 0x007F2E90
-EFFECT = 0x007F5340
-ALLOCATORS = {ACTION: "action", EFFECT: "effect"}
+# THE TWO ALLOCATORS ARE DERIVED, not stored -- `studies/crossbuild/PLAN.md` §6.
+# They used to be these two literals, unchecked, so on any other build this
+# module matched call targets against addresses belonging to a different image
+# and reported that nothing allocates anything.
+#
+# The derivation is the docstring's own argument, executed. Neither allocator
+# contains an assert, but each sits immediately beside a function that does, and
+# those functions are named by ArenaNet's own file and line -- which move far
+# less than addresses and are recoverable by `asserts.py` on any build:
+#
+#   ACTION  is the function immediately BEFORE the one asserting
+#           `action->queueLink.IsLinked()` (AvChar:1243) and
+#           `action->sequenceLink.IsLinked()` (AvChar:1251).
+#   EFFECT  is the function immediately AFTER the one asserting
+#           `effect->effectLink.IsLinked()` (AvChar:2433) and
+#           `effect->queueLink.IsLinked()` (AvChar:2438).
+#
+# BOTH lines are required, and that is not belt-and-braces. MEASURED: AvChar:1243
+# alone occurs in THREE distinct functions on both vaulted builds, so anchoring
+# on it and taking the first hit is the "take the first match" defect §7 rule 1
+# forbids -- it happens to be right on 38797 and is right by luck. The PAIR
+# resolves to exactly one function on each build.
+ANCHORS = (
+    dict(name="action", file="AvChar.cpp", lines=(1243, 1251), side="before"),
+    dict(name="effect", file="AvChar.cpp", lines=(2433, 2438), side="after"),
+)
+
+# Build 38797, kept as a cross-check only. `--census` prints whether the
+# derivation still lands here; a new build is expected to move them.
+ACTION_38797 = 0x007F2E90
+EFFECT_38797 = 0x007F5340
 
 # How far each walk is allowed to run. The functions involved are tiny -- the
 # largest AvApi entry point on this build is under 0x60 bytes -- so a bound this
@@ -228,6 +260,76 @@ class Image:
         self.size = sec["rawsize"]
         self.text = self.pe.data[self.raw:self.raw + self.size]
 
+    # -- the allocators, derived ----------------------------------------
+    def _fn_entry(self, off):
+        """File offset of the function containing `off`, by MSVC's int3 padding."""
+        d = self.pe.data
+        while off > 0 and d[off - 1] != 0xCC:
+            off -= 1
+        return off
+
+    def _prev_fn(self, entry):
+        d, i = self.pe.data, entry - 1
+        while i > 0 and d[i] == 0xCC:          # back over the pad
+            i -= 1
+        return self._fn_entry(i)
+
+    def _next_fn(self, off):
+        d, i = self.pe.data, off
+        limit = self.raw + self.size
+        while i < limit and d[i] != 0xCC:      # to this function's pad
+            i += 1
+        while i < limit and d[i] == 0xCC:      # past it
+            i += 1
+        return i
+
+    @property
+    def asserts(self):
+        if self._az is None:
+            import asserts                                    # noqa: PLC0415
+            self._az = asserts.Asserts(self.path)
+        return self._az
+
+    @property
+    def allocators(self):
+        """{VA: name} for the two event allocators, derived from this image.
+
+        REFUSES rather than guessing when an anchor does not resolve to exactly
+        one function -- see `ANCHORS` for why the pair of lines is required and
+        what taking the first hit would have cost.
+        """
+        if getattr(self, "_allocs", None) is not None:
+            return self._allocs
+        by_fn = {}
+        for a in self.asserts.items:
+            if not a.file.endswith("AvChar.cpp") or a.line is None:
+                continue
+            o = self.pe.rva_to_off(a.va - self.base)
+            if o is None:
+                continue
+            by_fn.setdefault(self._fn_entry(o), set()).add(a.line)
+
+        out = {}
+        for spec in ANCHORS:
+            want = set(spec["lines"])
+            cands = [e for e, lines in by_fn.items() if want <= lines]
+            if len(cands) != 1:
+                raise ValueError(
+                    f"{spec['name']}: {len(cands)} function(s) assert both "
+                    f"{spec['file']}:{'/'.join(str(n) for n in spec['lines'])}, "
+                    f"expected exactly 1 -- refusing to guess which one the "
+                    f"allocator sits beside. The asserts moved or the routine "
+                    f"was restructured; re-derive it before trusting any event "
+                    f"kind from this build.")
+            entry = cands[0]
+            off = (self._prev_fn(entry) if spec["side"] == "before"
+                   else self._next_fn(entry))
+            out[self.base + self.pe.off_to_rva(off)] = spec["name"]
+        if len(out) != len(ANCHORS):
+            raise ValueError("the two allocators resolved to the same address")
+        self._allocs = out
+        return out
+
     def off(self, va):
         """Offset into self.text, or None if the VA is outside .text."""
         i = va - self.tlo
@@ -330,8 +432,9 @@ class Image:
             if op in (0xE8, 0xE9):
                 rel = struct.unpack_from("<i", self.text, i + 1)[0]
                 tgt = self.tlo + i + 5 + rel
-                if tgt in ALLOCATORS:
-                    allocs.append((ALLOCATORS[tgt], self.kind_at(self.tlo + i),
+                if tgt in self.allocators:
+                    allocs.append((self.allocators[tgt],
+                                   self.kind_at(self.tlo + i),
                                    self.tlo + i))
                 elif tgt not in targets and self.is_entry(tgt):
                     targets.append(tgt)
@@ -370,7 +473,7 @@ class Image:
 def census(img):
     """{allocator name: {kind: [sites]}} plus the sites that would not resolve."""
     kinds, unresolved = {}, []
-    for target, name in ALLOCATORS.items():
+    for target, name in img.allocators.items():
         kinds[name] = {}
         for s in img.call_sites(target):
             k = img.kind_at(s)
@@ -419,6 +522,22 @@ def main():
     img = Image(a.exe)
 
     if a.census:
+        # The allocators, and whether the derivation still lands where build
+        # 38797 measured them. Printed before anything that depends on them.
+        want = {ACTION_38797: "action", EFFECT_38797: "effect"}
+        got = img.allocators
+        for va, name in sorted(got.items()):
+            print(f"{name} allocator 0x{va:08X}, derived from AvChar.cpp's own "
+                  f"asserts")
+        agree = got == want
+        what, _ = pinned.identify(a.exe, build=pinned.BUILD)
+        if what in ("pristine", "patched"):
+            print(f"  cross-check vs the pinned build-{pinned.BUILD} pair: "
+                  f"{'agrees' if agree else 'DISAGREES'}")
+        elif agree:
+            print("  note: this build's allocators are at build 38797's "
+                  "addresses, which would be a coincidence worth checking")
+        print()
         kinds, unresolved = census(img)
         for name, ks in kinds.items():
             n = sum(len(v) for v in ks.values())
@@ -461,5 +580,24 @@ def main():
     return 0
 
 
+def cli(argv=None):
+    """`main()`, with a build this cannot be read against reported as a FINDING.
+
+    Exit 0 it was read, 2 something this module or `genericvalue.py` depends on
+    moved. A traceback carries the same information and gets debugged as a
+    broken tool; this is a fact about the client. Same contract as
+    `genericvalue.cli` and `datcheck.py`.
+    """
+    try:
+        return main()
+    except ValueError as exc:
+        print(f"\nCANNOT READ THIS BUILD: {exc}", file=sys.stderr)
+        print("  This is a finding, not a crash. The allocator derivation may "
+              "have succeeded and the\n  property map still be unavailable -- it "
+              "comes from genericvalue.py, which is pinned\n  to build 38797's "
+              "switch sites.", file=sys.stderr)
+        return 2
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(cli())

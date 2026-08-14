@@ -61,7 +61,8 @@ try:
 except ImportError:                                           # pragma: no cover
     sys.exit("needs capstone and pefile: python -m pip install capstone pefile")
 
-from msgshape import TABLES                                   # noqa: E402,F401
+import msgshape                                              # noqa: E402
+from gwpe import PE as _StdlibPE                             # noqa: E402
 import pinned                                                # noqa: E402
 
 # WHICH CLIENT. `pinned.py` owns that answer for every static-analysis tool in
@@ -76,6 +77,14 @@ class Image:
     def __init__(self, path=None):
         path = path or find_exe()[0]
         self.path = path
+        # The tables are DERIVED from this image rather than imported as a
+        # constant -- `studies/crossbuild/PLAN.md` §3. They used to come from
+        # `msgshape.TABLES`, 25 addresses measured on build 38797, so against
+        # any other build this classifier read whatever happened to sit at
+        # those addresses. The derivation is stdlib, hence the second PE reader:
+        # `msgshape` deliberately takes no disassembler, and this module is one
+        # of the two files allowed to.
+        self.tables = msgshape.derive_tables(_StdlibPE(path))
         self.pe = pefile.PE(path, fast_load=True)
         self.base = self.pe.OPTIONAL_HEADER.ImageBase
         with open(path, "rb") as fh:
@@ -265,7 +274,7 @@ def classify(img):
     a real experiment; on its own it is a map of the catalogue and nothing more.
     """
     out = {}
-    for va, count, direction in TABLES:
+    for va, count, direction, _caller, _chan in img.tables:
         if direction != "RECV":
             continue
         for opcode, cmds, dispatch in read_table(img, va, count, direction):
@@ -371,7 +380,7 @@ def print_map(img):
     import collections
     byfile = collections.defaultdict(list)
     n = 0
-    for tva, count, direction in TABLES:
+    for tva, count, direction, _caller, _chan in img.tables:
         if direction != "RECV":
             continue
         for op, cmds, disp in read_table(img, tva, count, direction):
@@ -451,10 +460,12 @@ def main():
 
     if a.table:
         tva = int(a.table, 0)
-        entry = next((t for t in TABLES if t[0] == tva), None)
+        entry = next((t for t in img.tables if t.va == tva), None)
         if entry is None:
-            sys.exit(f"0x{tva:08x} is not a known table; see TABLES")
-        for op, cmds, disp in read_table(img, *entry):
+            sys.exit(f"0x{tva:08x} is not a table this build registers; "
+                     f"run --map to list them")
+        for op, cmds, disp in read_table(img, entry.va, entry.count,
+                                         entry.direction):
             d = f"dispatch 0x{disp:08x}" if disp else "(send: no dispatch)"
             print(f"  0x{op:04x}  {d}  cmds {[hex(c) for c in cmds]}")
         return 0
@@ -464,7 +475,7 @@ def main():
     want = int(a.opcode, 0)
 
     found = []
-    for tva, count, direction in TABLES:
+    for tva, count, direction, _caller, _chan in img.tables:
         for op, cmds, disp in read_table(img, tva, count, direction):
             if op == want:
                 found.append((tva, direction, cmds, disp))
