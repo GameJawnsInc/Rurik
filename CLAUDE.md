@@ -474,6 +474,38 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   was tracing, whose `0x00712200` parses the BLOATED chunk with five-byte
   headers -- confirmed it and settled the one thing the corpus could not, that
   tag 4's count is a u16),
+  `toolkit/mapdata/test_modelexport.py` (the MODEL interchange, rung M3: a
+  decoded prop mesh split into typed per-field arrays in `vault/exports/
+  models/`. **The structural check is the RE-INTERLEAVE and it is the reason
+  the rung is trustable**: the exporter DE-INTERLEAVES a vertex block, which is
+  a real transformation rather than a copy, so the test puts the exported
+  arrays back together with a packer written out of `struct.pack_into` -- no
+  code shared with the module -- and compares against the geometry chunk's own
+  bytes read FRESH from `Gw.dat`. **519 of 519 sub-models over both reference
+  maps, all nine formats.** It did not pass first time and that is the point:
+  the exporter's first version silently dropped `dat_fvf` bits 12/13, the
+  TANGENT FRAME, 24 bytes a vertex, and produced a perfectly plausible mesh --
+  six sub-models of format 12405 failed the re-interleave and nothing else
+  could have noticed, because a dropped field costs no vertex, no triangle and
+  no radius. Byte-exactness is what forces the two UNNAMED fields (bits 1 and
+  3) to be carried as raw bytes, and section 3's two POPULATION guards are
+  what stop the check passing vacuously on a sample holding no format that
+  carries them -- the default sample has 1 tangent-frame and 6 unnamed-field
+  sub-models, `--all` has 10 and 78. The cross-file ORACLE is M1/M2's run
+  through the SERIALISED interchange: `f11 == scale * max 2D radius`
+  recomputed from the exported position sidecar READ BACK OFF DISK, against
+  prop records in a map file this module never opens -- **474/474 and
+  664/664**, and required to EQUAL `test_modelfile.py`'s in-memory figures,
+  because serialising may not change the geometry. **Section 5 records the
+  oracle that ISN'T**: the rung was scoped around checking collision meshes
+  against retail outline rings, and on the reference maps the two populations
+  are DISJOINT -- 46 props with a ring, 30 on a collision-carrying model,
+  **ZERO with both** (Pre-Searing 34/23/0), with the corpus at 28 of 14,095,
+  about what independence predicts. The negative is pinned as a measurement
+  rather than dropped, and the first reading of it -- "disjoint" from the
+  reference maps alone -- was itself the §B4 small-sample trap and is
+  corrected in place. Sections 0-2 build a model geometry from `struct.pack`
+  and score 27 against a floor of 38; `--all` is 39. ~77 s),
   `toolkit/mapdata/test_modelfile.py` (the prop model decoder -- rung M1 of
   `studies/models/PLAN.md`, the layout customarea §5 measured from scratch
   scripts promoted to committed code -- and the cross-file oracle that makes it
