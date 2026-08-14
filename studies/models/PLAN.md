@@ -55,10 +55,26 @@ promoted, so nothing in `toolkit/` opens a model file today.
   and `gw_model_file_id` custom property. Replacing a proxy mesh datablock
   with a decoded one is a local change; nothing upstream of the Blender step
   moves.
-- **e10d gave a second cross-file oracle for free**: the client's compiler
+- ~~**e10d gave a second cross-file oracle for free**: the client's compiler
   instances the model's own collision footprint into the Bloated stream (run
   record `vault/research/e10d-props-2026-08-12/`), so a decoded collision mesh
-  can be checked against outline rings retail ships.
+  can be checked against outline rings retail ships.~~
+  **WRONG, AND IT WAS THIS DOCUMENT'S ERROR — struck 2026-08-13 by M3's
+  recon.** e10d established no such thing. Its "the compiler also instances
+  the model's own collision footprint" is INFERRED from a single navmesh
+  delta on a single prop, and **that prop's model carries ZERO collision
+  meshes** (file id 209883, `collision_count = 0` at +0x4C in both archives).
+  e10d never opened a model file — `readback.py` imports no `modelfile` — so
+  no comparison between a ring and a collision mesh has ever been made. Run
+  A's compiled props record carried `points = 0` and an EMPTY ring, and the
+  footprint that appeared went into the PATH chunk `0x20000008`, not the
+  props stream. The transform e10d did establish for rings is TRANSLATION
+  ONLY (`corresponds()` requires `x + dx`, `y + dy`, no rotation, no scale),
+  and both its runs used rot (0,0,0) so it measured nothing about rotation at
+  all. **M3's criterion inherited this error from here**; see §3 for what
+  replaced it. The lesson is the one this repo keeps relearning: a scope
+  written from a summary of a summary carries the summary's inference as
+  though it were the measurement.
 
 ## 2. What is genuinely unknown (the actual work)
 
@@ -90,8 +106,8 @@ Sessions are estimates, not commitments.
 |---|---|---|---|
 | **M1** ✅ | `toolkit/mapdata/modelfile.py` + `test_modelfile.py`: the KNOWN layout as committed code — chunk walk, sub-model walk, positions | **DONE 2026-08-13, criterion met exactly**: the radius identity reproduces at 12,766/12,875 (`--all`, 165 s) and 474/474 + 664/664 on the reference maps, pinned as the test's floor-guarded oracle with the 3D rival as control; closure census 1,741/1/306 and thirteen format pairs, all pinned. The reference-map model census: Kamadan 86 used models (71 close), Pre-Searing 229 (152 close — a 33.6% no-close rate against the corpus ~15%, pinned per map). **New finding**: the corpus's single `dat_fvf 0x2C` sighting is the ambiguous file 0x1BAE2's chosen parse (its rival parse is format 21), so the rare format's existence AND §B6's GWMB-table disagreement both rest on an uncertain read — M2 must settle it from the client. | 1 session |
 | **M2** ✅ | The vertex-format table, client-corroborated: FVF dispatch read from the loader, field maps for position/normal/UV per format | **DONE 2026-08-13 — and it CORRECTED M1 rather than confirming it.** The client's three stride tables (VA `0x00BF5B80`/`BC0`/`BE0`, accessor `0x00688010`) replaced our byte-cost rule: the two agree on all twelve real formats and differ on 60,168 of 65,536 words, which is why a wrong rule survived a corpus-wide check. **`dat_fvf 0x2C` never existed** — its one sighting was our misparse of the ambiguous file, and the cross-file oracle confirms the fix from a source sharing nothing with the binary (that model's props: **f11 0/16 → 16/16**, the whole corpus improvement 12,766 → **12,782**). GWMB was right; §B6 resolves in upstream's favour. Field map derived from the tables' per-bit additivity and each name established by refutable prediction: **normal unit on 90,108/90,108** (control 2.7%), tangent frame unit with 93.0% orthogonality (control 26.0%), texcoords wrapping past ±16, and **bit 1's colour reading REFUTED** (small index, purpose UNVERIFIED). Test floor 34 → 57 (68 under `--all`), with the module's tables pinned to the vaulted image by the test's own PE walk. | 1 session |
-| **M3** | Mesh assembly to the interchange: a `.gwmodel` sidecar family in `vault/exports/` (positions + triangles first) | A decoded mesh's max 2D radius equals `f11/scale` per instance (M1's oracle, now per-mesh); decoded collision meshes vs retail outline rings (the e10d oracle) on outlined props | 1 session |
-| **M4** | Blender: real meshes replace proxies, instanced per file id, transform/scale/z-sign settled by rendering against terrain | Kamadan renders recognizably; prop mesh bottoms sit on terrain at the placement rate the proxies scored (0.7338/0.304 baselines); local z sign MEASURED, not assumed | 1 session |
+| **M3** ✅ | Mesh assembly to the interchange: a `.gwmodel` sidecar family in `vault/exports/` | **DONE 2026-08-13. First criterion met, second criterion RETRACTED as this document's own error.** The radius oracle runs through the SERIALISED interchange — radius recomputed from the exported sidecar read off disk, against a map file the module never opens — **474/474 and 664/664**, equal to `test_modelfile.py`'s in-memory figures. The load-bearing structural check is the **RE-INTERLEAVE**: de-interleaving is a real transformation, so the test packs the exported arrays back together with its own `struct.pack_into` and matches ArenaNet's vertex bytes, **519/519 sub-models, nine formats** — and it **failed first run**, catching a dropped tangent frame (24 B/vertex) that no other check could see. The collision/ring criterion is struck: see §3's correction — e10d established nothing of the kind, and the populations are disjoint on both reference maps anyway. **What replaced it** is stronger because the decoder cannot force it (it validates render indices only, asserted on its own source): every collision index in range (2,265/2,265), every mesh a triangle list (28/28) with the rival header order `(nv, ni)` at 7/28 pinning the field order, every collision vertex referenced. Floor 44 (27 vault-less, 45 under `--all`). | 1 session |
+| **M4** | Blender: real meshes replace proxies, instanced per file id, transform/scale/z-sign settled by rendering against terrain | Kamadan renders recognizably; prop mesh bottoms sit on terrain at the placement rate the proxies scored (0.7338/0.304 baselines); local z sign MEASURED, not assumed. **Ready to start**: `vault/exports/models/` holds both reference maps' sets (223 models, 147,855 vertices, 12 MB) and the props sidecar already carries `gw_model_file_id` per prop, so the importer's join is a lookup. Note the two unknowns M4 must settle rather than assume — the model-space z sign (§4's convention 2 says AS STORED, unmeasured against the world's) and which of bits 12/13 is tangent vs binormal if it lights anything. | 1 session |
 | **M5** | Textures: FA1/FA5 → `atex.py` → images → Blender diffuse materials; the ten DDS get a stdlib reader | Reference-map textures resolve at the study's rate; UV sanity is statistical (coverage, seam rate) plus render inspection — stated as the weak half, because no strong UV oracle exists | 1 session |
 | **M6** | (stretch) the 15% preamble decode, the 0.5% `f11` mystery, the flags-2817 stream census | Each is its own finding; none blocks M1–M5 | open |
 
