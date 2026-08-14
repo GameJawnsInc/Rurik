@@ -221,7 +221,23 @@ def parse_record(data: bytes, base: int, skill_id: int) -> dict:
         "adrenaline": displayed_adrenaline(units),
         "activation": round(f32(data, r + 0x3C), 4),
         "aftercast": round(f32(data, r + 0x40), 4),
+        # The rank-0/rank-15 scaling window +0x44..+0x68, all u32 (dwords).
+        # OBSERVED to reproduce studies/skills/FINDINGS.md section 4's 4-skill
+        # anecdote byte-exact (318/322/316/319 -- test_skilltable section 7).
+        # skill_arguments is a bitfield: 1 = duration set, 2 = scale set,
+        # 4 = bonus-scale set (GWCA's Skill.h comment). A value renders green
+        # when its set is enabled AND its two endpoints differ; both are
+        # needed, which is why the endpoints are carried rather than a
+        # single "scales?" flag. +0x50 (h0050) stays named-unknown -- neither
+        # upstream source names it and nothing here resolves it (NOT FOUND).
+        "duration0": u32(data, r + 0x44),
+        "duration15": u32(data, r + 0x48),
         "recharge": u32(data, r + 0x4C),
+        "skill_arguments": u32(data, r + 0x58),
+        "scale0": u32(data, r + 0x5C),
+        "scale15": u32(data, r + 0x60),
+        "bonus_scale0": u32(data, r + 0x64),
+        "bonus_scale15": u32(data, r + 0x68),
         "name_id": u32(data, r + 0x98),
         "concise_id": u32(data, r + 0x9C),
         "description_id": u32(data, r + 0xA0),
@@ -261,9 +277,13 @@ def build_of(data: bytes):
 # The row fields the server consumes, in emit order. Everything here is a
 # MEASUREMENT (a number read out of the owner's own client) carried with
 # per-row provenance -- the boundary CLAUDE.md's gate draws. The scaling
-# window +0x44..+0x68 is NOT here yet; decoding it is studies/combat step 4.
+# window (skill_arguments + the four endpoint pairs) is what step 8 will scale
+# damage BY once a rank exists; it is emitted now so the capture run has the
+# endpoints to bind against, but nothing consumes it until then.
 CONTENT_FIELDS = ("activation", "aftercast", "recharge",
-                  "energy", "adrenaline", "attribute", "profession")
+                  "energy", "adrenaline", "attribute", "profession",
+                  "skill_arguments", "duration0", "duration15",
+                  "scale0", "scale15", "bonus_scale0", "bonus_scale15")
 
 
 def emit_content(rows, ids, build, exe, out_path) -> int:

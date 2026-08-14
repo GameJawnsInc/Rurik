@@ -96,16 +96,17 @@ WIKI_ENERGY_25 = {
     3013, 3009, 1592,
 }
 
-# FLOOR 26 = every check this file executes on a real client binary, counted
+# FLOOR 34 = every check this file executes on a real client binary, counted
 # from a green run on 2026-08-14 against Gw.exe: 3 structural (§1) + 4 corpus
 # (§2) + 5 wiki joins (§3: two adrenaline, one rival-rule refutation, and the
 # 15/25-energy pair) + 4 text-resolution (§4) + 2 build counts (§5) + 8
-# content-emitter checks (§6, added with --emit-content). None of them is
+# content-emitter checks (§6, added with --emit-content) + 8 scaling-window
+# checks (§7: 4 endpoint reproductions + 4 green-render-rule). None of them is
 # conditional once the binary opens, so a run that reports fewer has lost a
 # section rather than passed -- which is exactly the failure §3 would hide,
 # since dropping the wiki join is what turns this file back into our decoder
 # agreeing with itself.
-LEDGER = checks.Ledger("skill table", floor=26)
+LEDGER = checks.Ledger("skill table", floor=34)
 check = checks.adopt(LEDGER)
 
 
@@ -271,6 +272,43 @@ def main():
         row = dict(skills["153"])
         content._check_provenance("skills", "153", row)
         check(True, "content.py's client-table gate accepts an emitted row")
+
+    print("\n7. the rank-0/rank-15 scaling window reproduces the anecdote")
+    # studies/skills/FINDINGS.md section 4, the only in-repo ground truth for
+    # +0x44..+0x68: four skills the owner read off the live client, endpoint
+    # for endpoint. Pinned as LITERALS -- these are what the client draws, and
+    # a decode that drifts must go red against them, not move with them.
+    # (id: args, dur0, dur15, scale0, scale15, bonus0, bonus15)
+    ANECDOTE = {
+        318: (7, 20, 20, 90, 300, 1, 10),   # Defy Pain
+        322: (2,  0,  0, 10,  40, 0,  0),   # its clone (scale set only)
+        316: (7, 10, 20, 10,  60, 1,  6),   # "To the Limit!"
+        319: (1,  8, 20, 25,  25, 0,  0),   # Rush (duration set only)
+    }
+    for sid, want in ANECDOTE.items():
+        r = by_id[sid]
+        got = (r["skill_arguments"], r["duration0"], r["duration15"],
+               r["scale0"], r["scale15"], r["bonus_scale0"], r["bonus_scale15"])
+        check(got == want,
+              f"skill {sid} window == the owner's live reading",
+              f"got {got}, want {want}")
+    # The green-render rule the anecdote establishes, as an assertion rather
+    # than prose: a set renders green when its bit is set AND its endpoints
+    # differ. Defy Pain's duration bit is set but 20==20, so exactly its
+    # scale and bonus render -- two greens, which is the whole thing the
+    # owner noticed was missing on the clone.
+    def greens(r):
+        bits = r["skill_arguments"]
+        n = 0
+        n += bool(bits & 1) and r["duration0"] != r["duration15"]
+        n += bool(bits & 2) and r["scale0"] != r["scale15"]
+        n += bool(bits & 4) and r["bonus_scale0"] != r["bonus_scale15"]
+        return n
+    for sid, want_green in ((318, 2), (322, 1), (316, 3), (319, 1)):
+        check(greens(by_id[sid]) == want_green,
+              f"skill {sid} renders {want_green} green value(s) by the "
+              f"enabled-and-differing rule",
+              f"got {greens(by_id[sid])}")
 
     return LEDGER.verdict()
 
