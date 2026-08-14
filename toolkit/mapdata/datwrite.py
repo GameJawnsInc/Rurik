@@ -45,6 +45,7 @@ here undetected, and none of the three could fail a checksum.
 
 import argparse
 import binascii
+import hashlib
 import json
 import os
 import struct
@@ -52,7 +53,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from archive import (Archive, ENTRY_SIZE,  # noqa: E402
+from archive import (Archive, ENTRY_SIZE, file_id_table,  # noqa: E402
                      mft_row_offset, MFT_SELF_ROW)
 
 LIVE_INSTALL = os.path.normcase(os.path.abspath(r"C:\gw"))
@@ -115,6 +116,137 @@ def guard_source(path):
             f"  (--revert is still allowed there: undoing a mistaken write is "
             f"the one thing that should be.)")
     return path
+
+
+def reservation_for(size, block):
+    """Whole blocks, size rounded up. A zero-size row reserves nothing.
+
+    Same expression as `datmove.reservation_for`; not imported, because
+    `datmove` imports `datplan` which imports more, and this module is the one
+    that must keep working when the rest of the tree does not.
+    """
+    return -(-size // block) * block
+
+
+def claimants(ar, lo, hi, exclude):
+    """Every OTHER live row whose reservation intersects [lo, hi).
+
+    A row's reservation, not its size: the bytes between `size` and the end of
+    the last block belong to that row even though nothing is stored in them, and
+    a grow that took them would be corrupting a neighbour that still verifies.
+    That is the invariant `test_datmove.py` was written around -- two rows
+    sharing blocks is the one thing no checksum sees, because each crc covers
+    only its own row's bytes.
+    """
+    out = []
+    for e in ar.entries:
+        if e.index == exclude or e.size == 0:
+            continue
+        o = e.offset
+        h = o + reservation_for(e.size, ar.block_size)
+        if o < hi and lo < h:
+            out.append((o, h, e.index))
+    out.sort()
+    return out
+
+
+class DonorRow:
+    """What a donor archive says one row should contain. Read-only, always."""
+
+    __slots__ = ("path", "row", "size", "compression", "crc", "flags",
+                 "payload", "sha256", "file_ids", "image")
+
+    def __init__(self, path, row, size, compression, crc, flags, payload,
+                 file_ids, image):
+        self.path, self.row, self.size = path, row, size
+        self.compression, self.crc, self.flags = compression, crc, flags
+        self.payload, self.file_ids = payload, file_ids
+        self.sha256 = hashlib.sha256(payload).hexdigest()
+        # The donor's WHOLE reservation, not just its payload. The bytes between
+        # `size` and the end of the last block belong to the row, and a restore
+        # that zero-filled them would put the row back "correctly" while leaving
+        # it bytewise different from every pristine copy -- a difference that no
+        # checksum sees and that would show up later as an unexplained diff.
+        # Whether anything reads past the size field is UNTESTED (see replace()),
+        # which is the argument for reproducing rather than inventing them.
+        self.image = image
+
+
+def read_donor(donor_path, row):
+    """Row N's STORED bytes out of a donor archive.
+
+    DELIBERATELY NOT GUARDED, and that is a decision rather than an oversight:
+    `guard()` protects the thing being WRITTEN, and the owner's own install at
+    C:\\gw is the canonical donor -- reading bytes from it is explicitly
+    permitted and refusing it here would make the best source unusable. The
+    donor is opened 'rb' and never anything else.
+
+    The donor's own crc is checked against its payload before the caller is
+    allowed to trust it. A donor that fails its own checksum is a worse source
+    than the armed row it would replace.
+    """
+    with Archive(donor_path) as ar:
+        e = ar.row(row)
+        res = reservation_for(e.size, ar.block_size)
+        ar.fh.seek(e.offset)
+        image = ar.fh.read(res)
+        payload = image[:e.size]
+        if len(payload) != e.size:
+            raise SystemExit(
+                f"donor row {row} declares {e.size} bytes and only "
+                f"{len(payload)} could be read from {donor_path}")
+        if len(image) != res:
+            # The last row in a file can end short of its reservation. Pad, and
+            # say so, rather than silently restoring fewer bytes than claimed.
+            print(f"  note: donor row {row}'s reservation runs {res - len(image)}"
+                  f" B past EOF; the tail will be zero-filled")
+            image = image + b"\x00" * (res - len(image))
+        if e.size and binascii.crc32(payload) != e.crc:
+            raise SystemExit(
+                f"donor row {row} in {donor_path} FAILS ITS OWN CRC "
+                f"(stored 0x{e.crc:08X}, computed "
+                f"0x{binascii.crc32(payload):08X}). Refusing to restore from a "
+                f"donor that is itself damaged.")
+        ids = sorted(f for f, r in file_id_table(ar).items() if r == row)
+        return DonorRow(donor_path, row, e.size, e.compression, e.crc, e.flags,
+                        payload, ids, image)
+
+
+def check_identity(target_path, row, donor):
+    """The portable key: target row and donor row must NAME THE SAME FILE.
+
+    A row index is a fact about the copy (`mapchunks.py`:117) -- 304 file ids
+    changed row across the one update this project has measured. So a donor cut
+    from a different build can hold a perfectly valid, perfectly wrong file at
+    row N, and every checksum would agree afterwards.
+
+    Refuses only when BOTH rows are addressable and the id sets are disjoint,
+    because that is the only case where the archives positively disagree. When
+    either row carries no file id the check cannot be made and this says so
+    rather than implying it passed -- the alternative is a silent green from a
+    check that never ran.
+    """
+    with Archive(target_path) as ar:
+        ids = sorted(f for f, r in file_id_table(ar).items() if r == row)
+    if not ids or not donor.file_ids:
+        which = "target" if not ids else "donor"
+        print(f"  WARNING: the {which} row {row} carries no file id, so the "
+              f"identity check COULD NOT RUN. You are trusting the row number.")
+        return None
+    shared = set(ids) & set(donor.file_ids)
+    if not shared:
+        raise SystemExit(
+            f"row {row} names a DIFFERENT FILE in the two archives:\n"
+            f"    target {target_path}: "
+            + ", ".join(hex(i) for i in ids) + "\n"
+            f"    donor  {donor.path}: "
+            + ", ".join(hex(i) for i in donor.file_ids) + "\n"
+            f"  A row index is a fact about the copy. Restoring across this "
+            f"would write a valid file into the wrong row and every checksum "
+            f"would agree afterwards.")
+    print(f"  identity: row {row} is file id "
+          + ", ".join(hex(i) for i in sorted(shared)) + " in both archives")
+    return sorted(shared)
 
 
 def row_offset(ar, row):
@@ -318,6 +450,123 @@ class Writer:
         self.set_entry_crc(row, binascii.crc32(new))
         self.fix_mft_self_crc()
 
+    def restore(self, row, donor, confirm=False):
+        """Put a row back to what a DONOR archive says it should hold.
+
+        THE VERB `datmove.plan_move` NAMES AND REFUSES. Its docstring ends
+        "Free a run elsewhere, or write the in-place grow as its own verb with
+        its own test"; this is that verb, narrowed to the case where the bytes
+        come from another copy of the same archive rather than from a caller.
+
+        WHY --replace CANNOT DO THIS, which is the whole reason it exists:
+
+          * `--replace` writes COMPRESSION 0. An ArenaNet row is usually
+            compression 8, and there is no compressor here. This copies the
+            donor's STORED bytes verbatim, so the codec is never involved and
+            the compression field is restored rather than flattened.
+          * `--replace` computes the reservation from the row's CURRENT size, so
+            a row that was shrunk can never be grown back -- 2,068 B gives it
+            2,560 B of reservation when its original needs 7,680. The blocks were
+            never handed to anyone, but `--replace` cannot see that. This
+            computes the reservation from the DONOR and checks the difference is
+            genuinely unclaimed.
+          * `--overwrite` is same-length only.
+
+        AND WHY A JOURNAL IS NOT ENOUGH, which is why the donor is an archive and
+        not a `--data` file. `--revert` is the documented way back and it stops
+        working for two independent reasons: the client moves the MFT, so MFT
+        edits replay into dead space (see `Journal`), and a journal is a file
+        somebody has to still have. MEASURED 2026-08-14: three skill-icon rows
+        were left armed in `vault/run/reskin-roster/Gw.dat` on the recorded
+        understanding that their payloads were "still recoverable from the
+        journals' `before` fields", and **no journal for those rows exists in
+        the vault**. A pristine copy is a better source than a journal because
+        every checkout has one and it cannot go missing without the loss being
+        obvious.
+
+        IDENTITY IS BY FILE ID, never by row, because a row index is a fact about
+        the copy (`mapchunks.py`:117). If both rows are file-id addressable the
+        id sets must intersect or this refuses; a donor from a different build
+        where row N is a different file is exactly what that catches.
+
+        THE ONE HAZARD, stated rather than engineered around: an in-place grow
+        overwrites the current payload before the size field moves, so an
+        interrupted run leaves the row's size describing the old length over the
+        new bytes. `datmove` avoids this by writing to a new location first; an
+        in-place grow has nowhere else to put them. The journal is the way back
+        and it is written before the first byte.
+        """
+        e = self.ar.row(row)
+        block = self.ar.block_size
+        old_res = reservation_for(e.size, block)
+        new_res = reservation_for(donor.size, block)
+
+        if donor.size == 0:
+            raise SystemExit(f"donor row {row} is empty; there is nothing to "
+                             f"restore from {donor.path}")
+        if e.crc == donor.crc and e.size == donor.size \
+                and e.compression == donor.compression:
+            print(f"row {row} already matches the donor "
+                  f"({donor.size} B, comp {donor.compression}, "
+                  f"crc 0x{donor.crc:08X}) -- nothing to do")
+            return False
+
+        grow = new_res - old_res
+        if grow > 0:
+            lo, hi = e.offset + old_res, e.offset + new_res
+            taken = claimants(self.ar, lo, hi, exclude=row)
+            if taken:
+                raise SystemExit(
+                    f"row {row} needs to grow from {old_res} to {new_res} B in "
+                    f"place, and [0x{lo:X}, 0x{hi:X}) is CLAIMED by "
+                    + ", ".join(f"row {i} (0x{o:X}..0x{h:X})"
+                                for o, h, i in taken) + ".\n"
+                    f"  The blocks this row freed have been taken since. That is "
+                    f"a relocation, not an in-place restore -- use datmove.py, "
+                    f"which finds a free run and rewrites the offset.")
+            print(f"  reclaiming [0x{lo:X}, 0x{hi:X}) = {grow} B, "
+                  f"0 other rows claim it")
+
+        if not confirm:
+            raise SystemExit(
+                f"would restore row {row} from {donor.path}:\n"
+                f"    {e.size} B comp {e.compression} crc 0x{e.crc:08X}\n"
+                f" -> {donor.size} B comp {donor.compression} "
+                f"crc 0x{donor.crc:08X}\n"
+                f"    reservation {old_res} -> {new_res} B at 0x{e.offset:X}\n"
+                f"  Re-run with --confirm. This overwrites the current payload "
+                f"before the size field moves; the journal is the way back.")
+
+        image = donor.image
+        print(f"restoring row {row} from {donor.path}: {e.size} -> {donor.size} "
+              f"bytes, compression {e.compression} -> {donor.compression}, at "
+              f"0x{e.offset:X} (reservation {old_res} -> {new_res})")
+        self.put(e.offset, image, f"row {row} reservation ({new_res} B)")
+        if e.size != donor.size:
+            self.put(row_offset(self.ar, row) + ENTRY_SIZE_OFF,
+                     struct.pack("<I", donor.size),
+                     f"MFT row {row} size {e.size} -> {donor.size}")
+        if e.compression != donor.compression:
+            self.put(row_offset(self.ar, row) + ENTRY_COMP_OFF,
+                     struct.pack("<H", donor.compression),
+                     f"MFT row {row} compression {e.compression} -> "
+                     f"{donor.compression}")
+        self.set_entry_crc(row, donor.crc)
+        self.fix_mft_self_crc()
+
+        # READ BACK THROUGH THE WRITE HANDLE, never through self.ar -- the
+        # Archive's buffered read-only handle was opened before any of this and
+        # can answer from a pre-write window. Same trap read_mft() documents.
+        self.fh.seek(e.offset)
+        got = self.fh.read(donor.size)
+        if hashlib.sha256(got).hexdigest() != donor.sha256:
+            raise SystemExit(
+                f"RESTORE VERIFY FAILED on row {row}: the bytes on disk are not "
+                f"the donor's. Revert with the journal and do not use this "
+                f"archive.")
+        print(f"  verified: {donor.size} B read back sha256 {donor.sha256[:16]}")
+        return True
+
     def fix_mft_self_crc(self):
         """Recompute row 3's crc from the table as it now stands on disk.
 
@@ -449,12 +698,13 @@ def revert(journal_path, force=False):
 #
 # test_datwrite.py section 2 checks these two tuples against the parser's own
 # actions, so a flag added below and forgotten here goes red instead of going quiet.
-MUTATING_DESTS = ("corrupt_crc", "overwrite", "replace", "corrupt_mft_crc")
+MUTATING_DESTS = ("corrupt_crc", "overwrite", "replace", "corrupt_mft_crc",
+                  "restore")
 
 # The rest: reads, or arguments to something else. Listed only so the drift check
 # can tell "deliberately read-only" from "somebody forgot".
 READONLY_DESTS = ("help", "dat", "journal", "verify", "check_rows", "data",
-                  "revert", "force")
+                  "revert", "force", "from_dat", "confirm")
 
 
 def is_mutating(args):
@@ -492,6 +742,17 @@ def build_parser():
                          "compression field and crc. Refuses to relocate.")
     ap.add_argument("--corrupt-mft-crc", action="store_true",
                     help="flip the MFT self-crc (Arm C -- expect a full rescan)")
+    ap.add_argument("--restore", type=int, metavar="ROW",
+                    help="put ROW back to what --from says it should hold, "
+                         "compression and all. Grows in place if the blocks it "
+                         "freed are still unclaimed, and refuses naming the "
+                         "claimant if they are not")
+    ap.add_argument("--from", dest="from_dat", metavar="DONOR",
+                    help="a pristine archive to read the original from "
+                         "(read-only; C:\\gw is allowed here and nowhere else)")
+    ap.add_argument("--confirm", action="store_true",
+                    help="actually perform a --restore; without it the plan is "
+                         "printed and nothing is written")
     ap.add_argument("--revert", metavar="JOURNAL",
                     help="undo every edit recorded in a journal")
     ap.add_argument("--force", action="store_true",
@@ -508,6 +769,15 @@ def main():
         return revert(args.revert, args.force)
     if not args.dat:
         ap.error("--dat is required")
+
+    # Before the Writer, so a command that cannot run never opens the archive
+    # 'r+b'. --restore without --from would otherwise reach read_donor(None) and
+    # die inside the try/finally with the file already open for writing.
+    if args.restore is not None and not args.from_dat:
+        ap.error("--restore needs --from DONOR (a pristine archive to read the "
+                 "original out of)")
+    if args.from_dat is not None and args.restore is None:
+        ap.error("--from is only meaningful with --restore")
 
     if args.verify or args.check_rows:
         print(f"{args.dat}")
@@ -559,6 +829,15 @@ def main():
             if not args.data:
                 raise SystemExit("--replace needs --data")
             w.replace(args.replace, open(args.data, "rb").read())
+
+        if args.restore is not None:
+            row = args.restore
+            donor = read_donor(args.from_dat, row)
+            print(f"donor {args.from_dat} row {row}: {donor.size} B, "
+                  f"compression {donor.compression}, crc 0x{donor.crc:08X}, "
+                  f"sha256 {donor.sha256[:16]}")
+            check_identity(args.dat, row, donor)
+            w.restore(row, donor, confirm=args.confirm)
 
         if args.corrupt_mft_crc:
             # w.read_mft(), not read_mft(w.ar): combined with another write flag

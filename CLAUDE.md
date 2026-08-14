@@ -311,7 +311,38 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   its whole block reservation and zeroes the freed tail, that revert restores
   byte-for-byte even after something else took the freed blocks, and that the
   reservation refusal holds from both sides. Four defects, none of which could
-  fail a checksum -- the archive verified perfectly through all of them),
+  fail a checksum -- the archive verified perfectly through all of them.
+  **Section 7 (2026-08-14) is `--restore`, the IN-PLACE GROW `datmove.plan_move`
+  names and refuses** -- its own docstring ends *"write the in-place grow as its
+  own verb with its own test"*, and this is that verb. It puts a row back from a
+  DONOR ARCHIVE rather than from a journal, which is the whole design: `--revert`
+  expires the moment a client runs (the MFT moves, FINDINGS 4c) **and a journal is
+  a file somebody has to still have** -- 127 icon rows were left armed in
+  `vault/run/reskin-roster/` on the recorded understanding that their originals
+  were "recoverable from the journals' `before` fields", and NO SUCH JOURNAL
+  EXISTS anywhere in the vault. A pristine copy cannot go missing that way, and
+  two of them agree byte-for-byte. Three things `--replace` cannot do and each is
+  a check: it writes **compression 0** and there is no compressor here, so an
+  ArenaNet row comes back flattened; it computes the reservation from the row's
+  CURRENT size, so a shrunk row can never grow back (2,068 B reserves 2,560 when
+  the original needs 7,680) even though the blocks were never handed to anyone;
+  and `--overwrite` is same-length only. The donor's WHOLE RESERVATION is copied,
+  tail included, because a zero-filled tail verifies and still differs from every
+  pristine copy. **Identity is by FILE ID, never by row** -- a row index is a fact
+  about the copy, so a donor from another build can hold a valid, wrong file at
+  row N and every checksum agrees afterwards; the refusal names both ids, and when
+  either row is not addressable it SAYS the check could not run rather than
+  implying it passed. **The donor is deliberately NOT guarded** -- `guard()`
+  protects what is written, and `vault/dat_study` (refused as a target) is exactly
+  what you want as a source, asserted behaviourally in both directions AND on the
+  syntax tree, with `Writer.__init__` as the control so "not guarded" is a decision
+  rather than an omission. Three sabotages are BUILT AND RUN by rebinding one
+  module global each: `claimants()` stubbed to `[]` lets a restore into stolen
+  blocks through, `check_identity()` stubbed lets the wrong file through, and a
+  donor whose compression is flattened leaves the row at 0 **while the payload
+  stays byte-identical** -- which is why the compression field is checked
+  separately, since the stored bytes cannot tell those two apart. No vault, no
+  client. 66 checks against a floor of 66, was 34),
   `toolkit/mapdata/test_datcheck.py` (the pre-flight and the detector, against a
   5.5 KB archive the test BUILDS -- never a real one, and no vault: every one of
   the ten open-time rules the client itself applies is broken on purpose and must

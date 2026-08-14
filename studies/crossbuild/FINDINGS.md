@@ -268,8 +268,26 @@ which is a revert that reports success and restores nothing.
 before launching, or accept that the row stays as armed. `datwrite` has no verb for the
 explicit restore its own refusal recommends — `--replace` writes uncompressed and cannot put
 a compression-8 payload back, and `--overwrite` is same-length only — so the three icon rows
-above were **left armed on purpose**, with the original payloads still recoverable from the
-journals' `before` fields if anyone wants them.
+above were **left armed on purpose**.
+
+> **CORRECTED 2026-08-14, and this sentence used to be the reassurance.** It read *"with the
+> original payloads still recoverable from the journals' `before` fields if anyone wants
+> them"*. **No journal for those rows exists.** `datwrite`'s default journal path is
+> `DAT.journal.json`, there is no such file beside that archive, and a grep of the **whole
+> 45 GB vault** returns nothing mentioning row 174150. The claim was inferred from how
+> `--replace` normally behaves rather than checked, and it is the kind of error that only
+> surfaces when somebody needs the thing.
+>
+> **Two further things it got wrong**, both measured the same day: the armed set is **127
+> rows, not three** (174150–175682, every one 2,068 B at compression 0 — the profession arc
+> armed 124 more after this section was written), and row 174861 is 2,068 B rather than the
+> 8,212 B recorded above, having been re-armed since.
+>
+> **The gap it named is now closed**: `datwrite --restore ROW --from DONOR` is the in-place
+> grow `datmove.plan_move`:186 names and refuses. A pristine copy is a better source than a
+> journal for exactly this reason — every checkout has one, and it cannot quietly go missing.
+> All 127 originals are intact and identical in `vault/client/2026-07-29` **and**
+> `vault/dat_study`, two witnesses.
 
 ### 4b.1 THE TRAP — RETRACTED 2026-08-14. There is one row convention and both tools use it
 
