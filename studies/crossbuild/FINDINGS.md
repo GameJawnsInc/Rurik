@@ -458,6 +458,43 @@ zeroed.
 move, no `descriptor_counter` advance and no bit-31 change, all three together, mean the client
 wrote nothing and the run measures nothing.
 
+#### 4e-bis. A cross-copy census taken WHILE the client ran — and it weakens prediction 3
+
+Recorded separately and with its ordering stated, because it was gathered **after** the
+prediction above was committed (`0e23b34`) and **before** the result: it is evidence, not a
+revision. Ten vault copies, censused read-only. `run/-probe` refused with `PermissionError`,
+which is itself the liveness witness — the client had the archive open exclusively.
+
+| copies | bit-31 | id pairs | rows | `0x1B97D` |
+|---|---|---|---|---|
+| `client/2026-07-29` (pristine install), `run/main`, `run/reskin-roster` | **29** | 171,025 | 177,335 | renamed away |
+| `dat_study`, `dat_c2`, `dat_durability`, `run/-c2` | **25** | 171,025 | 177,342 | renamed away |
+| `client/2026-04-30` | 25 | 170,999 | 177,311 | renamed away |
+| **`run-live`** | **9** | **171,138** | **177,476** | **PLAINLY** |
+
+**The population is not constant and the count is not arbitrary**: 29 goes with 177,335 rows
+and 25 with 177,342, so the copies that gained 7 rows are exactly the ones that lost 4 renames.
+
+Diffing the SETS rather than the counts is what makes it a mechanism instead of a correlation:
+
+- **Install → study: exactly 4 cleared, and they are TWO ROWS each named twice** — row 11957
+  (`0x80022EB3`, `0x8005575D`) and row 177254 (`0x8005D4CA`, `0x8005EC1E`). That reproduces
+  `datwrite/FINDINGS.md`:589's *"cleared bit 31 on two of them in place … and zeroed two
+  aliases"* from the bytes, and adds what that account does not say: **neither row is a map
+  row** — both are `flags 3`.
+- **Install → run-live: 20 cleared**, including **both of row 7982's ids** (`0x8001B97D`,
+  `0x8005E728`). Row 20118's pair survives, which is why that copy still shows 2 on map rows.
+
+**This weakens prediction 3 and the honest thing is to say so before the result, not after.**
+Prediction 3 leaned on *"a loopback client has no content source"*, and `datwrite`:585 already
+records a clearing in a session where *"this content was not downloaded"* because the cage
+blocked everything non-loopback. That was under-weighted when the prediction was written.
+
+**The sharper, data-derived sub-prediction**, which the run can refute cleanly: the probe copy
+sits at the pristine 29 and still carries all four of the loopback-volatile ids. **If anything
+clears in this session it will be those four — rows 11957 and 177254 — and NOT the map rows.**
+Row 7982's pair should require a real content source, which loopback does not have.
+
 ---
 
 ## 5. What this changes elsewhere
