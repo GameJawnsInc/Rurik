@@ -443,6 +443,37 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   healthy set. Floor 32, MEASURED -- the first version guessed 41 and reported
   "9 did not execute" on a run where nothing was skipped. No vault, no
   archive, no client; ~40 s),
+  `toolkit/mapdata/test_skillnames.py` (the 188 authored skill names a custom
+  profession needs -- the text sibling of `glyphs.py`, and like it the file is
+  mostly about the INDEX ARITHMETIC, because "188 names came out and they are
+  all different" is worth nothing here: `assign()` RAISES on a duplicate, so the
+  headline is the guard's own output rather than a measurement of it, and
+  `name = "Skill %d" % sid` passes it for all 188. **A per-skill discriminator is
+  MANDATORY and that is measured, not assumed**: over profession 8 the motif
+  alone gives 22 groups worst-case 12, the whole glyph index gives 125 worst-case
+  7, and adding the attribute moves that only to 126 and 6 -- skills sharing an
+  icon overwhelmingly share an attribute too (the 7-skill icon is six Thunderhead
+  and one Galecraft), so 50 names would have collided. So uniqueness is asserted
+  STRUCTURALLY, one check per arm with the arm broken inline as a live function,
+  and the load-bearing claim is the one no uniqueness check can see: every
+  skill's noun must come from the MOTIF of the glyph `iconset` would actually arm
+  for it, 176 of 176, with the neighbouring motif as the control that stops it
+  passing vacuously. **The duplicate sabotage FAILED on its first version and the
+  reason is kept**: duplicating one noun pool onto its neighbour does not collide,
+  because the adjective is strided by the motif -- so the stride carries a
+  uniqueness guarantee the design never claimed, and the only motifs it does NOT
+  separate are the ones exactly POOL apart, which is where the sabotage now aims
+  (with `MOTIFS > POOL` asserted first, or the collision is unreachable and the
+  check is vacuous). Two constants where the first draft had one: the measured
+  worst group (8) and the pool width (10), because conflating them put the
+  generator exactly on its own boundary where one skill moving cells turns it
+  into a refusal. Also: `assign()` must not depend on dict order -- it sorts, and
+  the unsorted version is reproduced live and required to DIFFER, since the caller
+  happens to build its mapping in sorted order and CPython happens to preserve it.
+  Sections 0-4 need no vault, no archive and no client and score 26 against a
+  floor of 26; 36 with a vault. **The floor comment first said "MEASURED" over two
+  GUESSED numbers** -- 30/38 against a real 26/36 -- in a file already citing the
+  two earlier times that happened, which makes it the third. ~3 s),
   `toolkit/mapdata/test_png.py` (the stdlib PNG codec rung M5's texture
   export writes through -- `zlib` and `struct` and nothing else, because
   `toolkit/` takes no third-party dependency and a test needing PIL to check
