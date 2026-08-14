@@ -115,13 +115,13 @@ RING_POPULATION = {
                              both=0),
 }
 
-# FLOOR: 44, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
+# FLOOR: 46, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
 # (85 s). Sections 0-2 alone score 27 -- MEASURED by pointing --dat at a
-# missing file, not counted by eye -- so a vault-less run lands 17 short and
+# missing file, not counted by eye -- so a vault-less run lands 19 short and
 # goes RED. `--all` widens sections 3-4 from a sample to every model of both
 # reference maps and adds ONE check (the pinned sub-model census), so a green
-# `--all` run is 45.
-FLOOR = 44
+# `--all` run is 47.
+FLOOR = 46
 
 DEFAULT_SAMPLE = 12
 
@@ -363,6 +363,13 @@ def _section3(check, ar, table, by_row, tmp, args):
     fmts = set()
     raws = tangents = 0
     first = []
+    # The INDEX arrays are checked separately and deliberately: the
+    # re-interleave below covers vertex BYTES only, and the f11 oracle covers
+    # positions only, so without this an exporter that scrambled, truncated
+    # or mis-based the triangle list would pass every other check in this
+    # file. Found by reading the suite rather than by a sabotage.
+    idx_same = idx_subs = idx_tris = 0
+    idx_range_ok = idx_div3 = 0
     for map_fid in (KAMADAN_FILE_ID, PRESEARING_FILE_ID):
         ids = map_model_ids(map_fid, ar, table=table)
         if not args.all:
@@ -391,6 +398,13 @@ def _section3(check, ar, table, by_row, tmp, args):
                     mismatch += 1
                     if len(first) < 3:
                         first.append((hex(fid), si, sm.dat_fvf))
+                # ...and the triangle list, which no other check reaches.
+                idx_subs += 1
+                got = [i for t in exp.triangles(si) for i in t]
+                idx_same += list(sm.indices) == got
+                idx_tris += len(got) // 3
+                idx_range_ok += all(v < sm.nv for v in got)
+                idx_div3 += len(got) % 3 == 0
     print(f"    {subs} sub-models, {len(fmts)} formats, {tangents} with a "
           f"tangent frame, {raws} with an unnamed field")
     check(subs > 0 and mismatch == 0,
@@ -405,6 +419,18 @@ def _section3(check, ar, table, by_row, tmp, args):
     check(raws > 0,
           "and sub-models carrying an unnamed field (bit 1), without which "
           "the byte-exactness is untested", f"{raws}")
+
+    # THE TRIANGLE LIST. Read back through `exp.triangles()`, which resolves
+    # the manifest's per-sub-model index_base -- so a wrong base, a truncated
+    # array or a scrambled order all move it.
+    print(f"    {idx_tris} triangles read back through the manifest's bases")
+    check(idx_subs > 0 and idx_same == idx_subs,
+          f"every sub-model's triangle list comes back EXACTLY as the "
+          f"archive has it ({idx_subs} of {idx_subs})",
+          f"{idx_same}/{idx_subs}")
+    check(idx_range_ok == idx_subs and idx_div3 == idx_subs,
+          f"and every exported index is below its own sub-model's vertex "
+          f"count, in multiples of 3", f"{idx_range_ok}/{idx_div3}/{idx_subs}")
     if args.all:
         check(subs == REFERENCE_SUBMODELS and len(fmts) == REFERENCE_FORMATS,
               f"--all covers the pinned {REFERENCE_SUBMODELS} sub-models and "
