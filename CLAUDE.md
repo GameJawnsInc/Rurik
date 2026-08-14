@@ -404,7 +404,35 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   changed rows naming a file the after-image does not hold -- and the gate is the MFT
   BYTE FOR BYTE rather than a path compare, because a stale snapshot of the same path is
   the same defect wearing the right name. Floor 75 -> 84),
-  `toolkit/mapdata/test_atex.py` (the ATEX texture container, and first the write
+  `toolkit/mapdata/test_atex.py` (the ATEX texture container, and since
+  2026-08-14 rung T1's ATTX capability. **`parse` STILL REFUSES an ATTX row and
+  that is the design**: refusing a container whose walk does not close is what
+  catches damage, so the trailer is split by a named function and all six
+  pre-existing ATTX checks survive unchanged. The only thing that matters about
+  `split_trailer` is WHERE THE BOUNDARY COMES FROM -- it is WALKED, and the two
+  obvious rivals are built as LIVE functions and run on the same bytes:
+  `find(b"ffna")` lands inside level 0's payload, `rfind` inside the trailer.
+  Both are given a container BUILT to separate them, because the corpus cannot:
+  the sequence occurs **exactly once on 1,648 of 1,648** rows, at the true
+  boundary, so `rfind` -- what the scratch probe that scoped the arc used -- is
+  right on every row that exists today. **ArenaNet declares the boundary
+  herself** and that is the strongest check here: the last 12 bytes are
+  `{u32 head length, u32 0, b"XTTA"}` and the word equals the walk on 1,648 of
+  1,648, with the total length and head-12 as controls at 0 and 0 -- so the walk
+  can be REFUTED by her number instead of only agreeing with itself, and a
+  footer that disagrees is refused rather than resolved. The tag spelling is
+  itself a correction: the first measurement read `XETA` and a skeptic
+  re-measuring found `XTTA` on 1,648 of 1,648 and `XETA` on 0, with the client's
+  own writer at VA 0x007582A0 agreeing. The trailer length is a CENSUS, never a
+  locator -- a constant nothing re-derives is a landmine -- and the LIMIT of the
+  truncation refusal is asserted rather than left to be found: dropping a WHOLE
+  record is invisible to any walk-based rule, which first appeared as a bug in
+  the check above it (`[:-16]` removed exactly the final 16-byte record) and was
+  pinned rather than tuned away. Six one-edit saboteurs were BUILT AND RUN and
+  all six redden (5, 4, 7, 1, 2, 8); the `1` is the truncation refusal, the only
+  check standing between this module and reporting a truncated container as a
+  body that closes plus a garbage trailer. Floor 68, was 50; 45 without a vault.
+  ~36 s), and first the write
   guard `--make` never had: `atex.py` was the only binary writer in
   `toolkit/mapdata/` reaching `open(path, "wb")` straight off argv with no refusal
   of any kind, so `--make C:\gw\Gw.dat` would have truncated the owner's 4.2 GB

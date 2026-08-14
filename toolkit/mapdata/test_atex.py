@@ -57,8 +57,40 @@ than assumed:
     exactly, **106 of 106**. That is the claim that makes this a structural
     finding instead of a crash report.
 
-Nothing here teaches `parse` about ATTX. The day someone does, this file goes
-red and names precisely what changed.
+**AND SINCE 2026-08-14 (rung T1) ATTX IS A CAPABILITY -- but `parse` STILL
+REFUSES IT, and that is the design rather than an omission.** Refusing a
+container whose walk does not close is what catches damage, and softening it to
+accept a trailer would have cost exactly that; so the trailer is split off by a
+named function, `atex.split_trailer`, and every check above survives unchanged.
+
+The only thing that matters about that function is WHERE THE BOUNDARY COMES
+FROM, and section 1b is about nothing else. It is produced by WALKING the level
+records. The two obvious alternatives are built there as LIVE functions and run
+on the same bytes, so the result is a difference between three answers rather
+than an argument:
+
+  * `data.find(b"ffna")` lands INSIDE level 0's payload, because a compressed
+    payload is arbitrary bytes and may contain any sequence;
+  * `data.rfind(b"ffna")` lands INSIDE the trailer, which is 21,923 bytes of
+    chunked data and may contain it too. `rfind` is not a strawman -- it is what
+    the scratch probe that scoped this arc used, and it is right on every row of
+    today's corpus, which is the whole reason the fixture is built to separate
+    them rather than sampled from the archive;
+  * and the measured 21,923 is not used to find anything. A constant nothing
+    re-derives is a landmine the day a build ships a different one, so section
+    5b asserts the trailer length as a CENSUS -- `{21923: 106}`, one distinct
+    value -- where a second one names both instead of reddening with no context.
+
+Two more results earn their lines. `split_trailer` REFUSES a leftover that is
+not a container it recognises, because a truncated ATEX also leaves the walk
+short and without that check truncation reads as a body that closes exactly plus
+a garbage trailer -- and exactly one check in this file stands there. And the
+LIMIT of that refusal is asserted rather than left to be discovered: a
+truncation removing a WHOLE NUMBER OF RECORDS is invisible to any walk-based
+rule, since what remains is indistinguishable from a shorter mip chain. That
+one first appeared as a bug in the check above it -- `[:-16]` happened to remove
+exactly the final 16-byte record -- and the honest fix was to pin both
+behaviours rather than pick a luckier constant.
 
 WHICH OF THESE CHECKS ARE LOAD-BEARING WAS MEASURED, not argued. Four saboteurs
 were BUILT AND RUN against a scratch copy of `toolkit/` on 2026-08-13, each one
@@ -78,12 +110,14 @@ edit deep, with the unmodified copy scoring 50/50 green (exit 0) as the control:
      tool nobody can run. D also found a real defect in this file's first
      version and `_out_resolved` carries the story.
 
-A MISSING VAULT IS A FAILURE, NOT A SKIP. Sections 0-3 run and score 33 without
-one, against a floor of 50, so a vault-less run goes red on purpose: it has
+Rung T1's own six saboteurs are tabulated at the floor, not here.
+
+A MISSING VAULT IS A FAILURE, NOT A SKIP. Sections 0-3 run and score 45 without
+one, against a floor of 68, so a vault-less run goes red on purpose: it has
 checked the write guard and buffers this file wrote, and nothing whatever about
 ArenaNet's containers, which is where every claim in `atex.py` lives.
 
-    python toolkit/mapdata/test_atex.py               # 50 checks, ~26 s
+    python toolkit/mapdata/test_atex.py               # 68 checks, ~36 s
     python toolkit/mapdata/test_atex.py --stride 48 --sample 200   # quicker
     python toolkit/mapdata/test_atex.py --all                      # every row
 """
@@ -142,16 +176,39 @@ TRAILER_FFNA_TYPE = 7
 # why the refusal message on an ATTX row quotes a 1.6-billion-byte level.
 FFNA_AS_SIZE = int.from_bytes(TRAILER_MAGIC, "little")
 
-# FLOOR: 50, MEASURED from a green default run on 2026-08-13 (--stride 16
-# --sample 400; 25 s of archive work, ~26 s in all). Sections 0-3 score 33 and
-# need no vault, so a vault-less run goes red on purpose.
+# FLOOR: 68, MEASURED from a green default run on 2026-08-14 (--stride 16
+# --sample 400; 36 s of archive work). Was 50 before rung T1 added sections 1b
+# and 5b. Sections 0-3 score 45 and need no vault (was 33), so a vault-less run
+# goes red on purpose.
 #
 # The check COUNT had to be made independent of where this file is run from.
 # Section 2's checkout refusal was one check per working-tree root, which is two
 # in a git worktree and one in a plain checkout -- so the floor would have been
 # right here and one too high the moment the arc landed on main. It is one
 # aggregate check now; see the comment there.
-LEDGER = checks.Ledger("test_atex", floor=50)
+#
+# WHICH OF RUNG T1's CHECKS ARE LOAD-BEARING WAS MEASURED, by building six
+# one-edit saboteurs of `atex.py` and running this file against each in a
+# scratch copy of the whole `toolkit/` tree (a PARTIAL copy is why an earlier
+# sabotage harness in this project reported 0 red on all nine -- every run died
+# on a missing import, which is a control that proves nothing while looking
+# like it proved everything). Run at --stride 64 --sample 120, control 61/61
+# green, exit 0:
+#
+#   A  `rfind(b"ffna")` instead of the walk            5 red
+#   B  the measured 21,923 used AS the boundary        4 red
+#   C  boundary off by one record header (-8)          7 red
+#   D  the non-`ffna` leftover is NOT refused          1 red
+#   E  `decode_rgba` does not split (the pre-rung shape) 2 red
+#   F  `container_end` stops after the FIRST record    8 red
+#
+# D is the one worth knowing: exactly ONE check stands between this module and
+# silently reporting a TRUNCATED container as a body that closes plus a garbage
+# trailer. The two rival controls in 1b redden under none of the six, and that
+# is correct rather than a gap -- they are assertions about the RIVALS, which
+# are live functions in this file, and their job is to establish that the
+# fixture separates the three answers at all.
+LEDGER = checks.Ledger("test_atex", floor=68)
 check = checks.adopt(LEDGER)
 
 
@@ -376,6 +433,135 @@ def section1():
     check(b.magic == atex.MAGIC_ATTX and b.closes_exactly,
           "an ATTX MAGIC on an otherwise ordinary container parses and closes",
           "so when 106 real ATTX rows raise, the magic is not what did it")
+
+
+def section1b():
+    """WHERE THE TRAILER BOUNDARY COMES FROM -- rung T1, and its two rivals.
+
+    Section 5 measures that real ATTX rows carry a trailer. This measures the
+    only thing that matters about FINDING it: the boundary is produced by
+    WALKING the level records, not by searching for the trailer's magic.
+
+    The two rivals are the obvious implementations and both are built here as
+    LIVE functions rather than described, so every number below is a difference
+    between three answers to one question. They are given a container designed
+    to separate them -- one that a real archive is not obliged to contain --
+    because a control that happens to agree on today's corpus proves nothing
+    about the one that ships next.
+    """
+    print("\n-- 1b. the trailer boundary is WALKED, not searched for --")
+
+    # A rival that takes the FIRST occurrence, and one that takes the LAST.
+    def split_by_find(data):
+        at = data.find(atex.TRAILER_MAGIC)
+        return (data, b"") if at < 0 else (data[:at], data[at:])
+
+    def split_by_rfind(data):
+        at = data.rfind(atex.TRAILER_MAGIC)
+        return (data, b"") if at < 0 else (data[:at], data[at:])
+
+    good = atex.build(b"DXT1", 32, 32)
+    body = bytearray(atex.MAGIC_ATTX + good[4:])
+    # A compressed level payload is arbitrary bytes and may contain ANY
+    # sequence, including this one. Offset 24 is inside level 0's payload
+    # (its record is size@12, code@16, payload from 20).
+    body[24:28] = atex.TRAILER_MAGIC
+    trailer = bytearray(atex.TRAILER_MAGIC + bytes([7]) + b"\x00" * 200)
+    # ...and so may the trailer, which is 21,923 bytes of chunked data.
+    trailer[100:104] = atex.TRAILER_MAGIC
+    data = bytes(body) + bytes(trailer)
+
+    end = atex.container_end(data)
+    check(end == len(body),
+          "the record walk lands on the trailer's first byte",
+          f"{end}, and the container is {len(body)} bytes")
+    # THE TWO RIVALS RUN FIRST, and the order is deliberate. They are this
+    # section's only independent evidence, and they do not depend on the
+    # function under test -- so putting them after it meant a broken
+    # `split_trailer` RAISED, `guarded()` turned the whole section into one
+    # named failure, and the controls never executed at all. MEASURED: the
+    # off-by-one and first-record saboteurs took the section down that way.
+    # Neither rival is a strawman -- `rfind` is what the scratch probe that
+    # scoped this arc actually used, and it is right on every row of today's
+    # corpus.
+    fb, _ = split_by_find(data)
+    rb, _ = split_by_rfind(data)
+    check(len(fb) == 24 and len(fb) != len(body),
+          "CONTROL: taking the FIRST `ffna` lands INSIDE level 0's payload",
+          f"offset {len(fb)} against the true boundary {len(body)}")
+    check(len(rb) == len(body) + 100 and len(rb) != len(body),
+          "CONTROL: taking the LAST lands INSIDE the trailer",
+          f"offset {len(rb)} against the true boundary {len(body)}")
+
+    try:
+        split_body, split_tail = atex.split_trailer(data)
+        detail = f"{len(split_body)} + {len(split_tail)} = {len(data)}"
+        halves = split_body == bytes(body) and split_tail == bytes(trailer)
+    except ValueError as exc:                                  # noqa: BLE001
+        split_body, halves = b"", False
+        detail = f"{type(exc).__name__}: {exc}"
+    check(halves, "so split_trailer recovers BOTH halves byte-for-byte", detail)
+    try:
+        closes = atex.parse(split_body).closes_exactly
+        why = "which is the property the whole rung rests on"
+    except ValueError as exc:                                  # noqa: BLE001
+        closes, why = False, f"{type(exc).__name__}: {exc}"
+    check(closes, "and the body it returns closes exactly", why)
+
+    # THE NO-OP, and it is why callers may split unconditionally.
+    plain_body, plain_tail = atex.split_trailer(good)
+    check(plain_body == good and plain_tail == b"",
+          "a plain ATEX splits to ITSELF and an empty trailer",
+          "the walk closes on the last byte, so there is nothing to strip")
+
+    # THE REFUSAL, which is what stops a truncated file being reported as a
+    # body that closes plus a garbage trailer -- the failure mode a boundary
+    # taken from the walk alone would have.
+    check(refuses(atex.split_trailer, bytes(body)[:-6]),
+          "a TRUNCATED container is refused, not silently split",
+          "its leftover is level data and does not begin with `ffna`")
+
+    # AND THE LIMIT OF THAT REFUSAL, asserted rather than left for someone to
+    # discover. A truncation that removes a WHOLE NUMBER OF RECORDS is
+    # invisible to any boundary rule built on the walk: the remaining records
+    # still close on the last byte, so the file is indistinguishable from a
+    # shorter mip chain. This first went red as a bug in the check above --
+    # `[:-16]` happened to remove exactly the final 16-byte record -- and the
+    # honest fix was to pin both behaviours, not to pick a luckier constant.
+    last = atex.parse(bytes(body)).levels[-1]
+    lopped = bytes(body)[:last.offset]
+    lbody, ltail = atex.split_trailer(lopped)
+    check(lbody == lopped and ltail == b"" and atex.parse(lbody).closes_exactly,
+          "LIMIT: dropping a WHOLE record is NOT detectable and is not claimed "
+          "to be", f"{len(lopped)} bytes still close exactly")
+    try:
+        got, why = atex.decode_rgba(data)[1] == 32, "the capability rung T1 " \
+            "exists to add; parse() itself stays strict"
+    except (ValueError, struct.error) as exc:                  # noqa: BLE001
+        got, why = False, f"{type(exc).__name__}: {exc}"
+    check(got, "and decode_rgba reads an ATTX end to end", why)
+
+    # THE SECOND WITNESS, and the refusal when the two disagree. A real
+    # trailer's last 12 bytes declare the head length; a walk that agreed with
+    # itself and nothing else could not be refuted, and this can be.
+    footed = bytes(body) + bytes(trailer[:-12]) + struct.pack(
+        "<II4s", len(body), 0, atex.TRAILER_TAG)
+    fb2, ft2 = atex.split_trailer(footed)
+    check(atex.trailer_declared_end(ft2) == len(body) == len(fb2),
+          "a trailer's footer DECLARES the head length, and it is read",
+          f"declared {atex.trailer_declared_end(ft2)}")
+    lying = bytes(body) + bytes(trailer[:-12]) + struct.pack(
+        "<II4s", len(body) + 8, 0, atex.TRAILER_TAG)
+    check(refuses(atex.split_trailer, lying),
+          "and a footer DISAGREEING with the walk is refused, not resolved",
+          "two witnesses disagreeing is a finding; preferring one silently "
+          "is how a wrong boundary would survive")
+    unfooted = bytes(body) + bytes(trailer[:-12]) + struct.pack(
+        "<II4s", len(body), 0, b"____")
+    check(atex.trailer_declared_end(atex.split_trailer(unfooted)[1]) is None,
+          "CONTROL: a trailer with no recognisable footer declares NOTHING",
+          "None is a real answer -- a plain ATEX has no trailer at all, and "
+          "nothing obliges a future one to carry this")
 
 
 def section2():
@@ -702,6 +888,95 @@ def section5(ar, rows, stride):
                     f"stride {stride} is not the default {DEFAULT_STRIDE}")
 
 
+def section5b(ar, rows):
+    """ATTX as a CAPABILITY -- rung T1, on ArenaNet's own rows.
+
+    Section 5 above is unchanged and still asserts that `parse` REFUSES all of
+    them, because that refusal is correct and is what catches damage. What
+    changed is that the trailer can now be split off by a named function, and
+    the split is measured against this file's OWN `walk_end` -- two
+    implementations, no shared code, one answer per row.
+    """
+    print(f"\n-- 5b. splitting the trailer on {len(rows)} real ATTX rows --")
+    if not rows:
+        LEDGER.skip("the ATTX capability",
+                    "no ATTX rows in this sample; nothing to measure")
+        return
+    n = len(rows)
+    agree = decoded = closes = 0
+    lengths = collections.Counter()
+    bad = []
+    for e in rows:
+        data = ar.read(e)
+        try:
+            body, tail = atex.split_trailer(data)
+        except ValueError as exc:                              # noqa: BLE001
+            bad.append((e.index, f"{type(exc).__name__}: {exc}"))
+            continue
+        lengths[len(tail)] += 1
+        if len(body) == walk_end(data, atex.HEADER_SIZE):
+            agree += 1
+        container = atex.parse(body)
+        if container.closes_exactly:
+            closes += 1
+        try:
+            rgba, w, h = atex.decode_rgba(data)
+            if len(rgba) == w * h * 4 and (w, h) == (container.width,
+                                                     container.height):
+                decoded += 1
+        except Exception as exc:                               # noqa: BLE001
+            bad.append((e.index, f"decode {type(exc).__name__}: {exc}"))
+
+    check(agree == n,
+          f"split_trailer's boundary equals this file's own walk on "
+          f"{agree} of {n}",
+          "two implementations sharing no code -- walk_end is written here "
+          "out of int.from_bytes and imports nothing from atex.py")
+    check(closes == n,
+          f"and the body it hands back closes exactly on {closes} of {n}",
+          "the artifact refuting the boundary, not our parser forcing it")
+    check(decoded == n and not bad,
+          f"decode_rgba reads {decoded} of {n} ATTX rows END TO END",
+          f"{bad[:2]}" if bad else "at the container's own declared "
+          "dimensions -- the capability this rung exists to add")
+
+    # THE TRAILER LENGTH IS A CENSUS, NOT A CONSTANT. Section 5 asserts the
+    # 21,923 above; what this adds is the DISTRIBUTION, so the day a build
+    # ships a second length this names both instead of reddening with one
+    # number and no context. A constant nothing re-derives is a landmine, and
+    # `split_trailer` deliberately does not use this value to find anything.
+    check(len(lengths) == 1,
+          f"the trailer takes exactly {len(lengths)} distinct length over "
+          f"{n} rows",
+          f"{dict(lengths)}")
+
+    # THE SECOND WITNESS ON REAL BYTES. The head length is NOT a constant --
+    # MEASURED at 578 distinct values from 368 to 68,156 over the whole 1,648
+    # -- so this agreement is not free, and the two controls are what say so.
+    declared = same = 0
+    rival_total = rival_short = 0
+    for e in rows:
+        data = ar.read(e)
+        body, tail = atex.split_trailer(data)
+        d = atex.trailer_declared_end(tail)
+        if d is None:
+            continue
+        declared += 1
+        same += 1 if d == len(body) else 0
+        rival_total += 1 if d == len(data) else 0
+        rival_short += 1 if d == len(body) - 12 else 0
+    check(declared == n and same == n,
+          f"ArenaNet's own footer declares the boundary our walk found, "
+          f"{same} of {n}",
+          "an INDEPENDENT witness -- the walk can now be refuted by her "
+          "number rather than only agreeing with itself, and the client's "
+          "writer at VA 0x007582A0 appends exactly this")
+    check(rival_total == 0 and rival_short == 0,
+          f"CONTROLS: it is neither the total length ({rival_total} of {n}) "
+          f"nor head-12 ({rival_short} of {n})",
+          "so the agreement above is to the head length specifically")
+
+
 def section6(ar, atex_rows, attx_rows):
     """The whole-archive census. --all only: a full peek is ~74 s."""
     print("\n-- 6. the whole archive --")
@@ -733,6 +1008,7 @@ def main(argv=None):
     print(__doc__.strip().splitlines()[0])
     guarded(section0)
     guarded(section1)
+    guarded(section1b)
     guarded(section2)
     guarded(section3)
 
@@ -761,6 +1037,7 @@ def main(argv=None):
         picks = atex_rows[::step][:sample]
         guarded(section4, ar, picks, len(atex_rows), stride)
         guarded(section5, ar, attx_rows, stride)
+        guarded(section5b, ar, attx_rows)
     print(f"\n{time.time() - t0:.1f}s of archive work")
     return LEDGER.verdict()
 
