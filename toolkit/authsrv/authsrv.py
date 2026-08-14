@@ -1141,6 +1141,39 @@ GAME_CMSG_ATTACK_SKILL = 0x0027
 # see other people cast. 0x00E3 has no such check.
 GAME_SMSG_SKILL_ACTIVATED = 0x00E3
 
+# THE OTHER THREE QUARTERS OF THE CYCLE (studies/combat/PLAN.md H1, section 6).
+# ArenaNet answers every client-initiated cast with the same four opcodes in the
+# same order -- c2s 0x0046/0x0027 -> 0x00E4 -> 0x00E5 -> 0x00E3 -> 0x00E6 -- in
+# all six complete cycles across both live captures. Until 2026-08-14 this
+# server sent only 0x00E3, so the client's recharge state machine never started
+# and never finished.
+#
+# 0x00E4: the broadcast half of activation. OBSERVED: all 7 in the corpus name
+# the PLAYER's own agent, so the real server broadcasts uniformly and relies on
+# the receiver's self-discard (the early return measured above). It contributes
+# nothing to the caster's own feedback; it is sent for wire fidelity.
+#
+# 0x00E5: activation completes and recharge STARTS. Its trailing dword is the
+# recharge in whole seconds, and it is the first client-side constant ever
+# checked against ArenaNet: {153: 8, 105: 6, 394: 3} matched the client table's
+# +0x4C on exactly 1 of 41 dword columns (studies/reconstruction 2.9.2).
+#
+# 0x00E6: recharge ENDS, at E5 + recharge to within 13.7 ms on all 6 cycles --
+# not keyed to cast-end and not tick-quantised; both rivals were checked
+# against every cycle and fit none (studies/combat/PLAN.md section 6, 0b).
+#
+# THE TIMING LAW for E5 is not "press + activation". Skill 105's E4->E5 gaps
+# (2.64 s, 2.57 s) exceed its table activation (2.0 s) by exactly the previous
+# cast's remaining aftercast, both times: E4 fires when the press is ACCEPTED,
+# the cast BEGINS when the caster frees, and E5 lands at begin + activation --
+# a model that fits all four Necromancer cycles to <= 14 ms. The two Ranger
+# cycles (attack skill 394, table activation 0.0, observed gap ~1.14 s) do NOT
+# fit it: an attack skill's timing rides the weapon's attack speed, which this
+# server does not model -- OURS, divergence recorded rather than papered over.
+GAME_SMSG_SKILL_ACTIVATED_BROADCAST = 0x00E4
+GAME_SMSG_SKILL_RECHARGE = 0x00E5
+GAME_SMSG_SKILL_RECHARGED = 0x00E6
+
 GAME_CMSG_TURN_TO_DIRECTION = 0x003D
 GAME_CMSG_MOVE_TO_COORD = 0x003E
 GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
@@ -1746,10 +1779,11 @@ ENEMY_FACING_EPSILON = 0.15            # radians (~8.6 deg) before re-announcing
 # spawn) -- not picked from nowhere. Its activation and recharge are the table's,
 # not ours, which is why they are odd numbers.
 #
-# NOT THE PLAYER'S CAST PATH. The skill-dispatch arm below carries a standing note
-# that skill COMPLETION is being built on another branch and not to add to it.
-# This does not: it is an NPC announcing its own cast, and it touches nothing the
-# player's 0x0046/0x0027 handling uses.
+# NOT THE PLAYER'S CAST PATH. (A standing note here used to defer the player's
+# completion work to a branch that never existed; the player's cycle landed
+# 2026-08-14 in handle_skill_press/cast_tick, studies/combat step 3.) This is
+# an NPC announcing its own cast, and it touches nothing the player's
+# 0x0046/0x0027 handling uses.
 # THE BAR. Four skills rather than one, each with its OWN recharge.
 #
 # A TESTING FIXTURE, AND THE POLICY THAT USES IT IS TOO. Owner's ruling
@@ -2014,6 +2048,33 @@ def hit_enemy(send, state, target_id, conn_id):
               f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
 
+_MISSING_SKILL_ROWS = set()
+
+
+def skill_timing(skill_id):
+    """(activation, aftercast, recharge) seconds for a skill, from content.
+
+    The numbers are the client's own -- vault/content/skills.toml, 1,333 rows
+    emitted by toolkit/clientscan/skilltable.py with per-row build stamps.
+    On a machine with no vault overlay (the bare-machine rule: the server
+    path must run with nothing but the repo) there are no skill rows, and
+    the honest fallback is zeros, ANNOUNCED once per id: the lifecycle then
+    fires immediately rather than not at all, and the log says why the
+    timing is wrong instead of leaving it to be discovered on screen.
+    """
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except agents.content.ContentError:
+        if skill_id not in _MISSING_SKILL_ROWS:
+            _MISSING_SKILL_ROWS.add(skill_id)
+            print(f"[skills] no content row for skill {skill_id} -- "
+                  f"lifecycle timings fall back to 0 (is the vault overlay "
+                  f"present? see skilltable.py --emit-content)", flush=True)
+        return 0.0, 0.0, 0.0
+    return (float(row["activation"]), float(row["aftercast"]),
+            float(row["recharge"]))
+
+
 def handle_skill_press(values, send, state, conn_id, opcode):
     """One skill press, either half (0x0046 USE_SKILL or 0x0027 ATTACK_SKILL).
 
@@ -2022,34 +2083,57 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     `frame_pending` and `handle_perf_report` exist. The dispatch arm keeps the
     opcode condition (test_cmsgnames section 6 pins it) and the dead-player
     guard; everything the press DOES lives here.
+
+    THE ANSWER IS THE OBSERVED FOUR-OPCODE CYCLE, not a lone echo: E4 now,
+    then E5 at cast end, E3 an aftercast later, E6 when the recharge runs out
+    (the constants' comment carries the evidence; the tick fires the timed
+    three via cast_tick). Until 2026-08-14 this sent 0x00E3 alone,
+    immediately -- which answered the pending-skill key and started nothing:
+    no recharge sweep, no repeat cast, no animation state.
     """
-    # Confirm the cast by echoing the key the client is waiting on. If the
-    # echo is wrong the client says so in its own log -- 'Pending skill %u
-    # copy %d not found' -- which makes this one of the few things in the
-    # project that reports its own failure.
     which = ("USE_SKILL" if opcode == GAME_CMSG_USE_SKILL
              else "ATTACK_SKILL")
     skill_id, copy, target = values[1], values[2], values[3]
-    send(GAME_SMSG_SKILL_ACTIVATED,
+    now = time.time()
+    activation, aftercast, recharge = skill_timing(skill_id)
+
+    # The queue law from the constants' comment: E4 at accept, the cast
+    # begins when the caster frees (the previous cast's aftercast end), E5
+    # at begin + activation. `cast_busy_until` is only ever touched on this
+    # thread -- the tick reads nothing from it.
+    begin = max(now, state.get("cast_busy_until", 0.0))
+    e5_at = begin + activation
+    state["cast_busy_until"] = e5_at + aftercast
+
+    send(GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
          [PLAYER_AGENT_ID, skill_id, copy],
-         f"SKILL_ACTIVATED(skill {skill_id}, copy {copy}"
-         f" via {which})")
+         f"SKILL_ACTIVATED_BROADCAST(skill {skill_id} via {which})")
+    # The cast animation, in the OBSERVED player shape: 0x00A0
+    # [60, caster, target, skill], 4 of 4 player activations in the live
+    # corpus (the NPC path above sends the 3-slot 0x009F form its own n=1
+    # supports). GV_SKILL_FINISHED (58) is deliberately NOT sent: it appears
+    # ZERO times in 21,543 live messages, so emitting it would be invention
+    # -- if the loopback run shows the animation never ends, that absence
+    # becomes the next measured question, not a pre-answered one.
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+         [agents.GV_SKILL_ACTIVATED, PLAYER_AGENT_ID, target or 0, skill_id],
+         f"cast animation: player casts {skill_id}")
+    state.setdefault("pending_casts", []).append({
+        "skill_id": skill_id, "copy": copy,
+        "e5_at": e5_at, "e3_at": e5_at + aftercast,
+        "e6_at": e5_at + recharge, "recharge": int(recharge),
+        "e5_sent": False, "e3_sent": False,
+    })
     print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
-          f"agent {target or 'nothing'}", flush=True)
-    # TRIED AND IT DID NOT WORK, recorded so it is not retried blind: sending
-    # generic values 60 (skill_activated) then 58 (skill_finished) here left
-    # the cast exactly as stalled as before. They may still be part of the
-    # answer -- they were never going to be all of it -- but on their own they
-    # change nothing visible, so they are out rather than sitting in the code
-    # looking like they work. agents.py keeps the ids.
-    #
-    # (Until 2026-08-14 this comment deferred to a skill-completion branch
-    # that a full ref scan shows never existed. The lifecycle work is
-    # studies/combat/PLAN.md step 3.)
+          f"agent {target or 'nothing'}: E5 in {e5_at - now:.2f}s, "
+          f"recharge {recharge:.0f}s", flush=True)
+
     # A skill aimed at something hostile does what a click does. Whether a
     # skill should damage at all, and by how much, is OURS -- the client
     # carries every real number (studies/skills/FINDINGS.md) and we do not
-    # read it yet.
+    # read it yet. Damage stays AT PRESS for now: moving it to cast-end is
+    # step 8's business (magnitudes and timing change together, under the
+    # step-2 guards), not this step's.
     #
     # THE SAME ValueError CONTRACT world_tick has, because this runs on the
     # CONNECTION thread: handle's except tuple is ConnectionError /
@@ -2064,6 +2148,47 @@ def handle_skill_press(values, send, state, conn_id, opcode):
         except ValueError as ex:
             print(f"[c{conn_id}] skill press REFUSED a value: {ex}",
                   flush=True)
+
+
+def cast_tick(send, state, conn_id):
+    """Fire the timed three quarters of every pending cast cycle.
+
+    Runs on the world-tick thread; entries are APPENDED by the connection
+    thread (handle_skill_press) and mutated/removed only here, so each phase
+    fires exactly once -- the single-writer rule that makes "no lost or
+    doubled E6" a property of the design rather than of luck
+    (test_guards section 11 hammers it from both threads).
+
+    Phase order within a cycle is pinned to the observed one: E5, then E3,
+    then E6 -- E6 never precedes E3 in the corpus, so a zero-recharge skill
+    waits for its E3 rather than closing the cycle early.
+    """
+    pending = state.get("pending_casts")
+    if not pending:
+        return
+    now = time.time()
+    finished = []
+    for cast in list(pending):
+        if not cast["e5_sent"] and now >= cast["e5_at"]:
+            send(GAME_SMSG_SKILL_RECHARGE,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"],
+                  cast["recharge"]],
+                 f"SKILL_RECHARGE(skill {cast['skill_id']}, "
+                 f"{cast['recharge']}s)")
+            cast["e5_sent"] = True
+        if cast["e5_sent"] and not cast["e3_sent"] and now >= cast["e3_at"]:
+            send(GAME_SMSG_SKILL_ACTIVATED,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
+                 f"SKILL_ACTIVATED(skill {cast['skill_id']}, "
+                 f"copy {cast['copy']})")
+            cast["e3_sent"] = True
+        if cast["e3_sent"] and now >= cast["e6_at"]:
+            send(GAME_SMSG_SKILL_RECHARGED,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
+                 f"SKILL_RECHARGED(skill {cast['skill_id']})")
+            finished.append(cast)
+    for cast in finished:
+        pending.remove(cast)
 
 
 def revive_due(send, state, conn_id):
@@ -4285,6 +4410,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # would look like a working ping loop in exactly the
                         # sessions nobody is testing it in.
                         ping_tick(send, state, conn_id)
+                        # The timed three quarters of every skill cycle
+                        # (E5/E3/E6), before the swings so a cast completing
+                        # this tick is visible to everything after it.
+                        cast_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
                         agent_refill_due(send, state, conn_id)

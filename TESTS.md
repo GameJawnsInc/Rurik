@@ -2467,6 +2467,21 @@ Every one of these, in the order they were written:
   invariant so the first capture from a second build turns it red. A vault-less
   run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
   empty directory rather than derived by subtraction),
+  `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
+  ArenaNet's own template — six complete cycles, two live captures, same order
+  every time: E4 at the press, E5 at cast end carrying the recharge in whole
+  seconds, E3 an aftercast later, E6 at E5+recharge to within 13.7 ms on all
+  six. The section that earns the entry is the QUEUE LAW: skill 105's two
+  cycles both exceed its 2.0 s activation by exactly the previous cast's
+  remaining aftercast, so E4 fires at accept but the cast begins when the
+  caster FREES — the naive press+activation model is refuted by +0.64 s and
+  +0.57 s residuals in the corpus, and the test drives two back-to-back
+  presses through exactly that schedule. Timing is tested by REWINDING the
+  pending entries, never by sleeping; the zero-recharge inversion pins that
+  E6 waits for its E3 because the corpus never shows them inverted; and the
+  real-content section presses skill 153 and requires E5 to carry recharge 8,
+  the value ArenaNet's own wire echoed — it SKIPS loudly on a machine with no
+  vault overlay, where sections 1–3 still run on a stubbed skill_timing),
   `toolkit/authsrv/test_guards.py` (the guard contract for combat's computed
   values: a `_fraction` refusal must land BEFORE any send or state change, not
   after — the client dies on `fraction <= 1.0f` at CharPool.cpp:84 with no

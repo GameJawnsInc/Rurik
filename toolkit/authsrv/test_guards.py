@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("guard contract", floor=35)
+LEDGER = checks.Ledger("guard contract", floor=37)
 check = LEDGER.ok
 
 
@@ -118,11 +118,15 @@ def section_skill_press():
               out.getvalue().strip().splitlines()[-1] if out.getvalue() else
               "(nothing printed)")
         ops = [op for op, _, _ in sent]
-        check(ops == [authsrv.GAME_SMSG_SKILL_ACTIVATED],
-              "the valid echo went out; the refused effect sent NOTHING",
-              f"ops={ops} -- the echo precedes the effect and is a valid "
-              f"message; refusing it too would un-answer the client's "
-              f"pending-skill key over a number it never saw")
+        check(ops == [authsrv.GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
+                      authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET],
+              "the valid cycle-opening pair went out; the refused effect "
+              "sent NOTHING",
+              f"ops={ops} -- E4 and the cast animation precede the effect "
+              f"and are valid; refusing them too would cost the client a "
+              f"cycle over a number it never saw. (This pinned a lone "
+              f"immediate 0x00E3 until step 3 replaced the press's answer "
+              f"with the observed cycle.)")
     finally:
         authsrv.HIT_FRACTION = saved
 
@@ -132,8 +136,11 @@ def section_skill_press():
     with contextlib.redirect_stdout(out):
         authsrv.handle_skill_press(press, send, state, 0,
                                    authsrv.GAME_CMSG_USE_SKILL)
-    check(len(sent) == 4, "control: the in-range press sends echo + swing",
-          f"{len(sent)} messages: {[op for op, _, _ in sent]}")
+    check(len(sent) == 5,
+          "control: the in-range press opens the cycle and swings",
+          f"{len(sent)} messages: {[op for op, _, _ in sent]} -- E4, "
+          f"animation, then the swing trio (damage stays at press until "
+          f"step 8)")
 
 
 def _refusing_fraction(authsrv):
@@ -517,6 +524,84 @@ def section_concurrency():
                                                          saved_revive)
 
 
+def section_cast_timers():
+    """Step 3's cross-thread state: presses append, the tick consumes.
+
+    The amendment (C9) that demanded this: the pending-cast list is the
+    arc's first genuinely NEW cross-thread structure, so it does not get to
+    ride on section 10's coverage of the older dicts. The design claim under
+    test is the single-writer rule -- only cast_tick mutates phases and
+    removes entries -- which is what makes 'exactly one E5/E3/E6 per press,
+    none lost, none doubled' a property rather than luck.
+    """
+    import threading
+    import authsrv
+
+    print("\n11. cast timers: N presses across threads, exactly N of each "
+          "phase")
+    PRESSES = 200
+    sent = []
+    sent_lock = threading.Lock()
+
+    def send(op, vals, label="", quiet=False):
+        with sent_lock:
+            sent.append((op, vals, label))
+
+    state = {"agents": {}}
+    errors = []
+    done_pressing = threading.Event()
+
+    saved_timing = authsrv.skill_timing
+    authsrv.skill_timing = lambda sid: (0.0, 0.0, 0.0)   # everything due now
+    try:
+        out = io.StringIO()
+
+        def presser():
+            try:
+                for i in range(PRESSES):
+                    authsrv.handle_skill_press([0, 42, i, 0], send, state, 0,
+                                               authsrv.GAME_CMSG_USE_SKILL)
+            except BaseException as ex:   # noqa: BLE001
+                errors.append(repr(ex))
+            finally:
+                done_pressing.set()
+
+        def ticker():
+            try:
+                while not (done_pressing.is_set()
+                           and not state.get("pending_casts")):
+                    authsrv.cast_tick(send, state, 0)
+            except BaseException as ex:   # noqa: BLE001
+                errors.append(repr(ex))
+
+        threads = [threading.Thread(target=presser),
+                   threading.Thread(target=ticker)]
+        with contextlib.redirect_stdout(out):
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=60)
+        alive = any(t.is_alive() for t in threads)
+
+        counts = {}
+        for op, _, _ in sent:
+            counts[op] = counts.get(op, 0) + 1
+        check(errors == [] and not alive,
+              "two threads, zero exceptions, both finished",
+              f"errors={errors!r}, alive={alive}")
+        check(counts.get(0x00E5, 0) == PRESSES
+              and counts.get(0x00E3, 0) == PRESSES
+              and counts.get(0x00E6, 0) == PRESSES
+              and not state.get("pending_casts"),
+              f"exactly {PRESSES} E5s, E3s and E6s -- no phase lost, none "
+              f"doubled",
+              f"E5={counts.get(0x00E5, 0)}, E3={counts.get(0x00E3, 0)}, "
+              f"E6={counts.get(0x00E6, 0)}, pending="
+              f"{len(state.get('pending_casts', ()))}")
+    finally:
+        authsrv.skill_timing = saved_timing
+
+
 def main():
     section_hit_enemy()
     section_skill_press()
@@ -528,6 +613,7 @@ def main():
     section_player_refill_due()
     section_overkill()
     section_concurrency()
+    section_cast_timers()
     return LEDGER.verdict()
 
 

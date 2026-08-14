@@ -1321,12 +1321,14 @@ def section_opcode_pins():
                 for name, opcode, _s, _w in PINNED
                 if opcode in named and name != "GAME_SMSG_" + named[opcode]]
     hits = [name for name, opcode, _s, _w in PINNED if opcode in named]
-    LEDGER.ok(not disagree and len(hits) == 8,
-              "and the eight the catalog names are named the same thing here",
-              f"{disagree or len(hits)} of 8 -- 0x0021, 0x0029, 0x002B, 0x002E, "
-              "0x0059, 0x00A6, 0x00B1, 0x00F1. The other seven have no name in "
-              "overrides.json at all, which is why their `why` column has to "
-              "carry the evidence instead")
+    LEDGER.ok(not disagree and len(hits) == 9,
+              "and the nine the catalog names are named the same thing here",
+              f"{disagree or len(hits)} of 9 -- 0x0021, 0x0029, 0x002B, 0x002E, "
+              "0x0059, 0x00A6, 0x00B1, 0x00E3, 0x00F1. (Eight until "
+              "2026-08-14, when the cast-cycle promotion named 0x00E3 "
+              "SKILL_ACTIVATED in overrides.json -- studies/combat step 3.) "
+              "The other six have no name in overrides.json at all, which is "
+              "why their `why` column has to carry the evidence instead")
 
 
 def section_opcode_catalog():
