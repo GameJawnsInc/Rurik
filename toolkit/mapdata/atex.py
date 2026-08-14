@@ -325,6 +325,329 @@ def describe(a, name=""):
 
 # ------------------------------------------------------------ writing output
 
+# =========================================================================
+# THE LEVEL CODEC (2026-08-14). A level's `code` is NOT a compression method.
+# =========================================================================
+#
+# It is a **5-BIT MASK OF OPTIONAL DECODE PASSES** over the level's 4x4 block
+# grid, which is why the client's own validator gates it with
+# `test dword ptr [eax+4], 0xffffffe0` at `0x006C3187` -- five bits is the
+# whole field. Each set bit runs one run-length-coded pass that stamps a
+# single precomputed reference block into a subset of blocks and marks them;
+# **everything no pass claimed is then copied VERBATIM from the tail of the
+# same payload**, de-interleaved into three sequential planes. So a level is:
+#
+#     [bit stream: which blocks are one flat colour / flat alpha / transparent]
+#     [raw DXT bytes for every other block, planar]
+#
+# `code == 0` means no pass ran and the whole level is that planar copy --
+# which is why 25 of 1,533 containers looked "raw" and the other 98.4% did
+# not. The decoder is ArenaNet's `P:\Code\Engine\Gr\Img\ImgAtex.cpp` at
+# `0x006C2B70`, reached only as a handler pointer installed by the two
+# callers of the validator. There is no jump table and no per-code routine.
+#
+# **THE PLANAR SPLIT WAS MEASURED FROM THE CORPUS FIRST AND THE CLIENT
+# AGREED**, which is the shape worth trusting: mip-consistency scoring over
+# raw levels put DXT5's colour endpoints at `8*nb` (11.02 against 60.16 for
+# colour-first) and its alpha as whole 8-byte blocks (1.76 against 51.56 for
+# a split alpha plane), and DXT3's order at `aci` (10.80 against 39-65 for
+# five rivals) -- before any of this code was read. The client's residual
+# loop below is exactly that: an alpha PAIR plane, then a colour-word plane,
+# then an index-word plane.
+#
+# Provenance: the two tables are ArenaNet's and are carried as LITERALS with
+# their addresses, the pattern `modelfile.py` set for the FVF stride tables --
+# the module then works on a bare machine and `test_atex.py` re-reads them
+# out of the vaulted image to pin the literals to ArenaNet's own bytes.
+
+#: `s_formatFlags`, 27 u32 at VA 0x00A5DEA8 (accessor 0x006AE830, whose assert
+#: `format < GR_FORMATS` with `cmp esi, 0x1b` is what fixes the count at 27).
+#: Indexed by the validator's format enum. Bit 0x210 means "has a colour
+#: half", 0x280 "has an alpha half" -- and the block sizes those two bits
+#: imply (8 bytes for DXT1/DXTA, 16 for the rest) are independently confirmed
+#: by the corpus, so the table is corroborated rather than trusted.
+FORMAT_FLAGS_VA = 0x00A5DEA8
+FORMAT_FLAGS = (
+    0x00B2, 0x0012, 0x00B2, 0x0072, 0x0012, 0x0012, 0x0012, 0x0100,
+    0x01A4, 0x01A4, 0x01A4, 0x0104, 0x00A2, 0x0078, 0x0400, 0x0071,
+    0x00B1, 0x00B1, 0x00B1, 0x00B1, 0x00A1, 0x0011, 0x0201, 0x0100,
+    0x08B2, 0x0812, 0x0400)
+
+#: The run-length table: 64 x {u8 codeLen, u8 runLength-1} at VA 0x00A5E620,
+#: indexed by the TOP SIX BITS of the rack. A 3-symbol prefix code, and the
+#: closed form is CONFIRMED against the bytes rather than assumed:
+#:     top6 0..15  -> 6 bits, run 17 down to 2
+#:     top6 16..31 -> 2 bits, run 18 (the maximum; repeat for longer runs)
+#:     top6 32..63 -> 1 bit,  run 1
+RUN_TABLE_VA = 0x00A5E620
+RUN_TABLE = tuple([(6, 16 - i) for i in range(16)]
+                  + [(2, 17)] * 16 + [(1, 0)] * 32)
+
+#: The validator's format enum (`GrFormat`), written by `0x006C3050`.
+FORMAT_ENUM = {b"DXT1": 0x0F, b"DXT2": 0x10, b"DXT3": 0x11, b"DXT4": 0x12,
+               b"DXT5": 0x13, b"DXTA": 0x14, b"DXTL": 0x15, b"DXTN": 0x16}
+
+#: Which pass each code bit selects, and the formats it is gated to.
+PASS_TRANSPARENT = 0x01     # DXT1 punch-through blocks
+PASS_ALPHA4 = 0x02          # DXT2/DXT3 explicit-alpha flat blocks
+PASS_ALPHA8 = 0x04          # DXT4/5/A/L interpolated-alpha flat blocks
+PASS_FLAT_COLOUR = 0x08     # one 24-bit colour for the whole level
+PASS_TERRAIN_BORDERS = 0x10  # 256x256 DXT2/DXT3 mirrored-edge regeneration
+
+
+class Rack:
+    """ArenaNet's `Base\\compress\\CmpIo.h` bit rack: MSB-first within
+    little-endian u32 words, a 32-bit window plus a spill register.
+
+    Reading past the end yields ZEROS rather than raising, which is the
+    client's behaviour and is load-bearing -- several real levels end with
+    the last run still nominally in progress. `dry` counts those over-reads
+    so a caller can tell a clean finish from a starved one.
+    """
+
+    __slots__ = ("words", "i", "hi", "lo", "count", "dry")
+
+    def __init__(self, words):
+        self.words = words
+        self.hi = words[0] if words else 0
+        self.i = 1
+        self.lo = 0
+        self.count = 0
+        self.dry = 0
+
+    def peek6(self):
+        return self.hi >> 26
+
+    def read(self, n):
+        hi, lo, count = self.hi, self.lo, self.count
+        value = hi >> (32 - n)
+        shifted = ((hi << n) | (lo >> (32 - n))) & 0xFFFFFFFF
+        if count >= n:
+            self.hi, self.lo, self.count = (shifted, (lo << n) & 0xFFFFFFFF,
+                                            count - n)
+        elif self.i < len(self.words):
+            word = self.words[self.i]
+            self.i += 1
+            self.hi = shifted | (word >> (count + 32 - n))
+            self.lo = (word << (n - count)) & 0xFFFFFFFF
+            self.count = count + 32 - n
+        else:
+            self.hi, self.lo, self.count = shifted, 0, 0
+            self.dry += 1
+        return value
+
+    def run(self):
+        """One run length, via the client's 6-bit lookup."""
+        code_len, minus_one = RUN_TABLE[self.peek6()]
+        if code_len:
+            self.read(code_len)
+        return minus_one + 1
+
+
+def block_layout(fourcc):
+    """`(block_dwords, colour_offset, has_alpha, has_colour, fmt)`.
+
+    The stride the client computes at `0x006C2BA1`-`0x006C2BDE` from the
+    format flags: 8 bytes for DXT1/DXTA, 16 for everything else here.
+    """
+    fmt = FORMAT_ENUM.get(bytes(fourcc))
+    if fmt is None:
+        raise ValueError(f"fourcc {bytes(fourcc)!r} is not an ATEX format")
+    flags = FORMAT_FLAGS[fmt]
+    alpha = 2 if flags & 0x280 else 0
+    extra = 2 if fmt == 0x15 else 0          # DXTL carries a third pair
+    colour = 2 if flags & 0x210 else 0
+    return alpha + extra + colour, alpha + extra, bool(alpha or extra), \
+        bool(colour), fmt
+
+
+def solid_colour_block(rgb, is_dxt1):
+    """The 2-dword DXT1 block for one solid colour (`0x006CB060`).
+
+    Quantises to 565 with the client's own rounding -- `(x - (x>>5)) >> 3`
+    for the 5-bit channels and `(x - (x>>6)) >> 2` for green -- then picks
+    endpoints and a repeated index so the block reproduces the colour as
+    closely as the format allows. Transcribed rather than reinvented: a
+    "nearest 565" of our own lands on a different block for many colours and
+    would make every flat-colour region subtly wrong.
+    """
+    blue, green, red = rgb & 0xFF, (rgb >> 8) & 0xFF, (rgb >> 16) & 0xFF
+    quant = [(blue - (blue >> 5)) >> 3, (green - (green >> 6)) >> 2,
+             (red - (red >> 5)) >> 3]
+    source = [blue, green, red]
+
+    def expand(channel, value):
+        return value * 4 + (value >> 4) if channel == 1 else \
+            value * 8 + (value >> 2)
+
+    fracs = []
+    for k in range(3):
+        low, high = expand(k, quant[k]), expand(k, quant[k] + 1)
+        span = high - low
+        fracs.append((source[k] - low) * 12 // span if span else 0)
+    end0, end1 = [0, 0, 0], [0, 0, 0]
+    for k in range(3):
+        f = fracs[k]
+        end0[k] = quant[k] + (1 if 6 <= f < 10 else 0)
+        end1[k] = quant[k] + (1 if (2 <= f < 6) or f >= 10 else 0)
+    c0 = (end0[2] << 11) | (end0[1] << 5) | end0[0]
+    c1 = (end1[2] << 11) | (end1[1] << 5) | end1[0]
+
+    used, total = 0, 0
+    for k in range(3):
+        if end0[k] != end1[k]:
+            total += fracs[k] if end0[k] == quant[k] else 12 - fracs[k]
+            used += 1
+    frac = (total + used // 2) // used if used else 0
+    alt = 1 if (is_dxt1 and (frac in (5, 6) or used == 0)) else 0
+    if used == 0 and not alt:
+        if c1 != 0xFFFF:
+            frac, c1 = 0, c1 + 1
+        else:
+            frac, c0 = 12, c0 - 1
+    if alt != (0 if c1 < c0 else 1):
+        c0, c1 = c1, c0
+        frac = 12 - frac
+    if alt:
+        index = 2
+    elif frac < 2:
+        index = 0
+    elif frac < 6:
+        index = 2
+    elif frac < 10:
+        index = 3
+    else:
+        index = 1
+    nibble = index | (index << 2)
+    nibble |= nibble << 4
+    word = nibble | (nibble << 8)
+    return (((c1 << 16) | c0) & 0xFFFFFFFF, (word | (word << 16)) & 0xFFFFFFFF)
+
+
+def _run_pass(rack, out, block_dw, offset, blocks, skip, mark, two_bit,
+              reference):
+    """One run-coded pass. Blocks an EARLIER pass claimed do not spend run."""
+    i = 0
+    while i < blocks:
+        length = rack.run()
+        flag = rack.read(1)
+        selector = (1 + rack.read(1)) if (flag and two_bit) else (1 if flag
+                                                                  else 0)
+        while length > 0 and i < blocks:
+            if not skip[i]:
+                if flag:
+                    lo, hi = reference(selector)
+                    out[i * block_dw + offset] = lo
+                    out[i * block_dw + offset + 1] = hi
+                    for bitmap in mark:
+                        bitmap[i] = 1
+                length -= 1
+            i += 1
+        while i < blocks and skip[i]:
+            i += 1
+
+
+def decode_level(data, container, index):
+    """One mip level's DXT blocks, in D3D order, ready for a block decoder.
+
+    `data` is the whole ATEX container and `container` the `Atex` from
+    `parse`. Returns `(blocks, block_bytes)` -- the raw DXT payload for that
+    level exactly as the GPU would receive it, and the per-block stride.
+
+    THE ORDER OF WORK, and every step is the client's:
+      1. `PASS_TERRAIN_BORDERS` pre-marks the border blocks (256x256 DXT2/3
+         only; 0 of 49,800 sampled levels actually use it).
+      2. The four run-coded passes run IN BIT ORDER, sharing one rack.
+      3. The literal cursor backs up ONE DWORD from wherever the rack
+         stopped (`0x006C2E73`) and the record end is rounded DOWN so the
+         residual is a whole number of dwords.
+      4. The residual fills every unclaimed block from three sequential
+         planes: the alpha pair, then colour words, then index words.
+    """
+    block_dw, colour_off, has_alpha, has_colour, fmt = block_layout(
+        container.fourcc)
+    if not 0 <= index < len(container.levels):
+        raise ValueError(f"level {index} of {len(container.levels)}")
+    level = container.levels[index]
+    width, height = level_dims(container.width, container.height, index)
+    blocks = max(1, (width + 3) >> 2) * max(1, (height + 3) >> 2)
+    out = [0] * (blocks * block_dw)
+    seen_alpha = bytearray(blocks)
+    seen_colour = bytearray(blocks)
+
+    payload_at = level.offset + RECORD_SIZE
+    end = level.offset + level.size
+    literal_at = payload_at
+
+    if level.code:
+        body = data[payload_at:end]
+        words = list(struct.unpack_from(f"<{len(body) // 4}I", body, 0)) \
+            if len(body) >= 4 else []
+        rack = Rack(words)
+
+        if (level.code & PASS_TERRAIN_BORDERS and width == 256
+                and height == 256 and fmt in (0x10, 0x11)):
+            for i in range(blocks):
+                if (i & 31) in (0, 1, 30, 31) or ((i >> 6) & 31) in (0, 1, 30,
+                                                                     31):
+                    seen_alpha[i] = seen_colour[i] = 1
+
+        if (level.code & PASS_TRANSPARENT and has_colour and not has_alpha
+                and fmt != 0x15):
+            # A DXT1 block in 1-bit-alpha mode with all sixteen texels on
+            # index 3: fully transparent. It carries no payload value at all.
+            _run_pass(rack, out, block_dw, colour_off, blocks, seen_colour,
+                      (seen_alpha, seen_colour), False,
+                      lambda _s: (0xFFFFFFFE, 0xFFFFFFFF))
+
+        if level.code & PASS_ALPHA4 and fmt in (0x10, 0x11):
+            nibble = rack.read(4) * 0x11
+            nibble |= nibble << 8
+            nibble = (nibble | (nibble << 16)) & 0xFFFFFFFF
+            _run_pass(rack, out, block_dw, 0, blocks, seen_colour,
+                      (seen_alpha,), True,
+                      lambda s, v=nibble: (0, 0) if s == 1 else (v, v))
+
+        if level.code & PASS_ALPHA8 and fmt in (0x12, 0x13, 0x14, 0x15):
+            alpha = rack.read(8)
+            pair = (alpha | (alpha << 8)) & 0xFFFFFFFF
+            _run_pass(rack, out, block_dw, 0, blocks, seen_colour,
+                      (seen_alpha,), True,
+                      lambda s, v=pair: (0, 0) if s == 1 else (v, 0))
+
+        if level.code & PASS_FLAT_COLOUR and has_colour:
+            block = solid_colour_block(rack.read(24), fmt == 0x0F)
+            _run_pass(rack, out, block_dw, colour_off, blocks, seen_colour,
+                      (seen_colour,), False, lambda _s, b=block: b)
+
+        literal_at = payload_at + (rack.i - 1) * 4
+
+    literal_end = end - ((end - literal_at) & 3)
+    cursor = [literal_at]
+
+    def next_dword():
+        if cursor[0] >= literal_end:
+            return 0                       # the client reads past end as zero
+        value, = struct.unpack_from("<I", data, cursor[0])
+        cursor[0] += 4
+        return value
+
+    if has_alpha:
+        for i in range(blocks):
+            if not seen_alpha[i]:
+                out[i * block_dw] = next_dword()
+                out[i * block_dw + 1] = next_dword()
+    if has_colour:
+        for i in range(blocks):
+            if not seen_colour[i]:
+                out[i * block_dw + colour_off] = next_dword()
+        for i in range(blocks):
+            if not seen_colour[i]:
+                out[i * block_dw + colour_off + 1] = next_dword()
+
+    return struct.pack(f"<{len(out)}I", *out), block_dw * 4
+
+
 class Refused(SystemExit):
     """A write guard said no. Always names the path and the rule it broke."""
 
