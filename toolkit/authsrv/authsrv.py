@@ -2537,13 +2537,18 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # `casting`. Removing this line breaks no check, and that was verified by
     # removing it. It stays because a stale slot index is a bad thing to leave
     # lying around for the next person who reads `casting` from somewhere else.
+    # Guard before ANY mutation. This function's damage send was already its
+    # first send (the gate map's template for the others), but the cast slot
+    # and the player's health were consumed before the guard could refuse --
+    # a refused value would have cost real state for a message that never
+    # went out (test_guards section 4).
+    frac = _fraction(-ENEMY_SKILL_FRACTION, agents.PROP_DAMAGE,
+                     f"skill {skill_id}")
     agent["casting"] = None
     dealt = float(agents.PLAYER_HEALTH) * ENEMY_SKILL_FRACTION
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id,
-          _fraction(-ENEMY_SKILL_FRACTION, agents.PROP_DAMAGE,
-                    f"skill {skill_id}")],
+         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"skill {skill_id} deals {dealt:.0f} to the player")
     print(f"[c{conn_id}] player hit by skill {skill_id}: "
           f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)

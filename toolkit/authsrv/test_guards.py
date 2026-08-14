@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("guard contract", floor=12)
+LEDGER = checks.Ledger("guard contract", floor=15)
 check = LEDGER.ok
 
 
@@ -183,10 +183,49 @@ def section_land_swing():
           f"tape, checked by byte offset (land_swing docstring)")
 
 
+def section_land_skill():
+    import authsrv
+
+    print("\n4. land_skill: guard before the cast slot and the health are spent")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = {"agents": {}, "pos": (0.0, 0.0)}
+    agent = _fresh_agent()
+    agent["casting"], agent["skills"] = 0, ((7, 1.0, 20.0),)
+
+    saved = authsrv._fraction
+    authsrv._fraction = _refusing_fraction(authsrv)
+    try:
+        raised = False
+        try:
+            authsrv.land_skill(send, state, 10, agent, 0)
+        except ValueError:
+            raised = True
+        check(raised and sent == [],
+              "a refused enemy skill raises with NOTHING sent",
+              f"raised={raised}, sent={sent!r}")
+        check(state["player_health"] == float(authsrv.agents.PLAYER_HEALTH),
+              "and the player's health was not spent on an unsent message",
+              f"health={state['player_health']} -- pre-hoist the pool was "
+              f"debited and the cast slot cleared for a damage that never "
+              f"went out")
+    finally:
+        authsrv._fraction = saved
+
+    sent.clear()
+    state["player_health"] = float(authsrv.agents.PLAYER_HEALTH)
+    agent["casting"] = 0
+    authsrv.land_skill(send, state, 10, agent, 0)
+    check(len(sent) == 1 and agent["casting"] is None,
+          "control: in-range lands the skill and clears the slot",
+          f"{[op for op, _, _ in sent]}, casting={agent['casting']}")
+
+
 def main():
     section_hit_enemy()
     section_skill_press()
     section_land_swing()
+    section_land_skill()
     return LEDGER.verdict()
 
 
