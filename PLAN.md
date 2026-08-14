@@ -1552,6 +1552,60 @@ ladder in [studies/models/PLAN.md](studies/models/PLAN.md)** (a proposal until a
 format is half-read in customarea §5, the radius identity is a ready-made oracle, and the
 missing piece is committed code plus the client's own FVF dispatch.
 
+### The terrain texturing arc — T1 and T3 landed, T4/T5 are the visible payoff (2026-08-14)
+
+**Read [`studies/terrain/PLAN.md`](studies/terrain/PLAN.md), then
+[`FINDINGS.md`](studies/terrain/FINDINGS.md).** The props round trip landed on a map
+whose GROUND has no material: measured in Blender itself, the terrain is the only
+object in the scene with no material slot — **186,368 of 326,708 faces (57%)** and very
+nearly all of the visible area. Every one of the 516 props is textured; the map surface
+is not, because nothing mapped a tile byte to a texture.
+
+Six rungs, T1–T6. **T1 done** (`5bf5a20`) and **T3 done** (`44e0f78`); T2 was answered
+early out of the client rather than run as a rung.
+
+- **T1.** `atex.split_trailer` splits an ATTX row and `decode_rgba` reads one end to
+  end. `parse` still REFUSES ATTX and that is the design. Criterion met on the whole
+  corpus: **349/349 maps, 1,656 distinct textures, 1,652/1,652 ATEX-family close and
+  decode.** The boundary is WALKED — the two rivals (`find`, `rfind`) are live
+  functions in the test against a fixture built to separate them, because the corpus
+  cannot: `ffna` occurs exactly once on 1,648/1,648 rows. **ArenaNet declares the
+  boundary herself** in a 12-byte footer `{u32 head length, u32 0, b"XTTA"}`, equal to
+  the walk on 1,648/1,648 with two controls at 0.
+- **T2 (from the client, SINGLE witness).** The binding is **`dep[tile]`, DIRECT** —
+  `TrnTexBlendLo` indexes the texture array with the raw tile byte; the table it also
+  feeds is only COMPARED between a cell's corners. The corpus confirmation is still
+  worth running (41 of 80 maps discriminate) but no longer blocks anything.
+- **T3.** **One cell = one 128×128 variant = 96 world units = its inner 111×111
+  texels**; `tileVar[v]` = texel `(128*(v&1)+8.5, 128*(v>>1)+8.5)`, so variation *v* is
+  quadrant *v*. The rung's own hypothesis was REFUTED — the scale comes from no map
+  field at all, only compile-time literals plus a tile count that cancels.
+
+**Two corrections worth more than the rungs.** `PASS_TERRAIN_BORDERS` was recorded as
+used by "0 of 49,800 sampled levels" and is used by **every ATTX row** — the sample
+could not contain one, because `parse` raised on all 1,648 until T1 landed. And
+`decode_rgba` was **not returning what the client uploads**: the client regenerates the
+border band by mirroring and we left it zero, a black 8-pixel cross through every
+terrain texture. `atex.mirror_borders` fixes it (15,360 band pixels changed, all 15,360
+zero before, **0 interior pixels touched**) — and that zero had already corrupted a
+measurement made in the same session, written up rather than quietly amended.
+
+`terrain.py`'s **tag 3 moves NOT FOUND → MEASURED on both counts**: it is the per-cell
+tile VARIATION selector (0 = take the PRNG's pick, Lehmer/MINSTD reseeded per 32×32
+tile with `(tile.x << 16) ^ tile.y`), and `bits_at`'s `(i & 3) * 2` guess was already
+exactly the client's convention.
+
+**Next is T4 (export the terrain textures beside the map) then T5 (Blender: one
+material per tile texture, `material_index` from the `gw_tile` attribute the importer
+already writes).** Three things a T4/T5 session must not rediscover: the terrain set is
+**MIXED** (1,648 ATTX + 4 plain ATEX + 4 DDS, two of them V8U8 bump maps nothing
+decodes); terrain is genuinely **three blended layers per cell** with alpha as a mask
+(only 7 of 192 tiles fully opaque), so a single opaque layer per cell will not
+reproduce it and must say so rather than look broken; and **the prop fall-through is
+still open** — unbound faces keep `material_index = 0` and silently draw whichever
+image landed first, 31.6% of prop screen area on Kamadan, which is why its rocks render
+near-black (`studies/terrain/PLAN.md` §4).
+
 ### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks — a FROZEN snapshot; the suite is 85 files / 4,161 checks as of 2026-08-14, `python toolkit/run_suite.py`)
 
 *1,927 is **derived, not re-summed**, and says so: the 1,878 below was measured over 50 files, and this session added `test_behaviourrun.py` (35, new) and took `test_wirecapture.py` from 28 to 42 — both counted from real green runs. 1,878 − 28 + 42 + 35 = 1,927. The suite runner reports 51/51 green in 611 s; its per-file log truncates, which is what made the earlier 965 wrong, so the arithmetic is shown rather than a figure quoted from a partial log. The 1,878 figure's own method:* Method, because the gap is
