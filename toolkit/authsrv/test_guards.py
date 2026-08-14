@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("guard contract", floor=9)
+LEDGER = checks.Ledger("guard contract", floor=12)
 check = LEDGER.ok
 
 
@@ -132,9 +132,61 @@ def section_skill_press():
           f"{len(sent)} messages: {[op for op, _, _ in sent]}")
 
 
+def _refusing_fraction(authsrv):
+    """A _fraction stub that refuses everything.
+
+    The tick-side functions pass LITERAL fractions (1.0, -ENEMY_HIT_FRACTION),
+    so no constant poison can make the real guard fire -- the stub stands in
+    for the day those literals become computed values. What each section
+    asserts is placement: when the guard fires, NOTHING has been sent and the
+    retry state is intact.
+    """
+    def stub(x, prop, what):
+        raise ValueError(f"stub refusal: {x!r} as property {prop} ({what})")
+    return stub
+
+
+def section_land_swing():
+    import authsrv
+
+    print("\n3. land_swing: guard before the finished/damage pair")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = {"agents": {}, "pos": (0.0, 0.0)}
+    agent = _fresh_agent()
+
+    saved = authsrv._fraction
+    authsrv._fraction = _refusing_fraction(authsrv)
+    try:
+        raised = False
+        try:
+            authsrv.land_swing(send, state, 10, agent, 0)
+        except ValueError:
+            raised = True
+        check(raised and sent == [],
+              "a refused enemy swing raises with NOTHING sent",
+              f"raised={raised}, sent={sent!r} -- pre-hoist this held "
+              f"MELEE_ATTACK_FINISHED, a landing announced with no damage")
+        check(state["player_health"] == float(authsrv.agents.PLAYER_HEALTH),
+              "and the player's health is untouched",
+              f"health={state['player_health']}")
+    finally:
+        authsrv._fraction = saved
+
+    sent.clear()
+    state["player_health"] = float(authsrv.agents.PLAYER_HEALTH)
+    authsrv.land_swing(send, state, 10, agent, 0)
+    check(len(sent) == 2 and sent[0][0] ==
+          authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+          "control: in-range keeps ArenaNet's order -- finished, then damage",
+          f"{[op for op, _, _ in sent]} -- 6 of 6 swings in the Lakeside "
+          f"tape, checked by byte offset (land_swing docstring)")
+
+
 def main():
     section_hit_enemy()
     section_skill_press()
+    section_land_swing()
     return LEDGER.verdict()
 
 

@@ -2431,6 +2431,12 @@ def land_swing(send, state, agent_id, agent, conn_id):
     # daemon thread and a KeyError here would stop the world for the rest of the
     # session with a traceback nowhere near the cause.
     player_pools(state)
+    # Guard before effect: validate the fraction before the FIRST send, so a
+    # refusal leaves no half-swing on the wire (test_guards section 3). The
+    # WIRE ORDER below is untouched -- finished then damage is ArenaNet's own,
+    # 6 of 6 swings in the Lakeside tape (docstring above); only the
+    # validation moved up.
+    frac = _fraction(-ENEMY_HIT_FRACTION, agents.PROP_DAMAGE, "an enemy swing")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
          "melee_attack_finished")
@@ -2438,8 +2444,7 @@ def land_swing(send, state, agent_id, agent, conn_id):
     dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id,
-          _fraction(-ENEMY_HIT_FRACTION, agents.PROP_DAMAGE, "an enemy swing")],
+         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"damage {dealt:.0f} to the player")
     print(f"[c{conn_id}] player hit by {agent_id}: "
           f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
