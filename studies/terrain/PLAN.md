@@ -63,8 +63,8 @@ this arc adds no image decoding at all.
 
 | fact | result |
 |---|---|
-| `len(table_a) == len(terrain dep list)` | **80 of 80** |
-| `len(table_b) == len(terrain dep list)` | **80 of 80** |
+| `len(table_a) == len(terrain dep list)` | **80 of 80** — **CORRECTED by T4**: true only of maps WITHOUT the second tag-3 record; on the 24 that carry it the dep list is one longer (FINDINGS §4.1) |
+| `len(table_b) == len(terrain dep list)` | **80 of 80** — same correction |
 | max tile byte inside that length | **80 of 80** |
 | Kamadan: distinct tile bytes / dep entries | 50 distinct, range 0..50 / 51 |
 
@@ -183,7 +183,23 @@ that a wrong scale is visibly and measurably wrong.
 
 </details>
 
-### T4 — export: terrain textures beside the map
+### T4 — export: terrain textures beside the map — **DONE 2026-08-14**
+
+Landed; [FINDINGS.md](FINDINGS.md) §4. `mapexport.build_terrain_textures`,
+manifest format_version 3, PNGs under `terrain/` keyed by file id. The
+criterion is met and checked from the tiles sidecar rather than the block's
+claim about itself (`test_mapexport.py` §4c/§8); the corrupt-a-byte control
+refuses the whole export; `resolve_outdir`'s refusal covers the PNGs
+unchanged. Two measurements the rung did not ask for: the resolution law
+`len(dep) == len(table_a) + (1 if tag3b else 0)` on **349/349** (which
+CORRECTS §2's "80 of 80" identity claim below — that number is true only of
+maps without the second tag-3 record), and **every tile-position entry on
+every map is ATTX, 17,089/17,089** — the mixed shapes T1 found are entirely
+the 24 tag3b maps' extra LEADING entry, which the binding never indexes, so
+the V8U8 pair can never be a tile on retail. The skipped-tile path is kept
+and exercised synthetically anyway.
+
+<details><summary>the original rung</summary>
 
 PNG sidecars plus a per-tile table in the `.gwmap` manifest naming each tile's
 file id **and the MFT's (size, crc)** — a file id is archive state, the same
@@ -194,7 +210,23 @@ a negative control; the existing refusal that keeps derived ArenaNet bytes out
 of the working tree still fires.
 *Risk:* low. Same shape as `modelexport.texture_payloads`.
 
-### T5 — Blender: the ground gets a material
+</details>
+
+### T5 — Blender: the ground gets a material — **DONE 2026-08-14**
+
+Landed; [FINDINGS.md](FINDINGS.md) §5. One material per distinct image,
+`material_index` per face from `gw_tile` through the manifest table, plus
+T3's measured UV window (inner 111×111 texels of quadrant 0). The criterion
+is met at full coverage: all 212,992 Pre-Searing face indices sha256-match a
+recomputation from `tiles.u8` outside Blender, every tile's slot material is
+the manifest's image, and `--no-terrain-textures` is the control
+(`test_blenderimport.py` §2b/§5). A tile with no decodable texture gets its
+own named magenta slot, never slot 0 — §4's fall-through, refused on the
+ground. The render shows what §3.5 predicted: base tiles read as ground,
+alpha-overlay tiles draw their unwritten regions opaque. That is T6's
+problem, stated on the scene rather than hidden.
+
+<details><summary>the original rung</summary>
 
 One material per distinct tile texture, `material_index` per face from the
 `gw_tile` attribute the importer **already writes**. No shader work, no
@@ -204,6 +236,8 @@ blending — the same pattern the props use.
 names, asserted against the **sidecar** rather than against the importer's own
 choice, plus a `--no-terrain-textures` control.
 *Risk:* low.
+
+</details>
 
 ### T6 — blending between tiles (DEFERRED, with the reason)
 
