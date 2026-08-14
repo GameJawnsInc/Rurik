@@ -1564,6 +1564,41 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   small PE32 image byte by byte and need no vault, scoring 28 against a floor of 61,
   so a vault-less run goes red. ~15 s),
   `toolkit/test_checks.py` (the check on the checker — see below),
+  `toolkit/test_run_suite.py` (the suite RUNNER, which did not exist until
+  2026-08-13 — 66 test files and **0 scripts that ran them**, so every "the suite is
+  green" in this repo's history was a human pasting paths into a shell, which is how
+  2026-08-06 reported twenty of twenty-three green with both omitted files red.
+  Running N subprocesses is trivial; REPORTING HONESTLY about them is not, and the
+  ad-hoc runner this replaces got the count wrong **three times in one day, each time
+  in the direction that looks like success**. Every check here reproduces one. (1) It
+  harvested the file list out of CLAUDE.md's prose with
+  `toolkit/[\w/]+test_\w+\.py`, which cannot match `toolkit/test_checks.py` — the `+`
+  demands a character between the slash and `test_` — so it ran **63 of 71** and
+  printed "62 green of 63", a partial run presented as a full one. (2) Fixed, it found
+  70 of 71: `test_handshake.py` is named only inside a FENCED CODE BLOCK, so the
+  document is not a parseable index and never was — the list now comes from the DISK,
+  which `test_srclint.py` already binds to CLAUDE.md in both directions with a check
+  that can go red. (3) Reading the LAST line for the banner scored `test_handshake.py`
+  and `test_webgate.py` at **0 checks while they exited 0**, because both print after
+  their banner — so the runner was accusing two green files of silent vacuity, the
+  worst thing a test can be, and the total came out 26 short. **The distinction that
+  fixes it is in the return value**: `checks` is `None` when no banner was found and
+  never 0, because 0 is a measurement ("it ran and asserted nothing") and None is the
+  absence of one, and a summing caller must be able to tell them apart. `rc == 0` with
+  no banner is **SUSPECT**, never a pass. The controls are what keep the widened
+  search honest: a mid-line MENTION of the phrase must not be read as the banner (a
+  docstring quoting it would otherwise set the count to 99), a genuine `(0 checks)`
+  must survive as 0, a malformed count is SUSPECT rather than silently 0, and a
+  non-zero exit is FAIL even when a banner is present, because `checks.py` prints the
+  banner before the verdict on some paths so the exit code is the authority.
+  Discovery is a WALK and not a glob, with a fixture holding a test one level deeper
+  than `toolkit/*/test_*.py` reaches and a `__pycache__` copy that must not be run.
+  The cross-check is against a DIFFERENT SOURCE — the disk walk against a scan of
+  CLAUDE.md, sharing no code — with a non-empty guard first, because two empty sets
+  compare equal. And `--only` matching nothing exits 2: "no tests matched" with exit 0
+  is a green run over nothing, which is this repo's oldest defect. No vault, no
+  socket, no client; both halves are pure functions over a string and a tree, so
+  testing the thing that spawns 76 processes spawns none. 27 checks, ~2 s),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
   a live session on 2026-08-10. It also pins the checker's own vacuity failure — the
