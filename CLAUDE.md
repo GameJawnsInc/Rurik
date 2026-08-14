@@ -456,6 +456,49 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   alone reaches 1.6% of the corpus and the other 98.4% sit behind ATEX level
   compression codes nothing here decodes yet. Sections 1-5 need no vault and
   score 30; 32 by default, 33 under `--all`),
+  `toolkit/mapdata/test_iconset.py` (the 132-row icon ARMER, which is an
+  orchestrator over five tested modules -- so this checks only the composition,
+  and every section is a way it can destroy 4 GB or arm the wrong rows. Two
+  write guards, each with a POSITIVE control, because a guard that refuses
+  everything protects nothing: `C:\gw`, and `vault/dat_study`, which `datwrite`
+  does NOT refuse -- that refusal exists only here. The row indexing is asked of
+  the SYNTAX TREE: `file_id_table` returns one-based ROW NUMBERS while
+  `Archive.entries` is POSITIONAL, so `entries[row]` reads the row BEFORE the
+  one named, and on 2026-08-14 that put two authored icons into the wrong rows
+  with no checksum, no verify and no client able to tell -- it was found only
+  because `datwrite` refused a third arm as a relocation and quoted a
+  reservation that did not match the row it named. A grep cannot separate
+  `a.row(r)` from `a.entries[r]`, so the check counts Subscripts on an
+  `entries` attribute and a sabotage must flip it. Section 3 pins that the
+  WHOLE plan is checked before the Writer opens, on the AST, because otherwise
+  the reservation refusal lands on row 87 of 132 with 86 already written.
+  Sections 1-3 need no vault and score 16 against a floor of 16; 20 with one),
+  `toolkit/mapdata/test_glyphs.py` (the 132 procedural skill icons a custom
+  profession needs -- and mostly, the ARITHMETIC THAT INDEXES THEM, because
+  "132 icons came out and they are all different" stayed green through every
+  defect this module actually had. All three were index rules that fail
+  silently and leave a set that looks fine: polarity split by ground-index
+  RANGE gave a motif's six icons six CONSECUTIVE indices and therefore ONE
+  polarity block, so the rule meant to separate same-motif pairs never fired
+  for them (minimum confusability 10.65, worse than all four vocabularies the
+  module was synthesised from); the palette ORDER decides which palettes can
+  share a polarity and the first ordering put blue and grey together, the
+  worst pair in the set; and without an accent axis a motif's three
+  same-polarity siblings differed only in COLOUR (greyscale minimum 6.04 ->
+  13.48 once added). So each invariant is asserted directly with the BROKEN
+  version reproduced inline as a live function beside it -- and that control
+  is where the file's own over-claim showed up: "the pre-fix rule balances
+  NONE of them" is false, it balances 4 of 22 by coincidence, and the check
+  now asserts a minority against the fix's 22 of 22. Section 5 can fail in
+  both directions: the set's minimum pairwise distance must clear a floor AND
+  a degenerate set -- one picture hue-rotated 132 times -- must fall under it,
+  which it does at 0.02 against 9.92. The safe-area metric had to be rebuilt
+  too: the first version took a median of the RED channel and compared all
+  three against it, then tested it against a threshold copied from a
+  different tool's differently-defined number, and went red at 0.446 on a
+  healthy set. Floor 32, MEASURED -- the first version guessed 41 and reported
+  "9 did not execute" on a run where nothing was skipped. No vault, no
+  archive, no client; ~40 s),
   `toolkit/mapdata/test_png.py` (the stdlib PNG codec rung M5's texture
   export writes through -- `zlib` and `struct` and nothing else, because
   `toolkit/` takes no third-party dependency and a test needing PIL to check
