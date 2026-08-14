@@ -339,9 +339,22 @@ Three stated limits, all deliberate:
   tiles are fully opaque, retail blends three layers per cell with alpha as
   the mask, so tiles that are authored as alpha OVERLAYS (Kamadan's plaza
   pavement, rock edges) render their unwritten regions as opaque white-grey.
-  Measured by eye on a headless render: the city floor plan, plazas and
-  coastline are legible where there was a white slab; overlay-heavy cells
-  stripe. Honest, and far better than grey. Blending is T6.
+  Blending is T6.
+  > **CORRECTED the same day, after the first human look at the scene.**
+  > This section first blamed ALL the visible striping on that content
+  > limitation, and most of it was OURS: Blender premultiplies a
+  > STRAIGHT-mode image for rendering, so the un-wired Color output was
+  > arriving as RGB × alpha and every cell drew its blend mask as a dark
+  > band over clean ground colour — the same in-cell band position across
+  > different tile types, which a content explanation cannot produce and
+  > which is what exposed it. MEASURED on the exported PNGs: window
+  > luminance flat (e.g. 139..158), window alpha banded (25–52 of 112 rows
+  > below 128). The images are now loaded CHANNEL_PACKED — alpha is DATA,
+  > exactly what a splat mask is — and the terrain is smooth-shaded, since
+  > both vertex layouts T3 read carry per-vertex normals and the faceted
+  > stair-step look was the importer's artifact, not the archive's. What
+  > remains after the fix is the real content limit above, plus the
+  > per-cell quadrant repetition.
 - **Every cell samples quadrant 0** through T3's measured window — inner
   111×111 texels, corners inset 8.5 — because the interchange does not carry
   tag 3 and nothing reproduces the per-cell PRNG draw. Which world axis maps

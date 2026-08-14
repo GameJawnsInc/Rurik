@@ -229,10 +229,16 @@ PYTHON_EXIT_CODE = 66
 # through to slot 0 -- and section 5 asserts the real map's binding against
 # the SIDECAR (every tile's slot material the manifest's image, all 212,992
 # face indices digest-equal to a recomputation from tiles.u8), with
-# --no-terrain-textures as the control on both. Sections 0-2b score 53
-# (MEASURED with --dat at a missing file), so a vault-less run lands 55
-# short and goes RED.
-FLOOR = 108
+# --no-terrain-textures as the control on both.
+#
+# 108 -> 110 the same day, after the first human look at the scene: the
+# blend mask was DARKENING the ground (Blender premultiplies STRAIGHT-mode
+# images, so the Color output was RGB x alpha -- measured on the PNGs:
+# window luminance flat, window alpha banded), and the terrain was
+# flat-shaded where the client's vertex layouts carry normals. One check
+# per section pins CHANNEL_PACKED and all-faces-smooth, read back off the
+# scene. Sections 0-2b score 54, so a vault-less run lands 56 short.
+FLOOR = 110
 
 
 # ------------------------------------------------------------------ helpers
@@ -876,6 +882,12 @@ def _section2b(check, led, blender, tmp):
     check(tt["uv_window"] == [8.5 / 256.0, 119.5 / 256.0],
           "the UV window is T3's measured inner 111 texels (corners inset "
           "8.5)", "%r" % (tt["uv_window"],))
+    check(tt["image_alpha_modes"] == ["CHANNEL_PACKED"]
+          and tt["faces_smooth"] == exp.cells,
+          "the mask is CHANNEL_PACKED (alpha is DATA -- premultiplication "
+          "was darkening clean RGB by the blend mask) and every face is "
+          "smooth-shaded (the client's terrain vertices carry normals)",
+          "%r, %d smooth" % (tt["image_alpha_modes"], tt["faces_smooth"]))
 
     # THE FLAG CONTROL: --no-terrain-textures leaves the ground bare.
     work2 = os.path.join(tmp, "run_syntex_ctl")
@@ -1191,6 +1203,10 @@ def _section5(check, led, blender, tmp, exp, src, summary):
           "%r" % (tt["untextured_tiles"],))
     check(tt["uv_window"] == [8.5 / 256.0, 119.5 / 256.0],
           "the UV window is T3's measured inner 111 texels")
+    check(tt["image_alpha_modes"] == ["CHANNEL_PACKED"]
+          and tt["faces_smooth"] == exp.cells,
+          "channel-packed mask and smooth shading on the real ground too",
+          "%r, %d smooth" % (tt["image_alpha_modes"], tt["faces_smooth"]))
 
     # THE FLAG CONTROL on the real map, terrain only for speed.
     work = os.path.join(tmp, "run_real_t5ctl")
