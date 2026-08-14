@@ -133,12 +133,31 @@ fail this repository forbids.
             `dx/4` between them and unpacking to a flat image `dx/4` bytes wide:
             so a byte covers FOUR CONSECUTIVE X CELLS of one row, and the "one
             byte per 2x2 block" reading -- which satisfies the same size law --
-            is refuted (it would be 16 rows of 16). The bit pair's position
-            INSIDE the byte is still not established by anything measured; any
-            self-consistent convention round-trips, so a per-cell decode here
-            would be a check that cannot fail. `bits_at()` exists, is labelled
-            INFERRED, and the encoder never consults it.
-            MEANING: **NOT FOUND**, and four hypotheses were measured and died.
+            is refuted (it would be 16 rows of 16). **The bit pair's position
+            INSIDE the byte is SETTLED as of 2026-08-14 and `bits_at`'s
+            `(i & 3) * 2` was already exactly right** -- promoted INFERRED ->
+            MEASURED. The old note here said any self-consistent convention
+            round-trips so a per-cell decode could not be checked, and that was
+            true only while the field had no meaning. It has one now (below),
+            so the CLIENT decides: two consumers read the de-tiled buffer with a
+            shift counter starting at 0 and stepping `+2 & 7`. The corpus agrees
+            independently -- cross-byte co-occurrence collapses onto a monotone
+            function of true distance, `C(3->0) = 50.546%` against
+            `C(0->3) = 33.770%` (ratio 1.497, z = 31.1), where the reversed
+            reading demands the opposite inequality, and a null shuffling byte
+            POSITIONS while keeping CONTENTS collapses it to ~1.0.
+            **MEANING: the per-cell tile VARIATION selector** (2026-08-14,
+            `studies/terrain/FINDINGS.md` §3.2). A terrain texture is a 256x256
+            holding FOUR 128x128 variants of one material; variation `v` selects
+            quadrant `v`. Zero means "take the PRNG's pick" -- Lehmer/MINSTD
+            re-seeded per 32x32 tile with `(tile.x << 16) ^ tile.y`, with BOTH
+            branches drawing so the stream position is a pure function of the
+            cell index and the ground is deterministic. That is why the value is
+            0 on 99.94% of cells and near-uniform over 1/2/3 on the rest: it is a
+            sparse authored override, and it can only pin quadrants 1-3 because
+            quadrant 0 is reachable only through the draw.
+            The four dead hypotheses below are left as recorded; each is still a
+            true negative, and none of them was this.
             All-zero on 168 of 349 maps; where it is set at all the median map
             has 0.10% of its bytes non-zero (max 7.5%). Among non-zero cells the
             three values are near-uniform (row 32347: 840/805/816 for 1/2/3),
