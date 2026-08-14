@@ -10,10 +10,18 @@ This is the ordered work list, cheapest first. Every rung states its **predictio
 
 ## Tier 1 — static, no client, no harness contention (hours each)
 
-### S1. Correct `s_worldData` in `consttable.py`
+### S1. Correct `s_worldData` in `consttable.py` — **DONE 2026-08-14**
 **Prediction (a regression claim, since the measurement is in hand):** stride **48**, count **10**, `stride_from` = the accessor's own `lea/shl` at `0x005A93CD`, corroborated by `WORLDS = 10` and by `count == chunkCX × chunkCY` on 7 of 7 worlds. The current `stride=24, "UNSETTLED"` at `toolkit/clientscan/consttable.py:539` (printing `20 × 24`) is wrong; 48 is already in its own rival-stride list.
 **Procedure:** edit the row; `test_consttable.py` re-derives closure from the anchor, so a wrong stride reddens it. Keep the rival-stride print — 48's divisors still close, and the module's blind-spot doctrine says report that, not hide it.
 **Cost:** ~30 min. **Do first — it is a correction to a committed claim.**
+
+**Outcome — prediction met, and the re-verification made it stronger than predicted.** The row is `10 × 48` at file `0x635210` (VA `0x00A36210`), `pad +4`, and `test_consttable.py` is green at **69 checks** (floor 61 → 69) with a new section 7b. Three things the prediction did not contain:
+
+1. **The count is ArenaNet's own `arrsize`, not our `480 / 48`.** The accessor bounds *itself* — `0x005A93B7 cmp esi,0xa`, guarding `index < arrsize(s_worldData)` at `ConstWorld.cpp:41`. The prediction cited `ConstWorldMap:1313 world < WORLDS`, which is a **different translation unit and a different function** (the chunk-tile getter at `0x005A93E0`). Both bound at 10, so they corroborate; the accessor's is the direct witness and it names the symbol. The row now *declares* its count, the `s_missionClientData` shape.
+2. **That assert's `__FILE__` string IS the row's anchor** (`P:\Code\Gw\Const\ConstWorld.cpp` at VA `0x00A363F0`), so `base + 10 × 48` lands on it — the assert and the table are one measurement from two directions.
+3. **The 7-byte accessor pattern is unique in `.text`**, so section 7b finds it by SHAPE rather than at a remembered address. The `lea`+`shl` pair alone occurs 22 times; the trailing absolute `add` is what makes it a witness. Read as bytes — carve-out (1) scopes capstone to two named files and this is neither.
+
+**The rival-stride print was kept, as instructed, and it earned its keep:** 24 is still listed, because every divisor of 48 closes on the same base. What *can* refute 24 is a column — `+0x14` is `512` (`CONST_WORLD_CHUNK_SIZE`) on all ten 48-byte records and ragged on the twenty 24-byte ones — and that is now recorded as a stated **limit of `rival_strides`**, which tests closure and the index column and never column coherence. Four sabotages built and run (3, 5, 2, 1 red). The one that does *not* redden under the pre-fix row is the useful one: the left-edge corroboration passes at `20 × 24`, because 24 divides 480 and two readings of the **same 480 bytes** cannot see a divisor stride. Only the code witness can — which is the general lesson for S3, where the tile tables get walked.
 
 ### S2. Pin the footprint selector into `maprows` §9 item 4
 **Prediction:** the branch at `0x008C276B-0x008C2782` is the only place the compass reads either footprint; `MissionCliGetMap()==0 → A`, non-zero → B. `GmMapView` will have its own read and may or may not use the same rule.
