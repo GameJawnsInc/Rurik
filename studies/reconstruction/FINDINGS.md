@@ -2519,7 +2519,17 @@ Prefer `RegisterHotKey`, which **swallows** the key, over polling `GetAsyncKeySt
 GW binds the F-keys, and a mark keypress that also does something in-game changes the traffic being
 measured. If `RegisterHotKey` fails (already held), **refuse** — do not fall back to polling.
 
-**Output: `marks.jsonl`, beside `wire.jsonl` in the same capture directory.**
+**Output: ~~`marks.jsonl`~~ `plan_marks.jsonl`, beside `wire.jsonl` in the same capture
+directory. CORRECTED 2026-08-13, when the module was built.** `marks.jsonl` was already
+taken: `livesession.py:735` opens it in `"w"` and holds the handle for the whole session
+while `behaviourrun.py:385` reads it back, and both shapes use `"kind": "mark"` — so two
+writers on one file is silent loss in the one artifact a live run cannot reproduce.
+**The owner then ruled the split PERMANENT (2026-08-13): "driver marks and operator marks
+are different things."** That is the load-bearing reason and it outlives the filename
+clash — the driver's channel is the harness narrating itself with no prediction attached,
+this one is a human acting against a plan sealed before launch, and merging them would put
+pre-registered and un-pre-registered rows under one `"kind"` where no consumer could
+separate them. The record SHAPE below is unchanged.
 
 ```
 {"kind":"marks_meta","plan_sha256":"…","steps":17,"t0_perf":…,"t0_wall":…,"pid":…}

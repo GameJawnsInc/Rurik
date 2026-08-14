@@ -543,6 +543,77 @@ lines carry no timestamps, so they cannot be joined to the capture.
 line disappearing is the result; it staying is the more interesting one, because it
 would rule out ordering and point at the pools never having been zeroed.
 
+### 1f-RESULT. The experiment ran, and it is ORDERING
+
+**[OBSERVED] 2026-08-13.** Three harness runs of the same shape (`--enemy --keep-open
+--hold 150..180`, so the hostile kills the player every ~14 s and each run gives a dozen
+revives), differing ONLY in how long the two pool refills wait after the death bit
+clears:
+
+| refill defer | session | revives | `Health non-zero on resurrect` |
+|---|---|---|---|
+| **0.00 s** (the shipped burst) | 196.6 s | 13 | **13** |
+| 0.05 s (one tick) | 167.7 s | 11 | **0** |
+| 0.25 s (five ticks) | 197.7 s | 13 | **0** |
+
+**One complaint per revive with the burst, none with a single tick between.** So of §1f's
+two surviving readings the FIRST is right: the client's resurrect check runs after the
+message that clears the death bit is processed, and our refills were landing before it,
+refilling the pools the client was about to inspect. The pools were being zeroed
+correctly all along -- nothing was ever wrong with the death path.
+
+**The death counts scale with session length** (14 in 196 s, 12 in 167 s), which is the
+control that matters: a deferred refill that failed to arrive would leave the player
+standing up empty and dying instantly, and the cycle would speed up. It did not.
+
+`REVIVE_REFILL_DEFER` is now `TICK_SECONDS` by default -- expressed as one tick rather
+than 0.05 so it stays one tick if the rate moves -- and `RURIK_REVIVE_DEFER=0` restores
+the burst, which is what keeps the control above reproducible. `test_agentlife` pins both
+halves as a PAIR: the revive must not carry the refill, and the deferred half must
+actually send it. Either check alone is satisfied by a broken server.
+
+**The agent path now defers too, and its measurement status is NOT the player's.**
+`revive_due` sent the same three messages in the same burst, and the client's resurrect
+check is on the CHARACTER rather than on whose it is -- 2 of the vault's 49 complaints
+name `Corpse of Hatcher [Collector]`. It has the same one-tick defer as of 2026-08-13.
+
+**MEASURED 2026-08-13, unattended.** Two runs identical but for the constant, each
+21 player hits and 3 agent deaths:
+
+| refill defer | agent revives | `Corpse of Hatcher [Collector]: Health non-zero on resurrect` |
+|---|---|---|
+| **0.00 s** (burst) | 3 | **3** |
+| 0.05 s (one tick) | 3 | **0** |
+
+So the agent path is the player path: same check, same cause, same fix, and now the same
+standard of evidence.
+
+**Getting there needed two things, and both were mis-diagnosed first.** `hit agent` was
+0 for four runs, read first as a wrong keybind and then as synthetic keys missing the
+client's raw input path. Neither:
+
+1. **The player loses the fight.** The Hatcher deals 25 into a 100 HP player -- four
+   hits -- while killing it takes seven, so the player is dead before landing one.
+   `--practice-target` makes the standing hostile neither chase nor attack, which is a
+   real creature's behaviour rather than a test switch: WIKI (GWW, "Practice target",
+   rev. 2014-02-07) -- practice targets are stationary NPCs, there are allied and
+   hostile ones, "They do not use any skills", and a slain hostile one resurrects after
+   30 s at full health. The content field it sets, `attacks_back`, already existed and
+   already gated both the attack tick and the chase; only the switch was missing.
+2. **An OUTPOST forbids attacking.** With a passive target the player survived and STILL
+   landed nothing -- `0x00C1` TARGET_SELECT went out on every `C` press and no attack
+   followed. `--explorable` fixes it and the run went from 0 hits to 21, with the
+   client's attack arriving as `0x0026`.
+
+**The recipe, which is the reusable part** (also in `RUNBOOK.md`):
+
+```
+python toolkit/harness/session.py --enemy --keep-open --game-args "--practice-target --explorable" --hold 30   --actions "0:play 20:vk:0x43 1:vk:0x20 25:vk:0x43 1:vk:0x20 25:vk:0x43 1:vk:0x20"
+```
+
+`0x43` is `C` (select closest), `0x20` is `Space` (attack). `Tab` (`0x09`) also works and
+selects the NEXT target. Three attack commands gave 21 hits and 3 kills in 30 s.
+
 **Do not "fix" this by reordering on the strength of the reading above.** The severity is
 2 and nothing visible is wrong — the bar refills correctly, OBSERVED twice in §1e — so
 this is a correctness complaint from the client about our message order, not a symptom

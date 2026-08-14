@@ -353,7 +353,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R4b** | The skill substrate | See §3.2 — rewritten as a count | 🔶 **started.** Eight real skills on the bar with correct tooltips (`70c3926`), the cast lifecycle read out of the client's own asserts, `USE_SKILL` answered. **No skill resolves an effect.** |
 | **R4c** | AI + spawns + quests | See §3.2 — rewritten as a count | ⬜ not started, **and 2026-08-11 established what "started" would even mean** ([studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md), `9eb09a8`+). Monster AI *as a mechanism* is **not recoverable** — not from the client (0 of 937 embedded source paths under any `\Srv\` tree, from a detector proven to catch 6 of 6 planted ones; 33 AI-adjacent searches over two independent routes, all zero), not from the wire, and not by any capture campaign, because it is never shipped and never transmitted. What **is** recoverable is the observable envelope, and the study designs the labelled behaviour campaign that would recover it (§7) plus four desk follow-ups needing no capture at all (§7.9) — **the first of which ran the same day and made the binary negative total**: `CHAR_AI_MODES`, the one lead the study declined to call refuted, is 3 and its modes are Fight/Guard/Avoid Combat, i.e. the player's own hero-and-pet stance widget. It also found the AI-adjacent numbers already in `authsrv.py` are mostly the **wrong shape** rather than merely unmeasured: reach is per-creature-model (~65 / ~599 / ~706 units observed against our one global 150), a leash is *uncomputable* from the state `spawn_enemy` keeps, and 4 of 5 fights in the corpus are started by the **player**, refuting our proximity-initiation model for 4 of 5. |
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. **Its other half now exists too**: R5m authors the zone's *geometry*, which TOML was never going to describe. |
-| **R5m** | **Custom map geometry, end to end** | A map we authored loads in the retail client, and geometry we chose constrains the character | ✅ **2026-08-11**, arc landed `0be1555`, criterion completed the same day. **The client walks on our terrain and stops at our walls.** `mapbuild.build_flat` assembles a whole map from typed parameters — 7,841 B, 9 chunks, **97.04% generated**, the rest being FINDINGS 14's 232 bytes of ArenaNet constants read from an archive at run time — and the retail client loads it, places a character in it and writes nothing back (FINDINGS §22, four discriminators). Then **E1 proved the geometry is ours and not a coincidence**: two maps differing in **33 of 7,841 bytes**, all inside the pathing chunk, both 7,841 B, with the mesh rect at 0..3072 against 1024..2048, confined the character to reported bounding boxes of **3072.0 × 3072.0** and **1024.0 × 1024.5** — the ratio of the two rectangles, measured from the client's own position reports while our server broadcast no position at all (FINDINGS §23). The read direction is byte-exact across the corpus: terrain 349/349, pathing 349/349, whole map file 349/349 Bloated **and** Stripped — and since 2026-08-12 the STRIPPED terrain chunk too (`strippedterrain.py`, FINDINGS §37), whose real claim is not the round trip but that its **60,468,224 height samples equal the Bloated chunk's on 349 of 349 maps**, pulled out of a Huffman bit stream by a module that never reads that chunk. A retail map also stands up in Blender (`tools/blender/import_gwmap.py`, 213,921 verts, orientation checked against a chunk the exporter never reads) and **since 2026-08-12 comes back out of it**: `export_gwmap.py` round-trips Pre-Searing's 212,992 heights, tiles and shade bytes byte-identically through a `.blend` read by a separate Blender process, and a mesh authored in Blender from nothing reaches a map file passing all 17 open-time gates (FINDINGS §32). That byte-identity is the weak half by measurement — a memcpy sabotage keeps all six of those checks green and is caught only by a sculpt control. **And since 2026-08-12 the OTHER delivery route is open: the client's own map compiler builds from a Stripped stream we supply** — §35 it compiles at all and reproduces ArenaNet's bytes, §36 it compiles the stream WE write rather than anything cached, and **§38 it floods terrain we AUTHORED**: the rebuilt navmesh stops at world x = 1152.0, the cell boundary we chose, with walkable area in the steep strip falling from a measured 37.3% to 0. **What is NOT done**: authored art (textures are borrowed retail file ids), portals, multiple planes and elevation; only the terrain of §38's map is ours (props, zones and collision are ArenaNet's); and the delivery path is still `datwrite` into a copied archive — which now bounds authoring to maps that SHRINK, since it writes uncompressed and will not relocate (§8.10 e9). |
+| **R5m** | **Custom map geometry, end to end** | A map we authored loads in the retail client, and geometry we chose constrains the character | ✅ **2026-08-11**, arc landed `0be1555`, criterion completed the same day. **The client walks on our terrain and stops at our walls.** `mapbuild.build_flat` assembles a whole map from typed parameters — 7,841 B, 9 chunks, **97.04% generated**, the rest being FINDINGS 14's 232 bytes of ArenaNet constants read from an archive at run time — and the retail client loads it, places a character in it and writes nothing back (FINDINGS §22, four discriminators). Then **E1 proved the geometry is ours and not a coincidence**: two maps differing in **33 of 7,841 bytes**, all inside the pathing chunk, both 7,841 B, with the mesh rect at 0..3072 against 1024..2048, confined the character to reported bounding boxes of **3072.0 × 3072.0** and **1024.0 × 1024.5** — the ratio of the two rectangles, measured from the client's own position reports while our server broadcast no position at all (FINDINGS §23). The read direction is byte-exact across the corpus: terrain 349/349, pathing 349/349, whole map file 349/349 Bloated **and** Stripped — and since 2026-08-12 the STRIPPED terrain chunk too (`strippedterrain.py`, FINDINGS §37), whose real claim is not the round trip but that its **60,468,224 height samples equal the Bloated chunk's on 349 of 349 maps**, pulled out of a Huffman bit stream by a module that never reads that chunk. A retail map also stands up in Blender (`tools/blender/import_gwmap.py`, 213,921 verts, orientation checked against the props chunk through the test's own walker — the terrain path never reads it) and **since 2026-08-12 comes back out of it**: `export_gwmap.py` round-trips Pre-Searing's 212,992 heights, tiles and shade bytes byte-identically through a `.blend` read by a separate Blender process, and a mesh authored in Blender from nothing reaches a map file passing all 17 open-time gates (FINDINGS §32). **Since 2026-08-13 the interchange carries PROPS** (format_version 2): every placement from BOTH streams cross-checked at export through `corresponds()`, model indices resolved to file ids with MFT (size, crc) identity, **the rotation composition measured** — z first, then x, then y, per-axis signs (−, +, −), 3,545/3,545 multi-axis records on a 12-map probe, closing what `props.py` had open — and Blender places every placement as a measured proxy (footprint prism or radius cylinder; placements only, NO ArenaNet model geometry, which nothing in this tree decodes). That byte-identity is the weak half by measurement — a memcpy sabotage keeps all six of those checks green and is caught only by a sculpt control. **And since 2026-08-12 the OTHER delivery route is open: the client's own map compiler builds from a Stripped stream we supply** — §35 it compiles at all and reproduces ArenaNet's bytes, §36 it compiles the stream WE write rather than anything cached, and **§38 it floods terrain we AUTHORED**: the rebuilt navmesh stops at world x = 1152.0, the cell boundary we chose, with walkable area in the steep strip falling from a measured 37.3% to 0. **What is NOT done**: authored art (textures are borrowed retail file ids), portals, multiple planes and elevation; only the terrain of §38's map is ours (props, zones and collision are ArenaNet's); and the delivery path is still `datwrite` into a copied archive — which now bounds authoring to maps that SHRINK, since it writes uncompressed and will not relocate (§8.10 e9). |
 | **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ✅ **2026-08-07**, `vault/captures/live/20260807T143055`. Six connections to ArenaNet (one auth, five game, all on **port 80**), both directions, zero TCP gaps, stamped `origin: live`, and **byte-replayable in the strong sense**: `livesession.py --assemble` regenerates all six decrypted files **sha256-identical** from `wire.jsonl` + `keyring.jsonl` alone, with no client and no network. 200,153 bytes of ArenaNet plaintext, 11,700 messages. **The independent check is the framing**: every one of the 12 streams decodes 100% clean to its final byte against `schema/messages.json`, which was built from the *client's* format tables and never from these bytes. Adversarially attacked from four angles (§3.3); three failed to refute, and the fourth's safety finding is fixed. See §3.3 for what the number does *not* mean. The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
 | **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10, and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. **A second run the same day played Lakeside County (`:64103`, 1,074/1,074, 0 non-tape sends) and rendered COMBAT** — plus a labelled c2s corpus, and independent corroboration of D1's agent-id reuse from ArenaNet's own traffic. See §3.5 and [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md). |
 
@@ -1081,6 +1081,7 @@ keep honest.
 | `schema/overrides.json` — GAME_CMSG **names** | ldufr/Headquarter `opcodes.h` | **MIT** — permissive, attribution only | ✅ row added 2026-08-10, *before* the first name landed. Headquarter is where §4's A3 got the 60/40/194/487 counts and it has carried `ROTATE_PLAYER = 0x0040` all along, with no row here — the `gwdat.py` shape exactly. **What we take is corroboration, not the name**: 0x0040 was named from the client's own assert text `(rotation >= -1.0f) && (rotation <= 1.0f)` at `ChCliApi.cpp:5562`, read out of build 38797, and Headquarter agreeing is a second witness we did not need. Any *future* name adopted from Headquarter without that independent leg is a derivation and must say so in its `why`. |
 | `toolkit/mapdata/terrain.py` — the **terrain chunk** layout | GuildWarsMapBrowser: `FFNA_ImHexPatterns`, `FFNA_MapFile.h`, and `SourceFiles/Terrain.cpp` | same custom licence as the two rows above — permissive, **requires a repo link and visible credit**, *not* MIT | ✅ row added 2026-08-10, *before* the module exists. The `pathmap.py` row covers the **pathing** pattern only and does not reach terrain. **What we take is the hypothesis, not the layout**: every load-bearing field is re-derived from the client's own 11-entry step table at `0xA74F28` and confirmed corpus-wide — see [studies/customarea/FINDINGS.md](studies/customarea/FINDINGS.md) §4 and §17.4. Recorded because upstream is a **witness we had to correct**, which is the strongest argument for keeping the row honest rather than dropping it: its pattern reads the tags positionally so its "tag5"/"tag6 Shadow Map" are the file's tags 3 and 9 and **tag 6 exists in none of the 349 maps**; its `cellSize` is not a cell size but `max(3, v/3072.0)`, a distance in whole terrain chunks; and its pattern and its own renderer **disagree with each other** on storage order — the renderer is right and only the pattern had been read. |
 | `toolkit/mapdata/mapchunks.py` — the **Dependencies record** `{u16 id0, u16 id1, u16 pad}` and the pair→file-id formula | GuildWarsMapBrowser: `FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat` (`MapFileRef` / `MapFileRefPadded`, and the comment `decode: (id0 - 0xff00ff) + (id1 * 0xff00)`), the same expression in `SourceFiles/animation_state.cpp` | same custom licence as the three rows above — permissive, **requires a repo link and visible credit**, *not* MIT | ✅ row added 2026-08-11 by the verifier, *after* the module landed without one — the `gwdat.py` shape again, and the reason this table exists. The `pathmap.py` row covers the **pathing** chunk of that pattern and does not reach the dependency lists, exactly as the `terrain.py` row argues for terrain. **Everything else in the module is not upstream's**: the id decomposition, the 23-slot `s_chunkInfo` name table and the `alloc` byte split are read from the client's own strings and asserts (SOURCE-CODE, [FINDINGS](studies/customarea/FINDINGS.md) §3/§17.4), and the signature `0x29939830` and the `(size − 5) % 6` law are measured from the archive — GWMB has neither. **And upstream is a witness we corrected**: nobody upstream wrote the inverse, so nobody found that the pair encoding *aliases* (`id0 ≥ 0xFF00` names the same file as `(id0 − 0xFF00, id1 + 1)`), which retail's own writer uses in 85 records of 134,290. `THIRD-PARTY-NOTICES.md` names the module. |
+| `toolkit/mapdata/modelfile.py` — the **prop model geometry** layout and the FVF stride tables | GuildWarsMapBrowser (its FVF tables and model reader) — **not taken**; recorded because the arc ran alongside it | same custom licence as the rows above | ✅ row added 2026-08-13 with rung M2, and it is the row where **upstream turned out to be RIGHT and we were wrong**. Nothing is taken: the three stride tables are read out of the client's own `.data` (VA `0x00BF5B80`/`BC0`/`BE0`, accessor `0x00688010`) by this repo's own PE walk, and `test_modelfile.py` §5 re-reads them from the vaulted image so the module's literals are pinned to ArenaNet's bytes. GWMB's tables **are** those client tables. The point worth recording: [studies/customarea/FINDINGS.md](studies/customarea/FINDINGS.md) §B6 logged our corpus-fitted byte-cost rule "disagreeing with GWMB's table once (`dat_fvf 0x2C`)" as an open question and every prior row in this register describes upstream as a witness *we* corrected — here the client corrected **us**, `0x2C` never existed, and the cross-file oracle went 0/16 → 16/16 on the affected model. See [studies/models/FINDINGS.md](studies/models/FINDINGS.md) §2. |
 | **monster AI: aggro radius, leash, scatter, targeting, formation, patrol** — *no module takes these yet* | GWW (`wiki.guildwars.com`), the pages named in [studies/monsterai/FINDINGS.md](studies/monsterai/FINDINGS.md) §4 with revision ids | GFDL 1.2 / CC BY-NC-SA 2.5 (dual) — **attribution required**, and the NC arm is satisfied by this project being local and personal (`CLAUDE.md`) | ✅ row added 2026-08-11 **before any module takes any of it**, which is the first time this table has been used the way it was designed rather than retrofitted. **The split that matters is values vs. algorithms.** The gwinch table (aggro bubble/earshot 1012, touch 144, casting 1248, longbow 1498, compass 5020 …) is a set of *values* and reaches the repo as `content/*.toml` rows carrying `source = "wiki"`, which `toolkit/content.py` already gates. **Scatter, leash, target priority and the melee-surround formation are *algorithms*** and are what this row exists for — none has landed, and none may land without citing it here. **Currency is the failure mode, not licence**: three of the four core pages carry `Category:Unofficial terms`, *Foe* has not been revised since 2021 and *Patrol* since 2017, the wiki **contradicts itself** on target priority (§4.3), and where a stale page and a fresh one disagree the stale one was wrong both times. So every borrowed row records its revision id, and a value our own artifacts can check is checked rather than adopted. |
 
 **The rule this table encodes:** before a module takes a layout, an algorithm or a table
@@ -1276,138 +1277,43 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
-### Custom professions — a five-document arc, and one live result (2026-08-12)
+### Custom professions — the route is RESKIN, and the party window just opened
 
-**Read [`studies/profession/RUNS.md`](studies/profession/RUNS.md) first.** It is the only one
-of the five made of observations rather than readings, and it corrects the other four.
+**Read [`studies/profession/RESKIN.md`](studies/profession/RESKIN.md) first, then
+[`RUNS.md`](studies/profession/RUNS.md) §10.** RESKIN.md is the live document; RUNS.md
+§§1–9 are kept only as the record of seven sessions spent on a crash that turned out to
+be our own unlock bit 0.
 
-| Doc | What it settles |
-|---|---|
-| [`FINDINGS.md`](studies/profession/FINDINGS.md) | The limits. `CHAR_PROFESSIONS = 11` is a compiled array *dimension*, not a table row — 29 bound checks over 13 modules, and the assert reporter is **noreturn**. |
-| [`WORKAROUNDS.md`](studies/profession/WORKAROUNDS.md) | The routes. The 29 session-enders are **one 5-byte patch site**; the armour composite gate is a redirect, not art (professions 0/1/2/9 already share a row). |
-| [`MODDABLE.md`](studies/profession/MODDABLE.md) | The design for arbitrary N. Ceiling **256** via the `u8` carriers; the appearance nibble is real but different storage. Custom ids start at **12** (11 is the client's sentinel). |
-| [`ATTRIBUTES.md`](studies/profession/ATTRIBUTES.md) | **204** custom attributes (52–255), capped by a one-byte field. 191 same-length edits; custom attributes start at **52** (51 is the NONE sentinel). |
-| [`RUNS.md`](studies/profession/RUNS.md) | **OBSERVED, and §10 corrects §§1–9.** Profession 12 rides `0x00A6` and the client plays on. The skills-panel crash was **ours**: bit 0 of our unlock bitmap, asserted as a zero skill id — **not** a null pointer, not a bound check, and **not profession-dependent at all**. |
+**SETTLED.** Adding a 12th profession is refused on cost (zero slack in `.rdata`, and
+seven of the per-profession tables are `mov imm32` ladders — code, not data). **Repurposing
+a shipped id is the route**, host = **Ritualist (8)**, and it is validated in a running
+client: name, abbreviation, attribute ownership, attribute names and the primary marker
+are all same-length dword edits via `toolkit/clientpatch/reskin.py`, which locates every
+table structurally and writes out-of-place. A custom id can never be a SECONDARY (the
+builder loops `cmp edi, 0xb`) and `0x00B7` can never carry one (`ConstChar.cpp:1296`, on
+arrival, measured twice).
 
-**The next rung, and why it is cheap.** `R1` — NOP the `call` at `0x00487C11`, five bytes,
-one site for all 19,758 asserts. The ABI it depends on is confirmed by a live crash
-(`RUNS.md` §3), and `ret 4` is correct because there is exactly one stack argument. With
-asserts falling through, one client run yields the *ordering* of many profession-keyed
-surfaces instead of only the first.
+**Authored text is VIABLE and cheap.** ArenaNet ships 38,633 stored rows, and text file
+index **98 is 1,024 EMPTY records** (56 B on disk, 6,146 B decompressed, ids
+100352..101375) — so our own strings need a ~6 KB stored row, not the 84 KB one, and break
+nothing. `datplan` finds 96 usable runs for it. The encoder is built and re-encodes four
+of ArenaNet's own files byte-for-byte (`textrec.encode_file`).
 
-**SETTLED 2026-08-12 by a static dive — and the answer was ours.** The skills-panel
-crash had no profession in it. `*skill` (`ChCliSkill.cpp:1022`) is a **zero-VALUE test on
-an enumerated skill id**, not a null pointer and not a bound check: the panel walks the
-unlock bitmap `0x00DB` delivers (container `ctx[0x2c]+0x710`), forms `id = (word<<5)+bit`
-at `0x008217CB`, and asserts it non-zero at `0x008217D3`. **`unlock_all_words()` iterated
-from 0**, so every `0x00DB` this server ever sent carried bit 0 — 242 of 242 sends across
-every capture in the vault. Fixed to `range(1, SKILL_TABLE_ROWS)`, pinned by a negative
-control that rebuilds the old version and requires it to differ (`test_agentlife.py`).
-**The walk is profession-blind** — no profession value branches anything between the
-panel's entry and the assert — so it fired at every profession, and "profession 3 opens"
-was a misattributed crash (`RUNS.md` §3 retraction: arm A's client was dead 13 s before
-arm B's byte was sent). Full record and the three verifier corrections: `RUNS.md` §10.
+**THE PARTY WINDOW OPENS** (§17). Gate was `PyCliGetMyPartyId` (`0x00856250`), zero on our
+server, read by BOTH the outpost command router and the explorable frame builder — which
+is why forcing `is_explorable` moved the refusal without lifting it. Retail's four-message
+build (`0x01D2` / `0x01CB` / `0x01D3` / `0x01B2`, 20 bytes, 8 of 8 live connections) is in
+the burst now: **281,814 px against a 13,419 idle control.**
 
-**The next action is ONE session, with the prediction already stated.** With bit 0
-cleared and nothing else changed, the pure default world opens the panel on K and keeps
-answering pings; if it still asserts at `ChCliSkill.cpp:1022`, the whole reading is
-wrong. Score it on c2s traffic after the K press, **never on the socket**:
+**NEXT: it is Party SEARCH, not the party ROSTER.** The window that opens is dialog
+`0x1E`. The profession ABBREVIATION is drawn by `PtPartyEntry` — a different frame — so
+§16's target is still unmet. Find the roster frame's own open path and what it needs
+(likely party MEMBER rows beyond the one `0x01CB` adds). Same consumer-backwards method
+that named `0x00B6`, the abbreviation builder and this gate.
 
-```
-python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_spawn'
-```
-
-**RESULT 2026-08-13: the prediction SURVIVED and the bit-0 mechanism is CONFIRMED**
-(`RUNS.md` §11). On the correct tree, with `word0 = 0xfffffffe` on the wire, the
-`*skill` assert at `ChCliSkill.cpp:1022` **did not fire** — which was the stated
-refutation condition. The panel's skill walk gets past the zero id for the first time in
-the arc. (The first attempt, `20260813T000725`, was served by the parallel profession
-session's tree carrying the pre-fix loop — a pre-fix server cannot falsify a post-fix
-prediction. The banner now prints `source: <dir>`, `unlocks:` must read **3442**, and
-`refuse_skill_zero()` makes a bit-0 bitmap a startup failure naming
-`ChCliSkill.cpp:1022`, so an old tree dies before the socket opens.)
-
-**The next wall is the icons, and it is the same error one layer up.** The client now
-asserts **`fileId` at `File.cpp(367)`** — site `0x00471630`, pinned by the trace's own
-next-instruction frame `0x0047163F`, under the same `FrMsg`/`FrApi` UI frames.
-MEASURED: of the 3,442 ids we unlock, only **1,333 are player-usable skills**
-(`equip_family == 1`, PvP clear — `skilltable.player_corpus()`); the other **2,109 are
-weapon modifiers and non-player definitions** with no skill icon. INFERRED: the panel
-loads an icon per unlocked id and asserts on the first one that has none.
-
-**RESOLVED 2026-08-13: THE PANEL OPENED** (`RUNS.md` §11) — first time in the arc, on
-`--unlocks bar`. No crash dialog, c2s to +27.96 s, `ping_summary: missed 0`, and
-`hold002.png` shows "Skills and Attributes (Test Warrior)" with the Warrior attribute
-list, the profession drop-down, and the eight unlocked skills grouped by attribute. The
-icon hypothesis is corroborated, and §10.5's refutation is confirmed from the other
-side: the panel displays **Warrior** while the only player profession message this
-server sends is `0x00B7`.
-
-**The fix is in: `authsrv.py --unlocks corpus`** derives the set from the owner's own
-client at run time (`pinned.find()` + `skilltable.player_corpus()`) — **1,333
-player-usable ids of 3,443 rows**, build stamped in the banner, committed nowhere, bit 0
-clear, all bar skills included, 0.7 s at startup, and it SKIPS rather than passing
-silently with no client.
-
-**DISCRIMINATOR SETTLED 2026-08-13: membership, not magnitude.** `--unlocks corpus`
-opened the panel with the whole corpus listed — **43 attribute groups over 1,333
-skills**, matching `skilltable.py`'s own count for the same set, with no crash dialog,
-c2s to +32.98 s and `missed 0`. So the `fileId` assert was never about list length; it
-was the 2,109 non-player rows with no skill icon. **`--unlocks` now defaults to
-`corpus`** — `all` is measured to crash the client's own panel on K, and the derivation
-refuses with an actionable message (naming `--unlocks bar`) rather than falling back to
-the broken set when there is no client to read. Default pinned on the syntax tree.
-
-**THE ROUTE IS DECIDED: R-RESKIN** (`studies/profession/RESKIN.md`, 2026-08-13, nine
-agents; two of three verifiers refuted parts and both refutations changed the plan).
-**Repurpose a shipped profession id rather than adding a twelfth.** The id stays legal, so
-not one bound check, assert or `0..10` loop can fire — and on every axis that makes a class
-playable a reskin delivers what a 12th id would. **Five dwords, 20 bytes, zero code bytes**
-against ~60 sites for R-WIDEN. Three measurements decide it: `.rdata` has **zero slack**
-(every table is packed flush against the next live datum, so widening is always
-relocate-plus-repoint); **seven per-profession tables are CODE**, materialised as
-`mov imm32` ladders in a 240-byte stack frame with 36 callers; and a **bound-check-free**
-read of a fifth table at `0x00BEF4A4` that every census in this arc missed because they all
-keyed on `cmp reg, 0x0b`. **R-NEUTER should stop being listed as a route** — it is the
-global assert wrapper, and the fall-through reads are disqualifying (model scale collapses
-to ~0, chapter becomes 1.1 billion, the creation icon comes from an uninitialised stack
-slot).
-
-**Honest scope, stated because this arc has over-promised twice:** you get a playable class
-with its own name, campaign availability, attribute set and primary, skill roster, model
-scale, palettes, starter gear and borrowed armour — whose **skills keep their shipped names
-and icons** (identity text is 1 archive file; its skills' names are 19–22), wearing the
-host's in-game glyph. You lose a slot, not a capability.
-
-**Next: RUN 0, the control, on a PRISTINE exe.** Prove the character renders as a Ritualist
-everywhere before changing a byte — the experiment as first designed was untestable,
-because two of its five dwords are read only from the character-creation picker and our
-server has no creation flow (`studies/divergence` D10). Built for it: `--spawn-profession`
-now drives the **appearance nibble** on both carriers (the `0x0059` dword and the
-character-select blob disagreed), for in-band ids only — 12 still keeps the legal
-placeholder, since the nibble is asserted `< 0xB` at load.
-
-```
-python C:/gd/Rurik/.claude/worktrees/sweet-euler-697883/toolkit/harness/session.py --keep-open --shots 10 --game-args '--probe profession_panel --spawn-profession 8 --map 796'
-```
-
-**What this changed for the arc's actual goal.** The custom-profession boundary is now
-sharp, and one route is closed: the panel's profession record at `ctx[0x2c]+0x6BC` has
-**exactly one writer**, reached only from `0x00B7`'s handler — and that same handler, one
-call later (`0x00813B12`), feeds the primary to `s_profChapter`'s bound
-(`ConstChar.cpp:1296`). **So no server-side message can make the panel DISPLAY a custom
-profession**; that is measured, not assumed. Clearing bit 0 should make the panel OPEN at
-any primary including 12 (profession-blind walk), but displaying one needs a client-side
-rung: widening the 11-entry table at `0x00A384F0`, or R1's assert neuter. `0x00A6` does
-NOT populate that record (its event `0x1000001D` reaches only GmAgentCommander and
-AttribFrame), so the "send `0x00A6` and the panel comes right" reading is refuted too.
-
-**Three things to carry, all in `RUNS.md` §10.7.** The probe driver still lacks the
-proof-of-life fence `test_smsgsweep.py` has, and that gap cost six sessions; `asserts.py
---at` is a proximity window, so querying a RETURN address can omit the assert that
-produced it (use `--grep`); and on the 15 whitelisted map ids GmDeckBuilder builds the
-secondary-profession dropdown, whose `GmDeckBuilder:2321`/`2334` asserts both fire with
-our 11/11 getter defaults — a landmine the first time this arc changes map.
+**Then, when a decision is wanted:** the text route's step 2 writes a ~6 KB row into a
+4.2 GB archive (journalled, byte-for-byte revert proven by `test_datmove`). It needs the
+owner's call on WHICH archive — study copy, a fresh copy, or the run client's own.
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`
@@ -1430,6 +1336,14 @@ attacked, killed and revived, and the content store (`content/*.toml`, `501698b`
 **2026-08-10:** R0b and R1.5 both met (§3, §3.3–§3.5), and the labelled input run built and
 run twice (`toolkit/authsrv/labelrun.py`, [studies/cmsg/FINDINGS.md](studies/cmsg/FINDINGS.md))
 — witnessed `GAME_CMSG` opcodes 15 → 23 of 194, seven named in `schema/overrides.json`.
+**2026-08-13:** full-map export with props — the interchange (format_version 2) carries every
+placement from both streams cross-checked at export, the rotation composition is MEASURED
+(z, then x, then y — was `props.py`'s open item), and Blender places each prop as a measured
+proxy; Kamadan and Pre-Searing exported whole to `vault/exports/` with `.blend` scenes beside
+them. Placements only — model geometry stays undecoded; **scoped the same day as a six-rung
+ladder in [studies/models/PLAN.md](studies/models/PLAN.md)** (a proposal until adopted): the
+format is half-read in customarea §5, the radius identity is a ready-made oracle, and the
+missing piece is committed code plus the client's own FVF dispatch.
 
 ### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks)
 
@@ -2521,7 +2435,7 @@ parallel, with one safety change that is not optional — see its entry.
     component (every one of which was green): structural constants must come from a
     map SHAPED like ours (Pre-Searing's Zones is 7,208 B against 34, which blew the
     reservation), the client must OWN the archive you armed, and a documented stage
-    that no line runs is a docstring. `test_deploy.py` (floor 14) pins all three —
+    that no line runs is a docstring. `test_deploy.py` (floor 34) pins all three —
     and its own syntax check was VACUOUS at first, passing against a sabotaged
     source, so it now runs that sabotage as a negative control.
     Not a hot reload: the client compiles at load, so iterating means running it
@@ -2542,6 +2456,66 @@ parallel, with one safety change that is not optional — see its entry.
     `snap_field` with a negative control; and `--check-overlaps` is a read-only verb
     that returned 0 having written nothing while `deploy` reported success over
     ArenaNet's own map, so install now READS THE ROW BACK. Record: `vault/research/size-2026-08-13/`.
+    **(I)** ✅ **DONE 2026-08-13 (FINDINGS 59). THE NAVMESH JOIN, AND IT IS
+    A RETRACTION.** Every rung above says the client compiled our map and the
+    character walked in it. True — and **the SERVER never once pathed on our
+    geometry.** `load_pathmap`'s only call site was instance bring-up, i.e. after
+    a client is up: on its default archive it read **ArenaNet's map 143 (27
+    trapezoids)** while the client drew ours, and once pointed at our archive it
+    got **EACCES**, because a running client holds its `Gw.dat` open exclusively.
+    Both silent — the second is `load_pathmap`'s documented no-collision
+    fallback, and the harness still reported PASS. Rung G's own headline run logs
+    27. **How wrong: the walkable sets are DISJOINT** — 4,096-point grid on the
+    sculpt map, 49 ours, 435 theirs, **0 shared**, spawn off ArenaNet's mesh
+    entirely; 16 vault runs carry `collision suspended`. The stated prediction
+    (>50% disagreement) FAILED at 11.8% and is recorded as failing: both meshes
+    are mostly empty there, so unwalkable-on-both scores as agreement. Controls
+    held (each mesh self-agrees 13/13, 27/27, 1270/1270; Kamadan 0%).
+    **`authsrv.prewarm_pathmap` reads at startup**, the only moment the archive
+    both holds our map and is unlocked — verified 13 trapezoids on our archive,
+    27 on the default, refusal on an unconfigured map. **Serving an authored mesh
+    is inherently TWO runs** (`--install` arms the head to zero, so the run that
+    produces the mesh cannot serve it) and `deploy --serve` is the second, its
+    verdict the server's own log line against a count `pathmap` read from the
+    archive. `test_deploy` §6, floor 25 → 35, sabotage reddens 2.
+    **THE RUN LANDED the same day, both predictions confirmed**: run 1 (armed)
+    pre-warmed against an empty head and said so (`not an FFNA file: b''` →
+    PRE-WARM FAILED, serves NO collision) — a SUCCESS there would have meant
+    stale geometry and a wrong fix — and run 2 (`--serve`, unarmed) logged
+    `[map] navmesh 0x287D3: 1 planes, 13 trapezoids`, matching what `pathmap`
+    reads from the archive. Exit 0, readback green throughout (4,096/4,096
+    heights, env and sound verbatim, 8 props, spawn in one trapezoid, 92.34%
+    ours). **The server and the client now agree about the ground.** A third
+    defect fell out: the two runs started **17 s apart under `--hold 40`**,
+    because `session.hold_open` is gated on `keep_open` and `deploy` passed
+    `--hold` alone — the flag named a wait that never happened. Fixed, pinned on
+    the syntax tree, sabotage reddens 1. FINDINGS 58's "MEASURED" sentence is
+    retracted in place.
+    **(J)** ✅ **DONE 2026-08-13 (FINDINGS 60). THE ZONE IS POPULATED.** R5's
+    criterion is "a new zone in TOML, hot-reloaded, walked" and the toolkit could
+    author a zone's GROUND and nothing standing on it. `authsrv --area NAME`
+    serves `content/world.toml` spawn rows carrying `area = NAME`; **three bodies
+    stood in the sculpt map at their declared coordinates**, `3 of 3 placed`, run
+    20260813T185442. No new protocol -- every body goes out through
+    `create_agent_world` -- what is new is that the SET, the positions, the
+    allegiances and the health are content rows. **This is what rung (I) was
+    for**: a body goes out only where the navmesh says there is ground, and the
+    sculpt map is **1.2% walkable**, so a coordinate picked by eye is ground one
+    time in eighty. Positions are trapezoid centres read out of the mesh the
+    client compiled; the server nudges and REPORTS, or refuses past 480 units.
+    **The defect is the lesson: the first populated run placed ZERO bodies and
+    reported PASS** -- `spawn_population` took the raw content row, whose
+    `enc_name` is a list of string ids, so the codec refused every definition
+    (`string of 28 code units exceeds cap 8`); the throw landed inside instance
+    bring-up, so the harness passed, all six map checks were green and the
+    command exited 0. Caught because the OWNER LOOKED AT THE SCREEN.
+    `agents.npc_template` is public now and `deploy --serve` reads
+    `area 'X': N of M placed` out of the server's own log. `test_population.py`
+    floor 38; sections 0-2 could not have caught it (the bug was in entry
+    construction), so section 2b encodes every row through the real codec with
+    the raw row as a negative control. Seven sabotages, all red -- one CRASHED
+    rather than reddening and one passed GREEN because it derived its probe from
+    the constant under test.
 ### Naming the archive's map rows — 2026-08-13
 
 **[studies/maprows/FINDINGS.md](studies/maprows/FINDINGS.md), `toolkit/clientscan/maprows.py`.**

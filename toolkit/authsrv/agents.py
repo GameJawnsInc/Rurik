@@ -49,6 +49,21 @@ def _row(kind, key):
     return row
 
 
+def npc_template(key):
+    """A usable NPC template by name -- NOT the raw content row.
+
+    The difference is the whole reason this is public. `enc_name` is stored as
+    a list of 16-bit GW string ids and must be ENCODED before it can go on the
+    wire; a caller that reaches for `WORLD.get("npc", key)` gets the list and
+    `npc_properties` builds a message the codec refuses
+    (`string of 28 code units exceeds cap 8`). MEASURED 2026-08-13: the area
+    population did exactly that, and because the throw happened inside instance
+    bring-up the harness still reported PASS and the map readback was still
+    green -- every body was simply absent.
+    """
+    return _row("npc", key)
+
+
 INF = float("inf")
 
 # GmAgent.h: the top nibble of model_id is a class tag. OBSERVED both ways --

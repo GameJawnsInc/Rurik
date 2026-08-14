@@ -15,9 +15,12 @@ THE TWO ORACLES, in order of how much they can refute.
   1. **The props chunk, `0x20000004`, against the built mesh** (section 3). Every
      prop carries a world `(x, y, z)`. Read Blender's vertex buffer back and look
      up the vertex at each prop's cell corner **by the world coordinates Blender
-     stored**, not by a lattice index, then compare with the prop's `z`. Neither
-     `mapexport.py` nor `import_gwmap.py` reads that chunk, and nothing in this
-     pipeline produced it, so a flipped row order, a wrong pitch or a lost
+     stored**, not by a lattice index, then compare with the prop's `z`. The
+     chunk is read HERE by this file's own walker; the TERRAIN path -- the
+     height arrays through `mapexport.py` and the mesh through
+     `import_gwmap.py` -- never touches it (since 2026-08-13 both tools handle
+     props as a separate sidecar/collection, which shares nothing with the
+     height path), so a flipped row order, a wrong pitch or a lost
      de-tiling all move the mesh away from the props standing on it.
 
      Looking up by position rather than by index is not a detail. The first
@@ -117,7 +120,8 @@ from test_mapexport import (ORACLE, PROPS_CHUNK, PRESEARING_DIMS,  # noqa: E402
                             PRESEARING_FILE_ID, PRESEARING_PROPS,
                             PRESEARING_RECT, PRESEARING_ROW, PROPS_VERSION,
                             read_chunks, read_props, synthetic_terrain,
-                            SYN_X, SYN_Y)
+                            SYN_X, SYN_Y, _synth_pair)
+from mapexport import build_props  # noqa: E402
 import checks  # noqa: E402
 import vaultpath  # noqa: E402
 
@@ -130,6 +134,26 @@ BLENDER_ENV = "RURIK_BLENDER"
 # Blender anywhere else still runs.
 KNOWN_BLENDER = r"C:\Program Files\Blender Foundation\Blender 5.1\blender.exe"
 MEASURED_BLENDER = "5.1.1"
+
+# MEASURED 2026-08-13: how many of Pre-Searing's 864 props carry an outline
+# viable as a footprint prism (>= 3 distinct points after dropping the closing
+# repeat). All 34 outlines qualify, so outlined proxies == props with outlines.
+PRESEARING_OUTLINED = 34
+
+#: Rung M4, MEASURED 2026-08-13. Of Pre-Searing's 864 props, these get a REAL
+#: mesh from the `.gwmodel` family and these keep the measured proxy because
+#: their model never decoded; the real ones share one datablock per model.
+PRESEARING_REAL = 664
+PRESEARING_PROXY = 200
+PRESEARING_MODELS = 152
+
+#: The z-sign claim: prop geometry must reach ABOVE the terrain under it.
+#: MEASURED over both reference maps at 0.735 (Kamadan) and 0.743
+#: (Pre-Searing) mean vertex fraction; the object-level figure this file
+#: scores is higher because one vertex above ground is enough. The floor is
+#: set well under the measurement and the CONTROL (the opposite sign) is what
+#: carries the claim -- it scored 0.257 and 0.143 on the same props.
+Z_SIGN_MIN = 0.85
 
 # MEASURED 2026-08-11: the mesh oracle must reproduce test_mapexport section 5's
 # baseline for Pre-Searing exactly, because the vertex lattice carries the cell
@@ -150,10 +174,10 @@ BLENDER_TIMEOUT = 300
 # against a working importer, which is how the flag was found.
 PYTHON_EXIT_CODE = 66
 
-# FLOOR: 74, from a real green run on `vault/dat_study/Gw.dat` with Blender
-# 5.1.1, 2026-08-11 (13.8 s). Sections 0-2 alone score 39 -- MEASURED by
+# FLOOR: 84, from a real green run on `vault/dat_study/Gw.dat` with Blender
+# 5.1.1, 2026-08-13 (17.6 s). Sections 0-2 alone score 45 -- MEASURED by
 # running with `--dat` pointed at nothing, not counted by eye -- so a run with no
-# archive lands 35 short and goes RED. That is deliberate: a
+# archive lands 39 short and goes RED. That is deliberate: a
 # mesh built from a grid this file invented has verified the plumbing and
 # NOTHING about ArenaNet's layout, and a green exit code there would be
 # `test_codec.py`'s silent-success failure again.
@@ -167,7 +191,18 @@ PYTHON_EXIT_CODE = 66
 # 25) and `mesh_z` became the one place stating the sign. The added check is the
 # only one that can catch that function itself, because every other z prediction
 # is computed through it.
-FLOOR = 75
+#
+# 75 -> 84 on 2026-08-13, when the props sidecar landed: the synthetic fixture
+# now carries three props (one outlined), the --no-props flag has a control,
+# and section 3 pins all 864 Pre-Searing proxies at (x, y, -z) with the proxy
+# OBJECTS scoring the chunk's own 0.7338 against the mesh.
+#
+# 84 -> 92 the same day with rung M4's section 4: REAL meshes from the
+# `.gwmodel` family, the instancing (664 props over 152 datablocks, none
+# shared across file ids), the real/proxy split with nothing lost between
+# them, and THE Z SIGN -- 0.961 of real props reach above the terrain against
+# 0.032 for the reflected control. Sections 0-2 still score 45.
+FLOOR = 92
 
 
 # ------------------------------------------------------------------ helpers
@@ -210,7 +245,8 @@ def find_blender(explicit=None, environ=None):
                   "--blender." % (BLENDER_ENV, KNOWN_BLENDER, BLENDER_ENV))
 
 
-def run_blender(blender, json_path, workdir, verts=False, timeout=BLENDER_TIMEOUT):
+def run_blender(blender, json_path, workdir, verts=False,
+                timeout=BLENDER_TIMEOUT, extra=()):
     """Run the importer headless. Returns `(returncode, output, summary, verts)`.
 
     `summary` is the parsed dump or None when the importer did not write one --
@@ -228,6 +264,7 @@ def run_blender(blender, json_path, workdir, verts=False, timeout=BLENDER_TIMEOU
            json_path, "--dump", dump, "--clear"]
     if verts:
         cmd += ["--dump-verts", vpath]
+    cmd += list(extra)
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
                           errors="replace")
     out = (proc.stdout or "") + (proc.stderr or "")
@@ -556,9 +593,14 @@ def _section1(check, led, blender, tmp):
     # A rect that is NOT centred on the origin and whose y0 is not -y1, so a sign
     # error or a swapped pair cannot come out looking right by symmetry.
     rect = (-1536.0, -3072.0, dx * CELL_PITCH - 1536.0, dy * CELL_PITCH - 3072.0)
+    # WITH PROPS: the fixture carries test_mapexport's synthetic pair, so the
+    # proxy path runs on a bare machine too. Three props, one with an outline.
+    head, partner, sp = _synth_pair()
+    pd = build_props(head, partner)
     meta, payloads = build_manifest(trn, rect, "synthetic",
                                     {"archive": None, "row": None,
-                                     "file_id": None})
+                                     "file_id": None},
+                                    props=pd, props_state="exported")
     src = write_export(meta, payloads, os.path.join(tmp, "syn"))
     exp = load_export(src)
 
@@ -590,6 +632,42 @@ def _section1(check, led, blender, tmp):
           "gw_shade" in summary["attributes"],
           "the tile and shade sidecars arrive as per-face attributes",
           ",".join(a for a in summary["attributes"] if not a.startswith(".")))
+
+    # ---- the synthetic props ----------------------------------------------
+    ps = summary.get("props")
+    check(ps is not None and ps["count"] == len(sp.props)
+          and ps["sidecar_count"] == len(sp.props),
+          "the three synthetic props became proxy objects",
+          "%r" % (ps and (ps["count"], ps["sidecar_count"]),))
+    if ps is not None:
+        # Prop 1's outline is a CLOSED ring (first == last), so the proxy drops
+        # the repeated point and extrudes a 3-vertex footprint; the other two
+        # fall back to radius cylinders.
+        check(ps["outlined"] == 1,
+              "exactly the one outlined prop became a footprint prism",
+              "%d" % ps["outlined"])
+        # Placement: (x, y, -z), the terrain's own negation, EXACTLY -- every
+        # coordinate here is f32-exact so a tolerance would only hide a defect.
+        want = [(p.x, p.y, -p.z) for p in sp.props]
+        got = [tuple(o["location"]) for o in ps["objects"]]
+        check(got == want,
+              "every proxy sits at (x, y, -z) -- the prop z is negated the "
+              "same way the terrain is (FINDINGS 25)",
+              "%r vs %r" % (got[:2], want[:2]) if got != want else "3 exact")
+        check([o["file_id"] for o in ps["objects"]] == [0x1111, 0x2222, 0x1111],
+              "each proxy carries its model's file id from the sidecar")
+
+    # THE FLAG CONTROL: --no-props must actually turn the proxies off. A flag
+    # that silently stopped working would re-import props into every scene an
+    # operator asked to keep clean, and nothing else here would notice.
+    work_np = os.path.join(tmp, "run_syn_noprops")
+    os.makedirs(work_np, exist_ok=True)
+    rc, _out, s2, _v = run_blender(blender, src, work_np,
+                                   extra=["--no-props"])
+    check(rc == 0 and s2 is not None and "props" not in s2,
+          "--no-props imports the terrain alone and the dump says so",
+          "rc=%d, props block %s" % (rc, "absent" if s2 and "props" not in s2
+                                     else "PRESENT"))
     return src
 
 
@@ -711,8 +789,9 @@ def _section3(check, led, blender, tmp, args):
         return
 
     print("\n== 3. THE ORACLE: prop z against Blender's own vertex buffer ==")
-    print("   props chunk 0x%08X -- read by neither the exporter nor the "
-          "importer\n" % PROPS_CHUNK)
+    print("   props chunk 0x%08X, read here by this file's own walker -- the\n"
+          "   TERRAIN path (exporter and importer both) never touches it\n"
+          % PROPS_CHUNK)
 
     with Archive(dat) as ar:
         row = file_id_table(ar).get(PRESEARING_FILE_ID)
@@ -744,7 +823,13 @@ def _section3(check, led, blender, tmp, args):
     work = os.path.join(tmp, "run_real")
     os.makedirs(work, exist_ok=True)
     t = time.perf_counter()
-    rc, out, summary, verts = run_blender(blender, src, work, verts=True)
+    # --proxies-only is EXPLICIT, not incidental. This section's claims are
+    # about the measured proxies, and without the flag it would get them only
+    # because no `models/` directory happens to sit beside the temp export --
+    # so exporting a model family there would silently turn this section into
+    # a test of something else, with every check still green.
+    rc, out, summary, verts = run_blender(blender, src, work, verts=True,
+                                          extra=["--proxies-only"])
     check(rc == 0, "Blender exits 0 on the real map", "rc=%d" % rc)
     check(summary is not None and verts is not None,
           "Blender wrote both the summary and the raw vertex buffer")
@@ -819,6 +904,147 @@ def _section3(check, led, blender, tmp, args):
         check(base_med * 2.0 <= med,
               "the %s control's median |dz| is at least 2x the baseline's"
               % layout, "%.1f vs %.1f" % (med, base_med))
+
+    # ---- the prop PROXIES, against the sidecar and the mesh ----------------
+    # The proxies are OBJECTS, so the checks above (which read the chunk) say
+    # nothing about them; these read the summary's props block instead.
+    ps = summary.get("props")
+    check(ps is not None and ps["count"] == PRESEARING_PROPS
+          and ps["sidecar_count"] == PRESEARING_PROPS,
+          "all %d props became proxy objects" % PRESEARING_PROPS,
+          "%r" % (ps and (ps["count"], ps["sidecar_count"]),))
+    if ps is None:
+        return
+    check(ps["outlined"] == PRESEARING_OUTLINED,
+          "%d outlined footprints, the pinned population (the rest are radius "
+          "cylinders)" % PRESEARING_OUTLINED, "%d" % ps["outlined"])
+
+    # Every proxy at (x, y, -z) of its sidecar record, wholesale and exact.
+    pd = exp.props
+    same = sum(1 for o, r in zip(ps["objects"], pd["props"])
+               if tuple(o["location"]) == (r["position"][0], r["position"][1],
+                                           -r["position"][2]))
+    check(pd is not None and same == PRESEARING_PROPS,
+          "every proxy sits at its sidecar record's (x, y, -z)",
+          "%d/%d" % (same, PRESEARING_PROPS))
+
+    # THE OBJECTS STAND ON THE MESH. Score the proxies' own locations against
+    # Blender's vertex buffer, the same way the chunk was scored above. The
+    # PREDICTION: identical to the chunk's baseline -- the proxies carry the
+    # chunk's positions and both sides negate, so |dz| is invariant. A proxy
+    # placement bug (a dropped negation, a swapped axis) breaks it.
+    obj_props = [(o["location"][0], o["location"][1], -o["location"][2])
+                 for o in ps["objects"]]
+    frac, med, n, outside = score_mesh(zmap, dx, dy, exp.rect, obj_props,
+                                       MESH_ORACLE_LAYOUT)
+    want_f, _wm = ORACLE[MESH_ORACLE_LAYOUT][PRESEARING_ROW]
+    check(outside == 0 and n == PRESEARING_PROPS
+          and abs(frac - want_f) < FRAC_TOL,
+          "the proxy OBJECTS score the same baseline %r against the mesh"
+          % want_f, "%.4f, n=%d, outside=%d" % (frac, n, outside))
+
+    _section4(check, led, blender, tmp, exp, zmap, src)
+
+
+# --- 4. REAL meshes, and the z sign they are built under --------------------
+
+def _section4(check, led, blender, tmp, exp, zmap, src):
+    print("\n== 4. real prop meshes, instanced, and the MEASURED z sign ==")
+    models = os.path.join(os.path.dirname(os.path.abspath(src)), "models")
+    vault_models = os.path.join(vaultpath.vault_root(), "exports", "models")
+    if not os.path.isdir(models) and os.path.isdir(vault_models):
+        models = vault_models
+    if not os.path.isdir(models):
+        led.skip("4. real prop meshes", "no .gwmodel family at %s" % models)
+        return
+
+    work = os.path.join(tmp, "run_real")
+    os.makedirs(work, exist_ok=True)
+    rc, out, summary, _v = run_blender(blender, src, work,
+                                       extra=["--models", models])
+    check(rc == 0 and summary is not None and "props" in summary,
+          "Blender imports the map with the model family available",
+          "rc=%d" % rc)
+    if summary is None or "props" not in summary:
+        led.skip("4. real prop meshes", "no summary")
+        return
+    ps = summary["props"]
+    print("    %d props: %d real over %d datablocks, %d proxies"
+          % (ps["count"], ps["real"], ps["real_meshes"], ps["proxy"]))
+
+    check(ps["real"] == PRESEARING_REAL and ps["proxy"] == PRESEARING_PROXY,
+          "%d props get a REAL mesh and %d keep a proxy -- the pinned split"
+          % (PRESEARING_REAL, PRESEARING_PROXY),
+          "%d/%d" % (ps["real"], ps["proxy"]))
+    check(ps["real"] + ps["proxy"] == ps["count"] == PRESEARING_PROPS,
+          "and no placement is LOST between the two paths -- a prop whose "
+          "model does not decode keeps its proxy rather than vanishing")
+
+    # INSTANCING. Every prop sharing a model must share one datablock; a
+    # per-prop copy would be 664 meshes rather than 152 and is the obvious
+    # way to get this "working" while multiplying the scene by four.
+    check(ps["real_meshes"] == PRESEARING_MODELS,
+          "the %d real props share exactly %d mesh datablocks (one per model)"
+          % (PRESEARING_REAL, PRESEARING_MODELS), "%d" % ps["real_meshes"])
+    by_mesh = {}
+    for o in ps["objects"]:
+        if o["real"]:
+            by_mesh.setdefault(o["mesh"], set()).add(o["file_id"])
+    check(all(len(v) == 1 for v in by_mesh.values()),
+          "and no datablock is shared across DIFFERENT model file ids",
+          "%d datablocks, worst %d ids"
+          % (len(by_mesh), max((len(v) for v in by_mesh.values()), default=0)))
+
+    # THE Z SIGN. MEASURED, not assumed: a prop's geometry must end up ABOVE
+    # the terrain it stands on. `zmax` is world-space and comes off the built
+    # objects, so this reads Blender's own answer rather than our arithmetic.
+    above = n = 0
+    for o in ps["objects"]:
+        if not o["real"]:
+            continue
+        gy = int((exp.rect[3] - o["location"][1]) / CELL_PITCH)
+        gx = int((o["location"][0] - exp.rect[0]) / CELL_PITCH)
+        if not (0 <= gx < exp.dim_x and 0 <= gy < exp.dim_y):
+            continue
+        ground = zmap.get((f32(exp.rect[0] + gx * CELL_PITCH),
+                           f32(exp.rect[3] - gy * CELL_PITCH)))
+        if ground is None:
+            continue
+        n += 1
+        above += o["zmax"] > ground
+    frac = above / max(n, 1)
+    print("    %d/%d real props reach ABOVE the terrain under them (%.3f)"
+          % (above, n, frac))
+    check(n > 500 and frac >= Z_SIGN_MIN,
+          "prop geometry stands ABOVE the ground on at least %.0f%% of real "
+          "props -- the model-space z sign, MEASURED" % (100 * Z_SIGN_MIN),
+          "%.3f over n=%d" % (frac, n))
+
+    # THE CONTROL, and it is what makes the line above a measurement: the
+    # opposite sign buries the geometry. Scored on the SAME props, from the
+    # same objects, by reflecting each mesh about its own placement z.
+    flipped = sum(1 for o in ps["objects"] if o["real"]
+                  and (2 * o["location"][2] - o["zmax"]) > _ground_of(
+                      o, exp, zmap))
+    fflip = flipped / max(n, 1)
+    check(fflip * 2 < frac,
+          "and the OPPOSITE sign collapses -- geometry reflected about its "
+          "placement point sits above ground far less often",
+          "%.3f vs %.3f" % (fflip, frac))
+
+    # A prop whose model did not decode still has to be somewhere sensible.
+    check(all(o["verts"] > 0 for o in ps["objects"]),
+          "every object -- real or proxy -- carries geometry")
+
+
+def _ground_of(o, exp, zmap):
+    gy = int((exp.rect[3] - o["location"][1]) / CELL_PITCH)
+    gx = int((o["location"][0] - exp.rect[0]) / CELL_PITCH)
+    if not (0 <= gx < exp.dim_x and 0 <= gy < exp.dim_y):
+        return float("inf")
+    g = zmap.get((f32(exp.rect[0] + gx * CELL_PITCH),
+                  f32(exp.rect[3] - gy * CELL_PITCH)))
+    return float("inf") if g is None else g
 
 
 if __name__ == "__main__":

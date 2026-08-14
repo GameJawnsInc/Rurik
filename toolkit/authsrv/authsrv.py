@@ -837,6 +837,12 @@ def load_pathmap(map_file_id):
 
     None is a normal outcome, not an error: no archive on this machine, or a map
     whose file id we do not have. The caller falls back to no collision.
+
+    WHEN this runs is load-bearing, which is why `prewarm_pathmap` exists. Its
+    other call site is instance bring-up -- i.e. after a client has connected --
+    and a RUNNING Guild Wars client holds its own `Gw.dat` open exclusively, so
+    on a run where the server and the client share one archive this read fails
+    with EACCES and collision silently turns off.
     """
     if PathingMap is None:
         return None
@@ -847,12 +853,59 @@ def load_pathmap(map_file_id):
             pm = PathingMap.load(map_file_id)
             print(f"[map] navmesh 0x{map_file_id:X}: {len(pm.planes)} planes, "
                   f"{len(pm.trapezoids)} trapezoids")
+        except PermissionError as exc:
+            # Name the cause. "Permission denied" on a file this process owns
+            # reads as a broken install or a stray antivirus; it is the CLIENT
+            # holding the archive, and the fix is to have read it earlier.
+            print(f"[map] no navmesh for 0x{map_file_id:X}: {exc}")
+            print("[map] that is the CLIENT holding this archive open -- the "
+                  "read came too late; see prewarm_pathmap()")
+            print("[map] collision is OFF; the character can walk through walls")
+            pm = None
         except Exception as exc:                              # noqa: BLE001
             print(f"[map] no navmesh for 0x{map_file_id:X}: {exc}")
             print("[map] collision is OFF; the character can walk through walls")
             pm = None
         _PATHMAPS[map_file_id] = pm
         return pm
+
+
+def prewarm_pathmap(map_id):
+    """Read the navmesh at STARTUP, before any client can lock the archive.
+
+    MEASURED 2026-08-13, and it corrects a claim this repo made the other way
+    round. `load_pathmap`'s other call site is instance bring-up -- the client
+    is up by then -- and on the authoring loop the server and the client read
+    the SAME archive, so that read hit a client-held exclusive lock, returned
+    EACCES, and left the character with no collision at all while the harness
+    still reported PASS.
+
+    Before that it was worse in a quieter way. With the server defaulted to
+    `vault/dat_study/Gw.dat` while the authored map was installed into a run
+    copy, the read SUCCEEDED and handed back ArenaNet's geometry for the same
+    map id. Over a 4,096-point grid on the sculpt map the two meshes' walkable
+    sets are DISJOINT -- 49 points ours, 435 theirs, 0 shared -- and the
+    authored spawn is not on ArenaNet's mesh at all, so the server suspended
+    collision on arrival. 16 runs in the vault carry that line.
+
+    Startup is the only moment both halves hold: the archive contains whatever
+    was installed, and nothing has opened it yet. This cannot rescue a run whose
+    head was just armed to zero -- there is no compiled mesh to read, by design,
+    and that run is the one that PRODUCES it. Serving an authored mesh is
+    inherently two runs; this makes the second one work rather than letting the
+    first pretend.
+    """
+    cfg = MAP_STATIC_CONFIG.get(map_id)
+    if cfg is None:
+        print(f"[map] map {map_id} has no static config, so its navmesh cannot "
+              f"be pre-warmed; it will be read at instance load, which is late "
+              f"-- see prewarm_pathmap()")
+        return None
+    pm = load_pathmap(cfg[0])
+    if pm is None:
+        print(f"[map] PRE-WARM FAILED for map {map_id} (file id 0x{cfg[0]:X}); "
+              f"this run serves NO collision")
+    return pm
 
 
 # How far the client's reported position may be from ours before we stop
@@ -1069,6 +1122,20 @@ GAME_CMSG_LAST_POS_BEFORE_MOVE_CANCELED = 0x0047
 #   entirely zero -- because nothing this server sends ever sets a bit. The 56
 #   non-zero ones are the interesting minority and were invisible until now.
 GAME_CMSG_MISSION_MASK_REPORT = 0x0092
+# 0x0079 -- the ONLY c2s reply any GAME_SMSG opcode in the sweep ledger provokes.
+#   334 rows, 3 REPLIED, and two of them (0x0166 and 0x0167) name opcode 121 as
+#   what came back; the third is the ping. Its layout is a `msg_header` and
+#   NOTHING ELSE -- declared_unpack_size 2, no fields -- so the message carries no
+#   information beyond its own arrival, and an arm can only record that it came.
+#   That is worth doing anyway: it is the one place where a message WE chose to
+#   send makes the retail client answer, so it is the shortest closed loop
+#   available to this server, and until now our side of it fell off the end of
+#   the dispatch chain into D9(a)'s counter.
+#   NOT NAMED on purpose. Two stimuli reaching one reply does not say what the
+#   reply MEANS, and 0x0166/0x0167's own names are unknown -- naming this
+#   `ACK_SOMETHING` would be the invention this repo keeps refusing. The arm
+#   records arrivals so the loop is visible; the name waits for evidence.
+GAME_CMSG_UNNAMED_ACK_0079 = 0x0079
 # 0x00C1 TARGET_SELECT -- [effective_selection, auto_selection]. Field 1 is what
 #   every subsequent target-bearing message names (53 of 53 on ArenaNet's wire);
 #   0 clears the selection. FREE CORROBORATION, and the reason this one is worth
@@ -1313,6 +1380,15 @@ ENEMY_RESEND_DEFINITION = bool(_ENEMY.get("resend_definition", False))
 # named here and in spawn_enemy.
 ENEMY_ATTACKS_BACK = bool(_ENEMY.get("attacks_back", True))
 ENEMY_MAX_HEALTH = _ENEMY["max_health"]
+# Allegiance BY NAME, so a content row can say what a body is without carrying a
+# FourCC. The three values are the client's own constants (agents.py, read out
+# of the image); "hostile" is any unrecognised value, which is why it is the
+# default here and why a typo in a row reads as an enemy rather than as nothing.
+ALLEGIANCE_BY_NAME = {
+    "hostile": agents.ALLEGIANCE_HOSTILE,
+    "player": agents.ALLEGIANCE_PLAYER,
+    "noncombatant": agents.ALLEGIANCE_NONCOMBATANT,
+}
 ENEMY_OFFSET = (_ENEMY["offset_x"], _ENEMY["offset_y"])
 # A PLACEHOLDER, and it has to be non-zero rather than right. WIKI (GWW,
 # "Attack speed") says a creature that wields no weapon takes its rate from its
@@ -1482,6 +1558,23 @@ ATTACK_RANGE = 1500.0      # units. Ours entirely; nothing measured it.
 # close enough. Nothing here is a claim about retail.
 AGGRO_RANGE = 1200.0       # units. Ours. Inside ATTACK_RANGE so a fight is mutual.
 ENEMY_HIT_FRACTION = 0.10  # of the PLAYER's maximum, so ~10 swings to drop them
+# ONE TICK between the death bit clearing and the two pool refills, and the value is
+# MEASURED rather than chosen. The client checks
+# `min(f32 @ +0x130, +0x134) == 0.0` when a character is resurrected and logs
+# `Health non-zero on resurrect` when it is not; sending the three messages in one
+# burst failed that check on EVERY revive. Three runs of the same length, differing
+# only in this constant (studies/agentprops 1f):
+#
+#     0.00s (burst)   13 revives, 13 complaints
+#     0.05s (1 tick)  11 revives,  0 complaints
+#     0.25s (5 ticks) 13 revives,  0 complaints
+#
+# So the check runs after our clear is processed and before the next tick's messages,
+# and one tick is enough. Expressed as TICK_SECONDS rather than 0.05 so it stays one
+# tick if the rate moves. RURIK_REVIVE_DEFER overrides it; 0 restores the old burst,
+# which is what makes the control reproducible.
+REVIVE_REFILL_DEFER = float(os.environ.get("RURIK_REVIVE_DEFER", "") or TICK_SECONDS)
+
 PLAYER_REVIVE_AFTER = 10.0 # seconds face-down. Longer than an agent's 8.0 on
                            # purpose: this one interrupts a person.
 
@@ -1899,6 +1992,26 @@ def revive_due(send, state, conn_id):
         agent["last_hit"] = 0.0
         send(GAME_SMSG_AGENT_UPDATE_STATUS, [agent_id, 0],
              f"revive agent {agent_id}")
+        # ONE TICK before the refills, the same as the player path. The client's
+        # resurrect check is on the CHARACTER and does not care whose it is: 2 of the
+        # vault's 49 `Health non-zero on resurrect` lines name `Corpse of Hatcher
+        # [Collector]` rather than the player.
+        #
+        # MEASURED 2026-08-13, unattended, on the same standard as the player path:
+        # two runs identical but for this constant, 21 player hits and 3 agent deaths
+        # each, 3 of 3 complaints on the burst and 0 of 3 with one tick between.
+        #
+        # Reaching it needed TWO things that took four runs to find, and neither was
+        # the input everyone reached for first: `--practice-target`, because with the
+        # hostile fighting back the player loses the race (25 into 100 HP is four
+        # hits; killing it takes seven) and never lands one; and `--explorable`,
+        # because an OUTPOST forbids attacking -- in one the client selects a target
+        # (0x00C1 goes out on every press) and no attack ever follows.
+        if REVIVE_REFILL_DEFER > 0.0:
+            agent["refill_due_at"] = now + REVIVE_REFILL_DEFER
+            print(f"[c{conn_id}] agent {agent_id} is back up "
+                  f"(refill deferred {REVIVE_REFILL_DEFER:.2f}s)", flush=True)
+            continue
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
              f"restore max health on agent {agent_id}")
@@ -2396,6 +2509,20 @@ def player_revive_due(send, state, conn_id):
     state["player_dead"] = False
     state["player_health"] = float(agents.PLAYER_HEALTH)
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
+    # THE EXPERIMENT of studies/agentprops 1f, off by default. The client logs
+    # `Health non-zero on resurrect` on every revive we send -- 49 times across the
+    # vault -- because at the moment the death bit clears it requires
+    # min(f32 @ +0x130, +0x134) == 0.0, and our three messages leave in one burst.
+    # Two readings survive the log alone (deferred check vs. a pool never zeroed) and
+    # `Gw.log` has no timestamps to separate them, so this defers the two refills by
+    # `REVIVE_REFILL_DEFER` seconds and the complaint's presence is the answer.
+    # A SWITCH rather than a reorder: the fix is only known once the two runs differ,
+    # and 1f says in as many words not to reorder on the strength of the reading.
+    if REVIVE_REFILL_DEFER > 0.0:
+        state["player_refill_due_at"] = time.time() + REVIVE_REFILL_DEFER
+        print(f"[c{conn_id}] the player is back up "
+              f"(refill deferred {REVIVE_REFILL_DEFER:.2f}s)", flush=True)
+        return
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
          "restore the player's maximum")
@@ -2407,6 +2534,46 @@ def player_revive_due(send, state, conn_id):
           _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
          "refill the player's bar")
     print(f"[c{conn_id}] the player is back up", flush=True)
+
+
+def agent_refill_due(send, state, conn_id):
+    """The deferred half of the AGENT revive -- see revive_due and player_refill_due."""
+    now = time.time()
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}):
+            continue
+        due = agent.get("refill_due_at")
+        if not due or now < due:
+            continue
+        agent["refill_due_at"] = None
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
+             f"restore max health on agent {agent_id} (deferred)")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+             [agents.GV_HEALTH, agent_id, agent_id,
+              _fraction(1.0, agents.GV_HEALTH, f"refill agent {agent_id}")],
+             f"refill agent {agent_id}'s bar (deferred)")
+
+
+def player_refill_due(send, state, conn_id):
+    """The deferred half of 1f's experiment: the two pool refills, a tick later.
+
+    Only ever armed when REVIVE_REFILL_DEFER > 0, so the shipped path is byte-for-byte
+    what it was and a run with the switch off is a real control rather than a rebuild
+    of the same code.
+    """
+    due = state.get("player_refill_due_at")
+    if not due or time.time() < due:
+        return
+    state["player_refill_due_at"] = None
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+         [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
+         "restore the player's maximum (deferred)")
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
+          _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
+         "refill the player's bar (deferred)")
+    print(f"[c{conn_id}] deferred refill sent", flush=True)
 
 
 def frame_pending(codec_obj, channel, pending, mask):
@@ -2758,6 +2925,195 @@ def enemy_spot(state, ox, oy):
     return ox + ENEMY_OFFSET[0], oy + ENEMY_OFFSET[1]
 
 
+# ------------------------------------------------------- the area population
+
+# Set by --area. None means the legacy world: one global test enemy placed by
+# offset, exactly as before, which is what every probe and every earlier rung
+# expects.
+AREA_NAME = None
+
+# How far from its declared spot a body may be nudged to find ground, and how
+# fine the search is. A NUDGE IS REPORTED, NEVER SILENT: an author who wrote a
+# coordinate deserves to know it was not usable, and "it appeared 400 units
+# from where I put it" is otherwise indistinguishable from a placement bug.
+PLACE_SEARCH_RADIUS = 480.0
+PLACE_SEARCH_STEP = 48.0
+
+
+class PopulationError(Exception):
+    """An area's declared population cannot be placed as written."""
+
+
+def area_population(area):
+    """The spawn rows bound to one area, checked AS A SET rather than one by one.
+
+    The set checks are the point. An agent id reused for a second body leaves
+    the client holding one agent's state under another's name and nothing on the
+    wire says so -- `create_agent_world` already refuses that at spawn time, but
+    by then half the population is in the world and the run is wasted. A
+    definition index collision is worse and quieter: definitions are a raw array
+    on the client, so two rows sharing one index means the second body silently
+    wears the first's model.
+
+    Rows with no `area` are the legacy global spawn and are never returned here.
+    """
+    rows = []
+    for key, row in sorted(agents.WORLD.rows("spawn").items()):
+        if row.get("area") != area:
+            continue
+        if not row.get("enabled", True):
+            continue
+        rows.append((key, row))
+
+    for field in ("agent_id", "definition"):
+        for key, row in rows:
+            if row.get(field) is None:
+                raise PopulationError(
+                    f"spawn row {key!r} in area {area!r} has no {field}. Ids are "
+                    f"allocator choices and this server does not invent them -- "
+                    f"write one, or the client gets a body it was never told about")
+
+    seen = {}
+    for key, row in rows:
+        v = row["agent_id"]
+        if v in seen:
+            raise PopulationError(
+                f"spawn rows {seen[v]!r} and {key!r} in area {area!r} share "
+                f"agent_id {v}. Two bodies under one id leaves the client "
+                f"holding one agent's state under another's name, and nothing "
+                f"on the wire would say so")
+        seen[v] = key
+
+    # DEFINITIONS MAY BE SHARED -- but only by rows naming the SAME npc. A
+    # definition is per-instance and outlives the agents using it (measured:
+    # ArenaNet sends one 0x0056 for 140 re-creates of the same worm), so ten
+    # identical hatchers legitimately share an index and demanding ten would be
+    # inventing a rule retail does not follow. Two DIFFERENT templates sharing
+    # one index is the real fault: the definition array is raw, so the second
+    # row silently overwrites the first and a body wears the wrong model.
+    seen = {}
+    for key, row in rows:
+        v, npc = row["definition"], row["npc"]
+        if v in seen and seen[v][1] != npc:
+            raise PopulationError(
+                f"spawn rows {seen[v][0]!r} ({seen[v][1]}) and {key!r} ({npc}) "
+                f"in area {area!r} share definition {v} while naming DIFFERENT "
+                f"npc templates. The definition array is a raw index on the "
+                f"client, so one would silently wear the other's model")
+        seen[v] = (key, npc)
+    return rows
+
+
+def place_on_mesh(pm, x, y, what):
+    """The nearest spot the navmesh calls ground, or None, and how far it moved.
+
+    Returns `(x, y, moved)`. This exists because of rung (I): until 2026-08-13
+    the server on an authored map held either ArenaNet's geometry for the same
+    map id or no mesh at all, so a placement check here would have been
+    measuring the wrong map or nothing. With the mesh actually loaded, an
+    authored area can be sparse -- the sculpt map is 1.2% walkable by area --
+    and a coordinate an author picked off a Blender screenshot very often is
+    not standable.
+
+    None means REFUSE. A body placed off-mesh stands somewhere the server's own
+    collision says does not exist, and everything downstream reasons about it
+    wrongly; a missing NPC is a smaller lie than a present one nobody can reach.
+    """
+    if pm is None:
+        return x, y, 0.0                       # no mesh: nothing to check against
+    if pm.walkable(x, y):
+        return x, y, 0.0
+    step = PLACE_SEARCH_STEP
+    r = step
+    while r <= PLACE_SEARCH_RADIUS:
+        n = max(8, int(2 * math.pi * r / step))
+        for i in range(n):
+            a = 2.0 * math.pi * i / n
+            cx, cy = x + r * math.cos(a), y + r * math.sin(a)
+            if pm.walkable(cx, cy):
+                return cx, cy, r
+        r += step
+    return None
+
+
+def spawn_population(send, state, origin, conn_id, area=None):
+    """Everything that lives in an authored area, from `content/world.toml`.
+
+    R5's criterion is "a new zone in TOML, hot-reloaded, walked", and until now
+    the toolkit could author the GROUND of a zone and nothing that stands on it.
+    An area with a tree in it and nothing alive is a diorama.
+
+    Nothing here is new protocol: each body goes out through `create_agent_world`,
+    the same call `spawn_enemy` has used since the enemy rung, so every message
+    is one already proven against our own client. What is new is that the set of
+    bodies, their positions, their allegiances and their health come from content
+    rows rather than from module constants.
+    """
+    area = area or AREA_NAME
+    ox, oy, plane = origin
+    rows = area_population(area)
+    if not rows:
+        print(f"[c{conn_id}] area {area!r}: no population rows; the world is "
+              f"the player and the geometry", flush=True)
+        return 0
+
+    pm = state.get("pathmap")
+    if pm is None:
+        print(f"[c{conn_id}] area {area!r}: NO NAVMESH, so no placement can be "
+              f"checked -- every body below is placed on trust", flush=True)
+
+    placed = 0
+    for key, row in rows:
+        # npc_template, NOT WORLD.get: the raw row carries `enc_name` as a
+        # list of string ids and the codec refuses the message built from it.
+        npc = agents.npc_template(row["npc"])
+        # Absolute if the row says so, else the legacy offset-from-the-player.
+        if row.get("x") is not None and row.get("y") is not None:
+            wx, wy = float(row["x"]), float(row["y"])
+            how = "absolute"
+        else:
+            wx, wy = ox + float(row.get("offset_x", 0.0)), \
+                     oy + float(row.get("offset_y", 0.0))
+            how = "offset from the player"
+
+        spot = place_on_mesh(pm, wx, wy, key)
+        if spot is None:
+            print(f"[c{conn_id}] REFUSED {key!r}: ({wx:.0f}, {wy:.0f}) is not on "
+                  f"the navmesh and nothing within {PLACE_SEARCH_RADIUS:.0f} "
+                  f"units is either. Not placing a body the server's own "
+                  f"collision says is nowhere.", flush=True)
+            continue
+        x, y, moved = spot
+
+        allegiance = ALLEGIANCE_BY_NAME[row.get("allegiance", "hostile")]
+        hp = float(row.get("max_health", ENEMY_MAX_HEALTH))
+        entry = {
+            "pos": (x, y), "plane": plane,
+            "health": hp, "max_health": hp,
+            "dead": False,
+            "name": npc["name"],
+            "npc": npc,
+            "definition": int(row["definition"]),
+            "allegiance": allegiance,
+            "attack_speed": ENEMY_ATTACK_SPEED,
+            "effects": 0,
+            "resend_definition": bool(row.get("resend_definition", False)),
+            "attacks_back": bool(row.get("attacks_back", False)),
+            "skills": ENEMY_SKILLS,
+            "skill_ready": [0.0] * len(ENEMY_SKILLS),
+        }
+        create_agent_world(send, state, int(row["agent_id"]), entry, key,
+                           conn_id=conn_id)
+        placed += 1
+        note = (f" (MOVED {moved:.0f} units to reach ground)" if moved else "")
+        print(f"[c{conn_id}] {key!r}: {npc['name']} at ({x:.0f}, {y:.0f}) "
+              f"{how}, {row.get('allegiance', 'hostile')}, {hp:.0f} hp{note}",
+              flush=True)
+    print(f"[c{conn_id}] area {area!r}: {placed} of {len(rows)} placed",
+          flush=True)
+    return placed
+
+
 def spawn_enemy(send, state, origin, conn_id):
     """Put one hostile body in the map, using only packets we have proven.
 
@@ -3098,6 +3454,22 @@ def run_probe(name, send, conn_id, stop, origin=None):
     Failures are printed and swallowed. A probe is an experiment; a packet the
     client rejects is a result, not a crash, and it must not take the session
     down with it or we lose the rest of the sequence.
+
+    A step that declares `sends=False` is a REFUSAL and is not sent. That flag was
+    added for `probes.check_encodable` on 2026-08-13 and this loop -- the one that
+    puts bytes on a socket -- was not taught about it for the rest of the day, which
+    fails in BOTH directions. When the codec raises (the empty smsgsweep plan's
+    refusal is `0x0000` with no values, and 0x0000 wants one) the swallow above
+    prints `SEND FAILED ... that is a result too -- record it`, filing "there was no
+    plan" as an experimental result and `continue`ing PAST the `watch` line that
+    says what actually happened -- so the one message the step exists to carry is
+    the one thing the operator does not see. And when the codec does NOT raise -- a
+    refusal built on any opcode whose fields the degenerate encoder can fill -- the
+    packet goes on the wire underneath the words "nothing was sent". The second is
+    worse: it is a lie printed beside the bytes that contradict it.
+
+    Returns the Thread so a caller can join it. The live call site does not; the
+    suite does, because the alternative is a test that sleeps and hopes.
     """
     # origin is where the character is standing. A probe that places something
     # in the world needs it, and can only have it from here -- probes.py is a
@@ -3122,6 +3494,26 @@ def run_probe(name, send, conn_id, stop, origin=None):
                 return
             print(f"\n  --- step {i}/{len(probe.steps)}: {step.label}",
                   flush=True)
+            if not getattr(step, "sends", True):
+                # Declared refusal -- see this function's docstring. It is a DECLARED
+                # flag and never `if not step.values`, because a malformed step with
+                # no values is exactly what the encoder check exists to catch and the
+                # two are indistinguishable by shape (probes.Step's docstring).
+                #
+                # Without this arm the refusal reached `send(0x0000, [])`, which raises
+                # and lands in the handler below as "SEND FAILED" -- the correct outcome
+                # (nothing went on the wire) reported as a malfunction, with the one
+                # sentence the operator needed buried under a traceback name. The
+                # alternative considered and rejected was returning NO steps, which the
+                # runner already prints as "observation only": silent in the wrong
+                # direction, since a probe that measures nothing because its plan ran
+                # out would then look identical to one designed to send nothing.
+                #
+                # (Two sessions fixed this independently on 2026-08-13 and reached the
+                # same arm. This comment is the union of both; the print text is the
+                # one `test_agentlife` asserts on.)
+                print(f"      REFUSAL -- no packet sent. {step.watch}", flush=True)
+                continue
             try:
                 send(step.opcode, step.values, f"PROBE[{name}] {step.label}")
             except Exception as exc:
@@ -3132,7 +3524,9 @@ def run_probe(name, send, conn_id, stop, origin=None):
             print(f"      WATCH: {step.watch}", flush=True)
         print(f"\n  probe complete. What did you see?\n{bar}\n", flush=True)
 
-    threading.Thread(target=body, daemon=True).start()
+    thread = threading.Thread(target=body, daemon=True)
+    thread.start()
+    return thread
 
 
 class Recorder:
@@ -3769,6 +4163,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         ping_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
+                        agent_refill_due(send, state, conn_id)
                         # Both halves of the fight, and the order matters. The
                         # player's revive runs BEFORE the enemies swing, so a
                         # player whose timer expired this tick stands up and can
@@ -3777,6 +4172,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # state["player_dead"], which player_revive_due is the
                         # only thing that clears.
                         player_revive_due(send, state, conn_id)
+                        player_refill_due(send, state, conn_id)
                         # Walk BEFORE swinging, so an agent that arrives on this
                         # tick can open its swing on the same tick rather than
                         # standing in reach for one interval doing nothing.
@@ -4165,6 +4561,20 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # the client, so the newest one supersedes rather than
                         # adds to its predecessor.
                         state["mission_mask"] = values[1]
+                    elif opcode == GAME_CMSG_UNNAMED_ACK_0079:
+                        # Payload-free, so arrival is the whole content and a
+                        # COUNTER is the only thing there is to store. That is the
+                        # opposite choice from the INTERACT and MISSION_MASK arms
+                        # above, and deliberately: those carry a value that
+                        # supersedes its predecessor, this one carries none, so
+                        # latest-wins would store the same 0 forever and could not
+                        # tell one arrival from a hundred.
+                        #
+                        # Counting is what makes the loop measurable: 0x0166 and
+                        # 0x0167 are the only GAME_SMSG opcodes in 334 ledger rows
+                        # that provoke a c2s reply, and "how many came back" is the
+                        # question a send-then-count experiment asks.
+                        state["ack_0079_count"] = state.get("ack_0079_count", 0) + 1
                     elif opcode == GAME_CMSG_TURN_TO_DIRECTION:
                         # Keyboard movement comes through here, not through
                         # MOVE_TO_COORD: WASD sends a HEADING from where you
@@ -4888,7 +5298,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                     if NETGRAPH_FLAGS
                                     & UI_OVERLAY_FLAG_NETGRAPH_LATENCY
                                     else "") + ")")
-                        if SPAWN_ENEMY:
+                        # An AREA brings its own population and replaces the
+                        # single global enemy outright. Both would be wrong:
+                        # the global one is placed by offset from the player,
+                        # so it would appear in the middle of an authored zone
+                        # that has its own idea of what stands where.
+                        if AREA_NAME:
+                            spawn_population(send, state,
+                                             (pos[0], pos[1], cfg[2]), conn_id)
+                        elif SPAWN_ENEMY:
                             spawn_enemy(send, state,
                                         (pos[0], pos[1], cfg[2]), conn_id)
                         if PROBE_NAME:
@@ -5295,6 +5713,27 @@ def main():
                          "under --tape: the tape's own 0x0195 decides what the "
                          "client loads, and it will happily draw a map it never "
                          "asked for.")
+    ap.add_argument("--area", metavar="NAME",
+                    help="Serve the POPULATION of this authored area: the "
+                         "`content/world.toml` spawn rows carrying "
+                         "`area = NAME`, at their own coordinates, each checked "
+                         "against the navmesh before a body goes out. Replaces "
+                         "the single global test enemy rather than adding to "
+                         "it, since that one is placed by offset from the "
+                         "player and would land in the middle of a zone that "
+                         "has its own idea of what stands where.")
+    ap.add_argument("--practice-target", action="store_true",
+                    help="The standing hostile neither chases nor attacks -- a "
+                         "PRACTICE TARGET. WIKI (GWW, \"Practice target\", rev. "
+                         "2014-02-07): practice targets are stationary NPCs, there "
+                         "are allied and hostile ones, and 'They do not use any "
+                         "skills'; a slain hostile one resurrects after 30 s at full "
+                         "health. So this is a real Guild Wars creature's behaviour "
+                         "rather than a test switch. It is what makes an agent "
+                         "death REACHABLE unattended: with the hostile fighting back "
+                         "the player loses the race (25 damage a hit into 100 HP, "
+                         "four hits, against the seven the player needs) and never "
+                         "lands one.")
     ap.add_argument("--no-enemy", action="store_true",
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
@@ -5443,6 +5882,31 @@ def main():
               + (f", explorable={bool(known[3])}" if known
                  else " -- NOT in MAP_STATIC_CONFIG, so geometry falls back "
                     f"to map {FALLBACK_MAP_ID} and it will not be explorable"))
+        # RIGHT HERE, and not at instance load. We know which map this run will
+        # serve, and nothing has opened the archive yet -- both halves are only
+        # true at startup. See prewarm_pathmap() for what reading it late cost.
+        prewarm_pathmap(a.map if known else FALLBACK_MAP_ID)
+
+    if a.area:
+        global AREA_NAME
+        AREA_NAME = a.area
+        # RESOLVE THE POPULATION NOW, not at instance load. The set checks --
+        # duplicate agent ids, duplicate definition indices, a missing id -- are
+        # exactly the ones whose cost is a wasted client run, and a run that
+        # dies on the fourth of five bodies has already put three in the world.
+        try:
+            pop = area_population(a.area)
+        except PopulationError as exc:
+            raise SystemExit(f"--area {a.area}: {exc}")
+        print(f"AREA: {a.area} -- {len(pop)} spawn row(s): "
+              + (", ".join(k for k, _ in pop) or "none")
+              + ". This REPLACES the standing test enemy.")
+
+    if a.practice_target:
+        global ENEMY_ATTACKS_BACK
+        ENEMY_ATTACKS_BACK = False
+        print("PRACTICE TARGET: the hostile stands still and does not attack. "
+              "It can still be hit, killed and revived.")
 
     if a.no_enemy:
         global SPAWN_ENEMY

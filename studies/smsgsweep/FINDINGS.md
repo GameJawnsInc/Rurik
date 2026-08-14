@@ -566,3 +566,300 @@ here by hand rather than by loosening that refusal.
 `0x0191` is therefore a **map/instance change**, which makes it the most consequential
 row of this pass: it is the first opcode found that moves the player between maps, and
 `PLAN.md` §3.6's capture campaign wants exactly that.
+
+### 7.6 TWENTY-TWO NAMED, and thirteen CHANGED rows that were the operator's mouse
+
+**Status: OBSERVED, 2026-08-13.** The owner read the page and labelled every CHANGED
+row. Twenty-two are real; the remaining thirteen are hover artifacts (see below).
+Labels in `vault/labelling/labels-20260813.json`, folded into `schema/overrides.json` by
+`shotlabel.py --merge`.
+
+**Thirteen carry the client's own words** — which is the same standard that made `0x0033`
+Message of the Day, and the reason they are filed `name_confidence: high`:
+
+| opcode | name | what the client drew |
+|---|---|---|
+| `0x000E` | `NETWORK_ERROR_NOTICE` | green chat: "Network error 0." then a connection-check line |
+| `0x0014` | `TRIAL_TIME_REMAINING` | trial toast: playtime left, with the expiry date |
+| `0x001C` | `SKILL_UNLOCKED` | "Skill Unlocked!" popup with name, icon and description |
+| `0x0082` | `EQUIP_TEMPORARY_SKILL` | equip-temporary-skill UI |
+| `0x00B8` | `TRIAL_FEATURE_RESTRICTED` | trial toast about restricted features |
+| `0x00FD` | `PLAYER_REPORT_MENU` | the player-report reason menu |
+| `0x0101` | `CINEMATIC_WAIT_SCREEN` | "A Cinematic is in Progress" |
+| `0x0123` | `ALLIANCE_INVITE_RECEIVED` | green chat: guild received an alliance invitation |
+| `0x01B8` | `ACCOUNT_UNNAMED_NOTICE` | "Your account must be named… Tolkano [Tournament]" |
+| `0x01BC` | `ACCOUNT_UNNAMED_PROMPT` | the same line **plus** a centre-screen popup |
+| `0x01D6` | `ACCOUNT_UNNAMED_NOTICE_ALT` | the same line again |
+| `0x01D8` | `PARTY_DEFEATED` | "Your party was defeated. Your leader may return you…" |
+| `0x01E6` | `MISSION_ENTRY_CONFIRM` | "Your party has characters from another campaign…" |
+
+**Four are inferences from an animation with no text in it**, so they are filed
+`medium` — the operator's own hedging ("some sort of victory flag") is the tell, and a
+name taken from a picture of an effect is a guess about PURPOSE:
+`0x004E` `VICTORY_BANNER`, `0x006C` `CHEST_REWARD_EFFECT`, `0x00FB`
+`HARD_MODE_SUCCESS_BANNER`, `0x01AA` `AMBIENT_LIGHT_SET` (which repaints 88% of the
+window by changing the light colour and intensity — not a map change).
+
+**Five are NOT named, on purpose.** `0x00C3` `0x00C7` `0x00C8` `0x00C9` `0x00CA` all
+draw the same account-name selector and are indistinguishable on screen. Giving them one
+name each invents a distinction; giving them the same name asserts they are
+interchangeable. Neither is supported by a picture, so they are recorded here and left
+out of the schema until something separates them — `--merge` writes no row without an
+identifier and does not guess.
+
+**The account-name cluster is the largest thing here.** Eight of the twenty-two —
+`0x00C3/C7/C8/C9/CA`, `0x01B8`, `0x01BC`, `0x01D6` — are all the account-naming flow, and
+they sit in the same region as §7.3's tournament crash (`0x0170`, `MsCliTourn.cpp`) and
+the guild block. The notice text names Tolkano, the tournament registrar.
+
+#### The thirteen artifacts, and why the score cannot find them
+
+`0x0031` `0x0036` `0x00FC` `0x0113` `0x011F` `0x0127` `0x012E` `0x0136` `0x015D`
+`0x0182` `0x018C` `0x018D` `0x01E3` scored CHANGED and are the operator moving the
+mouse over the skill bar or the taskbar during the run. **They are QUIET.**
+
+**Their scores overlap the real ones and the instrument cannot separate them.** The
+artifacts run 0.22%–2.03%; four real readings sit inside that band (`0x01D6` 0.27%,
+`0x000E` 0.33%, `0x01BC` 0.47%, `0x0123` 1.53%) and four artifacts score ABOVE all four
+of them (`0x012E` 2.03%, `0x01E3` 1.97%, `0x018C` 1.71%). So magnitude ranks nothing
+here, and no threshold recovers the split — which is the argument for the page rather
+than against it: §7's design says a changed screen is evidence and the NAME comes from a
+person, and this is the case that proves the second half was not a formality.
+
+**The cause is a real limit of the apparatus, not a bug.** The run screenshots whatever
+the client window shows, and a hovered skill draws a tooltip that is indistinguishable
+from a tooltip an opcode drew. An unattended sweep is the fix, and the sweep WAS
+unattended for its 162 minutes — these thirteen are from the periods the operator was at
+the machine. Anything re-run should be re-run hands-off.
+
+### 7.7 The account-name cluster, read out of the client — and it is TWO subsystems
+
+**Status: OBSERVED, 2026-08-13, from the binary alone — no harness.** §7.6 left five
+opcodes unnamed because they draw an identical dialog. Reading their handlers
+(`msghandler.py <op> --follow --annotate`) separates them, and splits the cluster the
+screen had merged.
+
+#### The five selectors are `ChCliApi.cpp`, and they post ONE UI message
+
+All five handlers are a two-line forwarder into a family of adjacent workers, and every
+worker ends the same way: build a struct, then `call 0x633d70` with a constant. That
+callee asserts `frameId` at `FrApi:1179`, so it is the **frame/UI message post** and the
+constant is a UI message id.
+
+| opcode | worker | frame | payload |
+|---|---|---|---|
+| `0x00C3` | `0x00813F80` | 0x14 | `byte, dword` |
+| `0x00C7` | `0x00814130` | 0x1c | `byte, dword, array32` |
+| `0x00C8` | `0x008141A0` | 0x1c | `byte, dword, dword` |
+| `0x00C9` | `0x00814210` | 0x18 | `byte, byte` |
+| `0x00CA` | `0x00814270` | 0x20 | `byte, dword` |
+
+**All five post the SAME id, `0x100000B5`** — which is why the operator saw one dialog
+five times, and is the mechanism behind §7.6's refusal to name them. They are not
+duplicates: the payloads differ (`0x00C7` carries an `array32`, i.e. a LIST — the
+character names the selector offers), the stack frames differ, and `0x00CA` calls
+`0x0047F660` first where the others do not. What they share is the screen, because they
+all feed one UI message.
+
+The workers sit at `0x813F80`–`0x814270`, inside a span whose named asserts are **17 x
+`P:\Code\Gw\Char\Cli\ChCliApi.cpp`** and one `ChCliInt.h`. That is ADJACENCY, not a
+direct citation — none of the five workers asserts anything itself — but it agrees with
+the operator's reading, which was that the dialog "picks from existing character names".
+
+**Still not named, and now for a stated reason.** The five differ in payload and agree in
+effect, so the distinction is real but invisible from the screen alone. Naming them needs
+the CONSUMER of UI message `0x100000B5` — one dig, `--callers 0x633d70` filtered to that
+id — not another client run.
+
+#### The three notices are `PyCliParty.cpp` — the PARTY client, not the tournament one
+
+`0x01B8`, `0x01BC` and `0x01D6` print "Your account must be named. Please speak to the
+Account Registrar, Tolkano [Tournament]." The TEXT names the tournament; the CODE does
+not:
+
+| opcode | worker | UI message | source |
+|---|---|---|---|
+| `0x01B8` | `0x00858A80` | `0x10000117` | `PyCliParty.cpp` |
+| `0x01BC` | `0x00858C00` | `0x10000119` | `PyCliParty.cpp` |
+| `0x01D6` | `0x0085A240` | `0x1000012C` | `PyCliParty.cpp` |
+| `0x0170` | `0x00854D20` | `0x10000116`, then `0x10000160` | `MsCliTourn.cpp` |
+
+Unlike the selectors these post **three distinct UI ids**, which is why `0x01BC` differed
+on screen (it drew a centre-screen popup as well as the chat line) — a difference §7.6
+recorded from the picture and could not explain. `0x0170`, the tournament opcode, is the
+one that CRASHED in §7.3 (`IsBatching()`, `MsCliTourn.cpp:475`) and it posts two.
+
+**So "the account-name cluster" was a reading of the SCREEN, and the binary says
+otherwise: an account-name *selector* in the character client, and an unnamed-account
+*refusal* in the party client.** They share a subject and no code.
+
+**This may bear on the party-window arc.** `PLAN.md` §3 records a session finding the
+party window refusing to open specifically, while H, I and F all open. Three opcodes
+whose job is to refuse a party action for an unnamed account, in `PyCliParty.cpp`, are
+worth checking against that before it is attributed elsewhere — our synthetic loopback
+account has no account name at all. **UNVERIFIED as a connection**; it is a lead, and
+the two arcs have not been run against each other.
+
+#### Why the five stay unnamed: the id is never compared, and one poster is not a dialog
+
+Two more measurements, both cheap and both negative in the useful way.
+
+**`0x100000B5` is never compared anywhere in the image.** A byte scan of the whole file
+finds **9 occurrences, all 9 `push imm32`, and zero `cmp`** in any register form. So the
+UI does not dispatch this by an inline test; the id is `0x10000000 | ordinal` (the party
+notices are `0x117`, `0x119`, `0x12C`, the tournament one `0x116` and `0x160`) and the
+consumer is reached through a registration or a table. **Naming the five therefore needs
+that table, not another disassembly of the senders** — which is a bounded next dig and is
+the reason this stops here rather than guessing.
+
+**And the senders are not all dialogs.** Of the 9 pushes, five are our opcodes' workers,
+three are siblings in the same `0x813F80`–`0x814500` family, and one is at `0x004ECEFC`,
+whose nearest named assert is `GmView:3737`. A game-view function posting the same
+message argues `0x100000B5` is a general **character-data UI update** rather than "open
+the account-name selector" — the dialog the operator saw would then be whichever frame
+consumes that update in the client's current state, not a property of the message.
+
+**That is a caution against the obvious name.** Calling `0x00C3` `ACCOUNT_NAME_PROMPT`
+would have recorded the frame that happened to be listening on a level-1 character in an
+empty map as the meaning of the opcode. §7.6 declined to name them from the picture; the
+binary now says the picture was showing a consequence two steps removed from the message.
+
+### 7.8 The frame registration table, and why `0x100000B5` cannot name an opcode
+
+**Status: OBSERVED, 2026-08-13, binary only.** §7.7 stopped at "naming the five needs the
+registration table". Here it is.
+
+#### The mechanism
+
+Two structures, not one:
+
+* **The frame table** — an array of frames at `0xBF5924` with its count at `0xBF592C`,
+  read by `0x0064CA60`, which bounds-checks the index, refuses a NULL slot, and asserts
+  otherwise. Frame ids are small; `0x00633D70` rejects anything below `0x56` as one.
+* **The message map** at `0xC11BC4`, keyed by the 32-bit message id.
+
+And two entry points, which are the API:
+
+| | |
+|---|---|
+| **REGISTER** | `0x00633BD0(frameId, messageId)` — looks the frame up by id, then binds `messageId` in the map to that frame's sub-object at `+0xA8` (`0x0064CD60` → insert `0x00474200`) |
+| **SEND** | `0x00633D70(messageId, data, flags)` — tail-calls `0x0064CA30`, which looks `messageId` up in the map (`0x00491F20`) and invokes the bound object (`0x0064C7D0`) |
+
+**An unregistered id is a SILENT NO-OP.** `0x0064CA30` tests the lookup result and
+branches straight to `ret` — no assert, no log, no error. That is a fact worth carrying
+into any future probe: sending a UI message nothing is bound to produces no wire traffic
+*and* no screen change *and* no complaint, which is indistinguishable from an opcode that
+does nothing.
+
+#### `0x100000B5` has exactly ONE consumer, and it is not a dialog
+
+§7.7 found 9 pushes of the id and no `cmp`. Following each push to its call resolves them
+cleanly: **eight are SEND, one is REGISTER** — `0x004ECEFC`, the site whose neighbourhood
+named `GmView:3737` and which §7.7 could only call "not a dialog".
+
+That registration sits in a registrar at `0x004ECBD0` that binds **90 message ids to a
+single frame**, from `0x10000001` to `0x1000014B`. A frame subscribing to ninety messages
+is a root, not a panel — and `GmView` is the game view.
+
+**So the id identifies a DESTINATION, not a meaning.** The five opcodes of §7.7 deliver
+character data to the main game-view frame, which routes it onward by its own state. The
+dialog the operator saw is that routing's outcome on a level-1 character in an empty map,
+two steps removed from the message — exactly the caution §7.7 raised, now measured rather
+than suspected. **Naming any of the five `ACCOUNT_NAME_*` would have been wrong**, and
+§7.6's refusal to name them from the picture was the correct call for a reason neither
+§7.6 nor §7.7 could yet state.
+
+**A corroboration falls out of it.** The party notices' ids — `0x10000117`, `0x10000119`,
+`0x1000012C` — are **not among the 90**. They bind to a different frame, which is
+independent evidence for §7.7's split of the cluster into two subsystems: the selectors
+reach the game view, the notices do not.
+
+#### What would actually name them
+
+The remaining step is inside the view frame: the per-message handler behind the object at
+`frame+0xA8`, reached via `0x0064C7D0`. That is a routing read, not a naming one, and it
+is the same cost for all 90 ids — so it is worth doing once for the family rather than
+five times for these opcodes. **Nothing here needs the harness.**
+
+### 7.9 The routing read: dispatch is a runtime callback list, so the static chain ENDS here
+
+**Status: OBSERVED, 2026-08-13, binary only.** §7.8 left one step: the per-message handler
+behind `frame+0xA8`, reached via `0x0064C7D0`. Reading it answers the naming question in
+the negative, and the negative is worth more than a guess would have been.
+
+**The invoke path.** `0x0064C7D0(this, data, flags)` walks a subscriber list. Each
+subscriber is a **12-byte record** in an array at `[this]` with its count at `[this+8]`,
+iterated **backwards** (`sub eax, 0xC` per step; the `imul 0x2AAAAAAB; sar edx, 1` at
+`0x0064CA09` is the compiler's divide-by-12, which is what fixes the stride). Two skip
+rules: a record whose `+0` is NULL, and one whose `+8` is `>= 0`. Survivors reach
+`0x0064C9A0`, which builds a context on the stack out of `[edi+0x14]`, `[edi+0xE8]`,
+`&record+4` and `[record+8]`, and then:
+
+    0064CA20  mov eax, dword ptr [esi]     ; record[0] -- the handler
+    0064CA22  call eax                     ; <- the dispatch
+
+**The handler is a function pointer held in a record built at run time.** It is not a
+table in the image, not a vtable at a fixed VA, and not a switch on the id. So "which
+function handles `0x100000B5`" has no static answer: the chain
+`opcode -> SEND -> map 0xC11BC4 -> frame -> subscriber list -> call eax` is fully
+resolvable up to the list, and the list's contents are program state.
+
+**A detail that settles the shape.** The id is **not forwarded** to `0x0064C7D0` — its
+arguments are `(data, flags)` only. A handler therefore cannot switch on the message, so
+the map value cannot be "the frame": it must be the **per-id subscriber list**, with
+`0x00633BD0` binding one list per id. That is consistent with 90 ids binding to one frame
+in §7.8, and it means each id has its own handler chain rather than 90 handlers filtering
+90 messages.
+
+#### What this settles, and what it costs
+
+* **The five opcodes of §7.7 cannot be named from the image.** §7.6 declined from the
+  picture, §7.7 warned the id was a destination, §7.8 measured that, and the routing read
+  now shows the last hop is runtime state. Three independent stopping points, all short of
+  the name — which is why none of them invented one.
+* **It is not the harness that would settle it either.** A screen reading cannot separate
+  five opcodes that reach the same frame; that was §7.6's finding. Naming them needs the
+  subscriber list's contents at run time — a debugger or an injected read, i.e. the
+  `PLAN.md` §7 Q6 native route — or a labelled live capture where ArenaNet's own server
+  sends them in a context that distinguishes them.
+* **The cheap win is the SEND direction, and it is already banked.** `0x00633D70` and
+  `0x00633BD0` are a complete, verified API for the client's UI bus, and the silent-no-op
+  property of §7.8 is a fact any future probe needs.
+
+**Nothing further here is worth doing statically.** The next honest step for these five is
+a live capture from ArenaNet's server, where the surrounding traffic names the context —
+not another disassembly and not another loopback run.
+
+### 7.10 The party window subscribes to `0x01BC`'s message — a measured link, not a lead
+
+**Status: OBSERVED, 2026-08-13, binary only.** §7.7 offered the party-window arc an
+UNVERIFIED lead. §7.8's method turns it into a measurement, and it is cheap: resolve each
+push of a UI message id to its call, and REGISTER sites name the frames that consume it.
+
+| message | sent by | REGISTER sites | the frames |
+|---|---|---|---|
+| `0x10000117` | `0x01B8` | **none** | nothing is bound |
+| `0x10000119` | `0x01BC` (and 3 more senders) | **5** | `PtSearch.cpp`+`PtFrame.cpp`, `PtMission.cpp`, `PtButtons.cpp`, `GmDoll.cpp`+`GmView.cpp`, one unnamed |
+| `0x1000012C` | `0x01D6` | **none** | nothing is bound |
+| `0x10000116` | `0x0170` (and 8 more) | 2 | one at `0x0056014D`, one at `0x008AB8D9` |
+
+**Four of the five subscribers to `0x10000119` are the party window** —
+`P:\Code\Gw\Ui\Game\Party\PtFrame.cpp`, `PtButtons.cpp`, `PtMission.cpp`, `PtSearch.cpp`.
+So the opcode that says "Your account must be named" delivers a message the party frame,
+its buttons, its mission panel and its search panel are all registered to receive.
+
+**And the split predicts the pictures.** §7.6 recorded from the screen that `0x01BC` drew
+a centre-screen popup *as well as* a chat line, while `0x01B8` and `0x01D6` drew only the
+line. That is exactly the row with five registered consumers against the two rows with
+none — and per §7.8 an unbound id is a silent no-op, so `0x01B8`/`0x01D6`'s chat lines
+must come from elsewhere in their workers, not from the message they post. **The operator
+read the difference off two screenshots before anything here was disassembled**, which is
+the strongest kind of agreement this project gets: two instruments, no shared assumption.
+
+**For the party-window arc.** This does not explain a red member row and is not offered as
+that. What it does establish is that the account-name state reaches the party UI **by a
+path that exists in the image**, so the connection is now a question about behaviour
+rather than about whether any coupling exists at all. Note also that an assert census
+cannot see this: the notice text is a UI string a message carries, not an assert
+expression, so `asserts.py --file PyCliParty` finding nothing is the EXPECTED result and
+its silence was never evidence either way.

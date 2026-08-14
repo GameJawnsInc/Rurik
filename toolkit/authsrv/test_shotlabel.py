@@ -41,6 +41,15 @@ against six opcodes that all reported the SAME bounding box:
      (824, 491, 1113, ~724): the player standing in the middle of the screen
      breathing. The floor is now measured at MATCHING lags. Section 9.
 
+AND SECTION 10 IS A DIFFERENT KIND OF DEFECT: three ways the page RENDERED FINE and
+could not be read. `_catalogue` called a `Codec.load()` that does not exist behind a
+bare `except`, so all 238 cards carried a blank field list; the click handler widened
+the 560 px thumbnail to 1200 px, which is an upscale, so magnifying a toast made it
+bigger and blurrier while the full-resolution png was never referenced by the page at
+all; and there was no native-resolution view of the changed region, which for a dialog
+is exactly where the text is. None of the three could fail a build -- the page was
+produced, the count was right, and only a human trying to READ a frame ever found out.
+
 AND THE ONE THAT WAS NOT IN THIS MODULE AT ALL, which is section 7: the harness's log
 pump died on a cp1252 console, the gamesrv wedged on its next print, the probe sent
 NOTHING, and the run reported RUN VERDICT: PASS. Three opcodes were marked done having
@@ -51,6 +60,7 @@ holds its send, and `score_run` refuses a multi-send run outright.
 import datetime
 import json
 import os
+import re
 import sys
 import tempfile
 
@@ -60,10 +70,10 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks                                                   # noqa: E402
 import shotlabel                                                # noqa: E402
 
-# 38 is what a green run executes today, MEASURED rather than guessed. Every section
+# 46 is what a green run executes today, MEASURED rather than guessed. Every section
 # needs PIL; without it the whole file declares one skip and goes red, the way
 # test_keytap.py does off Windows -- the fixture is drawn, not stored.
-LEDGER = checks.Ledger("test_shotlabel", floor=38)
+LEDGER = checks.Ledger("test_shotlabel", floor=60)
 ok = LEDGER.ok
 
 UTC = datetime.timezone.utc
@@ -490,6 +500,208 @@ def section_9_drift(tmp):
        f"excess {row2['peak']*100:.3f}%")
 
 
+def section_10_page_is_readable(tmp):
+    """The page must let an operator READ the client, not just recognise a shape.
+
+    Every check here is a defect the first page shipped with, and all three were
+    INVISIBLE: the page rendered, the build printed a card count, and nothing was
+    wrong except that the evidence could not be read.
+
+      * `_catalogue` called `Codec.load()`, which does not exist, behind a bare
+        `except Exception: return ""`. All 238 cards carried a BLANK field list.
+      * the click handler widened the 560 px thumbnail to 1200 px -- an upscale, so
+        magnifying a toast made it bigger and blurrier. The full-resolution png was
+        never referenced by the page at all.
+      * there was no native-resolution view of the changed region, which for a dialog
+        or a toast is where the text is.
+    """
+    print("\n10. the page can be READ -- three defects the first page shipped with")
+    # (a) THE FIELD LIST. The bug returned "" for every opcode, so the assertion is on
+    # CONTENT: a known multi-field opcode must name more than one field.
+    cat = shotlabel._catalogue(0x0014)
+    ok(cat and "dword" in cat and cat.count(",") >= 1,
+       "a catalogued opcode renders a real field list",
+       f"0x0014 -> {cat!r} -- '' means the lookup is silently failing again")
+    ok(not shotlabel._catalogue_failed,
+       "and the lookup reported no swallowed failure",
+       f"{sorted(shotlabel._catalogue_failed)[:1]}")
+    # The header is dropped: its `length` is the OPCODE, and printing it as a field
+    # invites reading 20 as a payload width.
+    ok("msg_header" not in cat, "the msg_header row is not printed as a payload field",
+       cat)
+
+    # (b) THE FULL-RESOLUTION LINK. Build a real page off a synthetic run and require
+    # every image to carry a data-full that RESOLVES -- a broken relative path renders
+    # an identical page and fails only when a human clicks it.
+    run = _standard(tmp, "r10")
+    res = shotlabel.score_run(run)
+    out = os.path.join(tmp, "page10")
+    page, n = shotlabel.build_page([res], out, title="t")
+    h = open(page, encoding="utf-8").read()
+    fulls = re.findall(r'data-full="([^"]+)"', h)
+    ok(len(fulls) >= 2, "every strip frame carries a full-resolution source",
+       f"{len(fulls)} data-full attribute(s)")
+    missing = [f for f in fulls
+               if not os.path.isfile(os.path.join(out, f.replace("/", os.sep)))]
+    ok(not missing, "and every one of them resolves to a file on disk",
+       f"{len(missing)} broken: {missing[:2]}")
+    # The whole point: it must point at the ORIGINAL, not back at the thumbnail.
+    ok(all(not f.startswith("img/") for f in fulls),
+       "and points at the original png rather than the thumbnail it is enlarging",
+       "a data-full into img/ is the upscale bug wearing a lightbox")
+
+    # (c) THE DETAIL CROP AT NATIVE RESOLUTION. Its whole reason is to undo the 3.5x
+    # downscale, so the assertion is on PIXELS: a crop of a region must not come back
+    # narrower than the region.
+    row = res["rows"][0]
+    if row.get("bbox") and row.get("verdict") == "CHANGED":
+        x0, y0, x1, y1 = row["bbox"]
+        name = shotlabel._thumb(row["after"], out, "probe_detail.jpg",
+                                bbox=row["bbox"], pad=0, width=0)
+        w, _h = _pil().open(os.path.join(out, name)).size
+        ok(w == x1 - x0, "the detail crop is written at native resolution",
+           f"{w}px for a {x1 - x0}px region -- a downscale here defeats the crop")
+        # CONTROL: the same call WITH a width must still downscale, or the parameter
+        # is dead and every strip frame is silently full-size.
+        name2 = shotlabel._thumb(row["after"], out, "probe_scaled.jpg",
+                                 bbox=row["bbox"], pad=0, width=64)
+        w2, _ = _pil().open(os.path.join(out, name2)).size
+        ok(w2 == 64, "CONTROL: a width still downscales", f"{w2}px")
+    else:
+        LEDGER.skip("10c", "the fixture row is not CHANGED with a bbox")
+
+
+def section_11_partial_build_is_additive(tmp):
+    """Scoring ONE run must not delete the rest of the page.
+
+    THE DEFECT, and it happened to a real 238-card page: the image cleanup dropped
+    every file "this build did not write", so `--run <one dir>` rewrote index.html with
+    a single card and deleted 2,400 images. Nothing about the build looked wrong -- it
+    printed a page path and a card count of 1, which is exactly what it was asked for.
+    Only the run directories being untouched made it recoverable.
+
+    The fix persists the cards beside the page and renders the UNION, so this section
+    builds a page from run A, then builds again from run B ALONE, and requires A to
+    still be there -- with the whole point being that the second build is the narrow one.
+    """
+    print("\n11. a partial build ADDS to the page rather than replacing it")
+    out = os.path.join(tmp, "page11")
+    a = shotlabel.score_run(_standard(tmp, "r11a"))
+    shotlabel.build_page([a], out, title="t")
+    b = shotlabel.score_run(_standard(tmp, "r11b"))
+    page, n = shotlabel.build_page([b], out, title="t")
+    h = open(page, encoding="utf-8").read()
+    ok(n == 2, "a build of ONE run renders both it and the card already there",
+       f"{n} card(s) -- 1 means the partial build replaced the page again")
+    ok('data-id="0x0031_r11a"' in h and 'data-id="0x0031_r11b"' in h,
+       "and both ids are in the html", "")
+    # The images of the CARRIED card must survive the cleanup, or the page is a set of
+    # broken boxes -- which reads as "this opcode produced nothing", the worst failure
+    # this module has, because it looks like a measurement.
+    fulls = re.findall(r'src="(img/[^"]+)"', h)
+    missing = [f for f in fulls
+               if not os.path.isfile(os.path.join(out, f.replace("/", os.sep)))]
+    ok(not missing, "and the carried card's images were not deleted",
+       f"{len(missing)} missing of {len(fulls)}")
+
+    # RE-SCORING THE SAME RUN REPLACES ITS CARD, never duplicates it -- the page is
+    # rebuilt as scoring rules change, and two cards for one opcode would put a stale
+    # verdict beside a fresh one with nothing to tell them apart.
+    _, n2 = shotlabel.build_page([b], out, title="t")
+    ok(n2 == 2, "re-scoring a run replaces its own card rather than adding one",
+       f"{n2} card(s) after rebuilding an id that was already there")
+
+    # A CARD WHOSE FRAMES ARE GONE IS DROPPED, not carried as broken boxes. This is the
+    # recovery path from the defect above: after images are lost, the page must shrink
+    # honestly rather than render evidence that is not on disk.
+    for f in os.listdir(os.path.join(out, "img")):
+        if f.startswith("0x0031_r11a"):
+            os.remove(os.path.join(out, "img", f))
+    _, n3 = shotlabel.build_page([b], out, title="t")
+    ok(n3 == 1, "a carried card whose frames are gone is DROPPED, not shown broken",
+       f"{n3} card(s)")
+
+    # CONTROL: the union must not be unconditional. A build that carried cards even
+    # when their ids match would never let a re-score take effect.
+    ok(_pil() is not None, "CONTROL: PIL present, so the section measured something", "")
+    bad = os.path.join(out, "cards.json")
+    with open(bad, "w", encoding="utf-8") as fh:
+        fh.write("{not json")
+    _, n4 = shotlabel.build_page([b], out, title="t")
+    ok(n4 == 1, "an unreadable cards.json degrades to this build alone, not a crash",
+       f"{n4} card(s)")
+
+
+def section_12_merge_writes_the_schema(tmp):
+    """--merge folds answers into overrides.json, and must not guess or overwrite.
+
+    It was in this module's docstring from the first commit and implemented by nothing,
+    which is the blank-field-list defect again: a promise that reads as a feature.
+
+    What it writes goes into a TRACKED schema file that the server decodes with, so the
+    refusals matter more than the writes.
+    """
+    print("\n12. --merge writes names into the schema, and refuses to guess")
+    base = {"channels": {"GAME_SMSG": {
+        "20": {"opcode": 20, "name": "ALREADY_NAMED", "fields": [{"type": "byte"}]},
+        "30": {"opcode": 30, "fields": [{"type": "dword"}]}}}}
+    ov = os.path.join(tmp, "over.json")
+    with open(ov, "w", encoding="utf-8") as fh:
+        json.dump(base, fh)
+    labels = {
+        "0x001E_r": {"opcode": "0x001E", "name": "SCREEN_NAME", "text": "a panel",
+                     "verdict": "ui", "confidence": "high"},
+        "0x0040_r": {"opcode": "0x0040", "name": "NEW_ROW", "text": "another",
+                     "verdict": "ui"},
+        "0x0014_r": {"opcode": "0x0014", "name": "DIFFERENT", "text": "x",
+                     "verdict": "ui"},
+        "0x0050_r": {"opcode": "0x0050", "text": "indistinguishable from four others",
+                     "verdict": "ui"}}
+    lp = os.path.join(tmp, "labels.json")
+    with open(lp, "w", encoding="utf-8") as fh:
+        json.dump(labels, fh)
+
+    # A DRY RUN WRITES NOTHING. The default has to be safe: this edits a tracked file.
+    before = open(ov, encoding="utf-8").read()
+    r = shotlabel.merge_labels(lp, apply=False, overrides_path=ov)
+    ok(open(ov, encoding="utf-8").read() == before,
+       "a dry run leaves the schema byte-identical", "")
+    ok(len(r["wrote"]) == 2 and len(r["skipped"]) == 1 and len(r["conflicts"]) == 1,
+       "it reports what it would write, skip and refuse",
+       f"wrote {len(r['wrote'])}, skipped {len(r['skipped'])}, "
+       f"refused {len(r['conflicts'])}")
+
+    r = shotlabel.merge_labels(lp, apply=True, overrides_path=ov)
+    got = json.load(open(ov, encoding="utf-8"))["channels"]["GAME_SMSG"]
+    # A ROW WITH NO IDENTIFIER IS NOT WRITTEN. Five opcodes in the real run draw the
+    # same dialog; naming them one thing each invents a distinction and naming them the
+    # same asserts they are interchangeable, so the tool writes neither.
+    ok("80" not in got, "an answer with no identifier writes NO row",
+       "0x0050 would be a guess, and the five-way account-name family is exactly this")
+    # AN EXISTING NAME IS NEVER OVERWRITTEN. A name already in the schema came from the
+    # wire or the binary; a screen reading is the weaker witness.
+    ok(got["20"]["name"] == "ALREADY_NAMED",
+       "an opcode already named is REFUSED, not renamed",
+       f"{got['20']['name']} -- a screen reading must not outrank the wire")
+    # THE LAYOUT SURVIVES. This is the defect that broke the codec: a name-only row
+    # replaced the entry and removed `fields` from 17 opcodes.
+    ok(got["30"]["fields"] == [{"type": "dword"}],
+       "naming an opcode leaves its existing layout intact",
+       f"{got['30'].get('fields')}")
+    ok("fields" not in got["64"],
+       "and a NEW row carries no invented layout", f"{sorted(got['64'])}")
+    # CONFIDENCE DEFAULTS TO THE WEAKER GRADE, so an unstated one cannot enter the
+    # catalogue as a strong claim.
+    ok(got["30"]["name_confidence"] == "high"
+       and got["64"]["name_confidence"] == "medium",
+       "confidence is carried, and an unstated one defaults to medium",
+       f"stated -> {got['30']['name_confidence']}, "
+       f"unstated -> {got['64']['name_confidence']}")
+    # The operator's VERBATIM words are the evidence for the identifier and must survive.
+    ok("a panel" in got["30"]["why"] and "20260813" not in got["30"]["why"],
+       "the operator's own words are recorded beside the name", got["30"]["why"][:60])
+
+
 def main():
     if _pil() is None:
         LEDGER.skip("every section", "PIL is missing -- the fixture is drawn with it, "
@@ -505,6 +717,9 @@ def main():
         section_7_no_send_is_not_a_result(tmp)
         section_8_provenance(tmp)
         section_9_drift(tmp)
+        section_10_page_is_readable(tmp)
+        section_11_partial_build_is_additive(tmp)
+        section_12_merge_writes_the_schema(tmp)
     return LEDGER.verdict()
 
 

@@ -90,7 +90,24 @@ class Codec:
             for chan, msgs in over.get("channels", {}).items():
                 target = self.channels.setdefault(chan, {"messages": {}})
                 for key, msg in msgs.items():
-                    target["messages"][key] = msg
+                    # A row WITHOUT `fields` is a NAME-ONLY override and MERGES; a row
+                    # with fields replaces, which is what every layout correction here
+                    # means and must keep meaning.
+                    #
+                    # The distinction exists because naming an opcode must not destroy
+                    # its layout. `shotlabel --merge` writes {opcode, name, why} rows
+                    # from a screen reading -- it learns what a message DRAWS and
+                    # nothing about its fields -- and under a blind replace those 17
+                    # rows silently removed the imported `fields` from 17 opcodes. It
+                    # was not subtle downstream (`fields_for` raised KeyError on the
+                    # next decode) but it would have been trivial to "fix" at the call
+                    # site instead, leaving the schema quietly lobotomised.
+                    if "fields" not in msg and key in target["messages"]:
+                        merged = dict(target["messages"][key])
+                        merged.update(msg)
+                        target["messages"][key] = merged
+                    else:
+                        target["messages"][key] = msg
                     self.overridden.append(f"{chan}[{key}]")
 
     def name_for(self, channel, opcode, default="?"):

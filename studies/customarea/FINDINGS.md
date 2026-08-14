@@ -6679,8 +6679,236 @@ PathData:365.
 And the harness now refuses to launch when the server's archive and the
 client's bind one file id to different files — a guard from the parallel
 map-rows arc, and a good one, which the arm-and-recompile loop trips BY DESIGN.
-Pointing `RURIK_DAT` at the client's own run archive makes them agree; the
-exclusive-lock worry did not materialise. That deserves a real answer inside
-`deploy` rather than an env var typed into a shell.
+
+**That is now answered inside `deploy` rather than by an env var in a shell.**
+`--dat` already decides which client runs, so it decides which world the server
+serves: the launch sets `RURIK_DAT` to that archive and hands the environment to
+the harness. The guard then passes because the situation is actually right —
+server and client path against the same authored map — rather than because it
+was bypassed. `test_deploy` §3 pins it with two NEGATIVE CONTROLS — pointing the
+server elsewhere, and building the env without handing it over, which is exactly
+the shape of a fix that does nothing.
+
+> **RETRACTED 2026-08-13, same day, by §59.** This paragraph continued: *"The
+> known hazard is stated rather than discovered: a running client holds its
+> archive open, so a server wanting to re-read mid-session could be refused;
+> MEASURED 2026-08-13, the run completes, because the server reads the world at
+> startup before the client launches."* **The word MEASURED was doing work no
+> measurement supported.** The *world* is read at startup; the *navmesh* is not
+> — `load_pathmap` runs at instance bring-up, after the client is up and
+> holding the archive open — so that read returned EACCES and collision turned
+> off silently. The run "completing" was the fallback working, not the hazard
+> being absent. §59 has the numbers and the fix.
+
+A second robustness gap fell out of the same run: `rebloat --arm` refuses a
+head that is ALREADY zero length, rightly, since it cannot record a baseline
+mesh from a row that has none. But "already armed" is not an error for THIS
+command — the client recompiles on load either way, and `deploy` is meant to be
+re-run while iterating on a shape. Every re-run after an interrupted one was a
+dead end; it now checks the head and says so instead.
+
+With both in place the whole thing is one command again, exit 0, no env var and
+no flags papering over anything:
+
+    deploy.py --area sculpt --blend vale.blend --install --launch --dat <copy>
 
 Run record: `vault/research/blender-2026-08-13/`.
+
+## 59. OBSERVED: the server never once walked on our ground (2026-08-13, offline)
+
+Rungs (e10*), G and H all read the same way: *the client compiled our map and
+the character walked around in it.* True, and it is one half of a claim that
+reads as two. **The other half — that the SERVER agreed about where the ground
+was — was false on every compiler-route run this project has made.**
+
+Found by a completeness critic over six scouting reports, then verified here.
+
+### 59.1 Two failures, one cause, both silent
+
+`load_pathmap`'s only call site was instance bring-up (`authsrv.py`, inside the
+connection handler). That is *after* a client has connected. Two regimes:
+
+| when | what the server read | what happened |
+|---|---|---|
+| before `RURIK_DAT` | its default `vault/dat_study/Gw.dat` | **ArenaNet's map 143**, 27 trapezoids, while the client drew ours |
+| after `RURIK_DAT` | our run archive — correctly | **EACCES.** A running Guild Wars client holds its own `Gw.dat` open exclusively |
+
+Neither failed a test. Neither failed the harness. The first is quiet because
+ArenaNet's mesh is a perfectly valid mesh; the second because `load_pathmap`
+catches, prints one line and returns `None`, and the caller's documented
+fallback is *no collision*. `20260813T112706` — rung G's own headline run —
+logs `[map] navmesh 0x287D3: 1 planes, 27 trapezoids`.
+
+### 59.2 How wrong was it? The walkable sets are DISJOINT
+
+Prediction-first, on the sculpt map (64×64, rect 0..6144), 4,096-point grid:
+
+| | result |
+|---|---|
+| **P1** spawn walkable on ours / on ArenaNet's | **True / False** — HOLDS |
+| **P2** *(predicted)* >50% of samples disagree | **FAILS** — 11.8% |
+| **the statistic P2 should have been** | walkable on **both: 0**; 484 disagreements = 49 + 435 **exactly** |
+| **C1** every mesh agrees with itself | 13/13, 27/27, 1270/1270 — the query is sound |
+| **C2** Kamadan over the same rect | 0% walkable — the control does not collapse |
+
+**P2 was the wrong statistic and is recorded as failing rather than quietly
+restated.** Both meshes are mostly empty over that rect, so *unwalkable on
+both* scores as agreement and dilutes the rate. The set relation is what
+carries it: across 4,096 points the server and the client never once agreed
+that the same spot was standable. 16 vault runs carry
+`standing at (…), which the navmesh does not cover — collision suspended`.
+
+### 59.3 The fix, and why it is inherently TWO runs
+
+`prewarm_pathmap(map_id)` reads the navmesh **at startup**, from the `--map`
+branch — the only moment the archive both holds our map and is unlocked.
+Verified: with `RURIK_DAT` on the run archive it returns **13 trapezoids**
+(ours); with the default it returns **27** (ArenaNet's); on an unconfigured map
+it refuses and says why.
+
+It cannot rescue the run that installs. `--install` arms the head to zero *so
+that* the client recompiles, so at that server's startup there is no compiled
+mesh to read — and once the client is up the archive is locked. **The run that
+produces the mesh can never serve it.** `deploy --serve` therefore launches a
+second time, unarmed, and the verdict is the server's own log line matched
+against a count read from the archive by `pathmap` — two independent readers of
+the same bytes, never a predicted constant.
+
+`load_pathmap` also names `PermissionError` separately now: *Permission denied*
+on a file the process owns reads as a broken install, and the cause is a client.
+
+### 59.4 What this does and does not touch
+
+**Does not:** the readback checks run offline after the client exits and stand
+unchanged; client-side confinement to authored geometry is established
+independently by §23 (two maps differing in 33 bytes, bounding boxes in the
+ratio of the two mesh rects).
+
+**Does:** every "walked" sentence in §§54–58 means *the client drew and confined
+us to our geometry*, not *the server pathed on it*. And the retraction in §58 is
+the lesson — the word MEASURED was attached to a hazard nobody had measured, in
+a document whose whole purpose is to separate those.
+
+`test_deploy` §6 pins it (floor 25 → 35); the sabotage that deletes the one
+startup call was built and run and reddens exactly 2 checks.
+
+### 59.5 THE RUN: both predictions confirmed (2026-08-13)
+
+Stated before arming: run 1 (armed) must FAIL to pre-warm, since the head is
+zero and there is no compiled mesh yet; run 2 (`--serve`, unarmed) must succeed
+and name the archive's own count. A pre-warm that SUCCEEDED on run 1 would have
+meant something was serving stale geometry and the fix was wrong.
+
+| run | dir | the server's own log |
+|---|---|---|
+| 1, armed | `20260813T183010` | `no navmesh for 0x287D3: not an FFNA file: b''` → **PRE-WARM FAILED … serves NO collision** |
+| 2, `--serve` | `20260813T183027` | **`[map] navmesh 0x287D3: 1 planes, 13 trapezoids`** |
+
+`b''` is the load reading the armed head: empty, exactly as designed. Between
+the two, the client compiled a 3,016 B path chunk into that row, and run 2's
+server read it at startup. `serve_run` matched it against the 13 `pathmap` reads
+from the archive — two independent readers of the same bytes — and the command
+exited 0. **The server and the client now agree about the ground.**
+
+Full readback unchanged and green: heights 4,096/4,096, env 639 B and sound 89 B
+verbatim, 8 props, spawn in exactly one trapezoid, 92.34% ours.
+
+### 59.6 A third defect the run exposed: `--hold` was decoration
+
+The two runs started **17 seconds apart under `--hold 40`**. `session.hold_open`
+is gated on `keep_open`, which only the tape chain sets, and `deploy` passed
+`--hold` alone — so every run of this command has torn down as soon as the body
+reached the map. Nothing failed, because the client compiles during LOAD and
+that fits inside the un-held window; the flag was naming a wait that never
+happened, and a bigger map is where that stops being free. `launch()` passes
+`--keep-open` now, asked of the syntax tree rather than grepped (the comment
+explaining the rule would satisfy a grep), sabotage reddens 1.
+
+## 60. OBSERVED: an authored area gets a population (2026-08-13)
+
+R5's criterion is *"a new zone in TOML, hot-reloaded, walked"*. The toolkit could
+author a zone's **ground** long before anything standing on it, and an area with
+a tree in it and nothing alive is a diorama. `authsrv --area NAME` serves the
+`content/world.toml` spawn rows carrying `area = NAME`; `deploy --launch` passes
+it. **Three bodies stood in the sculpt map at their declared coordinates**, run
+`20260813T185442`:
+
+    AREA: sculpt -- 3 spawn row(s). This REPLACES the standing test enemy.
+    'sculpt_farside': Hatcher [Collector] at (2596, 3520) absolute, hostile
+    'sculpt_hostile': Hatcher [Collector] at (2619, 2921) absolute, hostile
+    'sculpt_watcher': Hatcher [Collector] at (2934, 3046) absolute, noncombatant
+    area 'sculpt': 3 of 3 placed
+
+Nothing here is new protocol — every body goes out through `create_agent_world`,
+the call the enemy rung proved. What is new is that the SET of bodies, their
+positions, allegiances and health come from content rows.
+
+### 60.1 This is what rung (I) was for
+
+The load-bearing rule is that a body goes out **only where the navmesh says
+there is ground**, and §59 is why that could not have been enforced before: the
+server held either ArenaNet's geometry for the same map id or no mesh at all. It
+is not a formality — **the sculpt map is 1.2% walkable by area**, 13 trapezoids
+over 64×64, because a Blender basin and a hard ridge leave most of the terrain
+steeper than the client's walkable band. A coordinate picked by eye is ground
+about **one time in eighty**. Every shipped position is a trapezoid centre read
+out of the mesh the client itself compiled, and the server re-checks each
+against that mesh: on the mesh it stands, near it it is nudged and the distance
+REPORTED, beyond 480 units it is REFUSED. A body standing where the server's own
+collision says nothing exists makes everything downstream reason about it
+wrongly.
+
+### 60.2 The defect, and it reported PASS
+
+**The first populated run placed ZERO bodies and every check was green.**
+`spawn_population` reached for `agents.WORLD.get("npc", …)` — the raw content
+row, whose `enc_name` is a list of 16-bit string ids — where `agents._row()`
+encodes it first. `npc_properties` then built a message the codec refused:
+
+    ValueError: string of 28 code units exceeds cap 8
+
+The throw landed **inside instance bring-up**, after the map had loaded. So the
+harness reported PASS, all six map readback checks were green (correctly — they
+are about the map), the serve check matched the navmesh, and the command exited
+0. The only evidence was a traceback in a log nobody was reading, and three
+bodies that were not there. **It was caught because the owner looked at the
+screen**, which is how rung E10a's client asserts were caught too.
+
+Two things changed, because either alone leaves the hole:
+
+* `agents.npc_template(key)` is public and documents the difference; the raw row
+  is not a usable template.
+* `deploy --serve` now reads `area 'X': N of M placed` out of the server's own
+  log and fails without it. Separate from the mesh check because they fail
+  separately: bodies are created well after the navmesh is read, so a throw
+  there leaves the mesh line correct and every map check green.
+
+### 60.3 What the tests could and could not do
+
+`test_population.py` (floor 38, no vault/socket/client — the mesh is
+`pathchunk.minimal()`). **Sections 0–2 did not catch the defect and could not**:
+they check which rows are selected and where a body may stand, and the bug was
+in entry construction. Section 2b encodes every shipped row through the real
+codec, with the raw row reproduced as a negative control so the section can tell
+the fix from the bug.
+
+Seven sabotages built and run, all seven redden — but the two worth keeping are
+the ones that did **not** at first:
+
+* one **CRASHED**: refusing any shared `definition` makes the real rows
+  unloadable, and the positive controls called `area_population` directly, so
+  the run died with a bare traceback, no verdict banner and no ledger — the trap
+  `vaultpath.require_dir` set for `test_stripbuild`. Everything goes through
+  `accepts()` now.
+* one passed **GREEN**: the bounded-search check computed its probe point as
+  `-(PLACE_SEARCH_RADIUS + 2*PLACE_SEARCH_STEP)`, so raising the radius to
+  100,000 moved the probe with it. A symbol appearing in a test file is not a
+  check — the same defect `test_agentlife` records, where twelve of fourteen
+  combat constants could be set wrong with all 125 checks green. Both constants
+  are now asserted against **literals written in the test file**.
+
+The `definition` rule has a shape worth keeping: sharing an index is ALLOWED
+within one npc template — a definition is per-instance and outlives its agents,
+and ArenaNet sends one for 140 re-creates of one worm — and REFUSED across two,
+since the array is a raw index and the second row would silently overwrite the
+first.

@@ -171,6 +171,12 @@ def load_tape(capture_dir, connection=None):
     the one with the most server plaintext wins, which for the 2026-08-07 capture is
     Ascalon City (map 148).
 
+    `info["t0"]` is this connection's first s2c segment on the CAPTURE's clock -- the
+    value every event time here is relative to. It is what lets anything measured in wire
+    time (a `wire.jsonl` segment, an operator mark from `toolkit/harness/marks.py`) be put
+    on the same axis as a tape event; see the comment at the dict below. None for an empty
+    tape.
+
     The correctness property, and it is checked rather than assumed: the wire
     segments for this connection, minus the handshake, must account for EXACTLY the
     decrypted plaintext -- same total length, no more and no less. If they do not,
@@ -232,6 +238,21 @@ def load_tape(capture_dir, connection=None):
         "bytes": len(plain),
         "seconds": events[-1][0] if events else 0.0,
         "origin": who,
+        # THE TAPE'S ORIGIN ON THE CAPTURE'S OWN CLOCK, exposed 2026-08-13 and ADDITIVE:
+        # every existing caller indexes named keys (`seconds`, `bytes`, `origin`) and none
+        # iterates this dict or asserts its key set, so a new key changes nothing for them.
+        #
+        # It was computed here and DISCARDED. A tape event's `t` is relative to THIS
+        # connection's first s2c segment, while a wire segment's `t` and an operator mark
+        # are relative to the capture's epoch -- two numbers that look comparable and are
+        # not, off by however long the client took to reach this connection. So a mark
+        # could not be joined to a tape at all, which is what made
+        # studies/reconstruction/FINDINGS.md §3.3 call this one exposed value the thing
+        # everything downstream wants. `marks.on_tape(info, marks)` subtracts it.
+        #
+        # None when the tape has no events: there is no first segment to measure from, and
+        # a 0.0 there would be a made-up origin that reads as a real one.
+        "t0": t0,
     }
     return info, events
 

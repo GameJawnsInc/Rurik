@@ -405,10 +405,28 @@ def section_swing_back():
     LEDGER.ok(cleared == [[authsrv.PLAYER_AGENT_ID, 0]],
               "clearing the effects bit it set",
               f"{cleared}")
+    # THE REFILL IS A TICK LATER, and that is the fix of studies/agentprops 1f rather
+    # than a weakening of this check. The client requires both pools EMPTY at the
+    # moment the death bit clears and logs `Health non-zero on resurrect` when they
+    # are not -- MEASURED at 13 of 13 revives with the burst order and 0 of 11 with
+    # one tick between. So the revive must NOT carry the refill...
+    early = [v for op, v in rev
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    LEDGER.ok(not early,
+              "the revive does NOT refill the pool in the same burst",
+              f"{early} -- a refill here is what the client complained about, "
+              f"13 of 13 revives")
+    # ...and the deferred half must actually send it, or a body stands up empty. The
+    # two checks are a pair on purpose: either alone is satisfied by a broken server.
+    state["player_refill_due_at"] = time.time() - 1.0
+    late = []
+    authsrv.player_refill_due(
+        lambda op, v, label="", quiet=False: late.append((op, v)), state, 1)
+    rev = late
     refill = [struct.unpack("<f", struct.pack("<I", v[-1]))[0] for op, v in rev
               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
     LEDGER.ok(refill == [1.0],
-              "and refilling the pool with 1.0, the SETTER's full-bar value",
+              "and the DEFERRED half refills the pool with 1.0, the SETTER's value",
               f"{refill} -- max_health here is what crashed the client on "
               "2026-08-11, and the same guard covers this call site")
 
@@ -1569,6 +1587,219 @@ def section_probe_encoding():
               f"by launching a client, which is the most expensive way to find "
               f"a typo in this repo")
 
+    # A REFUSAL step sends nothing, so there is nothing to encode. This went red on
+    # 2026-08-13 for the best possible reason: the all-zero sweep FINISHED, `remaining`
+    # went to 0, `smsgsweep_steps` returned its "NO PLAN" refusal, and the encoder tried
+    # to encode it -- 0x0000 is a real opcode wanting one value, so a completed sweep
+    # reported itself as a broken probe.
+    refusal = probes.Step(0.0, 0x0000, [], "refusal", "sends nothing", sends=False)
+    LEDGER.ok(refusal.sends is False and probes.Step(0.0, 0x0000, [1], "x", "y").sends,
+              "a step declares whether it SENDS, and the default is that it does",
+              "the flag defaults True, so an existing step cannot become invisible to "
+              "the encoder by omission")
+
+    # THE CONTROL, and it is the whole reason `sends` is a declared flag rather than an
+    # `if not step.values` shape test. A malformed step that carries no values and DOES
+    # claim to send is exactly what this section exists to catch, and it is bytewise
+    # identical to the refusal apart from the flag. Skipping on shape would have made
+    # the check unable to fail for its own reason.
+    class _Probe:
+        steps = [probes.Step(0.0, 0x0000, [], "malformed", "should be caught")]
+    saved = probes.get
+    try:
+        probes.get = lambda name, n=1: _Probe()
+        caught = probes.check_encodable(quiet=True)
+    finally:
+        probes.get = saved
+    LEDGER.ok(caught > 0,
+              "CONTROL: a valueless step that still claims to SEND is caught",
+              f"{caught} failure(s) -- identical to the refusal but for the flag, so a "
+              f"shape-based skip would have silently stopped catching broken probes")
+
+    section_planless_probe()
+
+
+def _plan_steps(plan_obj, strict=False):
+    """`_smsgsweep_steps` for a plan, reached THROUGH A REAL FILE and NO VAULT.
+
+    `plan_path` is monkeypatched rather than used, so nothing here reads
+    `vault/probes/smsgsweep-plan.json` -- which is the whole point of the section
+    below. It also means every key of a row's `set` arrives as a STRING, the way
+    JSON delivers it, rather than as the int an in-memory fixture would hand over.
+
+    `strict` picks WHICH `send` the run gets, and the two model the two ways the
+    unfixed `run_probe` failed. They are both needed and the sabotage is what
+    proved it: reverting the fix reddens the permissive run's check and NOT the
+    strict run's, because a `send` that never raises never reaches the branch
+    that misreports the refusal.
+
+      strict=False -- a send that ACCEPTS anything, which is the refusal whose
+        opcode the degenerate encoder can fill. The old code put the packet on
+        the wire here, under the words "nothing was sent".
+      strict=True  -- a send that refuses an empty payload the way the codec
+        really does (`GAME_SMSG 0x0000 wants 1 values, got 0`). The old code
+        printed `SEND FAILED: ValueError` and `that is a result too -- record
+        it` here, and `continue`d past the `watch` line.
+
+    Returns (steps, sent, printed, failures): the Steps the builder produced,
+    whatever `run_probe` actually handed to `send`, everything it printed, and
+    what `check_encodable` scored -- all four with THIS plan in place rather than
+    whatever the last sweep left in the vault.
+    """
+    import contextlib
+    import io
+    import json
+    import tempfile
+    import authsrv
+    import probes
+    import smsgsweep
+
+    fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False,
+                                     encoding="utf-8")
+    fh.close()
+    if plan_obj is None:
+        os.unlink(fh.name)              # the MISSING-plan case: no file at all
+    else:
+        with open(fh.name, "w", encoding="utf-8") as out:
+            json.dump(plan_obj, out)
+
+    class _Stop:
+        """Never sleeps. The first step of a real plan waits settle+control -- ten
+        seconds -- and a suite that paid it would be deleted."""
+
+        def wait(self, delay):
+            return False
+
+    sent = []
+
+    def _send(op, vals, label=""):
+        if strict and not vals:
+            # What the real send does with the refusal, via the codec.
+            raise ValueError(f"GAME_SMSG 0x{op:04X} wants 1 values, got 0")
+        sent.append((op, list(vals), label))
+
+    real = smsgsweep.plan_path
+    smsgsweep.plan_path = lambda: fh.name
+    buf = io.StringIO()
+    try:
+        steps = probes._smsgsweep_steps(1, None)
+        failures = probes.check_encodable(quiet=True)
+        with contextlib.redirect_stdout(buf):
+            thread = authsrv.run_probe("smsgsweep", _send, 1, _Stop(), None)
+            if thread is not None:
+                thread.join(timeout=20)
+    finally:
+        smsgsweep.plan_path = real
+        if os.path.isfile(fh.name):
+            os.unlink(fh.name)
+    return steps, sent, buf.getvalue(), failures
+
+
+def section_planless_probe():
+    """The plan-less run, pinned so the suite's COLOUR stops tracking vault state.
+
+    Every check above builds its own Step. The producer -- `_smsgsweep_steps` --
+    was checked by nothing, and it reads a file in `vault/probes/` that any sweep
+    in any session rewrites. So on 2026-08-13 this section went red not because
+    anything broke but because the all-zero sweep had FINISHED: `remaining` went
+    to 0, the plan emptied for the best possible reason, and the refusal it
+    returns could not encode. Whether the suite is green depended on what the
+    last sweep left behind, and nothing pinned either answer. Both are pinned
+    here, through a temp file, with no vault and no socket.
+
+    The runtime half is a separate claim from the encoder half and it is the one
+    that was still broken after `sends` landed. `check_encodable` honoured the
+    flag; `authsrv.run_probe` did not, and it is the consumer that puts bytes on
+    a socket. Both of its `send` fixtures are needed, one per failure direction,
+    and `_plan_steps`'s docstring says which is which.
+
+    WHICH CHECKS ARE LOAD-BEARING WAS MEASURED. Four sabotages were built and
+    run against a green 223, and all four redden a DIFFERENT set:
+
+      run_probe forgets the flag (the defect as it shipped)  2 red
+      the sentinel is built without sends=False              5 red
+      run_probe skips EVERY step, not just refusals          2 red
+      check_encodable stops honouring the flag               1 red
+
+    The third is the one that earns the positive control: it reddens the two
+    control checks and NOTHING else, so without them "skip every step" -- a
+    sweep that fires no packets and prints "probe complete" -- would have been
+    indistinguishable from the fix. The first is why there are two runtime
+    fixtures: with only the permissive `send` it reddened 1 rather than 2,
+    because that fixture never reaches the branch that misreports the refusal.
+    """
+    import probes
+
+    empty, empty_sent, _eo, empty_bad = _plan_steps({"rows": [],
+                                                     "remaining": 0})
+    LEDGER.ok(empty_bad == 0,
+              "with NO plan at all, `check_encodable` still scores 0 -- the "
+              "headline this section exists for",
+              f"{empty_bad} failure(s) against an EMPTY plan installed for the "
+              f"call. The check at the top of this section reads the real "
+              f"vault, so it measured a plan of 1 row today and a plan of 0 "
+              f"rows on 2026-08-13; only this one answers the question on "
+              f"purpose")
+    LEDGER.ok(len(empty) == 1 and empty[0].sends is False,
+              "an EMPTY plan makes the builder return one step that declares "
+              "sends=False",
+              f"{len(empty)} step(s), sends={[s.sends for s in empty]} -- the flag "
+              f"is set by the PRODUCER, which no check above reaches: they all "
+              f"build their own Step and would pass against a sentinel that "
+              f"dropped it")
+
+    missing, _ms, _mo, _mb = _plan_steps(None)
+    LEDGER.ok(len(missing) == 1 and missing[0].sends is False,
+              "and so does a MISSING plan file -- `load_plan` returns None there, "
+              "a different branch",
+              f"{len(missing)} step(s), sends={[s.sends for s in missing]}")
+
+    LEDGER.ok(not empty_sent,
+              "RUNTIME: the plan-less probe hands NOTHING to `send`",
+              f"{len(empty_sent)} packet(s): {empty_sent} -- until this check, "
+              f"`run_probe` sent it and relied on the codec to refuse. A `send` "
+              f"that does not refuse puts 0x0000 on the wire, and that is the "
+              f"hazard the sends flag was chosen over making the sentinel "
+              f"encodable")
+    # The OTHER half, and it needs its own fixture. A send that accepts anything
+    # never reaches the misreporting branch, so reverting the fix leaves the check
+    # above red and this one GREEN -- measured, not assumed. `strict` models the
+    # codec that really is behind `send` today.
+    _se, strict_sent, strict_out, _sb = _plan_steps({"rows": [], "remaining": 0},
+                                                    strict=True)
+    LEDGER.ok(not strict_sent
+              and "nothing was sent; this run measures nothing" in strict_out
+              and "SEND FAILED" not in strict_out
+              and "that is a result too" not in strict_out,
+              "and against the REAL codec's refusal the operator is told why, "
+              "not shown a ValueError filed as a result",
+              f"printed {strict_out.count('SEND FAILED')} SEND FAILED line(s). "
+              f"The old path printed `SEND FAILED: ValueError` and `that is a "
+              f"result too -- record it`, filing an absent plan as an "
+              f"experimental result, then `continue`d past the one line the "
+              f"step exists to carry")
+
+    # THE POSITIVE CONTROL, and it is the check that stops the fix from being
+    # "skip everything". A refusal-skip that fired on every step, or a sentinel
+    # hard-coded sends=False, would make each of the four checks above pass while
+    # every real sweep step went unsent -- a probe that measures nothing and
+    # prints "complete", which is the exact shape all of this exists to prevent.
+    live, live_sent, live_out, _lb = _plan_steps(
+        {"rows": [{"opcode": 0x0021, "predicted": "CONTROL"}], "remaining": 1})
+    LEDGER.ok(len(live) == 1 and live[0].sends is True
+              and [op for op, _v, _l in live_sent] == [0x0021],
+              "CONTROL: a plan WITH a row still sends -- sends=True, and the "
+              "packet reaches `send`",
+              f"sends={[s.sends for s in live]}, sent="
+              f"{[hex(op) for op, _v, _l in live_sent]} -- a skip that fired on "
+              f"every step would satisfy all four checks above and silently stop "
+              f"the sweep from measuring anything")
+    LEDGER.ok("REFUSAL" not in live_out,
+              "and it is not announced as a refusal",
+              "the two paths print differently, so an operator reading the "
+              "gamesrv log can tell a run that measured something from one "
+              "that could not")
+
 
 def section_secondary_bits():
     """0x00B6, and the two ways it fails SILENTLY.
@@ -2068,6 +2299,19 @@ def section_pool_fraction():
                              "last_hit": 0.0}}}
     authsrv.revive_due(lambda op, vals, label="": sent.append((op, vals, label)),
                        state, 1)
+    # THE REFILL IS A TICK LATER on this path too (studies/agentprops 1f): the client
+    # wants both pools EMPTY at the moment the death bit clears, and 2 of the vault's
+    # 49 complaints name an NPC. So the value this section reads off the wire now
+    # comes from the deferred half -- which must still be driven, or a revived body
+    # stands up empty and this check would pass by measuring nothing.
+    early = [v for op, v, _l in sent
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    LEDGER.ok(not early,
+              "the agent revive does NOT refill in the same burst",
+              f"{early} -- the burst is what the client complained about")
+    state["agents"][10]["refill_due_at"] = time.time() - 1.0
+    authsrv.agent_refill_due(
+        lambda op, vals, label="": sent.append((op, vals, label)), state, 1)
     floats = [struct.unpack("<f", struct.pack("<I", v[-1]))[0]
               for op, v, _l in sent
               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]

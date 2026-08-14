@@ -474,6 +474,109 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   was tracing, whose `0x00712200` parses the BLOATED chunk with five-byte
   headers -- confirmed it and settled the one thing the corpus could not, that
   tag 4's count is a u16),
+  `toolkit/mapdata/test_modelexport.py` (the MODEL interchange, rung M3: a
+  decoded prop mesh split into typed per-field arrays in `vault/exports/
+  models/`. **The structural check is the RE-INTERLEAVE and it is the reason
+  the rung is trustable**: the exporter DE-INTERLEAVES a vertex block, which is
+  a real transformation rather than a copy, so the test puts the exported
+  arrays back together with a packer written out of `struct.pack_into` -- no
+  code shared with the module -- and compares against the geometry chunk's own
+  bytes read FRESH from `Gw.dat`. **519 of 519 sub-models over both reference
+  maps, all nine formats.** It did not pass first time and that is the point:
+  the exporter's first version silently dropped `dat_fvf` bits 12/13, the
+  TANGENT FRAME, 24 bytes a vertex, and produced a perfectly plausible mesh --
+  six sub-models of format 12405 failed the re-interleave and nothing else
+  could have noticed, because a dropped field costs no vertex, no triangle and
+  no radius. Byte-exactness is what forces the two UNNAMED fields (bits 1 and
+  3) to be carried as raw bytes, and section 3's two POPULATION guards are
+  what stop the check passing vacuously on a sample holding no format that
+  carries them -- the default sample has 1 tangent-frame and 6 unnamed-field
+  sub-models, `--all` has 10 and 78. The cross-file ORACLE is M1/M2's run
+  through the SERIALISED interchange: `f11 == scale * max 2D radius`
+  recomputed from the exported position sidecar READ BACK OFF DISK, against
+  prop records in a map file this module never opens -- **474/474 and
+  664/664**, and required to EQUAL `test_modelfile.py`'s in-memory figures,
+  because serialising may not change the geometry. **Section 5 records the
+  oracle that ISN'T**: the rung was scoped around checking collision meshes
+  against retail outline rings, and on the reference maps the two populations
+  are DISJOINT -- 46 props with a ring, 30 on a collision-carrying model,
+  **ZERO with both** (Pre-Searing 34/23/0), with the corpus at 28 of 14,095,
+  about what independence predicts. The negative is pinned as a measurement
+  rather than dropped, and the first reading of it -- "disjoint" from the
+  reference maps alone -- was itself the §B4 small-sample trap and is
+  corrected in place. **What replaced that oracle is stronger, because the
+  decoder cannot force it** (section 6 asserts on `decode`'s own source that
+  it validates RENDER indices only): every collision index below its mesh's
+  vertex count (2,265/2,265), every mesh a triangle list (28/28) with the
+  rival header order `(nv, ni)` at **7/28** pinning `u32 ni` as the first
+  field, every collision vertex referenced. **WHICH CHECKS ARE LOAD-BEARING
+  WAS MEASURED**, by building eight sabotaged exporters and running the file
+  against each -- the table is in the floor comment. Two results earn their
+  place: a truncated vertex array reddens NINE checks now and reddened
+  NOTHING before section 3's read-backs were guarded, because it raised
+  IndexError and killed the process, printing no verdict and no floor
+  shortfall (the one failure `checks.py` cannot see, `test_content.py`'s
+  shape); and a MEMCPY loader that stashes the source block reddens nothing
+  -- correctly, since the files it writes are still right -- while **memcpy
+  PLUS a corrupted sidecar is caught by exactly ONE check**, the
+  `_sidecar_positions` read that unpacks the file with `struct.unpack` and
+  never touches `load_model`, with the re-interleave and both f11 oracles
+  passing green beside it. Every other check in the file reads geometry
+  through the module's loader, which is why that one must not. The triangle
+  lists are checked separately for the same reason -- the re-interleave
+  covers vertex BYTES only and the oracle covers positions only, a gap found
+  by reading the suite rather than by a sabotage. Sections 0-2 build a model
+  geometry from `struct.pack` and score 27 against a floor of 48; `--all` is
+  49. ~85 s),
+  `toolkit/mapdata/test_modelfile.py` (the prop model decoder -- rung M1 of
+  `studies/models/PLAN.md`, the layout customarea §5 measured from scratch
+  scripts promoted to committed code -- and the cross-file oracle that makes it
+  trustable: the Bloated prop record's `f11` equals scale x the referenced
+  model's max 2D vertex radius, a number crossing TWO FILES and eight decode
+  steps through committed code (props.py -> dependency pair -> file-id table ->
+  MFT row -> geometry chunk -> sub-model walk -> vertex stride), so no decoder
+  error at any step survives it. **474/474 and 664/664 at 1e-5** on the
+  reference maps' comparable props with the 3D-radius rival pinned collapsed (1
+  and 7); `--all` reproduces the full 14-map sample from committed code
+  -- 2,048 model files: 1,741 unique / 1 ambiguous / 306 no-close, f11
+  **12,782/12,875**, rival 103, twelve (dat_fvf, stride) pairs, ti and n0
+  divisible by 3 on 3,834/3,834 -- MEASURED at 227 s against the default's
+  121 s. The three failure populations are pinned APART (§A5's lesson: conflating
+  them manufactured a false theory) and PER MAP, because Pre-Searing's no-close
+  rate is 77/229 against the corpus ~15% and an average would hide both.
+  **The stride is the CLIENT'S OWN three tables since M2** (VA 0x00BF5B80/
+  0xBF5BC0/0xBF5BE0, accessor 0x00688010), and section 5 re-reads them out of
+  the vaulted image through the test's OWN PE walk so the module's literals are
+  pinned to ArenaNet's bytes rather than to a transcription, with a read four
+  bytes early as the control. **They REPLACED a byte-cost rule of ours, and
+  that correction is the lesson the file exists to carry**: the two rules agree
+  on all twelve real formats and differ on 60,168 of 65,536 words, so a wrong
+  rule closed 1,741 files and satisfied a two-file oracle on 99.15% of props
+  while the corpus could never show it. **dat_fvf 0x2C never existed** -- its
+  one sighting was our misparse of the ambiguous file 0x1BAE2, which the client's
+  tables resolve to a single closure at the common format 21, and the ORACLE
+  confirms the fix from a source sharing nothing with the binary: that model's
+  props score f11 **0/16 under the retired rule and 16/16 under the client's**,
+  which is the whole corpus improvement 12,766 -> 12,782 and shrinks §A5's
+  unexplained population from 109 to 93. The retired rule is REPRODUCED as a
+  live function so all of that is a difference between two answers rather than
+  prose. GWMB's tables ARE these client tables, so §B6's recorded disagreement
+  resolves in UPSTREAM's favour -- the direction nobody predicted. The
+  ambiguity moved rather than vanished (0x25AA9 at 170/65,842) and both files
+  are pinned, because closure is NOT identity (§B5). Section 6 establishes the
+  vertex FIELD MAP by refutable prediction rather than by field size (the
+  envchunk tag-6 lesson): **normal unit on 90,108/90,108** with the same read
+  four bytes early unit on 2.7%, tangent-frame vectors unit 20,034/20,034 and
+  93.0% orthogonal against a 26.0% next-vertex control, texcoords 97.8% inside
+  +/-16 over a real range of -519.7..520.4 so a consumer must WRAP not clamp,
+  and **bit 1's D3DCOLOR reading REFUTED** -- high three bytes zero on 9,128 of
+  9,128, ten values all <= 9, so it is an index whose purpose stays UNVERIFIED.
+  A sabotage that quietly reads the 3D radius as the 2D
+  one was built and run and reddens 5 checks from three directions, the
+  synthetic literal plus both maps' oracle and rival. Three scores, each
+  MEASURED rather than subtracted, because the file needs TWO vault artifacts
+  that fail independently: 57 with archive + client image, 33 with the client
+  image alone, **29 with neither** -- against a floor of 57. ~121 s),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against
@@ -711,19 +814,40 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   no vault and score 57 against a floor of 66. Default ~25 s and 66 checks; `--all` is
   67 checks and ~20 minutes — MEASURED 2026-08-12 at 1,205 s, so budget for that rather
   than for a round number),
-  `toolkit/mapdata/test_mapexport.py` (the neutral terrain interchange, and the
-  orientation checked against a chunk the exporter never reads: prop `z` from
-  `0x20000004` sampled against the exported height field, with three rival layouts
-  that must collapse — on Kamadan the fraction of props within 100 units is 0.304
+  `toolkit/mapdata/test_mapexport.py` (the neutral map interchange — terrain and,
+  since 2026-08-13, EVERY PROP PLACEMENT — with the orientation checked against the
+  props chunk `0x20000004` through the test's OWN 48-byte walker. The old framing
+  "a chunk the exporter never reads" died the day the props sidecar landed and the
+  independence that survives is narrower and stated: the terrain path never reads
+  props, the props path never touches the height arrays. Prop `z` sampled against
+  the exported height field, with three rival layouts that must collapse — on
+  Kamadan the fraction of props within 100 units is 0.304
   against 0.070 for the y-flip, 0.033 for the x-flip and **0.085 for not de-tiling
   at all**, which reproduces FINDINGS §4's 0.089 for the flat row-major rival from
   the other side; Pre-Searing is 0.734 against 0.078/0.139/0.137. Kamadan sits below
   FINDINGS' 0.504 corpus median and is reported at its real value rather than
   dropped. Every prop of both maps lands inside the grid under all four layouts, so
-  no control loses on sample size. Also: `detile` checked cell-for-cell against
+  no control loses on sample size. **The props sidecar (format_version 2) joins BOTH
+  streams and makes them check each other**: `StrippedProps` for the authoring bytes,
+  `BloatedProps` for the compiled basis, f32 scale and placement radius, through
+  `corresponds()` — retail satisfies it 349/349, so the exporter REFUSES a
+  disagreement, and the dep lists (`0x21000004`/`0x11000004`, measured identical)
+  resolve every model index to a file id plus the MFT's (size, crc), because a file
+  id is archive state. Section 7 pins the sidecar against the archive — every
+  position equal to the independent walk, every model resolving, the sidecar's own
+  props-vs-heights fraction reproducing section 5's number — **and the ROTATION
+  COMPOSITION, which `props.py` had open: z first, then x, then y (Blender 'ZXY'),
+  per-axis signs (−, +, −), reproducing the compiled basis on all 516 and 864
+  records, with the multi-axis populations (53, 179) pinned so the rival-order
+  control (zyx, which still fails 20 and 95 of them) cannot go vacuous.** The
+  12-map probe behind it closed 3,545/3,545 with the nearest rival at 2,070.
+  Section 4b's refusals each sit beside a live baseline built from a synthetic
+  pair whose Bloated half the test assembles out of `struct.pack`. Also: `detile`
+  checked cell-for-cell against
   `terrain.Terrain.index`, a different implementation in a module this rung does not
   own; a sha256 manifest whose negative control flips one mantissa bit of one height
-  and must be caught; and a refusal that keeps derived ArenaNet bytes out of the
+  and must be caught (and the same control on one byte of the props sidecar); and a
+  refusal that keeps derived ArenaNet bytes out of the
   working tree — which shipped broken, one `dirname` short, and wrote a 745 KB height
   field into the repo before the test pinned the resolved root.
   Section 6 lost its entry-count gate on 2026-08-13 and the reason is the lesson: it
@@ -734,16 +858,20 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   and redden the floor on `vault/client/2026-04-30_b174de1f2d8d`, which holds the same
   349 pairs at the same rows with the same crcs. What guards the section is the
   population assertion on the next line -- 349 rows with flags 259 -- which the
-  impostor archive of `test_mapfile`'s section 2b reddens at 1. Sections 0-4 need no
-  vault and score 65 against a floor of 108, so a vault-less run goes red. ~31 s, and
-  108 of 108 on BOTH vaulted archives),
+  impostor archive of `test_mapfile`'s section 2b reddens at 1. Sections 0-4b need no
+  vault and score 84 against a floor of 145, so a vault-less run goes red. ~48 s, and
+  145 of 145 on BOTH vaulted archives, MEASURED 2026-08-13),
   `toolkit/mapdata/test_blenderimport.py` (the Blender half: it runs
   `tools/blender/import_gwmap.py` headless as a SUBPROCESS — the test is stdlib-only
   and never imports `bpy`, which is why the importer may live outside `toolkit/` —
   and checks the mesh Blender actually built. 213,921 vertices and 212,992 quads for
   Pre-Searing, every face a quad, every normal +Z, and the bounding box equal to the
-  Map Parameters rect to the bit. The oracle is again a chunk neither tool reads:
-  prop `z` looked up in Blender's own vertex buffer **by world coordinate rather than
+  Map Parameters rect to the bit. The oracle is the props chunk read by the test's
+  own walker — the TERRAIN path through both tools never touches it, which since
+  2026-08-13 is the honest form of "a chunk neither tool reads", both tools now
+  handling props as a separate sidecar/collection sharing nothing with the height
+  path: prop `z` looked up in Blender's own vertex buffer **by world coordinate
+  rather than
   by lattice index**, scoring 0.7338 — identical to `test_mapexport`'s figure for the
   same map, which was the stated prediction — against 0.078 y-flip and 0.139 x-flip.
   Looking up by index is what the first version did, and an upside-down-map sabotage
@@ -760,8 +888,31 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   does off Windows; `RURIK_BLENDER` and `--blender` override the install path, and
   section 0 is that selector — an explicit path that does not exist is REFUSED
   rather than fallen through to the known install, because it fell through, and a
-  run that asked for one Blender measured another and printed green. Sections 0-2
-  need no vault and score 39 against a floor of 75. ~13 s),
+  run that asked for one Blender measured another and printed green.
+  **Section 4 (rung M4, 2026-08-13) is REAL prop geometry**: a `.gwmodel`
+  family beside the map export gives each prop ArenaNet's own mesh, instanced
+  one datablock per model file id — 664 real props over **152** datablocks on
+  Pre-Searing, none shared across different ids, with the 200 whose model does
+  not decode keeping their proxy so no placement is lost. **THE Z SIGN IS THE
+  MEASUREMENT**: prop geometry must reach ABOVE the terrain under it, scored
+  off the objects Blender actually built — **0.961 against 0.032** for a
+  control that reflects each mesh about its own placement point (and 73.2%/
+  83.3% vs 23.8%/6.5% measured the other way, from the exports, before any of
+  this was built). A null that shuffles which model a prop points at does NOT
+  collapse, and the file says so rather than burying it — the metric tests the
+  SIGN, not identity, and the sign flip is what has to fail. Section 3 passes
+  `--proxies-only` EXPLICITLY, because it was getting proxies only from the
+  absence of a `models/` directory beside its temp export, so exporting one
+  there would have turned the section into a test of something else with every
+  check green. **And since
+  2026-08-13 the props sidecar reaches Blender as PROXY objects** — outlined props
+  as their measured footprint prisms, the rest as cylinders at the measured
+  placement radius, never ArenaNet geometry, the proxy height being the one
+  invented (display-only) number — checked at all 864 Pre-Searing proxies sitting
+  at (x, y, −z) exactly, the proxy OBJECTS scoring the chunk's own 0.7338 against
+  the mesh, the outlined population pinned at 34, and a `--no-props` control that
+  must import the terrain alone. Sections 0-2
+  need no vault and score 45 against a floor of 92. ~25 s),
   `toolkit/mapdata/test_blenderroundtrip.py` (the AUTHORING direction, and the
   first thing in this arc to come OUT of Blender: an interchange imported, saved
   to a `.blend`, and exported back by a SEPARATE Blender process — two processes,
@@ -792,8 +943,15 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   a tolerance would have hidden; the comparison reports byte-differs and
   value-differs separately so the next one names itself. Section 4 authors a mesh
   in Blender from NOTHING, with no stamp to carry, and `mapbuild` assembles it
-  into a map file that passes all 17 of the client's open-time gates. Sections 0-4
-  need no vault and score 65 against a floor of 77. ~39 s),
+  into a map file that passes all 17 of the client's open-time gates. **And since
+  2026-08-13 the exporter picks the terrain by IDENTITY, not census**: a props
+  import fills the scene with proxy objects, so "more than one mesh" stopped
+  being proof of ambiguity — the terrain is the one mesh carrying the importer's
+  stamp, which proxies never do, and the old two-mesh refusal split into an
+  unstamped-intruder POSITIVE control (the stamp picks the terrain, the dims pin
+  it) and a two-STAMPED-meshes refusal, since a duplicated terrain copies its
+  stamp and is genuine ambiguity. Sections 0-4
+  need no vault and score 67 against a floor of 79. ~49 s),
   `toolkit/mapdata/test_mapfile.py` (the WHOLE-FILE codec: a retail `ffna` map
   payload decoded to a typed container and re-encoded byte-identically — **349 of
   349 Bloated and 349 of 349 Stripped** under `--all`, 6 of each by default. The
@@ -886,7 +1044,32 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   symbol appearing in a test file is not a check.** The same section reads
   `skilltable.py`'s live table off build 38797 and cross-checks the enemy's bar —
   which is how `authsrv.py`'s claim that all four bar skills are non-elite was
-  found false (276 is elite), the comment having been the only witness),
+  found false (276 is elite), the comment having been the only witness.
+  **And since 2026-08-13 the plan-less probe run, which is the section that
+  stopped this file's COLOUR from tracking mutable vault state.** Every check in
+  `section_probe_encoding` built its own `Step`; the PRODUCER — `_smsgsweep_steps`
+  — was checked by nothing and reads `vault/probes/smsgsweep-plan.json`, which any
+  sweep in any session rewrites. So the red of 2026-08-13 was not a defect at all:
+  the all-zero sweep FINISHED, `remaining` went to 0, and the refusal step the
+  builder returns for an empty plan could not encode. Seven checks now pin both
+  answers through a temp file with `plan_path` monkeypatched — no vault, no
+  socket, no client. **The half still broken when that section was written is the
+  RUNTIME one**: `Step.sends=False` was added for `check_encodable`, and
+  `authsrv.run_probe` — the consumer that puts bytes on a socket — was not taught
+  about it, so it sent the refusal and relied on the codec to raise. That fails in
+  both directions, which is why there are TWO `send` fixtures: a strict one
+  (refuses an empty payload the way the codec does) catches the refusal being
+  printed as `SEND FAILED … that is a result too — record it` with the `watch`
+  line skipped past, and a permissive one (the refusal whose opcode the degenerate
+  encoder can fill) catches the packet going on the wire underneath the words
+  "nothing was sent". Four sabotages were BUILT AND RUN and all four redden
+  different sets (2, 5, 2 and 1) — and the one that earns the POSITIVE CONTROL is
+  `run_probe` skipping EVERY step, which reddens the two control checks and
+  nothing else, so without them a sweep that fires no packets and prints "probe
+  complete" would be indistinguishable from the fix. The flag stays DECLARED and
+  never an `if not step.values` shape test, because a malformed valueless step
+  that DOES claim to send is exactly what the encoder check exists to catch and
+  the two are identical in shape. Floor 214 against a green 223),
   `toolkit/authsrv/test_dispatch.py` (D9(a): that a schema-KNOWN c2s opcode with
   no handler is now VISIBLE rather than falling off the end of the chain --
   19 opcodes and 9.8% of our corpus did, and worse against live shapes. The
@@ -929,6 +1112,43 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   append-only and GROWS WHILE THE TEST RUNS (`0x00C1` went 363 to 429 between two
   reads minutes apart), so every corpus count above is dated prose and not one of them
   is an assertion. 45 checks, ~1 s),
+  `toolkit/authsrv/test_population.py` (what LIVES in an authored area -- the
+  `content/world.toml` spawn rows carrying `area = NAME`, served by
+  `authsrv --area`. R5's criterion is "a new zone in TOML, hot-reloaded,
+  walked", and the toolkit could author a zone's GROUND long before anything
+  standing on it. **It could not have been written before rung (I)**: its
+  load-bearing rule is that a body goes out only where the navmesh says there is
+  ground, and until 2026-08-13 the server on an authored map held either
+  ArenaNet's geometry for that map id or no mesh at all (FINDINGS 59), so the
+  check would have been measuring the wrong map or nothing. It matters because
+  an authored area is SPARSE -- the sculpt map is **1.2% walkable by area**, 13
+  trapezoids over 64x64, so a coordinate picked by eye is ground about one time
+  in eighty, and the shipped positions are trapezoid centres read out of the
+  mesh the client itself compiled. The set rules are checked at STARTUP because
+  their cost is a wasted client run: `create_agent_world` already refuses a
+  duplicate agent id, but by then half the population is in the world. The
+  DEFINITION rule is the one with a shape -- sharing an index is ALLOWED within
+  one npc template (a definition is per-instance and outlives its agents;
+  ArenaNet sends one for 140 re-creates of one worm) and REFUSED across two,
+  since the array is a raw index and the second row would silently overwrite the
+  first. Placement nudges and REPORTS the distance, or refuses; it never
+  silently invents, because a body standing where the server's own collision
+  says nothing exists makes everything downstream reason about it wrongly.
+  Seven sabotages were BUILT AND RUN and all seven redden, but the two that
+  earn the file are the ones that did NOT at first. **One CRASHED instead**:
+  refusing any shared definition makes the real rows unloadable, and the
+  positive controls called `area_population` directly, so the run died with a
+  bare traceback, no verdict banner and no ledger -- the same trap
+  `vaultpath.require_dir` set for `test_stripbuild`, and it reads as a broken
+  test rather than a caught defect. Every call goes through `accepts()` now.
+  **One passed GREEN**: the bounded-search check computed its probe point as
+  `-(PLACE_SEARCH_RADIUS + 2*PLACE_SEARCH_STEP)`, so raising the radius to
+  100,000 moved the probe with it -- a check that cannot fail, the same defect
+  `test_agentlife` records where twelve of fourteen combat constants could be
+  set wrong with all 125 checks green. Both constants are now asserted against
+  LITERALS written in the test file and the probe distance is a literal too.
+  No vault, no socket, no client: the mesh is `pathchunk.minimal()`, authored
+  from nothing. 33 checks, ~2 s),
   `toolkit/authsrv/test_ping.py` (the `0x000C`→`0x0009`→`0x000D` round trip that
   drives the client's net graph, and the three places a plausible
   implementation quietly LIES: sending a second request while one is
@@ -1381,8 +1601,35 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   from that one read. Sections 9-11 are synthetic throughout and need no vault; the
   only claim about the real store is that its census carries no value out of it. 47
   checks against a floor of 45, the two vault-dependent ones declaring a skip. ~3m25s),
-  `toolkit/test_content.py` (the content store, and that its provenance and licence
-  refusals actually refuse),
+  `toolkit/test_content.py` (the content store, that its provenance and licence
+  refusals actually refuse -- and, since 2026-08-13, that the REAL `vault/content/`
+  overlay loads, which is the one input this file never read. Every other check in it
+  passes `vault_dir=""` or a temp dir, and the bare `content.load()` it opened with was
+  a fixture rather than a claim, so when the overlay shipped **2,077 effect rows citing
+  an extractor that had not been committed**, `_check_extracted` refused them correctly,
+  `content.load()` raised for the server, the harness and `deploy.py` -- and this file
+  did not go red. It DIED at the first line of `main()` and printed no verdict, no
+  ledger and no floor shortfall, which is the one failure `checks.py` cannot see: "a run
+  that measured nothing failed" cannot fire in a process that never reaches its verdict.
+  The load is now guarded and the failure is a named check. Which of the four new checks
+  are load-bearing was MEASURED by four sabotages, and the two that earn the section are
+  the ones the pre-existing checks SURVIVE: deleting the extractor reddens 3 while both
+  synthetic overlay checks stay green, and emptying the overlay reddens exactly 1;
+  gutting the existence check and dropping the vault from `load()`'s directory list are
+  caught synthetically too. The same sabotage found the pre-existing check next door
+  crashing rather than reddening -- `World.get()` RAISES on a missing key, so a dropped
+  overlay killed the section at its third check and the two after it never ran. What the
+  contribution check CANNOT decide is stated at the call site rather than implied by its
+  label: it is a total, so one file of several renamed aside does not move it, and there
+  is nothing tracked to check a per-file expectation against. **And the mutation target
+  is chosen by PARSING for a source in `EXTRACTED`, never by grepping for
+  `extractor = "`**, because an extractor on a row outside that set is INERT -- `capture`
+  rows carry the field and nothing validates it -- so the grep version picked a row with
+  no condition-1 claim to break, got no refusal, and reddened naming the gate while the
+  gate was fine. It did that within minutes of landing, when a parallel session removed
+  `effects.toml` and left `npcs.toml`, whose rows are all `capture`; the honest answer
+  there is the skip it now declares. Floor 39, the MEASURED vault-less score; 40 on an
+  overlay with no extracted-source row, 42 with one),
   `toolkit/test_contentids.py` (the pre-flight that a run's TWO archives agree
   about what `content/maps.toml`'s file ids NAME. **A file id is archive STATE,
   not a property of the map** -- bit 31 means `FcArchive` renamed that row away
@@ -1468,6 +1715,78 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   only so no ArenaNet text enters the tree. ~2 s),
   `toolkit/harness/test_accounts.py` (the account selector, and that the primary is
   refused),
+  `toolkit/harness/test_marks.py` (the pre-registered operator-mark channel — §10.5.1's
+  {t, kind, text} writer on `wire.jsonl`'s own clock, which two studies call a
+  precondition for the next live run. Its criterion is that a mark taken at a segment's
+  instant lands on THAT SEGMENT'S own `t`, against a capture the REAL `wirecapture.
+  open_capture` wrote — two modules, two epochs, one answer, and nothing this file
+  computes can force it. **Every headline here is a number a broken version also prints**,
+  so 25 one-edit sabotages of `marks.py` and 5 of `wirecapture.py` were BUILT AND RUN; all
+  30 redden, thirteen redden exactly ONE check, and the file's floor comment names each.
+  The three that earn the file are the three a skeptic passed with **all 139 checks green,
+  exit 0**: `self.user32["Send" + "Input"](...)`, `attrgetter("Send" + "Input")` and an
+  ALIASED subscript — working keyboard writers on a real `ctypes.WinDLL`, past the very
+  control CLAUDE.md's live-automation rule turns on, because detector 3 scanned
+  `ast.Attribute` off a base spelled `user32` and matched `getattr`/`setattr` by name. The
+  scan was widened (subscripts, aliases, 20 dynamic-lookup spellings, a `"<computed>"` key
+  that can never be whitelisted) but the answer is the CAPABILITY: `Hotkeys.__init__` now
+  BINDS its four functions and lets the handle go out of scope, and the check is on the
+  OBJECT — a scan says what it noticed, a class with no handle says what exists.
+  **Three constants were free to move the same way**: `VK_F9/F10/F11` were compared
+  against the module's own symbols, so a `marks.py` taking GLOBAL hotkeys on ESCAPE,
+  ENTER and SPACE — swallowed away from Guild Wars for a whole session — passed
+  everything, and even the refusal message relabelled 0x1B as "VK_F9". They are literals
+  now, with the binding ORDER beside them. `test_agentlife.py`'s twelve-of-fourteen, in
+  the file that cites it twenty lines earlier. **The module was also a writer with NO
+  destination guard**: one `open(self.path, "w")` off argv, zero guard calls, and `--out`
+  at a 4,096-byte file named `Gw.dat` replaced it with 533 bytes before the first mark —
+  `atex.py --make C:\gw\Gw.dat` in a new module. Four refusals now (the owner's install,
+  `vault/dat_study` before the vault allow, EVERY checkout, and any path that ALREADY
+  EXISTS), each with a positive control, and the syntax tree is asked whether
+  `resolve_out` runs BEFORE the `open`. **The check that tests that guard wrote into the
+  tree**: aimed at the TEST's `HERE` rather than the module's own `working_tree_roots()`,
+  it created `toolkit/harness/plan_marks.jsonl` on 24 sabotage runs — the exact write the
+  guard exists to prevent, through the check that tests it. **Five hotkey leaks are
+  measured, not argued**, against a fake keeping its OWN OS-side ledger: `RegisterHotKey`
+  RAISING (the branch only fired on a falsy RETURN and the `atexit` hook went on AFTER the
+  loop, so there was no net at all), the same through `with Hotkeys()`, Ctrl-C mid-loop,
+  `UnregisterHotKey` returning 0 (discarded — and a real one returns 0 with WinError 1419
+  on a key that is still held), and Ctrl-C INSIDE teardown, where `except Exception` misses
+  the BaseException and the id had already been popped so `atexit`'s retry could never
+  reach it. The backstop under all five is now MEASURED: a hard-killed process releases
+  VK_F24 at +0.0 s, with a live 1409 control while it lived. **The clock claim was two
+  witnesses restating each other.** `t_perf` and `t_wall` are sampled adjacently in ONE
+  process, so their difference only ever measures the OS-wide (QPC − system time) offset
+  against itself — a capture whose published epoch was 0.9 s off the epoch its segments
+  were stamped from BOUND, with both channels reporting 0.0001 ms of skew — and 0.250 s is
+  ~50,000x the phenomenon it is named for (two processes agree to 5 µs over 12 spawns,
+  drifting at −0.004 ppm). So `wire_t` is restored as the THIRD channel, the only one on
+  the segment axis; the boundary is pinned at 250 ms binds / 250.001 ms refuses, because
+  any value in (0.249, 0.600) used to leave every behavioural check green; the marks
+  file's own epoch sits 31 s after the capture's, because with them equal a binder reading
+  either epoch from the WRONG FILE passed 139 green; and the diagnosis grew a third word —
+  fed one +0.5 s wall step it answered "a stamping fault at those marks" (it was one clock
+  event) AND "it is a RATE" (it was a step), the two hypotheses it could express, both
+  wrong. **And a mark an HOUR after a capture that ended at t=12.0 bound silently**, which
+  is reachable because the sniffer has a `--seconds` ceiling and `livesession` keeps the
+  session going when it dies: disjoint is now REFUSED, a partial overlap is REPORTED,
+  because "the network went quiet" and "the sniff stopped" are not separable from the
+  artifact. The readout's own vacuity is fixed too — zero marks printed "worst |dperf −
+  dwall| = 0.0 ms", a run that measured nothing reporting the best possible measurement.
+  **The failure MODE was the structural problem, not coverage**: of 109 sabotages against
+  the old file, twelve died with a traceback at checks 17–126 and FOUR HUNG past 120 s —
+  no banner, no ledger, no floor line, so the declared floor was unreachable as a guard
+  and any one of four one-line defects in `run()` blocked the whole suite. `guarded()`
+  turns a section crash into a NAMED failing check and `BoundedHotkeys` bounds the one
+  call `run()` makes every pass, so all four are red now and the floor prints its
+  shortfall. Four `any(got)` rows were DELETED as strictly weaker restatements of the line
+  above them — a check that cannot fail independently is floor, not coverage. No vault, no
+  socket, no client, no Windows: every hotkey check runs on a fake `user32` and every
+  clock is injected, which is the shape `test_keytap.py` could not have. 179 checks
+  against a floor of 179; ~1.2 s. **`bind()` has still never run against a byte ArenaNet
+  sent** — `wire_epoch` refuses all ten `wire.jsonl` in the vault, and not for the reason
+  the refusal used to give: measured, every one carries NEITHER epoch, because `t0_wall`
+  landed 2026-08-11 and the newest live capture is 2026-08-10),
   `toolkit/harness/test_keytap.py` (the ReadProcessMemory key reader — RPM round-trip,
   ASLR-correct module-base resolution, cross-process, and a clean failure on an unmapped
   address; Windows-only, skips whole otherwise),

@@ -468,8 +468,14 @@ def score_run(run_dir, settle=SETTLE):
 
 # ---------------------------------------------------------------- the page
 
-def _thumb(src, out_dir, name, bbox=None, pad=40):
-    """Write a page-sized copy, cropped to the changed region when there is one."""
+def _thumb(src, out_dir, name, bbox=None, pad=40, width=THUMB_W, quality=78):
+    """Write a page-sized copy, cropped to the changed region when there is one.
+
+    `width=0` writes at NATIVE resolution. That is what the detail crop uses: the
+    frames are 1936x1040 and the strip shows them at 560, a 3.5x downscale that turns
+    every line of client text into grey mush. An operator naming a panel needs to READ
+    it, and a native crop of the changed region is the only image here that lets them.
+    """
     Image, _ = _pil()
     if Image is None:
         return None
@@ -479,24 +485,55 @@ def _thumb(src, out_dir, name, bbox=None, pad=40):
         box = (max(0, x0 - pad), max(0, y0 - pad),
                min(im.size[0], x1 + pad), min(im.size[1], y1 + pad))
         im = im.crop(box)
-    if im.size[0] > THUMB_W:
-        h = int(im.size[1] * THUMB_W / float(im.size[0]))
-        im = im.resize((THUMB_W, max(1, h)), Image.LANCZOS)
+    if width and im.size[0] > width:
+        h = int(im.size[1] * width / float(im.size[0]))
+        im = im.resize((width, max(1, h)), Image.LANCZOS)
     os.makedirs(out_dir, exist_ok=True)
     dst = os.path.join(out_dir, name)
-    im.save(dst, "JPEG", quality=78)
+    im.save(dst, "JPEG", quality=quality)
     return name
+
+
+def _full_rel(out_dir, src):
+    """A page-relative path to the ORIGINAL png, for the lightbox.
+
+    The strip is thumbnails and must stay that way -- 2,400 full frames is 8 GB and a
+    page no browser will open -- so the full-resolution image is LINKED rather than
+    copied. Both live under the vault, so this is a short relative hop and the page
+    keeps working from `file://` with nothing copied and nothing served.
+    """
+    try:
+        return os.path.relpath(src, out_dir).replace("\\", "/")
+    except ValueError:
+        return None            # different drive; the lightbox degrades to the thumbnail
+
+
+_catalogue_failed = set()
 
 
 def _catalogue(opcode):
     """The opcode's catalogued field list, so the picture is read beside the layout."""
+    # `Codec()` -- there is no `Codec.load()`, and the first version called one behind a
+    # bare `except Exception: return ""`. Every card on the page carried an EMPTY field
+    # list and the build printed nothing, so the layout an operator reads the picture
+    # against was silently absent from all 238. The except stays (a page is still worth
+    # having without the schema) but it now reports, because a swallowed failure that
+    # renders as a blank field is indistinguishable from an opcode that has no fields.
     try:
         sys.path.insert(0, os.path.join(REPO_ROOT, "schema"))
-        import codec as codec_mod
-        c = codec_mod.Codec.load()
-        fields = c.fields_for("GAME_SMSG", opcode)
-        return ", ".join(f"{f['name']}:{f['type']}" for f in fields) or "(no fields)"
-    except Exception:
+        from codec import Codec
+        # A field carries `type` and `length`; `name` is present only where the catalogue
+        # has one, so the first version's `f['name']` raised KeyError on EVERY opcode.
+        # The header row is dropped -- its `length` is the opcode, not a payload width,
+        # and printing it as a field invites reading it as one.
+        fields = [f for f in Codec().fields_for("GAME_SMSG", opcode)
+                  if f.get("type") != "msg_header"]
+        return ", ".join(
+            (f"{f['name']}:{f['type']}" if f.get("name") else str(f.get("type")))
+            + (f"[{f['length']}]" if f.get("length") else "")
+            for f in fields) or "(no payload fields)"
+    except Exception as exc:
+        _catalogue_failed.add(f"0x{opcode:04X}: {type(exc).__name__}: {exc}")
         return ""
 
 
@@ -524,13 +561,26 @@ def build_page(results, out_dir, title="smsgsweep -- name the silent opcodes"):
             # and the operator is reading these to recognise a panel, a chat line or
             # a world label -- all of which are identified by WHERE they sit.
             b = _thumb(r["before"], img_dir, f"{key}_base.jpg")
-            frames.append({"src": f"img/{b}", "cap": "baseline", "score": ""})
+            frames.append({"src": f"img/{b}", "cap": "baseline", "score": "",
+                           "full": _full_rel(out_dir, r["before"])})
             for i, f in enumerate(r.get("strip") or []):
                 n = _thumb(f["path"], img_dir, f"{key}_{i:02d}.jpg")
                 frames.append({
                     "src": f"img/{n}",
                     "cap": f"+{f['dt']:.1f}s",
-                    "score": "--" if f["score"] is None else f"{f['score']*100:.2f}%"})
+                    "score": "--" if f["score"] is None else f"{f['score']*100:.2f}%",
+                    "full": _full_rel(out_dir, f["path"])})
+        # THE DETAIL CROP, and it is the one image on this page meant to be READ rather
+        # than recognised. The strip answers "did something appear and where"; it cannot
+        # answer "what does it say", because 1936 px of client downscaled to 560 loses
+        # every glyph. So a CHANGED row also gets the peak frame cropped to the changed
+        # region at NATIVE resolution -- which for a dialog or a toast is the text.
+        detail = None
+        if r.get("verdict") == "CHANGED" and r.get("after") and r.get("bbox"):
+            d = _thumb(r["after"], img_dir, f"{key}_detail.jpg", bbox=r["bbox"],
+                       pad=12, width=0, quality=92)
+            if d:
+                detail = {"src": f"img/{d}", "full": _full_rel(out_dir, r["after"])}
         peak, sus = r.get("peak"), r.get("sustained")
         cards.append({
             "id": key, "op": op, "run": r["run"], "verdict": r["verdict"],
@@ -539,16 +589,55 @@ def build_page(results, out_dir, title="smsgsweep -- name the silent opcodes"):
             "flag": "--" if not r.get("flag_at") else f"{r['flag_at'] * 100:.2f}%",
             "fields": _catalogue(r["opcode"]),
             "frames": frames, "shared": ", ".join(r.get("shared_with") or []),
+            "detail": detail,
         })
-    # Drop images this build did not write. The page is rebuilt as the loop adds runs,
-    # and a stale frame from an earlier scoring rule is worse than a missing one: it
-    # looks like evidence and is not. The labels themselves live in the browser's
-    # localStorage keyed by opcode+run, so they survive a rebuild -- which is the
-    # whole reason the page is regenerated in place rather than into a new directory.
+    # A PARTIAL BUILD IS ADDITIVE, and this is the correction to a destructive design.
+    # The cleanup below drops images the page no longer references, which is right in
+    # itself -- a stale frame from an earlier scoring rule looks like evidence and is
+    # not. But the first version took "referenced" to mean "written by THIS build", so
+    # scoring one run rebuilt index.html with ONE card and deleted the other 2,400
+    # images. It happened: a `--run` over a single opcode reduced a 238-card page to a
+    # single card, and only the run directories being untouched made it recoverable.
+    #
+    # So the cards are persisted beside the page and every build renders the UNION:
+    # this build's rows replace their own ids and everything else carries. That also
+    # makes adding a run CHEAP -- the 25 minutes is the SCORING, and re-scoring 237
+    # unchanged runs to add one was always the wrong shape.
+    ledger_path = os.path.join(out_dir, "cards.json")
+    prior = []
+    if os.path.isfile(ledger_path):
+        try:
+            with open(ledger_path, encoding="utf-8") as fh:
+                prior = json.load(fh)
+        except (OSError, ValueError):
+            prior = []                      # unreadable: this build is the whole page
+    fresh_ids = {c["id"] for c in cards}
+    merged = cards + [c for c in prior if c.get("id") not in fresh_ids]
+    merged.sort(key=lambda c: (c.get("verdict") != "CHANGED", c.get("op", "")))
+    # A card whose images are gone would render as broken boxes and read as a run that
+    # produced nothing, so a carried card is kept only while its frames are on disk.
+    def _present(c):
+        srcs = [f["src"] for f in c.get("frames") or []]
+        if c.get("detail"):
+            srcs.append(c["detail"]["src"])
+        return all(os.path.isfile(os.path.join(out_dir, s.replace("/", os.sep)))
+                   for s in srcs) if srcs else True
+    dropped = [c["id"] for c in merged if c.get("id") not in fresh_ids and not _present(c)]
+    if dropped:
+        print(f"  {len(dropped)} carried card(s) dropped -- their frames are gone from "
+              f"img/ (rebuild them with --from-state). First: {dropped[0]}")
+    merged = [c for c in merged if c.get("id") in fresh_ids or _present(c)]
+    cards = merged
+    with open(ledger_path, "w", encoding="utf-8") as fh:
+        json.dump(cards, fh)
     keep = {os.path.basename(f["src"]) for c in cards for f in c["frames"]}
+    keep |= {os.path.basename(c["detail"]["src"]) for c in cards if c.get("detail")}
     for stale in os.listdir(img_dir):
         if stale not in keep:
             os.remove(os.path.join(img_dir, stale))
+    if _catalogue_failed:
+        print(f"  WARNING: no field layout for {len(_catalogue_failed)} opcode(s) -- "
+              f"the cards show a blank layout. First: {sorted(_catalogue_failed)[0]}")
     page = os.path.join(out_dir, "index.html")
     with open(page, "w", encoding="utf-8") as fh:
         fh.write(_render(cards, title))
@@ -563,11 +652,22 @@ def _render(cards, title):
     for c in cards:
         if c["frames"]:
             strip = "".join(
-                f'<figure><img loading=lazy src="{html.escape(f["src"])}">'
+                f'<figure><img loading=lazy src="{html.escape(f["src"])}" '
+                f'data-full="{html.escape(f.get("full") or f["src"])}" '
+                f'data-cap="{html.escape(c["op"])} {html.escape(f["cap"])}">'
                 f'<figcaption>{html.escape(f["cap"])} '
                 f'<b>{html.escape(f["score"])}</b></figcaption></figure>'
                 for f in c["frames"])
-            imgs = f'<div class=strip>{strip}</div>'
+            det = ""
+            if c.get("detail"):
+                d = c["detail"]
+                det = (f'<figure class=detail><img loading=lazy '
+                       f'src="{html.escape(d["src"])}" '
+                       f'data-full="{html.escape(d.get("full") or d["src"])}" '
+                       f'data-cap="{html.escape(c["op"])} changed region">'
+                       f'<figcaption>the changed region, full resolution '
+                       f'-- click for the whole frame</figcaption></figure>')
+            imgs = f'<div class=strip>{strip}</div>{det}'
         else:
             imgs = (f'<p class=none>no frames -- {html.escape(c["verdict"])}'
                     + (f' with {html.escape(c["shared"])}' if c["shared"] else "")
@@ -614,8 +714,19 @@ h2 {{ font:600 1.05rem ui-monospace,monospace; margin:0; }}
 .strip {{ display:flex; gap:.5rem; overflow-x:auto; padding-bottom:.4rem; }}
 .strip figure {{ flex:0 0 auto; width:270px; }}
 .strip img {{ width:270px; cursor:zoom-in; }}
-.strip img.big {{ width:min(94vw,1200px); }}
 figure {{ margin:0; }} figcaption {{ font-size:.72rem; color:#888; }}
+/* The detail crop is native resolution and must NOT be scaled to the card: shrinking
+   it to fit is exactly the downscale it exists to undo. It scrolls instead. */
+.detail {{ margin-top:.6rem; max-width:100%; overflow:auto; }}
+.detail img {{ max-width:none; cursor:zoom-in; }}
+#lb {{ position:fixed; inset:0; background:#000e; z-index:99; display:none;
+       overflow:auto; text-align:center; }}
+#lb.on {{ display:block; }}
+#lb img {{ max-width:none; margin:2.2rem auto; border:0; cursor:zoom-out; }}
+#lb img.fit {{ max-width:96vw; }}
+#lbbar {{ position:fixed; top:0; left:0; right:0; padding:.4rem .8rem; background:#000c;
+          color:#eee; font:12px ui-monospace,monospace; display:flex; gap:.8rem;
+          align-items:center; }}
 img {{ max-width:100%; border:1px solid var(--line); border-radius:6px; display:block; }}
 .none {{ color:#a33; font-size:.85rem; }}
 .controls {{ display:flex; gap:.4rem; margin-top:.8rem; flex-wrap:wrap; }}
@@ -637,6 +748,11 @@ button.on {{ background:#2b7a2b; color:#fff; border-color:#2b7a2b; }}
   <span id=count class=meta></span>
 </div>
 {''.join(body)}
+<div id=lb>
+  <div id=lbbar><b id=lbfit>fit to window</b><span id=lbcap></span>
+    <span style="margin-left:auto">click anywhere or Esc to close</span></div>
+  <img id=lbimg alt="">
+</div>
 <script>
 const KEY = 'rurik-shotlabel';
 const store = JSON.parse(localStorage.getItem(KEY) || '{{}}');
@@ -674,8 +790,29 @@ function paint() {{
   document.getElementById('count').textContent =
     Object.keys(store).length + ' labelled, ' + shown + ' shown';
 }}
-document.querySelectorAll('.strip img').forEach(im =>
-  im.addEventListener('click', () => im.classList.toggle('big')));
+// THE LIGHTBOX LOADS THE ORIGINAL PNG, not the thumbnail. The old handler widened the
+// 560 px thumbnail to 1200 px, which is an upscale: it made the picture bigger and no
+// more readable, which is the one thing an operator trying to read a toast needs.
+const lb = document.getElementById('lb'), lbi = document.getElementById('lbimg'),
+      lbc = document.getElementById('lbcap'), lbf = document.getElementById('lbfit');
+function openLb(im) {{
+  lbi.src = im.dataset.full || im.src;
+  lbc.textContent = (im.dataset.cap || '') + '  ' + (im.dataset.full || '');
+  lb.classList.add('on');
+}}
+document.addEventListener('click', e => {{
+  const im = e.target.closest('.strip img, .detail img');
+  if (im) {{ openLb(im); return; }}
+  if (e.target.id === 'lbfit') {{
+    lbi.classList.toggle('fit');
+    lbf.textContent = lbi.classList.contains('fit') ? 'actual size' : 'fit to window';
+    return;
+  }}
+  if (lb.classList.contains('on') && e.target.id !== 'lbcap') lb.classList.remove('on');
+}});
+document.addEventListener('keydown', e => {{
+  if (e.key === 'Escape') lb.classList.remove('on');
+}});
 document.getElementById('onlych').addEventListener('change', paint);
 document.getElementById('onlyun').addEventListener('change', paint);
 document.getElementById('save').addEventListener('click', () =>
@@ -700,12 +837,31 @@ def main(argv=None):
                     help="a harness run directory; repeatable")
     ap.add_argument("--scan", default=None, metavar="PREFIX",
                     help="every harness run whose name starts with PREFIX")
+    ap.add_argument("--merge", default=None, metavar="LABELS.JSON",
+                    help="fold the operator's answers into schema/overrides.json")
+    ap.add_argument("--apply", action="store_true",
+                    help="with --merge: actually write. Default is a dry run.")
     ap.add_argument("--from-state", action="store_true",
                     help="the runs shotloop RECORDED, one per opcode (recommended)")
     ap.add_argument("--out", default=None, help="page directory (under the vault)")
     ap.add_argument("--settle", type=float, default=SETTLE)
     ap.add_argument("--json", action="store_true", help="print the scoring, no page")
     a = ap.parse_args(argv)
+
+    if a.merge:
+        r = merge_labels(a.merge, apply=a.apply)
+        for op, name in r["wrote"]:
+            print(f"  {op}  {name}")
+        for op, text in r["skipped"]:
+            print(f"  {op}  NO IDENTIFIER -- left out of the schema on purpose: "
+                  f"{text[:60]}")
+        for op, prior, name in r["conflicts"]:
+            print(f"  {op}  REFUSED: already named {prior}, screen reading says {name}")
+        print(f"{len(r['wrote'])} row(s) {'written to' if r['applied'] else 'would go to'} "
+              f"{r['path']}; {len(r['skipped'])} skipped, {len(r['conflicts'])} refused")
+        if not r["applied"]:
+            print("  dry run -- pass --apply to write")
+        return 0
 
     runs = list(a.run)
     base = os.path.join(vaultpath.vault_path("captures"), "harness")
@@ -770,6 +926,71 @@ def main(argv=None):
     print(f"page: {page}  ({n} card(s))")
     print("  local file, vault only -- it holds frames of the retail client")
     return 0
+
+
+# ---------------------------------------------------------------- folding answers back
+
+OVERRIDES = os.path.join(REPO_ROOT, "..", "schema", "overrides.json")
+
+
+def merge_labels(labels_path, apply=False, overrides_path=None):
+    """Fold the operator's answers into the wire schema, one row per NAMED opcode.
+
+    `--merge` was in this module's docstring from the day it was written and was
+    implemented by nothing -- the same shape as the blank field list: a promise with no
+    code behind it, which reads as a finished feature.
+
+    A row is written ONLY where the labels file carries an identifier. A screen reading
+    that says WHAT THE OPCODE DRAWS does not always say what to CALL it: five opcodes in
+    this run produce an indistinguishable account-name dialog, and naming them five
+    things invents a distinction while naming them one thing asserts they are
+    interchangeable. Neither is supported by a picture, so they are recorded in the
+    study and left out of the schema. This function does not guess.
+
+    The operator's VERBATIM text goes into `why` beside the run id, because the
+    identifier is a reading and the words are the evidence for it.
+    """
+    with open(labels_path, encoding="utf-8") as fh:
+        labels = json.load(fh)
+    path = overrides_path or os.path.abspath(OVERRIDES)
+    with open(path, encoding="utf-8") as fh:
+        ov = json.load(fh)
+    chan = ov.setdefault("channels", {}).setdefault("GAME_SMSG", {})
+    wrote, skipped, conflicts = [], [], []
+    for key, row in sorted(labels.items()):
+        op = int(row["opcode"], 16)
+        name = (row.get("name") or "").strip()
+        if not name:
+            skipped.append((row["opcode"], row.get("text", "")))
+            continue
+        slot = chan.setdefault(str(op), {"opcode": op})
+        prior = slot.get("name")
+        if prior and prior != name:
+            # Never silently rename. A name already in the schema came from the wire or
+            # from the binary; a screen reading is a weaker witness than either.
+            conflicts.append((row["opcode"], prior, name))
+            continue
+        slot["name"] = name
+        # The schema demands a declared confidence per name (test_codec), and a screen
+        # reading has two grades: the client WROTE the words, or we inferred a purpose
+        # from an animation. Default MEDIUM -- the weaker one -- so an unstated grade
+        # cannot quietly enter the catalogue as a strong claim.
+        slot["name_confidence"] = row.get("confidence") or "medium"
+        run = key.split("_", 1)[1] if "_" in key else "?"
+        slot["why"] = (
+            f"OBSERVED on screen, {run}. One opcode sent to a fresh client with a real "
+            f"encoded string, screenshots joined to the send by wall clock; the operator "
+            f"read the frame and wrote: \"{row.get('text', '').strip()}\". "
+            f"Class: {row.get('verdict', 'unclassified')}. The wire sweep scored this "
+            f"row SILENT -- a UI update produces no c2s reply. "
+            f"studies/smsgsweep/FINDINGS.md 7.6.")
+        wrote.append((row["opcode"], name))
+    if apply:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(ov, fh, indent=1, ensure_ascii=False)
+            fh.write("\n")
+    return {"wrote": wrote, "skipped": skipped, "conflicts": conflicts,
+            "path": path, "applied": bool(apply)}
 
 
 if __name__ == "__main__":

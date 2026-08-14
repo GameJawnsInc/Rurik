@@ -46,9 +46,11 @@ install, and it cannot -- `datwrite` refuses anything but a copy.
 import argparse
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -417,6 +419,132 @@ def readback(dat, file_id, staged_blob, area):
     return out, bad
 
 
+# --------------------------------------------------------------- launch
+
+def launch(exe, session, dat, map_id, hold, area=None):
+    """Run the harness once, with the server pointed at OUR archive.
+
+    `--dat` already decides which client runs, so it decides which world the
+    server serves too: `RURIK_DAT` makes both halves name the same file, which
+    is also what `contentids.preflight` requires (studies/maprows FINDINGS 8).
+    """
+    env = dict(os.environ)
+    env["RURIK_DAT"] = os.path.abspath(dat)
+    print(f"  server world: RURIK_DAT={env['RURIK_DAT']}")
+    # --keep-open IS WHAT MAKES --hold MEAN ANYTHING. `session.hold_open` is
+    # gated on `keep_open`, which otherwise only the tape chain sets -- so every
+    # run of this command before 2026-08-13 asked for 40 s of client time and
+    # held for none of it, tearing down as soon as the body reached the map
+    # (MEASURED: the two runs of the serve pair started 17 s apart under
+    # `--hold 40`). Nothing failed, because the client compiles the map during
+    # LOAD and that fits; the flag was describing a wait that was not happening,
+    # and a bigger map is exactly where that stops being free.
+    # --area rides in --game-args, which session.py forwards to the gamesrv. It
+    # is what makes the zone POPULATED rather than empty ground: the server
+    # serves this area's spawn rows at their own coordinates and checks each one
+    # against the navmesh it pre-warmed. Passed always, so an area with no rows
+    # says so in the log rather than quietly serving the global test enemy in
+    # the middle of somebody's arrangement.
+    game_args = f"--map {map_id}" + (f" --area {area}" if area else "")
+    return subprocess.run(
+        [sys.executable, session, "--replace", "--keep-open", "--hold", str(hold),
+         "--warn", "3", "--exe", exe,
+         "--game-args", game_args], text=True, env=env).returncode
+
+
+def trapezoid_count(dat, file_id):
+    """How many trapezoids the client's compiler actually built, from the row."""
+    with Archive(dat) as ar:
+        pm = pathmap.PathingMap.load(file_id, archive=ar)
+    return len(pm.trapezoids)
+
+
+def newest_harness_log(after):
+    """The gamesrv log of the newest harness run started after `after`."""
+    root = os.path.join(vaultpath.require_dir(), "captures", "harness")
+    best, best_t = None, after
+    for name in os.listdir(root):
+        d = os.path.join(root, name)
+        log = os.path.join(d, "gamesrv.log")
+        if not os.path.isfile(log):
+            continue
+        t = os.path.getmtime(log)
+        if t > best_t:
+            best, best_t = log, t
+    return best
+
+
+NAVMESH_RE = re.compile(
+    r"\[map\] navmesh 0x([0-9A-Fa-f]+): (\d+) planes, (\d+) trapezoids")
+
+# `area 'sculpt': 3 of 3 placed`. Checked because the alternative was measured:
+# on the first populated run `spawn_population` threw inside instance bring-up,
+# every body was absent, and NOTHING said so -- harness rc 0, all six map
+# readback checks green (correctly, they are about the map), the serve check
+# matched the navmesh, exit 0. The only evidence was a traceback in a log
+# nobody was reading.
+PLACED_RE = re.compile(r"area '([^']+)': (\d+) of (\d+) placed")
+
+
+def serve_run(exe, session, dat, map_id, hold, expect_traps, area=None):
+    """A SECOND run, unarmed, that proves the SERVER read our mesh.
+
+    WHY TWO RUNS, and it is not a scheduling detail. `--install` arms the head
+    to zero so the client is forced to recompile, so at the moment the server
+    starts there is no compiled mesh in the archive to read -- and once the
+    client is up it holds the archive open exclusively, so reading it later
+    fails (EACCES). The run that PRODUCES the mesh can therefore never serve it.
+    This one starts from an archive that already holds it, with nothing else
+    open, which is the only configuration where the server can win.
+
+    The verdict is the server's OWN log line rather than anything we compute:
+    `[map] navmesh 0x287D3: 1 planes, 13 trapezoids` must name the count we
+    just read out of the archive. Comparing against a number we predicted would
+    be a check that cannot fail -- this compares two independent readers of the
+    same bytes, ours through `pathmap` and the server's through its own load.
+    """
+    t0 = time.time()
+    rc = launch(exe, session, dat, map_id, hold, area=area)
+    log = newest_harness_log(t0)
+    if log is None:
+        return False, f"  harness rc {rc}, but no gamesrv log was written"
+    with open(log, "r", encoding="utf-8", errors="replace") as fh:
+        text = fh.read()
+    hits = NAVMESH_RE.findall(text)
+    where = os.path.basename(os.path.dirname(log))
+    if not hits:
+        why = ("PRE-WARM FAILED" if "PRE-WARM FAILED" in text
+               else "no navmesh line at all")
+        return False, (f"  harness rc {rc}; {where}: {why} -- the server "
+                       f"served no collision")
+    fid, planes, traps = hits[0]
+    traps = int(traps)
+    ok = traps == expect_traps
+    note = (f"  harness rc {rc}; {where}: server loaded 0x{fid} with "
+            f"{planes} plane(s), {traps} trapezoids "
+            f"({'MATCHES' if ok else 'DISAGREES WITH'} the "
+            f"{expect_traps} in the archive)")
+
+    # AND THE POPULATION, if one was asked for. Separate from the mesh check
+    # because they fail separately: the bodies are created at instance
+    # bring-up, well after the navmesh is read, so a throw there leaves the
+    # mesh line correct and every map check green.
+    if area:
+        p = PLACED_RE.findall(text)
+        if not p:
+            ok = False
+            note += (f"\n  area {area!r}: NO population line -- the server "
+                     f"never got as far as placing bodies (look for a "
+                     f"traceback in {where}/gamesrv.log)")
+        else:
+            _, placed, total = p[0]
+            good = placed == total and int(total) > 0
+            ok = ok and good
+            note += (f"\n  area {area!r}: {placed} of {total} bodies placed"
+                     + ("" if good else "  <-- NOT ALL"))
+    return ok, note
+
+
 def resolve_rows(archive, file_id):
     """(head row, partner row, partner reservation). By FILE ID, never remembered."""
     row = file_id_table(archive).get(file_id)
@@ -447,6 +575,11 @@ def main(argv=None):
                     help="write the map and arm the re-bloat (needs --dat)")
     ap.add_argument("--launch", action="store_true",
                     help="run the harness at the area's own map id")
+    ap.add_argument("--serve", action="store_true",
+                    help="after the compile run, launch a SECOND time without "
+                         "arming, so the server reads the mesh the client just "
+                         "built and paths against OUR geometry. Needs --launch; "
+                         "see serve_run() for why one run cannot do both")
     ap.add_argument("--hold", type=int, default=45)
     ap.add_argument("--exe", help="client to launch; defaults to "
                                   "the one beside --dat")
@@ -562,14 +695,28 @@ def main(argv=None):
                 f"against {len(report.blob)} B written. The writer returned "
                 f"success and the archive disagrees, so the archive wins")
         print(f"  verified: the row reads back the {len(got)} B we wrote")
-        rc = subprocess.run(
-            [sys.executable, os.path.join(HERE, "rebloat.py"), "--dat", dat,
-             "--file-id", hex(file_id), "--arm", "--confirm",
-             "--baseline", os.path.join(here, f"{args.area}_baseline.json"),
-             "--journal", os.path.join(here, f"{args.area}_rebloat.json")],
-            text=True).returncode
-        if rc != 0:
-            raise Refused(f"rebloat refused (rc {rc})")
+        # ARM ONLY IF IT IS NOT ALREADY ARMED. `rebloat --arm` refuses a
+        # zero-length head -- rightly, since it cannot record a baseline mesh
+        # from a row that has none, and a second arm would overwrite the first
+        # journal with nothing. But "already armed" is not an error HERE: the
+        # client recompiles on load either way, and this command is meant to be
+        # run repeatedly while iterating on a shape. The previous version turned
+        # every re-run after an interrupted one into a dead end.
+        with Archive(dat) as ar:
+            head_now = next(e for e in ar.entries if e.index == head_row)
+            already = head_now.size == 0
+        if already:
+            print("  the head is already zero length -- already armed, so the "
+                  "client will recompile; not arming twice")
+        else:
+            rc = subprocess.run(
+                [sys.executable, os.path.join(HERE, "rebloat.py"), "--dat", dat,
+                 "--file-id", hex(file_id), "--arm", "--confirm",
+                 "--baseline", os.path.join(here, f"{args.area}_baseline.json"),
+                 "--journal", os.path.join(here, f"{args.area}_rebloat.json")],
+                text=True).returncode
+            if rc != 0:
+                raise Refused(f"rebloat refused (rc {rc})")
 
     if not args.launch:
         print("\ninstalled and armed. --launch to run the client.")
@@ -587,11 +734,31 @@ def main(argv=None):
         raise Refused(f"no client beside the archive at {exe}; the client that "
                       f"reads {dat} is the only one that can load what we armed")
     session = os.path.join(os.path.dirname(HERE), "harness", "session.py")
+
+    # THE SERVER MUST READ THE ARCHIVE WE JUST WROTE TO, and this is the whole
+    # reason `RURIK_DAT` is set here rather than typed into a shell. The server
+    # takes its navmesh from `vault/dat_study/Gw.dat` by default; we install the
+    # authored map into a COPY, so after an install the two disagree about this
+    # very map id -- the server would path against ArenaNet's geometry while the
+    # client draws ours, and `contentids.preflight` refuses the launch for
+    # exactly that reason (studies/maprows FINDINGS 8). It is a good guard and
+    # the fix is not to bypass it: `--dat` already decides which client runs, so
+    # it decides which world the server serves too. Both halves then name the
+    # same file and the guard passes because the situation is actually right.
+    #
+    # THE HAZARD IS REAL AND THIS COMMENT USED TO DENY IT. It said the run
+    # completes "because the server reads the world at startup, before the
+    # client is launched". The world, yes; the NAVMESH, no -- `load_pathmap`
+    # ran at instance bring-up, after the client was up and holding this
+    # archive open exclusively, so the read returned EACCES and collision
+    # turned off silently. Before this env var existed it was quieter still:
+    # the server read `dat_study` and got ARENANET's geometry for the same map
+    # id, whose walkable set is disjoint from ours (0 of 4,096 grid points
+    # shared). `authsrv.prewarm_pathmap` now reads it at startup, which is the
+    # only moment the archive both holds our map and is unlocked -- and that is
+    # why serving an authored mesh takes TWO runs. See serve_run().
     print(f"launching {exe} at map {map_id}")
-    rc = subprocess.run(
-        [sys.executable, session, "--replace", "--hold", str(args.hold),
-         "--warn", "3", "--exe", exe,
-         "--game-args", f"--map {map_id}"], text=True).returncode
+    rc = launch(exe, session, dat, map_id, args.hold, area=args.area)
     print(f"\nharness rc {rc}")
 
     # 7. read back. A harness PASS says the client reached a map; only this
@@ -603,6 +770,25 @@ def main(argv=None):
     if bad:
         print(f"\n{len(bad)} READBACK CHECK(S) FAILED")
         return 1
+
+    # 8. serve. Everything above is about the CLIENT: it compiled our geometry
+    # and drew it. Whether the SERVER agrees about the ground is a separate
+    # claim and was false for every run of this command until 2026-08-13.
+    if args.serve:
+        traps = trapezoid_count(dat, file_id)
+        print(f"\nserve -- a second run, unarmed, so the server reads the "
+              f"{traps}-trapezoid mesh the client just built:")
+        ok, note = serve_run(exe, session, dat, map_id, args.hold, traps,
+                             area=args.area)
+        print(note)
+        if not ok:
+            print("\nSERVE CHECK FAILED -- the client walked on our map and "
+                  "the server did not")
+            return 1
+    else:
+        print("\nnote: the SERVER did not path against this mesh. It is in the "
+              "archive now, so --serve runs again unarmed and proves it does.")
+
     print("\nrung G: the area was authored, delivered, compiled and verified.")
     return 0
 

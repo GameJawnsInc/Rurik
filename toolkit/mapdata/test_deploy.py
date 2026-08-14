@@ -55,9 +55,10 @@ BIOME_ROW = 7982               # Pre-Searing
 BORROWED_MAX = 900             # generous ceiling; the real figure is 770
 PRESEARING_ZONES = 7208        # what the first run wrongly pulled in
 
-# FLOOR: 22, MEASURED from a green run 2026-08-13 (sections 0,1,3,4,5 score 18
-# and need no vault; section 2 reads the archive).
-LEDGER = checks.Ledger("test_deploy", floor=22)
+# FLOOR: 35, MEASURED from a green run 2026-08-13 (sections 0,1,3,4,5,6 score 31
+# and need no vault; section 2 reads the archive for the borrowed halves, which
+# is the provenance rule rather than a convenience). Was 25 before section 6.
+LEDGER = checks.Ledger("test_deploy", floor=35)
 check = checks.adopt(LEDGER)
 
 
@@ -122,6 +123,39 @@ def exe_derived_from_dat(source):
     return False
 
 
+def sets_rurik_dat(source, where="launch"):
+    """True iff `where` assigns env["RURIK_DAT"] from `dat` AND hands env over.
+
+    Takes the SOURCE rather than reading the module, so section 3 can run it
+    against a sabotage and show the answer flips -- the same shape as
+    `exe_derived_from_dat`, and for the same reason: a structural check that has
+    only ever seen the passing case is a check nobody has watched fail.
+
+    It asks `launch()` rather than `main()` because the harness is now started
+    from exactly one place and both runs go through it. That is a stronger
+    claim, not a weaker one: with two call sites a fix could reach one and miss
+    the other, which is how the serve run would have gone out unpointed.
+    """
+    fn = next(n for n in ast.walk(ast.parse(source))
+              if isinstance(n, ast.FunctionDef) and n.name == where)
+    assigned = False
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.Assign) and len(node.targets) == 1):
+            continue
+        t = node.targets[0]
+        if not (isinstance(t, ast.Subscript)
+                and isinstance(t.value, ast.Name) and t.value.id == "env"
+                and isinstance(t.slice, ast.Constant)
+                and t.slice.value == "RURIK_DAT"):
+            continue
+        assigned = any(isinstance(n, ast.Name) and n.id == "dat"
+                       for n in ast.walk(node.value))
+    handed = any(isinstance(n, ast.keyword) and n.arg == "env"
+                 and isinstance(n.value, ast.Name) and n.value.id == "env"
+                 for n in ast.walk(fn))
+    return assigned and handed
+
+
 def section3():
     print("\n3. the client is DERIVED from the archive, not defaulted")
     source = open(deploy.__file__, encoding="utf-8").read()
@@ -150,6 +184,130 @@ def section3():
                  for n in ast.walk(fn))
     check(called, "main() actually calls readback() -- a documented stage that "
                   "no line runs is a docstring, not a check")
+
+    # THE SERVER'S WORLD. After an install the archive we wrote and the server's
+    # default (vault/dat_study) disagree about the area's map id, and
+    # contentids.preflight refuses the launch -- correctly, since the server
+    # would path against ArenaNet's geometry while the client drew ours. The fix
+    # is to point the server at the same archive, which `--dat` already names.
+    check(sets_rurik_dat(source),
+          "launch() sets RURIK_DAT from `dat` and hands the env to the harness "
+          "-- server and client read ONE world, so the archive-mismatch guard "
+          "passes because the situation is right, not because it was bypassed")
+    # NEGATIVE CONTROLS, one per half of that claim.
+    hardcoded = source.replace('env["RURIK_DAT"] = os.path.abspath(dat)',
+                               'env["RURIK_DAT"] = DEFAULT_DAT')
+    check(hardcoded != source and not sets_rurik_dat(hardcoded),
+          "and pointing the server somewhere OTHER than `dat` makes it go red")
+    dropped = source.replace("text=True, env=env", "text=True")
+    check(dropped != source and not sets_rurik_dat(dropped),
+          "and building the env without handing it over makes it go red -- "
+          "which is precisely the shape of a fix that does nothing")
+
+
+def section6():
+    """The navmesh join: WHEN the server reads the ground.
+
+    The defect this pins was silent in both of its forms and shipped for two
+    days. `load_pathmap`'s only call site was instance bring-up -- after the
+    client connects -- so:
+
+      * with the server on its default archive it read ARENANET's geometry for
+        the same map id. Over a 4,096-point grid on the sculpt map the two
+        walkable sets are DISJOINT (49 ours, 435 theirs, 0 shared), and the
+        authored spawn is off ArenaNet's mesh entirely, so the server suspended
+        collision on arrival. 16 vault runs carry that line.
+      * with the server pointed at OUR archive (the RURIK_DAT fix) the client
+        already held it open exclusively, so the read returned EACCES and
+        collision turned off. Two vault runs carry that one.
+
+    Neither failed a test, neither failed the harness, and the FINDINGS document
+    asserted the opposite as measured. What follows is structural because the
+    behaviour needs a client; the one thing a client would add -- that the
+    server's own log names our trapezoid count -- is what `serve_run` reads, and
+    its parsing is checked here against a log this test writes.
+    """
+    print("\n6. the navmesh is read BEFORE a client can lock the archive")
+    # By PATH, not by import. `authsrv` builds the whole world at import time,
+    # which needs the content store to load -- a shared vault overlay another
+    # session is mid-edit in would turn this section red for a reason that has
+    # nothing to do with what it checks.
+    path = os.path.join(os.path.dirname(HERE), "authsrv", "authsrv.py")
+    check(os.path.isfile(path), f"authsrv.py is where this expects it", path)
+    src = open(path, encoding="utf-8").read()
+    tree = ast.parse(src)
+
+    # (a) the pre-warm exists and main() calls it.
+    names = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    check("prewarm_pathmap" in names,
+          "authsrv defines prewarm_pathmap() -- the startup read")
+    main_fn = next(n for n in ast.walk(tree)
+                   if isinstance(n, ast.FunctionDef) and n.name == "main")
+    called = any(isinstance(n, ast.Call)
+                 and getattr(n.func, "id", "") == "prewarm_pathmap"
+                 for n in ast.walk(main_fn))
+    check(called, "and main() CALLS it -- a startup read that startup does not "
+                  "run is the defect wearing a fix's name")
+    # NEGATIVE CONTROL: delete the call, keep the function.
+    gutted = src.replace("        prewarm_pathmap(a.map if known else "
+                         "FALLBACK_MAP_ID)\n", "")
+    gutted_ok = gutted != src and not any(
+        isinstance(n, ast.Call) and getattr(n.func, "id", "") == "prewarm_pathmap"
+        for n in ast.walk(next(f for f in ast.walk(ast.parse(gutted))
+                               if isinstance(f, ast.FunctionDef)
+                               and f.name == "main")))
+    check(gutted_ok,
+          "and removing that one line makes the check go red while "
+          "prewarm_pathmap still EXISTS and still reads correctly -- which is "
+          "exactly how a documented stage becomes a docstring")
+
+    # (b) the EACCES arm is named, because "Permission denied" on a file this
+    # process owns reads as a broken install and sent one session hunting.
+    check(any(isinstance(n, ast.ExceptHandler)
+              and getattr(n.type, "id", "") == "PermissionError"
+              for n in ast.walk(tree)),
+          "load_pathmap names PermissionError separately -- the cause is a "
+          "client holding the archive, which the bare message does not say")
+
+    # (c) serve_run's verdict is the SERVER's own number against the ARCHIVE's,
+    # never a constant. Two independent readers of the same bytes.
+    dep = open(deploy.__file__, encoding="utf-8").read()
+    fn = next(n for n in ast.walk(ast.parse(dep))
+              if isinstance(n, ast.FunctionDef) and n.name == "serve_run")
+    check(any(isinstance(n, ast.Name) and n.id == "expect_traps"
+              for n in ast.walk(fn)),
+          "serve_run compares against a count read from the archive, not a "
+          "literal -- a predicted number would be a check that cannot fail")
+
+    # (d) --hold only holds under --keep-open. `session.hold_open` is gated on
+    # it, and deploy passed --hold alone -- so the flag named a wait that never
+    # happened and both runs of the serve pair finished 17 s apart under
+    # `--hold 40`. Asked of the syntax tree because "both flags are in the same
+    # argument list" is what matters, and a grep for "--keep-open" would pass on
+    # this comment.
+    launch_fn = next(n for n in ast.walk(ast.parse(dep))
+                     if isinstance(n, ast.FunctionDef) and n.name == "launch")
+    flags = {n.value for n in ast.walk(launch_fn)
+             if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+    check("--hold" in flags and "--keep-open" in flags,
+          "launch() passes --keep-open beside --hold -- without it "
+          "session.hold_open never runs and --hold is decoration",
+          f"keep-open={'--keep-open' in flags}")
+
+    # (e) the log parsing, behaviourally, against a log this test writes.
+    LINE = "[map] navmesh 0x287D3: 1 planes, 13 trapezoids"
+    hits = deploy.NAVMESH_RE.findall(f"noise\n{LINE}\nmore noise\n")
+    check(hits == [("287D3", "1", "13")],
+          f"the navmesh line parses to (id, planes, trapezoids)", f"{hits}")
+    check(deploy.NAVMESH_RE.findall("[map] no navmesh for 0x287D3: nope") == [],
+          "and a FAILED load does not parse as a successful one -- the two "
+          "lines share a prefix and a wrong regex reads the failure as a hit")
+    check(deploy.NAVMESH_RE.findall(
+        "[map] navmesh 0x287D3: 1 planes, 27 trapezoids") == [
+            ("287D3", "1", "27")],
+        "and ArenaNet's own 27-trapezoid map 143 parses too, so the check is "
+        "the COMPARISON and not the pattern -- 27 is what the server actually "
+        "logged on 43 runs while the client drew ours")
 
 
 def section4():
@@ -264,6 +422,7 @@ def main():
     section3()
     section4()
     section5(area)
+    section6()
     section2(area)
     return LEDGER.verdict()
 

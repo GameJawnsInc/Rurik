@@ -49,15 +49,51 @@ script. Options:
 | flag | what it does |
 |---|---|
 | `--out FILE.blend` | save the scene when the import is done |
-| `--dump FILE.json` | write the built mesh's summary (counts, bbox, named vertices, per-axis sha256) |
+| `--dump FILE.json` | write the built mesh's summary (counts, bbox, named vertices, per-axis sha256, and a `props` block when proxies were built) |
 | `--dump-verts FILE.f32` | write every vertex as interleaved little-endian float32 x,y,z |
 | `--name NAME` | name for the object and its mesh |
 | `--clear` | empty the scene first (the startup cube, camera and light) |
+| `--no-props` | terrain only; skip the props collection even when the export carries the sidecar |
 
 Interactively: open the file in Blender's text editor and run it, or
-`import import_gwmap; import_gwmap.import_gwmap(r"…\map.gwmap.json")` in the
-Python console. `--clear` is off by default so running it inside a scene you
-care about does not delete it.
+`import import_gwmap; obj, gw = import_gwmap.import_gwmap(r"…\map.gwmap.json")`
+then `import_gwmap.build_prop_objects(gw)` in the Python console. `--clear` is
+off by default so running it inside a scene you care about does not delete it.
+
+## Real prop meshes
+
+Put a `.gwmodel` family beside the map export — `models/`, which is what
+`python toolkit/mapdata/modelexport.py --map <id>` writes — and each prop
+gets **ArenaNet's actual geometry**, one mesh datablock per model file id
+shared by every prop that uses it (Kamadan: 516 props, 71 datablocks;
+Pre-Searing: 864 props, 152). Point elsewhere with `--models DIR`.
+
+A prop whose model does not decode keeps the measured proxy described below,
+so no placement is ever lost — `obj["gw_real"]` says which it got, and
+`--proxies-only` forces the proxy path for everything as a control.
+
+**Model z is negated, exactly as the terrain's is, and that was measured
+rather than assumed**: scoring every prop of both reference maps by whether
+its geometry ends up above the terrain it stands on gives 73.2% / 83.3% for
+negating and 23.8% / 6.5% for leaving it as stored. At object level the
+built scene scores **0.961 against 0.032** for the reflected control.
+
+## Proxies, for models that do not decode
+
+A format_version-2 export carries a `.props.json` sidecar — every placement of
+the map, from both of the archive's props streams, cross-checked at export time
+(`toolkit/mapdata/mapexport.py`). The importer turns each into a proxy object
+in a `<name>.props` collection: an outlined prop becomes its **measured
+footprint polygon** extruded, any other a 16-gon cylinder at the **measured
+placement radius**. The proxy *height* is invented for display (half the
+radius, floored at 10) and is the one number that measures nothing. **No
+ArenaNet model geometry is decoded anywhere in this tree** — a prop reaches
+Blender as a transform, a footprint and a radius, with the sidecar record on
+the object as `gw_*` custom properties (model index, model file id, rot bytes,
+scale byte, radius, flags). Prop z is negated exactly as the terrain's is, so
+props stand on the mesh they shipped beside; the outline is *not* rotated (the
+compiled ring is literally `x+dx, y+dy` — measured, no rotation term), while a
+radius proxy carries the compiled basis as its object rotation.
 
 **`--python-exit-code` is not decoration.** MEASURED on Blender 5.1.1:
 `blender --background --python x.py` exits **0 even when the script raises**. The
