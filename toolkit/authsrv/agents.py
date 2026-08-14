@@ -114,7 +114,22 @@ ALLEGIANCE_HOSTILE = 0x6D6F6E73       # 'mons'  -- any UNRECOGNISED value is an
 #                             maximum -- and why sending 100.0 killed the client.
 PROP_DAMAGE = 16          # SUBTRACTS fraction x max. Floors at 1: cannot kill.
 PROP_HEALTH_ABSOLUTE = 34 # badly named: it SETS health to fraction x max, and is the one the client range-checks. SILENT: no damage number.
-PROP_HEALTH_MAX = 42      # int channel (0x009F). Sets the maximum AND refills.
+PROP_HEALTH_MAX = 42      # int channel (0x009F). Sets the maximum; see below.
+# "AND refills" is REFUTED, 2026-08-13. That reading came from ldufr/Headquarter
+# ("assigns health_max = value and health = 1.f") -- UPSTREAM, never observed on
+# retail -- and it is wrong. MEASURED (harness 20260813T215004, RESKIN.md 18.13):
+#
+#   health += (new_max - old_max)
+#
+# From 25/100, setting the maximum to 200 gave a HUD reading of 125 -- not 200 --
+# and a bar at 62.3% against the 62.5% that 125/200 predicts. Setting it back to
+# 100 returned exactly 25, so it is reversible rather than a latch. A
+# maximum-health increase GRANTS that health, the way a rune does.
+#
+# The practical consequence, and why the old comment was worth more than a
+# footnote: sending 42 with the value the agent ALREADY has is a NO-OP, because
+# the delta is zero. A run that tried to use it as "restore to full" measured
+# nothing and looked like a dead property (RESKIN.md 18.12).
 
 # The agent effects bitfield, carried by GAME_SMSG 0x00F1. Bit 4 is death:
 # setting it kills, clearing it revives. OBSERVED both directions.
