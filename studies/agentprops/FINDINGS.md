@@ -577,13 +577,19 @@ actually send it. Either check alone is satisfied by a broken server.
 check is on the CHARACTER rather than on whose it is -- 2 of the vault's 49 complaints
 name `Corpse of Hatcher [Collector]`. It has the same one-tick defer as of 2026-08-13.
 
-**Why it is not measured, and why that is the world rather than an omission.** Nothing
-in an unattended run kills an agent. The hostile kills the PLAYER; the player does not
-fight back, so `hit agent` is 0 and the agent revive branch never runs. Four runs were
-spent discovering this the wrong way round -- scripted `C`/`Space` reached the client and
-produced no attack, and each `agent deaths: 0` was read as a keybind fault rather than as
-a fact about `content/world.toml`, which puts one hostile 300 units out and nothing that
-damages it.
+**Why it is not measured: the player loses the fight.** `hit agent` is 0 in an
+unattended run because the player is DEAD, not because the player never tries. The
+Hatcher deals 25 into a 100 HP player -- four hits -- while killing it took seven player
+hits in the only runs where it happened. The default world is balanced against the
+player winning, so the agent revive branch never runs.
+
+**That cause was got wrong twice before it was got right**, and both wrong answers were
+about INPUT: first "the keybind is wrong" (it was not -- `C` selects the closest target,
+`Tab` the next, and `Space` attacks with either), then "synthetic keys miss the client's
+raw input path" (also not it). Each `agent deaths: 0` was answered with another run
+instead of with the question *why would a dead player land a hit*. Anything unattended
+here needs the BALANCE changed -- more player health, a weaker hostile, or one that does
+not aggro -- and no amount of better input will do it.
 
 **The control already exists**, which is what makes the remaining step cheap: runs
 `20260811T141114` and `20260811T141332` are human-played, carry 7 `hit agent` lines each,
