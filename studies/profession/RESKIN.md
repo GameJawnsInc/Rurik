@@ -1806,3 +1806,104 @@ unchallenged), and `CharPool.cpp:84 fraction <= 1.0f` means float property 33/34
 +0x120 both have one; ArenaNet's own wire says parameter-before-trigger, **11 of 11**
 with no counter-examples. That is another arc's document and this session did not
 re-derive it, so it is flagged here rather than edited there.
+
+---
+
+## 22. THE PROFESSION GLYPH IS FOUND (2026-08-14)
+
+**The last wall in this arc is down.** It had been NOT FOUND since `FINDINGS.md` and had
+survived **three** independent bounded searches. It fell to a fourth pass with four
+parallel angles, and the reason it had survived is worth more than the address.
+
+### 22.1 The answer
+
+**MEASURED**, pinned client `2026-07-29_221c13772c7a` against `vault/dat_study/Gw.dat`.
+Every line below was re-verified byte by byte by the orchestrator, not taken from the
+agent that found it -- and the first attempt at that re-verification FAILED, in the exact
+way the finding predicts (see 22.2).
+
+| | |
+|---|---|
+| Named at | `.rdata` VA `0x00959964` (file offset `0x558964`) |
+| Stored as | the pair `{id0 = 0x573D, id1 = 0x0102}` -- **not** a raw file id |
+| Decodes to | file id **152638** (`0x2543E`) via `mapchunks.dependency_file_id` |
+| Resolves to | **MFT row 12032**, stored 35,460 B compression 8 |
+| Which is | a **`DDS ` 256x128, 32 bpp**, masks `R=0x00FF0000 G=0x0000FF00 B=0x000000FF A=0xFF000000`, 131,200 B decompressed (128 B header + 131,072 B pixels, exact) |
+| Laid out as | **8 x 4 cells of 32x32** = 32 frames |
+| Of which | **22 are distinct.** Cells 22-31 are byte-identical copies of 20 and 21 |
+| Selected by | `0x005A5A14 cmp eax, 0xB / ja <assert>`, then `jmp [eax*4 + 0x5A5EB8]` |
+| Owned by | `P:\Code\Gw\Ui\Game\Vendor\VnProfessionButton.cpp` -- ArenaNet's own `__FILE__`, loaded at both bracketing asserts |
+
+**The 12-entry jump table at VA `0x005A5EB8`, read out of the bytes.** Each arm is a
+`mov eax, imm32` naming the EVEN frame; a `0/1` state bit is then added, and every odd
+frame is measurably dimmer than its partner (luma ratio **0.687-0.788**, 11 of 11), so
+the pair is lit/unlit:
+
+| prof | 0 None | 1 W | 2 R | 3 Mo | 4 N | 5 Me | 6 E | 7 A | **8 Rt** | 9 P | 10 D | 11 (oob) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| frames | 20/21 | 0/1 | 2/3 | 10/11 | 8/9 | 4/5 | 6/7 | 12/13 | **14/15** | 18/19 | 16/17 | 20/21 |
+
+**The sheet position is NOT the profession id** and nothing about the layout suggests
+otherwise -- Monk is at frames 10/11, Mesmer at 4/5. Anyone arming a cell from the
+sheet's reading order rather than from this table will paint the wrong profession. One of
+the four agents did exactly that and was corrected against these bytes.
+
+**Profession 8 (Ritualist, our host) is frames 14/15 = cells (col 6, row 1) and
+(col 7, row 1)** -- the teal eye. Consistent with the emblem Guild Wars actually draws
+for Ritualist, which is a check the code reading could have failed and did not.
+
+Two properties fall out of ArenaNet's pixels rather than out of the disassembly, so they
+could have refuted it:
+
+- **The 22-frame count is recoverable from the archive alone.** Exactly 22 of 32 cells
+  are distinct, and the ten repeats are cells 22-31 duplicating 20/21 -- the `None` pair,
+  reused as padding. Under a **column-major** walk the unused set would be a different
+  set of cells entirely, so **column-major is refuted by the data**, and the row-major
+  reading is corroborated by a source the code did not impose.
+- **The jump table's out-of-range arm (index 11) points at 20/21**, the same pair as
+  `None` -- which is why cells 20/21 are the ones replicated.
+
+### 22.2 Why three searches failed, and it is a reusable correction
+
+**The client NEVER stores a raw u32 file id.** It stores a `{u16 id0, u16 id1}`
+dependency pair. Every sweep this project ran for "a run of consecutive dwords that all
+resolve through the archive's file-id table" was **structurally blind to every texture
+reference in the image** -- not unlucky, blind.
+
+That is not a hypothetical: this session ran two such sweeps hours before the answer
+landed and recorded both as negatives (a contiguous sweep, then a strided one over 19
+strides). Both were correct about what they measured and both were measuring a byte
+pattern that does not occur. **And the orchestrator's own first verification of the
+finding repeated the mistake** -- it read `0x00959964` as a dword, got `0x0102573D`,
+failed to resolve it, and only then read it as the pair the finding had just explained.
+Being told the mechanism was not enough to stop it being applied wrongly one command
+later, which is why it is written here at the top rather than as a footnote.
+
+**`FINDINGS.md`'s note on this widget was one clause wrong, and that clause closed the
+question for the whole arc.** It recorded that the Vendor control drives its icons from
+shared static image lists *"rather than an archive-resolved file id"*. The switch is
+real and the image list is real -- but the **list is built at run time from an archive
+file id sitting in `.rdata`**. The two halves are at different layers, and the arc's own
+question ("archive-resolved **or** a compiled-in image list?") was a false dichotomy that
+made the true answer unsayable. It is both.
+
+### 22.3 What it costs to author, and the one thing that is not free
+
+The format half was already closed. What is new is that the glyph is **one shared sheet**,
+not eleven per-profession files -- so authoring a custom glyph is a **partial overwrite of
+a 32x32 region** of row 12032, leaving the other ten professions' cells untouched.
+
+**It does not fit in place.** The row is stored compressed at 35,460 B (reservation
+35,840 B) and the decompressed sheet is 131,200 B, needing 131,584 B. This repo has no
+compression-8 encoder, so the write must go out **stored**, which is a **relocation**:
+`datmove`, which is proven (`crossbuild` §4b, §4c) and journalled. That is the whole
+extra cost, and it is a cost rather than a blocker.
+
+**Still UNVERIFIED:** that this sheet is the only surface a profession emblem appears on.
+It is the `VnProfessionButton` sheet -- MEASURED as its sole consumer in this image -- but
+whether the character panel, party search or hero panel draw from the same row has not
+been checked, and our loopback server may not be able to render any of them. The
+character-creation screen definitively does **not** use it: `CrProfession.cpp` has its own
+ten-entry table at VA `0x0094B470` of 128x512 `ATEX DXT5` art banners, a different asset
+class in different rows, found by the same pass and ruled out as the glyph by the agent
+that found it.
