@@ -259,7 +259,51 @@ sidecar and nothing saw the defect. `_sidecar_positions` unpacks the file with
 `struct.unpack` and never calls the module's loader; against that pair it is
 the only check that fires.
 
-## 5. What is still unknown
+## 5. Blender, and the z sign (M4)
+
+`tools/blender/import_gwmap.py` gives each prop ArenaNet's real geometry when
+a `.gwmodel` family sits beside the map export. **Kamadan: 516 props over 71
+mesh datablocks. Pre-Searing: 864 over 152** — one datablock per model file
+id, shared by every prop using it. Both maps render recognizably (§1's goal
+for this rung): Kamadan as crenellated walls, palms, awnings and a domed
+building; Pre-Searing as forested hillsides with a bridge.
+
+A prop whose model does not decode keeps its measured proxy, so a placement
+is never lost — 200 of Pre-Searing's 864. `obj["gw_real"]` says which path a
+prop took and `--proxies-only` forces the proxy path as a control.
+
+### 5.1 Model-space z shares the world's convention
+
+**MEASURED, which is what the rung required.** Scoring every prop of both
+reference maps by whether its geometry ends up ABOVE the terrain it stands on
+— things rest on the ground, they do not hang under it:
+
+| | Kamadan | Pre-Searing |
+|---|---|---|
+| negate model z (the terrain's convention) | **73.2%** | **83.3%** |
+| leave it as stored | 23.8% | 6.5% |
+
+Scored again at object level, off the meshes Blender actually built:
+**0.961 above ground against 0.032** for a control that reflects each mesh
+about its own placement point.
+
+The diagnostic that explains it: a model's own z runs from about **+34 to
+−642** (median over Kamadan's 71 decoded models), i.e. it extends from just
+under its origin far into negative z — which is *up* once negated, exactly
+what a tree or a wall standing on its base should do.
+
+One honest note on method: a null control that shuffles which model each prop
+points at does **not** collapse (63.1% / 81.5%). That is expected and is
+stated rather than buried — the metric tests the *sign*, not model identity,
+and it is the sign flip that has to fail. It does.
+
+### 5.2 What M4 did not settle
+
+Which of `dat_fvf` bits 12/13 is tangent versus binormal is still open. It did
+not need settling here because nothing yet lights the meshes; it becomes real
+at M5, when materials arrive.
+
+## 6. What is still unknown
 
 - **The preamble** (+0x54 → sub-model array) — located by search, so ~15% of
   files never close (Kamadan 15/86 models, Pre-Searing **77/229**). Per-map
@@ -277,7 +321,7 @@ the only check that fires.
 
 ---
 
-## 6. Provenance
+## 7. Provenance
 
 The three tables are **strides** — explicitly on the permitted side of the
 gate (`PLAN.md` §7 Q3: levels, bounds, counts, **strides**, ids, offsets,

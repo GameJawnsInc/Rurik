@@ -140,6 +140,21 @@ MEASURED_BLENDER = "5.1.1"
 # repeat). All 34 outlines qualify, so outlined proxies == props with outlines.
 PRESEARING_OUTLINED = 34
 
+#: Rung M4, MEASURED 2026-08-13. Of Pre-Searing's 864 props, these get a REAL
+#: mesh from the `.gwmodel` family and these keep the measured proxy because
+#: their model never decoded; the real ones share one datablock per model.
+PRESEARING_REAL = 664
+PRESEARING_PROXY = 200
+PRESEARING_MODELS = 152
+
+#: The z-sign claim: prop geometry must reach ABOVE the terrain under it.
+#: MEASURED over both reference maps at 0.735 (Kamadan) and 0.743
+#: (Pre-Searing) mean vertex fraction; the object-level figure this file
+#: scores is higher because one vertex above ground is enough. The floor is
+#: set well under the measurement and the CONTROL (the opposite sign) is what
+#: carries the claim -- it scored 0.257 and 0.143 on the same props.
+Z_SIGN_MIN = 0.85
+
 # MEASURED 2026-08-11: the mesh oracle must reproduce test_mapexport section 5's
 # baseline for Pre-Searing exactly, because the vertex lattice carries the cell
 # grid unchanged for i < dimX, j < dimY. Not a tolerance -- a prediction.
@@ -181,7 +196,13 @@ PYTHON_EXIT_CODE = 66
 # now carries three props (one outlined), the --no-props flag has a control,
 # and section 3 pins all 864 Pre-Searing proxies at (x, y, -z) with the proxy
 # OBJECTS scoring the chunk's own 0.7338 against the mesh.
-FLOOR = 84
+#
+# 84 -> 92 the same day with rung M4's section 4: REAL meshes from the
+# `.gwmodel` family, the instancing (664 props over 152 datablocks, none
+# shared across file ids), the real/proxy split with nothing lost between
+# them, and THE Z SIGN -- 0.961 of real props reach above the terrain against
+# 0.032 for the reflected control. Sections 0-2 still score 45.
+FLOOR = 92
 
 
 # ------------------------------------------------------------------ helpers
@@ -802,7 +823,13 @@ def _section3(check, led, blender, tmp, args):
     work = os.path.join(tmp, "run_real")
     os.makedirs(work, exist_ok=True)
     t = time.perf_counter()
-    rc, out, summary, verts = run_blender(blender, src, work, verts=True)
+    # --proxies-only is EXPLICIT, not incidental. This section's claims are
+    # about the measured proxies, and without the flag it would get them only
+    # because no `models/` directory happens to sit beside the temp export --
+    # so exporting a model family there would silently turn this section into
+    # a test of something else, with every check still green.
+    rc, out, summary, verts = run_blender(blender, src, work, verts=True,
+                                          extra=["--proxies-only"])
     check(rc == 0, "Blender exits 0 on the real map", "rc=%d" % rc)
     check(summary is not None and verts is not None,
           "Blender wrote both the summary and the raw vertex buffer")
@@ -915,6 +942,109 @@ def _section3(check, led, blender, tmp, args):
           and abs(frac - want_f) < FRAC_TOL,
           "the proxy OBJECTS score the same baseline %r against the mesh"
           % want_f, "%.4f, n=%d, outside=%d" % (frac, n, outside))
+
+    _section4(check, led, blender, tmp, exp, zmap, src)
+
+
+# --- 4. REAL meshes, and the z sign they are built under --------------------
+
+def _section4(check, led, blender, tmp, exp, zmap, src):
+    print("\n== 4. real prop meshes, instanced, and the MEASURED z sign ==")
+    models = os.path.join(os.path.dirname(os.path.abspath(src)), "models")
+    vault_models = os.path.join(vaultpath.vault_root(), "exports", "models")
+    if not os.path.isdir(models) and os.path.isdir(vault_models):
+        models = vault_models
+    if not os.path.isdir(models):
+        led.skip("4. real prop meshes", "no .gwmodel family at %s" % models)
+        return
+
+    work = os.path.join(tmp, "run_real")
+    os.makedirs(work, exist_ok=True)
+    rc, out, summary, _v = run_blender(blender, src, work,
+                                       extra=["--models", models])
+    check(rc == 0 and summary is not None and "props" in summary,
+          "Blender imports the map with the model family available",
+          "rc=%d" % rc)
+    if summary is None or "props" not in summary:
+        led.skip("4. real prop meshes", "no summary")
+        return
+    ps = summary["props"]
+    print("    %d props: %d real over %d datablocks, %d proxies"
+          % (ps["count"], ps["real"], ps["real_meshes"], ps["proxy"]))
+
+    check(ps["real"] == PRESEARING_REAL and ps["proxy"] == PRESEARING_PROXY,
+          "%d props get a REAL mesh and %d keep a proxy -- the pinned split"
+          % (PRESEARING_REAL, PRESEARING_PROXY),
+          "%d/%d" % (ps["real"], ps["proxy"]))
+    check(ps["real"] + ps["proxy"] == ps["count"] == PRESEARING_PROPS,
+          "and no placement is LOST between the two paths -- a prop whose "
+          "model does not decode keeps its proxy rather than vanishing")
+
+    # INSTANCING. Every prop sharing a model must share one datablock; a
+    # per-prop copy would be 664 meshes rather than 152 and is the obvious
+    # way to get this "working" while multiplying the scene by four.
+    check(ps["real_meshes"] == PRESEARING_MODELS,
+          "the %d real props share exactly %d mesh datablocks (one per model)"
+          % (PRESEARING_REAL, PRESEARING_MODELS), "%d" % ps["real_meshes"])
+    by_mesh = {}
+    for o in ps["objects"]:
+        if o["real"]:
+            by_mesh.setdefault(o["mesh"], set()).add(o["file_id"])
+    check(all(len(v) == 1 for v in by_mesh.values()),
+          "and no datablock is shared across DIFFERENT model file ids",
+          "%d datablocks, worst %d ids"
+          % (len(by_mesh), max((len(v) for v in by_mesh.values()), default=0)))
+
+    # THE Z SIGN. MEASURED, not assumed: a prop's geometry must end up ABOVE
+    # the terrain it stands on. `zmax` is world-space and comes off the built
+    # objects, so this reads Blender's own answer rather than our arithmetic.
+    above = n = 0
+    for o in ps["objects"]:
+        if not o["real"]:
+            continue
+        gy = int((exp.rect[3] - o["location"][1]) / CELL_PITCH)
+        gx = int((o["location"][0] - exp.rect[0]) / CELL_PITCH)
+        if not (0 <= gx < exp.dim_x and 0 <= gy < exp.dim_y):
+            continue
+        ground = zmap.get((f32(exp.rect[0] + gx * CELL_PITCH),
+                           f32(exp.rect[3] - gy * CELL_PITCH)))
+        if ground is None:
+            continue
+        n += 1
+        above += o["zmax"] > ground
+    frac = above / max(n, 1)
+    print("    %d/%d real props reach ABOVE the terrain under them (%.3f)"
+          % (above, n, frac))
+    check(n > 500 and frac >= Z_SIGN_MIN,
+          "prop geometry stands ABOVE the ground on at least %.0f%% of real "
+          "props -- the model-space z sign, MEASURED" % (100 * Z_SIGN_MIN),
+          "%.3f over n=%d" % (frac, n))
+
+    # THE CONTROL, and it is what makes the line above a measurement: the
+    # opposite sign buries the geometry. Scored on the SAME props, from the
+    # same objects, by reflecting each mesh about its own placement z.
+    flipped = sum(1 for o in ps["objects"] if o["real"]
+                  and (2 * o["location"][2] - o["zmax"]) > _ground_of(
+                      o, exp, zmap))
+    fflip = flipped / max(n, 1)
+    check(fflip * 2 < frac,
+          "and the OPPOSITE sign collapses -- geometry reflected about its "
+          "placement point sits above ground far less often",
+          "%.3f vs %.3f" % (fflip, frac))
+
+    # A prop whose model did not decode still has to be somewhere sensible.
+    check(all(o["verts"] > 0 for o in ps["objects"]),
+          "every object -- real or proxy -- carries geometry")
+
+
+def _ground_of(o, exp, zmap):
+    gy = int((exp.rect[3] - o["location"][1]) / CELL_PITCH)
+    gx = int((o["location"][0] - exp.rect[0]) / CELL_PITCH)
+    if not (0 <= gx < exp.dim_x and 0 <= gy < exp.dim_y):
+        return float("inf")
+    g = zmap.get((f32(exp.rect[0] + gx * CELL_PITCH),
+                  f32(exp.rect[3] - gy * CELL_PITCH)))
+    return float("inf") if g is None else g
 
 
 if __name__ == "__main__":
