@@ -20,7 +20,13 @@ six constant tables, derived from `SourceFiles/xentax.cpp`) and
 derived from `FFNA_ImHexPatterns/gw_file_pattern_complete.hexpat`) and
 `toolkit/mapdata/mapchunks.py` (the Dependencies record `{u16 id0, u16 id1, u16 pad}`
 and the pair→file-id formula `(id0 - 0xff00ff) + (id1 * 0xff00)`, from the same pattern
-file's `MapFileRef`/`MapFileRefPadded` and from `SourceFiles/animation_state.cpp`).
+file's `MapFileRef`/`MapFileRefPadded` and from `SourceFiles/animation_state.cpp`) and
+`toolkit/mapdata/terrain.py` (the **terrain chunk** layout hypothesis, from
+`FFNA_ImHexPatterns`, `FFNA_MapFile.h` and `SourceFiles/Terrain.cpp` — what is taken is
+the hypothesis and not the layout: every load-bearing field is re-derived from the
+client's own 11-entry step table at `0xA74F28` and confirmed corpus-wide, and upstream
+is a witness we had to correct on tag numbering, on `cellSize`, and on a storage order
+its own pattern and renderer disagree about. `PLAN.md` §6.1).
 
 **Credit, as clause 2 requires:** this software incorporates work by **Jonathan Bjørn
 Greve**, from **GuildWarsMapBrowser**, <https://github.com/Jonathan-Greve/GuildWarsMapBrowser>.

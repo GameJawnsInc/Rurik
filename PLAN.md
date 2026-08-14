@@ -345,7 +345,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 
 | Rung | Deliverable | Acceptance criterion | Status |
 |---|---|---|---|
-| **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **2026-08-04**, criterion met **2026-08-07** (`toolkit/authsrv/replay.py`). Gate proven both directions, client pinned and hash-verified, prior art mirrored — and the `.raw` now decrypts back to the logged plaintext, 329 real captures reproduced exactly, all-or-nothing across 375. The stated criterion finally rests on the stated fact. See §3.1. |
+| **R0a** | Vault + provenance gate + prior-art mirrors | A capture replays byte-identically from disk | ✅ **2026-08-04**, criterion met **2026-08-07**, `4ffa82a` (`toolkit/authsrv/replay.py`). Gate proven both directions, client pinned and hash-verified, prior art mirrored — and the `.raw` now decrypts back to the logged plaintext, 329 real captures reproduced exactly, all-or-nothing across 375. The stated criterion finally rests on the stated fact. See §3.1. |
 | **R1** | Handshake against a local server | Client reaches character select | ✅ **2026-08-04 22:58**, `e34c417`. Build 38797 rendered "Test Warrior" against our portal, our DH parameters, our ARC4 channel and our login burst. |
 | **R2** | Presence | Your own body standing in a real map | ✅ **2026-08-05 11:15**, `aedc214`. |
 | **R3** | Movement on real geometry | You walk to a wall and are stopped | ✅ **2026-08-05 17:40**, `a97c7c4` — the server reads the game's own navmesh. Movement itself landed at `885d05d` (11:46). Estimated here as "a quarter, not a week"; it took six hours. |
@@ -355,7 +355,7 @@ stamp it with a commit hash **in the same commit**; if you cannot, the rung is n
 | **R5** | Declarative authoring toolkit | A new zone in TOML, hot-reloaded, walked | ⬜ not started — but its substrate exists as of `501698b`: `content/*.toml` and `toolkit/content.py`, with the server holding zero content literals. **Its other half now exists too**: R5m authors the zone's *geometry*, which TOML was never going to describe. |
 | **R5m** | **Custom map geometry, end to end** | A map we authored loads in the retail client, and geometry we chose constrains the character | ✅ **2026-08-11**, arc landed `0be1555`, criterion completed the same day. **The client walks on our terrain and stops at our walls.** `mapbuild.build_flat` assembles a whole map from typed parameters — 7,841 B, 9 chunks, **97.04% generated**, the rest being FINDINGS 14's 232 bytes of ArenaNet constants read from an archive at run time — and the retail client loads it, places a character in it and writes nothing back (FINDINGS §22, four discriminators). Then **E1 proved the geometry is ours and not a coincidence**: two maps differing in **33 of 7,841 bytes**, all inside the pathing chunk, both 7,841 B, with the mesh rect at 0..3072 against 1024..2048, confined the character to reported bounding boxes of **3072.0 × 3072.0** and **1024.0 × 1024.5** — the ratio of the two rectangles, measured from the client's own position reports while our server broadcast no position at all (FINDINGS §23). The read direction is byte-exact across the corpus: terrain 349/349, pathing 349/349, whole map file 349/349 Bloated **and** Stripped — and since 2026-08-12 the STRIPPED terrain chunk too (`strippedterrain.py`, FINDINGS §37), whose real claim is not the round trip but that its **60,468,224 height samples equal the Bloated chunk's on 349 of 349 maps**, pulled out of a Huffman bit stream by a module that never reads that chunk. A retail map also stands up in Blender (`tools/blender/import_gwmap.py`, 213,921 verts, orientation checked against the props chunk through the test's own walker — the terrain path never reads it) and **since 2026-08-12 comes back out of it**: `export_gwmap.py` round-trips Pre-Searing's 212,992 heights, tiles and shade bytes byte-identically through a `.blend` read by a separate Blender process, and a mesh authored in Blender from nothing reaches a map file passing all 17 open-time gates (FINDINGS §32). **Since 2026-08-13 the interchange carries PROPS** (format_version 2): every placement from BOTH streams cross-checked at export through `corresponds()`, model indices resolved to file ids with MFT (size, crc) identity, **the rotation composition measured** — z first, then x, then y, per-axis signs (−, +, −), 3,545/3,545 multi-axis records on a 12-map probe, closing what `props.py` had open — and Blender places every placement as a measured proxy (footprint prism or radius cylinder; placements only, NO ArenaNet model geometry, which nothing in this tree decodes). That byte-identity is the weak half by measurement — a memcpy sabotage keeps all six of those checks green and is caught only by a sculpt control. **And since 2026-08-12 the OTHER delivery route is open: the client's own map compiler builds from a Stripped stream we supply** — §35 it compiles at all and reproduces ArenaNet's bytes, §36 it compiles the stream WE write rather than anything cached, and **§38 it floods terrain we AUTHORED**: the rebuilt navmesh stops at world x = 1152.0, the cell boundary we chose, with walkable area in the steep strip falling from a measured 37.3% to 0. **What is NOT done**: authored art (textures are borrowed retail file ids), portals, multiple planes and elevation; only the terrain of §38's map is ours (props, zones and collision are ArenaNet's); and the delivery path is still `datwrite` into a copied archive — which now bounds authoring to maps that SHRINK, since it writes uncompressed and will not relocate (§8.10 e9). |
 | **R0b** | **Instrumented-client capture** of a real session | A live session recorded from inside a client we control, both directions, stamped `origin: live` and byte-replayable from disk | ✅ **2026-08-07**, `vault/captures/live/20260807T143055`. Six connections to ArenaNet (one auth, five game, all on **port 80**), both directions, zero TCP gaps, stamped `origin: live`, and **byte-replayable in the strong sense**: `livesession.py --assemble` regenerates all six decrypted files **sha256-identical** from `wire.jsonl` + `keyring.jsonl` alone, with no client and no network. 200,153 bytes of ArenaNet plaintext, 11,700 messages. **The independent check is the framing**: every one of the 12 streams decodes 100% clean to its final byte against `schema/messages.json`, which was built from the *client's* format tables and never from these bytes. Adversarially attacked from four angles (§3.3); three failed to refute, and the fourth's safety finding is fixed. See §3.3 for what the number does *not* mean. The pipeline is complete — key-tap cave (`keytap_patch.py`, `--key-tap`), off-wire WinDivert capture (`wirecapture.py`), memory reader (`keytap.py`), driver (`livesession.py`, wired to launch at `9cd7bca`, 2026-08-07), decrypt (`replay.py`) — and `dryrun_keycapture.py` ran it end to end against our own server, elevated, GREEN (`32c7fe1`, 2026-08-07): the off-wire ciphertext matched the server's own `.raw` byte for byte, and the tapped key decrypted it to the server's logged plaintext. The live build is staged, stock-DH and key-tapped (2026-08-07). **What is left is the live run itself, and it is human-driven by design** (§6.2, and `livesession.run`'s docstring: no scripted input, the operator plays). **Re-specified 2026-08-06 — it used to read "proxy capture", which cannot work: the channel is DH-keyed end to end and a proxy holds neither private exponent. That is the same fact that forces us to patch the client for our own server.** |
-| **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10, and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. **A second run the same day played Lakeside County (`:64103`, 1,074/1,074, 0 non-tape sends) and rendered COMBAT** — plus a labelled c2s corpus, and independent corroboration of D1's agent-id reuse from ArenaNet's own traffic. See §3.5 and [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md). |
+| **R1.5** | **Tape player** | A recorded StoC stream replayed at recorded timing walks a real client through Ascalon | ✅ **2026-08-10**, `fbedcfb` — **and it walked through Ascalon City itself.** The full 48.6 s tape of connection `:60935` played **1,209 of 1,209 events, 74,319 B, with ZERO messages of our own on the channel** (measured, not assumed — the previous run's assert turned out to be our own world tick talking over the recording). The client skipped the cutscene, walked to each quest giver in order, spoke to them, accepted quests, and walked to the zone exit; chat arrived. **We still cannot name half the opcodes involved** — a tape needs no semantics, which is the whole point. It ended where a one-connection tape must: at the map transition, the client dialled `54.198.7.73:6112` from the recorded `GAME_SERVER_INFO` and the cage refused it (`Code=005`). See §3.4. **A second run the same day played Lakeside County (`:64103`, 1,074/1,074, 0 non-tape sends) and rendered COMBAT** — plus a labelled c2s corpus, and independent corroboration of D1's agent-id reuse from ArenaNet's own traffic. See §3.5 and [studies/tape/FINDINGS.md](studies/tape/FINDINGS.md). |
 
 Two structural changes, both argued below in §4.
 
@@ -503,7 +503,7 @@ The cheapest next thing this opens up is **a deliberately labelled input run** (
 an accident of five unplanned minutes) and **chaining tapes across a map transition**,
 which is what would turn four instance tapes into one continuous session.
 
-### 3.6 The loopback opcode sweep — 242 of 487 GAME_SMSG opcodes measured
+### 3.6 The loopback opcode sweep — 334 of 487 GAME_SMSG opcodes measured
 
 **COMPLETE 2026-08-12**, plus the ten table-less opcodes and both quick-win controls. [studies/smsgsweep/FINDINGS.md](studies/smsgsweep/FINDINGS.md).
 Our own server sends each catalogued opcode ArenaNet has never shown us to a client we
@@ -589,8 +589,14 @@ Both are now graded against an enumerated content surface:
   *R4c-1, capture-free*: 19 of 19 map rows with resolved file ids and arrival points that
   pass the spawn-in-trapezoid test, ≥15 NPC templates, 2 of 2 mandatory quests completable,
   6 of 6 quest verbs implemented, 4 of 4 services working. **Today the content store holds
-  9 map rows and 2 NPC rows** (`toolkit/content.py`'s own census, 2026-08-11: map 9, npc 2,
-  item 1, spawn 1). Every map row carries a `file_id` and a `spawn_x`/`spawn_y`; **how many
+  10 map rows and 56 NPC rows** (`toolkit/content.py`'s own census, re-run **2026-08-14**:
+  map 10, npc 56, item 1, spawn 4, area 3, attack_speed 1, player 1 — was map 9, npc 2,
+  item 1, spawn 1 on 2026-08-11). **Read the NPC figure carefully before scoring R4c-1
+  against it**: only **2** of the 56 are tracked in `content/npcs.toml`; the other **54**
+  are the gitignored `vault/content/npcs.toml` overlay `npcdefs.py` emits, and they carry
+  `level = 0` placeholders with no name, armor, energy or allegiance (that module's own
+  header says so). So the "≥15 NPC templates" bar is met on the count and **not** on the
+  content, which is the distinction this criterion exists to force. Every map row carries a `file_id` and a `spawn_x`/`spawn_y`; **how many
   of the nine pass the trapezoid test has not been re-run**, so the map figure is a row
   count and not yet a score against this criterion. The printed "(today 2)" and "(today 1)"
   were true when written and were never updated.
@@ -1277,34 +1283,70 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
-### The minimap — mechanism solved on paper, one lever held, one unnamed drop (2026-08-14)
+### The minimap — Tier 1 complete, and the compass on our server is drawing the client's FALLBACK (2026-08-14)
 
 **Read [`studies/minimap/FINDINGS.md`](studies/minimap/FINDINGS.md), then its
-[`PLAN.md`](studies/minimap/PLAN.md) ladder.** Static recon over build 38797 and the
-full live corpus; no client was launched. The pathing-map hypothesis is REFUTED: the
-compass, mission map and world map are three crops of ONE per-continent atlas of
-512×512 ATEX tiles compiled into the client (409 tiles over 7 worlds, 401 resolving in
-both vaulted archives), cropped by the area row's footprint rect — so a map file
-contributes nothing to the picture, and the customarea "featureless brown disc" is the
-continent-crop fallback, not missing art. Two things follow:
+[`PLAN.md`](studies/minimap/PLAN.md) ladder.** Static recon over build 38797 plus the
+full live corpus; **no client was launched by any of the eleven agents on this arc**.
+The pathing-map hypothesis is REFUTED: the compass, mission map and world map are three
+crops of ONE per-continent atlas of ATEX tiles compiled into the client — **492 tiles
+over three tiers, 484 resolving identically in all three vaulted archives** — cropped by
+the area row's footprint rect at **exactly one texel per terrain cell** (OBSERVED from
+the client's own `add`/`shr 9` and from a five-scale population test with four rivals at
+zero). A map file contributes nothing to the picture.
 
-- **We hold a lever already**: the map-type byte our server sends in `0x0199` selects
-  FOOTPRINT_A vs B (`maprows.py` §9 item 4, now answered from the compass's own branch
-  at `0x008C2770`). Rung C3 proves it on screen; it does not make our terrain appear.
-- **A genuine unnamed drop**: GAME_CMSG `0x002B` is the compass draw/ping (sole
-  producer `CompassCanvas.cpp`; s2c partner `0x0091`), our client has already sent it
-  5× on loopback, and `authsrv.py` discards it with no arm, no allowlist row, no name —
-  invisible to the D9(a) tripwire because the tripwire keys on *named* opcodes.
+**The one result that reorders everything, and it was not predicted.** Rung S5 rendered
+the crops offline and went to compare them against the compass frames we already have —
+and **every compass frame in the vault is the client's NULL-image fallback tile (archive
+file 9153, 64×64, tiled), not any crop of the atlas.** Six frames, three maps, four
+sessions, chromatic ratio +1.081..+1.110 against the fallback's +1.164 and the crops'
+−1.718..+0.286, with 0 of 7,948 atlas windows in band, no translation improving the fit
+across a walk and no rotation improving it while the bezel visibly turns. **It fires on
+retail map 148 too, with all four of that map's tiles present in the archive the client
+opened** — so it is not our authored maps' fault, and the customarea "featureless brown
+disc" is now positively identified rather than explained. **Why it fires is NOT FOUND**,
+with two separable hypotheses (a world index latched before the instance load, or a
+failed texture load) and a `Gw.log` line that tells them apart for free.
 
-Next, in order: **S1** fix `consttable.py:539`'s `s_worldData` row (stride 24 → 48,
-count 10 — a correction to a committed claim, measurement in hand); **S3** commit the
-atlas reader as `toolkit/clientscan/worldmap.py` (the reusable asset; enables the
-offline compass render S5); **S6 + overrides**: name `0x002B`/`0x0091` and either give
-`0x002B` an arm or a `DROPPED_ON_PURPOSE` row. Before naming the fog opcodes
-(`0x0089`/`0x008B`/`0x008C`), resolve FINDINGS §4.2's CONTESTED attribution — two dives
-put the same assert VA under different handlers. **Owner flag for Tier 3**: an authored
-map's compass showing OUR terrain needs both an archive tile write (A1) and a client
-patch repointing the footprint (A2) — it is not a free consequence of good authoring.
+Four things landed underneath that:
+
+- **The lever is confirmed and its population shrank by 8×.** The `0x0199` map-type byte
+  selects FOOTPRINT_A vs B, and the enum is now named from the binary — 0 =
+  `MISSION_MAP_OUTPOST`, 1 = `MISSION_MAP_GAME`. **Six** readers apply it image-wide, not
+  the one the rung predicted, closable because the table base occurs exactly once in the
+  image. And of the 172 rows where A ≠ B, **136 have A all-zero and 16 have B all-zero —
+  only 20 carry two real rects**, which is C3's actual population.
+- **The continent → world map is the IDENTITY**, closing this study's leading NOT FOUND
+  and promoting `areatable.OFF_CONTINENT` from UPSTREAM to CORROBORATED. But the
+  prediction's supporting argument is REFUTED: the seven area-table values are not the
+  seven tile-bearing worlds, world 6's art is orphaned, and five map ids point at a world
+  with no tiles at all.
+- **The fog contest is CLOSED** — two agents from opposite ends with the rival answers
+  withheld, agreeing on every VA and all five live counts: `0x008B` declare + `0x008A`
+  payload + `0x008C` incremental mark; `0x0089` is an AgentView mannequin message and not
+  in the subsystem. The wrong reading was manufactured by `asserts.py --at`'s fixed
+  2,000-byte window over four functions occupying 998 bytes — the same class of trap that
+  made `codescan --in CompassMap` hide the very branch rung S2 was run to find. **Both
+  locators answer confidently and wrongly outside their range and neither can warn.**
+- **A genuine unnamed drop, with its name now attacked as well as confirmed**: GAME_CMSG
+  `0x002B` is the compass draw (sole producer re-established by a value-first sweep of all
+  134 materialisations of `0x2b`, exactly one inside any of the **214** send-call bodies —
+  the earlier 174 missed a second send entry), our client has already sent it 5× on
+  loopback, and `authsrv.py` discards it with no arm, no allowlist row, no name. **The
+  `knotCount > 16` process-kill hazard is RETRACTED** — the generic unpacker refuses the
+  message before dispatch, so an over-range send is inert, not dangerous.
+
+Next, in order: **S11** land the six `overrides.json` names (c2s `0x002B` at *medium* —
+DRAW is ArenaNet's word but only on the s2c side — s2c `0x0091` at high) **with the
+`DROPPED_ON_PURPOSE` row for `0x002B` in the same commit**, or `test_dispatch.py` goes
+red; **S9** the static half of "why is the compass NULL"; **C1** re-scoped from a picture
+comparison into that diagnosis, on retail map 148, which **gates C2 and C3** — an arm
+whose two halves both draw the fallback is satisfied vacuously. `worldmap.py` and its
+test are written and audited (floor 78, 19 sabotages, all redden) but **uncommitted**.
+**Owner flag for Tier 3 is unchanged**: an authored map's compass showing OUR terrain
+needs both an archive tile write (A1) and a client patch repointing the footprint (A2) —
+it is not a free consequence of good authoring, and it is worth nothing until C1 explains
+the fallback.
 
 ### Custom professions — the route is RESKIN, and the party window just opened
 
@@ -1477,7 +1519,7 @@ ladder in [studies/models/PLAN.md](studies/models/PLAN.md)** (a proposal until a
 format is half-read in customarea §5, the radius identity is a ready-made oracle, and the
 missing piece is committed code plus the client's own FVF dispatch.
 
-### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks)
+### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks — a FROZEN snapshot; the suite is 85 files / 4,161 checks as of 2026-08-14, `python toolkit/run_suite.py`)
 
 *1,927 is **derived, not re-summed**, and says so: the 1,878 below was measured over 50 files, and this session added `test_behaviourrun.py` (35, new) and took `test_wirecapture.py` from 28 to 42 — both counted from real green runs. 1,878 − 28 + 42 + 35 = 1,927. The suite runner reports 51/51 green in 611 s; its per-file log truncates, which is what made the earlier 965 wrong, so the arithmetic is shown rather than a figure quoted from a partial log. The 1,878 figure's own method:* Method, because the gap is
 large enough to want one: run each of the 50 files in `toolkit/**/test_*.py` as its own
@@ -2138,7 +2180,11 @@ parallel, with one safety change that is not optional — see its entry.
    WowPacketParser and a packet logger, and TrinityCore's whole 3.3.5a world database exists
    because that pipeline ran while retail was on 3.3.5a. Target the first monster row, not a
    complete zone.
-3. **Finish R4a.** Nothing swings back. The player cannot die. The agent table
+3. **Finish R4a.** ~~Nothing swings back. The player cannot die.~~ — **both met 2026-08-11**,
+   see §3's R4a row; this item was written 2026-08-06 and restated the retired criteria for
+   eight days. What is actually left is the agent *model*: no AI, no pathing (the Hatcher
+   stands where it spawned), no resurrection shrine (the revive is a timer), and energy is
+   not restored on revive. The agent table
    `studies/enemy/PLAN.md` §7.2 asks for is the prerequisite, and it should read its NPCs from
    `content/npcs.toml` rather than minting constants.
 4. **Enumerate Pre-Searing** — [studies/presearing/MANIFEST.md](studies/presearing/MANIFEST.md).

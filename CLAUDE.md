@@ -85,10 +85,14 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
   `vault/run-live/` and verified byte-identical to the source. **The driver exists as of
   2026-08-07** (`toolkit/harness/livesession.py`), the whole pipeline is proven end to end
   on loopback (`dryrun_keycapture.py`, elevated, green), and the live build is key-tapped
-  and staged. What has not happened is the run, and it is human-driven on purpose: the
-  driver launches, sniffs and taps, and sends **no** keystrokes or clicks — the operator
-  logs in and plays, because the scripted input the loopback harness uses is precisely the
-  traffic pattern the rule above is about. `RUNBOOK.md` §"Capturing a live session" is the
+  and staged. **The run itself is human-driven by design**: the driver launches, sniffs
+  and taps, and sends **no** keystrokes or clicks — the operator logs in and plays,
+  because the scripted input the loopback harness uses is precisely the traffic pattern
+  the rule above is about. (This paragraph used to end "what has not happened is the
+  run", written 2026-08-07 12:41 and still saying it a week later — the run landed at
+  14:30 **that same day** and six live captures sit in the vault. Status of the live
+  campaign is `PLAN.md` §3's R0b row and nowhere else; that is what the top of this file
+  is about, and this sentence is the file breaking its own rule for seven days.) `RUNBOOK.md` §"Capturing a live session" is the
   procedure; do not pass `--host` (it is refused, and why is worth reading).
   **The launch rule is no longer "is it caged".** It is a binding, enforced from the
   bytes by `toolkit/clientpatch/dhbuild.py` and `cage.assert_launch_safe(exe, host)`: a
@@ -551,12 +555,41 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   arithmetic wrong. The planar/interleaved pair is pinned as two live answers
   -- same length, different bytes, cross-decode required to differ -- because
   no size check separates them and the texture arc had to settle it on
-  screen. Section 6 reads REAL retail levels and asserts only what the
+  screen. Section 7 reads REAL retail levels and asserts only what the
   archive can refute, and it carries the finding that bounds the whole rung:
   **only 25 of 1,533 ATEX containers have a RAW level 0**, so this decoder
   alone reaches 1.6% of the corpus and the other 98.4% sit behind ATEX level
-  compression codes nothing here decodes yet. Sections 1-5 need no vault and
-  score 30; 32 by default, 33 under `--all`),
+  compression codes nothing here decodes yet.
+  **Section 6 (2026-08-14) is not a codec at all** -- it is `pattern_icon`,
+  the picture the arc exists to put on a skillbar, which shipped with
+  `safe = min(w,h)/2 - 16` and therefore raised ZeroDivisionError at exactly
+  32x32 and drew nonsense below ~40. The 16 was never a pixel count: the
+  client stretches the whole texture linearly onto a fixed quad (FINDINGS 9,
+  two landmarks in a 64x64 ruler agreeing at 0.955 and 0.958 px per texel), so
+  the chrome eats a constant FRACTION, 12.5%. `safe` is now `min(w,h) * 0.375`
+  and MIN_ICON = 12 is DERIVED, being where the sun disc stops spanning one
+  DXT1 4x4 block. The retired rule is reproduced IN THE TEST as a live
+  function, so "128x128 is byte-identical" and "64x64 is not" are two live
+  answers rather than arithmetic the test asks the module to confirm about
+  itself, and **the load-bearing check is the one the old rule cannot pass at
+  any tolerance**: a proportional picture box-filtered 2:1 IS the picture drawn
+  at half size -- 2.04/255 against the old rule's 17.74, which is FINDINGS 9's
+  arm Q measured offline. Seven one-edit sabotages were BUILT AND RUN and all
+  seven redden (9, 4, 12, 10, 4, 5 and 1 check); the last is `min()` swapped
+  for `max()` in the refusal, caught by the 64x8 line ALONE, and the zeros
+  sabotage is the one that earns the feature checks -- a `pattern_icon`
+  returning a field of zeros keeps every "NxN is still drawn" length check
+  GREEN. **Two of the seven found defects in the TEST**, and they are this
+  file's real lesson: MIN_ICON -> 100000 originally HUNG past a 600 s timeout
+  printing no verdict, because the positive controls drew at `dxt1.MIN_ICON`
+  and the sabotage asked for a 100000x100000 image -- `test_agentlife`'s
+  twelve-of-fourteen in a new shape, a check whose WORKLOAD is computed from
+  the symbol under test -- so every size is a literal now; and the reverted
+  `safe` killed section 6b outright at its sixth check, so each per-size draw
+  is guarded and a crash is a named failure. Sections 1-6 need no vault and
+  score 52; 55 by default, 56 under `--all`, and the floor is 55, so a
+  vault-less run goes red -- as it always did, against an earlier comment
+  claiming a bare machine "still clears the bar"),
   `toolkit/mapdata/test_emblem.py` (the authored profession glyph -- the emblem
   spliced into ArenaNet's own 32-cell sheet at frames 14/15. Most of what makes
   art right is untestable; what IS testable is the set of MEASURED numbers the
@@ -681,31 +714,6 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   floor of 26; 36 with a vault. **The floor comment first said "MEASURED" over two
   GUESSED numbers** -- 30/38 against a real 26/36 -- in a file already citing the
   two earlier times that happened, which makes it the third. ~3 s),
-  `toolkit/mapdata/test_png.py` (the stdlib PNG codec rung M5's texture
-  export writes through -- `zlib` and `struct` and nothing else, because
-  `toolkit/` takes no third-party dependency and a test needing PIL to check
-  it would defeat the module's only reason to exist. NO vault, no archive, no
-  client, no PIL: every image is built in the file out of `bytes`. The round
-  trip is deliberately the WEAK half -- two functions that agree prove they
-  are inverses and nothing about whether either is PNG -- so section 2 reads
-  the emitted bytes with a walker written HERE out of `struct` and `zlib`,
-  recomputing every CRC, and section 3 feeds the reader images the WRITER
-  CANNOT PRODUCE: the writer only ever emits filter 0, the reader claims all
-  five, so a PNG is hand-built for each and one more mixing a different
-  filter per row (which is what catches a stale `prev` scanline). Six
-  one-edit sabotages were BUILT AND RUN and all six redden -- 8, 4, 2, 1, 2
-  and 2 -- and the counts are MEASURED, an earlier draft having carried
-  guessed ones of which four were wrong. Two rows earn their place: the
-  Paeth predictor is invisible to every round trip here (the writer never
-  emits filter 4) so only the hand-built images reach it, and **a reader
-  that trusts the stored CRC reddens exactly ONE check**, section 4's
-  tamper. The width/height swap reddening only 2 is reported rather than
-  tuned, and the reason is stated -- a transposed IHDR gives the reader a
-  wrong stride so it REFUSES, and the section aborts into one named failure,
-  which is `main()`'s guard working rather than thin coverage. Refusals are
-  asserted as `BadPNG` and not as "raises", because a truncated file left as
-  `struct.error` in the first version and the difference to a caller is a
-  refusal versus a crash in the exporter. 45 checks, ~1 s),
   `toolkit/mapdata/test_rebloat.py` (rung E3's driver, which is the only tool
   here that deliberately DESTROYS a payload — it zeroes a map's Bloated stream
   so the client is forced down the re-bloat path — so almost every check is a
@@ -1913,6 +1921,72 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   tool returns a SET per row on purpose: 888 named areas over 349 files means at
   least 539 must share one. 29 checks; ~9 min on a cold vault cache
   (MEASURED 558.6 s), ~9 s warm),
+  `toolkit/clientscan/test_worldmap.py` (the world-map ATLAS reader -- which
+  archive file holds each tile of the per-continent picture the compass, the
+  mission map and the world map are three crops of. **The headline is the WEAK
+  half and the check labels say so**: "492 tiles over three tiers" is close to
+  true by construction, since the module walks the count a table declares and
+  emits the non-NULL slots, so an all-wrong reader prints 492 too. Four things
+  carry it instead. **`count == CX x CY` on 21 of 21 grids**, where `count`
+  comes from the tile table at `0x00A37390` and `CX`/`CY` from `s_worldData`
+  4 KB away in another translation unit -- asserted on `grids()`, which
+  deliberately does NOT refuse a disagreement (`tiles()` does), because a
+  function that only ever returns rows that agree makes the agreement
+  unfalsifiable; and the test RECOMPUTES it rather than reading `closes`, since
+  `return True` is a one-character sabotage and reddens 2. **Every resolved row
+  decompresses to magic `ATEX`** -- 484 of 484, on THREE vaulted archives with
+  three different row counts, and the eight ids that resolve on NONE of them are
+  a LITERAL in the test file rather than a number the module computes. **The
+  control is the same walk one dword early**, written in the test out of
+  `struct.unpack_from` and sharing no code with the module: 484 resolved and 0
+  non-zero trailers collapses to **0 and 492/492**, from both sides. And
+  **locating through `consttable` is asserted BEHAVIOURALLY** -- the fixture
+  plants a SECOND `s_worldData` under a different anchor, the corpus row is
+  pointed at it, and the grids' dimensions must MOVE, because a test that reads
+  the constant passes against a module that never uses it. Two results the arc
+  did not have: there are **THREE tile tiers, not two** (`0x00A37440`, indexing
+  with `worldData+0x18`), which settles `satelliteCX/CY` from the client's own
+  `imul edi,[edx+0x18]` beside the assert `chunk.x < worldData.satelliteCX`; and
+  **not every tile is 512x512** -- 15 of 484 are 256x256, four of them in the
+  CHUNK tier and not at an edge, where FINDINGS says 512x512 off a sample of 4.
+  Sections 0-2 and 6-7 build a PE32 image byte by byte -- three synthetic
+  getters, planted tile tables, planted NULL slots, a planted `s_worldData` --
+  and every refusal in section 1 is a way the module could answer plausibly and
+  wrongly: a getter whose bound check and index arithmetic read DIFFERENT
+  fields, a loop bound that is not a whole number of records, two getters
+  claiming one tier, a slot pointing at bytes the file does not hold.
+  **Nineteen one-edit sabotages were BUILT AND RUN and all nineteen redden**
+  (9, 8, 5, 4, 3, 3, 3, 3, 2, 2, 2, 2, 1x7); the one that earns its place
+  reddens exactly ONE check with nothing else moving, the bound-check versus
+  index-arithmetic disagreement, which is invisible on the real image because
+  there the two reads agree. `guarded()` is why the several that take out whole
+  sections are named red checks and not a traceback with no verdict.
+  **THREE of those nineteen scored ZERO red on the file as first written --
+  ALL CHECKS PASSED, exit 0 -- and each is a shape this repo has been bitten by
+  before.** (1) A `main()` that NEVER CALLS `resolve_out` and writes straight to
+  `a.out`: section 6's syntax-tree check read `HERE/worldmap.py` instead of the
+  module under test, so it was structurally exempt from `--module`, which is the
+  mode the whole sabotage table is measured in -- a section that cannot fail in
+  the one mode its own evidence comes from. It reads `wm.__file__` now, and a
+  second check requires every WRITE SITE to write the name bound to the guard's
+  answer, because the write is `Path(x).write_text` and an `open(..., "w")`-only
+  scan finds zero write sites and passes vacuously (`test_atex.py` section 3,
+  one level up). (2) A reader that never reads the pair record's TRAILING u32
+  and assigns `trailer = 0`: all 492 real records carry zero, so it agreed with
+  the independent walker and with the client census, and PLAN rung S3's
+  prediction was being confirmed by a constant -- only a planted non-zero in the
+  fixture can tell a reader from an assumer. (3) The emitted index stamping
+  `pinned.BUILD` on every row: `--exe` takes any file and `pinned.find()` falls
+  back to the auto-updating install at `C:\gw`, so condition 2 was recording a
+  CONSTANT rather than the build of the image read. The build is measured from
+  `pinned.identify()` now, the row names WHICH image, and the control is a
+  payload built from an unidentified path that must record `None`. One check was
+  also DELETED as one that cannot fail -- `ar.row(n).index == n`, which
+  `archive.py:367` asserts internally and would have raised first -- and
+  replaced by two the archive can refute. THREE scores, each measured and none
+  subtracted: **78 with client and archive, 65 with the client alone, 40 with
+  neither** -- floor 78, so a vault-less run goes red. The archive section
+  scores a fixed count however many archives a vault holds. ~2.5 s),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first),
@@ -2408,7 +2482,7 @@ reasoning about it. Two of the three hardest questions so far were settled that 
 |---|---|
 | `toolkit/portal/`, `toolkit/authsrv/` | The server: portal (6601), auth + ARC4 channel (6112) |
 | `toolkit/schema/` | Codec and the message-catalog importer |
-| `schema/messages.json`, `overrides.json` | The wire schema, tracked in git |
+| `schema/messages.json`, `schema/overrides.json` | The wire schema, tracked in git |
 | `content/*.toml` | The world: maps, NPCs, items, spawns. One row per fact, each carrying its own provenance. Loaded by `toolkit/content.py`; the server holds no content literals. Bulk extraction goes to `vault/content/` and is merged over these. |
 | `toolkit/clientscan/`, `toolkit/clientpatch/` | Read-only client analysis; patching and the firewall cage |
 | `toolkit/mapdata/` | `Gw.dat` reader, planner (`datplan`), writer (`datwrite`), textures (`atex`, `dxt1`) |

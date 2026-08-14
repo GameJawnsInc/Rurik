@@ -151,7 +151,115 @@ means T3's UV question has a named answer to test rather than a scale to tune.
 
 ---
 
-## 3. What is still open
+## 3. Rung T3 — the atlas and the UVs (2026-08-14, MEASURED)
+
+### 3.1 One cell samples 111×111 texels of one 128×128 quadrant
+
+Read out of build 38797's terrain chunk builders. Terrain texcoords are
+**generated at chunk-build time and stored in the vertex buffer**; nothing in
+the map file carries a texcoord or a scale.
+
+- hi path (`0x0075DD50`): FVF `0xF05` — position + normal + **four texcoord
+  sets**, stride 56, **four unshared vertices per cell**. 32×32 cells → 4,096
+  vertices, and the pool is exactly `0x38000` = 4096 × 56.
+- lo path (`0x0075E650`): FVF `0x105`, stride 32, 33×33 = 1,089 shared vertices,
+  one texcoord set.
+- sets 0/1/2 are **three tile LAYERS**: `uv = tileVar[var] + atlasTile[tile].uv0`
+- `du = 0.5/tilesX − 17.0/atlasWidth` = **111 texels for every legal tile
+  count** (algebraically 128 − 17), verified at counts 3, 16, 31, 32, 47, 59, 63
+- `tileVar[0..3]` = texel `(128*(v&1) + 8.5, 128*(v>>1) + 8.5)` — so
+  **variation v IS quadrant v**
+- set 3 is chunk space: `1/32` per cell, one repeat = 32 cells = 3072 units
+
+**So one cell = one full variant = 96 world units = 111 texels.**
+
+**REFUTED, and it was the rung's stated hypothesis:** the scale comes from
+neither `tex_f12`/`tex_f16` nor `tex_word` nor a divisor of `CELL_PITCH`. Every
+operand is a compile-time literal (256-texel tile, the 0.5 quadrant split, the
+8.5-texel inset) plus the tile count, **which cancels**. Corroborated from the
+corpus: `tex_f12` and `tex_f16` are an exact `k/255` on **240 of 240** values
+over 120 maps — they are bytes, not scales.
+
+> Skeptic's correction, carried because it would bite an implementer: the
+> rotation flag is **bit 31 of the packed `(variation << 16) | tile` dword**,
+> i.e. bit 15 of the *variation* word. The tested register at `0x00757B43` has
+> already been shifted right by 16.
+
+### 3.2 The variation, and why the ground does not shimmer
+
+The four words at `0x00BF7808` are `{12, 2, 5, 8}` — the **lo path's inverse
+lookup** from variation to corner-mask slot; the hi path never reads them. Both
+paths agree that variation *v* selects quadrant *v*.
+
+Variation 0 means "take the PRNG's pick": Lehmer/MINSTD
+(`s' = 48271·s mod 2³¹−1`), **re-seeded per 32×32 tile with
+`seed = (tile.x << 16) ^ tile.y`**, and *both* branches of the variation test
+draw, so stream position is a pure function of the cell's index — the terrain
+is deterministic. Variation 0 is **99.9426% of 5,153,792 cells over 24 maps**,
+so tag 3 is a sparse authored override, and it can only pin quadrants 1–3:
+quadrant 0 is reachable only through the draw.
+
+### 3.3 Tag 3's bit order: INFERRED → MEASURED
+
+`terrain.py` records the bit-pair position as not established, on the grounds
+that any self-consistent convention round-trips. That was true while tag 3 had
+no meaning; the client now decides it, and **`bits_at`'s `(i & 3) * 2` guess is
+exactly right** — two consumers read the de-tiled buffer with a shift counter
+starting at 0 and stepping `+2 & 7`.
+
+The corpus settles it a **second** time and agrees: cross-byte co-occurrence
+collapses onto a monotone function of true distance, `C(3→0) = 50.546%` against
+`C(0→3) = 33.770%` (ratio 1.497, z = 31.1), and the reversed reading demands
+the opposite inequality. A null shuffling byte *positions* while keeping
+*contents* collapses the ratio to 1.010/0.966/0.855.
+
+Both of `terrain.py`'s stated controls reproduce exactly: all-zero on **168 of
+349** maps, median **0.0957%** of bytes non-zero where present.
+
+### 3.4 A DEFECT IN OUR DECODER, found by a skeptic
+
+**`atex.decode_rgba` did not return what the client uploads.** The border pass
+claims the band blocks so the payload never stores them — and the client then
+**regenerates** them (`0x006C2FA5` → `0x006C22A0`, source block `(x^3, y^3)`
+per border axis with an in-block reversal). We implemented only the first gate
+and left them zero.
+
+Measured on one texture, and the control is the sharp half:
+
+```
+border-band pixels: 15360, changed by the fix: 15360
+  of those, ZERO before the fix: 15360 (100.0%)
+interior pixels:    50176, changed by the fix: 0   <- must be 0
+```
+
+`atex.mirror_borders` now fills them: within a tile, column `band−1−k` takes
+column `band+k`.
+
+**This corrects a measurement made in this very session.** Before the fix I
+measured the band's alpha as "a hard zero at the rim" and concluded a quadrant
+was an alpha-bordered splat. **The zero was ours.** A tile is a 112×112 image
+inside an 8-pixel *mirrored* band, the four variants share that band and are
+therefore interchangeable at any cell boundary — which is exactly what a
+per-cell variation selector requires.
+
+The rule's form is confirmed at level 1, where the pass is gated off and the
+band IS stored: **83.24% exact pixel match against 63.23% for the nearest
+rival**. It cannot be 100% — level 1's band was mirrored *before* DXT
+compression, so a 4×4 block straddling the axis re-compresses asymmetrically —
+and an earlier version of this check demanded byte equality, got 0 of 60, and
+was wrong about the oracle rather than about the rule.
+
+### 3.5 What survives from the pre-fix reading
+
+The alpha **is** a blend mask: only 7 of 192 tiles are fully opaque, 178 of 192
+span the full 0..255, and the median tile has 46.9% of its pixels at
+intermediate alpha. With three tile layers per cell, terrain is genuinely
+multi-layer blended — so a T5 that draws one opaque layer per cell will not
+reproduce it, and should say so rather than look broken.
+
+---
+
+## 4. What is still open
 
 - **T3**: how a cell samples its 128×128 quadrant, and the UV scale. §2.1 gives
   the mechanism; the arithmetic is unmeasured.

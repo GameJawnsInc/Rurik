@@ -34,7 +34,20 @@ round trip cannot see it. So:
     interleaved was noise). Here it is pinned as a difference between two live
     answers, with the cross-decode required to differ.
 
-SECTION 5 IS THE ONE THAT NEEDS THE VAULT, and it is deliberately not a
+SECTION 6 IS pattern_icon, WHICH IS NOT A CODEC AT ALL -- it is the picture
+the texture arc exists to put on a skillbar, and it is here because it shipped
+with a constant that could not survive being called at any size but the one it
+was written for. `safe = min(w,h)/2 - 16` raised ZeroDivisionError at exactly
+32x32 and drew nonsense below ~40x40. The 16 is not a pixel count: OBSERVED
+2026-08-14 (studies/texture/FINDINGS.md section 9) the client stretches the
+whole texture linearly onto a fixed screen quad, so the chrome eats a constant
+FRACTION. The retired rule is reproduced IN THIS FILE as a live function, so
+"128x128 is unchanged" and "64x64 is not" are both differences between two
+live answers rather than arithmetic the test asks the module to confirm about
+itself -- and the strongest check is the one the old rule cannot pass at all:
+a proportional picture box-filtered 2:1 IS the picture drawn at half size.
+
+SECTION 7 IS THE ONE THAT NEEDS THE VAULT, and it is deliberately not a
 round trip: it decodes REAL retail DXT1 levels and asserts only things the
 archive can refute -- the payload length equals the block count exactly, and
 every decoded level is `w*h*4` bytes with alpha 255 everywhere (DXT1 raw
@@ -54,11 +67,37 @@ sys.path.insert(0, os.path.dirname(HERE))
 import checks                                                    # noqa: E402
 import dxt1                                                      # noqa: E402
 
-# MEASURED from green runs, 2026-08-13: 32 by default, 33 under `--all`
-# (which adds the raw-level-0 population check). Sections 1-5 are synthetic
-# and score 30 with no vault at all, so a bare machine still clears the bar
-# for everything except the retail sweep, which declares its own skip.
-LEDGER = checks.Ledger("dxt1 codec", floor=32)
+# MEASURED from green runs, 2026-08-14: 55 by default, 56 under `--all`
+# (which adds the raw-level-0 population check), 52 with no vault at all --
+# so a bare machine goes RED here and the retail sweep's declared skip names
+# why. That is unchanged in kind by section 6: the floor has always been the
+# full default run rather than the mandatory core (it was 32 against a
+# vault-less 30), and an earlier version of this comment claimed a bare
+# machine "still clears the bar", which it never did.
+#
+# WHICH OF SECTION 6's 23 CHECKS ARE LOAD-BEARING WAS MEASURED, by building
+# seven one-edit sabotages of `dxt1.py` and running this file against each
+# (2026-08-14, against a vault-less baseline of 52 and 0 red):
+#
+#   safe reverted to `min/2 - 16.0`   9 red   the defect itself
+#   the refusal deleted                4 red   all four refusals, nothing else
+#   MIN_ICON -> 100000                12 red   refuses everything
+#   MIN_ICON -> 40                    10 red
+#   ICON_MARGIN 0.125 -> 0.25          4 red   incl. the 128x128 byte identity
+#   pattern_icon returns zeros         5 red
+#   refusal tests max() not min()      1 red   the 64x8 line, ALONE
+#
+# The last row is why 64x8 is in the list at all, and the zeros row is the
+# one that justifies the feature checks: a pattern_icon that returns a field
+# of zeros keeps every "NxN is still drawn" length check GREEN and is caught
+# only by the corner, the sun, the colour census and the 128x128 identity.
+#
+# TWO OF THE SEVEN FOUND DEFECTS IN THIS FILE rather than in the module, and
+# both are noted at their call sites: MIN_ICON -> 100000 originally HUNG past
+# a 600 s timeout printing no verdict (the positive controls drew at
+# `dxt1.MIN_ICON`, so the sabotage asked for a 100000x100000 image), and the
+# reverted `safe` killed section 6b outright at its sixth check.
+LEDGER = checks.Ledger("dxt1 codec", floor=55)
 check = checks.adopt(LEDGER)
 
 #: MEASURED 2026-08-13 over the first 6,000 MFT rows of the study archive.
@@ -280,15 +319,266 @@ def section_refusals():
           "%d bytes" % len(ok))
 
 
-# --- 6. real retail levels ------------------------------------------------
+# --- 6. pattern_icon: the constant that was a pixel count -----------------
+
+def retired_icon(width, height):
+    """`pattern_icon` AS IT SHIPPED, so the fix is a difference not a claim.
+
+    Verbatim except for the one line under test -- `safe` -- which is why the
+    dither, the vignette and the palette arithmetic are all copied rather than
+    imported. If they were imported, a change to any of them would move both
+    answers together and the comparison below would quietly stop separating
+    anything.
+    """
+    out = bytearray(width * height * 3)
+    cx, cy = width / 2.0, height / 2.0
+    safe = min(width, height) / 2.0 - 16.0                 # <-- THE OLD RULE
+    horizon = cy + safe * 0.35
+    sun_r = safe * 0.46
+
+    def put(x, y, c):
+        o = (y * width + x) * 3
+        out[o], out[o + 1], out[o + 2] = (max(0, min(255, int(v))) for v in c)
+
+    for y in range(height):
+        for x in range(width):
+            dx, dy = x - cx, y - cy
+            d = (dx * dx + dy * dy) ** 0.5
+            if d > safe:
+                put(x, y, (10, 8, 20))
+                continue
+            t = d / safe
+            if y < horizon:
+                sd = ((x - cx) ** 2
+                      + (y - (horizon - sun_r * 0.35)) ** 2) ** 0.5
+                if sd < sun_r:
+                    k = 1.0 - sd / sun_r
+                    c = (255, 190 + 60 * k, 70 + 120 * k)
+                else:
+                    c = (40 + 150 * (1 - t), 30 + 70 * (1 - t),
+                         80 + 60 * (1 - t))
+            else:
+                k = (y - horizon) / max(safe, 1)
+                c = (90 - 50 * k, 40 - 20 * k, 70 - 40 * k)
+                if int(x * 0.7 + y * 1.3) % 11 < 2:
+                    c = (c[0] + 40, c[1] + 25, c[2] + 30)
+            v = 1.0 - 0.55 * max(0.0, (t - 0.72) / 0.28) ** 2
+            put(x, y, (c[0] * v, c[1] * v, c[2] * v))
+    return bytes(out)
+
+
+def halve(rgb, w, h):
+    """A 2:1 box filter, written here out of integer arithmetic."""
+    out = bytearray((w // 2) * (h // 2) * 3)
+    for y in range(h // 2):
+        for x in range(w // 2):
+            for c in range(3):
+                s = sum(rgb[((2 * y + dy) * w + (2 * x + dx)) * 3 + c]
+                        for dy in range(2) for dx in range(2))
+                out[(y * (w // 2) + x) * 3 + c] = s // 4
+    return bytes(out)
+
+
+def mae(a, b):
+    return sum(abs(a[i] - b[i]) for i in range(len(a))) / len(a)
+
+
+def sun_pixel(rgb, n):
+    """The centre of the sun disc, located from the module's own fractions."""
+    safe = n * dxt1._SAFE_FRAC
+    y = int(n / 2.0 + safe * 0.35 - safe * dxt1.ICON_SUN_FRAC * 0.35)
+    o = (y * n + n // 2) * 3
+    return tuple(rgb[o:o + 3])
+
+
+def section_icon():
+    print("\n== 6. pattern_icon -- a FRACTION, not sixteen pixels ==")
+
+    # THE CONSTRAINT: 128x128 must not have moved. Not "the radius agrees" --
+    # every byte, against the retired rule running in this process.
+    big, obig = dxt1.pattern_icon(128, 128), retired_icon(128, 128)
+    check(big == obig,
+          "128x128 is BYTE-IDENTICAL to the retired rule -- 128/2 - 16 and "
+          "128 * 0.375 are both 48.0, so the fix changed nothing where the "
+          "constant was written to work", "%d bytes" % len(big))
+
+    # ...and 64x64 must have. Same two functions, so this is the pair that
+    # makes the sentence above a measurement instead of a tautology.
+    small, osmall = dxt1.pattern_icon(64, 64), retired_icon(64, 64)
+    check(small != osmall,
+          "and 64x64 is NOT -- the old rule kept 16.0 of a 32.0 half-side "
+          "where the fraction keeps 24.0, throwing away a quarter of the "
+          "picture")
+
+    # THE LOAD-BEARING CHECK. A picture defined in proportions is the same
+    # picture at every size, so box-filtering the 128 down must land on the
+    # direct 64. The old rule composes a DIFFERENT picture at 64 and cannot
+    # pass this at any tolerance that means anything -- which is exactly the
+    # reason FINDINGS section 9's arm Q had to ship a mipmap of arm S rather
+    # than a second call to pattern_icon.
+    now = mae(halve(big, 128, 128), small)
+    was = mae(halve(obig, 128, 128), osmall)
+    print("    mipmap(128) vs direct 64:  fraction %.3f/255   pixels %.3f/255"
+          % (now, was))
+    check(now < 5.0,
+          "a 2:1 box filter of the 128 IS the 64 -- the picture is scale "
+          "invariant now", "%.3f/255 mean absolute" % now)
+    check(was > 12.0 and was > 3 * now,
+          "while under the retired rule the two were different pictures -- "
+          "the separation is what makes the check above worth its exit code",
+          "%.3f/255, %.1fx" % (was, was / max(now, 1e-9)))
+    # The residual is not zero, and it is NOT one thing -- which is worth
+    # writing down, because the first draft of this comment said it was the
+    # ground dither and that was a guess. MEASURED 2026-08-14 by stubbing the
+    # dither out: 2.039 with it, 1.251 without, so the dither indexing
+    # ABSOLUTE pixel coordinates (`int(x*0.7 + y*1.3) % 11`) is about 40% of
+    # it and the rest is box-filtering itself -- averaging four samples is not
+    # the same as evaluating the picture at half resolution, and the sun's
+    # rim, the horizon and the vignette all fall between samples.
+    check(now > 0.0,
+          "and it is not exactly zero -- roughly 40% the ground dither, which "
+          "is in absolute pixel coordinates, and the rest the box filter",
+          "%.3f/255" % now)
+
+    # 32x32 IS THE SIZE THE OLD RULE DIED AT: 32/2 - 16 == 0.
+    try:
+        retired_icon(32, 32)
+        died = None
+    except ZeroDivisionError:
+        died = "ZeroDivisionError"
+    except Exception as exc:                               # noqa: BLE001
+        died = type(exc).__name__
+    check(died == "ZeroDivisionError",
+          "the retired rule really does divide by zero at 32x32 -- the "
+          "defect is reproduced here, not quoted", repr(died))
+    try:
+        px = dxt1.pattern_icon(32, 32)
+    except Exception as exc:                               # noqa: BLE001
+        check(False, "and the same call now returns a whole 32x32 image",
+              "raised %s" % type(exc).__name__)
+    else:
+        check(len(px) == 32 * 32 * 3,
+              "and the same call now returns a whole 32x32 image",
+              "%d bytes" % len(px))
+
+
+def section_icon_bounds():
+    print("\n== 6b. pattern_icon refusals and the picture itself ==")
+
+    # MIN_ICON against a LITERAL written here, because a constant compared to
+    # the module's own symbol is free to move and take the test with it.
+    check(dxt1.MIN_ICON == 12,
+          "MIN_ICON is 12", "%d" % dxt1.MIN_ICON)
+    check(dxt1.ICON_MARGIN == 0.125 and dxt1._SAFE_FRAC == 0.375,
+          "the margin is 12.5% of the short side and the safe radius 37.5%",
+          "%.3f / %.3f" % (dxt1.ICON_MARGIN, dxt1._SAFE_FRAC))
+
+    # ...and DERIVED, not chosen: MIN_ICON is where the sun disc stops
+    # covering a whole DXT1 4x4 block. Checking the derivation both ways is
+    # what stops 12 being a number somebody liked.
+    span = 2 * dxt1.ICON_SUN_FRAC * dxt1._SAFE_FRAC
+    check(span * dxt1.MIN_ICON >= 4.0 > span * (dxt1.MIN_ICON - 1),
+          "MIN_ICON is the smallest short side whose sun disc spans a DXT1 "
+          "block -- 4 / %.3f, so 12 and not 11" % span,
+          "%.2f px at %d, %.2f at %d"
+          % (span * dxt1.MIN_ICON, dxt1.MIN_ICON,
+             span * (dxt1.MIN_ICON - 1), dxt1.MIN_ICON - 1))
+
+    def refuses(w, h, label):
+        try:
+            dxt1.pattern_icon(w, h)
+        except ValueError as exc:
+            check(True, "refused: %s" % label, str(exc)[:54])
+        except Exception as exc:                           # noqa: BLE001
+            check(False, "refused: %s" % label,
+                  "raised %s" % type(exc).__name__)
+        else:
+            check(False, "refused: %s" % label, "no refusal")
+
+    # EVERY SIZE BELOW IS A LITERAL, and that is not a style preference. The
+    # first draft passed `dxt1.MIN_ICON` and `dxt1.MIN_ICON - 1` here, so a
+    # sabotage setting MIN_ICON to 100000 did not redden -- it asked the test
+    # to draw a 100000x100000 image and HUNG for ten minutes, past its own
+    # timeout, printing no verdict. A check whose workload is computed from
+    # the symbol under test moves with the symbol; the literals plus the
+    # MIN_ICON == 12 check above are what pin it in place.
+    refuses(8, 8, "8x8 -- too small to be a picture")
+    refuses(11, 11, "11x11 -- one below MIN_ICON")
+    refuses(64, 8, "64x8 -- the SHORT side is what has to clear the bar")
+    refuses(0, 0, "a zero dimension")
+
+    # POSITIVE CONTROLS. Without these, four refusals are satisfied by a
+    # pattern_icon that refuses everything -- which protects nothing, because
+    # the tool then never draws.
+    for n in (12, 16, 32, 64, 128):
+        try:
+            got = dxt1.pattern_icon(n, n)
+        except Exception as exc:                           # noqa: BLE001
+            check(False, "%dx%d is still drawn" % (n, n),
+                  "raised %s" % type(exc).__name__)
+            continue
+        check(len(got) == n * n * 3, "%dx%d is still drawn" % (n, n),
+              "%d bytes" % len(got))
+
+    # AND IT IS A PICTURE, not a field of zeros -- which is what every length
+    # check above is also satisfied by. Two features the composition puts at
+    # known places, asserted at every size because both are proportional:
+    # the corner always falls outside `safe` (a corner is 0.707 of the short
+    # side from centre and `safe` is 0.375, at every n), and the sun disc
+    # always sits just above the horizon.
+    #
+    # The per-size draw is GUARDED. Reverting `safe` to the pixel count makes
+    # 32x32 raise, and unguarded that killed this whole section at its sixth
+    # check -- the remaining checks never ran and the failure arrived as a
+    # traceback rather than as something named.
+    corners, suns, drew = 0, 0, 0
+    sizes = (12, 16, 32, 40, 64, 128, 256)
+    for n in sizes:
+        try:
+            rgb = dxt1.pattern_icon(n, n)
+        except Exception as exc:                           # noqa: BLE001
+            print("      %dx%d raised %s" % (n, n, type(exc).__name__))
+            continue
+        drew += 1
+        if tuple(rgb[0:3]) == (10, 8, 20):
+            corners += 1
+        r, g, b = sun_pixel(rgb, n)
+        if r == 255 and g >= 200 and b >= 120:
+            suns += 1
+    check(drew == len(sizes),
+          "every size from %d to %d draws at all" % (sizes[0], sizes[-1]),
+          "%d/%d" % (drew, len(sizes)))
+    check(corners == len(sizes),
+          "the corner is the dark surround at every size -- it is outside "
+          "`safe` for any n, which is only true of a proportional radius",
+          "%d/%d" % (corners, len(sizes)))
+    check(suns == len(sizes),
+          "and the sun disc is bright and warm at its predicted centre at "
+          "every size -- so the picture composes, it does not just return "
+          "bytes", "%d/%d" % (suns, len(sizes)))
+
+    n = 16
+    try:
+        shades = len(set(bytes(dxt1.pattern_icon(n, n)[i * 3:i * 3 + 3])
+                         for i in range(n * n)))
+    except Exception as exc:                               # noqa: BLE001
+        shades, note = -1, "raised %s" % type(exc).__name__
+    else:
+        note = "%d distinct colours at %dx%d" % (shades, n, n)
+    check(shades >= 20,
+          "even the smallest sensible icon has real gradient in it, not a "
+          "flat fill", note)
+
+
+# --- 7. real retail levels ------------------------------------------------
 
 def section_retail(sample):
-    print("\n== 6. REAL retail DXT1 levels ==")
+    print("\n== 7. REAL retail DXT1 levels ==")
     try:
         import vaultpath
         dat = os.path.join(vaultpath.require_dir("dat_study"), "Gw.dat")
     except SystemExit:
-        LEDGER.skip("6. retail levels", "no vault/dat_study")
+        LEDGER.skip("7. retail levels", "no vault/dat_study")
         return
     from archive import Archive
     import atex
@@ -356,7 +646,8 @@ def main():
     print("DXT1 -- encode, decode, and the layout the texture arc settled")
     print("=" * 70)
     for fn in (section_packing, section_spec, section_punchthrough,
-               section_level, section_refusals):
+               section_level, section_refusals, section_icon,
+               section_icon_bounds):
         try:
             fn()
         except Exception as exc:                       # noqa: BLE001

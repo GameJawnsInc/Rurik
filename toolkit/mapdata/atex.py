@@ -935,6 +935,49 @@ def blocks_to_rgba(blocks, stride, fourcc, width, height):
     return bytes(out)
 
 
+#: A 256x256 terrain tile is FOUR 128x128 variants, and each variant is a
+#: 112x112 image inside an 8-pixel border band. `PASS_TERRAIN_BORDERS` marks
+#: those band blocks as claimed so the payload never stores them -- and the
+#: client then REGENERATES them by mirroring the interior about the tile edge
+#: (VA 0x006C2FA5 -> 0x006C22A0, source block `(x^3, y^3)` per border axis
+#: plus an in-block reversal).
+#:
+#: Leaving them zero, which this module did until 2026-08-14, is not a
+#: cosmetic gap: it puts a black 8-pixel cross through every terrain texture
+#: and it fooled this session's own measurement, which reported the band's
+#: alpha as "a hard zero at the rim" when the zero was OURS.
+TILE_SIDE = 128
+TILE_BAND = 8
+
+
+def mirror_borders(rgba, width, height, side=TILE_SIDE, band=TILE_BAND):
+    """Fill each tile's unstored border band by reflecting its interior.
+
+    Reflection is about the tile edge: within a tile, column `band-1-k` takes
+    column `band+k`, so the band is a mirror of the first `band` real columns.
+    Applied per axis, so a corner mirrors in both.
+    """
+    out = bytearray(rgba)
+
+    def src(v):
+        local = v % side
+        if local < band:
+            return v - local + (2 * band - 1 - local)
+        if local >= side - band:
+            return v - local + (2 * (side - band) - 1 - local)
+        return v
+
+    for y in range(height):
+        sy = src(y)
+        for x in range(width):
+            sx = src(x)
+            if sx == x and sy == y:
+                continue
+            d, s = (y * width + x) * 4, (sy * width + sx) * 4
+            out[d:d + 4] = rgba[s:s + 4]
+    return bytes(out)
+
+
 def decode_rgba(data, container=None, level=0):
     """One ATEX level straight to `(rgba, width, height)`.
 
@@ -949,8 +992,17 @@ def decode_rgba(data, container=None, level=0):
         container = parse(data)
     blocks, stride = decode_level(data, container, level)
     width, height = level_dims(container.width, container.height, level)
-    return (blocks_to_rgba(blocks, stride, bytes(container.fourcc),
-                           width, height), width, height)
+    rgba = blocks_to_rgba(blocks, stride, bytes(container.fourcc),
+                          width, height)
+    # The border pass claims those blocks so the payload never stores them.
+    # The client regenerates them; so must we, or the image has a black cross
+    # through it. Gated on exactly the pass's own condition, so a level that
+    # did not use it is untouched.
+    if container.levels[level].code & PASS_TERRAIN_BORDERS \
+            and width == height == 256 \
+            and FORMAT_ENUM.get(bytes(container.fourcc)) in (0x10, 0x11):
+        rgba = mirror_borders(rgba, width, height)
+    return rgba, width, height
 
 
 #: The one uncompressed DDS shape the prop corpus uses. MEASURED: of 1,795
