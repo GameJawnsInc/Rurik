@@ -1439,15 +1439,49 @@ structurally blind rather than unlucky. Authoring costs a partial overwrite of o
 region plus a `datmove` — the row ships compressed at 35,460 B and we would write stored
 at 131,200 B, which does not fit its 35,840 B reservation.
 
+**THE SKILL TIER IS NAMED (2026-08-14, RESKIN §24, `ccdf82a`).** **188 authored skill
+names**, generated rather than typed, on screen in the retail client: the noun comes from
+the MOTIF of the icon the skill draws (`glyphs.py`, `i % 22`) and the adjective from the
+ATTRIBUTE the Skills panel groups by, so a name agrees with its picture by construction.
+Eight of eight bar icons matched their names on screen — a violet starburst called
+*Sheltering Starburst*, reading `(Attrib: Windward)` from the client's own tooltip.
+`skillnames.py` generates, `textwrite.py` writes text file 98 (**7,134 B → 12,236 B**, a
+journalled `datmove`), `reskin.py`'s `[[skill]] name/concise/desc` dword verb points the
+rows at them, and `--emit-recipe` keeps both halves on ONE definition of the
+record↔skill assignment (`textwrite.name_assignment`) — nothing joins them at run time, so
+a disagreement would label every skill with another skill's name silently. Checked both
+directions: 188/188 resolve to their own name, 0/188 under a one-id shift.
+
+**A per-skill discriminator turned out to be MANDATORY, and that is measured.** Over
+profession 8: motif alone gives 22 groups worst-case 12; the whole glyph index gives 125
+worst-case 7; adding the attribute moves that only to 126 and 6, because skills sharing an
+icon overwhelmingly share an attribute too. **50 names would have collided.**
+
 **NEXT, and it is a design question rather than a mechanism one.** The identity tier is
-done, the primary marker moved onto our own claimed row (§19.7, `cb53a9b`), and the icon
-path is open. What is left is what makes the class *play* differently. In rough order of
-value: **the 132 icons are DRAWN and 125 are armed** (RESKIN 13.1, `glyphs.py` + `iconset.py`, eight of eight predictions held on screen); the skill roster is 1 byte per skill row and only two skills have been moved
-(§10's countable check); and armour, model scale and palettes
-are all same-length dwords that nothing has exercised yet. None of these is blocked —
-they need a design, not a discovery. The one thing that *is* server work is the primary
-attribute's inherent passive (RESKIN §20): the client never computes damage, healing,
-energy or cast time, and reads an attribute rank nowhere outside its own UI.
+done, the primary marker moved onto our own claimed row (§19.7, `cb53a9b`), the icon path
+is open and the names are authored. What is left is what makes the class *play*
+differently. In rough order of value: skill DESCRIPTIONS are still ArenaNet's — RESKIN
+§24's "the tooltip still lies", and the `concise`/`desc` verbs exist and are unexercised;
+the skill roster is 1 byte per skill row and only two skills have been moved (§10's
+countable check); and armour, model scale and palettes are all same-length dwords that
+nothing has exercised yet. None of these is blocked — they need a design, not a discovery.
+
+**The one thing that *is* server work is COMBAT, and its cost was re-measured 2026-08-14
+(RESKIN §24.1) against what §20 assumed.** The client never computes damage, healing,
+energy or cast time, and reads an attribute rank nowhere outside its own UI. Beyond that:
+**property 33 and property 52 have ZERO observations on any wire, ever** — 0 probes, 0
+server call sites, 0 of 22,524 live GAME_SMSG over twelve connections — and property 62,
+the only energy-moving float ever seen, is NEGATIVE in all 6 occurrences. Nobody has
+observed energy *gain* on a Guild Wars wire. The server also models **no attribute rank in
+any form** (`2 * rank` evaluates to 0) and no live energy, and sends `0x003A` as 42 zeros,
+so a passive shipped today would compute with rank R against a panel showing 0 and be
+unattributable. **So the passive is a PROBE first, not a feature.** Two hazards to respect:
+`hit_enemy`'s USE_SKILL caller is on the **connection thread**, whose only handler catches
+`ConnectionError`/`socket.timeout`/`OSError`, so a `_fraction` refusal there disconnects
+the client on exactly the path a demonstration uses; and at 25 max energy and +2 a kill an
+uncapped accumulator crosses fraction 1.0 on the **13th kill**. The cheapest real rung is
+`s_skill +0x44`–`+0x68`, the rank-0/rank-15 scaling, still undecoded — it would replace
+`ENEMY_SKILL_FRACTION = 0.25`, which `authsrv.py` itself labels an invention.
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`

@@ -47,14 +47,30 @@ sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientpatch"))
 from mapdata import archive as arch                              # noqa: E402
 from mapdata import atex, datwrite, dxt1, glyphs                 # noqa: E402
 import repoint_skill                                             # noqa: E402
+import vaultpath                                                 # noqa: E402
 from gwpe import PE                                              # noqa: E402
 
 BLOCK = 512
 ICON_FIELD = 0x90          # the field the SKILLBAR draws; +0x8c is the 64x64 DXTL
 SKILL_PROF = 0x28
-DEFAULT_EXE = r"C:\gd\Rurik\vault\run\reskin-roster\Gw.exe"
+SKILL_ATTR = 0x29          # what the Skills panel GROUPS by
 FORBIDDEN = (os.path.normcase(os.path.abspath(r"C:\gw")),)
 FORBIDDEN_PARTS = ("dat_study",)
+
+# RESOLVED, never a hardcoded absolute path. This module used to carry
+# `DEFAULT_EXE = r"C:\gd\Rurik\vault\run\reskin-roster\Gw.exe"`, which is the same
+# defect `textrec.py` records fixing in itself: it bypasses RURIK_VAULT, and from a
+# worktree it names the MAIN checkout's vault while every other path in the run
+# comes from `vaultpath`. It happened to resolve correctly because there is one
+# vault; that is luck, not a design.
+
+
+def _default_exe():
+    return str(vaultpath.vault_path("run", "reskin-roster", "Gw.exe"))
+
+
+def _default_dat():
+    return str(vaultpath.vault_path("run", "reskin-roster", "Gw.dat"))
 
 
 class Refused(SystemExit):
@@ -95,14 +111,28 @@ def roster(pe, profession):
     return mine, users, skills
 
 
-def plan(dat, exe, profession, allow_shared):
-    pe = PE(exe)
+def armable(pe, dat, profession, allow_shared):
+    """The ordered list of rows `--arm` would write, and what it skipped.
+
+    EXTRACTED so there is exactly one definition of the ordering. `--arm` walks
+    this list with `enumerate` and hands the position to `glyphs.icon`, so the
+    position IS the glyph index -- and `skillnames.py` has to agree with it or a
+    skill gets a name describing a picture it does not draw. Two copies of this
+    loop would agree until somebody edited one.
+
+    The ordering rule, stated because it is load-bearing and not obvious: `mine`
+    is sorted by archive FILE ID, so the index is not monotone in skill id and is
+    not stable under anything that changes which skills belong to the profession.
+    `reskin.skill_edits` writes row+0x28, which is exactly that -- so a recipe
+    that moves a skill between professions re-permutes the glyph indices and
+    invalidates both the armed archive and any names generated against it.
+    """
     mine, users, skills = roster(pe, profession)
     a = arch.Archive(dat)
     try:
         ids = arch.file_id_table(a)
-        rows, skipped, toosmall = [], [], []
-        for k, fid in enumerate(mine):
+        rows, skipped = [], []
+        for fid in mine:
             row = ids.get(fid)
             if row is None:
                 skipped.append((fid, None, "unresolved in this archive"))
@@ -115,11 +145,45 @@ def plan(dat, exe, profession, allow_shared):
             # .row(), NEVER entries[row] -- see the module docstring.
             have = reservation(a.row(row).size)
             rows.append((fid, row, have))
-        need = reservation(12 + 8 + (64 // 4) * (64 // 4) * 8)
-        toosmall = [(f, r, h) for f, r, h in rows if h < need]
     finally:
         a.close()
+    return mine, users, skills, rows, skipped
+
+
+def plan(dat, exe, profession, allow_shared):
+    pe = PE(exe)
+    mine, _users, skills, rows, skipped = armable(pe, dat, profession, allow_shared)
+    need = reservation(12 + 8 + (64 // 4) * (64 // 4) * 8)
+    toosmall = [(f, r, h) for f, r, h in rows if h < need]
     return mine, skills, rows, skipped, toosmall, need
+
+
+def skill_glyphs(profession=8, exe=None, dat=None, allow_shared=False):
+    """skill id -> (glyph index or None, attribute id), for one profession.
+
+    The join `skillnames.py` needs, and the reason it is HERE rather than there:
+    the glyph index is a position in `armable()`'s list, so it belongs to the
+    module that produces that list.
+
+    `None` means the skill's icon was SKIPPED -- shared with another profession,
+    or unresolved in this archive -- so we did not draw its picture and its name
+    must not claim to describe one.
+    """
+    exe = exe or _default_exe()
+    dat = dat or _default_dat()
+    pe = PE(exe)
+    _mine, _users, _skills, rows, _skipped = armable(pe, dat, profession,
+                                                     allow_shared)
+    at = {fid: k for k, (fid, _row, _have) in enumerate(rows)}
+    table, count, _section = repoint_skill.find_table(pe)
+    out = {}
+    for sid in range(count):
+        if pe.data[table + sid * repoint_skill.REC + SKILL_PROF] != profession:
+            continue
+        fid = repoint_skill.row_values(pe.data, table, sid)["icon2"]
+        attr = pe.data[table + sid * repoint_skill.REC + SKILL_ATTR]
+        out[sid] = (at.get(fid), attr)
+    return out
 
 
 def main():
@@ -127,8 +191,10 @@ def main():
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dat", required=True, help="Archive to arm. A run-dir copy.")
-    ap.add_argument("--exe", default=DEFAULT_EXE,
-                    help="Client whose s_skill table names the icon ids.")
+    ap.add_argument("--exe", default=None,
+                    help="Client whose s_skill table names the icon ids. "
+                         "Defaults to the reskin-roster run copy, resolved "
+                         "through vaultpath.")
     ap.add_argument("--profession", type=int, default=8)
     ap.add_argument("--plan", action="store_true",
                     help="Report what would be written and exit. Writes nothing.")
@@ -151,7 +217,7 @@ def main():
         raise SystemExit("not found: %s" % a.dat)
 
     mine, skills, rows, skipped, toosmall, need = plan(
-        a.dat, a.exe, a.profession, a.allow_shared)
+        a.dat, a.exe or _default_exe(), a.profession, a.allow_shared)
 
     print("profession %d: %d skills, %d distinct +0x%02X icons"
           % (a.profession, skills, len(mine), ICON_FIELD))

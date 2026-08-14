@@ -260,6 +260,23 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   reads movement through, so the first version held W for 65 seconds into a
   live client that ignored every one of them while the harness reported
   `held 8.0s of 8.0s` six times. Only the capture could tell the two apart.
+  **And section 9a (2026-08-14) is that same defect in the SIBLING the fix
+  missed, which is the more useful half of the story.** `hold_key` was fixed
+  and `press_vk` was written correct; `press_key` — the one EVERY `key:` action
+  goes through, including skill slots 1..8 — kept `keybd_event(vk, 0, 0, 0)`
+  and was in **no test at all**, so the trap this section exists for stayed live
+  in a second function for three days under a check that could never see it. A
+  fix applied to two of three copies of one send is not a fix, and a symbol
+  appearing in a test file is not a check. It surfaced only because a `key:K`
+  action printed `sent` while the Skills panel never opened and the owner
+  pressed K by hand; the blast radius is every scripted skill press since
+  2026-08-11, i.e. any run that concluded something from `key:1` was reading a
+  DROPPED INPUT rather than a client behaviour. `press_key` now delegates to
+  `press_vk` instead of keeping a third copy, a key with no scan code on this
+  layout sends nothing rather than falling back to zero (that fallback is the
+  original defect wearing a guard), and the fix was verified against a real
+  client rather than the fake `user32`: same action script and timing, the
+  0.6 s-after frame went from no panel to the panel open.
   **And since 2026-08-12 the harness spawns NO HOSTILE unless `--enemy` is
   passed**, because the standing enemy had wrecked two unrelated tests -- most
   recently FINDINGS 40's movement session, where it killed the character 10 s in
@@ -387,7 +404,35 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   changed rows naming a file the after-image does not hold -- and the gate is the MFT
   BYTE FOR BYTE rather than a path compare, because a stale snapshot of the same path is
   the same defect wearing the right name. Floor 75 -> 84),
-  `toolkit/mapdata/test_atex.py` (the ATEX texture container, and first the write
+  `toolkit/mapdata/test_atex.py` (the ATEX texture container, and since
+  2026-08-14 rung T1's ATTX capability. **`parse` STILL REFUSES an ATTX row and
+  that is the design**: refusing a container whose walk does not close is what
+  catches damage, so the trailer is split by a named function and all six
+  pre-existing ATTX checks survive unchanged. The only thing that matters about
+  `split_trailer` is WHERE THE BOUNDARY COMES FROM -- it is WALKED, and the two
+  obvious rivals are built as LIVE functions and run on the same bytes:
+  `find(b"ffna")` lands inside level 0's payload, `rfind` inside the trailer.
+  Both are given a container BUILT to separate them, because the corpus cannot:
+  the sequence occurs **exactly once on 1,648 of 1,648** rows, at the true
+  boundary, so `rfind` -- what the scratch probe that scoped the arc used -- is
+  right on every row that exists today. **ArenaNet declares the boundary
+  herself** and that is the strongest check here: the last 12 bytes are
+  `{u32 head length, u32 0, b"XTTA"}` and the word equals the walk on 1,648 of
+  1,648, with the total length and head-12 as controls at 0 and 0 -- so the walk
+  can be REFUTED by her number instead of only agreeing with itself, and a
+  footer that disagrees is refused rather than resolved. The tag spelling is
+  itself a correction: the first measurement read `XETA` and a skeptic
+  re-measuring found `XTTA` on 1,648 of 1,648 and `XETA` on 0, with the client's
+  own writer at VA 0x007582A0 agreeing. The trailer length is a CENSUS, never a
+  locator -- a constant nothing re-derives is a landmine -- and the LIMIT of the
+  truncation refusal is asserted rather than left to be found: dropping a WHOLE
+  record is invisible to any walk-based rule, which first appeared as a bug in
+  the check above it (`[:-16]` removed exactly the final 16-byte record) and was
+  pinned rather than tuned away. Six one-edit saboteurs were BUILT AND RUN and
+  all six redden (5, 4, 7, 1, 2, 8); the `1` is the truncation refusal, the only
+  check standing between this module and reporting a truncated container as a
+  body that closes plus a garbage trailer. Floor 68, was 50; 45 without a vault.
+  ~36 s), and first the write
   guard `--make` never had: `atex.py` was the only binary writer in
   `toolkit/mapdata/` reaching `open(path, "wb")` straight off argv with no refusal
   of any kind, so `--make C:\gw\Gw.dat` would have truncated the owner's 4.2 GB
@@ -570,6 +615,72 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   healthy set. Floor 32, MEASURED -- the first version guessed 41 and reported
   "9 did not execute" on a run where nothing was skipped. No vault, no
   archive, no client; ~40 s),
+  `toolkit/mapdata/test_textwrite.py` (the FIRST COMMITTED writer of authored
+  strings into the archive -- `textrec.encode_file` had existed since the text
+  arc with exactly one caller, its own test, using two strings, so every string
+  this project has put on a retail screen was written by an ad-hoc script that
+  was never committed, which is why `RESKIN.md` can quote the words but not the
+  arithmetic. **The claim that earns the file is that `merge` keeps untouched
+  records VERBATIM** -- payload, base and bits straight out of the archive, never
+  decode-then-re-encode -- because 4 of the 12 records already on screen are
+  written down nowhere and re-deriving them from text is how you lose them
+  silently. That check is worthless without its control, and the control is the
+  point: our records are ALL plain (base 0, bits 0x10, `encode_record`'s own
+  defaults), so a merge that drops base and bits is a perfect identity on
+  everything this project has ever written. So section 1 builds a fixture with
+  146 NON-DEFAULT records, runs both versions, and requires them to differ --
+  reported as the first differing OFFSET, because the two are the same LENGTH
+  (base and bits live in the header, so dropping them corrupts in place) and a
+  length comparison would read as agreement. The identity-tier refusal is
+  symmetric: records 0-11 are the profession name, abbreviation and five
+  attribute names already on screen, so writing them is refused without
+  `--allow-identity` and PERMITTED with it, since a guard that only refuses makes
+  the tool unusable. The row is RESOLVED through the client's own text pointer
+  table (`textrec.TextIndex.archive_id`) and never remembered -- `RESKIN.md` says
+  row 8295 and that is true of one copy, a file id being archive STATE. The size
+  model is verified against the artifact rather than quoted: `1024*6 + 2 +
+  2*chars` lands on 7,134 B exactly, and the planned write is 12,236 = 7,134 +
+  5,102 with no per-record cost, because all 1,024 six-byte headers are already
+  paid whether a record is used or not. Plan-before-write is asked of the SYNTAX
+  TREE (`plan()` constructs no Writer and calls no move/replace; `main()`
+  completes the plan before the first write call), because otherwise a refusal
+  lands after some of the file is written. Sections 0-4 build their own 1,024-record
+  files out of `struct` and need no vault, no archive and no client, scoring 31
+  against a floor of 31; 43 with a vault, two of them being the cross-module
+  JOIN -- every skill's recipe string id resolving to its own generated name,
+  188 of 188, read back through reskin's own recipe loader rather than compared
+  in memory, with a one-id shift collapsing it to 0 of 188. ~2 s),
+  `toolkit/mapdata/test_skillnames.py` (the 188 authored skill names a custom
+  profession needs -- the text sibling of `glyphs.py`, and like it the file is
+  mostly about the INDEX ARITHMETIC, because "188 names came out and they are
+  all different" is worth nothing here: `assign()` RAISES on a duplicate, so the
+  headline is the guard's own output rather than a measurement of it, and
+  `name = "Skill %d" % sid` passes it for all 188. **A per-skill discriminator is
+  MANDATORY and that is measured, not assumed**: over profession 8 the motif
+  alone gives 22 groups worst-case 12, the whole glyph index gives 125 worst-case
+  7, and adding the attribute moves that only to 126 and 6 -- skills sharing an
+  icon overwhelmingly share an attribute too (the 7-skill icon is six Thunderhead
+  and one Galecraft), so 50 names would have collided. So uniqueness is asserted
+  STRUCTURALLY, one check per arm with the arm broken inline as a live function,
+  and the load-bearing claim is the one no uniqueness check can see: every
+  skill's noun must come from the MOTIF of the glyph `iconset` would actually arm
+  for it, 176 of 176, with the neighbouring motif as the control that stops it
+  passing vacuously. **The duplicate sabotage FAILED on its first version and the
+  reason is kept**: duplicating one noun pool onto its neighbour does not collide,
+  because the adjective is strided by the motif -- so the stride carries a
+  uniqueness guarantee the design never claimed, and the only motifs it does NOT
+  separate are the ones exactly POOL apart, which is where the sabotage now aims
+  (with `MOTIFS > POOL` asserted first, or the collision is unreachable and the
+  check is vacuous). Two constants where the first draft had one: the measured
+  worst group (8) and the pool width (10), because conflating them put the
+  generator exactly on its own boundary where one skill moving cells turns it
+  into a refusal. Also: `assign()` must not depend on dict order -- it sorts, and
+  the unsorted version is reproduced live and required to DIFFER, since the caller
+  happens to build its mapping in sorted order and CPython happens to preserve it.
+  Sections 0-4 need no vault, no archive and no client and score 26 against a
+  floor of 26; 36 with a vault. **The floor comment first said "MEASURED" over two
+  GUESSED numbers** -- 30/38 against a real 26/36 -- in a file already citing the
+  two earlier times that happened, which makes it the third. ~3 s),
   `toolkit/mapdata/test_png.py` (the stdlib PNG codec rung M5's texture
   export writes through -- `zlib` and `struct` and nothing else, because
   `toolkit/` takes no third-party dependency and a test needing PIL to check
@@ -878,6 +989,64 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   refused AS a bound, since row 0 reached `entries[-1]` and planned a write to the LAST
   row of the table, which a "some blocker" predicate passes because that row's
   reservation is 0 bytes. Floor 30 -> 38),
+  `toolkit/mapdata/test_bit31.py` (the REPLACEMENT-PENDING census -- the file ids
+  carrying bit 31, which `FcArchive` binds when it has requested a replacement
+  and deleted the plain name (`archive.py`:486, read out of the client). The
+  population is small, it MOVES, and it moves under our own content: **two
+  `content/maps.toml` rows are recorded under `0x8001B97D`**, and row 7982 --
+  `donor_row` for every `content/areas.toml` row -- is named by two bit-31 ids.
+  **The headline is deliberately not the count.** "29 bit-31 ids" is a number an
+  almost-right census also prints, and the tool's whole job is to be believed
+  when it says NOTHING CHANGED: the 900 s session of 2026-08-14 reported
+  `29 -> 29`, and that reading is only worth anything because the two SETS were
+  compared -- four ids clearing while four others are newly set leaves the count
+  identical and describes a different archive. So `diff` never consults
+  `len(bit31)`, and the control is the **count-comparing reading REPRODUCED
+  INLINE** as a live function that must answer "no change" on the same pair the
+  real one catches, with every one of the five scalars asserted IDENTICAL across
+  that swap so none of them could have carried the signal either. The fixture
+  holds every shape at once -- a plain id, a bit-31 id on a map-flagged row, two
+  ids aliasing ONE row, an id whose MASKED form also binds, and an id naming a
+  row the archive does not have. The last is required to be REPORTED rather than
+  raised, because the tool describes copies we did not make; the second-to-last
+  exists because `archive.py`:475 claims the masked form is never separately
+  present, and a census that could not report it could not check it. Two
+  sabotages are built and run: dropping `sha256` from `ROW_FIELDS` makes a
+  flipped payload byte vanish, and censusing on the wrong high bit finds NOTHING
+  and prints **a clean confident zero**, which is why section 0 asserts the exact
+  id SET. Section 7 reproduces the cross-copy population from real archives --
+  **29 install / 25 study / 9 run-live**, install->study clearing exactly 4 ids
+  over TWO rows with NEITHER a map row while install->run-live clears row 7982 --
+  and corroborates `customarea/FINDINGS.md`:967's correction of "two map rows" to
+  **four** from an archive that file never read.
+  **Section 3 is the one an adversarial pass forced, and it is the file's
+  argument**: the first version pinned 3 of ROW_FIELDS' entries, and a
+  six-lens audit MEASURED that **seven of ten could be deleted with all 63
+  checks green** -- including `offset`, which alone is a ROW RELOCATION
+  reporting "NO CHANGE", and `masked_also_binds`, the field whose whole
+  justification is refuting `archive.py`:477. So there is now one fixture per
+  field, each a real archive edit; nine of eleven move their field ALONE and
+  the two that cannot are NAMED rather than faked (`size` co-varies with
+  `sha256` because a shorter read is a different hash; `row` cannot be
+  isolated because pointing an id at another row brings that row's every
+  field with it). Then each isolated field is dropped from `ROW_FIELDS` in
+  turn and its own fixture is required to go BLIND -- all nine. A
+  COMPLETENESS check unions the keys of a live census and requires each to be
+  in `ROW_FIELDS` or in a declared `DERIVED` set, which is what would have
+  caught the defect the same audit found in the module: **`counter` --
+  `alloc.nextStream`, the sibling link -- was censused and never diffed**, so
+  a relink on a map row printed "NO CHANGE" and exited 0. The other module
+  defects it found were all the same shape, exit 2 leaking out as exit 1: a
+  malformed baseline, an archive with no row 2, and a `struct.error` each
+  escaped a narrow `except` and left the CLI at 1, which is this tool's word
+  for "the population CHANGED". **And the write guard refused checkouts while
+  ALLOWING `C:\gw`** -- `--json C:\gw\Gw.dat` would have truncated the
+  owner's 4.2 GB archive, the identical defect `atex.py --make` shipped with,
+  reintroduced in a new module three days later. Floors are two shapes with
+  ZERO headroom each, both MEASURED: 76 bare (`RURIK_VAULT` pointed at
+  nothing), 86 with a vault, section 7 raising the floor itself as its last
+  act -- because a single fixed floor left the vaulted run eight checks of
+  slack and the audit deleted the whole sabotage section inside it. ~5 s),
   `toolkit/mapdata/test_gwdat.py` (the decompressor, including zero-length codes),
   `toolkit/mapdata/test_pathmap.py` (trapezoid walk, A*, line of sight -- and since
   2026-08-13 route()'s LATENCY, because it runs on the thread that owns the world and
@@ -2013,8 +2182,29 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   size pin would report the server doing its job as corruption; `audit_state_text` is
   pure over a string, the file is read once, and the harvest and the census both come
   from that one read. Sections 9-11 are synthetic throughout and need no vault; the
-  only claim about the real store is that its census carries no value out of it. 47
-  checks against a floor of 45, the two vault-dependent ones declaring a skip. ~3m25s),
+  only claim about the real store is that its census carries no value out of it.
+  **Section 12 (2026-08-14) is the CAPTURE path's missing report, and it is the
+  `plain` defect's shape one level up.** `scrub_state_json` has counted and NAMED
+  the fields it does not recognise since it was written; `scrub_record` had no
+  such report, so any unlisted key fell through its trailing `else` and was
+  copied verbatim with nothing counted and nothing said. `record_field_is_handled`
+  existed and only the STATE path called it. It was found by a field this repo
+  added itself -- `marks.py` writes operator marks as `{t, kind, text}` and `text`
+  is a free-text line a human types during a live session. **MEASURED over the
+  real vault: 57 fields, 1,219,853 values**, among them `key`, `keys`,
+  `key_from`, `user_agent`, `cipher`, `blob`, `header`, `tail`, `name`, `label`,
+  `values`, `host`, `peer`. `KNOWN_BENIGN` is the structural subset and is
+  deliberately NOT everything that occurs -- the payload-shaped and free-text
+  names are LEFT OFF so the first run reports them, since a list that blessed
+  them on sight would restore the silence it replaces, and the sabotage that
+  pads the list is built and run to prove the list is load-bearing. Copying is
+  still the behaviour, because inventing a cleaning for an unclassified field is
+  worse than reporting it; the report carries NAMES ONLY, on the module's own
+  rule that a manifest quoting the value would be the leak itself, and that is
+  asserted. Two positive controls keep it from becoming noise: an all-structural
+  record must report NOTHING, and a SECRET or OPAQUE field must not be counted as
+  unrecognised. Section 12 is synthetic throughout. 59 checks against a floor of
+  57, the two vault-dependent ones declaring a skip. ~3m25s),
   `toolkit/test_content.py` (the content store, that its provenance and licence
   refusals actually refuse -- and, since 2026-08-13, that the REAL `vault/content/`
   overlay loads, which is the one input this file never read. Every other check in it
