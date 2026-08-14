@@ -189,6 +189,36 @@ COMPOSITE_KEYS = ("who",)
 OPAQUE_KEYS = ("plain", "payload")
 OPAQUE_STAT = "NOT_CLEANED_opaque_payload"
 
+# --- keys the capture path recognises as STRUCTURAL, and the report for the rest ---
+#
+# `scrub_state_json` has counted and NAMED the fields it does not recognise since it was
+# written, on the `plain` precedent -- "the record shape belongs to the server and will
+# grow, and the failure that matters is a credential field nobody put on a list". The
+# CAPTURE path had no such report: every unlisted key fell through `scrub_record`'s
+# trailing `else` and was copied verbatim with nothing counted and nothing said, which is
+# the identical shape of the `plain` defect one level up.
+#
+# It was found by a field this repo added itself. `toolkit/harness/marks.py` writes
+# operator marks as {t, kind, text}, and `text` is a free-text line a human types during a
+# live session -- exactly the kind of thing that ends up holding a character name -- with
+# no arm here and no report.
+#
+# MEASURED 2026-08-14 over 401 capture files: 44 distinct keys occur, 14 are handled, and
+# the other 30 fell through silently. This list is the subset a reading of the producers
+# says is STRUCTURAL -- counters, ids, sizes, protocol scalars. It is deliberately NOT
+# "everything that occurs": `label`, `name`, `values`, `note`, `error`, `host`, `peer`,
+# and the payload-shaped `cipher`, `blob`, `header`, `tail`, `head` are all LEFT OFF so
+# the first run reports them, because nobody has classified them and a list that blessed
+# them on sight would turn this report into the silence it replaces.
+KNOWN_BENIGN = (
+    "t", "wall", "kind", "opcode", "seq", "direction", "n", "channel", "build",
+    "size", "req_id", "map_id", "world_id", "player_id", "region", "district",
+    "language", "port", "map_type", "total_bytes", "origin", "produced_by",
+    "h0008", "h000C", "unk1",
+)
+UNRECOGNISED_STAT = "NOT_CLEANED_unrecognised_field"
+UNRECOGNISED_NAMES = "NOT_CLEANED_unrecognised_field_names"
+
 # --- vault/state, the credential store that is NOT a capture -----------------------
 #
 # The path component that names it, matched case-insensitively anywhere in a relative
@@ -311,6 +341,19 @@ def scrub_record(rec, names, stats):
             stats[OPAQUE_STAT] = stats.get(OPAQUE_STAT, 0) + 1
             out[key] = value
         else:
+            # THE FALL-THROUGH IS NOW REPORTED, which is the whole point of this arm.
+            # Copying is still the behaviour -- this tool must not invent a cleaning for
+            # a field nobody has classified -- but a silent pass-through is
+            # indistinguishable from "there was nothing to do", and that is exactly what
+            # let `plain` carry the account email into captures-scrubbed/ for a day.
+            # Names, never values: the report is written into a manifest, and a manifest
+            # that quoted the value would be the leak itself.
+            if key not in KNOWN_BENIGN:
+                stats[UNRECOGNISED_STAT] = stats.get(UNRECOGNISED_STAT, 0) + 1
+                seen = stats.setdefault(UNRECOGNISED_NAMES, [])
+                if key not in seen:
+                    seen.append(key)
+                    seen.sort()
             out[key] = value
     return out
 
@@ -708,10 +751,23 @@ def scrub_tree(src, out, dry_run=False, skip=(), snapshot=None, state_audit=None
         os.makedirs(out, exist_ok=True)
         with open(os.path.join(out, "SCRUB-MANIFEST.json"), "w",
                   encoding="utf-8") as fh:
+            # The unrecognised-field NAMES are lifted out of the counter map: it is a
+            # {field: count} dict and a list sitting in it reads as a count of something.
+            counters = {k: v for k, v in sorted(stats.items())
+                        if k != UNRECOGNISED_NAMES}
             json.dump({
                 "source": src, "files": files, "records": records,
                 "distinct_secrets_replaced": names.count(),
-                "replacements_by_field": dict(sorted(stats.items())),
+                "replacements_by_field": counters,
+                UNRECOGNISED_NAMES: sorted(stats.get(UNRECOGNISED_NAMES, [])),
+                "unrecognised_note": (
+                    "Fields no arm in scrub_record recognises and that are not on "
+                    "KNOWN_BENIGN. They were COPIED THROUGH VERBATIM. This is a report, "
+                    "not a cleaning: classify each one, then either give it an arm or "
+                    "add it to KNOWN_BENIGN. Until then treat this tree as carrying "
+                    "whatever those fields carried."
+                ) if stats.get(UNRECOGNISED_NAMES) else
+                "Every field here was either cleaned or on the structural allowlist.",
                 "NOT_SCRUBBED": unscrubbed,
                 "NOT_CLEANED_opaque_payloads": opaque_files,
                 "NOT_SCRUBBED_credential_state": state_files,
@@ -887,7 +943,17 @@ def main():
     print(f"records  {records}")
     print(f"distinct secrets replaced  {distinct}")
     for field, n in sorted(stats.items()):
+        if field == UNRECOGNISED_NAMES:
+            continue                    # printed as its own block below
         print(f"  {field:16s} {n}")
+    unrecognised = sorted(stats.get(UNRECOGNISED_NAMES, []))
+    if unrecognised:
+        print(f"\nNOT CLEANED, and copied anyway: "
+              f"{stats.get(UNRECOGNISED_STAT, 0)} value(s) in "
+              f"{len(unrecognised)} field(s) no arm recognises:")
+        print(f"  {', '.join(unrecognised)}")
+        print("  Each was copied VERBATIM. Classify it, then give it an arm or add it")
+        print("  to KNOWN_BENIGN -- an unlisted field is the shape the `plain` leak had.")
     if unscrubbed:
         print(f"\nNOT SCRUBBED, and NOT copied: {len(unscrubbed)} .raw file(s).")
         print("  They are the undecoded byte stream; nothing here parses them, so")

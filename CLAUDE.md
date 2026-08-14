@@ -2005,8 +2005,29 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   size pin would report the server doing its job as corruption; `audit_state_text` is
   pure over a string, the file is read once, and the harvest and the census both come
   from that one read. Sections 9-11 are synthetic throughout and need no vault; the
-  only claim about the real store is that its census carries no value out of it. 47
-  checks against a floor of 45, the two vault-dependent ones declaring a skip. ~3m25s),
+  only claim about the real store is that its census carries no value out of it.
+  **Section 12 (2026-08-14) is the CAPTURE path's missing report, and it is the
+  `plain` defect's shape one level up.** `scrub_state_json` has counted and NAMED
+  the fields it does not recognise since it was written; `scrub_record` had no
+  such report, so any unlisted key fell through its trailing `else` and was
+  copied verbatim with nothing counted and nothing said. `record_field_is_handled`
+  existed and only the STATE path called it. It was found by a field this repo
+  added itself -- `marks.py` writes operator marks as `{t, kind, text}` and `text`
+  is a free-text line a human types during a live session. **MEASURED over the
+  real vault: 57 fields, 1,219,853 values**, among them `key`, `keys`,
+  `key_from`, `user_agent`, `cipher`, `blob`, `header`, `tail`, `name`, `label`,
+  `values`, `host`, `peer`. `KNOWN_BENIGN` is the structural subset and is
+  deliberately NOT everything that occurs -- the payload-shaped and free-text
+  names are LEFT OFF so the first run reports them, since a list that blessed
+  them on sight would restore the silence it replaces, and the sabotage that
+  pads the list is built and run to prove the list is load-bearing. Copying is
+  still the behaviour, because inventing a cleaning for an unclassified field is
+  worse than reporting it; the report carries NAMES ONLY, on the module's own
+  rule that a manifest quoting the value would be the leak itself, and that is
+  asserted. Two positive controls keep it from becoming noise: an all-structural
+  record must report NOTHING, and a SECRET or OPAQUE field must not be counted as
+  unrecognised. Section 12 is synthetic throughout. 59 checks against a floor of
+  57, the two vault-dependent ones declaring a skip. ~3m25s),
   `toolkit/test_content.py` (the content store, that its provenance and licence
   refusals actually refuse -- and, since 2026-08-13, that the REAL `vault/content/`
   overlay loads, which is the one input this file never read. Every other check in it
