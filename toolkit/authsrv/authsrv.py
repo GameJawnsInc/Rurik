@@ -1983,6 +1983,26 @@ def revive_due(send, state, conn_id):
         agent["last_hit"] = 0.0
         send(GAME_SMSG_AGENT_UPDATE_STATUS, [agent_id, 0],
              f"revive agent {agent_id}")
+        # ONE TICK before the refills, the same as the player path. The client's
+        # resurrect check is on the CHARACTER and does not care whose it is: 2 of the
+        # vault's 49 `Health non-zero on resurrect` lines name `Corpse of Hatcher
+        # [Collector]` rather than the player.
+        #
+        # UNMEASURED HERE, and that is a property of the world rather than an
+        # omission. Nothing in an unattended run kills an agent -- the hostile kills
+        # the PLAYER and the player does not fight back, so `hit agent` is 0 and this
+        # branch never runs. The two NPC lines above come from human-played runs
+        # 20260811T141114 and 20260811T141332 (7 `hit agent` lines each), and they are
+        # the standing CONTROL: they were produced by the burst order this replaces,
+        # so confirming the fix here costs ONE human-played run, not two. The
+        # mechanism is the player path's, which IS measured -- see
+        # REVIVE_REFILL_DEFER, 13 of 13 complaints on the burst and 0 of 11 with a
+        # tick between.
+        if REVIVE_REFILL_DEFER > 0.0:
+            agent["refill_due_at"] = now + REVIVE_REFILL_DEFER
+            print(f"[c{conn_id}] agent {agent_id} is back up "
+                  f"(refill deferred {REVIVE_REFILL_DEFER:.2f}s)", flush=True)
+            continue
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
              f"restore max health on agent {agent_id}")
@@ -2505,6 +2525,25 @@ def player_revive_due(send, state, conn_id):
           _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
          "refill the player's bar")
     print(f"[c{conn_id}] the player is back up", flush=True)
+
+
+def agent_refill_due(send, state, conn_id):
+    """The deferred half of the AGENT revive -- see revive_due and player_refill_due."""
+    now = time.time()
+    for agent_id, agent in list(state.get("agents", {}).items()):
+        if agent_id not in state.get("agents", {}):
+            continue
+        due = agent.get("refill_due_at")
+        if not due or now < due:
+            continue
+        agent["refill_due_at"] = None
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
+             [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
+             f"restore max health on agent {agent_id} (deferred)")
+        send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
+             [agents.GV_HEALTH, agent_id, agent_id,
+              _fraction(1.0, agents.GV_HEALTH, f"refill agent {agent_id}")],
+             f"refill agent {agent_id}'s bar (deferred)")
 
 
 def player_refill_due(send, state, conn_id):
@@ -4115,6 +4154,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         ping_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
+                        agent_refill_due(send, state, conn_id)
                         # Both halves of the fight, and the order matters. The
                         # player's revive runs BEFORE the enemies swing, so a
                         # player whose timer expired this tick stands up and can
