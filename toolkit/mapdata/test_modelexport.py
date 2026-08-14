@@ -115,13 +115,19 @@ RING_POPULATION = {
                              both=0),
 }
 
-# FLOOR: 46, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
+# FLOOR: 47, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
 # (85 s). Sections 0-2 alone score 27 -- MEASURED by pointing --dat at a
-# missing file, not counted by eye -- so a vault-less run lands 19 short and
+# missing file, not counted by eye -- so a vault-less run lands 20 short and
 # goes RED. `--all` widens sections 3-4 from a sample to every model of both
 # reference maps and adds ONE check (the pinned sub-model census), so a green
-# `--all` run is 47.
-FLOOR = 46
+# `--all` run is 48.
+#
+# MEASURED against a sabotage rather than assumed: an exporter that drops
+# each sub-model's last vertex while leaving `nv` alone reddens NINE of these
+# checks. Before section 3's read-backs were guarded it reddened none of
+# them -- it raised IndexError, killed the process, and the run printed no
+# verdict at all.
+FLOOR = 47
 
 DEFAULT_SAMPLE = 12
 
@@ -370,6 +376,7 @@ def _section3(check, ar, table, by_row, tmp, args):
     # file. Found by reading the suite rather than by a sabotage.
     idx_same = idx_subs = idx_tris = 0
     idx_range_ok = idx_div3 = 0
+    errors = []
     for map_fid in (KAMADAN_FILE_ID, PRESEARING_FILE_ID):
         ids = map_model_ids(map_fid, ar, table=table)
         if not args.all:
@@ -392,21 +399,42 @@ def _section3(check, ar, table, by_row, tmp, args):
                 fmts.add(sm.dat_fvf)
                 raws += bool(exp.submodels[si].get("raw_bases"))
                 tangents += bool(exp.submodels[si].get("tangent_bases"))
-                if reinterleave(exp, si) == bytes(sm.vertex_data):
-                    ok += 1
-                else:
-                    mismatch += 1
-                    if len(first) < 3:
-                        first.append((hex(fid), si, sm.dat_fvf))
+                # EVERY READ-BACK IS GUARDED, and this is not defensive
+                # habit -- a sabotage that truncated each sub-model's vertex
+                # array while leaving `nv` alone raised IndexError here and
+                # KILLED THE PROCESS: section 3 printed no [FAIL], the two
+                # headline checks below never ran, and `checks.py` never
+                # reached its verdict, so the run died with no banner and no
+                # floor shortfall. That is the one failure the ledger cannot
+                # see (`test_content.py` records the same shape). A broken
+                # export must produce a RED CHECK, never a traceback.
+                try:
+                    if reinterleave(exp, si) == bytes(sm.vertex_data):
+                        ok += 1
+                    else:
+                        mismatch += 1
+                        if len(first) < 3:
+                            first.append((hex(fid), si, sm.dat_fvf))
+                except Exception as exc:                    # noqa: BLE001
+                    errors.append((hex(fid), si, type(exc).__name__))
                 # ...and the triangle list, which no other check reaches.
                 idx_subs += 1
-                got = [i for t in exp.triangles(si) for i in t]
-                idx_same += list(sm.indices) == got
-                idx_tris += len(got) // 3
-                idx_range_ok += all(v < sm.nv for v in got)
-                idx_div3 += len(got) % 3 == 0
+                try:
+                    got = [i for t in exp.triangles(si) for i in t]
+                    idx_same += list(sm.indices) == got
+                    idx_tris += len(got) // 3
+                    idx_range_ok += all(v < sm.nv for v in got)
+                    idx_div3 += len(got) % 3 == 0
+                except Exception as exc:                    # noqa: BLE001
+                    errors.append((hex(fid), si, type(exc).__name__))
     print(f"    {subs} sub-models, {len(fmts)} formats, {tangents} with a "
           f"tangent frame, {raws} with an unnamed field")
+    # The guard's own check. Without it the try/except above would turn a
+    # crash into SILENCE, which is worse than the traceback it replaced.
+    check(not errors,
+          "no sub-model raised while being read back -- a malformed export "
+          "must be a red check, not a traceback that kills the run",
+          f"{len(errors)} raised: {errors[:3]}" if errors else "0")
     check(subs > 0 and mismatch == 0,
           f"re-interleaving the export reproduces ArenaNet's vertex bytes on "
           f"all {subs} sub-models", f"{ok} ok, {mismatch} MISMATCH {first}")
