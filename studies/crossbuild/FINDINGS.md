@@ -218,13 +218,35 @@ and skill-icon rows rather than a map. 70 s of play.
 
 | | armed | after play |
 |---|---|---|
-| MFT offset | `0xF8FFF000` | `0xF8BEFE00` — **the table moved 4.03 MB EARLIER** |
+| MFT offset | `0xF8FFF000` | `0xF8BEFE00` — **the table moved** |
 | MFT entry count | 177,334 | 177,334 |
 | rows 174150 / 174487 / 174861 | 2,068 / 2,068 / 8,212 B, compression 0 | **all three byte-identical** |
 
 So the §4b result reproduces on the easier case as well: an in-place authored row survives a
-session, table move included. The direction is worth noting only because it is not what
-"the table moved" suggests — it moved *backwards*, into lower file offsets.
+session, table move included.
+
+**THE TABLE DOES NOT WANDER — IT ALTERNATES BETWEEN TWO SLOTS, and the first draft of this
+section had that wrong.** It read "the table moved 4.03 MB EARLIER" and made a point of the
+*direction*, which implied a drift the evidence does not support. Every archive copy in the
+vault was then sampled, and there are exactly **two** offsets across all seven:
+
+| MFT offset | copies |
+|---|---|
+| `0xF8FFF000` | `run/2026-07-29…` (177,334), `run/…-c2` (177,341), `run/…-probe` (177,334) |
+| `0xF8BEFE00` | `run/reskin-roster` (177,334), `run-live/…` (177,475), `dat_study` (177,341), `dat_c2` (177,341) |
+
+**Copies with identical entry counts appear at BOTH offsets**, so the position is not a
+function of table size — it is a phase. The four `row8295*.journal` files from the text arc
+record the same two values and no others (`0xF8FFF000`, then `0xF8BEFE00` twice), i.e. this
+copy has flipped at least twice. That is the shadow-container rotation `datplan` already
+refuses free runs for — *"88.5% of `Gw.dat`'s free space is live container generations the
+client rotates through"* — now OBSERVED on the MFT itself rather than inferred from the gaps.
+
+The practical difference between the two readings is large. A drift is rare and bad luck; an
+alternation means **the guard below should be expected to fire on roughly every other client
+run**, which makes it a routine part of the procedure rather than an edge case. It also means
+`0xF8FFF000` was not "where we left it" — our own `datmove` of row 8295 put the table there,
+and the client put it back.
 
 **What is new is the failure mode, and §4b could not have found it.** §4b compared
 SNAPSHOTS; this run tried to `--revert` its JOURNALS afterwards, and all three refused:
