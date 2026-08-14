@@ -89,6 +89,7 @@ GRANDFATHERED = {
     os.path.join("studies", "reconstruction", "FINDINGS.md"): 25,  # 11
     os.path.join("studies", "enemy", "PLAN.md"): 25,          # 11
     os.path.join("studies", "skillcast", "FINDINGS.md"): 20,  # 7
+    os.path.join("studies", "minimap", "FINDINGS.md"): 25,    # 11: names the draw/ping pair + the atlas chain
 }
 
 # A dump landing anywhere in the tree moves this even if no single file trips its own
