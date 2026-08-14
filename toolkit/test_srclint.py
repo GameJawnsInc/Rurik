@@ -219,12 +219,28 @@ def main():
     # that no longer exists makes the list look complete while covering less
     # than it claims, and a checker that only walked the tree would call that
     # healthy.
+    #
+    # The list MOVED to TESTS.md on 2026-08-14 -- it had reached 2,458 of
+    # CLAUDE.md's 2,725 lines (90%) and buried the house rules. The two
+    # directions now read DIFFERENT files on purpose:
+    #
+    #   forward (every test on disk is named) -> TESTS.md ONLY. Reading both
+    #   would let a test be mentioned in CLAUDE.md's prose and absent from the
+    #   catalog while this check stayed green, which is precisely the "list is
+    #   the suite" rule being subverted.
+    #
+    #   reverse (every name cited still exists) -> BOTH, because a stale
+    #   `test_foo.py` citation in CLAUDE.md's rules is the same defect as one
+    #   in the catalog: it reads as coverage that is not there.
     root = os.path.dirname(HERE)
     claude = os.path.join(root, "CLAUDE.md")
-    if not os.path.isfile(claude):
-        LEDGER.skip("7. the suite list", f"no CLAUDE.md at {claude}")
+    tests_md = os.path.join(root, "TESTS.md")
+    if not os.path.isfile(tests_md):
+        LEDGER.skip("7. the suite list", f"no TESTS.md at {tests_md}")
     else:
-        text = open(claude, encoding="utf-8").read()
+        text = open(tests_md, encoding="utf-8").read()
+        both = text + (open(claude, encoding="utf-8").read()
+                       if os.path.isfile(claude) else "")
         on_disk = set()
         for dirpath, _dirs, files in os.walk(HERE):
             if "__pycache__" in dirpath:
@@ -238,15 +254,15 @@ def main():
         EXEMPT = set()
         unnamed = sorted(f for f in on_disk - EXEMPT if f not in text)
         LEDGER.ok(not unnamed,
-                  f"all {len(on_disk)} test files in toolkit/ are named in CLAUDE.md",
-                  f"UNNAMED: {unnamed} -- add the line in the same commit as the "
+                  f"all {len(on_disk)} test files in toolkit/ are named in TESTS.md",
+                  f"UNNAMED: {unnamed} -- add the entry in the same commit as the "
                   f"test, or the suite silently stops covering it")
         # The reverse. Only names that look like our test files, so ordinary
         # prose mentioning a module cannot trip it.
-        cited = set(re.findall(r"\btest_[a-z0-9_]+\.py\b", text))
+        cited = set(re.findall(r"\btest_[a-z0-9_]+\.py\b", both))
         missing = sorted(cited - on_disk)
         LEDGER.ok(not missing,
-                  f"and all {len(cited)} tests CLAUDE.md names still exist",
+                  f"and all {len(cited)} tests named in TESTS.md or CLAUDE.md exist",
                   f"STALE: {missing} -- the list reads as complete while "
                   f"covering less than it claims")
 
