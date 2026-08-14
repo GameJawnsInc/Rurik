@@ -504,8 +504,30 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   about what independence predicts. The negative is pinned as a measurement
   rather than dropped, and the first reading of it -- "disjoint" from the
   reference maps alone -- was itself the §B4 small-sample trap and is
-  corrected in place. Sections 0-2 build a model geometry from `struct.pack`
-  and score 27 against a floor of 38; `--all` is 39. ~77 s),
+  corrected in place. **What replaced that oracle is stronger, because the
+  decoder cannot force it** (section 6 asserts on `decode`'s own source that
+  it validates RENDER indices only): every collision index below its mesh's
+  vertex count (2,265/2,265), every mesh a triangle list (28/28) with the
+  rival header order `(nv, ni)` at **7/28** pinning `u32 ni` as the first
+  field, every collision vertex referenced. **WHICH CHECKS ARE LOAD-BEARING
+  WAS MEASURED**, by building eight sabotaged exporters and running the file
+  against each -- the table is in the floor comment. Two results earn their
+  place: a truncated vertex array reddens NINE checks now and reddened
+  NOTHING before section 3's read-backs were guarded, because it raised
+  IndexError and killed the process, printing no verdict and no floor
+  shortfall (the one failure `checks.py` cannot see, `test_content.py`'s
+  shape); and a MEMCPY loader that stashes the source block reddens nothing
+  -- correctly, since the files it writes are still right -- while **memcpy
+  PLUS a corrupted sidecar is caught by exactly ONE check**, the
+  `_sidecar_positions` read that unpacks the file with `struct.unpack` and
+  never touches `load_model`, with the re-interleave and both f11 oracles
+  passing green beside it. Every other check in the file reads geometry
+  through the module's loader, which is why that one must not. The triangle
+  lists are checked separately for the same reason -- the re-interleave
+  covers vertex BYTES only and the oracle covers positions only, a gap found
+  by reading the suite rather than by a sabotage. Sections 0-2 build a model
+  geometry from `struct.pack` and score 27 against a floor of 48; `--all` is
+  49. ~85 s),
   `toolkit/mapdata/test_modelfile.py` (the prop model decoder -- rung M1 of
   `studies/models/PLAN.md`, the layout customarea §5 measured from scratch
   scripts promoted to committed code -- and the cross-file oracle that makes it

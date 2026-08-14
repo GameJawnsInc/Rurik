@@ -226,6 +226,39 @@ widening from 2 maps to 14.)*
 Section 5 of the test pins those populations so the negative survives as a
 measurement. §4.3's invariants are what replaced it.
 
+### 4.5 Which checks are load-bearing, measured
+
+Eight sabotaged exporters were built and the suite run against each:
+
+| sabotage | checks reddened |
+|---|---|
+| drop normals | 2 (re-interleave 0/33) |
+| drop the tangent frame | 2 (re-interleave 32/33 — only **one** default-sample sub-model has one, so the population guard beside it is what really holds this) |
+| drop the unnamed fields | 2 (re-interleave 27/33) |
+| `vertex_base` always 0 | 3 (re-interleave 17/33) |
+| truncate a vertex | **9** — and **0** before the read-backs were guarded |
+| weaken `resolve_outdir` | 1 (the default-destination check alone) |
+| memcpy loader | **0** — correctly: its files are still right |
+| memcpy loader **+ corrupted sidecar** | **1**, and only `_sidecar_positions` |
+
+Two of those are worth carrying:
+
+**A truncated vertex array killed the run rather than failing it.** It raised
+`IndexError` inside section 3; the process died, the two headline checks never
+executed, and `checks.py` never reached its verdict — no banner, no floor
+shortfall. That is the one failure the ledger cannot see, and
+`test_content.py` records the same shape. The read-backs are now guarded and
+the exception is itself a named check, because a bare `try/except` would have
+replaced the traceback with silence.
+
+**The memcpy loader exposed that every check read geometry through
+`load_model`.** A loader that stashes the source block and rebuilds its arrays
+from it passes the re-interleave *and* both f11 oracles. On its own that is
+harmless — the written files are still correct — but pair it with a corrupted
+sidecar and nothing saw the defect. `_sidecar_positions` unpacks the file with
+`struct.unpack` and never calls the module's loader; against that pair it is
+the only check that fires.
+
 ## 5. What is still unknown
 
 - **The preamble** (+0x54 → sub-model array) — located by search, so ~15% of
