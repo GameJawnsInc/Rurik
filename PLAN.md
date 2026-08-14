@@ -1361,6 +1361,19 @@ reservation and fits **132 of profession 8's 132 distinct icon rows in place**, 
 client runs — **revert before you launch, not after**. `vault/run/reskin-roster/Gw.dat`
 is still armed on rows 174150/174487/174861 for that reason.
 
+**THE PROFESSION GLYPH IS FOUND (2026-08-14, RESKIN §22)** — the last NOT FOUND in the
+arc, after three failed bounded searches. It is ONE SHARED SHEET, not eleven files:
+`.rdata` VA `0x00959964` holds the pair `{0x573D, 0x0102}`, decoding to file id 152638 =
+MFT row 12032, a 256×128 32bpp DDS of 8×4 cells at 32×32, of which exactly 22 are
+distinct. The 12-entry jump table at VA `0x005A5EB8` maps profession to an even frame and
+a state bit adds lit/dim; **profession 8 is frames 14/15**. Owner is
+`VnProfessionButton.cpp`, by ArenaNet's own `__FILE__`.
+**Why three searches missed it, and it is reusable: the client never stores a raw u32 file
+id, only `{u16 id0, u16 id1}` pairs**, so every sweep for runs of resolving dwords was
+structurally blind rather than unlucky. Authoring costs a partial overwrite of one 32×32
+region plus a `datmove` — the row ships compressed at 35,460 B and we would write stored
+at 131,200 B, which does not fit its 35,840 B reservation.
+
 **NEXT, and it is a design question rather than a mechanism one.** The identity tier is
 done, the primary marker moved onto our own claimed row (§19.7, `cb53a9b`), and the icon
 path is open. What is left is what makes the class *play* differently. In rough order of
