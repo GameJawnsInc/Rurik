@@ -26,6 +26,15 @@ comparison to be byte-exact the export must account for EVERY byte of the
 stride, which is why the two unnamed fields (bits 1 and 3) are carried as raw
 bytes and why this test would redden if they stopped being.
 
+EVERY OTHER CHECK HERE READS GEOMETRY THROUGH `load_model`, so one does not:
+`_sidecar_positions` unpacks the position sidecar with `struct.unpack` and
+compares it against the archive. MEASURED to be the only thing covering the
+written files -- a loader that stashes the source block and rebuilds its
+arrays from it passes the re-interleave AND both f11 oracles while the
+sidecar it wrote is wrong, and exactly this one check goes red. The bare
+memcpy loader, whose files are still correct, reddens nothing, which is the
+right answer: the export is sound and only the loader is redundant.
+
 THE CROSS-FILE ORACLE is M1/M2's, now running through the serialised
 interchange: for every prop instance in a map, `f11 == scale * max 2D radius`
 where the radius is recomputed from the exported POSITION SIDECAR read back
@@ -115,19 +124,45 @@ RING_POPULATION = {
                              both=0),
 }
 
-# FLOOR: 47, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
+# FLOOR: 48, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
 # (85 s). Sections 0-2 alone score 27 -- MEASURED by pointing --dat at a
-# missing file, not counted by eye -- so a vault-less run lands 20 short and
+# missing file, not counted by eye -- so a vault-less run lands 21 short and
 # goes RED. `--all` widens sections 3-4 from a sample to every model of both
 # reference maps and adds ONE check (the pinned sub-model census), so a green
-# `--all` run is 48.
+# `--all` run is 49.
 #
-# MEASURED against a sabotage rather than assumed: an exporter that drops
-# each sub-model's last vertex while leaving `nv` alone reddens NINE of these
-# checks. Before section 3's read-backs were guarded it reddened none of
-# them -- it raised IndexError, killed the process, and the run printed no
-# verdict at all.
-FLOOR = 47
+# WHICH CHECKS ARE LOAD-BEARING WAS MEASURED, by building eight sabotaged
+# exporters and running this file against each. Results, for the next person
+# who wants to know whether a check here earns its line:
+#
+#   drop normals              2 red   (re-interleave 0/33)
+#   drop the tangent frame    2 red   (re-interleave 32/33 -- only ONE
+#                                      sub-model of the default sample has
+#                                      one, so the population guard beside
+#                                      it is what really holds this)
+#   drop the unnamed fields   2 red   (re-interleave 27/33)
+#   vertex_base always 0      3 red   (re-interleave 17/33)
+#   truncate a vertex         9 red   -- and it reddened NOTHING before the
+#                                      read-backs were guarded: it raised
+#                                      IndexError, killed the process, and
+#                                      the run printed no verdict at all,
+#                                      which is the one failure `checks.py`
+#                                      cannot see (`test_content.py` records
+#                                      the same shape)
+#   weaken resolve_outdir     1 red   (the default-destination check alone)
+#   memcpy loader             0 red   -- CORRECTLY: it stashes the source
+#                                      block and rebuilds arrays from it, but
+#                                      the FILES it writes are still right,
+#                                      so the export is still sound
+#   memcpy loader + a
+#     corrupted sidecar       1 red   -- and it is the sidecar check, ALONE.
+#                                      The re-interleave and both f11 oracles
+#                                      pass green, because every one of them
+#                                      reads geometry through `load_model`.
+#
+# That last pair is why `_sidecar_positions` exists and why it must never be
+# routed through the module's loader.
+FLOOR = 48
 
 DEFAULT_SAMPLE = 12
 
@@ -173,6 +208,22 @@ def reinterleave(exp, si):
             out[b + fo[bit]:b + fo[bit] + size] = \
                 exp.arrays[f"raw{bit}"][base + i * size:base + (i + 1) * size]
     return bytes(out)
+
+
+def _sidecar_positions(json_path):
+    """The position sidecar's own bytes, unpacked HERE.
+
+    Deliberately does not call `load_model`: this is the only path in the
+    suite that touches the file a third-party consumer would read, so it must
+    not share a loader with the module under test.
+    """
+    with open(json_path, "r", encoding="utf-8") as fh:
+        meta = json.load(fh)
+    side = next(s for s in meta["sidecars"] if s["kind"] == "pos")
+    blob = open(os.path.join(os.path.dirname(os.path.abspath(json_path)),
+                             side["name"]), "rb").read()
+    flat = struct.unpack(f"<{3 * side['count']}f", blob)
+    return [tuple(flat[i * 3:i * 3 + 3]) for i in range(side["count"])]
 
 
 def map_props(ar, table, by_row, map_fid):
@@ -377,6 +428,7 @@ def _section3(check, ar, table, by_row, tmp, args):
     idx_same = idx_subs = idx_tris = 0
     idx_range_ok = idx_div3 = 0
     errors = []
+    raw_pos, want_pos = [], []
     for map_fid in (KAMADAN_FILE_ID, PRESEARING_FILE_ID):
         ids = map_model_ids(map_fid, ar, table=table)
         if not args.all:
@@ -391,9 +443,20 @@ def _section3(check, ar, table, by_row, tmp, args):
                 continue
             if geo is None:
                 continue
-            exp = load_model(export_file_id(fid, ar,
-                                            outdir=os.path.join(tmp, "ri"),
-                                            table=table))
+            jpath = export_file_id(fid, ar, outdir=os.path.join(tmp, "ri"),
+                                   table=table)
+            exp = load_model(jpath)
+            # THE SIDECAR ITSELF, read with struct.unpack in this file and
+            # never through `load_model`. Everything else in this suite reads
+            # geometry through the module's own loader, so a loader that
+            # reconstructed the arrays from anything OTHER than the sidecars
+            # -- a stashed copy of the interleaved block, say -- would return
+            # correct values and pass every one of them while the files it
+            # claims to have written went unchecked. This is the only check
+            # that reads the bytes a third-party consumer would actually get.
+            raw_pos.append(_sidecar_positions(jpath))
+            want_pos.append([p for sm2 in geo.submodels
+                             for p in sm2.positions()])
             for si, sm in enumerate(geo.submodels):
                 subs += 1
                 fmts.add(sm.dat_fvf)
@@ -459,6 +522,18 @@ def _section3(check, ar, table, by_row, tmp, args):
     check(idx_range_ok == idx_subs and idx_div3 == idx_subs,
           f"and every exported index is below its own sub-model's vertex "
           f"count, in multiples of 3", f"{idx_range_ok}/{idx_div3}/{idx_subs}")
+
+    # THE SIDECAR BYTES, compared without the module's loader anywhere in the
+    # path. See `_sidecar_positions`: this is what stops a loader that
+    # reconstructs geometry from a stashed copy of the source from passing
+    # the whole suite while the files it wrote go unchecked.
+    nfiles = len(raw_pos)
+    same = sum(1 for got, want in zip(raw_pos, want_pos) if got == want)
+    nvert = sum(len(w) for w in want_pos)
+    check(nfiles > 0 and same == nfiles,
+          f"the POSITION SIDECAR's own bytes are the archive's vertices on "
+          f"all {nfiles} models ({nvert} vertices), read with struct.unpack "
+          f"and never through load_model", f"{same}/{nfiles}")
     if args.all:
         check(subs == REFERENCE_SUBMODELS and len(fmts) == REFERENCE_FORMATS,
               f"--all covers the pinned {REFERENCE_SUBMODELS} sub-models and "
