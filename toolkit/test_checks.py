@@ -97,18 +97,19 @@ def main():
     led.ok(raised, "a floor of 0 is rejected at construction")
 
     # --- and the suite list is the suite ----------------------------------------
-    # CLAUDE.md's pre-flight list IS the definition of "run the tests". A test in
+    # TESTS.md IS the definition of "run the tests" (it was CLAUDE.md's pre-flight
+    # list until 2026-08-14, when the catalog was split out). A test in
     # the tree but not on the list is one nobody runs: test_pathmap.py,
     # test_skillcast.py and test_textrec.py were each off it for days while
     # passing, which is the same failure as a green vacuous test one level up.
     # Enforced here rather than asserted in prose, per the house rule that a law
     # in a docstring is a wish.
-    tree, named = suite_on_disk(), suite_in_claude_md()
+    tree, named = suite_on_disk(), suite_in_docs()
     missing = sorted(tree - named)
     phantom = sorted(named - tree)
-    led.ok(not missing, "every test in the tree is named in CLAUDE.md",
+    led.ok(not missing, "every test in the tree is named in TESTS.md",
            f"unlisted: {', '.join(missing)}" if missing else f"{len(tree)} tests")
-    led.ok(not phantom, "every test CLAUDE.md names still exists",
+    led.ok(not phantom, "every test the docs name still exists",
            f"missing from tree: {', '.join(phantom)}" if phantom else "")
 
     # --- the top-level documents point at things that exist ---------------------
@@ -131,7 +132,7 @@ def main():
     return led.verdict()
 
 
-TOP_DOCS = ("CLAUDE.md", "PLAN.md", "RUNBOOK.md", "HANDOFF.md")
+TOP_DOCS = ("CLAUDE.md", "PLAN.md", "RUNBOOK.md", "HANDOFF.md", "TESTS.md")
 
 
 def broken_doc_links():
@@ -195,11 +196,21 @@ def suite_on_disk():
     return out
 
 
-def suite_in_claude_md():
-    """Every toolkit test path CLAUDE.md names, from its pre-flight section."""
-    path = os.path.join(repo_root(), "CLAUDE.md")
-    with open(path, encoding="utf-8") as fh:
-        return set(re.findall(r"toolkit/[\w/]*test_\w+\.py", fh.read()))
+def suite_in_docs():
+    """Every toolkit test path the house documents name.
+
+    BOTH files since 2026-08-14, when the catalog moved to TESTS.md (it had
+    reached 90% of CLAUDE.md). Not TESTS.md alone: `test_handshake.py` is named
+    only inside CLAUDE.md's code fence, so a scan of the catalog by itself is
+    short by exactly that one.
+    """
+    out = set()
+    for name in ("TESTS.md", "CLAUDE.md"):
+        path = os.path.join(repo_root(), name)
+        if os.path.isfile(path):
+            with open(path, encoding="utf-8") as fh:
+                out |= set(re.findall(r"toolkit/[\w/]*test_\w+\.py", fh.read()))
+    return out
 
 
 if __name__ == "__main__":
