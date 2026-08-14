@@ -1968,3 +1968,65 @@ A reader planning a fourth run should aim at service 16 and nothing else.
 **Still UNVERIFIED:** whether any other surface draws from row 12032. It is this sheet's
 sole consumer in this image (MEASURED), but the character panel and party search were not
 reachable to check, and the party roster is text (18.14) rather than a glyph.
+
+---
+
+## 23. EVERYTHING AT ONCE (2026-08-14): the arc, in one frame
+
+Harness `20260814T090803`, `hold005.png`. One retail client, one screen, and every
+authored layer of the arc visible together:
+
+| layer | what is ours | run |
+|---|---|---|
+| The ground | **Sculpted Vale**, map 143, 64x64. Terrain round trip 4,096/4,096 samples exact, 8 props, **91.87% generated** against 770 B borrowed | 23 |
+| Profession name | **`Profession: Stormcaller`** in the Skills panel | 19, 22 |
+| Attributes | **Tempest, Galecraft, Windward, Thunderhead, Storm Calling** -- all five authored, all five owned by profession 8 | 19.5 |
+| Skill icons | the bar, drawn from arithmetic | M7 |
+| **The glyph** | the button row -- our violet bolt at frames 14/15, selected, beside nine of ArenaNet's | 22.4 |
+
+Nothing on that screen is ArenaNet's text or ArenaNet's art except the nine control
+emblems and the borrowed structural constants, and both are named.
+
+### 23.1 A second consumer of the profession name, found by the owner clicking it
+
+The `VnUnlockSkill` panel's list heading reads **`Stormcaller Skills`**. That is
+`s_charProfession[8]` on a surface this arc had not seen it on -- 19 and 22 knew the
+Skills-panel heading and the party roster, and nothing predicted this one. It also
+demonstrates, on screen rather than by inference, that **the glyph button and the name
+resolve the same profession id**: clicking our emblem selected the profession the client
+itself then named Stormcaller.
+
+### 23.2 The panel said WARRIOR first, and the reason is worth writing down
+
+The first attempt at this frame produced `Profession: Warrior` over Strength, Axe Mastery,
+Hammer Mastery, Swordsmanship and Tactics, with the reskin patch fully applied and
+correct. **The reskin repaints profession 8. The panel displays whatever profession the
+SERVER told the client the player is**, and the spawn burst was sending Warrior because
+`--spawn-profession 8` was not passed. Nothing was wrong with any patch; the run was
+asking the wrong question and would have looked like a failure of the whole tier.
+
+That is the same shape as this arc's other expensive mistakes: a correct artifact
+measured through a wrong fixture. It is cheap to avoid -- **any run meant to show the
+profession must carry `--spawn-profession 8`** -- and it was caught only because the
+owner read the panel and said so.
+
+### 23.3 The two-run sequence, which is not optional
+
+`deploy --install` arms the map head to zero so the client is forced to recompile, so at
+the moment the server starts there is no mesh to read; and once the client is up it holds
+the archive exclusively. **The run that produces the mesh can never serve it**
+(`deploy.serve_run`). Both runs need `RURIK_DAT` pointing at the client's own archive, or
+`contentids.preflight` refuses the launch -- which it did here, correctly, naming row
+71496 as 9,284 B in the server's archive and 0 B in the client's. Sequence:
+
+```
+deploy.py --area sculpt --dat <run>/Gw.dat --install
+RURIK_DAT=<run>/Gw.dat session.py --exe <run>/Gw.exe --hold 25 \
+    --game-args='--map 143 --area sculpt'                      # client compiles
+RURIK_DAT=<run>/Gw.dat session.py --exe <run>/Gw.exe --keep-open --hold 300 \
+    --game-args='--map 143 --area sculpt --spawn-profession 8 --probe smsgsweep'
+```
+
+Row 71496 read 0 B before the first run and **6,012 B** after it, with our authored
+10,714 B Stripped map in the partner row -- so the client compiled our geometry and the
+server then pathed against it.
