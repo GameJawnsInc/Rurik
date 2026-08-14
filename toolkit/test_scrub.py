@@ -59,13 +59,14 @@ import scrub_captures as sc  # noqa: E402
 
 # 1 snapshot + 6 structural + 6 leak/property + 2 red-team + 6 blind-spot
 # + 1 state census stamp + 4 snapshot red-team + 11 session store + 6 state refusal
-# + 2 destination + 12 unrecognised-field report = 57 mandatory, plus 2 that need
-# `vault/state` to exist. MEASURED green 2026-08-14 at 59 over the whole capture tree
-# with the store present (was 47 before section 12). The floor is the mandatory core, so
-# a machine whose vault has no `state/` still has to run everything else; the two
-# real-store checks declare a skip. Nothing here is optional beyond that. Section 12 is
-# entirely synthetic and therefore all of it counts toward the mandatory core.
-LEDGER = checks.Ledger("credential scrub", floor=57)
+# + 2 destination + 16 unrecognised-field report + 7 opaque-exclusion = 68 mandatory,
+# plus 2 that need `vault/state` to exist. MEASURED green 2026-08-14 at 70 over the
+# whole capture tree with the store present (47 before section 12).
+#
+# There is no bare-machine shape to floor separately: `main()` opens with
+# `vaultpath.require_dir("captures")`, so this file cannot run at all without the
+# vault. The only optional pair is the two real-store checks, which declare a skip.
+LEDGER = checks.Ledger("credential scrub", floor=68)
 
 # Derived output of previous runs. Not evidence, and scrubbing a scrub would double-count
 # every record. Baked into the snapshot, so no pass can disagree about what was excluded.
@@ -250,6 +251,12 @@ def check_corpus(src, snap):
                   "no harvested secret survives anywhere in the scrubbed output",
                   f"{len(secrets)} checked" if not found
                   else f"LEAKED {len(found)} value(s)")
+
+        # And immediately: what that check's OPAQUE_KEYS exclusion is covering for.
+        # Run here rather than from main() because it needs this pass's scrubbed tree
+        # and its harvested secrets, and re-scrubbing to get them would double a
+        # three-minute run for nothing.
+        check_the_opaque_exclusion_earns_itself(out, secrets)
 
         # --- properties the substitution promises ------------------------------
         lengths_ok, corr_ok = True, True
@@ -778,6 +785,82 @@ def check_destination_guard_and_real_store():
               f"{len(secrets)} value(s) checked against the same bytes the census read")
 
 
+def check_the_opaque_exclusion_earns_itself(out_dir, secrets):
+    """Section 13: what `leaked()`'s OPAQUE_KEYS exclusion is actually hiding.
+
+    WHY THIS EXISTS, and it is a defect this session introduced and then caught.
+    `leaked()` strips every key in `sc.OPAQUE_KEYS` from a record before searching it.
+    On 2026-08-14 that tuple grew from two entries to eight -- `cipher`, `blob`, `hex`,
+    `head`, `tail`, `header` joined `plain` and `payload` -- and the effect on the leak
+    check is that it now looks at SIX FEWER FIELDS. The suite went green, and it went
+    green MORE EASILY, which is the direction a weakening always shows up in.
+
+    So the exclusion is measured rather than trusted: search the scrubbed tree again
+    WITHOUT it, per field, and report what each one is covering for. `plain` and
+    `payload` are expected to carry something -- the module's whole bargain is that they
+    cannot be cleaned and must therefore be counted -- and the six new ones are expected
+    to carry NOTHING, because they are hex-encoded bytes in which an ASCII credential
+    cannot appear literally. If that expectation is ever wrong this goes red and names
+    the field, which is the only way a blind spot stays honest.
+    """
+    print("\n13. and what the opaque exclusion is hiding, per field")
+    # SEARCH THE TREE UNFILTERED, once, the same shape `leaked()` uses -- one big text
+    # and one pass per secret. The per-value loop this replaced was
+    # O(values x secrets), 5,565 secrets against ~1M opaque values, and did not finish.
+    whole = []
+    for base, _dirs, files in os.walk(out_dir):
+        for f in sorted(files):
+            with open(os.path.join(base, f), encoding="utf-8",
+                      errors="replace") as fh:
+                whole.append(fh.read())
+    text = "\n".join(whole)
+    del whole
+    hidden = {s for s in secrets if s in text} - set(leaked(out_dir, secrets))
+
+    # Which opaque field carries each hidden value. Only the hidden ones are looked up,
+    # so this loop is over a handful rather than over the corpus.
+    carrier = {}
+    if hidden:
+        for base, _dirs, files in os.walk(out_dir):
+            for f in sorted(files):
+                if not f.endswith(".jsonl"):
+                    continue
+                with open(os.path.join(base, f), encoding="utf-8",
+                          errors="replace") as fh:
+                    for line in fh:
+                        if not any(s in line for s in hidden):
+                            continue
+                        try:
+                            rec = json.loads(line)
+                        except (json.JSONDecodeError, ValueError):
+                            continue
+                        if not isinstance(rec, dict):
+                            continue
+                        for k in sc.OPAQUE_KEYS:
+                            v = rec.get(k)
+                            if isinstance(v, str):
+                                for s in hidden:
+                                    if s in v:
+                                        carrier.setdefault(k, set()).add(s)
+
+    NEW = ("cipher", "blob", "hex", "head", "tail", "header")
+    for k in NEW:
+        LEDGER.ok(not carrier.get(k),
+                  f"the exclusion of {k!r} hides NO known secret",
+                  f"{len(carrier.get(k, ()))} -- these are hex-encoded bytes, so an "
+                  f"ASCII credential cannot appear in them literally; if this ever "
+                  f"reddens the field must LEAVE OPAQUE_KEYS, not gain a tolerance")
+
+    # The positive control, and it is what stops the six checks above from being six
+    # ways of saying "we searched nothing". If the exclusion hides NOTHING anywhere
+    # then the search is broken, not the tree clean.
+    LEDGER.ok(bool(hidden),
+              "CONTROL: the exclusion IS hiding something, so the search works",
+              f"{len(hidden)} value(s) findable unfiltered and not by leaked(); "
+              f"carried by {sorted(carrier)} -- the DH values cross the wire in the "
+              f"clear, which is the module's own recorded reason for the bargain")
+
+
 def check_unrecognised_fields_are_reported():
     """Section 12: the capture path now says what it did not clean.
 
@@ -839,6 +922,30 @@ def check_unrecognised_fields_are_reported():
               "CONTROL: a SECRET field and an OPAQUE one are handled, not "
               "reported as unrecognised",
               "they have arms; reporting them would bury the fields that do not")
+
+    # NETWORK endpoints: recognised, copied, and COUNTED -- a third state that is
+    # neither cleaned nor unrecognised. The count is the whole point: the owner's LAN
+    # address rides in these fields and silence about it would be the wrong report.
+    net = {}
+    sc.scrub_record({"src": "10.0.0.210", "dst": "98.85.54.17", "sport": 57335},
+                    names, net)
+    LEDGER.ok(net.get(sc.NETWORK_STAT) == 2,
+              "network endpoints are COUNTED, and a port number is not one",
+              f"{net.get(sc.NETWORK_STAT)} -- src and dst, not sport")
+    LEDGER.ok(sc.UNRECOGNISED_NAMES not in net,
+              "and they are NOT also reported as unrecognised",
+              "a field cannot be in two buckets or the counts double")
+
+    # THE DELIBERATE OMISSIONS. Leaving a field off KNOWN_BENIGN is a DECISION here,
+    # and a decision nothing checks is a decision that gets undone by the next person
+    # trying to quieten the report.
+    for field, why in (("values", "decoded message fields -- 16,428 strings, and the "
+                                  "opcodes carrying them include SEND_COMPUTER_HASH, "
+                                  "CHANGE_PLAY_CHARACTER and CHAT_SEND"),
+                       ("error", "exception text, bounded by nothing")):
+        LEDGER.ok(field not in sc.KNOWN_BENIGN
+                  and not sc.record_field_is_handled(field),
+                  f"{field!r} is deliberately still REPORTED", why)
 
     # Dedup: two records, same unlisted key -- counted twice, named once.
     dd = {}

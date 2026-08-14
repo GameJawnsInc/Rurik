@@ -2137,8 +2137,36 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   rule that a manifest quoting the value would be the leak itself, and that is
   asserted. Two positive controls keep it from becoming noise: an all-structural
   record must report NOTHING, and a SECRET or OPAQUE field must not be counted as
-  unrecognised. Section 12 is synthetic throughout. 59 checks against a floor of
-  57, the two vault-dependent ones declaring a skip. ~3m25s),
+  unrecognised. Section 12 is synthetic throughout.
+  **All 57 were then CLASSIFIED by reading each field's PRODUCER**, and the three
+  names that looked worst were the three the read defused: `key` is a KEYBOARD
+  KEY NAME (`session.py`:823), `key_from` is a LABEL naming which keyring entry
+  decrypted a channel (`livesession.py`:432), and `user_agent` is one fixed
+  18-character string in all 862 occurrences. **`values` is the one that looked
+  genuinely dangerous and was MEASURED instead of assumed** -- 16,428 strings on
+  opcodes including PORTAL_ACCOUNT_LOGIN, SEND_COMPUTER_HASH and
+  CHANGE_PLAY_CHARACTER, and **0 of the 5,565 secrets this tool already
+  recognises appear in it** over 53,794 records, so the existing leak check was
+  right and the alarm was wrong. It stays REPORTED anyway, with `error`, because
+  machine fingerprints and a character name are on nobody's list and silencing
+  them would decide that by omission. 57 fields became 3. The rest split three
+  ways: structural (silent), payload-shaped (`OPAQUE_KEYS`, counted), and
+  NETWORK endpoints (their own `NETWORK_STAT`, counted -- the owner's LAN address
+  rides in them and the live capture FILENAMES carry it anyway, so cleaning the
+  field alone would be a comfort rather than a control).
+  **Section 13 exists because that widening was a REGRESSION and it was caught
+  rather than shipped**: `leaked()` strips `OPAQUE_KEYS` before searching, so
+  growing that tuple from 2 entries to 8 widened the leak check's blind spot by
+  six fields and the suite went green MORE EASILY -- the direction a weakening
+  always shows up in. So the exclusion is measured per field: search the tree
+  UNFILTERED and diff against `leaked()`. All six new fields hide **0**, and the
+  positive control is that the exclusion IS hiding something -- **32 values in
+  `payload`**, the DH numbers that cross the wire in the clear -- because six
+  checks reading zero with a broken search would look identical. The first
+  version of that section was O(secrets x values), 5,565 against ~1M, and did not
+  finish. 70 checks against a floor of 68, the two `vault/state` ones declaring a
+  skip; there is no bare-machine shape to floor separately, since `main()` opens
+  with `require_dir("captures")`. ~3m30s),
   `toolkit/test_content.py` (the content store, that its provenance and licence
   refusals actually refuse -- and, since 2026-08-13, that the REAL `vault/content/`
   overlay loads, which is the one input this file never read. Every other check in it

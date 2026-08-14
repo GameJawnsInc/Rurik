@@ -186,8 +186,25 @@ COMPOSITE_KEYS = ("who",)
 # `a` and `sent` values the scrub carefully redacts in their own fields sit in the clear
 # inside payload, two records earlier. test_scrub's leak check found both the first time a
 # live capture entered the corpus -- which is the check working, not failing.
-OPAQUE_KEYS = ("plain", "payload")
+# `header` is here on evidence rather than on shape: it occurs only in `kind=version`
+# records, which are the ones that also carry `account_uuid` and `char_uuid`, and nothing
+# in this repo writes it -- so it is the client's own bytes in the credential-bearing
+# record and is exactly what "cannot clean, must not appear to have cleaned" is for.
+OPAQUE_KEYS = ("plain", "payload", "cipher", "blob", "hex", "head", "tail",
+               "header")
 OPAQUE_STAT = "NOT_CLEANED_opaque_payload"
+
+# --- network endpoints: recognised, deliberately not cleaned, COUNTED --------------
+#
+# The owner's LAN address, the ports, and the ArenaNet hosts a live session talked to.
+# Not the account credential, and not scrubbed -- pseudonymising an address would break
+# `wirecapture`'s own direction logic on re-read, and the live capture FILENAMES carry
+# the same address anyway, so cleaning the field alone would be a comfort rather than a
+# control. They get their own count so the number is on the page instead of being
+# implied by silence.
+NETWORK_KEYS = ("src", "dst", "peer", "host", "addr", "client", "server",
+                "reverse_dns", "connection")
+NETWORK_STAT = "NOT_CLEANED_network_endpoint"
 
 # --- keys the capture path recognises as STRUCTURAL, and the report for the rest ---
 #
@@ -210,12 +227,41 @@ OPAQUE_STAT = "NOT_CLEANED_opaque_payload"
 # and the payload-shaped `cipher`, `blob`, `header`, `tail`, `head` are all LEFT OFF so
 # the first run reports them, because nobody has classified them and a list that blessed
 # them on sight would turn this report into the silence it replaces.
+# CLASSIFIED 2026-08-14 by reading each field's PRODUCER, never by guessing from a
+# sample. The three names that looked worst were the three the read defused:
+#   `key`       is a KEYBOARD KEY NAME (`session.py`:823, the action script)
+#   `key_from`  is a LABEL naming which keyring entry decrypted a channel
+#               (`livesession.py`:432) -- not the key
+#   `user_agent` is one fixed 18-character string, identical in all 862 occurrences
+# What is NOT here is the point of the list. See `values` at the bottom.
 KNOWN_BENIGN = (
-    "t", "wall", "kind", "opcode", "seq", "direction", "n", "channel", "build",
-    "size", "req_id", "map_id", "world_id", "player_id", "region", "district",
-    "language", "port", "map_type", "total_bytes", "origin", "produced_by",
-    "h0008", "h000C", "unk1",
+    # protocol and record structure
+    "t", "wall", "kind", "opcode", "seq", "direction", "dir", "n", "channel",
+    "build", "size", "bytes", "req_id", "map_id", "world_id", "player_id",
+    "region", "district", "language", "port", "sport", "dport", "map_type",
+    "total_bytes", "total", "origin", "produced_by", "h0008", "h000C", "unk1",
+    "index", "steps", "seconds", "pid", "code", "method", "event", "path",
+    "user_agent", "msg", "states", "server_ports", "opcodes", "counts",
+    # our own labels and operator text, all written by this repo
+    "label", "name", "note", "prompt", "expect", "key", "keys", "key_from",
+    # measurements written by our own probes
+    "drift", "accepted", "reported", "ours", "plane", "server_plane",
+    "on_mesh", "clipped", "last_ms", "missed", "desynced", "control",
+    "waited",
 )
+
+# LEFT OFF DELIBERATELY, so every run keeps reporting them:
+#
+#   `values`  the DECODED field list of a game message -- 53,794 records, 16,428 of
+#             the items strings. MEASURED 2026-08-14: zero of the 5,565 secrets this
+#             tool already recognises appear in it, so it is not a known-credential
+#             leak and the existing leak check was right. But the opcodes whose values
+#             carry strings include SEND_COMPUTER_INFO, SEND_COMPUTER_HASH,
+#             SEND_MACHINE_SPEC, CHANGE_PLAY_CHARACTER and CHAT_SEND -- machine
+#             fingerprints, a character name and chat text, none of which is on any
+#             list here. Silencing it would be deciding that question by omission.
+#   `error`   exception text, which is whatever the exception happened to interpolate.
+#             Bounded by nothing, so bounded by nobody.
 UNRECOGNISED_STAT = "NOT_CLEANED_unrecognised_field"
 UNRECOGNISED_NAMES = "NOT_CLEANED_unrecognised_field_names"
 
@@ -334,6 +380,11 @@ def scrub_record(rec, names, stats):
             out[key] = scrub_xml(value, names, stats)
         elif key in COMPOSITE_KEYS and isinstance(value, str):
             out[key] = scrub_composite(value, names, stats)
+        elif key in NETWORK_KEYS and value not in (None, ""):
+            # Copied, and COUNTED. See NETWORK_KEYS: cleaning the field while the
+            # filenames carry the same address would be a comfort, not a control.
+            stats[NETWORK_STAT] = stats.get(NETWORK_STAT, 0) + 1
+            out[key] = value
         elif key in OPAQUE_KEYS and isinstance(value, str) and value:
             # Passed through UNCHANGED, and counted. The count is the whole point: this is
             # the one field the tool knowingly does not clean, and a silent pass-through is
@@ -375,7 +426,8 @@ def record_field_is_handled(key):
     is the failure `plain` cost us and the one `scrub_state_json` reports below.
     """
     return (key in SECRET_KEYS or key == "authorization" or key in XML_FIELDS
-            or key in COMPOSITE_KEYS or key in OPAQUE_KEYS)
+            or key in COMPOSITE_KEYS or key in OPAQUE_KEYS
+            or key in NETWORK_KEYS)
 
 
 def scrub_state_json(data, names, stats):
