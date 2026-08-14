@@ -324,13 +324,60 @@ restoring the loopback client to its untapped default:
 python toolkit/harness/dryrun_keycapture.py
 ```
 
+**Step 2a — write the marks plan FIRST, before anything launches.** Skipping it is not an error
+and the driver will not stop you, but the capture comes out *unlabelled* — which is what every
+live capture before 2026-08-13 already is. The plan is one `kind<TAB>text` line per thing you
+intend to do. It is a **pre-registration**: it states what you expect *before* you do it, and
+after the run it is what the marks mean.
+
+```
+open	merchant Sanura, first open
+buy	one salvage kit
+open	Sanura again, second open
+```
+
+Check it parses, then leave the file untouched for the rest of the session:
+
+```bash
+python toolkit/harness/marks.py --check-plan C:\gd\Rurik\vault\plans\kryta_merchant.txt
+```
+
 **Elevated step 2 — the live run itself.** Only after the dry-run is green. Owner-driven,
 one client, human cadence, human hours, never in a competitive context (`PLAN.md` §6.1 —
 the traffic *pattern* is what closes accounts, and no gate substitutes for that):
 
 ```bash
-python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\<build>\Gw.exe --confirm --mode base
+python toolkit/harness/livesession.py --account capture --exe C:\gd\Rurik\vault\run-live\<build>\Gw.exe --confirm --mode base --plan C:\gd\Rurik\vault\plans\kryta_merchant.txt
 ```
+
+**`--plan` is OPTIONAL — the run is worth taking without it — but pass it.** The driver hashes
+the plan **before the client launches**, prints the sha256, and writes it into `manifest.json`.
+A plan hashed at the *end* would certify whatever it said afterwards, which is worse than no
+seal because it looks like evidence. Without `--plan` the run prints a loud
+`*** THIS RUN HAS NO PRE-REGISTERED PLAN ***` block and records `"plan_sealed": false` rather
+than omitting the key — and it deliberately offers **no** `marks.py` command, because a plan
+written after the client launched is a label, not a prediction.
+
+**Step 2b — the second shell, started before you log in.** The driver prints the exact command
+with the resolved capture directory and the client pid. **Copy it; do not retype it** — a
+different file with the same name seals nothing and `marks.py` cannot tell, since the mismatch
+is only reported after the run. Then, while you play:
+
+- **F9** advance — the next plan step
+- **F10** repeat — you did that one again
+- **F11** note — stamps the instant with **no text**; you annotate it afterwards by ordinal in a
+  separate notes file, which is what keeps anything you type out of the capture
+
+The keys are registered globally and **swallowed**, so they never reach Guild Wars — which is
+why they are F9–F11, and why `marks.py` refuses rather than falling back to polling if
+something else already holds them. Free them before the run.
+
+Its output is `plan_marks.jsonl`, **not** `marks.jsonl`. Those are two different channels and
+they stay separate (owner's ruling, 2026-08-13): `marks.jsonl` is the harness narrating itself,
+`plan_marks.jsonl` is a human acting against a sealed plan. Afterwards `manifest.json`'s
+`plan_seals` field reports **AGREE / DISAGREE / UNCHECKED** — the driver's pre-launch hash
+against the marker's own independent read, which is the only thing that can catch a plan edited
+between the launch and the first mark.
 
 **`--mode base|reforged` is REQUIRED and has no default — check the account before you
 type it.** Reforged Mode changes enemy health and armour by roughly 20%, and **nothing in
