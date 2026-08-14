@@ -577,6 +577,22 @@ def gwmodel_materials(meta, models_dir):
     """
     slots = meta.get("textures") or []
     by_image, per_sub = {}, {}
+    # Which images are drawn by a BLENDED material. The archive says which
+    # materials need it (`blend` non-zero) and that is better evidence than
+    # guessing from pixels -- a texture can carry alpha and still be drawn
+    # opaque. Portals and mist are the visible case: without this they are
+    # black rectangles, because their texture has no fully opaque pixel.
+    blended = set()
+    for sm in meta["submodels"]:
+        mat = sm.get("material") or {}
+        if not mat.get("blend"):
+            continue
+        for lay in (mat.get("layers") or []):
+            slot = lay.get("texpath")
+            if slot is not None and slot < len(slots):
+                name = slots[slot].get("image")
+                if name:
+                    blended.add(name)
     for entry in slots:
         image_name = entry.get("image")
         if not image_name:
@@ -603,6 +619,16 @@ def gwmodel_materials(meta, models_dir):
                 links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
                 if "Alpha" in bsdf.inputs:
                     links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+        if image_name in blended:
+            # Blender 4.2+ renamed these; older builds want 'BLEND'. Try in
+            # order and leave the default alone if none is accepted, rather
+            # than failing the whole import over a display setting.
+            for value in ("BLENDED", "BLEND"):
+                try:
+                    mat.blend_method = value
+                    break
+                except TypeError:
+                    continue
         by_image[image_name] = mat
     for s, sm in enumerate(meta["submodels"]):
         # THE BINDING, and it is a chain rather than an index (format 3):

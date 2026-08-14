@@ -299,7 +299,17 @@ def _material_entry(mtable, sub):
     kind, layers = mtable.for_submodel(sub)
     if kind != "layered":
         return {"kind": kind, "index": sub.unk & 0xFFFF}
+    material = mtable.materials[sub.unk & 0xFFFF]
     return {"kind": "layered", "index": sub.unk & 0xFFFF,
+            # `blend` is NON-ZERO on the materials that need real alpha
+            # blending rather than opaque rendering. MEASURED on Kamadan:
+            # 16 of 194 layered sub-models, and 14 of those draw one texture
+            # -- a 512x128 mist band with 164 distinct alpha values and NOT
+            # ONE fully opaque pixel. What the individual values MEAN (5, 6,
+            # 8, 9, 10 occur) is NOT DECODED; that it separates blended from
+            # opaque is what a consumer can use.
+            "blend": material.blend,
+            "material_flags": material.flags,
             "layers": [{"texpath": lay.texpath, "uv": lay.texarray,
                         "flags": lay.flags, "slot": lay.slot}
                        for lay in layers]}
