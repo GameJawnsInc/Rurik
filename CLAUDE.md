@@ -1217,8 +1217,27 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   stamp, which proxies never do, and the old two-mesh refusal split into an
   unstamped-intruder POSITIVE control (the stamp picks the terrain, the dims pin
   it) and a two-STAMPED-meshes refusal, since a duplicated terrain copies its
-  stamp and is genuine ambiguity. Sections 0-4
-  need no vault and score 67 against a floor of 79. ~49 s),
+  stamp and is genuine ambiguity. **And since 2026-08-14 PROPS ROUND-TRIP** (section 6): a
+  retail map's 864 prop placements go into Blender and come back out as a
+  props sidecar -- 864/864 on model index, flags and outline, positions
+  EXACT and bases to 3.6e-07. That identity is the WEAK half, so the section
+  EDITS two different props and requires exactly those two records to move:
+  one translated by (+1000, -500, +250) in Blender, which must land as
+  (+1000, -500, **-250**) stored -- the terrain's negation, now measured on a
+  prop -- and a DIFFERENT one turned 90 degrees about its OWN origin, which
+  must move its basis by 1.35 and its position by zero. Two props rather than
+  one, because an exporter reading location but not rotation would satisfy a
+  single-prop check. The rotation is about the object's own origin on purpose:
+  the world-origin form displaced the prop by (-20344, +15804) and would have
+  made the position check ambiguous. **It found a real defect**: an OUTLINE
+  proxy is imported UNROTATED by design, so deriving its basis from an
+  identity matrix wrote an identity basis over the real one -- 31 of 864 props
+  silently flattened -- and the stamp now wins for exactly that case, the one
+  place in the exporter where it does. An EMPTY prop list writes no sidecar,
+  because a mesh authored from nothing has no prop layer and an empty one is a
+  different claim; the check that reddened when it did is section 4's "only a
+  heights sidecar is written". Sections 0-4
+  need no vault and score 67 against a floor of 94. ~62 s),
   `toolkit/mapdata/test_mapfile.py` (the WHOLE-FILE codec: a retail `ffna` map
   payload decoded to a typed container and re-encoded byte-identically — **349 of
   349 Bloated and 349 of 349 Stripped** under `--all`, 6 of each by default. The

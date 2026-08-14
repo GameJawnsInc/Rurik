@@ -145,6 +145,8 @@ DTYPE_JSON = "json"
 # back by `tools/blender/export_gwmap.py`; the two agree on this name and on
 # nothing else.
 STAMP = "gwmap"
+#: The props sidecar's non-per-prop half, for the round trip.
+PROPS_STAMP = "gwprops"
 
 # The pitch the interchange is expected to carry. Not used to place a vertex --
 # see convention 1 -- only to say so when a file disagrees with the measurement.
@@ -478,10 +480,22 @@ def _stamp(obj, gwmap):
     and a disagreement is worth reporting rather than silently resolving.
     """
     # `props_state` goes with `sidecars`: both describe the file that was
-    # imported, and the way OUT (a terrain-only manifest today) carries
-    # neither honestly.
+    # imported, and the way OUT rebuilds both from what is in the scene.
     stamp = {k: v for k, v in gwmap.meta.items()
              if k not in ("sidecars", "props_state")}
+    # THE PROPS SIDECAR'S NON-PER-PROP HALF, carried so a round trip can
+    # rebuild it. The model table maps a prop's `model` index to an archive
+    # file id and that row's (size, crc) -- ARCHIVE STATE, which a Blender
+    # scene has no way to re-derive and an exporter must therefore never
+    # invent. `refs4`/`refs6` are the Stripped-side reference arrays, whose
+    # meaning is UNVERIFIED (`props.PropRef`); they are transported, not
+    # understood. The per-prop records are deliberately NOT stamped: those
+    # are what the objects carry, and stamping them would let an exporter
+    # re-emit the map that was imported no matter what was done to it.
+    if gwmap.props is not None:
+        obj[PROPS_STAMP] = json.dumps(
+            {k: v for k, v in gwmap.props.items() if k != "props"},
+            sort_keys=True)
     obj[STAMP] = json.dumps(stamp, sort_keys=True)
 
 
@@ -823,6 +837,13 @@ def build_prop_objects(gwmap, name=None, models_dir=None,
         obj["gw_flags"] = rec["flags"]
         obj["gw_proxy"] = kind
         obj["gw_real"] = real
+        # CARRIED FOR THE ROUND TRIP, because a mesh cannot hold them and an
+        # exporter that had to invent them would be writing fiction. The
+        # OUTLINE especially: a real-mesh prop draws none of it, so without
+        # this the footprint the client compiles from would be lost the first
+        # time a scene went back out.
+        obj["gw_outline"] = [c for pt in rec["outline"] for c in pt]
+        obj["gw_basis"] = [c for v in rec["basis"] for c in v]
         objs.append(obj)
     return coll, objs
 
