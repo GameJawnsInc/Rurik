@@ -318,7 +318,13 @@ def main():
         return 0
 
     if p["relocate"]:
-        n = datmove.move(a.dat, p["row"], p["blob"], a.journal)
+        # `confirm=True` because --arm IS the confirmation at this layer, and it
+        # already cost a --journal. datmove's own gate exists for callers that
+        # reach it directly; passing it through here is not weakening the guard,
+        # but it IS the line to read twice if this ever writes something
+        # unexpected -- there is no second prompt after it.
+        n = datmove.move(a.dat, p["row"], p["blob"], a.journal, confirm=True,
+                         plan=p["placement"])
         print("\nrelocated: %s" % (n,))
     else:
         w = datwrite.Writer(a.dat, a.journal)

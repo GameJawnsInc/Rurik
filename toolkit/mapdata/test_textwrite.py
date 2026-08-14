@@ -254,7 +254,19 @@ def section_real():
         LEDGER.skip("section 5: no vault",
                     "the resolved row and the real size arithmetic")
         return
-    fid, row, blob = tw.resolve_row(str(exe), str(dat))
+    # A RUNNING CLIENT holds its own archive exclusively, so this section is
+    # unmeasurable while one is up -- which is a normal state during a session,
+    # not a fault. It is a SKIP and not a FAIL: "could not read it" and "read it
+    # and it was wrong" are different results, and `guarded()` would otherwise
+    # report the first as the second. Narrow on purpose -- only the open is
+    # wrapped, so a permission problem anywhere else still reddens.
+    try:
+        fid, row, blob = tw.resolve_row(str(exe), str(dat))
+    except PermissionError as exc:
+        LEDGER.skip("section 5: the archive is locked",
+                    "a client is running and holds %s exclusively (%s)"
+                    % (os.path.basename(str(dat)), exc.__class__.__name__))
+        return
     check(row > 0 and fid > 0,
           "text file %d resolves through the client's own pointer table"
           % tw.FILE_INDEX, "id 0x%X -> row %d" % (fid, row))

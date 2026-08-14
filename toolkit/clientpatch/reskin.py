@@ -527,6 +527,12 @@ def main(argv=None):
           f"stride 0x{sstride:X}")
     skill_profs = parse_pairs(a.skill_prof, "skill-prof")
     skill_attrs = parse_pairs(a.skill_attr, "skill-attr")
+    # No CLI flag: a skill string id is only ever set from a recipe, because the
+    # useful unit is 188 of them and the record<->skill assignment has exactly one
+    # definition (textwrite.name_assignment). Initialised here anyway so the
+    # recipe block below can extend it -- it was not, and the first real
+    # invocation died on an UnboundLocalError after locating all six tables.
+    skill_strings = []
     renames = parse_pairs(a.attr_name, "attr-name")
     owners = parse_pairs(a.attr_owner, "attr-owner")
     primaries = parse_pairs(a.attr_primary, "attr-primary")

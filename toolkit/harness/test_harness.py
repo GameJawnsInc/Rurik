@@ -44,7 +44,11 @@ import checks  # noqa: E402
 # needed it. hold_key earned its own section the hard way -- see the comment in
 # it -- and the camera floor was declared as 67 from a miscount and reddened the
 # run at 65 until it was measured, which is what the floor is for.
-LEDGER = checks.Ledger("harness", floor=94)
+# 2026-08-14: 94 -> 99, +5 for section 9a. press_key had carried the exact
+# bScan=0 defect section 9 exists for, for three days, in NO test at all --
+# the fix had landed on hold_key and press_vk and missed the third copy of
+# the same send. MEASURED from a green run, not derived.
+LEDGER = checks.Ledger("harness", floor=99)
 check = checks.adopt_named(LEDGER)
 
 
@@ -693,6 +697,58 @@ class FakeUser32:
             raise RuntimeError("something blew up mid-hold")
 
 
+def section_press_key():
+    print("\n9a. press_key: the sibling the scan-code fix MISSED")
+    # MEASURED 2026-08-14. Section 9 below has pinned hold_key's non-zero scan
+    # code since 2026-08-11, and `press_vk` was written correct. `press_key` --
+    # the one every `key:` action in every action script goes through, including
+    # skill slots 1..8 -- kept `keybd_event(vk, 0, 0, 0)` and was in NO test at
+    # all. So the trap that section 9 exists for was live in a second function
+    # for three days, under a check that could never see it: a symbol appearing
+    # in a test file is not a check, and neither is a fix applied to two of three
+    # copies of the same send.
+    #
+    # It surfaced as `action 18:key:K: sent` with the Skills panel never opening.
+    # The owner pressed K by hand and it opened at once.
+    real_u32, real_fg = dc.user32, dc._force_foreground
+    try:
+        fake = FakeUser32(scan=0x25)
+        dc.user32 = fake
+        dc._force_foreground = lambda hwnd: True
+        ok = dc.press_key(1, 4321, ord("K"))
+        downs = [e for e in fake.events if not e[2] & dc.KEYEVENTF_KEYUP]
+        ups = [e for e in fake.events if e[2] & dc.KEYEVENTF_KEYUP]
+        LEDGER.ok(bool(ok) and len(downs) == 1 and len(ups) == 1,
+                  "press_key sends one keydown and one keyup",
+                  f"{len(downs)} down / {len(ups)} up, returned {ok!r}")
+        LEDGER.ok(fake.events and all(e[1] != 0 for e in fake.events),
+                  "and EVERY event carries a NON-ZERO scan code",
+                  f"events {fake.events} -- this is the check that was missing; "
+                  f"before the fix every entry here was (vk, 0, flags)")
+        LEDGER.ok(all(e[1] == fake.scan for e in fake.events),
+                  "and the scan code is the LAYOUT's answer, not a constant",
+                  f"MapVirtualKeyW said {fake.scan:#04x}")
+        # A layout with no scan code for the key must REFUSE rather than fall
+        # back to zero -- that fallback is the original defect wearing a guard.
+        fake = FakeUser32(scan=0)
+        dc.user32 = fake
+        got = dc.press_key(1, 4321, ord("K"))
+        LEDGER.ok(not got and not fake.events,
+                  "a key with NO scan code on this layout sends NOTHING",
+                  f"returned {got!r}, {len(fake.events)} event(s) -- silently "
+                  f"sending bScan=0 here would restore the defect exactly")
+        # Focus is still respected: someone else owning the foreground sends
+        # nothing, because keybd_event is GLOBAL and would land in their window.
+        fake = FakeUser32(owner=1111, scan=0x25)
+        dc.user32 = fake
+        got = dc.press_key(1, 4321, ord("K"))
+        LEDGER.ok(not got and not fake.events,
+                  "and a client that does NOT own the foreground gets nothing",
+                  f"returned {got!r}, {len(fake.events)} event(s)")
+    finally:
+        dc.user32, dc._force_foreground = real_u32, real_fg
+
+
 def section_hold_key():
     print("\n9. hold_key: a real hold, always released, and it carries a scan code")
     real_u32, real_fg = dc.user32, dc._force_foreground
@@ -840,5 +896,6 @@ def section_hold_key():
               "costs the whole run and a client session")
 
 
+section_press_key()
 section_hold_key()
 sys.exit(LEDGER.verdict())
