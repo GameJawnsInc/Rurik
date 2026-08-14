@@ -2589,6 +2589,10 @@ def player_revive_due(send, state, conn_id):
     # faces the player after a revive. The day a dead player CAN be moved -- a
     # resurrection-shrine walk is exactly that -- this stops being true and the
     # reset has to go in.
+    # Guard before the flag flips, same as revive_due: a refused refill must
+    # leave the player DEAD so the next tick retries the whole revive
+    # (test_guards section 6).
+    frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
     state["player_dead"] = False
     state["player_health"] = float(agents.PLAYER_HEALTH)
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
@@ -2613,8 +2617,7 @@ def player_revive_due(send, state, conn_id):
     # 1.0 is a full bar and not a doubled one. The client's own death path zeroes
     # the pools, so clearing the bit alone returns a body at nothing.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
-          _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
+         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
          "refill the player's bar")
     print(f"[c{conn_id}] the player is back up", flush=True)
 

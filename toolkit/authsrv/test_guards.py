@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("guard contract", floor=18)
+LEDGER = checks.Ledger("guard contract", floor=21)
 check = LEDGER.ok
 
 
@@ -260,12 +260,49 @@ def section_revive_due():
           f"deferred, 3 with it inline -- REVIVE_REFILL_DEFER decides)")
 
 
+def section_player_revive_due():
+    import authsrv
+
+    print("\n6. player_revive_due: same contract, the player's side")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = {"agents": {}, "player_dead": True, "player_died_at": 0.0,
+             "player_health": 0.0}
+
+    saved = authsrv._fraction
+    authsrv._fraction = _refusing_fraction(authsrv)
+    try:
+        raised = False
+        try:
+            authsrv.player_revive_due(send, state, 0)
+        except ValueError:
+            raised = True
+        check(raised and sent == [],
+              "a refused player revive raises with NOTHING sent",
+              f"raised={raised}, sent={sent!r}")
+        check(state["player_dead"] is True,
+              "and the player is still dead, retryable next tick",
+              f"player_dead={state['player_dead']}")
+    finally:
+        authsrv._fraction = saved
+
+    sent.clear()
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        authsrv.player_revive_due(send, state, 0)
+    check(state["player_dead"] is False and len(sent) in (1, 3),
+          "control: the in-range revive stands the player up",
+          f"player_dead={state['player_dead']}, "
+          f"ops={[op for op, _, _ in sent]}")
+
+
 def main():
     section_hit_enemy()
     section_skill_press()
     section_land_swing()
     section_land_skill()
     section_revive_due()
+    section_player_revive_due()
     return LEDGER.verdict()
 
 
