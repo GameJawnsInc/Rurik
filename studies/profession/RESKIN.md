@@ -551,7 +551,22 @@ Counted per ICON rather than per skill, because a write targets a row and 188 sk
 | An authored **64x64** DXT1, one level | 2,068 B -> 2,560 B reservation; **fits in place 132 of 132** |
 
 The smallest `+0x90` reservation in the whole roster is 6,656 B, which is why the 64x64
-row is unanimous rather than merely good. So the route divides on one unanswered
+row is unanimous rather than merely good.
+
+> **The first version of this table was computed wrongly and the aggregate survived it,
+> which is the part worth remembering.** `file_id_table` returns **one-based MFT row
+> numbers**; `Archive.entries` is **positional**, `entries[k].index == k + 1`. Indexing
+> `entries[row]` therefore measures each row's PREDECESSOR, and `archive.py` says so in
+> two docstrings -- `row()`'s opens *"USE THIS WHENEVER YOU HAVE A ROW NUMBER"*. Every
+> figure above came out **identical** either way, because skill-icon rows sit in a long
+> run of similar sizes and shifting by one does not move the distribution. The per-row
+> facts did NOT survive: the run's own arms were re-picked, and two arms had already been
+> written into the wrong rows before anything caught it. What caught it was **not** a
+> check of ours -- it was `datwrite` refusing the third arm as a relocation, with the
+> refusal quoting a reservation that did not match the row it named. An aggregate that is
+> robust to an indexing error is not evidence the indexing is right.
+
+So the route divides on one unanswered
 question -- [`../texture/FINDINGS.md`](../texture/FINDINGS.md) §6's *"is the bar's frame
 inset a fixed pixel count or a fraction of the texture?"*:
 
