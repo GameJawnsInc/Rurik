@@ -60,7 +60,25 @@ Interactively: open the file in Blender's text editor and run it, or
 then `import_gwmap.build_prop_objects(gw)` in the Python console. `--clear` is
 off by default so running it inside a scene you care about does not delete it.
 
-## Props are PROXIES, not models
+## Real prop meshes
+
+Put a `.gwmodel` family beside the map export — `models/`, which is what
+`python toolkit/mapdata/modelexport.py --map <id>` writes — and each prop
+gets **ArenaNet's actual geometry**, one mesh datablock per model file id
+shared by every prop that uses it (Kamadan: 516 props, 71 datablocks;
+Pre-Searing: 864 props, 152). Point elsewhere with `--models DIR`.
+
+A prop whose model does not decode keeps the measured proxy described below,
+so no placement is ever lost — `obj["gw_real"]` says which it got, and
+`--proxies-only` forces the proxy path for everything as a control.
+
+**Model z is negated, exactly as the terrain's is, and that was measured
+rather than assumed**: scoring every prop of both reference maps by whether
+its geometry ends up above the terrain it stands on gives 73.2% / 83.3% for
+negating and 23.8% / 6.5% for leaving it as stored. At object level the
+built scene scores **0.961 against 0.032** for the reflected control.
+
+## Proxies, for models that do not decode
 
 A format_version-2 export carries a `.props.json` sidecar — every placement of
 the map, from both of the archive's props streams, cross-checked at export time

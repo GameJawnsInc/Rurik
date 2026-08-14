@@ -84,6 +84,21 @@ present and attached as mesh attributes, but their MEANING is unsettled upstream
 of here (`terrain.py` labels both NOT FOUND); carrying them is transport, not
 understanding, and no geometry depends on them.
 
+REAL PROP MESHES (rung M4, 2026-08-13). When a `.gwmodel` family sits beside
+the map export (`models/`, which is what `modelexport.py --map` writes, or
+`--models DIR`), each prop gets ArenaNet's ACTUAL geometry instead of the
+proxy below -- one mesh datablock per model file id, shared by every prop
+using it, so Kamadan's 516 props cost 71 meshes rather than 516 copies. A
+prop whose model does not decode (~15% of the corpus) keeps its measured
+proxy, so a placement is never lost; `obj["gw_real"]` says which it got and
+`--proxies-only` forces the proxy path as a control.
+
+**The model-space z sign is MEASURED, not assumed** -- see `gwmodel_mesh`.
+Models are negated exactly as the terrain is, and the check is that prop
+geometry ends up ABOVE the ground it stands on: 0.961 of Pre-Searing's real
+props against 0.032 for the reflected control, pinned by
+`test_blenderimport.py` section 4.
+
 PROPS (format_version 2, 2026-08-13). When the export carries a props sidecar,
 every placement becomes a PROXY object in a `<name>.props` collection --
 **never ArenaNet's geometry**, which nothing in this tree decodes. A prop with
@@ -118,6 +133,10 @@ FORMAT = "rurik.gwmap"
 # 1 is the terrain-only interchange; 2 adds the OPTIONAL props sidecar and
 # changes nothing else, so both load here.
 FORMAT_VERSIONS = (1, 2)
+# The MODEL interchange (rung M3), read when a prop's model has one beside
+# the map export.
+MODEL_FORMAT = "rurik.gwmodel"
+MODEL_VERSIONS = (1,)
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
 DTYPE_JSON = "json"
@@ -480,12 +499,101 @@ def _attach_cell_attributes(mesh, gwmap):
         attr.data.foreach_set("value", list(data))
 
 
-def build_prop_objects(gwmap, name=None):
-    """Every placement as a proxy object in its own collection.
+def load_gwmodel(json_path):
+    """One `.gwmodel` export: `(meta, positions, per-sub-model triangles)`.
+
+    A SECOND independent reader, for the same reason `load_export` is one:
+    Blender's interpreter is not this project's, and a `sys.path` walk into
+    `toolkit/` would reintroduce the dependency the interchange exists to
+    remove. Verifies every sidecar's size and sha256 before using a byte.
+    """
+    base = os.path.dirname(os.path.abspath(json_path))
+    with open(json_path, "r", encoding="utf-8") as fh:
+        meta = json.load(fh)
+    if meta.get("format") != MODEL_FORMAT:
+        raise ValueError("%s: format is %r, not %r"
+                         % (json_path, meta.get("format"), MODEL_FORMAT))
+    if meta.get("format_version") not in MODEL_VERSIONS:
+        raise ValueError("%s: format_version %r not in %r"
+                         % (json_path, meta.get("format_version"),
+                            MODEL_VERSIONS))
+    blobs = {}
+    for side in meta["sidecars"]:
+        path = os.path.join(base, side["name"])
+        if not os.path.isfile(path):
+            raise ValueError("%s: sidecar %s missing" % (json_path,
+                                                          side["name"]))
+        if os.path.getsize(path) != side["bytes"]:
+            raise ValueError("%s: %d bytes, manifest says %d"
+                             % (side["name"], os.path.getsize(path),
+                                side["bytes"]))
+        if _sha256_file(path) != side["sha256"]:
+            raise ValueError("%s: sha256 does not match the manifest"
+                             % side["name"])
+        with open(path, "rb") as fh:
+            blobs[side["kind"]] = (fh.read(), side["count"])
+
+    if "pos" not in blobs:
+        raise ValueError("%s: no position sidecar" % json_path)
+    blob, n = blobs["pos"]
+    flat = struct.unpack("<%df" % (3 * n), blob)
+    positions = [(flat[i * 3], flat[i * 3 + 1], flat[i * 3 + 2])
+                 for i in range(n)]
+    idx = []
+    if "idx" in blobs:
+        blob, n = blobs["idx"]
+        idx = list(struct.unpack("<%dH" % n, blob))
+    return meta, positions, idx
+
+
+def gwmodel_mesh(meta, positions, idx, mesh_name):
+    """A Blender mesh for one model, in Blender's world-up convention.
+
+    **z is NEGATED, exactly as the terrain's is, and that is MEASURED rather
+    than assumed** (M4, 2026-08-13). Scoring every prop of both reference maps
+    by whether its geometry ends up ABOVE the terrain it stands on:
+
+        negate model z (the terrain's convention)   Kamadan 73.2%, Pre-Searing 83.3%
+        leave it as stored                          Kamadan 23.8%, Pre-Searing  6.5%
+
+    The diagnostic behind it: a model's own z runs from about +34 down to
+    -642 (median over Kamadan's 71 decoded models), i.e. it extends from just
+    under its origin far into negative z -- which is UP once negated, exactly
+    what a tree or a wall standing on its base should do.
+
+    Vertices are LOCAL: the prop's own transform applies position, rotation
+    and scale.
+    """
+    verts = [(x, y, -z) for x, y, z in positions]
+    faces = []
+    for sm in meta["submodels"]:
+        vb, ib, ti = sm["vertex_base"], sm["index_base"], sm["ti"]
+        tri = idx[ib:ib + ti]
+        for i in range(0, len(tri) - 2, 3):
+            faces.append((vb + tri[i], vb + tri[i + 1], vb + tri[i + 2]))
+    mesh = bpy.data.meshes.new(mesh_name)
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    return mesh
+
+
+def _model_dir(gwmap, explicit=None):
+    """Where the `.gwmodel` family lives. `models/` beside the map export by
+    default, which is what `modelexport.py --map` produces."""
+    if explicit:
+        return explicit
+    return os.path.join(os.path.dirname(os.path.abspath(gwmap.path)), "models")
+
+
+def build_prop_objects(gwmap, name=None, models_dir=None, proxies_only=False):
+    """Every placement as an object in its own collection.
 
     Returns `(collection, objects)`, or `(None, [])` when the export carries
-    no props. See the module docstring: footprints and radii are measured,
-    the proxy height is display-only, and NOTHING here is ArenaNet geometry.
+    no props. A prop whose model has a `.gwmodel` beside the map export gets
+    the REAL mesh, instanced -- every prop sharing a model shares one mesh
+    datablock, so Kamadan's 516 props cost 71 meshes. A prop whose model does
+    NOT decode (~15% of the corpus) keeps the measured PROXY, so the scene
+    never silently loses a placement; `obj["gw_real"]` says which it got.
     """
     import mathutils
     pd = gwmap.props
@@ -495,13 +603,37 @@ def build_prop_objects(gwmap, name=None):
     coll = bpy.data.collections.new("%s.props" % base)
     bpy.context.scene.collection.children.link(coll)
 
+    # ONE mesh datablock per model file id, shared by every prop that uses it.
+    # Kamadan's 516 props resolve to 71 meshes; building a copy per prop would
+    # be 38,952 vertices seven times over.
+    mdir = _model_dir(gwmap, models_dir)
+    shared = {}
+    if not proxies_only:
+        for m in pd["models"]:
+            path = os.path.join(mdir, "model_%X.gwmodel.json" % m["file_id"])
+            if not os.path.isfile(path):
+                continue                  # the ~15% that never decoded
+            try:
+                meta, positions, idx = load_gwmodel(path)
+            except (ValueError, KeyError, struct.error) as exc:
+                sys.stderr.write("[warn] %s: %s\n"
+                                 % (os.path.basename(path), exc))
+                continue
+            shared[m["index"]] = gwmodel_mesh(
+                meta, positions, idx, "gwmodel_%X" % m["file_id"])
+
     objs = []
     for i, rec in enumerate(pd["props"]):
-        verts, faces, kind = prop_proxy_geometry(rec)
-        mesh = bpy.data.meshes.new("prop_%04d_m%d" % (i, rec["model"]))
-        mesh.from_pydata(verts, [], faces)
-        mesh.update()
-        obj = bpy.data.objects.new(mesh.name, mesh)
+        mesh = shared.get(rec["model"])
+        real = mesh is not None
+        kind = "real"
+        if not real:
+            verts, faces, kind = prop_proxy_geometry(rec)
+            mesh = bpy.data.meshes.new("prop_%04d_m%d" % (i, rec["model"]))
+            mesh.from_pydata(verts, [], faces)
+            mesh.update()
+        obj = bpy.data.objects.new(
+            ("prop_%04d_m%d" % (i, rec["model"])), mesh)
         coll.objects.link(obj)
 
         x, y, z = rec["position"]
@@ -509,15 +641,19 @@ def build_prop_objects(gwmap, name=None):
                 [0.0, 1.0, 0.0, y],
                 [0.0, 0.0, 1.0, -z],          # convention 4: negated, like
                 [0.0, 0.0, 0.0, 1.0]]         # the terrain it stands on
-        if kind == "radius":
-            # The compiled basis as the object rotation. An outline proxy gets
-            # NONE, because the ring is measured UNROTATED (the compiled ring
-            # is literally x+dx, y+dy) -- rotating it would move measured
-            # points to invented ones.
+        # A REAL mesh is model-space, so it takes the prop's full transform:
+        # rotation from the compiled basis and the prop's scale. A radius
+        # proxy takes the rotation only (its size already came from the
+        # measured radius, which has the scale in it), and an OUTLINE proxy
+        # takes neither -- its ring is measured UNROTATED and UNSCALED (the
+        # compiled ring is literally x+dx, y+dy), so transforming it would
+        # move measured points to invented ones.
+        if real or kind == "radius":
             b = basis_matrix_blender(rec["basis"])
+            s = rec["scale"] if real else 1.0
             for r in range(3):
                 for c in range(3):
-                    rows[r][c] = b[r][c]
+                    rows[r][c] = b[r][c] * s
         obj.matrix_world = mathutils.Matrix(rows)
 
         model = pd["models"][rec["model"]] if rec["model"] < len(
@@ -530,6 +666,7 @@ def build_prop_objects(gwmap, name=None):
         obj["gw_radius"] = rec["radius"]
         obj["gw_flags"] = rec["flags"]
         obj["gw_proxy"] = kind
+        obj["gw_real"] = real
         objs.append(obj)
     return coll, objs
 
@@ -544,11 +681,25 @@ def props_summary(objs, gwmap):
                     "model": obj["gw_model"],
                     "file_id": obj["gw_model_file_id"],
                     "radius": obj["gw_radius"],
-                    "proxy": obj["gw_proxy"]})
+                    "proxy": obj["gw_proxy"],
+                    "real": bool(obj["gw_real"]),
+                    "mesh": obj.data.name,
+                    "verts": len(obj.data.vertices),
+                    # World-space z extent, which is what the "sits above the
+                    # terrain" check needs and cannot get from the location.
+                    "zmin": min((obj.matrix_world @ v.co).z
+                                for v in obj.data.vertices),
+                    "zmax": max((obj.matrix_world @ v.co).z
+                                for v in obj.data.vertices)})
     pd = gwmap.props or {}
     return {"count": len(objs),
             "sidecar_count": pd.get("count", 0),
             "outlined": sum(1 for o in objs if o["gw_proxy"] == "outline"),
+            "real": sum(1 for o in objs if o["gw_real"]),
+            "proxy": sum(1 for o in objs if not o["gw_real"]),
+            # One datablock per model, shared: the count of DISTINCT meshes
+            # among real-mesh props is what proves the instancing.
+            "real_meshes": len({o.data.name for o in objs if o["gw_real"]}),
             "objects": out}
 
 
@@ -655,13 +806,21 @@ def main(argv=None):
     ap.add_argument("--no-props", action="store_true",
                     help="terrain only; skip the props collection even when "
                          "the export carries the sidecar")
+    ap.add_argument("--models", default=None, metavar="DIR",
+                    help="where the .gwmodel family lives (default: models/ "
+                         "beside the map export)")
+    ap.add_argument("--proxies-only", action="store_true",
+                    help="force the measured proxies even where a real mesh "
+                         "is available -- the control for the real-mesh path")
     args = ap.parse_args(_script_argv(argv))
 
     obj, gwmap = import_gwmap(args.json, name=args.name, clear=args.clear)
     summary = mesh_summary(obj, gwmap)
     prop_objs = []
     if not args.no_props and gwmap.props is not None:
-        _coll, prop_objs = build_prop_objects(gwmap, name=args.name)
+        _coll, prop_objs = build_prop_objects(
+            gwmap, name=args.name, models_dir=args.models,
+            proxies_only=args.proxies_only)
         summary["props"] = props_summary(prop_objs, gwmap)
 
     print("imported %s" % gwmap)
@@ -680,10 +839,14 @@ def main(argv=None):
           % (summary["bbox"]["min"][2], summary["bbox"]["max"][2]))
     if prop_objs:
         ps = summary["props"]
-        print("  props         %d proxies (%d outlined footprints, %d radius "
-              "cylinders) -- placements are measured, the proxy meshes are "
-              "NOT ArenaNet geometry"
-              % (ps["count"], ps["outlined"], ps["count"] - ps["outlined"]))
+        print("  props         %d placed: %d REAL meshes sharing %d "
+              "datablocks, %d proxies (%d outlined, %d radius)"
+              % (ps["count"], ps["real"], ps["real_meshes"], ps["proxy"],
+                 ps["outlined"], ps["proxy"] - ps["outlined"]))
+        if ps["proxy"]:
+            print("                the %d proxies are props whose model does "
+                  "not decode; their meshes are NOT ArenaNet geometry"
+                  % ps["proxy"])
     elif gwmap.props is not None:
         print("  props         %d in the sidecar, skipped (--no-props)"
               % gwmap.props["count"])
