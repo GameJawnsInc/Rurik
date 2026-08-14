@@ -109,17 +109,17 @@ from props import BloatedProps  # noqa: E402
 import modelfile  # noqa: E402
 from modelfile import (ModelFile, NoClose, Undecodable,  # noqa: E402
                        FIELD_NORMAL, FIELD_POSITION, FIELD_TEXCOORD_BITS,
-                       FIELD_SIZE)
+                       FIELD_SIZE, material_table)
 import mapexport  # noqa: E402
 import atex  # noqa: E402
 import png  # noqa: E402
 import vaultpath  # noqa: E402
 
 FORMAT = "rurik.gwmodel"
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 #: 1 is geometry only; 2 adds the OPTIONAL texture sidecars and the
 #: per-sub-model binding, and changes nothing else, so both load.
-FORMAT_VERSIONS_READ = (1, 2)
+FORMAT_VERSIONS_READ = (1, 2, 3)
 
 DTYPE_F32 = "float32-le"
 DTYPE_U16 = "uint16-le"
@@ -292,7 +292,20 @@ def texture_payloads(model, name, archive, table=None):
     return entries, payloads, census
 
 
-def build_manifest(geo, name, source):
+def _material_entry(mtable, sub):
+    """One sub-model's material, as the manifest carries it."""
+    if mtable is None:
+        return {"kind": "none"}
+    kind, layers = mtable.for_submodel(sub)
+    if kind != "layered":
+        return {"kind": kind, "index": sub.unk & 0xFFFF}
+    return {"kind": "layered", "index": sub.unk & 0xFFFF,
+            "layers": [{"texpath": lay.texpath, "uv": lay.texarray,
+                        "flags": lay.flags, "slot": lay.slot}
+                       for lay in layers]}
+
+
+def build_manifest(geo, name, source, mtable=None):
     """The JSON body and the sidecar payloads, with no file touched yet.
 
     Split out so the whole interchange can be built from a `ModelGeometry`
@@ -342,6 +355,13 @@ def build_manifest(geo, name, source):
             # slot, and AMAT is NOT DECODED. Nothing here should be read as
             # "the diffuse texture is slot `material_index`".
             "material_index": sm.unk,
+            # THE MATERIAL'S LAYERS, which is what actually binds a surface
+            # to its textures (`modelfile.MaterialTable`). Each layer names
+            # an FA5 slot (`texpath`, ArenaNet's texPathIndex) and the UV
+            # SET it samples (`uv`; negative means generated, not stored).
+            # A `kind` of "binary" means the material lives in the model's
+            # AMAT list instead and no layers are given.
+            "material": _material_entry(mtable, sm),
             "vertex_base": len(pos),
             "index_base": len(idx),
             "field_offsets": {str(b): o for b, o in sorted(fields.items())},
@@ -590,7 +610,10 @@ def export_file_id(file_id, archive, outdir=None, name=None, table=None,
     source = {"archive": os.path.basename(archive.path), "file_id": file_id,
               "row": row, "size": entry.size, "crc": entry.crc,
               "chunks": [f"0x{cid:X}" for cid, _p in mf.chunks]}
-    meta, payloads = build_manifest(geo, name, source)
+    meta, payloads = build_manifest(geo, name, source,
+                                    mtable=material_table(
+                                        mf.find(
+                                            modelfile.GEOMETRY_CHUNK)))
     if textures:
         entries, tex_payloads, census = texture_payloads(
             mf, name, archive, table=table)
