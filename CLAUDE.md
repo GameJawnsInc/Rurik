@@ -385,6 +385,21 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   alone reaches 1.6% of the corpus and the other 98.4% sit behind ATEX level
   compression codes nothing here decodes yet. Sections 1-5 need no vault and
   score 30; 32 by default, 33 under `--all`),
+  `toolkit/mapdata/test_emblem.py` (the authored profession glyph -- the emblem
+  spliced into ArenaNet's own 32-cell sheet at frames 14/15. Most of what makes
+  art right is untestable; what IS testable is the set of MEASURED numbers the
+  module claims about the sheet, and those rot silently because a wrong one
+  yields an emblem that looks fine alone and reads wrong in the row. So the
+  lit/dim ratio and the alpha disc are RE-MEASURED from the archive rather than
+  compared against copied constants -- ours is required to fall inside the
+  sheet's own 0.687-0.788 band, and all 32 cells are required to share one alpha
+  profile. The section that earns the file is the BGRA byte order: `cell()`
+  returns B,G,R,A because that is what the DDS masks say, and an RGBA writer
+  produces a plausible image with red and blue swapped -- our violet bolt would
+  render orange with the file size, the alpha and the luma all unchanged, so
+  nothing else here would catch it. Floor 11, MEASURED; 17 with a vault -- the
+  first version guessed 12/18 and went red on a vault-less run, the same mistake
+  test_glyphs.py made hours earlier in the same session. ~2 s),
   `toolkit/mapdata/test_iconset.py` (the 132-row icon ARMER, which is an
   orchestrator over five tested modules -- so this checks only the composition,
   and every section is a way it can destroy 4 GB or arm the wrong rows. Two
