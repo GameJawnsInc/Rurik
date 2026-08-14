@@ -1355,3 +1355,50 @@ by four points at the same health. The HUD's printed NUMBER is exact and is what
 `0x009F [42, agent, N]` is therefore the lever for maximum health, and this server can now
 set both terms of the party row: `0x00A3 [16, ...]` for current, `0x009F [42, ...]` for
 maximum.
+
+### 18.14 The custom abbreviation RENDERS -- RUN 1's open item, closed
+
+Harness `20260813T221128`, explorable, `--spawn-profession 8`, reskinned client.
+
+> **`Fast Casting0 Test Warrior`**
+
+RUN 1 (§8) left this in writing: *"The abbreviation donor was not observed. Fast Casting
+was patched into `s_charProfessionAbbrev[8]` but the abbreviated form shows in the party
+window and nameplate, neither of which renders in a solo session with no party.
+**UNVERIFIED**, and one run with a party or a visible nameplate settles it."*
+
+The party window renders now (§18.1), so this is that run. **Settled:**
+`s_charProfessionAbbrev` is the table the party roster reads, and `reskin.py`'s edit
+reaches it -- `abbrev 2057 -> 2078` at file `0x00637808`, 8 bytes changed, length
+unchanged, DH still `ours`. Profession 8 confirmed on the wire (`0x00B7` prof 8, `0x00A6`
+prof 8) and the row reads the donor string where a stock Ritualist would read `Rt` and the
+Warrior of §18.1 read `W`.
+
+**This is the first place a custom profession's identity appears outside the panels.**
+
+#### Two things the picture says that the plan did not
+
+1. **The "abbrev" table is a STRING ID, not a length-limited field.** ArenaNet's own
+   entries happen to be short (`W`, `Rt`), so "abbreviation" reads like a format
+   constraint. It is not: our donor is a full attribute name and the client renders it
+   whole, overflowing the space a two-letter code would occupy. Nothing clipped, nothing
+   crashed -- but a reskin that wants to LOOK like a profession needs a short donor
+   string, and that is an authoring constraint this arc had not written down.
+2. **The trailing `0` is the level suffix**, the same one §18.4 asked about and §18.11
+   settled. The row's format is `<abbrev><level>`, which is why `W0`, and now
+   `Fast Casting0`.
+
+#### Method note: a dedicated run directory rather than mutate a shared one
+
+RUN 1 patched the SHARED run client and restored it byte-for-byte afterwards. Another
+session was live this time, so the patch went to `vault/run/reskin-roster/` instead --
+assembled by `make_run_dir.py`, 4 GB, touching nothing anyone else launches from.
+
+**That trade has a cost worth recording: the cage is PER BINARY.** A new client under
+`vault/run/` has no firewall rule and `assert_launch_safe` refused the launch outright,
+naming the binary and quoting `PLAN.md` §6.2. Caging it needs an ELEVATED shell
+(`isolate_client.ps1`, no arguments -- it enumerates every client under `vault/run`), which
+is an owner action and cost one UAC prompt. That is the control working as designed: it is
+what stops an ours-DH client sitting uncaged, which happened for a day once. Budget the
+prompt when adding a run directory; the alternative is mutating a shared binary while
+somebody else may launch it.
