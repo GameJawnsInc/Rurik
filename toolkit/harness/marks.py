@@ -79,6 +79,20 @@ both record shapes use `"kind": "mark"`, so `wirecapture.read_marks` would hand
 refuses a file that holds both shapes -- that refusal is what catches the collision if the
 two channels are ever merged deliberately. The record SHAPE is exactly §10.5.1's.
 
+AND THE SPLIT IS A RULING, NOT A WORKAROUND. Everything above argues the separation from a
+MECHANICAL cause -- the name was taken, two handles corrupt one file -- and that argument
+evaporates the day somebody makes `livesession` release its handle or namespace its
+records. **Owner's decision, 2026-08-13: keep them split, because "driver marks and
+operator marks are different things."** That reason is semantic and does not evaporate.
+The driver's channel records what the HARNESS did -- session_start, session_end, whatever
+`livesession` stamps for itself -- on its own authority, with no prediction attached. This
+channel records what a HUMAN did against a plan sealed before the client launched, and its
+entire evidential value comes from that seal. Merged, a pre-registered record and an
+un-pre-registered one would sit in one file under one `"kind"`, and no consumer could tell
+which rows carry a prediction and which are the harness narrating itself. A future session
+that removes the collision has removed the LESSER of the two reasons; do not merge on the
+strength of it.
+
 BINDING TO THE WIRE CLOCK, AND THE THREE CHANNELS THAT MAKE IT A CLAIM.
 `wirecapture.open_capture` stamps every segment `"t": perf_counter() - t0`, and it runs as
 a SEPARATE SUBPROCESS spawned by `livesession.run` -- so `t0` is not in this process and
