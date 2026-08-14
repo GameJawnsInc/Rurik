@@ -303,6 +303,60 @@ Which of `dat_fvf` bits 12/13 is tangent versus binormal is still open. It did
 not need settling here because nothing yet lights the meshes; it becomes real
 at M5, when materials arrive.
 
+## 5.3 The preamble, and why 15% of models would not decode (M6)
+
+**The sub-model array is COMPUTED now, not searched.** ArenaNet's own loader
+is `P:\Code\Engine\Model\MdlLoad.cpp`; it fetches chunk `0xFA0` at
+`0x0079456C`, requires the chunk's first u32 to be `0x26`
+(`0x00794586`), and calls the parser at `0x007952A0`. That parser sets a
+cursor to `begin + 0x54` and advances it through **six gated
+variable-length blocks**, every size computed from a header field. The
+sub-model array is simply wherever the cursor lands.
+
+| block | at | size |
+|---|---|---|
+| A | `0x007952D7` | `28 * u8@0x30`, if nonzero |
+| B | `0x00795307` | `u16@0x50` records of `0x18` + per-record payload |
+| C | `0x00795860` | `8a + 9b + (b if c else 0)`, from `u8@0x18`, `u8@0x1C`, `u32@0x20` |
+| D | `0x00794D30` | counts at `0x19/0x1D/0x1A/0x1E`, including **NUL-terminated strings** |
+| E | `0x00795507` | if `u8@0x08 & 0x20`: `0x2E`-byte records + a computed payload |
+| F | `0x0079554E` | if `u8@0x08 & 0x80`: 48-byte records + `24Σ + 16Σ` |
+
+**MEASURED: 20,661 of 20,661 geometry chunks in the archive close on the
+exact final byte.** The closure gate is ArenaNet's own (`0x007957CB`
+`cmp [ebp+8], esi / jne -> return 4`), not our fit — which is what makes N
+green decodes N assertions about the derivation.
+
+### The 15% was never a preamble failure
+
+The cause is at the *other end*. The client's stream does **not** end at the
+last collision mesh — three more blocks follow it (`H` at `0x0079564A`, `I`
+at `0x0079574D`, `J` at `0x007957B4`) — so a walk that required closure
+*there* could never close on any file carrying one. Of 931 files the retired
+search called `NoClose`, **930 carry block I and/or block J**; exactly one is
+unexplained. Conversely 2 of 948 files the search *did* close carry a
+trailing block, so those closures were spurious fits.
+
+Result: **Kamadan 474 → 516 of 516 props with real geometry, Pre-Searing
+664 → 864 of 864, zero proxies on either map.** The ambiguity is gone by
+construction — file `0x25AA9` computed 170, and its rival 65,842 (which
+still closes as a walk, so the corpus could never have broken the tie) never
+arises.
+
+Nine one-term sabotages of the walk were built and run and **every one
+reduces closure** (315/315 → 1, 0, 275, 61, 314, 298, 311, 0, 251), so the
+terms are load-bearing rather than decorative.
+
+### What it sharpened rather than closed
+
+The `f11` oracle is **untouched on the population it always covered** —
+474/474 and 664/664 on the props whose models the retired search could
+read, which is what proves M6 recovered geometry without disturbing the
+oracle. All 24 new disagreements are in the newly recovered models (6 of 42,
+18 of 200). That ~10% rate is well above the corpus ~0.7% and is now the
+arc's sharpest open question. The two populations are pinned **apart**, per
+§A5's lesson that conflating failure populations manufactures false theories.
+
 ## 6. What is still unknown
 
 - **The preamble** (+0x54 → sub-model array) — located by search, so ~15% of

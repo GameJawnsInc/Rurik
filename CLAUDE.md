@@ -359,6 +359,57 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   ~30 ms), which is what makes the strided sweep affordable. Sections 0-3 need no
   vault and score 33 against a floor of 50. ~26 s; `--all` peeks all 177,341 rows and
   is ESTIMATED, not measured, at ~30 minutes),
+  `toolkit/mapdata/test_dxt1.py` (the DXT1 codec, which shipped in the texture
+  arc with an ENCODER and NO test file at all -- this is the first either
+  direction has had, added with rung M5's `decode`/`unpack`/`decode_block`.
+  The round trip is an unusually weak half here: DXT1 is LOSSY so the claim
+  can only be a bound, and the two directions SHARE `from565` and the palette
+  arithmetic, so an error in the shared part cancels exactly and the round
+  trip cannot see it. So section 2 recomputes the palette FROM THE SPEC in
+  the test -- 565 unpacking with its low-bit replication, the 2/3 and 1/3
+  interpolants -- and requires `decode_block` to agree on seven endpoint
+  pairs covering BOTH palette forms. **Section 3 is the arm the encoder
+  cannot reach**: `encode_block` always forces `c0 > c1` (asserted, three
+  ways, so the premise is not assumed), which makes the punch-through palette
+  -- one midpoint, index 3 fully TRANSPARENT -- unreachable from any round
+  trip, and a decoder missing it renders every cut-out texture (foliage,
+  fences, grates) as solid black. Section 4's bounds are DERIVED rather than
+  tuned: a flat image must land within one 5-bit quantum (7), and an earlier
+  draft asserting 4 went red at 6 with the codec correct and the TEST's
+  arithmetic wrong. The planar/interleaved pair is pinned as two live answers
+  -- same length, different bytes, cross-decode required to differ -- because
+  no size check separates them and the texture arc had to settle it on
+  screen. Section 6 reads REAL retail levels and asserts only what the
+  archive can refute, and it carries the finding that bounds the whole rung:
+  **only 25 of 1,533 ATEX containers have a RAW level 0**, so this decoder
+  alone reaches 1.6% of the corpus and the other 98.4% sit behind ATEX level
+  compression codes nothing here decodes yet. Sections 1-5 need no vault and
+  score 30; 32 by default, 33 under `--all`),
+  `toolkit/mapdata/test_png.py` (the stdlib PNG codec rung M5's texture
+  export writes through -- `zlib` and `struct` and nothing else, because
+  `toolkit/` takes no third-party dependency and a test needing PIL to check
+  it would defeat the module's only reason to exist. NO vault, no archive, no
+  client, no PIL: every image is built in the file out of `bytes`. The round
+  trip is deliberately the WEAK half -- two functions that agree prove they
+  are inverses and nothing about whether either is PNG -- so section 2 reads
+  the emitted bytes with a walker written HERE out of `struct` and `zlib`,
+  recomputing every CRC, and section 3 feeds the reader images the WRITER
+  CANNOT PRODUCE: the writer only ever emits filter 0, the reader claims all
+  five, so a PNG is hand-built for each and one more mixing a different
+  filter per row (which is what catches a stale `prev` scanline). Six
+  one-edit sabotages were BUILT AND RUN and all six redden -- 8, 4, 2, 1, 2
+  and 2 -- and the counts are MEASURED, an earlier draft having carried
+  guessed ones of which four were wrong. Two rows earn their place: the
+  Paeth predictor is invisible to every round trip here (the writer never
+  emits filter 4) so only the hand-built images reach it, and **a reader
+  that trusts the stored CRC reddens exactly ONE check**, section 4's
+  tamper. The width/height swap reddening only 2 is reported rather than
+  tuned, and the reason is stated -- a transposed IHDR gives the reader a
+  wrong stride so it REFUSES, and the section aborts into one named failure,
+  which is `main()`'s guard working rather than thin coverage. Refusals are
+  asserted as `BadPNG` and not as "raises", because a truncated file left as
+  `struct.error` in the first version and the difference to a caller is a
+  refusal versus a crash in the exporter. 45 checks, ~1 s),
   `toolkit/mapdata/test_rebloat.py` (rung E3's driver, which is the only tool
   here that deliberately DESTROYS a payload — it zeroes a map's Bloated stream
   so the client is forced down the re-bloat path — so almost every check is a

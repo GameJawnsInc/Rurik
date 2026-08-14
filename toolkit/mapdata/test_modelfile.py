@@ -98,30 +98,45 @@ CORRECTED_PROPS = 16
 #: and its extra closure is far out. Both rules pick the same (lowest) start,
 #: so nothing downstream moves; it is pinned because closure is not identity.
 AMBIGUOUS_FILE_ID = 0x25AA9
-AMBIGUOUS_STARTS = (170, 65842)
+#: RESOLVED by rung M6. Under the retired SEARCH this file closed at both 170
+#: and 65,842 and the corpus could never break the tie; the computed preamble
+#: answers 170 and the rival never arises. The retired rule is still exercised
+#: below, so this is a difference between two live answers.
+AMBIGUOUS_STARTS = (170,)
+RETIRED_AMBIGUOUS_STARTS = (170, 65842)
 
-#: Reference-map census pins, MEASURED 2026-08-13. `files` counts distinct
-#: prop-referenced models whose file resolves and carries a geometry chunk;
-#: `cmp` counts props standing on a uniquely-closed model (the comparable
-#: population for the f11 identity). Pre-Searing's no-close rate (77/229,
-#: 33.6%) is far above the corpus ~15% -- per-map rates are a fact about the
-#: map's model mix, which is why they are pinned per map.
+#: Reference-map census pins, RE-MEASURED 2026-08-13 after rung M6 replaced
+#: the brute-force search with the client's own computed preamble walk.
+#: `zero` is now 0 on both maps: EVERY prop-referenced model decodes, because
+#: the ~15% that never closed were files whose stream continues past the
+#: collision meshes (blocks H/I/J), which a walk requiring closure THERE
+#: could not satisfy.
+#:
+#: **The f11 population is split deliberately, and it is the §A5 lesson.**
+#: `cmp_old`/`f11_old` are the props whose model the RETIRED search could
+#: already read -- that population is UNCHANGED and still scores perfectly,
+#: which is what proves M6 did not disturb the oracle. `cmp`/`f11_ok` are the
+#: whole map including the newly recovered models, where ~10% disagree. Those
+#: two facts must not be averaged into one number: the first says nothing
+#: regressed, the second is an OPEN QUESTION about the recovered files.
 CENSUS = {
-    KAMADAN_FILE_ID: dict(files=86, unique=71, ambig=0, zero=15,
-                          cmp=474, f11_ok=474, rival=1),
-    PRESEARING_FILE_ID: dict(files=229, unique=152, ambig=0, zero=77,
-                             cmp=664, f11_ok=664, rival=7),
+    KAMADAN_FILE_ID: dict(files=86, unique=86, ambig=0, zero=0,
+                          cmp=516, f11_ok=510, rival=1,
+                          cmp_old=474, f11_old=474, newly=15),
+    PRESEARING_FILE_ID: dict(files=229, unique=229, ambig=0, zero=0,
+                             cmp=864, f11_ok=846, rival=13,
+                             cmp_old=664, f11_old=664, newly=77),
 }
 
-#: Per-map format census (sub-models per (dat_fvf, stride) over the
-#: uniquely-closed files), MEASURED the same day.
+#: Per-map format census (sub-models per (dat_fvf, stride)), RE-MEASURED
+#: after M6 -- the counts grew because every model now decodes.
 FORMATS = {
-    KAMADAN_FILE_ID: {(21, 32): 24, (23, 36): 4, (53, 40): 42, (55, 44): 5,
-                      (117, 48): 50, (119, 52): 13, (245, 56): 3,
+    KAMADAN_FILE_ID: {(21, 32): 46, (23, 36): 20, (53, 40): 46, (55, 44): 6,
+                      (117, 48): 60, (119, 52): 13, (245, 56): 6,
                       (12405, 72): 10},
-    PRESEARING_FILE_ID: {(21, 32): 100, (23, 36): 22, (53, 40): 96,
-                         (55, 44): 24, (117, 48): 74, (119, 52): 8,
-                         (245, 56): 42, (247, 60): 2},
+    PRESEARING_FILE_ID: {(21, 32): 267, (23, 36): 72, (53, 40): 229,
+                         (55, 44): 65, (117, 48): 121, (119, 52): 19,
+                         (245, 56): 68, (247, 60): 28},
 }
 
 #: The full 14-map sample (`--all`). Closure counts are the study's; the f11
@@ -176,7 +191,7 @@ F11_TOL = 1e-5
 # So a bare-machine run lands 28 short and goes RED: a synthetic model file
 # this test built has verified the plumbing and NOTHING about ArenaNet's
 # bytes. `--all` adds 10 checks; its runtime is in the module docstring.
-FLOOR = 57
+FLOOR = 61
 
 
 # ------------------------------------------------------------------ helpers
@@ -223,6 +238,15 @@ def synth_geometry(num_models=2, coll=1, bad_index=False):
                      + struct.pack("<9f", 5.0, 0.0, 0.0, 0.0, 5.0, 0.0,
                                    0.0, 0.0, 9.0))
     header = bytearray(0x54)
+    # Since rung M6 the decoder COMPUTES the sub-model start the way
+    # MdlLoad.cpp does, so a synthetic chunk has to be one the CLIENT would
+    # accept -- which makes this fixture stronger than the one it replaced,
+    # not merely different. The version word is ArenaNet's own gate
+    # (0x00794586); every preamble-block selector is left ZERO so all six
+    # blocks are absent and the cursor lands exactly on 0x54, and the three
+    # trailing selectors (0x31, 0x48, 0x34) are zero so the walk closes on
+    # the final byte.
+    struct.pack_into("<I", header, 0x00, modelfile.GEOMETRY_VERSION)
     struct.pack_into("<I", header, 0x44, num_models)
     struct.pack_into("<H", header, 0x4C, coll)
     return bytes(header) + body + collision
@@ -252,6 +276,7 @@ def map_models(ar, table, by_row, map_fid):
     fmts = {}
     div3 = dict(sub=0, ti=0, n0=0)
     radii = {}
+    newly_readable = set()
     for idx in sorted({r.model for r in bp.records}):
         cls["used"] += 1
         fid = fids[idx]
@@ -285,6 +310,11 @@ def map_models(ar, table, by_row, map_fid):
             div3["n0"] += sm.counts[0] % 3 == 0
         if not geo.ambiguous:
             radii[idx] = (geo.max_2d_radius(), geo.max_3d_radius())
+            # Could the RETIRED search have read this file? Answered by
+            # running it, not by remembering -- so "newly readable" is a
+            # difference between two live answers rather than a stored list.
+            if not retired_search_closes(model.find(GEOMETRY_CHUNK)):
+                newly_readable.add(idx)
 
     cmps = []
     for rec in bp.records:
@@ -292,8 +322,52 @@ def map_models(ar, table, by_row, map_fid):
             continue
         rxy, r3 = radii[rec.model]
         f11, = struct.unpack("<f", rec.tail)
-        cmps.append((f11, rec.scale, rxy, r3))
+        cmps.append(Comparison(f11, rec.scale, rxy, r3,
+                               rec.model in newly_readable))
     return cls, cmps, fmts, div3
+
+
+class Comparison:
+    """One prop scored against its model. `newly` marks a prop whose model
+    only the COMPUTED preamble can read."""
+
+    __slots__ = ("f11", "scale", "rxy", "r3", "newly")
+
+    def __init__(self, f11, scale, rxy, r3, newly):
+        self.f11, self.scale, self.rxy, self.r3, self.newly = (
+            f11, scale, rxy, r3, newly)
+
+    def __iter__(self):
+        return iter((self.f11, self.scale, self.rxy, self.r3))
+
+
+def retired_search_closes(payload):
+    """The BRUTE-FORCE SEARCH rung M6 retired, reproduced here as a live
+    function.
+
+    Kept for the same reason `test_modelfile` keeps M2's retired byte-cost
+    stride rule: the claim "M6 recovered N models" is only a measurement if
+    the old answer is computed rather than remembered, and the claim "the
+    ambiguity was the RULE's, not the file's" needs the rule that had it.
+    """
+    if len(payload) < modelfile.PREAMBLE_MIN:
+        return False
+    num, = struct.unpack_from("<I", payload, modelfile.NUM_MODELS_AT)
+    coll, = struct.unpack_from("<H", payload, modelfile.COLLISION_COUNT_AT)
+    limit = len(payload) - modelfile.SUBMODEL_HEADER.size
+    for start in range(modelfile.PREAMBLE_MIN, limit):
+        walked = modelfile._walk_models(payload, start, num)
+        if walked is None:
+            continue
+        end, _raw = walked
+        if coll == 0:
+            if end == len(payload):
+                return True
+        else:
+            cw = modelfile._walk_collision(payload, end, coll)
+            if cw is not None and cw[0] == len(payload):
+                return True
+    return False
 
 
 def score_f11(cmps):
@@ -513,6 +587,26 @@ def _section2(check, ar, table, by_row):
               f"{div3['sub']} sub-models (triangle lists)",
               f"{div3['ti']}/{div3['sub']}, {div3['n0']}/{div3['sub']}")
 
+        # THE SPLIT THAT PROVES M6 DID NOT DISTURB THE ORACLE, and the §A5
+        # lesson applied: the props whose model the RETIRED search could
+        # already read are scored SEPARATELY, and that population must still
+        # be PERFECT. Averaging it with the newly recovered models would turn
+        # "nothing regressed, and the new files raise a question" into one
+        # degraded number that says neither.
+        old_cmps = [c for c in cmps if not c.newly]
+        old_ok, _ = score_f11(old_cmps)
+        check(len(old_cmps) == want["cmp_old"] and old_ok == want["f11_old"],
+              f"0x{fid:X}: on the props the RETIRED search could already "
+              f"read, f11 still holds {want['f11_old']}/{want['cmp_old']} -- "
+              f"M6 recovered models without moving the oracle",
+              f"{old_ok}/{len(old_cmps)}")
+        newly = len(cmps) - len(old_cmps)
+        check(newly == want["cmp"] - want["cmp_old"] and newly > 0,
+              f"0x{fid:X}: and {newly} props stand on a model only the "
+              f"COMPUTED preamble can read -- the control that keeps the "
+              f"line above from being vacuous",
+              f"{newly} newly readable")
+
         ok, rival = score_f11(cmps)
         check(len(cmps) == want["cmp"] and ok == want["f11_ok"],
               f"0x{fid:X}: f11 == scale * max-2D-radius at {F11_TOL:g} on "
@@ -549,8 +643,9 @@ def _section3(check, ar, table, by_row):
     # The file that is ambiguous under the CLIENT's tables is a different one.
     mf2 = ModelFile.decode(ar.read(by_row[table[AMBIGUOUS_FILE_ID]]))
     geo2 = mf2.geometry()
-    check(geo2.ambiguous and geo2.starts == AMBIGUOUS_STARTS,
-          f"file 0x{AMBIGUOUS_FILE_ID:X} closes at the two pinned offsets -- "
+    check(not geo2.ambiguous and geo2.starts == AMBIGUOUS_STARTS,
+          f"file 0x{AMBIGUOUS_FILE_ID:X} resolves to the ONE computed offset "
+          f"{AMBIGUOUS_STARTS[0]} -- M6 removed the ambiguity by construction, "
           f"closure is still not identity", f"{geo2.starts}")
     check(geo2.start == AMBIGUOUS_STARTS[0],
           "decode keeps the lowest offset, which BOTH rules agree on here, "
@@ -851,8 +946,14 @@ def _section6(check, ar, table, by_row):
           "TEXCOORDS are mostly but NOT entirely inside +/-16 -- retail UVs "
           "wrap, so a consumer must not clamp",
           f"{uv_in}/{uv_tot} = {uv_in / max(uv_tot, 1):.3f}")
-    check(idx_tot > 1000 and idx_hi0 == idx_tot and len(idx_vals) < 32
-          and max(idx_vals) < 16,
+    # The DISCRIMINATING half is `idx_hi0 == idx_tot` -- a D3DCOLOR with the
+    # top three bytes zero on every single vertex is not a colour. The
+    # small-value bound is supporting evidence and its numbers MOVED when M6
+    # recovered the previously-undecodable models (10 values / max 9 became
+    # 22 / max 21), so it is stated as a bound on the KIND of quantity rather
+    # than re-pinned to the exact set: an index that fits in 6 bits.
+    check(idx_tot > 1000 and idx_hi0 == idx_tot and len(idx_vals) < 64
+          and max(idx_vals) < 64,
           f"BIT 1 IS NOT A COLOUR: its high 3 bytes are zero on all "
           f"{idx_tot} and it takes {len(idx_vals)} small values -- an index "
           f"whose purpose stays UNVERIFIED",

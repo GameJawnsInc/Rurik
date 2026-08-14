@@ -140,12 +140,19 @@ MEASURED_BLENDER = "5.1.1"
 # repeat). All 34 outlines qualify, so outlined proxies == props with outlines.
 PRESEARING_OUTLINED = 34
 
-#: Rung M4, MEASURED 2026-08-13. Of Pre-Searing's 864 props, these get a REAL
-#: mesh from the `.gwmodel` family and these keep the measured proxy because
-#: their model never decoded; the real ones share one datablock per model.
-PRESEARING_REAL = 664
-PRESEARING_PROXY = 200
-PRESEARING_MODELS = 152
+#: Rung M4, RE-MEASURED after rung M6 landed the client's computed preamble
+#: walk. **The proxy population is now ZERO**: every one of Pre-Searing's 864
+#: props gets ArenaNet's real mesh, over 229 datablocks. It was 664/200/152 --
+#: the 200 proxies were props whose model the retired brute-force search
+#: could not read, and all 77 of those models decode now.
+#:
+#: The proxy PATH is still exercised, by section 3's `--proxies-only` run and
+#: by the synthetic sections; what is gone is any prop that NEEDS it here. A
+#: model that fails to decode still falls back, and the check below that
+#: `real + proxy == count` is what keeps that honest.
+PRESEARING_REAL = 864
+PRESEARING_PROXY = 0
+PRESEARING_MODELS = 229
 
 #: The z-sign claim: prop geometry must reach ABOVE the terrain under it.
 #: MEASURED over both reference maps at 0.735 (Kamadan) and 0.743
