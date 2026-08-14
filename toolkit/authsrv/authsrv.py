@@ -1912,18 +1912,16 @@ def revive_due(send, state, conn_id):
         # vault's 49 `Health non-zero on resurrect` lines name `Corpse of Hatcher
         # [Collector]` rather than the player.
         #
-        # UNMEASURED HERE, and that is the world's BALANCE rather than an omission.
-        # `hit agent` is 0 in an unattended run because the player is DEAD: the
-        # Hatcher deals 25 into a 100 HP player (dead in 4 hits) and killing it takes
-        # 7, so the player loses the race and this branch never runs. It is not an
-        # input problem -- C (closest) and Tab (next) then Space both select and
-        # attack. The two NPC lines above come from human-played runs
-        # 20260811T141114 and 20260811T141332 (7 `hit agent` lines each), and they are
-        # the standing CONTROL: they were produced by the burst order this replaces,
-        # so confirming the fix here costs ONE human-played run, not two. The
-        # mechanism is the player path's, which IS measured -- see
-        # REVIVE_REFILL_DEFER, 13 of 13 complaints on the burst and 0 of 11 with a
-        # tick between.
+        # MEASURED 2026-08-13, unattended, on the same standard as the player path:
+        # two runs identical but for this constant, 21 player hits and 3 agent deaths
+        # each, 3 of 3 complaints on the burst and 0 of 3 with one tick between.
+        #
+        # Reaching it needed TWO things that took four runs to find, and neither was
+        # the input everyone reached for first: `--practice-target`, because with the
+        # hostile fighting back the player loses the race (25 into 100 HP is four
+        # hits; killing it takes seven) and never lands one; and `--explorable`,
+        # because an OUTPOST forbids attacking -- in one the client selects a target
+        # (0x00C1 goes out on every press) and no attack ever follows.
         if REVIVE_REFILL_DEFER > 0.0:
             agent["refill_due_at"] = now + REVIVE_REFILL_DEFER
             print(f"[c{conn_id}] agent {agent_id} is back up "
@@ -5358,6 +5356,18 @@ def main():
                          "under --tape: the tape's own 0x0195 decides what the "
                          "client loads, and it will happily draw a map it never "
                          "asked for.")
+    ap.add_argument("--practice-target", action="store_true",
+                    help="The standing hostile neither chases nor attacks -- a "
+                         "PRACTICE TARGET. WIKI (GWW, \"Practice target\", rev. "
+                         "2014-02-07): practice targets are stationary NPCs, there "
+                         "are allied and hostile ones, and 'They do not use any "
+                         "skills'; a slain hostile one resurrects after 30 s at full "
+                         "health. So this is a real Guild Wars creature's behaviour "
+                         "rather than a test switch. It is what makes an agent "
+                         "death REACHABLE unattended: with the hostile fighting back "
+                         "the player loses the race (25 damage a hit into 100 HP, "
+                         "four hits, against the seven the player needs) and never "
+                         "lands one.")
     ap.add_argument("--no-enemy", action="store_true",
                     help="Do not spawn the standing hostile NPC. The world is "
                          "then the player alone, which is what most probes "
@@ -5495,6 +5505,12 @@ def main():
               + (f", explorable={bool(known[3])}" if known
                  else " -- NOT in MAP_STATIC_CONFIG, so geometry falls back "
                     f"to map {FALLBACK_MAP_ID} and it will not be explorable"))
+
+    if a.practice_target:
+        global ENEMY_ATTACKS_BACK
+        ENEMY_ATTACKS_BACK = False
+        print("PRACTICE TARGET: the hostile stands still and does not attack. "
+              "It can still be hit, killed and revived.")
 
     if a.no_enemy:
         global SPAWN_ENEMY
