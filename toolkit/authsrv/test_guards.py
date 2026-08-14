@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("guard contract", floor=32)
+LEDGER = checks.Ledger("guard contract", floor=35)
 check = LEDGER.ok
 
 
@@ -421,6 +421,102 @@ def section_overkill():
           if damage_vals else f"sent={sent!r}")
 
 
+def section_concurrency():
+    """F10: the two live threads enter the combat state together.
+
+    hit_enemy has two callers on two threads (world tick at attack_tick,
+    connection thread at handle_skill_press) and NOTHING locks the agent
+    dicts between them. What this section pins is the contract that matters
+    today: concurrent entry must never RAISE (an exception on the tick
+    thread silently stops the world; on the connection thread it used to
+    close the socket), the health floor must hold, and every damage that
+    reaches the wire must carry the valid fraction. Known-benign races
+    (a lost health decrement, a doubled kill status -- both possible while
+    the read-modify-writes are unlocked) are MEASURED and printed, not
+    asserted: pinning them green would claim a synchronization the code
+    does not have, and red would flake. Step 3's pending-recharge timers
+    extend this section the day they add new cross-thread state
+    (studies/combat/PLAN.md, amendment C9).
+    """
+    import threading
+    import authsrv
+
+    print("\n10. concurrent entry: two threads, one agent, nothing raises")
+    sent = []
+    sent_lock = threading.Lock()
+
+    def send(op, vals, label="", quiet=False):
+        with sent_lock:
+            sent.append((op, vals, label))
+
+    agent = _fresh_agent()
+    agent["max_health"] = agent["health"] = 1000.0
+    state = {"agents": {10: agent}, "pos": (0.0, 0.0),
+             "attacking": 10, "player_dead": False}
+    errors = []
+
+    saved_interval, saved_revive = authsrv.ATTACK_INTERVAL, authsrv.REVIVE_AFTER
+    authsrv.ATTACK_INTERVAL, authsrv.REVIVE_AFTER = 0.0, 0.0
+    try:
+        out = io.StringIO()
+
+        def hammer(rounds):
+            try:
+                for _ in range(rounds):
+                    authsrv.hit_enemy(send, state, 10, 0)
+            except BaseException as ex:   # noqa: BLE001 -- the check IS the catch
+                errors.append(repr(ex))
+
+        def churn(rounds):
+            try:
+                for _ in range(rounds):
+                    authsrv.revive_due(send, state, 0)
+            except BaseException as ex:   # noqa: BLE001
+                errors.append(repr(ex))
+
+        threads = [threading.Thread(target=hammer, args=(300,)),
+                   threading.Thread(target=hammer, args=(300,)),
+                   threading.Thread(target=churn, args=(300,))]
+        with contextlib.redirect_stdout(out):
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30)
+        check(errors == [] and not any(t.is_alive() for t in threads),
+              "600 swings and 300 revive sweeps across three threads, "
+              "zero exceptions",
+              f"errors={errors!r} -- an exception here is the world tick "
+              f"dying silently or a client disconnected mid-fight")
+        check(0.0 <= agent["health"] <= agent["max_health"],
+              "the health floor and ceiling held through every interleaving",
+              f"health={agent['health']}")
+        damage_bits = {vals[3] for op, vals, _ in sent
+                       if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET
+                       and vals[0] == authsrv.agents.PROP_DAMAGE}
+        expected = authsrv._damage_fraction(
+            1000.0 * authsrv.HIT_FRACTION, 1000.0,
+            authsrv.agents.PROP_DAMAGE, "expected")
+        check(damage_bits <= {expected},
+              "every damage that reached the wire carried the valid fraction",
+              f"distinct wire values: { {hex(b) for b in damage_bits} }")
+        # The races this section deliberately does NOT assert, measured so a
+        # future locking change has a before-number: dead flips and kill
+        # statuses per life can exceed 1 while the read-modify-writes are
+        # unlocked.
+        kills = sum(1 for op, vals, _ in sent
+                    if op == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+                    and vals[1] == authsrv.agents.EFFECT_DEAD)
+        revives = sum(1 for op, vals, _ in sent
+                      if op == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
+                      and vals[1] == 0)
+        print(f"   measured, not asserted: {kills} kill statuses, "
+              f"{revives} revives, {len(sent)} total sends "
+              f"(a doubled kill per life is the F10 race, tolerated today)")
+    finally:
+        authsrv.ATTACK_INTERVAL, authsrv.REVIVE_AFTER = (saved_interval,
+                                                         saved_revive)
+
+
 def main():
     section_hit_enemy()
     section_skill_press()
@@ -431,6 +527,7 @@ def main():
     section_agent_refill_due()
     section_player_refill_due()
     section_overkill()
+    section_concurrency()
     return LEDGER.verdict()
 
 
