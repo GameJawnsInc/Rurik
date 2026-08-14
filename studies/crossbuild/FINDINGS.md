@@ -381,10 +381,11 @@ deliverable.**
 
 **What genuinely remains**, none of it blocking and none of it re-running the above:
 
-1. **Session length.** Both runs are ~70–120 s. Nothing is known about a session long enough
-   to trigger whatever rotation the 29-member set participates in. The MFT alternation (§4c)
-   fires on roughly every other run and is *already* visible at this length, so the untested
-   band is longer-period behaviour, not the common case.
+1. ~~**Session length.**~~ **CLOSED by §4e-ter** the same day: 900 s produced **2** changed
+   rows against 120 s's **3**, with the 29 unmoved and the authored rows byte-identical.
+   Duration is the wrong axis — the churn is per RUN, not per minute. What is still unmeasured
+   is **many sessions**, and a session that loads **many different maps**, which would exercise
+   the allocator far harder than any run in this arc has.
 2. **The bit-31 watchlist is unprobed**, and neither run could have probed it: our rows are
    not on it. Testing it means deliberately arming a row that *is*, which is a different
    experiment with a different risk profile.
@@ -495,6 +496,74 @@ sits at the pristine 29 and still carries all four of the loopback-volatile ids.
 clears in this session it will be those four — rows 11957 and 177254 — and NOT the map rows.**
 Row 7982's pair should require a real content source, which loopback does not have.
 
+#### 4e-ter. RESULT — harness `20260814T100327`, 900 s unarmed. OBSERVED
+
+The session ran the full 900 s in **our** world, which is asserted rather than assumed: the
+server's own log reads `[map] navmesh 0x287D3: 1 planes, 64 trapezoids` and
+`area 'sculpt': 3 of 3 placed`.
+
+**The vacuity control passed first**, and it had to, because every headline below is a
+negative:
+
+| liveness witness | before | after |
+|---|---|---|
+| `descriptor_counter` | 26,792 | **26,795** (+3) |
+| MFT sha256 | `4a8c691cc1285bde` | `8c9cac19feb6299d` |
+| Tier 1 changed rows | — | **2**, both *new extent (silent relocation)* — 8315 (96 B → **92 B**, new crc) and 8316 (28 B, new crc) |
+| archive lock | — | `PermissionError` on a mid-run read: the client held it exclusively |
+
+So the client demonstrably wrote — it **rewrote and moved two rows** — and the negatives below
+are about a session in which it did.
+
+**RESULTS against the four committed predictions.**
+
+1. ✅ **The authored rows are byte-identical.** Bloated row 71496, 6,012 B at `0x3D80400`,
+   sha `284dca56…`; Stripped row 71497, 10,714 B at `0x388A000`, sha `f827165e…` — offset,
+   size, crc and sha256 all equal on both. Third witness after §4b and §4c.
+2. ❌ **The MFT did NOT alternate** — `0xF8FFF000` on both sides. §4c put the flip at roughly
+   every other run and this run did not flip, which is unremarkable at n=1 but has a
+   consequence worth carrying: **the alternation is not a usable liveness signal.**
+   `descriptor_counter` is, it moved every time, and it is the one to check.
+3. ✅ **NONE of the 29 cleared.** Population, rows, slots, offsets, sizes, crcs, flags and
+   sha256s all identical — the diff prints *no change in the bit-31 population or any row it
+   names*. Prediction 3 held, and it held **after** §4e-bis argued against it.
+4. The sub-prediction was **not exercised**: nothing cleared at all, so "if any clears it will
+   be rows 11957 and 177254" is untested rather than confirmed. Recorded as untested.
+
+**This answers §4d item 1, and the answer is that duration is the wrong axis.** §4b held for
+120 s and saw **3** changed rows; this run held for **900 s** and saw **2**. Seven and a half
+times the session length produced no additional disturbance, no bit-31 movement and no
+approach to the authored rows. The churn is **per run, not per minute** — which is also what
+the MFT alternation's per-run cadence says. §4d item 1 is closed in its stated form; what
+remains unmeasured is many SESSIONS, not one long one.
+
+**And it puts `datwrite/FINDINGS.md`:585 into CONTESTED.** That passage attributes the
+install→study clearing of 4 ids to a session in which *"this content was not downloaded"*
+because the cage blocked all non-loopback traffic. The change is real — §4e-bis reproduces it
+from the bytes — but **a controlled loopback session that demonstrably wrote to the archive
+cleared nothing**, so "an ordinary loopback play session does it" is not supported. Either it
+needs a specific trigger nobody has isolated, or many more sessions than one. n=1 against
+n=1; what is now known is that the two disagree, and this is the only one of the two with a
+before-census.
+
+**The practical answer for our content.** `0x8001B97D` — the id `content/maps.toml` records
+for Ascalon City (Pre-Searing) and Lakeside County, and one of the two names on the
+`donor_row = 7982` every `areas.toml` row borrows — **did not move in a loopback session, and
+does move in a live one** (§4e-bis: cleared in `run-live`, where `0x1B97D` binds plainly to a
+different row). So the hazard is real, live-only, and already gated: that is exactly what
+`test_contentids.py` refuses on, and this measurement is the first evidence for *when* the
+state it guards actually changes.
+
+**Honest scope.** One session, one map, one client, one archive copy. The negatives are only
+as strong as the liveness witness, which is `descriptor_counter` +3 and two rewritten rows —
+real, but small. A session that loaded many different maps would exercise the allocator far
+harder, and no run in this arc has done that.
+
+**Incidental, not chased**: the gamesrv log carries 10 × `navmesh does not cover` and 7 ×
+`ignoring a … jump in the client's reported position` (largest 4,116 u, ours `(5950, 111)` vs
+theirs `(1994, 1248)`). A server/client position disagreement on the sculpt map, which is 1.2%
+walkable. Unrelated to durability and left for whoever owns movement.
+
 ---
 
 ## 5. What this changes elsewhere
@@ -522,7 +591,11 @@ Row 7982's pair should require a real content source, which loopback does not ha
 | The authored row will survive an update | **RECONSTRUCTION**, low confidence, §3 |
 | An authored row survives a PLAY SESSION in which the client demonstrably rewrote the archive | **OBSERVED** — two witnesses, §4b (relocated row, 10,714 B over a 4,608 B reservation, client recompiled from it) and §4c (three in-place rows, different archive copy). n=2 sessions, ~70–120 s each |
 | The MFT alternates between two offsets rather than drifting | **OBSERVED** — §4c, seven vault copies at exactly two values, copies with identical entry counts at both |
-| A session longer than ~120 s leaves an authored row alone | **UNVERIFIED** — §4d item 1, never run |
+| A session longer than ~120 s leaves an authored row alone | **OBSERVED** — §4e-ter, 900 s, third witness; and duration is the wrong axis, 900 s produced 2 changed rows against 120 s's 3 |
+| A loopback play session clears no bit-31 id | **OBSERVED**, n=1 with a before-census — §4e-ter, 29 of 29 unmoved in a session where the client rewrote and relocated two rows |
+| An ordinary loopback session is what cleared the install→study 4 | **CONTESTED** — `datwrite/FINDINGS.md`:585 says so; §4e-ter's controlled run cleared nothing. The change is real (§4e-bis reproduces it), the cause is not established |
+| A LIVE session clears bit-31 map-row ids, including row 7982's | **OBSERVED** — §4e-bis, `run-live` cleared 20 of 29 including `0x8001B97D` and `0x8005E728`; `0x1B97D` then binds plainly to a different row |
+| The MFT alternation is a usable liveness signal | **REFUTED** — §4e-ter did not flip; `descriptor_counter` moved and is the one to use |
 | The patcher holds no external content manifest | **UNVERIFIED** — never looked for, and it is the assumption the prediction rests on |
 | ~~`archive.py`'s offset for row 46196 is wrong by 1,024~~ | **REFUTED** 2026-08-14 — `archive.row(46196).offset == 0x437F6800`, identical to `datwrite`/`datcheck`, marker in that extent. The 1,024 came from reading `entries[46196]`, which is row 46197. §4, §4b.1 |
 | ~~`archive.py` and `datcheck.py` number MFT rows differently, off by one~~ | **REFUTED** 2026-08-14 — all 24 bytes of every row agree on all ten vault archives; pinned by `test_archive.py` §1c. The number that differs is `len(entries)` vs `row_count`. §4b.1 |
