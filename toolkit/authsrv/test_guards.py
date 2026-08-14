@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("guard contract", floor=21)
+LEDGER = checks.Ledger("guard contract", floor=25)
 check = LEDGER.ok
 
 
@@ -296,6 +296,72 @@ def section_player_revive_due():
           f"ops={[op for op, _, _ in sent]}")
 
 
+def section_agent_refill_due():
+    import authsrv
+
+    print("\n7. agent_refill_due: a refused refill stays DUE")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    agent = _fresh_agent()
+    agent["refill_due_at"] = 1.0   # long past due
+    state = {"agents": {10: agent}}
+
+    saved = authsrv._fraction
+    authsrv._fraction = _refusing_fraction(authsrv)
+    try:
+        raised = False
+        try:
+            authsrv.agent_refill_due(send, state, 0)
+        except ValueError:
+            raised = True
+        check(raised and sent == [] and agent["refill_due_at"] == 1.0,
+              "refused: nothing sent, and the refill timer is still armed",
+              f"raised={raised}, sent={sent!r}, "
+              f"due={agent['refill_due_at']!r} -- pre-hoist the timer was "
+              f"disarmed and PROP_HEALTH_MAX sent for a refill that never came")
+    finally:
+        authsrv._fraction = saved
+
+    sent.clear()
+    authsrv.agent_refill_due(send, state, 0)
+    check(len(sent) == 2 and agent["refill_due_at"] is None,
+          "control: in-range sends both refill halves and disarms",
+          f"ops={[op for op, _, _ in sent]}, due={agent['refill_due_at']!r}")
+
+
+def section_player_refill_due():
+    import authsrv
+
+    print("\n8. player_refill_due: same contract, the player's side")
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = {"agents": {}, "player_refill_due_at": 1.0}
+
+    saved = authsrv._fraction
+    authsrv._fraction = _refusing_fraction(authsrv)
+    try:
+        raised = False
+        try:
+            authsrv.player_refill_due(send, state, 0)
+        except ValueError:
+            raised = True
+        check(raised and sent == [] and state["player_refill_due_at"] == 1.0,
+              "refused: nothing sent, and the refill timer is still armed",
+              f"raised={raised}, sent={sent!r}, "
+              f"due={state['player_refill_due_at']!r}")
+    finally:
+        authsrv._fraction = saved
+
+    sent.clear()
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        authsrv.player_refill_due(send, state, 0)
+    check(len(sent) == 2 and state["player_refill_due_at"] is None,
+          "control: in-range sends both refill halves and disarms",
+          f"ops={[op for op, _, _ in sent]}, "
+          f"due={state['player_refill_due_at']!r}")
+
+
 def main():
     section_hit_enemy()
     section_skill_press()
@@ -303,6 +369,8 @@ def main():
     section_land_skill()
     section_revive_due()
     section_player_revive_due()
+    section_agent_refill_due()
+    section_player_refill_due()
     return LEDGER.verdict()
 
 

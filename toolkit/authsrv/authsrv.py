@@ -2631,13 +2631,15 @@ def agent_refill_due(send, state, conn_id):
         due = agent.get("refill_due_at")
         if not due or now < due:
             continue
+        # Guard before the timer is disarmed: a refused refill stays DUE and
+        # retries next tick (test_guards section 7).
+        frac = _fraction(1.0, agents.GV_HEALTH, f"refill agent {agent_id}")
         agent["refill_due_at"] = None
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
              f"restore max health on agent {agent_id} (deferred)")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-             [agents.GV_HEALTH, agent_id, agent_id,
-              _fraction(1.0, agents.GV_HEALTH, f"refill agent {agent_id}")],
+             [agents.GV_HEALTH, agent_id, agent_id, frac],
              f"refill agent {agent_id}'s bar (deferred)")
 
 
@@ -2651,13 +2653,15 @@ def player_refill_due(send, state, conn_id):
     due = state.get("player_refill_due_at")
     if not due or time.time() < due:
         return
+    # Guard before the timer is disarmed, same as agent_refill_due
+    # (test_guards section 8).
+    frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
     state["player_refill_due_at"] = None
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
          "restore the player's maximum (deferred)")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
-          _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
+         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
          "refill the player's bar (deferred)")
     print(f"[c{conn_id}] deferred refill sent", flush=True)
 
