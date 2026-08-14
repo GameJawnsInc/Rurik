@@ -55,10 +55,26 @@ promoted, so nothing in `toolkit/` opens a model file today.
   and `gw_model_file_id` custom property. Replacing a proxy mesh datablock
   with a decoded one is a local change; nothing upstream of the Blender step
   moves.
-- **e10d gave a second cross-file oracle for free**: the client's compiler
+- ~~**e10d gave a second cross-file oracle for free**: the client's compiler
   instances the model's own collision footprint into the Bloated stream (run
   record `vault/research/e10d-props-2026-08-12/`), so a decoded collision mesh
-  can be checked against outline rings retail ships.
+  can be checked against outline rings retail ships.~~
+  **WRONG, AND IT WAS THIS DOCUMENT'S ERROR — struck 2026-08-13 by M3's
+  recon.** e10d established no such thing. Its "the compiler also instances
+  the model's own collision footprint" is INFERRED from a single navmesh
+  delta on a single prop, and **that prop's model carries ZERO collision
+  meshes** (file id 209883, `collision_count = 0` at +0x4C in both archives).
+  e10d never opened a model file — `readback.py` imports no `modelfile` — so
+  no comparison between a ring and a collision mesh has ever been made. Run
+  A's compiled props record carried `points = 0` and an EMPTY ring, and the
+  footprint that appeared went into the PATH chunk `0x20000008`, not the
+  props stream. The transform e10d did establish for rings is TRANSLATION
+  ONLY (`corresponds()` requires `x + dx`, `y + dy`, no rotation, no scale),
+  and both its runs used rot (0,0,0) so it measured nothing about rotation at
+  all. **M3's criterion inherited this error from here**; see §3 for what
+  replaced it. The lesson is the one this repo keeps relearning: a scope
+  written from a summary of a summary carries the summary's inference as
+  though it were the measurement.
 
 ## 2. What is genuinely unknown (the actual work)
 

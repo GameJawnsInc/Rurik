@@ -102,6 +102,10 @@ REFERENCE_FORMATS = 9
 #: in-memory numbers EXACTLY -- serialising the geometry may not change it.
 ORACLE = {KAMADAN_FILE_ID: (474, 474), PRESEARING_FILE_ID: (664, 664)}
 
+#: (models with a collision mesh, collision meshes) over both reference maps,
+#: MEASURED 2026-08-13.
+COLLISION_POPULATION = (25, 28)
+
 #: The collision/ring population, MEASURED 2026-08-13. See the docstring: the
 #: reference maps have ZERO props carrying both, which is what killed the
 #: oracle this rung was scoped around.
@@ -111,13 +115,13 @@ RING_POPULATION = {
                              both=0),
 }
 
-# FLOOR: 38, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
-# (77 s). Sections 0-2 alone score 27 -- MEASURED by pointing --dat at a
-# missing file, not counted by eye -- so a vault-less run lands 11 short and
+# FLOOR: 44, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
+# (85 s). Sections 0-2 alone score 27 -- MEASURED by pointing --dat at a
+# missing file, not counted by eye -- so a vault-less run lands 17 short and
 # goes RED. `--all` widens sections 3-4 from a sample to every model of both
 # reference maps and adds ONE check (the pinned sub-model census), so a green
-# `--all` run is 39.
-FLOOR = 38
+# `--all` run is 45.
+FLOOR = 44
 
 DEFAULT_SAMPLE = 12
 
@@ -342,6 +346,7 @@ def _vault_sections(check, led, args, tmp):
         led.skip("3. the re-interleave against ArenaNet's own bytes", why)
         led.skip("4. the f11 oracle through the export", why)
         led.skip("5. the collision/ring population", why)
+        led.skip("6. the collision-mesh invariants", why)
         return
     with Archive(dat) as ar:
         table = file_id_table(ar)
@@ -349,6 +354,7 @@ def _vault_sections(check, led, args, tmp):
         _section3(check, ar, table, by_row, tmp, args)
         _section4(check, ar, table, by_row, tmp, args)
         _section5(check, ar, table, by_row)
+        _section6(check, ar, table, by_row)
 
 
 def _section3(check, ar, table, by_row, tmp, args):
@@ -444,6 +450,65 @@ def _section4(check, ar, table, by_row, tmp, args):
               f"0x{map_fid:X}: and it EQUALS test_modelfile's in-memory "
               f"{CENSUS[map_fid]['f11_ok']}/{CENSUS[map_fid]['cmp']} -- the "
               f"export changed nothing", f"{ok}/{n}")
+
+
+def _section6(check, ar, table, by_row):
+    print("\n== 6. the collision meshes: invariants the decoder does NOT force ==")
+    # These are worth more than the ring oracle M3 was scoped around, because
+    # `ModelGeometry.decode` validates RENDER indices only -- its refusal
+    # loops over `submodels` and never touches `collisions` -- so every count
+    # below is a fact about ArenaNet's bytes that our decoder could not have
+    # manufactured.
+    import inspect
+    import modelfile as _mf
+    src = inspect.getsource(_mf.ModelGeometry.decode)
+    check("sm.indices" in src and "cm.indices" not in src,
+          "the decoder validates RENDER indices only -- so the collision "
+          "checks below are unforced")
+
+    meshes = models = 0
+    idx_ok = idx_tot = div3 = rival3 = allref = 0
+    for map_fid in (KAMADAN_FILE_ID, PRESEARING_FILE_ID):
+        for fid in map_model_ids(map_fid, ar, table=table):
+            row = table.get(fid)
+            if row is None:
+                continue
+            try:
+                geo = ModelFile.decode(ar.read(by_row[row])).geometry()
+            except (NoClose, Undecodable, ValueError):
+                continue
+            if geo is None or not geo.collisions:
+                continue
+            models += 1
+            for cm in geo.collisions:
+                meshes += 1
+                nv, ni = len(cm.positions), len(cm.indices)
+                idx_tot += ni
+                idx_ok += sum(1 for v in cm.indices if v < nv)
+                div3 += ni % 3 == 0
+                rival3 += nv % 3 == 0
+                allref += len(set(cm.indices)) == nv
+    print(f"    {meshes} collision meshes on {models} models, "
+          f"{idx_tot} indices")
+    check((models, meshes) == COLLISION_POPULATION,
+          f"the pinned collision population {COLLISION_POPULATION}",
+          f"({models}, {meshes})")
+    check(idx_tot > 0 and idx_ok == idx_tot,
+          f"every collision index is below its own mesh's vertex count "
+          f"({idx_tot} of {idx_tot}) -- and nothing in the decoder requires it",
+          f"{idx_ok}/{idx_tot}")
+    check(meshes > 0 and div3 == meshes,
+          f"every collision mesh is a triangle LIST (ni % 3 == 0) on "
+          f"{meshes} of {meshes}", f"{div3}/{meshes}")
+    # THE CONTROL, and it is what pins the header's FIELD ORDER: read the
+    # header as (nv, ni) instead of (ni, nv) and the divisibility collapses.
+    check(rival3 * 2 < meshes,
+          f"the rival header order (nv, ni) divides by 3 on only "
+          f"{rival3}/{meshes} -- so `u32 ni` really is first",
+          f"{rival3}/{meshes}")
+    check(allref == meshes,
+          f"every collision vertex is referenced by some triangle "
+          f"({allref} of {meshes} meshes)", f"{allref}/{meshes}")
 
 
 def _section5(check, ar, table, by_row):
