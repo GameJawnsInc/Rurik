@@ -1309,3 +1309,49 @@ one that was authorised.
 
 **What is unaffected:** §18.11's confirmation. The bar is this member's health, measured
 twice on two clients at 100.0/49.7/24.0. Nothing about the recovery touches that.
+
+### 18.13 Int property 42 is MAXIMUM health, and current health follows it by the same ABSOLUTE DELTA
+
+Harness `20260813T215004`. The discriminator §18.12 asked for, and the answer is none of
+the three outcomes that section listed -- including the one this document predicted.
+
+| stage | HUD number | HUD bar | party row | implied |
+|---|---|---|---|---|
+| baseline | **100** | 100.0% | 100.0% | 100 / 100 |
+| damage `-0.75` | **25** | 23.9% | 19.8% | 25 / 100 |
+| **int property 42 = 200** | **125** | **61.7%** | **62.3%** | **125 / 200** |
+| int property 42 = 100 | **25** | 23.9% | 19.8% | 25 / 100 |
+
+> **`health += (new_max - old_max)`.** 25 + (200 - 100) = **125**, and 125/200 = **62.5%**
+> against 61.7% and 62.3% measured on two independent bars. Putting the maximum back
+> subtracts the same 100 and returns exactly 25.
+
+This is ordinary Guild Wars behaviour seen from the wire -- a maximum-health increase
+GRANTS that health, the way a rune or a health buff does -- and it is reversible, which the
+third step establishes rather than assumes.
+
+**Three readings die here, and one of them is this document's own:**
+
+| reading | would have shown | source |
+|---|---|---|
+| `health = 1.f`, a refill | 200 | ldufr/Headquarter -- **UPSTREAM**, now REFUTED for retail |
+| the fraction survives (0.25 x 200) | 50 | **my prediction in §18.12**, REFUTED |
+| property 42 is not the maximum | 25 | REFUTED -- it plainly is |
+
+**And it explains §18.12 exactly.** That run set the maximum to 100 when it was already
+100: the delta was ZERO, so health did not move. The observation was right and the framing
+("a refill that did not fire") was wrong -- there is no refill to fire. The candidate
+called "same-value no-op" was correct in outcome and wrong in mechanism.
+
+#### A measurement note, because the numbers are method-dependent
+
+The row bar reads 19.8% here where §18.11 read 24.0% for the same quarter-health state.
+Neither is wrong: the two passes use different column thresholds, and the row bar's chrome
+sits near the cut-off. **Absolute fill percentages from this method are only good to a few
+points; the RATIOS across stages are what carry the result** -- which is why the load-bearing
+number is 62.5% predicted against 61.7% and 62.3% on two bars whose absolute readings differ
+by four points at the same health. The HUD's printed NUMBER is exact and is what settles it.
+
+`0x009F [42, agent, N]` is therefore the lever for maximum health, and this server can now
+set both terms of the party row: `0x00A3 [16, ...]` for current, `0x009F [42, ...]` for
+maximum.

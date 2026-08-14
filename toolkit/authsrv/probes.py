@@ -194,6 +194,51 @@ def _agent_removal_steps(agent_id, origin):
     ]
 
 
+def _health_max_steps(agent_id):
+    """Does int property 42 refill only when the MAXIMUM actually changes?
+
+    RESKIN.md 18.12: with the bar at a quarter, int property 42 = 100 did nothing
+    -- row stayed 24.0%, HUD kept reading 25, nine frames. The "assigns
+    health_max = value AND health = 1.f" reading is ldufr/Headquarter's, which is
+    UPSTREAM rather than a retail observation. Our player's maximum is ALREADY
+    100, so that run could not tell a same-value no-op from a wrong reading.
+
+    200 separates them, and the HUD's own NUMBER is the discriminator rather than
+    the bar, because three outcomes are distinguishable and only one of them is
+    "nothing happened":
+
+      HUD 200, bar full  -> the refill is real and fires on a CHANGE of maximum.
+      HUD  50, bar 25%   -> the maximum moved and the FRACTION was preserved:
+                            0.25 * 200 = 50. Upstream's health_max half is right
+                            and its `health = 1.f` half is wrong.
+      HUD  25, bar 25%   -> property 42 does not carry the maximum either, and
+                            2026-08-06's "raised a health bar reading 100" was
+                            something else establishing it.
+
+    Step 3 puts it back to 100 -- if step 2 moved anything, a return is the
+    cheapest check that we are driving a live value rather than watching a
+    one-way latch.
+    """
+    a = agent_id
+    return [
+        Step(4.0, 0x00A3, [16, a, a, _f32(-0.75)],
+             "damage -0.75 -- take the bar to a quarter",
+             "the party row and the HUD must both read a quarter (bar ~25%, "
+             "HUD number 25). This is setup, and it is the step already "
+             "measured twice, so it doubles as the run's own control."),
+        Step(7.0, 0x009F, [42, a, 200],
+             "int property 42 = 200 -- a DIFFERENT maximum",
+             "READ THE HUD NUMBER, not just the bar. 200 means refill-on-change; "
+             "50 means the maximum moved and the fraction survived; 25 means "
+             "property 42 does not carry the maximum at all."),
+        Step(7.0, 0x009F, [42, a, 100],
+             "int property 42 = 100 -- put it back",
+             "whatever step 2 moved should move back. If step 2 changed nothing "
+             "this changes nothing either, and the run's answer is the third "
+             "outcome above."),
+    ]
+
+
 def _party_health_steps(agent_id):
     """Is the party row's red bar THIS player's health, or a constant?
 
@@ -2502,6 +2547,29 @@ PROBES = {
              "would let the server stop worrying about a message it has never "
              "sent. Any visible effect refutes the read and is more "
              "interesting still.",
+    ),
+    "health_max": lambda a, o: Probe(
+        question="Does int property 42 refill only when the MAXIMUM actually "
+                 "changes -- or does it not carry the maximum at all?",
+        predicts="THE FRACTION SURVIVES: HUD reads 50 with the bar still at a "
+                 "quarter. Reasoning: the damage handler clamps against "
+                 "health_max and the client stores health as a fraction "
+                 "(0.25 * 200 = 50), so moving the maximum should rescale the "
+                 "displayed number without touching the fraction. That makes "
+                 "upstream's health_max half right and its `health = 1.f` half "
+                 "wrong. A refill to 200 refutes this and vindicates upstream "
+                 "on a change of value; a flat 25 says property 42 is not the "
+                 "maximum either.",
+        steps=_health_max_steps(a),
+        note="ANSWERED 2026-08-13, and it is NONE of the three outcomes above -- "
+             "the HUD read 125. `health += (new_max - old_max)`: 25 + (200-100) "
+             "= 125, bar 62.5% predicted against 61.7% and 62.3% measured on two "
+             "independent bars, and putting the maximum back returns exactly 25. "
+             "A maximum-health increase GRANTS that health, as a rune does. So "
+             "upstream's `health = 1.f` refill is REFUTED for retail, and so is "
+             "this probe's own fraction prediction. Kept runnable: it is the "
+             "calibration for maximum health the way `damage` is for current. "
+             "Press P first; the HUD NUMBER is the measurement, not the bar.",
     ),
     "party_health": lambda a, o: Probe(
         question="Is the party row's red bar this player's HEALTH, or a constant "
