@@ -2466,4 +2466,19 @@ Every one of these, in the order they were written:
   no existing corpus figure is pooling builds, and that is asserted as an
   invariant so the first capture from a second build turns it red. A vault-less
   run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
-  empty directory rather than derived by subtraction).
+  empty directory rather than derived by subtraction),
+  `toolkit/authsrv/test_guards.py` (the guard contract for combat's computed
+  values: a `_fraction` refusal must land BEFORE any send or state change, not
+  after — the client dies on `fraction <= 1.0f` at CharPool.cpp:84 with no
+  server-side symptom, and on the connection thread an escaping ValueError
+  additionally closes the socket, because `handle`'s except tuple never named
+  it. Written RED-FIRST against the pre-guard tree (studies/combat/PLAN.md,
+  amendment C8b) and the red run is quoted in the file's docstring: hit_enemy
+  with a poisoned out-of-range HIT_FRACTION raised only AFTER
+  GV_ATTACK_STARTED was on the wire, the target's health was bookkept
+  100 → 0 unsent, and the swing timer was eaten — three FAILs, each now a
+  check. Every section carries an in-range CONTROL asserting the real
+  constant still sends the full effect burst, because a guard that refuses
+  everything would pass every refusal check. Dormant while every fraction is
+  a literal constant; load-bearing the day studies/combat step 8 computes
+  them from the client's skill table).

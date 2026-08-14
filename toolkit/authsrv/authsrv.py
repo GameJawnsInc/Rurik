@@ -1916,6 +1916,17 @@ def hit_enemy(send, state, target_id, conn_id):
     now = time.time()
     if now - agent.get("last_hit", 0.0) < ATTACK_INTERVAL:
         return
+
+    # THE GUARD RUNS BEFORE ANY EFFECT -- before the timer is consumed, before
+    # the health is bookkept, before the first send. Until 2026-08-14 the
+    # _fraction call sat inline in the damage send below, which meant a refused
+    # value left GV_ATTACK_STARTED alone on the wire (an attack with no damage
+    # and no close), a health pool bookkept to a kill nothing was told about,
+    # and a swing timer eaten by a swing that never happened -- measured, not
+    # reasoned: test_guards.py section 1 went red on exactly those three
+    # counts against the pre-guard tree. Dormant while HIT_FRACTION is a
+    # constant; load-bearing the day step 8 computes it (studies/combat).
+    frac = _fraction(-HIT_FRACTION, agents.PROP_DAMAGE, "one swing")
     agent["last_hit"] = now
 
     # A swing is two events, and sending only the second is why the first
@@ -1949,8 +1960,7 @@ def hit_enemy(send, state, target_id, conn_id):
     # measured (studies/enemy/PLAN.md 6b, 6f), and the fmul that makes it a
     # fraction is at 0x0081823C in the client.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID,
-          _fraction(-HIT_FRACTION, agents.PROP_DAMAGE, "one swing")],
+         [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID, frac],
          f"damage {dealt:.0f} to agent {target_id}")
     # And close the swing. Harmless if the client ignores it; without it the
     # attack has a beginning and no end.
