@@ -2086,6 +2086,19 @@ def section_pool_fraction():
                              "last_hit": 0.0}}}
     authsrv.revive_due(lambda op, vals, label="": sent.append((op, vals, label)),
                        state, 1)
+    # THE REFILL IS A TICK LATER on this path too (studies/agentprops 1f): the client
+    # wants both pools EMPTY at the moment the death bit clears, and 2 of the vault's
+    # 49 complaints name an NPC. So the value this section reads off the wire now
+    # comes from the deferred half -- which must still be driven, or a revived body
+    # stands up empty and this check would pass by measuring nothing.
+    early = [v for op, v, _l in sent
+             if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    LEDGER.ok(not early,
+              "the agent revive does NOT refill in the same burst",
+              f"{early} -- the burst is what the client complained about")
+    state["agents"][10]["refill_due_at"] = time.time() - 1.0
+    authsrv.agent_refill_due(
+        lambda op, vals, label="": sent.append((op, vals, label)), state, 1)
     floats = [struct.unpack("<f", struct.pack("<I", v[-1]))[0]
               for op, v, _l in sent
               if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]

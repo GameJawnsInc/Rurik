@@ -572,10 +572,24 @@ the burst, which is what keeps the control above reproducible. `test_agentlife` 
 halves as a PAIR: the revive must not carry the refill, and the deferred half must
 actually send it. Either check alone is satisfied by a broken server.
 
-**STILL UNMEASURED: the agent path.** `revive_due` sends the same three messages in the
-same burst and 2 of the vault's 49 complaints are an NPC's (`Corpse of Hatcher
-[Collector]`). The mechanism is surely identical, but it was not the thing measured here
-and has not been changed -- for the same reason the paragraph below gives.
+**The agent path now defers too, and its measurement status is NOT the player's.**
+`revive_due` sent the same three messages in the same burst, and the client's resurrect
+check is on the CHARACTER rather than on whose it is -- 2 of the vault's 49 complaints
+name `Corpse of Hatcher [Collector]`. It has the same one-tick defer as of 2026-08-13.
+
+**Why it is not measured, and why that is the world rather than an omission.** Nothing
+in an unattended run kills an agent. The hostile kills the PLAYER; the player does not
+fight back, so `hit agent` is 0 and the agent revive branch never runs. Four runs were
+spent discovering this the wrong way round -- scripted `C`/`Space` reached the client and
+produced no attack, and each `agent deaths: 0` was read as a keybind fault rather than as
+a fact about `content/world.toml`, which puts one hostile 300 units out and nothing that
+damages it.
+
+**The control already exists**, which is what makes the remaining step cheap: runs
+`20260811T141114` and `20260811T141332` are human-played, carry 7 `hit agent` lines each,
+and produced the two NPC complaints under the burst order this replaces. So confirming
+the agent half costs ONE human-played run -- attack the Hatcher, kill it, watch for the
+line -- and not two.
 
 **Do not "fix" this by reordering on the strength of the reading above.** The severity is
 2 and nothing visible is wrong — the bar refills correctly, OBSERVED twice in §1e — so
