@@ -507,14 +507,63 @@ with, so this section is dated and the runs are named.
 Eleven same-length dword edits plus one archive row. No code caves, no injected DLLs, no
 grown tables, and every profession id stays inside 0..10 so not one bound check can fire.
 
-### The two walls that are actually left
+### The one wall that is actually left
 
-1. **Skill icons.** 3,292 of 3,439 are DXTL, a format with no DirectX equivalent, and
-   skill-icon rows never ship stored -- so the compression escape hatch that made authored
-   TEXT cheap does not exist here. This is now the hardest thing on the list.
-2. **The profession glyph.** Still **NOT FOUND**, carried unresolved since `FINDINGS.md`.
-   A reskin inherits the host's, which remains an argument FOR the route: a
-   wrong-but-present glyph beats a missing one.
+**The profession glyph.** Still **NOT FOUND**, carried unresolved since `FINDINGS.md`.
+A reskin inherits the host's, which remains an argument FOR the route: a wrong-but-present
+glyph beats a missing one.
+
+### CORRECTION 2026-08-14: skill icons were never the second wall
+
+The first version of this rewrite listed skill icons alongside the glyph, on the grounds
+that "3,292 of 3,439 are DXTL, a format with no DirectX equivalent, and skill-icon rows
+never ship stored". **Both sentences are quotations from
+[`../datwrite/FINDINGS.md`](../datwrite/FINDINGS.md) blocker #3, and both were retired on
+2026-08-06** by [`../texture/FINDINGS.md`](../texture/FINDINGS.md), which was split out of
+that document and opens by saying so: *"the texture layer is open, end to end"*. This
+section exists to stop exactly this, and it shipped doing it. The lesson is the one
+`CLAUDE.md` states about `PLAN.md` §3 -- a blocker is only current in the document that
+owns the arc, and a quotation carries the date of the sentence, not of the paste.
+
+What is actually true, all OBSERVED on a running client:
+
+* The client draws icons **we authored from nothing** -- image, DXT1 encoding, container,
+  archive write. `dxt1.pattern_icon` rendered as a sunset on the bar (texture 4b).
+* **DXTL is not on the critical path.** The bar reads `+0x90`, which is **DXT1 128x128**;
+  DXTL lives at `+0x8c` and is **64x64**. Confirmed again here by decompressing a real
+  Ritualist icon and its partner: `ATEX/DXT1/(128,128)` and `ATEX/DXTL/(64,64)`.
+* **"Never ship stored" is a fact about what ArenaNet writes, not about what the client
+  reads.** Texture 3 arm 0 served a decompressed row *stored* and the client drew it.
+
+### What replaces it is a COSTING question, and it is measured
+
+MEASURED 2026-08-14, offline, against the pinned exe and `vault/dat_study/Gw.dat`:
+
+Counted per ICON rather than per skill, because a write targets a row and 188 skills share
+132 of them:
+
+| | |
+|---|---|
+| Skills on profession 8 (the host) | **188**, every icon id resolving |
+| Distinct `+0x90` icons behind them | **132** |
+| of those, exclusive to profession 8 | **125** -- the other **7** are also on another profession's skill, so an in-place write changes someone else's bar |
+| An authored **128x128** DXT1, one level | 8,212 B -> 8,704 B reservation; **fits in place 16 of 132** |
+| An authored **64x64** DXT1, one level | 2,068 B -> 2,560 B reservation; **fits in place 132 of 132** |
+
+The smallest `+0x90` reservation in the whole roster is 6,656 B, which is why the 64x64
+row is unanimous rather than merely good. So the route divides on one unanswered
+question -- [`../texture/FINDINGS.md`](../texture/FINDINGS.md) §6's *"is the bar's frame
+inset a fixed pixel count or a fraction of the texture?"*:
+
+* **If UV** (the prediction: the quad samples 0..1, so a smaller texture is the same
+  picture at lower resolution), the entire roster is authorable with `datwrite --replace`
+  alone -- journalled, byte-for-byte revertible, **zero relocations**.
+* **If fixed pixels**, a 64x64 loses most of its area to frame chrome and the roster needs
+  `datmove` for 166 of 188 rows. That is not a blocker either -- `datmove` is proven, and
+  an authored row has already survived a play session (`crossbuild` 4b) -- it is just
+  166 relocations instead of none.
+
+Nothing here needs a discovery. It needs one caged run with a ruler in it.
 
 ### Skill NAMES are no longer a wall -- RECONSTRUCTION, and untested
 
