@@ -1345,13 +1345,31 @@ caged client reads, so the write risked nothing shared and needed no decision. C
 of disk and one UAC prompt, because **the firewall cage is per BINARY** and a new client
 under `vault/run/` has no rule until `isolate_client.ps1` runs elevated.
 
+**SKILL ICONS ARE OPEN TOO, and the roster needs no archive relocations** (§13,
+[`studies/texture/FINDINGS.md`](studies/texture/FINDINGS.md) §9). The wall this list would
+have quoted — "3,292 of 3,439 are DXTL" — was `datwrite/FINDINGS.md` blocker #3, retired
+on 2026-08-06: DXTL is `+0x8c` at 64×64 and the bar reads `+0x90` at DXT1 128×128.
+Harness `20260814T002445` settled the last open term by measuring that the client
+**stretches the whole texture onto a fixed screen quad** — a 64×64 and a 128×128 of the
+same picture render at the same framing (15.19/255 apart, against 68.9–134.6 for the
+retail icons beside them), and a ruler's two landmarks give 0.958 and 0.955 px per texel,
+predicting one from the other to 0.1 px. So a 64×64 icon is 2,068 B against a 2,560 B
+reservation and fits **132 of profession 8's 132 distinct icon rows in place**, where a
+128×128 fits 16. What is missing is art, not mechanism: nothing yet draws 132 pictures.
+**Procedural rule earned the same day** ([`studies/crossbuild/FINDINGS.md`](studies/crossbuild/FINDINGS.md)
+§4c): the client moved the MFT 4.03 MB mid-session, so a journal expires the moment a
+client runs — **revert before you launch, not after**. `vault/run/reskin-roster/Gw.dat`
+is still armed on rows 174150/174487/174861 for that reason.
+
 **NEXT, and it is a design question rather than a mechanism one.** The identity tier is
-done; what is left is what makes the class *play* differently. In rough order of value:
-the PRIMARY marker still sits on the host's attribute 36 (`--attr-primary` is symmetric and
-is one line); the skill roster is 1 byte per skill row and only two skills have been moved
-(§10's countable check); and armour, model scale and palettes are all same-length dwords
-that nothing has exercised yet. None of these is blocked — they need a design, not a
-discovery.
+done, the primary marker moved onto our own claimed row (§19.7, `cb53a9b`), and the icon
+path is open. What is left is what makes the class *play* differently. In rough order of
+value: the skill roster is 1 byte per skill row and only two skills have been moved
+(§10's countable check); the 132 icons need drawing; and armour, model scale and palettes
+are all same-length dwords that nothing has exercised yet. None of these is blocked —
+they need a design, not a discovery. The one thing that *is* server work is the primary
+attribute's inherent passive (RESKIN §20): the client never computes damage, healing,
+energy or cast time, and reads an attribute rank nowhere outside its own UI.
 
 Probes are registered and encode-checked: `profession_custom`, `profession_ab`,
 `profession_skillbar`, `profession_spawn`, `profession_sentinel`, `profession_max`
