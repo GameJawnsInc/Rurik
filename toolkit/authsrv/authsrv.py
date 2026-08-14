@@ -1971,6 +1971,46 @@ def hit_enemy(send, state, target_id, conn_id):
               f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 
 
+def handle_skill_press(values, send, state, conn_id, opcode):
+    """One skill press, either half (0x0046 USE_SKILL or 0x0027 ATTACK_SKILL).
+
+    Extracted from the dispatch chain 2026-08-14 so the connection-thread
+    combat path is testable without a socket -- the same reason
+    `frame_pending` and `handle_perf_report` exist. The dispatch arm keeps the
+    opcode condition (test_cmsgnames section 6 pins it) and the dead-player
+    guard; everything the press DOES lives here.
+    """
+    # Confirm the cast by echoing the key the client is waiting on. If the
+    # echo is wrong the client says so in its own log -- 'Pending skill %u
+    # copy %d not found' -- which makes this one of the few things in the
+    # project that reports its own failure.
+    which = ("USE_SKILL" if opcode == GAME_CMSG_USE_SKILL
+             else "ATTACK_SKILL")
+    skill_id, copy, target = values[1], values[2], values[3]
+    send(GAME_SMSG_SKILL_ACTIVATED,
+         [PLAYER_AGENT_ID, skill_id, copy],
+         f"SKILL_ACTIVATED(skill {skill_id}, copy {copy}"
+         f" via {which})")
+    print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
+          f"agent {target or 'nothing'}", flush=True)
+    # TRIED AND IT DID NOT WORK, recorded so it is not retried blind: sending
+    # generic values 60 (skill_activated) then 58 (skill_finished) here left
+    # the cast exactly as stalled as before. They may still be part of the
+    # answer -- they were never going to be all of it -- but on their own they
+    # change nothing visible, so they are out rather than sitting in the code
+    # looking like they work. agents.py keeps the ids.
+    #
+    # (Until 2026-08-14 this comment deferred to a skill-completion branch
+    # that a full ref scan shows never existed. The lifecycle work is
+    # studies/combat/PLAN.md step 3.)
+    # A skill aimed at something hostile does what a click does. Whether a
+    # skill should damage at all, and by how much, is OURS -- the client
+    # carries every real number (studies/skills/FINDINGS.md) and we do not
+    # read it yet.
+    if target:
+        hit_enemy(send, state, target, conn_id)
+
+
 def revive_due(send, state, conn_id):
     """Stand the dead back up. Called from the world tick.
 
@@ -4433,37 +4473,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # no longer discards anything either. So this was a missing
                         # feature, which is reason enough to fix it.
                         #
-                        # Confirm the cast by echoing the key the client is
-                        # waiting on. If the echo is wrong the client says so in
-                        # its own log -- 'Pending skill %u copy %d not found' --
-                        # which makes this one of the few things in the project
-                        # that reports its own failure.
-                        which = ("USE_SKILL" if opcode == GAME_CMSG_USE_SKILL
-                                 else "ATTACK_SKILL")
-                        skill_id, copy, target = values[1], values[2], values[3]
-                        send(GAME_SMSG_SKILL_ACTIVATED,
-                             [PLAYER_AGENT_ID, skill_id, copy],
-                             f"SKILL_ACTIVATED(skill {skill_id}, copy {copy}"
-                             f" via {which})")
-                        print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
-                              f"agent {target or 'nothing'}", flush=True)
-                        # TRIED AND IT DID NOT WORK, recorded so it is not
-                        # retried blind: sending generic values 60
-                        # (skill_activated) then 58 (skill_finished) here left
-                        # the cast exactly as stalled as before. They may still
-                        # be part of the answer -- they were never going to be
-                        # all of it -- but on their own they change nothing
-                        # visible, so they are out rather than sitting in the
-                        # code looking like they work. agents.py keeps the ids.
-                        #
-                        # Skill completion is being worked on a separate branch.
-                        # Do not build more of it here.
-                        # A skill aimed at something hostile does what a click
-                        # does. Whether a skill should damage at all, and by how
-                        # much, is OURS -- the client carries every real number
-                        # (studies/skills/FINDINGS.md) and we do not read it yet.
-                        if target:
-                            hit_enemy(send, state, target, conn_id)
+                        # The body lives in handle_skill_press so the
+                        # connection-thread combat path has tests that need no
+                        # socket. The dead-player guard stays HERE: it gates
+                        # whether the press means anything at all, and the arm
+                        # condition above is pinned by test_cmsgnames section 6.
+                        handle_skill_press(values, send, state, conn_id, opcode)
                     elif opcode in (GAME_CMSG_ATTACK_AGENT,
                                     GAME_CMSG_INTERACT_PLAYER):
                         # The player clicked something. Clicking a hostile
