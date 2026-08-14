@@ -209,6 +209,42 @@ session long enough to trigger whatever rotation the 29-member set participates 
 retires is the strong form: *"the client may rewrite an authored row while you play"* is now
 measured false for the ordinary case, rather than unmeasured.
 
+### 4c. A second witness, 2026-08-14 — and the guard §4b never exercised
+
+The skill-icon run (`studies/texture/FINDINGS.md` §9, harness `20260814T002445`) is an
+independent repeat with three things different: a different archive copy
+(`vault/run/reskin-roster/Gw.dat`), **three IN-PLACE replaces** rather than a relocation,
+and skill-icon rows rather than a map. 70 s of play.
+
+| | armed | after play |
+|---|---|---|
+| MFT offset | `0xF8FFF000` | `0xF8BEFE00` — **the table moved 4.03 MB EARLIER** |
+| MFT entry count | 177,334 | 177,334 |
+| rows 174150 / 174487 / 174861 | 2,068 / 2,068 / 8,212 B, compression 0 | **all three byte-identical** |
+
+So the §4b result reproduces on the easier case as well: an in-place authored row survives a
+session, table move included. The direction is worth noting only because it is not what
+"the table moved" suggests — it moved *backwards*, into lower file offsets.
+
+**What is new is the failure mode, and §4b could not have found it.** §4b compared
+SNAPSHOTS; this run tried to `--revert` its JOURNALS afterwards, and all three refused:
+
+> Every MFT edit here names an address that is no longer the table. Replaying them would
+> write into dead space, restore nothing, and still leave the archive verifying — so the
+> failure would be invisible.
+
+That guard was written from `test_datcheck`'s reasoning that the table moves. **It has now
+fired on real data**, and its description of the alternative is exact: a forced replay would
+have written five MFT edits into abandoned bytes and left all three checksum rules PASSING,
+which is a revert that reports success and restores nothing.
+
+**The consequence for procedure: a journal is only good until the client next runs.** Revert
+before launching, or accept that the row stays as armed. `datwrite` has no verb for the
+explicit restore its own refusal recommends — `--replace` writes uncompressed and cannot put
+a compression-8 payload back, and `--overwrite` is same-length only — so the three icon rows
+above were **left armed on purpose**, with the original payloads still recoverable from the
+journals' `before` fields if anyone wants them.
+
 ### 4b.1 THE TRAP, and it nearly produced the opposite conclusion
 
 `datcheck --diff` reported **row 71496 changed from 0 B to 6,012 B** — and `deploy.py` had

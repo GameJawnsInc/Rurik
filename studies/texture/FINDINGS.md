@@ -260,7 +260,7 @@ want art rather than test patterns.
 | ~~Does the bar draw the whole texture?~~ | **Answered: no**, the frame covers everything inside inset ~10. See §4a. |
 | What does the terminal `code = 8` 1x1 record's 4-byte payload mean? | It is a compact colour fill; read the `code & 8` branch at `0x6c2010`. Only needed to clone a retail file byte-for-byte, never to author one. |
 | Does the `+0x8c` DXTL 64x64 slot have its own safe area? | Whatever consumes it is unidentified, so the question is downstream of finding that first. |
-| Is the bar's frame inset a fixed pixel count or a fraction of the texture? | Repeat the fine ruler at 64x64 and 256x256. If the safe inset scales, it is UV; if it stays 16px, it is pixels — which decides whether a 256x256 icon buys real detail. |
+| ~~Is the bar's frame inset a fixed pixel count or a fraction of the texture?~~ | **Answered: the client stretches the WHOLE texture onto a fixed screen quad.** See §9. |
 | Do the other fourccs author as predicted? | Repeat arm B at DXTA and DXT5. Cheap. |
 | Does a texture larger than its reservation force a relocation we can survive? | Everything so far fits in place. Relocation is the one archive operation still unexercised. |
 | What consumes `+0x8c`, given the bar reads `+0x90`? | Untested. Candidates: the effects monitor, the Skills panel, the party-window recharge overlay. |
@@ -294,3 +294,66 @@ python toolkit/clientpatch/repoint_skill.py --exe <exe> --target <skill> --set i
 `datwrite.py --replace` journals the previous value of every byte it writes, so
 an arm reverts without re-cutting 4.2 GB. It refuses to relocate: a payload
 larger than the row's 512-byte-block reservation is an error, not a silent move.
+
+## 9. OBSERVED 2026-08-14: the bar stretches the whole texture, so 64x64 works
+
+§6 asked whether the frame inset is a fixed pixel count or a fraction, and noted
+it "decides whether a 256x256 icon buys real detail". It decides something more
+immediately useful: **whether a skill roster can be re-iconed without moving a
+single archive row.** A 128x128 DXT1 needs an 8,704 B reservation and fits 16 of
+profession 8's 132 distinct icon rows; a 64x64 needs 2,560 B and fits **132 of
+132**, the smallest reservation in that roster being 6,656 B.
+
+Harness `20260814T002445`, three in-place `datwrite --replace` arms against
+`vault/run/reskin-roster/Gw.dat`, five untouched controls interleaved. RUN
+VERDICT PASS, no assert, no crash dialog, client alive the full 70 s.
+
+| Slot | Arm | Written | **OBSERVED** |
+|---|---|---|---|
+| 1,4,5,6,7 | controls | nothing | normal icons |
+| 2 | **Q** | 64x64 DXT1, a box-filtered mipmap of arm S | **the same sunset as slot 8, softer** |
+| 3 | **R** | 64x64 DXT1, `pattern_fine`'s inset ruler | all six bands, red included |
+| 8 | **S** | 128x128 DXT1, `pattern_icon` | the sunset — the positive control |
+
+**Arm Q is a MIPMAP of arm S, and that is the whole design.** `pattern_icon`
+draws to `safe = min(w,h)/2 - 16`, so calling it at 64 composes a *different*
+picture; slots 2 and 8 would then differ for a reason that has nothing to do
+with the client. Box-filtering the 128 down makes them the same image by
+construction, so "are these the same picture?" is a question about UV mapping
+alone. Measured over the inner 40% of each tile: slot 2 vs slot 8 is
+**15.19/255** mean absolute per channel, against **68.9, 75.7, 79.9, 91.1 and
+134.6** for the five untouched retail icons in the same frame. Same picture.
+
+**Arm R turns that into a scale.** A scanline through slot 3 finds the white
+band (source inset 20, so 12 texels from centre) at 11.5 px from centre and the
+red band (inset 10, 22 texels) at 21.0 px:
+
+```
+white  11.5 px / 12 texels = 0.958 px per texel
+red    21.0 px / 22 texels = 0.955 px per texel
+predicted red from the white landmark: 21.1 px    OBSERVED 21.0 px
+```
+
+Two independent landmarks, agreeing to 0.1 px. **The texture maps LINEARLY onto
+the quad across its whole width** — the client is not sampling a sub-rect, it is
+stretching the entire texture onto a screen quad of fixed size (~61 px here).
+The chrome then eats the outermost ~2.3 texels of a 64x64, i.e. **3.5% of the
+edge**, which is *less* than the 7-11.7% §4a measured at 128x128.
+
+That last comparison is the honest caveat: a constant *fraction* would predict
+equal percentages and these are not equal. The two readings were taken on
+different days and §4a's boundary was read by eye off nested frames ("not
+drawn" versus "partly under chrome") rather than off a scanline, so the
+discrepancy is as likely to be in that reading as in the model. What both agree
+on, and what the roster question needs, is the direction: **a 64x64 loses no
+more of its edge than a 128x128 does, and renders the same picture.**
+
+**Consequence.** `pattern_icon`'s 16-pixel border was written for 128x128 and is
+a *fraction* to be preserved, not a pixel count — 12.5%, so 8 px at 64x64.
+`pattern_icon` divides by `safe` and therefore raises ZeroDivisionError at
+32x32, where `min(w,h)/2 - 16` is 0; it is only valid at 40x40 and above.
+
+**Still open:** whether a 256x256 buys detail. The quad is ~61 px wide on this
+window, so a 128x128 is already supersampling it roughly 2:1 and a 256 would be
+4:1. That predicts no visible gain, and it is now a cheap arm rather than a
+question — but it has not been run.

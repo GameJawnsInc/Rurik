@@ -566,19 +566,37 @@ row is unanimous rather than merely good.
 > refusal quoting a reservation that did not match the row it named. An aggregate that is
 > robust to an indexing error is not evidence the indexing is right.
 
-So the route divides on one unanswered
-question -- [`../texture/FINDINGS.md`](../texture/FINDINGS.md) §6's *"is the bar's frame
-inset a fixed pixel count or a fraction of the texture?"*:
+The route divided on one unanswered question --
+[`../texture/FINDINGS.md`](../texture/FINDINGS.md) §6's *"is the bar's frame inset a fixed
+pixel count or a fraction of the texture?"* -- and **it was answered the same day, in the
+UV direction, so the roster needs ZERO relocations.** Harness `20260814T002445`: three
+in-place `datwrite --replace` arms, five untouched controls, RUN VERDICT PASS with no
+assert and no crash dialog. Write-up in
+[`../texture/FINDINGS.md`](../texture/FINDINGS.md) §9; the two numbers that carry it:
 
-* **If UV** (the prediction: the quad samples 0..1, so a smaller texture is the same
-  picture at lower resolution), the entire roster is authorable with `datwrite --replace`
-  alone -- journalled, byte-for-byte revertible, **zero relocations**.
-* **If fixed pixels**, a 64x64 loses most of its area to frame chrome and the roster needs
-  `datmove` for 166 of 188 rows. That is not a blocker either -- `datmove` is proven, and
-  an authored row has already survived a play session (`crossbuild` 4b) -- it is just
-  166 relocations instead of none.
+* A 64x64 and a 128x128 of the **same** picture -- the 64 a box-filtered mipmap of the
+  128, so they are the same image by construction rather than by eye -- render at the same
+  framing: **15.19/255** mean absolute apart, against **68.9 to 134.6** for the five
+  untouched retail icons in the same frame.
+* A ruler in slot 3 puts the texture's own inset-20 and inset-10 bands at 0.958 and 0.955
+  screen pixels per texel, predicting the second landmark from the first to **0.1 px**.
+  The client stretches the whole texture onto a fixed quad; it does not sample a sub-rect.
 
-Nothing here needs a discovery. It needs one caged run with a ruler in it.
+So `pattern_icon`'s 16-pixel border is a **fraction** (12.5%), not a pixel count, and the
+whole roster is authorable with `datwrite --replace` alone -- journalled, byte-for-byte
+revertible. **What has NOT been done is the roster**: this run authored three icons, not
+132, and nothing in the toolkit yet generates 132 distinct pictures worth looking at. That
+is now an art problem rather than a format one, which is a much better place to be stuck.
+
+> **`vault/run/reskin-roster/Gw.dat` IS STILL ARMED**, deliberately. Rows 174150 and 174487
+> (skills 317 and 318) and 174861 (skill 773) hold authored 64x64/64x64/128x128 icons, so a
+> later profession run in that directory will draw a sunset in slots 2 and 8 and a
+> calibration ruler in slot 3 -- that is us, not a fault. They were left because **the
+> journals expired**: the client moved the MFT during the session, `--revert` correctly
+> refused all three rather than write into dead space, and `datwrite` has no verb for the
+> explicit restore it recommends. The original payloads are still in the journals' `before`
+> fields. Full account in [`../crossbuild/FINDINGS.md`](../crossbuild/FINDINGS.md) §4c --
+> and the procedural rule it yields is **revert before you launch, not after**.
 
 ### Skill NAMES are no longer a wall -- RECONSTRUCTION, and untested
 
