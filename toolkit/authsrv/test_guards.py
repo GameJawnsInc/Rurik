@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 ".."))
 import checks  # noqa: E402
 
-LEDGER = checks.Ledger("guard contract", floor=25)
+LEDGER = checks.Ledger("guard contract", floor=32)
 check = LEDGER.ok
 
 
@@ -54,16 +54,20 @@ def section_hit_enemy():
     state = {"agents": {10: _fresh_agent()}, "pos": (0.0, 0.0)}
 
     saved = authsrv.HIT_FRACTION
-    authsrv.HIT_FRACTION = 1.5   # the shape step 8's computed values can take
+    # NEGATIVE damage -- a heal riding the damage property. This poison was
+    # 1.5 when the section was written red-first; amendment C4 then made
+    # overkill VALID (clamp-to-kill, section 9), so 1.5 stopped being an
+    # error and the invalid shape here had to become one that still is.
+    authsrv.HIT_FRACTION = -1.5
     try:
         raised = False
         try:
             authsrv.hit_enemy(send, state, 10, 0)
         except ValueError:
             raised = True
-        check(raised, "an out-of-range fraction still raises ValueError",
-              "the guard is _fraction's refusal, not a silent clamp -- "
-              "clamping is exactly what its docstring rules out")
+        check(raised, "an invalid computed damage still raises ValueError",
+              "the guard is a refusal, not a silent clamp -- negative "
+              "damage on the damage property would be a heal")
         check(sent == [], "and NOTHING was sent first",
               f"sent={sent!r} -- on the pre-guard tree this held "
               f"GV_ATTACK_STARTED, an attack opened on the wire with no "
@@ -101,7 +105,7 @@ def section_skill_press():
     press = [0, 42, 7, 10]   # header slot, skill 42, copy 7, target agent 10
 
     saved = authsrv.HIT_FRACTION
-    authsrv.HIT_FRACTION = 1.5
+    authsrv.HIT_FRACTION = -1.5   # invalid (a heal-shaped damage); see section 1
     try:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
@@ -362,6 +366,61 @@ def section_player_refill_due():
           f"due={state['player_refill_due_at']!r}")
 
 
+def section_overkill():
+    """Amendment C4: overkill is a valid game event, not a wrong number."""
+    import authsrv
+
+    print("\n9. overkill clamps to a kill; the true invalids are still refused")
+    # The wire value for a clamped kill, pinned as a LITERAL: f32(-1.0) is
+    # 0xBF800000. Computing it from authsrv._f32 would let the symbol under
+    # test move and the test move with it (TESTS.md's own lesson).
+    F32_MINUS_ONE = 0xBF800000
+
+    check(authsrv._damage_fraction(150.0, 100.0, 16, "overkill") ==
+          F32_MINUS_ONE,
+          "damage past the whole pool goes out as exactly -1.0",
+          "raw _fraction would REFUSE -150/100 -- a lethal hit that "
+          "silently no-ops, the exact failure C4 names")
+    check(authsrv._damage_fraction(30.0, 100.0, 16, "a scratch") ==
+          0xBE99999A,
+          "in-range damage is the plain fraction (f32(-0.3) = 0xBE99999A)")
+
+    for bad_dealt, bad_max, why in ((-5.0, 100.0, "negative damage"),
+                                    (float("nan"), 100.0, "NaN damage"),
+                                    (10.0, 0.0, "zero pool"),
+                                    (10.0, -100.0, "negative pool")):
+        raised = False
+        try:
+            authsrv._damage_fraction(bad_dealt, bad_max, 16, why)
+        except ValueError:
+            raised = True
+        check(raised, f"{why} is refused, not clamped",
+              f"dealt={bad_dealt!r}, pool_max={bad_max!r} -- the clamp is "
+              f"for overkill only; everything else keeps refuse-don't-clamp")
+
+    # End to end: an overkill swing KILLS, on the wire and in the books.
+    sent = []
+    send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
+    state = {"agents": {10: _fresh_agent()}, "pos": (0.0, 0.0)}
+    saved = authsrv.HIT_FRACTION
+    authsrv.HIT_FRACTION = 1.5
+    try:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            authsrv.hit_enemy(send, state, 10, 0)
+    finally:
+        authsrv.HIT_FRACTION = saved
+    agent = state["agents"][10]
+    damage_vals = [vals for op, vals, _ in sent
+                   if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
+    check(len(sent) == 4 and agent["dead"] is True and
+          damage_vals and damage_vals[0][3] == F32_MINUS_ONE,
+          "an overkill swing sends -1.0 and the target dies",
+          f"{len(sent)} messages (swing trio + kill status), "
+          f"dead={agent['dead']}, wire fraction=0x{damage_vals[0][3]:08X}"
+          if damage_vals else f"sent={sent!r}")
+
+
 def main():
     section_hit_enemy()
     section_skill_press()
@@ -371,6 +430,7 @@ def main():
     section_player_revive_due()
     section_agent_refill_due()
     section_player_refill_due()
+    section_overkill()
     return LEDGER.verdict()
 
 

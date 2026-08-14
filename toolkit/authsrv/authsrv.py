@@ -116,6 +116,38 @@ def _fraction(x, prop, what):
     return _f32(x)
 
 
+def _damage_fraction(dealt, pool_max, prop, what):
+    """Damage in pool units, as the wire's fraction-of-max -- clamped to a kill.
+
+    OVERKILL IS A VALID GAME EVENT, and this is where the refuse-don't-clamp
+    rule bends on purpose (studies/combat/PLAN.md, amendment C4): a decoded
+    skill dealing more than a weak target's whole pool is not a wrong number,
+    it is a kill with margin, and the wire's floor for it is -1.0. Routing it
+    through `_fraction` raw would refuse it -- a lethal hit that silently
+    no-ops, discovered by the gate map's critic BEFORE any computed damage
+    shipped, not after.
+
+    `_fraction` stays behind this as the invariant net. If it refuses AFTER
+    this clamp, that is a genuine bug -- and two of those are refused here by
+    name rather than left to leak through the clamp: a NEGATIVE dealt would
+    come out the far side as a heal on the damage property, and a NaN would
+    ride the `>` comparison past the clamp (both are exercised in
+    test_guards section 9).
+    """
+    if not pool_max > 0.0:
+        raise ValueError(
+            f"refusing damage against a non-positive pool max {pool_max!r} "
+            f"({what}): the fraction would be meaningless")
+    if not dealt >= 0.0:   # `not >=`, so NaN lands here too
+        raise ValueError(
+            f"refusing negative or NaN damage {dealt!r} ({what}): on the "
+            f"damage property that is a heal, not an overkill")
+    frac = dealt / pool_max
+    if frac > 1.0:
+        frac = 1.0
+    return _fraction(-frac, prop, what)
+
+
 AUTH_CMSG_VERSION_HEADER = 0x000C0400
 # 0x000C0700 came from the reference sources. 0x000C0500 is what build 38797
 # actually sends to a game server -- measured on the wire 2026-08-05, from a raw
@@ -1926,7 +1958,9 @@ def hit_enemy(send, state, target_id, conn_id):
     # reasoned: test_guards.py section 1 went red on exactly those three
     # counts against the pre-guard tree. Dormant while HIT_FRACTION is a
     # constant; load-bearing the day step 8 computes it (studies/combat).
-    frac = _fraction(-HIT_FRACTION, agents.PROP_DAMAGE, "one swing")
+    dealt = agent["max_health"] * HIT_FRACTION
+    frac = _damage_fraction(dealt, agent["max_health"],
+                            agents.PROP_DAMAGE, "one swing")
     agent["last_hit"] = now
 
     # A swing is two events, and sending only the second is why the first
@@ -1952,7 +1986,6 @@ def hit_enemy(send, state, target_id, conn_id):
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
          f"attack_started: player swings at {target_id}")
 
-    dealt = agent["max_health"] * HIT_FRACTION
     agent["health"] = max(0.0, agent["health"] - dealt)
 
     # Property 16 on 0x00A3: prop, TARGET, cause, value -- target before cause,
@@ -2441,12 +2474,13 @@ def land_swing(send, state, agent_id, agent, conn_id):
     # WIRE ORDER below is untouched -- finished then damage is ArenaNet's own,
     # 6 of 6 swings in the Lakeside tape (docstring above); only the
     # validation moved up.
-    frac = _fraction(-ENEMY_HIT_FRACTION, agents.PROP_DAMAGE, "an enemy swing")
+    dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
+    frac = _damage_fraction(dealt, float(agents.PLAYER_HEALTH),
+                            agents.PROP_DAMAGE, "an enemy swing")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
          "melee_attack_finished")
 
-    dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
@@ -2547,10 +2581,10 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # and the player's health were consumed before the guard could refuse --
     # a refused value would have cost real state for a message that never
     # went out (test_guards section 4).
-    frac = _fraction(-ENEMY_SKILL_FRACTION, agents.PROP_DAMAGE,
-                     f"skill {skill_id}")
-    agent["casting"] = None
     dealt = float(agents.PLAYER_HEALTH) * ENEMY_SKILL_FRACTION
+    frac = _damage_fraction(dealt, float(agents.PLAYER_HEALTH),
+                            agents.PROP_DAMAGE, f"skill {skill_id}")
+    agent["casting"] = None
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
          [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
