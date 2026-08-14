@@ -240,6 +240,71 @@ def player_corpus(rows: list[dict]) -> list[int]:
             if r["equip_family"] == 1 and not r["pvp_only"]]
 
 
+def build_of(data: bytes):
+    """The build number of this exact image, from its own bytes, or None.
+
+    The emitter stamps every content row with a `build`, and a stamp nothing
+    checks is an unfalsifiable self-declaration (toolkit/test_origin.py learned
+    this the hard way one layer up). So the number is derived by hashing the
+    image against `pinned.BUILDS`' PRISTINE hashes -- a patched copy or an
+    unknown build gets None, and the emitter refuses rather than guessing,
+    because a row stamped with the wrong build survives every later audit.
+    """
+    import hashlib
+    digest = hashlib.sha256(data).hexdigest()
+    for b in pinned.BUILDS:
+        if digest == b.pristine:
+            return b.number
+    return None
+
+
+# The row fields the server consumes, in emit order. Everything here is a
+# MEASUREMENT (a number read out of the owner's own client) carried with
+# per-row provenance -- the boundary CLAUDE.md's gate draws. The scaling
+# window +0x44..+0x68 is NOT here yet; decoding it is studies/combat step 4.
+CONTENT_FIELDS = ("activation", "aftercast", "recharge",
+                  "energy", "adrenaline", "attribute", "profession")
+
+
+def emit_content(rows, ids, build, exe, out_path) -> int:
+    """Write vault/content/skills.toml: the per-skill numbers the server reads.
+
+    One `[skills.<id>]` table per corpus skill, each carrying its own
+    `client-table` provenance (extractor named, build recorded -- the two
+    conditions `toolkit/content.py` enforces and `test_content.py` proves the
+    refusals of). The float fields are formatted with repr(), which for the
+    table's f32-derived values round-trips exactly through tomllib.
+    """
+    keep = {r["id"]: r for r in rows}
+    lines = [
+        "# GENERATED -- do not hand-edit. toolkit/clientscan/skilltable.py "
+        "--emit-content",
+        f"# exe: {exe}",
+        f"# build: {build} (derived from the image's own sha256 via "
+        f"clientscan/pinned.py, never typed in)",
+        f"# rows: {len(ids)} (the player-usable corpus: equip_family 1, "
+        f"PvP-only excluded)",
+        "# Loaded by toolkit/content.py as kind 'skills', merged over the "
+        "repo's content/*.toml.",
+        "",
+    ]
+    for skill_id in sorted(ids):
+        r = keep[skill_id]
+        lines.append(f"[skills.{skill_id}]")
+        for f in CONTENT_FIELDS:
+            v = r[f]
+            lines.append(f"{f} = {v!r}" if isinstance(v, float)
+                         else f"{f} = {int(v)}")
+        lines.append(f"[skills.{skill_id}.provenance]")
+        lines.append('source = "client-table"')
+        lines.append('extractor = "toolkit/clientscan/skilltable.py"')
+        lines.append(f"build = {build}")
+        lines.append("")
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_path).write_text("\n".join(lines), encoding="utf-8")
+    return len(ids)
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -249,6 +314,12 @@ def main(argv=None) -> int:
     p.add_argument("--out", help="write JSON here (keep it out of the repo)")
     p.add_argument("--summary", action="store_true",
                    help="print a summary instead of the full dump")
+    p.add_argument("--emit-content", metavar="PATH",
+                   help="write the server's per-skill content rows (TOML) "
+                        "here -- vault/content/skills.toml is the intended "
+                        "home. Refuses an exe whose bytes match no pristine "
+                        "build in clientscan/pinned.py, because every row is "
+                        "stamped with the build it was read from.")
     a = p.parse_args(argv)
     a.exe, why = (a.exe, "given on the command line") if a.exe else find_exe()
     print(f"client: {a.exe}\n        ({why})\n", file=sys.stderr)
@@ -257,6 +328,19 @@ def main(argv=None) -> int:
     base, count, score = locate_table(data)
     rows = [parse_record(data, base, i) for i in range(count)]
     corpus = player_corpus(rows)
+
+    if a.emit_content:
+        build = build_of(data)
+        if build is None:
+            print("REFUSED: this exe's sha256 matches no PRISTINE build in "
+                  "clientscan/pinned.py, so no honest `build` stamp exists "
+                  "for the rows. Point --exe at a pristine snapshot.",
+                  file=sys.stderr)
+            return 2
+        n = emit_content(rows, corpus, build, a.exe, a.emit_content)
+        print(f"wrote {a.emit_content}: {n} skill rows, build {build}",
+              file=sys.stderr)
+        return 0
 
     meta = {
         "exe": str(a.exe),

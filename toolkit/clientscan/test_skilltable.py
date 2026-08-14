@@ -38,8 +38,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from skilltable import (  # noqa: E402
-    RECORD_SIZE, decode_energy, displayed_adrenaline, locate_table,
-    parse_record, player_corpus,
+    RECORD_SIZE, build_of, decode_energy, displayed_adrenaline, emit_content,
+    locate_table, parse_record, player_corpus,
 )
 import checks  # noqa: E402
 import pinned  # noqa: E402
@@ -104,7 +104,7 @@ WIKI_ENERGY_25 = {
 # lost a section rather than passed -- which is exactly the failure §3 would
 # hide, since dropping the wiki join is what turns this file back into our
 # decoder agreeing with itself.
-LEDGER = checks.Ledger("skill table", floor=18)
+LEDGER = checks.Ledger("skill table", floor=26)
 check = checks.adopt(LEDGER)
 
 
@@ -220,6 +220,56 @@ def main():
     check(len(corpus) == EXPECTED_CORPUS,
           f"{EXPECTED_CORPUS} player-corpus rows (got {len(corpus)}) -- this is "
           f"also Tyria-Extractor's independent count")
+
+    print("\n6. the content emitter: server rows, stamped from the bytes")
+    import tempfile
+    import tomllib
+    build = build_of(data)
+    check(build == 38797,
+          f"the build stamp is DERIVED from the image's sha256 (got {build}) "
+          f"-- never typed in, so a wrong exe cannot stamp a plausible row")
+    check(build_of(b"not a client image") is None,
+          "an image matching no pristine build stamps nothing",
+          "the emitter refuses instead -- a row with a guessed build survives "
+          "every later audit, which is worse than no row")
+    with tempfile.TemporaryDirectory() as td:
+        out = os.path.join(td, "skills.toml")
+        n = emit_content(rows, sorted(corpus), build, args.exe, out)
+        with open(out, "rb") as fh:
+            doc = tomllib.load(fh)
+        skills = doc["skills"]
+        check(n == len(corpus) and len(skills) == n,
+              f"one TOML table per corpus skill ({n})")
+        # The three skills ArenaNet's own wire corroborated
+        # (studies/reconstruction/FINDINGS.md 2.9.2: the 0x00E5 field matched
+        # +0x4C on exactly 1 of 41 columns; activation/aftercast sit beside
+        # it). Pinned as LITERALS -- wire and table must both move for these
+        # to change.
+        for sid, act, aft, rech in (("153", 1.0, 0.75, 8),
+                                    ("105", 2.0, 0.75, 6),
+                                    ("394", 0.0, 0.0, 3)):
+            r = skills[sid]
+            check((r["activation"], r["aftercast"], r["recharge"])
+                  == (act, aft, rech),
+                  f"skill {sid} emits ({act}, {aft}, {rech}) -- the "
+                  f"live-corroborated trio",
+                  f"got ({r['activation']}, {r['aftercast']}, {r['recharge']})")
+        prov = skills["153"]["provenance"]
+        check(prov["source"] == "client-table"
+              and prov["extractor"] == "toolkit/clientscan/skilltable.py"
+              and prov["build"] == 38797,
+              "every row carries the gate's two conditions: extractor named, "
+              "build recorded")
+        # And the gate itself agrees: the row loads through content.py's
+        # provenance check rather than merely looking like it would.
+        sys.path.insert(0, os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "..", ".."))
+        sys.path.insert(0, os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), ".."))
+        import content
+        row = dict(skills["153"])
+        content._check_provenance("skills", "153", row)
+        check(True, "content.py's client-table gate accepts an emitted row")
 
     return LEDGER.verdict()
 
