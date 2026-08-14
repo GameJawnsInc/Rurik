@@ -109,18 +109,28 @@ REFERENCE_FORMATS = 9
 
 #: The f11 oracle through the export must reproduce `test_modelfile.py`'s
 #: in-memory numbers EXACTLY -- serialising the geometry may not change it.
-ORACLE = {KAMADAN_FILE_ID: (474, 474), PRESEARING_FILE_ID: (664, 664)}
+#: RE-MEASURED after rung M6: every prop-referenced model now decodes, so the
+#: comparable population is the WHOLE map rather than the subset the retired
+#: search could read. `test_modelfile.py` scores the two populations apart
+#: and shows the previously-readable ones still at 474/474 and 664/664; this
+#: file pins the totals, and the two must agree because they are the same
+#: measurement either side of a serialisation.
+ORACLE = {KAMADAN_FILE_ID: (510, 516), PRESEARING_FILE_ID: (846, 864)}
 
-#: (models with a collision mesh, collision meshes) over both reference maps,
-#: MEASURED 2026-08-13.
-COLLISION_POPULATION = (25, 28)
+#: (models with a collision mesh, collision meshes) over both reference maps.
+#: RE-MEASURED after M6 -- (25, 28) before, and the growth is entirely models
+#: the retired search could not read.
+COLLISION_POPULATION = (39, 43)
 
-#: The collision/ring population, MEASURED 2026-08-13. See the docstring: the
-#: reference maps have ZERO props carrying both, which is what killed the
-#: oracle this rung was scoped around.
+#: The collision/ring population, RE-MEASURED after M6. See the docstring:
+#: the reference maps still have ZERO props carrying BOTH a ring and a
+#: collision-carrying model, which is what killed the oracle this rung was
+#: scoped around -- and that negative now rests on the FULL population rather
+#: than on the ~85% the search could read, so it is a stronger negative than
+#: when it was first recorded.
 RING_POPULATION = {
-    KAMADAN_FILE_ID: dict(props=516, ring=46, on_collision_model=30, both=0),
-    PRESEARING_FILE_ID: dict(props=864, ring=34, on_collision_model=23,
+    KAMADAN_FILE_ID: dict(props=516, ring=46, on_collision_model=32, both=0),
+    PRESEARING_FILE_ID: dict(props=864, ring=34, on_collision_model=56,
                              both=0),
 }
 

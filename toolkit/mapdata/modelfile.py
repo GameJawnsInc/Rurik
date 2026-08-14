@@ -421,34 +421,38 @@ class ModelGeometry:
         num_models, = struct.unpack_from("<I", payload, NUM_MODELS_AT)
         coll, = struct.unpack_from("<H", payload, COLLISION_COUNT_AT)
 
-        starts = []
-        first_walk = None
-        for s in range(PREAMBLE_MIN, len(payload) - SUBMODEL_HEADER.size):
-            walked = _walk_models(payload, s, num_models)
-            if walked is None:
-                continue
-            end, raw = walked
-            if coll == 0:
-                if end == len(payload):
-                    starts.append(s)
-                    if first_walk is None:
-                        first_walk = raw
-            else:
-                cw = _walk_collision(payload, end, coll)
-                if cw is not None and cw[0] == len(payload):
-                    starts.append(s)
-                    if first_walk is None:
-                        first_walk = (raw, cw[1])
-        if not starts:
+        # THE SUB-MODEL ARRAY IS COMPUTED, NOT SEARCHED (rung M6). The
+        # preamble is six gated variable-length blocks and `preamble_end`
+        # walks them exactly as `MdlLoad.cpp`'s parser does; see its
+        # docstring for the block table and the addresses.
+        start = preamble_end(payload)
+        starts = [start]
+        walked = _walk_models(payload, start, num_models)
+        if walked is None:
             raise NoClose(
-                f"no start offset in [{PREAMBLE_MIN}, {len(payload)}) lets "
-                f"{num_models} sub-model(s) and {coll} collision mesh(es) "
-                f"close on the chunk's {len(payload)} bytes")
-
+                f"the computed sub-model start {start} does not admit "
+                f"{num_models} sub-model(s) in {len(payload)} bytes")
+        end, raw = walked
+        craw = []
         if coll:
-            raw, craw = first_walk
-        else:
-            raw, craw = first_walk, []
+            cw = _walk_collision(payload, end, coll)
+            if cw is None:
+                raise NoClose(
+                    f"the computed start {start} admits {num_models} "
+                    f"sub-model(s) but not {coll} collision mesh(es)")
+            end, craw = cw
+
+        # THE CLOSURE GATE IS ARENANET'S OWN, not ours: `0x007957CB` does
+        # `cmp [ebp+8], esi / jne -> return 4`. Keeping it means N green
+        # decodes are N assertions about the whole preamble derivation rather
+        # than N comparisons of a value with itself -- and because the offset
+        # is now COMPUTED, closure can genuinely fail, where a search made it
+        # true by selection.
+        end = trailing_end(payload, end)
+        if end != len(payload):
+            raise NoClose(
+                f"the walk ends at {end} of {len(payload)} bytes; the "
+                f"client's own gate at 0x007957CB requires the exact end")
         submodels = [_submodel(payload, rec) for rec in raw]
         for i, sm in enumerate(submodels):
             bad = sum(1 for v in sm.indices if v >= sm.nv)
@@ -489,6 +493,200 @@ class ModelGeometry:
         return (f"<ModelGeometry {self.num_models} sub-model(s), "
                 f"{self.collision_count} collision mesh(es), "
                 f"start {self.start}{amb}>")
+
+
+#: The chunk's own version word, gated by `MdlLoad.cpp` at 0x00794586
+#: (`cmp dword ptr [eax], 0x26` / `jne` -> error 6). MEASURED 0x26 on
+#: 2,951 of 2,951 sampled model files.
+GEOMETRY_VERSION = 0x26
+
+
+class _Cursor:
+    """A bounds-checked cursor, mirroring the client's own refusals."""
+
+    __slots__ = ("p", "n", "at")
+
+    def __init__(self, payload):
+        self.p = payload
+        self.n = len(payload)
+        self.at = 0
+
+    def take(self, k, why):
+        if k < 0 or self.at + k > self.n:
+            raise NoClose(f"{why}: {k} bytes from {self.at} runs past the "
+                          f"chunk's {self.n}")
+        self.at += k
+
+    def cstring(self, why):
+        z = self.p.find(b"\0", self.at, self.n)
+        if z < 0:
+            raise NoClose(f"{why}: unterminated string at {self.at}")
+        self.at = z + 1
+
+
+def _u8(p, o):
+    return p[o]
+
+
+def _u16(p, o):
+    return struct.unpack_from("<H", p, o)[0]
+
+
+def _u32(p, o):
+    return struct.unpack_from("<I", p, o)[0]
+
+
+def preamble_end(payload):
+    """Where the sub-model array starts. COMPUTED, exactly as the client does.
+
+    Rung M6, and it replaced a brute-force search that could not close on
+    ~15% of model files. `MdlLoad.cpp`'s parser at `0x007952A0` sets a cursor
+    to `begin + 0x54` (`0x007952C1 lea eax, [esi+0x54]`) and advances it
+    through SIX gated variable-length blocks; the sub-model array is simply
+    wherever the cursor lands. Every size comes from a header field, so the
+    offset is derived rather than fitted:
+
+        A  0x007952D7  if u8@0x30:  28 * u8@0x30
+        B  0x00795307  u16@0x50 records of 0x18, each + 7*u32@rec+8
+                       + 8*(u32@rec+0xC + u32@rec+0x10 + u32@rec+0x14)
+        --  gates at 0x0079545B: u8@0x18 <= 0xFE, u8@0x1C <= 0x7F, u32@0x20 <= 7
+        C  0x00795860  if a=u8@0x18: 8*a + 9*b + (b if c else 0)
+        D  0x00794D30  if u8@0x19: 9*u8@0x19, then u8@0x1D*(3 + (c!=0)),
+                       then 8*u16@0x1A, then u16@0x1A NUL-TERMINATED STRINGS,
+                       then 8*u16@0x1E
+        E  0x00795507  if u8@0x08 & 0x20: an 8-byte header, then its u32@+4
+                       records of 0x2E bytes, each + `_block_e_payload`
+        F  0x0079554E  if u8@0x08 & 0x80: u16@0x52 records of 48, then
+                       24*sum(u32@rec+0x28) + 16*sum(u32@rec+0x2C)
+
+    Nine one-term sabotages of this walk were built and run and every one
+    REDUCES closure over the reference maps' 315 chunks (from 315/315 to
+    1, 0, 275, 61, 314, 298, 311, 0 and 251) -- so the terms are load-bearing
+    rather than decorative, and `test_modelfile.py` keeps the sharpest of them.
+    """
+    n = len(payload)
+    if n < PREAMBLE_MIN:
+        raise Undecodable(f"geometry chunk is {n} bytes, under the "
+                          f"{PREAMBLE_MIN}-byte header region")
+    version = _u32(payload, 0)
+    if version != GEOMETRY_VERSION:
+        raise Undecodable(
+            f"geometry chunk version 0x{version:X} != 0x{GEOMETRY_VERSION:X}; "
+            f"MdlLoad.cpp refuses it at 0x00794586")
+    w = _Cursor(payload)
+    w.at = PREAMBLE_MIN
+
+    if _u8(payload, 0x30):                                          # A
+        w.take(28 * _u8(payload, 0x30), "block A")
+
+    for _ in range(_u16(payload, 0x50)):                            # B
+        rec = w.at
+        w.take(0x18, "block B header")
+        w.take(7 * _u32(payload, rec + 8)
+               + 8 * (_u32(payload, rec + 0x0C) + _u32(payload, rec + 0x10)
+                      + _u32(payload, rec + 0x14)), "block B payload")
+
+    a, b, c = _u8(payload, 0x18), _u8(payload, 0x1C), _u32(payload, 0x20)
+    if a > 0xFE:
+        raise Undecodable(f"u8@0x18 = {a} > 0xFE (0x0079545B refuses)")
+    if b > 0x7F:
+        raise Undecodable(f"u8@0x1C = {b} > 0x7F (0x0079545B refuses)")
+    if c > 7:
+        raise Undecodable(f"u32@0x20 = {c} > 7 (0x0079545B refuses)")
+
+    if a:                                                           # C
+        w.take(8 * a + 9 * b + (b if c else 0), "block C")
+
+    d0 = _u8(payload, 0x19)                                         # D
+    if d0:
+        w.take(9 * d0, "block D0")
+        w.take(_u8(payload, 0x1D) * (3 + (1 if c else 0)), "block D1")
+        d2 = _u16(payload, 0x1A)
+        w.take(8 * d2, "block D2")
+        for _ in range(d2):
+            w.cstring("block D strings")
+        w.take(8 * _u16(payload, 0x1E), "block D3")
+
+    flags = _u8(payload, 0x08)
+    if flags & 0x20:                                                # E
+        base = w.at
+        w.take(8, "block E header")
+        for _ in range(_u32(payload, base + 4)):
+            rec = w.at
+            w.take(0x2E, "block E record")
+            w.take(_block_e_payload(payload, rec), "block E payload")
+
+    if flags & 0x80:                                                # F
+        count = _u16(payload, 0x52)
+        if count == 0:
+            raise Undecodable("flags & 0x80 with u16@0x52 == 0 "
+                              "(0x00795C3F refuses)")
+        base = w.at
+        w.take(48 * count, "block F records")
+        sum_a = sum(_u32(payload, base + 48 * i + 0x28) for i in range(count))
+        sum_b = sum(_u32(payload, base + 48 * i + 0x2C) for i in range(count))
+        if sum_a == 0 or sum_b == 0:
+            raise Undecodable("block F sums are zero "
+                              "(0x00795CEA/0x00795CF2 refuse)")
+        w.take(24 * sum_a + 16 * sum_b, "block F payload")
+    return w.at
+
+
+def _block_e_payload(payload, rec):
+    """Bytes after a block-E record, per the callback at `0x00796ED0`."""
+    fl = _u8(payload, rec + 0x0C)
+    if fl & 2:
+        eax = _u16(payload, rec + 0x14)
+        edx = 0
+        edi = eax
+    else:
+        base = _u16(payload, rec + 0x14)
+        edx = (base - _u16(payload, rec + 0x28)) & 0xFFFFFFFF
+        edi = eax = base
+    eax &= 0xFFFF
+    if fl & 0x40:
+        ebx = eax
+        edi = eax
+    else:
+        ebx = _u32(payload, rec + 0x1A)
+        edi &= 0xFFFF
+    ecx = _u16(payload, rec + 0x26) + _u16(payload, rec + 0x24)
+    ecx = _u16(payload, rec + 0x22) + ecx * 2
+    ecx += _u32(payload, rec + 0x04) + ebx + _u32(payload, rec + 0x00)
+    span = (edx + _u32(payload, rec + 0x1E) * 2) & 0xFFFFFFFF
+    total = (span * 9 + ecx * 2 + _u32(payload, rec + 0x2A)
+             + _u32(payload, rec + 0x16))
+    per = 8 * _u8(payload, rec + 0x13) + 0x0C
+    return per * (edi & 0xFFFF) + 2 * total
+
+
+def trailing_end(payload, at):
+    """Walk the THREE blocks that follow the collision meshes.
+
+    **This is what the search could not see, and the whole cause of the
+    ~15% failure population** (rung M6): the client's stream does not end at
+    the last collision mesh, so a walk requiring closure THERE could never
+    close on a file carrying one of these. MEASURED on a 1,948-row sample --
+    of 931 files the old search called `NoClose`, 930 carry block I and/or
+    block J, and exactly one is unexplained.
+
+        H  0x0079564A  if u8@0x31: 16*u8@0x31 + 0x54*u8@0x32
+        I  0x0079574D  u32@0x48 records of 4 bytes, each + 8*u32@rec
+        J  0x007957B4  if u32@0x34: that many bytes (0x00795DA0)
+    """
+    w = _Cursor(payload)
+    w.at = at
+    if _u8(payload, 0x31):                                          # H
+        w.take(16 * _u8(payload, 0x31) + 0x54 * _u8(payload, 0x32),
+               "block H")
+    for _ in range(_u32(payload, 0x48)):                            # I
+        rec = w.at
+        w.take(4, "block I record")
+        w.take(8 * _u32(payload, rec), "block I payload")
+    tail = _u32(payload, 0x34)                                      # J
+    if tail:
+        w.take(tail, "block J")
+    return w.at
 
 
 def _walk_models(payload, start, n):
