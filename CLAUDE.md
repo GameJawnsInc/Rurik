@@ -1835,19 +1835,46 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   stride that DIVIDES the true one closes on the same base with a multiple of the
   count -- `s_eula` reads as 99 x 4 instead of 33 x 12 -- and only an index column can
   refute it, so the surviving rival strides are printed per row (`s_effect` 0,
-  `s_eula` [4, 36, 44, 132]) and `s_worldData`'s stride is labelled UNSETTLED. That is
+  `s_eula` [4, 36, 44, 132]). That is
   not hypothetical: `s_glow` was entered in this corpus as 2 x 44, CLOSED on the
   correct base with a plausible record, and is 11 x 8. Three sabotages built and run
   and three redden -- a first-hit anchor, a +/- 4 pad tolerance, and the code witness
   dropped -- which is why `pad` is a declared exact number and never a tolerance
-  (4 bytes is a whole record for the eight stride-4 tables here). It is also the
+  (4 bytes is a whole record for the eight stride-4 tables here).
+  **And since 2026-08-14 section 7b is the blind spot's OTHER victim, caught rather
+  than survived.** `s_worldData` shipped here as **20 x 24** with
+  `stride_from="record shape, UNSETTLED"` -- it closed, on the CORRECT base, with the
+  code reference corroborating it, so every check this module owns was satisfied by
+  the wrong answer for as long as the row existed. It is **10 x 48**, and what
+  settled it is not arithmetic available to this file: the table's own accessor at
+  `0x005A93B0` scales the index by 3 and shifts it left 4, and the section finds that
+  site by its SHAPE rather than at a remembered address -- the `lea`+`shl` pair alone
+  occurs 22 times, so it is the trailing absolute `add` that makes it a witness, and
+  the whole 7-byte pattern occurs exactly **once**, loading the very base the anchor
+  arithmetic produced. Read as BYTES, since carve-out (1) scopes capstone to two named
+  files and this is neither. **The count is ArenaNet's too** -- `cmp esi, 0xa` guards
+  `index < arrsize(s_worldData)` at `ConstWorld.cpp:41`, whose `__FILE__` string IS
+  this row's anchor, so the assert and the table are one measurement from two
+  directions -- and the row DECLARES it (the `s_missionClientData` shape) with a check
+  that dropping the declaration reddens, because the number would be unchanged and the
+  provenance would not. **24 is still in the rival list and saying so is the doctrine
+  working**: every divisor of 48 closes on the same base, and the closure never could
+  have refuted it. What can is a COLUMN -- `+0x14` is 512, the client's own
+  `CONST_WORLD_CHUNK_SIZE`, on all ten 48-byte records and ragged on the twenty
+  24-byte ones -- and that is a stated LIMIT of `rival_strides`, which tests closure
+  and the index column and never column coherence. Four sabotages built and run
+  (3, 5, 2 and 1 red); a draft of the floor comment GUESSED those counts and had three
+  of four wrong. The one that does NOT redden under the pre-fix row is the informative
+  one: the left-edge corroboration passes at 20 x 24, because 24 divides 480 and two
+  readings of the SAME 480 bytes cannot see a divisor stride. Only the code witness
+  can. Floor 61 -> 69. It is also the
   first `source = "client-table"` extraction in this repo's history: `--emit-effect`
   writes all **2,077** `s_effect` rows with provenance per row, keyed by the ARRAY
   INDEX rather than the id column (one record's id is not its index, and keying by id
   would drop row 2036 and mint a 2077), and the test loads them through `content.py`
   and then REMOVES the build from one row and requires the load to FAIL, so the 2,077
   are proved to have passed condition 2 rather than skipped it. Sections 0-4 build a
-  small PE32 image byte by byte and need no vault, scoring 28 against a floor of 61,
+  small PE32 image byte by byte and need no vault, scoring 28 against a floor of 69,
   so a vault-less run goes red. ~15 s),
   `toolkit/test_checks.py` (the check on the checker — see below),
   `toolkit/test_run_suite.py` (the suite RUNNER, which did not exist until
