@@ -481,8 +481,53 @@ tied to a content class; and the set both grows and shrinks with play (25 in
    would cluster by biome, though a statistical cluster is weaker evidence than
    anything in this document.
 3. **The Underworld rows 461/463.** §7.
-4. **Which of `+0x48` and `+0x58` the client prefers**, and what the 172
-   disagreements mean. Both are used here; neither is understood.
+4. **CLOSED 2026-08-14 (studies/minimap rung S2) — which of `+0x48` and `+0x58`
+   the client prefers, and what the 172 disagreements mean.** Left in place
+   rather than renumbered, because `studies/minimap/FINDINGS.md` §3.3 cites this
+   item by its number.
+   **`MissionCliGetMap()` (`0x0084D9B0`, reading `missionContext+0x238`) picks:
+   0 → `+0x48`, non-zero → `+0x58`** — and the enum is two-valued, so `+0x48` is
+   the rect the client crops the continent atlas with while the area is an
+   **OUTPOST** instance and `+0x58` the one it uses while it is a **GAME**
+   (explorable/mission) instance. ArenaNet's own numbers, all three read out of
+   compiled comparisons rather than inferred: `MISSION_MAP_OUTPOST == 0`
+   (`QuestLog:261 MISSION_MAP_OUTPOST == MissionCliGetMap()` compiles to
+   `call 0x0084D9B0; test eax,eax; je` at `0x0057BEBA`, skipping the assert when
+   the answer is zero), `MISSION_MAP_GAME == 1` (`MsCliApi:251`, `cmp
+   [esi+0x238],1` @ `0x0084D9EC`), `MISSION_MAPS == 2` (`MsCliMan:486`, `cmp
+   [edi+0x238],2` @ `0x0085204B`). — OBSERVED, build 38797, pinned pristine.
+   **Six readers apply it, and the count is measured rather than assumed.** The
+   table base `0x0096DE38` occurs **exactly once** in the whole image — at
+   `0x005A85A8`, inside the accessor `0x005A8580` — so every row pointer the
+   client holds came from there, which is what makes an exhaustive answer
+   possible at all; and the table is `.rdata`, so any site that *writes*
+   `[base+0x48]` is provably not an area row. Three sweeps sharing no premise
+   (int3-block co-occurrence with the 106 accessor call sites; a shape sweep for
+   a contiguous four-dword rect at both offsets on one base register; a forward
+   sweep from all 171 `MissionCliGetMap()` call sites) return the same six:
+   `CompassMap.cpp` `0x008C2160` and `0x008C2761`, the compass block at
+   `0x008C3141`, `ChCliApi.cpp` `0x00811C64`, and `GmMapHelpers.cpp`
+   `0x0054E6A0` and `0x0054E830`. **`GmMapView.cpp` reads neither offset** — 0
+   instructions at both over `0x00550A18..0x00553D8B`, no accessor and no
+   selector call in that span. Blind to indirect calls and to a row pointer
+   cached across functions; both stated so the negative is auditable.
+   **The 172 are mostly not disagreements.** Of them, **136 have `+0x48`
+   all-zero, 16 have `+0x58` all-zero, and only 20 carry two different non-zero
+   rects.** One side is usually simply ABSENT — and the client says so itself:
+   the two `GmMapHelpers` readers fall back to the other rect when the preferred
+   one is `{0,0,0,0}` (`0x0054E876..0x0054E894` and the mirror at `0x0054E8A4`).
+   The compass has no such fallback and bails on a degenerate rect instead
+   (`0x008C274F cmp x0, x1; je`). Corroboration from a column the selector never
+   touches, with the prediction stated before it was read (a flat or overlapping
+   split would have refuted it): the `+0x48`-zero and `+0x58`-zero populations
+   are **disjoint on their dominant `type` values** — `{2: 63, 18: 71, 14: 2}`
+   against `{10: 12, 13: 3, 14: 1}` — which is what two instance kinds predicts
+   and a stale-duplicate reading does not. CORROBORATED, at UPSTREAM strength,
+   since `areatable.OFF_TYPE` is UPSTREAM.
+   **What is still open is narrower and needs a client:** whether every one of
+   the 20 two-rect rows is an outpost/explorable pair, and what a flip of the
+   map-type byte actually draws, are UNVERIFIED. `studies/minimap/PLAN.md` rung
+   C3 is that experiment, and **its population is 20, not 172**.
 5. **`0x01A4`'s field 7** is a second map-file-id carrier (§2b) and has never
    been seen on a capture — all nine of ours used `0x0195`.
 6. **The names in §6 are not proof of geometry.** A forced row means its

@@ -23,17 +23,22 @@ import checks  # noqa: E402
 
 AUTH_CMSG_MASK = 0x8000
 
-# Floor 27, measured from a green run on 2026-08-11: section 1 contributes exactly
-# one whatever the vault holds (its three branches each score a single verdict),
-# then 2 + 5 + 3 for sections 2, 3 and 4, 5 for section 5, 4 for section 6, and 7
-# for the catalog block at the end. It was 18 before the string16 sections landed.
+# Floor 29, RE-MEASURED from a green run on 2026-08-14: section 1 contributes exactly
+# one whatever the vault holds (its three branches each score a single verdict), then
+# 2 + 5 + 3 for sections 2, 3 and 4, 5 for section 5, and 13 under section 6's heading
+# (its own round trip plus the catalog block that prints beneath it). It was 18 before
+# the string16 sections landed, then 27 -- and 27 was STALE: the run had grown to 28
+# without the floor following, so the file carried a check of slack, which is the
+# state this floor exists to prevent. The arithmetic above is now counted from the
+# output rather than reasoned about, because the old comment's own sum (1+2+5+3+5+4+7)
+# was the number that drifted.
 # This file is the reason checks.py exists — it once printed ALL CHECKS PASSED with
 # its capture glob matching nothing — so the floor is what makes a section going
 # quiet a failure rather than a shorter list of passes. Section 6 needs the live
 # captures and declares four skips without them, which puts a vault-less run four
 # below the floor and therefore RED: ArenaNet's own bytes are the only oracle for
 # the round trip, and a run that could not consult them has not checked it.
-LEDGER = checks.Ledger("codec vs captured bytes", floor=27)
+LEDGER = checks.Ledger("codec vs captured bytes", floor=29)
 check = checks.adopt_named(LEDGER)
 
 
@@ -404,12 +409,23 @@ def main():
     # "a named entry changes no field" must look everywhere that principle applies, or
     # the first exception to it arrives unnoticed.
     #
-    # ONE entry is allowed to differ, and it is named here rather than filtered
+    # TWO entries are allowed to differ, and they are named here rather than filtered
     # silently: GAME_SMSG 421's layout correction (38 -> 39 bytes, a trailing byte our
     # import missed) came from the client's own cmds[] table, predates the name by
     # days, and is now independently corroborated by ArenaNet's stream -- all three
     # tapes put the next message exactly 39 bytes later. Adding a name did not move it.
-    LAYOUT_FIXED = {("GAME_SMSG", "421")}
+    #
+    # GAME_SMSG 146 (COMPASS_PING, 2026-08-14) is the same shape and is deliberately
+    # held to the same test: its correction (10 -> 12 bytes, a trailing `word` our
+    # import missed) also came from the client's own cmds[] table -- cmd 0x204 is a
+    # 2-byte unsigned int, and the MsgFormatRecv entry statically holds count=4 -- and
+    # it, too, was in overrides.json BEFORE the name arrived, which is the property
+    # this check actually cares about: the name moved nothing. Where it is WEAKER than
+    # 421 and the difference is stated rather than glossed: 421's correction is
+    # corroborated on the wire and 146's CANNOT be, because 0x0092 occurs 0 times in
+    # all 22,524 live GAME_SMSG. It rests on the binary alone. If a capture ever
+    # carries one, that is the check this exemption is waiting for.
+    LAYOUT_FIXED = {("GAME_SMSG", "421"), ("GAME_SMSG", "146")}
     all_base = json.load(open(os.path.join(repo, "schema", "messages.json"),
                               encoding="utf-8"))["channels"]
     all_over = json.load(open(os.path.join(repo, "schema", "overrides.json"),
@@ -446,6 +462,25 @@ def main():
               f"{len({ch for ch, _k in named_over})} channel(s), layouts untouched "
               f"apart from the declared exception -- the names record what a message "
               f"MEANS, which its marshalling types cannot say")
+
+    # ...and the exemption list is checked in the OTHER direction too, because an
+    # allowlist that only ever grows is how this check would quietly stop working. A
+    # row for an entry that no longer differs is inert today and silently re-permits a
+    # layout move the day someone edits that entry -- test_dispatch.py's
+    # DROPPED_ON_PURPOSE has the same rule for the same reason. Every exemption must
+    # still be DOING something.
+    stale_fixed = [(ch, k) for ch, k in sorted(LAYOUT_FIXED)
+                   if k not in all_over.get(ch, {})
+                   or "name" not in all_over[ch][k]
+                   or "fields" not in all_over[ch][k]
+                   or all_over[ch][k]["fields"]
+                   == all_base.get(ch, {}).get("messages", {}).get(k, {}).get("fields")]
+    LEDGER.ok(not stale_fixed,
+              "and every declared layout exception is still load-bearing",
+              f"stale: {stale_fixed}" if stale_fixed else
+              f"{len(LAYOUT_FIXED)} exemption(s), each still a named entry whose "
+              f"layout genuinely differs from the imported catalog -- a row that "
+              f"stopped differing would re-permit a move on that entry unnoticed")
 
     codec_named = codec_mod.Codec()
     LEDGER.ok(codec_named.name_for("GAME_SMSG", 0x01A5) == "GAME_SERVER_TRANSFER",
