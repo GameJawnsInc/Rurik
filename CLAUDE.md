@@ -803,8 +803,27 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   zeroing reddens exactly ONE check. No vault and no client -- and the client half
   is no longer missing: FINDINGS 39 moved a real map's Stripped partner **1.6 GB**
   and the retail client found it, compiled from it and emitted ArenaNet's own bytes,
-  with 0 overlapping pairs afterwards on the real 4.2 GB archive. What is still
-  unmeasured is DURABILITY across a play session),
+  with 0 overlapping pairs afterwards on the real 4.2 GB archive. **DURABILITY
+  across a play session is MEASURED as of 2026-08-13, and this line said it was
+  not until 2026-08-14** -- which is how a session re-opened it as an open item a
+  day after running it, so the answer lives here rather than only in the study.
+  Two witnesses, `studies/crossbuild/FINDINGS.md` 4b and 4c: an authored row
+  survives a session in which the client demonstrably rewrote the archive, on the
+  RELOCATED case (10,714 B that did not fit its 4,608 B reservation, byte-identical
+  afterwards while the client recompiled its Bloated partner FROM it, 64 trapezoids
+  and 4,096/4,096 height samples exact) and on the IN-PLACE case (three icon rows,
+  a different archive copy, all three byte-identical). **The arm is what makes the
+  vacuity control free** and is the method point worth carrying: a zeroed head
+  REQUIRES the client to write, so the run measures survival rather than whether
+  the client happened to touch anything -- without it, "nothing changed" is
+  INCONCLUSIVE and not a pass. What is still unmeasured is a session long enough to
+  trigger whatever rotation the 29-member set participates in, and the bit-31
+  watchlist is unprobed because our rows are not on it. **And the MFT ALTERNATES
+  between two offsets rather than drifting** -- copies with identical entry counts
+  sit at both, so it is a phase and not a function of table size -- which means a
+  journal is only good until the client next runs: `--revert` refuses afterwards,
+  correctly, because replaying MFT edits into abandoned bytes restores nothing and
+  leaves all three checksum rules PASSING),
   `toolkit/mapdata/test_datplan.py` (where a new file may be PUT, against an
   archive the test builds with two shadow containers in it: that placement is
   best fit rather than the head of the largest run, that a run carrying a live

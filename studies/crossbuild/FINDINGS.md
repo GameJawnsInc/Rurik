@@ -361,6 +361,47 @@ lands: **never compare a row number printed by one tool against one printed by a
 
 </details>
 
+### 4d. What is left after 4b and 4c — and why this question got asked twice
+
+**Play-session durability is CLOSED for the ordinary case**, on two witnesses that differ in
+archive copy, edit shape and payload kind. It should not be re-opened as an open item, and on
+**2026-08-14 it was** — by the same session that had run §4b the day before, which listed it
+back onto its own next-actions list and started staging a third run before finding this
+section.
+
+The cause was not forgetfulness. `CLAUDE.md`'s `test_datmove` entry ended *"what is still
+unmeasured is DURABILITY across a play session"* — the exact sentence §4b quotes as the
+question it answered — and nothing updated it when the answer landed. That is this repo's
+own opening rule arriving from a new direction: the top of `CLAUDE.md` says status lives in
+`PLAN.md` §3 *"and nowhere else"* because three files once disagreed, and here a **result**
+did the same thing. A cold session reads the house-rules file, not the study. Corrected
+2026-08-14, in the entry itself rather than by adding a pointer. **The general form: when a
+study closes a question that a suite entry states as open, the suite entry is part of the
+deliverable.**
+
+**What genuinely remains**, none of it blocking and none of it re-running the above:
+
+1. **Session length.** Both runs are ~70–120 s. Nothing is known about a session long enough
+   to trigger whatever rotation the 29-member set participates in. The MFT alternation (§4c)
+   fires on roughly every other run and is *already* visible at this length, so the untested
+   band is longer-period behaviour, not the common case.
+2. **The bit-31 watchlist is unprobed**, and neither run could have probed it: our rows are
+   not on it. Testing it means deliberately arming a row that *is*, which is a different
+   experiment with a different risk profile.
+3. **`datwrite` has no explicit-restore verb**, and that is a live state rather than a
+   hypothetical — §4c left three skill-icon rows **armed on purpose** in
+   `vault/run/reskin-roster/Gw.dat`, because `--replace` writes uncompressed and cannot put a
+   compression-8 payload back and `--overwrite` is same-length only, while `--revert` correctly
+   refuses once the client has moved the table. The payloads are still recoverable from the
+   journals' `before` fields. This is the one item here with an owner.
+
+**One dangling pointer was fixed alongside.** `vault/dat_durability/ARMED.json` cited
+`studies/crossbuild/DURABILITY.md` twice — once in `why`, once inside the `NOT_PLAYABLE`
+safety warning that says to read it *"before handing it to any client"*. **That file has never
+existed in either tree** (the recon survey noted the same dangling name at
+`studies/recon/FINDINGS.md`:304). Both now point at this document, §1 and §4. A safety warning
+whose citation resolves to nothing is the half of a guard that does no work.
+
 ---
 
 ## 5. What this changes elsewhere
@@ -386,6 +427,9 @@ lands: **never compare a row number printed by one tool against one printed by a
 | Revert is byte-identical | **OBSERVED** — `datcheck --diff` exit 0, recorded in `ARMED.json`; not independently re-run here |
 | 334 rows change across one update, in the four named shapes | **OBSERVED** — one update, n=1 |
 | The authored row will survive an update | **RECONSTRUCTION**, low confidence, §3 |
+| An authored row survives a PLAY SESSION in which the client demonstrably rewrote the archive | **OBSERVED** — two witnesses, §4b (relocated row, 10,714 B over a 4,608 B reservation, client recompiled from it) and §4c (three in-place rows, different archive copy). n=2 sessions, ~70–120 s each |
+| The MFT alternates between two offsets rather than drifting | **OBSERVED** — §4c, seven vault copies at exactly two values, copies with identical entry counts at both |
+| A session longer than ~120 s leaves an authored row alone | **UNVERIFIED** — §4d item 1, never run |
 | The patcher holds no external content manifest | **UNVERIFIED** — never looked for, and it is the assumption the prediction rests on |
 | ~~`archive.py`'s offset for row 46196 is wrong by 1,024~~ | **REFUTED** 2026-08-14 — `archive.row(46196).offset == 0x437F6800`, identical to `datwrite`/`datcheck`, marker in that extent. The 1,024 came from reading `entries[46196]`, which is row 46197. §4, §4b.1 |
 | ~~`archive.py` and `datcheck.py` number MFT rows differently, off by one~~ | **REFUTED** 2026-08-14 — all 24 bytes of every row agree on all ten vault archives; pinned by `test_archive.py` §1c. The number that differs is `len(entries)` vs `row_count`. §4b.1 |
