@@ -117,6 +117,88 @@ def encode(rgb, width, height):
     return blocks
 
 
+def decode_block(c0, c1, idx):
+    """One 4x4 block to 16 RGBA tuples, row-major.
+
+    **BOTH palette forms, which the encoder above does not exercise.** When
+    `c0 > c1` the block is opaque and the palette has two interpolated
+    middles; when `c0 <= c1` DXT1 switches to PUNCH-THROUGH -- one
+    interpolated middle and index 3 meaning fully transparent black. Retail
+    uses both, and a decoder that knows only the opaque form renders every
+    cut-out texture (foliage, fences, grates) as solid black where it should
+    be see-through, which is the failure mode that looks like a lighting bug
+    rather than a decode bug.
+
+    That asymmetry is why `test_dxt1.py` cannot check this against `encode`
+    alone: `encode_block` always emits `c0 > c1` on purpose, so the
+    punch-through arm needs a hand-built block or it is never entered.
+    """
+    a = from565(c0)
+    b = from565(c1)
+    if c0 > c1:
+        pal = [a + (255,), b + (255,),
+               tuple((2 * a[i] + b[i]) // 3 for i in range(3)) + (255,),
+               tuple((a[i] + 2 * b[i]) // 3 for i in range(3)) + (255,)]
+    else:
+        pal = [a + (255,), b + (255,),
+               tuple((a[i] + b[i]) // 2 for i in range(3)) + (255,),
+               (0, 0, 0, 0)]
+    return [pal[(idx >> (2 * n)) & 3] for n in range(16)]
+
+
+def unpack(payload, blocks, layout):
+    """Payload bytes back to `(c0, c1, idx)` triples. The inverse of `pack`.
+
+    Refuses a payload whose length is not exactly `8 * blocks`, because both
+    layouts are the same size and a truncated one would otherwise decode into
+    a plausible image that is silently missing its tail.
+    """
+    if layout not in LAYOUTS:
+        raise ValueError(f"layout {layout!r} is not one of {LAYOUTS}")
+    want = 8 * blocks
+    if len(payload) != want:
+        raise ValueError(f"{len(payload)} bytes for {blocks} DXT1 blocks; "
+                         f"expected {want}")
+    out = []
+    if layout == INTERLEAVED:
+        for i in range(blocks):
+            c0, c1, idx = struct.unpack_from("<HHI", payload, 8 * i)
+            out.append((c0, c1, idx))
+        return out
+    # PLANAR: every block's colour dword first, then every block's indices.
+    # OBSERVED to be retail's order (studies/texture/FINDINGS.md section 4 --
+    # the two were put on the bar in one frame and only planar was a picture).
+    half = 4 * blocks
+    for i in range(blocks):
+        c0, c1 = struct.unpack_from("<HH", payload, 4 * i)
+        (idx,) = struct.unpack_from("<I", payload, half + 4 * i)
+        out.append((c0, c1, idx))
+    return out
+
+
+def decode(payload, width, height, layout=PLANAR):
+    """A whole DXT1 level to RGBA bytes, `width * height * 4`, top row first.
+
+    Dimensions must be whole blocks, for the same reason `encode` insists:
+    a silent pad shifts every block after it.
+    """
+    if width % 4 or height % 4:
+        raise ValueError(f"{width}x{height} is not a whole number of 4x4 "
+                         f"blocks")
+    bw, bh = width // 4, height // 4
+    blocks = unpack(payload, bw * bh, layout)
+    out = bytearray(width * height * 4)
+    for by in range(bh):
+        for bx in range(bw):
+            px = decode_block(*blocks[by * bw + bx])
+            for y in range(4):
+                row = (by * 4 + y) * width + bx * 4
+                for x in range(4):
+                    o = (row + x) * 4
+                    out[o:o + 4] = bytes(px[y * 4 + x])
+    return bytes(out)
+
+
 def pack(blocks, layout):
     """Blocks to payload bytes, in one of the two candidate orders."""
     if layout == INTERLEAVED:
