@@ -1912,3 +1912,59 @@ character-creation screen definitively does **not** use it: `CrProfession.cpp` h
 ten-entry table at VA `0x0094B470` of 128x512 `ATEX DXT5` art banners, a different asset
 class in different rows, found by the same pass and ruled out as the glyph by the agent
 that found it.
+
+### 22.4 OBSERVED (2026-08-14): the Stormcaller emblem is on screen
+
+**The glyph is authored.** Harness `20260814T084922`. The retail client drew an emblem this
+project drew from arithmetic, in the profession button row, beside nine of ArenaNet's own.
+
+```
+  W      R      Mo     N      Me     E      A      Rt     D      P
+shield  paw    ankh   skull  hand   flame  daggers BOLT  crescents disc
+                                                   ^^^^
+                                                   ours
+```
+
+**The write.** `emblem.py` draws a 32x32 BGRA lit/dim pair -- a forked violet bolt over a
+swept wind arc on a recessed socket. Those two cells were spliced into the sheet and the
+result asserted before anything was written: **exactly cells 14 and 15 differ, the header
+is byte-identical, and the other thirty cells are unchanged.** So the nine other
+professions in the screenshot are in-frame controls that the write could have damaged and
+did not.
+
+Provenance: every pixel is ours. The disc, rim, recess and bolt are arithmetic; **no byte
+of ArenaNet's art was read, sampled or averaged, not even the socket colour**, which was
+the obvious shortcut. What was taken from the sheet is geometry and ratios -- 32x32 BGRA,
+an alpha disc of 725 opaque / 131 partial / 168 clear texels, and the lit/dim luma band
+0.687-0.788. Ours measures 732 / 80 / 212 and 0.720, inside the band.
+
+**It needed a relocation, as predicted.** Row 12032 ships compressed (35,460 B, reservation
+35,840) and we write stored at 131,200 B, so `datwrite --replace` cannot fit it.
+`datmove` moved it `0x4E8F7E00 -> 0xA818400`, journalled: **0 overlapping row pairs
+afterwards, all three checksum rules hold, `datcheck --preflight` 10 of 10.** This is the
+first time in the project that a relocated row has been read back by a client on a
+non-map asset.
+
+### 22.5 Getting it on screen took three runs, and the reason is worth keeping
+
+The glyph's widget is `VnProfessionButton`, built by a vendor frame. That frame opens from
+**one s2c message** -- no NPC, no interact, no click -- which is what made this observable
+at all. `0x00C3` carries `{byte, dword}` and the **byte is the service selector**:
+
+| run | sent | OBSERVED |
+|---|---|---|
+| `20260814T084423` | `0x00C3:2=12` (the DWORD) | the account-name dialog -- **prediction failed** |
+| `20260814T084804` | `0x00C3:1=12` (the BYTE) | `VnTradeBuy`. Right frame, but its list is empty and it draws **no** profession row |
+| `20260814T084922` | `0x00C3:1=16` | **`VnUnlockSkill`** -- ten profession buttons, and ours among them |
+
+Two corrections fall out of that. The recon named the service value correctly
+(`TRADE_BUY = 0x0C`, `UNLOCK_SKILL = 0x10`) and the field wrongly, and a whole run was
+spent on the dword; the schema said `{byte, dword}` all along and a byte-sized enum
+belongs in the byte. And **`VnTradeBuy` was the wrong creator to aim at** even once the
+field was right -- it builds eleven buttons per the disassembly, but with an empty item
+list it renders none, so the panel that proves the mechanism is the SKILL UNLOCK one.
+A reader planning a fourth run should aim at service 16 and nothing else.
+
+**Still UNVERIFIED:** whether any other surface draws from row 12032. It is this sheet's
+sole consumer in this image (MEASURED), but the character panel and party search were not
+reachable to check, and the party roster is text (18.14) rather than a glyph.
