@@ -486,7 +486,7 @@ def main(argv=None):
     ap.add_argument("--skill-prof", action="append", metavar="SKILL=PROFESSION",
                     help="reassign which profession owns a skill (row+0x28). "
                          "Repeatable.")
-    ap.add_argument("--recipe", metavar="FILE.toml",
+    ap.add_argument("--recipe", metavar="FILE.toml", action="append",
                     help="apply a profession design from a file. Everything a "
                          "recipe holds is a number (profession, attribute, "
                          "skill and string ids), so it carries no ArenaNet "
@@ -535,8 +535,34 @@ def main(argv=None):
     if a.recipe:
         # A recipe is the base; explicit flags layer on top, so a design can be
         # versioned and still tweaked for one run without editing the file.
-        (rhost, rnames, rren, rown, rpri,
-         rdescs, rsprof, rsattr, rsstr) = load_recipe(a.recipe)
+        #
+        # REPEATABLE (2026-08-14). The bulk skill-name roster is 188 rows of
+        # arithmetic emitted by `textwrite.py --emit-recipe`, and it does not
+        # belong in the hand-authored design file. It cannot be a SECOND RUN
+        # either -- this tool cannot re-patch its own output, because the
+        # attribute table it locates structurally no longer matches once its own
+        # edits are in (RESKIN.md 19.6). So recipes layer within one run, in the
+        # order given, and every one of them must name the SAME host: a fragment
+        # aimed at a different profession would silently retarget the design.
+        rhost = None
+        rnames, rren, rown, rpri = {}, [], [], []
+        rdescs, rsprof, rsattr, rsstr = [], [], [], []
+        for path in a.recipe:
+            (h, n, ren, own, pri, d, sp, sa, ss) = load_recipe(path)
+            if rhost is not None and h != rhost:
+                raise SystemExit(
+                    f"recipes disagree about the host profession: {rhost} then "
+                    f"{h} in {path}. Layering these would aim half the design at "
+                    f"one profession and half at another.")
+            rhost = h
+            rnames.update(n)
+            rren += ren
+            rown += own
+            rpri += pri
+            rdescs += d
+            rsprof += sp
+            rsattr += sa
+            rsstr += ss
         # Precedence, stated rather than implied: an explicit --profession
         # beats the recipe's host, so a versioned design can be aimed at a
         # different host for one run without editing the file.
@@ -547,7 +573,7 @@ def main(argv=None):
         descs = rdescs + descs
         skill_profs, skill_attrs = rsprof + skill_profs, rsattr + skill_attrs
         skill_strings = rsstr + skill_strings
-        print(f"recipe {a.recipe}: host profession {rhost}, "
+        print(f"recipe(s) {', '.join(a.recipe)}: host profession {rhost}, "
               f"{len(rnames)} name(s), "
               f"{len(rren) + len(rown) + len(rpri) + len(rdescs)} "
               f"attribute edit(s), "

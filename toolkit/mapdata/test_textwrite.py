@@ -35,7 +35,7 @@ import textrec                                                   # noqa: E402
 import textwrite as tw                                           # noqa: E402
 import vaultpath                                                 # noqa: E402
 
-# MEASURED 2026-08-14 by running it both ways: 31 with no vault, 39 with one.
+# MEASURED 2026-08-14 by running it both ways: 31 with no vault, 41 with one.
 # (The draft of this line said 29/34 and both were guesses, in the same session
 # that had already recorded three of those -- see test_skillnames.py's floor
 # comment. Run it, read the banner, paste the number.)
@@ -283,6 +283,34 @@ def section_real():
     check(p["relocate"] and p["placement"] is not None,
           "it is a relocation and datmove will place it",
           "%d B vs a %d B reservation" % (p["new"], p["reserved"]))
+
+    # THE JOIN. The archive gets a string at a record; the client gets that
+    # record's string ID in the skill's row+0x98. NOTHING joins them at run time
+    # -- the client reads whatever number is in the row -- so if the two halves
+    # disagree, every skill on the bar wears another skill's name and no check
+    # anywhere fires. Both halves are read back through their REAL parsers here
+    # (reskin's recipe loader, textwrite's record map), never compared in memory.
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientpatch"))
+    import reskin                                                # noqa: E402
+    frag = os.path.join(os.path.dirname(HERE), "clientpatch", "recipes",
+                        "stormcaller-skills.toml")
+    if not os.path.isfile(frag):
+        LEDGER.skip("the recipe join", "no emitted fragment at %s" % frag)
+        return
+    sstr = reskin.load_recipe(frag)[8]
+    client = {sid: val for sid, field, val in sstr if field == "name"}
+    archive = {tw.string_id(r): nm for r, nm in strings.items()}
+    truth = {sid: nm for sid, _r, nm in tw.name_assignment(8, str(exe), str(dat))}
+    good = sum(1 for s in truth if archive.get(client.get(s)) == truth[s])
+    check(good == len(truth),
+          "every skill's recipe string id resolves to ITS OWN generated name",
+          "%d of %d" % (good, len(truth)))
+    shifted = sum(1 for s in truth
+                  if archive.get(client.get(s, 0) + 1) == truth[s])
+    check(shifted == 0,
+          "and shifting the recipe by one id collapses it to zero -- the control "
+          "that stops the check above passing on any consistent-looking map",
+          "%d of %d" % (shifted, len(truth)))
 
 
 def main():

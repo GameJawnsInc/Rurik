@@ -474,7 +474,10 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   completes the plan before the first write call), because otherwise a refusal
   lands after some of the file is written. Sections 0-4 build their own 1,024-record
   files out of `struct` and need no vault, no archive and no client, scoring 31
-  against a floor of 31; 39 with a vault. ~2 s),
+  against a floor of 31; 41 with a vault, the last two being the cross-module
+  JOIN -- every skill's recipe string id resolving to its own generated name,
+  188 of 188, read back through reskin's own recipe loader rather than compared
+  in memory, with a one-id shift collapsing it to 0 of 188. ~2 s),
   `toolkit/mapdata/test_skillnames.py` (the 188 authored skill names a custom
   profession needs -- the text sibling of `glyphs.py`, and like it the file is
   mostly about the INDEX ARITHMETIC, because "188 names came out and they are
