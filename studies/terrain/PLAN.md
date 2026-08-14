@@ -103,7 +103,17 @@ identity — would be exactly the mistake `modelexport` made when it read
 Each rung is independently landable and leaves the tree green. The visible
 payoff arrives at **T4**; T5 and T6 are quality.
 
-### T1 — ATTX becomes a capability instead of a documented refusal
+### T1 — ATTX becomes a capability instead of a documented refusal — **DONE 2026-08-14**
+
+Landed; results in [FINDINGS.md](FINDINGS.md) §1. Criterion was met on the
+WHOLE corpus rather than the ≥50-map sample asked for: 349 of 349 maps, 1,656
+distinct textures, **1,652 of 1,652 ATEX-family close and decode**. Two things
+came out that the rung did not go looking for — ArenaNet's own 12-byte footer
+declaring the boundary (an independent witness, 1,648/1,648), and the
+correction that `PASS_TERRAIN_BORDERS` is used by every ATTX row rather than
+"0 of 49,800". One requirement CHANGED: the terrain set is **mixed** — 1,648
+ATTX, 4 plain ATEX, 4 DDS, two of which are V8U8 bump maps nothing decodes —
+so T4 handles three shapes, not one.
 
 `atex.parse` raises on 106 of 106 ATTX rows today, and `test_atex.py` asserts
 that asymmetry as a finding. Promote the scratch probe: locate the trailer by
@@ -118,7 +128,24 @@ half regresses — a relabelled synthetic ATEX must still parse, and a real ATTX
 must now decode where it previously raised.
 *Risk:* low. Two independent populations already agree.
 
-### T2 — the tile → texture binding, settled on the maps that can refute it
+### T2 — the tile → texture binding — **ANSWERED FROM THE CLIENT 2026-08-14**
+
+**The reading is `dep[tile]`, DIRECT.** In `TrnTexBlendLo` the raw per-cell
+tile byte indexes the texture array `m_tiles` unmodified; the table it also
+feeds is only ever COMPARED between a cell's four corners to decide how many
+blend layers to emit, never used as an index. [FINDINGS.md](FINDINGS.md) §2.
+
+This is a SINGLE witness from a disassembly, so the corpus half below is still
+worth running as confirmation — 41 of 80 maps discriminate the two readings,
+which makes a render a cheap second witness. What is no longer true is that
+this rung blocks the arc.
+
+It also produced the answer to T3's mechanism for free: terrain **tag 3**'s
+2-bit plane, recorded in `terrain.py` as NOT FOUND after four dead hypotheses,
+is the per-cell **tile variation selector**, which is what the four quadrants
+of a 256×256 terrain texture are.
+
+<details><summary>the original rung, kept for its criterion</summary>
 
 State the prediction first, then decide `dep[tile]` vs `dep[table_a[tile]]` on
 the **41 discriminating maps**. Two routes, and the second is the one that
@@ -129,8 +156,11 @@ corpus.
 *Criterion:* one reading survives with the rival kept as a LIVE control that
 collapses, in the shape `test_modelfile.py` uses for the retired stride rule —
 two live answers, not prose.
-*Risk:* **the highest in the arc**, and the reason T3–T5 should not be started
-until it lands. Everything downstream renders plausibly under the wrong reading.
+*Risk:* was **the highest in the arc**, and the reason T3–T5 were not to be
+started until it landed. Everything downstream renders plausibly under the
+wrong reading.
+
+</details>
 
 ### T3 — the atlas, and where the UVs come from
 
