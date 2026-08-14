@@ -112,6 +112,18 @@ DROPPED_ON_PURPOSE = {
             "a quest-description lookup, and ArenaNet answers GAME_SMSG 0x004C "
             "in 30.7-61.5 ms. Answering it needs a quest table this repo does "
             "not have, and inventing quest text is worse than the drop.",
+    0x002B: "COMPASS_DRAW (5 loopback, 1 live) -- the player drawing or "
+            "pinging on their own compass: a client-allocated stroke handle "
+            "plus 1-16 knots, each two signed int16 packed low-half-first in "
+            "one dword, in ABSOLUTE world coordinates divided by the terrain "
+            "cell pitch. Answering it means rebroadcasting GAME_SMSG 0x0091 to "
+            "the rest of the party with a NON-ZERO owner tag -- zero is the "
+            "drawing client's own value (0x008BF43B), so a zero echo makes the "
+            "drawer's client merge the broadcast into its own line and double "
+            "the stroke -- and the drawer probably should not receive the echo "
+            "at all. THIS SERVER HAS NO PARTY, so there is nobody to broadcast "
+            "to; the drop costs nothing today and the work is one arm the day a "
+            "second client connects. studies/minimap/FINDINGS.md 4.1.",
     0x003B: "NPC_SERVICE_SELECT (0 loopback, 22 live) -- what the player picked "
             "in an NPC service window. Blocked behind 0x0039 above: this server "
             "does not answer an interaction, so no window is ever open and no "

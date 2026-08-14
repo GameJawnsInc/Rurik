@@ -1892,6 +1892,72 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   tool returns a SET per row on purpose: 888 named areas over 349 files means at
   least 539 must share one. 29 checks; ~9 min on a cold vault cache
   (MEASURED 558.6 s), ~9 s warm),
+  `toolkit/clientscan/test_worldmap.py` (the world-map ATLAS reader -- which
+  archive file holds each tile of the per-continent picture the compass, the
+  mission map and the world map are three crops of. **The headline is the WEAK
+  half and the check labels say so**: "492 tiles over three tiers" is close to
+  true by construction, since the module walks the count a table declares and
+  emits the non-NULL slots, so an all-wrong reader prints 492 too. Four things
+  carry it instead. **`count == CX x CY` on 21 of 21 grids**, where `count`
+  comes from the tile table at `0x00A37390` and `CX`/`CY` from `s_worldData`
+  4 KB away in another translation unit -- asserted on `grids()`, which
+  deliberately does NOT refuse a disagreement (`tiles()` does), because a
+  function that only ever returns rows that agree makes the agreement
+  unfalsifiable; and the test RECOMPUTES it rather than reading `closes`, since
+  `return True` is a one-character sabotage and reddens 2. **Every resolved row
+  decompresses to magic `ATEX`** -- 484 of 484, on THREE vaulted archives with
+  three different row counts, and the eight ids that resolve on NONE of them are
+  a LITERAL in the test file rather than a number the module computes. **The
+  control is the same walk one dword early**, written in the test out of
+  `struct.unpack_from` and sharing no code with the module: 484 resolved and 0
+  non-zero trailers collapses to **0 and 492/492**, from both sides. And
+  **locating through `consttable` is asserted BEHAVIOURALLY** -- the fixture
+  plants a SECOND `s_worldData` under a different anchor, the corpus row is
+  pointed at it, and the grids' dimensions must MOVE, because a test that reads
+  the constant passes against a module that never uses it. Two results the arc
+  did not have: there are **THREE tile tiers, not two** (`0x00A37440`, indexing
+  with `worldData+0x18`), which settles `satelliteCX/CY` from the client's own
+  `imul edi,[edx+0x18]` beside the assert `chunk.x < worldData.satelliteCX`; and
+  **not every tile is 512x512** -- 15 of 484 are 256x256, four of them in the
+  CHUNK tier and not at an edge, where FINDINGS says 512x512 off a sample of 4.
+  Sections 0-2 and 6-7 build a PE32 image byte by byte -- three synthetic
+  getters, planted tile tables, planted NULL slots, a planted `s_worldData` --
+  and every refusal in section 1 is a way the module could answer plausibly and
+  wrongly: a getter whose bound check and index arithmetic read DIFFERENT
+  fields, a loop bound that is not a whole number of records, two getters
+  claiming one tier, a slot pointing at bytes the file does not hold.
+  **Nineteen one-edit sabotages were BUILT AND RUN and all nineteen redden**
+  (9, 8, 5, 4, 3, 3, 3, 3, 2, 2, 2, 2, 1x7); the one that earns its place
+  reddens exactly ONE check with nothing else moving, the bound-check versus
+  index-arithmetic disagreement, which is invisible on the real image because
+  there the two reads agree. `guarded()` is why the several that take out whole
+  sections are named red checks and not a traceback with no verdict.
+  **THREE of those nineteen scored ZERO red on the file as first written --
+  ALL CHECKS PASSED, exit 0 -- and each is a shape this repo has been bitten by
+  before.** (1) A `main()` that NEVER CALLS `resolve_out` and writes straight to
+  `a.out`: section 6's syntax-tree check read `HERE/worldmap.py` instead of the
+  module under test, so it was structurally exempt from `--module`, which is the
+  mode the whole sabotage table is measured in -- a section that cannot fail in
+  the one mode its own evidence comes from. It reads `wm.__file__` now, and a
+  second check requires every WRITE SITE to write the name bound to the guard's
+  answer, because the write is `Path(x).write_text` and an `open(..., "w")`-only
+  scan finds zero write sites and passes vacuously (`test_atex.py` section 3,
+  one level up). (2) A reader that never reads the pair record's TRAILING u32
+  and assigns `trailer = 0`: all 492 real records carry zero, so it agreed with
+  the independent walker and with the client census, and PLAN rung S3's
+  prediction was being confirmed by a constant -- only a planted non-zero in the
+  fixture can tell a reader from an assumer. (3) The emitted index stamping
+  `pinned.BUILD` on every row: `--exe` takes any file and `pinned.find()` falls
+  back to the auto-updating install at `C:\gw`, so condition 2 was recording a
+  CONSTANT rather than the build of the image read. The build is measured from
+  `pinned.identify()` now, the row names WHICH image, and the control is a
+  payload built from an unidentified path that must record `None`. One check was
+  also DELETED as one that cannot fail -- `ar.row(n).index == n`, which
+  `archive.py:367` asserts internally and would have raised first -- and
+  replaced by two the archive can refute. THREE scores, each measured and none
+  subtracted: **78 with client and archive, 65 with the client alone, 40 with
+  neither** -- floor 78, so a vault-less run goes red. The archive section
+  scores a fixed count however many archives a vault holds. ~2.5 s),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first),
@@ -2095,8 +2161,29 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   size pin would report the server doing its job as corruption; `audit_state_text` is
   pure over a string, the file is read once, and the harvest and the census both come
   from that one read. Sections 9-11 are synthetic throughout and need no vault; the
-  only claim about the real store is that its census carries no value out of it. 47
-  checks against a floor of 45, the two vault-dependent ones declaring a skip. ~3m25s),
+  only claim about the real store is that its census carries no value out of it.
+  **Section 12 (2026-08-14) is the CAPTURE path's missing report, and it is the
+  `plain` defect's shape one level up.** `scrub_state_json` has counted and NAMED
+  the fields it does not recognise since it was written; `scrub_record` had no
+  such report, so any unlisted key fell through its trailing `else` and was
+  copied verbatim with nothing counted and nothing said. `record_field_is_handled`
+  existed and only the STATE path called it. It was found by a field this repo
+  added itself -- `marks.py` writes operator marks as `{t, kind, text}` and `text`
+  is a free-text line a human types during a live session. **MEASURED over the
+  real vault: 57 fields, 1,219,853 values**, among them `key`, `keys`,
+  `key_from`, `user_agent`, `cipher`, `blob`, `header`, `tail`, `name`, `label`,
+  `values`, `host`, `peer`. `KNOWN_BENIGN` is the structural subset and is
+  deliberately NOT everything that occurs -- the payload-shaped and free-text
+  names are LEFT OFF so the first run reports them, since a list that blessed
+  them on sight would restore the silence it replaces, and the sabotage that
+  pads the list is built and run to prove the list is load-bearing. Copying is
+  still the behaviour, because inventing a cleaning for an unclassified field is
+  worse than reporting it; the report carries NAMES ONLY, on the module's own
+  rule that a manifest quoting the value would be the leak itself, and that is
+  asserted. Two positive controls keep it from becoming noise: an all-structural
+  record must report NOTHING, and a SECRET or OPAQUE field must not be counted as
+  unrecognised. Section 12 is synthetic throughout. 59 checks against a floor of
+  57, the two vault-dependent ones declaring a skip. ~3m25s),
   `toolkit/test_content.py` (the content store, that its provenance and licence
   refusals actually refuse -- and, since 2026-08-13, that the REAL `vault/content/`
   overlay loads, which is the one input this file never read. Every other check in it

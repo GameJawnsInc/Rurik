@@ -80,12 +80,51 @@ RECORD_SIZE = areatable.RECORD_SIZE          # 124
 MAP_FLAGS = 259                              # stream 1, entry flags 3
 MAP_PARAMS_CHUNK = 0x2000000C
 
-# The two footprint rects. Both are (x0, y0, x1, y1) in terrain cells, and they
-# are equal on 716 of the 888 rows; where they differ, both are kept, because
-# nothing yet says which one the client prefers and dropping either would be a
-# guess. UNNAMED in every upstream mirror -- these offsets are ours.
-FOOTPRINT_A = (0x48, 0x4C, 0x50, 0x54)
-FOOTPRINT_B = (0x58, 0x5C, 0x60, 0x64)
+# The two footprint rects, (x0, y0, x1, y1) in terrain cells, equal on 716 of
+# the 888 rows. UNNAMED in every upstream mirror -- these offsets are ours.
+#
+# WHICH ONE THE CLIENT PREFERS IS NO LONGER OPEN, and this comment said it was
+# for as long as it stood. SETTLED 2026-08-14 on build 38797 (studies/minimap
+# rung S2; studies/maprows/FINDINGS.md section 9 item 4): `MissionCliGetMap()`
+# (0x0084D9B0, reading missionContext+0x238) picks, and the branch is
+# `test eax,eax; jne` -- 0 takes +0x48, non-zero takes +0x58. The enum is
+# ArenaNet's own and is TWO-VALUED, so the branch is a real choice and not a
+# collapse: MISSION_MAP_OUTPOST == 0 (`QuestLog:261 MISSION_MAP_OUTPOST ==
+# MissionCliGetMap()`, compiled `call 0x0084D9B0; test eax,eax; je` at
+# 0x0057BEBA -- the assert is SKIPPED when the answer is zero),
+# MISSION_MAP_GAME == 1 (`MsCliApi:251`, `cmp [esi+0x238],1` @ 0x0084D9EC),
+# MISSION_MAPS == 2 (`MsCliMan:486`, `cmp [edi+0x238],2` @ 0x0085204B). So
+# +0x48 is the rect the client crops the continent atlas with while this area
+# is an OUTPOST instance and +0x58 the one it uses while it is a GAME
+# (explorable/mission) instance. -- OBSERVED.
+#
+# SIX readers apply it and no seventh is visible to three sweeps that share no
+# premise -- int3-block co-occurrence with the 106 `call 0x005A8580` sites, a
+# shape sweep for a contiguous four-dword rect at both offsets on one base
+# register, and a forward sweep from all 171 `MissionCliGetMap()` sites. They
+# are CompassMap.cpp 0x008C2160 (a helper) and 0x008C2761 (an inline re-fetch
+# of the ORIGIN only), the compass block at 0x008C3141, ChCliApi.cpp
+# 0x00811C64 (the fog mark, which then `shr`s by 5 into the block grid), and
+# GmMapHelpers.cpp 0x0054E6A0 and 0x0054E830. GmMapView.cpp reads NEITHER
+# offset. What makes that countable rather than hopeful: the table base
+# 0x0096DE38 occurs EXACTLY ONCE in the image, at 0x005A85A8 inside the
+# accessor, so every row pointer in the client comes from there; and
+# s_missionClientData is .rdata, so any site that WRITES [base+0x48] is
+# provably not an area row. Blind to indirect calls and to a row pointer
+# cached across functions.
+#
+# BOTH RECTS ARE STILL KEPT -- now for a measured reason instead of for want
+# of one. The two GmMapHelpers readers FALL BACK to the other rect when the
+# preferred one is all zeros (0x0054E876..0x0054E894 and its mirror at
+# 0x0054E8A4), and the population is why that matters: of the 172 rows where
+# the two differ, 136 have +0x48 all-zero, 16 have +0x58 all-zero, and only
+# 20 carry two different NON-ZERO rects. 152 of the 172 are one ABSENT rect,
+# not two rival ones, so dropping either side would lose a real footprint on
+# 152 rows. `read_footprints` already skips an all-zero rect, which is the
+# same rule arrived at from the other end. (The compass has NO fallback; it
+# bails on a degenerate rect at 0x008C274F instead.)
+FOOTPRINT_A = (0x48, 0x4C, 0x50, 0x54)   # MISSION_MAP_OUTPOST == 0
+FOOTPRINT_B = (0x58, 0x5C, 0x60, 0x64)   # MISSION_MAP_GAME    == 1
 
 # MEASURED elsewhere in this repo and re-derived here rather than trusted:
 # `terrain.py` gets rect/dims == 96.0 exactly and nothing else, and

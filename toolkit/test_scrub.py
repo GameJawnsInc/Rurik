@@ -59,11 +59,13 @@ import scrub_captures as sc  # noqa: E402
 
 # 1 snapshot + 6 structural + 6 leak/property + 2 red-team + 6 blind-spot
 # + 1 state census stamp + 4 snapshot red-team + 11 session store + 6 state refusal
-# + 2 destination = 45 mandatory, plus 2 that need `vault/state` to exist. MEASURED green
-# 2026-08-13 at 47 over the whole capture tree with the store present. The floor is the
-# mandatory core, so a machine whose vault has no `state/` still has to run everything
-# else; the two real-store checks declare a skip. Nothing here is optional beyond that.
-LEDGER = checks.Ledger("credential scrub", floor=45)
+# + 2 destination + 12 unrecognised-field report = 57 mandatory, plus 2 that need
+# `vault/state` to exist. MEASURED green 2026-08-14 at 59 over the whole capture tree
+# with the store present (was 47 before section 12). The floor is the mandatory core, so
+# a machine whose vault has no `state/` still has to run everything else; the two
+# real-store checks declare a skip. Nothing here is optional beyond that. Section 12 is
+# entirely synthetic and therefore all of it counts toward the mandatory core.
+LEDGER = checks.Ledger("credential scrub", floor=57)
 
 # Derived output of previous runs. Not evidence, and scrubbing a scrub would double-count
 # every record. Baked into the snapshot, so no pass can disagree about what was excluded.
@@ -776,6 +778,123 @@ def check_destination_guard_and_real_store():
               f"{len(secrets)} value(s) checked against the same bytes the census read")
 
 
+def check_unrecognised_fields_are_reported():
+    """Section 12: the capture path now says what it did not clean.
+
+    `scrub_state_json` has counted and NAMED unrecognised fields since it was written.
+    The CAPTURE path did not: an unlisted key fell through `scrub_record`'s trailing
+    `else` and was copied verbatim with nothing counted and nothing said -- the identical
+    shape of the `plain` defect, which put the account email into `captures-scrubbed/`
+    for a day before anyone noticed.
+
+    It was found by a field this repo added itself: `toolkit/harness/marks.py` writes
+    operator marks as {t, kind, text}, and `text` is a free-text line a human types
+    during a live session.
+
+    Synthetic throughout -- no vault, no real capture.
+    """
+    print("\n12. the capture path reports the fields it does not recognise")
+
+    stats = {}
+    names = sc.Pseudonyms()
+    rec = {"t": 1.5, "kind": "sent", "opcode": 34,       # all KNOWN_BENIGN
+           "text": "met the merchant by the gate",       # the marks field
+           "quartermaster_note": "invented for this test"}
+    out = sc.scrub_record(rec, names, stats)
+
+    got = stats.get(sc.UNRECOGNISED_NAMES, [])
+    LEDGER.ok(sorted(got) == ["quartermaster_note", "text"],
+              "an unrecognised field is NAMED, and a structural one is not",
+              f"reported {sorted(got)} -- t/kind/opcode are on KNOWN_BENIGN")
+    LEDGER.ok(stats.get(sc.UNRECOGNISED_STAT) == 2,
+              "and COUNTED, one per value rather than one per record",
+              f"{stats.get(sc.UNRECOGNISED_STAT)}")
+    LEDGER.ok(out["text"] == rec["text"] and out["quartermaster_note"],
+              "the values are still COPIED THROUGH -- this is a report, not a "
+              "cleaning, because inventing one for an unclassified field is worse",
+              "shape is never changed")
+
+    # NAMES, NEVER VALUES. The report is written into a manifest that may be read by
+    # somebody who must not see the capture; a report that quoted the value would BE
+    # the leak. This is the same rule scrub_state_json states for its own unknowns.
+    blob = json.dumps({k: v for k, v in stats.items()})
+    LEDGER.ok("merchant" not in blob and "invented for this test" not in blob,
+              "and the report carries NAMES ONLY, never the values",
+              "a manifest that quoted the value would be the leak itself")
+
+    # THE POSITIVE CONTROL. A report that fires on everything is the same as one that
+    # fires on nothing: the operator stops reading it.
+    clean_stats = {}
+    sc.scrub_record({"t": 0.5, "kind": "frame", "opcode": 12, "seq": 3,
+                     "direction": "s2c", "size": 40}, names, clean_stats)
+    LEDGER.ok(sc.UNRECOGNISED_NAMES not in clean_stats,
+              "CONTROL: an all-structural record reports NOTHING",
+              "a guard that fires on every record is noise, and gets ignored")
+
+    # A handled field is not an unrecognised one -- the two lists must not overlap.
+    sec_stats = {}
+    sc.scrub_record({"email": "someone@example.invalid", "plain": "0180ABCD"},
+                    names, sec_stats)
+    LEDGER.ok(sc.UNRECOGNISED_NAMES not in sec_stats,
+              "CONTROL: a SECRET field and an OPAQUE one are handled, not "
+              "reported as unrecognised",
+              "they have arms; reporting them would bury the fields that do not")
+
+    # Dedup: two records, same unlisted key -- counted twice, named once.
+    dd = {}
+    sc.scrub_record({"text": "a"}, names, dd)
+    sc.scrub_record({"text": "b"}, names, dd)
+    LEDGER.ok(dd[sc.UNRECOGNISED_STAT] == 2
+              and dd[sc.UNRECOGNISED_NAMES] == ["text"],
+              "a repeated unlisted key counts twice and is named once",
+              f"count {dd[sc.UNRECOGNISED_STAT]}, names {dd[sc.UNRECOGNISED_NAMES]}")
+
+    print("\n12a. and the two sabotages that would make it silent")
+    real_benign = sc.KNOWN_BENIGN
+    try:
+        sc.KNOWN_BENIGN = real_benign + ("text", "quartermaster_note")
+        sab = {}
+        sc.scrub_record(dict(rec), names, sab)
+        LEDGER.ok(sc.UNRECOGNISED_NAMES not in sab,
+                  "SABOTAGE: blessing a field on KNOWN_BENIGN silences it -- so the "
+                  "list is load-bearing and must not be padded to quiet the report",
+                  "which is why cipher/blob/name/label/values were left OFF it")
+    finally:
+        sc.KNOWN_BENIGN = real_benign
+
+    after = {}
+    sc.scrub_record(dict(rec), names, after)
+    LEDGER.ok(after.get(sc.UNRECOGNISED_STAT) == 2,
+              "CONTROL: the sabotage was undone rather than left in place",
+              "the same record reports two again")
+
+    # The manifest must keep the NAMES out of the {field: count} map, or a list sitting
+    # among the counters reads as a count of something.
+    tmp = tempfile.mkdtemp(prefix="rurik-scrub-unrec-")
+    try:
+        src = os.path.join(tmp, "src")
+        os.makedirs(src)
+        with open(os.path.join(src, "c.jsonl"), "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"t": 1.0, "kind": "sent", "text": "hello"}) + "\n")
+        out_dir = os.path.join(tmp, "out")
+        sc.scrub_tree(src, out_dir)
+        with open(os.path.join(out_dir, "SCRUB-MANIFEST.json"),
+                  encoding="utf-8") as fh:
+            man = json.load(fh)
+        LEDGER.ok(man.get(sc.UNRECOGNISED_NAMES) == ["text"],
+                  "the manifest names the unrecognised field at top level",
+                  f"{man.get(sc.UNRECOGNISED_NAMES)}")
+        LEDGER.ok(sc.UNRECOGNISED_NAMES not in man["replacements_by_field"],
+                  "and NOT inside replacements_by_field, which is a {field: count} "
+                  "map where a list reads as a count",
+                  "lifted out at manifest time")
+        LEDGER.ok("classify" in man.get("unrecognised_note", ""),
+                  "and the manifest says what the reader is supposed to DO about it",
+                  "a report with no next action gets read once")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     src = vaultpath.require_dir("captures",
                                 why="the scrub test reads the real capture tree")
@@ -792,6 +911,7 @@ def main():
     check_session_store()
     check_state_is_excluded_from_the_shareable_tree()
     check_destination_guard_and_real_store()
+    check_unrecognised_fields_are_reported()
     return LEDGER.verdict()
 
 
