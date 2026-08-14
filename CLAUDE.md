@@ -359,6 +359,41 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   ~30 ms), which is what makes the strided sweep affordable. Sections 0-3 need no
   vault and score 33 against a floor of 50. ~26 s; `--all` peeks all 177,341 rows and
   is ESTIMATED, not measured, at ~30 minutes),
+  `toolkit/mapdata/test_atexlevel.py` (the ATEX LEVEL CODEC, solved
+  2026-08-14 -- kept apart from `test_atex.py`, which owns the container. A
+  level's `code` was never a compression method: it is a 5-BIT MASK OF
+  OPTIONAL DECODE PASSES over the block grid, which is why the client's
+  validator gates it with `test [eax+4], 0xffffffe0`. Each set bit
+  run-length-codes WHICH BLOCKS are one flat colour or alpha; everything
+  unclaimed is copied verbatim from the payload tail into three planes, and
+  `code == 0` is that copy with no pass at all. **The headline is explicitly
+  the weak half**: `decode_level` allocates `blocks * stride` and returns
+  exactly that, so "19,175 levels produced the right number of bytes" is TRUE
+  BY CONSTRUCTION and an all-zero decoder passes it. The load-bearing check is
+  a CODED level scored against its RAW neighbour -- a `code == 0` level needs
+  no pass logic, so it is independent ground truth, and mip k+1 is a
+  downsample of k: colour median 3.27 against a NULL of 12.47, alpha 2.45
+  against 38.63. **The oracle had to be made FORMAT-AWARE and that cost a
+  measurement**: scoring every 8-byte format as DXT1 colour put DXTA at 59.19
+  against a null of 59.88 -- indistinguishable from noise, reading as "broken
+  for 349 of 1,533 containers" -- when the truth is that **DXTA has NO COLOUR
+  HALF** and the oracle was reading alpha as colour; scored on its own channel
+  it is median 2.36, 472/474 under 8. The decoder was right and the
+  MEASUREMENT was wrong, so section 2 pins `has_colour` per format. Sections
+  0-4 need no vault and BUILD their own coded containers, hand-encoding runs
+  through the client's prefix table. Nine one-edit sabotages were built and
+  run; seven redden (12, 7, 6, 5, 4, 3, 3) and **the two that did NOT are why
+  the file grew**: "skipped blocks spend run" was invisible because the alpha
+  passes run first with the colour bitmap empty (code 9 occurs 4 times in the
+  corpus), so section 3(f) builds a two-pass level by hand; and "naive
+  nearest-565" was invisible under a one-quantum tolerance, so the bound is
+  now 4 -- the client's interpolated index reaches worst-4 where naive is
+  worst-7 -- with naive REPRODUCED as a live function. One sabotage still
+  reddens nothing and it is NOT a gap: bit 0's gate is "has colour and not
+  alpha", so its marking of the alpha bitmap can never be read back, and
+  section 2 asserts the gate instead. `--rows` exists so the matrix is
+  affordable to re-run. 63 checks with the vault, 48 with neither it nor a
+  client image, against a floor of 63),
   `toolkit/mapdata/test_dxt1.py` (the DXT1 codec, which shipped in the texture
   arc with an ENCODER and NO test file at all -- this is the first either
   direction has had, added with rung M5's `decode`/`unpack`/`decode_block`.
