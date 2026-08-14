@@ -502,6 +502,14 @@ This matters beyond rendering: `studies/customarea/FINDINGS.md` §5 lists
 prop with a known model at a known world position, so the geometry names WHERE
 a map link is even though nothing yet says where it leads.
 
+**The corpus census is in [PORTALS.md](PORTALS.md)** (2026-08-14): seven portal
+models in two DISJOINT families — `0x605E` (Prophecies/Factions, 4 models) and
+`0x28892` (Nightfall/EotN, 3) — found by reading the FA5 list of all 8,420
+referenced prop models. **175 of 346 maps carry a portal, 656 placements**, and
+3 maps carry both families. The edge-proximity control is reported there as
+suggestive rather than decisive (median 0.307 against 0.449 for ordinary
+props), because the identification rests on the texture.
+
 ### 6.4 AMAT is not the answer either
 
 The obvious next hypothesis was **sub-model → an AMAT material (`0x00000FAD`)
