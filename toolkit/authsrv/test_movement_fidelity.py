@@ -133,6 +133,15 @@ def game_channel_captures():
     # files classify as ours), so this refuses nothing yet and refuses the first one
     # that appears, which is the only moment it could matter.
     out = origin.require_single(out, origin.OURS, what="the movement fidelity score")
+    # And the same argument one level down: the score is pooled over the corpus,
+    # and opcodes are not stable across client builds -- MOVE_TO_COORD is 0x003C
+    # in one and 0x003E in another -- so two builds in the pool produce a number
+    # about neither. MEASURED 2026-08-13: every capture in the vault that names a
+    # build names 38797, so this refuses nothing today and refuses the first
+    # mixed corpus that appears, which is the only moment it can matter.
+    build, out = origin.require_single_build(out, what="the movement fidelity score")
+    if build is not origin.BUILD_UNKNOWN:
+        print(f"  (corpus is client build {build})")
     return sorted(out, key=os.path.getmtime, reverse=True)
 
 

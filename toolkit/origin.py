@@ -231,6 +231,144 @@ def partition(paths):
     return out
 
 
+# WHICH BUILD, and it is the same argument as WHICH SERVER one level down.
+#
+# `HANDOFF.md`:237 has said since day one that every capture manifest records the
+# build id. Nothing did. That was survivable only while there was one build, and
+# it is not a hypothetical risk: `MOVE_TO_COORD` is 0x003C in one client and
+# 0x003E in another, so pooling two builds' captures is the same class of error
+# this module exists to prevent, with the same property -- the pooled number is
+# about neither.
+#
+# THREE-VALUED for the same reason `origin` is: a build we cannot read is
+# UNKNOWN, never "probably the pinned one". `BUILD_UNKNOWN` is None and is
+# deliberately distinct from any number.
+BUILD_UNKNOWN = None
+
+# Records that name a build, in the two shapes the producers actually write.
+# `authsrv.py` writes it on its `version` event straight off the client's VERSION
+# frame; `livesession.py` writes it on the decrypted channel's `version` record,
+# parsed from the client's own first bytes in `wire.jsonl`.
+BUILD_FIELD = "build"
+VERSION_KIND = "version"
+
+
+def build_of(path):
+    """(build, why) for one capture. `build` is an int or `BUILD_UNKNOWN`.
+
+    Classified in the same order, and with the same suspicion, as `origin_of`:
+
+    1. an explicit `build` on the file's own `origin` record, CHECKED against
+       whatever the file's contents say;
+    2. failing that, inferred from a `version` record -- which is the client's
+       own number, off its own VERSION frame, not something we chose;
+    3. otherwise UNKNOWN.
+
+    A stated build contradicted by the file's contents is REFUSED, not believed.
+    That is the half `origin_of` learned the hard way: a stamp nothing checks is
+    an unfalsifiable self-declaration, and one was already wrong on disk.
+    """
+    stated, seen = None, set()
+    parsed = 0
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rec = json.loads(line)
+                except (json.JSONDecodeError, ValueError):
+                    continue
+                if not isinstance(rec, dict):
+                    continue
+                parsed += 1
+                if rec.get("kind") == RECORD_KIND:
+                    v = rec.get(BUILD_FIELD)
+                    if isinstance(v, int) and stated is None:
+                        stated = v
+                    continue
+                if rec.get("kind") == VERSION_KIND:
+                    v = rec.get(BUILD_FIELD)
+                    if isinstance(v, int):
+                        seen.add(v)
+    except OSError as exc:
+        return BUILD_UNKNOWN, f"unreadable: {exc}"
+
+    if len(seen) > 1:
+        return BUILD_UNKNOWN, (f"CONTRADICTED: the file's own version records name "
+                               f"{len(seen)} different builds ({sorted(seen)}); one "
+                               f"capture cannot be two clients")
+    recovered = next(iter(seen), None)
+    if stated is not None and recovered is not None and stated != recovered:
+        return BUILD_UNKNOWN, (f"CONTRADICTED: stamped build {stated}, but the "
+                               f"file's own version record says {recovered}. The "
+                               f"stamp is not believed over the contents.")
+    if stated is not None:
+        if recovered is not None:
+            return stated, "stated in the origin record, corroborated by its own version record"
+        return stated, ("stated in the origin record -- UNCORROBORATED, the file "
+                        "records no version to check it against")
+    if recovered is not None:
+        return recovered, "inferred from the client's own VERSION frame"
+    if parsed == 0:
+        return BUILD_UNKNOWN, ("no JSON records could be read -- this reader takes "
+                               "one object per line, so a pretty-printed .json "
+                               "parses as nothing")
+    return BUILD_UNKNOWN, f"no build recorded in any of the {parsed} record(s) read"
+
+
+def partition_builds(paths):
+    """{build or BUILD_UNKNOWN: [path, ...]}."""
+    out = {}
+    for p in paths:
+        out.setdefault(build_of(p)[0], []).append(p)
+    return out
+
+
+class MixedBuilds(SystemExit):
+    """Refusing to pool captures of two different client builds."""
+
+
+def require_single_build(paths, what="this measurement", allow_unknown=True):
+    """Every path must share one client build, or refuse loudly.
+
+    Returns (build, paths). `build` may be `BUILD_UNKNOWN` when nothing in the
+    corpus names one.
+
+    UNKNOWN IS TOLERATED BY DEFAULT, and that is a measured decision rather than
+    laziness: 555 of the vault's 1,675 capture files carry no version record at
+    all -- a per-connection frame log names the build once per SESSION, not once
+    per file -- so refusing on unknown would refuse almost every real corpus and
+    the guard would be deleted within a week. What it must never do is be
+    SILENT, so the count comes back in the reason either way. Pass
+    `allow_unknown=False` where the corpus is small enough to know better.
+    """
+    groups = partition_builds(paths)
+    known = {b: v for b, v in groups.items() if b is not BUILD_UNKNOWN}
+    unknown = groups.get(BUILD_UNKNOWN, [])
+
+    if len(known) > 1:
+        lines = [f"REFUSING to pool captures of different client builds for {what}."]
+        for b, files in sorted(known.items()):
+            lines.append(f"  build {b}: {len(files)} file(s), e.g.")
+            for f in files[:3]:
+                lines.append(f"      {os.path.basename(f)}")
+        lines.append("  Opcodes are not stable across builds -- MOVE_TO_COORD is")
+        lines.append("  0x003C in one client and 0x003E in another -- so a figure")
+        lines.append("  pooled over two of them is about neither. Select one.")
+        raise MixedBuilds("\n".join(lines))
+
+    if unknown and not allow_unknown:
+        raise MixedBuilds(
+            f"REFUSING {what}: {len(unknown)} of {len(paths)} file(s) name no "
+            f"client build, and this caller asked for none.\n"
+            f"  e.g. {', '.join(os.path.basename(f) for f in unknown[:3])}")
+
+    build = next(iter(known), BUILD_UNKNOWN)
+    return build, list(paths)
+
+
 class MixedCorpora(SystemExit):
     """Refusing to pool captures of two different servers."""
 
@@ -271,6 +409,15 @@ def main():
     groups = partition(found)
     for kind in (OURS, LIVE, UNKNOWN):
         print(f"{kind:8s} {len(groups[kind])}")
+
+    builds = partition_builds(found)
+    print("\nby client build:")
+    for b in sorted(builds, key=lambda v: (v is BUILD_UNKNOWN, v)):
+        label = "unknown" if b is BUILD_UNKNOWN else str(b)
+        print(f"  {label:8s} {len(builds[b])}")
+    if len(builds) - (1 if BUILD_UNKNOWN in builds else 0) > 1:
+        print("  !! more than one build in the vault -- a consumer pooling these")
+        print("     must select one; see origin.require_single_build")
     if groups[UNKNOWN]:
         print("\nunknown, with the reason each could not be classified:")
         for p in groups[UNKNOWN][:10]:

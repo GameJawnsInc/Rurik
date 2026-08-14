@@ -66,7 +66,13 @@ import vaultpath  # noqa: E402
 # Section 3 is still outside the floor and that is a known weakness, not a decision this
 # comment is defending: it is the only section that proves the 2026-08-06 regression is
 # fixed, and a machine missing either build silently does not run it.
-LEDGER = checks.Ledger("dhbuild", floor=23)
+#
+# 2026-08-13: section 8 adds 8 checks and is UNCONDITIONAL -- synthetic PEs, no build of
+# either kind needed -- so the mandatory core rises by exactly that, 23 -> 31. A full run
+# on a machine with both builds scores 43. The floor stays the core rather than the total
+# for the reason above: sections 3 and 4 legally skip, and a floor set to 43 would turn a
+# legal state into a red run.
+LEDGER = checks.Ledger("dhbuild", floor=31)
 
 
 def scratch_copy(src, dst):
@@ -405,7 +411,89 @@ def main():
               "two DIFFERENT DH-shaped structs are undecidable from bytes and REFUSED",
               "picking one could file an ours build as stock and clear it for live")
 
+    section_8(real, other, g, p, B)
     return LEDGER.verdict()
+
+
+def section_8(real, other, g, p, B):
+    """All three modules that read these bytes share ONE implementation.
+
+    `studies/crossbuild/PLAN.md` §7 rule 1 -- refuse on 0 or 2+ -- was honoured
+    by `dhbuild` and by neither of the others, and the same `SIG_KEYS` bytes were
+    typed out in all three:
+
+        dhbuild.py            refused on ambiguity
+        make_custom_client.py took the FIRST, printing `note: N matches`  <- the PATCHER
+        dump_dh_params.py     no check at all; printed GO if ANY match fit  <- the go/no-go
+
+    The fix is one implementation with two call sites, not three that agree,
+    because three that agree today are three that drift tomorrow. This section
+    checks BOTH halves: that they behave identically on a planted ambiguity, and
+    that they are structurally the same code path -- a behavioural check alone
+    would pass again the moment somebody re-inlined the search.
+    """
+    import ast
+    import importlib
+
+    print("\n8. one implementation, not three that agree")
+
+    mcc = importlib.import_module("make_custom_client")
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+    ddp = importlib.import_module("dump_dh_params")
+
+    LEDGER.ok(mcc.SIG_KEYS is dhbuild.SIG_KEYS and ddp.SIG_KEYS is dhbuild.SIG_KEYS,
+              "all three modules use dhbuild's SIG_KEYS object, not a copy",
+              "three spellings of one signature drift the moment one is edited")
+    LEDGER.ok(mcc.SIG_KEYS_PTR_OFF == dhbuild.SIG_KEYS_PTR_OFF
+              == ddp.SIG_KEYS_PTR_OFFSET,
+              "and the same pointer offset")
+
+    # BEHAVIOURAL: the same planted ambiguity, through the patcher's own locator.
+    with tempfile.NamedTemporaryFile(suffix=".exe", delete=False) as fh:
+        fh.write(_synth_pe([real, other]))
+        ambiguous = fh.name
+    with tempfile.NamedTemporaryFile(suffix=".exe", delete=False) as fh:
+        fh.write(_synth_pe([real, real]))
+        fine = fh.name
+    try:
+        from gwpe import PE
+        try:
+            mcc.locate(PE(ambiguous))
+            LEDGER.ok(False, "the PATCHER refuses two different DH structs",
+                      "it located one -- this is the build-writing path")
+        except SystemExit:
+            LEDGER.ok(True, "the PATCHER refuses two different DH structs",
+                      "it used to print `note: N matches; using the first` and patch it")
+        # POSITIVE CONTROL: it still locates an unambiguous one, so the refusal
+        # above is the ambiguity and not a locator that now refuses everything.
+        va, rva, off = mcc.locate(PE(fine))
+        LEDGER.ok(isinstance(va, int) and off is not None,
+                  "while still locating an unambiguous struct",
+                  f"VA 0x{va:08x}")
+    finally:
+        os.unlink(ambiguous)
+        os.unlink(fine)
+
+    # STRUCTURAL: both weaker modules must CALL the shared locator. A behavioural
+    # check cannot see a re-inlined copy that happens to agree today.
+    for mod, fname in ((mcc, "make_custom_client.py"), (ddp, "dump_dh_params.py")):
+        src = open(mod.__file__, encoding="utf-8").read()
+        calls = {n.func.attr for n in ast.walk(ast.parse(src))
+                 if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)}
+        LEDGER.ok("locate_keys" in calls,
+                  f"{fname} CALLS dhbuild.locate_keys",
+                  "asked of the syntax tree; a mention in a comment is not a call")
+        # Specifically SIG_KEYS. `make_custom_client` legitimately searches for
+        # SIG_DOWNLOAD, SIG_MUTEX and the mutex name -- a blanket "no pe.find"
+        # would forbid those too, and the first version of this check did.
+        searches_keys = [
+            n for n in ast.walk(ast.parse(src))
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "find" and n.args
+            and isinstance(n.args[0], ast.Name) and n.args[0].id == "SIG_KEYS"]
+        LEDGER.ok(not searches_keys,
+                  f"and {fname} never searches for SIG_KEYS itself",
+                  "the search lives in one place; other signatures are its own business")
 
 
 if __name__ == "__main__":

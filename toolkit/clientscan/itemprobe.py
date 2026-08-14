@@ -69,6 +69,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, os.path.join(os.path.dirname(HERE), "harness"))
 import agentprobe  # noqa: E402   -- gw_pids()
 import keytap  # noqa: E402
+import pinned  # noqa: E402
 
 IMAGE_BASE = 0x00400000
 RVA_TLS_INDEX = 0x00C0F300 - IMAGE_BASE   # the dword 0x0047F660 indexes fs:[0x2c] with
@@ -281,6 +282,10 @@ def main():
     ap.add_argument("--pid", type=int, help="client pid; default = the running Gw.exe")
     ap.add_argument("--dump", type=int, default=0,
                     help="hex-dump this many item objects (0x60 bytes each)")
+    ap.add_argument("--any-build", action="store_true",
+                    help="read a client that is NOT the build RVA_TLS_INDEX was "
+                         "measured on. The TLS walk below may then be following "
+                         "unrelated memory; the run says so")
     a = ap.parse_args()
 
     pid = a.pid
@@ -292,7 +297,17 @@ def main():
             return 1
         pid = pids[-1]
 
-    base = keytap.module_base(pid, "Gw.exe")
+    # The build gate, BEFORE the first read. `RVA_TLS_INDEX` was measured on one
+    # build; against another it does not give a wrong TLS index, it gives an
+    # arbitrary dword that the walk below then follows as if it were a pointer.
+    # studies/crossbuild/FINDINGS.md §2.1.
+    base, path = keytap.module_info(pid, "Gw.exe")
+    what = pinned.assert_build(path, why=f"walking item memory in pid {pid}",
+                               allow_any=a.any_build)
+    if what not in ("pristine", "patched"):
+        print(f"  !! --any-build: pid {pid} is running {path}, which is not a\n"
+              f"     build {pinned.BUILD} copy we recorded. The walk below may be\n"
+              f"     following unrelated memory.")
     rd = Reader(pid)
     try:
         tls_index = rd.u32(base + RVA_TLS_INDEX)

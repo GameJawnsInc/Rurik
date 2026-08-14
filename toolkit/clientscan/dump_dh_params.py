@@ -48,13 +48,26 @@ vault. Never commit the output.
 
 import argparse
 import hashlib
+import os
 import struct
 import sys
 
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_HERE))
+sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "clientpatch"))
+import dhbuild  # noqa: E402
+
 # Prologue of the accessor that returns the DH parameter struct.
 # Ends just before the `mov eax, imm32` whose operand is the struct's VA.
-SIG_KEYS = bytes.fromhex("8B4508C700880000 00B8".replace(" ", ""))
-SIG_KEYS_PTR_OFFSET = 0x0A
+#
+# RE-EXPORTED from `dhbuild`, not re-typed. Three modules carried these bytes and
+# three had different policies on a second match -- `studies/crossbuild/PLAN.md`
+# §7 rule 1 -- and this one, the go/no-go a human runs FIRST after an update, had
+# no check at all: it looped every match and printed GO if ANY of them looked
+# right. The per-match report below is still printed, because diagnosing a moved
+# accessor is this tool's job; the VERDICT now comes from the one implementation.
+SIG_KEYS = dhbuild.SIG_KEYS
+SIG_KEYS_PTR_OFFSET = dhbuild.SIG_KEYS_PTR_OFF
 
 STRUCT_SIZE = 0x88  # 136, and the value the accessor writes
 
@@ -186,6 +199,24 @@ def main():
                 print(f"    parameters written to {a.full}")
 
     print()
+    # THE VERDICT, from the one implementation. `ok` above is per-match and says
+    # only "at least one match looked right", which is exactly the reading that
+    # made two DH-shaped structs indistinguishable from one.
+    # `dhbuild` reads through `gwpe.PE`; this module predates it and carries its
+    # own minimal PE parser, which is why the report above uses `find_all`. Both
+    # open the same path, so the verdict is about the same bytes -- and a second
+    # parser agreeing that the struct is there is a small bonus rather than a
+    # cost, on a tool that runs once per ArenaNet update.
+    from gwpe import PE as _SharedPE                          # noqa: PLC0415
+    try:
+        va, _rva, _off, _params = dhbuild.locate_keys(_SharedPE(a.exe), a.exe)
+    except SystemExit as exc:
+        print("CANNOT DECIDE WHICH STRUCT THE CLIENT READS.")
+        print(str(exc))
+        print("\nTreat this as NOT FOUND: do not trust any patching or launch tool")
+        print("against this build until it is resolved.")
+        return 2
+    print(f"the struct the client reads: VA 0x{va:08x}")
     if ok:
         print("GO. The static-ephemeral DH scheme is intact in this build: g = 4 over a")
         print("512-bit prime, with the server's public value compiled in. R1 proceeds as")

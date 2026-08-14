@@ -155,6 +155,46 @@ build** — a patched copy from last week keys to nothing. Order matters: snapsh
 *before* accepting an update, or you have already lost the build you were working
 against.
 
+### 0. Before you accept anything: capture the before-state
+
+One command, and it is the whole of it. Run this the moment you see an update
+prompt, before clicking anything.
+
+```bash
+python toolkit/updatecheck.py --before --snapshot
+```
+
+`--snapshot` copies `C:\gw` into the vault via `snapshot_client.py`; **without
+it the command only reads**, which is safe any time but leaves out the one part
+of the before-state that cannot be recovered afterwards. Exit **0** captured,
+**2** the run could not be made — including exit 3 from the snapshot, meaning a
+file is LOCKED and the copy is incomplete. Close the client and re-run; do not
+accept the update on a 2.
+
+It records every vaulted build's number, what the live install currently is, the
+signature corpus with the addresses each anchor resolves to, the class-(a)
+address census, the schema's build stamp, and the DH parameters **as a
+fingerprint only** — never the values, which are ArenaNet key material. The
+baseline goes to `vault/updatecheck/` and is refused into any checkout of this
+repo.
+
+### 0b. After the update: one page on what moved
+
+```bash
+python toolkit/updatecheck.py --after vault/updatecheck/before-<stamp>.json
+```
+
+Exit **0** nothing moved, **1 something did — which is a RESULT, not an error**,
+**2** the run could not be made. The distinction is `datcheck.py`'s and it is not
+decoration: conflating "it changed" with "it could not run" once cost a crash
+being reported as a moved row.
+
+The line worth reading first is the signature corpus. An anchor that moved to a
+new address but kept its hit count **still resolves** and needs nothing; one whose
+hit count changed is flagged `RE-DERIVE THIS`, and every tool that owns it is
+untrustworthy until it is. Then work through the numbered steps below, which the
+report will tell you are necessary.
+
 **1. Confirm the crypto scheme is still where we think it is.** Reads
 `C:\gw\Gw.exe`, touches nothing.
 
@@ -259,7 +299,7 @@ Then heartbeats with a rising tick counter, which is a healthy idle client.
 | Client hangs after login | A reply field is wrong | `ACCOUNT_INFO` has three fields marked low-confidence at the call site — start there. See below |
 | Roster empty but login succeeded | Campaign gate | Try the all-campaigns bitmask `b'\x3f' + b'\x00'*7` in `ACCOUNT_INFO` |
 | `undecodable` in terminal 2 | Unknown opcode, framing stopped | Correct behaviour — it refuses to guess. The printed leading bytes are the next thing to identify |
-| Anything at all after an ArenaNet update | Parameters rotated | Redo the one-time setup in full |
+| Anything at all after an ArenaNet update | Parameters rotated | `python toolkit/updatecheck.py --after <baseline>` first — it names what moved and what still resolves — then redo the one-time setup in full |
 
 **Never point a patched client at the real service.** It carries our DH values, so
 it cannot key with ArenaNet's — and the attempt is exactly the kind of malformed

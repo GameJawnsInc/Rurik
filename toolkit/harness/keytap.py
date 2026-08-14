@@ -120,6 +120,18 @@ def module_base(pid, module_name):
     (e.g. "Gw.exe"), and snapshots both the native and the WOW64 (32-bit) module lists so a
     64-bit reader can locate a 32-bit client's modules.
     """
+    return module_info(pid, module_name)[0]
+
+
+def module_info(pid, module_name):
+    """(base, path) for `module_name` in `pid`, or raise.
+
+    The PATH is what lets a caller ask WHICH BUILD it is about to read. Every
+    RVA in `itemprobe.py` and `agentprobe.py` was measured on one build, and a
+    wrong RVA against a live process is not a wrong number -- it is a read of
+    whatever else is mapped there. `pinned.assert_build()` is the gate; this is
+    the half of it that has to come from the operating system.
+    """
     want = os.path.basename(str(module_name)).lower()
     snap = kernel32.CreateToolhelp32Snapshot(
         TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, int(pid))
@@ -135,7 +147,7 @@ def module_base(pid, module_name):
             name = ent.szModule
             seen.append(name)
             if name.lower() == want:
-                return ent.modBaseAddr
+                return ent.modBaseAddr, ent.szExePath
             ok = kernel32.Module32NextW(snap, ctypes.byref(ent))
         raise TapError(f"module {module_name!r} not in pid {pid}; "
                        f"{len(seen)} modules present, e.g. {', '.join(seen[:6])}")

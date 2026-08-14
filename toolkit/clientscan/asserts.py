@@ -87,6 +87,7 @@ on a bare machine.
 """
 
 import argparse
+import collections
 import os
 import re
 import struct
@@ -106,9 +107,81 @@ import pinned                                                # noqa: E402
 # of this file: `pinned` imports nothing but hashlib, os and `vaultpath`.
 find_exe = pinned.find
 
-# The one routine every assert site on build 38797 calls. Not used to FIND the
-# sites -- used to check that what we found is what we think it is.
+# The one routine every assert site on build 38797 calls.
+#
+# NO LONGER THE LOOKUP -- `studies/crossbuild/PLAN.md` §4. It was used live, so
+# on `2026-04-30_b174de1f2d8d` this module reported 19,680 sites with
+# `single-routine=False` and a warning, because the callee it was comparing
+# against belongs to the newer image. That is not cosmetic: `asserts.py` supplies
+# the module ranges `codescan.py --in` narrows searches to, so an under-count
+# propagates silently into every search run inside it, and §8/§9 of
+# `test_codescan.py` exist because an under-counting assert scan already produced
+# two report rows describing no file in the image.
+#
+# The callee is now DERIVED, two independent ways that must agree (see
+# `Asserts._derive_callee`). This constant stays as a class-(c) expectation under
+# §6 of that plan: it is checked on the build it was measured on and going red on
+# a new build is correct.
 ASSERT_VA_38797 = 0x00487BC0
+
+# The assert routine's own body, as a byte shape -- the second witness. Encodes
+# only the /GS cookie mix, three register spills and an address-free `call $+5`
+# EIP capture:
+#
+#   33 c5              xor eax,ebp            ; /GS cookie
+#   89 45 fc           mov [ebp-4],eax
+#   89 55 ec           mov [ebp-0x14],edx     ; the source-file pointer
+#   89 4d e0           mov [ebp-0x20],ecx     ; the expression pointer
+#   e8 00 00 00 00     call $+5               ; rel32 is literally zero
+#   8f 45 f0 / 54 / 8f 45 f4 / 55 / 8f 45 f8  ; pop EIP, ESP, EBP into locals
+#
+# Not one address and not one build-varying byte in the 27. The bytes that DO
+# differ between the builds -- the absolute /GS cookie VA, the default-file
+# string VA -- sit outside the pattern, which is why it survived the 90-day gap
+# unchanged. MEASURED: one hit in `.text` on both builds, and one whole-file.
+ASSERT_SIG = bytes.fromhex(
+    "33c58945fc8955ec894de0e8000000008f45f0548f45f4558f45f8")
+ASSERT_SIG_DELTA = 11
+ASSERT_PROLOGUE = bytes.fromhex("558bec83ec20a1")   # NOT an anchor -- see below
+
+# How unanimous the call sites must be before their modal target is believed.
+# Both vaulted builds are 100.0000% -- one distinct callee over 19,758 and
+# 19,680 sites -- so this floor has never yet been the thing deciding anything,
+# and it is here so that a build where the idiom genuinely splits refuses
+# instead of quietly reporting the more popular half.
+CONSENSUS_FLOOR = 0.99
+
+
+class NoAssertRoutine(SystemExit):
+    """The assert callee could not be established. Never a silent fallback."""
+
+
+def find_assert_callee(pe):
+    """(entry_va, entry_off) of the assert routine, by byte shape.
+
+    Refuses on 0 or 2+ hits -- `studies/crossbuild/PLAN.md` §7 rule 1.
+
+    The -11 delta is VERIFIED against the routine's prologue rather than
+    trusted, and the prologue is deliberately not the anchor: `ASSERT_PROLOGUE`
+    occurs 56 times in `.text` on build 38797 and 57 times on the older build, so
+    searching on it and taking the first hit resolves the wrong routine in
+    silence. That is the negative control `test_codescan.py` pins.
+    """
+    hits = pe.find(ASSERT_SIG, ".text")
+    if not hits:
+        raise NoAssertRoutine(
+            "the assert routine's signature is not in this client -- it was "
+            "recompiled or the idiom changed.")
+    if len(hits) > 1:
+        raise NoAssertRoutine(
+            f"{len(hits)} matches for the assert-routine signature, expected 1; "
+            f"refusing to guess which is the real one.")
+    off = hits[0] - ASSERT_SIG_DELTA
+    if pe.data[off:off + len(ASSERT_PROLOGUE)] != ASSERT_PROLOGUE:
+        raise NoAssertRoutine(
+            f"the assert signature matched but the entry at {off:#x} is not the "
+            f"expected prologue; the signature's offset into the routine moved.")
+    return pe.image_base + pe.off_to_rva(off), off
 
 # The three shapes, named so a row can say how it was found. See the docstring.
 SHAPE_EDX_FIRST = "edx-first"      # push / mov edx / mov ecx / call
@@ -151,6 +224,10 @@ class Asserts:
         self.items = list(self._scan())
         self.items.sort(key=lambda a: a.va)
         self._by_va = [a.va for a in self.items]
+        self.callee_distinct = 0
+        self.callee_share = 0.0
+        self.callee_witness = "not searched"
+        self.assert_va = self._derive_callee()
 
     # -- string reading -------------------------------------------------
     def cstr(self, va, cap=400):
@@ -284,9 +361,67 @@ class Asserts:
             return struct.unpack_from("<I", data, i - 4)[0], i - 5
         return None, None
 
+    # -- the callee, derived ---------------------------------------------
+    def _derive_callee(self):
+        """The assert routine, from this image, by two independent routes.
+
+        ROUTE 1, and it is the whole answer on its own: every assert site is a
+        call, so the modal target of ~19,700 of them IS the assert routine. No
+        address is involved. MEASURED on both vaulted builds: exactly ONE
+        distinct target, 100.0000% -- 0x00487BC0 on 38797, 0x00487A80 on
+        2026-04-30_b174de1f2d8d.
+
+        ROUTE 2 is `find_assert_callee`, a byte shape. It is a CROSS-CHECK: if
+        it resolves and disagrees with the consensus, this refuses rather than
+        picking one, because two witnesses disagreeing is a fact about the build
+        that a caller must not be handed a number past. If the shape is simply
+        absent on some future build the consensus still stands and says so --
+        the sites voting is a stronger witness than a pattern, and making the
+        pattern mandatory would break a working tool for tidiness.
+        """
+        if not self.items:
+            raise NoAssertRoutine(
+                f"{self.path}: no assert sites were found at all, so there is no "
+                f"callee to derive.\n"
+                f"  The three call shapes all missed, which means the idiom "
+                f"changed. Re-derive it before\n"
+                f"  trusting any 'no assert names X' claim against this build.")
+        tally = collections.Counter(a.callee for a in self.items)
+        va, n = tally.most_common(1)[0]
+        self.callee_distinct = len(tally)
+        self.callee_share = n / len(self.items)
+        if self.callee_share < CONSENSUS_FLOOR:
+            raise NoAssertRoutine(
+                f"{self.path}: the assert sites do not agree on one callee -- "
+                f"{len(tally)} distinct targets, the most popular holding only "
+                f"{self.callee_share:.2%} of {len(self.items)} sites.\n"
+                f"  Refusing to report the majority as 'the assert routine'.")
+        try:
+            sig_va, _ = find_assert_callee(self.pe)
+        except NoAssertRoutine as exc:
+            self.callee_witness = f"consensus only ({exc})"
+            return va
+        if sig_va != va:
+            raise NoAssertRoutine(
+                f"{self.path}: the two derivations disagree -- {len(self.items)} "
+                f"call sites point at 0x{va:08X}, the byte signature resolves "
+                f"0x{sig_va:08X}.\n"
+                f"  One of them is reading the wrong routine and the bytes "
+                f"cannot say which, so this is REFUSED.")
+        self.callee_witness = "consensus and signature agree"
+        return va
+
     # -- queries --------------------------------------------------------
-    def check(self, expect_callee=ASSERT_VA_38797):
-        """(n_sites, n_distinct_callees, agreed). See the docstring."""
+    def check(self, expect_callee=None):
+        """(n_sites, n_distinct_callees, agreed). See the docstring.
+
+        `expect_callee` defaults to the callee DERIVED from this image, so
+        `agreed` now answers "do all sites call one routine" on any build. It
+        used to default to build 38797's address, which made the answer False on
+        every other build for a reason unrelated to the sites.
+        """
+        if expect_callee is None:
+            expect_callee = self.assert_va
         callees = {a.callee for a in self.items}
         return len(self.items), len(callees), callees == {expect_callee}
 
@@ -314,7 +449,7 @@ class Asserts:
         X" is now a claim with a stated shortfall instead of a census.
         """
         if callee is None:
-            callee = self.base + (ASSERT_VA_38797 - 0x00400000)
+            callee = self.assert_va
         # Cached: coverage_lines() runs under every query, and the suite builds
         # this object dozens of times. Sweeping 5.4 MB per call took the whole
         # test run past ten minutes.
@@ -530,6 +665,15 @@ def main():
     n, ncallee, agreed = az.check()
     print(f"{exe}: {n} assert sites, {ncallee} distinct callee(s), "
           f"single-routine={agreed}")
+    print(f"  assert routine 0x{az.assert_va:08X}, derived -- "
+          f"{az.callee_witness}, {az.callee_share:.4%} of sites")
+    # The pinned constant, demoted to a cross-check and scoped by hash so it is
+    # only asserted against the build it was measured on.
+    what, _ = pinned.identify(exe, build=pinned.BUILD)
+    if what in ("pristine", "patched"):
+        same = az.assert_va == ASSERT_VA_38797
+        print(f"  cross-check vs the pinned build-{pinned.BUILD} address "
+              f"0x{ASSERT_VA_38797:08X}: {'agrees' if same else 'DISAGREES'}")
     for line in az.coverage_lines():
         print(f"  {line}")
     if not agreed:

@@ -55,6 +55,15 @@ Nine of the ten sections can fail for the right reason:
     to reach 14 and to MISS that address, so the 19 beside it is a difference
     between two live answers. Its other half is the controls on the new `A`
     class, because widening `A` is the lazy way to pass.
+  * §11 runs the assert corpus on BOTH vaulted builds -- studies/crossbuild
+    PLAN.md §4. `asserts.py` compared every site's call target against a literal
+    measured on 38797, so the older build came back `single-routine=False` with a
+    warning and studies/srvtree/FINDINGS.md:262-268 recorded its corpus as not
+    trustworthy. The assertion is the SHAPE COUNTS, not the boolean: a bare
+    `single-routine=True` is satisfied by a scan that found two sites. Its
+    negative control is that the routine's own prologue is NOT unique -- 56 hits
+    -- which is why the byte signature anchors elsewhere and the delta is
+    verified after a match rather than searched for.
 
 §1 is a guard, not a check: everything below is measured against one build.
 
@@ -73,6 +82,7 @@ is the second half of §3: `msgshape.py` reads the client's own dispatch tables
 through `gwpe`, stdlib only, no disassembler involved.
 """
 
+import collections
 import os
 import struct
 import sys
@@ -85,6 +95,8 @@ import asserts as AZ                                          # noqa: E402
 import checks                                                 # noqa: E402
 import msgshape as MS                                         # noqa: E402
 import pinned                                                 # noqa: E402
+import vaultpath                                              # noqa: E402
+from gwpe import PE as GWPE                                   # noqa: E402
 
 # `codescan.py` sys.exit()s at import when capstone or pefile is missing, so the
 # question has to be asked BEFORE importing it. Otherwise a bare machine dies on
@@ -121,13 +133,12 @@ EXE_BYTES = 10_483_904
 # and still print green, which is precisely the partial vacuity checks.py was
 # written to name.
 #
-# The capstone number went up on 2026-08-10 with §7 (3 -> 16 on the stdlib
-# side), on 2026-08-11 with §8 and §9, and on 2026-08-13 with §10 plus one check
-# added to §5 (83 -> 106). The stdlib floor takes the whole of §8 because
-# `asserts.py` is stdlib on purpose: its census is checkable on a bare machine,
-# and a wrong census is what §9's bounds are computed from.
-FLOOR_WITH_CAPSTONE = 106
-FLOOR_STDLIB_ONLY = 35
+# 2026-08-14: §11 (the cross-build assert corpus, from the crossbuild arc) joins
+# §10. Both floors are MEASURED on a real green run rather than computed by adding
+# §11's count to the old pair -- a floor computed from a floor is how a section
+# quietly stops running, which is the lesson the retired comment here already carried.
+FLOOR_WITH_CAPSTONE = 116
+FLOOR_STDLIB_ONLY = 45
 
 LEDGER = checks.Ledger(
     "codescan vs studies/enemy §6q",
@@ -317,7 +328,9 @@ def section_6(img):
 
     # Every function the property chase visits: the case bodies, the AvApi entry
     # points, the AvChar methods, plus the two allocators themselves.
-    starts = set(AV.ALLOCATORS)
+    # `AV.ALLOCATORS` until 2026-08-12; the two allocators are now derived from
+    # the image rather than stored, so they are asked of the Image.
+    starts = set(aimg.allocators)
     for _i, (_w, body) in GV.classify(GV.Image(img.path)).items():
         if body is not None:
             starts.add(body)
@@ -782,6 +795,79 @@ def section_10(exe, img):
           f"{sum(1 for r in ea.values() if r.kind == 'A')} A row(s)")
 
 
+def section_11():
+    """The assert corpus on BOTH vaulted builds -- studies/crossbuild/PLAN.md §4.
+
+    `asserts.py` used to compare every site's call target against
+    `ASSERT_VA_38797`, a literal, so on `2026-04-30_b174de1f2d8d` it reported
+    19,680 sites with `single-routine=False` and a warning -- and
+    `studies/srvtree/FINDINGS.md`:262-268 recorded the older build's corpus as
+    "not currently trustworthy" for exactly that reason. Since the callee is
+    derived, both builds come back clean.
+
+    The assertion is the SHAPE COUNTS, per the plan, because a bare
+    `single-routine=True` is satisfied by a scan that found two sites. The three
+    shapes must all be present on both builds -- that is what makes the derived
+    callee a consensus over the whole idiom rather than over one spelling of it.
+
+    Stdlib: `asserts.py` takes no disassembler on purpose, so this section runs
+    on a bare machine, which is where an under-counted census does the most
+    damage (§9's bounds are computed from it).
+    """
+    print("\n10. the assert corpus, on both vaulted builds  (stdlib)")
+    # MEASURED 2026-08-12. Build expectations: going red on a NEW build is
+    # correct -- these are class-(c) numbers under studies/crossbuild/PLAN.md §6.
+    EXPECT = {
+        "2026-07-29_221c13772c7a": (0x00487BC0, 19758, 19620, 75, 63),
+        "2026-04-30_b174de1f2d8d": (0x00487A80, 19680, 19544, 74, 62),
+    }
+    for stamp, (want_va, want_n, want_edx, want_ecx, want_tail) in EXPECT.items():
+        try:
+            d = vaultpath.require_dir("client", stamp, why="both-build asserts")
+        except BaseException as exc:                         # noqa: BLE001
+            # require_dir raises SystemExit, a BaseException -- `except
+            # Exception` would sail straight past it and skip the skip.
+            LEDGER.skip(f"10. build {stamp}", f"not in the vault: {exc}")
+            continue
+        az = AZ.Asserts(os.path.join(d, "Gw.exe"))
+        n, ncallee, agreed = az.check()
+        check(agreed and ncallee == 1,
+              f"{stamp}: single-routine=True, one distinct callee",
+              f"{ncallee} callee(s) over {n} sites")
+        check(az.assert_va == want_va,
+              f"{stamp}: the derived assert routine is 0x{want_va:08X}",
+              f"got 0x{az.assert_va:08X} -- {az.callee_witness}")
+        counts = collections.Counter(a.shape for a in az.items)
+        got = (n, counts[AZ.SHAPE_EDX_FIRST], counts[AZ.SHAPE_ECX_FIRST],
+               counts[AZ.SHAPE_SHARED_TAIL])
+        check(got == (want_n, want_edx, want_ecx, want_tail),
+              f"{stamp}: shape counts {want_n} = {want_edx} edx + {want_ecx} "
+              f"ecx + {want_tail} tail",
+              f"got {got}")
+        check(all(counts[s] for s in (AZ.SHAPE_EDX_FIRST, AZ.SHAPE_ECX_FIRST,
+                                      AZ.SHAPE_SHARED_TAIL)),
+              f"{stamp}: all three call shapes are present",
+              "so the consensus is over the whole idiom, not one spelling")
+
+    # The negative control for the anchor, and the reason the byte signature is
+    # a cross-check rather than the primary route: the routine's own prologue is
+    # not unique, so "search for it and take the first hit" resolves the wrong
+    # function in silence.
+    try:
+        d = vaultpath.require_dir("client", pinned.PINNED.stamp, why="anchor control")
+    except BaseException:                                    # noqa: BLE001
+        LEDGER.skip("10. the prologue control", "pinned build not in the vault")
+        return
+    pe = GWPE(os.path.join(d, "Gw.exe"))
+    check(len(pe.find(AZ.ASSERT_SIG, ".text")) == 1,
+          "the assert-routine signature is unique in .text")
+    generic = pe.find(AZ.ASSERT_PROLOGUE, ".text")
+    check(len(generic) > 10,
+          "while the routine's own prologue is NOT",
+          f"{len(generic)} hits -- which is why the -11 delta is VERIFIED after "
+          f"a match rather than searched for")
+
+
 def main():
     # The build guard. `pinned` is stdlib -- `CS.find_exe` is literally
     # `pinned.find` -- so which client we are reading gets said out loud even on a
@@ -807,6 +893,7 @@ def main():
     section_8(exe)
     section_9(exe, img)
     section_10(exe, img)
+    section_11()
 
     return LEDGER.verdict()
 
