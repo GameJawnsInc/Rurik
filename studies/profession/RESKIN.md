@@ -507,11 +507,16 @@ with, so this section is dated and the runs are named.
 Eleven same-length dword edits plus one archive row. No code caves, no injected DLLs, no
 grown tables, and every profession id stays inside 0..10 so not one bound check can fire.
 
-### The one wall that is actually left
+### The one wall that is actually left -- CLEARED 2026-08-14, see section 22
 
-**The profession glyph.** Still **NOT FOUND**, carried unresolved since `FINDINGS.md`.
-A reskin inherits the host's, which remains an argument FOR the route: a wrong-but-present
-glyph beats a missing one.
+**The profession glyph.** ~~Still NOT FOUND, carried unresolved since `FINDINGS.md`.~~
+**FOUND** (section 22): one shared 256x128 DDS, file id 152638 / MFT row 12032, 8x4 cells
+of 32x32, profession 8 at frames 14/15, selected by the jump table at VA `0x005A5EB8` in
+`VnProfessionButton.cpp`. Authoring it is a partial overwrite of one 32x32 region plus a
+`datmove`, since the row ships compressed and we write stored.
+
+**There is now no NOT FOUND left in this arc's identity tier.** What remains is unexercised
+work, not unknown mechanism.
 
 ### CORRECTION 2026-08-14: skill icons were never the second wall
 
