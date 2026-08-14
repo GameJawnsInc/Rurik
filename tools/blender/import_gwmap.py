@@ -615,15 +615,25 @@ def apply_terrain_textures(obj, gwmap):
                 if image is None:
                     image = bpy.data.images.load(
                         os.path.join(base, image_name))
+                # CHANNEL_PACKED, and it is a bug fix with a measurement
+                # behind it: the alpha here is a three-layer blend MASK
+                # (FINDINGS §3.5), not transparency, and under the default
+                # STRAIGHT mode Blender premultiplies for rendering -- so
+                # the Color output arrived as RGB x alpha and every cell
+                # drew its mask as a DARK BAND over clean ground colour
+                # (measured on the exported PNGs: window luminance flat,
+                # window alpha banded 25-52 rows of 112 below 128).
+                # Channel-packed means "colour and alpha are independent
+                # data", which is exactly what a splat mask is.
+                image.alpha_mode = "CHANNEL_PACKED"
                 tex.image = image
                 tex.extension = "REPEAT"
                 if bsdf is not None:
                     links.new(tex.outputs["Color"],
                               bsdf.inputs["Base Color"])
-                # NO alpha wired, deliberately: the alpha is a three-layer
-                # blend MASK (FINDINGS §3.5), and one opaque layer is the
-                # honest simplification. Wiring it would punch holes in the
-                # ground where the retail client blends.
+                # NO alpha wired, deliberately: one opaque layer is the
+                # honest simplification. Wiring the mask would punch holes
+                # in the ground where the retail client blends.
         slot_of_name[mat_name] = len(materials)
         tile_slot.append(len(materials))
         materials.append(mat)
@@ -634,6 +644,13 @@ def apply_terrain_textures(obj, gwmap):
     # row-major order as the faces, so the mapping is the identity.
     indices = [tile_slot[t] for t in gwmap.tiles]
     mesh.polygons.foreach_set("material_index", indices)
+
+    # SMOOTH-SHADED, because the client's terrain is: both vertex layouts
+    # T3 read out of the chunk builders carry a per-vertex NORMAL (FVF
+    # 0xF05 and 0x105), and the lo path SHARES its 33x33 vertices between
+    # cells. Faceted quads were this importer's artifact -- the stair-step
+    # look on every slope -- not the archive's.
+    mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
 
     # T3's UV window, identical on every face. Loop order is the quad winding
     # from build_geometry: (i,j) -> (i,j+1) -> (i+1,j+1) -> (i+1,j), with j
@@ -646,13 +663,20 @@ def apply_terrain_textures(obj, gwmap):
     layer.data.foreach_set("uv", flat)
 
     # Read the indices BACK off the built mesh for the digest, so anything
-    # Blender did on the way in shows up in it.
+    # Blender did on the way in shows up in it. Same for the smooth flags
+    # and the images' alpha mode: the dump reports the scene, not the loop
+    # that built it.
     got = [0] * len(mesh.polygons)
     mesh.polygons.foreach_get("material_index", got)
     digest = hashlib.sha256(struct.pack("<%dH" % len(got), *got)).hexdigest()
     counts = {}
     for s in got:
         counts[s] = counts.get(s, 0) + 1
+    smooth = [False] * len(mesh.polygons)
+    mesh.polygons.foreach_get("use_smooth", smooth)
+    modes = sorted({m.node_tree.nodes["Image Texture"].image.alpha_mode
+                    for m in materials
+                    if m.use_nodes and "Image Texture" in m.node_tree.nodes})
     return {
         "state": "bound",
         "materials": [m.name for m in materials],
@@ -662,6 +686,8 @@ def apply_terrain_textures(obj, gwmap):
         "material_index_digest": digest,
         "uv_layer": "UVMap",
         "uv_window": [lo, hi],
+        "faces_smooth": sum(smooth),
+        "image_alpha_modes": modes,
     }
 
 
