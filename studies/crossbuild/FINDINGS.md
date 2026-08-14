@@ -157,6 +157,88 @@ document says so rather than letting the green half imply the whole.
 
 ---
 
+## 4b. The PLAY-SESSION half — RUN 2026-08-13, and the authored row survived
+
+§4 says the update experiment cannot fire. The owner's answer was that a private server's
+mods should simply be **rebased over an update**, which dissolves the update question —
+re-applying is one command (`deploy.py`) and the journals make it reversible.
+
+**What it does not dissolve** is the question `CLAUDE.md`'s own `test_datwrite` entry ends
+on: *"what is still unmeasured is DURABILITY across a play session."* That one is sharper,
+because the damage would happen **between** updates and no rebase helps. It is also far
+cheaper — loopback, no owner decision — so it was run the same day.
+
+**Method.** Three snapshots of `vault/run/2026-07-29_221c13772c7a-probe/Gw.dat`: pristine
+(S0), after `deploy.py --area sculpt --install` (S1), after `--launch --hold 120` (S2). The
+diff that answers the question is **S1 → S2**, isolating the client's writes from ours.
+
+**PREDICTION, stated before the run.** (1) The authored row survives byte-identical — the
+bit-31 mechanism at `datwrite/FINDINGS.md`:589 is a *stale/needs-refresh watchlist* and a
+freshly written row with a correct crc should not be on it. (2) The archive changes anyway,
+because the client rotates container generations. **(2) is the load-bearing half**: if
+nothing changed, the client never wrote and the run is INCONCLUSIVE, not a pass.
+
+**The arm made that vacuity control free**, which is a method point rather than luck: a
+re-bloat arm zeroes the Bloated stream, so the client is *required* to write back. The
+experiment stopped being "did the client happen to write" and became "does our row survive
+a session in which the client demonstrably rewrote this very map".
+
+**RESULT — both predictions held. OBSERVED.**
+
+| | S1 (armed) | S2 (after play) |
+|---|---|---|
+| Authored Stripped row | `0x388A000`, 10,714 B, crc `0xEF793381` | **identical** |
+| Bloated partner (zeroed by the arm) | `0x63C64200`, **0 B**, crc 0 | `0x3D80400`, **6,012 B**, crc `0xEDAE21C3` |
+| `descriptor_counter` | 26,788 | 26,792 |
+| MFT offset | 4,173,266,432 | 4,177,522,688 (**the table moved**) |
+| Tier 1 changed rows | — | **3**, all *new extent (silent relocation)* |
+| Tier 2 | — | **unchanged**, the directory invariant both ways |
+
+The authored row had **relocated on install** (10,714 B did not fit its 4,608 B
+reservation), the more fragile case, and still came back untouched. The client compiled from
+it in the same session: 64 trapezoids from our terrain, height field **4,096/4,096 samples
+exact**, environment (639 B) and sound (89 B) carried verbatim, all 8 props present, spawn
+landing in exactly one trapezoid.
+
+**So an authored row survives a play session in which the client actively wrote to the
+archive.** The two other relocated rows (8315, 8316) are the client's own cache churn.
+
+**Honest scope.** One session, ~120 s, one map, one client, one relocation. It does not
+probe the bit-31 watchlist directly — our row is not on it — and says nothing about a
+session long enough to trigger whatever rotation the 29-member set participates in. What it
+retires is the strong form: *"the client may rewrite an authored row while you play"* is now
+measured false for the ordinary case, rather than unmeasured.
+
+### 4b.1 THE TRAP, and it nearly produced the opposite conclusion
+
+`datcheck --diff` reported **row 71496 changed from 0 B to 6,012 B** — and `deploy.py` had
+just printed *"installing … head 71496, partner 71497"*. Read together those say the client
+rewrote our authored row, which is the alarming result. **It is wrong.**
+
+**The two tools number MFT rows differently, off by exactly one.** Verified empirically on
+four adjacent rows by exact `(offset, size, crc)` triples: `archive.py[71495]` is
+`0x3D80400 / 6012 B / 0xEDAE21C3`, bit for bit what `datcheck` calls row 71496. `archive.py`
+reports **177,334** rows where `datcheck` reports **177,335**, and `archive.py[2]` is the MFT
+row itself (`0xF8FFF000`, 4,256,040 B) — so its numbering begins one record earlier.
+`deploy.py` prints in `archive.py`'s numbering; `datcheck` prints in its own. **Cause
+CORROBORATED by effect and by the row-2 observation; the precise off-by-one site has not been
+read out of both readers' code and is UNVERIFIED.**
+
+The consequence is not hypothetical, because it happened here: the row `datcheck` calls
+71496 is `archive.py`'s 71495 — **the Bloated partner the arm zeroed**, whose re-bloat is
+the whole point of the experiment. Our row is `datcheck`'s 71497, absent from the diff
+because it did not change. A reader comparing `deploy`'s row numbers against a `datcheck`
+diff mis-attributes by one row, and the direction of the error is the worst available: **it
+reads a successful re-bloat as the client having eaten your map.**
+
+This is `mapchunks.py`:117's lesson from a new side. That comment says a row index is
+meaningful only against the archive copy it was measured on; this adds that it is meaningful
+only against the **reader** it was measured with. `test_contentids.py` and `test_mapfile.py`
+both moved to file-id identity for the first reason, and the same fix applies here. Until it
+lands: **never compare a row number printed by one tool against one printed by another.**
+
+---
+
 ## 5. What this changes elsewhere
 
 - **`studies/datwrite/FINDINGS.md`** said *"the durability experiment is still unrun"*.
