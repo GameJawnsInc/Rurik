@@ -587,7 +587,10 @@ assert and no crash dialog. Write-up in
   screen pixels per texel, predicting the second landmark from the first to **0.1 px**.
   The client stretches the whole texture onto a fixed quad; it does not sample a sub-rect.
 
-So `pattern_icon`'s 16-pixel border is a **fraction** (12.5%), not a pixel count, and the
+So `pattern_icon`'s 16-pixel border is a **fraction** (12.5%), not a pixel count — since
+2026-08-14 `dxt1.py` implements it as one (`safe = min(w,h) * 0.375`, unchanged at 128x128,
+refusing below 12), so calling the function at 64 now yields arm S's picture directly
+rather than needing a mipmap of it — and the
 whole roster is authorable with `datwrite --replace` alone -- journalled, byte-for-byte
 revertible. **What has NOT been done is the roster**: this run authored three icons, not
 132, and nothing in the toolkit yet generates 132 distinct pictures worth looking at. That

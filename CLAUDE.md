@@ -555,12 +555,41 @@ reasoning about it. Two of the three hardest questions so far were settled that 
   arithmetic wrong. The planar/interleaved pair is pinned as two live answers
   -- same length, different bytes, cross-decode required to differ -- because
   no size check separates them and the texture arc had to settle it on
-  screen. Section 6 reads REAL retail levels and asserts only what the
+  screen. Section 7 reads REAL retail levels and asserts only what the
   archive can refute, and it carries the finding that bounds the whole rung:
   **only 25 of 1,533 ATEX containers have a RAW level 0**, so this decoder
   alone reaches 1.6% of the corpus and the other 98.4% sit behind ATEX level
-  compression codes nothing here decodes yet. Sections 1-5 need no vault and
-  score 30; 32 by default, 33 under `--all`),
+  compression codes nothing here decodes yet.
+  **Section 6 (2026-08-14) is not a codec at all** -- it is `pattern_icon`,
+  the picture the arc exists to put on a skillbar, which shipped with
+  `safe = min(w,h)/2 - 16` and therefore raised ZeroDivisionError at exactly
+  32x32 and drew nonsense below ~40. The 16 was never a pixel count: the
+  client stretches the whole texture linearly onto a fixed quad (FINDINGS 9,
+  two landmarks in a 64x64 ruler agreeing at 0.955 and 0.958 px per texel), so
+  the chrome eats a constant FRACTION, 12.5%. `safe` is now `min(w,h) * 0.375`
+  and MIN_ICON = 12 is DERIVED, being where the sun disc stops spanning one
+  DXT1 4x4 block. The retired rule is reproduced IN THE TEST as a live
+  function, so "128x128 is byte-identical" and "64x64 is not" are two live
+  answers rather than arithmetic the test asks the module to confirm about
+  itself, and **the load-bearing check is the one the old rule cannot pass at
+  any tolerance**: a proportional picture box-filtered 2:1 IS the picture drawn
+  at half size -- 2.04/255 against the old rule's 17.74, which is FINDINGS 9's
+  arm Q measured offline. Seven one-edit sabotages were BUILT AND RUN and all
+  seven redden (9, 4, 12, 10, 4, 5 and 1 check); the last is `min()` swapped
+  for `max()` in the refusal, caught by the 64x8 line ALONE, and the zeros
+  sabotage is the one that earns the feature checks -- a `pattern_icon`
+  returning a field of zeros keeps every "NxN is still drawn" length check
+  GREEN. **Two of the seven found defects in the TEST**, and they are this
+  file's real lesson: MIN_ICON -> 100000 originally HUNG past a 600 s timeout
+  printing no verdict, because the positive controls drew at `dxt1.MIN_ICON`
+  and the sabotage asked for a 100000x100000 image -- `test_agentlife`'s
+  twelve-of-fourteen in a new shape, a check whose WORKLOAD is computed from
+  the symbol under test -- so every size is a literal now; and the reverted
+  `safe` killed section 6b outright at its sixth check, so each per-size draw
+  is guarded and a crash is a named failure. Sections 1-6 need no vault and
+  score 52; 55 by default, 56 under `--all`, and the floor is 55, so a
+  vault-less run goes red -- as it always did, against an earlier comment
+  claiming a bare machine "still clears the bar"),
   `toolkit/mapdata/test_emblem.py` (the authored profession glyph -- the emblem
   spliced into ArenaNet's own 32-cell sheet at frames 14/15. Most of what makes
   art right is untestable; what IS testable is the set of MEASURED numbers the

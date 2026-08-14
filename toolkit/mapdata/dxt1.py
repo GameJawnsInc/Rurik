@@ -383,23 +383,51 @@ def pattern_fine(width, height):
     return bytes(out)
 
 
+#: The frame chrome, as a FRACTION of the short side rather than a pixel
+#: count. OBSERVED 2026-08-14 (studies/texture/FINDINGS.md section 9): the
+#: client stretches the whole texture linearly onto a fixed screen quad -- two
+#: landmarks in a 64x64 inset ruler agreed on 0.955 and 0.958 px per texel --
+#: so the chrome covers a constant fraction of the TEXTURE, not a constant
+#: number of texels. The original 16 px was written for 128x128, which is
+#: 12.5%; at 64x64 the same margin is 8 px, and subtracting 16 there threw
+#: away a quarter of the picture. Keeping the fraction reproduces the 128x128
+#: safe radius of 48.0 exactly.
+ICON_MARGIN = 0.125
+_SAFE_FRAC = 0.5 - ICON_MARGIN                                    # 0.375
+
+#: The sun disc, as a fraction of the safe radius. Named because MIN_ICON is
+#: derived from it -- it is the picture's smallest feature.
+ICON_SUN_FRAC = 0.46
+
+#: Smallest short side pattern_icon will draw. DERIVED, not chosen: the sun
+#: disc spans 2 * ICON_SUN_FRAC * _SAFE_FRAC == 0.345 of the short side, and
+#: below one DXT1 4x4 block across it is not a picture. 4 / 0.345 -> 11.6, so
+#: 12. Anything smaller is refused rather than drawn as noise; the old rule
+#: raised ZeroDivisionError at exactly 32x32 and produced garbage below ~40.
+MIN_ICON = 12
+
+
 def pattern_icon(width, height):
     """An actual skill icon, drawn entirely inside the safe area.
 
     The deliverable this whole arc was for: not a test pattern, a picture that
-    could plausibly sit on a skillbar. Everything is kept inside a 16-pixel
-    border because OBSERVED 2026-08-06 the bar does not draw the outer edge of
-    the texture -- see pattern_calib.
+    could plausibly sit on a skillbar. Everything is kept inside a border of
+    ICON_MARGIN of the short side because OBSERVED 2026-08-06 the bar does not
+    draw the outer edge of the texture -- see pattern_calib -- and OBSERVED
+    2026-08-14 that what it eats is a fraction and not a texel count.
 
     A rising sun over a horizon, in warm colours against a deep sky, with a
     vignette so the crop boundary is not a hard line if the safe area is
     slightly smaller than we think.
     """
+    if min(width, height) < MIN_ICON:
+        raise ValueError(f"{width}x{height} is too small to draw an icon; "
+                         f"the short side must be at least {MIN_ICON}")
     out = bytearray(width * height * 3)
     cx, cy = width / 2.0, height / 2.0
-    safe = min(width, height) / 2.0 - 16.0
+    safe = min(width, height) * _SAFE_FRAC
     horizon = cy + safe * 0.35
-    sun_r = safe * 0.46
+    sun_r = safe * ICON_SUN_FRAC
 
     def put(x, y, c):
         o = (y * width + x) * 3
