@@ -620,6 +620,53 @@ The `--explorable` run was scored on three frames and they are not all alike: `f
 
 ---
 
+## 6f. The lever, held: C2 and C3 on a live client (2026-08-15)
+
+**Six runs, build 38833 against its own archive, loopback, caged, synthetic credential. The model of §3 survives both arms; one clause of C2's prediction does not, and its failure is the model's own arithmetic.** Everything below is scored on a **coarse 4×4×4 colour histogram over a CENTRED annulus** (`28 ≤ r ≤ 72` px about the disc centre) with L1 distance. That metric is **rotation-invariant by construction** — a rotation about the disc centre permutes pixels within a centred annulus without changing the multiset of values — which matters because the operator moved the camera during two arms and the compass disc turns with it.
+
+### 6f.1 C3 — the `0x0199` map-type byte is a real lever on the picture. CONFIRMED.
+
+| arm | byte | rect used | tiles | median RGB |
+|---|---|---|---|---|
+| map 474, default | 1 `MISSION_MAP_GAME` | B `(800,2720,1312,3232)` 512×512 | (1,5)(1,6)(2,5)(2,6) | (21, 21, 27) |
+| map 474, `--outpost` | 0 `MISSION_MAP_OUTPOST` | A `(1536,2176,1984,2784)` 448×608 | (3,4)(3,5) | (61, 59, 46) |
+| map 143, default | 0 | A == B | — | (89, 61, 25) |
+| map 143, `--explorable` | 1 | A == B | — | (89, 61, 25) |
+
+**Between the 474 arms: L1 = 0.915. Between the 143 arms: L1 = 0.000.** Within-arm noise floor 0.027 and 0.109 (frames spanning the camera movement). The two 474 rects touch **disjoint** tile sets, which is why that row was chosen — there is no shared art for the arms to agree on. **One byte on the wire, nothing else changed, and the picture changes completely where the row's two rects differ and not at all where they are equal.** — OBSERVED.
+
+**The negative control is not vacuous, which is the trap the rung wrote itself against.** Map 143's content row points at `0x287D3`, the authored sculpt map, so its compass could have been pure fallback and "no change" would prove nothing. Its median gives **χ = +0.778**, outside the fallback band (+1.081..+1.164), and the frame plainly shows a square patch of real atlas art inside the tiled fallback.
+
+### 6f.2 C2 — the picture follows the SLOT, not the terrain. CONFIRMED, and one clause REFUTED.
+
+Run with a new `--file-id` override that serves a chosen map **file** at whatever **slot** the client is in — the only way to hold one still while moving the other, and it needs no archive write at all (the rung's own procedure called for `deploy.py --install` twice, which would also have changed the archive and confounded the arm).
+
+| arm | slot (area row) | terrain file | fallback pixels | median RGB |
+|---|---|---|---|---|
+| A | 143 → **world 1** | sculpt `0x287D3`, 64×64 | 39.6% | (89, 61, 25) |
+| B | 144 → **world 2** | sculpt `0x287D3`, 64×64 | 40.7% | (77, 55, 30) |
+| C | 143 → **world 1** | Ascalon `0x1B97D`, 416×512 | **5.3%** | (89, 84, 35) |
+
+- **SAME terrain, different slot (A vs B): L1 = 0.618**, within-arm 0.000. The square patch is **the same size** — same terrain, same latch — and the art inside it is a different continent's: world 1's green/tan against world 2's dark blue with Cantha's turquoise water. The tile sets are disjoint (116842/116844/116848/116850 against 155731/155741). **The identical file drawn at two slots gives two different pictures, so the ground image cannot be coming from the terrain.** — OBSERVED. This is C2's load-bearing half and it is met.
+- **C2's other clause — "must NOT change when the terrain changes at a fixed slot" — is REFUTED (A vs C: L1 = 0.916).** It changes, and **both causes were already in this document's own arithmetic**:
+  1. **Extent.** The latch copies the loaded map's cell dims, so a 64×64 map crops a 64-cell square and tiles the fallback around it while a 416×512 map fills the disc: fallback **39.6% → 5.3%**.
+  2. **Translation, which is the bigger effect and the one the clause missed entirely.** The crop is `atlas = local + footprint_origin` (§6b.2), and the player's **map-local cell differs between terrains at the same world position**: `(1536, 1536)` is cell **(48, 48)** of the sculpt map (rect ±3072) but cell **(208, 271)** of Ascalon (rect −18432..21504 × −24576..24576). Both land inside map 143's footprint `(960,448,1280,992)` — at atlas ≈ (1008, 496) and ≈ (1168, 719), **223 cells apart**. Different window, same continent.
+
+**The model is NOT refuted, and the distinction matters.** C2's refutation condition was *"if the compass instead tracks the terrain"* — i.e. if it drew **our** geometry. It never does: arm C draws Pre-Searing walls, roads and water, which is world 1 atlas art, over Ascalon geometry; arm A draws world 1 atlas art over a sculpted radial basin. **What the terrain supplies is the addressing — where the window sits and how far it reaches — exactly as §0 was corrected to say after S9.** The clause was written before that correction and contradicts the hazard note PLAN C2 itself carries.
+
+### 6f.3 H3b, seen
+
+The square patch in arms A and B **is** the latch, photographed: an authored map crops only as many cells as it has, and `0x008C1E00` tiles the fallback over the rest. Mechanism was OBSERVED statically (S9, S12); this is the first time it has been **looked at**, and it is on our own map. It also gives Tier 3 its cost in one number: **~40% of the disc is fallback on a 64-cell map**, and no amount of tile authoring (A1) changes that — only making the authored map's own dims cover the footprint does, which is A2.
+
+### 6f.4 Two flags this pair required, and why neither is scope creep
+
+- **`authsrv --outpost`** — the counterpart of `--explorable`, forcing the `0x0199` map-type byte to **0**. Without it C3 had no off position on map 474, which content marks explorable, and the arm was unrunnable. Refuses to combine with `--explorable`; logs `[is_explorable=0, FORCED OUTPOST]`.
+- **`authsrv --file-id ID`** — serve this map file at whatever slot `--map` selects, splitting the slot/geometry pair that `content/maps.toml` couples by design. The spawn stays the slot's, so a file whose rect does not contain it will not spawn; both C2 slots spawn at `(1536,1536)`, inside the sculpt map's ±3072 rect, which is why the swap works.
+
+**A harness note paid for twice:** one run failed at *"client asked for a game instance"* — login clean, then nothing — because the play click needs the client foregrounded, the same condition that skips `--shots` frames. A retry, not a diagnosis.
+
+---
+
 ## 7. Contradictions and open questions
 
 **Cross-report contradictions, surfaced rather than silently resolved:**
