@@ -565,7 +565,62 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 4 | ✅ 2026-08-14, `0ddfbd0`+`9d97f45`+`a7971b1` — `+0x44..+0x68` decoded as u32 (duration0/15, skill_arguments bitfield, scale0/15, bonus_scale0/15; +0x50 stays NOT FOUND). Reproduces the 4-skill FINDINGS anecdote byte-exact and asserts its green-render rule. **C7's wiki third witness ran and agrees with all 14 endpoint values GWW lists**, plus costs and recharge — and checks the other direction too (no unlisted set may render green), which is what makes Rush's constant-25-with-bit-clear a real discriminator. Emitted to the content rows; **nothing consumes them until step 8**. `test_skilltable` floor 26→46 |
 | 5 | 🔶 **research half ✅ 2026-08-14, §8** — the triple's slots 1–2 named by ArenaNet's own asserts (`attrib`, `baseValue`), the panel's read path traced to `AttribBtns.cpp` (C8a closed), the tooltip formula measured (C6 closed). **Still to do in code**: adopt the gapped numbering, replace `ATTRIBUTE_COUNT = 42`, retire the stale `authsrv.py:552-557` comment, and pin the handler constants in a test |
 | 5 (cont.) | **code half ✅ 2026-08-15, `043e395`** — `attribtable.py` reads `s_attrib` and DISSOLVES the numbering contest (§10): index space contiguous 0..50, 42 owned by playable professions, 26/27/28 are profession 11's. 51 content rows emitted. Still open in code: `ATTRIBUTE_COUNT = 42` is a count of the wrong thing for a wire payload and step 7 replaces it |
-| 6–10 | ⬜ |
+| 6 | ⬜ — the targeted live capture. Operator-driven; §3's shopping list |
+| 7 | 🔶 **wire half ✅ 2026-08-15, `1339bfe`** (§11) — five real triples, bounds refused not clamped, payload bound to its content row and proven red. **L6's panel criterion is UNVERIFIED and needs one caged loopback run**: `--probe attributes`, whose step 3 reverses the ranks as the discriminator |
+| 8–10 | ⬜ |
+
+## §11. Step 7 landed: the wire half of L6 (2026-08-15, `1339bfe`)
+
+`0x003A` now carries five real triples instead of `[0] * 42`. What that
+constant actually was, once the handler's divide-by-three is applied: **fourteen
+(0,0,0) triples — fourteen writes of rank 0 to attribute 0**, accepted in
+silence, which is why nothing ever caught it.
+
+**Emitted:** `(17,12,12) (18,9,9) (19,6,6) (20,3,3) (21,1,1)` — profession 1's
+five attributes with distinct ranks. Ids measured (`s_attrib`), ranks OURS.
+
+**Slot 3 is the load-bearing uncertainty and is labelled as such at the call
+site.** No assert names it. What is measured is that the client's own
+pending-change apply adds the *identical* delta to it and to `baseValue`, so
+sending the rank in both reproduces the client's invariant rather than
+inventing a second number. The reading that fits everything seen is
+base-rank vs effective-rank-including-bonuses — equal for a character wearing
+no runes, and ours wears none. **If a capture ever shows the two differing,
+that is the line that was wrong.**
+
+**`ATTRIBUTE_COUNT = 42` was renamed, not deleted**, to
+`REAL_PROFESSION_ATTRIBUTE_COUNT`: it was a true statement about a different
+set all along. Three client-asserted bounds now sit beside it —
+`CHAR_ATTRIBS = 51`, `ATTRIBUTE_RANK_MAX = 12` (AcctTemplate:441),
+`ATTRIBUTE_TRIPLES_MAX = 16`. That last is corroborated twice, by the
+`array32`'s declared 48 elements and by `AcctTemplate:423`'s `attribCount < 16`.
+**Both agree, so one message always suffices for a real character** (primary +
+secondary ≤ ~10 attributes) and the `ceil(N/16)` batching `ATTRIBUTES.md` §6
+describes belongs to RESKIN's custom tables, not to combat.
+
+`attribute_triples()` refuses rather than clamps on every bound the client
+asserts, plus a duplicate id — which would otherwise mean "last one wins"
+while wearing a perfectly valid shape.
+
+**What is NOT done, and needs the harness.** The wire half is testable offline
+and tested (`test_spawn_burst` §4, floor 34; the payload is bound to the
+content row and proven red by changing one rank). **L6's actual criterion —
+the panel showing rank R — is unverified**, and per H5 no tool can read the
+HUD, so it stays operator-confirmed. The `attributes` probe was rewritten for
+exactly this and is ready to run:
+
+```bash
+python toolkit/harness/session.py --probe attributes --explorable
+```
+
+Its step 2 sends the five ranks; **step 3 reverses them across the same names**,
+so a panel that does not follow means step 2 passing was a coincidence. That
+reversal is the discriminator, and it is why the ranks are distinct.
+
+The residual from §8b stands: the write chain and the panel's read chain
+provably share one record, one locator and one TLS-resolved manager, but the
+control's runtime agent binding is not a byte pattern. This probe is what
+closes it.
 
 ## §10. `s_attrib`, and the numbering contest that dissolved (2026-08-15)
 
