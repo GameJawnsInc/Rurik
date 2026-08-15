@@ -549,6 +549,14 @@ The fix is not to change `file_id_table()` — its convenience is load-bearing e
 
 ## 6e. WHY it was NULL: 22 of the 492 atlas tiles were not addressable by the id the client asks for (rung S13, 2026-08-14, static)
 
+> **CORRECTION, same day, before this section had been read by anyone — and it makes the mechanism STRONGER while killing the framing.** As first written this section attributed the fault to the archive **generation** (38797-era copies broken, build 38833's fixed) and rung S13 recorded that *"the refutation clause did NOT fire … no 38797 client drew the atlas."* **That is false. The refutation clause fired.** A population sweep of every harness session carrying a frame found **4 of 320** sessions (scored on hold frames) in the atlas band, and **three of them are build 38797** — `20260813T012916` (χ +0.129), `20260813T013033` (+0.125) and `20260813T103437` (+0.125), all map 148, all visually a full Ascalon crop.
+>
+> **And the pair that settles it is better than anything this rung designed.** `20260813T103437` (**atlas**) and `20260813T105432` (**fallback**) ran **twenty minutes apart from the SAME run directory** — `vault/run/2026-07-29_221c13772c7a`, the same `Gw.exe`, the same archive path. Same binary, same file, opposite compass. So the variable is not the generation of anything: it is **the armed state of the client's own archive, which changes over the archive's life** — `FcArchive` arms a row when it *requests* a replacement, and the client writes its own `Gw.dat`. The arming happened between 10:34 and 10:54 on 2026-08-13, and every session after it draws the fallback until build 38833 installs the replacements.
+>
+> **What this changes:** the tile-addressability MECHANISM below is confirmed and now rests on a natural experiment that holds the client fixed, which is far stronger than the static build diff in §6e.2 (that diff is now corroboration, not the argument). What is withdrawn is "38797 is broken and 38833 is fixed" — **38797 drew the atlas perfectly well until its archive was armed.** Read every "generation" below as "armed state at the time of the run".
+>
+> **A limit of the sweep, stated because it nearly produced a second false claim:** 188 sessions scored χ ≈ **+0.529**, which is not a compass at all — those were measured from `final.png`, which is usually the character-select screen, and the disc samples UI. Only the **320** sessions with a `hold*.png` are scored above; the other 300 are excluded, not counted as either band.
+
 **The cause is found, it is one sentence, and it is the same defect three times over: in the archives every fallback session played from, map 148's world-map tiles carry bit 31 — the "replacement pending" rename — so the PLAIN id the client's own tile table holds does not bind, the exact 32-bit lookup misses, `ConstWorldMapGetChunkFile` returns NULL, and `0x008C1E00` tiles the fallback over the whole disc.** — OBSERVED, measured on the raw id table of five archives.
 
 | tile (map 148, world 1) | `run/38797` plain | armed form | `run/38833` plain |
@@ -562,10 +570,12 @@ Identical in `dat_study`, `run/…-c2` and `run/reskin-roster`. **The client doe
 
 **Scope, over the whole atlas** (`vault/exports/worldmap/atlas-38797.json`, 492 tiles, joined to each archive's raw table):
 
-| archive | tiles the client can address | misses | misses by world |
+| archive, **as it stands on 2026-08-14** | tiles the client can address | misses | misses by world |
 |---|---|---|---|
-| `run/2026-07-29…` (every fallback session) | **470 / 492** | **22** | **world 1: 18, world 0: 4** |
-| `run/2026-08-13…` (the atlas session) | **492 / 492** | **0** | — |
+| `run/2026-07-29…` (armed; every fallback session after 08-13 10:54) | **470 / 492** | **22** | **world 1: 18, world 0: 4** |
+| `run/2026-08-13…` (replacements installed) | **492 / 492** | **0** | — |
+
+**These are readings of the archives TODAY, not properties of the builds.** The same `run/2026-07-29…` copy served three atlas sessions earlier on 2026-08-13 — see the correction above — so its 22 misses are a state it entered, not a state it shipped in.
 
 **And that is exactly the right 22.** Map 148 is **world 1** (§7, rung S4), and so are 143 and 146 — the three maps §6's fallback corpus was drawn from. Every frame in that corpus is a world-1 map, and world 1 is precisely where 18 tiles were unaddressable. Kamadan (449, world 4) was never served, so the one continent that would have drawn normally never got the chance. The premise "the compass never draws the atlas under our server" was a survey of a single broken continent.
 
@@ -585,10 +595,10 @@ The rows were always there. They were never **addressable by the id the client u
 
 ### 6e.2 What this does to the three named hypotheses, and to S9's H2
 
-**S13's prediction was that the archive generation is the cause — CORRECT. The mechanism it proposed for that was the map file's rect, and that is REFUTED.** Both halves matter:
+**S13 predicted the ARCHIVE and proposed the map file's rect as the mechanism. The archive half is right; the rect is REFUTED; and "generation" is the wrong noun — it is the archive's ARMED STATE, which varies over one copy's life** (see the correction at the top of this section: one directory, twenty minutes, both outcomes). Both halves matter:
 
 - **The map file is NOT it.** Row 7982 and row 177262 decompress to 2,925,270 and 2,925,267 bytes; the **height field is byte-identical** (sha256 `f9bd7848…` both); `MAP_PARAMS 0x2000000C` is 41 bytes in both with **the first 25 — the whole rect — byte-identical**, differing only in a trailing 16-byte version-4 GUID; `0x20000008` differs by **one** byte; `0x20000002` by 670 of 1,735,664 in one contiguous tail span. Grid 416×512 and rect `(−18432, −24576, 21504, 24576)` in **both**. The latch had the same input all along.
-- **The client build is NOT it.** All twelve `CompassMap.cpp` asserts are identical in 38797 and 38833 — same lines (164, 165, 288–291, 381–384, 401, 472), same expressions — and every one is displaced by **exactly +0xA0**. Comparing instruction streams under that displacement: the constructor, the crop, the surface-init latch and the fallback tiler all have **identical instruction counts and ZERO mnemonic mismatches**; the operand-only differences are relocated branch targets. The compass's data is identical too — the footprint table base `0x0096DE38`, `s_worldData`, the chunk-tile table head and world 1's tile array head are all **byte-identical** between builds.
+- **The client build is NOT it — and the natural experiment above says so before any disassembly does.** One build, one archive path, twenty minutes, both outcomes. The static agreement is now corroboration: all twelve `CompassMap.cpp` asserts are identical in 38797 and 38833 — same lines (164, 165, 288–291, 381–384, 401, 472), same expressions — and every one is displaced by **exactly +0xA0**. Comparing instruction streams under that displacement: the constructor, the crop, the surface-init latch and the fallback tiler all have **identical instruction counts and ZERO mnemonic mismatches**; the operand-only differences are relocated branch targets. The compass's data is identical too — the footprint table base `0x0096DE38`, `s_worldData`, the chunk-tile table head and world 1's tile array head are all **byte-identical** between builds.
 - **The map-type byte is NOT it.** Map 148's `FOOTPRINT_A` and `FOOTPRINT_B` are the same rect `(768, 512, 1184, 1024)`, and a run with `--explorable` forced (the flag the old fallback sessions used) **still drew the atlas** — see §6e.3.
 - **S9's hypothesis 2 was right in substance and refuted for the wrong reason.** It said "the texture load fails" and was killed on the argument that the fallback tile was loaded *by the same loader, from the same archive, on the same frame*. That argument is sound and the conclusion was still wrong, because the failure is **upstream of the loader**: the lookup never yields a row to load. S9 named the residual as "a size- or id-dependent refusal … UNDECIDABLE STATICALLY". It was **id-dependent**, and it was **decidable statically** — by reading the raw table instead of the helper.
 

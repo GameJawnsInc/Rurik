@@ -2389,18 +2389,40 @@ Every one of these, in the order they were written:
   `0x1B97D` on a different row in another, and both are right for their own copy
   (`studies/maprows/FINDINGS.md` §8). The server reads one archive for the
   navmesh and the client opens its own for the geometry, and nothing checked they
-  matched. The POSITIVE CONTROL is what earns the file and it is not synthetic:
-  `vault/run-live/`, a copy a client really played live from, genuinely does not
-  bind `0x8001B97D`, and the check must go FATAL on EXACTLY the two Pre-Searing
+  matched. **THIS FILE'S SUBJECT HAD THE BUG IT WAS WRITTEN TO CATCH, fixed
+  2026-08-14:** `contentids` asked `archive.file_id_table()`, which registers a
+  bit-31 id under BOTH spellings, so it cleared a pair whose client could not
+  bind the id at all -- it printed `10 of 10 agree` and the run died at
+  `Code=007`. The client's lookup is an EXACT 32-bit compare with no masking
+  (`0x0047AA20`), so the client's half now reads `file_id_table(..., raw=True)`
+  while the SERVER's half keeps the masked table, because that is what our own
+  reader really does -- measured, not assumed: the gamesrv log resolved
+  `navmesh 0x1B97D` against an archive binding only `0x8001B97D`. **That
+  asymmetry is the fix and §1b is its regression guard**; reverting the one
+  `raw=True` reddens 7 checks. The POSITIVE CONTROL is what earns the file and it
+  is not synthetic, but it MOVED: it was `vault/run-live/`, and as of 2026-08-14
+  both run-live copies bind every content id plainly, so that control had gone
+  vacuous. It is now found by PROPERTY -- any `vault/run/` archive that fails to
+  bind a content id raw -- which today is the 38797-era copy, the exact pairing
+  that died at `Code=007`. The check must go FATAL on EXACTLY the two Pre-Searing
   rows while the other eight stay green -- a guard that reddens on all ten says
-  nothing. Identity is the MFT entry's size and crc, never the row, because row
+  nothing. §2b states, rather than assumes, that the DEFAULT server pairing is
+  cross-generation and correctly refused (point `RURIK_DAT` at a same-generation
+  archive to run). `default_client_dat()` now mirrors
+  `drive_client.newest_run_exe()` by mtime instead of taking the alphabetically
+  first directory -- those were different archives AND different answers, so the
+  pre-flight was auditing a copy no run was going to open. Identity is the MFT
+  entry's size and crc, never the row, because row
   indices do not survive a patch; a one-bit crc mutation must be caught, since
   two archives resolving one id to different FILES is worse than a failed launch
   (the run produces data and looks like it worked). Section 4 asserts the
   LOOPBACK GATE on the syntax tree -- a live run answers to ArenaNet's own ids
   and must never be refused on our rows, and "the call is inside the RUN_ROOT
   branch" is invisible to a grep; the sabotage that removes the gate reddens it
-  alone. ~3 s),
+  alone. **Floor 12, deliberately BELOW the healthy score of 23**: §1b, §2 and
+  §2b all need the vault to hold an archive that is mid-replacement on a content
+  id, which is a condition we want to go away -- a floor of 23 would turn a
+  HEALED vault into a red suite. The mandatory core is §0+§1+§3+§4. ~10 s),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same
