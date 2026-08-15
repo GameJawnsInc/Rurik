@@ -2798,6 +2798,38 @@ Every one of these, in the order they were written:
   real-content section presses skill 153 and requires E5 to carry recharge 8,
   the value ArenaNet's own wire echoed — it SKIPS loudly on a machine with no
   vault overlay, where sections 1–3 still run on a stubbed skill_timing),
+  `toolkit/authsrv/test_skilldamage.py` (skill damage: the client's own
+  numbers at the player's own rank, replacing `ENEMY_SKILL_FRACTION = 0.25` —
+  a flat quarter of the player's maximum for every skill, admitted invention.
+  **The sections that refuse are the point.** The client's table gives a
+  magnitude and does NOT say what it means: `scale0/15` is `+ Damage` on Power
+  Attack and `Healing` on Restore Condition, and `type_code` cannot
+  discriminate because a Spell can heal or harm. **Three of the four skills on
+  our own enemy's bar are not damage**, so a decode that read endpoints and
+  dealt them would have had the enemy "damaging" the player with a heal for
+  10–70 and an enchantment for 40–200 — an invention wearing a measurement's
+  clothes, and worse than the flat fraction because it would look principled.
+  The meaning therefore comes from GWW's own `{{Skill progression}}` variable
+  names, quoted verbatim into `content/world.toml` with a per-skill citation;
+  §3 asserts the five non-damage skills return **None rather than 0**, and is
+  proven red by relabelling Restore Condition's `Healing` as `Holy damage`.
+  §1 reproduces both endpoints for four skills — values GWW independently
+  lists, so a match is two witnesses rather than our decoder agreeing with
+  itself. §2 walks Holy Strike's whole ladder (3 per rank, exactly) and pins
+  that rank 20 **extrapolates to 70 rather than saturating**, because the
+  client's interpolator never compares rank against 15 and a "sensible" clamp
+  is exactly what someone would add. §4 pins that a disabled `skill_arguments`
+  bit REFUSES: Rush's scale slot holds 25 — the "move 25% faster" in its
+  description — so a decode ignoring the bitfield returns a plausible number
+  instead of refusing. §5 proves the **unresolved** rounding tie-break
+  (studies/combat 8c: the client adjusts by ±1.0, not ±0.5) cannot bite,
+  because no skill in the effect table lands on a .5 at any rank 0–15 — the
+  open question is shown to cost nothing rather than assumed to. §6 is the
+  chain steps 7 and 8 exist to join: Power Attack reads Strength 12 and
+  Desperation Blow reads Tactics 1, identical 10→40 tables landing 22 points
+  apart, which is precisely what "the server models no attribute ranks" used
+  to cost. §7 asserts a `+ Damage` bonus rides the swing as ONE damage
+  message, since two would draw two numbers on screen for one hit),
   `toolkit/authsrv/test_guards.py` (the guard contract for combat's computed
   values: a `_fraction` refusal must land BEFORE any send or state change, not
   after — the client dies on `fraction <= 1.0f` at CharPool.cpp:84 with no

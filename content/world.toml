@@ -65,6 +65,126 @@ importing an ArenaNet creature into tracked content is a judgement for the owner
 the cycle is testable without it.
 """
 
+# ------------------------------------------------- what a skill's scale MEANS
+#
+# THE CLIENT'S TABLE DOES NOT SAY. `scale0`/`scale15` is a generic magnitude
+# pair; nothing in the 164-byte record marks it as damage, healing or a health
+# bonus, and `type_code` is the skill's TYPE (spell/stance/shout/attack), which
+# does not discriminate either -- a Spell can heal or harm.
+#
+# Reading the endpoints as damage would have been an invention wearing a
+# measurement's clothes, and a bad one: three of the four skills on our own
+# enemy's bar are NOT damage. The enemy would have "damaged" the player with a
+# heal for 10-70 and an enchantment for 40-200.
+#
+# So the magnitude is measured and the MEANING is sourced here, from GWW's own
+# `{{Skill progression}}` variable names -- the wiki's word, quoted verbatim,
+# not our classification. Ids are the client's; every row's number was checked
+# against the client table and matches endpoint for endpoint.
+#
+# `toolkit/authsrv/authsrv.py` models only the labels it names in
+# SCALE_MEANS_DAMAGE. Everything else lands as "no modelled effect" and says so
+# in the log rather than being quietly treated as damage.
+
+[skill_effect.312]
+scale_means = "Holy damage"
+bonus_scale_means = "+ Holy damage"
+[skill_effect.312.provenance]
+source = "wiki"
+page = 'GWW, "Holy Strike", {{Skill progression}}, rev. 2024-05-16'
+verified = """Client scale 10->55 and bonus_scale 10->55, skill_arguments = 6
+(scale|bonus). The wiki lists exactly those two vars at exactly those endpoints,
+and its concise description reads "Deals 10...55 holy damage. Deals 10...55 more
+holy damage if target is knocked down." """
+
+[skill_effect.322]
+scale_means = "+ Damage"
+[skill_effect.322.provenance]
+source = "wiki"
+page = 'GWW, "Power Attack", {{Skill progression}}, rev. 2026-07-05'
+verified = "Client scale 10->40, args = 2 (scale). Wiki var1 `+ Damage` 10->40."
+
+[skill_effect.323]
+scale_means = "+ Damage"
+[skill_effect.323.provenance]
+source = "wiki"
+page = 'GWW, "Desperation Blow", {{Skill progression}}, rev. 2026-07-05'
+verified = "Client scale 10->40, args = 2 (scale). Wiki var1 `+ Damage` 10->40."
+
+# The rest of the two bars, declared so "not damage" is a RECORDED FACT with a
+# citation rather than a silent default. The server models none of these.
+[skill_effect.276]
+scale_means = "Healing"
+[skill_effect.276.provenance]
+source = "wiki"
+page = 'GWW, "Restore Condition", {{Skill progression}}, rev. 2024-05-16'
+verified = "Client scale 10->70, args = 2. Wiki var1 `Healing` 10->70."
+
+[skill_effect.253]
+scale_means = "Duration"
+[skill_effect.253.provenance]
+source = "wiki"
+page = 'GWW, "Scourge Sacrifice", {{Skill progression}}, rev. 2026-02-05'
+verified = """Client duration 8->20 with args = 1 (duration only); the scale
+slot holds a constant 100 with its bit CLEAR, which is the same shape as Rush's
+25 and is why the bitfield has to be honoured."""
+
+[skill_effect.289]
+scale_means = "+ Maximum health"
+[skill_effect.289.provenance]
+source = "wiki"
+page = 'GWW, "Vital Blessing", {{Skill progression}}, rev. 2026-07-05'
+verified = "Client scale 40->200, args = 2. Wiki var1 `+ Maximum health` 40->200."
+
+[skill_effect.316]
+scale_means = "+ Max health"
+[skill_effect.316.provenance]
+source = "wiki"
+page = 'GWW, "To the Limit!", {{Skill progression}} (via studies/skills/FINDINGS.md section 4, crawled 2026-08-14)'
+verified = """Client scale 10->60, args = 7. FINDINGS section 4 records the GWW
+progression as Max foes 1->6, Duration 10->20, + Max health 10->60. Cited from
+there rather than re-fetched: the plain title redirects on the API."""
+
+[skill_effect.317]
+scale_means = "Duration"
+[skill_effect.317.provenance]
+source = "wiki"
+page = 'GWW, "Battle Rage", {{Skill progression}}, rev. 2026-07-31'
+verified = "args = 1 (duration only); the scale slot holds a constant 33."
+
+[skill_effect.318]
+scale_means = "+ Maximum health"
+bonus_scale_means = "Damage reduction"
+[skill_effect.318.provenance]
+source = "wiki"
+page = 'GWW, "Defy Pain", {{Skill progression}}, rev. 2026-07-05'
+verified = "Client scale 90->300, bonus 1->10, args = 7. Wiki lists both."
+
+[skill_effect.319]
+scale_means = "Duration"
+[skill_effect.319.provenance]
+source = "wiki"
+page = 'GWW, "Rush", {{Skill progression}}, rev. 2023-03-03'
+verified = """args = 1; the scale slot holds a constant 25 -- the "move 25%
+faster" in the description -- with its bit clear. THE row that proves reading
+endpoints without the bitfield invents scaling the game does not draw."""
+
+[skill_effect.320]
+scale_means = "Crippled duration"
+[skill_effect.320.provenance]
+source = "wiki"
+page = 'GWW, "Hamstring", {{Skill progression}}, rev. 2026-06-25'
+verified = "args = 4 (bonus only); the scale slot is 0->0."
+
+[skill_effect.321]
+scale_means = "none"
+[skill_effect.321.provenance]
+source = "wiki"
+page = 'GWW, "Wild Blow", rev. 2026-03-08'
+verified = """No {{Skill progression}} template on the page at all, and the
+client agrees: args = 0, every set disabled. Two independent ways of saying
+this skill does not scale."""
+
 # ---------------------------------------------------------------- the player
 
 # The player's attribute ranks, as [attribute_id, rank] pairs.

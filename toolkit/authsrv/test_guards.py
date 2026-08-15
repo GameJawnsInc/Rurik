@@ -202,7 +202,11 @@ def section_land_skill():
     send = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
     state = {"agents": {}, "pos": (0.0, 0.0)}
     agent = _fresh_agent()
-    agent["casting"], agent["skills"] = 0, ((7, 1.0, 20.0),)
+    # 312 Holy Strike, and it must be a real DAMAGE skill for this section to
+    # mean anything: since step 8, land_skill returns early on a skill whose
+    # scale is not damage, so the synthetic id this used to carry would now
+    # skip the guarded path entirely and the section would pass vacuously.
+    agent["casting"], agent["skills"] = 0, ((312, 1.0, 20.0),)
 
     saved = authsrv._fraction
     authsrv._fraction = _refusing_fraction(authsrv)

@@ -438,6 +438,109 @@ def spawn_profession_values(profession=None):
         custom=p > agents.CHAR_PROFESSIONS - 1) + [0]
 
 
+# Which of GWW's own progression labels this server treats as damage to a foe.
+# EXPLICIT AND SMALL ON PURPOSE: the client's table does not say what a scale
+# set means (content/world.toml's skill_effect block explains at length), so a
+# label not named here lands as "no modelled effect" rather than being guessed
+# at. Three of the four skills on our enemy's own bar are in that second group
+# -- a heal, a hex duration and a max-health enchantment -- and treating their
+# endpoints as damage would have been an invention wearing a measurement's
+# clothes.
+#
+# The `+` is load-bearing, not decoration. "Holy damage" IS the skill's damage;
+# "+ Damage" is ADDED to the weapon attack it rides on, which is what an attack
+# skill does, so the two resolve differently below.
+SCALE_MEANS_DAMAGE = {
+    "Holy damage": "standalone",
+    "+ Damage": "additive",
+}
+
+# The rank the ENEMY casts at. OURS -- no capture and no table gives a monster's
+# attribute ranks, and studies/monsterai/FINDINGS.md establishes that a monster's
+# bar is structurally unreachable (ArenaNet never sends it), so this is a choice
+# and not a measurement. 12 is ArenaNet's own cap for a player
+# (AcctTemplate:441); a real monster's is unknown.
+ENEMY_SKILL_RANK = 12
+
+
+def skill_scale_value(skill_id, rank, which="scale"):
+    """A skill's attribute-scaled value at `rank`, by the CLIENT's own formula.
+
+    MEASURED, at 0x005A8920 -- one general-purpose interpolator the client uses
+    for the scale, bonus-scale and duration sets alike (studies/combat 8c):
+
+        value(rank) = max(0, round(lo + (hi - lo) * rank / 15.0))
+
+    with the divisor a literal double 15.0 (verified by a stdlib read of
+    0x0094B930: bytes 0000000000002e40) and NO upper clamp on rank, so ranks
+    above 15 extrapolate rather than saturating. The floor at zero is
+    ArenaNet's own assert, ConstSkill:3769 `(int)result >= 0`.
+
+    THE BITFIELD IS HONOURED, and it is not optional. `skill_arguments` (+0x58)
+    enables each set -- 1 duration, 2 scale, 4 bonus -- and a disabled set's
+    slot can still hold a meaningful CONSTANT: Rush's scale slot holds 25, the
+    "move 25% faster" in its description, with the bit clear. Reading endpoints
+    without the bit invents a progression the game never draws, so a disabled
+    set raises here rather than returning a plausible number.
+
+    THE ROUNDING TIE-BREAK IS UNRESOLVED (studies/combat 8c): the client's CRT
+    helper adjusts by +/-1.0 rather than the textbook +/-0.5 before truncating,
+    and half-up vs half-even was not settled. Python's round() is half-EVEN, so
+    this uses explicit half-up -- a choice, recorded here, and one that cannot
+    currently bite: no skill this server resolves lands on a .5, which
+    test_skilldamage asserts rather than leaves to luck.
+    """
+    import math
+    row = agents.WORLD.get("skills", str(skill_id))
+    bit = {"scale": 2, "bonus_scale": 4, "duration": 1}[which]
+    if not int(row["skill_arguments"]) & bit:
+        raise ValueError(
+            f"skill {skill_id} has its {which} set DISABLED "
+            f"(skill_arguments = {row['skill_arguments']}), so its "
+            f"{which}0/{which}15 slots are not a progression. Rush's scale "
+            f"slot holds 25 with this bit clear and the wiki lists no scale "
+            f"progression for it; reading the endpoints anyway would invent "
+            f"one. Refusing rather than returning a plausible number.")
+    lo, hi = int(row[f"{which}0"]), int(row[f"{which}15"])
+    exact = lo + (hi - lo) * rank / 15.0
+    return max(0, int(math.floor(exact + 0.5)))
+
+
+def skill_damage(skill_id, rank):
+    """(amount, mode) if this skill's scale IS damage, else None.
+
+    `mode` is "standalone" (the skill's own damage) or "additive" (added to the
+    weapon attack it rides on). The distinction is GWW's: "Holy damage" against
+    "+ Damage", and the plus is what says the number rides an attack.
+
+    Returns None -- not zero -- when the skill is not a modelled damage skill,
+    so a caller must decide what that means rather than silently dealing 0.
+    """
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    mode = SCALE_MEANS_DAMAGE.get(row.get("scale_means"))
+    if mode is None:
+        return None
+    return skill_scale_value(skill_id, rank), mode
+
+
+def player_rank_for_skill(skill_id):
+    """The player's rank in the attribute the SKILL scales on.
+
+    This is where step 7 and step 8 join: the skill record names its attribute
+    (+0x29), the attribute is an index into the client's own s_attrib table,
+    and the player's rank in it comes from the content row 0x003A is built
+    from. Before this the chain was cut in the middle and `2 * rank` was 0.
+
+    An attribute the player has no rank in is 0 -- which is correct rather
+    than missing: a Warrior really does have rank 0 in Smiting Prayers.
+    """
+    attribute = int(agents.WORLD.get("skills", str(skill_id))["attribute"])
+    return dict(agents.PLAYER_ATTRIBUTE_RANKS).get(attribute, 0)
+
+
 def attribute_triples(ranks=None):
     """0x003A's payload: (attribute_id, rank, rank) per attribute, flattened.
 
@@ -1942,12 +2045,6 @@ ENEMY_SKILL_BAR = ((276, 0.75, 2.0),   # 5
                    (253, 1.00, 5.0),   # 4
                    (312, 0.75, 8.0),   # 10
                    (289, 0.75, 2.0))   # 6
-ENEMY_SKILL_FRACTION = 0.25   # of the player's maximum, for EVERY skill on the
-                              # bar. OURS, and flat on purpose: per-skill effects
-                              # are not modelled and giving each one a different
-                              # number would be four inventions instead of one.
-                              # The client carries every real number and we do not
-                              # read it yet (studies/skills/FINDINGS.md)
 
 # The bar this spawn fights with. A content row may give `skills = [[id, act,
 # recharge], ...]`, and an EMPTY list leaves the agent on plain swings. Named here
@@ -2086,8 +2183,15 @@ def attack_tick(send, state, conn_id):
     hit_enemy(send, state, target_id, conn_id)
 
 
-def hit_enemy(send, state, target_id, conn_id):
-    """Land one swing on a hostile agent, if the swing timer allows it."""
+def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
+    """Land one swing on a hostile agent, if the swing timer allows it.
+
+    `bonus_damage` is an attack skill's "+ Damage", in health points, added to
+    the swing this call already lands. ONE damage number, not two, because
+    that is what the plus means: GWW writes Power Attack as "+ Damage 10-40",
+    a bonus on the attack it rides rather than a separate hit. Sending two
+    property-16 messages would draw two numbers on the screen for one swing.
+    """
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
         return
@@ -2104,9 +2208,11 @@ def hit_enemy(send, state, target_id, conn_id):
     # reasoned: test_guards.py section 1 went red on exactly those three
     # counts against the pre-guard tree. Dormant while HIT_FRACTION is a
     # constant; load-bearing the day step 8 computes it (studies/combat).
-    dealt = agent["max_health"] * HIT_FRACTION
+    dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
     frac = _damage_fraction(dealt, agent["max_health"],
-                            agents.PROP_DAMAGE, "one swing")
+                            agents.PROP_DAMAGE,
+                            "one swing" if not bonus_damage
+                            else f"one swing +{bonus_damage:.0f}")
     agent["last_hit"] = now
 
     # A swing is two events, and sending only the second is why the first
@@ -2240,12 +2346,26 @@ def handle_skill_press(values, send, state, conn_id, opcode):
           f"agent {target or 'nothing'}: E5 in {e5_at - now:.2f}s, "
           f"recharge {recharge:.0f}s", flush=True)
 
-    # A skill aimed at something hostile does what a click does. Whether a
-    # skill should damage at all, and by how much, is OURS -- the client
-    # carries every real number (studies/skills/FINDINGS.md) and we do not
-    # read it yet. Damage stays AT PRESS for now: moving it to cast-end is
-    # step 8's business (magnitudes and timing change together, under the
-    # step-2 guards), not this step's.
+    # A skill aimed at something hostile does what a click does, PLUS its own
+    # "+ Damage" if it has one. Since 2026-08-15 the "by how much" is no longer
+    # ours: the magnitude is the client's own scale endpoints interpolated at
+    # the player's rank IN THAT SKILL'S OWN ATTRIBUTE (studies/combat 12), so
+    # Power Attack lands harder than Desperation Blow because Strength 12 beats
+    # Tactics 1 -- which is the whole point of having ranks at all.
+    #
+    # A skill whose scale is not damage adds nothing and the swing stands
+    # alone. That covers most of this bar: two stances, two health buffs and a
+    # condition. Guessing an effect for those is the invention this arc exists
+    # to remove.
+    #
+    # Damage stays AT PRESS rather than at cast end, and that is still a known
+    # divergence rather than a decision this step revisited: the magnitudes
+    # moved here, the timing did not.
+    bonus = 0.0
+    if target:
+        found = skill_damage(skill_id, player_rank_for_skill(skill_id))
+        if found and found[1] == "additive":
+            bonus = float(found[0])
     #
     # THE SAME ValueError CONTRACT world_tick has, because this runs on the
     # CONNECTION thread: handle's except tuple is ConnectionError /
@@ -2256,7 +2376,7 @@ def handle_skill_press(values, send, state, conn_id, opcode):
     # connection. Refusing the VALUE must never cost more than the value.
     if target:
         try:
-            hit_enemy(send, state, target, conn_id)
+            hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
         except ValueError as ex:
             print(f"[c{conn_id}] skill press REFUSED a value: {ex}",
                   flush=True)
@@ -2813,12 +2933,32 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # `casting`. Removing this line breaks no check, and that was verified by
     # removing it. It stays because a stale slot index is a bad thing to leave
     # lying around for the next person who reads `casting` from somewhere else.
+    # THE DAMAGE IS THE CLIENT'S OWN NUMBER SINCE 2026-08-15. It was
+    # `PLAYER_HEALTH * ENEMY_SKILL_FRACTION` -- a flat quarter of the player's
+    # maximum for every skill on the bar, admitted invention. Now it is the
+    # skill's scale endpoints interpolated at ENEMY_SKILL_RANK by the client's
+    # own formula (studies/combat 12).
+    #
+    # MOST OF THIS BAR NO LONGER DAMAGES, and that is the correct answer rather
+    # than a regression. Three of its four skills are not damage skills:
+    # Restore Condition heals 10-70, Vital Blessing grants 40-200 maximum
+    # health, Scourge Sacrifice is a hex duration. The old flat fraction made
+    # all four hurt the player identically; dealing a heal's magnitude AS
+    # damage would be worse, not better. The player still dies to the ordinary
+    # swing (land_swing), which is what R4a's criterion ever rested on.
+    damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
+    if damage is None:
+        agent["casting"] = None
+        print(f"[c{conn_id}] agent {agent_id} cast skill {skill_id}: no "
+              f"modelled effect (its scale is not damage -- see "
+              f"content/world.toml skill_effect)", flush=True)
+        return
+    dealt = float(damage[0])
     # Guard before ANY mutation. This function's damage send was already its
     # first send (the gate map's template for the others), but the cast slot
     # and the player's health were consumed before the guard could refuse --
     # a refused value would have cost real state for a message that never
     # went out (test_guards section 4).
-    dealt = float(agents.PLAYER_HEALTH) * ENEMY_SKILL_FRACTION
     frac = _damage_fraction(dealt, float(agents.PLAYER_HEALTH),
                             agents.PROP_DAMAGE, f"skill {skill_id}")
     agent["casting"] = None
