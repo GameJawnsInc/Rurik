@@ -461,8 +461,20 @@ def describe(a, name=""):
 #
 # Provenance: the two tables are ArenaNet's and are carried as LITERALS with
 # their addresses, the pattern `modelfile.py` set for the FVF stride tables --
-# the module then works on a bare machine and `test_atex.py` re-reads them
-# out of the vaulted image to pin the literals to ArenaNet's own bytes.
+# the module then works on a bare machine and `test_atexlevel.py` §7 re-reads
+# them out of the vaulted image to pin the literals to ArenaNet's own bytes.
+# (That sentence said `test_atex.py` until 2026-08-15; the check has never
+# lived there, and a pointer at the wrong test is how a section stops being
+# run without anyone noticing.)
+#
+# AND THE ADDRESSES BELOW ARE A FACT ABOUT ONE BUILD, which is why the number
+# is now written down beside them rather than left to be inferred. `atex.py`
+# named neither build nor date -- the exact shape `studies/crossbuild/PLAN.md`
+# §6's class (b) calls the defect: "a bare VA with no build is the defect, not
+# the VA". It cost something real: §7's re-read picked its image by directory
+# order, and with nothing here saying WHICH build these came from there was no
+# way for that section, or its reader, to notice it had switched.
+TABLES_BUILD = 38797
 
 #: `s_formatFlags`, 27 u32 at VA 0x00A5DEA8 (accessor 0x006AE830, whose assert
 #: `format < GR_FORMATS` with `cmp esi, 0x1b` is what fixes the count at 27).

@@ -1034,6 +1034,64 @@ refusal alone is unusable the moment a second build is legitimately present — 
 a project that will meet an update every few weeks, is the ordinary case rather than the
 exception.
 
+### 7.9 A fourth `sorted()[-1]`, and this one had switched builds without going red
+
+**OBSERVED 2026-08-15**, found while auditing whether the census's remaining pins fail
+loudly. `test_atexlevel.py` §7 — the section that pins the ATEX codec's two literal
+tables to ArenaNet's own bytes — chose its image like this:
+
+```python
+builds = sorted(os.listdir(root))
+exe = None
+for name in builds:
+    candidate = os.path.join(root, name, "Gw.exe")
+    if os.path.isfile(candidate):
+        exe = candidate          # no break: LAST one wins
+```
+
+That is `sorted(...)[-1]` written as a loop, which is why three previous sweeps for the
+idiom did not find it. **The fourth instance in four files**, after `authsrv`'s key
+selection (§7.7), `drive_client.newest_run_exe` and `contentids.default_client_dat`.
+
+**It was harmless until the vault held a third build, and then it changed answers in
+silence.** `2026-08-13_64fae3b1369b` sorts last, so from the moment 38833 was
+snapshotted this section stopped validating 38797 — the build its literals were measured
+on — and began validating **38833**, which nobody chose and no output named.
+
+**It stayed green, and the reason is the interesting part.** MEASURED across all three
+vaulted builds:
+
+| Build | `FORMAT_FLAGS` matches | `RUN_TABLE` matches |
+|---|---|---|
+| 38519 | **no** | **no** |
+| 38797 | yes | yes |
+| 38833 | yes | yes |
+
+So the tables **are** build-coupled — 38519 proves it — and 38833 simply did not move
+them, consistent with §7.2's finding that this 15-day bugfix moved far less than the
+90-day gap did. The section passed for a real reason rather than by accident, but it
+passed about the wrong build, and the day a future build moves those tables the red
+would read as *"the ATEX codec is broken"* rather than *"you are reading a client nobody
+selected."* That is the arc's own defect class arriving inside the arc's own test suite.
+
+**Two fixes, and the second is the one that would have prevented it.**
+
+1. §7 now resolves through `pinned.find(atex.TABLES_BUILD)` — selection by REGISTRY
+   rather than by filename order, with the sha256 verified and the live install refused
+   — and it **prints the build it read**. A section that opens a client and does not say
+   which one is one directory rename away from this bug again.
+2. `atex.py` gained `TABLES_BUILD = 38797`. The two VAs named no build at all, which is
+   precisely the class-(b) defect §6 states — *"a bare VA with no build is the defect,
+   not the VA"* — and the cost was concrete rather than theoretical: with nothing
+   recording which build they came from, neither the test nor a reader had anything to
+   notice the switch against. Its docstring also pointed at `test_atex.py`, where this
+   check has never lived.
+
+The census went **46 → 47** and `test_buildpins.py` went red for it, correctly. That
+trade is the right way round and worth stating plainly, because the instinct is to read
+any increase as regression: **a counted pin a test resolves through `pinned.find()` is
+safer than an uncounted address nobody can tell is stale.**
+
 ---
 
 ## 8. `genericvalue.py` derived — the arc's one casualty, closed
@@ -1170,6 +1228,7 @@ reverts, and it caught me inside an hour.
 | ~296 files counted as research corpus were self-test artifacts | **MEASURED** — §7.4d, census 1,828 → 1,532 once `selftest/` is excluded. Deliverable 7's "1,122 files" figure was over a tree that included them |
 | The research corpus is now genuinely two-build, and the pooling refusal alone could not resolve it | **OBSERVED** — §7.8, 1,534 at 38797 against 18 at 38833 plus 953 unstamped. The refusal was correct and unactionable; the figures now FOLLOW THE PIN via `origin.select_build`, unstamped files kept, exclusions printed |
 | A pin the corpus does not hold passes the one-build census vacuously | **MEASURED** — §7.8, control at 99999: 0 files, first predicate green, second red. Why the census needs both halves |
+| `test_atexlevel.py` §7 silently switched to validating 38833 when the vault gained a third build | **OBSERVED** — §7.9, a fourth `sorted()[-1]` written as a break-less loop. Stayed green because 38833 did not move those tables; 38519 does, so they ARE build-coupled |
 | ~~`archive.py`'s offset for row 46196 is wrong by 1,024~~ | **REFUTED** 2026-08-14 — `archive.row(46196).offset == 0x437F6800`, identical to `datwrite`/`datcheck`, marker in that extent. The 1,024 came from reading `entries[46196]`, which is row 46197. §4, §4b.1 |
 | ~~`archive.py` and `datcheck.py` number MFT rows differently, off by one~~ | **REFUTED** 2026-08-14 — all 24 bytes of every row agree on all ten vault archives; pinned by `test_archive.py` §1c. The number that differs is `len(entries)` vs `row_count`. §4b.1 |
 | There is ONE row convention, ArenaNet's raw MFT index, and every reader and every recorded constant is in it | **OBSERVED** — 10 archives by an independent `struct` walker; 65 recorded constants ≥ 16 re-resolved in both conventions, 26 map-flagged under `row(N)` and 1 under `entries[N]`, zero overlap |

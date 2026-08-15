@@ -193,8 +193,8 @@ check("buildpins.py" in " ".join(skipped),
 
 live = [r for r in rows if r["klass"] == BP.LIVE]
 files = {r["file"] for r in live}
-check(len(live) == 46,
-      "46 class-(a) occurrences -- the census",
+check(len(live) == 47,
+      "47 class-(a) occurrences -- the census",
       f"{len(live)}; if this moved, the plan's cost number moved with it. 68 "
       f"until genericvalue.py stopped storing its ten table addresses; 63 after; "
       f"64 once buildid.py gave the older build a NUMBER, since a build number "
@@ -217,7 +217,15 @@ check(len(live) == 46,
       f"DOWN by a lot: genericvalue.py's 27 became 0 when its switches were "
       f"derived from the message tables instead of looked up, which is a 37% cut "
       f"to the whole repo's per-build liability in one module "
-      f"(studies/crossbuild/FINDINGS.md §8)")
+      f"(studies/crossbuild/FINDINGS.md §8). 47 on 2026-08-15, and this one is a "
+      f"pin ADDED ON PURPOSE: atex.py's two VAs named no build, which is exactly "
+      f"the class-(b) defect the plan states -- 'a bare VA with no build is the "
+      f"defect, not the VA' -- and with nothing recording that they were measured "
+      f"on 38797, test_atexlevel.py §7 was free to re-read them against whatever "
+      f"client sorted last and did (38833, silently, once the vault gained a "
+      f"third build). atex.TABLES_BUILD fixes that and costs one census row. The "
+      f"trade is the right way round: a counted pin that a test resolves through "
+      f"pinned.find() beats an uncounted address nobody can tell is stale")
 check(len(files) == 8, "across 8 files", f"{len(files)}: {sorted(files)}")
 
 # The sites the plan names by hand must actually be there. A census that missed
