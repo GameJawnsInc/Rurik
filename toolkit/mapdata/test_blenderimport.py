@@ -88,10 +88,21 @@ REFUSED rather than fallen through to the default install, which is section 0
 and is there because the first version fell through and a run that asked for one
 Blender silently measured another and printed ALL CHECKS PASSED.
 
-SECTIONS 0 TO 2 NEED NO VAULT and build their fixture from nothing. Section 3
-needs `vault/dat_study/Gw.dat`, declares a skip naming the path when it is
-absent, and the floor then fails the run -- because the synthetic half cannot
-refute anything about ArenaNet's bytes.
+SECTIONS 0 TO 2b NEED NO VAULT and build their fixture from nothing --
+including section 2b's textured ground, whose three tiles ride synthetic ATEX
+rows behind a fake archive and whose third tile deliberately resolves to
+nothing, so the untextured path (its OWN named slot, never a silent fall
+through to slot 0) is exercised on a bare machine. Sections 3-5 need
+`vault/dat_study/Gw.dat`, declare a skip naming the path when it is absent,
+and the floor then fails the run -- because the synthetic half cannot refute
+anything about ArenaNet's bytes.
+
+SECTION 5 IS RUNG T5, and its criterion is against the SIDECAR rather than
+the importer's own loop: every tile's slot material must be the image the
+manifest names for that tile byte, and every FACE's material index --
+recomputed here from tiles.u8 through the dump's slot table -- must
+sha256-match what Blender read back off its own built polygons. All 212,992
+Pre-Searing faces, not a sample; `--no-terrain-textures` is the control.
 """
 
 import argparse
@@ -110,8 +121,9 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from archive import Archive, file_id_table  # noqa: E402
 from terrain import CELL_PITCH  # noqa: E402
-from mapexport import (build_manifest, export_row, load_export,  # noqa: E402
-                       write_export)
+from mapexport import (build_manifest, build_terrain_textures,  # noqa: E402
+                       export_row, load_export, write_export)
+from mapfile import MapFile  # noqa: E402
 # The prop oracle's chunk walk, its pinned populations and its measured
 # fractions live in `test_mapexport.py` and are imported rather than copied. One
 # copy of a measured constant is the point: if that file's oracle is ever
@@ -120,7 +132,8 @@ from test_mapexport import (ORACLE, PROPS_CHUNK, PRESEARING_DIMS,  # noqa: E402
                             PRESEARING_FILE_ID, PRESEARING_PROPS,
                             PRESEARING_RECT, PRESEARING_ROW, PROPS_VERSION,
                             read_chunks, read_props, synthetic_terrain,
-                            SYN_X, SYN_Y, _synth_pair)
+                            SYN_X, SYN_Y, _synth_pair, _TexArchive, _tex_deps)
+import atex  # noqa: E402
 from mapexport import build_props  # noqa: E402
 import checks  # noqa: E402
 import vaultpath  # noqa: E402
@@ -209,7 +222,31 @@ PYTHON_EXIT_CODE = 66
 # shared across file ids), the real/proxy split with nothing lost between
 # them, and THE Z SIGN -- 0.961 of real props reach above the terrain against
 # 0.032 for the reflected control. Sections 0-2 still score 45.
-FLOOR = 92
+#
+# 108 -> 114 on 2026-08-14, rung T6: section 5 recomputes the overlay
+# geometry straight from the .layers.u16 sidecar -- one face per non-base
+# layer, rotated where bit 15 is set -- and requires Blender's built
+# object to match (262,310 faces over 148,882 cells, 68,201 rotated on
+# Pre-Searing), requires all four base quadrants to be in use (T5 pinned
+# every cell to quadrant 0, which was the repetition), and adds the
+# --no-blend control. Sections 0-2b score 54.
+#
+# 92 -> 108 on 2026-08-14, rung T5 (46.0 s green): section 2b binds a
+# synthetic ground -- two decodable tiles plus one whose file id resolves to
+# nothing, which must get its OWN named empty slot rather than falling
+# through to slot 0 -- and section 5 asserts the real map's binding against
+# the SIDECAR (every tile's slot material the manifest's image, all 212,992
+# face indices digest-equal to a recomputation from tiles.u8), with
+# --no-terrain-textures as the control on both.
+#
+# 108 -> 110 the same day, after the first human look at the scene: the
+# blend mask was DARKENING the ground (Blender premultiplies STRAIGHT-mode
+# images, so the Color output was RGB x alpha -- measured on the PNGs:
+# window luminance flat, window alpha banded), and the terrain was
+# flat-shaded where the client's vertex layouts carry normals. One check
+# per section pins CHANNEL_PACKED and all-faces-smooth, read back off the
+# scene. Sections 0-2b score 54, so a vault-less run lands 56 short.
+FLOOR = 118
 
 
 # ------------------------------------------------------------------ helpers
@@ -530,6 +567,7 @@ def main(argv=None):
     with tempfile.TemporaryDirectory(prefix="rurik_blender_") as tmp:
         base_json = _section1(check, led, blender, tmp)
         _section2(check, led, blender, tmp, base_json)
+        _section2b(check, led, blender, tmp)
         _section3(check, led, blender, tmp, args)
 
     print("\n(%.1fs)" % (time.perf_counter() - t0))
@@ -783,6 +821,94 @@ def _bbox_of(exp):
             "max": [x1, y1, mesh_z(min(exp.heights))]}
 
 
+# --- 2b. rung T5 on a synthetic fixture, no vault ---------------------------
+
+def _section2b(check, led, blender, tmp):
+    print("\n== 2b. rung T5: the ground's material, synthetic (no vault) ==")
+    # Three tiles: two behind decodable synthetic ATEX rows, one whose file id
+    # the table cannot resolve -- so the UNTEXTURED path runs on a bare
+    # machine, and the prop fall-through defect (unbound faces silently
+    # drawing slot 0) has a check that would catch its return.
+    fids = (0x1111, 0x2222, 0x3333)
+    blobs = {10 + i: atex.build(b"DXT1", 8, 8, fill=0x01010101 * (i + 1))
+             for i in range(3)}
+    table = {0x1111: 10, 0x2222: 11}
+    trn = synthetic_terrain()
+    block, tex_payloads = build_terrain_textures(
+        MapFile(chunks=[_tex_deps(*fids)]), trn, _TexArchive(blobs),
+        table=table)
+    rect = (-1536.0, -3072.0, SYN_X * CELL_PITCH - 1536.0,
+            SYN_Y * CELL_PITCH - 3072.0)
+    meta, payloads = build_manifest(trn, rect, "syntex",
+                                    {"archive": None, "row": None,
+                                     "file_id": None},
+                                    terrain_textures=block,
+                                    textures_state="exported")
+    src = write_export(meta, payloads + tex_payloads,
+                       os.path.join(tmp, "syntex"))
+    exp = load_export(src)
+
+    work = os.path.join(tmp, "run_syntex")
+    os.makedirs(work, exist_ok=True)
+    rc, out, summary, _v = run_blender(blender, src, work)
+    check(rc == 0 and summary is not None,
+          "Blender imports the textured synthetic export", "rc=%d" % rc)
+    if summary is None:
+        led.skip("2b. the ground material", "no summary; blender said: %r"
+                 % out.strip()[-200:])
+        return
+    tt = summary.get("terrain_textures")
+    check(tt is not None and tt.get("state") == "bound",
+          "the ground is bound", "%r" % (tt and tt.get("state"),))
+    if not tt or tt.get("state") != "bound":
+        return
+
+    check(tt["materials"] == ["tex_1111.png", "tex_2222.png",
+                              "gw_untextured_3333"],
+          "one material per distinct image, and the unresolvable tile gets "
+          "its OWN named slot rather than impersonating slot 0",
+          "%r" % (tt["materials"],))
+    check(tt["tile_slot"] == [0, 1, 2] and tt["untextured_tiles"] == [2],
+          "tile->slot is the manifest's order and names the untextured tile")
+
+    # THE BINDING, at full coverage: recompute the per-face material index
+    # from the SIDECAR's tile bytes and the dump's slot table, and it must
+    # equal the digest Blender took off its own built polygons.
+    idx = [tt["tile_slot"][t] for t in exp.tiles]
+    want = hashlib.sha256(struct.pack("<%dH" % len(idx), *idx)).hexdigest()
+    check(want == tt["material_index_digest"],
+          "all %d faces bind by their tile byte, including the untextured "
+          "slot -- reached explicitly, never by fall-through" % len(idx))
+    census = {}
+    for t in exp.tiles:
+        s = str(tt["tile_slot"][t])
+        census[s] = census.get(s, 0) + 1
+    check(tt["faces_per_slot"] == census and
+          sum(census.values()) == exp.cells,
+          "the per-slot face counts match the sidecar's own census",
+          "%r" % (tt["faces_per_slot"],))
+    check(tt["uv_window"] == [8.5 / 256.0, 119.5 / 256.0],
+          "the UV window is T3's measured inner 111 texels (corners inset "
+          "8.5)", "%r" % (tt["uv_window"],))
+    check(tt["image_alpha_modes"] == ["CHANNEL_PACKED"]
+          and tt["faces_smooth"] == exp.cells,
+          "the mask is CHANNEL_PACKED (alpha is DATA -- premultiplication "
+          "was darkening clean RGB by the blend mask) and every face is "
+          "smooth-shaded (the client's terrain vertices carry normals)",
+          "%r, %d smooth" % (tt["image_alpha_modes"], tt["faces_smooth"]))
+
+    # THE FLAG CONTROL: --no-terrain-textures leaves the ground bare.
+    work2 = os.path.join(tmp, "run_syntex_ctl")
+    os.makedirs(work2, exist_ok=True)
+    rc, _out, s2, _v = run_blender(blender, src, work2,
+                                   extra=["--no-terrain-textures"])
+    check(rc == 0 and s2 is not None
+          and s2.get("terrain_textures", {}).get("state") == "skipped",
+          "--no-terrain-textures leaves the ground unmaterialed and the "
+          "dump says so",
+          "rc=%d, state %r" % (rc, s2 and s2.get("terrain_textures")))
+
+
 # --- 3. a real map, and the props that stand on it --------------------------
 
 def _section3(check, led, blender, tmp, args):
@@ -951,6 +1077,7 @@ def _section3(check, led, blender, tmp, args):
           % want_f, "%.4f, n=%d, outside=%d" % (frac, n, outside))
 
     _section4(check, led, blender, tmp, exp, zmap, src)
+    _section5(check, led, blender, tmp, exp, src, summary)
 
 
 # --- 4. REAL meshes, and the z sign they are built under --------------------
@@ -1042,6 +1169,148 @@ def _section4(check, led, blender, tmp, exp, zmap, src):
     # A prop whose model did not decode still has to be somewhere sensible.
     check(all(o["verts"] > 0 for o in ps["objects"]),
           "every object -- real or proxy -- carries geometry")
+
+
+# --- 5. rung T5 on the real map ---------------------------------------------
+
+def _section5(check, led, blender, tmp, exp, src, summary):
+    print("\n== 5. rung T5: the real ground against the sidecar ==")
+    block = exp.terrain_textures
+    check(block is not None,
+          "the real export carries its texture block (rung T4)")
+    tt = (summary or {}).get("terrain_textures")
+    check(tt is not None and tt.get("state") == "bound",
+          "section 3's import bound the ground",
+          "%r" % (tt and tt.get("state"),))
+    if block is None or not tt or tt.get("state") != "bound":
+        led.skip("5. the ground binding", "no block or unbound")
+        return
+
+    # THE RUNG CRITERION, against the SIDECAR rather than the importer's own
+    # loop: (a) every tile's slot material is the image the MANIFEST names
+    # for that tile byte; (b) every FACE's material index, recomputed here
+    # from the tiles sidecar through the dump's slot table, digests to what
+    # Blender read back off its own built polygons.
+    slot_names, tile_slot = tt["materials"], tt["tile_slot"]
+    bad = [e["tile"] for e in block["tiles"]
+           if slot_names[tile_slot[e["tile"]]] !=
+           (os.path.basename(e["image"]) if "image" in e
+            else "gw_untextured_%X" % e["file_id"])]
+    check(not bad,
+          "every one of the %d tiles binds the texture the manifest names "
+          "for it" % len(block["tiles"]), "wrong: %r" % (bad,))
+    idx = [tile_slot[t] for t in exp.tiles]
+    want = hashlib.sha256(struct.pack("<%dH" % len(idx), *idx)).hexdigest()
+    check(want == tt["material_index_digest"],
+          "all %d faces carry the material their tile byte names"
+          % len(idx))
+    check(sum(tt["faces_per_slot"].values()) == exp.cells,
+          "every face is bound -- none fell through unassigned")
+    check(tt["untextured_tiles"] == [],
+          "every tile of the real map decoded, so no slot is a placeholder",
+          "%r" % (tt["untextured_tiles"],))
+    check(tt["uv_window"] == [8.5 / 256.0, 119.5 / 256.0],
+          "the UV window is T3's measured inner 111 texels")
+    check(tt["image_alpha_modes"] == ["CHANNEL_PACKED"]
+          and tt["faces_smooth"] == exp.cells,
+          "channel-packed mask and smooth shading on the real ground too",
+          "%r, %d smooth" % (tt["image_alpha_modes"], tt["faces_smooth"]))
+
+    # ---- rung T6: the blend overlays, against the sidecar ------------------
+    # Recompute what the overlay geometry MUST be straight from the
+    # `.layers.u16` sidecar -- one face per non-base layer, rotated where
+    # bit 15 is set -- and require Blender's built object to match. The
+    # sidecar is the exporter's resolved answer and this file never asks the
+    # importer how many faces it meant to make.
+    tbl = summary.get("terrain_blend") or {}
+    words = exp.layers
+    check(words is not None and len(words) == exp.cells * 3,
+          "the export carries the resolved blend layers, three slots per cell",
+          "%r" % (words is None or len(words),))
+    if words is not None:
+        want_faces = sum(1 for i in range(exp.cells) for s in (1, 2)
+                         if words[i * 3 + s] != 0xFFFF)
+        want_rot = sum(1 for i in range(exp.cells) for s in (1, 2)
+                       if words[i * 3 + s] != 0xFFFF
+                       and words[i * 3 + s] & 0x8000)
+        want_cells = sum(1 for i in range(exp.cells)
+                         if words[i * 3 + 1] != 0xFFFF)
+        check(tbl.get("state") == "bound"
+              and tbl.get("overlay_faces") == want_faces
+              and tbl.get("cells_blended") == want_cells
+              and tbl.get("rotated_faces") == want_rot,
+              "Blender's overlay geometry is exactly the sidecar's non-base "
+              "layers -- %d faces over %d cells, %d rotated"
+              % (want_faces, want_cells, want_rot),
+              "%r" % ({k: tbl.get(k) for k in
+                       ("state", "overlay_faces", "cells_blended",
+                        "rotated_faces")},))
+        # The base quadrant must not be stuck at 0 any more: T5 pinned every
+        # cell to quadrant 0 and that is precisely the repetition T6 removes.
+        check(sorted(set(tt.get("base_quadrants") or [])) == [0, 1, 2, 3],
+              "all four base quadrants are in use, so the ground no longer "
+              "repeats one variant per tile type",
+              "%r" % (tt.get("base_quadrants"),))
+
+    # ---- tag 9's baked lightmap, against the sidecar ----------------------
+    # The attribute is per VERTEX because tag 9 shares tag 1's grid and
+    # those samples are cell CORNERS, so its lattice must be the mesh's and
+    # its statistics must be the sidecar's own -- computed here, including
+    # the far-edge replication, and never taken from the importer.
+    lm = tt.get("lightmap") or {}
+    want_n = (exp.dim_x + 1) * (exp.dim_y + 1)
+    dx, dy = exp.dim_x, exp.dim_y
+    lattice = []
+    for gy in range(dy):
+        rowv = list(exp.shade[gy * dx:(gy + 1) * dx])
+        lattice.extend(rowv + [rowv[-1]])
+    lattice.extend(lattice[-(dx + 1):])
+    want_mean = sum(lattice) / len(lattice) / 255.0
+    check(lm.get("state") == "attached" and lm.get("vertices") == want_n,
+          "the lightmap is attached to every vertex of the lattice (%d), not "
+          "per face -- tag 9 shares tag 1's corner grid" % want_n,
+          "%r" % ({k: lm.get(k) for k in ("state", "vertices")},))
+    check(abs((lm.get("mean") or 0) - want_mean) < 1e-3,
+          "and its mean equals the shade sidecar's own, replicated edge "
+          "included (%.4f)" % want_mean, "%r" % (lm.get("mean"),))
+    # It has to actually VARY, or multiplying it in changes nothing and the
+    # checks above would pass over a uniform white attribute.
+    check((lm.get("max") or 0) - (lm.get("min") or 0) > 0.5,
+          "the bake spans a real range, so multiplying it in is visible",
+          "%r..%r" % (lm.get("min"), lm.get("max")))
+
+    # THE LIGHTMAP CONTROL: --no-lightmap must leave the ground unlit.
+    workl = os.path.join(tmp, "run_real_lmctl")
+    os.makedirs(workl, exist_ok=True)
+    rc, _out, s4, _v = run_blender(blender, src, workl,
+                                   extra=["--no-props", "--no-lightmap"])
+    lm2 = ((s4 or {}).get("terrain_textures") or {}).get("lightmap") or {}
+    check(rc == 0 and lm2.get("state") == "skipped",
+          "--no-lightmap leaves tag 9 unapplied and says so",
+          "rc=%d, %r" % (rc, lm2))
+
+    # THE T6 CONTROL: --no-blend must drop the overlays and keep the base.
+    workb = os.path.join(tmp, "run_real_t6ctl")
+    os.makedirs(workb, exist_ok=True)
+    rc, _out, s3, _v = run_blender(blender, src, workb,
+                                   extra=["--no-props", "--no-blend"])
+    check(rc == 0 and s3 is not None
+          and (s3.get("terrain_blend") or {}).get("state") == "skipped"
+          and (s3.get("terrain_textures") or {}).get("state") == "bound",
+          "--no-blend draws the base layer alone and says so, while the "
+          "ground stays textured",
+          "rc=%d, %r" % (rc, s3 and s3.get("terrain_blend")))
+
+    # THE FLAG CONTROL on the real map, terrain only for speed.
+    work = os.path.join(tmp, "run_real_t5ctl")
+    os.makedirs(work, exist_ok=True)
+    rc, _out, s2, _v = run_blender(blender, src, work,
+                                   extra=["--no-props",
+                                          "--no-terrain-textures"])
+    check(rc == 0 and s2 is not None
+          and s2.get("terrain_textures", {}).get("state") == "skipped",
+          "--no-terrain-textures leaves the real ground unmaterialed",
+          "rc=%d, state %r" % (rc, s2 and s2.get("terrain_textures")))
 
 
 def _ground_of(o, exp, zmap):

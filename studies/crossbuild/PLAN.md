@@ -17,9 +17,26 @@ class §0 says this arc exists to hunt — and it was sitting one command away t
 Results go to `studies/crossbuild/FINDINGS.md`. This file is the plan and gets struck
 through as it lands.
 
+> **THE UPDATE LANDED — build 38833, 2026-08-14. Results in
+> [FINDINGS.md](FINDINGS.md) §7, and read that before re-quoting anything below.**
+> The arc's tooling met a build nobody had measured and mostly held: **8 of 8 signatures
+> at exact hit counts**, `msgshape`/`asserts`/`buildid`/`srctree`/`dump_dh_params` all read
+> it, and the one class-(a) site this plan left outstanding — `genericvalue.py` — is the one
+> that broke, taking `avevents.py` with it. It refused loudly and named the address, which
+> is §6.1's hard-gate pattern working.
+> **Three things below are now wrong and are corrected in FINDINGS §7:** §2's "any patch
+> anchored to a raw address is broken by the next build" is **too strong** (this 15-day
+> patch left the exe the same length and moved almost nothing — §7.2); the DH struct did
+> **not** move this time, though its parameters rotated (§7.3); and `updatecheck.py`, this
+> arc's own deliverable 8, **printed a vacuous pass about the new build** on its first real
+> firing (§7.4a, fixed). The pin stays at **38797** — 38833 is registered, not pinned.
+>
 > **Landed 2026-08-12/13: every section — deliverables 1-8 complete, 9 ARMED.** §9 is the
 > only one that cannot be finished on demand: it needs an ArenaNet content patch to land,
 > and the trap is set with its prediction written down first ([DURABILITY.md](DURABILITY.md)).
+> **The 38833 patch did NOT spring it**, exactly as §4 of FINDINGS predicted — the tracer
+> sits on an inert copy no updater reaches. Nothing was lost; the owner's standing answer is
+> to rebase mods over an update.
 > `msgshape.py` derives the message tables (`db26a00`), `asserts.py` derives its callee
 > (`458b79d`), `pinned.find()` verifies what it returns and fails closed (`25cd1c4`), the
 > census is measured (`06bfcc3`), `genericvalue.py` is gated (`0a5b501`), `avevents.py`
@@ -572,18 +589,20 @@ the format gap `tape.py` documented; `overrides.json` gained a structured
 builds** -- every capture in the vault that names one names 38797 (1,122 files), and
 `test_origin.py` now asserts that as an invariant.
 
-**UPDATED 2026-08-14: the invariant changed shape, the answer stands.** The build-38,833
-arc's out-of-sample selftest campaign put 38833 captures in `vault/captures/selftest/`
-(4 when this was written, and the campaign was still running), and "the whole vault is at
-most ONE build" went red on the arrival of a legitimate artifact -- the same defect as
-asserting no live capture exists. `test_origin.py`'s census now requires every off-pin
-capture to be covered by a NAMED row (`OFF_PIN_CAPTURES`: an exact path or a dated
-campaign pattern, consulted only for files whose own VERSION frame is off-pin -- an
-off-pin capture outside the rows is red until acknowledged, so accumulation is never
-silent), exercises `require_single_build`'s refusal on the real mixed pair, asserts
-everything outside the named rows still names 38797, and cross-checks that pin against
-`clientscan/pinned.py`. No pooled figure reads the campaign's files: they are
-auth-channel files under `selftest/`, and the one pooling consumer
+**UPDATED 2026-08-14: the invariant is scoped to the research corpus, the answer stands.**
+The suite's own runs began writing 38833-stamped fixtures into `vault/captures/selftest/`
+(`test_handshake` drives whichever client the newest key matches, FINDINGS §7.7), and
+"the whole vault is at most ONE build" went red over its own byproducts. Two parallel
+sessions fixed the same red two ways -- a per-file allowlist of the off-pin captures,
+refuted because the producer is the suite itself so the list stales on every run, and
+excluding `selftest/` from the census walk the way `captures-scrubbed/` already is,
+which stands: a self-test artifact is not research data. `test_origin.py`'s census now
+asserts the research corpus is one build and it is 38797, exercises
+`require_single_build`'s refusal on a real mixed pair (the fixtures supply a genuine
+38833 file), and cross-checks that 38797 against `clientscan/pinned.py` so a moved pin
+turns the census red until re-decided. A real second-build capture in the research
+corpus still turns it red -- that is the point. No pooled figure reads the fixtures:
+they are auth-channel files under `selftest/`, and the one pooling consumer
 (`test_movement_fidelity`) selects game-channel files from `authsrv/`+`gamesrv/` and
 routes through both guards.
 
@@ -693,7 +712,7 @@ full") should point at the command rather than at prose.
 | 4 | ~~Class-(a) census~~ | ✅ `buildpins.py` + `test_buildpins.py` 40 checks; `FINDINGS.md` §2 carries the table with a verdict per row; 68 sites, 7 files, 37 outstanding |
 | 5 | ~~Conversions landed~~ | ✅ `SIG_KEYS` has ONE implementation, not three that agree (`dhbuild.locate_keys`); the patcher and the go/no-go delegate to it; §7.2's two signatures are in `sigcorpus.py` and checked. `test_dhbuild` 43, `test_sigcorpus` 34 |
 | 6 | ~~Build identity~~ | ✅ `buildid.py` + `test_buildid.py` 23 checks; the older build is **38519**; `pinned.BUILDS` is asserted against a fresh read of each image |
-| 7 | ~~Build stamp on captures~~ | ✅ `origin.build_of` + `require_single_build`, contradiction-checked; `test_movement_fidelity` refuses to mix; `overrides.json` stamped; audit clean at landing (1,122 files, all 38797 — since 2026-08-14 the vault also holds the 38,833 selftest campaign's files, covered by a NAMED row, see §10's update); `test_origin.py` 30 checks |
+| 7 | ~~Build stamp on captures~~ | ✅ `origin.build_of` + `require_single_build`, contradiction-checked; `test_movement_fidelity` refuses to mix; `overrides.json` stamped; audit clean at landing (1,122 files, all 38797 — since 2026-08-14 the suite's own selftest fixtures carry 38833 and are excluded from the census as fixtures, see §10's update); `test_origin.py` 30 checks |
 | 8 | ~~Pre-update / post-update commands~~ | ✅ `updatecheck.py --before/--after`, exit 0/1/2 driven through the process, wired into `RUNBOOK.md` steps 0 and 0b and its failure table; `test_updatecheck.py` 26 checks |
 | 9 | ~~Archive-durability experiment~~ | ✅ ARMED `studies/crossbuild/DURABILITY.md`; tracer in `vault/dat_durability/`, prediction stated before the event, revert proven on the real archive. Cannot be COMPLETED without an update |
 

@@ -9,8 +9,11 @@ five files per map:
                           where it came from, and a sha256 for each sidecar
     <name>.heights.f32    dimX*dimY little-endian float32, DE-TILED
     <name>.tiles.u8       dimX*dimY tile indices, same order       (optional)
+    <name>.variation.u8   dimX*dimY tag-3 variation 0..3, same order (with tiles)
     <name>.shade.u8       dimX*dimY tag-9 bytes, same order        (optional)
     <name>.props.json     every prop placement, both streams joined (optional)
+    terrain/tex_<id>.png  the map's terrain textures, keyed by FILE ID and
+                          shared between maps like models/ is       (optional)
 
     python toolkit/mapdata/mapexport.py --row 22371
     python toolkit/mapdata/mapexport.py --file-id 0x345CC --out D:\\scratch
@@ -103,12 +106,16 @@ argmax 0.504 against 0.247 for the nearest rival -- **Kamadan is well below that
 median and is reported rather than dropped**; it is a dense city whose props sit
 on buildings, and its controls collapse just as hard.
 
-WHAT AN EXPORT IS NOT EVIDENCE OF. Tag 2's tile indices and tag 9's shade bytes
-are carried through as arrays whose MEANING is unsettled (`terrain.py` names both
-NOT FOUND / not-settled). Exporting them is transport, not understanding. Tag 3
-is deliberately not exported at all: its bit-pair position inside a byte is not
-established by anything measured, so any per-cell unpacking would be a convention
-we invented and could never refute.
+WHAT AN EXPORT IS NOT EVIDENCE OF. Tag 9's shade bytes are carried through as an
+array whose MEANING is a baked lightmap (`terrain.py`) but whose transfer curve
+is not settled. Exporting it is transport, not understanding. Tag 2's tile
+indices ARE settled since T4 -- each names a terrain texture. Tag 3 (the
+per-cell VARIATION selector) IS now exported as `.variation.u8`: its bit-pair
+position was NOT FOUND when this line first read "deliberately not exported",
+and is MEASURED as `(i & 3) * 2` since 2026-08-14 (`studies/terrain/FINDINGS.md`
+§3.3), so the per-cell unpacking is the client's convention rather than one we
+invented. The value 0 (99.94% of cells) defers to the client's per-cell PRNG,
+which the array does NOT carry -- a consumer reproduces it.
 
 THE PROPS SIDECAR (format_version 2, 2026-08-13). Every placement, from BOTH
 streams, made to check each other at export time: the Stripped chunk
@@ -138,12 +145,51 @@ nearest rival order closing 2,070. `test_mapexport.py` pins it on the
 reference maps. The sidecar still carries the compiled basis verbatim, so no
 consumer is forced through the formula.
 
+TERRAIN TEXTURES (format_version 3, rung T4, 2026-08-14). Every entry of the
+map's Terrain Dependencies chunk (`0x21000002`) is resolved to an archive row
+and decoded to a PNG under `terrain/`, keyed by file id alone -- 349 maps
+reference 1,656 distinct textures 17,113 times, so per-map copies would
+multiply exactly like the prop textures would have. The manifest gains a
+`terrain_textures` block: one row per TILE BYTE naming its file id, the MFT's
+(size, crc) -- a file id is ARCHIVE STATE, the same rule the props model
+table follows -- and the image it decoded to, or the REASON it did not.
+
+HOW A TILE BYTE RESOLVES, and every clause is MEASURED on 349/349 maps
+(2026-08-14, this rung's own scan; `studies/terrain/FINDINGS.md` §4):
+
+    file_id = dep[tile + (1 if the terrain carries a second tag-3 record
+                          else 0)]
+
+  * the tile byte indexes the texture array DIRECTLY (T2, read out of
+    `TrnTexBlendLo` -- `dep[table_a[tile]]` is the refuted rival);
+  * `len(dep) == len(table_a) + (1 if tag3b else 0)` on 349 of 349 -- the 24
+    maps carrying the optional second tag-3 record are exactly the 24 with an
+    extra LEADING dependency, so their slot i pairs with dep i+1 (the tag-5
+    realignment measured in `terrain.py`, 880/880). This CORRECTS the arc
+    study's earlier "len(table_a) == len(dep) on 80 of 80", which is true
+    only of maps without the record;
+  * `max(tiles) < len(table_a)` on 349 of 349, so every used byte resolves.
+  Both equalities are REFUSALS here, not warnings: a map violating either is
+  a finding about the source, and exporting a guessed binding would put the
+  wrong ground texture under every face that names the bad byte.
+
+The population is MIXED and this exporter handles three shapes (T1: 1,648
+ATTX + 4 plain ATEX + 4 DDS): ATEX-family rows decode through
+`atex.decode_rgba` (which splits an ATTX trailer and regenerates the mirrored
+border band itself), plain DDS through `atex.dds_rgba` -- and the two 512x512
+V8U8 bump maps NOTHING in this tree decodes are recorded with their reason
+rather than dropped, because a texture table with silent holes cannot be
+audited. The extra leading dependency on the 24 tag3b maps is recorded with
+its archive identity and NOT decoded: what it is for is UNVERIFIED, and
+naming it a terrain texture would be a guess wearing a filename.
+
 SCOPE. Terrain and props. Zones, water and the navmesh are not exported;
 `pathmap.py` already reads the last of those and joining them is a separate
 rung. Nothing here writes to an archive.
 """
 
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -158,16 +204,19 @@ from terrain import CELL_PITCH, CHUNK_SIZE  # noqa: E402
 from mapfile import MapFile  # noqa: E402
 from mapchunks import next_stream  # noqa: E402
 from props import StrippedProps, BloatedProps  # noqa: E402
+import atex  # noqa: E402
+import png  # noqa: E402
 import vaultpath  # noqa: E402
 
 FORMAT = "rurik.gwmap"
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 
 #: Versions a reader accepts. 1 is the terrain-only interchange; 2 adds the
-#: OPTIONAL props sidecar and changes nothing else, so a version-1 file stays
-#: readable forever and a version-2 file with no props sidecar is a version-1
+#: OPTIONAL props sidecar; 3 adds the OPTIONAL terrain-texture block and its
+#: PNG images. Each addition changes nothing else, so a version-1 file stays
+#: readable forever and a version-3 file with neither option is a version-1
 #: file wearing the new number.
-FORMAT_VERSIONS_READ = (1, 2)
+FORMAT_VERSIONS_READ = (1, 2, 3)
 
 # The Map Parameters chunk, FINDINGS 3 and 17.4. 41 bytes: u32 signature, u8
 # version, four f32 x0,y0,x1,y1 -- which start at the UNALIGNED offset 5,
@@ -185,7 +234,15 @@ MAP_RECT = struct.Struct("<4f")
 # sidecar and its `count` is the prop record count.
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
+DTYPE_U16 = "uint16-le"
 DTYPE_JSON = "json"
+
+#: How many blend layers a cell can carry (the client's own `varIndex`
+#: assert: three texcoord sets, three layers).
+BLEND_LAYERS = 3
+#: The sentinel for an unused layer slot, matching the client's own
+#: `0xFFFF0000` fill of the slots it does not use.
+BLEND_EMPTY = 0xFFFF
 
 # The props chunks and their model dependency lists, one pair per stream.
 # `props.py` owns both codecs; `mapchunks.py` owns the dependency decode.
@@ -193,6 +250,14 @@ PROPS_BLOATED_CHUNK = 0x20000004
 PROPS_STRIPPED_CHUNK = 0x10000004
 PROPS_DEPS_BLOATED = 0x21000004
 PROPS_DEPS_STRIPPED = 0x11000004
+
+# The Terrain Dependencies chunk: the texture a tile byte names lives here.
+# Present on 349/349 maps, exactly once per map.
+TERRAIN_DEPS_CHUNK = 0x21000002
+#: Where the texture images land, relative to the manifest. A subdirectory
+#: because the PNGs are keyed by FILE ID and shared between every map exported
+#: into the same directory -- the `models/` pattern.
+TEX_SUBDIR = "terrain"
 
 # `HERE` is toolkit/mapdata, so the repo root is two levels up FROM IT -- three
 # dirnames from the file. The first version of this line took two from the file
@@ -278,16 +343,17 @@ class MapExport:
     """One exported map, read back from disk. What `load_export` returns.
 
     Every array is in world row-major order, `gy*dim_x + gx`, with grid row 0 at
-    world maxY. `tiles` and `shade` are None when they were not exported.
-    `props` is the parsed props sidecar (a dict -- see `build_props` for its
-    shape) or None when the export has none.
+    world maxY. `tiles`, `shade` and `variation` are None when they were not
+    exported. `props` is the parsed props sidecar (a dict -- see `build_props`
+    for its shape) or None when the export has none.
     """
 
     __slots__ = ("meta", "dim_x", "dim_y", "rect", "pitch", "heights", "tiles",
-                 "shade", "props", "path")
+                 "shade", "variation", "layers", "props", "path")
 
     def __init__(self, meta, dim_x, dim_y, rect, pitch, heights, tiles=None,
-                 shade=None, props=None, path=None):
+                 shade=None, variation=None, layers=None, props=None,
+                 path=None):
         self.meta = meta
         self.dim_x = dim_x
         self.dim_y = dim_y
@@ -296,6 +362,8 @@ class MapExport:
         self.heights = heights
         self.tiles = tiles
         self.shade = shade
+        self.variation = variation
+        self.layers = layers
         self.props = props
         self.path = path
 
@@ -337,6 +405,25 @@ class MapExport:
         if not (0 <= gx < self.dim_x and 0 <= gy < self.dim_y):
             return None
         return self.heights[gy * self.dim_x + gx]
+
+    @property
+    def terrain_textures(self):
+        """The manifest's terrain-texture block, or None (rung T4)."""
+        return self.meta.get("terrain_textures")
+
+    def tile_image(self, t):
+        """The image name tile byte `t` names, or None.
+
+        None is a real answer with two causes the block distinguishes: the
+        export carried no textures at all, or this tile's texture is in a
+        format nothing decodes (its entry then carries `skipped`).
+        """
+        block = self.terrain_textures
+        if block is None:
+            return None
+        if not 0 <= t < len(block["tiles"]):
+            return None
+        return block["tiles"][t].get("image")
 
     def corner_heights(self):
         """The `(dimX+1) x (dimY+1)` vertex lattice the CLIENT manufactures.
@@ -408,6 +495,23 @@ def _verify_meta(meta, base):
         if got != side["sha256"]:
             bad.append(f"{side['name']}: sha256 {got[:16]}... does not match "
                        f"the manifest's {side['sha256'][:16]}...")
+    # The terrain-texture images carry their digests in their own block
+    # rather than in `sidecars` (they are shared between maps and keyed by
+    # file id), and they verify exactly the same way.
+    for img in (meta.get("terrain_textures") or {}).get("images", []):
+        path = os.path.join(base, img["name"])
+        if not os.path.isfile(path):
+            bad.append(f"{img['name']}: missing")
+            continue
+        size = os.path.getsize(path)
+        if size != img["bytes"]:
+            bad.append(f"{img['name']}: {size} bytes on disk, manifest says "
+                       f"{img['bytes']}")
+            continue
+        got = sha256_file(path)
+        if got != img["sha256"]:
+            bad.append(f"{img['name']}: sha256 {got[:16]}... does not match "
+                       f"the manifest's {img['sha256'][:16]}...")
     return bad
 
 
@@ -449,14 +553,19 @@ def load_export(json_path):
                     f"{side['name']}: manifest says {side['count']} props, "
                     f"the sidecar declares {props.get('count')} and holds {n}")
             continue
-        # the per-cell array sidecars; their count is the cell count
-        if side["count"] != cells:
+        # the per-cell array sidecars. Most hold one value per cell; the
+        # blend layers hold BLEND_LAYERS of them, and the manifest's count
+        # says which, so a truncated file is caught rather than reshaped.
+        want = cells * (BLEND_LAYERS if side["kind"] == "layers" else 1)
+        if side["count"] != want:
             raise ValueError(f"{side['name']} holds {side['count']} values for "
-                             f"a {dim_x}x{dim_y} grid ({cells} cells)")
+                             f"a {dim_x}x{dim_y} grid ({want} expected)")
         if side["dtype"] == DTYPE_F32:
             arrays[side["kind"]] = list(struct.unpack(f"<{cells}f", blob))
         elif side["dtype"] == DTYPE_U8:
             arrays[side["kind"]] = blob
+        elif side["dtype"] == DTYPE_U16:
+            arrays[side["kind"]] = list(struct.unpack(f"<{want}H", blob))
         else:
             raise ValueError(f"{side['name']}: unknown dtype "
                              f"{side['dtype']!r}")
@@ -465,6 +574,8 @@ def load_export(json_path):
         raise ValueError("export has no heights sidecar")
     return MapExport(meta, dim_x, dim_y, rect, pitch, arrays["heights"],
                      tiles=arrays.get("tiles"), shade=arrays.get("shade"),
+                     variation=arrays.get("variation"),
+                     layers=arrays.get("layers"),
                      props=props, path=json_path)
 
 
@@ -622,10 +733,195 @@ def build_props(head_mf, partner_mf, archive=None):
     }
 
 
+# ------------------------------------------------------- the terrain textures
+
+def build_terrain_textures(mf, trn, archive, table=None):
+    """The manifest's `terrain_textures` block and its PNG payloads.
+
+    `(block, payloads)` -- the block is one row per TILE BYTE, each naming its
+    file id, the MFT's (size, crc), and either the image it decoded to or the
+    reason it did not; `payloads` is `(relative name, png bytes)` pairs, keyed
+    by file id and deduplicated within the map.
+
+    THE RESOLUTION RULE IS ENFORCED, NOT ASSUMED. Both equalities in the
+    module docstring (measured 349/349) are refusals: a dependency list whose
+    length disagrees with tag 4's table, or a used tile byte outside the
+    table, means the binding for this map is not the one the corpus supports,
+    and a guessed binding puts the wrong ground texture under real faces.
+
+    `archive` needs `.row(n)` and `.read(entry)`; `table` (file id -> MFT
+    row) defaults to the archive's own. Both are parameters so the test can
+    run this on a fake archive holding synthetic ATEX rows on a bare machine.
+    """
+    dep = mf.find(TERRAIN_DEPS_CHUNK)
+    if dep is None:
+        raise ValueError(
+            f"no Terrain Dependencies chunk 0x{TERRAIN_DEPS_CHUNK:08X}; every "
+            f"one of 349 retail maps carries exactly one, so this map file is "
+            f"broken or not a map head. --no-terrain-textures exports without "
+            f"the texture table.")
+    dep_ids = dep.value.file_ids
+    offset = 1 if trn.tag3b is not None else 0
+    n = len(trn.table_a)
+    if len(dep_ids) != n + offset:
+        raise ValueError(
+            f"the Terrain Dependencies list has {len(dep_ids)} entries for a "
+            f"{n}-entry tile table with{'' if offset else 'out'} a second "
+            f"tag-3 record; len(dep) == len(table_a) + "
+            f"(1 if tag3b else 0) holds on 349 of 349 retail maps, so "
+            f"refusing to guess which binding this map uses")
+    used = sorted(set(trn.tiles))
+    if used and used[-1] >= n:
+        raise ValueError(
+            f"tile byte {used[-1]} is used but the tile table has {n} "
+            f"entries; max(tiles) < len(table_a) holds on 349 of 349 retail "
+            f"maps, so this map cannot be exported honestly")
+
+    if table is None:
+        table = file_id_table(archive)
+    tiles_out, payloads = [], []
+    images = []
+    written = {}
+    census = collections.Counter()
+    for t in range(n):
+        fid = dep_ids[t + offset]
+        entry = {"tile": t, "file_id": fid}
+        row = table.get(fid)
+        if row is None:
+            entry["skipped"] = "file id not in the archive's table"
+            census["unresolved"] += 1
+            tiles_out.append(entry)
+            continue
+        mft = archive.row(row)
+        entry.update(row=row, size=mft.size, crc=mft.crc)
+        if fid in written:
+            entry["image"] = written[fid]
+            census["shared"] += 1
+            tiles_out.append(entry)
+            continue
+        try:
+            data = archive.read(mft)
+            magic = bytes(data[:4])
+            if magic == atex.DDS_MAGIC:
+                got = atex.dds_rgba(data)
+                if got is None:
+                    # The known population: two 512x512 V8U8 bump maps
+                    # (T1's census). Recorded, never dropped -- a texture
+                    # table with silent holes cannot be audited.
+                    entry["skipped"] = "a DDS shape this decoder refuses"
+                    census["dds_refused"] += 1
+                    tiles_out.append(entry)
+                    continue
+                rgba, width, height = got
+                census["dds"] += 1
+            else:
+                rgba, width, height = atex.decode_rgba(data)
+                census[magic.decode("ascii", "replace")] += 1
+        except Exception as exc:                       # noqa: BLE001
+            entry["skipped"] = f"{type(exc).__name__}: {exc}"
+            census["error"] += 1
+            tiles_out.append(entry)
+            continue
+        fname = f"{TEX_SUBDIR}/tex_{fid:X}.png"
+        blob = png.encode(rgba, width, height)
+        payloads.append((fname, blob))
+        images.append({"name": fname, "file_id": fid, "width": width,
+                       "height": height, "bytes": len(blob),
+                       "sha256": hashlib.sha256(blob).hexdigest()})
+        written[fid] = fname
+        entry.update(image=fname, width=width, height=height)
+        tiles_out.append(entry)
+
+    block = {
+        # The rule, restated where a consumer reads it, with its evidence.
+        "binding": "file_id = dep[tile + dep_offset], the tile byte indexing "
+                   "the texture list DIRECTLY (T2, TrnTexBlendLo; the "
+                   "dep[table_a[tile]] rival is refuted). dep_offset is 1 "
+                   "exactly on the 24 maps carrying a second tag-3 record, "
+                   "whose extra dependency is the FIRST entry. 349/349.",
+        "dep_offset": offset,
+        "dep_count": len(dep_ids),
+        "tile_count": n,
+        "used_tiles": used,
+        "tiles": tiles_out,
+        "images": images,
+        "census": dict(census),
+    }
+    if offset:
+        fid = dep_ids[0]
+        row = table.get(fid)
+        lead = {"file_id": fid}
+        if row is not None:
+            mft = archive.row(row)
+            lead.update(row=row, size=mft.size, crc=mft.crc)
+        # Identity only, no decode: what the extra leading dependency IS FOR
+        # is UNVERIFIED, and naming it a terrain texture would be a guess
+        # wearing a filename.
+        block["extra_leading"] = lead
+    return block, payloads
+
+
+# ------------------------------------------------------- the blend layers
+
+def build_blend_layers(trn):
+    """The RESOLVED per-cell blend layers, packed. Rung T6.
+
+    `BLEND_LAYERS` little-endian u16 per cell, world row-major:
+
+        bits 0..7   the tile byte this layer draws
+        bits 8..9   the quadrant (which 128x128 quarter of its texture)
+        bit 15      rotated 180 degrees
+        0xFFFF      the slot is unused
+
+    Layer 0 is the OPAQUE BASE and always present; layers 1 and 2 are
+    overlays whose texture alpha masks them onto the corners they cover.
+
+    WHY THIS IS RESOLVED HERE AND NOT IN THE CONSUMER. Two of the three
+    inputs are client behaviour rather than file content -- the corner
+    grouping (`trnblend`) and the per-cell PRNG that picks the base quadrant
+    where tag 3 defers (`trnvariation`) -- and both are measured, tested and
+    stdlib. `tools/blender/` cannot import `toolkit/` by design, so shipping
+    the ANSWER keeps one implementation of the client's rules instead of two,
+    and keeps the drawing side a consumer of measurements rather than a
+    second interpreter of them.
+    """
+    import trnblend
+    import trnvariation
+
+    dim_x, dim_y = trn.dim_x, trn.dim_y
+    tiles = detile(trn.tiles, dim_x, dim_y)
+    authored = trn.variation()
+    var = trnvariation.map_variation(dim_x, dim_y, authored)
+    table_a = trn.table_a
+
+    out = bytearray(dim_x * dim_y * BLEND_LAYERS * 2)
+    counts = collections.Counter()
+    for gy in range(dim_y):
+        gy1 = min(gy + 1, dim_y - 1)
+        row, row1 = gy * dim_x, gy1 * dim_x
+        for gx in range(dim_x):
+            gx1 = min(gx + 1, dim_x - 1)
+            i = row + gx
+            corners = (tiles[i], tiles[row + gx1],
+                       tiles[row1 + gx], tiles[row1 + gx1])
+            layers = trnblend.cell_layers(corners, table_a, var[i])
+            counts[len(layers)] += 1
+            for s in range(BLEND_LAYERS):
+                if s < len(layers):
+                    lay = layers[s]
+                    word = ((0x8000 if lay.rotated else 0)
+                            | ((lay.quadrant & 3) << 8) | (lay.tile & 0xFF))
+                else:
+                    word = BLEND_EMPTY
+                struct.pack_into("<H", out, (i * BLEND_LAYERS + s) * 2, word)
+    return bytes(out), dict(counts)
+
+
 # ------------------------------------------------------------- the export
 
 def build_manifest(trn, rect, name, source, tiles=True, shade=True,
-                   props=None, props_state=None):
+                   props=None, props_state=None, terrain_textures=None,
+                   textures_state=None):
     """The JSON body and the sidecar payloads, with no file touched yet.
 
     Split out from `export_map` so the whole interchange can be built in memory
@@ -636,6 +932,12 @@ def build_manifest(trn, rect, name, source, tiles=True, shade=True,
     sidecar is or is not there ("exported", "none in source", "skipped") and
     is omitted from the manifest when None -- the in-memory builders that
     carry no claim about a source archive leave it that way.
+
+    `terrain_textures` is a `build_terrain_textures` block or None, and
+    `textures_state` mirrors `props_state` for it. The block's PNG payloads
+    are NOT sidecars -- their names, sizes and digests live in the block's
+    own `images` list, verified by the same readers -- so the caller hands
+    them to `write_export` alongside what this returns.
     """
     dim_x, dim_y = trn.dim_x, trn.dim_y
     cells = dim_x * dim_y
@@ -646,6 +948,19 @@ def build_manifest(trn, rect, name, source, tiles=True, shade=True,
     if tiles:
         payloads.append(("tiles", f"{name}.tiles.u8", DTYPE_U8,
                          detile(trn.tiles, dim_x, dim_y), cells))
+        # The per-cell VARIATION selector (tag 3), 0..3, travels WITH the
+        # tiles: a tile byte names a 256x256 texture and the variation picks
+        # which of its four 128x128 quadrants a cell samples. Already
+        # world row-major (Terrain.variation de-tiles it), so NOT run through
+        # `detile`. 0 means "the client's per-cell PRNG picks" -- a consumer
+        # reproduces that; this array carries only the authored overrides.
+        payloads.append(("variation", f"{name}.variation.u8", DTYPE_U8,
+                         trn.variation(), cells))
+        # The RESOLVED layers (rung T6): the corner grouping and the PRNG
+        # already applied, so a consumer draws rather than re-derives.
+        blob, _census = build_blend_layers(trn)
+        payloads.append(("layers", f"{name}.layers.u16", DTYPE_U16, blob,
+                         cells * BLEND_LAYERS))
     if shade:
         payloads.append(("shade", f"{name}.shade.u8", DTYPE_U8,
                          detile(trn.shade, dim_x, dim_y), cells))
@@ -700,6 +1015,10 @@ def build_manifest(trn, rect, name, source, tiles=True, shade=True,
         "tile_table_b": list(trn.table_b),
         "tag_sequence": list(trn.order),
         **({} if props_state is None else {"props_state": props_state}),
+        **({} if terrain_textures is None
+           else {"terrain_textures": terrain_textures}),
+        **({} if textures_state is None
+           else {"terrain_textures_state": textures_state}),
         "sidecars": [
             {"kind": kind, "name": fname, "dtype": dtype, "count": count,
              "bytes": len(blob),
@@ -718,7 +1037,11 @@ def write_export(meta, payloads, outdir):
     outdir = resolve_outdir(outdir)
     os.makedirs(outdir, exist_ok=True)
     for fname, blob in payloads:
-        with open(os.path.join(outdir, fname), "wb") as fh:
+        path = os.path.join(outdir, fname)
+        # The texture images live under terrain/; a flat sidecar's dirname
+        # is outdir itself, which already exists.
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as fh:
             fh.write(blob)
     json_path = os.path.join(outdir, f"{meta['name']}.gwmap.json")
     with open(json_path, "w", encoding="utf-8") as fh:
@@ -728,12 +1051,14 @@ def write_export(meta, payloads, outdir):
 
 
 def export_row(row, archive, outdir=None, name=None, file_id=None, tiles=True,
-               shade=True, props=True):
+               shade=True, props=True, textures=True):
     """One MFT row's terrain and props to an interchange on disk.
 
     Returns the JSON path. `row` is the Bloated HEAD; the props sidecar also
     reads its Stripped partner (resolved through `alloc.nextStream`, the same
     join `mapchunks.MapIndex` makes) because the two streams check each other.
+    With `textures`, every tile byte's terrain texture is decoded to a PNG
+    under `terrain/` and the manifest records the binding (rung T4).
     """
     mf = MapFile.from_row(row, archive)
     trn = mf.terrain()
@@ -771,24 +1096,29 @@ def export_row(row, archive, outdir=None, name=None, file_id=None, tiles=True,
             props_state = ("exported" if props_dict is not None
                            else "none in source")
 
+    tex_block, tex_payloads = None, []
+    if textures:
+        tex_block, tex_payloads = build_terrain_textures(mf, trn, archive)
+
     if name is None:
         name = f"map_{file_id:X}" if file_id is not None else f"row_{row}"
     source = {"archive": os.path.basename(archive.path), "row": row,
               "partner_row": partner_row, "file_id": file_id,
               "chunk_count": len(mf), "ffna_type": mf.ffna_type}
-    meta, payloads = build_manifest(trn, rect, name, source, tiles=tiles,
-                                    shade=shade, props=props_dict,
-                                    props_state=props_state)
-    return write_export(meta, payloads, outdir)
+    meta, payloads = build_manifest(
+        trn, rect, name, source, tiles=tiles, shade=shade, props=props_dict,
+        props_state=props_state, terrain_textures=tex_block,
+        textures_state="exported" if textures else "skipped")
+    return write_export(meta, payloads + tex_payloads, outdir)
 
 
 def export_file_id(file_id, archive, outdir=None, name=None, tiles=True,
-                   shade=True, props=True):
+                   shade=True, props=True, textures=True):
     row = file_id_table(archive).get(file_id)
     if row is None:
         raise KeyError(f"no file id 0x{file_id:X} in {archive.path}")
     return export_row(row, archive, outdir=outdir, name=name, file_id=file_id,
-                      tiles=tiles, shade=shade, props=props)
+                      tiles=tiles, shade=shade, props=props, textures=textures)
 
 
 def _check_rect(rect, dim_x, dim_y):
@@ -825,6 +1155,9 @@ def _main(argv=None):
     ap.add_argument("--no-props", action="store_true",
                     help="terrain only; skip the props sidecar and the "
                          "partner-row read it needs")
+    ap.add_argument("--no-terrain-textures", action="store_true",
+                    help="skip the terrain texture PNGs and the tile->texture "
+                         "table (rung T4)")
     ap.add_argument("--verify", default=None, metavar="JSON",
                     help="verify an existing export instead of making one")
     args = ap.parse_args(argv)
@@ -848,12 +1181,14 @@ def _main(argv=None):
         if args.row is not None:
             path = export_row(args.row, ar, outdir=args.out, name=args.name,
                               tiles=not args.no_tiles, shade=not args.no_shade,
-                              props=not args.no_props)
+                              props=not args.no_props,
+                              textures=not args.no_terrain_textures)
         else:
             path = export_file_id(int(args.file_id, 0), ar, outdir=args.out,
                                   name=args.name, tiles=not args.no_tiles,
                                   shade=not args.no_shade,
-                                  props=not args.no_props)
+                                  props=not args.no_props,
+                                  textures=not args.no_terrain_textures)
 
     exp = load_export(path)
     ex, ey = exp.extent
@@ -873,6 +1208,18 @@ def _main(argv=None):
               f"with outlines, {len(exp.props['models'])} model files")
     else:
         print(f"  props         {exp.meta.get('props_state', 'absent')}")
+    tex = exp.terrain_textures
+    if tex is not None:
+        skipped = [e for e in tex["tiles"] if "skipped" in e]
+        print(f"  textures      {tex['tile_count']} tiles -> "
+              f"{len(tex['images'])} images under {TEX_SUBDIR}/ "
+              f"(dep_offset {tex['dep_offset']}, census {tex['census']})")
+        for e in skipped:
+            print(f"                tile {e['tile']} file 0x{e['file_id']:X} "
+                  f"NOT decoded: {e['skipped']}")
+    else:
+        print(f"  textures      "
+              f"{exp.meta.get('terrain_textures_state', 'absent')}")
     print(f"  sidecars      " + ", ".join(s["name"]
                                           for s in exp.meta["sidecars"]))
     return 0

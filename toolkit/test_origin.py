@@ -26,19 +26,26 @@ nothing recorded one; that was survivable only while there was one build, and
 same way the origin stamp is -- a stated build the file's own VERSION record refutes is
 REFUSED -- and UNKNOWN is again a distinct third value rather than "probably the pinned
 one". The vault census answers the question `studies/crossbuild/PLAN.md` §10 left
-UNVERIFIED -- no corpus figure pools two builds -- and SINCE 2026-08-14 it answers it the
-way the origin half answers "is there a live capture": not by asserting the second
-build's absence. "The whole vault is at most ONE build" went red the day the
-build-38,833 arc's out-of-sample selftests landed, which is the same defect this file
-already documents for `not groups[LIVE]` -- a check that goes red when the legitimate
-thing arrives, whose obvious cure is to move the evidence or soften the guard. So the
-census now covers every off-pin capture with a NAMED row -- an exact path, or a dated
-campaign -- proves the pooling guard refuses the real files, and checks that everything
-outside those rows still names the pin.
+UNVERIFIED -- no corpus figure pools two builds -- and it is scoped to the RESEARCH
+corpus: `selftest/` is excluded from the walk the way `captures-scrubbed/` already is.
+
+SINCE 2026-08-14 that scoping is load-bearing. Build 38833 shipped, and the suite's own
+runs began writing 38833-stamped fixtures into captures/selftest/ -- test_handshake
+drives whichever client the newest key matches (`studies/crossbuild/FINDINGS.md` §7.7)
+-- so a census over the whole vault went red over its own byproducts, and would go red
+again on every future suite run. Two sessions hit that red in parallel and fixed it two
+ways: one NAMED the off-pin files in an allowlist, which the producer refutes -- the
+suite itself writes them, so the list stales on every run -- and one excluded the
+fixtures, which stands: a self-test artifact is not research data, and counting it
+re-creates one level up the very contamination `selftest/` was split out to prevent.
+What survives from the allowlist branch: the pooling refusal is EXERCISED on a real
+mixed pair (the fixtures supply a genuine 38833 file), and the census's 38797 is
+cross-checked against `clientscan/pinned.py` so the pin cannot move without this
+census going red until re-decided. A REAL second-build capture in the research corpus
+still turns the census red -- that is the point, not a defect.
 
     python toolkit/test_origin.py
 """
-import fnmatch
 import json
 import os
 import sys
@@ -60,35 +67,6 @@ import vaultpath  # noqa: E402
 # vault-less run still passes; the census checks are the only ones that need real
 # captures.
 LEDGER = checks.Ledger("capture origin", floor=23)
-
-# The pinned client build -- cross-checked against clientscan/pinned.py in the census,
-# because two authorities that can drift apart silently is this repo's oldest defect --
-# and every vault capture of any OTHER build, acknowledged by a row here. A row is an
-# fnmatch pattern over the path relative to captures/: an exact path for a stray, or a
-# DATED CAMPAIGN (one directory, one producer, one day) for an authorized run. It is
-# consulted ONLY for files whose own VERSION frame names an off-pin build, so a wide
-# date pattern cannot launder anything -- a pin-build file is never tested against it.
-# This exists because "at most one build in the vault" stopped being true on 2026-08-14
-# and SILENT ACCUMULATION is the failure mode that replaced it; the granularity is the
-# campaign rather than the file because the first day proved the finer grain is an
-# outage, not a guard -- the parallel session's selftest campaign added a fourth 38833
-# capture DURING this test's first green suite run, and a check that goes red on every
-# rerun of authorized work is a check somebody deletes.
-#
-# 38833: ArenaNet's 2026-08-13 update. Loopback selftests recorded by authsrv.py on
-# 2026-08-14 during the build-38,833 arc's out-of-sample campaign -- origin `ours`,
-# channel `auth`, and the build is the client's OWN number off its VERSION frame, not
-# our label (4 files when this row was written). The pin deliberately did not move
-# (every address in studies/ is measured on 38797), so these are named exceptions, not
-# the new corpus. No pooled figure reads them: they sit under captures/selftest/, and
-# the one pooling consumer (test_movement_fidelity) selects game-channel files from
-# authsrv/ and gamesrv/ and routes through require_single_build besides.
-PIN = 38797
-OFF_PIN_CAPTURES = {
-    38833: (
-        "selftest/authsrv-20260814T*-c1.jsonl",
-    ),
-}
 
 
 def write(path, records):
@@ -344,73 +322,95 @@ def section_build():
         return
     found = []
     for base, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in ("captures-scrubbed",)]
+        # `selftest` joined `captures-scrubbed` here on 2026-08-14, and the
+        # reason is the one test_handshake.py already gives for the directory
+        # existing at all: its output "used to share vault/captures/authsrv/
+        # with real client sessions ... two self-test captures were read as
+        # evidence of successful client logins that never happened." The files
+        # were split out so they could not be mistaken for research data -- and
+        # this census then walked the whole tree and counted them as exactly
+        # that, re-creating the contamination one level up.
+        #
+        # It surfaced the moment the numbers could disagree: build 38833 was
+        # patched, `test_handshake.py` began announcing 38833 (it had been
+        # claiming a hardcoded 38797 while driving whatever client the newest
+        # key matched -- see studies/crossbuild/FINDINGS.md §7.7), and three
+        # runs of the SUITE ITSELF put three 38833-stamped files in the vault.
+        # The corpus then read {38797: 1828, 38833: 3} and this check went red
+        # over its own test fixtures.
+        #
+        # THE GUARD KEEPS ITS TEETH. The claim below is about the corpus the
+        # figures in studies/ are computed over, and a self-test artifact is
+        # not one of those. The day a REAL capture is taken on a second build,
+        # this still goes red -- which is the whole point, since opcodes drift
+        # between builds and pooling two builds' captures is the error
+        # `origin.py` exists to prevent.
+        dirs[:] = [d for d in dirs if d not in ("captures-scrubbed", "selftest")]
         found += [os.path.join(base, f) for f in files if f.endswith(".jsonl")]
     groups = origin.partition_builds(found)
     known = {b: v for b, v in groups.items() if b is not origin.BUILD_UNKNOWN}
-    census = (f"{ {b: len(v) for b, v in sorted(known.items())} } "
+    LEDGER.ok(len(known) <= 1,
+              "the research corpus is at most ONE client build (selftest excluded)",
+              f"{ {b: len(v) for b, v in known.items()} } "
               f"+ {len(groups.get(origin.BUILD_UNKNOWN, []))} unknown")
+    if known:
+        LEDGER.ok(set(known) == {38797},
+                  "and that build is 38797",
+                  "MEASURED 2026-08-13, still true on 2026-08-14 after build "
+                  "38833 shipped: no capture has yet been taken on it. The "
+                  "corpus figures in studies/ are not pooling builds, which "
+                  "resolves PLAN.md §10's UNVERIFIED flag")
 
-    # This census asserted "the whole vault is at most ONE client build" until
-    # 2026-08-14, when the three 38,833 selftests named in OFF_PIN_CAPTURES turned it
-    # red. Same defect as the origin census's old `not groups[LIVE]`, documented above:
-    # a check that goes RED when the legitimate thing arrives. What actually protects a
-    # corpus figure is the guard at the pooling site, so the census now claims what is
-    # true and stays checkable with a second build on disk: off-pin captures are NAMED
-    # per file (accumulation is never silent), the refusal is EXERCISED on the real
-    # files, and everything outside the named rows is still the pin.
-    off_pin = {b: v for b, v in known.items() if b != PIN}
-
-    def rel(p):
-        return os.path.relpath(p, root).replace(os.sep, "/")
-
-    stray = [rel(p) for b in sorted(off_pin) for p in off_pin[b]
-             if not any(fnmatch.fnmatch(rel(p), pat)
-                        for pat in OFF_PIN_CAPTURES.get(b, ()))]
-    LEDGER.ok(not stray,
-              "every off-pin capture is covered by a row this test NAMES",
-              (f"UNLISTED: {', '.join(stray[:3])}"
-               + (f" (+{len(stray) - 3} more)" if len(stray) > 3 else "")
-               + " -- a second-build capture is a deliberate act: add its row to "
-                 "OFF_PIN_CAPTURES with its provenance, or it is drift and the "
-                 "producer needs finding") if stray else census)
-
-    pin_files = known.get(PIN, [])
-    off_files = [p for b in sorted(off_pin) for p in off_pin[b]]
-    if not off_files:
-        LEDGER.ok(True, "one build in the corpus -- nothing to mix", census)
-    elif not pin_files:
-        LEDGER.ok(False,
-                  "a second build EXISTS, and pooling it with the pin is refused by name",
-                  "no pinned-build capture left in the vault to exercise the refusal "
-                  "against -- which is its own emergency")
+    # Two additions from the branch that fixed this same red in parallel (both
+    # sessions hit it on 2026-08-14; the selftest exclusion above is the scoping
+    # that stands, and these two survive it).
+    #
+    # The refusal, exercised on REAL files. The constructed pair earlier proves
+    # `require_single_build` refuses in principle; the suite's own fixtures now
+    # give the vault a real 38833 file, so the guard can also be proven against
+    # actual captures -- the same upgrade the origin census made when the first
+    # live capture landed, because a refusal that has never fired on a real
+    # artifact is the same class of thing as a green test that asserts nothing.
+    # The fixture is found by reading each candidate's bytes (`build_of`), never
+    # by filename -- and if the fixtures age out, this degrades to "nothing to
+    # mix", not to red.
+    off_pin = None
+    fixtures = os.path.join(root, "selftest")
+    if os.path.isdir(fixtures):
+        for name in sorted(os.listdir(fixtures), reverse=True):
+            if name.endswith(".jsonl"):
+                p = os.path.join(fixtures, name)
+                b = origin.build_of(p)[0]
+                if b is not origin.BUILD_UNKNOWN and b != 38797:
+                    off_pin = p
+                    break
+    pin_files = known.get(38797, [])
+    if off_pin is None or not pin_files:
+        LEDGER.ok(True,
+                  "no real mixed pair on disk -- the pooling refusal rests "
+                  "on the constructed pair",
+                  "an off-pin fixture and a pinned research capture are both needed")
     else:
         refused = ""
         try:
-            origin.require_single_build([pin_files[0], off_files[0]],
+            origin.require_single_build([pin_files[0], off_pin],
                                         what="the build census")
         except origin.MixedBuilds as exc:
             refused = str(exc)
-        LEDGER.ok(os.path.basename(off_files[0]) in refused,
-                  "a second build EXISTS, and pooling it with the pin is refused by name",
-                  census)
+        LEDGER.ok(os.path.basename(off_pin) in refused,
+                  "a real second-build file EXISTS (a selftest fixture), and "
+                  "pooling it with the research corpus is refused by name",
+                  origin.build_of(off_pin)[1])
 
-    LEDGER.ok(set(known) - set(OFF_PIN_CAPTURES) <= {PIN},
-              f"outside those named exceptions the vault is at most ONE build, "
-              f"the pin ({PIN})",
-              "the surviving half of the old invariant -- it is what keeps every "
-              "pooled figure in studies/ a figure about one client, which is what "
-              "PLAN.md §10's UNVERIFIED flag asked")
-
-    # And the pin this census is WRITTEN against must still be the registry's pin.
-    # The literal above is deliberate -- this census states a measured fact about the
-    # corpus, not a policy -- but the day clientscan/pinned.py moves its pin, that fact
-    # needs re-deciding, and two authorities drifting apart silently is the exact
+    # And the 38797 above must still be the registry's pin. The literal is
+    # deliberate -- this census states a measured fact about the corpus, not a
+    # policy -- but the day clientscan/pinned.py moves its pin, that fact needs
+    # re-deciding, and two authorities drifting apart silently is the exact
     # staleness failure the top of CLAUDE.md is about.
     sys.path.insert(0, os.path.join(HERE, "clientscan"))
     import pinned  # noqa: E402
-    LEDGER.ok(pinned.BUILD == PIN,
-              "and the pin this census is written against is still the registry's pin",
+    LEDGER.ok(pinned.BUILD == 38797,
+              "and the build this census is written against is still the registry's pin",
               f"clientscan/pinned.py says {pinned.BUILD}; if these disagree, the pin "
               f"moved and this census must be re-decided, not patched green")
 

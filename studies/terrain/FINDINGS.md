@@ -259,11 +259,301 @@ reproduce it, and should say so rather than look broken.
 
 ---
 
-## 4. What is still open
+## 4. Rung T4 — the textures exported beside the map (2026-08-14, MEASURED)
 
-- **T3**: how a cell samples its 128×128 quadrant, and the UV scale. §2.1 gives
-  the mechanism; the arithmetic is unmeasured.
-- **T4**: the two 512×512 V8U8 bump maps nothing decodes.
+**Landed.** `mapexport.build_terrain_textures` resolves every tile byte to a
+PNG under `terrain/` (keyed by file id, shared between maps like `models/`),
+and the `.gwmap` manifest (format_version 3) gains a `terrain_textures` block:
+one row per tile naming its file id, the MFT's (size, crc), and its image or
+the reason it has none. `test_mapexport.py` sections 4c and 8.
+
+### 4.1 The resolution law, measured whole and enforced as a refusal
+
+Over **all 349 maps** (this rung's scan, 2026-08-14):
+
+| fact | result |
+|---|---|
+| `len(dep) == len(table_a) + (1 if tag3b else 0)` | **349 / 349** |
+| `max(tiles) < len(table_a)` | **349 / 349** |
+| maps carrying the second tag-3 record | **24**, = the offset-1 maps |
+
+So the exporter's rule is `file_id = dep[tile + offset]`, with the offset
+decided by the second tag-3 record's presence — T2's DIRECT binding plus
+`terrain.py`'s tag-5 realignment, now confirmed as the *texture* binding on
+the whole corpus. Both equalities are REFUSALS in the exporter, not warnings.
+
+> **A CORRECTION.** `PLAN.md` §2's scoping table recorded
+> `len(table_a) == len(terrain dep list)` on "80 of 80" map heads. That is
+> true only of maps WITHOUT the second tag-3 record; on the 24 that carry it
+> the dep list is one longer. The 80-head sample either missed all 24 or the
+> probe read the wrong pair; either way the corpus-wide law is the one above.
+
+### 4.2 The mixed population is entirely the LEADING entry
+
+T1 found the terrain set MIXED — 1,648 ATTX + 4 plain ATEX + 4 DDS — and the
+rung brief said T4 must handle three shapes. Where those shapes actually sit
+is now MEASURED, and it collapses the worry:
+
+- **Every tile-position entry on every map is ATTX: 17,089 of 17,089.**
+- **All 8 non-ATTX files appear ONLY as the extra leading entry** of the 24
+  tag3b maps — the 4 plain ATEX on 16 maps, the 4 DDS on 8 maps (e.g. row
+  56835 leads with `0x475C8`, 494,516 bytes, plausibly one of the two
+  512×512 V8U8 bump maps).
+
+So **no retail tile byte can name an undecodable texture** — the V8U8 problem
+lives entirely in the slot the binding never indexes. The exporter records
+the leading entry with its archive identity and does NOT decode it: what it
+is for is UNVERIFIED (the tag3b record's four floats arrive beside it, which
+smells like a detail/far-texture pairing, and that is a smell, not a
+measurement). The skipped-tile path (reason recorded, never dropped, and in
+Blender its own empty slot) is kept and exercised synthetically, because a
+future archive owes us nothing.
+
+### 4.3 What the export is and is not
+
+Kamadan: 51 tiles → 51 images, `dep_offset` 0, census `{ATTX: 51}`, every
+distinct tile byte in use resolving — the rung criterion, checked from the
+tiles sidecar rather than the block's claim about itself. The sha256 negative
+control: one flipped byte in one PNG refuses the whole export at load. The
+PNGs are derived ArenaNet bytes and land in the vault; `resolve_outdir`'s
+working-tree refusal covers them unchanged.
+
+---
+
+## 5. Rung T5 — the ground gets a material (2026-08-14, MEASURED)
+
+**Landed.** `import_gwmap.apply_terrain_textures`: one Blender material per
+distinct texture image, `material_index` per face from the `gw_tile`
+attribute through the manifest's tile table — the props pattern on the
+ground. `test_blenderimport.py` sections 2b and 5; the criterion is asserted
+against the SIDECAR: every tile's slot material equals the image the manifest
+names for it, and the per-face indices — recomputed outside Blender from
+`tiles.u8` through the dump's slot table — sha256-match what Blender read
+back off its own built polygons (212,992 of 212,992 faces on Pre-Searing).
+`--no-terrain-textures` is the control, on both the synthetic and the real
+map.
+
+Three stated limits, all deliberate:
+
+- **One opaque layer per cell, no alpha wired.** §3.5 stands: only 7 of 192
+  tiles are fully opaque, retail blends three layers per cell with alpha as
+  the mask, so tiles that are authored as alpha OVERLAYS (Kamadan's plaza
+  pavement, rock edges) render their unwritten regions as opaque white-grey.
+  Blending is T6.
+  > **CORRECTED the same day, after the first human look at the scene.**
+  > This section first blamed ALL the visible striping on that content
+  > limitation, and most of it was OURS: Blender premultiplies a
+  > STRAIGHT-mode image for rendering, so the un-wired Color output was
+  > arriving as RGB × alpha and every cell drew its blend mask as a dark
+  > band over clean ground colour — the same in-cell band position across
+  > different tile types, which a content explanation cannot produce and
+  > which is what exposed it. MEASURED on the exported PNGs: window
+  > luminance flat (e.g. 139..158), window alpha banded (25–52 of 112 rows
+  > below 128). The images are now loaded CHANNEL_PACKED — alpha is DATA,
+  > exactly what a splat mask is — and the terrain is smooth-shaded, since
+  > both vertex layouts T3 read carry per-vertex normals and the faceted
+  > stair-step look was the importer's artifact, not the archive's. What
+  > remains after the fix is the real content limit above, plus the
+  > per-cell quadrant repetition.
+- **Every cell samples quadrant 0** through T3's measured window — inner
+  111×111 texels, corners inset 8.5 — because the interchange does not carry
+  tag 3 and nothing reproduces the per-cell PRNG draw. Which world axis maps
+  to +u is a CONVENTION chosen in the importer and named there; nothing
+  measured orients the quadrant yet.
+- **A tile with no decodable texture gets its OWN empty magenta slot**
+  (`gw_untextured_<fid>`), never slot 0 — the prop material fall-through
+  (31.6% of Kamadan's prop area silently drawing whichever image landed
+  first) is the defect this refuses to repeat. §4.2 says retail can never hit
+  this path; the check exists for the archive that ships next.
+
+---
+
+## 6. Rung T6 — the blend, and why the ground stops repeating (2026-08-14)
+
+**Landed.** Two mechanisms, both read out of build 38797, both reproduced in
+`toolkit/` (stdlib, tested) and consumed by Blender as a resolved sidecar so
+the client's rules have exactly one implementation.
+
+### 6.1 The per-cell variation is a PRNG draw (MEASURED)
+
+`trnvariation.py`. Per cell, `0x00761800`:
+
+- **one draw ALWAYS** (`0x007618B3`..`0x007618CE`) — the tag-3 forced branch
+  calls the generator and *discards* the result, so a consumer that skips it
+  desynchronises every later cell in the tile;
+- `quadrant = draw & 3` (`0x007618CB`, a plain mask), or the raw 1/2/3 when
+  tag 3 forces it;
+- the primary layer's rotation bit **can never be set** — the mask clears it
+  and tag 3 is two bits wide;
+- `seed = (tile.x << 16) ^ tile.y` (`0x00761C80`), x in the high word, zero
+  becoming `0x075BD924`;
+- **one reseed per 32×32 tile**, row-major, both axes ascending. Settled by
+  the tag-3 cursor: it advances 8 bytes per row and is never reset across the
+  outer loop, so 32 rows consume exactly 256 bytes = one tile's tag-3 data.
+  The outer loop's back-edge is `0x0075E3D7 → 0x0075DF9E`.
+
+**The generator is NOT `s' = 48271·s mod (2³¹−1)`, and this is the trap.**
+`0x0046D120` computes the modulo by magic-number division (`0xBC8F1391`,
+`>>47`), whose quotient is one too high on **3.79% of states** (measured by
+search over 200,000, independently of the reading agent's ~3.8%), and the
+correction adds `0x80000000` rather than the modulus — which does not cancel
+it. On those states the client returns `(48271·s mod 2147483647) + 1`. A
+"tidied up" clean-modulo port drifts on one draw in twenty-six.
+
+### 6.2 The four quadrants are COVERAGE MASKS, not just variants (DERIVED)
+
+`trnblend.py`. A cell samples the tile bytes of its four corners — its own
+cell and the `+x`, `+y`, `+xy` neighbours, which are also vertices V0..V3 —
+maps each through `tileTypes` (tag 4), and groups them: corners sharing a
+**type** need no seam. Each group's 4-bit corner mask indexes a 16-entry
+table at `0x00BF78D8` giving the quadrant, a 180° rotation flag, and
+optionally a second layer.
+
+**What that table means was not in the read; it is derived here, and it is
+the rung's real finding.** Each 128×128 quadrant of a terrain texture is an
+authored **alpha coverage shape**:
+
+| quadrant | covers corners |
+|---|---|
+| 0 | {2, 3} — an edge |
+| 1 | {1} — a corner |
+| 2 | {0, 2} — the other edge |
+| 3 | {3} — a corner |
+
+with rotation mapping corner *k* → 3−*k*, which reaches all four edges and
+all four corners. Three independent supports, none of them forced:
+
+- the cover sets are read off the four rows that are unrotated and
+  single-layer (masks 12, 2, 5, 8);
+- **the client's own inverse table at `0x00BF7808` is `{12, 2, 5, 8}`** — a
+  different array, in the lo path, which never reads `0x00BF78D8`;
+- predicting all 16 rows and requiring each row's layers to cover exactly its
+  own mask: **15 of 16**, the miss being the empty mask 0 the grouping loop
+  cannot emit. The six two-layer rows are the sharp part, since a union of
+  two separately looked-up quadrants has to land exactly. A mirror-in-x rival
+  rotation scores 8 of 16 and is kept as a live control.
+
+So **the blend mask is ArenaNet's, not a gradient we invented**: bind the
+layer's texture at the named quadrant and its own alpha does the masking.
+This also retires §3.5's framing — the alpha is not merely "a blend mask",
+it is a *corner-coverage* mask with a table naming which shape goes where.
+
+### 6.3 What is reproduced, and what is a translation
+
+`mapexport` ships `.layers.u16` — three slots per cell, `(rot<<15) |
+(quad<<8) | tile`, `0xFFFF` unused — so Blender draws rather than re-derives.
+Kamadan: 81.9% of cells single-layer, 58,456 overlay quads. Pre-Searing:
+262,310 overlay faces over 148,882 cells, 68,201 rotated, and Blender's
+built geometry equals a recomputation from the sidecar exactly.
+
+Two honest departures, both labelled at the call site:
+
+- **The client composites in ONE pass** through three texture stages
+  (measured: `0x006D34DA` binds N stages, one `DrawIndexedPrimitive` at
+  `0x006D3A2B`, `ALPHABLENDENABLE=0` so the polygon is written opaque).
+  Blender has no equivalent, so the layers become coplanar geometry drawn
+  back-to-front with a 0.35-unit lift — a translation of the composite, not
+  a copy of it, and the lift is ours.
+
+### 6.4 The composite formula, OBSERVED — ArenaNet's own shader
+
+This section first shipped the formula as INFERRED, reasoning from the
+architecture ("a single pass with per-stage ops is only consistent with the
+mask being consumed in the combiner"). **It did not have to stay inferred.**
+The terrain material builder at `0x0074B9D0` (`TrnTex.cpp`) selects one of
+four paths by device caps, and the preferred one hands a **binary ps_1_1
+pixel shader, 128 bytes at `0x00A737E8`**, to `0x00664110`. Decoded whole:
+
+```
+tex t0 ; tex t1 ; tex t2 ; tex t3
+lrp r1, t1.wwww, t1, t0      ; r1 = lerp(t0, t1, t1.a)
+lrp r1, t2.wwww, t2, r1      ; r1 = lerp(r1, t2, t2.a)
+mul r0, v0, r1               ; r0 = diffuse  * r1
+mul r1, v1, r1               ; r1 = specular * r1
+lrp r0, t3.wwww, r1, r0      ; r0 = lerp(r0, r1, t3.a)
+```
+
+`lrp dst, s0, s1, s2` is `s2 + s0*(s1 - s2)`. So: **layer 0 opaque, then
+each additional layer lerped over the accumulator by ITS OWN texture
+alpha** — the formula this repo drew coplanar geometry to reproduce, read
+out of ArenaNet's shader tokens rather than argued from her architecture.
+
+The **fixed-function fallback agrees**, which is a second witness from a
+different mechanism. Path C/D build stage ops from literal tables at
+`0x00A73E08`/`0x00A73E38`, and the `GR_TEXOP → D3DTEXTUREOP` decoder at
+`0x00A65B78` (24 entries × 3 dwords, located from `Dx9ShaderStage.cpp` at
+`0x006DA8E7`) reads them as:
+
+```
+stage 0: SELECTARG1          stage 2: BLENDTEXTUREALPHA
+stage 1: BLENDTEXTUREALPHA   stage 3: MODULATE, no texture
+```
+
+That decoder is itself cross-checked four ways, the sharpest being
+ArenaNet's own assert `GrStage:350 layerFlags & GR_TEXFLAG_MODULATE_2X_ARG`
+setting op 14, which the table maps to `D3DTOP_MODULATE2X`.
+
+**Two things this opens, and they are the next visible wins.** `mul r0, v0,
+r1` modulates the blended ground by the **vertex diffuse colour** — which is
+terrain tag 9, the baked directional lightmap `terrain.py` already decodes
+and `mapexport` already ships as `.shade.u8`, and which nothing in Blender
+currently applies. And `t3` is not a tile layer at all: its alpha blends
+between the diffuse and specular lighting terms, which is what T3's fourth
+texcoord set (chunk space, one repeat per 32 cells) addresses.
+- **Which corner is the BASE rests on an assumption.** Each corner is
+  fetched as `arr[(sel >> 2k) & 3]` where `sel` is a per-cell byte from a
+  chunk-local array at `chunk+0x2B4` that the builder fills before the loop;
+  where it comes from is NOT FOUND. `trnblend.SELECTION` assumes the
+  identity, which makes corner 0 the cell's own tile and agrees with T2's
+  separately measured "the raw byte indexes `m_tiles` directly". If that is
+  wrong the SET of layers is unchanged and which one is opaque can differ.
+
+### 6.5 Tag 9 applied — the lightmap the shader asked for
+
+`mul r0, v0, r1` (§6.4) multiplies the composited ground by the vertex
+diffuse colour, and terrain tag 9 is a BAKED DIRECTIONAL LIGHTMAP measured
+in `terrain.py`: fitting `255 * max(0, N.L)` gives median Pearson r 0.887
+over 345 maps, the best-fit elevation tracks tag 0's angle field with
+Spearman 0.9352, and the azimuth control puts the light on +x with no y
+component on 343 of 345 — which is the client's own
+`TrnTexIntensity:342 lightDir.y == 0`.
+
+It is attached **per VERTEX**, and that follows from the file rather than
+from taste: tag 9 holds `dimX * dimY` bytes, the same grid as tag 1, whose
+samples are measured to sit at cell CORNERS. So the far column and row
+replicate exactly as `corner_heights` does. Kamadan's lattice means 0.862
+over 187,233 vertices, Lornar's Pass 0.719 over 267,393; both span the full
+0..1, so the multiply is visible rather than a no-op. The overlay geometry
+samples the same lattice, so a blended layer is lit identically to the
+ground beneath it.
+
+What is NOT settled is the transfer curve — see §7.
+
+---
+
+## 7. What is still open
+
+- **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
+  (§6.5) but as the simplest mapping the measurement allows, `shade / 255`
+  as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
+  at 255, so a gamma or a scale-and-bias would fit the corpus equally well
+  and none is measured. `--no-lightmap` is the control.
+- The per-cell corner SELECTOR at `chunk+0x2B4` (§6.3) — which decides which
+  corner is the opaque base. NOT FOUND.
+- The 4-dword table at `0x00A73DF8` = `{3, 3, 3, 0x30}`, the terrain
+  factory's argument that lands at stage record +0x10. Named, not
+  understood, and asserted nowhere.
+
+- **T6**: blending between tiles — the three per-cell layers, the alpha
+  mask, and which corner-tile combination selects the two overlay layers.
+  DEFERRED with the reason in PLAN.md §3.
+- The per-cell variation: tag 3 is decoded (§2.1, §3.3) but not exported,
+  and the PRNG draw is not reproduced, so T5 pins quadrant 0. Also the
+  quadrant's ORIENTATION (which axis is +u) is a convention, not a
+  measurement.
+- The extra leading dependency's MEANING (§4.2): 8 files — 4 plain ATEX, 4
+  DDS of which two are 512×512 V8U8 bump maps nothing decodes — paired with
+  tag3b's four floats. UNVERIFIED.
 - `table_b` — Kamadan's values are `{5, 7, 13, 15, 17, 19, 21, 23, 81, 85}`,
   all odd. UNVERIFIED, and not on the critical path.
 - Terrain tag 0's `tex_word`, `tex_f12`, `tex_f16`. Named, not understood.

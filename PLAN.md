@@ -1566,7 +1566,7 @@ ladder in [studies/models/PLAN.md](studies/models/PLAN.md)** (a proposal until a
 format is half-read in customarea §5, the radius identity is a ready-made oracle, and the
 missing piece is committed code plus the client's own FVF dispatch.
 
-### The terrain texturing arc — T1 and T3 landed, T4/T5 are the visible payoff (2026-08-14)
+### The terrain texturing arc — T1, T3, T4 and T5 landed; T6 (blending) deferred (2026-08-14)
 
 **Read [`studies/terrain/PLAN.md`](studies/terrain/PLAN.md), then
 [`FINDINGS.md`](studies/terrain/FINDINGS.md).** The props round trip landed on a map
@@ -1575,8 +1575,9 @@ object in the scene with no material slot — **186,368 of 326,708 faces (57%)**
 nearly all of the visible area. Every one of the 516 props is textured; the map surface
 is not, because nothing mapped a tile byte to a texture.
 
-Six rungs, T1–T6. **T1 done** (`5bf5a20`) and **T3 done** (`44e0f78`); T2 was answered
-early out of the client rather than run as a rung.
+Six rungs, T1–T6. **T1 done** (`5bf5a20`), **T3 done** (`44e0f78`), **T4 and T5 done
+2026-08-14** (`a337c5c`); T2 was answered early out of the client rather than run as
+a rung. T6 (blending) is deferred with its reason in the study PLAN §3.
 
 - **T1.** `atex.split_trailer` splits an ATTX row and `decode_rgba` reads one end to
   end. `parse` still REFUSES ATTX and that is the design. Criterion met on the whole
@@ -1609,16 +1610,34 @@ tile VARIATION selector (0 = take the PRNG's pick, Lehmer/MINSTD reseeded per 32
 tile with `(tile.x << 16) ^ tile.y`), and `bits_at`'s `(i & 3) * 2` guess was already
 exactly the client's convention.
 
-**Next is T4 (export the terrain textures beside the map) then T5 (Blender: one
-material per tile texture, `material_index` from the `gw_tile` attribute the importer
-already writes).** Three things a T4/T5 session must not rediscover: the terrain set is
-**MIXED** (1,648 ATTX + 4 plain ATEX + 4 DDS, two of them V8U8 bump maps nothing
-decodes); terrain is genuinely **three blended layers per cell** with alpha as a mask
-(only 7 of 192 tiles fully opaque), so a single opaque layer per cell will not
-reproduce it and must say so rather than look broken; and **the prop fall-through is
-still open** — unbound faces keep `material_index = 0` and silently draw whichever
-image landed first, 31.6% of prop screen area on Kamadan, which is why its rocks render
-near-black (`studies/terrain/PLAN.md` §4).
+- **T4** (2026-08-14). `mapexport.build_terrain_textures` — manifest format_version 3,
+  PNGs under `terrain/` keyed by file id, one table row per tile byte with the MFT's
+  (size, crc), the corrupt-a-byte control refusing the whole export. The binding is
+  `dep[tile + (1 if tag3b else 0)]`, its law MEASURED **349/349** and enforced as
+  refusals — which **corrected the study's own "len(table_a) == len(dep) on 80 of 80"**
+  (true only without the second tag-3 record). And the mixed population T1 found is
+  **entirely the 24 tag3b maps' extra LEADING entry**: 17,089/17,089 tile positions are
+  ATTX, so no retail tile can be undecodable — the V8U8 pair lives in the slot the
+  binding never indexes, meaning UNVERIFIED. `studies/terrain/FINDINGS.md` §4.
+- **T5** (2026-08-14). The ground has a material: one per distinct texture,
+  `material_index` per face from `gw_tile` through the manifest table, T3's UV window
+  (inner 111×111 texels, quadrant 0 pinned — tag 3 is not exported and the PRNG not
+  reproduced). Criterion met at full coverage against the SIDECAR: all 212,992
+  Pre-Searing face indices sha256-match a recomputation from `tiles.u8` outside
+  Blender; `--no-terrain-textures` is the control. A tile with no decodable texture
+  gets its OWN magenta slot, never slot 0. Kamadan renders as a place: base tiles read
+  as ground; **alpha-overlay tiles draw their unwritten regions opaque and stripe**,
+  which is §3.5's three-layer blend not being reproduced — T6's problem, visible on
+  the scene rather than hidden. FINDINGS §5.
+
+**What a T6 session must not rediscover**: terrain is genuinely **three blended layers
+per cell** with alpha as a mask (only 7 of 192 tiles fully opaque), and the layer
+count is decided by COMPARING `tileTypes` between a cell's four corners (T2) — the
+blending question starts there. **The prop fall-through is still open** — unbound
+faces keep `material_index = 0` and silently draw whichever image landed first, 31.6%
+of prop screen area on Kamadan, which is why its rocks render near-black
+(`studies/terrain/PLAN.md` §4); the GROUND now refuses that pattern, the props still
+don't.
 
 ### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks — a FROZEN snapshot; the suite is 85 files / 4,161 checks as of 2026-08-14, `python toolkit/run_suite.py`)
 ### Cross-build resilience — the arc that cost the update risk (2026-08-12)
@@ -1651,6 +1670,55 @@ which already contains the gated pattern it needs; `SIG_KEYS`' three implementat
 disagreeing on the refuse-on-2+ rule, one of them the patcher; then the build-id reader and
 the `origin.py` build stamp, without which "stamp every capture with its build" is
 unsatisfiable for half the corpus.
+
+### The update arrived — build 38833, 2026-08-14
+
+**[studies/crossbuild/FINDINGS.md](studies/crossbuild/FINDINGS.md) §7 is the record.** The
+whole arc above was built on n=2; ArenaNet shipped **38,833** on 2026-08-13, the owner took
+it on 2026-08-14, and `RUNBOOK.md` §0/§0b was walked on a real update for the first time.
+
+- **The derivation work held.** 8 of 8 signatures at their exact hit counts;
+  `msgshape` (25 tables, 666 messages, 4/4 oracles), `asserts` (`single-routine=True`),
+  `buildid` (38833), `srctree` and `dump_dh_params` (**GO**) all read the new build.
+- **`genericvalue.py` REFUSED it** — its int-main switch at `0x008129CC` is restructured —
+  and took `avevents.py`'s property map with it. That was the outstanding job named two
+  paragraphs above, and it is now the arc's one measured casualty rather than a hypothetical
+  one. It failed the *right* way: named the address, called it a finding, did not guess.
+- **The headline claim needed weakening, not strengthening.** "Any patch anchored to a raw
+  address is broken by the next build" is too strong: this 15-day bugfix left `Gw.exe` the
+  **same length** and left the build getter, assert callee, DH struct and AgentView
+  allocators at **identical addresses**. Pinned tools are *unpredictably* broken, not
+  reliably broken — worse, because they earn trust they cannot honour.
+- **`updatecheck.py` — this arc's own deliverable — printed a vacuous pass** on its first
+  firing, claiming the anchors held on a build it had never opened, because it read
+  signatures only from the vaulted builds. Fixed; it now reads the live install and names
+  what it read. `RUNBOOK.md` step 3 also omitted `--no-updater-patch` and produced a wrong
+  live-capture build; fixed, with a `CLAUDE.md` contradiction flagged for a ruling.
+- **Registered, not pinned.** `pinned.BUILDS` carries 38833; `PINNED` stays **38797**,
+  spelled explicitly rather than `BUILDS[-1]`. Moving the pin is a re-measurement arc.
+- **The claimable-row collision is now 3 of 3** — this update recycled both 35300 and 35301,
+  the slots `datplan.plan_insert` claims.
+
+- **The server broke too, by the rule-book's own named defect.** `authsrv.load_keys()` did
+  `sorted(rurik_dh_*)[-1]`, so patching 38833 silently handed a 38797 client the wrong DH
+  key — handshake completes, ARC4 is noise, `Code=058`. The key is now bound to the build
+  the client announces in its version frame, with a refusal when no key matches.
+- **Suite 94/94 green, 4,686 checks, 2,721 s**, on the tree with `main` merged in. Three
+  runs: 89/5 before, 93/1 after the code fixes, 94/0 once the new loopback client was
+  caged (a UAC prompt, by design).
+
+**Next, and it now has a measured reason:** convert or gate `genericvalue.py`'s VAs, which
+would bring `avevents.py` back with it. Then the two live-memory readers in
+`itemprobe`/`agentprobe`, which on a new build do not compute a wrong number — they
+dereference a stale RVA inside a *running* client.
+
+**Two things left for the owner, both judgement rather than mechanics:** `content/maps.toml`
+gives both Pre-Searing maps `file_id = 0x8001B97D`, which **no longer binds** on 38833 — the
+update installed the pending replacement, cleared bit 31, and the plain `0x1B97D` now
+resolves to row 177262 while old row 7982 holds a texture (FINDINGS §7.5a). And `CLAUDE.md`'s
+launch-rule paragraph says the updater kill switch is "wanted on both configurations", which
+contradicts `RUNBOOK.md`:849 and the vault; RUNBOOK is fixed, `CLAUDE.md` is left for a
+ruling.
 
 ### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks)
 
