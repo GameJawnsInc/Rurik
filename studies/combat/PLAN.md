@@ -88,6 +88,12 @@ unrefined, and the map found five hard gates and ten fidelity gates it did not n
   literal", GmPlayer.c:125) and is contradicted by every live sample.
 
 ### Gate 3 — `s_skill +0x44..+0x68` undecoded; replaces `ENEMY_SKILL_FRACTION = 0.25`
+> **CLOSED 2026-08-15 (§12), and with one premise of it REFUTED.** The window is
+> decoded (step 4) and wired (step 8). But "it replaces `ENEMY_SKILL_FRACTION`"
+> was true only for the skills whose scale actually *is* damage — three of the
+> enemy's four are a heal, a hex and an enchantment, and the client's table
+> never says which is which. Read §12 before treating a scale endpoint as a
+> damage number.
 **VERIFIED on the facts; REFINED on "cheapest real win" — cheapest OFFLINE win, not
 the first combat-visible one, and it has two unpriced dependencies.**
 
@@ -567,7 +573,65 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 5 (cont.) | **code half ✅ 2026-08-15, `043e395`** — `attribtable.py` reads `s_attrib` and DISSOLVES the numbering contest (§10): index space contiguous 0..50, 42 owned by playable professions, 26/27/28 are profession 11's. 51 content rows emitted. Still open in code: `ATTRIBUTE_COUNT = 42` is a count of the wrong thing for a wire payload and step 7 replaces it |
 | 6 | ⬜ — the targeted live capture. Operator-driven; §3's shopping list |
 | 7 | 🔶 **wire half ✅ 2026-08-15, `1339bfe`** (§11) — five real triples, bounds refused not clamped, payload bound to its content row and proven red. **L6's panel criterion is UNVERIFIED and needs one caged loopback run**: `--probe attributes`, whose step 3 reverses the ranks as the discriminator |
-| 8–10 | ⬜ |
+| 8 | ✅ **2026-08-15, `e4bb222`** (§12) — `ENEMY_SKILL_FRACTION` retired; damage is the client's endpoints at the player's own attribute rank. **The step's premise was refuted mid-flight**: scale is not damage, 3 of the enemy's 4 skills are a heal/hex/enchantment, so meaning is GWW-sourced per skill and unmodelled skills return None. `test_skilldamage` 25 checks, sabotage-proven |
+| 9–10 | ⬜ |
+
+## §12. Step 8: the premise was wrong, and the data said so (2026-08-15, `e4bb222`)
+
+`ENEMY_SKILL_FRACTION = 0.25` is gone. Damage is now the skill's own scale
+endpoints interpolated by the client's own formula at a rank.
+
+**Step 8 as planned would have shipped an invention.** The plan — and gate 3 —
+assumed `scale0/scale15` is damage. It is not. The client's table gives a
+*magnitude* and never says what it means, and `type_code` cannot discriminate
+because it is the skill's TYPE (a Spell can heal or harm). Measured on our own
+enemy's bar:
+
+| id | skill | client scale | GWW progression var | damage? |
+|---|---|---|---|---|
+| 276 | Restore Condition | 10→70 | **Healing** | no |
+| 253 | Scourge Sacrifice | (dur 8→20) | **Duration** | no |
+| 312 | Holy Strike | 10→55 | **Holy damage** | **yes** |
+| 289 | Vital Blessing | 40→200 | **+ Maximum health** | no |
+
+**Three of the four are not damage.** Wiring scale-as-damage would have had the
+enemy hurting the player with a heal for 10–70 and an enchantment for 40–200 —
+worse than the flat fraction it replaced, because it would have looked
+principled. This is the gate map's own rule biting the gate map.
+
+**So the split is: magnitude measured, meaning sourced.** The meaning comes from
+GWW's own `{{Skill progression}}` variable names, quoted verbatim into
+`content/world.toml` with a per-skill citation, for all twelve skills the two
+bars touch. Every wiki endpoint matches the client's table exactly — two
+witnesses, no shared ancestry. The server models only the labels named in
+`SCALE_MEANS_DAMAGE`; everything else lands as "no modelled effect" and says so.
+`skill_damage()` returns **None, not 0**, so a caller must decide what an
+unmodelled skill means rather than silently dealing nothing.
+
+**The plus is load-bearing.** `"Holy damage"` IS the skill's damage;
+`"+ Damage"` is ADDED to the attack it rides. So Power Attack's bonus goes
+through `hit_enemy` as one damage message — two would draw two numbers on
+screen for one swing.
+
+**The chain gate 1 was about now closes.** The skill record names its attribute
+(+0x29), the attribute indexes `s_attrib`, and the rank comes from the same
+content row `0x003A` is built from:
+
+- Power Attack → Strength, player rank **12** → **34** damage
+- Desperation Blow → Tactics, player rank **1** → **12** damage
+
+Identical 10→40 tables, 22 points apart, purely because the ranks differ. That
+is exactly what "the server models none, so `2 * rank` is 0" cost.
+
+**Consequence recorded, not hidden: most of the enemy's bar no longer damages.**
+That is the correct answer. R4a's criterion still holds — the player dies to
+`land_swing`, which this does not touch. If the owner wants a dangerous enemy,
+that is now a *content* decision (pick a damage bar), not a code one.
+
+**Still open here:** the rounding tie-break stays UNRESOLVED, and
+`test_skilldamage` §5 proves it cannot bite — no skill in the effect table
+lands on a .5 at any rank 0–15. Damage also still lands AT PRESS rather than at
+cast end; magnitudes moved, timing did not.
 
 ## §11. Step 7 landed: the wire half of L6 (2026-08-15, `1339bfe`)
 
