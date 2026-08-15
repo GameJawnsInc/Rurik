@@ -578,6 +578,61 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 9 | ✅ **2026-08-15, `34ee86b`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
 | 10 | ✅ **2026-08-15, `2610aa3`+merge** — `PLAN.md` §3 (R4a, R4b) and §8 updated dated and stamped; the profession ladder's L6 row annotated so the two ledgers agree. **Landing suite: 100 green / 1 red of 101, 4,947 checks.** The red is `test_contentids`, and it is ENVIRONMENTAL and attributed: `vault/run/2026-08-13_64fae3b1369b/Gw.dat` is held open by **another session's client, PID 16340, running from that directory since 11:47** — the archive is present (4.2 GB) and unreadable, which is the same "the client holds its own archive open" note main's own §8 carries. `test_contentids` passed at 23 checks earlier the same day with the archive free, and nothing in this arc touches archives, map content or `contentids.py`. Not killed, per the parallel-sessions rule |
 
+## §16. The `cast_anim` probe ran: step 4 confirmed in the client's own words, the animation still needs eyes (2026-08-15)
+
+Caged loopback, build 38833 against its own archive
+(`--exe vault/run/2026-08-13_64fae3b1369b/Gw.exe`,
+`RURIK_DAT=vault/dat_study_38833/Gw.dat`), map 90 explorable, synthetic
+credential. `RUN VERDICT: PASS`, **zero Undecodable**, no assert in `Gw.log`.
+Run: `vault/captures/harness/20260815T182423`.
+
+This was the one combat item §15 left open, and the probe's question is
+whether the cast animation is driven by opcode 228 or by agent property 60.
+
+**CONFIRMED, verbatim and machine-readable — step 4's prediction.** The probe
+said `Gw.log` should carry the client's own `Pending skill %u copy %d not
+found`. It does:
+
+```
+Error: Pending skill 320 copy 0 not found
+```
+
+320 is `bar[4]`, the skill the probe sent, and `copy 0` is the field. So the
+client is telling us in words what `0x00E3`'s third field is called and that it
+matches an entry it never created for us — which is the same mechanism
+`handle_skill_press`'s echo relies on, now witnessed from the client's side.
+
+**ALSO ESTABLISHED, and it is a safety result rather than a semantic one:** the
+client accepted `0x00E4` addressed to the LOCAL PLAYER, then property 60, then
+`0x00E3`, and ran on without asserting. Given §14's crash — an interleaved
+`0x003A` killed it on `CharData.cpp:202` — "these three do not kill it" is
+worth having explicitly.
+
+**NOT SETTLED: whether property 60 plays the animation.** The prediction is
+that 228 does nothing visible locally (its handler returns early on self, which
+§6's step 0a corroborated from the wire: all 7 live `0x00E4`s name the
+receiving connection's own player) and that property 60 is the one that
+animates. **Nobody was watching the screen**, and the frame instrument cannot
+substitute:
+
+| what | result |
+|---|---|
+| 24 hold frames at 1.0 s, per-frame pixel change | **12.77 %–15.35 %, flat** |
+| the frame after 228 (`hold005`) | 14.66 % |
+| the frame after property 60 (`hold008`) | 14.26 % |
+
+The idle scene churns at ~14.5 % a frame all by itself — water, foliage, the
+character's idle animation, camera drift — so a cast animation on one body does
+not separate from the baseline. **This is H5 measured rather than asserted:**
+`shotlabel.py` detects THAT pixels changed, never WHAT, and at this baseline
+that is not enough. `shotlabel --run` also declines the run outright ("no sweep
+sends in the capture") because it is built for the opcode sweep, not for probes.
+
+So the animation half stays operator-visual, which is what H5 said it would.
+The run is cheap to repeat — ~50 s — and what an operator needs to watch is
+**the character's body at two moments: t≈5 s (228, predict nothing) and
+t≈8 s (property 60, predict the cast animation)**.
+
 ## §15. Step 3's loopback acceptance RAN, and both halves pass (2026-08-15)
 
 **§7's blocker is gone and its acceptance is met.** Two caged runs, build
