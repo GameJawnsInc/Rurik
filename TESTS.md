@@ -2216,11 +2216,15 @@ Every one of these, in the order they were written:
   rather than guessing, because those are read at run time by tests that never import
   them and no graph can see the edge; one such file among Python ones still forces the
   full run; and a diff git could not produce is a full run, not an empty one, which is
-  why `changed_since` returns `None` and never `set()`. A green partial run exits
-  **3, never 0**. No vault, no socket, no client; the halves under test are pure
-  functions over a string, a tree and a dict, so testing the thing that spawns 94
-  processes spawns none — section 7 builds a synthetic `toolkit/` and the one check
-  that touches a real repo only asks git to reject a bogus ref. 43 checks, ~2 s),
+  why `changed_since` returns `None` and never `set()`. **The exit rule is a pure
+  function so it can be checked without spawning 94 processes to learn it**: green AND
+  complete is the only 0, green-but-partial is 3 — `--only` included, which always was
+  a partial run and exited 0 for as long as the runner existed — and a failure
+  OUTRANKS partiality, because 3 on a run with a red file hides the failure behind a
+  caveat. No vault, no socket, no client; the halves under test are pure functions
+  over a string, a tree and a dict, so testing the thing that spawns 94 processes
+  spawns none — section 7 builds a synthetic `toolkit/` and the one check that touches
+  a real repo only asks git to reject a bogus ref. 47 checks, ~2 s),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
   a live session on 2026-08-10. It also pins the checker's own vacuity failure — the

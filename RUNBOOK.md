@@ -156,7 +156,9 @@ Three behaviours worth knowing before you rely on it:
 
 - **A green partial run exits 3, never 0**, and prints how many files never ran. That
   is deliberate: the banner protects a human reading a pasted report, the exit code
-  protects a script.
+  protects a script. **`--only` exits 3 too** — it always was a partial run, and it
+  returned 0 for as long as this runner existed. A failure still outranks it: red is
+  1 whether or not the run was scoped.
 - **A change to anything that is not `toolkit/**.py` forces the FULL suite** and says
   which file did it. `content/*.toml`, `schema/messages.json` and `CLAUDE.md` are read
   at run time by tests that never import them, so the graph is structurally blind to

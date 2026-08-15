@@ -89,7 +89,9 @@ the code that moved. So:
     Refusing to guess is `CLAUDE.md`'s rule and this is where it applies.
   * A green partial run exits **3, never 0**, and prints how many files never ran. The
     banner is what survives being pasted into a report; the exit code is what survives
-    being consumed by a script. Without `--since` the codes are exactly as they were.
+    being consumed by a script. **`--only` counts as partial too** -- it always was one,
+    and it exited 0 for as long as this runner existed. That is the same defect from
+    the same side, so it moved to 3 with `--since`; a bare run is untouched.
   * Selecting NOTHING is reported as a coverage statement and exit 2 -- eleven modules
     in `toolkit/` have no test reachable from them at all, and a change confined to one
     of those must not read as an all-clear.
@@ -325,6 +327,19 @@ def affected(changed, tests, root=None, graph=None):
     return picked, f"{len(py)} changed module(s)"
 
 
+def exit_code(bad, partial):
+    """0 only when everything passed AND everything ran.
+
+    Pure, so the rule can be checked without spawning 94 processes to find out. A
+    failure outranks partiality -- red is red whether or not the run was scoped, and
+    reporting 3 for a run with a red file in it would hide the failure behind a
+    caveat.
+    """
+    if bad:
+        return 1
+    return 3 if partial is not None else 0
+
+
 def load_timings(path=TIMINGS):
     """Last run's per-file seconds, or {} -- a missing or corrupt cache is not an error.
 
@@ -410,8 +425,9 @@ def main():
     order = schedule(tests, times)
     known = sum(1 for t in order if t in times)
     if partial is not None:
+        vs = f" vs {a.since}" if a.since else ""
         print(f"PARTIAL RUN -- {len(tests)} of {len(everything)} test file(s), "
-              f"selected by {partial} vs {a.since or 'HEAD'}.")
+              f"selected by {partial}{vs}.")
         print("This is NOT the suite and must not be reported as one.\n")
     print(f"{len(tests)} test file(s), {jobs} at a time"
           f" ({known} with a recorded time to schedule by)\n", flush=True)
@@ -469,20 +485,19 @@ def main():
           + (f" ({cpu:.0f}s serial, {jobs} jobs)" if jobs > 1 else " (serial)"))
     for rel, status, note in bad:
         print(f"  {status} {rel}  {note}")
-    if bad:
-        return 1
-    if partial is not None:
+    rc = exit_code(bad, partial)
+    if rc == 3:
         # Exit 3, never 0, and the difference is the whole safety property. A green
         # PARTIAL run is a true statement about a subset and a false one about the
         # suite, and the summary line above is the only thing that survives being
         # pasted into a report -- so the banner carries the warning for humans and
-        # this carries it for anything that branches on a status code. Nothing that
-        # existed before `--since` can see a 3: without the flag the codes are
-        # unchanged.
+        # this carries it for anything that branches on a status code. A bare
+        # `run_suite.py` is untouched; `--only` reaches here too, because it always
+        # was a partial run and exiting 0 for one was the same defect from the same
+        # side.
         print(f"\nexit 3: green, but {len(everything) - len(tests)} file(s) never "
               f"ran. `python toolkit/run_suite.py` is the suite.")
-        return 3
-    return 0
+    return rc
 
 
 if __name__ == "__main__":

@@ -20,12 +20,12 @@ sys.path.insert(0, HERE)
 import checks  # noqa: E402
 import run_suite as rs  # noqa: E402
 
-# Floor 43, MEASURED from a green run: 27 on 2026-08-13, plus section 6's six when the
-# runner learned to schedule a pool on 2026-08-14, plus section 7's ten when it learned
-# to select by diff the same day. Every check is unconditional and builds its own
-# fixtures, so there is no vault-less variant and no declared skip: a score under the
-# floor means a section crashed.
-LEDGER = checks.Ledger("run_suite: the suite runner's own counting", floor=43)
+# Floor 47, MEASURED from a green run: 27 on 2026-08-13, plus section 6's six when the
+# runner learned to schedule a pool on 2026-08-14, plus section 7's fourteen when it
+# learned to select by diff the same day. Every check is unconditional and builds its
+# own fixtures, so there is no vault-less variant and no declared skip: a score under
+# the floor means a section crashed.
+LEDGER = checks.Ledger("run_suite: the suite runner's own counting", floor=47)
 
 
 def section_banner_not_last():
@@ -405,6 +405,20 @@ def section_selection():
     LEDGER.ok(bad is None,
               "and changed_since returns None for a ref git rejects",
               "which main() routes to the full suite")
+
+    # The exit rule, driven directly rather than by spawning 94 processes to learn it.
+    # It is a pure function precisely so this section keeps the property the module
+    # docstring claims: no vault, no socket, no client, and nothing launched.
+    LEDGER.ok(rs.exit_code([], None) == 0,
+              "green AND complete is the only 0")
+    LEDGER.ok(rs.exit_code([], "--only mapdata") == 3,
+              "green but partial is 3 -- including for --only, which always was a "
+              "partial run and exited 0 for as long as this runner existed")
+    LEDGER.ok(rs.exit_code([("t", "FAIL", "")], None) == 1,
+              "a failure is 1")
+    LEDGER.ok(rs.exit_code([("t", "FAIL", "")], "--since HEAD") == 1,
+              "and a failure OUTRANKS partiality -- red is red whether or not the run "
+              "was scoped", "3 there would hide a failure behind a caveat")
 
 
 def main():
