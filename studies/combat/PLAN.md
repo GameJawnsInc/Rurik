@@ -573,9 +573,214 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 5 (cont.) | **code half ✅ 2026-08-15, `043e395`** — `attribtable.py` reads `s_attrib` and DISSOLVES the numbering contest (§10): index space contiguous 0..50, 42 owned by playable professions, 26/27/28 are profession 11's. 51 content rows emitted. Still open in code: `ATTRIBUTE_COUNT = 42` is a count of the wrong thing for a wire payload and step 7 replaces it |
 | 6 | ⬜ — the targeted live capture. Operator-driven; §3's shopping list |
 | 7 | 🔶 **wire half ✅ 2026-08-15, `1339bfe`** (§11) — five real triples, bounds refused not clamped, payload bound to its content row and proven red. **L6's panel criterion is UNVERIFIED and needs one caged loopback run**: `--probe attributes`, whose step 3 reverses the ranks as the discriminator |
+| 7 (fix) | ⚠️→✅ **2026-08-15** (§14) — the payload shipped INTERLEAVED and `0x003A` is column-major, so every session since died on `CharData.cpp:202`. `attribute_triples` → `attribute_columns`; `arrsize(s_attribPoints)` read at last (13, correcting `consttable.py`'s 14) by the new `attribpoints.py`. Diagnosed statically from the crash dump's own stack — no client run, no int3. **Cure is UNVERIFIED until one watched loopback session** |
 | 8 | ✅ **2026-08-15, `e4bb222`** (§12) — `ENEMY_SKILL_FRACTION` retired; damage is the client's endpoints at the player's own attribute rank. **The step's premise was refuted mid-flight**: scale is not damage, 3 of the enemy's 4 skills are a heal/hex/enchantment, so meaning is GWW-sourced per skill and unmodelled skills return None. `test_skilldamage` 25 checks, sabotage-proven |
 | 9 | ✅ **2026-08-15, `34ee86b`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
 | 10 | ✅ **2026-08-15, `2610aa3`+merge** — `PLAN.md` §3 (R4a, R4b) and §8 updated dated and stamped; the profession ladder's L6 row annotated so the two ledgers agree. **Landing suite: 100 green / 1 red of 101, 4,947 checks.** The red is `test_contentids`, and it is ENVIRONMENTAL and attributed: `vault/run/2026-08-13_64fae3b1369b/Gw.dat` is held open by **another session's client, PID 16340, running from that directory since 11:47** — the archive is present (4.2 GB) and unreadable, which is the same "the client holds its own archive open" note main's own §8 carries. `test_contentids` passed at 23 checks earlier the same day with the archive free, and nothing in this arc touches archives, map content or `contentids.py`. Not killed, per the parallel-sessions rule |
+
+## §14. `0x003A` is COLUMN-MAJOR, and step 7 sent it interleaved (2026-08-15)
+
+**The bug §11 shipped, found from the outside by the terrain arc.** A loopback
+harness session on build 38833 killed the client with
+
+```
+Assertion: level < arrsize(s_attribPoints)
+P:\Code\Gw\Char\CharData.cpp(202)
+App: Gw.exe   BaseAddr: 00090000   Build: 38833
+```
+
+reproduced, seen at least twice, and **caused by this arc**: step 7 replaced
+`0x003A`'s fourteen zero triples with five real ones on 2026-08-15, and its
+payload layout is wrong. Nothing else in the burst is implicated.
+
+Settled **statically, with no client run and no int3**. The suggested route was
+an injected breakpoint at the assert site; it was not needed, because the crash
+dump's own stack names every frame once the addresses are rebased
+(`- 0x00090000 + 0x00400000`) and the client's asserts say which source file
+each one is in. The whole diagnosis is `asserts.py`, `codescan.py` and the
+receive table.
+
+### 14a. The stack, rebased and named — OBSERVED
+
+| # | dump | rebased | function | module, from the asserts inside it |
+|---|---|---|---|---|
+| 0 | `00117bdb` | `0x00487BDB` | — | the assert routine itself (`asserts.py` derives `0x00487BC0`) |
+| 1 | `005ad580` | `0x0091D580` | `0x0091D560` | **`CharData.cpp:202`**, the failing site |
+| 2 | `004a9323` | `0x00819323` | `0x00819270` | `ChCliAttrib.cpp` — the attribute writer |
+| 3 | `004a9e5c` | `0x00819E5C` | `0x00819C00` | `ChCliAttrib.cpp` — the per-index loop |
+| 4 | `0049eb65` | `0x0080EB65` | `0x0080EB40` | `ChCliApi.cpp` — a five-argument forwarder |
+| 5 | `005ad94b` | `0x0091D94B` | `0x0091D920` | **the `0x003A` handler** |
+| 6–7 | `0046c5d6`, `0046ca94` | `0x007DC5D6`, `0x007DCA94` | | `MsgConn.cpp` |
+| 8–9 | `00121cdb`, `0012237d` | `0x00491CDB`, `0x0049237D` | | `GcGameCmd.cpp`, `GcSrv.cpp` |
+| 10 | `002bdf68` | `0x0062DF68` | | `EvtDispatch.cpp` |
+
+Frame 5 names the message without a capture: `0x0091D920` is stored in exactly
+one `.rdata` word, `0x00BC8FE8`, which is the `dispatch` member of the 12-byte
+receive descriptor at `0x00BC8FE0` — and that descriptor's `cmds[0]` is
+**`0x003A`**. (`{uint32 *cmds; uint32 count; void *dispatch;}`, the layout
+`msghandler.py` already uses.) The worker thread the dump names is consistent:
+`MsgConn`/`EvtDispatch` frames, not the render thread.
+
+### 14b. The wire layout — OBSERVED, and §8a already had it right
+
+The handler is eleven instructions and it is the whole answer:
+
+```
+0091D923  mov ecx, [ebp+8]          ; the decoded message
+0091D926  mov eax, 0xAAAAAAAB
+0091D92B  mul dword ptr [ecx+8]     ; count
+0091D931  shr edx, 1                ; edx = n = count / 3
+0091D933  lea eax, [eax + edx*8]    ; arr3 = payload+0x0C + n*8
+0091D93A  lea eax, [eax + edx*4]    ; arr2 = payload+0x0C + n*4
+0091D93E  lea eax, [ecx+0xc]        ; arr1 = payload+0x0C
+0091D946  call 0x80eb40             ; (agentId, n, arr1, arr2, arr3)
+```
+
+**Three contiguous columns of `n` dwords, not `n` interleaved triples.**
+Element `i` of each column is `n*4` bytes from the last, never 4. The loop at
+`0x00819C00` confirms it and shows why the shape is easy to misread: MSVC
+converts the three cursors into induction variables, holding `arr2 - arr1` and
+`arr3 - arr2` as deltas (`sub [ebp+0x18], eax` / `sub eax, ebx` at
+`0x00819CFC`–`0x00819D07`) and re-adding them at the call, so the call site
+reads `push [ebx] / push [eax] / push [ecx+eax]` and looks like pointer
+arithmetic on three unrelated things.
+
+§8a said "three parallel n-dword arrays" and named them `payload+0xc`,
+`+0xc+4n`, `+0xc+8n` on 2026-08-14. **The study was right and the
+implementation ignored it.** `attribute_triples()` shipped the next day with a
+docstring that repeated §8a correctly above a body doing `out += [attrib_id,
+rank, rank]`. The name was the tell, and nothing checked the name against the
+docstring.
+
+### 14c. Why it is fatal rather than merely wrong — OBSERVED
+
+Writer `0x00819270` stores `arr2[i]` at `slot+8` (`baseValue`, §8a) and then
+passes that same dword to `CharData.cpp:202`:
+
+```
+00819315  push dword ptr [esi+8]    ; the rank, after pending-change deltas
+0091931E  call 0x91d560             ; <-- level < arrsize(s_attribPoints)
+```
+
+So **column 2 is indexed straight into `s_attribPoints`**, whose `arrsize` is
+**13** (§14d). Interleaving `(id, rank, rank)` puts the flat array's second
+third into column 2, which for our five attributes is a mix of ids and ranks —
+and attribute ids run to 50. Reproduced by hand and then as a test control:
+
+```
+content ranks  [(17,12), (18,9), (19,6), (20,3), (21,1)]
+interleaved    [17,12,12, 18,9,9, 19,6,6, 20,3,3, 21,1,1]   n = 5
+  column 1     [17, 12, 12, 18, 9]     ids   -- all < 51, so ChCliAttrib:249 stays quiet
+  column 2     [9, 19, 6, 6, 20]       ranks -- 19 at i=1 is >= 13
+```
+
+The client asserts at **i = 1 on the value 19**, which is exactly where and what
+the dump shows. Two predictions fall out and both hold: the `attrib < 51`
+assert (`ChCliAttrib:249`) must NOT fire first, and it did not; and the failure
+is deterministic on every spawn, which is why it was seen twice rather than
+intermittently.
+
+**It hid for a day because the previous payload was all zeros.** Fourteen
+`(0,0,0)` triples and five column-major zeros are the same fifteen dwords —
+the layout is unobservable until a nonzero value exists. The moment step 7 put
+real ranks in, the layout became load-bearing and the client said so.
+
+**And it hid twice more because of the watcher, not the payload.** The assert
+box is a modal window *inside* the client process, so `Get-Process` reports
+ALIVE for as long as it is up; two instrumented runs were reported clean while
+the owner was looking at the crash dialog. `Crash.dmp` is no better — none was
+written on 2026-08-15, anywhere. The signal is the dialog itself
+(`crashwatch.ps1`, §14f).
+
+### 14d. `arrsize(s_attribPoints)` is 13, and it was recorded as 14 — CORRECTED
+
+`arrsize` was a number this repo did not have, and the one it did have was
+wrong. `consttable.py` carried the table as **14 x 4**; it is **13 x 4**:
+
+```
+s_attribPoints = { 1, 2, 3, 4, 5, 6, 7, 9, 11, 13, 16, 20, -1 }
+```
+
+Indexed by an attribute's **RANK**, not by a character level, despite
+ArenaNet naming the parameter `level` — which is why `START_LEVEL = 1` and
+`PLAYER_ATTR_LEVEL = 9` were never suspects. `s_attribPoints[r]` is the cost of
+raising an attribute from rank `r` to `r+1`; `-1` at [12] means rank 12 is the
+last. UPSTREAM: those twelve are retail's published per-rank costs and sum to
+**97**, the cost of a rank-12 attribute.
+
+The two accessors differ by exactly the thing that caused the error:
+
+```
+0x0091D560  CharData:202   cmp esi,0Dh ; mov eax,[esi*4 + base-4]   s_attribPoints[level-1], 0 at level 0
+0x0091D5A0  CharData:208   cmp esi,0Dh ; mov eax,[esi*4 + base  ]   s_attribPoints[level]
+```
+
+MSVC folded the `- 1` into the displacement, so `CharData:202` encodes an
+address **four bytes below** the array. Read that as the base — the obvious
+move, and effectively what happened — and the table starts one element early
+and must be 14 long to reach its anchor. **Both readings close on the anchor**,
+so `consttable.py`'s arithmetic could never have chosen between them: it had
+`pad=None` for this row, meaning no left-edge witness, so its base was derived
+from its count and its count from the biased displacement. Two errors that are
+the same error.
+
+Refuted three ways, in `toolkit/clientscan/attribpoints.py`, none of them the
+anchor arithmetic:
+
+1. **the client's own `arrsize`** — both accessors `cmp esi, 0Dh` before the
+   lookup, at the exact site whose assert expression is
+   `level < arrsize(s_attribPoints)`;
+2. **the unbiased accessor** — `CharData:208` applies no `- 1`, and its
+   displacement sits exactly 4 above `CharData:202`'s;
+3. **the neighbour's right edge** — `s_appearanceSlot` (own asserts at
+   `CharData:165/178`, own `cmp esi, 8`, stride 12 from
+   `lea edi,[esi+esi*2]`) ends its 8 records exactly on the corrected base, so
+   the dword the old reading absorbed is that table's last column.
+
+and the content agrees: 13 gives a strictly increasing run terminated by `-1`;
+14 opens on a `5` that breaks it. `consttable.py`'s own row had *noticed* that
+— it called the `5` "what `dead data` looks like from the outside" — and
+noticing was not enough to overturn a closure. **A closure is only evidence for
+the term you did not derive from it.** Same defect as §7b's `s_worldData`
+(a free stride), arriving from the left edge instead.
+
+All three vaulted ArenaNet builds agree at 13, with the base at a *different*
+address on 38519 — which is what makes the locator structural rather than an
+address that still happens to work.
+
+### 14e. What changed
+
+| Where | Change |
+|---|---|
+| `authsrv.attribute_triples` | → **`attribute_columns`**, emitting `ids + ranks + ranks`. The name is part of the fix: it was the only thing in the file asserting the wrong shape, and it outvoted a correct docstring |
+| `authsrv.ATTRIBUTE_TRIPLES_MAX` | → `ATTRIBUTE_COLUMN_MAX` (same 16) |
+| `probes.py --probe attributes` | follows the rename; its note now says a mis-built layout never reaches the panel check because it asserts the client dead first |
+| `toolkit/clientscan/attribpoints.py` | NEW — the structural locator, stdlib only, `--all-builds` |
+| `toolkit/clientscan/test_attribpoints.py` | NEW — 20 checks, 7 sabotages, three-build cross-check |
+| `consttable.py` | `s_attribPoints` 14 → 13, base +4, and the docstring records why the closure could not catch it |
+| `test_consttable.py` §7c | NEW — binds the row to `attribpoints.py`; floor 69 → 74 |
+| `test_spawn_burst.py` §4 | slices the payload the CLIENT's way, and its last check is a control requiring the interleaved layout to produce an out-of-range rank; floor 34 → 38 |
+
+The step-7 wire half is **still ✅** — the ids, the bounds, the refusals and
+the content binding were all right. Only the ordering was wrong.
+
+### 14f. What is still open
+
+- **L6's panel criterion remains UNVERIFIED**, unchanged by this section. It
+  needs one caged loopback run of `--probe attributes`, whose step 3 reverses
+  the ranks as the discriminator. This section fixes the message; it does not
+  prove the panel reads it.
+- **The fix is verified statically only.** The client has not been run since.
+  What would settle it is one harness session watched with `crashwatch.ps1` —
+  and that is the honest status: OBSERVED for the diagnosis, UNVERIFIED for
+  the cure.
+- ~~**`crashwatch.ps1` is untracked**, committed by nobody.~~ **CLOSED the
+  same day**: the terrain arc landed it as `d0899cf`, "Crash detection,
+  because liveness polling could never have caught it". It is the instrument
+  that caught this crash after liveness polling missed it twice, and the
+  verification run above should be watched with it rather than `Get-Process`.
+- **Column 3 is still RECONSTRUCTION**, exactly as §8a left it. Sending the
+  rank there reproduces an invariant the client maintains; no assert names it.
 
 ## §13. Step 9: the kill window, and the template that looked richer (2026-08-15, `34ee86b`)
 
@@ -684,6 +889,16 @@ lands on a .5 at any rank 0–15. Damage also still lands AT PRESS rather than a
 cast end; magnitudes moved, timing did not.
 
 ## §11. Step 7 landed: the wire half of L6 (2026-08-15, `1339bfe`)
+
+> **PARTLY SUPERSEDED by §14, same day.** Everything below about the ids, the
+> bounds, the refusals and the content binding stands. The **ORDERING does
+> not**: this section says "triples" throughout, and `0x003A` is column-major
+> — `ids | ranks | ranks`, not `(id, rank, rank)` apiece. The interleaved
+> payload it describes asserted the client dead on `CharData.cpp:202` in every
+> session that ran it. Two names below have moved with the fix:
+> `attribute_triples()` → `attribute_columns()` and `ATTRIBUTE_TRIPLES_MAX` →
+> `ATTRIBUTE_COLUMN_MAX`. This section is left as written rather than edited,
+> because what it got right and what it got wrong came from the same pass.
 
 `0x003A` now carries five real triples instead of `[0] * 42`. What that
 constant actually was, once the handler's divide-by-three is applied: **fourteen

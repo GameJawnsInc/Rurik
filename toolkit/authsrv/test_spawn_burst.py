@@ -72,12 +72,16 @@ BURST = [
     # actually reddens on an ATTRIBUTE_POINTS edit is in section 3.
     (0x0037, [PLAYER_AGENT_ID, 0, 0], "AGENT_UPDATE_ATTRIBUTE_POINTS"),
     (0x00B7, [PLAYER_AGENT_ID, PROF_WARRIOR, 0, 0], "PLAYER_UPDATE_PROFESSION"),
-    # Five TRIPLES, not a flat array: (attribute_id, rank, rank) apiece. The
-    # ids are the client's own s_attrib indices for profession 1 (Warrior);
-    # the ranks are invented and distinct on purpose. Section 4 binds this to
-    # the module rather than leaving it a hand-copy.
+    # THREE COLUMNS, not five triples: every id, then every rank, then the
+    # third column. The client slices ONE flat array at n and 2n (handler
+    # 0x0091D920), so `(id, rank, rank)` apiece is a different message -- and
+    # for one day on 2026-08-15 it was what we sent, which killed the client
+    # on CharData:202. Section 4 binds this to the module rather than leaving
+    # it a hand-copy, and reproduces the fatal layout as its own control.
+    # The ids are the client's own s_attrib indices for profession 1
+    # (Warrior); the ranks are invented and distinct on purpose.
     (0x003A, [PLAYER_AGENT_ID,
-              [17, 12, 12, 18, 9, 9, 19, 6, 6, 20, 3, 3, 21, 1, 1]],
+              [17, 18, 19, 20, 21, 12, 9, 6, 3, 1, 12, 9, 6, 3, 1]],
      "AGENT_UPDATE_ATTRIBUTES"),
     (0x0022, [PLAYER_AGENT_ID, 3], "WORLD_UPDATE_CONTROLLED_AGENT"),
     (0x018E, [], "INSTANCE_LOAD_FINISH"),
@@ -91,15 +95,16 @@ WIDTH = {"byte": 1, "word": 2, "dword": 4, "float": 4, "vec2": 8,
 NAMED_OFFSETS = {0x0B: "h000B", 0x1E: "h001E", 0x23: "h0023", 0x27: "h0027",
                  0x3B: "h003B", 0x4B: "h004B", 0x59: "h0059"}
 
-# The floor is 34 because nothing here is optional and nothing varies with a
+# The floor is 38 because nothing here is optional and nothing varies with a
 # fixture: 9 burst messages that must encode, then 7 named struct offsets plus
 # the total closing at 0x63 plus its agreement with declared_unpack_size, then 3
-# sourced values, then the ATTRIBUTE_POINTS binding, then section 4's 7 shape
-# checks and 5 refusals. Measured from a green run on 2026-08-15. If this run
-# reports fewer, a section stopped executing -- most likely the section 2 field
-# walk hitting an unhandled type and breaking out early, which drops the offset
-# checks that are the whole reason this file exists.
-LEDGER = checks.Ledger("spawn burst", floor=34)
+# sourced values, then the ATTRIBUTE_POINTS binding, then section 4's 10 shape
+# checks, its CONTROL, and 5 refusals. Measured from a green run on 2026-08-15
+# (was 34 before section 4 learned to slice the payload the client's way). If
+# this run reports fewer, a section stopped executing -- most likely the section
+# 2 field walk hitting an unhandled type and breaking out early, which drops the
+# offset checks that are the whole reason this file exists.
+LEDGER = checks.Ledger("spawn burst", floor=38)
 check = checks.adopt(LEDGER)
 
 
@@ -156,38 +161,69 @@ def main():
           "ATTRIBUTE_POINTS is 0, the 8-of-8 live-capture value, not "
           "OpenTyria's uncited 50")
 
-    print("\n4. 0x003A carries real triples, and refuses what the client would")
+    print("\n4. 0x003A is COLUMN-MAJOR, and refuses what the client would")
     import agents
-    triples = authsrv.attribute_triples()
+    payload = authsrv.attribute_columns()
     # Bound to the MODULE, so the hand-copied BURST row above cannot drift
     # away from what the server actually sends.
-    want = [x for a, r in agents.PLAYER_ATTRIBUTE_RANKS for x in (a, r, r)]
+    want_ids = [a for a, _ in agents.PLAYER_ATTRIBUTE_RANKS]
+    want_ranks = [r for _, r in agents.PLAYER_ATTRIBUTE_RANKS]
+    want = want_ids + want_ranks + want_ranks
     # By OPCODE, not by position: the burst's order is exactly the kind of
     # thing that changes, and a positional index would then compare against
     # whatever moved into the slot instead of failing honestly.
     row = next(v for op, v, _ in BURST if op == 0x003A)
-    check(triples == want and triples == row[1],
-          "the emitted payload is the content row's ranks, as (id, rank, rank)",
-          f"{triples}")
-    check(len(triples) % 3 == 0,
-          f"its length is divisible by 3 ({len(triples)}) -- the client's "
+    check(payload == want and payload == row[1],
+          "the emitted payload is the content row's ranks, column-major",
+          f"{payload}")
+    check(len(payload) % 3 == 0,
+          f"its length is divisible by 3 ({len(payload)}) -- the client's "
           f"handler divides the wire count by three (ATTRIBUTES.md 1.2), so a "
           f"length that is not is a different message than we think")
-    check(len(triples) // 3 <= authsrv.ATTRIBUTE_TRIPLES_MAX,
-          f"{len(triples) // 3} triples, within the array32's declared 48 "
-          f"elements = {authsrv.ATTRIBUTE_TRIPLES_MAX} triples")
-    ids = triples[0::3]
+    check(len(payload) // 3 <= authsrv.ATTRIBUTE_COLUMN_MAX,
+          f"{len(payload) // 3} attributes, within the array32's declared 48 "
+          f"elements = {authsrv.ATTRIBUTE_COLUMN_MAX} per column")
+
+    # THE CLIENT'S OWN SLICING, reproduced. 0x0091D920 computes n = count/3
+    # and hands the loop three pointers -- payload+0xc, +0xc+4n, +0xc+8n --
+    # so this is what the writer 0x00819270 actually receives, not what our
+    # builder thinks it wrote. Every check below reads these, never `payload`
+    # at a stride, because a stride-3 read of a column-major array is exactly
+    # the mistake under test and would agree with itself.
+    n = len(payload) // 3
+    ids, ranks, third = payload[:n], payload[n:2 * n], payload[2 * n:]
+    check(ids == want_ids,
+          f"column 1 decodes to the attribute ids ({ids})")
     check(all(0 <= i < authsrv.CHAR_ATTRIBS for i in ids),
           f"every id is inside the client's s_attrib table ({ids})")
     check(len(set(ids)) == len(ids), "and no attribute is written twice")
-    ranks = triples[1::3]
+    check(ranks == want_ranks,
+          f"column 2 decodes to the ranks ({ranks})")
     check(len(set(ranks)) == len(ranks),
           f"the ranks are DISTINCT ({ranks}) -- which is what makes a "
-          f"slot-order error visible on the panel rather than plausible")
-    check(triples[1::3] == triples[2::3],
-          "slots 2 and 3 carry the same value, reproducing the invariant the "
+          f"column-order error visible on the panel rather than plausible")
+    check(third == ranks,
+          "column 3 carries the same value, reproducing the invariant the "
           "client's own pending-change apply maintains (both take the "
           "identical delta; studies/combat/PLAN.md 8a)")
+    # The bound the crash was about. Column 2 goes into s_attribPoints[rank],
+    # whose arrsize is 13 -- read out of the client's own `cmp esi, 0Dh` by
+    # toolkit/clientscan/attribpoints.py, not typed in here.
+    check(all(0 <= r <= authsrv.ATTRIBUTE_RANK_MAX for r in ranks),
+          f"every value the client will index s_attribPoints with is "
+          f"0..{authsrv.ATTRIBUTE_RANK_MAX} ({ranks})")
+
+    # THE CONTROL, because the six checks above are ours agreeing with
+    # ourselves and would all pass on any self-consistent layout. This
+    # rebuilds the interleaved form that shipped on 2026-08-15, slices it the
+    # CLIENT's way, and requires it to produce an out-of-range rank. If this
+    # goes green the checks above are not discriminating and mean nothing.
+    fatal = [x for a, r in agents.PLAYER_ATTRIBUTE_RANKS for x in (a, r, r)]
+    bad = [r for r in fatal[n:2 * n] if not 0 <= r <= authsrv.ATTRIBUTE_RANK_MAX]
+    check(bool(bad),
+          f"CONTROL: the interleaved layout puts {bad} in column 2, past "
+          f"arrsize(s_attribPoints) -- so these checks can go red, and did",
+          f"interleaved={fatal} -> column2={fatal[n:2 * n]}")
 
     # The refusals. Each is a bound the CLIENT asserts, so a clamp here would
     # hide a caller bug behind a valid-looking message.
@@ -195,10 +231,10 @@ def main():
                      (((17, 13),), "a rank above ArenaNet's cap of 12"),
                      (((17, -1),), "a negative rank"),
                      (((17, 1), (17, 2)), "the same attribute twice"),
-                     (tuple((i, 1) for i in range(17)), "17 triples")):
+                     (tuple((i, 1) for i in range(17)), "17 attributes")):
         raised = False
         try:
-            authsrv.attribute_triples(bad)
+            authsrv.attribute_columns(bad)
         except ValueError:
             raised = True
         check(raised, f"REFUSES {why}")

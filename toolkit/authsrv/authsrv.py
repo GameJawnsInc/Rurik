@@ -541,16 +541,48 @@ def player_rank_for_skill(skill_id):
     return dict(agents.PLAYER_ATTRIBUTE_RANKS).get(attribute, 0)
 
 
-def attribute_triples(ranks=None):
-    """0x003A's payload: (attribute_id, rank, rank) per attribute, flattened.
+def attribute_columns(ranks=None):
+    """0x003A's payload: THREE CONTIGUOUS COLUMNS, ids | ranks | ranks.
 
-    THE SHAPE IS MEASURED, not chosen. The client's handler 0x0091D8C0 divides
-    the wire count by three and forwards three parallel arrays into a per-index
-    loop calling the attribute writer 0x00819220 (ATTRIBUTES.md 1.2), and two of
-    the three slots carry ArenaNet's own names (studies/combat/PLAN.md 8a):
-    slot 1 is `attrib`, the id, bound-checked against 51; slot 2 is `baseValue`,
-    the rank, and the assert that names it reads `[record + attrib*20 + 8]`,
-    which is what ties the name to that slot rather than to its neighbour.
+    NOT interleaved triples. This function was `attribute_triples` and emitted
+    `[id0, rank0, rank0, id1, rank1, rank1, ...]` for one day, 2026-08-15, and
+    it killed the client every session it ran in:
+
+        Assertion: level < arrsize(s_attribPoints)
+        P:\\Code\\Gw\\Char\\CharData.cpp(202)
+
+    The docstring it carried was RIGHT -- it said "three parallel arrays", and
+    so did studies/combat/PLAN.md 8a, which had named the wire arrays
+    `payload+0xc`, `+0xc+4n` and `+0xc+8n` a day earlier. The code did not do
+    what either said. See studies/combat/PLAN.md 14 for the whole trace.
+
+    THE SHAPE IS MEASURED, from the handler's own arithmetic. 0x003A's handler
+    (0x0091D920 on build 38833) takes the wire count, divides it by three, and
+    builds three pointers into ONE flat array before forwarding:
+
+        n = count / 3                    mov eax,0xAAAAAAAB; mul [ecx+8]; shr edx,1
+        arr1 = payload + 0x0C            lea eax,[ecx+0xc]
+        arr2 = payload + 0x0C + n*4      lea eax,[eax+edx*4]
+        arr3 = payload + 0x0C + n*8      lea eax,[eax+edx*8]
+
+    so element i of each column is n*4 bytes from the last, NOT 4. The loop
+    (0x00819C00) walks them with MSVC's induction-variable form -- it holds
+    `arr2 - arr1` and `arr3 - arr2` as deltas and adds them to the arr1 cursor
+    -- and hands `(record, arr1[i], arr2[i], arr3[i])` to the writer 0x00819270.
+
+    WHY INTERLEAVING IS FATAL RATHER THAN MERELY WRONG. Column 2 lands on
+    whatever the flat array holds from index n on, which for interleaved input
+    is a mix of ids and ranks. Attribute ids run to 50; the rank the client
+    reads out of column 2 goes straight into `s_attribPoints[rank]`, whose
+    `arrsize` is 13 (toolkit/clientscan/attribpoints.py, read out of the
+    client's own `cmp esi, 0Dh`). Any id of 13 or more is a modal assert box.
+    With the five content ranks the interleaved form put 19 in column 2 at
+    i=1 and the client stopped there.
+
+    Slot 1 is `attrib`, the id, bound-checked against 51; slot 2 is
+    `baseValue`, the rank, and the assert that names it reads
+    `[record + attrib*20 + 8]`, which is what ties the name to that slot
+    rather than to its neighbour (studies/combat/PLAN.md 8a).
 
     SLOT 3 IS RECONSTRUCTION AND IS THE ONE THING HERE TO DISTRUST. No assert
     names it. What is measured is that the client's own pending-change apply
@@ -567,14 +599,14 @@ def attribute_triples(ranks=None):
     caller that a clamp would hide.
     """
     ranks = agents.PLAYER_ATTRIBUTE_RANKS if ranks is None else ranks
-    if len(ranks) > ATTRIBUTE_TRIPLES_MAX:
+    if len(ranks) > ATTRIBUTE_COLUMN_MAX:
         raise ValueError(
-            f"refusing to send {len(ranks)} attribute triples in one 0x003A: "
-            f"the array32 is declared at 48 elements = {ATTRIBUTE_TRIPLES_MAX} "
-            f"triples, and AcctTemplate:423 bounds a build template at 16 too. "
-            f"More than that needs ceil(N/16) messages, which no real "
+            f"refusing to send {len(ranks)} attributes in one 0x003A: "
+            f"the array32 is declared at 48 elements = {ATTRIBUTE_COLUMN_MAX} "
+            f"per column, and AcctTemplate:423 bounds a build template at 16 "
+            f"too. More than that needs ceil(N/16) messages, which no real "
             f"character reaches -- primary plus secondary is at most ten.")
-    seen, out = set(), []
+    seen, ids, values = set(), [], []
     for attrib_id, rank in ranks:
         if not 0 <= attrib_id < CHAR_ATTRIBS:
             raise ValueError(
@@ -595,8 +627,13 @@ def attribute_triples(ranks=None):
                 f"slot, so a duplicate silently means 'the last one wins' -- "
                 f"refused because that is a caller bug wearing a valid shape.")
         seen.add(attrib_id)
-        out += [attrib_id, rank, rank]
-    return out
+        ids.append(attrib_id)
+        values.append(rank)
+    # The one line the crash was in. Column-major: every id, then every rank,
+    # then the third column -- because the client slices ONE flat array at n
+    # and 2n, and `+ [a, r, r]` per attribute is the reading that does not
+    # survive contact with that.
+    return ids + values + list(values)
 
 
 def spawn_probe_warning(probe, spawn_set, spawn_out_of_band=False):
@@ -792,7 +829,7 @@ GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
 # to attribute 0 -- not 42 slots. Silent rather than fatal (the loopback sweep,
 # studies/smsgsweep 5b), which is why nothing ever caught it.
 #
-# REPLACED 2026-08-15 by real triples; see attribute_triples below. The 42 is
+# REPLACED 2026-08-15 by real ranks; see attribute_columns below. The 42 is
 # kept as a NAMED FACT rather than deleted, because it is a true statement
 # about a different set and deleting it would lose that: it is the number of
 # attributes the ten playable professions own, which is what OpenTyria's
@@ -809,12 +846,13 @@ CHAR_ATTRIBS = 51
 # the s_attribPoints lookup at 0..12.
 ATTRIBUTE_RANK_MAX = 12
 # The wire's own ceiling: 0x003A's array32 is declared at 48 elements, which is
-# exactly 16 triples -- and AcctTemplate:423 bounds a build template at
-# `attribCount < 16`. The two agree, which is why ONE message always suffices
-# for a real character: primary plus secondary profession is at most ten
-# attributes. The ceil(N/16) batching ATTRIBUTES.md 6 describes is the RESKIN
-# arc's problem (custom tables above 16), not combat's.
-ATTRIBUTE_TRIPLES_MAX = 16
+# exactly 16 attributes across THREE COLUMNS (see attribute_columns -- the
+# payload is column-major, not interleaved) -- and AcctTemplate:423 bounds a
+# build template at `attribCount < 16`. The two agree, which is why ONE message
+# always suffices for a real character: primary plus secondary profession is at
+# most ten attributes. The ceil(N/16) batching ATTRIBUTES.md 6 describes is the
+# RESKIN arc's problem (custom tables above 16), not combat's.
+ATTRIBUTE_COLUMN_MAX = 16
 # OBSERVED: every 0x0037 ArenaNet sent in the vault's two live captures carries
 # [0, 0] -- 8 of 8 connections, once each at load, naming the player agent (e.g.
 # 20260807T143055 conn :64103 t=0.722 hex 37001f0000000000). The 50 this used to
@@ -5745,15 +5783,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         player_attrs[PLAYER_ATTR_LEVEL] = START_LEVEL
                         send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,
                              f"CHARACTER_UPDATE_FACTIONS(level {START_LEVEL})")
-                        # REAL TRIPLES since 2026-08-15. This was
-                        # `[0] * ATTRIBUTE_COUNT` -- fourteen (0,0,0) triples,
-                        # i.e. fourteen writes of rank 0 to attribute 0, which
-                        # the client accepted in silence. See attribute_triples.
-                        triples = attribute_triples()
+                        # REAL RANKS since 2026-08-15. This was
+                        # `[0] * ATTRIBUTE_COUNT` -- fourteen writes of rank 0
+                        # to attribute 0, which the client accepted in silence
+                        # because every value was 0 and the layout could not
+                        # show. COLUMN-MAJOR since 2026-08-15 as well, and the
+                        # day between the two cost every session a modal
+                        # assert box: see attribute_columns.
+                        columns = attribute_columns()
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
-                             [PLAYER_AGENT_ID, triples],
+                             [PLAYER_AGENT_ID, columns],
                              f"AGENT_UPDATE_ATTRIBUTES"
-                             f"({len(triples) // 3} attributes: "
+                             f"({len(columns) // 3} attributes: "
                              + ", ".join(f"{a}={r}" for a, r
                                          in agents.PLAYER_ATTRIBUTE_RANKS)
                              + ")")
