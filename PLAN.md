@@ -1753,7 +1753,29 @@ it on 2026-08-14, and `RUNBOOK.md` §0/§0b was walked on a real update for the 
 - **Registered, not pinned.** `pinned.BUILDS` carries 38833; `PINNED` stays **38797**,
   spelled explicitly rather than `BUILDS[-1]`. Moving the pin is a re-measurement arc.
 - **The claimable-row collision is now 3 of 3** — this update recycled both 35300 and 35301,
-  the slots `datplan.plan_insert` claims.
+  the slots `datplan.plan_insert` claims. **And as of 2026-08-15 there are none left to
+  collide over**: `free_rows` returns `[]` on loopback 38833, live 38833 and live 38797, so
+  every allocation must now APPEND. See the next bullet, and
+  [studies/datwrite/FINDINGS.md](studies/datwrite/FINDINGS.md).
+- **`datwrite` can ALLOCATE as of 2026-08-15 — `toolkit/mapdata/datalloc.py`**, the third
+  write verb, and the one that stops authoring needing a victim. `--replace` and `datmove`
+  both start from a row ArenaNet made, which is why every authored map so far has displaced
+  a real retail area. This appends MFT rows for a file that never existed and registers it
+  in the file-id table. **Proven end to end on a copy of the live 38833 archive**: a map
+  pair allocated at file id `0x5F0B0`, `datcheck --preflight` 10 of 10, both crc rules,
+  0 overlapping pairs over 177,741 live rows, then reverted **byte-identical** by sha256.
+  The binding constraint is small and now enforced: the MFT may grow only into the slack of
+  its own last 512-byte block — **424 bytes = 17 rows** on the 38833 pair, where the gap
+  measure claims 4,266,920 — because the next block is a container generation or, on live
+  38833, EOF. Seventeen rows is eight authored maps. **Three latent defects were found and
+  fixed on the way**, all present in the tree beforehand: `datplan.free_rows` offered an
+  ARMED MAP HEAD as a free slot (`vault/dat_c2` returned `[71496]`, map 143's head, still
+  chained to its partner — and no checksum covers the swap); `Writer.fix_mft_self_crc`
+  computed the crc over the pre-growth table for any caller that grew it, silently, with
+  `datcheck` still 10 of 10 because datcheck does not check the self-crc; and `revert()`
+  could not open a torn archive, because `Archive.__init__` refuses when
+  `entry_count * 24 != mft_size` and that is exactly the state the two unavoidable 4-byte
+  writes pass through. `test_datalloc.py`, floor 87, six sabotages all red.
 
 - **The server broke too, by the rule-book's own named defect.** `authsrv.load_keys()` did
   `sorted(rurik_dh_*)[-1]`, so patching 38833 silently handed a 38797 client the wrong DH

@@ -192,6 +192,17 @@ MFT_SELF_ROW = 3             # the table describing itself; its crc skips its ow
 # until it did not.
 FIRST_CLAIMABLE_ROW = 16
 
+# `alloc.flags` at +0x0E, with ArenaNet's own bit names -- recovered from its
+# assertion strings compiled into the PE, `FLAG_ENTRY_USED` and
+# `FLAG_FIRST_STREAM`. They live here for the same reason the rows above do, and
+# the cost of them not living here has already been paid once: `datcheck.py` and
+# `mapchunks.py` each declared a private copy, and `datplan.free_rows` -- which
+# imported neither -- asked `size == 0` on its own and called a live armed map
+# head a free slot. See that function; the bug was real and sat in front of the
+# only code path that claims a row.
+FLAG_ENTRY_USED = 0x01
+FLAG_FIRST_STREAM = 0x02
+
 
 def _as_row(value, what):
     """Refuse anything that is not an int.

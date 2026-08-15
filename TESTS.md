@@ -819,6 +819,60 @@ Every one of these, in the order they were written:
   refused AS a bound, since row 0 reached `entries[-1]` and planned a write to the LAST
   row of the table, which a "some blocker" predicate passes because that row's
   reservation is 0 bytes. Floor 30 -> 38),
+  `toolkit/mapdata/test_datalloc.py` (the THIRD write verb: rows that did not
+  exist, and the file id that makes the client able to name them. `--replace`
+  needs a row, `datmove` needs a row; both start from one ArenaNet made, which is
+  why every authored map so far has been installed by DISPLACING a real retail
+  area. The fixture carries what the real archive has and `test_datmove`'s does
+  not -- an MFT whose size is not a block multiple, so it has genuine growth
+  slack and its reservation ends at EOF, a file-id table with headroom inside its
+  own reservation, and **an ARMED MAP HEAD beside a genuine spare**. That last
+  pairing is the bug this arc found: `datplan.free_rows` tested `size == 0`
+  alone, and `rebloat --arm` sets a live map head's size to zero ON PURPOSE, so
+  on `vault/dat_c2/Gw.dat` it returned `[71496]` -- the head of map 143, flags
+  259, USED, still chained to partner 71497 -- and `plan_insert` prefers
+  `erased[0]`. The next insert into that archive would have taken a live map's
+  head, orphaned its partner and left the file id resolving to somebody else's
+  payload, with all three crc rules still holding. It now asks the client's own
+  question, the USED flag. **Three things a one-row insert gets wrong and this
+  refuses:** a map is TWO rows chained by `alloc.nextStream` at +0x10 and
+  `plan_insert` plans no such field and returns the same row index when called
+  twice; a file id is not optional, because the open-time reconcile deletes an
+  unnamed USED|FIRST row at index >= 16 and frees its extent, so an unregistered
+  row works exactly once; and the MFT can grow ONLY into the slack of its own
+  last 512-byte block -- 424 bytes = 17 rows on the 38833 pair, where the gap
+  measure claims 4,266,920 -- because the next block is a container generation or
+  EOF. The write order is asserted as a property rather than described: payload,
+  then rows past the declared count, then the id pair past the declared table
+  size, all three invisible; then the two writes that make them exist. **Section
+  7 is the one that earns its place** -- it tears the archive at exactly that
+  window, proves `Archive()` refuses it (`entry_count * 24 != mft_size`), and
+  then proves `--revert` still works, which it did not before `mft_offset_of`
+  read the MFT address from the 32-byte header instead of by opening the whole
+  table. The recovery path could not open the archive in the one state it exists
+  for. Everything is re-derived from raw bytes by readers that import nothing
+  from `datalloc`, and the chain is walked three ways -- a Floyd walk out of
+  `int.from_bytes`, `mapchunks.MapIndex`, and the corpus-wide orphan list --
+  because the first draft asserted `nextStream` once and a sabotage that wrote 0
+  there reddened exactly one check. **Section 11 is the one that found a real
+  defect in the code it was written against.** It replays every prefix of the
+  write out of the journal and asserts the property the order exists to serve:
+  no prefix may leave a USED|FIRST_STREAM row that the file-id table does not
+  name, because that is the shape the reconcile frees and memsets. The first
+  version of `alloc()` wrote every row in one pass and called it invisible --
+  true only of APPENDED rows, since a REUSED spare is already inside the declared
+  table and goes live the instant it is written. Section 11 reported three FAILs
+  against code that was green on every other check in the file: an unnamed head
+  on disk, and, with a reused head and an appended partner, a `nextStream`
+  pointing past the declared count while the loader asserts `nextStream < count`.
+  The order now publishes the id record FIRST and reused rows LAST, taking a
+  transient dangling record -- which the client drops -- over an orphan row,
+  which it deletes. Eight sabotages, all eight red, counts in the floor comment
+  and re-measured after every change. **Also proven at full scale**: a map pair
+  allocated into a 4.2 GB copy of the live 38833 archive, preflight 10 of 10 with
+  the orphan count rising by exactly one, then reverted byte-identical by sha256.
+  No client, though: **no client has ever read a row this verb allocated**, which
+  is the same sentence `datmove` carried before FINDINGS 39. Floor 98),
   `toolkit/mapdata/test_bit31.py` (the REPLACEMENT-PENDING census -- the file ids
   carrying bit 31, which `FcArchive` binds when it has requested a replacement
   and deleted the plain name (`archive.py`:486, read out of the client). The

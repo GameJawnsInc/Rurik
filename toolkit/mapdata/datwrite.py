@@ -54,7 +54,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from archive import (Archive, ENTRY_SIZE, file_id_table,  # noqa: E402
-                     mft_row_offset, MFT_SELF_ROW)
+                     mft_row_offset, MFT_SELF_ROW, FILE_MAGIC)
 
 LIVE_INSTALL = os.path.normcase(os.path.abspath(r"C:\gw"))
 
@@ -66,6 +66,32 @@ ENTRY_SIZE_OFF = 0x08   # u32, the entry's stored length
 ENTRY_COMP_OFF = 0x0C   # u16, 0 stored / 8 huffman
 ENTRY_CRC = 0x14        # offset of the crc within a 24-byte MFT row
 HDR_CRC = 0x0C          # offset of the crc within the 32-byte file header
+HDR_MFT_OFFSET = 0x10   # u64, where the master file table lives
+MFT_HDR_COUNT = 0x0C    # u32 inside the MFT's own first row: the entry count
+
+
+def mft_offset_of(path):
+    """The MFT's address, read from the 32-byte file header ALONE.
+
+    Deliberately not `Archive(path).mft_offset`, and the difference is a recovery
+    path rather than a style preference. `Archive.__init__` goes on to parse the
+    table and REFUSES when `entry_count * 24 != mft_size` (archive.py:320) -- and
+    that inequality is exactly the state an interrupted allocation leaves behind,
+    because the descriptor's count and the header's declared size are two
+    separate 4-byte writes and no ordering makes them one. MEASURED 2026-08-15,
+    in both orders: `Archive()` raised and `datwrite --verify` raised with it.
+
+    So the tool that exists to undo a half-finished write could not open the
+    archive in precisely the case it exists for. This reads sixteen bytes and
+    parses none of the table, which is all `revert()` ever needed.
+    """
+    with open(path, "rb") as fh:
+        head = fh.read(32)
+    if len(head) < 32 or head[:4] != FILE_MAGIC:
+        raise SystemExit(f"{path} does not begin with a Gw.dat file header "
+                         f"(no {FILE_MAGIC!r} magic); refusing to guess where "
+                         f"its MFT is")
+    return struct.unpack_from("<Q", head, HDR_MFT_OFFSET)[0]
 
 
 def guard(path):
@@ -334,6 +360,34 @@ class Writer:
         self.fh.close()
         self.ar.close()
 
+    def resync(self, why):
+        """Re-parse the archive header. Call after any STRUCTURAL change.
+
+        `self.ar` is parsed once, in `__init__`, and two of its fields stop being
+        true the moment a row is appended: `mft_size`, which `read_mft()` sizes
+        its read from, and `entry_count`, which `mft_self_crc()` slices with.
+        Neither is refreshed anywhere, because until 2026-08-15 nothing in this
+        file could change them -- `replace` and `restore` keep the table exactly
+        the size they found it.
+
+        The failure that made this necessary is silent in the worst direction.
+        `fix_mft_self_crc()` on a stale view computes the crc over the
+        PRE-GROWTH extent, writes it into row 3, and prints a confident
+        before/after -- and the archive is left failing its own self-checksum
+        with a green line on the screen. `datcheck --preflight` still returns 10
+        of 10 clear, because datcheck does not check the self-crc at all; only
+        `datwrite --verify` does, and that is a separate command a person has to
+        remember to run. Three independent readers found this the same day.
+
+        Reopening rather than patching the three fields is deliberate: the point
+        is to believe the DISK, and every write here is fsynced before this runs.
+        """
+        self.ar.close()
+        self.ar = Archive(self.path)
+        print(f"  resync  ({why}): entry_count {self.ar.entry_count}, "
+              f"mft_size {self.ar.mft_size}")
+        return self.ar
+
     def read_mft(self):
         """The table as it stands ON DISK, through the handle that wrote it.
 
@@ -572,7 +626,31 @@ class Writer:
 
         Call this after every MFT change, or the table no longer describes
         itself and we have run a different experiment than the one we meant to.
+
+        REFUSES on a stale view rather than computing a wrong crc. `self.ar` is
+        a snapshot taken in `__init__`, and a caller that grows the table without
+        calling `resync()` would otherwise get a crc over the pre-growth extent
+        -- silently, and with datcheck still reporting 10 of 10. The check is the
+        cheapest one available and it is an equality the artifact can refute: the
+        descriptor's own count word, re-read from disk right now, against the
+        count this object thinks it has. A check that cannot fail is not a check;
+        this one fails on exactly the mistake it was written for.
         """
+        self.fh.seek(self.ar.mft_offset)
+        head = self.fh.read(ENTRY_SIZE)
+        on_disk = struct.unpack_from("<I", head, MFT_HDR_COUNT)[0]
+        if on_disk != self.ar.entry_count:
+            raise SystemExit(
+                f"refusing to compute the MFT self-crc from a stale view of the "
+                f"table.\n"
+                f"  this Writer was opened when the table held "
+                f"{self.ar.entry_count} entries\n"
+                f"  the descriptor on disk now says {on_disk}\n"
+                f"The crc would be computed over "
+                f"{self.ar.entry_count * ENTRY_SIZE} bytes instead of "
+                f"{on_disk * ENTRY_SIZE}, and the archive would fail its own "
+                f"self-checksum while this printed a confident before/after. "
+                f"Call Writer.resync() after growing the table.")
         mft = self.read_mft()
         want = mft_self_crc(mft, self.ar.entry_count)
         have = struct.unpack_from("<I", mft, SELF_ROW_START + ENTRY_CRC)[0]
@@ -637,8 +715,7 @@ def revert(journal_path, force=False):
     # See Journal's docstring: the client moves the MFT, and a stale MFT edit
     # replayed at its old address is a silent no-op that still verifies.
     was = doc.get("mft_offset")
-    with Archive(path) as ar:
-        now = ar.mft_offset
+    now = mft_offset_of(path)          # header only -- see mft_offset_of
     if was is None:
         print(f"WARNING: this journal predates MFT-offset recording. If it "
               f"contains MFT edits and the table has moved since, reverting "
