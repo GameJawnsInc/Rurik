@@ -1240,6 +1240,111 @@ extent.
 The id space is not a constraint: 171,025 pairs occupy a range spanning
 `0 .. 2,147,870,504`, and unused ids start at **4**.
 
+### What an insert actually costs, applied — `toolkit/mapdata/datalloc.py`
+
+2026-08-15. The planner's seven edits are now a verb. Three things it corrects
+about the plan, each of which looks like a smaller version of the operation and
+is not.
+
+**A map is two rows, and the planner plans one.** `alloc.nextStream` at entry
+`+0x10` holds a ROW INDEX and chains a Bloated head (`flags` 259) to a Stripped
+partner (`flags` 1). `plan_insert` emits no such field — a grep of the module
+finds no write to `+0x10` — and called twice it returns the SAME row index both
+times, because neither call knows about the other. MEASURED on `dat_study`: the
+file-id table names 349 map heads and **zero** partners, so a writer must
+register the head and must not register the partner.
+
+**A file id is not optional.** `plan_insert(file_id=None)` is the default and
+prints "no file id requested; skipping the file-id table edit". The client's
+open-time reconcile at `0x0047B7D7` → `0x0047BE50` runs **unconditionally** —
+it is not gated by the dirty flag — and for a `USED|FIRST_STREAM` row at index
+≥ 16 with no file-id record it logs `Entry %u exists in mft but not directory`,
+**frees the extent and memsets the 24 bytes**. That plan produces a file that
+works exactly once. `datcheck` rule 7 already refuses it; `datalloc` refuses it
+earlier, at plan time.
+
+**The MFT's headroom is its own last block and nothing more.** The gap measure
+says the live 38833 archive has 4,266,920 bytes above the table. The honest
+figure is **424**, and it is exactly `-mft_size % 512` in every copy measured:
+48 B (2 rows) on the `dat_study` family, 216 and 416 on the 38797 pair, 424
+(17 rows) on both 38833 copies. The next block is a container generation the
+client rotates onto, or — on live 38833, where the table's reservation ends at
+**exactly EOF** — the end of the file. Seventeen rows is eight authored maps.
+Growing past it is refused rather than costed: the journal stores each range's
+previous bytes, bytes past EOF have none, so undoing a growth means a truncation
+the format cannot express.
+
+**Three defects found in the existing tree while building it**, all present and
+none hypothetical:
+
+- **`datplan.free_rows` called a live map head a free slot.** It tested
+  `size == 0` alone, and `rebloat --arm` zeroes a head DELIBERATELY so the client
+  recompiles from the partner. MEASURED on `vault/dat_c2/Gw.dat`, where an arm
+  has actually happened: it returned `[71496]` — map 143's head, flags 0x0103,
+  USED, `nextStream` 71497. `plan_insert` prefers `erased[0]`, so the next insert
+  there takes a live map's head row, orphans its partner, and leaves file id
+  0x287D3 pointing at somebody else's payload. **No checksum covers it**: all
+  three crc rules hold across the swap, and `datcheck` rule 6 skips size-0 rows
+  because they own no extent. It now tests the USED flag, which is the question
+  `LoadMft`'s own spare stack asks.
+- **`Writer.fix_mft_self_crc` was wrong for any table that grew.** `Writer`
+  snapshots its `Archive` in `__init__` and never refreshes it, so `read_mft()`
+  sized its read from the stale `mft_size` and the crc was computed over the
+  PRE-GROWTH extent — written into row 3, with a confident before/after printed.
+  `datcheck --preflight` still returns 10 of 10, because **datcheck does not
+  check the self-crc at all**; only `datwrite --verify` does, and that is a
+  separate command. Fixed with `Writer.resync()`, plus a guard that refuses on a
+  stale view rather than computing the wrong number.
+- **The recovery path could not open a torn archive.** `Archive.__init__` raises
+  when `entry_count * 24 != mft_size` (`archive.py:320`), and that inequality is
+  exactly the state the two unavoidable 4-byte writes pass through — there is no
+  ordering that makes them one. `revert()` constructed an `Archive` purely to
+  read `mft_offset`, so the undo tool refused the one state it exists for.
+  `datwrite.mft_offset_of` now reads sixteen bytes of the file header instead.
+
+**PROVEN END TO END ON THE REAL ARCHIVE**, not only on the 14 KB fixture the test
+builds. 2026-08-15, on a throwaway copy of
+`vault/run-live/2026-08-13_64fae3b1369b/Gw.dat` — 4,200,829,952 bytes, 177,753
+rows, a 4.2 MB MFT, sha256 `65f35e8f5253b394`:
+
+| Step | Result |
+|---|---|
+| allocate a map at file id `0x5F0B0` | rows **177753** (head, `flags 0x0103`, `nextStream 177754`, size 0) and **177754** (partner, 10,714 B at `0x4C18A00`) |
+| MFT growth | count 177,753 → 177,755; size 4,266,072 → 4,266,120; slack 424 → **376** |
+| file-id table | 1,369,664 → 1,369,672 B; last pair `(0x5F0B0, 177753)`; spare 448 → **440** |
+| `datwrite --verify` | header crc and MFT self-crc both PASS |
+| `--check-rows 177754 2` | both PASS — the payload and the grown table |
+| `datcheck --preflight` | **10 of 10 clear**, and rule 7 reads **0 orphans of 132,798** USED\|FIRST rows, one more than before: our head is counted and is named |
+| overlap sweep | 0 overlapping pairs over 177,741 live rows |
+| `datwrite --revert` | 10 ranges restored; **sha256 byte-identical to the original**; preflight 10 of 10 again |
+
+The file length never changed. Every figure the plan predicted from the 38833
+measurements — the payload address, the id-pair offset `0xF9C32840`, the 424 → 376
+slack — came out exactly as planned.
+
+**A fourth defect, in the new code, found by the test written for it.** The
+first `alloc()` wrote every MFT row in one pass and its docstring called that
+step invisible — true only of APPENDED rows. A REUSED spare is already inside the
+declared table, so writing it publishes the row THAT INSTANT, and the file-id
+record did not go live until four writes later. That put a USED|FIRST_STREAM
+head with no record on disk, fsynced — exactly the shape the reconcile frees and
+memsets — and, when the head was reused and its partner appended, published a
+head whose `nextStream` pointed past the declared count while the loader asserts
+`nextStream < count`. The order now publishes the **id record first and reused
+rows last**, which trades a transient *dangling record* (the client drops a name)
+for the *orphan row* it replaces (the client frees the bytes). `test_datalloc.py`
+§11 replays every prefix of the write out of the journal and asserts neither
+state can exist; it reported three FAILs against code that was green on every
+other check in the file, which is the argument for prefix-replay as a technique
+rather than for this fix.
+
+**Still UNVERIFIED, and it is the same sentence `datmove` carried before
+FINDINGS 39: no client has ever read a row this verb allocated.** Everything
+above is about the archive's own rules — the three crc rules, 512-byte
+alignment, whole-block reservations, non-overlapping extents, the ten open-time
+rules, and the reconcile pass. Whether the retail client accepts an MFT row WE
+appended is one caged run away and has not been made.
+
 ### The three icon fields, across all 3,443 rows
 
 | Field | Non-zero | Distinct | Range |
