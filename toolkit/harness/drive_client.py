@@ -189,9 +189,13 @@ def _why(want, pick, others):
     return why
 
 
-def newest_run_exe(build=None):
-    """Back-compatible thin wrapper: just the path, or None. See select_run_exe."""
-    return select_run_exe(build)[0]
+# `newest_run_exe()` USED TO LIVE HERE and is deliberately not kept as a
+# wrapper. It no longer returns the newest anything -- selection is by build and
+# by name now -- so the name would be a false statement about what the function
+# does, in a module whose whole subject is which binary gets launched. That is a
+# worse trap than a missing function: a caller reading `newest_run_exe()` would
+# believe it. Nothing in the tree called it once both call sites moved to
+# `select_run_exe`, which returns the reason as well as the path.
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 VK_RETURN = 0x0D
