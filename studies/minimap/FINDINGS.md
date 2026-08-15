@@ -299,13 +299,15 @@ The customarea arc is the only direct visual evidence of the minimap on a map th
 - **§22's "square" is a load-overlay artefact — CONFIRMED.** The two frames were located and opened: `vault/captures/harness/20260811T142319/final.png` and `.../20260811T142431/final.png` (both `map_id=148`, neither `report.json` has a `"walk"` key, matching §22's "both of our runs"). Both show the "Ascalon City" loading crossfade frozen at 100% with the world rendered underneath, and the **round** compass dial mostly hidden behind the red loading-curtain art, leaving a small square-ish sliver. It is the ordinary compass cropped by a still-compositing overlay, not a differently-shaped widget. — OBSERVED.
 - **§23's "featureless brown disc" is the client's NULL-image FALLBACK — the tiled surface §3.4 describes — and it is POSITIVELY IDENTIFIED.** `CompassMap`'s constructor loads the `File.cpp` pair `{0x24C0, 0x0100}` at `0xBA0368` (`0x008C1C96 push 0xba0368; call 0x679a90`), which is **archive file id 9153, row 8359, a 64×64 DXT1 ATEX with 7 levels** — present and identical in `dat_study` and in both run archives. `0x008C1E00` tiles it with an AND mask (`[edi+0x90]-1`), which is why the constructor power-of-two-checks the loaded dims. The frame is `vault/captures/harness/20260811T161925/hold007.png`. — OBSERVED.
 
+**THE "ART IS MISSING" EXPLANATION WAS REFUTED HERE ON A PREDICATE THAT DOES NOT MODEL THE CLIENT, AND RUNG S13 HAS NOW REINSTATED IT IN A PRECISE FORM — see §6e.** The paragraph below is true as written and answers the wrong question: the tiles are **present as rows** and are **not addressable by the plain id the client asks for**, because in every one of these archives they carry bit 31. `file_id_table()` registers both forms and so answers "present"; the client's exact 32-bit compare returns nothing. **22 of 492 tiles — 18 of them in world 1, which is maps 143, 146 and 148 — were unaddressable in exactly the archives every fallback frame came from.** Original text, retained because its row/id data is correct and is what §6e builds on:
+
 The **"art is missing" explanation is REFUTED** (deep dive A, re-verified by rung S5 against the archive the client actually opened): every continent chunk each `maps.toml` map needs is present (148 2/2, 146 2/2, 143 4/4, 144 2/2, 449 1/1, 194 2/2), and `vault/run/2026-07-29_221c13772c7a-c2/Gw.dat` — the copy those sessions played from — holds all four of map 148's tiles (file ids 116848/116850/116854/116856, rows 44717/44718/44720/44721, every one a 512×512 `ATEX`) **and** the fallback tile 9153.
 
 **The "small featureless corner of a large borrowed footprint" hypothesis is REFUTED as the explanation for what we have actually seen.** *This paragraph used to carry it as the live RECONSTRUCTION.* Rung S5 measured six compass frames across three maps and four sessions and **every one is the fallback tile, not any crop of the atlas** — including frames from **retail map 148**, where nothing is borrowed and nothing is authored. The metric is chromatic ratio `χ = (R−G)/(G−B)`, which survives the compass's `out = a·src + (1−a)·neutral` composite because both differences scale by `a` and the neutral cancels: the six discs sit at **+1.081 … +1.110** (spread 0.029), file 9153 level 0 at **+1.164**, and the four candidate atlas crops at medians **−1.718 (449), −1.414 (144), +0.196 (143), +0.286 (148)** — with **0 of 7,948** 93×93 windows over all four crops falling inside the compass band. Three further controls: two sessions 45 minutes apart give the same disc to **0.08/255**; a ±12 px translation search on frames the player demonstrably walked between finds its best at **(0, 0)**; and a 0-355° rotation search finds its best at **0°** while the compass *bezel* visibly rotates. A ground image that does not translate with the player and does not rotate with the bezel is not being sampled in world space. — OBSERVED.
 
 **A metric that FAILED, kept as a negative.** A normalised-texture template match (z-score both patches, slide a window, take min mean |Δ|) does **not** discriminate and points the wrong way — 0.984 for the fallback against 0.688-0.774 for the atlas crops. Two defects, both in the metric: z-scoring normalises away the one channel carrying the signal, and the search spaces are wildly asymmetric (a few hundred fallback candidates against tens of thousands of atlas windows, so the atlas wins by having more chances). This is exactly the "a blurry brown circle matches anything" hazard, and it is why the surviving metric is a **band with a full-population null** rather than a best-fit score.
 
-**ANSWERED 2026-08-14 by rung C1 — §6d. The question below expired rather than being solved: on build 38833 against its own archive generation the compass draws the atlas crop on retail map 148 (χ +0.250..+0.279 against the crop's predicted +0.286, with the old fallback frames re-measured at +1.154..+1.160 by the same code as the control).** The whole-disc fallback is **not** a property of our server. Everything from here to the end of this section is the record of the hypotheses that were killed while the premise still held — it remains correct as static analysis and is retained for that, but **do not read it as describing current behaviour.**
+**ANSWERED TWICE, 2026-08-14. Rung C1 (§6d) showed the compass DOES draw the atlas; rung S13 (§6e) then found WHY it had not: in every archive these fallback frames came from, 22 of the 492 atlas tiles — 18 in world 1, the world of maps 143/146/148 — carry bit 31, so the plain id the client's tile table holds does not bind and the lookup returns NULL. Read §6e before anything below. The question below expired rather than being solved: on build 38833 against its own archive generation the compass draws the atlas crop on retail map 148 (χ +0.250..+0.279 against the crop's predicted +0.286, with the old fallback frames re-measured at +1.154..+1.160 by the same code as the control).** The whole-disc fallback is **not** a property of our server. Everything from here to the end of this section is the record of the hypotheses that were killed while the premise still held — it remains correct as static analysis and is retained for that, but **do not read it as describing current behaviour.**
 
 *The question, as it stood:* **the open question is no longer "what does the crop look like" — it is "why is the compass image NULL under our server, even on a retail map whose tiles are present?"** Still **NOT FOUND** — but the room is much smaller as of 2026-08-14, because **rung S9 ran two agents, one per hypothesis, each told to refute its own, and BOTH SUCCEEDED.** *This section used to carry those two as the live pair with an experiment to separate them; neither survives, and the experiment it named cannot fire.*
 
@@ -542,6 +544,63 @@ The fix is not to change `file_id_table()` — its convenience is load-bearing e
 - **H3b is untouched.** It was always about authored maps, and this run was retail 148.
 
 **Artefacts:** `vault/captures/harness/20260814T225013/` (five `hold*.png`, `final.png`, `report.json`, three server logs); the failed 38797 arm at `vault/captures/harness/20260814T224512/`. Both are loopback, synthetic credential, `origin = ours`.
+
+---
+
+## 6e. WHY it was NULL: 22 of the 492 atlas tiles were not addressable by the id the client asks for (rung S13, 2026-08-14, static)
+
+**The cause is found, it is one sentence, and it is the same defect three times over: in the archives every fallback session played from, map 148's world-map tiles carry bit 31 — the "replacement pending" rename — so the PLAIN id the client's own tile table holds does not bind, the exact 32-bit lookup misses, `ConstWorldMapGetChunkFile` returns NULL, and `0x008C1E00` tiles the fallback over the whole disc.** — OBSERVED, measured on the raw id table of five archives.
+
+| tile (map 148, world 1) | `run/38797` plain | armed form | `run/38833` plain |
+|---|---|---|---|
+| 116848 | **absent** | `0x8001C870` → row 44717 | row 44716 |
+| 116850 | **absent** | `0x8001C872` → row 44718 | row 44717 |
+| 116854 | **absent** | `0x8001C876` → row 44720 | row 44718 |
+| 116856 | **absent** | `0x8001C878` → row 44721 | row 44720 |
+
+Identical in `dat_study`, `run/…-c2` and `run/reskin-roster`. **The client does not mask** (`0x0047AA20`, exact 32-bit compare, no retry — `archive.py`'s own docstring), so all four miss.
+
+**Scope, over the whole atlas** (`vault/exports/worldmap/atlas-38797.json`, 492 tiles, joined to each archive's raw table):
+
+| archive | tiles the client can address | misses | misses by world |
+|---|---|---|---|
+| `run/2026-07-29…` (every fallback session) | **470 / 492** | **22** | **world 1: 18, world 0: 4** |
+| `run/2026-08-13…` (the atlas session) | **492 / 492** | **0** | — |
+
+**And that is exactly the right 22.** Map 148 is **world 1** (§7, rung S4), and so are 143 and 146 — the three maps §6's fallback corpus was drawn from. Every frame in that corpus is a world-1 map, and world 1 is precisely where 18 tiles were unaddressable. Kamadan (449, world 4) was never served, so the one continent that would have drawn normally never got the chance. The premise "the compass never draws the atlas under our server" was a survey of a single broken continent.
+
+### 6e.1 The measurement S9 got wrong, and why it could not have caught this
+
+§6 states, and this document has repeated it as OBSERVED: *"all four of map 148's tiles present in the archive the client opened"* and *"484 of 484 resolvable atlas tiles are `ATEX`/`DXT1` on four archives … byte-identical across all four."* **Both are true and both are irrelevant, because they were resolved through `archive.file_id_table()`** — the helper that *deliberately* registers a bit-31 id under **both** its raw and its masked form. Asked for tile 116848 against the old archive it answers **row 44717**; the client asked the same question and got nothing.
+
+The rows were always there. They were never **addressable by the id the client uses**. Presence was the wrong predicate, and the tool that answered it is documented as not being a model of the client — in the same file, in the docstring above the code that does it.
+
+**This is the third thing the same helper has hidden, and the three should be read together:**
+
+1. `content/maps.toml`'s map **file** id — caught 2026-08-14 by the crossbuild arc, which is why the row now reads `0x1B97D`.
+2. **`toolkit/contentids.py`** — cleared the 38797 pair that then died at Code=007 (§6d.3). Still UNFIXED.
+3. **This** — rung S9's tile-presence check, and through it the whole arc's leading question, which cost S9, S12, C1 and S13 to unwind.
+
+**The fix is the same one in all three places: ask the raw table whether the id binds *in the form it is sent*.** A `file_id_table(raw=True)` or a `binds_plainly(archive, file_id)` helper would have made each of these a one-line check.
+
+### 6e.2 What this does to the three named hypotheses, and to S9's H2
+
+**S13's prediction was that the archive generation is the cause — CORRECT. The mechanism it proposed for that was the map file's rect, and that is REFUTED.** Both halves matter:
+
+- **The map file is NOT it.** Row 7982 and row 177262 decompress to 2,925,270 and 2,925,267 bytes; the **height field is byte-identical** (sha256 `f9bd7848…` both); `MAP_PARAMS 0x2000000C` is 41 bytes in both with **the first 25 — the whole rect — byte-identical**, differing only in a trailing 16-byte version-4 GUID; `0x20000008` differs by **one** byte; `0x20000002` by 670 of 1,735,664 in one contiguous tail span. Grid 416×512 and rect `(−18432, −24576, 21504, 24576)` in **both**. The latch had the same input all along.
+- **The client build is NOT it.** All twelve `CompassMap.cpp` asserts are identical in 38797 and 38833 — same lines (164, 165, 288–291, 381–384, 401, 472), same expressions — and every one is displaced by **exactly +0xA0**. Comparing instruction streams under that displacement: the constructor, the crop, the surface-init latch and the fallback tiler all have **identical instruction counts and ZERO mnemonic mismatches**; the operand-only differences are relocated branch targets. The compass's data is identical too — the footprint table base `0x0096DE38`, `s_worldData`, the chunk-tile table head and world 1's tile array head are all **byte-identical** between builds.
+- **The map-type byte is NOT it.** Map 148's `FOOTPRINT_A` and `FOOTPRINT_B` are the same rect `(768, 512, 1184, 1024)`, and a run with `--explorable` forced (the flag the old fallback sessions used) **still drew the atlas** — see §6e.3.
+- **S9's hypothesis 2 was right in substance and refuted for the wrong reason.** It said "the texture load fails" and was killed on the argument that the fallback tile was loaded *by the same loader, from the same archive, on the same frame*. That argument is sound and the conclusion was still wrong, because the failure is **upstream of the loader**: the lookup never yields a row to load. S9 named the residual as "a size- or id-dependent refusal … UNDECIDABLE STATICALLY". It was **id-dependent**, and it was **decidable statically** — by reading the raw table instead of the helper.
+
+### 6e.3 A second, smaller result the control run produced: the ground layer arrives LATE
+
+The `--explorable` run was scored on three frames and they are not all alike: `final.png`, taken at the map verdict (~t+10 s), reads **χ +1.182 — the fallback band**; `hold001` (~t+18 s) **+0.403**; `hold002` (~t+26 s) **+0.250 — the atlas**. The first atlas run shows the same shape more weakly (`hold001` +0.279, then +0.250 flat).
+
+**So the compass draws the fallback first and converges to the atlas once the tile load completes** — mechanism UNVERIFIED, but the ordering is OBSERVED on two runs. Consequences: a single early frame is **not** evidence of a NULL image, and §22's "small square minimap" plus any frame caught near the load overlay should be re-read with that in mind. Sampling must be late, and a run that reports one frame reports nothing. *(This does not rescue the old corpus: `20260813T222031` holds **8** frames at a flat +1.154 over the whole hold, and its tiles were unaddressable the entire time.)*
+
+### 6e.4 The one thing that is still open
+
+**Why those 22 rows were replacement-armed in the owner's archives is NOT FOUND**, and it is an ArenaNet-side question about how `FcArchive` requests and `DnArchive` installs replacements — not something our server does. What matters operationally is settled: **an archive with armed atlas rows draws a fallback compass on every map of the affected world, and no amount of server-side work changes it.** The check is one line and belongs in the pre-flight.
 
 ---
 

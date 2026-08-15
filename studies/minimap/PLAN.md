@@ -200,7 +200,27 @@ The control is what makes it evidence: the sampler reproduces the fallback band 
 
 ---
 
-### S13. Which of the three changes un-NULLed the compass? — **NEW 2026-08-14, opened by C1**
+### S13. Which of the three changes un-NULLed the compass? — **DONE 2026-08-14, same day it was opened. FINDINGS §6e. The attribution was right and the mechanism was wrong.**
+
+**Outcome — the cause is the ARCHIVE, via the ATLAS TILE ROWS rather than the map file.** In every archive the fallback sessions played from, map 148's world-map tiles carry bit 31 (replacement pending), so the **plain** id the client's own tile table holds does not bind; the client's exact 32-bit compare misses, the tile getter returns NULL, and the fallback is tiled over the whole disc. Over the full atlas: **470 of 492 tiles addressable in `run/38797`, 22 missing — 18 in world 1 and 4 in world 0 — against 492 of 492 in `run/38833`.** Maps 143, 146 and 148 are all **world 1**, and they are the entire fallback corpus. The premise was a survey of one broken continent.
+
+**Every clause of the rung's own prediction was tested and three of the four died:**
+- **map file — REFUTED.** Height field byte-identical (sha256 `f9bd7848…`), `MAP_PARAMS`'s first 25 bytes (the whole rect) identical, differing only in a trailing v4 GUID; grid 416×512 and the same rect in both. The latch always had the same input.
+- **client build — REFUTED.** All 12 `CompassMap.cpp` asserts identical, uniformly displaced +0xA0; instruction streams for the ctor, crop, latch and fallback tiler have identical counts and **zero** mnemonic mismatches; the footprint table, `s_worldData` and the tile arrays are byte-identical.
+- **map-type byte — REFUTED** (not in the original prediction, added when the first two died). `FOOTPRINT_A == FOOTPRINT_B` for map 148, and a `--explorable` run **still drew the atlas**.
+- **archive generation — CONFIRMED**, by the tile rows.
+
+**The refutation clause did NOT fire**: no 38833 client drew a sustained fallback and no 38797 client drew the atlas.
+
+**Two by-products:**
+- **The ground layer arrives LATE.** `final.png` at the map verdict reads χ **+1.182** (fallback band) and converges to **+0.250** by ~t+26 s. A single early frame is not evidence of a NULL image. *(It does not rescue the old corpus — 8 flat frames at +1.154 there.)*
+- **`file_id_table()` has now hidden the same class of failure three times**: the map file id (caught by crossbuild), `contentids.py` (§6d.3, UNFIXED), and rung S9's tile-presence check — which cost S9, S12, C1 and S13 to unwind. **The fix is one predicate: does the id bind in the form it is sent?**
+
+**Still NOT FOUND:** why those 22 rows were replacement-armed in the owner's archives. That is an ArenaNet-side `FcArchive`/`DnArchive` question, not a server one.
+
+---
+
+### S13-old. The rung as written, kept for the record
 **Prediction:** the archive generation is the cause — the compass ground layer is drawn from the client's own archive, and map 148's file genuinely changed (row 7982, 1,300,036 B, crc `0xA0AE500A` → row 177262, 1,300,044 B, crc `0x33F1A289`). The client build is the weakest candidate, because §6's static model has no build-dependent step in the crop path. **Refutation:** if a 38833 client can be made to draw the fallback, or a 38797 client the atlas, the archive reading is wrong.
 **Procedure, cheapest first, and the first leg is STATIC and free:** diff the two map files' chunk tables with `mapexport.py` — if the new file's rect or grid differs from `416 × 512 / (−18432, −24576, 21504, 24576)`, the latch changes and the mechanism is named without a run. Only then consider runs; note the id form is **not** freely variable (each archive binds exactly one form), so client-build and archive-generation cannot be fully crossed — say so rather than pretending to a 2×2.
 **Cost:** ~1 h static, then optional runs. **Do the static leg before spending a go-ahead.**
