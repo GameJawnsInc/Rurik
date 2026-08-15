@@ -317,7 +317,20 @@ Also read `[+0x60..0x6c]` (the raw map rect) in the same pass — it is four dwo
 **Procedure:** two probe-free harness runs per arm; strip-score against the pre-flip idle window; register a `probes.py` step so the flip is timestamped in the capture.
 **Cost:** ~4 runs. **Turns FINDINGS §3.3 from a disassembly reading into an OBSERVED fact — the answer to the brief's "do we hold the lever" question.** It does not make our map look right; it proves we hold the lever. (Note: map 143's A == B, so a live-retail row must be borrowed for the positive arm — the `maps.toml` map.144 caution about unknown live rows applies.)
 
-### C4. Targeted opcode probes with screen readout — **PARTLY DONE 2026-08-15. FINDINGS §6f.**
+### C4. Targeted opcode probes with screen readout — **DONE 2026-08-15. TIER 2 IS COMPLETE. FINDINGS §6f.**
+
+**Five arms, four probes, and the two that closed last are a matched null/positive pair.**
+
+- **`0x008C` UNFOGS — OBSERVED.** Marking a block the init payload left CLEAR (26, 22) changes **1,059** world-map pixels in one compact 88×101 box, visibly lifting the fog; marking a block it had ALREADY SET (30, 24) changes **0 of 2,013,440**. Same probe, one coordinate different. So the mark works, is confined to the blocks it names, and re-marking a set block is a **no-op rather than a refusal** — which is why the first isolation attempt returned byte-identical and was not evidence about the opcode.
+- **Which blocks are clear is COMPUTABLE.** Decoding the replayed payload's bands consumes exactly its declared 38 bytes, reproducing rung S8 outside S8's tooling; 68 of map 148's footprint blocks are clear. Both coordinates live in `probes.py` with the derivation. *(The tail parse is 20 bits short of the band's 1,024 — do not trust blocks near a band's end from it.)*
+- **`0x008D` is the predicted NULL — MET.** Compass byte-static across the entire run (green 23 / red 441 / pale 62 on every frame), the same zero-variance baseline the draw arm used.
+- **`0x0049` is HALF REFUTED.** The quest registers — a **"?" icon** appears under the level bar, 23.8 % of that slot differing from a run without it — but **no green starburst on the compass**. Why is NOT FOUND: field semantics, a tracked-quest requirement and a world-map-only marker are all live.
+
+**Still open after C4:** the per-map explorable mask (`0x0070A120` → `0x00721D00`) is unread, so `0x008C` is proven on **retail** map 148 and not on our own authored geometry.
+
+---
+
+### C4-partial. The first pass, superseded above (2026-08-15)
 
 **Three results, and the biggest was not the one this rung asked for.** A new probe (`probes.py`, `compass_draw`) sent five messages on build 38833, map 148, loopback and caged, every payload hexdump-verified before the run.
 

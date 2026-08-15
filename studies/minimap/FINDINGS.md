@@ -700,12 +700,31 @@ So the difference between "world map opens" and "world map asserts" is **exactly
 
 The compass drew its atlas crop normally in **both** runs, including the control whose `mapDims` was zero and whose world map could not open. So `CompassMap`'s blit does not consult the exploration bitmap, matching the static reading (`CompassMarker` tests the bits, `CompassMap`'s blit does not, `GmMapView` does). — OBSERVED.
 
-### 6f.4 What C4 did NOT measure, stated rather than glossed
+### 6f.4 `0x008C` UNFOGS — and the null that preceded it is what makes it a measurement — OBSERVED
 
-- **The `0x008C` mark's own contribution is UNMEASURED.** The probe sent init *and* mark, and the init payload is real explored data from a live session, so the revealed region is most likely the **init's**, not our 3×3-block mark's. Separating them needs an init-only arm; the mark was sent and did not crash, and that is all this run supports.
-- **`0x008D` was not sent.** PLAN C4 names it as the null control ("draws nothing, static catalogue") and this probe omits it.
-- **`0x0049` (QUEST_ADD) was not sent** — the quest-marker arm is untouched.
-- **The per-map explorable mask** (`0x0070A120` → `0x00721D00`) is still unread, so whether `0x008C` can unfog on *our own* authored geometry is still NOT FOUND. Map 148 is retail.
+**The mark works, and the first attempt at it measured nothing for a reason worth keeping.** Two runs, identical but for one coordinate, each diffed against an init-only run of the same probe pair:
+
+| mark at continent block | world-map pixels differing >25 | region |
+|---|---|---|
+| **(30, 24)** — a block the init payload ALREADY SET | **0** of 2,013,440 | — |
+| **(26, 22)** — a block the init payload left CLEAR | **1,059** of 2,013,440 (0.053%) | one compact **88 × 101 px** box, worst channel delta 70 |
+
+The revealed patch is visibly unfogged: blurred haze before, sharp terrain with a winding watercourse after. So `0x008C` reveals on our own server, its effect is confined to the blocks it names, and **writing a block that is already set is a genuine no-op rather than a refusal** — which is why the first isolation run came back byte-identical and why that result was not evidence about the opcode at all.
+
+**Which block is clear is COMPUTABLE, and that is the reusable half.** Decoding the replayed payload's bands — u16 length per 16-row band, `0xFF`-continuation runs of alternating colour — consumes **exactly its declared 38 bytes**, independently reproducing rung S8 outside S8's own tooling. Band 1 (rows 16–31) is the only non-empty one, and of map 148's footprint blocks (x 24..36, y 16..31) **68 are clear**. `probes.py` carries both coordinates with the derivation, so the null and the positive stay one experiment with one variable. *(The decode yields 1,004 of the band's 1,024 bits — 20 short — so the run parse is not perfect at the tail and blocks near the band's end should not be trusted from it. The two blocks used here sit well inside the decoded range, and the client's own behaviour corroborated both.)*
+
+### 6f.5 `0x008D` is the predicted null; `0x0049` registers a quest but draws NO compass marker
+
+Both sent in one run, control first so a clean frame precedes the test.
+
+- **`0x008D` — NULL, prediction MET.** The compass is unchanged: green 23, red 441, pale 62 on **every frame from t=3 s to t=31 s**, the same zero-variance baseline §6f.1 established. It writes its 40-byte record and posts `0x10000091`, and nothing draws.
+- **`0x0049` (QUEST_ADD) — PARTIAL, and the prediction is HALF REFUTED.** PLAN C4 predicted "a green starburst on the compass **and** a quest-log entry". The log entry arrives: a **"?" quest icon** appears under the level bar, **23.8 %** of that icon slot differing from a run without the message (side-by-side: icon present vs bare background), the "?" being the empty name string we deliberately sent. **The compass starburst does not** — the disc is byte-static across the whole run. So the message is accepted and registers a quest; what it does not do is mark the compass, at least with a vec2 at the player's own position in absolute world units and both `word` fields set to the map id. Which field gates the marker, whether it needs the quest to be *tracked*, and whether the marker is world-map-only are all **NOT FOUND**. — OBSERVED.
+
+### 6f.6 What C4 did NOT measure, stated rather than glossed
+
+- ~~**The `0x008C` mark's own contribution is UNMEASURED**~~, ~~**`0x008D` was not sent**~~, ~~**`0x0049` was not sent**~~ — **all three CLOSED the same day by §6f.4 and §6f.5.**
+- **The per-map explorable mask** (`0x0070A120` → `0x00721D00`) is still unread, so whether `0x008C` can unfog on *our own* authored geometry is still NOT FOUND. Map 148 is retail, and §6f.4 only shows the mark working **there**.
+- **Why `0x0049` draws no compass marker is NOT FOUND** — field semantics, a tracked-quest requirement and a world-map-only marker are all live, and the run distinguishes none of them.
 - **A measurement failure worth recording as a harness fact:** `--shots` only fires during the `--keep-open` hold, and the hold begins *after* the `--actions` script finishes. A first attempt with `--actions "0:play 45:key:M"` put its earliest frame at t=46.9 s while the draw steps fired at t≈20–39 s, so arm A was invisible for a reason that had nothing to do with the opcodes. Sample the window you are testing.
 
 ---
