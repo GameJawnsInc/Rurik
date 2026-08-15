@@ -20,7 +20,13 @@ SAFETY, because this one can destroy 4 GB of somebody's game:
     and after every arm. test_datcrc.py asserts the same rules against the
     corpus; this checks one archive right now.
   - Nothing here relocates, resizes, or allocates. Same length, same offset,
-    same row. Growing the archive is a different tool and a much later problem.
+    same row. Both of the other two verbs are separate tools that build on this
+    one's `Writer` and `Journal`: `datmove.py` relocates a row, and since
+    2026-08-15 `datalloc.py` creates rows that did not exist and registers them
+    in the file-id table. This sentence used to end "a much later problem",
+    which stayed true for nine days after it stopped being true of the project.
+    Neither of them grows the FILE, which remains unsupported and, because the
+    journal has no way to express a truncation, unrevertible if it were.
 
 THE THREE CHECKSUM RULES, all MEASURED (see test_datcrc.py):
 
