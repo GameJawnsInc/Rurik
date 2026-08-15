@@ -218,8 +218,18 @@ def identify(path, build=None):
         if b.patched and digest == b.patched:
             return "patched", (f"build {name_of(b)}, OUR patched copy -- 9 bytes of "
                                f".text differ from the shipped client")
-    return "unknown", (f"the size of build {name_of(sized[0])} but sha256 "
-                       f"{digest[:16]}..., which is neither copy we hold")
+    # NAMES EVERY same-size candidate, not `sized[0]`. This said "the size of
+    # build {sized[0]}" until 2026-08-14, which was unambiguous only while size
+    # was a discriminator -- and 38833 ships at 10,483,904 bytes, exactly 38797's
+    # length (see the BUILDS comment above). MEASURED that day: the patched 38833
+    # run directory identified as "the size of build 38797 but sha256 e06ada3b...",
+    # pointing a reader diagnosing it at the wrong build entirely. The loop above
+    # already considers every candidate; only the refusal message did not.
+    which = " or ".join(name_of(b) for b in sized)
+    plural = "s" if len(sized) > 1 else ""
+    return "unknown", (f"the size of build{plural} {which} but sha256 "
+                       f"{digest[:16]}..., which is no copy we hold of "
+                       f"{'either' if len(sized) > 1 else 'it'}")
 
 
 def find(build=None, *, verify=True, allow_live=False):

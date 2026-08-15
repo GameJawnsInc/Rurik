@@ -125,9 +125,62 @@ python toolkit/run_suite.py
 
 One process per file, discovered from **the disk** rather than from any document, and
 `rc == 0` with no `ALL CHECKS PASSED` banner is reported `SUSPECT` rather than laundered
-into a pass. `--only <substring>` filters, `--list` enumerates and stops. Baseline
-2026-08-14: **85 green / 0 red / 0 suspect of 85, 4,161 checks, ~40 minutes.** Budget
-for that wall clock — `test_modelexport` alone is ~9 minutes and `test_scrub` ~5.
+into a pass. `--only <substring>` filters, `--list` enumerates and stops.
+
+**It runs eight files at a time, longest-first.** Baseline 2026-08-14, measured over
+the 94 files on disk that day (96 now, after the terrain-variation arc landed):
+**717 s wall — 12 minutes, down from 46.6 serial.** `--jobs 1` restores one-at-a-time
+and is how you check a suspected collision: a parallel run that disagrees with a serial
+one about any file's verdict is a collision, not a flake. (Measured when this landed:
+same verdicts, same 4,620 checks. The two files that differed between those runs failed
+STANDALONE too — see the drift warning below — so concurrency was not what moved them.)
+
+Two numbers to budget against, because they set the floor: `test_scrub` is **584 s** and
+`test_modelexport` **480 s**, together 38% of the serial work, so no amount of extra
+workers takes the wall clock below ~10 minutes. Half the suite — 47 files — finishes in
+83 seconds put together.
+
+### While you are working: only what your edits reach
+
+Twelve minutes is still too long after every edit, so during the loop:
+
+```bash
+python toolkit/run_suite.py --since HEAD
+```
+
+Tests reachable from your changed modules, through a real dependency graph — imports
+plus the subprocess launches an import graph cannot see. A change under `authsrv/`,
+`schema/` or `portal/` lands around **3 minutes**; a one-module change can be
+**seconds**. `--since main` covers everything the branch touched.
+
+Three behaviours worth knowing before you rely on it:
+
+- **A green partial run exits 3, never 0**, and prints how many files never ran. That
+  is deliberate: the banner protects a human reading a pasted report, the exit code
+  protects a script. **`--only` exits 3 too** — it always was a partial run, and it
+  returned 0 for as long as this runner existed. A failure still outranks it: red is
+  1 whether or not the run was scoped.
+- **A change to anything that is not `toolkit/**.py` forces the FULL suite** and says
+  which file did it. `content/*.toml`, `schema/messages.json` and `CLAUDE.md` are read
+  at run time by tests that never import them, so the graph is structurally blind to
+  those edges and refuses to guess.
+- **"0 tests selected" is not an all-clear.** Eleven modules in `toolkit/` have no test
+  reachable from them at all — `rawlisten.py`, `flagscan.py`, `admin.py` among them —
+  and a change confined to one of those exits 2 with a coverage statement.
+
+Selection cannot help `mapdata/` much, and the reason is the floor above: a change to
+one terrain decoder still pulls `test_modelexport` into the selection, so it lands at
+the same ~12 minutes. Fixing that is about the two hogs, not about the selector.
+
+**`python toolkit/run_suite.py` with no flags is the suite. Nothing else is** — that is
+the count you report, and `CLAUDE.md`'s rule is to name it.
+
+**A red suite here is not always your change.** Several tests refuse to pool captures
+from two client builds, so a capture landing in `vault/captures/authsrv|gamesrv/` from
+ANOTHER session turns `test_origin`, `test_codec` and `test_movement_fidelity` red
+without a line of code changing. That happened on 2026-08-14. Check
+`python toolkit/test_origin.py` first: if it names two build ids, the vault drifted and
+the other two are downstream of it, not of you.
 
 Individual files, when you want one answer fast:
 
