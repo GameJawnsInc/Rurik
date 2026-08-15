@@ -699,6 +699,40 @@ corroborate `trnvariation` from sites it was not built from:**
   this may be inert for our purposes or may be the second stream that varies
   the selector. UNVERIFIED, and it is the cheapest lead left.
 
+**The live read was attempted 2026-08-15 and got most of the way.** Recorded
+because the two blockers cost the session and neither is about terrain:
+
+- **A loopback run could not start at all**, and the fix is not the obvious
+  one. `contentids.preflight` refuses because maps 146/148 name `0x1B97D`,
+  which no 38797-era archive binds *plainly* — row 7982 carries the bit-31
+  spelling, a rename pending a replacement the loopback builds can never
+  install because their updater is killed. **Re-cutting from `dat_study` does
+  not fix it: `dat_study` is the stale side** (`binds_plainly` is `None` there
+  too). MFT row counts place it exactly — `C:\gw` and the build-38833 run
+  directory both hold 177,753 rows, `dat_study` 177,342, the 38797 run copy
+  177,335. The pairing that passes 10/10 is **both sides at the 38833
+  generation**: client `vault/run/2026-08-13_64fae3b1369b`, server a fresh
+  study copy cut from `C:\gw` (`vault/dat_study_38833/`, additive, nothing
+  existing touched). `contentids.py`'s own docstring already says why —
+  "**0** in the build-38833 run directory, where every pending replacement has
+  landed" — and warns that refreshing one side only is the loud-on-client,
+  silent-on-server failure.
+- **`vault/content/attributes.toml` cites `toolkit/clientscan/attribtable.py`,
+  which exists only on branch `claude/combat-end-to-end-a2242b`.** Shared vault
+  data referencing an unmerged tool makes `content.py` refuse in every other
+  tree. `deploy.py --repo-content-only` is the sanctioned way past it.
+
+With that pairing the client reached Kamadan and the probe **found the map's
+tile bytes in the live process**, so the read path works. The chunk itself was
+NOT identified: the "`+0`/`+4` are the block counts" guess came from `ebx` in
+`0x0074B440`, a DIFFERENT function, and is not the chunk's layout; and the
+bytes matched are almost certainly the file buffer rather than
+`[chunk+0x80]`. It failed loudly rather than returning a wrong array, which is
+the only good thing to say about it. **Next session: anchor on the chunk, not
+on data it points at** — walk `[ebp-0x40]` in `0x0075DD50` from its own
+caller, or breakpoint-free, find the RNG pair at `+0x2A4` adjacent to a live
+`+0x1D0` subobject.
+
 **What this costs to finish: one live read, not more static analysis.** Two
 rounds of anchored scanning have now bounded the question without answering it,
 and `toolkit/harness/keytap.py` already does cross-process `ReadProcessMemory`
