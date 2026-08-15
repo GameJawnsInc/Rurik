@@ -57,6 +57,12 @@ SEP = st.SEP
 EXPECT_PATHS = {
     "2026-04-30_b174de1f2d8d": 936,
     "2026-07-29_221c13772c7a": 937,
+    # 38833, MEASURED 2026-08-14 by running this test's own `st.source_paths`
+    # over the image: 937, zero server-side translation units, and the same two
+    # client-side `Srv`-named files. The census is unchanged across the 15-day
+    # patch, which is consistent with everything else measured about that gap
+    # (studies/crossbuild/FINDINGS.md §7.2).
+    "2026-08-13_64fae3b1369b": 937,
 }
 BUILDS = [(b.stamp, EXPECT_PATHS.get(b.stamp)) for b in pinned.BUILDS]
 
@@ -79,15 +85,19 @@ SHARED = ["Base", "Engine", "Net", "Gw" + SEP + "Const"]
 # Every string in the image containing "mock", as (encoding, text).
 MOCK_STRINGS = {("ascii", "mockDevice"), ("utf16", "mock"), ("utf16", "MockDevice")}
 
-# The floor counts a measured green run of 2026-08-11: 30 checks. That is 2 for the
+# The floor counts a measured green run of 2026-08-14: 39 checks. That is 2 for the
 # detector self-test in section 1, then 9 per vaulted build (5 census + 4 shared
-# trees) across the two builds = 18, then 5 for the srctree/asserts containment in
+# trees) across the THREE builds = 27, then 5 for the srctree/asserts containment in
 # 3b, 4 for the assert-scan blind-spot disclosure in 3c, and 1 for the -mock
 # closeout. Nothing here is optional: every fixture arrives through
 # `vaultpath.require_dir`, which raises rather than yielding an empty scan, so a run
-# that reaches the banner having done fewer than 30 checks has lost a section --
+# that reaches the banner having done fewer than 39 checks has lost a section --
 # most likely one of the per-build loops -- rather than found less data.
-LEDGER = checks.Ledger("srctree", floor=30)
+#
+# It was 30 over two builds until 2026-08-14, when 38833 was registered; the
+# per-build term is why registering a build moves this number by 9 rather than
+# by 1, and re-deriving it here beats bumping the constant.
+LEDGER = checks.Ledger("srctree", floor=39)
 check = checks.adopt(LEDGER)
 
 

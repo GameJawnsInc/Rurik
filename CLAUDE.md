@@ -62,8 +62,17 @@ of the three was 40 hours stale. `PLAN.md` §8 is the live next-actions list.
   It does not fail cleanly — it delivers a stream of garbage frames to ArenaNet's auth
   server, *after* completing a real Stage A login with whatever credential the client
   autofilled. "Patched" is the wrong word for the rule: of the four patches
-  `make_custom_client.py` applies, only the DH substitution disqualifies a client; the
-  updater kill switch and the multi-instance NOP are wanted on both configurations.
+  `make_custom_client.py` applies, only the DH substitution disqualifies a client, and
+  the multi-instance NOP is wanted on both configurations. **The updater kill switch is
+  NOT** — this sentence used to say it was, and on 2026-08-14 somebody followed
+  `RUNBOOK.md`'s setup steps literally and built a live-capture client that could not
+  stream map content. The kill switch is **wanted on the loopback build** (the cage and
+  the pre-login patcher are in direct conflict, so with the updater dead the cage never
+  has to open) and **must be OFF for the live-capture build**, which needs to fetch
+  content during a real session — `RUNBOOK.md` §"a live run writes new content into its
+  own `Gw.dat`". Build it with `--no-dh-patch --no-updater-patch --key-tap`; expect
+  `updater=LIVE` for everything under `run-live/` and `updater=killed` under `run/`,
+  and check with `python toolkit/clientpatch/dhbuild.py`.
   **Whose DH a build carries is what decides where it may point, so the vault is split
   by that and nothing else** — `client-patched/` + `run/` are ours and loopback-only,
   `client-patched-live/` + `run-live/` are ArenaNet's and live-only. Never select a

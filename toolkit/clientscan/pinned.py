@@ -104,6 +104,10 @@ Build = collections.namedtuple("Build", "stamp number size pristine patched")
 # <build>; ret`, and exactly one such getter on each build carries a five-digit
 # value. So 38519 here is derived, not guessed, and the older build finally has
 # a number. `studies/crossbuild/FINDINGS.md` §3.
+#
+# 38833 added 2026-08-14, the day it shipped. It is the FIRST build this project
+# received while the cross-build tooling existed, so it is the first
+# out-of-sample test of it -- `studies/crossbuild/FINDINGS.md` §7.
 BUILDS = (
     Build(stamp="2026-04-30_b174de1f2d8d", number=38519, size=10_404_032,
           pristine="b174de1f2d8dd4b5239e22714a96478af94ab5ad6b7bf308120562d5b49633a1",
@@ -111,12 +115,30 @@ BUILDS = (
     Build(stamp="2026-07-29_221c13772c7a", number=38797, size=10_483_904,
           pristine="221c13772c7a4fd1f3efd6769694614ed608909706d60a9d2b7190ba10119a75",
           patched="fa9563f1851014e80117195a1b66850c913433c4aba584ec6309b97e46bbf7e6"),
+    Build(stamp="2026-08-13_64fae3b1369b", number=38833, size=10_483_904,
+          pristine="64fae3b1369b9e2f6a6f0c315a95941f7e8db6b3412b9324418a293b614a13c6",
+          patched=None),
 )
 
-# The current pin. Everything below defaults to it, so a caller that does not
-# care which build it reads keeps reading the one every address in `studies/`
-# was measured against.
-PINNED = BUILDS[-1]
+# THE PIN DOES NOT FOLLOW THE NEWEST BUILD, and this line used to read
+# `BUILDS[-1]`, which would have moved it silently on 2026-08-14.
+#
+# Everything below defaults to the pin, so a caller that does not care which
+# build it reads keeps reading the one every address in `studies/` was measured
+# against -- and that is still 38797. Moving the pin is not a registration step;
+# it is a re-measurement arc, because `genericvalue.py` REFUSES to read 38833
+# (its int-main switch at 0x008129CC is restructured) and `avevents.py`'s
+# property map depends on it. Repointing the default would turn that honest
+# refusal into a wall of red in tests whose subject is not the pin at all.
+#
+# 38833 is the FIRST build where size is not a discriminator: it is byte-for-byte
+# the same LENGTH as 38797, 10,483,904. `identify()` already loops over every
+# same-size candidate rather than assuming one, so this is safe -- but a size
+# check written anywhere else is now a bug, and `pinned.py`:54's "two copies of
+# 38797 at the same size" caution now has a third file in it.
+# (Spelled as a lookup rather than `select(38797)` because `select()` is defined
+# below this line; a NameError at import time would take every tool with it.)
+PINNED, = [b for b in BUILDS if b.number == 38797]
 
 # Named individually because callers spell them that way and have since before
 # `BUILDS` existed. They are the pinned row and nothing else.
@@ -196,8 +218,18 @@ def identify(path, build=None):
         if b.patched and digest == b.patched:
             return "patched", (f"build {name_of(b)}, OUR patched copy -- 9 bytes of "
                                f".text differ from the shipped client")
-    return "unknown", (f"the size of build {name_of(sized[0])} but sha256 "
-                       f"{digest[:16]}..., which is neither copy we hold")
+    # NAMES EVERY same-size candidate, not `sized[0]`. This said "the size of
+    # build {sized[0]}" until 2026-08-14, which was unambiguous only while size
+    # was a discriminator -- and 38833 ships at 10,483,904 bytes, exactly 38797's
+    # length (see the BUILDS comment above). MEASURED that day: the patched 38833
+    # run directory identified as "the size of build 38797 but sha256 e06ada3b...",
+    # pointing a reader diagnosing it at the wrong build entirely. The loop above
+    # already considers every candidate; only the refusal message did not.
+    which = " or ".join(name_of(b) for b in sized)
+    plural = "s" if len(sized) > 1 else ""
+    return "unknown", (f"the size of build{plural} {which} but sha256 "
+                       f"{digest[:16]}..., which is no copy we hold of "
+                       f"{'either' if len(sized) > 1 else 'it'}")
 
 
 def find(build=None, *, verify=True, allow_live=False):

@@ -125,9 +125,92 @@ python toolkit/run_suite.py
 
 One process per file, discovered from **the disk** rather than from any document, and
 `rc == 0` with no `ALL CHECKS PASSED` banner is reported `SUSPECT` rather than laundered
-into a pass. `--only <substring>` filters, `--list` enumerates and stops. Baseline
-2026-08-14: **85 green / 0 red / 0 suspect of 85, 4,161 checks, ~40 minutes.** Budget
-for that wall clock — `test_modelexport` alone is ~9 minutes and `test_scrub` ~5.
+into a pass. `--only <substring>` filters, `--list` enumerates and stops.
+
+**It runs four files at a time, longest-first.** Baseline 2026-08-15, 96 files:
+**621 s wall — 10.4 minutes, down from 46.6 serial.** `--jobs 1` restores one-at-a-time
+and is how you check a suspected collision: a parallel run that disagrees with a serial
+one about any file's verdict is a collision, not a flake.
+
+**Four is measured, not guessed, and raising it will not help.** Wall clock is flat from
+4 to 8 workers — 621 s, 595 s, 623 s — while the summed cost of the same 96 files goes
+2,484 s → 3,498 s → 4,196 s. Eight workers spend 1,700 CPU-seconds fighting for the disk
+and finish no sooner (`test_scrub` reads 270 s at four jobs and 457 s at eight, for
+identical work). All three runs agreed on every verdict and every check count. This box
+feeds about four concurrent heavy readers, so **the only way below ~10 minutes is
+removing work, not adding workers.**
+
+Where the remaining time is, if you go looking: `test_modelexport` ~390 s and
+`test_scrub` ~270 s at four jobs, then `trnshadow`, `pathmap`, `blenderroundtrip` and
+`atexlevel`. Half the suite still finishes in under a minute put together. Both of the
+former hogs were cut on 2026-08-15 — 584 s → 183 s and 480 s → ~330 s standalone — by
+removing accidental work, with every assertion and every reported number unchanged; see
+TESTS.md for `search_all` and `Archive.magic`.
+
+### While you are working: only what your edits reach
+
+Ten minutes is still too long after every edit, so during the loop:
+
+```bash
+python toolkit/run_suite.py --since HEAD
+```
+
+Tests reachable from your changed modules, through a real dependency graph — imports
+plus the subprocess launches an import graph cannot see. `--since main` covers
+everything the branch touched.
+
+**HOW MANY tests it picks does not tell you how long it takes, and the two run in
+opposite directions here.** MEASURED 2026-08-15, at the default four jobs:
+
+| a change to | selects | wall |
+|---|---|---|
+| `authsrv/authsrv.py` | 34 of 96 | **87 s** (measured) |
+| `schema/codec.py` | 39 of 96 | ~105 s |
+| `mapdata/dxt1.py` | **14 of 96** | **~390 s** |
+| `mapdata/archive.py` | 68 of 96 | ~530 s |
+| `checks.py` | 96 of 96 | the full suite |
+
+Only the first is a stopwatch figure; the rest are its arithmetic — sum the selected
+files' times, divide by four, floor at the longest single file — which came in 20%
+HIGH on the one that was checked (105 s predicted, 87 s actual), so treat them as
+budgets rather than promises.
+
+The `dxt1.py` row is the one to remember. It selects the FEWEST tests of anything in
+the table and costs four times what a change to the whole auth server costs, because
+the fourteen it picks are the expensive texture and atlas files. A small blast radius
+made of slow tests is slower than a wide one made of fast ones, so read the selection
+list rather than its length.
+
+Three behaviours worth knowing before you rely on it:
+
+- **A green partial run exits 3, never 0**, and prints how many files never ran. That
+  is deliberate: the banner protects a human reading a pasted report, the exit code
+  protects a script. **`--only` exits 3 too** — it always was a partial run, and it
+  returned 0 for as long as this runner existed. A failure still outranks it: red is
+  1 whether or not the run was scoped.
+- **A change to anything that is not `toolkit/**.py` forces the FULL suite** and says
+  which file did it. `content/*.toml`, `schema/messages.json` and `CLAUDE.md` are read
+  at run time by tests that never import them, so the graph is structurally blind to
+  those edges and refuses to guess.
+- **"0 tests selected" is not an all-clear.** Eleven modules in `toolkit/` have no test
+  reachable from them at all — `rawlisten.py`, `flagscan.py`, `admin.py` among them —
+  and a change confined to one of those exits 2 with a coverage statement.
+
+Selection helps `mapdata/` least, and the table above says why: `archive.py` reaches 68
+of the 96 files, so it lands at ~530 s against the full suite's 621 s — a scoped run
+that saves about a minute and a half. That is a property of the code, not of the
+selector: `archive.py` is what almost everything under `mapdata/` opens the world
+through. Server, schema and portal work is where `--since` pays, and it pays well.
+
+**`python toolkit/run_suite.py` with no flags is the suite. Nothing else is** — that is
+the count you report, and `CLAUDE.md`'s rule is to name it.
+
+**A red suite here is not always your change.** Several tests refuse to pool captures
+from two client builds, so a capture landing in `vault/captures/authsrv|gamesrv/` from
+ANOTHER session turns `test_origin`, `test_codec` and `test_movement_fidelity` red
+without a line of code changing. That happened on 2026-08-14. Check
+`python toolkit/test_origin.py` first: if it names two build ids, the vault drifted and
+the other two are downstream of it, not of you.
 
 Individual files, when you want one answer fast:
 
@@ -239,9 +322,33 @@ the patched client is a brick.
 
 **There are two client builds and they are not interchangeable.** The commands above
 make the loopback one — our DH parameters — into `vault/client-patched/` and
-`vault/run/`. Adding `--no-dh-patch` (and `--live` to `make_run_dir.py`) makes the
-live-capture build instead, ArenaNet's own parameters, into `vault/client-patched-live/`
-and `vault/run-live/`. Never move a build between those directories and never pick one
+`vault/run/`. The live-capture build is ArenaNet's own parameters, into
+`vault/client-patched-live/` and `vault/run-live/`:
+
+```bash
+python toolkit/clientpatch/make_custom_client.py --no-dh-patch --no-updater-patch
+```
+
+```bash
+python toolkit/clientpatch/make_run_dir.py --live
+```
+
+**`--no-updater-patch` is not optional and this line used to omit it**, which is a
+documentation bug the 38833 update caught by making somebody follow the page
+exactly. `make_custom_client.py` kills the updater **by default**, and that default
+is right for the caged loopback build (§"Stuck on Connecting to ArenaNet" — the cage
+and the pre-login patcher are in direct conflict) and **wrong for this one**: §"a
+live run writes new content into its own `Gw.dat`" below is the same document
+stating that `run-live/` must be able to stream map content. Following the old
+wording produced a 38833 live build reading `updater=killed` beside a 38797 one
+reading `updater=LIVE`, in a pair that is supposed to differ **only** in build.
+Check with `dhbuild.py` and expect `updater=LIVE` for everything under
+`run-live/` and `updater=killed` under `run/`. (`CLAUDE.md`'s launch-rule paragraph
+used to say the kill switch was "wanted on both configurations", which contradicted
+this page; **resolved 2026-08-14 in this page's favour** — the vault and the evidence
+both agree with it, and `CLAUDE.md` now names the split explicitly.)
+
+Never move a build between those directories and never pick one
 by filename: the tools decide from the DH struct, and
 
 ```bash

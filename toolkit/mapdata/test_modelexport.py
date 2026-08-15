@@ -483,11 +483,16 @@ def _section7(check, ar, table, by_row, tmp):
           f"{rival}/{walked}")
     nulls = swept = rival_closes = 0
     for entry in ar.entries[::97]:
+        # CLASSIFY on four bytes, decode only on a hit. 64% of the strided rows
+        # are not models at all, and reading them whole to look at `data[:4]`
+        # decompressed megabytes of texture and threw them away -- MEASURED
+        # 2026-08-14: this loop was 65 s of the file's 480 s, and 4.6x of it was
+        # decode of entries that never reached `ModelFile`.
         try:
+            if ar.magic(entry) != b"ffna":
+                continue
             data = ar.read(entry)
         except Exception:                              # noqa: BLE001
-            continue
-        if len(data) < 4 or data[:4] != b"ffna":
             continue
         try:
             mf = ModelFile.decode(data)
@@ -518,6 +523,20 @@ def _section7(check, ar, table, by_row, tmp):
     # would still resolve some rows -- it is the MAGIC that refutes it.
     magics = collections.Counter()
     resolved = unresolved = 0
+    # The magic of a texture row, four bytes and once per ROW. This section was
+    # 176 s of the file's 480 s and both halves of that were waste: it fully
+    # decompressed a multi-megabyte texture to slice `[:4]`, and it did so once
+    # per REFERENCE rather than once per row -- 1,795 references land on 472
+    # distinct rows, so 3.8 of every 4 decodes reproduced a byte string the loop
+    # had already seen. MEASURED: 143 s -> under a second, same counter.
+    _magic_by_row = {}
+
+    def row_magic(row):
+        m = _magic_by_row.get(row)
+        if m is None:
+            m = _magic_by_row[row] = ar.magic(by_row[row])
+        return m
+
     for fid in (KAMADAN_FILE_ID, PRESEARING_FILE_ID):
         for model_id in modelexport.map_model_ids(fid, ar, table=table):
             row = table.get(model_id)
@@ -535,7 +554,7 @@ def _section7(check, ar, table, by_row, tmp):
                     unresolved += 1
                     continue
                 resolved += 1
-                magics[bytes(ar.read(by_row[trow])[:4])] += 1
+                magics[row_magic(trow)] += 1
     known = magics[b"ATEX"] + magics[b"ATTX"] + magics[b"DDS "]
     check(unresolved == 0 and resolved > 1500,
           "every non-null texture reference resolves to an archive row",

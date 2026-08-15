@@ -1,8 +1,13 @@
 """Validate the codec against bytes the real Guild Wars client actually sent.
 
-Synthetic round-trips only prove the codec agrees with itself. The capture from
-build 38797 is ground truth, so it is the primary fixture here: if the schema's
+Synthetic round-trips only prove the codec agrees with itself. Captured client
+frames are ground truth, so they are the primary fixture here: if the schema's
 field layout is wrong, the real frame will not decode cleanly to its end.
+
+This line said "the capture from build 38797" until 2026-08-14, when the vault
+legitimately gained a second build and the check that enforced the literal went
+red on two perfectly-decoding 38833 captures. The oracle is the BYTES, not one
+build number -- see `_known_builds()`.
 """
 
 import binascii
@@ -42,12 +47,35 @@ LEDGER = checks.Ledger("codec vs captured bytes", floor=29)
 check = checks.adopt_named(LEDGER)
 
 
+def _known_builds():
+    """Every client build this repo has a pin for, as a set of numbers.
+
+    THIS WAS THE LITERAL 38797 UNTIL 2026-08-14, and the literal went red the day
+    the vault legitimately gained a second build: driving the 38833 client wrote
+    two captures whose opening frame decodes perfectly and announces 38833, and
+    the check called that a failure. Same shape as `test_origin.py`'s build
+    census, fixed the same way -- the vault now holds a second build, so the
+    check NAMES the builds it knows instead of denying them.
+
+    The assertion this preserves is the one that was always doing the work: the
+    build field must decode to a REAL build number. A mis-framed message puts
+    something arbitrary there, and `pinned.BUILDS` is a short list, so this stays
+    refutable. What it stops asserting is that the owner may only ever have run
+    one client.
+    """
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+    import pinned                                            # noqa: PLC0415
+    return {b.number for b in pinned.BUILDS}
+
+
 def main():
     c = Codec()
     ok = True   # kept only so the `ok &= check(...)` call sites read unchanged;
                 # the verdict now lives in LEDGER, which also counts the checks.
 
-    print("\n1. real client frames from the vault (build 38797)")
+    KNOWN_BUILDS = _known_builds()
+    print(f"\n1. real client frames from the vault "
+          f"(builds this repo pins: {sorted(KNOWN_BUILDS)})")
     # Select the fixture by CONTENT, never by position. This used to take "the
     # last long frame in the newest capture", which silently became a
     # PORTAL_ACCOUNT_LOGIN frame the first time a session captured something
@@ -110,8 +138,9 @@ def main():
                 elif not (op1 == 0x0002 and isinstance(v1[-1], bytes)
                           and len(v1[-1]) == 16):
                     why = f"second message is 0x{op1:04x} or lacks a 16-byte blob"
-                elif v1[1] != 38797:
-                    why = f"build {v1[1]}, expected 38797"
+                elif v1[1] not in KNOWN_BUILDS:
+                    why = (f"build {v1[1]}, which is not one this repo knows "
+                           f"({sorted(KNOWN_BUILDS)})")
             if why:
                 bad.append(f"{path}: {why}")
 
@@ -425,7 +454,18 @@ def main():
     # corroborated on the wire and 146's CANNOT be, because 0x0092 occurs 0 times in
     # all 22,524 live GAME_SMSG. It rests on the binary alone. If a capture ever
     # carries one, that is the check this exemption is waiting for.
-    LAYOUT_FIXED = {("GAME_SMSG", "421"), ("GAME_SMSG", "146")}
+    # GAME_SMSG 140 (MAP_EXPLORATION_MARK, 2026-08-14) is the THIRD, and it is the
+    # strongest of them rather than another concession. Its correction (10 -> 11 bytes,
+    # a trailing `byte` our import missed) has been in overrides.json since before this
+    # arc named anything, so the property this check cares about holds in the same way
+    # 421 and 146 hold it: the name moved nothing. Where it is STRONGER than both is the
+    # evidence under the shape -- 146 rests on the binary alone because 0x0092 occurs 0
+    # times in 22,524 live GAME_SMSG, while 0x008C occurs 47 times over 6 connections and
+    # its three fields are read back as (x, y, half-span) with 47 of 47 marks landing
+    # inside the area row's own footprint at >>5, against three shift rivals at 0/47.
+    # This exemption is the one most likely to be retired by a capture rather than
+    # waiting for one.
+    LAYOUT_FIXED = {("GAME_SMSG", "421"), ("GAME_SMSG", "146"), ("GAME_SMSG", "140")}
     all_base = json.load(open(os.path.join(repo, "schema", "messages.json"),
                               encoding="utf-8"))["channels"]
     all_over = json.load(open(os.path.join(repo, "schema", "overrides.json"),

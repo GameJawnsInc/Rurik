@@ -3839,6 +3839,36 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             print(f"[c{conn_id}] auth version: build={build} h0008={h8} h000C={hC}",
                   flush=True)
             rec.event("version", channel="auth", build=build, h0008=h8, h000C=hC)
+
+            # BIND THE KEY TO THE BUILD THE CLIENT JUST NAMED. The DH triple is
+            # patched per build, so a key from another build derives a shared
+            # secret the client does not share: the handshake completes, the
+            # ARC4 stream is noise, and the first symptom is `Code=058` on the
+            # client half a minute later -- which names nothing. This costs one
+            # dict lookup and turns that into a line naming both builds.
+            want = KEYS_BY_BUILD.get(build)
+            have_tag = keys.get("build_tag")
+            # Compared by build_tag, not by object identity: the registry loads
+            # its own copy of every file, so `is not` is true even when both are
+            # the same key and the log would claim a swap that did not happen.
+            if want is not None and want.get("build_tag") != have_tag:
+                keys = want
+                print(f"[c{conn_id}] keys: re-selected {keys.get('build_tag')} to "
+                      f"match the client's build {build} (had {have_tag})",
+                      flush=True)
+                rec.event("keys_reselected", build=build,
+                          build_tag=keys.get("build_tag"), was=have_tag)
+            elif want is None and _build_of_tag(have_tag) not in (None, build):
+                # No key for this build AND the loaded one is for a different,
+                # known build. Refusing beats a wrong key: the client cannot be
+                # decrypted either way, and only one of those says why.
+                msg = (f"no DH key for client build {build}; the loaded key is "
+                       f"{have_tag} (build {_build_of_tag(have_tag)}). Patch that "
+                       f"build with make_custom_client.py, or point the client at "
+                       f"the run directory matching the key.")
+                print(f"[c{conn_id}] REFUSING: {msg}", flush=True)
+                rec.event("key_build_mismatch", build=build, key_tag=have_tag)
+                return
         else:
             # 60 more bytes, measured: build, unk1, world_id, map_id, player_id,
             # then the account uuid and the character uuid we handed this client in
@@ -5535,17 +5565,82 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             pass
 
 
+# Every rurik_dh_*.json in the vault, keyed by the client build it was cut for.
+# Populated by load_keys(); read by handle() once the client announces its build.
+KEYS_BY_BUILD = {}
+KEYS_LOADED_TAG = None
+
+
+def _build_of_tag(tag):
+    """Client build number for a `build_tag` stamp, or None if not registered."""
+    try:
+        sys.path.insert(0, os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "clientscan"))
+        import pinned                                        # noqa: PLC0415
+    except Exception:                                        # noqa: BLE001
+        return None
+    for b in pinned.BUILDS:
+        if b.stamp == tag:
+            return b.number
+    return None
+
+
 def load_keys(path):
-    if path:
-        return json.load(open(path))
+    """The DH private half, and a REGISTRY of every other one in the vault.
+
+    THIS USED TO BE `sorted(...)[-1]` AND THAT IS THE DEFECT CLAUDE.md NAMES BY
+    NAME: *"Never select a build by filename: `sorted(exes)[-1]` picked the wrong
+    one the day both configurations first existed."* Here it picked the wrong
+    KEY the day a second build existed -- 2026-08-14, when build 38833 was
+    patched and `rurik_dh_2026-08-13_...json` sorted last. A session running the
+    38797 client got 38833's key material, the handshake "succeeded", and the
+    ARC4 stream was garbage: 50 unframeable bytes, DESYNC, and the client showing
+    `Code=058` half a minute later with nothing to point at. Exactly the failure
+    mode this repo keeps writing rules about.
+
+    Newest-wins is kept as the STARTING key, because at bind time no client has
+    spoken yet and something has to be loaded. What is new is that every key is
+    kept, and `handle()` re-selects by the build the client announces -- which it
+    sends BEFORE the key exchange, so the right key is always knowable in time.
+    """
     from vaultpath import require_dir
+    global KEYS_LOADED_TAG                                   # noqa: PLW0603
+
     kd = require_dir("keys", why="the DH private half; the server cannot decrypt without it")
+    for f in sorted(os.listdir(kd)):
+        if not f.startswith("rurik_dh_"):
+            continue
+        try:
+            d = json.load(open(os.path.join(kd, f)))
+        except (OSError, ValueError):
+            continue
+        tag = d.get("build_tag")
+        num = _build_of_tag(tag)
+        if num is not None:
+            KEYS_BY_BUILD[num] = d
+        print(f"keys: {f}  build_tag={tag}  build="
+              f"{num if num is not None else 'UNREGISTERED in pinned.BUILDS'}")
+
+    if path:
+        d = json.load(open(path))
+        KEYS_LOADED_TAG = d.get("build_tag")
+        print(f"keys: using {path} (named on the command line)")
+        return d
+
     cands = sorted(f for f in os.listdir(kd) if f.startswith("rurik_dh_"))
     if not cands:
         raise SystemExit("No rurik_dh_*.json in vault/keys — run make_custom_client.py first.")
     p = os.path.join(kd, cands[-1])
-    print(f"keys: {p}")
-    return json.load(open(p))
+    d = json.load(open(p))
+    KEYS_LOADED_TAG = d.get("build_tag")
+    if len(cands) > 1:
+        print(f"keys: {len(cands)} key files present; starting with the newest, "
+              f"{os.path.basename(p)} (build_tag {KEYS_LOADED_TAG}). The key is "
+              f"re-selected per connection from the build the client announces, "
+              f"so this default only matters for a build we hold no key for.")
+    else:
+        print(f"keys: {p}")
+    return d
 
 
 def main():
