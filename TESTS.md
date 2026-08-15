@@ -2558,14 +2558,40 @@ Every one of these, in the order they were written:
   checks is an unfalsifiable self-declaration. `BUILD_UNKNOWN` is a distinct third
   value, never "probably the pinned one", and `require_single_build` refuses a
   two-build corpus — `test_movement_fidelity.py`, the pooling consumer, calls it.
-  Unknown is TOLERATED by default and that is measured rather than lax: 556 of
-  the vault's 1,678 capture files name no build, because a frame log names it once
-  per SESSION not once per file, so refusing on unknown would refuse nearly every
-  real corpus and the guard would be deleted in a week — it may never be silent,
-  so the count comes back in the reason, and `allow_unknown=False` exists.
-  **The vault census answers what `studies/crossbuild/PLAN.md` §10 left
-  UNVERIFIED: every capture that names a build names 38797** — 1,122 files — so
-  no existing corpus figure is pooling builds, and that is asserted as an
-  invariant so the first capture from a second build turns it red. A vault-less
-  run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
-  empty directory rather than derived by subtraction).
+  Unknown is TOLERATED by default and that is measured rather than lax: 919 of
+  the research corpus's 2,451 capture files name no build (556 of 1,678 when this
+  was written; the fraction is stable as the vault grows), because a frame log
+  names it once per SESSION not once per file, so refusing on unknown would
+  refuse nearly every real corpus and the guard would be deleted in a week — it
+  may never be silent, so the count comes back in the reason, and
+  `allow_unknown=False` exists.
+  **The census answers what `studies/crossbuild/PLAN.md` §10 left UNVERIFIED:
+  every capture that names a build names 38797**, and that is asserted as an
+  invariant so the first capture from a second build turns it red.
+  **It fired on 2026-08-14, and read the sentence above carefully before
+  concluding it fired correctly.** Build 38833 shipped, `test_handshake.py`
+  began stamping it (it had been announcing a hardcoded 38797 while driving
+  whatever client the newest key matched — `studies/crossbuild/FINDINGS.md`
+  §7.7), and running THE SUITE ITSELF put 38833-stamped files in the vault: the
+  census read `{38797: …, 38833: 4}` and went red over its own test fixtures.
+  The scope was wrong, not the invariant. `selftest` now joins
+  `captures-scrubbed` in the walk's exclusions, for the reason
+  `test_handshake.py` gives for that directory existing at all — its output
+  "used to share `vault/captures/authsrv/` with real client sessions … two
+  self-test captures were read as evidence of successful client logins that
+  never happened", and a census counting them re-created that contamination one
+  level up. So the claim is about **the research corpus**, which is what the
+  figures in `studies/` are computed over; a self-test artifact is not one of
+  those. **The teeth are intact**: MEASURED 2026-08-14 the corpus reads
+  `{38797: 1,532} + 919 unknown`, no capture has yet been taken on 38833 outside
+  selftest, and a real one still turns this red. The pooling consumer never saw
+  the selftest files either — `game_channel_captures()` globs only
+  `captures/authsrv/` and `captures/gamesrv/`, and calls `require_single_build`
+  on top. (The two censuses in this file walk with DIFFERENT exclusions on
+  purpose-by-omission rather than by argument: the origin census still counts
+  selftest, 2,757 files vs the build census's 2,451. Harmless today — a selftest
+  capture really is ours, so the ours/live claim stays true — but the asymmetry
+  is undesigned and is the kind of thing to settle before leaning on either
+  count.) A vault-less run scores 23 against a floor of 23, measured with
+  `RURIK_VAULT` pointed at an empty directory rather than derived by
+  subtraction).
