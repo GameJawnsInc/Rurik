@@ -725,21 +725,31 @@ def section_oracle(pairs, pool):
 
 def section_tables():
     print("\n== 7. the two client tables vs the vaulted image ==")
+    # WHICH IMAGE, and this section read the WRONG ONE from 2026-08-14 until
+    # 2026-08-15. It used to walk `sorted(os.listdir(root))` and keep the LAST
+    # candidate -- a `sorted(...)[-1]` written as a loop with no `break`, which
+    # is the same defect `CLAUDE.md` names by name and the FOURTH file to carry
+    # it. It was harmless while the vault held one usable build. The day 38833
+    # was snapshotted, `2026-08-13_64fae3b1369b` began sorting last, and this
+    # section silently started asserting literals MEASURED ON 38797 against
+    # 38833's bytes. It passed -- MEASURED, those two tables did not move in
+    # that update -- so the defect produced no red and would have been found
+    # only by a future build moving them, at which point the failure reads as
+    # "atex is broken" rather than "you are reading the wrong client".
+    #
+    # Resolved through `pinned` now, which is the module built to answer this:
+    # it selects the build by REGISTRY rather than by filename order, verifies
+    # the sha256 of what it hands back, and refuses the auto-updating live
+    # install. The build is then PRINTED, because a section that reads a client
+    # and does not say which one is one rename away from this bug again.
     try:
-        import vaultpath
-        root = vaultpath.require_dir("client")
-    except SystemExit:
-        LEDGER.skip("7. client tables", "no vault/client")
+        sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+        import pinned
+        exe, why = pinned.find(atex.TABLES_BUILD)
+    except SystemExit as exc:
+        LEDGER.skip("7. client tables", f"no pinned client: {exc}")
         return
-    builds = sorted(os.listdir(root))
-    exe = None
-    for name in builds:
-        candidate = os.path.join(root, name, "Gw.exe")
-        if os.path.isfile(candidate):
-            exe = candidate
-    if exe is None:
-        LEDGER.skip("7. client tables", "no Gw.exe in vault/client")
-        return
+    print(f"    image: build {atex.TABLES_BUILD} -- {why}")
     with open(exe, "rb") as fh:
         image = fh.read()
 

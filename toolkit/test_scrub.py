@@ -59,18 +59,24 @@ import scrub_captures as sc  # noqa: E402
 
 # 1 snapshot + 6 structural + 6 leak/property + 2 red-team + 6 blind-spot
 # + 1 state census stamp + 4 snapshot red-team + 11 session store + 6 state refusal
-# + 2 destination + 16 unrecognised-field report + 7 opaque-exclusion = 68 mandatory,
-# plus 2 that need `vault/state` to exist. MEASURED green 2026-08-14 at 70 over the
-# whole capture tree with the store present (47 before section 12).
+# + 2 destination + 16 unrecognised-field report + 7 opaque-exclusion
+# + 8 search-equivalence = 76 mandatory, plus 2 that need `vault/state` to exist.
+# MEASURED green 2026-08-15 at 78 over the whole capture tree with the store present
+# (70 before section 14, 47 before section 12).
 #
 # There is no bare-machine shape to floor separately: `main()` opens with
 # `vaultpath.require_dir("captures")`, so this file cannot run at all without the
 # vault. The only optional pair is the two real-store checks, which declare a skip.
-LEDGER = checks.Ledger("credential scrub", floor=68)
+LEDGER = checks.Ledger("credential scrub", floor=76)
 
 # Derived output of previous runs. Not evidence, and scrubbing a scrub would double-count
 # every record. Baked into the snapshot, so no pass can disagree about what was excluded.
 SKIP = ("captures-scrubbed", "portal-scrubbed")
+
+# Joins the distinct character-runs `search_all` searches. NUL, because it has to be a
+# character no secret can contain -- otherwise a join could manufacture a match that is
+# not in the text. `search_all` checks that rather than trusting this comment.
+SEARCH_SEP = "\x00"
 
 
 def harvest_secrets(snap):
@@ -175,8 +181,54 @@ def leaked(out_dir, secrets):
                     if isinstance(rec, dict):
                         rec = {k: v for k, v in rec.items() if k not in sc.OPAQUE_KEYS}
                     blob.append(json.dumps(rec))
-    text = "\n".join(blob)
-    return {s for s in secrets if s in text}
+    return search_all("\n".join(blob), secrets)
+
+
+def search_all(text, secrets):
+    """Exactly `{s for s in secrets if s in text}`, without scanning once per secret.
+
+    WHY THIS IS NOT A SHORTCUT. The naive comprehension is O(secrets x text), and on
+    2026-08-14 that was 6,716 secrets against a 179 MB corpus -- about 1.2 TB of
+    scanning, twice over, and it is the single largest cost in the suite. Worse, the
+    cost lands in the WORST case by construction: a green run finds nothing, so no scan
+    ever exits early.
+
+    The reduction is exact rather than heuristic, and that matters because this is the
+    check standing between the vault and a shared tree. Every secret is built from some
+    alphabet of characters; therefore any occurrence of a secret in `text` lies entirely
+    inside a maximal run of those characters. Collect the distinct runs, join them with
+    a separator that is NOT in the alphabet -- so nothing can match across a join that
+    did not match in the text -- and search that instead. `s in text` and `s in haystack`
+    are then the same predicate for every s.
+
+    MEASURED: 1,193,853 distinct runs, a 19.5 MB haystack from 179 MB of text (9x), and
+    the same answers. **This file went from 584 s to 183 s**, which is the largest
+    single saving in the suite. A tokenising version would be faster still and WRONG: it
+    would miss a secret embedded inside a longer token, which is precisely the shape a
+    half-working scrubber produces, and section 14 pins that case.
+
+    Two things that were tried first and are worth not re-trying. A single compiled
+    ALTERNATION of all 6,716 secrets is slower than the naive loop -- 9.4 s against
+    3.8 s for the same 200 patterns, because `re` does not optimise large literal
+    alternations. And a per-file search (only the secrets from file X against file X's
+    output) would be cheaper still and would not answer the question `leaked()` asks:
+    its docstring is explicit that a scrubber writing values into its own MANIFEST is
+    the failure being hunted, and that leak is cross-file by construction.
+
+    The alphabet is derived from the secrets at run time, never hardcoded, so a new kind
+    of secret cannot silently fall outside it. If the separator ever turns out to be a
+    legal secret character the function does the slow, obviously-correct thing instead
+    of risking a wrong answer.
+    """
+    if not secrets:
+        return set()
+    alphabet = set().union(*(set(s) for s in secrets))
+    if SEARCH_SEP in alphabet:
+        return {s for s in secrets if s in text}
+    run = ("[" + re.escape("".join(sorted(alphabet))) + "]{"
+           + str(min(len(s) for s in secrets)) + ",}")
+    haystack = SEARCH_SEP.join(set(re.findall(run, text)))
+    return {s for s in secrets if s in haystack}
 
 
 def check_corpus(src, snap):
@@ -804,9 +856,12 @@ def check_the_opaque_exclusion_earns_itself(out_dir, secrets):
     the field, which is the only way a blind spot stays honest.
     """
     print("\n13. and what the opaque exclusion is hiding, per field")
-    # SEARCH THE TREE UNFILTERED, once, the same shape `leaked()` uses -- one big text
-    # and one pass per secret. The per-value loop this replaced was
-    # O(values x secrets), 5,565 secrets against ~1M opaque values, and did not finish.
+    # SEARCH THE TREE UNFILTERED, once, through `search_all` -- the same reduction
+    # `leaked()` uses, and equal to `{s for s in secrets if s in text}` by the argument
+    # in its docstring. The per-value loop this replaced was O(values x secrets), 5,565
+    # secrets against ~1M opaque values, and did not finish; the one-pass-per-secret
+    # version that replaced IT was still O(secrets x text) and was, with `leaked()`,
+    # most of this file's 584 s.
     whole = []
     for base, _dirs, files in os.walk(out_dir):
         for f in sorted(files):
@@ -815,7 +870,7 @@ def check_the_opaque_exclusion_earns_itself(out_dir, secrets):
                 whole.append(fh.read())
     text = "\n".join(whole)
     del whole
-    hidden = {s for s in secrets if s in text} - set(leaked(out_dir, secrets))
+    hidden = search_all(text, secrets) - set(leaked(out_dir, secrets))
 
     # Which opaque field carries each hidden value. Only the hidden ones are looked up,
     # so this loop is over a handful rather than over the corpus.
@@ -1002,6 +1057,58 @@ def check_unrecognised_fields_are_reported():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def check_search_all_equals_the_naive_scan():
+    """`search_all` is an optimisation of a SECURITY check, so it is proved equal to it.
+
+    The naive `{s for s in secrets if s in text}` is the definition; this section pins
+    the fast version against it on cases chosen to break a plausible-but-wrong
+    implementation, then on the real corpus. The second check is the load-bearing one:
+    a TOKENISING search -- split on delimiters, intersect with a set -- would be faster
+    than either and would miss a secret embedded inside a longer run, which is exactly
+    what a half-working scrubber leaves behind.
+    """
+    print("\n14. the fast leak search is the slow one, exactly")
+    secrets = {"player7@example.invalid", "AAAABBBBCCCCDDDD", "deadbeefcafe1234"}
+
+    cases = {
+        "plain occurrence": 'x "email": "player7@example.invalid" y',
+        "EMBEDDED in a longer token": "prefixAAAABBBBCCCCDDDDsuffix",
+        "adjacent, no delimiter": "deadbeefcafe1234AAAABBBBCCCCDDDD",
+        "absent": "nothing to see, all pseudonymised",
+        "repeated many times": "AAAABBBBCCCCDDDD " * 50,
+    }
+    for name, text in cases.items():
+        want = {s for s in secrets if s in text}
+        LEDGER.ok(search_all(text, secrets) == want,
+                  f"search_all agrees with the naive scan: {name}",
+                  f"{sorted(want)} -- the definition is the comprehension, and this "
+                  f"is only allowed to be faster than it")
+
+    # A join must never manufacture a match. Two runs that are adjacent only AFTER
+    # deduplication must not read as one.
+    LEDGER.ok(search_all("AAAABBBB!CCCCDDDD", {"AAAABBBBCCCCDDDD"}) == set(),
+              "a secret spanning two separate runs is NOT reported",
+              "the separator is outside the alphabet precisely so this stays empty")
+    LEDGER.ok(search_all("anything", set()) == set(),
+              "and an empty secret set searches to nothing rather than raising")
+
+    # And on the real tree, where the corpus is 179 MB and the secret set is thousands.
+    try:
+        snap = sc.Snapshot(vaultpath.require_dir("captures"), skip=SKIP)
+        secrets = harvest_secrets(snap)
+        text = "\n".join(snap.text(rel) for rel, _n in snap.jsonl())
+    except Exception as exc:                                       # noqa: BLE001
+        LEDGER.skip("real-corpus equivalence", f"corpus unreadable: {exc}")
+        return
+    probe = sorted(secrets)[:150]
+    slow = {s for s in probe if s in text}
+    fast = search_all(text, set(probe))
+    LEDGER.ok(slow == fast and len(probe) > 100,
+              "and they agree on the REAL corpus, not only on fixtures",
+              f"{len(probe)} secrets over {len(text)/1e6:.0f} MB, {len(slow)} found "
+              f"by both")
+
+
 def main():
     src = vaultpath.require_dir("captures",
                                 why="the scrub test reads the real capture tree")
@@ -1019,6 +1126,7 @@ def main():
     check_state_is_excluded_from_the_shareable_tree()
     check_destination_guard_and_real_store()
     check_unrecognised_fields_are_reported()
+    check_search_all_equals_the_naive_scan()
     return LEDGER.verdict()
 
 

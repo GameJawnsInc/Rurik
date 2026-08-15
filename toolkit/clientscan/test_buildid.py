@@ -49,7 +49,9 @@ import pinned                                                # noqa: E402
 import vaultpath                                             # noqa: E402
 from gwpe import PE                                          # noqa: E402
 
-LEDGER = checks.Ledger("client build id", floor=23)
+# floor re-measured 2026-08-14 from a real green run: 23 -> 29, the third
+# vaulted build (38833) adding 6.
+LEDGER = checks.Ledger("client build id", floor=29)
 check = checks.adopt(LEDGER)
 
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -58,6 +60,12 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 EXPECT = {
     "2026-07-29_221c13772c7a": dict(number=38797, va=0x004729E0, shapes=54),
     "2026-04-30_b174de1f2d8d": dict(number=38519, va=0x004728A0, shapes=56),
+    # 38833, MEASURED 2026-08-14. The getter VA is the SAME as 38797's and the
+    # shape count is the same 54 -- only the immediate the getter returns moved.
+    # Worth stating because this file's §1 argument is "the shape is common and
+    # the VALUE is the filter": here that is the ONLY thing separating the two
+    # images, and the read still lands on exactly one in-range candidate.
+    "2026-08-13_64fae3b1369b": dict(number=38833, va=0x004729E0, shapes=54),
 }
 EXPECT_CALLERS = 16
 
@@ -106,11 +114,15 @@ for stamp, exe in EXES.items():
 if len(EXES) >= 2:
     nums = {BI.read(p)[0] for p in EXES.values()}
     check(len(nums) == len(EXES),
-          "the two builds report DIFFERENT numbers", str(sorted(nums)))
-    check(EXPECT["2026-04-30_b174de1f2d8d"]["number"]
-          < EXPECT["2026-07-29_221c13772c7a"]["number"],
-          "and the older build's is the lower one",
-          "38519 < 38797, which is the direction the dates say")
+          f"all {len(EXES)} builds report DIFFERENT numbers", str(sorted(nums)))
+    # Dates come from the vault stamp, so this compares the reader against the
+    # calendar rather than against itself. Written as a sort so a fourth build
+    # needs no edit here -- the two-build spelling had to be corrected when the
+    # third arrived, which is the same maintenance this arc exists to remove.
+    by_date = [EXPECT[s]["number"] for s in sorted(EXPECT) if s in EXES]
+    check(by_date == sorted(by_date),
+          "and build numbers ascend with the snapshot dates",
+          f"{by_date} -- which is NOT the direction the dates say")
 
 
 print("\n2. it refuses rather than choosing")

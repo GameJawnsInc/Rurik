@@ -145,6 +145,30 @@ def capture(snapshot=False, dat=None):
             out["live_install"]["build"] = buildid.read(pinned.LIVE_INSTALL)[0]
         except SystemExit as exc:
             out["live_install"]["build_error"] = str(exc).splitlines()[0]
+        # READ THE SIGNATURES OFF THE LIVE INSTALL TOO. Until 2026-08-14 this
+        # block recorded only identify/size/build, while `signatures` came from
+        # `pinned.BUILDS` -- the VAULTED builds, which by definition did not
+        # change across an update. So `_advice()`'s
+        #   "Every signature in the corpus still resolves at its expected count"
+        # compared the old builds against themselves and printed a PASS about a
+        # build it had never opened. MEASURED: it printed exactly that on the
+        # 38797 -> 38833 update, the first real firing of this tool, in the same
+        # breath as "the live install moved to 38833".
+        #
+        # It is the repo's own named defect -- a check that cannot fail, worded
+        # as reassurance -- and it is the one this arc built `msgshape.py`'s
+        # vacuity guard to catch. The live install is the ONLY image that has
+        # the new build in it before the snapshot lands, so it is the only place
+        # the question can be asked at `--after` time.
+        try:
+            pe = PE(pinned.LIVE_INSTALL)
+            out["live_install"]["signatures"] = {
+                s.name: {"hits": hits, "expected": s.hits, "ok": ok,
+                         "vas": sorted(pe.image_base + pe.off_to_rva(h)
+                                       for h in pe.find(s.pattern, ".text"))}
+                for s, hits, ok in sigcorpus.verify(pe)}
+        except Exception as exc:                             # noqa: BLE001
+            out["live_install"]["signature_error"] = f"{type(exc).__name__}: {exc}"
 
     rows, problems, _skipped = buildpins.scan(HERE)
     out["pins"] = buildpins.baseline(rows)
@@ -287,9 +311,35 @@ def _advice(before, after):
         out.append(f"{len(broken)} signature(s) changed hit count. Every tool that "
                    f"owns one is untrustworthy until re-derived:")
         out += [f"  {ln.strip()}" for ln in broken]
+
+    # The corpus verdict for the NEW build, read off the live install itself.
+    # It is stated separately from `broken` above, which can only ever speak
+    # about the vaulted builds -- and those cannot move across an update.
+    sigs = after.get("live_install", {}).get("signatures")
+    err = after.get("live_install", {}).get("signature_error")
+    if err:
+        out.append(f"  The signature corpus could not be read off the live "
+                   f"install: {err}. That is UNKNOWN, not a pass.")
+    elif not sigs:
+        # NOTE the direction: `sigs` is read off the AFTER capture, taken just
+        # now, not off the stored baseline -- the question is what the corpus
+        # does on the build that is installed at this moment. So a miss here
+        # means this run could not read the live install (absent, or not a PE),
+        # never that the baseline is an old format.
+        out.append(f"  No signature reading for {pinned.LIVE_INSTALL} in THIS "
+                   f"run, so the corpus verdict for the new build is UNKNOWN, "
+                   f"not a pass. Check the file exists and is readable.")
     elif live_b != live_a:
-        out.append("  Every signature in the corpus still resolves at its expected "
-                   "count -- the byte-shape anchors held.")
+        bad = sorted(n for n, d in sigs.items() if not d.get("ok"))
+        if bad:
+            out.append(f"  {len(bad)} of {len(sigs)} signature(s) do NOT resolve at "
+                       f"their expected count on build {live_a} -- RE-DERIVE: "
+                       f"{', '.join(bad)}")
+        else:
+            out.append(f"  All {len(sigs)} signatures in the corpus resolve at their "
+                       f"expected hit count ON BUILD {live_a} itself -- the "
+                       f"byte-shape anchors held. (Read off {pinned.LIVE_INSTALL}, "
+                       f"not off the vaulted builds.)")
     return out
 
 

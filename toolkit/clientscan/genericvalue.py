@@ -34,7 +34,9 @@ those four were wrong -- 5 and 51 are handled by the float dispatcher's
 AgentView switch and 8 by the int one's. Only 40 is genuinely untouched. The
 lesson is the same one msgshape.py carries: a partial model of the client
 produces answers that are self-consistent and false, and nothing in the output
-says so. The seven, in the order each dispatcher runs them:
+says so. The seven, in the order each dispatcher runs them -- addresses ON BUILD
+38797, cited so a reader can check the claim against that image, and NOT how the
+module finds them (see `locate()`; run `--locate` to print any build's):
 
     int   0x008128F0  ->  int-store       0x00818170  compare chain, 3 ids
                           int-agentview   0x0081BC60  table, only when the
@@ -46,26 +48,39 @@ says so. The seven, in the order each dispatcher runs them:
                           float-main      table, ids 16..63
 
 Two of the seven are compare chains rather than jump tables, so they cannot be
-read as data. Their ids are recorded here as constants AND pinned to the exact
-bytes that encode the comparisons, so a build that moves them fails loudly
-instead of returning a stale map that still looks plausible.
+read as data. Their ids and case bodies are PARSED out of the comparisons, and
+the byte string encoding those comparisons is checked first, so a build that
+renumbers or reorders one is refused rather than answered from memory.
 
 Both dispatchers also gate the main switch behind `test byte [charContext +
 0x53C], 2` -- when that bit is set the main switch is skipped entirely and only
-the earlier switches run. `gate_bytes()` pins it.
+the earlier switches run. The gate is located inside each dispatcher, and there
+must be exactly one.
 
 This module extracts every table from the image and reports, per id, which
 switches act on it and what their case bodies are. The names alongside are the
 reconstructions', quoted so a disagreement is visible; the binary supplies the
 grouping, not the vocabulary.
 
-STANDARD LIBRARY ONLY. The tables are jump tables at known addresses, read as
-data -- no disassembly needed to recover the mapping itself.
+NOTHING HERE IS LOOKED UP BY ADDRESS, as of 2026-08-14. Every switch is found
+from the client's own receive table downwards, which is why this file reads
+build 38519, 38797 and 38833 alike and why its class-(a) census went 27 -> 0.
+The addresses above are CITATIONS: provenance for a reader, checked by
+`test_genericvalue.py` against a fresh derivation, and never consulted at run
+time. `studies/crossbuild/FINDINGS.md` §8.
+
+STANDARD LIBRARY ONLY, and the derivation keeps it that way. The dispatchers are
+reached through `msgshape.py`, which is also stdlib-only; the two instruction
+shapes this file needs (`call rel32` and the `movzx`/`jmp` pair) are matched as
+bytes inside a single function body, with every count asserted. Carve-out (1)
+covers `msghandler.py` and `codescan.py`, not this file, so importing a
+disassembler here would be a new dependency rather than an existing one.
 
 READ ONLY. Opens the exe for reading and nothing else.
 """
 
 import argparse
+import collections
 import os
 import struct
 import sys
@@ -104,54 +119,65 @@ find_exe = pinned.find
 # than remembered beside it, and the opcode framing is what makes `at` refutable.
 # That removes 10 of this file's hardcoded addresses and gates the rest.
 #
-# WHY `at` IS STILL PINNED, measured rather than assumed: this instruction shape
-# occurs **596 times** in `.text` on build 38797, so it is not an anchor. Making
-# these fully derived means anchoring the DISPATCHERS first -- they are reached
-# from the message handler -- which is a separate job and is not this one.
-INT_SWITCH = dict(name="int-main", dispatch=0x008128F0, lo=0, hi=66,
-                  at=0x008129CC, default=0x00812EC7)
-FLOAT_SWITCH = dict(name="float-main", dispatch=0x00813040, lo=0x10, hi=0x3F,
-                    at=0x008130DB, default=0x00813249)
+# ~~WHY `at` IS STILL PINNED~~ -- IT IS NOT, as of 2026-08-14. That paragraph
+# read: "this instruction shape occurs 596 times in `.text` on build 38797, so
+# it is not an anchor. Making these fully derived means anchoring the
+# DISPATCHERS first -- they are reached from the message handler -- which is a
+# separate job and is not this one." Both halves were right, and build 38833
+# turned the second one into the job: this module REFUSED that build (its
+# int-main site is restructured) and took `avevents.py`'s property map with it.
+# `studies/crossbuild/FINDINGS.md` §7.1.
+#
+# So the dispatchers are anchored first, exactly as that note said they must be,
+# and everything else falls out of them. `locate()` below is the whole
+# derivation; nothing in this file is looked up by address any more. The route:
+#
+#   1. the client's own RECEIVE table gives the handler for opcode 0x009F (int)
+#      and 0x00A2 (float). `msgshape.derive_tables` finds those tables from
+#      `MsgChannel::RegisterMsgs`, anchored BY BYTE SHAPE -- so the chain bottoms
+#      out in a shape, not an address.
+#   2. each handler is a FORWARDER: exactly one `call rel32` in its body, and its
+#      target is the dispatcher. Exactly one is asserted, not assumed.
+#   3. inside the int dispatcher: exactly TWO `movzx`/`jmp [table]` sites, which
+#      are int-pre then int-main. Inside the float one: exactly ONE, float-main.
+#   4. the dispatcher's call targets that themselves contain an id switch are
+#      exactly TWO, in call order the STORE then the AGENTVIEW.
+#   5. each switch's default case is the jump target the most ids share; each
+#      chain's ids and case bodies are parsed out of its compare/jz pairs.
+#
+# Every "exactly N" above is checked and refused on, which is what makes this a
+# derivation rather than a search that takes the first plausible hit.
+INT_OPCODE, FLOAT_OPCODE = 0x009F, 0x00A2
 
-# A second, earlier switch inside the INT dispatcher, taken before the main one.
-PRE_SWITCH = dict(name="int-pre", dispatch=0x008128F0, lo=4, hi=64,
-                  at=0x0081298B, default=0x008129B0)
-
-# The AgentView switch each dispatcher runs BEFORE its pre-switch, and only when
-# the message's agent resolves to an object of type 1. `int-agentview` is where
-# property 8 lives -- the id the first version of this module called unhandled.
-INT_AGENTVIEW = dict(name="int-agentview", dispatch=0x0081BC60, lo=4, hi=60,
-                     at=0x0081BC78, default=0x0081BD29)
-
-# The per-agent record store each dispatcher runs first, on the 0x34-byte record
-# at charContext+0x7C indexed by AGENT id. The float one is a table; the int one
-# is a three-way compare chain (see CHAINS). Note its dispatch site indexes
-# through edx rather than eax -- `0f b6 92` / `ff 24 95` -- which is why the
-# framing check below tests the opcode bytes and not the whole instruction.
-FLOAT_STORE = dict(name="float-store", dispatch=0x00818210, lo=0x10, hi=0x3E,
-                   at=0x0081822E, default=0x0081838B)
-
-TABLE_SWITCHES = [INT_AGENTVIEW, PRE_SWITCH, INT_SWITCH, FLOAT_STORE,
-                  FLOAT_SWITCH]
+# WHAT BUILD 38797 MEASURED BY HAND now lives in `test_genericvalue.py`, not
+# here, and the move is the point rather than tidiness. Under
+# `studies/crossbuild/PLAN.md` §6's taxonomy a hand-measured address is class
+# (a) -- the per-build liability -- for exactly as long as the tool COMPUTES
+# with it, and class (c) -- a wanted expectation -- once its only reader is a
+# test. Keeping the witness in this file would have left `buildpins` counting
+# 25 live constants in a module that no longer looks anything up, which is the
+# census lying in the safe direction. The test asserts the derivation
+# reproduces every one of them on 38797.
+#
+# The id RANGE each switch covers is derived too, from the guard MSVC emits
+# ahead of each one (`lea`/`add` to rebase, `cmp` against the span, `ja` to the
+# default) -- see `_switch_span`. Ranges are property ids rather than addresses,
+# so they were never build-coupled the way a VA is, but reading them means a
+# build that WIDENS a switch is read correctly instead of truncated.
 
 # The two compare-chain switches. MSVC emitted `sub`/`cmp` + `je` rather than a
 # jump table because each has only three cases, so there is no table to read as
-# data. `verify` is the exact byte string encoding the comparisons: it is what
-# makes these entries refutable rather than a hardcoded answer. A build that
-# renumbers a property, adds a case or reorders the chain changes those bytes.
-CHAINS = [
-    dict(name="int-store", dispatch=0x00818170,
-         ids={32: 0x008181E5, 41: 0x008181B0, 42: 0x00818191},
-         at=0x00818182, verify="83ea20745e83ea09742483ea017572"),
-    # 5, 51 and 61 all store the wire float into the agent object's +0x124.
-    dict(name="float-agentview", dispatch=0x0081BD80,
-         ids={5: 0x0081BD95, 51: 0x0081BD95, 61: 0x0081BD95},
-         at=0x0081BD86, verify="83f805740a83f833740583f83d7509"),
-]
+# data. These byte strings encode the comparisons and are what make the parsed
+# ids refutable: a build that renumbers a property, adds a case or reorders the
+# chain changes them. MEASURED unchanged on all three vaulted builds.
+CHAIN_VERIFY = {"int-store": "83ea20745e83ea09742483ea017572",
+                "float-agentview": "83f805740a83f833740583f83d7509"}
 
 # `test byte ptr [edi/esi + 0x53C], 2` in each dispatcher: when that bit is set
-# the MAIN switch is skipped and only the earlier switches run.
-MAIN_SWITCH_GATE = [(0x008129B6, "f6863c05000002"), (0x008130C2, "f6873c05000002")]
+# the MAIN switch is skipped and only the earlier switches run. Located by this
+# shape INSIDE the dispatcher body -- on its own it is not an anchor (7 and 3
+# hits in `.text` for the esi and edi forms), which is why it is scoped.
+GATE_TAIL = bytes.fromhex("3c05000002")
 
 # ldufr/OpenTyria `code/GmAgentProperties.h`. 66 entries, 0..65. UPSTREAM.
 OPENTYRIA = {
@@ -216,6 +242,315 @@ class Image:
         image itself named, so a wild pointer is a refusal and not a traceback
         from somewhere further down."""
         return self.pe.rva_to_off(va - self.base) is not None
+
+    def off(self, va):
+        return self.pe.rva_to_off(va - self.base)
+
+    def va_of(self, off):
+        return self.base + self.pe.off_to_rva(off)
+
+    def u32(self, va):
+        o = self.off(va)
+        return None if o is None else struct.unpack_from("<I", self.pe.data, o)[0]
+
+    def body(self, va):
+        """(start_off, end_off) of the function at `va`, by MSVC's int3 padding.
+
+        The same boundary rule `avevents.py` and `test_worldmap.py` use. It ends
+        at the first `int3`, which is a pad byte between functions and never a
+        real instruction in compiled MSVC output.
+        """
+        o = self.off(va)
+        if o is None:
+            raise ValueError(f"0x{va:08x} is not backed by file bytes")
+        d, i = self.pe.data, o
+        while i < len(d) and d[i] != 0xCC:
+            i += 1
+        return o, i
+
+    # -- the derivation ----------------------------------------------------
+    @property
+    def located(self):
+        """The derived switch map, computed once per image."""
+        if getattr(self, "_located", None) is None:
+            self._located = locate(self)
+        return self._located
+
+    @property
+    def switches(self):
+        """The five TABLE switches, name -> spec, in the order each runs."""
+        return self.located["tables"]
+
+    @property
+    def chains(self):
+        """The two COMPARE-CHAIN switches, name -> spec."""
+        return self.located["chains"]
+
+    @property
+    def gates(self):
+        """The two main-switch gate VAs, int first."""
+        return self.located["gates"]
+
+
+def _calls(img, start, end):
+    """Every `call rel32` target in [start, end), in address order, deduped.
+
+    A byte scan rather than a disassembly: this module takes no third-party
+    dependency (carve-out (1) names `msghandler.py` and `codescan.py`, not this
+    file), and `E8` immediately followed by a displacement that lands inside
+    `.text` is specific enough when the window is one function body. Every
+    consumer below checks a COUNT, so a stray match is refused rather than used.
+    """
+    d, out = img.pe.data, []
+    for i in range(start, max(start, end - 5)):
+        if d[i] != 0xE8:
+            continue
+        rel = struct.unpack_from("<i", d, i + 1)[0]
+        tgt = img.va_of(i + 5) + rel
+        if img.mapped(tgt) and tgt not in out:
+            out.append(tgt)
+    return out
+
+
+def _switch_sites(img, start, end):
+    """Every `movzx`/`jmp [table]` site in [start, end), in address order."""
+    d, out = img.pe.data, []
+    for i in range(start, max(start, end - SWITCH_SITE_LEN)):
+        if d[i:i + 2] == MOVZX and d[i + 7:i + 9] == JMP_TABLE:
+            out.append(img.va_of(i))
+    return out
+
+
+def _switch_span(img, at):
+    """(lo, hi) for the switch at `at`, read out of the guard MSVC puts ahead.
+
+    The shape is `lea/add r32, -lo` (optional, absent when lo is 0) then
+    `cmp r32, hi-lo` then `ja default`. Reading it means a build that widens a
+    switch is read correctly instead of truncated to the range we remember.
+    """
+    o = img.off(at)
+    d = img.pe.data
+    # `cmp r32, imm8` is the 3 bytes ending where the `ja` begins.
+    for back in (6, 2):                      # ja rel32, then ja rel8
+        j = o - back
+        if back == 6 and not (d[j] == 0x0F and d[j + 1] == 0x87):
+            continue
+        if back == 2 and d[j] != 0x77:
+            continue
+        c = j - 3
+        if d[c] != 0x83 or d[c + 1] not in (0xF8, 0xFA, 0xF9, 0xFB):
+            break
+        span = d[c + 2]
+        # The rebase that makes the switch zero-based is NOT always adjacent to
+        # the `cmp`: `int-agentview` puts `push esi; mov esi, ecx` between them,
+        # and reading only the three bytes before the compare scored it (0, 56)
+        # against a true (4, 60) -- a range that starts four ids early and ends
+        # four short, which would have mapped every id in the switch to the
+        # wrong case body. So scan back a short window and take the NEAREST.
+        #
+        #   8d /r disp8   lea r32, [r32 - lo]
+        #   83 /0 ib      add r32, -lo
+        #
+        # A switch whose lo is 0 has no rebase at all (`int-main`), so finding
+        # none is a real answer rather than a failure.
+        lo = 0
+        for r in range(c - 3, max(0, c - 12), -1):
+            if d[r] == 0x8D and 0x40 <= d[r + 1] <= 0x7F and d[r + 2] >= 0x80:
+                lo = 256 - d[r + 2]
+                break
+            if d[r] == 0x83 and 0xC0 <= d[r + 1] <= 0xC7 and d[r + 2] >= 0x80:
+                lo = 256 - d[r + 2]
+                break
+        return lo, lo + span
+    raise ValueError(
+        f"no `cmp`/`ja` guard ahead of the switch site at 0x{at:08x}, so its id "
+        f"range cannot be read -- this build compiled the switch differently")
+
+
+def _modal_default(img, spec):
+    """The default case: the jump target the most ids share.
+
+    MSVC gives every unhandled id in range the same jump-table entry, so the
+    default is the modal target. Derived rather than recorded because the
+    default VA is what separates "this switch acts on the id" from "it does
+    not", and a stale one silently reclassifies every id in the switch.
+    """
+    counts = collections.Counter(read_switch(img, spec).values())
+    (va, n), = counts.most_common(1)
+    if n < 2:
+        raise ValueError(
+            f"{spec['name']}: no jump target is shared by two ids, so there is "
+            f"no default to identify -- this is not the dense switch we read")
+    return va
+
+
+def _parse_chain(img, fn, name):
+    """{property id: case-body VA} for a three-case compare chain.
+
+    Two encodings, both present: `sub r32, imm8` accumulates (so the ids are
+    running totals) and `cmp r32, imm8` is absolute. Each is followed by
+    `jz rel8` to that id's body, and the chain ends on a `jnz` whose FALL-
+    THROUGH is the last id's body. Parsed rather than recorded, then checked
+    against `CHAIN_VERIFY` so a build that reorders the chain is refused.
+    """
+    start, end = img.body(fn)
+    d = img.pe.data
+    want = bytes.fromhex(CHAIN_VERIFY[name])
+    at = d.find(want, start, end)
+    if at < 0:
+        raise ValueError(
+            f"{name}: the compare chain is not in the function at 0x{fn:08x} -- "
+            f"expected the bytes {CHAIN_VERIFY[name]}, which encode its three "
+            f"comparisons. This build renumbered or restructured it, so no id "
+            f"map read here would be trustworthy")
+    ids, acc, i = {}, 0, at
+    while i < at + len(want):
+        op = d[i:i + 2]
+        if op in (b"\x83\xea", b"\x83\xe8"):          # sub edx/eax, imm8
+            acc += d[i + 2]
+        elif op in (b"\x83\xf8", b"\x83\xfa"):        # cmp eax/edx, imm8
+            acc = d[i + 2]
+        else:
+            break
+        i += 3
+        if d[i] == 0x74:                              # jz rel8 -> that id's body
+            ids[acc] = img.va_of(i + 2) + struct.unpack_from("<b", d, i + 1)[0]
+        elif d[i] == 0x75:                            # jnz rel8 -> falls through
+            ids[acc] = img.va_of(i + 2)
+        else:
+            break
+        i += 2
+    if len(ids) != 3:
+        raise ValueError(
+            f"{name}: parsed {len(ids)} case(s) from the chain at 0x{fn:08x}, "
+            f"expected 3 -- {sorted(ids)}")
+    # `verify` rides along so `chain_ids` can re-read the bytes at `at` on every
+    # call. That is a second reading of the same fact rather than a formality:
+    # this parse happens once per image and is cached, and the re-check is what
+    # a caller holding a stale spec would trip over.
+    return dict(at=img.va_of(at), dispatch=fn, name=name, ids=ids,
+                verify=CHAIN_VERIFY[name])
+
+
+def _table_spec(img, name, dispatch, at):
+    """One table switch, fully derived: span, tables and default."""
+    lo, hi = _switch_span(img, at)
+    spec = dict(name=name, dispatch=dispatch, at=at, lo=lo, hi=hi, default=None)
+    switch_tables(img, spec)                 # refuses if `at` is not the pair
+    spec["default"] = _modal_default(img, spec)
+    return spec
+
+
+def locate(img):
+    """Every switch in this module, derived from the image. Never a lookup.
+
+    Raises `ValueError` naming what did not hold. Each count below is an
+    assertion: a search that quietly takes the first plausible hit is the defect
+    this whole arc exists to remove, so "exactly one" and "exactly two" are
+    checked rather than assumed.
+    """
+    import msgshape                                          # noqa: PLC0415
+
+    # 1. the two dispatchers, via the client's own receive table.
+    handlers = {}
+    for va, count, direction, _caller, _chan in msgshape.derive_tables(img.pe):
+        if direction != "RECV":
+            continue
+        for i in range(count):
+            e = va + 12 * i
+            cmds_va, n = img.u32(e), img.u32(e + 4)
+            if not cmds_va or not n or n > 64 or img.off(cmds_va) is None:
+                continue
+            opcode = img.u32(cmds_va)
+            if opcode in (INT_OPCODE, FLOAT_OPCODE) and opcode not in handlers:
+                handlers[opcode] = img.u32(e + 8)
+    missing = [f"0x{o:04X}" for o in (INT_OPCODE, FLOAT_OPCODE)
+               if not handlers.get(o)]
+    if missing:
+        raise ValueError(
+            f"the receive table has no handler for {', '.join(missing)} -- the "
+            f"agent-property messages are how both dispatchers are reached, so "
+            f"nothing below can be located on this build")
+
+    dispatch = {}
+    for opcode, kind in ((INT_OPCODE, "int"), (FLOAT_OPCODE, "float")):
+        h = handlers[opcode]
+        calls = _calls(img, *img.body(h))
+        if len(calls) != 1:
+            raise ValueError(
+                f"the handler for 0x{opcode:04X} at 0x{h:08x} makes {len(calls)} "
+                f"calls, expected exactly 1 -- it is supposed to be a forwarder "
+                f"whose single callee is the {kind} dispatcher")
+        dispatch[kind] = calls[0]
+
+    # 2. the main switches, inside the dispatchers themselves.
+    out, chains = {}, {}
+    int_start, int_end = img.body(dispatch["int"])
+    sites = _switch_sites(img, int_start, int_end)
+    if len(sites) != 2:
+        raise ValueError(
+            f"the int dispatcher at 0x{dispatch['int']:08x} holds {len(sites)} "
+            f"`movzx`/`jmp [table]` site(s), expected 2 (int-pre then int-main)")
+    out["int-pre"] = _table_spec(img, "int-pre", dispatch["int"], sites[0])
+    out["int-main"] = _table_spec(img, "int-main", dispatch["int"], sites[1])
+
+    fl_start, fl_end = img.body(dispatch["float"])
+    sites = _switch_sites(img, fl_start, fl_end)
+    if len(sites) != 1:
+        raise ValueError(
+            f"the float dispatcher at 0x{dispatch['float']:08x} holds "
+            f"{len(sites)} `movzx`/`jmp [table]` site(s), expected 1 (float-main)")
+    out["float-main"] = _table_spec(img, "float-main", dispatch["float"], sites[0])
+
+    # 3. the store and agentview switches, in the functions each dispatcher calls.
+    for kind, (start, end) in (("int", (int_start, int_end)),
+                               ("float", (fl_start, fl_end))):
+        found = []
+        for target in _calls(img, start, end):
+            try:
+                b0, b1 = img.body(target)
+            except ValueError:
+                continue
+            tables = _switch_sites(img, b0, b1)
+            chain = [n for n, h in CHAIN_VERIFY.items()
+                     if bytes.fromhex(h) in img.pe.data[b0:b1]]
+            if tables:
+                found.append(("table", target, tables[0]))
+            elif chain:
+                found.append(("chain", target, chain[0]))
+        if len(found) != 2:
+            raise ValueError(
+                f"the {kind} dispatcher calls {len(found)} function(s) holding a "
+                f"property switch, expected exactly 2 (the store, then the "
+                f"AgentView switch): {[hex(f[1]) for f in found]}")
+        # The dispatcher runs its per-agent STORE first and its AgentView switch
+        # second, so call order names them. Asserted by the pinned cross-check.
+        for pos, (shape_, target, extra) in zip(("store", "agentview"), found):
+            name = f"{kind}-{pos}"
+            if shape_ == "table":
+                out[name] = _table_spec(img, name, target, extra)
+            else:
+                chains[name] = _parse_chain(img, target, extra)
+
+    # 4. the gate that decides whether each MAIN switch runs at all.
+    gates = []
+    for kind in ("int", "float"):
+        start, end = img.body(dispatch[kind])
+        d = img.pe.data
+        hits = [img.va_of(i) for i in range(start, max(start, end - 7))
+                if d[i] == 0xF6 and d[i + 2:i + 7] == GATE_TAIL]
+        if len(hits) != 1:
+            raise ValueError(
+                f"the {kind} dispatcher holds {len(hits)} main-switch gate(s) "
+                f"(`test byte [ctx+0x53C], 2`), expected exactly 1 -- which "
+                f"switches run is no longer established on this build")
+        gates.append(hits[0])
+
+    order = ["int-store", "int-agentview", "int-pre", "int-main",
+             "float-store", "float-agentview", "float-main"]
+    tables = {n: out[n] for n in order if n in out}
+    return {"tables": tables, "chains": chains, "gates": tuple(gates),
+            "dispatch": dispatch}
 
 
 # `movzx r32, byte ptr [r32 + disp32]` then `jmp dword ptr [disp32 + r32*4]`.
@@ -309,12 +644,13 @@ def consumers(img):
     functions fall through to `ret` for anything they do not name, so nothing
     is recorded anywhere on the way past.
     """
-    out = {i: {} for i in range(INT_SWITCH["lo"], INT_SWITCH["hi"] + 1)}
-    for spec in TABLE_SWITCHES:
+    main = img.switches["int-main"]
+    out = {i: {} for i in range(main["lo"], main["hi"] + 1)}
+    for spec in img.switches.values():
         for i, va in read_switch(img, spec).items():
             if va != spec["default"] and i in out:
                 out[i][spec["name"]] = va
-    for spec in CHAINS:
+    for spec in img.chains.values():
         for i, va in chain_ids(img, spec).items():
             if i in out:
                 out[i][spec["name"]] = va
@@ -336,8 +672,13 @@ def gate_bytes(img, strict=True):
     below is about a control flow we have not actually read.
     `studies/crossbuild/PLAN.md` §6.
     """
-    out = [(va, img.read(va, len(h) // 2) == bytes.fromhex(h))
-           for va, h in MAIN_SWITCH_GATE]
+    # The gates are LOCATED by shape inside each dispatcher now (see `locate`),
+    # so reaching this function at all means one was found in each. Re-reading
+    # the bytes keeps the report honest and keeps `strict` meaningful for a
+    # caller that passes a VA list of its own.
+    out = [(va, img.read(va, 2) == b"\xf6" + img.read(va, 2)[1:2]
+            and img.read(va + 2, 5) == GATE_TAIL)
+           for va in img.gates]
     bad = [va for va, ok in out if not ok]
     if bad and strict:
         raise ValueError(
@@ -358,20 +699,55 @@ def classify(img):
     5, 8 and 51 turned out to be. Kept because "int or float message" is the
     question a server actually asks before sending.
     """
-    ints = read_switch(img, INT_SWITCH)
-    floats = read_switch(img, FLOAT_SWITCH)
-    pre = read_switch(img, PRE_SWITCH)
+    si, sf, sp = (img.switches["int-main"], img.switches["float-main"],
+                  img.switches["int-pre"])
+    ints = read_switch(img, si)
+    floats = read_switch(img, sf)
+    pre = read_switch(img, sp)
     out = {}
-    for i in range(INT_SWITCH["lo"], INT_SWITCH["hi"] + 1):
-        if ints.get(i, INT_SWITCH["default"]) != INT_SWITCH["default"]:
+    for i in range(si["lo"], si["hi"] + 1):
+        if ints.get(i, si["default"]) != si["default"]:
             out[i] = ("int", ints[i])
-        elif floats.get(i, FLOAT_SWITCH["default"]) != FLOAT_SWITCH["default"]:
+        elif floats.get(i, sf["default"]) != sf["default"]:
             out[i] = ("float", floats[i])
-        elif pre.get(i, PRE_SWITCH["default"]) != PRE_SWITCH["default"]:
+        elif pre.get(i, sp["default"]) != sp["default"]:
             out[i] = ("int-pre", pre[i])
         else:
             out[i] = (None, None)
     return out
+
+
+def cross_check(img, addrs, spans):
+    """[(what, derived, expected)] where the derivation disagrees with `addrs`.
+
+    The expectations are passed IN rather than held here, because a
+    hand-measured address stops being a liability only once this module has no
+    copy of it -- see the note beside `INT_OPCODE`. `test_genericvalue.py` owns
+    build 38797's, and an empty list there is the claim that the derivation
+    reproduces every value that used to be typed into this file.
+    """
+    bad = []
+    for name, want in addrs.items():
+        if name == "gates":
+            if tuple(img.gates) != tuple(want):
+                bad.append(("gates", tuple(hex(g) for g in img.gates),
+                            tuple(hex(g) for g in want)))
+            continue
+        got = img.switches.get(name) or img.chains.get(name)
+        if got is None:
+            bad.append((name, "NOT LOCATED", "expected"))
+            continue
+        for key, wanted in want.items():
+            have = got.get(key)
+            if have != wanted:
+                def fmt(v):
+                    return v if isinstance(v, dict) else f"0x{v:08X}"
+                bad.append((f"{name}.{key}", fmt(have), fmt(wanted)))
+    for name, (lo, hi) in spans.items():
+        s = img.switches.get(name)
+        if s and (s["lo"], s["hi"]) != (lo, hi):
+            bad.append((f"{name}.span", (s["lo"], s["hi"]), (lo, hi)))
+    return bad
 
 
 def main():
@@ -381,21 +757,46 @@ def main():
                          "build, and the choice is printed")
     ap.add_argument("--id", type=lambda s: int(s, 0), help="one property id")
     ap.add_argument("--csv", action="store_true")
+    ap.add_argument("--locate", action="store_true",
+                    help="print every address the derivation found, and stop -- "
+                         "the first thing to run against a new build")
     a = ap.parse_args()
     a.exe, why = (a.exe, "given on the command line") if a.exe else find_exe()
     if not os.path.exists(a.exe):
         sys.exit(f"no such file: {a.exe}")
     print(f"client: {a.exe}\n        ({why})\n")
     img = Image(a.exe)
+
+    if a.locate:
+        d = img.located["dispatch"]
+        print(f"  dispatchers     int 0x{d['int']:08X}  float 0x{d['float']:08X}"
+              f"   (handlers for 0x{INT_OPCODE:04X} / 0x{FLOAT_OPCODE:04X})")
+        for name, spec in img.switches.items():
+            print(f"  {name:15s} in 0x{spec['dispatch']:08X}  "
+                  f"at 0x{spec['at']:08X}  default 0x{spec['default']:08X}  "
+                  f"ids {spec['lo']}..{spec['hi']}")
+        for name, spec in img.chains.items():
+            print(f"  {name:15s} in 0x{spec['dispatch']:08X}  "
+                  f"at 0x{spec['at']:08X}  ids "
+                  f"{ {k: hex(v) for k, v in sorted(spec['ids'].items())} }")
+        print(f"  {'gates':15s} {', '.join(f'0x{g:08X}' for g in img.gates)}")
+        print("\nEvery address above is derived from this image; none is stored "
+              "in this file.\ntest_genericvalue.py holds build 38797's "
+              "hand-measured values and requires\nthis derivation to reproduce "
+              "every one of them.")
+        return 0
+
     table = classify(img)
     cons = consumers(img)
 
-    hi = INT_SWITCH["hi"]
+    si, sf, sp = (img.switches["int-main"], img.switches["float-main"],
+                  img.switches["int-pre"])
+    hi = si["hi"]
     ni = sum(1 for k, (w, _) in table.items() if w == "int")
     nf = sum(1 for k, (w, _) in table.items() if w == "float")
     npre = sum(1 for k, (w, _) in table.items() if w == "int-pre")
     none = sorted(k for k, (w, _) in table.items() if w is None)
-    overlap = handled(img, INT_SWITCH) & handled(img, FLOAT_SWITCH)
+    overlap = handled(img, si) & handled(img, sf)
 
     if a.csv:
         print("id,dispatcher,body,switches,opentyria,gwca")
@@ -421,8 +822,8 @@ def main():
 
     print(f"property ids 0..{hi} ({hi + 1} of them; OpenTyria's enum has "
           f"{len(OPENTYRIA)}, ending at {max(OPENTYRIA)})")
-    print(f"  int main switch   0x{INT_SWITCH['dispatch']:08x}: {ni} handled")
-    print(f"  float main switch 0x{FLOAT_SWITCH['dispatch']:08x}: {nf} handled")
+    print(f"  int main switch   0x{si['dispatch']:08x}: {ni} handled")
+    print(f"  float main switch 0x{sf['dispatch']:08x}: {nf} handled")
     print(f"  int pre-switch only: {npre}")
     print(f"  no case body in either MAIN switch: {none}")
     print(f"  ids both main switches claim: {sorted(overlap) or 'none -- disjoint'}")
@@ -435,8 +836,7 @@ def main():
         w, va = table[i]
         mark = {"int": "INT  ", "float": "FLOAT", "int-pre": "pre  "}.get(w, "  -  ")
         body = f"0x{va:08x}" if va else "          "
-        extra = sorted(set(cons[i]) - {INT_SWITCH["name"], FLOAT_SWITCH["name"],
-                                       PRE_SWITCH["name"]})
+        extra = sorted(set(cons[i]) - {si["name"], sf["name"], sp["name"]})
         print(f"  {i:3}  {mark} {body}  {OPENTYRIA.get(i, '(past enum end)'):<20}"
               f"  {GWCA.get(i, ''):<24}{' +' + ','.join(extra) if extra else ''}")
     return 0
@@ -455,9 +855,13 @@ def cli(argv=None):
         return main()
     except ValueError as exc:
         print(f"\nCANNOT READ THIS BUILD: {exc}", file=sys.stderr)
-        print("  This is a finding, not a crash. Every address in this module was "
-              "measured on\n  build 38797; re-derive them before trusting any "
-              "property map from this image.", file=sys.stderr)
+        print("  This is a finding, not a crash -- and since 2026-08-14 it is a "
+              "SHARPER one.\n  Nothing here is looked up by address any more, so "
+              "this is not 'the addresses\n  are stale': it is the DERIVATION "
+              "failing a check it states, on a build that\n  compiles these "
+              "switches differently from all three vaulted ones. The message\n"
+              "  above names which. `--locate` prints what it did manage to find.",
+              file=sys.stderr)
         return 2
 
 

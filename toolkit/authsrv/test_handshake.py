@@ -60,6 +60,10 @@ sys.path.insert(0, os.path.join(
 from gwcrypto import ARC4, arc4_hash, recover_master_secret  # noqa: E402
 import dhbuild  # noqa: E402
 import vaultpath  # noqa: E402
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'clientscan'))
+import buildid  # noqa: E402
+import pinned  # noqa: E402
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'schema'))
 from codec import Codec  # noqa: E402
 sys.path.insert(0, os.path.join(
@@ -73,7 +77,25 @@ SELFTEST_SESSIONS = r"C:\gd\Rurik\vault\state\selftest-sessions.json"
 codec = Codec()
 
 PORT = 6112
-BUILD = 38797
+
+# The build this synthetic client ANNOUNCES in its version frame. It is derived
+# from the exe whose DH parameters the client is about to use, never typed in.
+#
+# WHY, and it is a defect this file carried from 2026-08-06 to 2026-08-14. This
+# was `BUILD = 38797`, a constant, while the exe came from `dhbuild.select(...
+# match=server_keys())` -- "whichever build the newest key file belongs to". The
+# two were independent, so the moment a second build was patched (38833, on
+# 2026-08-14) the test drove a 38833 client while announcing 38797: a client
+# claiming a build it is not. Nothing noticed, because nothing on either side
+# read the announced build.
+#
+# `authsrv` now DOES read it -- it binds the DH key to the announced build, so
+# that a session running one build against another build's key is refused by
+# name instead of dying as `Code=058` (studies/crossbuild/FINDINGS.md §7.7). That
+# turned this latent inconsistency into an aborted connection, which is the guard
+# working on the first thing it was pointed at. Derived below, after the exe is
+# chosen, so the two can never drift apart again.
+BUILD = None
 
 # Reuses the real UUIDs observed on the wire, so the encoding stays exercised.
 TEST_EMAIL = "selftest@rurik.local"
@@ -97,6 +119,14 @@ def server_keys():
     return json.load(open(os.path.join(kd, cands[-1]), encoding="utf-8"))
 
 
+def _build_of_keyfile(keys):
+    """The client build a `rurik_dh_*.json` was cut for, via pinned.BUILDS."""
+    for b in pinned.BUILDS:
+        if b.stamp == keys.get("build_tag"):
+            return b.number
+    return None
+
+
 # The floor is what a completed handshake session executes. MEASURED 2026-08-06:
 # a green run spawns its authsrv on 6112, completes the lifecycle and prints 17,
 # which is every check() site in the file. 16 of those are mandatory; the 17th is
@@ -111,7 +141,10 @@ def server_keys():
 # would still have cleared it. And when the wrong artifact WAS selected, the banner
 # read "ONLY 8 OF A DECLARED FLOOR OF 13", understating the damage -- eight of the
 # SIXTEEN mandatory checks had not run.
-LEDGER = checks.Ledger("handshake", floor=16)
+# 16 -> 17 on 2026-08-14: the mandatory core gained the check that the exe's
+# build matches the key file the server will load. A green run now prints 18
+# (17 mandatory + the negative control).
+LEDGER = checks.Ledger("handshake", floor=17)
 check = checks.adopt_named(LEDGER)
 
 
@@ -133,6 +166,17 @@ def main():
 
     g, p, B = dhbuild.read_params(exe)
     print(f"read from exe  : g={g}, prime {p.bit_length()} bits, B {B.bit_length()} bits")
+
+    # The announced build comes from THIS exe, so the client cannot claim to be a
+    # build it is not. See the note on BUILD above for what that cost.
+    global BUILD                                             # noqa: PLW0603
+    BUILD = buildid.read(exe)[0]
+    print(f"announcing     : build {BUILD}, read out of that same exe")
+    check(BUILD == _build_of_keyfile(srv),
+          "the exe's build matches the key file the server will load",
+          f"exe says {BUILD}, key file is {srv.get('build_tag')} -- these must "
+          f"agree or the handshake is testing two different builds against "
+          f"each other")
 
     # Keep the self-test's output out of the ground-truth vault. These used to
     # share vault/captures/authsrv/ and vault/state/sessions.json with real

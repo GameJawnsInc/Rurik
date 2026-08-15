@@ -32,6 +32,7 @@ binary. Floor 40, ~2 s.
 """
 import ast
 import json
+import collections
 import os
 import re
 import shutil
@@ -192,8 +193,8 @@ check("buildpins.py" in " ".join(skipped),
 
 live = [r for r in rows if r["klass"] == BP.LIVE]
 files = {r["file"] for r in live}
-check(len(live) == 71,
-      "71 class-(a) occurrences -- the census",
+check(len(live) == 47,
+      "47 class-(a) occurrences -- the census",
       f"{len(live)}; if this moved, the plan's cost number moved with it. 68 "
       f"until genericvalue.py stopped storing its ten table addresses; 63 after; "
       f"64 once buildid.py gave the older build a NUMBER, since a build number "
@@ -206,25 +207,53 @@ check(len(live) == 71,
       f"test_modelfile.py §5), and mapdata/atex.py's FORMAT_FLAGS_VA and "
       f"RUN_TABLE_VA (the ATEX level codec). THAT IS THE POINT OF THIS CHECK "
       f"RATHER THAN A NUISANCE: the liability grows silently, it grew 11% in the "
-      f"two days this branch was unmerged, and nothing but a literal here notices")
-check(len(files) == 9, "across 9 files", f"{len(files)}: {sorted(files)}")
+      f"two days this branch was unmerged, and nothing but a literal here notices. "
+      f"73 later the same day, 2026-08-14, when ArenaNet shipped 38833 and it was "
+      f"registered in pinned.BUILDS: a build NUMBER and its SIZE are both "
+      f"build-coupled constants, so REGISTERING a build costs two pins -- the "
+      f"cheapest kind, derived and asserted against a fresh read by "
+      f"test_buildid.py §4, but the census counts them because they are real. "
+      f"**46 the same evening**, and this is the first time the number has gone "
+      f"DOWN by a lot: genericvalue.py's 27 became 0 when its switches were "
+      f"derived from the message tables instead of looked up, which is a 37% cut "
+      f"to the whole repo's per-build liability in one module "
+      f"(studies/crossbuild/FINDINGS.md §8). 47 on 2026-08-15, and this one is a "
+      f"pin ADDED ON PURPOSE: atex.py's two VAs named no build, which is exactly "
+      f"the class-(b) defect the plan states -- 'a bare VA with no build is the "
+      f"defect, not the VA' -- and with nothing recording that they were measured "
+      f"on 38797, test_atexlevel.py §7 was free to re-read them against whatever "
+      f"client sorted last and did (38833, silently, once the vault gained a "
+      f"third build). atex.TABLES_BUILD fixes that and costs one census row. The "
+      f"trade is the right way round: a counted pin that a test resolves through "
+      f"pinned.find() beats an uncounted address nobody can tell is stale")
+check(len(files) == 8, "across 8 files", f"{len(files)}: {sorted(files)}")
 
 # The sites the plan names by hand must actually be there. A census that missed
 # the two live-memory readers would be reassuring and wrong.
 for f, sym in (("clientscan/agentprobe.py", "RVA_ARRAY"),
                ("clientscan/itemprobe.py", "RVA_TLS_INDEX"),
                ("clientscan/avevents.py", "ACTION_38797"),
-               ("clientscan/genericvalue.py", None),
                ("clientscan/msgshape.py", "TABLES_38797"),
                ("clientscan/asserts.py", "ASSERT_VA_38797")):
     hit = [r for r in live if r["file"] == f and (sym is None or r["symbol"] == sym)]
     check(hit, f"the census finds {f}" + (f" {sym}" if sym else ""),
           f"{len(hit)} row(s)")
 
-check(len([r for r in live if r["file"] == "clientscan/genericvalue.py"]) == 27,
-      "genericvalue.py is the largest remaining block, at 27",
-      "down from 32, and all of them now GATED -- the module refuses on a build "
-      "it was not measured on rather than returning a stale map")
+# INVERTED 2026-08-14, and the inversion is the result. This asserted that
+# genericvalue.py held 27 -- "the largest remaining block" -- with the consolation
+# that all 27 were GATED, so the module refused a build it had not been measured
+# on rather than returning a stale map. Build 38833 then arrived and it refused,
+# correctly and uselessly, taking avevents.py's property map with it. The
+# switches are now derived from the client's own receive table, so the block is
+# ZERO and the file is the negative case this census most wants to be able to
+# state. msgshape.py's 25 is the largest remaining block.
+check(not [r for r in live if r["file"] == "clientscan/genericvalue.py"],
+      "genericvalue.py contributes NOTHING to the census (was 27, then 0)",
+      "the switches are located through the message tables now; a live constant "
+      "reappearing here means something went back to being looked up")
+check(max(collections.Counter(r["file"] for r in live).values()) == 25,
+      "and the largest remaining block is msgshape.py's 25",
+      str(collections.Counter(r["file"] for r in live).most_common(3)))
 
 cited = [r for r in rows if r["klass"] == BP.CITATION]
 check(len(cited) > len(live) * 3,

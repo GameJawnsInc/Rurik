@@ -26,8 +26,38 @@ nothing recorded one; that was survivable only while there was one build, and
 same way the origin stamp is -- a stated build the file's own VERSION record refutes is
 REFUSED -- and UNKNOWN is again a distinct third value rather than "probably the pinned
 one". The vault census answers the question `studies/crossbuild/PLAN.md` §10 left
-UNVERIFIED: every capture that names a build names 38797, so no existing corpus figure
-is pooling two of them.
+UNVERIFIED -- no corpus figure pools two builds -- and it is scoped to the RESEARCH
+corpus: `selftest/` is excluded from the walk the way `captures-scrubbed/` already is.
+
+SINCE 2026-08-14 that scoping is load-bearing. Build 38833 shipped, and the suite's own
+runs began writing 38833-stamped fixtures into captures/selftest/ -- test_handshake
+drives whichever client the newest key matches (`studies/crossbuild/FINDINGS.md` §7.7)
+-- so a census over the whole vault went red over its own byproducts, and would go red
+again on every future suite run. Two sessions hit that red in parallel and fixed it two
+ways: one NAMED the off-pin files in an allowlist, which the producer refutes -- the
+suite itself writes them, so the list stales on every run -- and one excluded the
+fixtures, which stands: a self-test artifact is not research data, and counting it
+re-creates one level up the very contamination `selftest/` was split out to prevent.
+What survives from the allowlist branch: the pooling refusal is EXERCISED on a real
+mixed pair, and the census's 38797 is cross-checked against `clientscan/pinned.py` so
+the pin cannot move without this census going red until re-decided.
+
+THAT PARAGRAPH USED TO END "a REAL second-build capture in the research corpus still
+turns the census red -- that is the point, not a defect", AND IT DID, THE NEXT DAY.
+The 38833 verification runs put real captures in captures/authsrv/, and the red was
+correct and useless in the same breath: it stated a true fact about the vault (two
+builds are present) while the thing anyone needed to know was a policy (which build do
+our figures describe), and a test cannot settle a policy by failing at it.
+
+OWNER'S DECISION, 2026-08-15: THE FIGURES FOLLOW THE PIN. So the census no longer
+asserts that one build exists -- the corpus has outgrown that and will keep outgrowing
+it -- and instead asserts the pair that actually protects a number: selecting to the
+pin leaves ONE build, and the pinned corpus is not gutted by the selection. The second
+half is the one that would fail silently, because a filter that keeps nothing also
+"leaves one build". `origin.select_build` is the primitive and consumers call it;
+`toolkit/authsrv/test_movement_fidelity.py` is the worked example and PRINTS what it
+excluded, because a bounded corpus reported as a whole one is the defect this repo
+keeps re-learning.
 
     python toolkit/test_origin.py
 """
@@ -44,11 +74,16 @@ import vaultpath  # noqa: E402
 
 # 5 classification + 4 stamp-vs-contents + 4 refusal + 3 vault-corpus = 16, measured green
 # 2026-08-07. 2026-08-13 added the BUILD stamp: 11 constructed + 2 vault-census, for 28
-# with a vault. Both vault sections declare a skip when there are no captures, and a
-# vault-less run scores 23 -- MEASURED with RURIK_VAULT pointed at an empty directory,
-# not derived by subtraction, because a floor computed from a floor is how a section
-# quietly stops running. The floor sits at 23 so a vault-less run still passes; the two
-# census checks are the only ones that need real captures.
+# with a vault; 2026-08-14 the build census grew from 2 checks to 4 when the vault gained
+# its first off-pin captures, for 30 with a vault; 2026-08-15 it grew to 6 when the census
+# moved from "one build exists" to "selecting to the pin leaves one build" and gained the
+# two-check negative control that proves the pair splits on a nonexistent pin, for 32 with
+# a vault, measured. Both vault sections declare
+# a skip when there are no captures, and a vault-less run scores 23 -- MEASURED with
+# RURIK_VAULT pointed at an empty directory, not derived by subtraction, because a floor
+# computed from a floor is how a section quietly stops running. The floor sits at 23 so a
+# vault-less run still passes; the census checks are the only ones that need real
+# captures.
 LEDGER = checks.Ledger("capture origin", floor=23)
 
 
@@ -305,19 +340,147 @@ def section_build():
         return
     found = []
     for base, dirs, files in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in ("captures-scrubbed",)]
+        # `selftest` joined `captures-scrubbed` here on 2026-08-14, and the
+        # reason is the one test_handshake.py already gives for the directory
+        # existing at all: its output "used to share vault/captures/authsrv/
+        # with real client sessions ... two self-test captures were read as
+        # evidence of successful client logins that never happened." The files
+        # were split out so they could not be mistaken for research data -- and
+        # this census then walked the whole tree and counted them as exactly
+        # that, re-creating the contamination one level up.
+        #
+        # It surfaced the moment the numbers could disagree: build 38833 was
+        # patched, `test_handshake.py` began announcing 38833 (it had been
+        # claiming a hardcoded 38797 while driving whatever client the newest
+        # key matched -- see studies/crossbuild/FINDINGS.md §7.7), and three
+        # runs of the SUITE ITSELF put three 38833-stamped files in the vault.
+        # The corpus then read {38797: 1828, 38833: 3} and this check went red
+        # over its own test fixtures.
+        #
+        # THE GUARD KEEPS ITS TEETH, and on 2026-08-15 it had to grow a second
+        # set. The claim this census used to make was "the research corpus is
+        # at most ONE build", with the note that a REAL second-build capture
+        # would turn it red and that this was the point. It went red the next
+        # day, exactly as advertised: the 38833 verification runs left real
+        # captures in captures/authsrv/, not just fixtures in selftest/.
+        #
+        # That red was correct and it was also unanswerable BY THIS TEST, which
+        # is the distinction that matters. "Two builds are present" is a fact
+        # about the vault; "which build do our figures describe" is a policy,
+        # and a test cannot decide a policy by failing. OWNER'S DECISION,
+        # 2026-08-15: THE FIGURES FOLLOW THE PIN. So the invariant below is no
+        # longer "one build exists" -- which the corpus has outgrown and will
+        # keep outgrowing -- but the one that actually protects a number:
+        # SELECTING TO THE PIN LEAVES ONE BUILD, AND THE PIN'S CORPUS IS NOT
+        # EMPTY. Consumers do that selection (`test_movement_fidelity.py` is
+        # the worked example) and print what they excluded.
+        dirs[:] = [d for d in dirs if d not in ("captures-scrubbed", "selftest")]
         found += [os.path.join(base, f) for f in files if f.endswith(".jsonl")]
     groups = origin.partition_builds(found)
     known = {b: v for b, v in groups.items() if b is not origin.BUILD_UNKNOWN}
-    LEDGER.ok(len(known) <= 1,
-              "the whole vault is at most ONE client build",
-              f"{ {b: len(v) for b, v in known.items()} } "
-              f"+ {len(groups.get(origin.BUILD_UNKNOWN, []))} unknown")
-    if known:
-        LEDGER.ok(set(known) == {38797},
-                  "and that build is 38797",
-                  "MEASURED 2026-08-13; the corpus figures in studies/ are not "
-                  "pooling builds, which resolves PLAN.md §10's UNVERIFIED flag")
+    n_unknown = len(groups.get(origin.BUILD_UNKNOWN, []))
+
+    kept, off = origin.select_build(found, 38797)
+    kept_known = {b for b in origin.partition_builds(kept)
+                  if b is not origin.BUILD_UNKNOWN}
+    LEDGER.ok(kept_known <= {38797},
+              "selecting the research corpus to the pin leaves ONE build",
+              f"whole corpus { {b: len(v) for b, v in known.items()} } "
+              f"+ {n_unknown} unknown; selection drops {len(off)} off-pin "
+              f"file(s) and keeps {len(kept)}")
+
+    # The other half, and it is the one that fails silently. A selection that
+    # keeps NOTHING also "leaves one build", and every figure computed after it
+    # would be over an empty or gutted pool while still reading as a pass. The
+    # unstamped files are the bulk of the risk -- 948 of them, kept on purpose
+    # because "cannot say" is not "some other build" -- so this asserts the
+    # PINNED files survive on their own terms, not merely that the total is
+    # non-zero.
+    LEDGER.ok(len(known.get(38797, [])) > 100,
+              "and the pinned build's own corpus survives the selection",
+              f"{len(known.get(38797, []))} file(s) stamped 38797, "
+              f"{n_unknown} unstamped and kept with them; if this collapses, "
+              f"the figures moved for a reason nobody can see")
+
+    # NEGATIVE CONTROL, and it is the reason the check above exists as a SECOND
+    # check rather than a clause on the first. Selected to a build the corpus
+    # does not hold, "leaves ONE build" passes VACUOUSLY -- nothing stamped
+    # survives, so there is no second build to find, and a filter that kept
+    # nothing would report the same green as one that kept everything. MEASURED
+    # here rather than argued: the same two predicates are run against a
+    # nonexistent pin, and the pair must split.
+    ghost_kept, _ = origin.select_build(found, 99999)
+    ghost_known = {b for b in origin.partition_builds(ghost_kept)
+                   if b is not origin.BUILD_UNKNOWN}
+    LEDGER.ok(len(ghost_known) <= 1,
+              "control: a nonexistent pin passes the ONE-BUILD test vacuously",
+              "which is why that check cannot stand alone")
+    LEDGER.ok(len(origin.partition_builds(found).get(99999, [])) == 0,
+              "control: and the survives-the-selection test catches it",
+              f"0 file(s) stamped 99999, against "
+              f"{len(known.get(38797, []))} at the real pin -- the pair splits, "
+              f"so the second check is load-bearing rather than decorative")
+
+    # Two additions from the branch that fixed this same red in parallel (both
+    # sessions hit it on 2026-08-14; the selftest exclusion above is the scoping
+    # that stands, and these two survive it).
+    #
+    # The refusal, exercised on REAL files. The constructed pair earlier proves
+    # `require_single_build` refuses in principle; the suite's own fixtures now
+    # give the vault a real 38833 file, so the guard can also be proven against
+    # actual captures -- the same upgrade the origin census made when the first
+    # live capture landed, because a refusal that has never fired on a real
+    # artifact is the same class of thing as a green test that asserts nothing.
+    # The fixture is found by reading each candidate's bytes (`build_of`), never
+    # by filename -- and if the fixtures age out, this degrades to "nothing to
+    # mix", not to red.
+    #
+    # UPDATED 2026-08-15: it now prefers a real RESEARCH capture and falls back
+    # to a selftest fixture. Since the 38833 runs there are off-pin files in
+    # captures/authsrv/ itself, which is a stronger witness than a fixture the
+    # suite wrote -- the pair being refused is then two files a consumer would
+    # really have pooled.
+    off_pin = off[0] if off else None
+    if off_pin is None:
+        fixtures = os.path.join(root, "selftest")
+        if os.path.isdir(fixtures):
+            for name in sorted(os.listdir(fixtures), reverse=True):
+                if name.endswith(".jsonl"):
+                    p = os.path.join(fixtures, name)
+                    b = origin.build_of(p)[0]
+                    if b is not origin.BUILD_UNKNOWN and b != 38797:
+                        off_pin = p
+                        break
+    pin_files = known.get(38797, [])
+    if off_pin is None or not pin_files:
+        LEDGER.ok(True,
+                  "no real mixed pair on disk -- the pooling refusal rests "
+                  "on the constructed pair",
+                  "an off-pin fixture and a pinned research capture are both needed")
+    else:
+        refused = ""
+        try:
+            origin.require_single_build([pin_files[0], off_pin],
+                                        what="the build census")
+        except origin.MixedBuilds as exc:
+            refused = str(exc)
+        LEDGER.ok(os.path.basename(off_pin) in refused,
+                  "a real second-build file EXISTS, and pooling it with the "
+                  "pinned corpus is still refused by name",
+                  f"{'a RESEARCH capture' if off else 'a selftest fixture'}: "
+                  f"{origin.build_of(off_pin)[1]}")
+
+    # And the 38797 above must still be the registry's pin. The literal is
+    # deliberate -- this census states a measured fact about the corpus, not a
+    # policy -- but the day clientscan/pinned.py moves its pin, that fact needs
+    # re-deciding, and two authorities drifting apart silently is the exact
+    # staleness failure the top of CLAUDE.md is about.
+    sys.path.insert(0, os.path.join(HERE, "clientscan"))
+    import pinned  # noqa: E402
+    LEDGER.ok(pinned.BUILD == 38797,
+              "and the build this census is written against is still the registry's pin",
+              f"clientscan/pinned.py says {pinned.BUILD}; if these disagree, the pin "
+              f"moved and this census must be re-decided, not patched green")
 
 
 if __name__ == "__main__":

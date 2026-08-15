@@ -44,10 +44,16 @@ sys.path.insert(0, TOOLKIT)
 # first; `session.py` used to work only because it imported drive_client one
 # line before it imported cage, which is an ordering accident, not a path.
 sys.path.insert(0, os.path.join(TOOLKIT, "clientpatch"))
+# And `clientscan/` for the two modules that answer "which build is this exe" --
+# `pinned` for what we are pinned TO, `buildid` for what a file actually IS.
+# Both are stdlib-only, so this does not put a dependency on the launch path.
+sys.path.insert(0, os.path.join(TOOLKIT, "clientscan"))
 from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
+import buildid  # noqa: E402
 import cage  # noqa: E402
 import accounts  # noqa: E402
+import pinned  # noqa: E402
 
 RUN_ROOT = os.path.normcase(vault_path("run"))
 # The live-capture build is staged apart so isolate_client.ps1's bare sweep, which
@@ -77,19 +83,119 @@ def is_loopback(value):
             and all(p.isdigit() and int(p) <= 255 for p in parts))
 
 
-def newest_run_exe():
-    """The most recently assembled vault/run/<build>/Gw.exe, or None.
+def select_run_exe(build=None):
+    """(path, why) -- the newest vault/run/<dir>/Gw.exe THAT IS `build`.
 
-    Discovered rather than hardcoded: the run dir is rebuilt after every
-    ArenaNet update, and a default frozen to one build stamp goes stale the
-    moment make_run_dir.py assembles the next one.
+    `why` is meant to be printed, in both outcomes. `path` is None when nothing
+    qualifies, and then `why` is the whole diagnosis.
+
+    NEWEST IS NOT A BUILD SELECTOR, and this function used to think it was: it
+    globbed vault/run/*/Gw.exe and returned `max(..., key=os.path.getmtime)`.
+    That is the third appearance of one defect. `sorted(exes)[-1]` picked the
+    wrong client the day both DH configurations first existed (CLAUDE.md says
+    so, twice, in two files), `pinned.PINNED` was `BUILDS[-1]` until 2026-08-14,
+    and this line was the one nobody had converted -- so when build 38833 was
+    snapshotted at 18:24 that day it became "newest" and the harness silently
+    changed which client it launches.
+
+    Silently is the operative word. It did not fail at the exe: it failed later
+    and elsewhere, because the 38833 run directory's Gw.dat has never had the
+    maps 146/148 replacement installed (file_id 0x8001B97D, bit-31 "replacement
+    pending") while the 38797 directory still carries it. A newest-wins default
+    turns an ArenaNet update into a wrong answer somewhere downstream rather
+    than into an error here.
+
+    SO THE BUILD IS MEASURED, never inferred from the directory name -- the same
+    rule the vault's DH split lives by. `buildid.read()` reads the client's own
+    `mov eax, <build>; ret` getter out of the image in ~0.07 s, which is cheap
+    enough to do on every launch, and it works on copies whose hash we never
+    recorded: `identify()` calls vault/run/reskin-roster "unknown", and its
+    exe says 38797 quite clearly.
+
+    Defaults to `pinned.BUILD` -- 38797 -- because that is what every address in
+    `studies/` was measured against and what the map replacement is installed
+    for. Moving the harness to a new build is a re-measurement arc, not a
+    side effect of snapshotting one.
+
+    NEVER RAISES. `--exe`'s argparse default used to call this eagerly, so a
+    refusal here would take `--help` and even an explicit `--exe` down with it.
+    Callers decide what a None means; both of ours print `why` and stop.
     """
     import glob
+    want = pinned.BUILD if build is None else build
     cands = glob.glob(os.path.join(vault_path("run"), "*", "Gw.exe"))
-    # -probe dirs are experiment copies; prefer the plain build dir.
-    plain = [c for c in cands if not os.path.dirname(c).endswith("-probe")]
-    pick = plain or cands
-    return max(pick, key=os.path.getmtime) if pick else None
+    if not cands:
+        return None, (f"No Gw.exe under {vault_path('run')} — run "
+                      f"make_run_dir.py first (RUNBOOK.md, one-time setup).")
+
+    matched, others = [], []
+    for c in cands:
+        try:
+            number = buildid.read(c)[0]
+        except BaseException as exc:                          # noqa: BLE001
+            # An unreadable candidate is skipped and REPORTED, never silently
+            # dropped: "we could not look" and "we looked and it was the wrong
+            # build" are different answers and the second is the only one that
+            # should ever narrow the field.
+            others.append((c, f"unreadable: {type(exc).__name__}"))
+            continue
+        (matched if number == want else others).append(
+            (c, f"build {number}"))
+
+    if not matched:
+        lines = [f"No client of build {want} under {vault_path('run')}.",
+                 f"  {len(cands)} run director(ies) exist and none is it:"]
+        for c, what in sorted(others):
+            lines.append(f"      {os.path.basename(os.path.dirname(c))}  -- {what}")
+        lines.append(f"  This tool's offsets, its captures and the maps 146/148")
+        lines.append(f"  replacement are all pinned to {want}. Re-assemble that run")
+        lines.append(f"  directory (RUNBOOK.md), or pass an explicit --exe if you")
+        lines.append(f"  genuinely mean to drive another build.")
+        return None, "\n".join(lines)
+
+    # AND WITHIN THE BUILD, THE CANONICAL DIRECTORY -- also not by mtime.
+    #
+    # This was the same bug a second time and filtering by build alone did not
+    # fix it: with 38833 excluded the newest 38797 copy is `reskin-roster`
+    # (assembled 2026-08-14 12:29), an experiment copy, beating the real one at
+    # 2026-08-10 23:54. The old `-probe` exclusion covered exactly one spelling
+    # of "experiment" and there are three on disk: `-c2`, `-probe`,
+    # `reskin-roster`.
+    #
+    # `make_run_dir.py` names the canonical directory after the build's own
+    # vault STAMP (`dest = run_root/tag`, tag off `Gw.custom.<tag>.exe`);
+    # everything else on disk got its name from an explicit `--dest`. So ask for
+    # the stamp. That is a name with a producer and a meaning, rather than a
+    # timestamp that means "whatever was touched last".
+    by_dir = {os.path.basename(os.path.dirname(c)): c for c, _ in matched}
+    stamp = next((b.stamp for b in pinned.BUILDS if b.number == want), None)
+    if stamp and stamp in by_dir:
+        return by_dir[stamp], _why(want, by_dir[stamp], others)
+    # No canonical directory: fall back to a variant, but SAY the name, because
+    # an experiment copy carries whatever that experiment changed -- reskinned
+    # models, a repointed Gw.dat -- and a run that silently used one would be
+    # measuring the experiment.
+    pick = max((c for c, _ in matched), key=os.path.getmtime)
+    return pick, (_why(want, pick, others) + f"; NO canonical {stamp} directory, "
+                  f"this is a VARIANT copy and may carry experiment changes")
+
+
+def _why(want, pick, others):
+    why = f"build {want}, {os.path.basename(os.path.dirname(pick))}"
+    if others:
+        skipped = sorted(os.path.basename(os.path.dirname(c)) for c, _ in others)
+        why += (f" (chosen by BUILD and name, never by mtime; "
+                f"skipped {', '.join(skipped)})")
+    return why
+
+
+# `newest_run_exe()` USED TO LIVE HERE and is deliberately not kept as a
+# wrapper. It no longer returns the newest anything -- selection is by build and
+# by name now -- so the name would be a false statement about what the function
+# does, in a module whose whole subject is which binary gets launched. That is a
+# worse trap than a missing function: a caller reading `newest_run_exe()` would
+# believe it. Nothing in the tree called it once both call sites moved to
+# `select_run_exe`, which returns the reason as well as the path.
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 VK_RETURN = 0x0D
@@ -766,7 +872,15 @@ def main():
                     help="account label from vault/keys/accounts.json. "
                          "Omit for a loopback run: a synthetic credential is "
                          "used and no real account is involved.")
-    ap.add_argument("--exe", default=newest_run_exe())
+    # Resolved AFTER parsing, not as an eager default. As a default it scanned
+    # the vault (and now reads a PE per candidate) on every `--help` and on
+    # every run that passes an explicit --exe, and it had nowhere to report why
+    # it came back empty.
+    ap.add_argument("--exe", default=None,
+                    help=f"Client to drive. Default: the newest vault/run copy "
+                         f"OF BUILD {pinned.BUILD}, selected by reading each "
+                         f"candidate's own build getter -- never by directory "
+                         f"name or mtime.")
     # The original 9/5/5 spacing was tuned when the client still ran its updater
     # on boot. With the updater patched out every screen -- load, login, EULA,
     # character select -- comes up fast, and the old delays just sat idle.
@@ -800,8 +914,10 @@ def main():
     a = ap.parse_args()
 
     if not a.exe:
-        raise SystemExit(f"No Gw.exe under {vault_path('run')} — "
-                         f"run make_run_dir.py first (RUNBOOK.md, one-time setup).")
+        a.exe, why = select_run_exe()
+        if not a.exe:
+            raise SystemExit(why)
+        print(f"client: {why}")
     args = ["-authsrv", a.authsrv, "-portal", "127.0.0.1", "-windowed", "-log"]
     # Choose the account rather than inheriting whatever the client autofilled. For a
     # loopback run that is a synthetic credential and no real one: our webgate says yes

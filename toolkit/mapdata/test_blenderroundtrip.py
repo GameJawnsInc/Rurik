@@ -861,8 +861,12 @@ def _section5(check, led, blender, tmp, args):
         if row is None:
             led.skip("5. the real map", "the reference map did not resolve")
             return
+        # textures=False: this file's claim is the GEOMETRY round trip, and
+        # the texture block never survives the stamp anyway (import_gwmap
+        # strips it -- a scene cannot vouch for files it does not contain).
         src = export_row(row, ar, outdir=os.path.join(tmp, "real"),
-                         file_id=PRESEARING_FILE_ID, name="presearing")
+                         file_id=PRESEARING_FILE_ID, name="presearing",
+                         textures=False)
         constants, donor = mapbuild.borrowed_constants(ar, exclude_row=row)
 
     exp = load_export(src)

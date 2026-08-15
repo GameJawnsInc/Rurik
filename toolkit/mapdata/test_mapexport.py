@@ -40,13 +40,21 @@ must equal the Map Parameters rect exactly, and `(x1-x0)/dimX` must be 96.0.
 Section 6 runs it over a sample of maps and section 4 ships the `(dim-1)` divisor
 and a perturbed dimension as controls that must NOT pass.
 
-SECTIONS 0-4b NEED NO VAULT and build everything they check out of nothing --
+SECTIONS 0-4c NEED NO VAULT and build everything they check out of nothing --
 including a matched props pair whose Bloated half is assembled here from
-`struct.pack`, which is what lets `build_props`'s refusals each sit beside a
-live baseline. A run with no archive still executes them, declares the three
-vault sections as skips naming the path, and then FAILS on the floor -- because
-a run that measured nothing about ArenaNet's bytes has not verified this
-module, whatever it printed.
+`struct.pack`, and synthetic ATEX/DDS texture rows behind a fake two-method
+archive, which is what lets `build_props`'s and `build_terrain_textures`'s
+refusals each sit beside a live baseline. A run with no archive still executes
+them, declares the four vault sections as skips naming the path, and then
+FAILS on the floor -- because a run that measured nothing about ArenaNet's
+bytes has not verified this module, whatever it printed.
+
+SECTION 8 IS RUNG T4: Kamadan's 51-entry texture table exported whole -- every
+distinct tile byte in use resolving to a decoded image, the MFT identity on
+every entry re-read here, a flipped byte in one PNG refusing the whole export
+-- plus the tag3b reference map (row 56835), whose extra LEADING dependency is
+one of the corpus's four DDS rows and must reach no tile, and the resolution
+law over the sampled maps (`--all` for the corpus).
 
 SECTION 7 IS THE PROPS SIDECAR against the archive: every position equal to
 this file's own independent walk of the Bloated chunk, every placement inside
@@ -82,9 +90,11 @@ from archive import Archive, ffna_chunks, file_id_table  # noqa: E402
 from terrain import Terrain, CELL_PITCH, CHUNK_SIZE, TERRAIN_CHUNK  # noqa: E402
 import mapexport  # noqa: E402
 from mapexport import (MAP_PARAMS_CHUNK, build_manifest, build_props,  # noqa: E402
-                       detile, export_row, load_export, map_rect,
-                       resolve_outdir, retile, verify_manifest, write_export,
-                       FORMAT, FORMAT_VERSION, _check_rect)
+                       build_terrain_textures, detile, export_row, load_export,
+                       map_rect, resolve_outdir, retile, verify_manifest,
+                       write_export, FORMAT, FORMAT_VERSION, TEX_SUBDIR,
+                       TERRAIN_DEPS_CHUNK, _check_rect)
+import atex  # noqa: E402
 from mapfile import MapFile, Chunk, FORM_OPAQUE, FORM_DEPENDENCIES  # noqa: E402
 from mapchunks import (Dependencies, dependency_pair,  # noqa: E402
                        DEPENDENCY_SIGNATURE, DEPENDENCY_VERSION)
@@ -152,21 +162,29 @@ SYN_X, SYN_Y = 64, 96
 CORPUS_MAPS = 349
 DEFAULT_SAMPLE = 12
 
-# FLOOR: 145, from a real green run on `vault/dat_study/Gw.dat` 2026-08-13
-# (51 s; was 108 before the props sections landed). The count does not move
-# with `--sample` or `--all` -- every archive section reports an aggregate, so
-# the floor is a constant rather than a function of the fixture.
+# FLOOR: 185, from a real green run on `vault/dat_study/Gw.dat` 2026-08-14
+# (74 s; was 145 before the terrain-texture sections landed, 108 before the
+# props sections). The count does not move with `--sample` or `--all` -- every
+# archive section reports an aggregate, so the floor is a constant rather than
+# a function of the fixture.
 #
-# Sections 0-4b alone score 84 (MEASURED by pointing --dat at a missing file),
-# so a run with no archive lands 61 short and goes RED. That is deliberate and
-# it is the whole reason the floor exists: 84 checks about a synthetic grid and
-# synthetic props this file built itself have verified the plumbing and
-# NOTHING about ArenaNet's layout, and a green exit code there would be the
-# `test_codec.py` failure all over again. The placeholder value this constant
-# carried while the file was being written was 46, and a vault-less run duly
-# printed ALL CHECKS PASSED -- which is how the number came to be measured
-# rather than guessed.
-FLOOR = 145
+# Sections 0-4c alone score 114 (MEASURED by pointing --dat at a missing
+# file), so a run with no archive lands short and goes RED. That is
+# deliberate and it is the whole reason the floor exists: those checks about a
+# synthetic grid, synthetic props and synthetic textures this file built
+# itself have verified the plumbing and NOTHING about ArenaNet's layout, and a
+# green exit code there would be the `test_codec.py` failure all over again.
+# The placeholder value this constant carried while the file was being
+# written was 46, and a vault-less run duly printed ALL CHECKS PASSED --
+# which is how the number came to be measured rather than guessed.
+#
+# 188 -> 189 the same day, when T6's RESOLVED blend layers joined it as a
+# fifth sidecar (.layers.u16, three u16 slots per cell).
+#
+# 185 -> 188 on 2026-08-14, when T6's variation sidecar joined the tiles
+# export: the synthetic fixture now packs a per-cell variation 0..3 and
+# section 1 asserts it de-tiles with the measured (i&3)*2 bit order.
+FLOOR = 189
 
 
 # ------------------------------------------------------------------ helpers
@@ -279,15 +297,20 @@ def synthetic_terrain(dim_x=SYN_X, dim_y=SYN_Y):
     heights = [0.0] * cells
     tiles = bytearray(cells)
     shade = bytearray(cells)
+    bits = bytearray(cells // 4)
     for gy in range(dim_y):
         for gx in range(dim_x):
             i = Terrain.index(gx, gy, dim_x)
             heights[i] = float(gy * dim_x + gx)
             tiles[i] = (gx + gy) % 3
             shade[i] = (gx * 7 + gy * 13) & 0xFF
+            # A per-cell variation 0..3, packed the way bits_at reads it, so
+            # a wrong bit-pair position or a wrong de-tile is visible.
+            bits[i >> 2] |= ((gx * 3 + gy) & 3) << ((i & 3) * 2)
     trn.heights = heights
     trn.tiles = bytes(tiles)
     trn.shade = bytes(shade)
+    trn.bits = bytes(bits)
     return trn
 
 
@@ -322,6 +345,7 @@ def main(argv=None):
         _section3(check, tmp)
         _section4(check)
         _section4b(check)
+        _section4c(check, tmp)
         _vault_sections(check, led, args, tmp)
 
     print(f"\n({time.perf_counter() - t0:.1f}s)")
@@ -412,6 +436,12 @@ def _section1(check, tmp):
     bad_s = sum(1 for gy in range(dy) for gx in range(dx)
                 if exp.shade[gy * dx + gx] != ((gx * 7 + gy * 13) & 0xFF))
     check(bad_s == 0, "the shade bytes de-tile the same way", f"{bad_s} wrong")
+    check(exp.variation is not None and len(exp.variation) == dx * dy,
+          "the variation sidecar is present, one byte per cell (T6)")
+    bad_v = sum(1 for gy in range(dy) for gx in range(dx)
+                if exp.variation[gy * dx + gx] != ((gx * 3 + gy) & 3))
+    check(bad_v == 0, "tag 3's variation de-tiles with the measured (i&3)*2 "
+          "bit order (FINDINGS §3.3)", f"{bad_v} wrong")
 
     # Geometry the JSON promises.
     check(exp.extent == (dx * CELL_PITCH, dy * CELL_PITCH),
@@ -458,9 +488,11 @@ def _section1(check, tmp):
           and conv["sample_position"] == "cell corners",
           "the manifest states row 0 = maxY, corner samples, and that a GREATER "
           "stored value is LOWER in the world (FINDINGS 25)", sign[:80])
-    check(len(meta["sidecars"]) == 3
-          and {s["kind"] for s in meta["sidecars"]} == {"heights", "tiles", "shade"},
-          "three sidecars, each named by kind in the manifest")
+    check(len(meta["sidecars"]) == 5
+          and {s["kind"] for s in meta["sidecars"]}
+          == {"heights", "tiles", "variation", "layers", "shade"},
+          "five sidecars, each named by kind in the manifest "
+          "(variation and the resolved blend layers joined tiles for T6)")
 
 
 # --- 1b. the props sidecar, built from nothing -----------------------------
@@ -532,8 +564,8 @@ def _section1b(check, tmp):
           "the props sidecar comes back DEEP-EQUAL through disk and json")
     check(meta.get("props_state") == "exported"
           and {s["kind"] for s in meta["sidecars"]}
-          == {"heights", "tiles", "shade", "props"},
-          "the manifest declares props_state and the fourth sidecar")
+          == {"heights", "tiles", "variation", "layers", "shade", "props"},
+          "the manifest declares props_state and the props sidecar")
     side = next(s for s in meta["sidecars"] if s["kind"] == "props")
     check(side["dtype"] == mapexport.DTYPE_JSON
           and side["count"] == pd["count"] and side["count"] != exp.cells,
@@ -794,6 +826,230 @@ def _section4b(check):
           "(row 26209's shape)")
 
 
+# --- 4c. rung T4's tile->texture table, no vault -----------------------------
+
+PNG_SIG = b"\x89PNG\r\n\x1a\n"
+
+
+class _TexEntry:
+    def __init__(self, index, size, crc):
+        self.index, self.size, self.crc = index, size, crc
+
+
+class _TexArchive:
+    """The two methods `build_terrain_textures` needs, over in-memory rows.
+
+    The crc is invented (recorded, never verified against bytes here) -- what
+    the test checks is that the exporter CARRIES the archive identity, not
+    what the identity is.
+    """
+
+    def __init__(self, blobs):                       # {row: bytes}
+        self._blobs = blobs
+
+    def row(self, n):
+        return _TexEntry(n, len(self._blobs[n]), 0xC0FFEE00 + n)
+
+    def read(self, entry):
+        return self._blobs[entry.index]
+
+
+def _tex_deps(*fids):
+    return Chunk(TERRAIN_DEPS_CHUNK,
+                 Dependencies(DEPENDENCY_SIGNATURE, DEPENDENCY_VERSION,
+                              [(*dependency_pair(f), 0) for f in fids]),
+                 FORM_DEPENDENCIES)
+
+
+def _dds32(width, height, pixel):
+    """A minimal uncompressed A8R8G8B8 DDS, one repeated pixel."""
+    hdr = bytearray(128)
+    hdr[0:4] = b"DDS "
+    struct.pack_into("<I", hdr, 4, 124)
+    struct.pack_into("<2I", hdr, 12, height, width)
+    struct.pack_into("<I", hdr, 80, 0x41)            # RGB | ALPHAPIXELS
+    struct.pack_into("<I", hdr, 88, 32)
+    struct.pack_into("<4I", hdr, 92, 0x00FF0000, 0x0000FF00, 0x000000FF,
+                     0xFF000000)
+    return bytes(hdr) + struct.pack("<I", pixel) * (width * height)
+
+
+def _dds_refused():
+    """A compressed-flagged DDS, which `dds_rgba` answers None to."""
+    hdr = bytearray(128)
+    hdr[0:4] = b"DDS "
+    struct.pack_into("<I", hdr, 4, 124)
+    struct.pack_into("<2I", hdr, 12, 8, 8)
+    struct.pack_into("<I", hdr, 80, 0x4)             # FOURCC
+    hdr[84:88] = b"DXT1"
+    return bytes(hdr) + b"\0" * 32
+
+
+def _section4c(check, tmp):
+    print("\n== 4c. rung T4: the tile->texture table (no vault) ==")
+    # Three synthetic ATEX rows, one per tile of `synthetic_terrain`'s 3-entry
+    # table. Distinct fills so no two images can share a digest.
+    fids = (0x1111, 0x2222, 0x3333)
+    blobs = {10 + i: atex.build(b"DXT1", 8, 8, fill=0x01010101 * (i + 1))
+             for i in range(3)}
+    table = {fid: 10 + i for i, fid in enumerate(fids)}
+    ar = _TexArchive(blobs)
+    trn = synthetic_terrain()
+
+    # -- the happy path, and what the block promises
+    block, payloads = build_terrain_textures(
+        MapFile(chunks=[_tex_deps(*fids)]), trn, ar, table=table)
+    check(block["dep_offset"] == 0 and block["tile_count"] == 3
+          and block["dep_count"] == 3,
+          "an identity map binds with dep_offset 0", f"{block['dep_offset']}")
+    check(block["used_tiles"] == [0, 1, 2],
+          "used_tiles is the distinct tile bytes of tag 2")
+    check([e["file_id"] for e in block["tiles"]] == list(fids),
+          "tile t names dep[t], in order")
+    check(all(e.get("image") == f"{TEX_SUBDIR}/tex_{e['file_id']:X}.png"
+              for e in block["tiles"]),
+          "every tile decoded to a PNG named by its FILE ID under "
+          f"{TEX_SUBDIR}/")
+    check(all(e["size"] == len(blobs[e["row"]])
+              and e["crc"] == 0xC0FFEE00 + e["row"]
+              for e in block["tiles"]),
+          "every tile carries the MFT's (row, size, crc) -- a file id is "
+          "archive STATE")
+    by_name = dict(payloads)
+    check(len(payloads) == 3
+          and all(img["sha256"] == hashlib.sha256(by_name[img["name"]])
+                  .hexdigest() and img["bytes"] == len(by_name[img["name"]])
+                  for img in block["images"]),
+          "each image's manifest digest is the sha256 of its payload")
+    check(all(blob[:8] == PNG_SIG for blob in by_name.values()),
+          "every payload is a PNG")
+    check(block["census"] == {"ATEX": 3}, "the census names the container "
+          "magics", f"{block['census']}")
+
+    # -- two tiles sharing one texture share one image
+    block2, payloads2 = build_terrain_textures(
+        MapFile(chunks=[_tex_deps(0x1111, 0x2222, 0x1111)]), trn, ar,
+        table=table)
+    check(len(block2["images"]) == 2 and len(payloads2) == 2
+          and block2["tiles"][0]["image"] == block2["tiles"][2]["image"]
+          and block2["census"].get("shared") == 1,
+          "a repeated dependency is decoded once and shared")
+
+    # -- the second tag-3 record moves the binding by one, MEASURED 349/349
+    trn3b = synthetic_terrain()
+    trn3b.tag3b = (7, (0.0, 0.0, 0.0, 0.0))
+    lead_blobs = dict(blobs)
+    lead_blobs[20] = b"????this is not a texture"
+    table_lead = {**table, 0x9999: 20}
+    block3, _pl3 = build_terrain_textures(
+        MapFile(chunks=[_tex_deps(0x9999, *fids)]), trn3b,
+        _TexArchive(lead_blobs), table=table_lead)
+    check(block3["dep_offset"] == 1
+          and [e["file_id"] for e in block3["tiles"]] == list(fids),
+          "with tag3b, tile t names dep[t+1] -- the 24-map realignment")
+    lead = block3.get("extra_leading")
+    check(lead is not None and lead["file_id"] == 0x9999
+          and lead["row"] == 20 and lead["size"] == len(lead_blobs[20]),
+          "the extra LEADING dependency is recorded with its archive "
+          "identity and NOT decoded", f"{lead}")
+    check(not any(e["file_id"] == 0x9999 for e in block3["tiles"])
+          and all(img["file_id"] != 0x9999 for img in block3["images"]),
+          "the leading entry reaches no tile and no image -- its meaning is "
+          "UNVERIFIED")
+
+    # -- the two refusals; the corpus law is the evidence, 349/349 each
+    check(raises(build_terrain_textures,
+                 MapFile(chunks=[_tex_deps(0x1111, 0x2222)]), trn, ar,
+                 table=table),
+          "a dep list SHORTER than the tile table is refused")
+    check(raises(build_terrain_textures,
+                 MapFile(chunks=[_tex_deps(0x9999, *fids)]), trn,
+                 _TexArchive(lead_blobs), table=table_lead),
+          "a dep list LONGER than the table without tag3b is refused -- the "
+          "length law is two-sided")
+    check(raises(build_terrain_textures,
+                 MapFile(chunks=[_tex_deps(*fids)]), trn3b, ar, table=table),
+          "tag3b with no extra dependency is refused")
+    trn_hot = synthetic_terrain()
+    trn_hot.tiles = bytes([3]) * trn_hot.cells
+    check(raises(build_terrain_textures,
+                 MapFile(chunks=[_tex_deps(*fids)]), trn_hot, ar,
+                 table=table),
+          "a used tile byte outside the table is refused")
+    check(raises(build_terrain_textures, MapFile(chunks=[]), trn, ar,
+                 table=table),
+          "a map with no Terrain Dependencies chunk is refused")
+
+    # -- what is recorded rather than refused: holes a reader can audit
+    table_hole = {0x1111: 10, 0x2222: 11}          # 0x3333 unresolvable
+    blockh, _ = build_terrain_textures(
+        MapFile(chunks=[_tex_deps(*fids)]), trn, ar, table=table_hole)
+    check(blockh["tiles"][2].get("skipped") == "file id not in the "
+          "archive's table" and len(blockh["images"]) == 2
+          and blockh["census"].get("unresolved") == 1,
+          "an unresolvable file id is recorded with its reason, not dropped")
+    dds_blobs = dict(blobs)
+    dds_blobs[13] = _dds32(4, 4, 0x80FF8040)
+    dds_blobs[14] = _dds_refused()
+    dds_table = {**table, 0x4444: 13, 0x5555: 14}
+    trn5 = synthetic_terrain()
+    trn5.table_a = bytes(range(5))
+    trn5.table_b = bytes(5)
+    blockd, pld = build_terrain_textures(
+        MapFile(chunks=[_tex_deps(*fids, 0x4444, 0x5555)]), trn5,
+        _TexArchive(dds_blobs), table=dds_table)
+    check(blockd["tiles"][3].get("image") is not None
+          and blockd["tiles"][3]["width"] == 4
+          and blockd["census"].get("dds") == 1,
+          "an uncompressed 32-bit DDS decodes (2 of the corpus's 8 "
+          "non-ATTX rows are this shape)")
+    check(blockd["tiles"][4].get("skipped") ==
+          "a DDS shape this decoder refuses"
+          and blockd["census"].get("dds_refused") == 1,
+          "a DDS this tree cannot decode is recorded with its reason -- "
+          "the V8U8 pair's path")
+
+    # -- through the manifest and back, with the negative controls
+    dx, dy = SYN_X, SYN_Y
+    rect = (0.0, 0.0, dx * CELL_PITCH, dy * CELL_PITCH)
+    meta, sidecars = build_manifest(trn, rect, "textest",
+                                    {"archive": None, "row": None,
+                                     "file_id": None},
+                                    terrain_textures=block,
+                                    textures_state="exported")
+    check(meta["format_version"] == 3 == FORMAT_VERSION,
+          "the texture block rides format_version 3")
+    outdir = os.path.join(tmp, "t4c")
+    path = write_export(meta, sidecars + payloads, outdir)
+    exp = load_export(path)
+    check(exp.terrain_textures == block
+          and exp.meta.get("terrain_textures_state") == "exported",
+          "the block round-trips through load_export")
+    check(exp.tile_image(0) == f"{TEX_SUBDIR}/tex_1111.png"
+          and exp.tile_image(3) is None,
+          "tile_image resolves a tile and answers None off the table")
+
+    png_path = os.path.join(outdir, TEX_SUBDIR, "tex_2222.png")
+    good = open(png_path, "rb").read()
+    with open(png_path, "wb") as fh:
+        fh.write(good[:-1] + bytes([good[-1] ^ 0xFF]))
+    bad = verify_manifest(path)
+    check(any("tex_2222" in b and "sha256" in b for b in bad),
+          "NEGATIVE CONTROL: a corrupted texture byte is named by "
+          "verify_manifest", f"{bad}")
+    check(raises(load_export, path),
+          "NEGATIVE CONTROL: load_export refuses the corrupted image")
+    os.remove(png_path)
+    check(any("tex_2222" in b and "missing" in b
+              for b in verify_manifest(path)),
+          "NEGATIVE CONTROL: a missing texture file is named")
+    with open(png_path, "wb") as fh:
+        fh.write(good)
+    check(verify_manifest(path) == [],
+          "restored, the export verifies clean -- the controls measured "
+          "the corruption, not the fixture")
+
+
 # --- 5 and 6. the archive ---------------------------------------------------
 
 def _vault_sections(check, led, args, tmp):
@@ -807,12 +1063,14 @@ def _vault_sections(check, led, args, tmp):
         led.skip("5. the prop-z oracle and its three controls", why)
         led.skip("6. extent agreement across the corpus", why)
         led.skip("7. the props sidecar against the archive", why)
+        led.skip("8. the terrain textures against the archive", why)
         return
 
     with Archive(dat) as ar:
         _section5(check, led, ar, tmp)
         _section6(check, led, ar, args)
         _section7(check, led, ar, tmp)
+        _section8(check, led, ar, tmp, args)
 
 
 def _section5(check, led, ar, tmp):
@@ -834,8 +1092,11 @@ def _section5(check, led, ar, tmp):
             continue
         row = resolved
 
+        # textures=False: this section's claim is the LAYOUT, and decoding
+        # 51 ground textures per map would treble its runtime saying nothing
+        # about it. The texture path has sections 4c and 8.
         path = export_row(row, ar, outdir=os.path.join(tmp, f"m{row}"),
-                          file_id=fid)
+                          file_id=fid, textures=False)
         exp = load_export(path)
         dx, dy = exp.dim_x, exp.dim_y
         check((dx, dy) == dims, f"row {row}: exported grid is {dims[0]}x{dims[1]}",
@@ -1003,6 +1264,126 @@ BASIS_TOL = 5e-4                               # f32 chain vs our f64 rebuild
 MULTI_AXIS = {KAMADAN_ROW: 53, PRESEARING_ROW: 179}
 
 
+# --- 8. rung T4 against the archive ------------------------------------------
+
+# The tag3b reference: one of the 24 maps carrying the second tag-3 record,
+# picked because its extra LEADING dependency is one of the corpus's four DDS
+# rows (0x475C8), so a single export exercises the offset AND shows the
+# leading entry staying out of the tile table. MEASURED on this archive
+# 2026-08-14 (this rung's scan; the row is this archive's, the file id
+# travels).
+T3B_ROW = 56835
+T3B_LEAD_FID = 0x475C8
+KAMADAN_TILES = 51
+
+
+def _section8(check, led, ar, tmp, args):
+    print("\n== 8. rung T4: the terrain textures against the archive ==")
+    table = file_id_table(ar)
+    by_row = {e.index: e for e in ar.entries}
+
+    row = table.get(KAMADAN_FILE_ID)
+    if row is None:
+        led.skip("8. terrain textures", "Kamadan's file id unresolved")
+        return
+    path = export_row(row, ar, outdir=os.path.join(tmp, "t8"),
+                      file_id=KAMADAN_FILE_ID)
+    exp = load_export(path)
+    block = exp.terrain_textures
+    check(block is not None
+          and exp.meta.get("terrain_textures_state") == "exported",
+          "Kamadan exports with its texture block")
+    if block is None:
+        return
+
+    check(block["dep_offset"] == 0 and block["tile_count"] == KAMADAN_TILES
+          and block["dep_count"] == KAMADAN_TILES,
+          f"Kamadan: {KAMADAN_TILES} dependencies bind {KAMADAN_TILES} tiles "
+          f"directly (no tag3b)",
+          f"offset {block['dep_offset']}, {block['tile_count']} tiles")
+    check(block["census"] == {"ATTX": KAMADAN_TILES},
+          f"Kamadan: all {KAMADAN_TILES} tile textures are ATTX and all "
+          f"decode", f"{block['census']}")
+    check(len(block["images"]) == KAMADAN_TILES
+          and not any("skipped" in e for e in block["tiles"]),
+          "no tile was skipped -- the table has no holes on this map")
+
+    # THE RUNG CRITERION: every distinct tile byte the map uses resolves to
+    # an image, checked from the SIDECAR's own bytes rather than the block's
+    # claim about itself.
+    used = sorted(set(exp.tiles))
+    check(block["used_tiles"] == used,
+          f"used_tiles matches the tiles sidecar ({len(used)} distinct)")
+    unresolved = [t for t in used if exp.tile_image(t) is None]
+    check(not unresolved,
+          f"EVERY distinct tile byte in use ({len(used)}) resolves to a "
+          f"decoded image", f"unresolved: {unresolved}")
+
+    # The archive identity on every entry, against rows read here.
+    bad_mft = [e["tile"] for e in block["tiles"]
+               if by_row[e["row"]].size != e["size"]
+               or by_row[e["row"]].crc != e["crc"]
+               or table.get(e["file_id"]) != e["row"]]
+    check(not bad_mft,
+          "every tile's (row, size, crc) matches the MFT read by this test",
+          f"disagree: {bad_mft}")
+
+    # One image re-hashed off disk, then the corrupt-a-byte control.
+    img = block["images"][0]
+    ipath = os.path.join(os.path.dirname(path), img["name"])
+    good = open(ipath, "rb").read()
+    check(hashlib.sha256(good).hexdigest() == img["sha256"]
+          and len(good) == img["bytes"] and good[:8] == PNG_SIG,
+          f"{img['name']} on disk is the PNG the manifest promises")
+    with open(ipath, "wb") as fh:
+        fh.write(good[:100] + bytes([good[100] ^ 1]) + good[101:])
+    check(raises(load_export, path),
+          "NEGATIVE CONTROL: one flipped byte in one texture refuses the "
+          "whole export")
+    with open(ipath, "wb") as fh:
+        fh.write(good)
+
+    # -- 8b. the tag3b reference map
+    t3b_path = export_row(T3B_ROW, ar, outdir=os.path.join(tmp, "t8b"))
+    t3b = load_export(t3b_path).terrain_textures
+    check(t3b["dep_offset"] == 1
+          and t3b["dep_count"] == t3b["tile_count"] + 1,
+          f"row {T3B_ROW}: the second tag-3 record shifts the binding by "
+          f"one", f"offset {t3b['dep_offset']}")
+    lead = t3b.get("extra_leading")
+    check(lead is not None and lead["file_id"] == T3B_LEAD_FID
+          and by_row[lead["row"]].size == lead["size"],
+          f"row {T3B_ROW}: the extra leading dependency is DDS row "
+          f"0x{T3B_LEAD_FID:X}, recorded with its identity and not decoded",
+          f"{lead}")
+    check(not any(e["file_id"] == T3B_LEAD_FID for e in t3b["tiles"])
+          and not any("skipped" in e for e in t3b["tiles"]),
+          f"row {T3B_ROW}: the leading entry reaches no tile, and every "
+          f"tile decodes")
+
+    # -- 8c. the resolution law over the sample (--all for the corpus)
+    picks, _all_rows = sample_rows(ar, args.sample, args.all)
+    law_ok = law_bad = 0
+    for prow in picks:
+        mf = MapFile.from_row(prow, ar)
+        trn = mf.terrain()
+        dep = mf.find(TERRAIN_DEPS_CHUNK)
+        if trn is None or dep is None:
+            law_bad += 1
+            continue
+        off = 1 if trn.tag3b is not None else 0
+        if (len(dep.value.file_ids) == len(trn.table_a) + off
+                and max(trn.tiles) < len(trn.table_a)):
+            law_ok += 1
+        else:
+            law_bad += 1
+    check(law_bad == 0 and law_ok == len(picks),
+          f"the resolution law (len(dep) == len(table_a) + tag3b, "
+          f"max(tiles) < len(table_a)) holds on {len(picks)} of "
+          f"{len(picks)} sampled maps (349/349 measured 2026-08-14)",
+          f"{law_ok} ok, {law_bad} bad")
+
+
 def _rotm(axis, theta):
     c, s = math.cos(theta), math.sin(theta)
     if axis == 0:
@@ -1050,7 +1431,7 @@ def _section7(check, led, ar, tmp):
             continue
 
         path = export_row(row, ar, outdir=os.path.join(tmp, f"p{row}"),
-                          file_id=fid)
+                          file_id=fid, textures=False)
         exp = load_export(path)
         pd = exp.props
         check(pd is not None and pd["count"] == nprops

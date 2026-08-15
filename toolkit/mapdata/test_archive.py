@@ -111,7 +111,7 @@ SAMPLE_SIZE = 6
 # to spend it. BOTH shapes now have ZERO headroom, and that is re-measured
 # rather than reasoned: a `return` cutting ONE check reddens at 32/33 on
 # `dat_study` and at 30/31 on `client/2026-04-30`.
-LEDGER = checks.Ledger("dat archive", floor=31)
+LEDGER = checks.Ledger("dat archive", floor=32)
 check = checks.adopt(LEDGER)
 
 
@@ -556,7 +556,7 @@ def main():
         else:
             # RAISE the floor by what this section is about to contribute. Only
             # ever upward, and only when the section can actually run: the
-            # module-level floor is 31 because that is what a run on ANY copy
+            # module-level floor is 32 because that is what a run on ANY copy
             # scores, and leaving it there on a 177,342-row copy would hand
             # `dat_study` two checks of slack -- room for exactly the silent
             # deletion the 26 -> 31 raise was made to close, one size smaller.
@@ -572,6 +572,29 @@ def main():
                 check(len(data) == want_bytes and len(chunks) == want_chunks,
                       f"row {row}: {len(chunks)} chunks, {len(data)} bytes "
                       f"(expected {want_chunks}, {want_bytes})")
+
+        # --- magic() is read()[:4] and must never disagree with it -------------
+        # A bounded decode is a SHORTCUT, and a shortcut that is merely usually
+        # right is worse than the cost it saves: `test_modelexport.py` classifies
+        # 1,795 texture references through this, and a wrong leading byte would
+        # move a corpus verdict rather than raise. So the check is differential --
+        # every sampled entry decoded BOTH ways and required equal -- and it is
+        # strided at a different interval (997) from the sweep that uses it (97),
+        # so the two do not sample the same rows.
+        pairs = mismatch = 0
+        for e in ar.entries[::997][:150]:
+            try:
+                full = bytes(ar.read(e)[:4])
+            except Exception:                                      # noqa: BLE001
+                continue          # unreadable through the normal path: not our claim
+            pairs += 1
+            if ar.magic(e) != full:
+                mismatch += 1
+        check(pairs > 100 and mismatch == 0,
+              "magic() returns exactly what read()[:4] does, on every sampled entry",
+              f"{pairs} entries decoded both ways, {mismatch} disagree -- MEASURED "
+              f"80x faster on this sample, and the speed is only worth having "
+              f"because this check can go red")
 
     return LEDGER.verdict()
 
