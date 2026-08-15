@@ -585,8 +585,30 @@ GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
 # where 42 comes from, and that source stands alone. The claim this comment used
 # to make, that the array's LENGTH is what tells the client how many attribute
 # slots exist, is supported by NO source; it was our inference stated as fact.
-# Whether a 42-zero array is even well-formed is open: one lineage reads this as
-# triplets, and another never sends this message at all.
+#
+# "WHETHER THIS IS TRIPLETS IS OPEN" -- IT IS NOT, AND HAS NOT BEEN SINCE
+# 2026-08-12. This comment said so for two days after the question was settled,
+# which is the drift the top of CLAUDE.md is about. MEASURED on our own pinned
+# build: the handler 0x0091D8C0 divides the wire count by THREE (the
+# 0xAAAAAAAB reciprocal idiom) and forwards three parallel arrays -- base+0,
+# base+n*4, base+n*8 -- into a per-index loop calling the attribute writer
+# 0x00819220 (studies/profession/ATTRIBUTES.md 1.2).
+#
+# And since 2026-08-14 two of the three slots carry ARENANET'S OWN NAMES, from
+# the client's compiled asserts (studies/combat/PLAN.md 8a):
+#   slot 1  the attribute id     ChCliAttrib:249 "attrib < arrsize(attribState->attrib)"
+#   slot 2  the RANK, "baseValue" ChCliAttrib:42 "(int)attribState->attrib[attrib].baseValue >= 0",
+#           whose own cmp reads [record + attrib*20 + 8] -- which is what ties
+#           the name to that slot rather than to its neighbour
+#   slot 3  NOT NAMED. It takes the identical delta as baseValue in the
+#           pending-change apply and is never bound-checked or indexed.
+#
+# So a 42-zero array is FOURTEEN (0,0,0) triples -- i.e. fourteen writes of
+# rank 0 to attribute 0 -- not 42 slots. It is silent rather than fatal (the
+# loopback sweep, studies/smsgsweep 5b), which is why nothing has ever caught
+# it. Emitting real triples is studies/combat step 7; the count below is what
+# that step replaces, along with the contiguous-0-41 numbering it assumes
+# (CONTESTED -- the gapped 0-44/51-row scheme is the better-witnessed rival).
 ATTRIBUTE_COUNT = 42
 # OBSERVED: every 0x0037 ArenaNet sent in the vault's two live captures carries
 # [0, 0] -- 8 of 8 connections, once each at load, naming the player agent (e.g.
