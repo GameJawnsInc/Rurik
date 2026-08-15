@@ -2573,8 +2573,26 @@ Every one of these, in the order they were written:
   real corpus and the guard would be deleted in a week — it may never be silent,
   so the count comes back in the reason, and `allow_unknown=False` exists.
   **The vault census answers what `studies/crossbuild/PLAN.md` §10 left
-  UNVERIFIED: every capture that names a build names 38797** — 1,122 files — so
-  no existing corpus figure is pooling builds, and that is asserted as an
-  invariant so the first capture from a second build turns it red. A vault-less
+  UNVERIFIED — no corpus figure pools builds — and is scoped to the RESEARCH
+  corpus: `selftest/` is excluded from the walk the way `captures-scrubbed/`
+  already is, and since 2026-08-14 that scoping is load-bearing.** Build 38833
+  shipped, and the suite's own runs began writing 38833-stamped fixtures into
+  `captures/selftest/` — `test_handshake` drives whichever client the newest
+  key matches (`studies/crossbuild/FINDINGS.md` §7.7) — so a census over the
+  whole vault went red over its own byproducts, and would go red again on every
+  future suite run. Two sessions hit that red in parallel and fixed it two
+  ways: one NAMED the off-pin files in an allowlist, which the producer refutes
+  (the suite itself writes them, so the list stales on every run), and one
+  excluded the fixtures, which stands — a self-test artifact is not research
+  data, and counting it re-creates one level up the contamination `selftest/`
+  was split out to prevent. Two checks survive from the allowlist branch: the
+  pooling refusal is EXERCISED on a real mixed pair (the fixtures supply a
+  genuine 38833 file, found by reading each candidate's bytes, never by
+  filename — a refusal that has never fired on a real artifact is the same
+  class of thing as a green test that asserts nothing), and the census's 38797
+  is cross-checked against `clientscan/pinned.py` so a moved pin turns the
+  census red until it is re-decided rather than silently re-aimed. A REAL
+  second-build capture in the research corpus still turns the census red — that
+  is the point, not a defect. A vault-less
   run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
-  empty directory rather than derived by subtraction).
+  empty directory rather than derived by subtraction; a vault run scores 30).
