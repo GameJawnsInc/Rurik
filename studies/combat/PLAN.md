@@ -567,7 +567,7 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 0 | ✅ 2026-08-14, this section |
 | 1 | ✅ 2026-08-14, `07c22b0` — 0x0037 → [0,0], binding check proven red-then-green |
 | 2 | ✅ 2026-08-14, `cdefe83`…`e9f7b7d` (10 commits) — extraction, red-first guard contract on all seven `_fraction` functions, connection-thread catch, overkill clamp-to-kill (`_damage_fraction`), first two-thread test. `test_guards.py`, floor 35 |
-| 3 | 🔶 offline half ✅ 2026-08-14, `f5f65b2`+`77b65d1` — emitter (1,333 client-table rows, build stamped from bytes), the four-opcode cycle on the observed template, THE QUEUE LAW (E4 at accept, cast begins when the caster frees — fits 4/4 Necro cycles ≤14 ms; the naive press+activation model is refuted by +0.64 s/+0.57 s residuals), overrides names 227–230, cross-thread cast-timer test (200 presses → exactly 200 of each phase). Attack-skill E5 timing rides the weapon — recorded as unmodeled divergence. GV 58 deliberately unsent (0 of 21,543 live). **Loopback acceptance BLOCKED — see §7** |
+| 3 | ✅ **BOTH HALVES** — offline 2026-08-14, `f5f65b2`+`77b65d1` — emitter (1,333 client-table rows, build stamped from bytes), the four-opcode cycle on the observed template, THE QUEUE LAW (E4 at accept, cast begins when the caster frees — fits 4/4 Necro cycles ≤14 ms; the naive press+activation model is refuted by +0.64 s/+0.57 s residuals), overrides names 227–230, cross-thread cast-timer test (200 presses → exactly 200 of each phase). Attack-skill E5 timing rides the weapon — recorded as unmodeled divergence. GV 58 deliberately unsent (0 of 21,543 live). **Loopback acceptance ✅ 2026-08-15, §15** — both halves: the client accepts E4/E5/E3/E6 without asserting, a repeat press after E6 produces a full second cycle, recharge is per-skill with concurrent timers (four cycles, max error 36 ms), and the operator confirms **both slots swept with slot 6 clearly longer than slot 7** — the comparison that shows the client honours the message's DURATION rather than just flashing an icon. §7's blocker (a new ArenaNet build's fresh archive) is gone. Cast ANIMATION remains unmeasured and belongs to the unrun `cast_anim` probe, §15c. ~~BLOCKED — see §7~~ |
 | 4 | ✅ 2026-08-14, `0ddfbd0`+`9d97f45`+`a7971b1` — `+0x44..+0x68` decoded as u32 (duration0/15, skill_arguments bitfield, scale0/15, bonus_scale0/15; +0x50 stays NOT FOUND). Reproduces the 4-skill FINDINGS anecdote byte-exact and asserts its green-render rule. **C7's wiki third witness ran and agrees with all 14 endpoint values GWW lists**, plus costs and recharge — and checks the other direction too (no unlisted set may render green), which is what makes Rush's constant-25-with-bit-clear a real discriminator. Emitted to the content rows; **nothing consumes them until step 8**. `test_skilltable` floor 26→46 |
 | 5 | 🔶 **research half ✅ 2026-08-14, §8** — the triple's slots 1–2 named by ArenaNet's own asserts (`attrib`, `baseValue`), the panel's read path traced to `AttribBtns.cpp` (C8a closed), the tooltip formula measured (C6 closed). **Still to do in code**: adopt the gapped numbering, replace `ATTRIBUTE_COUNT = 42`, retire the stale `authsrv.py:552-557` comment, and pin the handler constants in a test |
 | 5 (cont.) | **code half ✅ 2026-08-15, `043e395`** — `attribtable.py` reads `s_attrib` and DISSOLVES the numbering contest (§10): index space contiguous 0..50, 42 owned by playable professions, 26/27/28 are profession 11's. 51 content rows emitted. Still open in code: `ATTRIBUTE_COUNT = 42` is a count of the wrong thing for a wire payload and step 7 replaces it |
@@ -577,6 +577,74 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 8 | ✅ **2026-08-15, `e4bb222`** (§12) — `ENEMY_SKILL_FRACTION` retired; damage is the client's endpoints at the player's own attribute rank. **The step's premise was refuted mid-flight**: scale is not damage, 3 of the enemy's 4 skills are a heal/hex/enchantment, so meaning is GWW-sourced per skill and unmodelled skills return None. `test_skilldamage` 25 checks, sabotage-proven |
 | 9 | ✅ **2026-08-15, `34ee86b`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
 | 10 | ✅ **2026-08-15, `2610aa3`+merge** — `PLAN.md` §3 (R4a, R4b) and §8 updated dated and stamped; the profession ladder's L6 row annotated so the two ledgers agree. **Landing suite: 100 green / 1 red of 101, 4,947 checks.** The red is `test_contentids`, and it is ENVIRONMENTAL and attributed: `vault/run/2026-08-13_64fae3b1369b/Gw.dat` is held open by **another session's client, PID 16340, running from that directory since 11:47** — the archive is present (4.2 GB) and unreadable, which is the same "the client holds its own archive open" note main's own §8 carries. `test_contentids` passed at 23 checks earlier the same day with the archive free, and nothing in this arc touches archives, map content or `contentids.py`. Not killed, per the parallel-sessions rule |
+
+## §15. Step 3's loopback acceptance RAN, and both halves pass (2026-08-15)
+
+**§7's blocker is gone and its acceptance is met.** Two caged runs, build
+38833, map 90 explorable, `--enemy --practice-target`, synthetic credential,
+each watched with `crashwatch.ps1`. `RUN VERDICT: PASS` both times, zero
+`Undecodable`.
+
+### 15a. The wire half — OBSERVED
+
+`vault/captures/gamesrv/authsrv-20260815T180701-c1.jsonl`, 3,158 messages,
+t = 107.7 s. Four complete cycles, `E4 → E5 → E3 → … → E6` every time, and the
+client accepted all of them without asserting:
+
+| cycle | declared | measured | error |
+|---|---|---|---|
+| 322 | 3.0 s | 2.989 s | −0.011 |
+| 321 | 8.0 s | 7.993 s | −0.007 |
+| 322 | 3.0 s | 2.990 s | −0.010 |
+| 322 | 3.0 s | 3.036 s | +0.036 |
+
+**The repeat-press acceptance passes.** Press 2 (t = 38.559) lands after cycle
+1's `E6` (t = 30.747) and produces a full second cycle; press 3 does it again.
+
+**And a result C10 did not ask for: recharge state is PER-SKILL and the timers
+run concurrently.** Slot 6's 8 s recharge overlaps slot 7's second and third
+cycles, and the opcode stream interleaves correctly — `228 229 227 230 230`
+across t = 38.5–41.6 is 322's cycle opening, then **321's** `E6`, then
+**322's**, each naming its own skill. Two independent timers, observed rather
+than assumed.
+
+Incidental, and it confirms step 8 from the other side: the player
+auto-attacks the practice target for 15 a swing, and at t = 42.479 one swing
+lands **49** — the skill damage from the client's own scale endpoints. The
+target is killed and reset (`restore max health on agent 10`, t = 41.5). Note
+the magnitude arrives at the PRESS, which is the timing divergence step 8
+already records as unmodelled.
+
+### 15b. The rendered half — OBSERVED, operator-confirmed
+
+`vault/captures/gamesrv/authsrv-20260815T181338-c1.jsonl`, second run, with the
+operator watching the skill bar (H5: no tool here can read the HUD).
+
+> **Both slots swept, and slot 6 was clearly longer than slot 7.**
+
+That is the acceptance, and the *comparison* is what makes it one. A client
+merely flashing an icon on `E5` would look the same for both slots; 8 s
+visibly longer than 3 s means the client is honouring the DURATION the message
+carries. Wire for that run: slot 7 `E5 recharge 3s` at t = 27.715 with its
+`E6` at 30.704, slot 6 `E5 recharge 8s` at t = 31.615.
+
+**This capture is the shorter of the two and deliberately so cited.** The
+operator closed the client at t ≈ 39.4 s once the comparison was made, so
+slot 6's `E6` (due 39.615 s) is NOT in it — the harness confirms the exit was
+clean (`client exited with code 0 during the hold`, `no error dialog within
+12s`). The complete four-cycle wire evidence is §15a's run; this one carries
+the rendered result. Neither is asked to carry both.
+
+### 15c. What this does NOT settle
+
+**The cast animation is NOT measured.** The operator was directed at the bar
+and told to ignore the character's body unless something surprised them, so
+nothing was reported about it — and **silence is not a negative result**. It
+also is not this acceptance's question: the unrun `cast_anim` probe states the
+prediction outright, that opcode `228` "does nothing visible at all when
+addressed to the local player", and `228` is what these runs send. Whatever
+animates, `cast_anim` (agent property 60) is the probe that would show it, and
+it is still UNRUN.
 
 ## §14. `0x003A` is COLUMN-MAJOR, and step 7 sent it interleaved (2026-08-15)
 
@@ -1201,6 +1269,15 @@ names the energy-cost byte's lookup table — the `11→15, 12→25` encoding in
 ---
 
 ## §7. The loopback validation is blocked on a vault archive-state mismatch (2026-08-14)
+
+> **RESOLVED 2026-08-15 — the acceptance ran and both halves pass, §15.** The
+> blocker was real and the diagnosis below is correct: a new ArenaNet build
+> arrived mid-session and the harness selected its fresh archive. What
+> unblocked it is the first option this section lists — name the build and the
+> archive explicitly (`--exe vault/run/2026-08-13_64fae3b1369b/Gw.exe`,
+> `RURIK_DAT=vault/dat_study_38833/Gw.dat`) — plus `391e8ca`, which made
+> `session.py` pick by BUILD and NAME instead of by newest. The command below
+> is what ran, with `--map 90 --explorable` added and a longer hold.
 
 Step 3's acceptance has two halves: an automated loopback run (does the client
 accept E4/E5/E6 without asserting; does a second press after E6 produce a second
