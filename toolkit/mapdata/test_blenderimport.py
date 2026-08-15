@@ -1247,9 +1247,16 @@ def _section5(check, led, blender, tmp, exp, src, summary):
                         "rotated_faces")},))
         # The base quadrant must not be stuck at 0 any more: T5 pinned every
         # cell to quadrant 0 and that is precisely the repetition T6 removes.
+        # The rationale here first read "so the ground no longer repeats one
+        # variant per tile type", and that was RETRACTED the same day: the
+        # four quadrants differ in ALPHA by ~128/255 and in RGB by only
+        # 4..21, so they are one picture with four coverage masks and
+        # variation cannot break colour repetition (FINDINGS par. 6.2b). What
+        # it does select is the per-cell MASK, which is what T5 got wrong by
+        # pinning every cell to quadrant 0.
         check(sorted(set(tt.get("base_quadrants") or [])) == [0, 1, 2, 3],
-              "all four base quadrants are in use, so the ground no longer "
-              "repeats one variant per tile type",
+              "all four base quadrants are in use, so cells select their own "
+              "coverage shape instead of T5's pinned quadrant 0",
               "%r" % (tt.get("base_quadrants"),))
 
     # ---- tag 9's baked lightmap, against the sidecar ----------------------
