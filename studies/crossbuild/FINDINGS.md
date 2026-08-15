@@ -584,18 +584,394 @@ walkable. Unrelated to durability and left for whoever owns movement.
 
 ---
 
+## 7. THE UPDATE LANDED — build 38833, 2026-08-14. The tooling's first out-of-sample test
+
+Everything above 38833 was built on **n=2**, two ArenaNet builds ~90 days apart, and every
+stability claim in the arc said so. On 2026-08-14 ArenaNet shipped **38,833** and the owner
+took it. This section is what the tooling did when it met a build nobody had measured.
+
+**Provenance of the build number:** WIKI (GWW, "Game updates" §Update - August 13, 2026,
+read 2026-08-14) gives `Build: 38,833` for a patch of an email-login crash fix, a Bird's
+Eye Compass range increase and two map-reveal fixes. **MEASURED independently:**
+`buildid.py` reads `38833` out of the image, from the getter at `0x004729E0`, 16 callers.
+The wiki was not consulted by the reader; they agree.
+
+**Procedure followed:** `RUNBOOK.md` §0 → §0b, exactly as written, which is the first time
+that page has been walked on a real update. The before-state was captured at 17:58 UTC on
+2026-08-14 with `--snapshot --dat` (`vault/updatecheck/before-20260814T175822.json`), the
+owner then updated and closed the client, and `--after` ran at 22:14.
+
+### 7.1 The result: derivation held, pinning broke, and the split is exactly where the arc predicted
+
+| Tool | On 38833 | Anchoring |
+|---|---|---|
+| `sigcorpus.py` | **8 of 8 signatures at their exact expected hit counts** | byte shape |
+| `buildid.py` | ✅ 38833, getter `0x004729E0`, 54 candidate shapes, one in range | byte shape |
+| `asserts.py` | ✅ `single-routine=True`, callee `0x00487BC0`, 19,756 sites, consensus 100.0000% | derived, dual |
+| `msgshape.py` | ✅ **25 tables derived, 751 declared, 666 usable, 2,420 cmd slots, 4 of 4 oracles PASS**, invariants over 1,754 descriptors | derived |
+| `srctree.py` | ✅ runs | structural |
+| `dump_dh_params.py` | ✅ **GO** — g=4, 512-bit prime, struct at VA `0x00A910D8` | byte shape |
+| `genericvalue.py` | ❌ **REFUSED**: *"the switch site at `0x008129CC` is ... not a `movzx`/`jmp [table]` pair -- this build moved or restructured the switch"* | **raw VA** |
+| `avevents.py` | ❌ blocked — its property map comes from `genericvalue.py` | inherits |
+
+`msghandler.py --classify` also runs and returns **477 receive opcodes, NO_HANDLER 0,
+241 forwarder / 236 body** — the same 477-of-477 non-null dispatch that
+`studies/review`'s loopback-sweep prediction rests on, and the same split.
+
+**Every tool this arc converted to derivation read the new build. The one class-(a) site the
+arc left outstanding is the one that broke, and it took a second tool down with it.**
+`PLAN.md` §8.0's next-actions list named `genericvalue.py`'s 32 addresses as an outstanding
+job; that job now has a measured consequence rather than a hypothetical one.
+
+**And it failed the RIGHT way.** `genericvalue.py` printed `CANNOT READ THIS BUILD ... This
+is a finding, not a crash` and named the address. That is §6.1's "**Yes, hard** — byte
+`verify` at the VA, raises on mismatch. **This is the model**" doing its job on a build it
+had never seen. The gate is vindicated; what is missing is that only *some* of that module
+carries it.
+
+### 7.2 REFINED: "any patch anchored to a raw address is broken by the next build" is too strong
+
+§2 of [PLAN.md](PLAN.md) carries that claim from the 38519 → 38797 gap, labelled
+MEASURED / stated limit, n=2. **The third build refines it, and the refinement is not
+reassuring — it is worse.**
+
+38797 → 38833 is a **15-day bugfix patch and it moved almost nothing.** MEASURED, all on
+the same pair:
+
+| Anchor | 38797 | 38833 |
+|---|---|---|
+| `Gw.exe` length | 10,483,904 B | **10,483,904 B — identical** |
+| build getter | `0x004729E0` | **same** |
+| assert callee | `0x00487BC0` | **same** |
+| DH struct | VA `0x00A910D8` | **same VA** |
+| AgentView allocators | `0x007F2E90` / `0x007F5340` | **same pair** |
+| `genericvalue` int-main switch | `0x008129CC` | **restructured** |
+
+So raw addresses did **not** uniformly break. Most survived; one region moved. The honest
+statement, and it should replace the old one wherever it is quoted:
+
+> **Whether a raw address survives a build gap depends on the size of the patch, and
+> nothing tells you which kind of patch you are looking at from the outside.** Addresses
+> broke wholesale across the 90-day gap and mostly held across the 15-day one. A pinned
+> tool is therefore not reliably broken by an update — it is *unpredictably* broken, which
+> is the worse failure, because a tool that keeps working across most updates earns trust
+> it cannot honour on the one that matters. Byte-shape anchoring survived **all three
+> builds, 8 signatures, exact hit counts**.
+
+The n is now **3 builds / 2 gaps**, and the two gaps are qualitatively different rather than
+two samples of one thing. Do not average them.
+
+### 7.3 The DH struct did not move; its CONTENTS rotated
+
+MEASURED. Struct VA `0x00A910D8` on both 38797 and 38833 — the RVA `0x6910D8` that
+`PLAN.md`:803 records as having moved from `0x6843E8` at the previous gap **stayed put this
+time**. But the parameters inside it rotated:
+
+| | 38797 | 38833 |
+|---|---|---|
+| prime fingerprint | `fccfed6d897593eb` | `69957c41e902a1b7` |
+| server public fingerprint | `dc1b568d13a81438` | `a451d70af363653c` |
+
+(Fingerprints only. The values are ArenaNet key material, live in `vault/keys/`, and are
+never committed — `updatecheck.py` records the fingerprint for exactly this reason.)
+
+**So "the DH parameters rotate with every build" survives its third test, and it is the
+rotation that matters operationally, not the struct's address.** `RUNBOOK.md`'s rule holds:
+a patched copy from last week keys to nothing.
+
+### 7.4 Two defects the update exposed in the tooling built to handle it
+
+**(a) `updatecheck.py --after` printed a vacuous pass about the new build.** Its one-page
+advice ended:
+
+```
+Every signature in the corpus still resolves at its expected count -- the byte-shape anchors held.
+```
+
+directly beneath `The live install moved from build 38797 to 38833`. **It had not read
+38833.** `capture()` collected `signatures` only for `pinned.BUILDS` — the *vaulted* builds,
+which by construction cannot change across an update — and gave the live install only
+identify/size/build. The line compared the old builds against themselves and printed a pass
+about a build it never opened, in the one report whose entire purpose is to say what the new
+build did.
+
+This is the repo's own named defect — *a check that cannot fail is not a check* — in the
+tool this arc built to catch it, on its first real firing, and it is the same shape as
+`msgshape.py`'s `descriptor invariant violations: 0` over zero descriptors that opened the
+arc. **FIXED 2026-08-14:** `capture()` now reads the corpus off `C:\gw\Gw.exe` itself and
+stores `hits`/`expected`/`ok` per signature; `_advice()` reports the count from that reading,
+names the build it read, distinguishes *no reading* and *read failed* from *pass*, and says
+where it read. The claim in §7.1 above — 8 of 8 on 38833 — is that fixed path's output, and
+was independently confirmed by running `sigcorpus.py --exe` directly first.
+
+**(b) `RUNBOOK.md` §"One-time setup" step 3 omitted `--no-updater-patch`, and following the
+page exactly produced a wrong live-capture build.** `make_custom_client.py` kills the updater
+**by default**. That is right for the caged loopback build and wrong for `run-live/`, which
+`RUNBOOK.md`:849 says must keep its updater *"or a live session cannot stream map content"*.
+The page's step 3 named only `--no-dh-patch`, so the first 38833 live build came out
+`updater=killed` beside 38797's `updater=LIVE` — a pair meant to differ only in build number.
+Caught by `dhbuild.py`'s audit, rebuilt correctly, and the page is fixed.
+**Left for a ruling, not resolved here:** `CLAUDE.md`'s launch-rule paragraph says the
+updater kill switch is *"wanted on both configurations"*, which contradicts `RUNBOOK.md`:849.
+The vault and the evidence agree with `RUNBOOK.md`; `CLAUDE.md` is a house-rules document and
+this is the owner's call.
+
+**(c) THE TWO-BUILD ASSUMPTION, and it is a pattern rather than a slip.** The cross-build
+tests were all written when the vault held exactly two builds, and **four of them encoded
+that number structurally.** Registering a third did not make them go red — it made three of
+them *crash*:
+
+| File | What it did | Why three breaks it |
+|---|---|---|
+| `test_avevents.py`:107 | `a, b = [set(i.allocators) for i in IMGS.values()]` | ValueError on 3 |
+| `test_sigcorpus.py`:106 | `(_sa, pa), (_sb, pb) = sorted(PES.items())` | ValueError on 3 |
+| `test_sigcorpus.py`:156 | the same unpack again, in §3 | ValueError on 3 |
+| `test_msgshape.py`:111 | `EXPECT_ENTRY[stamp]` | KeyError, no 38833 row |
+| `test_srctree.py` | `EXPECT_PATHS.get(stamp)` → `None` | **FAILED CLEANLY** — *"has no expected path count in EXPECT_PATHS: add one, measured from a real run — never from a guess"* |
+
+`test_srctree.py` is the one that got it right, and the difference is worth copying: it
+looks the build up with `.get()` and turns a missing expectation into a **named failure**
+rather than an exception, because — its own comment — *"the registry is what other tools
+consult to answer 'which builds do we cover', and an unmeasured build sitting in it silently
+is the coverage gap this wiring exists to close."*
+
+**And the deeper problem was not the unpacking — it was the CLAIM.** Three of these
+asserted, in one wording or another, *"the addresses are different on the two builds"*, as
+the proof that a locator derives rather than looks up. **38833 refutes that as a universal
+without touching rule 2:** it shares `0x007F2E90`/`0x007F5340` with 38797 (AgentView
+allocators), shares `0x007DE010` (RegisterMsgs), and shares SIG_KEYS' and SIG_MUTEX's
+addresses outright, because that gap did not move the code. Read literally, the old checks
+say a derivation that returns the same answer on two builds has degenerated into a lookup.
+That does not follow: what makes it a derivation is finding the address **without being told
+it**, and the proof of that is the pair where they *do* differ. All three are now pairwise —
+counts asserted on every build, disjointness required of at least one **pair**, agreeing
+pairs printed as measurements. `test_sigcorpus.py` §3 now shows the split directly:
+**SIG_DOWNLOAD has 3 distinct address sets over 3 builds** (it moved 144 bytes,
+`0x833EC0` → `0x833F50`), while **SIG_KEYS and SIG_MUTEX have 2** — same byte string, same
+hit count, same address across the 15-day gap.
+
+**(d) The suite contaminated its own corpus census, and the update made it visible.**
+`test_origin.py` asserts *"the whole vault is at most ONE client build"* — the guard behind
+deliverable 7, and the thing that keeps opcode-drifting captures from being pooled. It went
+red at `{38797: 1828, 38833: 3}`. **All three 38833 files were `test_handshake.py`'s own
+output**, written by three runs of the suite during this session, now that the self-test
+announces its real build (§7.7).
+
+The fix is not a tolerance, it is the rule `test_handshake.py` already states. Its self-test
+output was moved to `vault/captures/selftest/` precisely because mixing it with real captures
+*"produced a false timeline during a real debugging session — two self-test captures were
+read as evidence of successful client logins that never happened."* The census then walked
+the whole tree and counted that directory as corpus, re-creating the contamination one level
+up. `selftest` now joins `captures-scrubbed` in the walk's exclusion list.
+
+**And excluding it moved a published figure.** Deliverable 7 records the audit as *"1,122
+files, all 38797"*; the census read **1,828** before the exclusion and **1,532** after, so
+roughly **296 of the files being counted as research corpus were self-test artifacts.** The
+guard keeps its teeth either way: no capture has yet been taken on 38833, and the first real
+one will turn this red — correctly.
+
+**A fifth was a claim, not a crash.** `test_pinned.py` asserted *"the two builds differ in
+SIZE, so size separates them"* and went red because 38833 ships at **exactly 38797's
+10,483,904 bytes**. The red was right and the claim was wrong: size never separated the two
+copies *within* a build — this module's founding defect — and now it does not separate
+builds either. Inverted to the invariant that holds, **sha256 is the discriminator**, with
+`identify()` required to name each build from its own same-size image.
+
+### 7.7 The second build broke the SERVER, by the same `sorted()[-1]` defect the rules name
+
+**Reported from the minimap session, 2026-08-14 ~18:40, and it is the most consequential
+thing this update caused.** That session ran two loopback sessions that failed with
+`Code=058`: the handshake "succeeded", then 50 unframeable bytes and DESYNC.
+
+**Cause, and it was caused BY this arc's own work.** `authsrv.load_keys()` read:
+
+```python
+cands = sorted(f for f in os.listdir(kd) if f.startswith("rurik_dh_"))
+p = os.path.join(kd, cands[-1])
+```
+
+Newest key file wins, by filename sort. That was harmless while the vault held one key.
+Patching 38833 wrote `rurik_dh_2026-08-13_64fae3b1369b.json`, which sorts last — so a
+session running the **38797** client got **38833's** key material. The DH triple is patched
+per build, so the two ends derived different shared secrets, and the ARC4 stream was noise.
+
+**This is `CLAUDE.md`'s own named defect, verbatim:** *"Never select a build by filename:
+`sorted(exes)[-1]` picked the wrong one the day both configurations first existed."* The rule
+was written about the client patcher after exactly this happened on 2026-08-06. The same
+expression was sitting in the server's key loader, and it went wrong the same way, on the
+same trigger — a second artifact existing — eight days later. A rule written in one file
+does not protect the identical line in another.
+
+**The symptom is the one the house rules are about.** `CLAUDE.md`: *"a red test names the
+broken thing, the client says `Code=058` thirty seconds later and tells you nothing."* This
+produced precisely the second thing, to a session that had changed nothing about crypto.
+
+**FIXED 2026-08-14.** The key is now bound to the build **the client itself announces**,
+which it sends in its version frame *before* the key exchange (`authsrv.py`:3838), so the
+right key is always knowable in time:
+
+- `load_keys()` builds `KEYS_BY_BUILD`, every `rurik_dh_*.json` mapped through
+  `pinned.BUILDS` to a build number, and prints each with its tag and build. Newest-wins
+  survives only as the *starting* key, because at bind time no client has spoken.
+- `handle()` re-selects by the announced build, logging the swap.
+- If there is **no** key for the announced build and the loaded one belongs to a different
+  *known* build, it **REFUSES by name** rather than deriving a key that cannot work.
+
+Branches proven rather than asserted: client 38797 → no swap; client 38833 → swaps; client
+99999 → refuses. The minimap session's exact case is the middle one and now self-corrects.
+
+**And it exposed a latent lie in `test_handshake.py`.** That file hardcoded `BUILD = 38797`
+in its version frame while choosing its client exe by *"whichever build the newest key file
+belongs to"* — two independent selections. From 2026-08-14 they disagreed: it drove a 38833
+client announcing 38797. Nothing noticed, because until now nothing on either side read the
+announced build. The new guard read it and aborted the connection — the guard working on the
+first thing it was pointed at. `BUILD` is now derived from the exe via `buildid.read()`, with
+a check that the exe's build matches the key file the server will load. Floor 16 → 17.
+
+### 7.5 The archive, and an honest confounder
+
+`datcheck --diff` across the update, full output in
+`vault/updatecheck/diff-38797-to-38833.txt`:
+
+```
+rows 177,335 -> 177,753        descriptor_counter 26,722 -> 26,813
+mft_offset 4,173,266,432 -> 4,196,563,456      mft_size 4,256,040 -> 4,266,072
+TIER 1: 459 changed rows -- 418 added, 30 recycled, 11 relocated, 0 UNCLASSIFIED
+TIER 2: records 171,025 -> 171,208    first_stream_rows 132,628 -> 132,797
+        released_records 1 -> 0
+```
+
+**0 UNCLASSIFIED again** — FINDINGS 18.5's Tier 1 vocabulary now covers two full updates
+with nothing left over.
+
+**The confounder, stated because the number is not what it looks like:** the owner ran the
+update with **`-image`**, which forces a full download of every asset. So these 459 rows are
+*(the patch's own changes)* **+** *(backfill of content this install had never downloaded)*,
+and **this pair cannot separate them.** The 418 additions in particular are far more likely
+backfill than patch. Do not quote 459 as "what a content patch does"; the clean figure for
+that question is still §2's 334 across 38519 → 38797. What this pair *does* support is the
+shape result — the vocabulary held, nothing came back unclassified.
+
+**The claimable-slot collision reproduced, and it is now 3 of 3.** §5.2 of
+[DURABILITY.md](DURABILITY.md) found that the previous update recycled **row 35300**, the
+exact slot `datplan.plan_insert` deterministically claims, and that a play session then took
+35301. This update recycled **both 35300 and 35301** — 35301 went from an erased `0x0 0B`
+slot to a live 6,248,664 B row. Three of three observable disturbance events have consumed
+the slot our planner would have written into. That is no longer a coincidence to note; it is
+a property to design around, and it strengthens DURABILITY §4b's revised prediction that an
+authored row placed by `datplan` is more likely than not to be destroyed by a patch.
+
+### 7.5a The update moved the Pre-Searing map, cleared its bit-31, and stranded `content/maps.toml`
+
+**Reported as a symptom by the minimap session** (pre-flight refusing maps 146 and 148),
+**diagnosed here from the archives.** `content/maps.toml` gives both `[map.148]` Ascalon City
+(Pre-Searing) and `[map.146]` Lakeside County `file_id = 0x8001B97D`, and its provenance note
+records *"0x1B97D is MFT row 7982"*. MEASURED against both vaulted archives:
+
+| Archive | `0x8001B97D` (bit-31 form) | `0x0001B97D` (plain) |
+|---|---|---|
+| 38797 | row **7982** | row 7982 |
+| 38833 | **does not bind at all** | row **177262** |
+
+And what those rows now hold on 38833: row **177262** is `ffna` type 3, 2,925,267 B — the map;
+row **7982** is `ATEX`, 55,492 B — **a texture**. The row was recycled (it is in §7.5's list of
+30) and now holds something unrelated.
+
+**Three things follow, and the third is a design question rather than a fix.**
+
+1. **`mapchunks.py`:117 is confirmed by the event it was written about** — *"an MFT row index
+   is meaningful only against the archive copy it was measured on; file ids are the portable
+   key."* The file id survived this update; the row index did not, and the row it named now
+   answers with a texture. A tool that remembered 7982 gets a confident wrong file.
+2. **`maps.toml`'s "BIT 31 STAYS ON, and that is the experiment" is RESOLVED, by the archive
+   itself.** That note recorded that sending the masked id crashed the 38797 client
+   (`Map.cpp(1762)`), and left open whether the client masks the bit. On 38833 the bit-31 form
+   is simply **absent from the id table** and the plain form binds — the pending replacement
+   `DnArchive` was holding was installed by the patch. This is the same clearing
+   §4e-bis observed from a LIVE session (20 of 29 bit-31 ids cleared, `0x8001B97D` among them,
+   *"0x1B97D then binds plainly to a different row"*) — now reproduced by an update, on a
+   pristine archive, which lifts that from one witness to two of different kinds.
+3. **`content/maps.toml` is now build-coupled and does not say so.** `0x8001B97D` is right for
+   38797 and wrong for 38833; `0x1B97D` is the reverse. The file's rows carry
+   `source = "gw-preservation"` and a provenance note, but no archive or build stamp — while
+   `content.py` already enforces exactly that for `source = "client-table"` rows, *on the
+   stated rationale that a value read out of a client "is a fact about THAT BUILD and moves
+   when ArenaNet ships"*. **An id read out of an ARCHIVE is the same kind of fact**, and this
+   update is the proof. **NOT FIXED HERE:** the choice between stamping these rows per
+   archive, resolving bit-31 ids through a both-forms lookup at load time, or re-deriving on
+   snapshot belongs to whoever owns the content loader — and the minimap session is live in
+   these two maps right now. The measurement is above; the edit is theirs.
+
+**The durability tracer did not fire and could not have.** `vault/dat_durability/Gw.dat` is
+an inert copy no updater touches — §4 above, known before the event. Nothing was lost; the
+owner's standing answer is to rebase mods over an update via `deploy.py`. Arming an
+updater-reachable archive remains an explicit owner choice.
+
+### 7.6 What was done to the tree
+
+- `pinned.BUILDS` gains `2026-08-13_64fae3b1369b` = **38833**, sha256
+  `64fae3b1369b…a13c6`, 10,483,904 B. **The pin did NOT move.** `PINNED` was
+  `BUILDS[-1]` and is now an explicit lookup of 38797, because every address in `studies/`
+  is measured against 38797 and `genericvalue.py` cannot read 38833 — repointing the default
+  would have turned one honest refusal into a wall of red. **Moving the pin is a
+  re-measurement arc, not a registration step.**
+- **38833 is the first build where size is not a discriminator** — byte-for-byte the same
+  length as 38797. `identify()` already loops over every same-size candidate, so it is safe;
+  a size check written anywhere else is now a bug.
+- `vault/client/2026-08-13_64fae3b1369b/` — full snapshot, every file verified
+  byte-identical, exit 0. Only `Gw.exe` and `Gw.dat` changed; the four sibling DLLs hash
+  identically to 38797's.
+- Both client builds rebuilt and both run directories reassembled. `dhbuild.py` audit:
+  **every build is where it belongs**, `run-live/` both `updater=LIVE`.
+  `vault/keys/dh_params_2026-08-13_64fae3b1369b.txt` added — without it `classify()`
+  returned `unknown` and `make_custom_client.py` **refused to file the binary**, exit 1,
+  which is the fail-closed behaviour working.
+- Six tests updated for a third build, with floors re-measured from real green runs:
+  `test_buildid` 23 → 29, `test_avevents` 19 → 26, `test_pinned` 55 → 61,
+  `test_srctree` 30 → 39, `test_msgshape` 37 → 44, `test_sigcorpus` 34 → 35.
+  `TESTS.md`'s entries carry the same numbers and the reasons.
+- ~~**One item is left for the owner and needs elevation:** the new loopback client at
+  `vault/run/2026-08-13_64fae3b1369b/` is **UNCAGED**~~ — **DONE**, out of session, by
+  `isolate_client.ps1` in an elevated shell. It carries OUR DH parameters, so it had to be
+  caged before launch, and that costs a UAC prompt by design rather than being something a
+  session does silently. Recorded because the sequence is the point: patching a new build
+  leaves the machine one deliberate manual step short of safe, `test_cage.py` is what says
+  so, and it named the exact binary.
+- **Suite: 94 green / 0 red / 0 suspect of 94, 4,686 checks, 2,721 s** — a full run of
+  `python toolkit/run_suite.py` on the tree with `main` merged in (the terrain T4/T5 and
+  minimap S12 arcs), not a partial run reported as a full one. Three runs tell the story:
+  **89/5** before any of this, **93/1** after the code fixes, **94/0** once the new
+  loopback client was caged. The intermediate red was `test_cage.py` and it was **machine
+  state rather than code** — the four code reds were `test_msgshape`, `test_sigcorpus`,
+  `test_srctree` and `test_origin`, every one a two-build assumption meeting a third build.
+- The new loopback client **is now caged** (`cage.py`: *7 client(s), 0 in the wrong state*),
+  so the launch binding holds for all seven builds in the vault.
+- The live build needed **two** flags beyond `--no-dh-patch` to match its 38797 predecessor:
+  `--no-updater-patch` (§7.4b) and `--key-tap`, without which `livesession.py` refuses the
+  build outright. Both are now in `RUNBOOK.md` step 3; only the key tap was already
+  documented, and only in the live-capture section rather than in the setup steps.
+
+---
+
 ## 5. What this changes elsewhere
 
 - **`studies/datwrite/FINDINGS.md`** said *"the durability experiment is still unrun"*.
   Corrected in the same commit as this file: it is armed, byte-verified, reverted and
   re-armed — and blocked on delivery, which is a different state from unrun and points at a
   different next action.
-- **`vault/updatecheck/`** is dark in a stronger sense: the snapshot exists, **no tool in
+- ~~**`vault/updatecheck/`** is dark in a stronger sense: the snapshot exists, **no tool in
   either tree reads or writes it**, and its `archive` key is `{}`. If an update-detection
-  path is wanted, that is where it was started and abandoned. NOT FOUND: any consumer.
-- **`PLAN.md` §7's pre-update checklist** is called *"the highest-value deliverable here"*
-  and it is the thing this arc should finish next, because it is the half that cannot be run
-  retroactively and it needs no delivery decision.
+  path is wanted, that is where it was started and abandoned. NOT FOUND: any consumer.~~
+  **SUPERSEDED 2026-08-13/14.** `toolkit/updatecheck.py` is the consumer — it writes the
+  baselines and reads them back at `--after` — and on 2026-08-14 it was **used for real**
+  against the 38833 update (§7). The empty `archive` key was not a defect in the directory
+  but a missing `--dat` on the one baseline that had been taken by hand;
+  `before-20260814T175822.json` carries a populated one.
+- ~~**`PLAN.md` §7's pre-update checklist** is called *"the highest-value deliverable here"*
+  and it is the thing this arc should finish next~~ — **LANDED** as `updatecheck.py`
+  (deliverable 8), and §7 above is the record of its first firing, which found two defects
+  in it and in `RUNBOOK.md`. It earned the "highest-value" label: it was the reason a
+  before-state existed at all when the update arrived.
 
 ---
 
@@ -615,6 +991,17 @@ walkable. Unrelated to durability and left for whoever owns movement.
 | A LIVE session clears bit-31 map-row ids, including row 7982's | **OBSERVED** — §4e-bis, `run-live` cleared 20 of 29 including `0x8001B97D` and `0x8005E728`; `0x1B97D` then binds plainly to a different row |
 | The MFT alternation is a usable liveness signal | **REFUTED** — §4e-ter did not flip; `descriptor_counter` moved and is the one to use |
 | The patcher holds no external content manifest | **UNVERIFIED** — never looked for, and it is the assumption the prediction rests on |
+| Build 38833 shipped 2026-08-13 | **WIKI** (GWW, "Game updates" §Update - August 13, 2026, read 2026-08-14) for the number and the changelog; **MEASURED** independently by `buildid.py` off the image. Two witnesses sharing no lineage |
+| 8 of 8 signatures resolve at their exact hit counts on 38833 | **MEASURED**, §7.1 — `sigcorpus.py --exe` directly, and again through the fixed `updatecheck` path |
+| `msgshape` / `asserts` / `buildid` / `srctree` all read 38833; `genericvalue` refuses it | **MEASURED**, §7.1, one run each |
+| Raw-address anchoring is *unpredictably* rather than reliably broken by an update | **MEASURED**, n=3 builds / 2 gaps, §7.2. The two gaps differ in kind (90-day vs 15-day); this is induction over two events and must not be quoted as a law |
+| The DH struct stayed at `0x00A910D8` while its parameters rotated | **MEASURED**, §7.3, fingerprints only |
+| 459 archive rows changed across the update | **MEASURED but CONFOUNDED**, §7.5 — the owner ran `-image`, so patch changes and never-downloaded backfill are inseparable in this pair. Not a "what a patch does" figure |
+| The claimable erased row slot is consumed by disturbance events | **OBSERVED, 3 of 3** — §7.5 (35300 *and* 35301 this update) plus DURABILITY §5.2's two. Small n, but no counter-example |
+| `updatecheck --after` printed a pass about a build it never opened | **OBSERVED**, §7.4a — reproduced, then fixed; the fix is what produced the §7.1 figure |
+| A second key file made `authsrv` hand a 38797 client 38833's DH key | **OBSERVED** — §7.7, two failed loopback sessions from the minimap session, `Code=058`. Root cause read from the source (`sorted(...)[-1]`); fix's three branches proven by direct call |
+| `test_handshake.py` drove a 38833 client while announcing build 38797 | **OBSERVED**, §7.7 — latent from the moment the second build was patched, surfaced by the new guard |
+| ~296 files counted as research corpus were self-test artifacts | **MEASURED** — §7.4d, census 1,828 → 1,532 once `selftest/` is excluded. Deliverable 7's "1,122 files" figure was over a tree that included them |
 | ~~`archive.py`'s offset for row 46196 is wrong by 1,024~~ | **REFUTED** 2026-08-14 — `archive.row(46196).offset == 0x437F6800`, identical to `datwrite`/`datcheck`, marker in that extent. The 1,024 came from reading `entries[46196]`, which is row 46197. §4, §4b.1 |
 | ~~`archive.py` and `datcheck.py` number MFT rows differently, off by one~~ | **REFUTED** 2026-08-14 — all 24 bytes of every row agree on all ten vault archives; pinned by `test_archive.py` §1c. The number that differs is `len(entries)` vs `row_count`. §4b.1 |
 | There is ONE row convention, ArenaNet's raw MFT index, and every reader and every recorded constant is in it | **OBSERVED** — 10 archives by an independent `struct` walker; 65 recorded constants ≥ 16 re-resolved in both conventions, 26 map-flagged under `row(N)` and 1 under `entries[N]`, zero overlap |

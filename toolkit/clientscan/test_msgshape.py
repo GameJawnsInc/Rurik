@@ -59,7 +59,8 @@ import pinned                                                # noqa: E402
 import vaultpath                                             # noqa: E402
 from gwpe import PE                                          # noqa: E402
 
-LEDGER = checks.Ledger("msgshape table derivation", floor=37)
+# floor re-measured 2026-08-14 from a real green run: 37 -> 44, build 38833 joining pinned.BUILDS.
+LEDGER = checks.Ledger("msgshape table derivation", floor=44)
 check = checks.adopt(LEDGER)
 
 # The routine's real entry prologue -- `push ebp / mov ebp,esp / sub esp,0x20 /
@@ -70,6 +71,12 @@ GENERIC_PROLOGUE = bytes.fromhex("558bec83ec20a1")
 EXPECT_ENTRY = {
     "2026-07-29_221c13772c7a": 0x007DE010,      # studies/msgtable/FINDINGS.md §3
     "2026-04-30_b174de1f2d8d": 0x007D7CE0,
+    # 38833, MEASURED 2026-08-14: the SAME VA as 38797. That is the measurement,
+    # not a copy-paste -- the 15-day patch did not move this function. The
+    # derivation is still doing real work here: the anchor is found by byte
+    # shape and the -0x22 delta verified against an int3 boundary, so an
+    # unchanged answer is a re-derivation that agreed, not a lookup.
+    "2026-08-13_64fae3b1369b": 0x007DE010,
 }
 
 
