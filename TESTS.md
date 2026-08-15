@@ -2297,8 +2297,8 @@ Every one of these, in the order they were written:
   a partial run and exited 0 for as long as the runner existed — and a failure
   OUTRANKS partiality, because 3 on a run with a red file hides the failure behind a
   caveat. No vault, no socket, no client; the halves under test are pure functions
-  over a string, a tree and a dict, so testing the thing that spawns 94 processes
-  spawns none — section 7 builds a synthetic `toolkit/` and the one check that touches
+  over a string, a tree and a dict, so testing the thing that runs the whole suite runs
+  none of it — section 7 builds a synthetic `toolkit/` and the one check that touches
   a real repo only asks git to reject a bogus ref. **DEFECT 5 is in section 1**: a
   failing test whose entire explanation goes to STDERR was reported as
   `FAIL … (no output)`, which names nothing and sends the reader to run the file by

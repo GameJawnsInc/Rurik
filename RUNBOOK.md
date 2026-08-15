@@ -127,7 +127,8 @@ One process per file, discovered from **the disk** rather than from any document
 `rc == 0` with no `ALL CHECKS PASSED` banner is reported `SUSPECT` rather than laundered
 into a pass. `--only <substring>` filters, `--list` enumerates and stops.
 
-**It runs eight files at a time, longest-first.** Baseline 2026-08-14, 94 files:
+**It runs eight files at a time, longest-first.** Baseline 2026-08-14, measured over
+the 94 files on disk that day (96 now, after the terrain-variation arc landed):
 **717 s wall — 12 minutes, down from 46.6 serial.** `--jobs 1` restores one-at-a-time
 and is how you check a suspected collision: a parallel run that disagrees with a serial
 one about any file's verdict is a collision, not a flake. (Measured when this landed:

@@ -13,8 +13,10 @@ pool that starts its 584s file LAST, and a note of `(no output)` for a test whos
 explanation went to stderr.
 
 No vault, no socket, no client. The halves under test are pure functions over a string,
-a tree and a dict, which is why they can be driven directly instead of by spawning 94
-processes to test the thing that spawns 94 processes.
+a tree and a dict, which is why they can be driven directly instead of by running the
+whole suite to test the thing that runs the whole suite. (Counts of test files are
+deliberately not pinned in this file's prose -- the suite was 71 files when the runner
+was written, 94 when it learned to schedule, and 96 a day later.)
 """
 import os
 import sys
