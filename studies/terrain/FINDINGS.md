@@ -839,6 +839,33 @@ Capture: `vault/research/terrain/selector_lornars_tile8_18.bin`.
 > showing up as a difference rather than as an assertion. Second capture:
 > `vault/research/terrain/selector_lornars_run2.bin`.
 >
+> **BOTH CRASHES WERE MISSED BY THE SAME DEFECT IN MY LOOP, and the owner
+> caught both.** The only check was "does the process still exist". It does:
+> the ArenaNet assert box is a MODAL DIALOG INSIDE THE SAME PROCESS, so
+> `Get-Process` reports ALIVE for as long as it is up. "Alive at all twelve
+> checks" and "crashed" are perfectly compatible, and no amount of polling
+> liveness would ever have separated them. `crashwatch.ps1` now watches for a
+> titled top-level window that is not `ArenaNet_Dx_Window_Class`, which is the
+> signal that actually exists -- `Crash.dmp` is NOT reliable: after the
+> 2026-08-15 crash no dump existed under the run directory or `%TEMP%`.
+>
+> **AND THE SECOND DUMP EXONERATES THE INSTRUMENT.** It is an ArenaNet
+> assertion in CHARACTER code, with no terrain frame anywhere in the trace:
+>
+>     Assertion: level < arrsize(s_attribPoints)
+>     P:\Code\Gw\Char\CharData.cpp(202)      build 38833
+>
+> `s_attribPoints` is visible at `ebx-32` as `6, 7, 9, 11, 13, 16, 20,
+> ffffffff`, and the failing thread's entry is `0x0024BB99` -- a worker, not
+> the render thread. Our three `int3` patches are all one-shot, restored
+> before this point, and none is in `CharData`. `START_LEVEL = 1`, so it is
+> not the level in `CHARACTER_UPDATE_FACTIONS` either. Filed as a server-side
+> character-data bug, out of scope for this arc.
+>
+> So §7.6's crash is now **probably the same assert rather than unexplained** —
+> same client, same server, same character — but that is INFERENCE, not
+> measurement: the first crash produced no dump. Treat it as a lead.
+>
 > **THE FIRST RUN'S CLIENT CRASHED, and the owner noticed it before I did.**
 > My script exited the moment it saw the hit and never re-checked liveness, so
 > I reported the run clean. It was not. What the timestamps do establish is
@@ -865,6 +892,121 @@ It does NOT by itself fix the renderer: the permutation must be derived, not
 captured, because a consumer cannot ship a memory dump -- so the next question
 is what generates it, and the `rng` pair 16 bytes before it is the obvious
 suspect now that both are observable in the same read.
+
+### 7.7 What generates the permutation: corner pattern picks a PAIR, the PRNG picks one
+
+**MEASURED 2026-08-15, offline, from the run-1 capture plus the archive** — no
+client needed, which is why it is worth doing before another live run.
+
+Tile block (9,18) of Lornar's Pass, 1024 cells, corner types from terrain tag
+2 through tag 4, compared against the captured selector byte:
+
+**LAW 1 — a uniform cell is ALWAYS the identity. 835 of 835, ZERO
+counterexamples.** Not "usually": a cell whose four corners share one type is
+never permuted. That alone kills the reading that this is a per-cell random
+draw, which would put identity at 1 in 24.
+
+**LAW 2 — for a mixed cell the corner PATTERN determines a small CANDIDATE
+SET, and something picks within it.** Patterns are canonicalised
+material-agnostically (`(0,1,1,1)` means "corner 0 differs, the rest agree"):
+
+| pattern | candidates | split |
+|---|---|---|
+| `(0,0,0,0)` | `0xE4` | 835 |
+| `(0,1,1,1)` | `0x39` / `0xE4` | 24 / 15 |
+| `(0,0,0,1)` | `0x27` / `0xE4` | 21 / 17 |
+| `(0,1,0,0)` | `0xE1` / `0x78` | 15 / 12 |
+| `(0,0,1,0)` | `0xB4` / `0xC6` | 15 / 12 |
+| `(0,0,1,1)` | `0x4E` / `0xE4` | 12 / 10 |
+| `(0,1,0,1)` | `0x2D` / `0xD8` | 11 / 7 |
+| three-material patterns | 4 candidates each | n ≤ 7 |
+
+Every two-material pattern gets **exactly two** candidates in a near-even
+split; three-material patterns get four. **92.2% of the block is predictable
+from the corner pattern alone** (944/1024), and the residual is the choice
+within each pair.
+
+**So the generator is `f(corner pattern, one PRNG draw)`**, and the two halves
+explain what was previously puzzling. The pattern half is why 18 of 24
+permutations appear and the other 6 never do — only reachable candidates
+occur. The PRNG half is why the identity share swung 85.6% → 50.8% between
+two blocks (§7.6) while the law itself did not move: different stream, same
+rule. The reseed `(tile_x << 16) ^ tile_y` and `trnvariation` already
+reproduce that stream.
+
+**CROSS-VALIDATED against run 2 (block (5,2), a different block), and the
+single-block caveat above was the right one to raise:**
+
+- **LAW 1 survives untouched.** Run 1: 835 uniform cells, 0 violations. Run 2:
+  363 uniform cells, 0 violations. **1,198 of 1,198 across two captures.**
+- **LAW 2's two-material pairs PREDICTED run 2 exactly.** All seven
+  two-material patterns added ZERO new values out of sample, including
+  `(0,0,0,1)` where run 1 saw n=38 and run 2 saw n=101. A candidate set
+  derived from tens of cells predicted hundreds. That is the difference
+  between a fit and a law.
+- **The three-material sets were under-sampled, exactly as flagged, and they
+  converge on SIX.** `(0,1,2,2)`, `(0,1,2,1)`, `(0,0,1,2)` and `(0,1,0,2)` all
+  reach 6 candidates once both blocks are pooled — run 1 had seen 4, 4, 1 and
+  1. Run 2 also contributes `0x6C`, a 19th permutation.
+
+So the arity is **2 candidates for a two-material cell, 6 for a
+three-material one** — which is a much sharper target for the table than "a
+small set", and 91.9% of run 2's cells (941/1024) drew a value run 1 had
+already named.
+
+### 7.8 The writer is `0x0074B440`, and the generator is a SORT (2026-08-15)
+
+**Found by walking back from the breakpoint, which is what the working
+instrument is for.** `trnint3c.dll` captures 512 bytes of stack at the hit;
+`[esp]` is `0x007434F8` (the return address after `call 0x75e650`, confirming
+the caller) and two frames up sit `0x00745422` and `0x00745750`.
+
+That region contains `0x00745143  lea edi, [esi + 0x1d0]`, and
+`0x007451CF  call 0x74b440` passes it in `ecx`. `0x0074B440` opens
+`mov [ebp-0x20], ecx`, so `this` = `chunk+0x1d0`, and at `0x0074B4EC` it
+computes `this + 0xE4` -- **which is `chunk+0x2B4`.** The array nothing
+appeared to write is written through a displacement of `0xE4` from a
+subobject, exactly the blind spot §7.4 named. *This function was disassembled
+hours earlier in the same session and dismissed, because the `+0xe4` was
+matched against the wrong base.*
+
+**`0x0074B540`.. is a SORTING NETWORK.** It loads the four corner type bytes
+into `edx/edi/ebx/esi`, seeds four index values 0,1,2,3 in
+`[ebp-0xc]/[ebp+8]/[ebp-4]/[ebp-0x10]`, and runs `cmp` + conditional-swap
+pairs that permute **values and indices together**. The selector byte is the
+resulting index permutation.
+
+**This retires the PRNG hypothesis of §7.7.** The "coin flip" is not a random
+draw -- it is *which material has the lower type id*. Deterministic, and
+derivable from data we already ship, so a consumer needs no stream replay.
+
+Predicting the byte from a plain stable ASCENDING sort of the four corner
+types, against both captures:
+
+| capture | ascending / source-index | identity-only baseline |
+|---|---|---|
+| block (9,18) | **95.2%** | 85.6% |
+| block (5,2) | **87.0%** | 50.8% |
+
+Descending scores 81.5% / 35.4%, so the direction is settled. The arity falls
+out exactly: two materials -> 2 orderings, three -> 3! = 6, which is what
+§7.7 measured before the mechanism was known.
+
+**NOT CLOSED, and the residual has two candidate causes I have not
+separated:** the block indices `(9,18)` and `(5,2)` were INFERRED by best fit
+rather than read from the capture, so an off-by-one contaminates every cell;
+and the client's comparator/tie-break may not be a plain stable sort. Either
+produces exactly this high-but-imperfect signature. Both are cheap to settle
+-- record `tile_x`/`tile_y` in the capture (the reseed at `chunk+0x2A4`
+already encodes it) and transcribe the network's swap order literally.
+
+Stack capture: `vault/research/terrain/stack_lornars_run3.bin`.
+
+**What is still needed for a consumer**, and it is now a small question rather
+than an open-ended one: the candidate TABLE (which pair each pattern maps to,
+almost certainly a static array near `0x00BF78D8`'s neighbours) and the DRAW
+ORDER (how many PRNG values a cell consumes, and whether uniform cells consume
+one). Both are testable offline against the two captures already in the vault.
 
 ### 7.5 The seam is not where it looked — a measurement, and a bug in the probe
 
