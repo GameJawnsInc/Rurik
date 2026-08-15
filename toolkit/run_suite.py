@@ -148,8 +148,16 @@ def find_tests(root=None):
     return sorted(out)
 
 
-def parse_result(stdout, returncode):
+def parse_result(stdout, returncode, stderr=""):
     """(status, checks, note) for one finished test process.
+
+    DEFECT 5, and it cost a real diagnosis on 2026-08-14. `test_movement_fidelity.py`
+    refuses to pool captures from two client builds, and it prints that refusal to
+    STDERR and exits 1 with stdout completely empty -- so the run reported
+    `FAIL ... (no output)`, which names nothing and sends the reader to run the file by
+    hand to find out what it already knew. The banner is still looked for on stdout
+    alone, because a verdict line is stdout by construction; stderr is consulted only
+    to answer "what did it SAY", which is the entire value of the note.
 
     `checks` is None when no banner was found -- NOT 0. The difference is the whole
     point: 0 is a measurement ("it ran and asserted nothing"), None is the absence of
@@ -166,7 +174,8 @@ def parse_result(stdout, returncode):
             except (IndexError, ValueError):
                 checks = None
             break
-    last = lines[-1] if lines else "(no output)"
+    err = [l.strip() for l in (stderr or "").splitlines() if l.strip()]
+    last = lines[-1] if lines else (f"(stderr) {err[-1]}" if err else "(no output)")
     if returncode != 0:
         return FAIL, checks, last
     if checks is None:
@@ -184,7 +193,7 @@ def run_one(rel, root=None, python=None):
     p = subprocess.run([python or sys.executable, rel], cwd=root,
                        capture_output=True, text=True,
                        encoding="utf-8", errors="replace")
-    status, checks, note = parse_result(p.stdout, p.returncode)
+    status, checks, note = parse_result(p.stdout, p.returncode, p.stderr)
     return status, checks, note, time.time() - t0
 
 

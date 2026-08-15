@@ -1,14 +1,20 @@
-r"""The suite runner, and the three ways its ad-hoc ancestor miscounted in one day.
+r"""The suite runner, and the five ways it has misreported a run so far.
 
-Every check here is a REPRODUCTION of a defect that actually happened on 2026-08-13
-while running this repo's own suite by hand, and each one reported a wrong number as a
-confident report rather than as an error. That is the shape worth testing: none of the
-three raised, none printed a traceback, and all three produced output that read like a
-successful run.
+Every check here is a REPRODUCTION of a defect that actually happened, and each one
+reported a wrong number -- or no number -- as a confident report rather than as an
+error. That is the shape worth testing: none raised, none printed a traceback, and all
+produced output that read like a successful run.
 
-No vault, no socket, no client. The two halves under test are pure functions over a
-string and a directory tree, which is why they can be driven directly instead of by
-spawning 75 processes to test the thing that spawns 75 processes.
+Defects 1-3 are 2026-08-13, from running this repo's suite by hand: a file list
+harvested from prose that ran 63 of 71, a fixed regex that still missed the one file
+CLAUDE.md names inside a code fence, and a banner search that scored two healthy files
+at 0 checks. Defects 4-5 are 2026-08-14, from making the run concurrent: an alphabetical
+pool that starts its 584s file LAST, and a note of `(no output)` for a test whose entire
+explanation went to stderr.
+
+No vault, no socket, no client. The halves under test are pure functions over a string,
+a tree and a dict, which is why they can be driven directly instead of by spawning 94
+processes to test the thing that spawns 94 processes.
 """
 import os
 import sys
@@ -20,12 +26,12 @@ sys.path.insert(0, HERE)
 import checks  # noqa: E402
 import run_suite as rs  # noqa: E402
 
-# Floor 47, MEASURED from a green run: 27 on 2026-08-13, plus section 6's six when the
-# runner learned to schedule a pool on 2026-08-14, plus section 7's fourteen when it
-# learned to select by diff the same day. Every check is unconditional and builds its
-# own fixtures, so there is no vault-less variant and no declared skip: a score under
-# the floor means a section crashed.
-LEDGER = checks.Ledger("run_suite: the suite runner's own counting", floor=47)
+# Floor 49, MEASURED from a green run: 27 on 2026-08-13, then on 2026-08-14 section 6's
+# six for the pool's scheduling, section 7's fourteen for `--since`, and two more in
+# section 1 for defect 5 (stderr-only failures). Every check is unconditional and builds
+# its own fixtures, so there is no vault-less variant and no declared skip: a score
+# under the floor means a section crashed.
+LEDGER = checks.Ledger("run_suite: the suite runner's own counting", floor=49)
 
 
 def section_banner_not_last():
@@ -55,6 +61,18 @@ def section_banner_not_last():
     LEDGER.ok(status == rs.PASS and n == 9,
               "and when a log follows it",
               f"got {status} {n} -- test_webgate's real shape")
+
+    # DEFECT 5: the note for a file whose whole explanation went to stderr.
+    status, n, note = rs.parse_result("", 1, "refusing: two client builds in the vault")
+    LEDGER.ok(status == rs.FAIL and "two client builds" in note,
+              "a failure that printed ONLY to stderr is reported with what it said",
+              f"note={note!r} -- test_movement_fidelity.py exits 1 with an empty "
+              f"stdout, and the run used to name it '(no output)'")
+    status, _n, note = rs.parse_result("ALL CHECKS PASSED (3 checks)\ntail line\n", 1,
+                                       "a warning nobody asked about")
+    LEDGER.ok(note == "tail line",
+              "but stdout still wins the note when it has one",
+              "stderr is a fallback, not a louder channel")
 
     # THE CONTROL. Finding the banner anywhere must not mean finding it in prose that
     # merely mentions it -- a test whose own docstring quotes the phrase would

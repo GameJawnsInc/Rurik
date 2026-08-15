@@ -2224,7 +2224,14 @@ Every one of these, in the order they were written:
   caveat. No vault, no socket, no client; the halves under test are pure functions
   over a string, a tree and a dict, so testing the thing that spawns 94 processes
   spawns none — section 7 builds a synthetic `toolkit/` and the one check that touches
-  a real repo only asks git to reject a bogus ref. 47 checks, ~2 s),
+  a real repo only asks git to reject a bogus ref. **DEFECT 5 is in section 1**: a
+  failing test whose entire explanation goes to STDERR was reported as
+  `FAIL … (no output)`, which names nothing and sends the reader to run the file by
+  hand — `test_movement_fidelity.py` exits 1 with a completely empty stdout when it
+  refuses to pool two client builds, and that is how it read on 2026-08-14. The note
+  now falls back to stderr, with a control that stdout still wins when it has a line:
+  stderr is a fallback, not a louder channel. The banner search stays on stdout alone,
+  because a verdict line is stdout by construction. 49 checks, ~2 s),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
   a live session on 2026-08-10. It also pins the checker's own vacuity failure — the
