@@ -2692,6 +2692,22 @@ Every one of these, in the order they were written:
   checks is an unfalsifiable self-declaration. `BUILD_UNKNOWN` is a distinct third
   value, never "probably the pinned one", and `require_single_build` refuses a
   two-build corpus — `test_movement_fidelity.py`, the pooling consumer, calls it.
+  **And since 2026-08-15 it also SELECTS, which is the half a refusal cannot
+  supply.** The refusal fired for real the day after build 38833 shipped: its
+  verification runs left genuine 38833 captures in `captures/authsrv/`, and both
+  pooling consumers went red. Correctly — but a red states a fact about the vault
+  (two builds are present) when what a reader needs is a policy (which build the
+  figure describes), and a test cannot settle a policy by failing at it. Owner's
+  decision: **the figures follow the pin**, so `origin.select_build(paths, build)`
+  keeps the pinned build plus the unstamped files, drops anything stamped
+  otherwise, and returns what it dropped so the caller can print it. The build is
+  an ARGUMENT — `origin.py` is on the server path and does not import
+  `clientscan/pinned.py`; the consumer reads `pinned.BUILD` and passes it, so the
+  corpus follows the pin automatically and the two cannot drift. Unstamped files
+  are KEPT: "cannot say" is not "some other build", and a strict filter would
+  silently discard a third of the evidence. The census asserts the pair that
+  actually protects a number — selection leaves one build, **and** the pinned
+  corpus survives it, since a filter that keeps nothing also "leaves one build".
   Unknown is TOLERATED by default and that is measured rather than lax: roughly
   **38%** of the research corpus names no build — 930 of 2,464 MEASURED
   2026-08-14, 556 of 1,678 when this was written. Treat the fraction as the

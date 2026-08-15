@@ -976,6 +976,66 @@ updater-reachable archive remains an explicit owner choice.
 
 ---
 
+### 7.8 The corpus went two-build, and a correct refusal was the wrong instrument
+
+**OBSERVED 2026-08-15.** The 38833 verification runs of §7.6 wrote real captures into
+`vault/captures/authsrv/`. Not fixtures — §7.4d's `selftest/` exclusion had already
+handled those, and this is precisely the case that exclusion was scoped *not* to cover.
+The research corpus became genuinely two-build:
+
+| Build | Files |
+|---|---:|
+| 38797 | 1,534 |
+| 38833 | 18 |
+| unstamped | 953 |
+
+Both pooling consumers went red — `test_movement_fidelity.py` and `test_origin.py`'s
+census — and **both were right to.** Opcodes drift between builds (`MOVE_TO_COORD` is
+`0x003C` in one client and `0x003E` in another), so a fidelity score pooled over two of
+them is about neither. This is deliverable 7's guard doing exactly the job it was built
+for, on the first occasion it could.
+
+**The finding is not the red. It is that the red could not be acted on.** A refusal
+states a fact about the vault — *two builds are present* — when what a reader needs is a
+policy: *which build does this figure describe?* No test settles that by failing, and
+the two obvious responses are both wrong in the same way: loosening the guard restores a
+meaningless number, and leaving it red parks two real measurements over a condition that
+is now permanent and recurs at every update.
+
+**Owner's decision, 2026-08-15: the figures follow the pin.** `pinned.py` deliberately
+still pins 38797 (§7.6 — moving it is a re-measurement arc of its own), so the published
+figures are figures about 38797 and off-pin captures are excluded rather than blended.
+The mechanism is `origin.select_build(paths, build) -> (kept, dropped)`:
+
+- **the build is an argument, not an import.** `origin.py` is on the server path and
+  does not depend on `clientscan/pinned.py`; the consumer reads `pinned.BUILD` and passes
+  it. The corpus follows the pin automatically when it moves, and the two authorities
+  cannot drift apart silently — the staleness failure the top of `CLAUDE.md` is about.
+- **unstamped files are KEPT.** 953 of the corpus names no build, because a frame log
+  names it once per SESSION and not once per file. "Cannot say" is not "some other
+  build", and a strict `== build` filter would silently discard a third of the evidence
+  and move every figure for a reason nobody could see.
+- **the caller prints what it dropped.** `select_build` returns `dropped` rather than
+  logging it, and every call site reports the count — a bounded corpus reported as a
+  whole one is the silent-truncation defect this repo keeps re-learning.
+
+**The census's invariant changed shape, and the new one needed a second half.** It used
+to assert *one build exists*, which the corpus has outgrown and will keep outgrowing. It
+now asserts *selecting to the pin leaves one build* — **and** *the pinned corpus survives
+the selection*. The second is not belt-and-braces: **MEASURED, selecting to a pin the
+corpus does not hold (99999) passes the first check VACUOUSLY**, because a filter that
+keeps nothing also leaves one build. Both predicates run against a nonexistent pin inside
+the test as a negative control, and the pair must split — 0 files at 99999 against 1,534
+at the real pin.
+
+Scored honestly: the guard worked as designed *and* the arc left an instrument gap it did
+not anticipate. Deliverable 7 built the refusal and never built the selection, and a
+refusal alone is unusable the moment a second build is legitimately present — which, for
+a project that will meet an update every few weeks, is the ordinary case rather than the
+exception.
+
+---
+
 ## 8. `genericvalue.py` derived — the arc's one casualty, closed
 
 §7.1 left this module as the update's single measured casualty: it REFUSED build
@@ -1108,6 +1168,8 @@ reverts, and it caught me inside an hour.
 | A second key file made `authsrv` hand a 38797 client 38833's DH key | **OBSERVED** — §7.7, two failed loopback sessions from the minimap session, `Code=058`. Root cause read from the source (`sorted(...)[-1]`); fix's three branches proven by direct call |
 | `test_handshake.py` drove a 38833 client while announcing build 38797 | **OBSERVED**, §7.7 — latent from the moment the second build was patched, surfaced by the new guard |
 | ~296 files counted as research corpus were self-test artifacts | **MEASURED** — §7.4d, census 1,828 → 1,532 once `selftest/` is excluded. Deliverable 7's "1,122 files" figure was over a tree that included them |
+| The research corpus is now genuinely two-build, and the pooling refusal alone could not resolve it | **OBSERVED** — §7.8, 1,534 at 38797 against 18 at 38833 plus 953 unstamped. The refusal was correct and unactionable; the figures now FOLLOW THE PIN via `origin.select_build`, unstamped files kept, exclusions printed |
+| A pin the corpus does not hold passes the one-build census vacuously | **MEASURED** — §7.8, control at 99999: 0 files, first predicate green, second red. Why the census needs both halves |
 | ~~`archive.py`'s offset for row 46196 is wrong by 1,024~~ | **REFUTED** 2026-08-14 — `archive.row(46196).offset == 0x437F6800`, identical to `datwrite`/`datcheck`, marker in that extent. The 1,024 came from reading `entries[46196]`, which is row 46197. §4, §4b.1 |
 | ~~`archive.py` and `datcheck.py` number MFT rows differently, off by one~~ | **REFUTED** 2026-08-14 — all 24 bytes of every row agree on all ten vault archives; pinned by `test_archive.py` §1c. The number that differs is `len(entries)` vs `row_count`. §4b.1 |
 | There is ONE row convention, ArenaNet's raw MFT index, and every reader and every recorded constant is in it | **OBSERVED** — 10 archives by an independent `struct` walker; 65 recorded constants ≥ 16 re-resolved in both conventions, 26 map-flagged under `row(N)` and 1 under `entries[N]`, zero overlap |
