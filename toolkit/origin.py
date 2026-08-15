@@ -369,6 +369,47 @@ def require_single_build(paths, what="this measurement", allow_unknown=True):
     return build, list(paths)
 
 
+def select_build(paths, build, allow_unknown=True):
+    """The "Select one" `require_single_build`'s refusal asks for.
+
+    Returns `(kept, dropped)`. `kept` is every path at `build`, plus the
+    unstamped ones unless `allow_unknown=False`; `dropped` is every path
+    stamped a DIFFERENT known build.
+
+    WHY THIS EXISTS RATHER THAN A WIDER `require_single_build`. On 2026-08-14
+    build 38833 shipped, the day's verification runs put 18 real captures in
+    the research corpus beside 38797's 1,534, and two consumers went red --
+    correctly, because a fidelity number pooled over two builds is about
+    neither. The refusal was right and the remedy is not to loosen it: it is
+    for the caller to say which build it means. That is a per-caller policy
+    decision and it is spelled at the call site, which is why the build is an
+    ARGUMENT and this module still imports nothing from `clientscan/`
+    (`origin.py` is on the server path; `pinned.py` is not).
+
+    UNSTAMPED FILES ARE KEPT BY DEFAULT, and getting this backwards would be
+    the expensive mistake. 948 of the corpus carries no version record -- a
+    frame log names the build once per SESSION, not once per file -- so a
+    strict `== build` filter silently discards a third of the evidence and
+    every figure computed after it moves for a reason nobody can see. That is
+    the failure `test_origin.py` guards with its "if this collapses, the
+    inference rule broke" check. Unstamped is not "some other build"; it is
+    "this file cannot say", and it was in every figure before today.
+
+    THE CALLER MUST REPORT `dropped`. Returning it rather than logging it
+    keeps this function quiet enough for a library, but a bounded corpus
+    reported as a whole one is exactly the silent-truncation defect this repo
+    keeps re-learning -- so every call site prints the count.
+    """
+    kept, dropped = [], []
+    for p in paths:
+        b = build_of(p)[0]
+        if b == build or (b is BUILD_UNKNOWN and allow_unknown):
+            kept.append(p)
+        else:
+            dropped.append(p)
+    return kept, dropped
+
+
 class MixedCorpora(SystemExit):
     """Refusing to pool captures of two different servers."""
 

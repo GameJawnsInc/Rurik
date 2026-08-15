@@ -1763,10 +1763,44 @@ it on 2026-08-14, and `RUNBOOK.md` §0/§0b was walked on a real update for the 
   runs: 89/5 before, 93/1 after the code fixes, 94/0 once the new loopback client was
   caged (a UAC prompt, by design).
 
-**Next, and it now has a measured reason:** convert or gate `genericvalue.py`'s VAs, which
-would bring `avevents.py` back with it. Then the two live-memory readers in
-`itemprobe`/`agentprobe`, which on a new build do not compute a wrong number — they
-dereference a stale RVA inside a *running* client.
+- **`genericvalue.py` IS DERIVED, and the casualty is closed** (FINDINGS §8). Its 27
+  build-coupled addresses are **zero**: the dispatchers are the handlers the client's own
+  receive table gives for opcodes `0x009F`/`0x00A2` — so the chain bottoms out in
+  `RegisterMsgs`, anchored by byte shape — and every switch, default, id span, chain case
+  body and gate falls out of them, with an asserted count at each link. All three vaulted
+  builds now read **47 int / 14 float ids, `{40}` untouched, main switches disjoint**, at
+  three completely different address sets. `avevents.py` is back to 39 of 67 on all three.
+  **The repo-wide class-(a) census is 73 → 46**, its first large fall. **47 on 2026-08-15**,
+  one pin added on purpose: `atex.TABLES_BUILD` records which build its two codec VAs were
+  measured on, and the bare VAs are what let a test silently re-read them against the wrong
+  client (FINDINGS §7.9).
+
+**Next — and this list was STALE as written, which is worth saying rather than quietly
+fixing.** It opened "cheapest first: the two live-memory readers in
+`itemprobe`/`agentprobe` — three RVAs, and on a new build they do not compute a wrong
+number, they dereference a stale address inside a *running* client." **That describes
+their state before 2026-08-12.** Both now call `pinned.assert_build`, which REFUSES by
+default; `--any-build` is an explicit opt-in that prints "every address below may be
+reading something else entirely". Gated was one of the three verdicts §6 allowed, and
+these two took it — so the arc's scariest sites are closed, not pending. VERIFIED
+2026-08-15 by reading both call sites.
+
+What genuinely remains in the census is bookkeeping rather than liability, and it is worth
+naming so nobody re-opens it as work:
+
+- `msgshape.py`'s 25 and `asserts.py`'s 1 are **cross-check tuples** the plan asked to keep
+  when their lookups were derived — they print on disagreement and are not consulted.
+- `pinned.py`'s 8 are build numbers and sizes, two per registered build by construction.
+- `atex.py`'s 3 and `modelfile.py`'s 5 are ArenaNet's own tables carried as literals so the
+  modules work on a bare machine, each re-read out of the vaulted image by its test. Those
+  tables ARE build-coupled — MEASURED, both differ on 38519 — so the guard that matters is
+  the test resolving the right image, which is what §7.9 fixed.
+
+**The one deliverable still open is rung 6**, and 38833 came and went without advancing it:
+the durability tracer sits in `vault/dat_durability/`, whose mtime is still 2026-08-13,
+because no updater touches an inert vault copy (FINDINGS §4). It needs an owner decision —
+arm an archive a real client opens, accepting either a search for an uncompressed row or one
+broken map — and it will keep costing an update every time one ships.
 
 **Both of the judgement calls this arc parked are now settled** (2026-08-14):
 

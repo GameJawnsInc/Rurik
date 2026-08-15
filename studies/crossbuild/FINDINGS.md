@@ -976,6 +976,207 @@ updater-reachable archive remains an explicit owner choice.
 
 ---
 
+### 7.8 The corpus went two-build, and a correct refusal was the wrong instrument
+
+**OBSERVED 2026-08-15.** The 38833 verification runs of §7.6 wrote real captures into
+`vault/captures/authsrv/`. Not fixtures — §7.4d's `selftest/` exclusion had already
+handled those, and this is precisely the case that exclusion was scoped *not* to cover.
+The research corpus became genuinely two-build:
+
+| Build | Files |
+|---|---:|
+| 38797 | 1,534 |
+| 38833 | 18 |
+| unstamped | 953 |
+
+Both pooling consumers went red — `test_movement_fidelity.py` and `test_origin.py`'s
+census — and **both were right to.** Opcodes drift between builds (`MOVE_TO_COORD` is
+`0x003C` in one client and `0x003E` in another), so a fidelity score pooled over two of
+them is about neither. This is deliverable 7's guard doing exactly the job it was built
+for, on the first occasion it could.
+
+**The finding is not the red. It is that the red could not be acted on.** A refusal
+states a fact about the vault — *two builds are present* — when what a reader needs is a
+policy: *which build does this figure describe?* No test settles that by failing, and
+the two obvious responses are both wrong in the same way: loosening the guard restores a
+meaningless number, and leaving it red parks two real measurements over a condition that
+is now permanent and recurs at every update.
+
+**Owner's decision, 2026-08-15: the figures follow the pin.** `pinned.py` deliberately
+still pins 38797 (§7.6 — moving it is a re-measurement arc of its own), so the published
+figures are figures about 38797 and off-pin captures are excluded rather than blended.
+The mechanism is `origin.select_build(paths, build) -> (kept, dropped)`:
+
+- **the build is an argument, not an import.** `origin.py` is on the server path and
+  does not depend on `clientscan/pinned.py`; the consumer reads `pinned.BUILD` and passes
+  it. The corpus follows the pin automatically when it moves, and the two authorities
+  cannot drift apart silently — the staleness failure the top of `CLAUDE.md` is about.
+- **unstamped files are KEPT.** 953 of the corpus names no build, because a frame log
+  names it once per SESSION and not once per file. "Cannot say" is not "some other
+  build", and a strict `== build` filter would silently discard a third of the evidence
+  and move every figure for a reason nobody could see.
+- **the caller prints what it dropped.** `select_build` returns `dropped` rather than
+  logging it, and every call site reports the count — a bounded corpus reported as a
+  whole one is the silent-truncation defect this repo keeps re-learning.
+
+**The census's invariant changed shape, and the new one needed a second half.** It used
+to assert *one build exists*, which the corpus has outgrown and will keep outgrowing. It
+now asserts *selecting to the pin leaves one build* — **and** *the pinned corpus survives
+the selection*. The second is not belt-and-braces: **MEASURED, selecting to a pin the
+corpus does not hold (99999) passes the first check VACUOUSLY**, because a filter that
+keeps nothing also leaves one build. Both predicates run against a nonexistent pin inside
+the test as a negative control, and the pair must split — 0 files at 99999 against 1,534
+at the real pin.
+
+Scored honestly: the guard worked as designed *and* the arc left an instrument gap it did
+not anticipate. Deliverable 7 built the refusal and never built the selection, and a
+refusal alone is unusable the moment a second build is legitimately present — which, for
+a project that will meet an update every few weeks, is the ordinary case rather than the
+exception.
+
+### 7.9 A fourth `sorted()[-1]`, and this one had switched builds without going red
+
+**OBSERVED 2026-08-15**, found while auditing whether the census's remaining pins fail
+loudly. `test_atexlevel.py` §7 — the section that pins the ATEX codec's two literal
+tables to ArenaNet's own bytes — chose its image like this:
+
+```python
+builds = sorted(os.listdir(root))
+exe = None
+for name in builds:
+    candidate = os.path.join(root, name, "Gw.exe")
+    if os.path.isfile(candidate):
+        exe = candidate          # no break: LAST one wins
+```
+
+That is `sorted(...)[-1]` written as a loop, which is why three previous sweeps for the
+idiom did not find it. **The fourth instance in four files**, after `authsrv`'s key
+selection (§7.7), `drive_client.newest_run_exe` and `contentids.default_client_dat`.
+
+**It was harmless until the vault held a third build, and then it changed answers in
+silence.** `2026-08-13_64fae3b1369b` sorts last, so from the moment 38833 was
+snapshotted this section stopped validating 38797 — the build its literals were measured
+on — and began validating **38833**, which nobody chose and no output named.
+
+**It stayed green, and the reason is the interesting part.** MEASURED across all three
+vaulted builds:
+
+| Build | `FORMAT_FLAGS` matches | `RUN_TABLE` matches |
+|---|---|---|
+| 38519 | **no** | **no** |
+| 38797 | yes | yes |
+| 38833 | yes | yes |
+
+So the tables **are** build-coupled — 38519 proves it — and 38833 simply did not move
+them, consistent with §7.2's finding that this 15-day bugfix moved far less than the
+90-day gap did. The section passed for a real reason rather than by accident, but it
+passed about the wrong build, and the day a future build moves those tables the red
+would read as *"the ATEX codec is broken"* rather than *"you are reading a client nobody
+selected."* That is the arc's own defect class arriving inside the arc's own test suite.
+
+**Two fixes, and the second is the one that would have prevented it.**
+
+1. §7 now resolves through `pinned.find(atex.TABLES_BUILD)` — selection by REGISTRY
+   rather than by filename order, with the sha256 verified and the live install refused
+   — and it **prints the build it read**. A section that opens a client and does not say
+   which one is one directory rename away from this bug again.
+2. `atex.py` gained `TABLES_BUILD = 38797`. The two VAs named no build at all, which is
+   precisely the class-(b) defect §6 states — *"a bare VA with no build is the defect,
+   not the VA"* — and the cost was concrete rather than theoretical: with nothing
+   recording which build they came from, neither the test nor a reader had anything to
+   notice the switch against. Its docstring also pointed at `test_atex.py`, where this
+   check has never lived.
+
+The census went **46 → 47** and `test_buildpins.py` went red for it, correctly. That
+trade is the right way round and worth stating plainly, because the instinct is to read
+any increase as regression: **a counted pin a test resolves through `pinned.find()` is
+safer than an uncounted address nobody can tell is stale.**
+
+---
+
+## 8. `genericvalue.py` derived — the arc's one casualty, closed
+
+§7.1 left this module as the update's single measured casualty: it REFUSED build
+38833 (`the switch site at 0x008129CC ... is not a movzx/jmp pair`) and took
+`avevents.py`'s property map down with it. **Fixed 2026-08-14. Its class-(a) count
+is 27 → 0, and the repo's whole census is 73 → 46 — the first time that number has
+gone down by a lot.**
+
+### 8.1 The blocker was written down, and it was right
+
+The module's own comment said why it could not be converted, and it was correct on
+both counts:
+
+> *"WHY `at` IS STILL PINNED, measured rather than assumed: this instruction shape
+> occurs **596 times** in `.text` on build 38797, so it is not an anchor. Making
+> these fully derived means anchoring the DISPATCHERS first — they are reached
+> from the message handler — which is a separate job and is not this one."*
+
+The update turned "a separate job" into the job. And the anchor it named was
+already in the tree: `msgshape.py` derives the client's message tables from
+`RegisterMsgs` **by byte shape**, so the receive table is reachable without a
+single stored address — and the two dispatchers are simply the handlers for
+`AGENT_PROPERTY_UPDATE_INT` (`0x009F`) and `_FLOAT` (`0x00A2`).
+
+### 8.2 The chain, and the count asserted at every link
+
+Each step below is a refusal, not a search. MEASURED on all three vaulted builds.
+
+| Step | What is derived | The assertion |
+|---|---|---|
+| 1 | the RECV table entry for `0x009F` / `0x00A2` | the handler exists, or refuse |
+| 2 | handler → dispatcher | the forwarder makes **exactly 1** call |
+| 3 | int dispatcher body | **exactly 2** `movzx`/`jmp` sites: int-pre, then int-main |
+| 4 | float dispatcher body | **exactly 1**: float-main |
+| 5 | functions each dispatcher calls | **exactly 2** hold a property switch: store, then AgentView |
+| 6 | each switch's default | the jump target the most ids share |
+| 7 | each switch's id span | read from the `lea`/`cmp`/`ja` guard |
+| 8 | each chain's ids and bodies | parsed from its comparisons, after its byte string verifies |
+| 9 | each main-switch gate | **exactly 1** `test byte [ctx+0x53C], 2` per dispatcher |
+
+**Every one of those addresses reproduces build 38797's hand-measured value** —
+all seven switches, both gates, all six chain case bodies, all five spans.
+`test_genericvalue.py` §1 is that claim, and the witness now lives in the test
+rather than the module, which is what took the count to zero: under §6's taxonomy
+a hand-measured address is class (a) only for as long as the **tool** computes
+with it.
+
+### 8.3 The result, and the part a lookup cannot fake
+
+| Build | int-main site | float-main site | int / float ids handled | untouched |
+|---|---|---|---|---|
+| 38519 | `0x0080C4DC` | `0x0080CBEB` | 47 / 14 | `{40}` |
+| 38797 | `0x008129CC` | `0x008130DB` | 47 / 14 | `{40}` |
+| 38833 | `0x0081286C` | `0x00812F7B` | 47 / 14 | `{40}` |
+
+**Three builds, three disjoint address sets, one answer.** Main switches disjoint
+on all three; `avevents.py` back to 39 of 67 ids queueing an event on all three.
+Agreement on the semantics *with* disagreement on the addresses is the signature
+of a derivation, and it is the check `test_genericvalue.py` §3 now makes — a
+section that previously asserted the opposite, that the older build must REFUSE,
+because refusing was the best the pinned module could do.
+
+### 8.4 Two things worth carrying
+
+**The old §3 was not wrong, it was as good as pinning allows.** "This build moved
+something, so refuse" is the correct behaviour for a tool that cannot look; it is
+just not the same as reading the client. The arc has now produced both shapes in
+one module and the difference is visible: round one turned a silent wrong answer
+into a loud refusal, round two turned the refusal into an answer. **Only the first
+was strictly necessary; the second is what made the tool survive an update.**
+
+**And one check I wrote had to be thrown away, for the reason `PLAN.md` §6 warns
+about.** The first draft of §1 grepped `genericvalue.py` for the old literals and
+required them absent. It went red — on the module's own docstring, which names the
+seven switches and their 38797 addresses. Those are class (b), citations,
+*provenance*, and §6 is explicit: **"Add build ids; do not remove addresses."** The
+check now asks `buildpins` — the repo's own AST census — for live constants, which
+is the distinction that actually matters, and asserts the citations are still there.
+That is the same trap that cost a previous session 46 rewritten citations and 46
+reverts, and it caught me inside an hour.
+
+---
+
 ## 5. What this changes elsewhere
 
 - **`studies/datwrite/FINDINGS.md`** said *"the durability experiment is still unrun"*.
@@ -1025,6 +1226,9 @@ updater-reachable archive remains an explicit owner choice.
 | A second key file made `authsrv` hand a 38797 client 38833's DH key | **OBSERVED** — §7.7, two failed loopback sessions from the minimap session, `Code=058`. Root cause read from the source (`sorted(...)[-1]`); fix's three branches proven by direct call |
 | `test_handshake.py` drove a 38833 client while announcing build 38797 | **OBSERVED**, §7.7 — latent from the moment the second build was patched, surfaced by the new guard |
 | ~296 files counted as research corpus were self-test artifacts | **MEASURED** — §7.4d, census 1,828 → 1,532 once `selftest/` is excluded. Deliverable 7's "1,122 files" figure was over a tree that included them |
+| The research corpus is now genuinely two-build, and the pooling refusal alone could not resolve it | **OBSERVED** — §7.8, 1,534 at 38797 against 18 at 38833 plus 953 unstamped. The refusal was correct and unactionable; the figures now FOLLOW THE PIN via `origin.select_build`, unstamped files kept, exclusions printed |
+| A pin the corpus does not hold passes the one-build census vacuously | **MEASURED** — §7.8, control at 99999: 0 files, first predicate green, second red. Why the census needs both halves |
+| `test_atexlevel.py` §7 silently switched to validating 38833 when the vault gained a third build | **OBSERVED** — §7.9, a fourth `sorted()[-1]` written as a break-less loop. Stayed green because 38833 did not move those tables; 38519 does, so they ARE build-coupled |
 | ~~`archive.py`'s offset for row 46196 is wrong by 1,024~~ | **REFUTED** 2026-08-14 — `archive.row(46196).offset == 0x437F6800`, identical to `datwrite`/`datcheck`, marker in that extent. The 1,024 came from reading `entries[46196]`, which is row 46197. §4, §4b.1 |
 | ~~`archive.py` and `datcheck.py` number MFT rows differently, off by one~~ | **REFUTED** 2026-08-14 — all 24 bytes of every row agree on all ten vault archives; pinned by `test_archive.py` §1c. The number that differs is `len(entries)` vs `row_count`. §4b.1 |
 | There is ONE row convention, ArenaNet's raw MFT index, and every reader and every recorded constant is in it | **OBSERVED** — 10 archives by an independent `struct` walker; 65 recorded constants ≥ 16 re-resolved in both conventions, 26 map-flagged under `row(N)` and 1 under `entries[N]`, zero overlap |

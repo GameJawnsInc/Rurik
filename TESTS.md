@@ -90,7 +90,36 @@ Every one of these, in the order they were written:
   beside it is `&Send report to ArenaNet`. It was a missing call site. The test
   asserts it on the SYNTAX TREE, because "in the finally" and "before
   `close_client`, which destroys the dialog" are both invisible to a grep, with a
-  control that the ordering check fails on a reversed finally),
+  control that the ordering check fails on a reversed finally.
+  **And since 2026-08-14, WHICH CLIENT a run launches — by build and by name,
+  never by mtime.** `newest_run_exe` was
+  `max(glob("vault/run/*/Gw.exe"), key=os.path.getmtime)`. Build 38833 shipped,
+  was snapshotted and assembled that afternoon, became "newest", and the harness
+  silently changed which client it launches — to a run directory whose `Gw.dat`
+  never had the maps 146/148 replacement installed, while the 38797 directory
+  still carries it. Nothing failed at the exe: an update turned into a wrong
+  answer somewhere downstream instead of an error at the launch. **This is the
+  same defect for the third time** — `sorted(exes)[-1]` picked the wrong client
+  the day both DH configurations first existed, `pinned.PINNED` was `BUILDS[-1]`
+  until the same week, and this was the copy nobody had converted. **Filtering by
+  build alone did NOT fix it, which is the half worth reading:** with 38833
+  excluded the newest 38797 copy is `reskin-roster`, an experiment copy, still
+  beating the canonical directory, because the old exclusion covered exactly one
+  spelling of "experiment" (`-probe`) and three exist on disk. So the selector
+  asks for the build's own vault STAMP — the name `make_run_dir.py` actually
+  assigns — and the build is MEASURED from each candidate's own `mov eax,
+  <build>; ret` getter via `buildid.read`, never inferred from the directory
+  name, the same rule the vault's DH split lives by. It also works where
+  `identify()` cannot: that calls `reskin-roster` "unknown" for want of a
+  recorded hash, and its exe says 38797 plainly. `buildid.read` is stubbed for
+  the ten constructed cases and run for real against the vault at the end, and
+  a positive control asks for a build that IS present so the refusals cannot be
+  satisfied by a function that refuses everything. An unreadable candidate is
+  skipped and NAMED, because "we could not look" must never narrow the field the
+  way "wrong build" does. The floor moved 99 → 108 against a measured 110, two
+  below for the two checks that can legitimately skip; this test cannot run
+  vault-less at all — `pinned.find()` refuses first — so unlike `test_origin.py`
+  there is no empty-vault figure to measure against),
   `toolkit/portal/test_webgate.py`,
   `toolkit/mapdata/test_archive.py` (the archive reader, and since 2026-08-14
   section 1c: that `archive.py` and `datcheck.py` share ONE row convention --
@@ -109,9 +138,15 @@ Every one of these, in the order they were written:
   exactly 11 rows, all of them the all-zero reserved spares at 4..14, checked both by
   count and by contents. The floor is the other lesson: 26 against a green run of 29 let
   two reviews delete exactly the three checks the section calls load-bearing and still
-  print ALL CHECKS PASSED, so it is 31 -- the copy-independent green, MEASURED on five
-  archives -- with section 4 raising it to 33 when it runs, because a fixed 31 would hand
-  `dat_study` two checks of slack. Both shapes have ZERO headroom. ~30 s),
+  print ALL CHECKS PASSED, so it is 32 -- the copy-independent green, MEASURED on five
+  archives -- with section 4 raising it to 34 when it runs, because a fixed 32 would hand
+  `dat_study` two checks of slack. Both shapes have ZERO headroom. **`magic()` is pinned
+  DIFFERENTIALLY (2026-08-15)**: it returns an entry's first four bytes by asking the
+  huffman decoder to stop early rather than decoding the whole entry, which is 80x
+  cheaper and is how `test_modelexport` classifies 1,795 texture references — so every
+  sampled entry is decoded BOTH ways and required equal, strided at 997 so it does not
+  sample the same rows as the sweep that uses it (97). A shortcut that is merely usually
+  right would move a corpus verdict rather than raise. ~30 s),
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_datwrite.py` (the only tool that opens the archive `r+b`,
   against a small archive the test builds: that `--verify --replace` actually
@@ -1955,20 +1990,32 @@ Every one of these, in the order they were written:
   inside the table it had just read (internal consistency, which catches a
   corrupt read and not a moved one), and `MAIN_SWITCH_GATE` printed
   "MOVED — results are suspect" and carried on. The table addresses are now read
-  out of the `movzx`/`jmp` pair that jumps through them, so they are derived from
-  the instruction rather than remembered beside it: 10 addresses gone, 32 → 27,
-  and the rest gated. §1 is the load-bearing positive claim — the derivation must
-  land on the exact ten addresses that used to be hardcoded, which now live in
-  the test as class-(c) expectations. §3 is the half a lookup cannot fake: on the
-  older vaulted build every switch, both chains and the gate must REFUSE, and the
-  CLI must exit **2 with no traceback**, because a refusal that reads as a crash
-  gets debugged as one. §4 doctors a site by ONE byte and requires a refusal,
-  with the real site still resolving as the positive control — a checker that
-  refuses everything would pass §3 on its own. Why gated and not converted is
-  MEASURED, not preferred: the `movzx`/`jmp` switch shape occurs **596 times** in
-  `.text`, so it identifies "a switch" and never "this switch", and converting
-  means anchoring the dispatchers first. Needs the vault throughout. Floor 33,
-  ~4 s),
+  out of the `movzx`/`jmp` pair that jumps through them: 10 addresses gone,
+  32 → 27, and the rest gated. **ROUND TWO, 2026-08-14, and the file's central
+  claim is INVERTED.** Build 38833 shipped, this module refused it outright and
+  took `avevents.py`'s property map with it — being right about not knowing beats
+  being confidently wrong, and is still not being able to read the client. The 27
+  are now **ZERO**: the two dispatchers are the handlers the client's own RECEIVE
+  table gives for opcodes `0x009F` and `0x00A2` (so the chain bottoms out in
+  `RegisterMsgs`, anchored by byte shape), each handler is a forwarder with
+  **exactly one** call, the int dispatcher holds **exactly two** switch sites and
+  the float one **exactly one**, each dispatcher calls **exactly two** functions
+  holding a property switch — store then AgentView — each default is the jump
+  target the most ids share, each span is read from the `cmp`/`ja` guard, and each
+  chain's ids are parsed from its comparisons. §1 requires the derivation to
+  reproduce every address that used to be typed into the module, which now live
+  here as class-(c) expectations; that move is what took the module's census to 0,
+  since a hand-measured address is class (a) only while the TOOL computes with it.
+  §3 is the inversion: every vaulted build must be READ and all three must agree
+  — 47 int ids, 14 float, exactly {40} untouched, main switches disjoint — while
+  putting those switches at three DIFFERENT address sets, which is what a
+  derivation looks like and a lookup cannot fake. §4 keeps the framing control (a
+  site off by ONE byte is refused) and adds four sabotages, one per "exactly N"
+  guard, each with the module restored in `finally` and a positive control after.
+  Why the old form could not do better is still MEASURED: the `movzx`/`jmp` shape
+  occurs **596 times** in `.text`, so it identifies "a switch" and never "this
+  switch" — which is why the dispatchers had to be anchored first, and now are.
+  Needs the vault throughout. Floor 39, ~20 s),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins
@@ -2390,9 +2437,25 @@ Every one of these, in the order they were written:
   `payload`**, the DH numbers that cross the wire in the clear -- because six
   checks reading zero with a broken search would look identical. The first
   version of that section was O(secrets x values), 5,565 against ~1M, and did not
-  finish. 70 checks against a floor of 68, the two `vault/state` ones declaring a
-  skip; there is no bare-machine shape to floor separately, since `main()` opens
-  with `require_dir("captures")`. ~3m30s),
+  finish. **Section 14 (2026-08-15) is why this file is no longer the slowest in the
+  suite.** The leak search was still O(secrets x text) — 6,716 secrets against 179 MB,
+  in three places, and always in the WORST case, because a green run finds nothing and
+  so no scan ever exits early. `search_all` reduces it exactly rather than
+  heuristically: a secret is built from some alphabet, so any occurrence lies wholly
+  inside a maximal run of those characters; collect the DISTINCT runs, join them with a
+  separator outside the alphabet so no join can manufacture a match, and search that
+  (1,193,853 runs, a 19.5 MB haystack from 179 MB). **584 s → 183 s.** Because this is
+  an optimisation of a security check, section 14 proves it equal to the naive
+  comprehension rather than asserting it — five shaped cases, the load-bearing one
+  being a secret EMBEDDED inside a longer token, which a tokenising search would miss
+  and which is exactly what a half-working scrubber leaves; a secret spanning two runs
+  that must NOT be reported; and agreement on the real 179 MB corpus. Two rejected
+  approaches are recorded in the docstring so they are not re-tried: a single compiled
+  alternation of all 6,716 secrets is SLOWER than the naive loop (9.4 s vs 3.8 s for
+  200 patterns), and a per-file search cannot answer the cross-file question
+  `leaked()` exists to ask. 78 checks against a floor of 76, the two `vault/state`
+  ones declaring a skip; there is no bare-machine shape to floor separately, since
+  `main()` opens with `require_dir("captures")`. ~3m),
   `toolkit/test_content.py` (the content store, that its provenance and licence
   refusals actually refuse -- and, since 2026-08-13, that the REAL `vault/content/`
   overlay loads, which is the one input this file never read. Every other check in it
@@ -2629,8 +2692,29 @@ Every one of these, in the order they were written:
   checks is an unfalsifiable self-declaration. `BUILD_UNKNOWN` is a distinct third
   value, never "probably the pinned one", and `require_single_build` refuses a
   two-build corpus — `test_movement_fidelity.py`, the pooling consumer, calls it.
-  Unknown is TOLERATED by default and that is measured rather than lax: 556 of
-  the vault's 1,678 capture files name no build, because a frame log names it once
+  **And since 2026-08-15 it also SELECTS, which is the half a refusal cannot
+  supply.** The refusal fired for real the day after build 38833 shipped: its
+  verification runs left genuine 38833 captures in `captures/authsrv/`, and both
+  pooling consumers went red. Correctly — but a red states a fact about the vault
+  (two builds are present) when what a reader needs is a policy (which build the
+  figure describes), and a test cannot settle a policy by failing at it. Owner's
+  decision: **the figures follow the pin**, so `origin.select_build(paths, build)`
+  keeps the pinned build plus the unstamped files, drops anything stamped
+  otherwise, and returns what it dropped so the caller can print it. The build is
+  an ARGUMENT — `origin.py` is on the server path and does not import
+  `clientscan/pinned.py`; the consumer reads `pinned.BUILD` and passes it, so the
+  corpus follows the pin automatically and the two cannot drift. Unstamped files
+  are KEPT: "cannot say" is not "some other build", and a strict filter would
+  silently discard a third of the evidence. The census asserts the pair that
+  actually protects a number — selection leaves one build, **and** the pinned
+  corpus survives it, since a filter that keeps nothing also "leaves one build".
+  Unknown is TOLERATED by default and that is measured rather than lax: roughly
+  **38%** of the research corpus names no build — 930 of 2,464 MEASURED
+  2026-08-14, 556 of 1,678 when this was written. Treat the fraction as the
+  claim and the absolute counts as a timestamp: the suite writes captures on
+  every run, so these moved twice during the session that recorded them and any
+  exact figure here is stale by the next green run. It is that high because a
+  frame log names the build once
   per SESSION not once per file, so refusing on unknown would refuse nearly every
   real corpus and the guard would be deleted in a week — it may never be silent,
   so the count comes back in the reason, and `allow_unknown=False` exists.
@@ -2655,6 +2739,19 @@ Every one of these, in the order they were written:
   is cross-checked against `clientscan/pinned.py` so a moved pin turns the
   census red until it is re-decided rather than silently re-aimed. A REAL
   second-build capture in the research corpus still turns the census red — that
-  is the point, not a defect. A vault-less
+  is the point, not a defect.
+  **And the scoping was checked against the thing it protects, not just made
+  green:** the pooled consumer never saw the selftest files in the first place —
+  `game_channel_captures()` globs only `captures/authsrv/` and
+  `captures/gamesrv/`, never the whole tree, and calls `require_single_build` on
+  top, so it would still refuse a real mixed corpus. Scoping a census green and
+  the contamination being absent are different claims and only the second one
+  matters. (Noted while checking it, and undesigned rather than argued: the two
+  censuses in this file walk with DIFFERENT exclusions — the origin census still
+  counts `selftest`, 2,782 files against the build census's 2,464. Harmless
+  today, because a selftest capture really is ours and the ours/live claim stays
+  true, but it is the kind of asymmetry to settle before leaning on either
+  count. Both figures MEASURED 2026-08-14 and both drift per the note above; the
+  ~320-file gap between them is the durable part.) A vault-less
   run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
   empty directory rather than derived by subtraction; a vault run scores 30).

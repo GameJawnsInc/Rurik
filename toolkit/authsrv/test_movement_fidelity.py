@@ -136,9 +136,32 @@ def game_channel_captures():
     # And the same argument one level down: the score is pooled over the corpus,
     # and opcodes are not stable across client builds -- MOVE_TO_COORD is 0x003C
     # in one and 0x003E in another -- so two builds in the pool produce a number
-    # about neither. MEASURED 2026-08-13: every capture in the vault that names a
-    # build names 38797, so this refuses nothing today and refuses the first
-    # mixed corpus that appears, which is the only moment it can matter.
+    # about neither.
+    #
+    # UNTIL 2026-08-14 THIS REFUSED, and the refusal was right the day it fired.
+    # Build 38833 shipped, that day's verification runs left real 38833 captures
+    # in the research corpus beside 38797's, and this test went red rather than
+    # print a blended number. What it could not do is decide WHICH build it
+    # meant -- and that is a policy question, not a corpus defect, so it is
+    # answered here at the call site: THE SCORE FOLLOWS THE PIN.
+    #
+    # Owner's decision, 2026-08-15. `clientscan/pinned.py` deliberately still
+    # pins 38797 (moving it is a re-measurement arc of its own), so the figure
+    # this test publishes is a figure about 38797, and captures of any other
+    # build are excluded rather than blended. When the pin moves, this follows
+    # it automatically -- the number below is read from `pinned.py`, never typed
+    # here, so the two cannot drift apart silently.
+    sys.path.insert(0, os.path.join(os.path.dirname(HERE), "clientscan"))
+    import pinned                                             # noqa: E402
+    out, off_pin = origin.select_build(out, pinned.BUILD)
+    if off_pin:
+        # Never silently. A bounded corpus reported as a whole one is the
+        # defect; the count is what makes the bound auditable.
+        other = sorted({str(origin.build_of(p)[0]) for p in off_pin})
+        print(f"  (excluded {len(off_pin)} capture(s) off the pin: "
+              f"build{'s' if len(other) > 1 else ''} {', '.join(other)})")
+    # Still assert it: selection narrows the pool, and this proves the pool it
+    # narrowed to really is one build rather than trusting the filter above.
     build, out = origin.require_single_build(out, what="the movement fidelity score")
     if build is not origin.BUILD_UNKNOWN:
         print(f"  (corpus is client build {build})")

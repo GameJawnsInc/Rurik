@@ -127,31 +127,59 @@ One process per file, discovered from **the disk** rather than from any document
 `rc == 0` with no `ALL CHECKS PASSED` banner is reported `SUSPECT` rather than laundered
 into a pass. `--only <substring>` filters, `--list` enumerates and stops.
 
-**It runs eight files at a time, longest-first.** Baseline 2026-08-14, measured over
-the 94 files on disk that day (96 now, after the terrain-variation arc landed):
-**717 s wall — 12 minutes, down from 46.6 serial.** `--jobs 1` restores one-at-a-time
+**It runs four files at a time, longest-first.** Baseline 2026-08-15, 96 files:
+**621 s wall — 10.4 minutes, down from 46.6 serial.** `--jobs 1` restores one-at-a-time
 and is how you check a suspected collision: a parallel run that disagrees with a serial
-one about any file's verdict is a collision, not a flake. (Measured when this landed:
-same verdicts, same 4,620 checks. The two files that differed between those runs failed
-STANDALONE too — see the drift warning below — so concurrency was not what moved them.)
+one about any file's verdict is a collision, not a flake.
 
-Two numbers to budget against, because they set the floor: `test_scrub` is **584 s** and
-`test_modelexport` **480 s**, together 38% of the serial work, so no amount of extra
-workers takes the wall clock below ~10 minutes. Half the suite — 47 files — finishes in
-83 seconds put together.
+**Four is measured, not guessed, and raising it will not help.** Wall clock is flat from
+4 to 8 workers — 621 s, 595 s, 623 s — while the summed cost of the same 96 files goes
+2,484 s → 3,498 s → 4,196 s. Eight workers spend 1,700 CPU-seconds fighting for the disk
+and finish no sooner (`test_scrub` reads 270 s at four jobs and 457 s at eight, for
+identical work). All three runs agreed on every verdict and every check count. This box
+feeds about four concurrent heavy readers, so **the only way below ~10 minutes is
+removing work, not adding workers.**
+
+Where the remaining time is, if you go looking: `test_modelexport` ~390 s and
+`test_scrub` ~270 s at four jobs, then `trnshadow`, `pathmap`, `blenderroundtrip` and
+`atexlevel`. Half the suite still finishes in under a minute put together. Both of the
+former hogs were cut on 2026-08-15 — 584 s → 183 s and 480 s → ~330 s standalone — by
+removing accidental work, with every assertion and every reported number unchanged; see
+TESTS.md for `search_all` and `Archive.magic`.
 
 ### While you are working: only what your edits reach
 
-Twelve minutes is still too long after every edit, so during the loop:
+Ten minutes is still too long after every edit, so during the loop:
 
 ```bash
 python toolkit/run_suite.py --since HEAD
 ```
 
 Tests reachable from your changed modules, through a real dependency graph — imports
-plus the subprocess launches an import graph cannot see. A change under `authsrv/`,
-`schema/` or `portal/` lands around **3 minutes**; a one-module change can be
-**seconds**. `--since main` covers everything the branch touched.
+plus the subprocess launches an import graph cannot see. `--since main` covers
+everything the branch touched.
+
+**HOW MANY tests it picks does not tell you how long it takes, and the two run in
+opposite directions here.** MEASURED 2026-08-15, at the default four jobs:
+
+| a change to | selects | wall |
+|---|---|---|
+| `authsrv/authsrv.py` | 34 of 96 | **87 s** (measured) |
+| `schema/codec.py` | 39 of 96 | ~105 s |
+| `mapdata/dxt1.py` | **14 of 96** | **~390 s** |
+| `mapdata/archive.py` | 68 of 96 | ~530 s |
+| `checks.py` | 96 of 96 | the full suite |
+
+Only the first is a stopwatch figure; the rest are its arithmetic — sum the selected
+files' times, divide by four, floor at the longest single file — which came in 20%
+HIGH on the one that was checked (105 s predicted, 87 s actual), so treat them as
+budgets rather than promises.
+
+The `dxt1.py` row is the one to remember. It selects the FEWEST tests of anything in
+the table and costs four times what a change to the whole auth server costs, because
+the fourteen it picks are the expensive texture and atlas files. A small blast radius
+made of slow tests is slower than a wide one made of fast ones, so read the selection
+list rather than its length.
 
 Three behaviours worth knowing before you rely on it:
 
@@ -168,9 +196,11 @@ Three behaviours worth knowing before you rely on it:
   reachable from them at all — `rawlisten.py`, `flagscan.py`, `admin.py` among them —
   and a change confined to one of those exits 2 with a coverage statement.
 
-Selection cannot help `mapdata/` much, and the reason is the floor above: a change to
-one terrain decoder still pulls `test_modelexport` into the selection, so it lands at
-the same ~12 minutes. Fixing that is about the two hogs, not about the selector.
+Selection helps `mapdata/` least, and the table above says why: `archive.py` reaches 68
+of the 96 files, so it lands at ~530 s against the full suite's 621 s — a scoped run
+that saves about a minute and a half. That is a property of the code, not of the
+selector: `archive.py` is what almost everything under `mapdata/` opens the world
+through. Server, schema and portal work is where `--since` pays, and it pays well.
 
 **`python toolkit/run_suite.py` with no flags is the suite. Nothing else is** — that is
 the count you report, and `CLAUDE.md`'s rule is to name it.
