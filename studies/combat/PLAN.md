@@ -770,7 +770,25 @@ the content binding were all right. Only the ordering was wrong.
 credential.** `vault/captures/gamesrv/authsrv-20260815T180007-c1.jsonl`,
 1,716 messages, last at **t = 78.2 s**, no `Undecodable`, no disconnect. The
 client was watched with `crashwatch.ps1` rather than `Get-Process`, which is
-the only reason a clean result here means anything (§14c).
+the only reason a clean result here means anything (§14c):
+
+```
+VERDICT: HEALTHY (pid 22192, watched 201s, no dialog)
+```
+
+That line is the verdict, and it is the one the two earlier runs could not
+have produced honestly — they were scored by liveness, which reports ALIVE
+through a modal assert box. The harness agrees independently:
+`RUN VERDICT: PASS (target: map)`, report at
+`vault/captures/harness/20260815T175950`.
+
+**The screenshots are NOT evidence here and the report says so** — every
+`--shots` frame was skipped, `client not foreground`, because the operator had
+the attribute panel up and focused for the whole hold. The panel result below
+is operator-confirmed, which is what H5 requires anyway; the frames would have
+been a bonus and there are none. Recorded rather than glossed, because a
+future reader finding an empty `frames-` dir should not conclude the run was
+partial.
 
 **No assert.** The spawn burst's `0x003A` goes out at t = 0.85 s and the
 client runs on for another seventy-seven seconds. On the interleaved payload
