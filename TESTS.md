@@ -1846,9 +1846,18 @@ Every one of these, in the order they were written:
   also DELETED as one that cannot fail -- `ar.row(n).index == n`, which
   `archive.py:367` asserts internally and would have raised first -- and
   replaced by two the archive can refute. THREE scores, each measured and none
-  subtracted: **78 with client and archive, 65 with the client alone, 40 with
-  neither** -- floor 78, so a vault-less run goes red. The archive section
-  scores a fixed count however many archives a vault holds. ~2.5 s),
+  subtracted: **77 with client and archive, 64 with the client alone, 39 with
+  neither** -- floor 77, so a vault-less run goes red. The archive section
+  scores a fixed count however many archives a vault holds, and **as of
+  2026-08-14 so does section 6's checkout refusal**. It was one check PER working
+  tree, and `working_tree_roots()` answers 2 inside a git worktree against 1 in
+  the main checkout -- so the old floor of 78 silently required the suite to be
+  run from a worktree, and `run_suite.py` in `C:\gd\Rurik` reported "ONLY 77 OF A
+  DECLARED FLOOR OF 78 CHECKS RAN". A count that moves with the caller's working
+  directory cannot be a floor: the vacuity guard cannot tell it from a lost
+  section, which is the one thing it exists to catch. The refusal is now a single
+  verdict over every root, naming any it failed to refuse, so each score above is
+  one lower than before and the same in both environments. ~2.5 s),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first. Since

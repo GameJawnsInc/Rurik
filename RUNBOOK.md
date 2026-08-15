@@ -260,9 +260,10 @@ stating that `run-live/` must be able to stream map content. Following the old
 wording produced a 38833 live build reading `updater=killed` beside a 38797 one
 reading `updater=LIVE`, in a pair that is supposed to differ **only** in build.
 Check with `dhbuild.py` and expect `updater=LIVE` for everything under
-`run-live/`. (`CLAUDE.md`'s launch-rule paragraph currently says the kill switch is
-"wanted on both configurations", which contradicts this; the vault agrees with this
-page, and the discrepancy is flagged for a ruling rather than silently resolved.)
+`run-live/` and `updater=killed` under `run/`. (`CLAUDE.md`'s launch-rule paragraph
+used to say the kill switch was "wanted on both configurations", which contradicted
+this page; **resolved 2026-08-14 in this page's favour** — the vault and the evidence
+both agree with it, and `CLAUDE.md` now names the split explicitly.)
 
 Never move a build between those directories and never pick one
 by filename: the tools decide from the DH struct, and

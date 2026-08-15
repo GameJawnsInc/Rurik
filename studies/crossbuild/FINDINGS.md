@@ -891,16 +891,39 @@ row **7982** is `ATEX`, 55,492 B — **a texture**. The row was recycled (it is 
    §4e-bis observed from a LIVE session (20 of 29 bit-31 ids cleared, `0x8001B97D` among them,
    *"0x1B97D then binds plainly to a different row"*) — now reproduced by an update, on a
    pristine archive, which lifts that from one witness to two of different kinds.
-3. **`content/maps.toml` is now build-coupled and does not say so.** `0x8001B97D` is right for
-   38797 and wrong for 38833; `0x1B97D` is the reverse. The file's rows carry
-   `source = "gw-preservation"` and a provenance note, but no archive or build stamp — while
-   `content.py` already enforces exactly that for `source = "client-table"` rows, *on the
-   stated rationale that a value read out of a client "is a fact about THAT BUILD and moves
-   when ArenaNet ships"*. **An id read out of an ARCHIVE is the same kind of fact**, and this
-   update is the proof. **NOT FIXED HERE:** the choice between stamping these rows per
-   archive, resolving bit-31 ids through a both-forms lookup at load time, or re-deriving on
-   snapshot belongs to whoever owns the content loader — and the minimap session is live in
-   these two maps right now. The measurement is above; the edit is theirs.
+3. ~~**`content/maps.toml` is now build-coupled and does not say so.**~~ **FIXED
+   2026-08-14, and the answer was already written down in the repo.** The framing above —
+   "`0x8001B97D` is right for 38797 and wrong for 38833, stamp the rows per archive" —
+   is the wrong fix, and `archive.py`'s `file_id_table()` says why: *"A server should send
+   the PLAIN LOGICAL ID and serve from an archive that binds it. `0x8001B97D` works
+   against `dat_study` only because that copy has the map renamed away."*
+
+   Bit 31 is not a spelling of the id, it is `FcArchive` announcing **a replacement is
+   pending**. Recording the renamed form pinned one copy's transient state as the map's
+   name, and it stopped being true the moment a copy caught up. **Both rows now carry
+   `0x1B97D`**, and the id needs no stamp because it is no longer archive state.
+
+   **The three pairings, MEASURED after the change** (`toolkit/contentids.py`):
+
+   | server archive | client archive | verdict |
+   |---|---|---|
+   | `dat_study` (pre-update) | `run/2026-07-29…` (pre-update) | **10 of 10 OK**, both row 7982 |
+   | `dat_study` (pre-update) | `run/2026-08-13…` (post-update) | **2 FATAL**, exit 2 — correctly |
+   | 38833's archive | `run/2026-08-13…` | **10 of 10 OK**, both row 177262 |
+
+   The plain id works on **both** generations, which the renamed form never could — under
+   the old value the third row was impossible, because a post-update client binds
+   `0x8001B97D` nowhere. What the middle row shows is not a regression but the guard doing
+   its job: the update installed a genuinely **different file** (1,300,044 B crc
+   `0x33F1A289` against 1,300,036 B crc `0xA0AE500A`), so a post-update client against a
+   pre-update server would draw new geometry while the server pathed the old. **Point
+   `RURIK_DAT` at a post-update archive to run the new client**; `contentids.preflight`
+   refuses the mixed pair by size and crc rather than by row index.
+
+   Three tests moved with it, each an assertion about the old state rather than a defect:
+   `test_content.py`'s migration pin (kept, with the old literal as the FROM),
+   `test_contentids.py` §0 (now **no content row may name a bit-31 id** — the stronger
+   invariant), and its refusal-message check (was pinned to the renamed spelling).
 
 **The durability tracer did not fire and could not have.** `vault/dat_durability/Gw.dat` is
 an inert copy no updater touches — §4 above, known before the event. Nothing was lost; the
