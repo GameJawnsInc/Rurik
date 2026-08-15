@@ -566,6 +566,46 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 5 | 🔶 **research half ✅ 2026-08-14, §8** — the triple's slots 1–2 named by ArenaNet's own asserts (`attrib`, `baseValue`), the panel's read path traced to `AttribBtns.cpp` (C8a closed), the tooltip formula measured (C6 closed). **Still to do in code**: adopt the gapped numbering, replace `ATTRIBUTE_COUNT = 42`, retire the stale `authsrv.py:552-557` comment, and pin the handler constants in a test |
 | 6–10 | ⬜ |
 
+## §9. The suite's one red is REAL, is NOT this arc's, and names a new client build
+
+**Final full run: 95 green / 1 red of 96, 4,641 checks** (`python toolkit/run_suite.py`,
+2,722 s). The baseline at the start of this session was 94 green / 0 red / 4,584
+checks, so this arc added two test files and no failure. The red is
+`test_origin.py`, 2 checks:
+
+```
+[FAIL] the whole vault is at most ONE client build   {38797: 1833, 38833: 4} + 919 unknown
+[FAIL] and that build is 38797
+```
+
+**This is the guard doing precisely its job.** `TESTS.md` says of it: every
+capture that names a build names 38797, "asserted as an invariant so the first
+capture from a second build turns it red." That first capture has now arrived.
+
+The four 38833 files are `vault/captures/selftest/authsrv-2026081⁠4T{185031,
+185208,190427,195052}-c1.jsonl`, and they are **another session's**: this tree's
+`test_handshake.py` hard-codes `BUILD = 38797`, while the
+`crossbuild-plan-snapshot-7e3bae` worktree sets `BUILD = None` and derives it
+from the exe it selects. The vault is shared, the selftest capture path is
+absolute, and their run stamped 38833. Timing corroborates: the earliest is
+18:50, after this session's own baseline suite had already passed green.
+
+**Two consequences that outlive this arc, neither of them combat's to fix:**
+
+1. `test_origin.py`'s message claims the single-build census "resolves
+   `PLAN.md` §10's UNVERIFIED flag". **That claim is now false** and the census
+   needs re-deciding — tolerate a second build, or scope the census. It is a
+   real decision, not a lint fix, so it is named here rather than made here.
+2. The 38833 snapshot exists but `pinned.py` does not know it, so every tool
+   that resolves "the pinned client" still reads 38797. That is *correct* for
+   this arc — every address in `studies/` was measured against 38797, and §8's
+   results are stamped to it — but it is a fork in the road the crossbuild arc
+   owns.
+
+**Nothing was deleted or rewritten.** Removing another session's captures, or
+loosening the invariant to make a red go away, is exactly what the guard exists
+to prevent.
+
 ## §8. Step 5's client-byte results — both critic amendments CLOSED (2026-08-14)
 
 Three read-only digs on pinned build 38797. The two headline answers come from
@@ -673,15 +713,30 @@ replacement into the client archive, and the archive the harness selects
 installed. The refusal fires for ANY `--map`, because the guard validates the
 whole table, not the map being loaded.
 
-This is the shared-vault / parallel-sessions hazard the memory notes name, in the
-custom-map/datwrite arc's territory. **Combat must not "fix" it** by rewriting a
-shared client archive or masking the committed id — that mutates state other
-sessions depend on and is another arc's call.
+**CORRECTED 2026-08-14, later the same day — the cause is not the map arc, it is
+that ARENANET SHIPPED A NEW CLIENT BUILD mid-session.** The first write of this
+section blamed shared archive state and filed it under the custom-map arc. That
+was wrong, and the real cause is worth more than the guess:
 
-**What unblocks it (operator, or the map arc):** install the pending replacement
-for 146/148 into a client run archive with `DnArchive` (per `studies/maprows`),
-OR point the run at a client archive already carrying it, then run the loopback
-acceptance:
+- The owner's live install is now **build 38833** (`buildid.py` on `C:\gw\Gw.exe`,
+  read-only). `pinned.py`'s `BUILDS` knows only 38519 and 38797.
+- A parallel session snapshotted it into the vault **today at 18:14** as
+  `client/2026-08-13_64fae3b1369b` — **and a `run/` directory with it**
+  (`buildid.py` confirms both are 38833).
+- `session.py` picks the **newest** run directory, so it selected the 38833 one.
+  Its `Gw.dat` is fresh from ArenaNet and has **never** had the map replacement
+  installed — which is exactly what the pre-flight reported. The 38797 run dir
+  (`2026-07-29_221c13772c7a`) is the one the map work was done against.
+
+So nothing is corrupt and nothing needs repairing: the harness pointed a brand
+new client at a content table prepared for the previous build. **This is the
+`RUNBOOK` "an ArenaNet update means redoing that setup in full" case**, and it is
+the crossbuild arc's live concern rather than combat's.
+
+**What unblocks it, cheapest first:** point the run at the 38797 build that
+already carries the installed replacement (the run directory still exists), OR
+install the pending replacement for 146/148 into the 38833 archive with
+`DnArchive` (per `studies/maprows`). Then run the loopback acceptance:
 
 ```bash
 python toolkit/harness/session.py --enemy --keep-open \
