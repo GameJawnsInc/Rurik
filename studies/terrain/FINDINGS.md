@@ -438,6 +438,41 @@ layer's texture at the named quadrant and its own alpha does the masking.
 This also retires §3.5's framing — the alpha is not merely "a blend mask",
 it is a *corner-coverage* mask with a table naming which shape goes where.
 
+### 6.2b The quadrants are alpha shapes and NOT colour variants — a correction
+
+**MEASURED 2026-08-14, and it corrects this arc's own claims.** Over eight of
+Kamadan's terrain textures, comparing the four 128×128 quadrants pairwise
+inside the sampled window:
+
+| | mean pairwise difference |
+|---|---|
+| **ALPHA** | **118 – 134** of 255 |
+| RGB | **4 – 21** of 255 |
+
+So a texture's four quadrants are very nearly the SAME PICTURE carrying FOUR
+DIFFERENT COVERAGE MASKS. Two consequences, and the second is a retraction:
+
+- **It independently corroborates §6.2.** If the quadrants were four visual
+  variants of a material — the reading T3 recorded and this document
+  repeated — their RGB would differ substantially and their alpha need not.
+  The measurement is the other way round by an order of magnitude, which is
+  what "each quadrant is an authored corner-coverage shape" predicts and
+  what a variant reading does not.
+- **RETRACTED: that per-cell variation removes the ground's repetition.**
+  §6.1 and the T6 commit message both said so, and `test_blenderimport`
+  carried it as a check's rationale. It is wrong. Variation selects a
+  coverage mask; it barely moves the colour. **The visible tiling of the
+  ground at close range is INHERENT** — one cell is 96 world units showing
+  one 111-texel image of its material (T3), and the client draws exactly
+  that. What variation actually buys is correct per-cell MASK selection,
+  which is what makes tile boundaries blend; the colour repetition is
+  ArenaNet's and is not something a renderer can fix without inventing
+  detail she did not ship.
+
+The claim that survives is narrower and still worth having: T5 pinned every
+cell to quadrant 0, which forced the WRONG COVERAGE SHAPE everywhere, not a
+duller picture.
+
 ### 6.3 What is reproduced, and what is a translation
 
 `mapexport` ships `.layers.u16` — three slots per cell, `(rot<<15) |
