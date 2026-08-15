@@ -773,6 +773,56 @@ standing in a map settles in one observation both what the values are and
 whether they change per tile block — which is the repo's own rule (capture and
 read; the wins never came from reasoning about the client).
 
+### 7.6 THE SELECTOR IS READ: a per-cell corner PERMUTATION (OBSERVED)
+
+**2026-08-15, Lornar's Pass, loopback, build 38833.** `int3` at `0x0075DD50`
+and `0x0075E650`, injected at **t+0.4s** -- before the map exists -- with two
+controls passing in the same run: the DLL's own `int3` seen by its handler,
+and the caller's branch point `0x007434E5` (`test eax, 0x2000`) firing, which
+is on the path and must precede either callee.
+
+    terrain hit: YES at the LO path (0x0075E650)
+    chunk 0x1CA4EFE0
+    rng +0x2A4 = 0x00080012, 0x0A0E2CE4
+
+**`chunk+0x2B4` holds 16 distinct byte values and ALL SIXTEEN ARE
+PERMUTATIONS of (0,1,2,3).** Not a subset that happens to look like one -- 16
+of 16, decoded as the client decodes them, `(sel >> 2k) & 3` for k in 0..3:
+
+| byte | (c0,c1,c2,c3) | count | byte | (c0,c1,c2,c3) | count |
+|---|---|---|---|---|---|
+| `0xE4` | (0,1,2,3) identity | 877 | `0xD8` | (0,2,1,3) | 7 |
+| `0x39` | (1,2,3,0) | 25 | `0x87` | (3,1,0,2) | 3 |
+| `0x27` | (3,1,2,0) | 21 | `0x36` | (2,1,3,0) | 2 |
+| `0xB4` | (0,1,3,2) | 16 | `0x4B` | (3,2,0,1) | 2 |
+| `0xE1` | (1,0,2,3) | 15 | `0x1E` | (2,3,1,0) | 1 |
+| `0x2D` | (1,3,2,0) | 14 | `0xC9` | (1,2,0,3) | 1 |
+| `0x78` | (0,2,3,1) | 14 | `0xD2` | (2,0,1,3) | 1 |
+| `0x4E` | (2,3,0,1) | 13 | `0xC6` | (2,1,0,3) | 12 |
+
+**85.6% identity, 14.4% permuted.** So `trnblend.SELECTION = "identity"` is
+right for six cells in seven and WRONG for the seventh, and the owner's read
+off the isolated Blender overlay -- *"these connect a certain way ... to not
+repeat corner tiles or use other mismatches like we're currently doing"* --
+is confirmed: the permutation is the orientation mechanism that stops one
+authored coverage shape repeating with a period of exactly one cell.
+
+**The array is LIVE, not a fixed table.** The DLL's own header, counted from
+memory a moment before the file was dumped, reported 18 distinct values and
+546/1024 identity; the dump reports 16 and 877. Two reads of the same address
+seconds apart disagree, which means it is regenerated per tile block -- and
+the `rng` pair beside it says which block: `0x00080012` is
+`(8 << 16) ^ 18`, `trnvariation.reseed(8, 18)` **observed live**, the third
+independent confirmation of that function.
+
+Capture: `vault/research/terrain/selector_lornars_tile8_18.bin`.
+
+**What this un-blocks and what it does not.** It answers §8's top open item.
+It does NOT by itself fix the renderer: the permutation must be derived, not
+captured, because a consumer cannot ship a memory dump -- so the next question
+is what generates it, and the `rng` pair 16 bytes before it is the obvious
+suspect now that both are observable in the same read.
+
 ### 7.5 The seam is not where it looked — a measurement, and a bug in the probe
 
 `scratchpad/composite.py` composites the ground from our own `layers.u16` in
@@ -798,16 +848,14 @@ a picture that looks plausible and is measuring its own bug.
   as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
   at 255, so a gamma or a scale-and-bias would fit the corpus equally well
   and none is measured. `--no-lightmap` is the control.
-- **The SOURCE of the per-cell corner selector.** §7.3 measures its form and
-  proves it walks a per-cell array (`inc dword ptr [ebp-0x38]`), so
-  `trnblend.SELECTION = "identity"` is now known to be **wrong**, not merely
-  unverified. §7.4 locates the array at `chunk+0x2B4`, shows **nothing in the
-  image writes it**, and rules out the cheap explanation (not an undecoded
-  tag). Still NOT FOUND, and still the top item: it is what makes a boundary
-  stop repeating. **Next move is a live `ReadProcessMemory`, not more static
-  scanning** — two anchored rounds have bounded it without answering it.
-  Cheapest untried lead: `RNG::seed` writes TWO state dwords (§7.4) and
-  `trnvariation` models one.
+- ~~The SOURCE of the per-cell corner selector.~~ **READ 2026-08-15, §7.6.**
+  `chunk+0x2B4` holds a per-cell **corner permutation**: 16 distinct bytes, all
+  16 permutations of (0,1,2,3), 85.6% identity. `trnblend.SELECTION =
+  "identity"` is right for six cells in seven and wrong for the seventh.
+  **What replaces it as the open item: what GENERATES the permutation.** The
+  array is regenerated per tile block (two reads seconds apart disagree), and
+  the PRNG pair sits 16 bytes before it at `chunk+0x2A4` — observed live as
+  `reseed(8, 18)`. A consumer must derive the permutation, not capture it.
 - **The base layer's own UV rectangle** — `obj+0x68/0x6C` (span) and
   `obj+0x70/0x74` (origin), §7.2. If the caller advances the origin per cell
   the base tiles continuously and there is no 96-unit repeat; if it does not,
