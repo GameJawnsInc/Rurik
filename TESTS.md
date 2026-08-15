@@ -109,9 +109,15 @@ Every one of these, in the order they were written:
   exactly 11 rows, all of them the all-zero reserved spares at 4..14, checked both by
   count and by contents. The floor is the other lesson: 26 against a green run of 29 let
   two reviews delete exactly the three checks the section calls load-bearing and still
-  print ALL CHECKS PASSED, so it is 31 -- the copy-independent green, MEASURED on five
-  archives -- with section 4 raising it to 33 when it runs, because a fixed 31 would hand
-  `dat_study` two checks of slack. Both shapes have ZERO headroom. ~30 s),
+  print ALL CHECKS PASSED, so it is 32 -- the copy-independent green, MEASURED on five
+  archives -- with section 4 raising it to 34 when it runs, because a fixed 32 would hand
+  `dat_study` two checks of slack. Both shapes have ZERO headroom. **`magic()` is pinned
+  DIFFERENTIALLY (2026-08-15)**: it returns an entry's first four bytes by asking the
+  huffman decoder to stop early rather than decoding the whole entry, which is 80x
+  cheaper and is how `test_modelexport` classifies 1,795 texture references — so every
+  sampled entry is decoded BOTH ways and required equal, strided at 997 so it does not
+  sample the same rows as the sweep that uses it (97). A shortcut that is merely usually
+  right would move a corpus verdict rather than raise. ~30 s),
   `toolkit/mapdata/test_datcrc.py` (the archive's checksum and allocator rules),
   `toolkit/mapdata/test_datwrite.py` (the only tool that opens the archive `r+b`,
   against a small archive the test builds: that `--verify --replace` actually
@@ -2390,9 +2396,25 @@ Every one of these, in the order they were written:
   `payload`**, the DH numbers that cross the wire in the clear -- because six
   checks reading zero with a broken search would look identical. The first
   version of that section was O(secrets x values), 5,565 against ~1M, and did not
-  finish. 70 checks against a floor of 68, the two `vault/state` ones declaring a
-  skip; there is no bare-machine shape to floor separately, since `main()` opens
-  with `require_dir("captures")`. ~3m30s),
+  finish. **Section 14 (2026-08-15) is why this file is no longer the slowest in the
+  suite.** The leak search was still O(secrets x text) — 6,716 secrets against 179 MB,
+  in three places, and always in the WORST case, because a green run finds nothing and
+  so no scan ever exits early. `search_all` reduces it exactly rather than
+  heuristically: a secret is built from some alphabet, so any occurrence lies wholly
+  inside a maximal run of those characters; collect the DISTINCT runs, join them with a
+  separator outside the alphabet so no join can manufacture a match, and search that
+  (1,193,853 runs, a 19.5 MB haystack from 179 MB). **584 s → 183 s.** Because this is
+  an optimisation of a security check, section 14 proves it equal to the naive
+  comprehension rather than asserting it — five shaped cases, the load-bearing one
+  being a secret EMBEDDED inside a longer token, which a tokenising search would miss
+  and which is exactly what a half-working scrubber leaves; a secret spanning two runs
+  that must NOT be reported; and agreement on the real 179 MB corpus. Two rejected
+  approaches are recorded in the docstring so they are not re-tried: a single compiled
+  alternation of all 6,716 secrets is SLOWER than the naive loop (9.4 s vs 3.8 s for
+  200 patterns), and a per-file search cannot answer the cross-file question
+  `leaked()` exists to ask. 78 checks against a floor of 76, the two `vault/state`
+  ones declaring a skip; there is no bare-machine shape to floor separately, since
+  `main()` opens with `require_dir("captures")`. ~3m),
   `toolkit/test_content.py` (the content store, that its provenance and licence
   refusals actually refuse -- and, since 2026-08-13, that the REAL `vault/content/`
   overlay loads, which is the one input this file never read. Every other check in it
