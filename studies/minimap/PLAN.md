@@ -317,7 +317,34 @@ Also read `[+0x60..0x6c]` (the raw map rect) in the same pass — it is four dwo
 **Procedure:** two probe-free harness runs per arm; strip-score against the pre-flip idle window; register a `probes.py` step so the flip is timestamped in the capture.
 **Cost:** ~4 runs. **Turns FINDINGS §3.3 from a disassembly reading into an OBSERVED fact — the answer to the brief's "do we hold the lever" question.** It does not make our map look right; it proves we hold the lever. (Note: map 143's A == B, so a live-retail row must be borrowed for the positive arm — the `maps.toml` map.144 caution about unknown live rows applies.)
 
-### C4. Targeted opcode probes with screen readout
+### C4. Targeted opcode probes with screen readout — **DONE 2026-08-15. TIER 2 IS COMPLETE. FINDINGS §6f.**
+
+**Five arms, four probes, and the two that closed last are a matched null/positive pair.**
+
+- **`0x008C` UNFOGS — OBSERVED.** Marking a block the init payload left CLEAR (26, 22) changes **1,059** world-map pixels in one compact 88×101 box, visibly lifting the fog; marking a block it had ALREADY SET (30, 24) changes **0 of 2,013,440**. Same probe, one coordinate different. So the mark works, is confined to the blocks it names, and re-marking a set block is a **no-op rather than a refusal** — which is why the first isolation attempt returned byte-identical and was not evidence about the opcode.
+- **Which blocks are clear is COMPUTABLE.** Decoding the replayed payload's bands consumes exactly its declared 38 bytes, reproducing rung S8 outside S8's tooling; 68 of map 148's footprint blocks are clear. Both coordinates live in `probes.py` with the derivation. *(The tail parse is 20 bits short of the band's 1,024 — do not trust blocks near a band's end from it.)*
+- **`0x008D` is the predicted NULL — MET.** Compass byte-static across the entire run (green 23 / red 441 / pale 62 on every frame), the same zero-variance baseline the draw arm used.
+- **`0x0049` is HALF REFUTED.** The quest registers — a **"?" icon** appears under the level bar, 23.8 % of that slot differing from a run without it — but **no green starburst on the compass**. Why is NOT FOUND: field semantics, a tracked-quest requirement and a world-map-only marker are all live.
+
+**Still open after C4:** the per-map explorable mask (`0x0070A120` → `0x00721D00`) is unread, so `0x008C` is proven on **retail** map 148 and not on our own authored geometry.
+
+---
+
+### C4-partial. The first pass, superseded above (2026-08-15)
+
+**Three results, and the biggest was not the one this rung asked for.** A new probe (`probes.py`, `compass_draw`) sent five messages on build 38833, map 148, loopback and caged, every payload hexdump-verified before the run.
+
+1. **`0x0091` RENDERS, both arms — OBSERVED.** `knotCount = 1` with a non-zero owner tag draws a **red ping ripple** (806 and 744 red-excess px at t=3 s and 6 s); `knotCount = 5` draws a **polyline** (83 and 75 pale px at t=10 s and 13 s). Baseline: **eleven consecutive frames at exactly 441 and 62, zero variance.** Both appear on the frames their steps predict and vanish two frames later. The ripple needs no `0x0092`, confirming `0x008BE6B3 cmp edi,1`.
+2. **THE FOG INIT PAIR IS ACCEPTED, and a CRASHED CONTROL is what proves it.** With `0x008B` + `0x008A` (ArenaNet's own RLE, replayed verbatim) the world map opens and shows revealed terrain; **without them the same M press kills the client** on `GmMapView:1731 worldMapDims.x == mapDims.x * DXT_BLOCK_SIZE`. The binary closes it: `mapDims` comes from `charContext + 0x5B4` (the field §4.2's expander writes) and `shl eax, 2` fixes `DXT_BLOCK_SIZE == 4`. **The world map is unopenable on this server until that pair is sent.**
+3. **The compass ground is NOT fog-masked** — it drew normally in both runs, including the control whose `mapDims` was zero. Closes a §7 open question for free.
+
+**What is left of C4, and it is real work rather than bookkeeping:** the `0x008C` mark's own contribution is **unmeasured** (the probe sent init *and* mark, and the revealed region is most likely the init's — separating them needs an init-only arm); **`0x008D`** (the predicted null control) and **`0x0049`** (QUEST_ADD, the green starburst) were never sent; and the per-map explorable mask is still unread, so whether `0x008C` can unfog **our own** geometry is still NOT FOUND.
+
+**A harness fact this rung paid for:** `--shots` only fires during the `--keep-open` hold, and the hold starts *after* `--actions` finishes — so `--actions "0:play 45:key:M"` put the first frame at t=46.9 s while the draw steps fired at t≈20–39 s, and arm A was invisible for reasons unrelated to the opcodes. Sample the window under test.
+
+---
+
+### C4-old. The rung as written
 **Prediction (per candidate, before sending):** `0x0049` (QUEST_ADD) with a vec2 inside our map's rect and `dest_map_id` = our slot draws a **green starburst on the compass** and a quest-log entry; `0x008D` draws **nothing** (static catalogue).
 **`0x008C` (MAP_EXPLORATION_MARK) sent ALONE draws nothing, and that is a prediction rather than a caution** — its handler returns immediately when `mapBits.Count() == 0` (`0x00811BEE`), and only the init pair allocates that array, so `smsgsweep`'s 108 prior sends of `0x008C` measured nothing at all. The arm is therefore a **three-message sequence**: `0x008B` with `(dims.x, dims.y, byteCount)` where `dims.x % 32 == 0`, then `0x008A` carrying `ceil(byteCount/4)` dwords of a valid RLE stream (16-row bands, `u16` band length, `0xFF`-continuation runs, alternating colour — rung S8 re-derived it and closed it 8/8 on ArenaNet's own payloads), **then** `0x008C` with `(blockX, blockY, blockRadius)` inside the footprint at `>>5`. **The init pair posts no frame message**, so expect no repaint until the `0x008C` lands — a run that sends only the pair and stops is expected to look dead. Two things can make the whole arm fail for reasons unrelated to the opcodes: `0x008C`'s bit writes are gated by a **per-map explorable mask** from `Engine\Map\Map.cpp`, which nothing here has read, and the mark coordinates are in **continent-absolute blocks**, not map-local ones.
 **`0x0091` (COMPASS_DRAW_BROADCAST): knots are two SIGNED int16 in one dword, low half = x, in ABSOLUTE world units divided by 96.0** — so a knot must be near the player's own position to be inside the compass at all (the clickable radius is exactly 4,500 world units). Field 1 must be **NON-ZERO** (zero is the drawing client's own owner tag, and a zero echo makes the client merge the broadcast into its own line and double the stroke). **The `knotCount > 16` process-kill caution is RETRACTED** — `MsgConn.cpp`'s generic unpacker refuses the message before dispatch with a tight bound, so an over-range send is not dangerous, it is **inert** and measures nothing. **Cheapest possible demonstration: a single `0x0091` with `knotCount = 1`, a non-zero owner tag and a world position beside the player** draws a red ping ripple without needing `0x0092` at all (`0x008BE6B3 cmp edi,1`).
