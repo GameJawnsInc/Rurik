@@ -116,6 +116,38 @@ def _fraction(x, prop, what):
     return _f32(x)
 
 
+def _damage_fraction(dealt, pool_max, prop, what):
+    """Damage in pool units, as the wire's fraction-of-max -- clamped to a kill.
+
+    OVERKILL IS A VALID GAME EVENT, and this is where the refuse-don't-clamp
+    rule bends on purpose (studies/combat/PLAN.md, amendment C4): a decoded
+    skill dealing more than a weak target's whole pool is not a wrong number,
+    it is a kill with margin, and the wire's floor for it is -1.0. Routing it
+    through `_fraction` raw would refuse it -- a lethal hit that silently
+    no-ops, discovered by the gate map's critic BEFORE any computed damage
+    shipped, not after.
+
+    `_fraction` stays behind this as the invariant net. If it refuses AFTER
+    this clamp, that is a genuine bug -- and two of those are refused here by
+    name rather than left to leak through the clamp: a NEGATIVE dealt would
+    come out the far side as a heal on the damage property, and a NaN would
+    ride the `>` comparison past the clamp (both are exercised in
+    test_guards section 9).
+    """
+    if not pool_max > 0.0:
+        raise ValueError(
+            f"refusing damage against a non-positive pool max {pool_max!r} "
+            f"({what}): the fraction would be meaningless")
+    if not dealt >= 0.0:   # `not >=`, so NaN lands here too
+        raise ValueError(
+            f"refusing negative or NaN damage {dealt!r} ({what}): on the "
+            f"damage property that is a heal, not an overkill")
+    frac = dealt / pool_max
+    if frac > 1.0:
+        frac = 1.0
+    return _fraction(-frac, prop, what)
+
+
 AUTH_CMSG_VERSION_HEADER = 0x000C0400
 # 0x000C0700 came from the reference sources. 0x000C0500 is what build 38797
 # actually sends to a game server -- measured on the wire 2026-08-05, from a raw
@@ -406,6 +438,167 @@ def spawn_profession_values(profession=None):
         custom=p > agents.CHAR_PROFESSIONS - 1) + [0]
 
 
+# Which of GWW's own progression labels this server treats as damage to a foe.
+# EXPLICIT AND SMALL ON PURPOSE: the client's table does not say what a scale
+# set means (content/world.toml's skill_effect block explains at length), so a
+# label not named here lands as "no modelled effect" rather than being guessed
+# at. Three of the four skills on our enemy's own bar are in that second group
+# -- a heal, a hex duration and a max-health enchantment -- and treating their
+# endpoints as damage would have been an invention wearing a measurement's
+# clothes.
+#
+# The `+` is load-bearing, not decoration. "Holy damage" IS the skill's damage;
+# "+ Damage" is ADDED to the weapon attack it rides on, which is what an attack
+# skill does, so the two resolve differently below.
+SCALE_MEANS_DAMAGE = {
+    "Holy damage": "standalone",
+    "+ Damage": "additive",
+}
+
+# The rank the ENEMY casts at. OURS -- no capture and no table gives a monster's
+# attribute ranks, and studies/monsterai/FINDINGS.md establishes that a monster's
+# bar is structurally unreachable (ArenaNet never sends it), so this is a choice
+# and not a measurement. 12 is ArenaNet's own cap for a player
+# (AcctTemplate:441); a real monster's is unknown.
+ENEMY_SKILL_RANK = 12
+
+
+def skill_scale_value(skill_id, rank, which="scale"):
+    """A skill's attribute-scaled value at `rank`, by the CLIENT's own formula.
+
+    MEASURED, at 0x005A8920 -- one general-purpose interpolator the client uses
+    for the scale, bonus-scale and duration sets alike (studies/combat 8c):
+
+        value(rank) = max(0, round(lo + (hi - lo) * rank / 15.0))
+
+    with the divisor a literal double 15.0 (verified by a stdlib read of
+    0x0094B930: bytes 0000000000002e40) and NO upper clamp on rank, so ranks
+    above 15 extrapolate rather than saturating. The floor at zero is
+    ArenaNet's own assert, ConstSkill:3769 `(int)result >= 0`.
+
+    THE BITFIELD IS HONOURED, and it is not optional. `skill_arguments` (+0x58)
+    enables each set -- 1 duration, 2 scale, 4 bonus -- and a disabled set's
+    slot can still hold a meaningful CONSTANT: Rush's scale slot holds 25, the
+    "move 25% faster" in its description, with the bit clear. Reading endpoints
+    without the bit invents a progression the game never draws, so a disabled
+    set raises here rather than returning a plausible number.
+
+    THE ROUNDING TIE-BREAK IS UNRESOLVED (studies/combat 8c): the client's CRT
+    helper adjusts by +/-1.0 rather than the textbook +/-0.5 before truncating,
+    and half-up vs half-even was not settled. Python's round() is half-EVEN, so
+    this uses explicit half-up -- a choice, recorded here, and one that cannot
+    currently bite: no skill this server resolves lands on a .5, which
+    test_skilldamage asserts rather than leaves to luck.
+    """
+    import math
+    row = agents.WORLD.get("skills", str(skill_id))
+    bit = {"scale": 2, "bonus_scale": 4, "duration": 1}[which]
+    if not int(row["skill_arguments"]) & bit:
+        raise ValueError(
+            f"skill {skill_id} has its {which} set DISABLED "
+            f"(skill_arguments = {row['skill_arguments']}), so its "
+            f"{which}0/{which}15 slots are not a progression. Rush's scale "
+            f"slot holds 25 with this bit clear and the wiki lists no scale "
+            f"progression for it; reading the endpoints anyway would invent "
+            f"one. Refusing rather than returning a plausible number.")
+    lo, hi = int(row[f"{which}0"]), int(row[f"{which}15"])
+    exact = lo + (hi - lo) * rank / 15.0
+    return max(0, int(math.floor(exact + 0.5)))
+
+
+def skill_damage(skill_id, rank):
+    """(amount, mode) if this skill's scale IS damage, else None.
+
+    `mode` is "standalone" (the skill's own damage) or "additive" (added to the
+    weapon attack it rides on). The distinction is GWW's: "Holy damage" against
+    "+ Damage", and the plus is what says the number rides an attack.
+
+    Returns None -- not zero -- when the skill is not a modelled damage skill,
+    so a caller must decide what that means rather than silently dealing 0.
+    """
+    try:
+        row = agents.WORLD.get("skill_effect", str(skill_id))
+    except Exception:                                          # noqa: BLE001
+        return None
+    mode = SCALE_MEANS_DAMAGE.get(row.get("scale_means"))
+    if mode is None:
+        return None
+    return skill_scale_value(skill_id, rank), mode
+
+
+def player_rank_for_skill(skill_id):
+    """The player's rank in the attribute the SKILL scales on.
+
+    This is where step 7 and step 8 join: the skill record names its attribute
+    (+0x29), the attribute is an index into the client's own s_attrib table,
+    and the player's rank in it comes from the content row 0x003A is built
+    from. Before this the chain was cut in the middle and `2 * rank` was 0.
+
+    An attribute the player has no rank in is 0 -- which is correct rather
+    than missing: a Warrior really does have rank 0 in Smiting Prayers.
+    """
+    attribute = int(agents.WORLD.get("skills", str(skill_id))["attribute"])
+    return dict(agents.PLAYER_ATTRIBUTE_RANKS).get(attribute, 0)
+
+
+def attribute_triples(ranks=None):
+    """0x003A's payload: (attribute_id, rank, rank) per attribute, flattened.
+
+    THE SHAPE IS MEASURED, not chosen. The client's handler 0x0091D8C0 divides
+    the wire count by three and forwards three parallel arrays into a per-index
+    loop calling the attribute writer 0x00819220 (ATTRIBUTES.md 1.2), and two of
+    the three slots carry ArenaNet's own names (studies/combat/PLAN.md 8a):
+    slot 1 is `attrib`, the id, bound-checked against 51; slot 2 is `baseValue`,
+    the rank, and the assert that names it reads `[record + attrib*20 + 8]`,
+    which is what ties the name to that slot rather than to its neighbour.
+
+    SLOT 3 IS RECONSTRUCTION AND IS THE ONE THING HERE TO DISTRUST. No assert
+    names it. What is measured is that the client's own pending-change apply
+    adds the IDENTICAL delta to it and to `baseValue` (0x0081877C and
+    0x00818789-0x0081878C read the same `[edx+8]`), so from a common zero the
+    two stay equal -- and sending the rank in both reproduces that invariant
+    rather than inventing a second number. The reading that fits everything
+    seen is base-rank vs effective-rank-including-bonuses, which are equal for
+    a character wearing no runes; ours wears none. If a capture ever shows the
+    two differing, THIS is the line that was wrong.
+
+    Refuses rather than clamping, the same rule `_fraction` follows: every
+    bound below is the client's own, and a value outside one is a bug in the
+    caller that a clamp would hide.
+    """
+    ranks = agents.PLAYER_ATTRIBUTE_RANKS if ranks is None else ranks
+    if len(ranks) > ATTRIBUTE_TRIPLES_MAX:
+        raise ValueError(
+            f"refusing to send {len(ranks)} attribute triples in one 0x003A: "
+            f"the array32 is declared at 48 elements = {ATTRIBUTE_TRIPLES_MAX} "
+            f"triples, and AcctTemplate:423 bounds a build template at 16 too. "
+            f"More than that needs ceil(N/16) messages, which no real "
+            f"character reaches -- primary plus secondary is at most ten.")
+    seen, out = set(), []
+    for attrib_id, rank in ranks:
+        if not 0 <= attrib_id < CHAR_ATTRIBS:
+            raise ValueError(
+                f"refusing attribute id {attrib_id}: the client's s_attrib "
+                f"table has {CHAR_ATTRIBS} rows and its writer asserts "
+                f"`attrib < arrsize(attribState->attrib)` (ChCliAttrib:249). "
+                f"Ids are contiguous 0..{CHAR_ATTRIBS - 1}; there are no gaps "
+                f"in the index space (studies/combat/PLAN.md 10).")
+        if not 0 <= rank <= ATTRIBUTE_RANK_MAX:
+            raise ValueError(
+                f"refusing rank {rank} for attribute {attrib_id}: ArenaNet's "
+                f"own cap is {ATTRIBUTE_RANK_MAX} (AcctTemplate:441 "
+                f"`data.attribValue[index] <= 12`), and CharData:202 bounds "
+                f"the s_attribPoints lookup at 0..12.")
+        if attrib_id in seen:
+            raise ValueError(
+                f"attribute {attrib_id} appears twice. Each triple WRITES its "
+                f"slot, so a duplicate silently means 'the last one wins' -- "
+                f"refused because that is a caller bug wearing a valid shape.")
+        seen.add(attrib_id)
+        out += [attrib_id, rank, rank]
+    return out
+
+
 def spawn_probe_warning(probe, spawn_set, spawn_out_of_band=False):
     """profession_spawn without --spawn-profession measures the wrong thing.
 
@@ -538,13 +731,37 @@ GAME_SMSG_AGENT_UPDATE_STATUS = 0x00F1
 # 0x1000 on 151 of 151 Plague Worm creates and 0 on the ordinary ones in the same tape.
 GAME_SMSG_AGENT_INITIAL_STATUS = 0x00F0
 # Deliberately NOT given a meaningful name. It carries [agent_id, byte] and the whole
-# corpus holds two values: 9, on every one of 140 worm creates, and 8, exactly once --
-# on the Wolf at the instant it died, alongside EFFECT_DEAD. Two values with one of them
-# seen a single time is a shape, not a semantic, and this project's rule is to refuse
-# the guess. Note also that GAME_CMSG 0x0026 is ATTACK: 0x26 is the one value ArenaNet
+# corpus holds two values: 9 and 8.
+#
+# THE "EXACTLY ONCE" HERE WAS STALE AND IS NOW MEASURED. This comment said value 8
+# was seen "exactly once -- on the Wolf at the instant it died", and concluded that
+# one sighting is a shape rather than a semantic. Re-counted 2026-08-15 over BOTH
+# live captures, all ten connections: the histogram is {9: 200, 8: 4}, and all four
+# 8s land on a death tick naming the dying agent (agent 38 t=19.912 and agent 40
+# t=23.511 in 20260807T143055; agent 43 t=36.330 and agent 278 t=23.202 in
+# 20260810T235916). The single sighting was an artifact of counting one capture.
+#
+# 4 of 4 is still not a name -- what the flag MEANS is unresolved and 8 could be a
+# bitfield rather than an enum -- but it is enough to send: value 8 accompanies a
+# kill, value 9 accompanies a create, and no other value exists in 204 samples.
+#
+# Note also that GAME_CMSG 0x0026 is ATTACK: 0x26 is the one value ArenaNet
 # sends on BOTH channels, and they are different messages. Do not reuse either name.
 GAME_SMSG_AGENT_UPDATE_FLAGS = 0x0026
 BURROW_TAIL_0026_VALUE = 9        # what every observed worm create carried
+AGENT_FLAGS_KILLED = 8            # ...and what all 4 observed deaths carried
+
+# The kill reward. OBSERVED as [attr_id, value] on the tick an agent dies, 3 of 3
+# CLEAN kills carrying exactly [0, 26]; the fourth (the Wolf) sits on a tick
+# contaminated by a coincident non-kill burst and is excluded rather than averaged
+# in -- see studies/combat/PLAN.md 13 for why that burst is a different mechanism.
+#
+# attr_id 0 = experience is UPSTREAM and UNVERIFIED; 26 is copied from the wire,
+# not derived. Whether it varies by creature is UNMEASURED: three different
+# creatures gave 26, which is evidence that it does NOT vary, at n=3.
+GAME_SMSG_AGENT_KILL_REWARD = 0x00EE
+KILL_REWARD_ATTR = 0
+KILL_REWARD_VALUE = 26
 
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
@@ -553,12 +770,60 @@ GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
 # where 42 comes from, and that source stands alone. The claim this comment used
 # to make, that the array's LENGTH is what tells the client how many attribute
 # slots exist, is supported by NO source; it was our inference stated as fact.
-# Whether a 42-zero array is even well-formed is open: one lineage reads this as
-# triplets, and another never sends this message at all.
-ATTRIBUTE_COUNT = 42
-# UPSTREAM, and an uncited literal at that (GmPlayer.c:125). Two other lineages
-# send 0/0 here, and whether the two bytes mean used/max or max/used is contested.
-ATTRIBUTE_POINTS = 50
+#
+# "WHETHER THIS IS TRIPLETS IS OPEN" -- IT IS NOT, AND HAS NOT BEEN SINCE
+# 2026-08-12. This comment said so for two days after the question was settled,
+# which is the drift the top of CLAUDE.md is about. MEASURED on our own pinned
+# build: the handler 0x0091D8C0 divides the wire count by THREE (the
+# 0xAAAAAAAB reciprocal idiom) and forwards three parallel arrays -- base+0,
+# base+n*4, base+n*8 -- into a per-index loop calling the attribute writer
+# 0x00819220 (studies/profession/ATTRIBUTES.md 1.2).
+#
+# And since 2026-08-14 two of the three slots carry ARENANET'S OWN NAMES, from
+# the client's compiled asserts (studies/combat/PLAN.md 8a):
+#   slot 1  the attribute id     ChCliAttrib:249 "attrib < arrsize(attribState->attrib)"
+#   slot 2  the RANK, "baseValue" ChCliAttrib:42 "(int)attribState->attrib[attrib].baseValue >= 0",
+#           whose own cmp reads [record + attrib*20 + 8] -- which is what ties
+#           the name to that slot rather than to its neighbour
+#   slot 3  NOT NAMED. It takes the identical delta as baseValue in the
+#           pending-change apply and is never bound-checked or indexed.
+#
+# So a 42-zero array was FOURTEEN (0,0,0) triples -- fourteen writes of rank 0
+# to attribute 0 -- not 42 slots. Silent rather than fatal (the loopback sweep,
+# studies/smsgsweep 5b), which is why nothing ever caught it.
+#
+# REPLACED 2026-08-15 by real triples; see attribute_triples below. The 42 is
+# kept as a NAMED FACT rather than deleted, because it is a true statement
+# about a different set and deleting it would lose that: it is the number of
+# attributes the ten playable professions own, which is what OpenTyria's
+# Attribute_Count counts. It is NOT the wire's index space -- that is the
+# client's own contiguous 0..50 (`cmp esi, 0x33`, 51 rows), read by
+# toolkit/clientscan/attribtable.py. The old CONTESTED registry row wanted one
+# of those two numbers to be wrong; neither is (studies/combat/PLAN.md 10).
+REAL_PROFESSION_ATTRIBUTE_COUNT = 42
+# The client's own s_attrib bound: the first slot of every triple must be
+# below this, and the writer asserts it (ChCliAttrib:249).
+CHAR_ATTRIBS = 51
+# ArenaNet's own rank cap, asserted twice: AcctTemplate:441
+# `data.attribValue[index] <= 12`, and CharData:202's `cmp esi, 0xd` guarding
+# the s_attribPoints lookup at 0..12.
+ATTRIBUTE_RANK_MAX = 12
+# The wire's own ceiling: 0x003A's array32 is declared at 48 elements, which is
+# exactly 16 triples -- and AcctTemplate:423 bounds a build template at
+# `attribCount < 16`. The two agree, which is why ONE message always suffices
+# for a real character: primary plus secondary profession is at most ten
+# attributes. The ceil(N/16) batching ATTRIBUTES.md 6 describes is the RESKIN
+# arc's problem (custom tables above 16), not combat's.
+ATTRIBUTE_TRIPLES_MAX = 16
+# OBSERVED: every 0x0037 ArenaNet sent in the vault's two live captures carries
+# [0, 0] -- 8 of 8 connections, once each at load, naming the player agent (e.g.
+# 20260807T143055 conn :64103 t=0.722 hex 37001f0000000000). The 50 this used to
+# be was UPSTREAM and uncited (GmPlayer.c:125), contradicted by all eight.
+# STATE-CONDITIONAL, not universal: all eight samples are characters in unknown
+# spend state, so what a character with genuinely unspent points gets is open --
+# capture shopping-list item 1, studies/combat/PLAN.md section 3. Whether the two
+# bytes mean used/max or max/used is still CONTESTED, and moot only at zero.
+ATTRIBUTE_POINTS = 0
 
 # ---------------------------------------------------------------- skills ----
 # The server owns WHICH and WHEN; the client owns WHAT. A skill's name, icon,
@@ -1102,6 +1367,39 @@ GAME_CMSG_ATTACK_SKILL = 0x0027
 # the agent against your own and RETURNS EARLY when they match, so it is how you
 # see other people cast. 0x00E3 has no such check.
 GAME_SMSG_SKILL_ACTIVATED = 0x00E3
+
+# THE OTHER THREE QUARTERS OF THE CYCLE (studies/combat/PLAN.md H1, section 6).
+# ArenaNet answers every client-initiated cast with the same four opcodes in the
+# same order -- c2s 0x0046/0x0027 -> 0x00E4 -> 0x00E5 -> 0x00E3 -> 0x00E6 -- in
+# all six complete cycles across both live captures. Until 2026-08-14 this
+# server sent only 0x00E3, so the client's recharge state machine never started
+# and never finished.
+#
+# 0x00E4: the broadcast half of activation. OBSERVED: all 7 in the corpus name
+# the PLAYER's own agent, so the real server broadcasts uniformly and relies on
+# the receiver's self-discard (the early return measured above). It contributes
+# nothing to the caster's own feedback; it is sent for wire fidelity.
+#
+# 0x00E5: activation completes and recharge STARTS. Its trailing dword is the
+# recharge in whole seconds, and it is the first client-side constant ever
+# checked against ArenaNet: {153: 8, 105: 6, 394: 3} matched the client table's
+# +0x4C on exactly 1 of 41 dword columns (studies/reconstruction 2.9.2).
+#
+# 0x00E6: recharge ENDS, at E5 + recharge to within 13.7 ms on all 6 cycles --
+# not keyed to cast-end and not tick-quantised; both rivals were checked
+# against every cycle and fit none (studies/combat/PLAN.md section 6, 0b).
+#
+# THE TIMING LAW for E5 is not "press + activation". Skill 105's E4->E5 gaps
+# (2.64 s, 2.57 s) exceed its table activation (2.0 s) by exactly the previous
+# cast's remaining aftercast, both times: E4 fires when the press is ACCEPTED,
+# the cast BEGINS when the caster frees, and E5 lands at begin + activation --
+# a model that fits all four Necromancer cycles to <= 14 ms. The two Ranger
+# cycles (attack skill 394, table activation 0.0, observed gap ~1.14 s) do NOT
+# fit it: an attack skill's timing rides the weapon's attack speed, which this
+# server does not model -- OURS, divergence recorded rather than papered over.
+GAME_SMSG_SKILL_ACTIVATED_BROADCAST = 0x00E4
+GAME_SMSG_SKILL_RECHARGE = 0x00E5
+GAME_SMSG_SKILL_RECHARGED = 0x00E6
 
 GAME_CMSG_TURN_TO_DIRECTION = 0x003D
 GAME_CMSG_MOVE_TO_COORD = 0x003E
@@ -1720,10 +2018,11 @@ ENEMY_FACING_EPSILON = 0.15            # radians (~8.6 deg) before re-announcing
 # spawn) -- not picked from nowhere. Its activation and recharge are the table's,
 # not ours, which is why they are odd numbers.
 #
-# NOT THE PLAYER'S CAST PATH. The skill-dispatch arm below carries a standing note
-# that skill COMPLETION is being built on another branch and not to add to it.
-# This does not: it is an NPC announcing its own cast, and it touches nothing the
-# player's 0x0046/0x0027 handling uses.
+# NOT THE PLAYER'S CAST PATH. (A standing note here used to defer the player's
+# completion work to a branch that never existed; the player's cycle landed
+# 2026-08-14 in handle_skill_press/cast_tick, studies/combat step 3.) This is
+# an NPC announcing its own cast, and it touches nothing the player's
+# 0x0046/0x0027 handling uses.
 # THE BAR. Four skills rather than one, each with its OWN recharge.
 #
 # A TESTING FIXTURE, AND THE POLICY THAT USES IT IS TOO. Owner's ruling
@@ -1770,12 +2069,6 @@ ENEMY_SKILL_BAR = ((276, 0.75, 2.0),   # 5
                    (253, 1.00, 5.0),   # 4
                    (312, 0.75, 8.0),   # 10
                    (289, 0.75, 2.0))   # 6
-ENEMY_SKILL_FRACTION = 0.25   # of the player's maximum, for EVERY skill on the
-                              # bar. OURS, and flat on purpose: per-skill effects
-                              # are not modelled and giving each one a different
-                              # number would be four inventions instead of one.
-                              # The client carries every real number and we do not
-                              # read it yet (studies/skills/FINDINGS.md)
 
 # The bar this spawn fights with. A content row may give `skills = [[id, act,
 # recharge], ...]`, and an EMPTY list leaves the agent on plain swings. Named here
@@ -1914,14 +2207,36 @@ def attack_tick(send, state, conn_id):
     hit_enemy(send, state, target_id, conn_id)
 
 
-def hit_enemy(send, state, target_id, conn_id):
-    """Land one swing on a hostile agent, if the swing timer allows it."""
+def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
+    """Land one swing on a hostile agent, if the swing timer allows it.
+
+    `bonus_damage` is an attack skill's "+ Damage", in health points, added to
+    the swing this call already lands. ONE damage number, not two, because
+    that is what the plus means: GWW writes Power Attack as "+ Damage 10-40",
+    a bonus on the attack it rides rather than a separate hit. Sending two
+    property-16 messages would draw two numbers on the screen for one swing.
+    """
     agent = state.get("agents", {}).get(target_id)
     if agent is None or agent["dead"]:
         return
     now = time.time()
     if now - agent.get("last_hit", 0.0) < ATTACK_INTERVAL:
         return
+
+    # THE GUARD RUNS BEFORE ANY EFFECT -- before the timer is consumed, before
+    # the health is bookkept, before the first send. Until 2026-08-14 the
+    # _fraction call sat inline in the damage send below, which meant a refused
+    # value left GV_ATTACK_STARTED alone on the wire (an attack with no damage
+    # and no close), a health pool bookkept to a kill nothing was told about,
+    # and a swing timer eaten by a swing that never happened -- measured, not
+    # reasoned: test_guards.py section 1 went red on exactly those three
+    # counts against the pre-guard tree. Dormant while HIT_FRACTION is a
+    # constant; load-bearing the day step 8 computes it (studies/combat).
+    dealt = agent["max_health"] * HIT_FRACTION + bonus_damage
+    frac = _damage_fraction(dealt, agent["max_health"],
+                            agents.PROP_DAMAGE,
+                            "one swing" if not bonus_damage
+                            else f"one swing +{bonus_damage:.0f}")
     agent["last_hit"] = now
 
     # A swing is two events, and sending only the second is why the first
@@ -1947,7 +2262,6 @@ def hit_enemy(send, state, target_id, conn_id):
          [agents.GV_ATTACK_STARTED, PLAYER_AGENT_ID, target_id, 0],
          f"attack_started: player swings at {target_id}")
 
-    dealt = agent["max_health"] * HIT_FRACTION
     agent["health"] = max(0.0, agent["health"] - dealt)
 
     # Property 16 on 0x00A3: prop, TARGET, cause, value -- target before cause,
@@ -1955,8 +2269,7 @@ def hit_enemy(send, state, target_id, conn_id):
     # measured (studies/enemy/PLAN.md 6b, 6f), and the fmul that makes it a
     # fraction is at 0x0081823C in the client.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID,
-          _fraction(-HIT_FRACTION, agents.PROP_DAMAGE, "one swing")],
+         [agents.PROP_DAMAGE, target_id, PLAYER_AGENT_ID, frac],
          f"damage {dealt:.0f} to agent {target_id}")
     # And close the swing. Harmless if the client ignores it; without it the
     # attack has a beginning and no end.
@@ -1971,10 +2284,183 @@ def hit_enemy(send, state, target_id, conn_id):
         # death message failed before this was read out of the client
         # (studies/agentprops/FINDINGS.md 1c).
         agent["dead"], agent["died_at"] = True, now
+        # THE ORDER IS ARENANET'S, read off the two uncontaminated kills in the
+        # corpus (agent 278 t=23.202 and agent 40 t=23.511): status, then the
+        # reward, then the flags byte. Same tick, same agent, all three.
         send(GAME_SMSG_AGENT_UPDATE_STATUS, [target_id, agents.EFFECT_DEAD],
              f"KILL agent {target_id}")
+        # A SINGLE [0, 26], and the single is the finding. The pair
+        # [10,0]+[0,X] looks like the richer template and is NOT a kill shape:
+        # 6 of its 7 occurrences fire 6.8-31.5 s from any death, inside a
+        # recurring broadcast burst that is always preceded by 0x009C
+        # [agent, 100]. The seventh landed on the Wolf's kill tick by
+        # coincidence -- and that tick carries the 0x009C marker too, which is
+        # what gives the coincidence away. The three CLEAN kills carry one
+        # message and no 0x009C. studies/combat/PLAN.md 13.
+        send(GAME_SMSG_AGENT_KILL_REWARD,
+             [KILL_REWARD_ATTR, KILL_REWARD_VALUE],
+             f"kill reward [{KILL_REWARD_ATTR}, {KILL_REWARD_VALUE}]")
+        send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
+             f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
         print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
               f"back up in {REVIVE_AFTER:.0f}s", flush=True)
+
+
+_MISSING_SKILL_ROWS = set()
+
+
+def skill_timing(skill_id):
+    """(activation, aftercast, recharge) seconds for a skill, from content.
+
+    The numbers are the client's own -- vault/content/skills.toml, 1,333 rows
+    emitted by toolkit/clientscan/skilltable.py with per-row build stamps.
+    On a machine with no vault overlay (the bare-machine rule: the server
+    path must run with nothing but the repo) there are no skill rows, and
+    the honest fallback is zeros, ANNOUNCED once per id: the lifecycle then
+    fires immediately rather than not at all, and the log says why the
+    timing is wrong instead of leaving it to be discovered on screen.
+    """
+    try:
+        row = agents.WORLD.get("skills", str(skill_id))
+    except agents.content.ContentError:
+        if skill_id not in _MISSING_SKILL_ROWS:
+            _MISSING_SKILL_ROWS.add(skill_id)
+            print(f"[skills] no content row for skill {skill_id} -- "
+                  f"lifecycle timings fall back to 0 (is the vault overlay "
+                  f"present? see skilltable.py --emit-content)", flush=True)
+        return 0.0, 0.0, 0.0
+    return (float(row["activation"]), float(row["aftercast"]),
+            float(row["recharge"]))
+
+
+def handle_skill_press(values, send, state, conn_id, opcode):
+    """One skill press, either half (0x0046 USE_SKILL or 0x0027 ATTACK_SKILL).
+
+    Extracted from the dispatch chain 2026-08-14 so the connection-thread
+    combat path is testable without a socket -- the same reason
+    `frame_pending` and `handle_perf_report` exist. The dispatch arm keeps the
+    opcode condition (test_cmsgnames section 6 pins it) and the dead-player
+    guard; everything the press DOES lives here.
+
+    THE ANSWER IS THE OBSERVED FOUR-OPCODE CYCLE, not a lone echo: E4 now,
+    then E5 at cast end, E3 an aftercast later, E6 when the recharge runs out
+    (the constants' comment carries the evidence; the tick fires the timed
+    three via cast_tick). Until 2026-08-14 this sent 0x00E3 alone,
+    immediately -- which answered the pending-skill key and started nothing:
+    no recharge sweep, no repeat cast, no animation state.
+    """
+    which = ("USE_SKILL" if opcode == GAME_CMSG_USE_SKILL
+             else "ATTACK_SKILL")
+    skill_id, copy, target = values[1], values[2], values[3]
+    now = time.time()
+    activation, aftercast, recharge = skill_timing(skill_id)
+
+    # The queue law from the constants' comment: E4 at accept, the cast
+    # begins when the caster frees (the previous cast's aftercast end), E5
+    # at begin + activation. `cast_busy_until` is only ever touched on this
+    # thread -- the tick reads nothing from it.
+    begin = max(now, state.get("cast_busy_until", 0.0))
+    e5_at = begin + activation
+    state["cast_busy_until"] = e5_at + aftercast
+
+    send(GAME_SMSG_SKILL_ACTIVATED_BROADCAST,
+         [PLAYER_AGENT_ID, skill_id, copy],
+         f"SKILL_ACTIVATED_BROADCAST(skill {skill_id} via {which})")
+    # The cast animation, in the OBSERVED player shape: 0x00A0
+    # [60, caster, target, skill], 4 of 4 player activations in the live
+    # corpus (the NPC path above sends the 3-slot 0x009F form its own n=1
+    # supports). GV_SKILL_FINISHED (58) is deliberately NOT sent: it appears
+    # ZERO times in 21,543 live messages, so emitting it would be invention
+    # -- if the loopback run shows the animation never ends, that absence
+    # becomes the next measured question, not a pre-answered one.
+    send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT_TARGET,
+         [agents.GV_SKILL_ACTIVATED, PLAYER_AGENT_ID, target or 0, skill_id],
+         f"cast animation: player casts {skill_id}")
+    state.setdefault("pending_casts", []).append({
+        "skill_id": skill_id, "copy": copy,
+        "e5_at": e5_at, "e3_at": e5_at + aftercast,
+        "e6_at": e5_at + recharge, "recharge": int(recharge),
+        "e5_sent": False, "e3_sent": False,
+    })
+    print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
+          f"agent {target or 'nothing'}: E5 in {e5_at - now:.2f}s, "
+          f"recharge {recharge:.0f}s", flush=True)
+
+    # A skill aimed at something hostile does what a click does, PLUS its own
+    # "+ Damage" if it has one. Since 2026-08-15 the "by how much" is no longer
+    # ours: the magnitude is the client's own scale endpoints interpolated at
+    # the player's rank IN THAT SKILL'S OWN ATTRIBUTE (studies/combat 12), so
+    # Power Attack lands harder than Desperation Blow because Strength 12 beats
+    # Tactics 1 -- which is the whole point of having ranks at all.
+    #
+    # A skill whose scale is not damage adds nothing and the swing stands
+    # alone. That covers most of this bar: two stances, two health buffs and a
+    # condition. Guessing an effect for those is the invention this arc exists
+    # to remove.
+    #
+    # Damage stays AT PRESS rather than at cast end, and that is still a known
+    # divergence rather than a decision this step revisited: the magnitudes
+    # moved here, the timing did not.
+    bonus = 0.0
+    if target:
+        found = skill_damage(skill_id, player_rank_for_skill(skill_id))
+        if found and found[1] == "additive":
+            bonus = float(found[0])
+    #
+    # THE SAME ValueError CONTRACT world_tick has, because this runs on the
+    # CONNECTION thread: handle's except tuple is ConnectionError /
+    # socket.timeout / OSError only, so an escaping refusal would run the
+    # finally, close the socket, and disconnect the client over a number that
+    # was -- by design -- never sent. The world tick logs and keeps ticking
+    # (its except at the tick body); a skill press logs and keeps the
+    # connection. Refusing the VALUE must never cost more than the value.
+    if target:
+        try:
+            hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
+        except ValueError as ex:
+            print(f"[c{conn_id}] skill press REFUSED a value: {ex}",
+                  flush=True)
+
+
+def cast_tick(send, state, conn_id):
+    """Fire the timed three quarters of every pending cast cycle.
+
+    Runs on the world-tick thread; entries are APPENDED by the connection
+    thread (handle_skill_press) and mutated/removed only here, so each phase
+    fires exactly once -- the single-writer rule that makes "no lost or
+    doubled E6" a property of the design rather than of luck
+    (test_guards section 11 hammers it from both threads).
+
+    Phase order within a cycle is pinned to the observed one: E5, then E3,
+    then E6 -- E6 never precedes E3 in the corpus, so a zero-recharge skill
+    waits for its E3 rather than closing the cycle early.
+    """
+    pending = state.get("pending_casts")
+    if not pending:
+        return
+    now = time.time()
+    finished = []
+    for cast in list(pending):
+        if not cast["e5_sent"] and now >= cast["e5_at"]:
+            send(GAME_SMSG_SKILL_RECHARGE,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"],
+                  cast["recharge"]],
+                 f"SKILL_RECHARGE(skill {cast['skill_id']}, "
+                 f"{cast['recharge']}s)")
+            cast["e5_sent"] = True
+        if cast["e5_sent"] and not cast["e3_sent"] and now >= cast["e3_at"]:
+            send(GAME_SMSG_SKILL_ACTIVATED,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
+                 f"SKILL_ACTIVATED(skill {cast['skill_id']}, "
+                 f"copy {cast['copy']})")
+            cast["e3_sent"] = True
+        if cast["e3_sent"] and now >= cast["e6_at"]:
+            send(GAME_SMSG_SKILL_RECHARGED,
+                 [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],
+                 f"SKILL_RECHARGED(skill {cast['skill_id']})")
+            finished.append(cast)
+    for cast in finished:
+        pending.remove(cast)
 
 
 def revive_due(send, state, conn_id):
@@ -1999,6 +2485,12 @@ def revive_due(send, state, conn_id):
             continue
         if not agent["dead"] or now - agent["died_at"] < REVIVE_AFTER:
             continue
+        # Guard before the body stands up: a refused refill must leave the
+        # agent DEAD so next tick retries the whole revive, not half-alive
+        # with a status sent and no bar behind it (test_guards section 5).
+        # The refill itself may still be deferred below -- validating a value
+        # the defer branch won't use this tick is the cheap direction.
+        frac = _fraction(1.0, agents.GV_HEALTH, "refill to a full pool")
         agent["dead"] = False
         agent["health"] = agent["max_health"]
         agent["last_hit"] = 0.0
@@ -2050,8 +2542,7 @@ def revive_due(send, state, conn_id):
         # exceed the maximum, so `max_health` here was never merely too large, it
         # was the wrong KIND of number.
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-             [agents.GV_HEALTH, agent_id, agent_id,
-              _fraction(1.0, agents.GV_HEALTH, "refill to a full pool")],
+             [agents.GV_HEALTH, agent_id, agent_id, frac],
              f"refill bar on agent {agent_id}")
         print(f"[c{conn_id}] agent {agent_id} ({agent['name']}) is back up",
               flush=True)
@@ -2375,15 +2866,21 @@ def land_swing(send, state, agent_id, agent, conn_id):
     # daemon thread and a KeyError here would stop the world for the rest of the
     # session with a traceback nowhere near the cause.
     player_pools(state)
+    # Guard before effect: validate the fraction before the FIRST send, so a
+    # refusal leaves no half-swing on the wire (test_guards section 3). The
+    # WIRE ORDER below is untouched -- finished then damage is ArenaNet's own,
+    # 6 of 6 swings in the Lakeside tape (docstring above); only the
+    # validation moved up.
+    dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
+    frac = _damage_fraction(dealt, float(agents.PLAYER_HEALTH),
+                            agents.PROP_DAMAGE, "an enemy swing")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.GV_MELEE_ATTACK_FINISHED, agent_id, 0],
          "melee_attack_finished")
 
-    dealt = float(agents.PLAYER_HEALTH) * ENEMY_HIT_FRACTION
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id,
-          _fraction(-ENEMY_HIT_FRACTION, agents.PROP_DAMAGE, "an enemy swing")],
+         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"damage {dealt:.0f} to the player")
     print(f"[c{conn_id}] player hit by {agent_id}: "
           f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
@@ -2476,13 +2973,38 @@ def land_skill(send, state, agent_id, agent, conn_id):
     # `casting`. Removing this line breaks no check, and that was verified by
     # removing it. It stays because a stale slot index is a bad thing to leave
     # lying around for the next person who reads `casting` from somewhere else.
+    # THE DAMAGE IS THE CLIENT'S OWN NUMBER SINCE 2026-08-15. It was
+    # `PLAYER_HEALTH * ENEMY_SKILL_FRACTION` -- a flat quarter of the player's
+    # maximum for every skill on the bar, admitted invention. Now it is the
+    # skill's scale endpoints interpolated at ENEMY_SKILL_RANK by the client's
+    # own formula (studies/combat 12).
+    #
+    # MOST OF THIS BAR NO LONGER DAMAGES, and that is the correct answer rather
+    # than a regression. Three of its four skills are not damage skills:
+    # Restore Condition heals 10-70, Vital Blessing grants 40-200 maximum
+    # health, Scourge Sacrifice is a hex duration. The old flat fraction made
+    # all four hurt the player identically; dealing a heal's magnitude AS
+    # damage would be worse, not better. The player still dies to the ordinary
+    # swing (land_swing), which is what R4a's criterion ever rested on.
+    damage = skill_damage(skill_id, ENEMY_SKILL_RANK)
+    if damage is None:
+        agent["casting"] = None
+        print(f"[c{conn_id}] agent {agent_id} cast skill {skill_id}: no "
+              f"modelled effect (its scale is not damage -- see "
+              f"content/world.toml skill_effect)", flush=True)
+        return
+    dealt = float(damage[0])
+    # Guard before ANY mutation. This function's damage send was already its
+    # first send (the gate map's template for the others), but the cast slot
+    # and the player's health were consumed before the guard could refuse --
+    # a refused value would have cost real state for a message that never
+    # went out (test_guards section 4).
+    frac = _damage_fraction(dealt, float(agents.PLAYER_HEALTH),
+                            agents.PROP_DAMAGE, f"skill {skill_id}")
     agent["casting"] = None
-    dealt = float(agents.PLAYER_HEALTH) * ENEMY_SKILL_FRACTION
     state["player_health"] = max(0.0, state["player_health"] - dealt)
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id,
-          _fraction(-ENEMY_SKILL_FRACTION, agents.PROP_DAMAGE,
-                    f"skill {skill_id}")],
+         [agents.PROP_DAMAGE, PLAYER_AGENT_ID, agent_id, frac],
          f"skill {skill_id} deals {dealt:.0f} to the player")
     print(f"[c{conn_id}] player hit by skill {skill_id}: "
           f"{state['player_health']:.0f}/{agents.PLAYER_HEALTH}", flush=True)
@@ -2518,6 +3040,10 @@ def player_revive_due(send, state, conn_id):
     # faces the player after a revive. The day a dead player CAN be moved -- a
     # resurrection-shrine walk is exactly that -- this stops being true and the
     # reset has to go in.
+    # Guard before the flag flips, same as revive_due: a refused refill must
+    # leave the player DEAD so the next tick retries the whole revive
+    # (test_guards section 6).
+    frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
     state["player_dead"] = False
     state["player_health"] = float(agents.PLAYER_HEALTH)
     send(GAME_SMSG_AGENT_UPDATE_STATUS, [PLAYER_AGENT_ID, 0], "revive the player")
@@ -2542,8 +3068,7 @@ def player_revive_due(send, state, conn_id):
     # 1.0 is a full bar and not a doubled one. The client's own death path zeroes
     # the pools, so clearing the bit alone returns a body at nothing.
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
-          _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
+         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
          "refill the player's bar")
     print(f"[c{conn_id}] the player is back up", flush=True)
 
@@ -2557,13 +3082,15 @@ def agent_refill_due(send, state, conn_id):
         due = agent.get("refill_due_at")
         if not due or now < due:
             continue
+        # Guard before the timer is disarmed: a refused refill stays DUE and
+        # retries next tick (test_guards section 7).
+        frac = _fraction(1.0, agents.GV_HEALTH, f"refill agent {agent_id}")
         agent["refill_due_at"] = None
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
              [agents.PROP_HEALTH_MAX, agent_id, int(agent["max_health"])],
              f"restore max health on agent {agent_id} (deferred)")
         send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-             [agents.GV_HEALTH, agent_id, agent_id,
-              _fraction(1.0, agents.GV_HEALTH, f"refill agent {agent_id}")],
+             [agents.GV_HEALTH, agent_id, agent_id, frac],
              f"refill agent {agent_id}'s bar (deferred)")
 
 
@@ -2577,13 +3104,15 @@ def player_refill_due(send, state, conn_id):
     due = state.get("player_refill_due_at")
     if not due or time.time() < due:
         return
+    # Guard before the timer is disarmed, same as agent_refill_due
+    # (test_guards section 8).
+    frac = _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")
     state["player_refill_due_at"] = None
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_INT,
          [agents.PROP_HEALTH_MAX, PLAYER_AGENT_ID, agents.PLAYER_HEALTH],
          "restore the player's maximum (deferred)")
     send(GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET,
-         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID,
-          _fraction(1.0, agents.GV_HEALTH, "refill the player to a full pool")],
+         [agents.GV_HEALTH, PLAYER_AGENT_ID, PLAYER_AGENT_ID, frac],
          "refill the player's bar (deferred)")
     print(f"[c{conn_id}] deferred refill sent", flush=True)
 
@@ -4205,6 +4734,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # would look like a working ping loop in exactly the
                         # sessions nobody is testing it in.
                         ping_tick(send, state, conn_id)
+                        # The timed three quarters of every skill cycle
+                        # (E5/E3/E6), before the swings so a cast completing
+                        # this tick is visible to everything after it.
+                        cast_tick(send, state, conn_id)
                         attack_tick(send, state, conn_id)
                         revive_due(send, state, conn_id)
                         agent_refill_due(send, state, conn_id)
@@ -4471,37 +5004,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # no longer discards anything either. So this was a missing
                         # feature, which is reason enough to fix it.
                         #
-                        # Confirm the cast by echoing the key the client is
-                        # waiting on. If the echo is wrong the client says so in
-                        # its own log -- 'Pending skill %u copy %d not found' --
-                        # which makes this one of the few things in the project
-                        # that reports its own failure.
-                        which = ("USE_SKILL" if opcode == GAME_CMSG_USE_SKILL
-                                 else "ATTACK_SKILL")
-                        skill_id, copy, target = values[1], values[2], values[3]
-                        send(GAME_SMSG_SKILL_ACTIVATED,
-                             [PLAYER_AGENT_ID, skill_id, copy],
-                             f"SKILL_ACTIVATED(skill {skill_id}, copy {copy}"
-                             f" via {which})")
-                        print(f"[c{conn_id}] skill {skill_id} (copy {copy}) at "
-                              f"agent {target or 'nothing'}", flush=True)
-                        # TRIED AND IT DID NOT WORK, recorded so it is not
-                        # retried blind: sending generic values 60
-                        # (skill_activated) then 58 (skill_finished) here left
-                        # the cast exactly as stalled as before. They may still
-                        # be part of the answer -- they were never going to be
-                        # all of it -- but on their own they change nothing
-                        # visible, so they are out rather than sitting in the
-                        # code looking like they work. agents.py keeps the ids.
-                        #
-                        # Skill completion is being worked on a separate branch.
-                        # Do not build more of it here.
-                        # A skill aimed at something hostile does what a click
-                        # does. Whether a skill should damage at all, and by how
-                        # much, is OURS -- the client carries every real number
-                        # (studies/skills/FINDINGS.md) and we do not read it yet.
-                        if target:
-                            hit_enemy(send, state, target, conn_id)
+                        # The body lives in handle_skill_press so the
+                        # connection-thread combat path has tests that need no
+                        # socket. The dead-player guard stays HERE: it gates
+                        # whether the press means anything at all, and the arm
+                        # condition above is pinned by test_cmsgnames section 6.
+                        handle_skill_press(values, send, state, conn_id, opcode)
                     elif opcode in (GAME_CMSG_ATTACK_AGENT,
                                     GAME_CMSG_INTERACT_PLAYER):
                         # The player clicked something. Clicking a hostile
@@ -5237,9 +5745,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         player_attrs[PLAYER_ATTR_LEVEL] = START_LEVEL
                         send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,
                              f"CHARACTER_UPDATE_FACTIONS(level {START_LEVEL})")
+                        # REAL TRIPLES since 2026-08-15. This was
+                        # `[0] * ATTRIBUTE_COUNT` -- fourteen (0,0,0) triples,
+                        # i.e. fourteen writes of rank 0 to attribute 0, which
+                        # the client accepted in silence. See attribute_triples.
+                        triples = attribute_triples()
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
-                             [PLAYER_AGENT_ID, [0] * ATTRIBUTE_COUNT],
-                             "AGENT_UPDATE_ATTRIBUTES")
+                             [PLAYER_AGENT_ID, triples],
+                             f"AGENT_UPDATE_ATTRIBUTES"
+                             f"({len(triples) // 3} attributes: "
+                             + ", ".join(f"{a}={r}" for a, r
+                                         in agents.PLAYER_ATTRIBUTE_RANKS)
+                             + ")")
                         # The player's own pools, which we had never sent. See
                         # agents.py: the enemy got a health pool the day it was
                         # spawned and the player never got one, so every skill

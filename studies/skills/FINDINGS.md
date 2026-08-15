@@ -946,7 +946,7 @@ re-skinning, not a technical obstacle.
 | Energy, adrenaline, health cost | PE row `0x34-0x38` | **No** |
 | Activation, aftercast, recharge | PE row `0x3c`, `0x40`, `0x4c` | **No** |
 | Attribute, profession, type, elite flag | PE row `0x28`, `0x29`, `0x0c`, `0x10` | **No** |
-| Rank-0/rank-15 scaling shown in the tooltip | PE row `0x44`-`0x68` | **No** |
+| Rank-0/rank-15 scaling shown in the tooltip | PE row `0x44`-`0x68` | **Yes, 2026-08-14** — `skilltable.py`, whole window bar `+0x50` (§4) |
 | Animation ids | PE row `0x74`-`0x88` | **No** |
 | Whether the id exists at all | PE table length at row 0 `+0x2c` | **No** |
 
@@ -1373,6 +1373,34 @@ But the bit alone is not the rule. MEASURED:
 **A value renders green when its set is enabled AND its two endpoints differ.**
 Defy Pain's duration is enabled but constant at 20→20, so it prints without being
 green — which is exactly the missing second green number.
+
+**[OBSERVED/CORROBORATED] 2026-08-14 — this table is now reproducible by a
+script, and a third witness agrees with all of it.** For two days these four rows
+were the only reading of `+0x44`..`+0x68` in the repo and **nothing here could
+regenerate them**; `skilltable.py` decoded exactly one field inside the window
+(recharge, `+0x4C`). It now decodes the whole window as u32 — `duration0/15`
+(`+0x44`/`+0x48`), `skill_arguments` (`+0x58`), `scale0/15` (`+0x5C`/`+0x60`),
+`bonus_scale0/15` (`+0x64`/`+0x68`) — and reproduces every number above
+byte-exact (`test_skilltable.py` §7, which also asserts the green rule rather
+than leaving it as prose). `+0x50` stays **NOT FOUND**: neither upstream source
+names it and nothing here resolves it.
+
+The third witness is GWW, crawled 2026-08-14, which shares no author, code or
+ancestry with either the client binary or Tyria-Extractor's spec. Every endpoint
+its `{{Skill progression}}` templates list matches (§8):
+WIKI (GWW, "Defy Pain", rev. 2026-08-14) `+ Maximum health` 90→300 and
+`Damage reduction` 1→10, with duration absent from the progression because the
+description says a flat "For 20 seconds";
+WIKI (GWW, `"To the Limit!"`) `Max foes` 1→6, `Duration` 10→20,
+`+ Max health` 10→60; WIKI (GWW, "Power Attack") `+ Damage` 10→40;
+WIKI (GWW, "Rush") `Duration` 8→20.
+
+**Rush is the row that proves the bitfield is load-bearing.** Its scale slot
+holds **25** — the constant in "move 25% faster" — with its scale bit CLEAR, and
+the wiki lists no scale progression for it. A decode that read endpoints and
+skipped `skill_arguments` would invent a green the game does not draw, so the
+test checks both directions: every listed endpoint must match, and no unlisted
+set may render.
 
 ## 5. Two corrections to §1
 

@@ -1880,6 +1880,30 @@
     "name": "MAP_EXPLORATION_INIT_BEGIN",
     "why": "MAP_EXPLORATION_INIT_BEGIN -- the DECLARE half of the two-message stream that seeds a character's explored-area bitmap on entering an instance. Handler body 0x00811B30..0x00811BDE: writes accumMapInitDims = (f1, f2) to ctx+0x50/+0x54, sizes the Array at ctx+0x44 to f3 BYTES, zeroes accumMapInitOffset (+0x58), and if f3 == 0 expands immediately at 0x00811BD6. ArenaNet's own token for the field it fills is accumMapInitDims (ChCliApi:77 @ 0x0081756C). Wire: 8 live occurrences, once per instance at t = 0.58-0.73 s, and it IMMEDIATELY PRECEDES its 0x008A 8 of 8. f1 is dims.x, settled from the wire independently of the disassembly: the pair is (64, 128) on 8 of 8 and only 64 % 32 == 0 satisfies ChCliApi:77 in that slot; read as (y, x) the grid would be 128 wide and continent 1 is 83 blocks tall, which does not fit. The grid is CONTINENT-ABSOLUTE, not per-map. Established twice from opposite ends with the rival answers withheld (rung S8), agreeing on every VA and all five live counts. NAME CONFIDENCE is high on the operative token and NOT on the prefix: accumMapInit* is ArenaNet's, BEGIN is our word for the declare half, and `asserts.py --grep '(?i)explor'` returns 0 of 19,758 readable sites -- the client never says 'exploration', nor 'fog'. studies/minimap/FINDINGS.md 4.2.",
     "name_confidence": "high"
+   },
+   "227": {
+    "opcode": 227,
+    "name": "SKILL_ACTIVATED",
+    "why": "The confirmation of a cast the CLIENT initiated: the client matches it against the pending entry it created at USE_SKILL and says so in its own log when the echo is wrong ('Pending skill %u copy %d not found', VA 0x00823090). All 6 live occurrences name the player, and it sits third in the observed answer cycle E4->E5->E3->E6, 6/6 complete cycles across both captures. Class: skill. studies/combat/PLAN.md section 1 H1 and section 6.",
+    "name_confidence": "high"
+   },
+   "228": {
+    "opcode": 228,
+    "name": "SKILL_ACTIVATED_BROADCAST",
+    "why": "How you see OTHER people cast: the receive handler compares the named agent against your own and RETURNS EARLY on a match (measured in build 38797; pinned at test_agentlife.py). On the wire it is broadcast uniformly -- all 7 live occurrences name the receiving connection's OWN player agent, verified two independent ways (first 0x0037 at load; 0x0022 [agent,3]), so the real server relies on the client-side self-discard. First in the cycle, ~34-54ms after the c2s press. studies/combat/PLAN.md section 6, 0a.",
+    "name_confidence": "high"
+   },
+   "229": {
+    "opcode": 229,
+    "name": "SKILL_RECHARGE",
+    "why": "Activation completes and recharge starts; the trailing dword is the recharge in WHOLE SECONDS and is the first client-side skill constant ever checked against ArenaNet: the live values {153:8, 105:6, 394:3} matched the client table's +0x4C on exactly 1 of 41 dword columns (studies/reconstruction/FINDINGS.md 2.9.2, which recommended this promotion with ArenaNet's own traffic as the independent leg). Second in the cycle, at cast completion.",
+    "name_confidence": "high"
+   },
+   "230": {
+    "opcode": 230,
+    "name": "SKILL_RECHARGED",
+    "why": "Recharge ends: fires at E5 + recharge to within 13.7ms on ALL 6 complete cycles across both captures (spread -0.3ms..+13.7ms); the rival hypotheses -- keyed to cast-end, or tick-quantised -- were checked against every cycle and fit none. Zero E5s lack a matching E6. studies/combat/PLAN.md section 6, 0b.",
+    "name_confidence": "high"
    }
   }
  }

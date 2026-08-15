@@ -638,6 +638,15 @@ PLAYER_ENERGY = _PLAYER["energy"]
 PLAYER_HEALTH = _PLAYER["health"]
 PLAYER_FLOAT_43 = _PLAYER["float_43"]
 
+# The player's attribute ranks, as (attribute_id, rank) pairs. The IDS are the
+# client's own s_attrib indices (attribtable.py); the RANKS are invented and
+# the content row says so -- nothing in the vault can source them, because
+# 0x003A never appears in a live capture and no c2s spend opcode was found.
+# Tuples rather than the TOML's lists so a caller cannot mutate the module's
+# copy, which is the same reason ENEMY_SKILLS is a tuple of tuples.
+PLAYER_ATTRIBUTE_RANKS = tuple(
+    (int(a), int(r)) for a, r in WORLD.get("player", "attributes")["ranks"])
+
 
 # ------------------------------------------------- what an agent WIELDS
 #

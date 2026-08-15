@@ -38,8 +38,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.dirname(HERE))
 from skilltable import (  # noqa: E402
-    RECORD_SIZE, decode_energy, displayed_adrenaline, locate_table,
-    parse_record, player_corpus,
+    RECORD_SIZE, build_of, decode_energy, displayed_adrenaline, emit_content,
+    locate_table, parse_record, player_corpus,
 )
 import checks  # noqa: E402
 import pinned  # noqa: E402
@@ -78,6 +78,46 @@ WIKI_ADRENALINE = {
     2213: 4, 2685: 10, 2732: 8, 2214: 6, 2759: 4,
 }
 
+# WIKI (GWW), crawled 2026-08-14 via the browser (action=raw wikitext), for
+# the scaling window +0x44..+0x68. The THIRD witness for these values: the
+# wiki shares no author, code or ancestry with either the client binary or
+# Tyria-Extractor's spec, so wiki + client agreeing is real corroboration
+# rather than one lineage wearing two hats. Each skill's
+# `{{Skill progression}}` template, verbatim:
+#
+#   318 Defy Pain      var1 "+ Maximum health" 90->300, var2 "Damage
+#                      reduction" 1->10. Duration is NOT a progression var --
+#                      the description says a flat "For 20 seconds".
+#   322 Power Attack   var1 "+ Damage" 10->40.
+#   316 "To the Limit!" var1 "Max foes" 1->6, var2 "Duration" 10->20,
+#                      var3 "+ Max health" 10->60.
+#   319 Rush           var1 "Duration" 8->20. Nothing else scales: the
+#                      description's "move 25% faster" is a CONSTANT, and the
+#                      client's scale slot holds exactly 25 with its bit
+#                      clear -- which is why the bitfield is consulted and not
+#                      just the endpoints.
+#
+# Stored as (duration0, duration15, scale0, scale15, bonus0, bonus15) against
+# our decode's field order, with None where the wiki lists no progression var
+# for that set. A pinned crawl, not a live fetch: the suite must run on a bare
+# machine with no network.
+WIKI_PROGRESSION = {
+    318: (None, None, 90, 300, 1, 10),
+    322: (None, None, 10,  40, None, None),
+    316: (10, 20, 10, 60, 1, 6),
+    319: (8, 20, None, None, None, None),
+}
+
+# ...and the same crawl's costs and timings, which the window sections do not
+# cover: (energy, adrenaline, recharge). None where the infobox omits the key
+# (a skill carries only the cost keys that apply to it).
+WIKI_COSTS = {
+    318: (None, 5, None),
+    322: (5, None, 3),
+    316: (5, None, 10),
+    319: (None, 4, None),
+}
+
 # WIKI (GWW), same crawl: every skill the wiki shows at 15 and at 25 energy.
 # The client is claimed to store these as the encoded bytes 11 and 12.
 WIKI_ENERGY_15 = {
@@ -96,15 +136,18 @@ WIKI_ENERGY_25 = {
     3013, 3009, 1592,
 }
 
-# FLOOR 18 = every check this file executes on a real client binary, counted
-# from a green run on 2026-08-06 against Gw.exe: 3 structural (§1) + 4 corpus
+# FLOOR 46 = every check this file executes on a real client binary, counted
+# from a green run on 2026-08-14 against Gw.exe: 3 structural (§1) + 4 corpus
 # (§2) + 5 wiki joins (§3: two adrenaline, one rival-rule refutation, and the
-# 15/25-energy pair) + 4 text-resolution (§4) + 2 build counts (§5). None of
-# them is conditional once the binary opens, so a run that reports fewer has
-# lost a section rather than passed -- which is exactly the failure §3 would
-# hide, since dropping the wiki join is what turns this file back into our
-# decoder agreeing with itself.
-LEDGER = checks.Ledger("skill table", floor=18)
+# 15/25-energy pair) + 4 text-resolution (§4) + 2 build counts (§5) + 8
+# content-emitter checks (§6, added with --emit-content) + 8 scaling-window
+# checks (§7: 4 endpoint reproductions + 4 green-render-rule) + 12 wiki
+# third-witness checks (§8: 4 endpoint joins, 4 no-unlisted-green, 4 costs). None of them is
+# conditional once the binary opens, so a run that reports fewer has lost a
+# section rather than passed -- which is exactly the failure §3 would hide,
+# since dropping the wiki join is what turns this file back into our decoder
+# agreeing with itself.
+LEDGER = checks.Ledger("skill table", floor=46)
 check = checks.adopt(LEDGER)
 
 
@@ -220,6 +263,144 @@ def main():
     check(len(corpus) == EXPECTED_CORPUS,
           f"{EXPECTED_CORPUS} player-corpus rows (got {len(corpus)}) -- this is "
           f"also Tyria-Extractor's independent count")
+
+    print("\n6. the content emitter: server rows, stamped from the bytes")
+    import tempfile
+    import tomllib
+    build = build_of(data)
+    check(build == 38797,
+          f"the build stamp is DERIVED from the image's sha256 (got {build}) "
+          f"-- never typed in, so a wrong exe cannot stamp a plausible row")
+    check(build_of(b"not a client image") is None,
+          "an image matching no pristine build stamps nothing",
+          "the emitter refuses instead -- a row with a guessed build survives "
+          "every later audit, which is worse than no row")
+    with tempfile.TemporaryDirectory() as td:
+        out = os.path.join(td, "skills.toml")
+        n = emit_content(rows, sorted(corpus), build, args.exe, out)
+        with open(out, "rb") as fh:
+            doc = tomllib.load(fh)
+        skills = doc["skills"]
+        check(n == len(corpus) and len(skills) == n,
+              f"one TOML table per corpus skill ({n})")
+        # The three skills ArenaNet's own wire corroborated
+        # (studies/reconstruction/FINDINGS.md 2.9.2: the 0x00E5 field matched
+        # +0x4C on exactly 1 of 41 columns; activation/aftercast sit beside
+        # it). Pinned as LITERALS -- wire and table must both move for these
+        # to change.
+        for sid, act, aft, rech in (("153", 1.0, 0.75, 8),
+                                    ("105", 2.0, 0.75, 6),
+                                    ("394", 0.0, 0.0, 3)):
+            r = skills[sid]
+            check((r["activation"], r["aftercast"], r["recharge"])
+                  == (act, aft, rech),
+                  f"skill {sid} emits ({act}, {aft}, {rech}) -- the "
+                  f"live-corroborated trio",
+                  f"got ({r['activation']}, {r['aftercast']}, {r['recharge']})")
+        prov = skills["153"]["provenance"]
+        check(prov["source"] == "client-table"
+              and prov["extractor"] == "toolkit/clientscan/skilltable.py"
+              and prov["build"] == 38797,
+              "every row carries the gate's two conditions: extractor named, "
+              "build recorded")
+        # And the gate itself agrees: the row loads through content.py's
+        # provenance check rather than merely looking like it would.
+        sys.path.insert(0, os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "..", ".."))
+        sys.path.insert(0, os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), ".."))
+        import content
+        row = dict(skills["153"])
+        content._check_provenance("skills", "153", row)
+        check(True, "content.py's client-table gate accepts an emitted row")
+
+    print("\n7. the rank-0/rank-15 scaling window reproduces the anecdote")
+    # studies/skills/FINDINGS.md section 4, the only in-repo ground truth for
+    # +0x44..+0x68: four skills the owner read off the live client, endpoint
+    # for endpoint. Pinned as LITERALS -- these are what the client draws, and
+    # a decode that drifts must go red against them, not move with them.
+    # (id: args, dur0, dur15, scale0, scale15, bonus0, bonus15)
+    ANECDOTE = {
+        318: (7, 20, 20, 90, 300, 1, 10),   # Defy Pain
+        322: (2,  0,  0, 10,  40, 0,  0),   # its clone (scale set only)
+        316: (7, 10, 20, 10,  60, 1,  6),   # "To the Limit!"
+        319: (1,  8, 20, 25,  25, 0,  0),   # Rush (duration set only)
+    }
+    for sid, want in ANECDOTE.items():
+        r = by_id[sid]
+        got = (r["skill_arguments"], r["duration0"], r["duration15"],
+               r["scale0"], r["scale15"], r["bonus_scale0"], r["bonus_scale15"])
+        check(got == want,
+              f"skill {sid} window == the owner's live reading",
+              f"got {got}, want {want}")
+    # The green-render rule the anecdote establishes, as an assertion rather
+    # than prose: a set renders green when its bit is set AND its endpoints
+    # differ. Defy Pain's duration bit is set but 20==20, so exactly its
+    # scale and bonus render -- two greens, which is the whole thing the
+    # owner noticed was missing on the clone.
+    def greens(r):
+        bits = r["skill_arguments"]
+        n = 0
+        n += bool(bits & 1) and r["duration0"] != r["duration15"]
+        n += bool(bits & 2) and r["scale0"] != r["scale15"]
+        n += bool(bits & 4) and r["bonus_scale0"] != r["bonus_scale15"]
+        return n
+    for sid, want_green in ((318, 2), (322, 1), (316, 3), (319, 1)):
+        check(greens(by_id[sid]) == want_green,
+              f"skill {sid} renders {want_green} green value(s) by the "
+              f"enabled-and-differing rule",
+              f"got {greens(by_id[sid])}")
+
+    print("\n8. the wiki, the third witness for the scaling window")
+    # This is section 3's argument applied to the window: the anecdote above
+    # and the client are OUR reading of OUR artifact. GWW is twenty years of
+    # players reading the game screen, with no ancestry in our code, our
+    # captures, or Tyria-Extractor's spec -- so agreement here is
+    # CORROBORATION and disagreement is a real finding.
+    for sid, want in WIKI_PROGRESSION.items():
+        r = by_id[sid]
+        got = (r["duration0"], r["duration15"], r["scale0"], r["scale15"],
+               r["bonus_scale0"], r["bonus_scale15"])
+        # Compare only the sets the wiki actually lists a progression var
+        # for; a None means "the wiki says this does not scale", which the
+        # bitfield check below is what tests.
+        pairs = [(g, w) for g, w in zip(got, want) if w is not None]
+        check(all(g == w for g, w in pairs) and len(pairs) >= 2,
+              f"skill {sid}: every endpoint the wiki lists matches the "
+              f"client's window ({len(pairs)} value(s))",
+              f"client {got} vs wiki {want}")
+        # And the other direction: a set the wiki does NOT list must have its
+        # bit clear or its endpoints equal -- otherwise we would be decoding
+        # a green the game does not draw. Rush is the sharp case: its scale
+        # slot holds 25 ("move 25% faster") with the bit clear.
+        bits = r["skill_arguments"]
+        unlisted_render = []
+        for (bit, lo, hi, nm) in ((1, "duration0", "duration15", "duration"),
+                                  (2, "scale0", "scale15", "scale"),
+                                  (4, "bonus_scale0", "bonus_scale15",
+                                   "bonus")):
+            idx = {"duration": 0, "scale": 2, "bonus": 4}[nm]
+            if want[idx] is None and (bits & bit) and r[lo] != r[hi]:
+                unlisted_render.append(nm)
+        check(not unlisted_render,
+              f"skill {sid}: no set renders green that the wiki does not list",
+              f"would render {unlisted_render} -- args={bits}, "
+              f"window={got}")
+
+    for sid, (energy, adrenaline, recharge) in WIKI_COSTS.items():
+        r = by_id[sid]
+        wrong = []
+        if energy is not None and r["energy"] != energy:
+            wrong.append(f"energy {r['energy']} vs {energy}")
+        if adrenaline is not None and r["adrenaline"] != adrenaline:
+            wrong.append(f"adrenaline {r['adrenaline']} vs {adrenaline}")
+        if recharge is not None and r["recharge"] != recharge:
+            wrong.append(f"recharge {r['recharge']} vs {recharge}")
+        check(not wrong,
+              f"skill {sid}: the wiki's costs and recharge match the table",
+              "; ".join(wrong) if wrong else
+              f"energy={r['energy']}, adrenaline={r['adrenaline']}, "
+              f"recharge={r['recharge']}")
 
     return LEDGER.verdict()
 

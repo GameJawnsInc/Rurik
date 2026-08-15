@@ -571,9 +571,49 @@ rather than a design choice.
 
 ---
 
-**L6 — The wire.** Fix `authsrv.py`'s `0x003A` payload to emit `ceil(N/16)` messages of
-triples rather than one array of `[0] * 42`, per §1.2. Independent of every rung above;
+**L6 — The wire.** ~~Fix `authsrv.py`'s `0x003A` payload to emit `ceil(N/16)` messages of
+triples rather than one array of `[0] * 42`, per §1.2.~~ Independent of every rung above;
 sequenced last only because nothing else depends on it.
+
+> **🔶 THE SERVER-SIDE HALF LANDED 2026-08-15**, in the combat arc rather than this
+> one — [studies/combat/PLAN.md](../combat/PLAN.md) §11, commit `1339bfe`. What that
+> arc needed from L6 was ranks on the wire so skill damage could scale by them, so it
+> built the emission and left this ladder's client-side work alone.
+>
+> **Delivered:** `0x003A` carries real triples — `(attrib, rank, rank)` — built through
+> a guard that refuses rather than clamps on every bound the client itself asserts
+> (`CHAR_ATTRIBS` 51, rank ≤ 12 per `AcctTemplate:441`, ≤ 16 triples, no duplicate id).
+> Two of the three slots now carry **ArenaNet's own names**, from the client's compiled
+> asserts: slot 1 is `attrib` and slot 2 is `baseValue`, the latter tied to that exact
+> slot by its assert's own arithmetic `[record + attrib*20 + 8]` (combat §8a). Slot 3
+> stays NOT NAMED and the call site says so.
+>
+> **AND ONE THING THIS DOCUMENT GOT WRONG IS NOW SETTLED.** §1.2 and §3 treat the
+> attribute numbering as contested — contiguous 0–41 against a gapped 0–44 with ids
+> 26/27/28 reserved. **Neither is wrong; they answer different questions**, and reading
+> the client's own `s_attrib` table shows both at once (combat §10, `toolkit/clientscan/
+> attribtable.py`): the **index space is contiguous 0..50**, 51 rows, no gaps — that is
+> what the wire is bound-checked against — while **42 is the count the ten playable
+> professions own**, which is what OpenTyria's `Attribute_Count` counts. The other 9
+> rows belong to profession 11, and three of them are 26/27/28, sitting immediately
+> before Dagger Mastery at 29 — which is exactly the "+3 offset" the gapped scheme
+> described. **So the emission uses contiguous ids, not gapped ones.**
+>
+> **Deliberately NOT delivered, and still this ladder's work:** the `s_attrib` WRITES
+> and the table relocation (L1–L5, including the open pre-L6 write-safety question at
+> [FINDINGS.md](FINDINGS.md):1277 — that concerns client-side patching and does not
+> block a server-side emission); the `ceil(N/16)` BATCHING, which combat measured it
+> does not need — the `array32` is declared at 48 elements = 16 triples and
+> `AcctTemplate:423` bounds a build template at `attribCount < 16`, so **one message
+> always suffices for a real character** (primary + secondary is at most ten
+> attributes) and batching is a custom-table problem, not a wire one; and anything
+> above 51 ids.
+>
+> **Still unverified:** that the attribute PANEL displays what is sent. The write chain
+> and the panel's read chain provably share one record, one locator and one
+> TLS-resolved manager (combat §8b, ending in `AttribBtns.cpp` vtable code), but the
+> control's runtime agent binding is not a byte pattern. `--probe attributes` is
+> written for it and has not been run.
 
 ---
 
