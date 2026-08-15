@@ -150,13 +150,65 @@ choosing a row whose payload can absorb the write — or accepting one broken ma
 **That trade is the owner's, not a session's**, and it is recorded in
 [studies/recon/FINDINGS.md](../recon/FINDINGS.md) §8 LANE C item 1. The two shapes:
 
-- **Arm a row whose stream is stored uncompressed**, so the marker is inert. Costs a search
-  for such a row and possibly finds none of useful size.
+- ~~**Arm a row whose stream is stored uncompressed**, so the marker is inert. Costs a search
+  for such a row and possibly finds none of useful size.~~
 - **Accept one broken map** on a copy that is otherwise played from. Costs a map, and risks
   the client asserting in a way that contaminates an unrelated session — which is precisely
   the failure `--enemy` was defaulted off to prevent.
 
-Until one is chosen, rung 6 is **armed and documented but not deliverable**, and this
+### 4a. The first shape does not exist, and the second is unnecessary — MEASURED 2026-08-15
+
+The search that bullet hypothesised was run. **It finds none, and not "none of useful size"
+— none at all.** MEASURED on `vault/run/2026-08-13_64fae3b1369b/Gw.dat`, the archive a
+loopback client actually opens (177,752 rows):
+
+| | |
+|---|---:|
+| Map-flagged rows (`flags == 259`) | 361 |
+| …of which stored uncompressed (`compression == 0`) | **0** |
+| Median map row | 961,088 B |
+
+Every map in the archive is huffman-compressed, so **there is no map whose payload can
+absorb an inert marker.** The uncompressed rows that do exist are almost all far too small
+to be one, and the three that are not are structural:
+
+| Uncompressed row size | Count |
+|---|---:|
+| < 64 B | 26,487 |
+| 64–255 B | 11,247 |
+| 256 B – 1 KB | 945 |
+| ≥ 1 KB | **3** — rows 2 (the file-id table, 1,369,664 B), 3 (4,266,072 B), and 34113 (1,412 B) |
+
+Row 2 is the file-id table every lookup in this repo goes through; writing a tracer into it
+would not be a durability experiment, it would be sabotage of the index. So the first shape
+is **REFUTED**, and a reader sent looking for an uncompressed map row is being sent after
+something that is not there.
+
+**And the second shape is not needed either, because §4b already did this properly without
+breaking anything.** `deploy.py --area sculpt --install` writes a genuine, loadable authored
+map into a run archive — real content with a correct crc, not 25 bytes scribbled into a
+compressed stream — and §4b then measured it surviving a play session in which the client
+demonstrably rewrote the archive. `DURABILITY.md` §3.1 said this in advance (*"the tracer
+must be re-made as something a client can load — an authored map via `mapbuild`, not a
+corrupted row"*) and the tooling has since been proven twice (§4b, §4c). **The broken map
+was an artifact of how the tracer was first staged, never a requirement of the experiment.**
+
+**So the trade the owner was asked to make is not the trade that exists.** What remains is
+one question and it is about account posture rather than archives: the only client whose
+updater is enabled is the LIVE build, because a live session must stream content
+(`CLAUDE.md`'s launch rule, `RUNBOOK.md` §"a live run writes new content into its own
+`Gw.dat`"). The loopback build's updater is killed on purpose. So a patch can only reach an
+archive holding our authored map if that archive is the one a live, updater-enabled client
+opens — which means a live session against ArenaNet with a modified `Gw.dat`. That is route
+A of §2, it is `PLAN.md` §6.2's territory, and it is still the owner's call.
+
+Its cost is smaller than the staging implies, and worth stating so the decision is made
+against the real price: **the updater runs at launch**, so launching, letting it patch and
+quitting is plausibly sufficient — no play session, no combat, nothing that loads the armed
+map. UNVERIFIED that a launch-and-quit alone triggers a content patch; nobody has tried it,
+and it should be predicted-then-measured like anything else rather than assumed.
+
+Until that call is made, rung 6 is **armed and documented but not deliverable**, and this
 document says so rather than letting the green half imply the whole.
 
 ---
@@ -1233,3 +1285,6 @@ reverts, and it caught me inside an hour.
 | ~~`archive.py` and `datcheck.py` number MFT rows differently, off by one~~ | **REFUTED** 2026-08-14 — all 24 bytes of every row agree on all ten vault archives; pinned by `test_archive.py` §1c. The number that differs is `len(entries)` vs `row_count`. §4b.1 |
 | There is ONE row convention, ArenaNet's raw MFT index, and every reader and every recorded constant is in it | **OBSERVED** — 10 archives by an independent `struct` walker; 65 recorded constants ≥ 16 re-resolved in both conventions, 26 map-flagged under `row(N)` and 1 under `entries[N]`, zero overlap |
 | Rung 6 is deliverable | **NOT FOUND** — no update can reach this copy (§4) |
+| A map row exists whose stream is stored uncompressed, so a marker could be inert | **REFUTED** — §4a, 0 of 361 map rows on the run archive; every map is huffman-compressed. The three uncompressed rows ≥1KB are structural, one being the file-id table itself |
+| Arming the experiment requires breaking a map | **REFUTED** — §4a. `deploy.py --area sculpt --install` writes a real loadable map, proven twice (§4b, §4c). The broken map was an artifact of the first staging, not a requirement |
+| Rung 6's open question is which row to arm | **REFUTED** — §4a. It is whether a live, updater-enabled client may open a modified archive (route A, `PLAN.md` §6.2). An account-posture call, not an archive one |
