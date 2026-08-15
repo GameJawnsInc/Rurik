@@ -2201,9 +2201,26 @@ Every one of these, in the order they were written:
   quietly smaller and the run FASTER, which reads as success and is the same defect as
   (1) from a third side — and both cache-read failures (missing, corrupt) must yield
   `{}`, because a malformed HINT must degrade the packing and never stop the run. No
-  vault, no socket, no client; the halves under test are pure functions over a string,
-  a tree and a dict, so testing the thing that spawns 94 processes spawns none. 33
-  checks, ~2 s),
+  **Section 7 is `--since`, the only feature in the runner that can make the suite
+  SMALLER**, so both of its failure modes are reproduced rather than reasoned about.
+  Under-selection is the dangerous one — a fast green run over exactly the code that
+  moved — and over-selection is the one that makes the feature pointless, which is how
+  it gets switched off. Dependencies come from a real graph: `ast` imports, plus SPAWN
+  edges, because `test_handshake.py` does not import `authsrv.py`, it launches it as a
+  subprocess, and an import-only graph leaves it unselected when the server changes.
+  **Spawn edges are read from non-docstring string literals, and the docstring control
+  is what keeps that honest**: scanning raw source text instead put a one-decoder
+  change at **90 of 94 tests** (MEASURED 2026-08-14, this repo cites modules in prose
+  constantly); restricting the scan put the same change at 22. The refusals are the
+  other half — a `content/*.toml` or `CLAUDE.md` change ESCALATES to the full suite
+  rather than guessing, because those are read at run time by tests that never import
+  them and no graph can see the edge; one such file among Python ones still forces the
+  full run; and a diff git could not produce is a full run, not an empty one, which is
+  why `changed_since` returns `None` and never `set()`. A green partial run exits
+  **3, never 0**. No vault, no socket, no client; the halves under test are pure
+  functions over a string, a tree and a dict, so testing the thing that spawns 94
+  processes spawns none — section 7 builds a synthetic `toolkit/` and the one check
+  that touches a real repo only asks git to reject a bogus ref. 43 checks, ~2 s),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
   a live session on 2026-08-10. It also pins the checker's own vacuity failure — the

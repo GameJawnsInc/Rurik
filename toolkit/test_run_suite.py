@@ -15,15 +15,17 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT_FOR_GIT = os.path.dirname(HERE)      # the only check here that touches a real repo
 sys.path.insert(0, HERE)
 import checks  # noqa: E402
 import run_suite as rs  # noqa: E402
 
-# Floor 33, MEASURED from a green run: 27 on 2026-08-13, plus section 6's six when the
-# runner learned to schedule a pool on 2026-08-14. Every check is unconditional and
-# builds its own fixtures, so there is no vault-less variant and no declared skip: a
-# score under the floor means a section crashed.
-LEDGER = checks.Ledger("run_suite: the suite runner's own counting", floor=33)
+# Floor 43, MEASURED from a green run: 27 on 2026-08-13, plus section 6's six when the
+# runner learned to schedule a pool on 2026-08-14, plus section 7's ten when it learned
+# to select by diff the same day. Every check is unconditional and builds its own
+# fixtures, so there is no vault-less variant and no declared skip: a score under the
+# floor means a section crashed.
+LEDGER = checks.Ledger("run_suite: the suite runner's own counting", floor=43)
 
 
 def section_banner_not_last():
@@ -303,6 +305,108 @@ def section_scheduling():
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def fake_tree(files):
+    """A throwaway repo root holding `toolkit/` with the given {relpath: source}."""
+    root = tempfile.mkdtemp(prefix="rurik-suite-sel-")
+    for rel, src in files.items():
+        path = os.path.join(root, rel.replace("/", os.sep))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(src)
+    return root
+
+
+def section_selection():
+    """`--since`, and the two ways a change-scoped run lies about coverage.
+
+    Selection is the only feature here that can make the suite SMALLER, so both of its
+    failure modes are reproduced rather than reasoned about. Under-selection is the
+    dangerous one -- it looks like a fast green run over exactly the code that moved --
+    and over-selection is the one that makes the feature pointless, which is how it
+    gets switched off and stops protecting anything.
+
+    Both numbers below were MEASURED on this repo on 2026-08-14, not imagined: scanning
+    raw source text for `<name>.py` put a one-decoder change at **90 of 94 tests**,
+    because this repo's docstrings cite modules constantly; restricting the scan to
+    non-docstring string literals put the same change at 22.
+    """
+    print("\n7. --since selects by dependency, and refuses when it cannot see the edge")
+    root = fake_tree({
+        "toolkit/checks.py": "def ok(*a, **k):\n    pass\n",
+        "toolkit/leaf.py": "VALUE = 1\n",
+        "toolkit/middle.py": "import leaf\n",
+        "toolkit/server.py": "def serve():\n    pass\n",
+        "toolkit/quoted.py": "X = 2\n",
+        # imports middle, which imports leaf: the transitive case
+        "toolkit/test_chain.py": "import checks\nimport middle\n",
+        # never imports server.py -- it LAUNCHES it, the edge an import graph misses
+        "toolkit/test_spawn.py": ('import checks\nimport subprocess\n'
+                                  'subprocess.run(["python", "toolkit/server.py"])\n'),
+        # only MENTIONS quoted.py, in a docstring: prose, not a dependency
+        "toolkit/test_prose.py": ('"""Unlike toolkit/quoted.py, which does it wrong."""\n'
+                                  'import checks\n'),
+    })
+    try:
+        tests = rs.find_tests(root)
+        graph = rs.dep_graph(root)
+
+        sel, _ = rs.affected({"toolkit/leaf.py"}, tests, root, graph)
+        LEDGER.ok(sel == {"toolkit/test_chain.py"},
+                  "a transitive import selects: test_chain imports middle imports leaf",
+                  f"selected {sorted(sel)}")
+
+        sel, _ = rs.affected({"toolkit/server.py"}, tests, root, graph)
+        LEDGER.ok(sel == {"toolkit/test_spawn.py"},
+                  "a SPAWNED module selects the test that launches it without importing "
+                  "it", f"selected {sorted(sel)} -- an import-only graph selects nothing "
+                        f"here, and test_handshake.py launches authsrv.py exactly so")
+
+        # THE CONTROL for the check above. Without it, the spawn rule could be a plain
+        # text search and still pass -- and a plain text search is the 90-of-94 defect.
+        sel, _ = rs.affected({"toolkit/quoted.py"}, tests, root, graph)
+        LEDGER.ok(sel == set(),
+                  "but a DOCSTRING citation of a module is prose and selects nothing",
+                  f"selected {sorted(sel)} -- scanning raw source instead put one "
+                  f"decoder change at 90 of 94 tests on the real tree")
+
+        sel, _ = rs.affected({"toolkit/checks.py"}, tests, root, graph)
+        LEDGER.ok(sel == set(tests),
+                  "a module every test imports selects every test",
+                  f"{len(sel)} of {len(tests)}")
+
+        sel, _ = rs.affected({"toolkit/test_prose.py"}, tests, root, graph)
+        LEDGER.ok(sel == {"toolkit/test_prose.py"},
+                  "a changed TEST selects itself and nothing else")
+
+        sel, _ = rs.affected(set(), tests, root, graph)
+        LEDGER.ok(sel == set(),
+                  "an empty diff selects nothing rather than everything",
+                  "main() turns this into exit 2 and a coverage statement, never a pass")
+
+        # THE REFUSAL. content/*.toml, schema/*.json and CLAUDE.md are read at RUN time
+        # by tests that never import them, so no graph can see the edge.
+        sel, why = rs.affected({"content/npcs.toml"}, tests, root, graph)
+        LEDGER.ok(sel is None and "run time" in why,
+                  "a non-Python change ESCALATES to the full suite instead of guessing",
+                  f"reason: {why}")
+        sel, why = rs.affected({"toolkit/leaf.py", "CLAUDE.md"}, tests, root, graph)
+        LEDGER.ok(sel is None,
+                  "and one such file among Python ones still forces the full run",
+                  "the escalation is not outvoted by the changes it can resolve")
+
+        LEDGER.ok(rs.affected(None, tests, root, graph)[0] is None,
+                  "a diff git could not produce is a FULL run, not an empty one",
+                  "None and set() take different paths on purpose")
+    finally:
+        import shutil
+        shutil.rmtree(root, ignore_errors=True)
+
+    bad = rs.changed_since("no-such-ref-anywhere-xyz", ROOT_FOR_GIT)
+    LEDGER.ok(bad is None,
+              "and changed_since returns None for a ref git rejects",
+              "which main() routes to the full suite")
+
+
 def main():
     section_banner_not_last()
     section_suspect_is_not_zero()
@@ -310,6 +414,7 @@ def main():
     section_against_the_real_tree()
     section_refusals()
     section_scheduling()
+    section_selection()
     return LEDGER.verdict()
 
 

@@ -70,16 +70,46 @@ That comparison was run when this landed -- 94 files, same 93/1/0 split, same 4,
 checks, same single red file -- which is the evidence that the pool is safe here rather
 than the assumption that it is.
 
+`--since`: THE ONLY FEATURE HERE THAT CAN MAKE THE SUITE SMALLER. Twelve minutes is
+still too long to sit through after every edit, so `--since HEAD` runs the tests
+reachable from what actually changed -- 3 minutes for a change under `authsrv/`,
+`schema/` or `portal/`. A selector has two failure modes and they are not symmetric:
+over-selecting wastes time, and UNDER-selecting produces a fast green run over exactly
+the code that moved. So:
+
+  * Dependencies come from a real graph, never from a name or a directory. `ast` for
+    imports, plus SPAWN edges -- `test_handshake.py` does not import `authsrv.py`, it
+    launches it as a subprocess, and an import-only graph leaves it unselected when the
+    server changes. Spawn edges are read from non-docstring STRING LITERALS: scanning
+    raw source text instead put a one-decoder change at 90 of 94 tests, because this
+    repo cites modules in prose constantly.
+  * Anything the graph cannot see ESCALATES to the full suite and says which file did
+    it. `content/*.toml`, `schema/messages.json` and `CLAUDE.md` are read at run time
+    by tests that never import them, so a graph is structurally blind to those edges.
+    Refusing to guess is `CLAUDE.md`'s rule and this is where it applies.
+  * A green partial run exits **3, never 0**, and prints how many files never ran. The
+    banner is what survives being pasted into a report; the exit code is what survives
+    being consumed by a script. Without `--since` the codes are exactly as they were.
+  * Selecting NOTHING is reported as a coverage statement and exit 2 -- eleven modules
+    in `toolkit/` have no test reachable from them at all, and a change confined to one
+    of those must not read as an all-clear.
+
+`python toolkit/run_suite.py`, with no flags, is the suite. Nothing else is.
+
     python toolkit/run_suite.py                 # everything, concurrently
+    python toolkit/run_suite.py --since HEAD    # only what your edits can reach
+    python toolkit/run_suite.py --since main    # everything this branch touches
     python toolkit/run_suite.py --jobs 1        # one at a time, the old behaviour
     python toolkit/run_suite.py --only mapdata  # substring filter on the path
     python toolkit/run_suite.py --list          # what would run, and stop
 
-Exit code is 0 only when every file passed AND none was SUSPECT.
+Exit code is 0 only when every file passed, none was SUSPECT, and every file RAN.
 """
 import argparse
+import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -156,6 +186,145 @@ def run_one(rel, root=None, python=None):
     return status, checks, note, time.time() - t0
 
 
+def changed_since(ref, root=None):
+    """Repo-relative paths differing from `ref`, working tree and untracked included.
+
+    Untracked files count. A brand-new module nobody has added yet is exactly the
+    change most likely to break something, and `git diff` alone cannot see it.
+    Returns None -- not an empty set -- when git cannot answer, because "nothing
+    changed" and "I could not tell" must take different paths at the call site.
+    """
+    root = root or ROOT
+    out = set()
+    for cmd in (["git", "diff", "--name-only", ref],
+                ["git", "ls-files", "--others", "--exclude-standard"]):
+        try:
+            p = subprocess.run(cmd, cwd=root, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        if p.returncode != 0:
+            return None
+        out.update(l.strip().replace("\\", "/") for l in p.stdout.splitlines()
+                   if l.strip())
+    return out
+
+
+def module_index(root=None):
+    """Bare module name -> every `toolkit/` file that could satisfy it.
+
+    Imports in this repo are FLAT -- `import checks`, `import vaultpath`, `import
+    gwdat` -- because each entry point does `sys.path.insert(0, HERE)` rather than
+    installing a package. So a name resolves by basename, and where two directories
+    hold the same basename it resolves to BOTH. Over-selecting is the safe direction:
+    the cost is a test that did not need to run, and the cost of the other mistake is
+    a change that ships untested behind a green banner.
+    """
+    idx = {}
+    for where, dirs, files in os.walk(os.path.join(root or ROOT, "toolkit")):
+        dirs[:] = [d for d in dirs if d != "__pycache__"]
+        for f in files:
+            if f.endswith(".py"):
+                rel = os.path.relpath(os.path.join(where, f), root or ROOT)
+                idx.setdefault(f[:-3], set()).add(rel.replace(os.sep, "/"))
+    return idx
+
+
+def dep_graph(root=None):
+    """file -> the `toolkit/` files it depends on, by IMPORT and by SPAWN.
+
+    The spawn edges are the half a naive selector gets wrong, and they are not an
+    edge case here: `test_handshake.py` does not import `authsrv.py`, it launches it
+    as a subprocess, and so do a dozen others. An import-only graph would leave every
+    one of them unselected when the server changed -- a fast green run over exactly
+    the code that moved. So a file also depends on any non-test module whose FILENAME
+    appears in a STRING LITERAL THAT IS NOT A DOCSTRING.
+
+    That qualifier is doing real work and was measured, not assumed. Scanning raw
+    source text instead, a change to one decoder selected **90 of 94 tests** -- this
+    repo's docstrings cite other modules constantly, and prose citations are not
+    dependencies. Comments fall out for free (the AST never sees them); docstrings are
+    excluded explicitly. What survives is `[sys.executable, "toolkit/authsrv/
+    authsrv.py"]`, which is exactly the edge that matters.
+    """
+    root = root or ROOT
+    idx = module_index(root)
+    graph = {}
+    for names in idx.values():
+        for rel in names:
+            try:
+                with open(os.path.join(root, rel), encoding="utf-8",
+                          errors="replace") as fh:
+                    src = fh.read()
+            except OSError:
+                continue
+            deps = set()
+            try:
+                tree = ast.parse(src)
+            except SyntaxError:
+                graph[rel] = set()        # unparseable: claim no edges, never guess
+                continue
+            docstrings = set()
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef,
+                                     ast.AsyncFunctionDef)):
+                    body = getattr(node, "body", None) or []
+                    if (body and isinstance(body[0], ast.Expr)
+                            and isinstance(body[0].value, ast.Constant)
+                            and isinstance(body[0].value.value, str)):
+                        docstrings.add(id(body[0].value))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for a in node.names:
+                        deps |= idx.get(a.name.split(".")[0], set())
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    deps |= idx.get(node.module.split(".")[0], set())
+                elif (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                        and id(node) not in docstrings):
+                    for hit in re.findall(r"\b(\w+)\.py\b", node.value):
+                        if not hit.startswith("test_"):
+                            deps |= idx.get(hit, set())
+            graph[rel] = deps - {rel}
+    return graph
+
+
+def affected(changed, tests, root=None, graph=None):
+    """(selected_tests, reason). `selected` is None when the diff forces a FULL run.
+
+    THE REFUSAL IS THE POINT. A change to `content/*.toml`, `schema/messages.json`,
+    `CLAUDE.md` or any other non-Python file is read at RUN time by tests that never
+    import it, so no dependency graph can see the edge -- `test_content.py` and
+    `test_srclint.py` would go unselected by a change aimed straight at them. This
+    function does not guess at those; it escalates to the whole suite and says which
+    file made it do so. `CLAUDE.md` calls that refusing to guess, and the direction of
+    error a selector must never take is the one that looks like a faster green run.
+    """
+    if changed is None:
+        return None, "git could not report a diff"
+    py = {c for c in changed if c.startswith("toolkit/") and c.endswith(".py")}
+    other = sorted(changed - py)
+    if other:
+        return None, (f"{len(other)} change(s) outside toolkit/*.py, which tests read "
+                      f"at run time rather than import: {', '.join(other[:3])}"
+                      + (" ..." if len(other) > 3 else ""))
+    if not py:
+        return set(), "no change since the ref"
+
+    graph = dep_graph(root) if graph is None else graph
+    picked = set()
+    for t in tests:
+        seen, stack = set(), [t]
+        while stack:                                  # transitive: A spawns B imports C
+            cur = stack.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            stack.extend(graph.get(cur, ()))
+        if seen & py:
+            picked.add(t)
+    return picked, f"{len(py)} changed module(s)"
+
+
 def load_timings(path=TIMINGS):
     """Last run's per-file seconds, or {} -- a missing or corrupt cache is not an error.
 
@@ -199,13 +368,36 @@ def main():
                     help="print what would run and stop")
     ap.add_argument("--jobs", "-j", type=int, default=min(8, os.cpu_count() or 1),
                     help="files in flight at once (1 = serial, the old behaviour)")
+    ap.add_argument("--since", metavar="REF", default=None,
+                    help="only tests reachable from what changed vs REF (e.g. HEAD, "
+                         "main). PARTIAL: exits 3 when green, never 0")
     a = ap.parse_args()
 
-    tests = find_tests()
+    everything = find_tests()
+    tests = everything
+    partial = None
+    if a.since:
+        picked, why = affected(changed_since(a.since, ROOT), tests, ROOT)
+        if picked is None:
+            print(f"FULL RUN FORCED: {why}\n")
+        else:
+            partial = why
+            tests = sorted(picked)
     if a.only:
         tests = [t for t in tests if a.only in t]
+        partial = partial or f"--only {a.only}"
     if not tests:
+        # "Nothing to run" is the most dangerous thing this tool can say, so it never
+        # says it quietly and never says it with exit 0. Eleven modules in `toolkit/`
+        # have NO test reachable from them at all -- `rawlisten.py`, `flagscan.py`,
+        # `admin.py` among them -- and a change confined to one of those lands here.
+        # That is a true report about coverage, not an all-clear about the change.
         print("no test files matched -- refusing to report a green run over nothing")
+        if a.since:
+            print(f"  selection: {partial} vs {a.since}")
+            print("  NO test in the suite depends on what you changed. That is a "
+                  "statement about coverage,\n  not a pass -- run the full suite, or "
+                  "write the test that would have caught this.")
         return 2
     if a.list:
         for t in tests:
@@ -217,7 +409,11 @@ def main():
     times = load_timings()
     order = schedule(tests, times)
     known = sum(1 for t in order if t in times)
-    print(f"{len(tests)} test file(s) on disk, {jobs} at a time"
+    if partial is not None:
+        print(f"PARTIAL RUN -- {len(tests)} of {len(everything)} test file(s), "
+              f"selected by {partial} vs {a.since or 'HEAD'}.")
+        print("This is NOT the suite and must not be reported as one.\n")
+    print(f"{len(tests)} test file(s), {jobs} at a time"
           f" ({known} with a recorded time to schedule by)\n", flush=True)
 
     results = {}
@@ -266,12 +462,27 @@ def main():
     save_timings({**times, **{r: v[3] for r, v in results.items()}})
     cpu = sum(v[3] for v in results.values())
     print("\n" + "=" * 72)
+    scope = (f"of {len(tests)} SELECTED ({len(everything)} on disk)"
+             if partial is not None else f"of {len(tests)}")
     print(f"{tally[PASS]} green / {tally[FAIL]} red / {tally[SUSPECT]} suspect "
-          f"of {len(tests)}    {total} checks    {wall:.0f}s wall"
+          f"{scope}    {total} checks    {wall:.0f}s wall"
           + (f" ({cpu:.0f}s serial, {jobs} jobs)" if jobs > 1 else " (serial)"))
     for rel, status, note in bad:
         print(f"  {status} {rel}  {note}")
-    return 0 if not bad else 1
+    if bad:
+        return 1
+    if partial is not None:
+        # Exit 3, never 0, and the difference is the whole safety property. A green
+        # PARTIAL run is a true statement about a subset and a false one about the
+        # suite, and the summary line above is the only thing that survives being
+        # pasted into a report -- so the banner carries the warning for humans and
+        # this carries it for anything that branches on a status code. Nothing that
+        # existed before `--since` can see a 3: without the flag the codes are
+        # unchanged.
+        print(f"\nexit 3: green, but {len(everything) - len(tests)} file(s) never "
+              f"ran. `python toolkit/run_suite.py` is the suite.")
+        return 3
+    return 0
 
 
 if __name__ == "__main__":
