@@ -215,14 +215,19 @@ if exe:
     check(state["schema"]["messages.json"]["validated_against_build"] == pinned.BUILD,
           "the schema stamp is read from where it actually lives",
           "nested under `provenance`; the top level answers None")
-    check(len(state["pins"]) == 46,
-          "and the class-(a) census rides along, at 46",
+    check(len(state["pins"]) == 47,
+          "and the class-(a) census rides along, at 47",
           f"{len(state['pins'])} -- and it must agree with test_buildpins.py's own "
           f"literal, which is the same number asserted from the other side. Was 64 "
           f"until 2026-08-14, when this tooling was cherry-picked onto a `main` that "
           f"had gained seven more build-coupled constants (modelfile.py's FVF stride "
           f"tables and accessor, atex.py's two level-codec VAs) while the branch sat "
-          f"unmerged. Both literals moved together, on purpose: a baseline that "
+          f"unmerged. 46 that evening when genericvalue.py's 27 became 0, and 47 on "
+          f"2026-08-15 when atex.TABLES_BUILD recorded which build those two VAs were "
+          f"measured on -- a pin added deliberately, because a bare VA with no build "
+          f"is what let test_atexlevel.py §7 re-read them against 38833 without "
+          f"anyone noticing (studies/crossbuild/FINDINGS.md §7.9). Both literals "
+          f"moved together, on purpose: a baseline that "
           f"quietly disagreed with the census it is a baseline OF is how an update "
           f"report goes green over the wrong tree")
 
