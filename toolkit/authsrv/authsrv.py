@@ -1314,6 +1314,18 @@ LABEL_RUN = None
 # Set from --explorable. Tells the client this instance is a field rather than a
 # town. See the INSTANCE_LOAD_INFO send site for why it is worth a flag.
 EXPLORABLE = False
+# The other direction. `--explorable` can only force the 0x0199 map-type byte ON,
+# which left no way to send 0 on a map content/maps.toml marks explorable -- and
+# the minimap C3 arm needs BOTH values on ONE map id, because that byte chooses
+# which footprint rect the compass crops with. Kept as a separate global rather
+# than a tri-state so the existing `EXPLORABLE` call sites read unchanged.
+OUTPOST = False
+# Serve a chosen map FILE at whatever map SLOT the client is in. `--map` moves the
+# slot and the file together, because content/maps.toml pairs them; this splits the
+# pair. It exists for the minimap C2 arm, whose entire question is whether the
+# compass picture follows the slot or the terrain, and which cannot be asked while
+# the two always move together. None = use the content row's own file id.
+FILE_ID_OVERRIDE = None
 
 # Set from --player-flags. The VALUE half of GAME_SMSG 0x003C's (value, mask)
 # pair; the mask is always 7 (423 of 423 live sends). None means send nothing,
@@ -4137,12 +4149,14 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                   # outpost -- and MAP_STATIC_CONFIG carries that per map.
                   # --explorable still forces it on for maps we have not
                   # configured, which is what it was added for.
-                  1 if (EXPLORABLE or map_explorable(state["map_id"])) else 0,
+                  0 if OUTPOST else
+                  (1 if (EXPLORABLE or map_explorable(state["map_id"])) else 0),
                   0,          # district
                   0,          # language
                   0],         # is_observer
                  "INSTANCE_LOAD_INFO"
-                 + (" [is_explorable=1, FORCED]" if EXPLORABLE else ""))
+                 + (" [is_explorable=1, FORCED]" if EXPLORABLE else "")
+                 + (" [is_explorable=0, FORCED OUTPOST]" if OUTPOST else ""))
 
             spawn = MAP_STATIC_CONFIG.get(state["map_id"],
                                           MAP_STATIC_CONFIG[FALLBACK_MAP_ID])
@@ -5365,6 +5379,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   f"{state['map_id']}; substituting map "
                                   f"{FALLBACK_MAP_ID} geometry", flush=True)
                         file_id, pos, plane = cfg[0], cfg[1], cfg[2]
+                        # --file-id: send THIS geometry at whatever slot the
+                        # client is in. Separating the two is the whole minimap
+                        # C2 arm -- the compass picture comes from the area ROW
+                        # (a property of map_id), the walkable ground from the
+                        # FILE, and nothing else lets one move while the other
+                        # is held still. The spawn stays the slot's, so a file
+                        # whose rect does not contain it will refuse to spawn:
+                        # that is the caller's problem to predict, not ours to
+                        # paper over.
+                        if FILE_ID_OVERRIDE is not None:
+                            print(f"[c{conn_id}] FILE-ID OVERRIDE: serving "
+                                  f"0x{FILE_ID_OVERRIDE:X} instead of "
+                                  f"0x{file_id:X} at map {state['map_id']}",
+                                  flush=True)
+                            file_id = FILE_ID_OVERRIDE
                         send(GAME_SMSG_INSTANCE_LOAD_SPAWN_POINT,
                              [file_id, pos, plane, 0, 0, b"\x00" * 8],
                              f"INSTANCE_LOAD_SPAWN_POINT(file {file_id})")
@@ -5844,6 +5873,30 @@ def main():
                          "is the cheap way to find out whether combat is gated on "
                          "the map or on this one field — the alternative is "
                          "recovering a real explorable's file id out of Gw.dat.")
+    ap.add_argument("--file-id", type=lambda s: int(s, 0), default=None,
+                    metavar="ID",
+                    help="Serve THIS map file at whatever slot --map selects, "
+                         "instead of the file content/maps.toml pairs with that "
+                         "slot. Splits the map SLOT from the map GEOMETRY, which "
+                         "content pairs by design. Added 2026-08-15 for the "
+                         "minimap C2 arm: the compass ground image is cropped from "
+                         "the AREA ROW (a property of the slot) while the ground "
+                         "you walk on comes from the FILE, and no other flag can "
+                         "hold one still while moving the other. The spawn stays "
+                         "the slot's, so a file whose rect does not contain it "
+                         "will not spawn -- predict that before the run.")
+    ap.add_argument("--outpost", action="store_true",
+                    help="The COUNTERPART of --explorable: force the 0x0199 map-type "
+                         "byte to 0 (MISSION_MAP_OUTPOST) even on a map "
+                         "content/maps.toml marks explorable. Added 2026-08-14 for "
+                         "the minimap ladder's C3 arm, which needs BOTH values of "
+                         "that byte on one map id — and --explorable can only force "
+                         "it ON, so on an explorable map the toggle had no off "
+                         "position. The byte selects which of the area row's two "
+                         "footprint rectangles the compass crops with (0 -> +0x48, "
+                         "1 -> +0x58, studies/minimap/FINDINGS.md §3.3), so on a row "
+                         "where those differ this is a real lever on the picture. "
+                         "Refused together with --explorable: they contradict.")
     ap.add_argument("--player-flags", type=lambda s: int(s, 0), default=None,
                     metavar="VALUE",
                     help="Send GAME_SMSG 0x003C (player number, VALUE, mask 7) "
@@ -6037,11 +6090,27 @@ def main():
         PLAYER_FLAGS = a.player_flags
         print(f"PLAYER_FLAGS: sending 0x003C (player {PLAYER_NUMBER}, value "
               f"{a.player_flags}, mask 7) before WORLD_CREATE_AGENT")
+    if a.explorable and a.outpost:
+        raise SystemExit("--explorable and --outpost contradict each other: one "
+                         "forces the 0x0199 map-type byte to 1, the other to 0. "
+                         "Pass at most one.")
     if a.explorable:
         global EXPLORABLE
         EXPLORABLE = True
         print("EXPLORABLE: telling the client this instance is a field, not a "
               "town. The geometry is unchanged -- only the flag.")
+    if a.file_id is not None:
+        global FILE_ID_OVERRIDE
+        FILE_ID_OVERRIDE = a.file_id
+        print(f"FILE-ID OVERRIDE: serving map file 0x{a.file_id:X} at whatever "
+              f"slot the client loads. The slot's area row -- and therefore the "
+              f"compass crop -- is unchanged; only the geometry moves.")
+    if a.outpost:
+        global OUTPOST
+        OUTPOST = True
+        print("OUTPOST: forcing the 0x0199 map-type byte to 0 "
+              "(MISSION_MAP_OUTPOST) regardless of what content/maps.toml says. "
+              "The geometry is unchanged -- only the flag.")
 
     GAME_SRV_HOST, GAME_SRV_PORT = a.game_host, a.game_port
     HOST_FIELD_ENCODING = a.host_encoding

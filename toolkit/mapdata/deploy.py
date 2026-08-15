@@ -166,6 +166,44 @@ def heights_from_blend(blend, dim, blender=None, workdir=None):
 
 # --------------------------------------------------------------- borrow
 
+def _donor_row(archive, area, what, id_key, row_key, default_row=None):
+    """Which row `what` comes from IN THIS ARCHIVE, resolved by file id.
+
+    A row index is meaningful only against the copy it was measured on
+    (`mapchunks.py`:117), and build 38833 collected on that: the update recycled
+    row 7982, so every area row named a 46,556-byte non-map (flags 3) as its
+    biome donor while Pre-Searing Ascalon itself sat unharmed at row 177262.
+    `_stripped_of` fails closed, so this was a refusal rather than a wrong map
+    -- and a refusal on all three areas against any current archive.
+
+    The pinned index survives as a CROSS-CHECK that prints when it disagrees,
+    never as the lookup -- the same demotion `asserts.py` and `msgshape.py` gave
+    their VAs. Disagreement is expected on any archive but 38797; what would not
+    be acceptable is not knowing which row you got.
+    """
+    fid = area.get(id_key)
+    pinned_row = area.get(row_key, default_row)
+    if fid is None:
+        if pinned_row is None:
+            raise Refused(f"area names neither {id_key} nor {row_key} for {what}")
+        print(f"  {what}: row {int(pinned_row)} (no {id_key}; an index alone, "
+              f"which is only valid against build 38797's archive)")
+        return int(pinned_row)
+    row = file_id_table(archive).get(int(fid))
+    if row is None:
+        raise Refused(
+            f"{what} file id 0x{int(fid):X} binds to no row in this archive. "
+            f"That is the PORTABLE key, so this is a real absence rather than a "
+            f"stale index -- check which archive generation you are installing "
+            f"into before editing content.")
+    if pinned_row is not None and int(pinned_row) != row:
+        print(f"  {what}: file id 0x{int(fid):X} -> row {row} "
+              f"(pinned {int(pinned_row)} is 38797's answer; this archive differs)")
+    else:
+        print(f"  {what}: file id 0x{int(fid):X} -> row {row}")
+    return row
+
+
 def _stripped_of(archive, head_row, what):
     mi = mapchunks.MapIndex(archive)
     head = next((h for h, _p in mi.pairs if h.index == head_row), None)
@@ -619,12 +657,15 @@ def main(argv=None):
     # 2. borrow
     dat = args.dat or os.path.join(vaultpath.require_dir("dat_study"), "Gw.dat")
     with Archive(dat) as ar:
-        donor = Donor(ar, int(area["donor_row"]),
-                      int(area.get("constants_row", 46196)))
+        biome_row = _donor_row(ar, area, "biome donor",
+                               "donor_file_id", "donor_row")
+        const_row = _donor_row(ar, area, "constants donor",
+                               "constants_file_id", "constants_row", 46196)
+        donor = Donor(ar, biome_row, const_row)
         print(f"  constants row {donor.constants_row}: "
               f"{sum(len(v) for v in donor.constants.values())} B "
               f"(Header + Zones, structural -- must match our shape)")
-        print(f"  biome row {area['donor_row']}: "
+        print(f"  biome row {biome_row}: "
               f"{len(donor.terrain_dep_ids)} terrain dep(s), "
               f"angle {donor.angle_index}, "
               f"env {'yes' if donor.env else 'no'}, "

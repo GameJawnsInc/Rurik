@@ -620,6 +620,115 @@ The `--explorable` run was scored on three frames and they are not all alike: `f
 
 ---
 
+## 6f. The lever, held: C2 and C3 on a live client (2026-08-15)
+
+**Six runs, build 38833 against its own archive, loopback, caged, synthetic credential. The model of §3 survives both arms; one clause of C2's prediction does not, and its failure is the model's own arithmetic.** Everything below is scored on a **coarse 4×4×4 colour histogram over a CENTRED annulus** (`28 ≤ r ≤ 72` px about the disc centre) with L1 distance. That metric is **rotation-invariant by construction** — a rotation about the disc centre permutes pixels within a centred annulus without changing the multiset of values — which matters because the operator moved the camera during two arms and the compass disc turns with it.
+
+### 6f.1 C3 — the `0x0199` map-type byte is a real lever on the picture. CONFIRMED.
+
+| arm | byte | rect used | tiles | median RGB |
+|---|---|---|---|---|
+| map 474, default | 1 `MISSION_MAP_GAME` | B `(800,2720,1312,3232)` 512×512 | (1,5)(1,6)(2,5)(2,6) | (21, 21, 27) |
+| map 474, `--outpost` | 0 `MISSION_MAP_OUTPOST` | A `(1536,2176,1984,2784)` 448×608 | (3,4)(3,5) | (61, 59, 46) |
+| map 143, default | 0 | A == B | — | (89, 61, 25) |
+| map 143, `--explorable` | 1 | A == B | — | (89, 61, 25) |
+
+**Between the 474 arms: L1 = 0.915. Between the 143 arms: L1 = 0.000.** Within-arm noise floor 0.027 and 0.109 (frames spanning the camera movement). The two 474 rects touch **disjoint** tile sets, which is why that row was chosen — there is no shared art for the arms to agree on. **One byte on the wire, nothing else changed, and the picture changes completely where the row's two rects differ and not at all where they are equal.** — OBSERVED.
+
+**The negative control is not vacuous, which is the trap the rung wrote itself against.** Map 143's content row points at `0x287D3`, the authored sculpt map, so its compass could have been pure fallback and "no change" would prove nothing. Its median gives **χ = +0.778**, outside the fallback band (+1.081..+1.164), and the frame plainly shows a square patch of real atlas art inside the tiled fallback.
+
+### 6f.2 C2 — the picture follows the SLOT, not the terrain. CONFIRMED, and one clause REFUTED.
+
+Run with a new `--file-id` override that serves a chosen map **file** at whatever **slot** the client is in — the only way to hold one still while moving the other, and it needs no archive write at all (the rung's own procedure called for `deploy.py --install` twice, which would also have changed the archive and confounded the arm).
+
+| arm | slot (area row) | terrain file | fallback pixels | median RGB |
+|---|---|---|---|---|
+| A | 143 → **world 1** | sculpt `0x287D3`, 64×64 | 39.6% | (89, 61, 25) |
+| B | 144 → **world 2** | sculpt `0x287D3`, 64×64 | 40.7% | (77, 55, 30) |
+| C | 143 → **world 1** | Ascalon `0x1B97D`, 416×512 | **5.3%** | (89, 84, 35) |
+
+- **SAME terrain, different slot (A vs B): L1 = 0.618**, within-arm 0.000. The square patch is **the same size** — same terrain, same latch — and the art inside it is a different continent's: world 1's green/tan against world 2's dark blue with Cantha's turquoise water. The tile sets are disjoint (116842/116844/116848/116850 against 155731/155741). **The identical file drawn at two slots gives two different pictures, so the ground image cannot be coming from the terrain.** — OBSERVED. This is C2's load-bearing half and it is met.
+- **C2's other clause — "must NOT change when the terrain changes at a fixed slot" — is REFUTED (A vs C: L1 = 0.916).** It changes, and **both causes were already in this document's own arithmetic**:
+  1. **Extent.** The latch copies the loaded map's cell dims, so a 64×64 map crops a 64-cell square and tiles the fallback around it while a 416×512 map fills the disc: fallback **39.6% → 5.3%**.
+  2. **Translation, which is the bigger effect and the one the clause missed entirely.** The crop is `atlas = local + footprint_origin` (§6b.2), and the player's **map-local cell differs between terrains at the same world position**: `(1536, 1536)` is cell **(48, 48)** of the sculpt map (rect ±3072) but cell **(208, 271)** of Ascalon (rect −18432..21504 × −24576..24576). Both land inside map 143's footprint `(960,448,1280,992)` — at atlas ≈ (1008, 496) and ≈ (1168, 719), **223 cells apart**. Different window, same continent.
+
+**The model is NOT refuted, and the distinction matters.** C2's refutation condition was *"if the compass instead tracks the terrain"* — i.e. if it drew **our** geometry. It never does: arm C draws Pre-Searing walls, roads and water, which is world 1 atlas art, over Ascalon geometry; arm A draws world 1 atlas art over a sculpted radial basin. **What the terrain supplies is the addressing — where the window sits and how far it reaches — exactly as §0 was corrected to say after S9.** The clause was written before that correction and contradicts the hazard note PLAN C2 itself carries.
+
+### 6f.3 H3b, seen
+
+The square patch in arms A and B **is** the latch, photographed: an authored map crops only as many cells as it has, and `0x008C1E00` tiles the fallback over the rest. Mechanism was OBSERVED statically (S9, S12); this is the first time it has been **looked at**, and it is on our own map. It also gives Tier 3 its cost in one number: **~40% of the disc is fallback on a 64-cell map**, and no amount of tile authoring (A1) changes that — only making the authored map's own dims cover the footprint does, which is A2.
+
+### 6f.4 Two flags this pair required, and why neither is scope creep
+
+- **`authsrv --outpost`** — the counterpart of `--explorable`, forcing the `0x0199` map-type byte to **0**. Without it C3 had no off position on map 474, which content marks explorable, and the arm was unrunnable. Refuses to combine with `--explorable`; logs `[is_explorable=0, FORCED OUTPOST]`.
+- **`authsrv --file-id ID`** — serve this map file at whatever slot `--map` selects, splitting the slot/geometry pair that `content/maps.toml` couples by design. The spawn stays the slot's, so a file whose rect does not contain it will not spawn; both C2 slots spawn at `(1536,1536)`, inside the sculpt map's ±3072 rect, which is why the swap works.
+
+**A harness note paid for twice:** one run failed at *"client asked for a game instance"* — login clean, then nothing — because the play click needs the client foregrounded, the same condition that skips `--shots` frames. A retry, not a diagnosis.
+
+---
+
+## 6f. C4 — the draw pair renders, the fog init is ACCEPTED, and the world map cannot open without it (2026-08-15)
+
+**Three results, one of them unplanned and the largest.** Rung C4 sent five messages through a new probe (`toolkit/authsrv/probes.py`, `compass_draw`) on build 38833, map 148, loopback, our DH, caged. Every payload was verified as a hexdump against intent before the run — PLAN C4's caution (i), earned by `--set` shipping a degenerate payload for an hour.
+
+### 6f.1 GAME_SMSG `0x0091` renders, both arms — OBSERVED
+
+| frame | t | red-excess px | pale px |
+|---|---|---|---|
+| hold002 | 3 s | **806** | 62 |
+| hold003 | 6 s | **744** | 62 |
+| hold005 | 10 s | 441 | **83** |
+| hold006 | 13 s | 441 | **75** |
+| 11 frames | >16 s | **441 exactly** | **62 exactly** |
+
+`0x0091` with `knotCount = 1`, owner tag **7** (non-zero) and one knot at the player's own cell draws a **red ping ripple**; with `knotCount = 5` it draws a **polyline**. Both appear on exactly the frames their steps predict (ping at spawn+3, polyline at spawn+9) and are gone two frames later, against a baseline of **eleven consecutive frames scoring 441 and 62 with zero variance** — so any deviation is signal, and the metric could have failed. Knots are absolute world units ÷ 96 (§4.1's closed coordinate space) and the values were computed from map 148's spawn, not tuned. **The `knotCount = 1` ripple needs no `0x0092` at all**, confirming the `0x008BE6B3 cmp edi,1` branch PLAN C4 predicted. — OBSERVED, one session, 18 frames.
+
+### 6f.2 THE FOG INIT PAIR IS ACCEPTED, proven by a control that CRASHED — OBSERVED
+
+*This is the result the rung did not ask for and it is worth more than the one it did.* The probe run sent `0x008B` + `0x008A` (**ArenaNet's own RLE payload replayed verbatim** — capture `20260807T143055` conn `:64102`, declared 38 bytes, band chain `(0, 22, 0, 0, 0, 0, 0, 0)` closing at exactly 38) and then pressed **M**: the world map opened and drew a large revealed region of Pre-Searing. A control run, identical but with **no probe at all**, pressed M and **crashed**:
+
+```
+Assertion: worldMapDims.x == mapDims.x * DXT_BLOCK_SIZE
+P:\Code\Gw\Ui\Game\Map\GmMapView.cpp(1731)     Build: 38833
+```
+
+**The binary closes it.** `0x00553C50` is the only site (`asserts.py --grep worldMapDims`: 1 of 19,758): `0x00553C79 mov eax,[eax]` reads `mapDims.x` through `0x0080E4F0`, which returns **`charContext + 0x5B4`** — the exact field §4.2's RLE expander writes (its sibling `0x0080E500` returns `+0x5A4`, the `mapBits` grid) — and `0x00553C7B shl eax, 2` fixes **`DXT_BLOCK_SIZE == 4`**, read rather than assumed. With no init, `mapDims.x` is 0, the compare fails and the client dies.
+
+So the difference between "world map opens" and "world map asserts" is **exactly our two messages**, which is far stronger evidence that the pair took effect than the revealed picture alone would be — a revealed map could have been the default state; a crash that appears precisely when the pair is absent could not. **Operational consequence: the world map is UNOPENABLE on this server until the fog init pair is sent**, and that is a server gap rather than a client one.
+
+### 6f.3 The compass ground is NOT fog-masked — §7's open question, answered as a by-product
+
+The compass drew its atlas crop normally in **both** runs, including the control whose `mapDims` was zero and whose world map could not open. So `CompassMap`'s blit does not consult the exploration bitmap, matching the static reading (`CompassMarker` tests the bits, `CompassMap`'s blit does not, `GmMapView` does). — OBSERVED.
+
+### 6f.4 `0x008C` UNFOGS — and the null that preceded it is what makes it a measurement — OBSERVED
+
+**The mark works, and the first attempt at it measured nothing for a reason worth keeping.** Two runs, identical but for one coordinate, each diffed against an init-only run of the same probe pair:
+
+| mark at continent block | world-map pixels differing >25 | region |
+|---|---|---|
+| **(30, 24)** — a block the init payload ALREADY SET | **0** of 2,013,440 | — |
+| **(26, 22)** — a block the init payload left CLEAR | **1,059** of 2,013,440 (0.053%) | one compact **88 × 101 px** box, worst channel delta 70 |
+
+The revealed patch is visibly unfogged: blurred haze before, sharp terrain with a winding watercourse after. So `0x008C` reveals on our own server, its effect is confined to the blocks it names, and **writing a block that is already set is a genuine no-op rather than a refusal** — which is why the first isolation run came back byte-identical and why that result was not evidence about the opcode at all.
+
+**Which block is clear is COMPUTABLE, and that is the reusable half.** Decoding the replayed payload's bands — u16 length per 16-row band, `0xFF`-continuation runs of alternating colour — consumes **exactly its declared 38 bytes**, independently reproducing rung S8 outside S8's own tooling. Band 1 (rows 16–31) is the only non-empty one, and of map 148's footprint blocks (x 24..36, y 16..31) **68 are clear**. `probes.py` carries both coordinates with the derivation, so the null and the positive stay one experiment with one variable. *(The decode yields 1,004 of the band's 1,024 bits — 20 short — so the run parse is not perfect at the tail and blocks near the band's end should not be trusted from it. The two blocks used here sit well inside the decoded range, and the client's own behaviour corroborated both.)*
+
+### 6f.5 `0x008D` is the predicted null; `0x0049` registers a quest but draws NO compass marker
+
+Both sent in one run, control first so a clean frame precedes the test.
+
+- **`0x008D` — NULL, prediction MET.** The compass is unchanged: green 23, red 441, pale 62 on **every frame from t=3 s to t=31 s**, the same zero-variance baseline §6f.1 established. It writes its 40-byte record and posts `0x10000091`, and nothing draws.
+- **`0x0049` (QUEST_ADD) — PARTIAL, and the prediction is HALF REFUTED.** PLAN C4 predicted "a green starburst on the compass **and** a quest-log entry". The log entry arrives: a **"?" quest icon** appears under the level bar, **23.8 %** of that icon slot differing from a run without the message (side-by-side: icon present vs bare background), the "?" being the empty name string we deliberately sent. **The compass starburst does not** — the disc is byte-static across the whole run. So the message is accepted and registers a quest; what it does not do is mark the compass, at least with a vec2 at the player's own position in absolute world units and both `word` fields set to the map id. Which field gates the marker, whether it needs the quest to be *tracked*, and whether the marker is world-map-only are all **NOT FOUND**. — OBSERVED.
+
+### 6f.6 What C4 did NOT measure, stated rather than glossed
+
+- ~~**The `0x008C` mark's own contribution is UNMEASURED**~~, ~~**`0x008D` was not sent**~~, ~~**`0x0049` was not sent**~~ — **all three CLOSED the same day by §6f.4 and §6f.5.**
+- **The per-map explorable mask** (`0x0070A120` → `0x00721D00`) is still unread, so whether `0x008C` can unfog on *our own* authored geometry is still NOT FOUND. Map 148 is retail, and §6f.4 only shows the mark working **there**.
+- **Why `0x0049` draws no compass marker is NOT FOUND** — field semantics, a tracked-quest requirement and a world-map-only marker are all live, and the run distinguishes none of them.
+- **A measurement failure worth recording as a harness fact:** `--shots` only fires during the `--keep-open` hold, and the hold begins *after* the `--actions` script finishes. A first attempt with `--actions "0:play 45:key:M"` put its earliest frame at t=46.9 s while the draw steps fired at t≈20–39 s, so arm A was invisible for a reason that had nothing to do with the opcodes. Sample the window you are testing.
+
+---
+
 ## 7. Contradictions and open questions
 
 **Cross-report contradictions, surfaced rather than silently resolved:**

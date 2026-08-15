@@ -2293,7 +2293,245 @@ def _sweep_codec():
     return Codec()
 
 
+# ------------------------------------------------------- minimap / compass --
+#
+# PLAN C4. Every value below is computed from a measurement rather than chosen,
+# and the two that could not be computed are REPLAYED VERBATIM from ArenaNet.
+#
+# KNOTS (0x0091). Two SIGNED int16 packed in one dword, LOW half = x, in
+# ABSOLUTE world units divided by 96.0 -- the terrain cell pitch
+# (studies/minimap/FINDINGS.md §4.1, closed against the one live 0x002B and
+# three rival readings). The compass hit-test bounds a click at exactly 4500.0
+# world units, so a knot must sit beside the player to be inside the disc at
+# all; map 148's spawn is (9826, 8077), i.e. cell (102, 84).
+COMPASS_CELL = 96.0
+_SPAWN_CELL = (102, 84)                    # 9826/96, 8077/96, round-away-from-zero
+
+
+def _knot(cx, cy):
+    """Pack one knot the way CompassCanvas does: low half x, high half y."""
+    return ((cy & 0xFFFF) << 16) | (cx & 0xFFFF)
+
+
+# THE FOG INIT PAIR IS ARENANET'S OWN, NOT OURS, AND THAT IS THE POINT.
+# The RLE stream is 16-row bands, u16 band length, 0xFF-continuation runs of
+# alternating colour (rung S8, re-derived and closed 8/8 on live payloads).
+# Building one by hand is the single most likely way for this arm to fail for a
+# reason that has nothing to do with the opcodes, so it replays a REAL pair
+# instead: capture 20260807T143055, connection :64102, the largest of the eight.
+# Its declared byteCount is 38 and its band chain closes at EXACTLY 38 --
+# lengths (0, 22, 0, 0, 0, 0, 0, 0) over 128/16 = 8 bands -- which is the same
+# arithmetic S8 used and is re-checked in test_probes.py rather than trusted.
+# Only the two trailing 0xCCCC padding dwords beyond the declared count are ours
+# to ignore; everything inside the count is verbatim ArenaNet.
+FOG_INIT_DIMS = (64, 128)                  # continent 1's block grid, 64 % 32 == 0
+FOG_INIT_BYTES = 38
+FOG_INIT_PAYLOAD = [1441792, 973218303, 956578308, 889600005, 939930889,
+                    1006778885, 41474, 0, 0, 3435921408]
+
+# The mark, in CONTINENT-ABSOLUTE blocks (footprint cells >> 5), not map-local.
+# Map 148's footprint is (768, 512)-(1184, 1024) cells = blocks x 24..36,
+# y 16..31, and the init pair declares a 64x128 grid, so (30, 24) is inside both
+# and satisfies ChCliApi:201 `x + markSpanCount <= mapDims.x` (30 + 1 <= 64).
+# Field 3 is the HALF-SPAN, so 1 reveals a 3x3 block window.
+FOG_MARK = (30, 24, 1)
+
+# ...AND THE ONE ABOVE IS A NO-OP, WHICH IS WHY THERE ARE TWO.
+# The 2026-08-15 isolation run diffed init-only against init+mark and got a
+# BYTE-IDENTICAL world map -- 0 pixels of 2,013,440. The mark was not refused:
+# block (30, 24) was ALREADY SET by the replayed init payload, so writing it
+# again changes nothing. Decoding that payload's band 1 (the only non-empty
+# band, rows 16..31) settles it -- and the band chain consumes exactly its
+# declared 38 bytes, independently reproducing rung S8.
+#
+# `FOG_MARK_UNSET` is a block the SAME decode says is CLEAR, inside map 148's
+# footprint (blocks x 24..36, y 16..31) and beside revealed neighbours so a
+# 3x3 reveal lands against known terrain rather than in empty space. 68 of the
+# footprint's blocks are clear; this is one of them. Keeping both marks means
+# the null and the positive are the same experiment with one coordinate
+# changed, which is what makes the null interpretable.
+FOG_MARK_UNSET = (26, 22, 1)
+
+
+def _compass_draw_steps():
+    ping = _knot(*_SPAWN_CELL)
+    line = [_knot(_SPAWN_CELL[0] + dx, _SPAWN_CELL[1] + dy)
+            for dx, dy in ((0, 0), (2, 0), (4, 1), (6, 2), (8, 2))]
+    return [
+        Step(3.0, 0x0091, [7, 1, [ping]],
+             "0x0091 PING: knotCount=1, owner=7 (NON-zero), at the player's cell",
+             "a red ping ripple ON THE COMPASS at the player's own position. "
+             "knotCount==1 takes the ripple path at 0x008BE6B3 and needs no "
+             "0x0092 at all. Owner is 7 rather than 0 on purpose: 0 is the "
+             "LOCAL client's own tag, and a zero echo makes the client merge "
+             "the broadcast into its own line."),
+        Step(6.0, 0x0091, [7, 2, line],
+             "0x0091 POLYLINE: knotCount=5, a short stroke beside the player",
+             "a red line on the compass. CompassCanvas:1372 needs knotCount >= 2 "
+             "to render a polyline, so this is the arm the ping cannot test."),
+        Step(6.0, 0x008B, [FOG_INIT_DIMS[0], FOG_INIT_DIMS[1], FOG_INIT_BYTES],
+             "0x008B fog INIT DECLARE (64 x 128 blocks, 38 bytes to follow)",
+             "NOTHING, and that is the prediction rather than a caution: the "
+             "init path posts no frame message at all, so no repaint is due "
+             "until the mark lands."),
+        Step(1.0, 0x008A, [FOG_INIT_PAYLOAD],
+             "0x008A fog INIT PAYLOAD -- ArenaNet's own RLE, replayed verbatim",
+             "still nothing visible. This allocates and fills mapBits; until it "
+             "has run, 0x008C returns immediately at 0x00811BEE and measures "
+             "nothing, which is why smsgsweep's 108 prior sends of 0x008C were "
+             "inert."),
+        Step(6.0, 0x008C, list(FOG_MARK),
+             "0x008C fog MARK at continent block (30, 24), half-span 1",
+             "THE REPAINT. This is the only message of the three that posts "
+             "0x10000090, whose subscribers are Compass.cpp, GmMapWorld.cpp and "
+             "GmMapWindow.cpp. Watch the COMPASS first, then press M: whether "
+             "the compass GROUND IMAGE is fog-masked is an open question "
+             "(CompassMarker tests the bits, CompassMap's blit does not, "
+             "GmMapView does), so a change on the world map with none on the "
+             "compass is a REAL result and not a failure."),
+    ]
+
+
+def _fog_pair_steps():
+    """The init pair alone -- the NO-MARK half of C4's isolation arm."""
+    return [
+        Step(3.0, 0x008B, [FOG_INIT_DIMS[0], FOG_INIT_DIMS[1], FOG_INIT_BYTES],
+             "0x008B fog INIT DECLARE (no mark will follow)",
+             "nothing yet; the init posts no frame message."),
+        Step(1.0, 0x008A, [FOG_INIT_PAYLOAD],
+             "0x008A fog INIT PAYLOAD -- ArenaNet's own RLE, replayed verbatim",
+             "still nothing on the compass. The world map should now OPEN "
+             "rather than assert, which is the 6f.2 result; what it must NOT "
+             "show is whatever the 0x008C mark adds."),
+    ]
+
+
+def _fog_mark_steps():
+    """The same pair PLUS the mark. Identical timing, one extra message."""
+    return _fog_pair_steps() + [
+        Step(6.0, 0x008C, list(FOG_MARK),
+             "0x008C fog MARK at continent block (30, 24), half-span 1",
+             "the only difference from compass_fog_nomark. Any world-map pixel "
+             "that differs between the two runs is THIS message's doing."),
+    ]
+
+
+# QUEST MARKER AND THE NULL CONTROL (PLAN C4's two untouched arms).
+# 0x0049's vec2 is in ABSOLUTE WORLD UNITS -- unlike the compass knots, which
+# are world/96 -- so it takes the spawn coordinate verbatim from
+# content/maps.toml rather than the cell pair the draw arm uses. Getting that
+# wrong would put the marker 96x too far out and read as "nothing drew".
+_SPAWN_WORLD = (9826.0, 8077.0)
+
+
+def _compass_quest_steps():
+    return [
+        Step(3.0, 0x008D, [1, _SPAWN_WORLD, 0, 0, 0, 0, ""],
+             "0x008D indexed marker record -- THE NULL CONTROL",
+             "NOTHING, predicted before the run. 0x008D writes a 40-byte record "
+             "into charContext+0x7EC and posts 0x10000091, so it is not inert "
+             "in the client -- the prediction is that it is a static catalogue "
+             "entry with no compass glyph of its own. If something DOES draw "
+             "here, the null control is the finding and 0x0049's arm below is "
+             "confounded by it."),
+        Step(8.0, 0x0049, [1, _SPAWN_WORLD, 148, 148, 0, "", "", "", 0],
+             "0x0049 QUEST_ADD at the player's own position, map 148",
+             "a GREEN STARBURST on the compass at the player, and a quest-log "
+             "entry. The vec2 is inside map 148's rect and the map id is our "
+             "own slot, so both of PLAN C4's stated preconditions hold. Empty "
+             "strings are deliberate: the marker is what is under test, not the "
+             "text, and an authored string is a separate question."),
+    ]
+
+
 PROBES = {
+    "compass_fog_nomark": lambda a, o: Probe(
+        question="PLAN C4 isolation, half 1 of 2: what does the fog INIT PAIR "
+                 "alone reveal, with no 0x008C mark?",
+        predicts="The world map OPENS rather than asserting (6f.2), and shows "
+                 "whatever ArenaNet's own replayed payload encodes -- which is "
+                 "most of what 6f.2's screenshot showed. This run exists to "
+                 "prove that, so that the mark's own contribution can be "
+                 "measured as a DIFFERENCE rather than assumed from a single "
+                 "picture that contained both.",
+        steps=_fog_pair_steps(),
+        note="Run this and compass_fog_mark back to back with identical flags, "
+             "then diff the two world-map frames. 6f.4 records that C4's first "
+             "pass could not separate them because one run sent both.",
+    ),
+    "compass_fog_mark": lambda a, o: Probe(
+        question="PLAN C4 isolation, half 2 of 2: what does the 0x008C MARK add "
+                 "on top of the init pair?",
+        predicts="A 3x3-block patch revealed at continent block (30, 24) that "
+                 "compass_fog_nomark does not have. If the two world maps are "
+                 "pixel-identical, the mark did nothing -- and the per-map "
+                 "explorable mask from Engine\\Map\\Map.cpp, which nothing has "
+                 "read, is the first suspect rather than the opcode.",
+        steps=_fog_mark_steps(),
+        note="Identical to compass_fog_nomark except for the trailing 0x008C, "
+             "so the world-map difference is attributable to one message.",
+    ),
+    "compass_fog_mark_unset": lambda a, o: Probe(
+        question="PLAN C4 isolation, the RETRY: does 0x008C reveal a block the "
+                 "init payload left CLEAR?",
+        predicts="A 3x3 patch appears on the world map at continent block "
+                 "(26, 22) that compass_fog_nomark does not have. The first "
+                 "attempt marked (30, 24), which decoding the payload shows was "
+                 "ALREADY SET -- so its byte-identical result measured nothing "
+                 "about the opcode. If THIS one is also identical, the mark is "
+                 "genuinely inert and the per-map explorable mask "
+                 "(0x0070A120 -> 0x00721D00, unread) is the first suspect.",
+        steps=_fog_pair_steps() + [
+            Step(6.0, 0x008C, list(FOG_MARK_UNSET),
+                 "0x008C fog MARK at continent block (26, 22) -- a CLEAR block",
+                 "the world map, diffed against compass_fog_nomark. This is the "
+                 "same experiment as compass_fog_mark with one coordinate "
+                 "changed, which is what makes either outcome interpretable."),
+        ],
+        note="Diff against compass_fog_nomark, not against compass_fog_mark.",
+    ),
+    "compass_quest": lambda a, o: Probe(
+        question="PLAN C4's two untouched arms: does 0x0049 draw a quest marker "
+                 "on the compass, and is 0x008D really the null it is predicted "
+                 "to be?",
+        predicts="0x008D draws NOTHING and 0x0049 draws a GREEN STARBURST at "
+                 "the player's own position, plus a quest-log entry. The order "
+                 "matters and is deliberate: the control goes FIRST, so that if "
+                 "a glyph appears after 0x0049 there is already a clean frame "
+                 "proving 0x008D did not put it there.",
+        steps=_compass_quest_steps(),
+        note="MAP 148 ONLY -- the vec2 is that map's spawn in ABSOLUTE world "
+             "units. Note the unit differs from the compass draw arm, whose "
+             "knots are world/96; using the cell pair here would place the "
+             "marker 96x too close to the origin and look like a null.",
+    ),
+    "compass_draw": lambda a, o: Probe(
+        question="PLAN C4. Does the compass draw/ping pair render from the wire, "
+                 "and can the three-message fog sequence unfog a block on our "
+                 "own server?",
+        predicts="THE PING AND THE POLYLINE RENDER. Both ends of the draw pair "
+                 "are named from the client's own asserts and the handler's "
+                 "unpack loop is the exact inverse of the sender's pack, so a "
+                 "well-formed 0x0091 beside the player should draw. A null "
+                 "there would mean the broadcast needs party state we do not "
+                 "have. THE FOG SEQUENCE IS THE HARD ARM and its first two "
+                 "steps are predicted to show NOTHING -- the init posts no "
+                 "frame message -- with the repaint arriving only on the "
+                 "0x008C. Two things can defeat it for reasons unrelated to the "
+                 "opcodes, both named in advance: 0x008C's bit writes are gated "
+                 "by a per-map explorable mask from Engine\\Map\\Map.cpp that "
+                 "nothing in this repo has read, and if the compass ground is "
+                 "not fog-masked the reveal is visible only on the world map.",
+        steps=_compass_draw_steps(),
+        note="RUN ON MAP 148 (the default) -- every coordinate here is computed "
+             "for it and is wrong anywhere else: the knots are absolute world "
+             "units/96 around ITS spawn, and the mark is in continent-1 blocks "
+             "inside ITS footprint. The fog init pair is ArenaNet's own bytes "
+             "replayed verbatim rather than a payload we built, because a "
+             "hand-rolled RLE stream failing would look exactly like the client "
+             "refusing the opcode. Give the run --keep-open and enough hold to "
+             "see all five steps, and press M after the last one.",
+    ),
     "smsgsweep": lambda a, o: Probe(
         question="Of the GAME_SMSG opcodes ArenaNet has never sent us, which ones does "
                  "the client visibly act on -- and which of those answer back?",
