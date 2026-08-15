@@ -1,0 +1,5 @@
+trnhook.dll
+trnhook2.dll
+*.obj
+*.exp
+*.lib
