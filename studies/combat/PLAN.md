@@ -471,7 +471,7 @@ capture-first), projectile reconciliation (F9 — research, not build).
 
 | Question | Side A | Side B | Settles via |
 |---|---|---|---|
-| Attribute numbering | contiguous 0–41 (OpenTyria, single witness; current code) | gapped 0–44/51-row (3 lineages + client text-id table + measured table — CORROBORATED) | Step 5 (client-table); step 6 item 1 (wire) |
+| ~~Attribute numbering~~ | **DISSOLVED, §10** — both sides are right about different sets: the index space is contiguous 0..50 (51 rows, what the wire is bound-checked against), and 42 is the count owned by the ten playable professions | nothing residual; profession 11's 9 rows are nameless and unowned | closed by `attribtable.py` |
 | ~~`0x003A` triple positions~~ | **RESOLVED for slots 1–2, §8a**: slot 1 = `attrib` (id), slot 2 = `baseValue` (rank), both named by the client's own asserts | slot 3 remains NOT NAMED — moves in lockstep with `baseValue`; Headquarter's `rank_bonus` still UNVERIFIED | step 6 item 1, or a rendered check |
 | ~~Panel reads the array `0x00819220` writes?~~ | **RESOLVED YES, §8b** — same TLS singleton, same locator, chain ends in `AttribBtns.cpp` vtable code | residual: the panel control's runtime `agentId` is an ASSUMPTION static analysis cannot close | step 7's operator check |
 | Tooltip rank interpolation | **RESOLVED, §8c**: `max(0, round(lo + (hi−lo)·rank/15.0))`, literal 15.0, no upper clamp | the rounding TIE-BREAK (half-up vs half-even) is unresolved — ±1.0 adjust, not ±0.5 | a rendered check on a .5-landing pair (skill 316) |
@@ -564,7 +564,66 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 3 | 🔶 offline half ✅ 2026-08-14, `f5f65b2`+`77b65d1` — emitter (1,333 client-table rows, build stamped from bytes), the four-opcode cycle on the observed template, THE QUEUE LAW (E4 at accept, cast begins when the caster frees — fits 4/4 Necro cycles ≤14 ms; the naive press+activation model is refuted by +0.64 s/+0.57 s residuals), overrides names 227–230, cross-thread cast-timer test (200 presses → exactly 200 of each phase). Attack-skill E5 timing rides the weapon — recorded as unmodeled divergence. GV 58 deliberately unsent (0 of 21,543 live). **Loopback acceptance BLOCKED — see §7** |
 | 4 | ✅ 2026-08-14, `0ddfbd0`+`9d97f45`+`a7971b1` — `+0x44..+0x68` decoded as u32 (duration0/15, skill_arguments bitfield, scale0/15, bonus_scale0/15; +0x50 stays NOT FOUND). Reproduces the 4-skill FINDINGS anecdote byte-exact and asserts its green-render rule. **C7's wiki third witness ran and agrees with all 14 endpoint values GWW lists**, plus costs and recharge — and checks the other direction too (no unlisted set may render green), which is what makes Rush's constant-25-with-bit-clear a real discriminator. Emitted to the content rows; **nothing consumes them until step 8**. `test_skilltable` floor 26→46 |
 | 5 | 🔶 **research half ✅ 2026-08-14, §8** — the triple's slots 1–2 named by ArenaNet's own asserts (`attrib`, `baseValue`), the panel's read path traced to `AttribBtns.cpp` (C8a closed), the tooltip formula measured (C6 closed). **Still to do in code**: adopt the gapped numbering, replace `ATTRIBUTE_COUNT = 42`, retire the stale `authsrv.py:552-557` comment, and pin the handler constants in a test |
+| 5 (cont.) | **code half ✅ 2026-08-15, `043e395`** — `attribtable.py` reads `s_attrib` and DISSOLVES the numbering contest (§10): index space contiguous 0..50, 42 owned by playable professions, 26/27/28 are profession 11's. 51 content rows emitted. Still open in code: `ATTRIBUTE_COUNT = 42` is a count of the wrong thing for a wire payload and step 7 replaces it |
 | 6–10 | ⬜ |
+
+## §10. `s_attrib`, and the numbering contest that dissolved (2026-08-15)
+
+H4 and the registry's top row are closed, and not by picking a winner. Reading
+the client's own attribute table showed the two rival schemes were answering
+**different questions**, which is why both had good witnesses.
+
+Found from `ConstAttrib.cpp`'s own `index < arrsize(s_attrib)` asserts
+(`0x005a92a1`, `0x005a92d1`, `0x005a9301`, `0x005a9331`), then the four
+accessors' shared idiom — `cmp esi, 0x33` then
+`lea eax,[esi+esi*4]; mov eax,[eax*4 + <base>]` — giving **base `0x00A35740`,
+stride 20, 51 rows**, columns at `+0x00`, `+0x08`, `+0x0C`, `+0x10`.
+
+| offset | meaning |
+|---|---|
+| `+0x00` | profession id (1–10 playable, 11 = none) |
+| `+0x04` | the row's own index — self-declared, and what makes the locator refutable |
+| `+0x08` | name string id |
+| `+0x0C` | description string id |
+| `+0x10` | 1 if the profession's PRIMARY attribute |
+
+**The verdict, both halves:**
+
+- The **index space is contiguous 0..50**. No gaps. This is what `0x003A`'s
+  first array is bound-checked against and what the per-agent record is indexed
+  by — so it is the numbering the **wire** wants, and what step 7 emits.
+- The **ten playable professions own exactly 42 rows** — precisely OpenTyria's
+  `Attribute_Count`. It counts attributes, not indices, and was never a claim
+  about the id space.
+- The remaining 9 belong to **profession 11**, which has no primary and no
+  resolvable name. Three of them are **26/27/28**, sitting immediately before
+  Dagger Mastery at 29 — exactly the "+3 offset from Dagger Mastery on" that
+  the gapped scheme described. Enumerate only real attributes in id order and
+  you skip three in the middle; that is the whole of the "gap".
+
+Per-profession, every count and primary matches retail: Warrior 5 (Strength
+17), Elementalist 5 (Energy Storage 12), the other eight 4 apiece — Mesmer
+(Fast Casting 0), Necromancer (Soul Reaping 6), Monk (Divine Favor 16), Ranger
+(Expertise 23), Assassin (Critical Strikes 35), Ritualist (Spawning Power 36),
+Paragon (Leadership 40), Dervish (Mysticism 44).
+
+**The independent leg.** The profession column lives in `Gw.exe`; the names
+live in the owner's `Gw.dat` and come back through `textrec`, a decoder written
+for an unrelated arc. The 42 rows the EXE assigns a profession are **exactly**
+the 42 the ARCHIVE can name — `named-not-real=[]`, `real-not-named=[]`. One
+partition, drawn twice, by two mechanisms that share nothing.
+
+Also recovered on the way, and directly useful to step 7: **`AcctTemplate:441
+data.attribValue[index] <= 12` caps a rank at 12**, matching `CharData:202`'s
+`cmp esi, 0xd` bound of 13 (0..12) on the downstream `s_attribPoints` lookup.
+`AcctTemplate:423 data.attribCount < 16` bounds a build template's attribute
+count, which is the ceiling one `0x003A` message of 16 triples has to clear.
+
+Tooling: `toolkit/clientscan/attribtable.py` (stdlib only, structural locator,
+`--emit-content`) and `test_attribtable.py` (29 checks, floor 25 archive-less;
+three sabotages prove the locator refuses rather than guessing). Rows emitted
+to `vault/content/attributes.toml`, 51 of them, name ids only — no authored
+text, per the provenance rule.
 
 ## §9. The suite's one red is REAL, is NOT this arc's, and names a new client build
 
