@@ -1092,7 +1092,18 @@ Every one of these, in the order they were written:
   real rule's 15, compared to the real count rather than to a threshold, because
   the first version asserted `< 8`, got exactly 8, and a tuned constant measures
   nothing. Section 2 pins the selection loop with a no-bleed check (no overlay may
-  cover a corner belonging to the base) and both refusals. No vault, no client),
+  cover a corner belonging to the base) and both refusals. **Section 4 is the only
+  one that can refute rather than confirm**: it runs `corner_selector` against
+  `chunk+0x2B4` as the RUNNING CLIENT filled it, two int3 captures from Lornar's
+  Pass tile blocks (8,18) and (4,2), and demands **2048 of 2048 cells exactly**.
+  A near-match is a FAIL, not a rounding difference — a stable sort scores 95%/87%
+  here, which is precisely how the wrong model survived three rounds of tuning the
+  tie-break, the block origin and raw-vs-mapped tile bytes. The client's sort is
+  UNSTABLE (a selection-sort comparator network, swap on strict `>`), so equal
+  corners come out in swap order and `sorted()` can never reproduce it. Sections
+  1–3 are arithmetic and run on a bare machine; section 4 needs the vault and the
+  captures and declares `LEDGER.skip` rather than passing vacuously, which is why
+  the floor is the vault-less 26 and a full run scores 29),
   `toolkit/mapdata/test_trnvariation.py` (rung T6's first half: which of a terrain
   texture's four 128x128 quadrants each cell samples. The per-cell arithmetic is
   OBSERVED in build 38797 — one PRNG draw per cell ALWAYS, `quadrant = draw & 3`,

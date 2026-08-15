@@ -41,9 +41,11 @@ sys.path.insert(0, os.path.dirname(HERE))
 import trnblend as tb  # noqa: E402
 import checks  # noqa: E402
 
-# FLOOR: 25, from a real green run 2026-08-14. All arithmetic, nothing
-# skippable, so a short run is a section that died.
-FLOOR = 25
+# FLOOR: 26, from a real green run 2026-08-15 -- the vault-less count.
+# Sections 1-3 are arithmetic and cannot skip; section 4 needs the vault and
+# the client captures, so it declares a skip rather than inflating the floor.
+# A full run with the vault scores 29.
+FLOOR = 26
 
 
 def main(argv=None):
@@ -53,6 +55,7 @@ def main(argv=None):
     _section1(check)
     _section2(check)
     _section3(check)
+    _section4(check, led)
     print(f"\n({time.perf_counter() - t0:.1f}s)")
     return led.verdict()
 
@@ -237,12 +240,85 @@ def _section3(check):
           "on a checkerboard every interior cell blends", f"{len(interior)}")
     # The far edge replicates rather than wrapping: the last column's cell
     # must not take its +x corner from column 0.
+    # This used to assert `last[0].tile == tiles[dx-1]` -- "the base is this
+    # cell's own tile" -- which was true only while SELECTION was pinned to the
+    # identity. The client permutes the corners first (trnblend.corner_selector,
+    # measured 2048/2048), so the base is whichever corner SORTS first and need
+    # not be this cell's. The property under test is replication, not which
+    # corner wins, so assert that directly: the far column may only draw tiles
+    # its own replicated corners supply, and never column 0's.
     last = lays[0 * dx + (dx - 1)]
-    check(last[0].tile == tiles[dx - 1],
-          "the far column's base is its own tile (the edge REPLICATES, it "
-          "does not wrap)")
+    row1 = min(1, dy - 1) * dx
+    allowed = {tiles[dx - 1], tiles[row1 + dx - 1]}
+    drawn = {lay.tile for lay in last}
+    check(drawn <= allowed,
+          "the far column draws only its own replicated corners (the edge "
+          "REPLICATES, it does not wrap)", f"drew {sorted(drawn)}")
+    check(tiles[0] in allowed or tiles[0] not in drawn,
+          "and column 0's tile never leaks into the far column")
     check(all(v[0].quadrant == 0 for v in lays),
           "the base quadrant is the variation the caller passed, here 0")
+
+
+# --- 4. the selector against the CLIENT'S OWN MEMORY ------------------------
+
+def _section4(check, led):
+    """`corner_selector` against `chunk+0x2B4` as the running client filled it.
+
+    This is the only check in the file that can refute the derivation rather
+    than confirm our own arithmetic -- everything above is us agreeing with
+    us. The captures are int3 breakpoint dumps from Lornar's Pass tile blocks
+    (8,18) and (4,2); the block index comes from the reseed at `chunk+0x2A4`,
+    which stores `(tile_x << 16) ^ tile_y` unstepped.
+
+    Vault-only, so it SKIPS loudly rather than passing vacuously.
+    """
+    import vaultpath
+    try:
+        vault = vaultpath.require_dir()
+    except Exception as exc:
+        led.skip(f"selector-vs-client: no vault ({exc})")
+        return
+    caps = [("selector_lornars_tile8_18.bin", 8, 18),
+            ("selector_lornars_run2.bin", 4, 2)]
+    root = os.path.join(str(vault), "research", "terrain")
+    present = [c for c in caps if os.path.exists(os.path.join(root, c[0]))]
+    if not present:
+        led.skip("selector-vs-client: no captures under vault/research/terrain")
+        return
+
+    import archive as ar
+    import terrain as trnmod
+    import mapexport
+    dat = os.path.join(str(vault), "dat_study_38833", "Gw.dat")
+    if not os.path.exists(dat):
+        led.skip("selector-vs-client: build-38833 archive absent")
+        return
+    trn = trnmod.Terrain.from_row(34466, ar.Archive(dat))
+    dx, dy = trn.dim_x, trn.dim_y
+    tiles = mapexport.detile(trn.tiles, dx, dy)
+    ta = trn.table_a
+
+    def corners(gx, gy):
+        def g(x, y):
+            return ta[tiles[min(max(y, 0), dy - 1) * dx + min(max(x, 0), dx - 1)]]
+        return (g(gx, gy), g(gx + 1, gy), g(gx, gy + 1), g(gx + 1, gy + 1))
+
+    total = hit = 0
+    for name, tx, ty in present:
+        sel = open(os.path.join(root, name), "rb").read()
+        ok = sum(1 for cy in range(32) for cx in range(32)
+                 if tb.corner_selector(corners((tx + 1) * 32 + cx,
+                                               ty * 32 + cy)) == sel[cy * 32 + cx])
+        check(ok == 1024,
+              f"{name}: every cell of tile ({tx},{ty}) reproduced",
+              f"{ok}/1024")
+        total += 1024
+        hit += ok
+    # A stable sort scores 95%/87% here, so an exact match is the discriminating
+    # result and a near-match is a FAILURE, not a rounding difference.
+    check(hit == total, "the client's own selector bytes, exactly",
+          f"{hit}/{total}")
 
 
 if __name__ == "__main__":

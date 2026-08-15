@@ -1008,6 +1008,61 @@ almost certainly a static array near `0x00BF78D8`'s neighbours) and the DRAW
 ORDER (how many PRNG values a cell consumes, and whether uniform cells consume
 one). Both are testable offline against the two captures already in the vault.
 
+### 7.9 CLOSED: a selection-sort network, 2048 of 2048 (2026-08-15)
+
+`tile_x`/`tile_y` come free from the reseed: `chunk+0x2A4`'s FIRST dword is the
+seed unstepped, so run 1's `0x00080012` is tile **(8,18)** and run 2's
+`0x00040002` is **(4,2)**. §7.7's best-fit blocks were (9,18) and (5,2) --
+**off by exactly +1 in `tile_x`, both times**, a consistent convention error
+rather than noise, and correcting it did NOT move the score. Alignment was
+never the residual.
+
+Nor was the other candidate: sorting the RAW tile bytes instead of the mapped
+types scores identically (Lornar's `table_a` is not the identity, so this was
+a real test), and reversing the tie-break collapses to 0.5%.
+
+**The residual was that the client's sort is UNSTABLE.** The misses are
+interior, scattered, and every one is a cell with EQUAL corners coming out in
+an order `sorted()` cannot produce: `(4,4,2,4)` yields its equal 4s as 1,0,3,
+not 0,1,3; `(4,4,4,2)` yields 1,2,0. A stable sort is stable by construction,
+which is why it plateaued at 95%/87% no matter what else was varied.
+
+Testing the standard 4-element comparator networks against the 39 observed
+ordering signatures identifies it outright:
+
+| network | strict `>` |
+|---|---|
+| **selection `[01][02][03][12][13][23]`** | **39/39** |
+| bubble / insertion | 30/39 |
+| optimal-4 | 29/39 |
+| odd-even | 25/39 |
+
+**That is the sequence the disassembly already showed** -- `cmp ecx,edi`,
+`cmp ecx,ebx`, `cmp ecx,esi`, `cmp edi,ebx` at `0x0074B57C`.. is element 0
+against 1, 2, 3, then 1 against 2, 3. So the code and the data agree, and the
+rule generalises to all 75 signatures rather than needing the 39-entry table.
+
+    v = corners; idx = [0,1,2,3]
+    for a, b in ((0,1),(0,2),(0,3),(1,2),(1,3),(2,3)):
+        if v[a] > v[b]: swap v[a],v[b] and idx[a],idx[b]
+    selector = sum(idx[k] << 2k)
+
+**Verified cell by cell: 1024/1024 on tile (8,18), 1024/1024 on (4,2),
+2048/2048 total.** Landed as `trnblend.corner_selector` /
+`select_corners`, wired into `map_layers`, and `SELECTION` is now
+`"selection-sort-network"` instead of `"identity"`.
+
+`test_trnblend.py` §4 runs the derivation against both captures and demands an
+exact 2048/2048; it skips loudly without the vault. **A near-match there is a
+FAIL by design** -- 95% is what the wrong model scored, and treating it as
+"close enough" is exactly how it survived three rounds of tuning.
+
+**One consequence worth stating.** The base layer is now whichever corner
+SORTS FIRST, not necessarily the cell's own tile. §6.3 flagged that "which of
+them is the opaque base can differ" if the identity assumption was wrong; it
+was, and it does. `test_trnblend`'s far-edge check asserted the old behaviour
+and was rewritten to test replication directly.
+
 ### 7.5 The seam is not where it looked — a measurement, and a bug in the probe
 
 `scratchpad/composite.py` composites the ground from our own `layers.u16` in
