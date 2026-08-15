@@ -368,7 +368,103 @@ Three stated limits, all deliberate:
 
 ---
 
-## 6. What is still open
+## 6. Rung T6 — the blend, and why the ground stops repeating (2026-08-14)
+
+**Landed.** Two mechanisms, both read out of build 38797, both reproduced in
+`toolkit/` (stdlib, tested) and consumed by Blender as a resolved sidecar so
+the client's rules have exactly one implementation.
+
+### 6.1 The per-cell variation is a PRNG draw (MEASURED)
+
+`trnvariation.py`. Per cell, `0x00761800`:
+
+- **one draw ALWAYS** (`0x007618B3`..`0x007618CE`) — the tag-3 forced branch
+  calls the generator and *discards* the result, so a consumer that skips it
+  desynchronises every later cell in the tile;
+- `quadrant = draw & 3` (`0x007618CB`, a plain mask), or the raw 1/2/3 when
+  tag 3 forces it;
+- the primary layer's rotation bit **can never be set** — the mask clears it
+  and tag 3 is two bits wide;
+- `seed = (tile.x << 16) ^ tile.y` (`0x00761C80`), x in the high word, zero
+  becoming `0x075BD924`;
+- **one reseed per 32×32 tile**, row-major, both axes ascending. Settled by
+  the tag-3 cursor: it advances 8 bytes per row and is never reset across the
+  outer loop, so 32 rows consume exactly 256 bytes = one tile's tag-3 data.
+  The outer loop's back-edge is `0x0075E3D7 → 0x0075DF9E`.
+
+**The generator is NOT `s' = 48271·s mod (2³¹−1)`, and this is the trap.**
+`0x0046D120` computes the modulo by magic-number division (`0xBC8F1391`,
+`>>47`), whose quotient is one too high on **3.79% of states** (measured by
+search over 200,000, independently of the reading agent's ~3.8%), and the
+correction adds `0x80000000` rather than the modulus — which does not cancel
+it. On those states the client returns `(48271·s mod 2147483647) + 1`. A
+"tidied up" clean-modulo port drifts on one draw in twenty-six.
+
+### 6.2 The four quadrants are COVERAGE MASKS, not just variants (DERIVED)
+
+`trnblend.py`. A cell samples the tile bytes of its four corners — its own
+cell and the `+x`, `+y`, `+xy` neighbours, which are also vertices V0..V3 —
+maps each through `tileTypes` (tag 4), and groups them: corners sharing a
+**type** need no seam. Each group's 4-bit corner mask indexes a 16-entry
+table at `0x00BF78D8` giving the quadrant, a 180° rotation flag, and
+optionally a second layer.
+
+**What that table means was not in the read; it is derived here, and it is
+the rung's real finding.** Each 128×128 quadrant of a terrain texture is an
+authored **alpha coverage shape**:
+
+| quadrant | covers corners |
+|---|---|
+| 0 | {2, 3} — an edge |
+| 1 | {1} — a corner |
+| 2 | {0, 2} — the other edge |
+| 3 | {3} — a corner |
+
+with rotation mapping corner *k* → 3−*k*, which reaches all four edges and
+all four corners. Three independent supports, none of them forced:
+
+- the cover sets are read off the four rows that are unrotated and
+  single-layer (masks 12, 2, 5, 8);
+- **the client's own inverse table at `0x00BF7808` is `{12, 2, 5, 8}`** — a
+  different array, in the lo path, which never reads `0x00BF78D8`;
+- predicting all 16 rows and requiring each row's layers to cover exactly its
+  own mask: **15 of 16**, the miss being the empty mask 0 the grouping loop
+  cannot emit. The six two-layer rows are the sharp part, since a union of
+  two separately looked-up quadrants has to land exactly. A mirror-in-x rival
+  rotation scores 8 of 16 and is kept as a live control.
+
+So **the blend mask is ArenaNet's, not a gradient we invented**: bind the
+layer's texture at the named quadrant and its own alpha does the masking.
+This also retires §3.5's framing — the alpha is not merely "a blend mask",
+it is a *corner-coverage* mask with a table naming which shape goes where.
+
+### 6.3 What is reproduced, and what is a translation
+
+`mapexport` ships `.layers.u16` — three slots per cell, `(rot<<15) |
+(quad<<8) | tile`, `0xFFFF` unused — so Blender draws rather than re-derives.
+Kamadan: 81.9% of cells single-layer, 58,456 overlay quads. Pre-Searing:
+262,310 overlay faces over 148,882 cells, 68,201 rotated, and Blender's
+built geometry equals a recomputation from the sidecar exactly.
+
+Two honest departures, both labelled at the call site:
+
+- **The client composites in ONE pass** through three texture stages
+  (measured: `0x006D34DA` binds N stages, one `DrawIndexedPrimitive` at
+  `0x006D3A2B`, `ALPHABLENDENABLE=0` so the polygon is written opaque).
+  Blender has no equivalent, so the layers become coplanar geometry drawn
+  back-to-front with a 0.35-unit lift — a translation of the composite, not
+  a copy of it, and the lift is ours.
+- **Which corner is the BASE rests on an assumption.** Each corner is
+  fetched as `arr[(sel >> 2k) & 3]` where `sel` is a per-cell byte from a
+  chunk-local array at `chunk+0x2B4` that the builder fills before the loop;
+  where it comes from is NOT FOUND. `trnblend.SELECTION` assumes the
+  identity, which makes corner 0 the cell's own tile and agrees with T2's
+  separately measured "the raw byte indexes `m_tiles` directly". If that is
+  wrong the SET of layers is unchanged and which one is opaque can differ.
+
+---
+
+## 7. What is still open
 
 - **T6**: blending between tiles — the three per-cell layers, the alpha
   mask, and which corner-tile combination selects the two overlay layers.
