@@ -1693,7 +1693,9 @@ it on 2026-08-14, and `RUNBOOK.md` §0/§0b was walked on a real update for the 
   firing, claiming the anchors held on a build it had never opened, because it read
   signatures only from the vaulted builds. Fixed; it now reads the live install and names
   what it read. `RUNBOOK.md` step 3 also omitted `--no-updater-patch` and produced a wrong
-  live-capture build; fixed, with a `CLAUDE.md` contradiction flagged for a ruling.
+  live-capture build; fixed, and the `CLAUDE.md` sentence that contradicted it ("the
+  updater kill switch … wanted on both configurations") is **corrected** — the switch is
+  wanted on the loopback build and must be OFF for the live-capture one.
 - **Registered, not pinned.** `pinned.BUILDS` carries 38833; `PINNED` stays **38797**,
   spelled explicitly rather than `BUILDS[-1]`. Moving the pin is a re-measurement arc.
 - **The claimable-row collision is now 3 of 3** — this update recycled both 35300 and 35301,
@@ -1712,13 +1714,21 @@ would bring `avevents.py` back with it. Then the two live-memory readers in
 `itemprobe`/`agentprobe`, which on a new build do not compute a wrong number — they
 dereference a stale RVA inside a *running* client.
 
-**Two things left for the owner, both judgement rather than mechanics:** `content/maps.toml`
-gives both Pre-Searing maps `file_id = 0x8001B97D`, which **no longer binds** on 38833 — the
-update installed the pending replacement, cleared bit 31, and the plain `0x1B97D` now
-resolves to row 177262 while old row 7982 holds a texture (FINDINGS §7.5a). And `CLAUDE.md`'s
-launch-rule paragraph says the updater kill switch is "wanted on both configurations", which
-contradicts `RUNBOOK.md`:849 and the vault; RUNBOOK is fixed, `CLAUDE.md` is left for a
-ruling.
+**Both of the judgement calls this arc parked are now settled** (2026-08-14):
+
+- **`content/maps.toml`'s Pre-Searing file id is the PLAIN `0x1B97D`**, not the renamed
+  `0x8001B97D`. Bit 31 is `FcArchive` announcing a pending replacement, so the renamed form
+  was one archive copy's transient state recorded as the map's name — and 38833 installed
+  that replacement, after which it binds nowhere. `archive.py` had already drawn the rule:
+  *send the plain logical id and serve from an archive that binds it.* The plain id works on
+  **both** archive generations; a mixed pair (post-update client, pre-update server) is
+  refused by `contentids.preflight`, because the update delivered genuinely different
+  geometry. Point `RURIK_DAT` at a post-update archive to run the new client. FINDINGS §7.5a
+  has the three measured pairings.
+- **`CLAUDE.md`'s updater sentence is corrected.** The kill switch is wanted on the
+  **loopback** build and must be **OFF** for the live-capture build, which has to stream
+  content; only the multi-instance NOP is wanted on both. `RUNBOOK.md` and the vault were
+  right and now say so in one voice.
 
 ### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks)
 

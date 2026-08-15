@@ -13,7 +13,7 @@
 
 [map.148]
 name = "Ascalon City (Pre-Searing)"
-file_id = 0x8001B97D
+file_id = 0x1B97D
 spawn_x = 9826.0
 spawn_y = 8077.0
 plane = 0
@@ -26,18 +26,45 @@ verified = """Checked against our own archive, not taken on faith. 0x1B97D is MF
 lands in exactly 1 trapezoid on plane 0 of that mesh, and in 0 trapezoids of Kamadan's \
 (the control). studies/mapdata/FORMAT.md."""
 note = """
-BIT 31 STAYS ON, and that is the experiment. The archive stores this id as
-0x8001B97D. Sending the MASKED id (0x1B97D) reached the client and it refused the
-file outright:
+THIS ID WAS 0x8001B97D UNTIL 2026-08-14, and the correction is the whole entry.
+
+The old note said "BIT 31 STAYS ON, and that is the experiment", on this evidence,
+which still stands and is still the reason the bit-31 form ever worked -- sending the
+PLAIN id to a build-38797 client whose archive had the map renamed away was refused
+outright:
 
   Map file '0x01b97d' failed to load.  Attempting to re-bloat.
   Map '0x01b97d' failed to load / Creating default map
   Assertion: found  P:\\Code\\Engine\\Map\\Map.cpp(1762)
 
-archive.py's own docstring flags "the client masks the bit" as NOT ESTABLISHED -- an
-inference from the id a pre-Reforged upstream server sends, never read out of the
-binary -- and that crash is the first measurement to bear on it. Our reader registers
-both forms, so only the client's opinion is under test.
+What that measured is that THE CLIENT DOES NOT MASK: it stores the id verbatim and
+compares 32 bits exactly, with no retry on the map path (Gw.exe 0x0047C027 and
+0x0047AA20, read 2026-08-13). The falsification stands. The RULE drawn from it did
+not, and archive.py's file_id_table() already says so: a server should send the
+PLAIN LOGICAL ID and serve from an archive that binds it. 0x8001B97D only ever
+worked because the copies we serve from happen to have this row renamed away.
+
+Bit 31 is a RENAME, not a spelling: FcArchive binds `id | 0x80000000` and deletes
+the plain name when it has REQUESTED A REPLACEMENT, and DnArchive re-links the plain
+id once the replacement is installed. So a bit-31 id is not this map's name -- it is
+the archive announcing that this row is stale and a new file is on its way.
+
+THE REPLACEMENT LANDED. Build 38833 (2026-08-14, taken with `-image`) installed it:
+in that archive 0x8001B97D does not bind AT ALL, and 0x1B97D binds plainly to row
+177262 -- 1,300,044 B, crc 0x33F1A289, against the old row 7982's 1,300,036 B, crc
+0xA0AE500A. Eight bytes bigger and a different checksum: a genuinely different file,
+which is exactly what "a replacement is pending" had been promising. So recording
+the renamed form here was recording a transient state of one archive copy as if it
+were the map's name, and it stopped being true the first time a copy caught up.
+
+WHAT THIS COSTS, AND IT IS THE RIGHT COST. A file id is archive STATE, so server and
+client must be the SAME GENERATION -- toolkit/contentids.py checks exactly that and
+refuses a launch where they disagree, comparing size and crc rather than row index
+because rows do not survive a patch. With the plain id, a pre-update pair (dat_study
++ vault/run/2026-07-29...) still agrees, both at row 7982. A post-update CLIENT
+against a pre-update SERVER does not, and is refused: the client would draw the new
+geometry while the server pathed against the old. Point RURIK_DAT at a post-update
+archive to run the new client. That refusal is the feature.
 
 This map resolving at all was a bug fix in OUR code, not a gap in theirs:
 file_id_table() did an exact-match lookup while 25 of the archive's 171,023 ids carry
@@ -47,7 +74,7 @@ were wrong, which is the more useful half of that entry.
 
 [map.146]
 name = "Lakeside County"
-file_id = 0x8001B97D
+file_id = 0x1B97D
 spawn_x = 9826.0
 spawn_y = 8077.0
 plane = 0
@@ -55,10 +82,14 @@ explorable = true
 
 [map.146.provenance]
 source = "gw-preservation"
-verified = """The FILE id is verified as for map 148 -- same file, MFT row 7982. The \
-SPAWN is not Lakeside's and this row says so: gw-preservation records no spawn point \
-for 146, so Ascalon City's coordinate is reused, MEASURED walkable on plane 0 of this \
-same mesh."""
+verified = """The FILE id is verified as for map 148 -- same file, and the same \
+correction on 2026-08-14: it was recorded as 0x8001B97D, which is the RENAMED form and \
+archive state rather than the map's name, and it is now the plain 0x1B97D. See map \
+148's note for the measurement and for why server and client must be the same archive \
+generation. Row 7982 in a pre-update copy; row 177262 in build 38833's, where the \
+pending replacement was installed. The SPAWN is not Lakeside's and this row says so: \
+gw-preservation records no spawn point for 146, so Ascalon City's coordinate is \
+reused, MEASURED walkable on plane 0 of this same mesh."""
 note = """
 Three map ids share one file because row 7982 covers the whole Pre-Searing region
 (studies/mapdata/FORMAT.md calls it that) -- which is why its extent runs

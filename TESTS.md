@@ -1875,9 +1875,18 @@ Every one of these, in the order they were written:
   also DELETED as one that cannot fail -- `ar.row(n).index == n`, which
   `archive.py:367` asserts internally and would have raised first -- and
   replaced by two the archive can refute. THREE scores, each measured and none
-  subtracted: **78 with client and archive, 65 with the client alone, 40 with
-  neither** -- floor 78, so a vault-less run goes red. The archive section
-  scores a fixed count however many archives a vault holds. ~2.5 s),
+  subtracted: **77 with client and archive, 64 with the client alone, 39 with
+  neither** -- floor 77, so a vault-less run goes red. The archive section
+  scores a fixed count however many archives a vault holds, and **as of
+  2026-08-14 so does section 6's checkout refusal**. It was one check PER working
+  tree, and `working_tree_roots()` answers 2 inside a git worktree against 1 in
+  the main checkout -- so the old floor of 78 silently required the suite to be
+  run from a worktree, and `run_suite.py` in `C:\gd\Rurik` reported "ONLY 77 OF A
+  DECLARED FLOOR OF 78 CHECKS RAN". A count that moves with the caller's working
+  directory cannot be a floor: the vacuity guard cannot tell it from a lost
+  section, which is the one thing it exists to catch. The refusal is now a single
+  verdict over every root, naming any it failed to refuse, so each score above is
+  one lower than before and the same in both environments. ~2.5 s),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first. Since
@@ -2587,40 +2596,50 @@ Every one of these, in the order they were written:
   checks is an unfalsifiable self-declaration. `BUILD_UNKNOWN` is a distinct third
   value, never "probably the pinned one", and `require_single_build` refuses a
   two-build corpus — `test_movement_fidelity.py`, the pooling consumer, calls it.
-  Unknown is TOLERATED by default and that is measured rather than lax: 919 of
-  the research corpus's 2,451 capture files name no build (556 of 1,678 when this
-  was written; the fraction is stable as the vault grows), because a frame log
-  names it once per SESSION not once per file, so refusing on unknown would
-  refuse nearly every real corpus and the guard would be deleted in a week — it
-  may never be silent, so the count comes back in the reason, and
-  `allow_unknown=False` exists.
-  **The census answers what `studies/crossbuild/PLAN.md` §10 left UNVERIFIED:
-  every capture that names a build names 38797**, and that is asserted as an
-  invariant so the first capture from a second build turns it red.
-  **It fired on 2026-08-14, and read the sentence above carefully before
-  concluding it fired correctly.** Build 38833 shipped, `test_handshake.py`
-  began stamping it (it had been announcing a hardcoded 38797 while driving
-  whatever client the newest key matched — `studies/crossbuild/FINDINGS.md`
-  §7.7), and running THE SUITE ITSELF put 38833-stamped files in the vault: the
-  census read `{38797: …, 38833: 4}` and went red over its own test fixtures.
-  The scope was wrong, not the invariant. `selftest` now joins
-  `captures-scrubbed` in the walk's exclusions, for the reason
-  `test_handshake.py` gives for that directory existing at all — its output
-  "used to share `vault/captures/authsrv/` with real client sessions … two
-  self-test captures were read as evidence of successful client logins that
-  never happened", and a census counting them re-created that contamination one
-  level up. So the claim is about **the research corpus**, which is what the
-  figures in `studies/` are computed over; a self-test artifact is not one of
-  those. **The teeth are intact**: MEASURED 2026-08-14 the corpus reads
-  `{38797: 1,532} + 919 unknown`, no capture has yet been taken on 38833 outside
-  selftest, and a real one still turns this red. The pooling consumer never saw
-  the selftest files either — `game_channel_captures()` globs only
-  `captures/authsrv/` and `captures/gamesrv/`, and calls `require_single_build`
-  on top. (The two censuses in this file walk with DIFFERENT exclusions on
-  purpose-by-omission rather than by argument: the origin census still counts
-  selftest, 2,757 files vs the build census's 2,451. Harmless today — a selftest
-  capture really is ours, so the ours/live claim stays true — but the asymmetry
-  is undesigned and is the kind of thing to settle before leaning on either
-  count.) A vault-less run scores 23 against a floor of 23, measured with
-  `RURIK_VAULT` pointed at an empty directory rather than derived by
-  subtraction).
+  Unknown is TOLERATED by default and that is measured rather than lax: roughly
+  **38%** of the research corpus names no build — 930 of 2,464 MEASURED
+  2026-08-14, 556 of 1,678 when this was written. Treat the fraction as the
+  claim and the absolute counts as a timestamp: the suite writes captures on
+  every run, so these moved twice during the session that recorded them and any
+  exact figure here is stale by the next green run. It is that high because a
+  frame log names the build once
+  per SESSION not once per file, so refusing on unknown would refuse nearly every
+  real corpus and the guard would be deleted in a week — it may never be silent,
+  so the count comes back in the reason, and `allow_unknown=False` exists.
+  **The vault census answers what `studies/crossbuild/PLAN.md` §10 left
+  UNVERIFIED — no corpus figure pools builds — and is scoped to the RESEARCH
+  corpus: `selftest/` is excluded from the walk the way `captures-scrubbed/`
+  already is, and since 2026-08-14 that scoping is load-bearing.** Build 38833
+  shipped, and the suite's own runs began writing 38833-stamped fixtures into
+  `captures/selftest/` — `test_handshake` drives whichever client the newest
+  key matches (`studies/crossbuild/FINDINGS.md` §7.7) — so a census over the
+  whole vault went red over its own byproducts, and would go red again on every
+  future suite run. Two sessions hit that red in parallel and fixed it two
+  ways: one NAMED the off-pin files in an allowlist, which the producer refutes
+  (the suite itself writes them, so the list stales on every run), and one
+  excluded the fixtures, which stands — a self-test artifact is not research
+  data, and counting it re-creates one level up the contamination `selftest/`
+  was split out to prevent. Two checks survive from the allowlist branch: the
+  pooling refusal is EXERCISED on a real mixed pair (the fixtures supply a
+  genuine 38833 file, found by reading each candidate's bytes, never by
+  filename — a refusal that has never fired on a real artifact is the same
+  class of thing as a green test that asserts nothing), and the census's 38797
+  is cross-checked against `clientscan/pinned.py` so a moved pin turns the
+  census red until it is re-decided rather than silently re-aimed. A REAL
+  second-build capture in the research corpus still turns the census red — that
+  is the point, not a defect.
+  **And the scoping was checked against the thing it protects, not just made
+  green:** the pooled consumer never saw the selftest files in the first place —
+  `game_channel_captures()` globs only `captures/authsrv/` and
+  `captures/gamesrv/`, never the whole tree, and calls `require_single_build` on
+  top, so it would still refuse a real mixed corpus. Scoping a census green and
+  the contamination being absent are different claims and only the second one
+  matters. (Noted while checking it, and undesigned rather than argued: the two
+  censuses in this file walk with DIFFERENT exclusions — the origin census still
+  counts `selftest`, 2,782 files against the build census's 2,464. Harmless
+  today, because a selftest capture really is ours and the ours/live claim stays
+  true, but it is the kind of asymmetry to settle before leaning on either
+  count. Both figures MEASURED 2026-08-14 and both drift per the note above; the
+  ~320-file gap between them is the durable part.) A vault-less
+  run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
+  empty directory rather than derived by subtraction; a vault run scores 30).

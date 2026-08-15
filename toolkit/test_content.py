@@ -146,9 +146,28 @@ def main():
 
     # --- the migration did not change a value --------------------------------
     # Read off the pre-migration authsrv.py / agents.py, 2026-08-06.
+    #
+    # MAP 148'S FILE ID IS THE ONE VALUE THAT HAS MOVED SINCE, and it moved on
+    # purpose: 0x8001B97D -> 0x1B97D on 2026-08-14. The migration claim this
+    # section makes is intact -- moving the data out of authsrv.py changed
+    # nothing -- and this is a later, separate, measured correction, so the old
+    # literal is kept here as the FROM rather than quietly dropped.
+    #
+    # Bit 31 is a RENAME, not a spelling: FcArchive binds `id | 0x80000000` and
+    # deletes the plain name when it has REQUESTED A REPLACEMENT, and DnArchive
+    # re-links the plain id once that lands. So the renamed form is a transient
+    # state of ONE archive copy, not the map's identity. Build 38833 installed
+    # the replacement: 0x8001B97D does not bind in that archive AT ALL, and
+    # 0x1B97D binds to a genuinely different file -- 1,300,044 B crc 0x33F1A289
+    # against old row 7982's 1,300,036 B crc 0xA0AE500A. archive.py's
+    # file_id_table() had already drawn the rule this now follows: send the plain
+    # logical id and serve from an archive that binds it. The full measurement is
+    # in content/maps.toml [map.148].
     msc = world.map_static_config()
-    LEDGER.ok(msc[148] == (0x8001B97D, (9826.0, 8077.0), 0, False),
-              "map 148 is byte-for-byte what MAP_STATIC_CONFIG held", str(msc[148]))
+    LEDGER.ok(msc[148] == (0x1B97D, (9826.0, 8077.0), 0, False),
+              "map 148 carries the PLAIN file id, not the renamed bit-31 form",
+              f"{msc[148]} -- was 0x8001B97D until 2026-08-14; reverting it makes "
+              f"the map unbindable by any post-update client")
     LEDGER.ok(msc[449] == (0x345CC, (-9067.0, 13218.0), 0, False),
               "map 449 (the fallback) is unchanged", str(msc[449]))
     MIGRATED = {148, 146, 449, 194, 55, 474, 558, 90}

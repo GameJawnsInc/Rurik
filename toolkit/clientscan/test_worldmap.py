@@ -204,7 +204,16 @@ wm = _load_module()
 # catches it because parchment's grid is 1x2, not square. A fixture built only
 # out of square grids would have scored that sabotage 1 red, on the client
 # check alone -- which is why SYNTH_DIMS is deliberately ragged.
-LEDGER = checks.Ledger("worldmap", floor=78)
+# 78 -> 77 on 2026-08-14, and the change is that the number no longer MOVES.
+# Section 6's checkout-refusal was one check PER working tree, and
+# `working_tree_roots()` answers 2 inside a git worktree and 1 from the main
+# checkout -- so the floor silently required the suite to be run from a
+# worktree, and `python toolkit/run_suite.py` in `C:\gd\Rurik` reported
+# "ONLY 77 OF A DECLARED FLOOR OF 78". That is the vacuity guard firing on the
+# caller's working directory rather than on lost coverage, which is precisely
+# the confusion it exists to prevent. The refusal is now one verdict over every
+# root, so 77 is what both environments produce.
+LEDGER = checks.Ledger("worldmap", floor=77)
 
 # ---- literals, written HERE and not computed from the module -------------
 EXPECT_TIERS = ("chunk", "parchment", "satellite")
@@ -877,13 +886,31 @@ def section_guards():
                   wm.Refused, "SOURCE snapshot"),
               "vault/dat_study is REFUSED even though the vault is allowed "
               "(the order of the tests is what does that)")
+    # ONE check over every root, not one check PER root, and the difference is a
+    # floor that used to depend on where you ran from. `working_tree_roots()`
+    # returns the worktree AND the main checkout when `.git` is a file, and just
+    # the one tree when it is a directory -- so this loop emitted 2 checks from a
+    # worktree and 1 from `C:\gd\Rurik`. The floor was measured at 78 inside a
+    # worktree, so running the suite from the MAIN checkout scored 77 and failed
+    # the vacuity guard: "1 did not execute", naming nothing real. MEASURED both
+    # ways on 2026-08-14. A count that moves with the caller's directory cannot
+    # be a floor, and the guard cannot tell that shortfall from a lost section.
+    #
+    # The assertion is unchanged in strength -- EVERY root must be refused, and a
+    # root that is not is named -- it is just reported as one verdict.
     roots = atex.working_tree_roots()
-    for root in roots:
-        LEDGER.ok(refuses(lambda r=root: wm.resolve_out(
-                      os.path.join(r, "toolkit", "atlas.json")),
-                      wm.Refused, "checkout of this repository"),
-                  f"a write into {'the MAIN checkout' if root != os.path.abspath(wm.REPO_ROOT) else 'this checkout'} is REFUSED",
-                  root)
+    unrefused = [r for r in roots
+                 if not refuses(lambda r=r: wm.resolve_out(
+                     os.path.join(r, "toolkit", "atlas.json")),
+                     wm.Refused, "checkout of this repository")]
+    LEDGER.ok(roots and not unrefused,
+              f"a write into EVERY checkout of this repo is REFUSED "
+              f"({len(roots)} tree(s))",
+              # Shown on pass as well as failure, so it says what was actually
+              # refused rather than only what went wrong.
+              f"UNREFUSED: {unrefused}" if unrefused else
+              ("no working tree found at all, so this refused nothing" if not roots
+               else "; ".join(roots)))
     LEDGER.ok(len(roots) >= 1,
               "working_tree_roots() found at least this tree",
               f"{len(roots)}: {roots}")

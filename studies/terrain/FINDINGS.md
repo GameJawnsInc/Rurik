@@ -438,6 +438,41 @@ layer's texture at the named quadrant and its own alpha does the masking.
 This also retires §3.5's framing — the alpha is not merely "a blend mask",
 it is a *corner-coverage* mask with a table naming which shape goes where.
 
+### 6.2b The quadrants are alpha shapes and NOT colour variants — a correction
+
+**MEASURED 2026-08-14, and it corrects this arc's own claims.** Over eight of
+Kamadan's terrain textures, comparing the four 128×128 quadrants pairwise
+inside the sampled window:
+
+| | mean pairwise difference |
+|---|---|
+| **ALPHA** | **118 – 134** of 255 |
+| RGB | **4 – 21** of 255 |
+
+So a texture's four quadrants are very nearly the SAME PICTURE carrying FOUR
+DIFFERENT COVERAGE MASKS. Two consequences, and the second is a retraction:
+
+- **It independently corroborates §6.2.** If the quadrants were four visual
+  variants of a material — the reading T3 recorded and this document
+  repeated — their RGB would differ substantially and their alpha need not.
+  The measurement is the other way round by an order of magnitude, which is
+  what "each quadrant is an authored corner-coverage shape" predicts and
+  what a variant reading does not.
+- **RETRACTED: that per-cell variation removes the ground's repetition.**
+  §6.1 and the T6 commit message both said so, and `test_blenderimport`
+  carried it as a check's rationale. It is wrong. Variation selects a
+  coverage mask; it barely moves the colour. **The visible tiling of the
+  ground at close range is INHERENT** — one cell is 96 world units showing
+  one 111-texel image of its material (T3), and the client draws exactly
+  that. What variation actually buys is correct per-cell MASK selection,
+  which is what makes tile boundaries blend; the colour repetition is
+  ArenaNet's and is not something a renderer can fix without inventing
+  detail she did not ship.
+
+The claim that survives is narrower and still worth having: T5 pinned every
+cell to quadrant 0, which forced the WRONG COVERAGE SHAPE everywhere, not a
+duller picture.
+
 ### 6.3 What is reproduced, and what is a translation
 
 `mapexport` ships `.layers.u16` — three slots per cell, `(rot<<15) |
@@ -454,6 +489,52 @@ Two honest departures, both labelled at the call site:
   Blender has no equivalent, so the layers become coplanar geometry drawn
   back-to-front with a 0.35-unit lift — a translation of the composite, not
   a copy of it, and the lift is ours.
+
+### 6.4 The composite formula, OBSERVED — ArenaNet's own shader
+
+This section first shipped the formula as INFERRED, reasoning from the
+architecture ("a single pass with per-stage ops is only consistent with the
+mask being consumed in the combiner"). **It did not have to stay inferred.**
+The terrain material builder at `0x0074B9D0` (`TrnTex.cpp`) selects one of
+four paths by device caps, and the preferred one hands a **binary ps_1_1
+pixel shader, 128 bytes at `0x00A737E8`**, to `0x00664110`. Decoded whole:
+
+```
+tex t0 ; tex t1 ; tex t2 ; tex t3
+lrp r1, t1.wwww, t1, t0      ; r1 = lerp(t0, t1, t1.a)
+lrp r1, t2.wwww, t2, r1      ; r1 = lerp(r1, t2, t2.a)
+mul r0, v0, r1               ; r0 = diffuse  * r1
+mul r1, v1, r1               ; r1 = specular * r1
+lrp r0, t3.wwww, r1, r0      ; r0 = lerp(r0, r1, t3.a)
+```
+
+`lrp dst, s0, s1, s2` is `s2 + s0*(s1 - s2)`. So: **layer 0 opaque, then
+each additional layer lerped over the accumulator by ITS OWN texture
+alpha** — the formula this repo drew coplanar geometry to reproduce, read
+out of ArenaNet's shader tokens rather than argued from her architecture.
+
+The **fixed-function fallback agrees**, which is a second witness from a
+different mechanism. Path C/D build stage ops from literal tables at
+`0x00A73E08`/`0x00A73E38`, and the `GR_TEXOP → D3DTEXTUREOP` decoder at
+`0x00A65B78` (24 entries × 3 dwords, located from `Dx9ShaderStage.cpp` at
+`0x006DA8E7`) reads them as:
+
+```
+stage 0: SELECTARG1          stage 2: BLENDTEXTUREALPHA
+stage 1: BLENDTEXTUREALPHA   stage 3: MODULATE, no texture
+```
+
+That decoder is itself cross-checked four ways, the sharpest being
+ArenaNet's own assert `GrStage:350 layerFlags & GR_TEXFLAG_MODULATE_2X_ARG`
+setting op 14, which the table maps to `D3DTOP_MODULATE2X`.
+
+**Two things this opens, and they are the next visible wins.** `mul r0, v0,
+r1` modulates the blended ground by the **vertex diffuse colour** — which is
+terrain tag 9, the baked directional lightmap `terrain.py` already decodes
+and `mapexport` already ships as `.shade.u8`, and which nothing in Blender
+currently applies. And `t3` is not a tile layer at all: its alpha blends
+between the diffuse and specular lighting terms, which is what T3's fourth
+texcoord set (chunk space, one repeat per 32 cells) addresses.
 - **Which corner is the BASE rests on an assumption.** Each corner is
   fetched as `arr[(sel >> 2k) & 3]` where `sel` is a per-cell byte from a
   chunk-local array at `chunk+0x2B4` that the builder fills before the loop;
@@ -462,9 +543,41 @@ Two honest departures, both labelled at the call site:
   separately measured "the raw byte indexes `m_tiles` directly". If that is
   wrong the SET of layers is unchanged and which one is opaque can differ.
 
+### 6.5 Tag 9 applied — the lightmap the shader asked for
+
+`mul r0, v0, r1` (§6.4) multiplies the composited ground by the vertex
+diffuse colour, and terrain tag 9 is a BAKED DIRECTIONAL LIGHTMAP measured
+in `terrain.py`: fitting `255 * max(0, N.L)` gives median Pearson r 0.887
+over 345 maps, the best-fit elevation tracks tag 0's angle field with
+Spearman 0.9352, and the azimuth control puts the light on +x with no y
+component on 343 of 345 — which is the client's own
+`TrnTexIntensity:342 lightDir.y == 0`.
+
+It is attached **per VERTEX**, and that follows from the file rather than
+from taste: tag 9 holds `dimX * dimY` bytes, the same grid as tag 1, whose
+samples are measured to sit at cell CORNERS. So the far column and row
+replicate exactly as `corner_heights` does. Kamadan's lattice means 0.862
+over 187,233 vertices, Lornar's Pass 0.719 over 267,393; both span the full
+0..1, so the multiply is visible rather than a no-op. The overlay geometry
+samples the same lattice, so a blended layer is lit identically to the
+ground beneath it.
+
+What is NOT settled is the transfer curve — see §7.
+
 ---
 
 ## 7. What is still open
+
+- **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
+  (§6.5) but as the simplest mapping the measurement allows, `shade / 255`
+  as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
+  at 255, so a gamma or a scale-and-bias would fit the corpus equally well
+  and none is measured. `--no-lightmap` is the control.
+- The per-cell corner SELECTOR at `chunk+0x2B4` (§6.3) — which decides which
+  corner is the opaque base. NOT FOUND.
+- The 4-dword table at `0x00A73DF8` = `{3, 3, 3, 0x30}`, the terrain
+  factory's argument that lands at stage record +0x10. Named, not
+  understood, and asserted nowhere.
 
 - **T6**: blending between tiles — the three per-cell layers, the alpha
   mask, and which corner-tile combination selects the two overlay layers.
