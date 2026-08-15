@@ -2462,8 +2462,25 @@ Every one of these, in the order they were written:
   real corpus and the guard would be deleted in a week — it may never be silent,
   so the count comes back in the reason, and `allow_unknown=False` exists.
   **The vault census answers what `studies/crossbuild/PLAN.md` §10 left
-  UNVERIFIED: every capture that names a build names 38797** — 1,122 files — so
-  no existing corpus figure is pooling builds, and that is asserted as an
-  invariant so the first capture from a second build turns it red. A vault-less
+  UNVERIFIED — no corpus figure pools builds — and changed shape on 2026-08-14,
+  when the build-38,833 arc's three out-of-sample selftests turned "the whole
+  vault is at most ONE build" red.** That was the same defect the origin census
+  already documents for its old `not groups[LIVE]`: a check asserting the
+  legitimate thing's ABSENCE goes red when it arrives, and the cure on offer is
+  to move the evidence or soften the guard. The census now asserts the form that
+  survives a second build: every off-pin capture must be covered by a NAMED row
+  (`OFF_PIN_CAPTURES` — an exact path, or a DATED CAMPAIGN pattern: one
+  directory, one producer, one day; consulted only for files whose own VERSION
+  frame is off-pin, so a wide date pattern cannot launder a pin-build file).
+  An off-pin capture outside the rows is red until acknowledged, so
+  accumulation is never silent — and the granularity is the campaign because
+  day one proved the finer grain is an outage: the parallel session's selftest
+  campaign landed a fourth 38833 capture DURING the first green suite run, and
+  per-file rows would go red on every rerun of authorized work. Pooling the
+  pin with an off-pin capture is REFUSED exercised
+  on the real files, everything outside the named rows still names 38797, and
+  the pin the census is written against is cross-checked against
+  `clientscan/pinned.py` so a moved pin turns the census red until it is
+  re-decided rather than silently re-aimed. A vault-less
   run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
-  empty directory rather than derived by subtraction).
+  empty directory rather than derived by subtraction; a vault run scores 30).

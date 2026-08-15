@@ -572,6 +572,21 @@ the format gap `tape.py` documented; `overrides.json` gained a structured
 builds** -- every capture in the vault that names one names 38797 (1,122 files), and
 `test_origin.py` now asserts that as an invariant.
 
+**UPDATED 2026-08-14: the invariant changed shape, the answer stands.** The build-38,833
+arc's out-of-sample selftest campaign put 38833 captures in `vault/captures/selftest/`
+(4 when this was written, and the campaign was still running), and "the whole vault is at
+most ONE build" went red on the arrival of a legitimate artifact -- the same defect as
+asserting no live capture exists. `test_origin.py`'s census now requires every off-pin
+capture to be covered by a NAMED row (`OFF_PIN_CAPTURES`: an exact path or a dated
+campaign pattern, consulted only for files whose own VERSION frame is off-pin -- an
+off-pin capture outside the rows is red until acknowledged, so accumulation is never
+silent), exercises `require_single_build`'s refusal on the real mixed pair, asserts
+everything outside the named rows still names 38797, and cross-checks that pin against
+`clientscan/pinned.py`. No pooled figure reads the campaign's files: they are
+auth-channel files under `selftest/`, and the one pooling consumer
+(`test_movement_fidelity`) selects game-channel files from `authsrv/`+`gamesrv/` and
+routes through both guards.
+
 **The schema half is mostly built; do not re-invent it.** `schema/messages.json`:8 carries
 `"validated_against_build": 38797`. `PLAN.md` §4 A3:700 already states the law — *"Every
 schema revision must carry a client build id. `MOVE_TO_COORD` drifted `0x003C` → `0x003E`
@@ -678,7 +693,7 @@ full") should point at the command rather than at prose.
 | 4 | ~~Class-(a) census~~ | ✅ `buildpins.py` + `test_buildpins.py` 40 checks; `FINDINGS.md` §2 carries the table with a verdict per row; 68 sites, 7 files, 37 outstanding |
 | 5 | ~~Conversions landed~~ | ✅ `SIG_KEYS` has ONE implementation, not three that agree (`dhbuild.locate_keys`); the patcher and the go/no-go delegate to it; §7.2's two signatures are in `sigcorpus.py` and checked. `test_dhbuild` 43, `test_sigcorpus` 34 |
 | 6 | ~~Build identity~~ | ✅ `buildid.py` + `test_buildid.py` 23 checks; the older build is **38519**; `pinned.BUILDS` is asserted against a fresh read of each image |
-| 7 | ~~Build stamp on captures~~ | ✅ `origin.build_of` + `require_single_build`, contradiction-checked; `test_movement_fidelity` refuses to mix; `overrides.json` stamped; audit clean (1,122 files, all 38797); `test_origin.py` 28 checks |
+| 7 | ~~Build stamp on captures~~ | ✅ `origin.build_of` + `require_single_build`, contradiction-checked; `test_movement_fidelity` refuses to mix; `overrides.json` stamped; audit clean at landing (1,122 files, all 38797 — since 2026-08-14 the vault also holds the 38,833 selftest campaign's files, covered by a NAMED row, see §10's update); `test_origin.py` 30 checks |
 | 8 | ~~Pre-update / post-update commands~~ | ✅ `updatecheck.py --before/--after`, exit 0/1/2 driven through the process, wired into `RUNBOOK.md` steps 0 and 0b and its failure table; `test_updatecheck.py` 26 checks |
 | 9 | ~~Archive-durability experiment~~ | ✅ ARMED `studies/crossbuild/DURABILITY.md`; tracer in `vault/dat_durability/`, prediction stated before the event, revert proven on the real archive. Cannot be COMPLETED without an update |
 
