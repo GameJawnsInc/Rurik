@@ -662,7 +662,52 @@ are filled from two row cursors each read **before and after** a call that
 advances them, matching `trnblend`'s "corner 0 = this cell, 1 = +x, 2 = +y,
 3 = +x+y" from the other side.
 
-### 7.4 The seam is not where it looked — a measurement, and a bug in the probe
+### 7.4 Hunting the selector's filler: three things closed, the question open
+
+The array is **`chunk+0x2B4`**, and its address is formed exactly once in the
+image — `lea eax, [ebx + 0x2b4]` at `0x0075DF60`, stored to `[ebp-0x38]` and
+walked a byte per cell. It is inline chunk memory, not a pointer: the read is
+`movzx eax, byte ptr [eax]` with no indirection.
+
+**Nothing in the image writes it.** `--field 0x2B4` finds six stores, all on
+unrelated objects (`0x004362B3`, `0x004362BC`, `0x00438ABD`, `0x00438F58`,
+`0x004393B7`, `0x00855F54`), and three address-taking sites of which only
+`0x0075DF60` is terrain — the read itself. So the fill goes through a pointer
+the anchored scan cannot follow. `codescan` names its own blind spots and one
+of them fits exactly: a method whose `this` is the RNG object at `chunk+0x2A4`
+writing `[this+0x10]` **is** `chunk+0x2B4`, spelled with displacement `0x10`,
+and no sweep for `0x2B4` can see it.
+
+**RULED OUT — it is not an undecoded terrain tag,** which is worth having
+because it is the cheap explanation and it is wrong. `terrain.py` decodes tags
+0, 1, 2, 3, 4, 5, 7, 9; tags 6 and 8 occur in none of the 349 maps and the tag
+sequence is fixed (`SEQUENCE_SHORT` / `SEQUENCE_LONG`, 325 + 24). §6.3's "NOT
+map data" therefore survives a real test rather than standing on assumption.
+
+**Two things fell out that are not about the selector at all, and both
+corroborate `trnvariation` from sites it was not built from:**
+
+- `0x00761C80` is the per-tile-block reseed, and it is
+  `(a << 16) ^ b` — `mov edx,[eax]; shl edx,0x10; xor edx,[eax+4]` — which is
+  `trnvariation.reseed` instruction for instruction.
+- `0x0046D2E0` is `RNG::seed`, and its zero-seed fallback is **`0x075BD924`**,
+  which is `trnvariation.DEFAULT_SEED`. Independent of the draw loop the
+  constant was originally read from.
+- **NEW, and unmodelled:** that seeder writes **two** state dwords, `[ecx]` and
+  `[ecx+4]`, both to the same value. `trnvariation` models a single state. Two
+  states seeded identically diverge only if they are stepped differently, so
+  this may be inert for our purposes or may be the second stream that varies
+  the selector. UNVERIFIED, and it is the cheapest lead left.
+
+**What this costs to finish: one live read, not more static analysis.** Two
+rounds of anchored scanning have now bounded the question without answering it,
+and `toolkit/harness/keytap.py` already does cross-process `ReadProcessMemory`
+with ASLR-correct module bases in pure `ctypes`. Reading `chunk+0x2B4` while
+standing in a map settles in one observation both what the values are and
+whether they change per tile block — which is the repo's own rule (capture and
+read; the wins never came from reasoning about the client).
+
+### 7.5 The seam is not where it looked — a measurement, and a bug in the probe
 
 `scratchpad/composite.py` composites the ground from our own `layers.u16` in
 texture space, with no camera and no lighting, and scores
@@ -690,8 +735,13 @@ a picture that looks plausible and is measuring its own bug.
 - **The SOURCE of the per-cell corner selector.** §7.3 measures its form and
   proves it walks a per-cell array (`inc dword ptr [ebp-0x38]`), so
   `trnblend.SELECTION = "identity"` is now known to be **wrong**, not merely
-  unverified. Where the array is filled is still NOT FOUND, and it is the
-  top item on this list: it is what makes a boundary stop repeating.
+  unverified. §7.4 locates the array at `chunk+0x2B4`, shows **nothing in the
+  image writes it**, and rules out the cheap explanation (not an undecoded
+  tag). Still NOT FOUND, and still the top item: it is what makes a boundary
+  stop repeating. **Next move is a live `ReadProcessMemory`, not more static
+  scanning** — two anchored rounds have bounded it without answering it.
+  Cheapest untried lead: `RNG::seed` writes TWO state dwords (§7.4) and
+  `trnvariation` models one.
 - **The base layer's own UV rectangle** — `obj+0x68/0x6C` (span) and
   `obj+0x70/0x74` (origin), §7.2. If the caller advances the origin per cell
   the base tiles continuously and there is no 96-unit repeat; if it does not,
