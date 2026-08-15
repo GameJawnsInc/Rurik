@@ -984,6 +984,45 @@ Every one of these, in the order they were written:
   ~17 minutes — MEASURED 2026-08-12 at 434 s for the Bloated sweep and 565 s for
   the Stripped one, which reads BOTH streams of every map, so budget for those
   two numbers rather than for a round one),
+  `toolkit/mapdata/test_trnblend.py` (rung T6's second half: WHICH textures a cell
+  blends and how each is masked. A cell samples its four corners' tile bytes, and
+  where their tile TYPES disagree — tag 4, not the raw byte, which is T2's finding
+  from the other side, so two raw tiles sharing a type make no seam — the client
+  emits overlays whose alpha covers exactly the disagreeing corners. The masking
+  is not ours to invent: each 128x128 quadrant of a terrain texture is an authored
+  COVERAGE SHAPE and a 16-entry table maps a 4-bit corner mask to the quadrant
+  (plus a 180° rotation flag, plus optionally a second layer) that covers it.
+  Section 1 runs that derivation as a check rather than trusting it: the cover
+  sets are re-derived HERE from the four unrotated single-layer rows, they must
+  equal the client's INDEPENDENT inverse table at `0x00BF7808` (`{12, 2, 5, 8}` —
+  a different array, in the lo path, which never reads the first one), and
+  predicting all 16 rows must cover each row's own mask on **15 of 16**, the miss
+  being the empty mask 0 the grouping loop cannot emit. The six two-layer rows are
+  the sharp part — a union of two separately looked-up quadrants has to land
+  exactly — and a mirror-in-x rival rotation is scored live at 8 of 16 against the
+  real rule's 15, compared to the real count rather than to a threshold, because
+  the first version asserted `< 8`, got exactly 8, and a tuned constant measures
+  nothing. Section 2 pins the selection loop with a no-bleed check (no overlay may
+  cover a corner belonging to the base) and both refusals. No vault, no client),
+  `toolkit/mapdata/test_trnvariation.py` (rung T6's first half: which of a terrain
+  texture's four 128x128 quadrants each cell samples. The per-cell arithmetic is
+  OBSERVED in build 38797 — one PRNG draw per cell ALWAYS, `quadrant = draw & 3`,
+  `seed = (tile.x << 16) ^ tile.y` — and the whole-map traversal assembled from it
+  is labelled RECONSTRUCTION, which this file can check for internal exactness and
+  explicitly cannot check against ArenaNet's output. Two traps kept armed, both of
+  them edits a later reader would think were improvements. **The generator is NOT
+  `% 2147483647`**: the client computes the modulo by magic-number division whose
+  quotient is one too high on ~3.8% of states and corrects with `+0x80000000`,
+  which does not cancel it — so section 1 SEARCHES for the disagreeing states
+  rather than quoting them, finds 7,579 of 200,000 (3.79%), and requires every one
+  to be exactly +1; a tidied-up clean-modulo port makes that check go red instead
+  of drifting on one draw in twenty-six. **An authored cell still draws**: tag 3
+  overrides the value, not the draw, so forcing one cell must move exactly ONE
+  output byte — with a live skip-the-draw rival that moves 458 of 1,024 as the
+  control. Section 4 makes the one thing the disassembly did not settle refutable
+  rather than prose: the per-ROW reseed reading makes every row of a tile identical
+  (1,984/1,984 — a stripe), the per-TILE reading leaves rows independent (23.4%),
+  and the default is pinned. No vault, no client, 0.2 s),
   `toolkit/mapdata/test_trnshadow.py` (terrain tag 7 decoded rather than carried:
   that every retail shadow block's run coding closes on 272 rows of 272 samples and
   re-encodes to ArenaNet's own bytes from the bitmap alone, that the 10x10 window

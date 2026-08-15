@@ -178,10 +178,13 @@ DEFAULT_SAMPLE = 12
 # written was 46, and a vault-less run duly printed ALL CHECKS PASSED --
 # which is how the number came to be measured rather than guessed.
 #
+# 188 -> 189 the same day, when T6's RESOLVED blend layers joined it as a
+# fifth sidecar (.layers.u16, three u16 slots per cell).
+#
 # 185 -> 188 on 2026-08-14, when T6's variation sidecar joined the tiles
 # export: the synthetic fixture now packs a per-cell variation 0..3 and
 # section 1 asserts it de-tiles with the measured (i&3)*2 bit order.
-FLOOR = 188
+FLOOR = 189
 
 
 # ------------------------------------------------------------------ helpers
@@ -485,11 +488,11 @@ def _section1(check, tmp):
           and conv["sample_position"] == "cell corners",
           "the manifest states row 0 = maxY, corner samples, and that a GREATER "
           "stored value is LOWER in the world (FINDINGS 25)", sign[:80])
-    check(len(meta["sidecars"]) == 4
+    check(len(meta["sidecars"]) == 5
           and {s["kind"] for s in meta["sidecars"]}
-          == {"heights", "tiles", "variation", "shade"},
-          "four sidecars, each named by kind in the manifest "
-          "(variation joined tiles for T6)")
+          == {"heights", "tiles", "variation", "layers", "shade"},
+          "five sidecars, each named by kind in the manifest "
+          "(variation and the resolved blend layers joined tiles for T6)")
 
 
 # --- 1b. the props sidecar, built from nothing -----------------------------
@@ -561,7 +564,7 @@ def _section1b(check, tmp):
           "the props sidecar comes back DEEP-EQUAL through disk and json")
     check(meta.get("props_state") == "exported"
           and {s["kind"] for s in meta["sidecars"]}
-          == {"heights", "tiles", "variation", "shade", "props"},
+          == {"heights", "tiles", "variation", "layers", "shade", "props"},
           "the manifest declares props_state and the props sidecar")
     side = next(s for s in meta["sidecars"] if s["kind"] == "props")
     check(side["dtype"] == mapexport.DTYPE_JSON
