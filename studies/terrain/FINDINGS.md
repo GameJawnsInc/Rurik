@@ -733,6 +733,38 @@ on data it points at** — walk `[ebp-0x40]` in `0x0075DD50` from its own
 caller, or breakpoint-free, find the RNG pair at `+0x2A4` adjacent to a live
 `+0x1D0` subobject.
 
+**Anchoring on the chunk, 2026-08-15: four probes, no read, three facts.** The
+client was in Kamadan on loopback each time and its tile bytes were located in
+process memory every run, so the machinery works; what failed is every attempt
+to name the object that owns `+0x2B4`.
+
+- **`chunk+0x80` is `tileTypes`, NOT the tile array** — and this document's own
+  `trnblend.py` docstring already said so (*"mapped through `tileTypes`
+  (terrain tag 4, `terrain+0x80`)"*). Two probes were built on the opposite
+  reading and found per-block pointer tables. The proof is at the call site:
+  `arg2`'s four entries are filled with `movzx eax, byte ptr [eax]`, i.e. raw
+  tile BYTES 0..255, so `byte[ecx + [arg1+0x80]]` is a 256-entry table lookup.
+  **Read our own findings before re-deriving them from the disassembly.**
+- **Kamadan's `table_a` is the IDENTITY**, `0..50`. So for this map tile byte
+  == tile type and `trnblend`'s grouping is unaffected by tag 4 — worth knowing
+  before treating a Kamadan measurement as evidence about the type mapping. It
+  also makes `table_a` useless as a memory needle, which cost one timed-out
+  scan.
+- **The client stores the tile bytes in FILE order.** The detiled spelling
+  (`mapexport.detile`) does not appear anywhere in the process, so the
+  reordering is ours, applied on export, and not something the client
+  materialises. `table_b` does not appear in byte form at all.
+
+Every object reachable from a pointer to the tile array is dominated by a
+**stride-0x400 table of per-tile-block pointers** at each of `+0x80`, `+0xD8`,
+`+0xDC`, `+0xE0`, `+0x84`. So the tile-array pointer does not sit at a small
+fixed offset from the chunk, and that whole family of anchors is spent.
+**What is left is the direct route: `[ebp-0x40]` in `0x0075DD50` is the chunk,
+so take it from the function's own argument** — a breakpoint, a hook DLL
+(CLAUDE.md carve-out 3 permits the toolchain), or a hardware watchpoint on the
+tile-array pointer. Guessing offsets from data the chunk points at has now
+failed four times and should not be tried a fifth.
+
 **What this costs to finish: one live read, not more static analysis.** Two
 rounds of anchored scanning have now bounded the question without answering it,
 and `toolkit/harness/keytap.py` already does cross-process `ReadProcessMemory`
