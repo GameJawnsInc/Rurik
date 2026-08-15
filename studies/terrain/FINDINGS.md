@@ -817,7 +817,29 @@ independent confirmation of that function.
 
 Capture: `vault/research/terrain/selector_lornars_tile8_18.bin`.
 
-> **THE CLIENT CRASHED DURING THIS RUN, and the owner noticed it before I did.**
+> **REPLICATED 2026-08-15, and the second run ended with the client ALIVE.**
+> Same procedure, fresh process: hit at **t+6.4s** again, both controls PASS,
+> chunk `0x1AFE7CE8`. Liveness was then polled every 15s for **three minutes
+> after the hit** -- the step missing the first time -- and the client was
+> alive at all twelve checks with a flat working set (~290 MB), still alive at
+> 222s when it was stopped deliberately. So the instrument does not kill the
+> client at the hit, and the first run's crash remains unexplained rather than
+> attributable.
+>
+> **The claim replicates and the identity share does NOT:**
+>
+> | | distinct | non-permutations | identity |
+> |---|---|---|---|
+> | run 1 | 16 | **0** | 85.6% |
+> | run 2 | 18 | **0** | 50.8% |
+>
+> Union across both: **18 distinct values, all 18 permutations of (0,1,2,3),
+> zero exceptions.** The captures are not byte-identical and the identity
+> share swings from 86% to 51%, which is the per-tile-block regeneration
+> showing up as a difference rather than as an assertion. Second capture:
+> `vault/research/terrain/selector_lornars_run2.bin`.
+>
+> **THE FIRST RUN'S CLIENT CRASHED, and the owner noticed it before I did.**
 > My script exited the moment it saw the hit and never re-checked liveness, so
 > I reported the run clean. It was not. What the timestamps do establish is
 > that the crash came LONG AFTER the read: process start ~16:00:28.6, hit and
