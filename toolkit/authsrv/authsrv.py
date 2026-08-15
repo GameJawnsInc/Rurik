@@ -438,6 +438,64 @@ def spawn_profession_values(profession=None):
         custom=p > agents.CHAR_PROFESSIONS - 1) + [0]
 
 
+def attribute_triples(ranks=None):
+    """0x003A's payload: (attribute_id, rank, rank) per attribute, flattened.
+
+    THE SHAPE IS MEASURED, not chosen. The client's handler 0x0091D8C0 divides
+    the wire count by three and forwards three parallel arrays into a per-index
+    loop calling the attribute writer 0x00819220 (ATTRIBUTES.md 1.2), and two of
+    the three slots carry ArenaNet's own names (studies/combat/PLAN.md 8a):
+    slot 1 is `attrib`, the id, bound-checked against 51; slot 2 is `baseValue`,
+    the rank, and the assert that names it reads `[record + attrib*20 + 8]`,
+    which is what ties the name to that slot rather than to its neighbour.
+
+    SLOT 3 IS RECONSTRUCTION AND IS THE ONE THING HERE TO DISTRUST. No assert
+    names it. What is measured is that the client's own pending-change apply
+    adds the IDENTICAL delta to it and to `baseValue` (0x0081877C and
+    0x00818789-0x0081878C read the same `[edx+8]`), so from a common zero the
+    two stay equal -- and sending the rank in both reproduces that invariant
+    rather than inventing a second number. The reading that fits everything
+    seen is base-rank vs effective-rank-including-bonuses, which are equal for
+    a character wearing no runes; ours wears none. If a capture ever shows the
+    two differing, THIS is the line that was wrong.
+
+    Refuses rather than clamping, the same rule `_fraction` follows: every
+    bound below is the client's own, and a value outside one is a bug in the
+    caller that a clamp would hide.
+    """
+    ranks = agents.PLAYER_ATTRIBUTE_RANKS if ranks is None else ranks
+    if len(ranks) > ATTRIBUTE_TRIPLES_MAX:
+        raise ValueError(
+            f"refusing to send {len(ranks)} attribute triples in one 0x003A: "
+            f"the array32 is declared at 48 elements = {ATTRIBUTE_TRIPLES_MAX} "
+            f"triples, and AcctTemplate:423 bounds a build template at 16 too. "
+            f"More than that needs ceil(N/16) messages, which no real "
+            f"character reaches -- primary plus secondary is at most ten.")
+    seen, out = set(), []
+    for attrib_id, rank in ranks:
+        if not 0 <= attrib_id < CHAR_ATTRIBS:
+            raise ValueError(
+                f"refusing attribute id {attrib_id}: the client's s_attrib "
+                f"table has {CHAR_ATTRIBS} rows and its writer asserts "
+                f"`attrib < arrsize(attribState->attrib)` (ChCliAttrib:249). "
+                f"Ids are contiguous 0..{CHAR_ATTRIBS - 1}; there are no gaps "
+                f"in the index space (studies/combat/PLAN.md 10).")
+        if not 0 <= rank <= ATTRIBUTE_RANK_MAX:
+            raise ValueError(
+                f"refusing rank {rank} for attribute {attrib_id}: ArenaNet's "
+                f"own cap is {ATTRIBUTE_RANK_MAX} (AcctTemplate:441 "
+                f"`data.attribValue[index] <= 12`), and CharData:202 bounds "
+                f"the s_attribPoints lookup at 0..12.")
+        if attrib_id in seen:
+            raise ValueError(
+                f"attribute {attrib_id} appears twice. Each triple WRITES its "
+                f"slot, so a duplicate silently means 'the last one wins' -- "
+                f"refused because that is a caller bug wearing a valid shape.")
+        seen.add(attrib_id)
+        out += [attrib_id, rank, rank]
+    return out
+
+
 def spawn_probe_warning(probe, spawn_set, spawn_out_of_band=False):
     """profession_spawn without --spawn-profession measures the wrong thing.
 
@@ -603,13 +661,33 @@ GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
 #   slot 3  NOT NAMED. It takes the identical delta as baseValue in the
 #           pending-change apply and is never bound-checked or indexed.
 #
-# So a 42-zero array is FOURTEEN (0,0,0) triples -- i.e. fourteen writes of
-# rank 0 to attribute 0 -- not 42 slots. It is silent rather than fatal (the
-# loopback sweep, studies/smsgsweep 5b), which is why nothing has ever caught
-# it. Emitting real triples is studies/combat step 7; the count below is what
-# that step replaces, along with the contiguous-0-41 numbering it assumes
-# (CONTESTED -- the gapped 0-44/51-row scheme is the better-witnessed rival).
-ATTRIBUTE_COUNT = 42
+# So a 42-zero array was FOURTEEN (0,0,0) triples -- fourteen writes of rank 0
+# to attribute 0 -- not 42 slots. Silent rather than fatal (the loopback sweep,
+# studies/smsgsweep 5b), which is why nothing ever caught it.
+#
+# REPLACED 2026-08-15 by real triples; see attribute_triples below. The 42 is
+# kept as a NAMED FACT rather than deleted, because it is a true statement
+# about a different set and deleting it would lose that: it is the number of
+# attributes the ten playable professions own, which is what OpenTyria's
+# Attribute_Count counts. It is NOT the wire's index space -- that is the
+# client's own contiguous 0..50 (`cmp esi, 0x33`, 51 rows), read by
+# toolkit/clientscan/attribtable.py. The old CONTESTED registry row wanted one
+# of those two numbers to be wrong; neither is (studies/combat/PLAN.md 10).
+REAL_PROFESSION_ATTRIBUTE_COUNT = 42
+# The client's own s_attrib bound: the first slot of every triple must be
+# below this, and the writer asserts it (ChCliAttrib:249).
+CHAR_ATTRIBS = 51
+# ArenaNet's own rank cap, asserted twice: AcctTemplate:441
+# `data.attribValue[index] <= 12`, and CharData:202's `cmp esi, 0xd` guarding
+# the s_attribPoints lookup at 0..12.
+ATTRIBUTE_RANK_MAX = 12
+# The wire's own ceiling: 0x003A's array32 is declared at 48 elements, which is
+# exactly 16 triples -- and AcctTemplate:423 bounds a build template at
+# `attribCount < 16`. The two agree, which is why ONE message always suffices
+# for a real character: primary plus secondary profession is at most ten
+# attributes. The ceil(N/16) batching ATTRIBUTES.md 6 describes is the RESKIN
+# arc's problem (custom tables above 16), not combat's.
+ATTRIBUTE_TRIPLES_MAX = 16
 # OBSERVED: every 0x0037 ArenaNet sent in the vault's two live captures carries
 # [0, 0] -- 8 of 8 connections, once each at load, naming the player agent (e.g.
 # 20260807T143055 conn :64103 t=0.722 hex 37001f0000000000). The 50 this used to
@@ -5487,9 +5565,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         player_attrs[PLAYER_ATTR_LEVEL] = START_LEVEL
                         send(GAME_SMSG_CHARACTER_UPDATE_FACTIONS, player_attrs,
                              f"CHARACTER_UPDATE_FACTIONS(level {START_LEVEL})")
+                        # REAL TRIPLES since 2026-08-15. This was
+                        # `[0] * ATTRIBUTE_COUNT` -- fourteen (0,0,0) triples,
+                        # i.e. fourteen writes of rank 0 to attribute 0, which
+                        # the client accepted in silence. See attribute_triples.
+                        triples = attribute_triples()
                         send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
-                             [PLAYER_AGENT_ID, [0] * ATTRIBUTE_COUNT],
-                             "AGENT_UPDATE_ATTRIBUTES")
+                             [PLAYER_AGENT_ID, triples],
+                             f"AGENT_UPDATE_ATTRIBUTES"
+                             f"({len(triples) // 3} attributes: "
+                             + ", ".join(f"{a}={r}" for a, r
+                                         in agents.PLAYER_ATTRIBUTE_RANKS)
+                             + ")")
                         # The player's own pools, which we had never sent. See
                         # agents.py: the enemy got a health pool the day it was
                         # spawned and the player never got one, so every skill

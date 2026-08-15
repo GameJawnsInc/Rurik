@@ -67,6 +67,43 @@ the cycle is testable without it.
 
 # ---------------------------------------------------------------- the player
 
+# The player's attribute ranks, as [attribute_id, rank] pairs.
+#
+# The IDS are measured -- they are the client's own `s_attrib` indices, read by
+# toolkit/clientscan/attribtable.py, and 17..21 are exactly profession 1's
+# (Warrior): Strength 17 (its primary), Axe Mastery 18, Hammer Mastery 19,
+# Swordsmanship 20, Tactics 21. See studies/combat/PLAN.md section 10.
+#
+# The RANKS are ours. Nothing in the vault can source them: 0x003A appears 0
+# times in 21,543 live GAME_SMSG, no c2s attribute-spend opcode was found in
+# 52,778 decoded client messages, and there is no character-creation flow to
+# take them from. So they are chosen, and the row says so.
+#
+# CHOSEN DISTINCT, and that is the one design decision worth keeping: with
+# 12/9/6/3/1 no two attributes share a rank, so if the wire's triple slots were
+# ever mis-ordered the attribute panel would show the numbers against the wrong
+# names and a person could SEE it. A uniform spread would hide exactly that.
+# Every value is <= 12, which is ArenaNet's own cap (AcctTemplate:441
+# `data.attribValue[index] <= 12`, and CharData:202's bound of 13 on the
+# s_attribPoints lookup).
+#
+# THE POINT BUDGET IS NOT MODELLED -- said out loud rather than left implied.
+# We do not read the client's s_attribPoints cost table, we do not track spend,
+# and 0x0037 goes out as [0, 0] because that is what all 8 live samples carry.
+# Whether this spread is affordable at any level is a question this server
+# cannot currently ask.
+[player.attributes]
+ranks = [[17, 12], [18, 9], [19, 6], [20, 3], [21, 1]]
+
+[player.attributes.provenance]
+source = "invented"
+note = """
+Ids measured from the client's s_attrib table (attribtable.py, build 38797);
+ranks chosen. Replace the ranks the day a capture shows a real character's --
+capture shopping-list item 1, studies/combat/PLAN.md section 3 -- and the ids
+should survive that, because they are the client's own.
+"""
+
 [player.defaults]
 energy = 25
 health = 100
