@@ -684,6 +684,21 @@ guess that the client predicts the animation itself.
 > reproduces a full cast** — body animation included. `cast_spell_only` is the
 > follow-up: property 60 with **105 Deathly Swarm**, a 2.0 s spell with three
 > animation components, where a casting stance would be unmistakable.
+>
+> **RAN, and the model animated (2026-08-15).** `cast_spell_only`, caged
+> loopback on 38833, map 90: bar with 105 in slot 5 at t=2.85, property 60 with
+> skill 105 at t=10.86, nothing else sent. Capture
+> `authsrv-20260815T190337-c1.jsonl`, `RUN VERDICT: PASS`. **The operator
+> reports the model itself performed an animation** — not the weapon-only
+> sparkle Hamstring produced.
+>
+> So the corrected claim, with its scope now earned rather than assumed:
+> **property 60 drives the cast, body animation included, and what renders is
+> per-skill** — one animation component for an attack skill, a full casting
+> animation for a 2.0 s spell with three. 228 drives nothing. The overclaim was
+> real but the conclusion survives a properly designed test; what changed is
+> that it is now supported by the experiment rather than by a skill that could
+> not have shown it.
 
 **Three independent witnesses now agree**, which is the part worth keeping:
 

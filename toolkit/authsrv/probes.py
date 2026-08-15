@@ -2942,7 +2942,13 @@ PROBES = {
                  "the body animation has another source -- which is the "
                  "more useful answer of the two.",
         steps=_cast_spell_steps(a),
-        note="Follow-up to cast_prop60_only, which the owner correctly "
+        note="ANSWERED 2026-08-15 and the prediction HELD: the operator "
+             "reports the MODEL animated, not just a weapon effect. "
+             "Capture authsrv-20260815T190337-c1.jsonl. So property 60 "
+             "drives the cast including the body, and what renders is "
+             "PER-SKILL -- one component for an attack skill, a full "
+             "casting animation for a 2 s spell carrying three. "
+             "Follow-up to cast_prop60_only, which the owner correctly "
              "objected was tested with an ATTACK skill (320 Hamstring, "
              "activation 0.0 s, one animation id) and so could never have "
              "shown a body animation. That probe settled the DRIVER; this "
