@@ -774,11 +774,11 @@ the content binding were all right. Only the ordering was wrong.
   What would settle it is one harness session watched with `crashwatch.ps1` —
   and that is the honest status: OBSERVED for the diagnosis, UNVERIFIED for
   the cure.
-- **`crashwatch.ps1` is untracked.** It lives in `C:\gd\Rurik`'s working tree
-  and in the terrain worktree, gitignored by neither but committed by nobody.
-  It is the instrument that caught this crash after liveness polling missed it
-  twice, and it belongs in the repo; it is left alone here because it is
-  another session's uncommitted work.
+- ~~**`crashwatch.ps1` is untracked**, committed by nobody.~~ **CLOSED the
+  same day**: the terrain arc landed it as `d0899cf`, "Crash detection,
+  because liveness polling could never have caught it". It is the instrument
+  that caught this crash after liveness polling missed it twice, and the
+  verification run above should be watched with it rather than `Get-Process`.
 - **Column 3 is still RECONSTRUCTION**, exactly as §8a left it. Sending the
   rank there reproduces an invariant the client maintains; no assert names it.
 
