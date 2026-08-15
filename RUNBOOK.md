@@ -127,18 +127,25 @@ One process per file, discovered from **the disk** rather than from any document
 `rc == 0` with no `ALL CHECKS PASSED` banner is reported `SUSPECT` rather than laundered
 into a pass. `--only <substring>` filters, `--list` enumerates and stops.
 
-**It runs eight files at a time, longest-first.** Baseline 2026-08-14, measured over
-the 94 files on disk that day (96 now, after the terrain-variation arc landed):
-**717 s wall — 12 minutes, down from 46.6 serial.** `--jobs 1` restores one-at-a-time
+**It runs four files at a time, longest-first.** Baseline 2026-08-15, 96 files:
+**621 s wall — 10.4 minutes, down from 46.6 serial.** `--jobs 1` restores one-at-a-time
 and is how you check a suspected collision: a parallel run that disagrees with a serial
-one about any file's verdict is a collision, not a flake. (Measured when this landed:
-same verdicts, same 4,620 checks. The two files that differed between those runs failed
-STANDALONE too — see the drift warning below — so concurrency was not what moved them.)
+one about any file's verdict is a collision, not a flake.
 
-Two numbers to budget against, because they set the floor: `test_scrub` is **584 s** and
-`test_modelexport` **480 s**, together 38% of the serial work, so no amount of extra
-workers takes the wall clock below ~10 minutes. Half the suite — 47 files — finishes in
-83 seconds put together.
+**Four is measured, not guessed, and raising it will not help.** Wall clock is flat from
+4 to 8 workers — 621 s, 595 s, 623 s — while the summed cost of the same 96 files goes
+2,484 s → 3,498 s → 4,196 s. Eight workers spend 1,700 CPU-seconds fighting for the disk
+and finish no sooner (`test_scrub` reads 270 s at four jobs and 457 s at eight, for
+identical work). All three runs agreed on every verdict and every check count. This box
+feeds about four concurrent heavy readers, so **the only way below ~10 minutes is
+removing work, not adding workers.**
+
+Where the remaining time is, if you go looking: `test_modelexport` ~390 s and
+`test_scrub` ~270 s at four jobs, then `trnshadow`, `pathmap`, `blenderroundtrip` and
+`atexlevel`. Half the suite still finishes in under a minute put together. Both of the
+former hogs were cut on 2026-08-15 — 584 s → 183 s and 480 s → ~330 s standalone — by
+removing accidental work, with every assertion and every reported number unchanged; see
+TESTS.md for `search_all` and `Archive.magic`.
 
 ### While you are working: only what your edits reach
 
