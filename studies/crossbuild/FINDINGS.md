@@ -930,19 +930,22 @@ updater-reachable archive remains an explicit owner choice.
   `test_buildid` 23 → 29, `test_avevents` 19 → 26, `test_pinned` 55 → 61,
   `test_srctree` 30 → 39, `test_msgshape` 37 → 44, `test_sigcorpus` 34 → 35.
   `TESTS.md`'s entries carry the same numbers and the reasons.
-- **One item is left for the owner and needs elevation:** the new loopback client at
-  `vault/run/2026-08-13_64fae3b1369b/` is **UNCAGED**, and `cage.py` reports
-  `7 client(s), 1 in the wrong state`. It carries OUR DH parameters, so it must be caged
-  before it is launched; that costs a UAC prompt by design and is not a thing a session
-  does silently. `& toolkit\clientpatch\isolate_client.ps1` in an elevated shell, no
-  arguments — it enumerates every client under `vault/run`.
-- **Suite: 93 green / 1 red / 0 suspect of 94, 4,610 checks, 2,634 s** — one full run of
-  `python toolkit/run_suite.py` after every edit above, not a partial run reported as a
-  full one. The single red is `test_cage.py`, and it is **machine state rather than code**:
-  the new loopback client is not yet caged (see the item above; it needs a UAC prompt).
-  For contrast, the run taken BEFORE these fixes scored **89 green / 5 red**, the four
-  code reds being `test_msgshape`, `test_sigcorpus`, `test_srctree` and `test_origin` —
-  every one of them a two-build assumption meeting a third build.
+- ~~**One item is left for the owner and needs elevation:** the new loopback client at
+  `vault/run/2026-08-13_64fae3b1369b/` is **UNCAGED**~~ — **DONE**, out of session, by
+  `isolate_client.ps1` in an elevated shell. It carries OUR DH parameters, so it had to be
+  caged before launch, and that costs a UAC prompt by design rather than being something a
+  session does silently. Recorded because the sequence is the point: patching a new build
+  leaves the machine one deliberate manual step short of safe, `test_cage.py` is what says
+  so, and it named the exact binary.
+- **Suite: 94 green / 0 red / 0 suspect of 94, 4,686 checks, 2,721 s** — a full run of
+  `python toolkit/run_suite.py` on the tree with `main` merged in (the terrain T4/T5 and
+  minimap S12 arcs), not a partial run reported as a full one. Three runs tell the story:
+  **89/5** before any of this, **93/1** after the code fixes, **94/0** once the new
+  loopback client was caged. The intermediate red was `test_cage.py` and it was **machine
+  state rather than code** — the four code reds were `test_msgshape`, `test_sigcorpus`,
+  `test_srctree` and `test_origin`, every one a two-build assumption meeting a third build.
+- The new loopback client **is now caged** (`cage.py`: *7 client(s), 0 in the wrong state*),
+  so the launch binding holds for all seven builds in the vault.
 - The live build needed **two** flags beyond `--no-dh-patch` to match its 38797 predecessor:
   `--no-updater-patch` (§7.4b) and `--key-tap`, without which `livesession.py` refuses the
   build outright. Both are now in `RUNBOOK.md` step 3; only the key tap was already

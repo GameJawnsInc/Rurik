@@ -1703,8 +1703,9 @@ it on 2026-08-14, and `RUNBOOK.md` §0/§0b was walked on a real update for the 
   `sorted(rurik_dh_*)[-1]`, so patching 38833 silently handed a 38797 client the wrong DH
   key — handshake completes, ARC4 is noise, `Code=058`. The key is now bound to the build
   the client announces in its version frame, with a refusal when no key matches.
-- **Suite 93/94 green, 4,610 checks** (was 89/94 before these fixes). The one red is
-  `test_cage.py`: the new loopback client needs caging, which costs a UAC prompt.
+- **Suite 94/94 green, 4,686 checks, 2,721 s**, on the tree with `main` merged in. Three
+  runs: 89/5 before, 93/1 after the code fixes, 94/0 once the new loopback client was
+  caged (a UAC prompt, by design).
 
 **Next, and it now has a measured reason:** convert or gate `genericvalue.py`'s VAs, which
 would bring `avevents.py` back with it. Then the two live-memory readers in
