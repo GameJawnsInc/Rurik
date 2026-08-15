@@ -485,7 +485,7 @@ capture-first), projectile reconciliation (F9 — research, not build).
 | "One cast per skill per session" without E5/E6 | skillcast study's own synthesis | flagged UNVERIFIED by both capture readers | Step 3 repeat-press acceptance (C10) |
 | E6 scheduler: keyed to E5 + recharge? | one measured cycle says yes (+3 ms) | unmeasured on the other 13+ cycles | Step 0b |
 | `0x00E4` in the self-cast cycle: consumed or discarded? | live server sends it in every cycle | in-tree MEASURED: handler returns early on self | Step 0a + step 3's discriminating operator check (C1) |
-| `0x00EE` attr_id 10 ([10,0], Wolf kill only) | — | — (wholly unknown) | Registry only; watch step 6 |
+| ~~`0x00EE` attr_id 10~~ | **RESOLVED as NOT-A-KILL-SHAPE, §13**: the `[10,0]`+`[0,X]` pair is a broadcast burst marked by `0x009C`, 6 of 7 sightings far from any death | what the burst itself IS remains unknown, and what attr_id 10 means inside it | a capture with marks on the burst |
 | `0x00A4` meaning | GWCA: AGENT_PROJECTILE_LAUNCHED, never sent by anyone | monsterai: positional oracle, 13 live instances | Cross-check both readings against the 13 samples |
 | TargetBuff+0x04 | effect_type (Headquarter) | attribute_level (GWCA) | Step 6 item 3 |
 | ~~Scaling-window values display-literal at scale?~~ | **RESOLVED, §8c + step 4**: the endpoints ARE the displayed values (the interpolator consumes them raw at rank 0 and 15), and GWW's progression templates match all 14 | no transform like `ceil(raw/25)` appears in the path | closed |
@@ -574,7 +574,57 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 6 | ⬜ — the targeted live capture. Operator-driven; §3's shopping list |
 | 7 | 🔶 **wire half ✅ 2026-08-15, `1339bfe`** (§11) — five real triples, bounds refused not clamped, payload bound to its content row and proven red. **L6's panel criterion is UNVERIFIED and needs one caged loopback run**: `--probe attributes`, whose step 3 reverses the ranks as the discriminator |
 | 8 | ✅ **2026-08-15, `e4bb222`** (§12) — `ENEMY_SKILL_FRACTION` retired; damage is the client's endpoints at the player's own attribute rank. **The step's premise was refuted mid-flight**: scale is not damage, 3 of the enemy's 4 skills are a heal/hex/enchantment, so meaning is GWW-sourced per skill and unmodelled skills return None. `test_skilldamage` 25 checks, sabotage-proven |
-| 9–10 | ⬜ |
+| 9 | ✅ **2026-08-15, `34ee86b`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
+| 10 | ⬜ — land the arc: merge, `PLAN.md` §3/§8, the profession ladder's L6 row |
+
+## §13. Step 9: the kill window, and the template that looked richer (2026-08-15, `34ee86b`)
+
+A kill sent one message — `0x00F1` with the death bit. It now sends the three
+the real service sends, same tick, same agent, in ArenaNet's order:
+
+```
+0x00F1 [agent, 0x10]     the death status
+0x00EE [0, 26]           the reward -- a SINGLE message
+0x0026 [agent, 8]        the flags byte
+```
+
+The reward encodes to `ee00000000001a000000`, byte-identical to the capture.
+
+**The pair is a trap, and refusing it is the finding.** The corpus holds a
+richer-*looking* `0x00EE` template — `[10, 0]` followed byte-adjacent by
+`[0, X]`, X ∈ {100, 126, 250, 500}. It is **not** a kill shape: 6 of its 7
+sightings fire 6.8–31.5 s from any death, inside a recurring broadcast burst
+that is always preceded by `0x009C [agent, 100]`. The seventh landed on the
+Wolf's kill tick — **and that tick carries the `0x009C` marker too**, which is
+what gives the coincidence away. The three clean kills carry one message and no
+`0x009C`. Copying the pair would have looked like more fidelity and been less.
+
+**Two counts this arc had wrong, re-measured over both captures:**
+
+| claim | was | is |
+|---|---|---|
+| deaths in the corpus | 4 (§6, step 0c) | **5** — agent 38 dies twice on one connection |
+| `0x0026` value 8 | "exactly once, on the Wolf" (`authsrv.py`) | **4**, `{9: 200, 8: 4}`, every one a death |
+
+The second was one capture's count written before the second capture existed.
+The first matters more than a number: **agent 38's second death carries neither
+reward nor flags**, so a repeated `EFFECT_DEAD` on an already-dead agent awards
+nothing (n=1) — which is also a hint that the reward is per-kill rather than
+per-status-message.
+
+**`test_killwindow.py` takes the CORPUS as its oracle**, re-deriving the live
+template from `vault/captures/live/*` every run rather than pinning a literal,
+so adding or re-decoding a capture moves the expectation instead of leaving a
+stale constant behind. 21 checks, floor 6 (the vault-less section), proven red
+by setting the reward to the Wolf's contaminated 126.
+
+**Left open, deliberately:** `attr_id 0 = experience` stays UPSTREAM/UNVERIFIED
+— 26 is copied from the wire, not derived. Whether it varies by creature is
+UNMEASURED, though three different creatures all gave 26. `0x009C` is still
+n=1 as a kill signal and is not sent. And one element of the live kill window
+is observed but unsent: **`0x009F [3, agent, 0]`** — `GV_ATTACK_STOPPED` on the
+dying agent, on 3 of the 4 rewarded kills. It is a separate mechanism (an agent
+ceasing its attack) and is the obvious next candidate.
 
 ## §12. Step 8: the premise was wrong, and the data said so (2026-08-15, `e4bb222`)
 
