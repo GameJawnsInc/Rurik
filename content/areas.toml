@@ -7,9 +7,26 @@
 #
 # Every row here is `source = "invented"`, and that is the honest label rather
 # than a formality: the geometry is ours, chosen rather than observed. What the
-# row BORROWS is named per field (`donor_row`), and the borrowed bytes are read
-# from the owner's own archive at run time and never stored here -- the same
-# `borrowed_constants` pattern `mapbuild.py` has used since FINDINGS 14.
+# row BORROWS is named per field (`donor_file_id`), and the borrowed bytes are
+# read from the owner's own archive at run time and never stored here -- the
+# same `borrowed_constants` pattern `mapbuild.py` has used since FINDINGS 14.
+#
+# WHAT A DONOR IS NAMED BY, and this changed on 2026-08-15 after it broke.
+# These rows used to name their donor by ROW INDEX (`donor_row = 7982`), and a
+# row index is meaningful only against the archive copy it was measured on --
+# `mapchunks.py`:117 has said exactly that since it was written. Build 38833
+# proved it: the update RECYCLED row 7982, so on a post-update archive that row
+# is a 46,556-byte non-map (flags 3) while Pre-Searing Ascalon itself is alive
+# and well at row 177262. Every area here would have refused to build against a
+# current archive -- `deploy.py` fails closed, so this was a block rather than a
+# wrong map, but a block on all three areas either way.
+#
+# The portable key is the FILE ID, so that is what these rows carry now.
+# `deploy.py` resolves it against whichever archive it is installing into, and
+# `donor_row`/`constants_row` are kept beside it as the 38797 answer, PRINTED
+# when the resolution disagrees rather than trusted. Same correction, same day,
+# as `maps.toml`'s Pre-Searing `file_id` -- and this file was missed when that
+# one was fixed, which is why the note is long enough to be found next time.
 #
 # `map_id` points at a maps.toml row, which is what the SERVER serves. The two
 # tables are deliberately separate: a map row is a fact about where something
@@ -32,17 +49,19 @@ heights = "plaza"
 seed_x = 1536.0
 seed_y = 1536.0
 
-# Everything below is BORROWED from one donor map, read at run time. 7982 is
+# Everything below is BORROWED from one donor map, read at run time. 0x1B97D is
 # Pre-Searing Ascalon: sunny morning grassland, birds and wind. Naming one donor
 # rather than four keeps the map coherent -- its textures, its sun, its sky and
 # its ambience agree with each other because they came from one place.
-donor_row = 7982
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
 # The STRUCTURAL constants -- Header and Zones -- come from a map shaped like
 # ours, NOT from the biome donor. Zones is per-map: Pre-Searing's is 7,208 bytes
 # against this reference map's 34, and borrowing it built an 11,115-byte map for
 # a 4,608-byte reservation the first time this ran. Two fields, because one
 # field invited the mistake.
-constants_row = 46196
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
 textures = true      # terrain dependency ids + table_a/table_b from the donor
 sun = true           # angle_index from the donor's terrain, env sun byte to match
 environment = true   # 0x10000009 + deps: sky, fog, ambient light, water
@@ -78,8 +97,10 @@ dims = 96
 heights = "plaza"
 seed_x = 4608.0
 seed_y = 4608.0
-donor_row = 7982
-constants_row = 46196
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
 textures = true
 sun = true
 environment = true
@@ -111,8 +132,10 @@ heights = "plaza"
 # correctly. The centre is measured at 3 degrees.
 seed_x = 3072.0
 seed_y = 3072.0
-donor_row = 7982
-constants_row = 46196
+donor_file_id = 0x1B97D
+donor_row = 7982          # the 38797 answer; a cross-check, not the lookup
+constants_file_id = 0x22E2C
+constants_row = 46196     # the 38797 answer; a cross-check, not the lookup
 textures = true
 sun = true
 environment = true
