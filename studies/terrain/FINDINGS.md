@@ -508,15 +508,36 @@ texcoord set (chunk space, one repeat per 32 cells) addresses.
   separately measured "the raw byte indexes `m_tiles` directly". If that is
   wrong the SET of layers is unchanged and which one is opaque can differ.
 
+### 6.5 Tag 9 applied — the lightmap the shader asked for
+
+`mul r0, v0, r1` (§6.4) multiplies the composited ground by the vertex
+diffuse colour, and terrain tag 9 is a BAKED DIRECTIONAL LIGHTMAP measured
+in `terrain.py`: fitting `255 * max(0, N.L)` gives median Pearson r 0.887
+over 345 maps, the best-fit elevation tracks tag 0's angle field with
+Spearman 0.9352, and the azimuth control puts the light on +x with no y
+component on 343 of 345 — which is the client's own
+`TrnTexIntensity:342 lightDir.y == 0`.
+
+It is attached **per VERTEX**, and that follows from the file rather than
+from taste: tag 9 holds `dimX * dimY` bytes, the same grid as tag 1, whose
+samples are measured to sit at cell CORNERS. So the far column and row
+replicate exactly as `corner_heights` does. Kamadan's lattice means 0.862
+over 187,233 vertices, Lornar's Pass 0.719 over 267,393; both span the full
+0..1, so the multiply is visible rather than a no-op. The overlay geometry
+samples the same lattice, so a blended layer is lit identically to the
+ground beneath it.
+
+What is NOT settled is the transfer curve — see §7.
+
 ---
 
 ## 7. What is still open
 
-- **Tag 9's baked lightmap is decoded, exported and UNUSED.** §6.4 shows the
-  client's own shader modulating the blended ground by the vertex diffuse
-  colour, and `terrain.py` identified tag 9 as a directional lightmap
-  (median Pearson r 0.887 over 345 maps). Applying it in Blender is the
-  cheapest remaining visual gain and needs no new reading.
+- **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
+  (§6.5) but as the simplest mapping the measurement allows, `shade / 255`
+  as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
+  at 255, so a gamma or a scale-and-bias would fit the corpus equally well
+  and none is measured. `--no-lightmap` is the control.
 - The per-cell corner SELECTOR at `chunk+0x2B4` (§6.3) — which decides which
   corner is the opaque base. NOT FOUND.
 - The 4-dword table at `0x00A73DF8` = `{3, 3, 3, 0x30}`, the terrain
