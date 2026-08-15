@@ -392,7 +392,12 @@ def main():
     eq(len(floats), 14, "float dispatcher case bodies")
     eq(len(pre), 2, "handled only by the int pre-switch")
     eq(sorted(none), [5, 8, 40, 51], "no case body in either MAIN switch")
-    both = GV.handled(gimg, GV.INT_SWITCH) & GV.handled(gimg, GV.FLOAT_SWITCH)
+    # The switches are LOCATED per image now rather than named as module
+    # constants -- genericvalue.py stopped storing addresses on 2026-08-14
+    # (studies/crossbuild/FINDINGS.md section 8), so they are asked of the
+    # image that was opened.
+    both = (GV.handled(gimg, gimg.switches["int-main"])
+            & GV.handled(gimg, gimg.switches["float-main"]))
     check(not both, "the two switches are DISJOINT", f"overlap {sorted(both)}")
     eq(len(ints | floats | pre | none), 67, "and together they cover every id")
     eq(table[60][0], "int", "60 (skill_activated) is an int property")
@@ -404,10 +409,10 @@ def main():
     # three share one body in the pre-switch that runs before it. Both
     # lineages independently call those three "X started/activated"; the
     # binary bucketing exactly those three and no others is the corroboration.
-    presw = GV.read_switch(gimg, GV.PRE_SWITCH)
+    presw = GV.read_switch(gimg, gimg.switches["int-pre"])
     shared = {i for i, va in presw.items() if va == presw[4]}
     eq(sorted(shared), [4, 50, 60], "the pre-switch groups exactly 4, 50, 60")
-    check(presw[4] != GV.PRE_SWITCH["default"],
+    check(presw[4] != gimg.switches["int-pre"]["default"],
           "and that group is a real body, not the fall-through")
 
     # -- the correction section 16 forced. Modelling three of the seven
@@ -420,9 +425,9 @@ def main():
     eq(sorted(cons[8]), ["int-agentview"], "property 8, on the int side")
     eq(sorted(cons[61]), ["float-agentview", "float-main"],
        "and 61 shares 5 and 51's case body as well as having its own")
-    eq(sorted(GV.chain_ids(gimg, GV.CHAINS[1])), [5, 51, 61],
+    eq(sorted(GV.chain_ids(gimg, gimg.chains["float-agentview"])), [5, 51, 61],
        "the float compare chain still encodes exactly those three ids")
-    eq(sorted(GV.chain_ids(gimg, GV.CHAINS[0])), [32, 41, 42],
+    eq(sorted(GV.chain_ids(gimg, gimg.chains["int-store"])), [32, 41, 42],
        "and the int pre-store exactly these")
     for va, ok in GV.gate_bytes(gimg):
         check(ok, f"the main-switch gate at 0x{va:08x} is where we left it")

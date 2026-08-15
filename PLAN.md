@@ -1709,10 +1709,21 @@ it on 2026-08-14, and `RUNBOOK.md` §0/§0b was walked on a real update for the 
   runs: 89/5 before, 93/1 after the code fixes, 94/0 once the new loopback client was
   caged (a UAC prompt, by design).
 
-**Next, and it now has a measured reason:** convert or gate `genericvalue.py`'s VAs, which
-would bring `avevents.py` back with it. Then the two live-memory readers in
-`itemprobe`/`agentprobe`, which on a new build do not compute a wrong number — they
-dereference a stale RVA inside a *running* client.
+- **`genericvalue.py` IS DERIVED, and the casualty is closed** (FINDINGS §8). Its 27
+  build-coupled addresses are **zero**: the dispatchers are the handlers the client's own
+  receive table gives for opcodes `0x009F`/`0x00A2` — so the chain bottoms out in
+  `RegisterMsgs`, anchored by byte shape — and every switch, default, id span, chain case
+  body and gate falls out of them, with an asserted count at each link. All three vaulted
+  builds now read **47 int / 14 float ids, `{40}` untouched, main switches disjoint**, at
+  three completely different address sets. `avevents.py` is back to 39 of 67 on all three.
+  **The repo-wide class-(a) census is 73 → 46**, its first large fall.
+
+**Next, cheapest first:** the two live-memory readers in `itemprobe`/`agentprobe` — three
+RVAs, and on a new build they do not compute a wrong number, they dereference a stale
+address inside a *running* client. Then `msgshape.py`'s 25, now the largest remaining block
+(they are already derived at run time; the 25 survive as the cross-check tuple, so this is a
+bookkeeping question rather than a liability), and `pinned.py`'s 8, which are build numbers
+and sizes and cost two per registered build by construction.
 
 **Both of the judgement calls this arc parked are now settled** (2026-08-14):
 
