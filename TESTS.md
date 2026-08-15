@@ -90,7 +90,36 @@ Every one of these, in the order they were written:
   beside it is `&Send report to ArenaNet`. It was a missing call site. The test
   asserts it on the SYNTAX TREE, because "in the finally" and "before
   `close_client`, which destroys the dialog" are both invisible to a grep, with a
-  control that the ordering check fails on a reversed finally),
+  control that the ordering check fails on a reversed finally.
+  **And since 2026-08-14, WHICH CLIENT a run launches — by build and by name,
+  never by mtime.** `newest_run_exe` was
+  `max(glob("vault/run/*/Gw.exe"), key=os.path.getmtime)`. Build 38833 shipped,
+  was snapshotted and assembled that afternoon, became "newest", and the harness
+  silently changed which client it launches — to a run directory whose `Gw.dat`
+  never had the maps 146/148 replacement installed, while the 38797 directory
+  still carries it. Nothing failed at the exe: an update turned into a wrong
+  answer somewhere downstream instead of an error at the launch. **This is the
+  same defect for the third time** — `sorted(exes)[-1]` picked the wrong client
+  the day both DH configurations first existed, `pinned.PINNED` was `BUILDS[-1]`
+  until the same week, and this was the copy nobody had converted. **Filtering by
+  build alone did NOT fix it, which is the half worth reading:** with 38833
+  excluded the newest 38797 copy is `reskin-roster`, an experiment copy, still
+  beating the canonical directory, because the old exclusion covered exactly one
+  spelling of "experiment" (`-probe`) and three exist on disk. So the selector
+  asks for the build's own vault STAMP — the name `make_run_dir.py` actually
+  assigns — and the build is MEASURED from each candidate's own `mov eax,
+  <build>; ret` getter via `buildid.read`, never inferred from the directory
+  name, the same rule the vault's DH split lives by. It also works where
+  `identify()` cannot: that calls `reskin-roster` "unknown" for want of a
+  recorded hash, and its exe says 38797 plainly. `buildid.read` is stubbed for
+  the ten constructed cases and run for real against the vault at the end, and
+  a positive control asks for a build that IS present so the refusals cannot be
+  satisfied by a function that refuses everything. An unreadable candidate is
+  skipped and NAMED, because "we could not look" must never narrow the field the
+  way "wrong build" does. The floor moved 99 → 108 against a measured 110, two
+  below for the two checks that can legitimately skip; this test cannot run
+  vault-less at all — `pinned.find()` refuses first — so unlike `test_origin.py`
+  there is no empty-vault figure to measure against),
   `toolkit/portal/test_webgate.py`,
   `toolkit/mapdata/test_archive.py` (the archive reader, and since 2026-08-14
   section 1c: that `archive.py` and `datcheck.py` share ONE row convention --
@@ -2629,8 +2658,13 @@ Every one of these, in the order they were written:
   checks is an unfalsifiable self-declaration. `BUILD_UNKNOWN` is a distinct third
   value, never "probably the pinned one", and `require_single_build` refuses a
   two-build corpus — `test_movement_fidelity.py`, the pooling consumer, calls it.
-  Unknown is TOLERATED by default and that is measured rather than lax: 556 of
-  the vault's 1,678 capture files name no build, because a frame log names it once
+  Unknown is TOLERATED by default and that is measured rather than lax: roughly
+  **38%** of the research corpus names no build — 930 of 2,464 MEASURED
+  2026-08-14, 556 of 1,678 when this was written. Treat the fraction as the
+  claim and the absolute counts as a timestamp: the suite writes captures on
+  every run, so these moved twice during the session that recorded them and any
+  exact figure here is stale by the next green run. It is that high because a
+  frame log names the build once
   per SESSION not once per file, so refusing on unknown would refuse nearly every
   real corpus and the guard would be deleted in a week — it may never be silent,
   so the count comes back in the reason, and `allow_unknown=False` exists.
@@ -2655,6 +2689,19 @@ Every one of these, in the order they were written:
   is cross-checked against `clientscan/pinned.py` so a moved pin turns the
   census red until it is re-decided rather than silently re-aimed. A REAL
   second-build capture in the research corpus still turns the census red — that
-  is the point, not a defect. A vault-less
+  is the point, not a defect.
+  **And the scoping was checked against the thing it protects, not just made
+  green:** the pooled consumer never saw the selftest files in the first place —
+  `game_channel_captures()` globs only `captures/authsrv/` and
+  `captures/gamesrv/`, never the whole tree, and calls `require_single_build` on
+  top, so it would still refuse a real mixed corpus. Scoping a census green and
+  the contamination being absent are different claims and only the second one
+  matters. (Noted while checking it, and undesigned rather than argued: the two
+  censuses in this file walk with DIFFERENT exclusions — the origin census still
+  counts `selftest`, 2,782 files against the build census's 2,464. Harmless
+  today, because a selftest capture really is ours and the ours/live claim stays
+  true, but it is the kind of asymmetry to settle before leaning on either
+  count. Both figures MEASURED 2026-08-14 and both drift per the note above; the
+  ~320-file gap between them is the durable part.) A vault-less
   run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
   empty directory rather than derived by subtraction; a vault run scores 30).
