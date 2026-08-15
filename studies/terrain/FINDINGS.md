@@ -927,6 +927,54 @@ three-material one** — which is a much sharper target for the table than "a
 small set", and 91.9% of run 2's cells (941/1024) drew a value run 1 had
 already named.
 
+### 7.8 The writer is `0x0074B440`, and the generator is a SORT (2026-08-15)
+
+**Found by walking back from the breakpoint, which is what the working
+instrument is for.** `trnint3c.dll` captures 512 bytes of stack at the hit;
+`[esp]` is `0x007434F8` (the return address after `call 0x75e650`, confirming
+the caller) and two frames up sit `0x00745422` and `0x00745750`.
+
+That region contains `0x00745143  lea edi, [esi + 0x1d0]`, and
+`0x007451CF  call 0x74b440` passes it in `ecx`. `0x0074B440` opens
+`mov [ebp-0x20], ecx`, so `this` = `chunk+0x1d0`, and at `0x0074B4EC` it
+computes `this + 0xE4` -- **which is `chunk+0x2B4`.** The array nothing
+appeared to write is written through a displacement of `0xE4` from a
+subobject, exactly the blind spot §7.4 named. *This function was disassembled
+hours earlier in the same session and dismissed, because the `+0xe4` was
+matched against the wrong base.*
+
+**`0x0074B540`.. is a SORTING NETWORK.** It loads the four corner type bytes
+into `edx/edi/ebx/esi`, seeds four index values 0,1,2,3 in
+`[ebp-0xc]/[ebp+8]/[ebp-4]/[ebp-0x10]`, and runs `cmp` + conditional-swap
+pairs that permute **values and indices together**. The selector byte is the
+resulting index permutation.
+
+**This retires the PRNG hypothesis of §7.7.** The "coin flip" is not a random
+draw -- it is *which material has the lower type id*. Deterministic, and
+derivable from data we already ship, so a consumer needs no stream replay.
+
+Predicting the byte from a plain stable ASCENDING sort of the four corner
+types, against both captures:
+
+| capture | ascending / source-index | identity-only baseline |
+|---|---|---|
+| block (9,18) | **95.2%** | 85.6% |
+| block (5,2) | **87.0%** | 50.8% |
+
+Descending scores 81.5% / 35.4%, so the direction is settled. The arity falls
+out exactly: two materials -> 2 orderings, three -> 3! = 6, which is what
+§7.7 measured before the mechanism was known.
+
+**NOT CLOSED, and the residual has two candidate causes I have not
+separated:** the block indices `(9,18)` and `(5,2)` were INFERRED by best fit
+rather than read from the capture, so an off-by-one contaminates every cell;
+and the client's comparator/tie-break may not be a plain stable sort. Either
+produces exactly this high-but-imperfect signature. Both are cheap to settle
+-- record `tile_x`/`tile_y` in the capture (the reseed at `chunk+0x2A4`
+already encodes it) and transcribe the network's swap order literally.
+
+Stack capture: `vault/research/terrain/stack_lornars_run3.bin`.
+
 **What is still needed for a consumer**, and it is now a small question rather
 than an open-ended one: the candidate TABLE (which pair each pattern maps to,
 almost certainly a static array near `0x00BF78D8`'s neighbours) and the DRAW
