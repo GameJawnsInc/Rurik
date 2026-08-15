@@ -866,6 +866,53 @@ captured, because a consumer cannot ship a memory dump -- so the next question
 is what generates it, and the `rng` pair 16 bytes before it is the obvious
 suspect now that both are observable in the same read.
 
+### 7.7 What generates the permutation: corner pattern picks a PAIR, the PRNG picks one
+
+**MEASURED 2026-08-15, offline, from the run-1 capture plus the archive** — no
+client needed, which is why it is worth doing before another live run.
+
+Tile block (9,18) of Lornar's Pass, 1024 cells, corner types from terrain tag
+2 through tag 4, compared against the captured selector byte:
+
+**LAW 1 — a uniform cell is ALWAYS the identity. 835 of 835, ZERO
+counterexamples.** Not "usually": a cell whose four corners share one type is
+never permuted. That alone kills the reading that this is a per-cell random
+draw, which would put identity at 1 in 24.
+
+**LAW 2 — for a mixed cell the corner PATTERN determines a small CANDIDATE
+SET, and something picks within it.** Patterns are canonicalised
+material-agnostically (`(0,1,1,1)` means "corner 0 differs, the rest agree"):
+
+| pattern | candidates | split |
+|---|---|---|
+| `(0,0,0,0)` | `0xE4` | 835 |
+| `(0,1,1,1)` | `0x39` / `0xE4` | 24 / 15 |
+| `(0,0,0,1)` | `0x27` / `0xE4` | 21 / 17 |
+| `(0,1,0,0)` | `0xE1` / `0x78` | 15 / 12 |
+| `(0,0,1,0)` | `0xB4` / `0xC6` | 15 / 12 |
+| `(0,0,1,1)` | `0x4E` / `0xE4` | 12 / 10 |
+| `(0,1,0,1)` | `0x2D` / `0xD8` | 11 / 7 |
+| three-material patterns | 4 candidates each | n ≤ 7 |
+
+Every two-material pattern gets **exactly two** candidates in a near-even
+split; three-material patterns get four. **92.2% of the block is predictable
+from the corner pattern alone** (944/1024), and the residual is the choice
+within each pair.
+
+**So the generator is `f(corner pattern, one PRNG draw)`**, and the two halves
+explain what was previously puzzling. The pattern half is why 18 of 24
+permutations appear and the other 6 never do — only reachable candidates
+occur. The PRNG half is why the identity share swung 85.6% → 50.8% between
+two blocks (§7.6) while the law itself did not move: different stream, same
+rule. The reseed `(tile_x << 16) ^ tile_y` and `trnvariation` already
+reproduce that stream.
+
+**What is still needed for a consumer**, and it is now a small question rather
+than an open-ended one: the candidate TABLE (which pair each pattern maps to,
+almost certainly a static array near `0x00BF78D8`'s neighbours) and the DRAW
+ORDER (how many PRNG values a cell consumes, and whether uniform cells consume
+one). Both are testable offline against the two captures already in the vault.
+
 ### 7.5 The seam is not where it looked — a measurement, and a bug in the probe
 
 `scratchpad/composite.py` composites the ground from our own `layers.u16` in
