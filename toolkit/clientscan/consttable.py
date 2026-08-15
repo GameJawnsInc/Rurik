@@ -70,9 +70,8 @@ names itself.
 A CORRECTION TO THE RECON THIS IMPLEMENTS, which expected two non-closures and
 explained one of them as a `-1` sentinel. There are four, and all four are
 alignment. No table in this corpus has a sentinel between its last record and
-its anchor: `s_attribPoints`'s `FF FF FF FF` is the fourteenth ELEMENT of the
-array (`arrsize` counts it, and 14 x 4 lands on the anchor), and
-`s_energyTable`'s is likewise its own last element. What the sentinels really
+its anchor: `s_attribPoints`'s `FF FF FF FF` is its own LAST ELEMENT (`arrsize`
+counts it), and `s_energyTable`'s is likewise. What the sentinels really
 cause is the THIRD shape -- a table whose left neighbour is not a string.
 `s_skill` sits directly after `s_energyTable`, and the first version of this
 module happily found a "previous string" 233 KB deep INSIDE the skill table:
@@ -101,6 +100,21 @@ amount of left-edge arithmetic could ever have refuted it, and 24 is still in
 its rival list today -- which is the doctrine working, not failing. A row whose
 `stride_from` does not name a witness outside this file is a row nobody has
 checked.
+
+`s_attribPoints` is the SAME defect arriving from the other end, found
+2026-08-15 and corrected here from 14 to 13. `s_worldData` had a free stride;
+this row had a free LEFT EDGE (`pad=None`), so its base was derived from its
+count and its count came from an accessor's displacement -- and that accessor
+is `s_attribPoints[level - 1]`, with the `- 1` folded by MSVC into the
+displacement. The base it encodes is four bytes below the array. `(base-4, 14)`
+and `(base, 13)` close on the same anchor, so this module could never have
+chosen between them; what chose was `attribpoints.py`, reading `arrsize`
+straight out of the client's own `cmp esi, 0Dh`. The tell was in the row's own
+note the whole time -- it called the leading `5` "dead data", and a table with
+a stray element at the front is a table whose left edge is wrong. **A closure
+is only evidence for the term you did NOT derive from it.** The client found
+this the hard way: a modal assert box, twice, from a server that had built
+`0x003A`'s payload against a bound nobody had read (studies/combat/PLAN.md 14).
 
 Output is JSON on stdout or to --out. Never write extracted client values into
 the repo: the provenance gate is absolute and bulk extraction goes to `vault/`.
@@ -605,13 +619,34 @@ CORPUS = [
          stride_from="u32 string-id array"),
     # Not a Gw\Const table, and kept for exactly that reason: the idiom is a
     # property of how MSVC lays out a translation unit, not of that directory.
+    # CORRECTED 2026-08-15, from 14 to 13, and the correction is the point.
+    # This row had `pad=None` -- no left-edge witness -- so its base was
+    # DERIVED from its count by subtracting count*stride from the anchor, and
+    # the count came from the displacement in the CharData:202 accessor. That
+    # accessor is `s_attribPoints[level - 1]` and MSVC folded the `- 1` into
+    # the displacement, so the address it encodes is FOUR BYTES BELOW the
+    # array. Both (base-4, 14) and (base, 13) close on the anchor, so closure
+    # could never separate them -- which is exactly the definitional blind
+    # spot this module's own docstring names, arriving from the left edge
+    # instead of the stride. The `5` this row called "dead data" is real data:
+    # it is the last column of `s_appearanceSlot`, whose 8 records of 12 bytes
+    # end exactly on the corrected base. `toolkit/clientscan/attribpoints.py`
+    # is the independent witness -- it reads `arrsize` out of the client's own
+    # `cmp esi, 0Dh` (both accessors), takes the base from the UNBIASED
+    # accessor at CharData:208, and checks the neighbour's right edge; all
+    # three agree on 13 across all three builds in `pinned.BUILDS`. The count
+    # here is still hand-declared, so `test_consttable.py` binds it to that
+    # module rather than leaving two numbers free to drift apart.
     dict(symbol="s_attribPoints", anchor=b"P:\\Code\\Gw\\Char\\CharData.cpp\x00",
-         stride=4, count=14, pad=None, stride_from="u32 array",
-         note="14 dwords: 5, then 1 2 3 4 5 6 7 9 11 13 16 20, then FF FF FF FF. "
-              "MEASURED: the 12-value run is strictly increasing and the leading "
-              "5 breaks that, which is what `dead data` looks like from the "
-              "outside. UPSTREAM: the same 12 values are the game's published "
-              "per-rank attribute-point costs, so index 0 is not rank 0's cost"),
+         stride=4, count=13, pad=None, stride_from="u32 array",
+         note="13 dwords: 1 2 3 4 5 6 7 9 11 13 16 20, then FF FF FF FF. "
+              "MEASURED: strictly increasing, sentinel-terminated, and the "
+              "count is the client's own arrsize (`cmp esi, 0Dh` in both "
+              "accessors; attribpoints.py). UPSTREAM: the same 12 values are "
+              "the game's published per-rank attribute-point costs and sum to "
+              "97, retail's cost of a rank-12 attribute -- so index 0 is "
+              "rank 1's cost and the array is indexed by an attribute RANK, "
+              "not by a character level, whatever ArenaNet named the param"),
 ]
 
 BY_SYMBOL = {row["symbol"]: row for row in CORPUS}
