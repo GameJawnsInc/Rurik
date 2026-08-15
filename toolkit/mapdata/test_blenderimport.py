@@ -246,7 +246,7 @@ PYTHON_EXIT_CODE = 66
 # flat-shaded where the client's vertex layouts carry normals. One check
 # per section pins CHANNEL_PACKED and all-faces-smooth, read back off the
 # scene. Sections 0-2b score 54, so a vault-less run lands 56 short.
-FLOOR = 114
+FLOOR = 118
 
 
 # ------------------------------------------------------------------ helpers
@@ -1251,6 +1251,43 @@ def _section5(check, led, blender, tmp, exp, src, summary):
               "all four base quadrants are in use, so the ground no longer "
               "repeats one variant per tile type",
               "%r" % (tt.get("base_quadrants"),))
+
+    # ---- tag 9's baked lightmap, against the sidecar ----------------------
+    # The attribute is per VERTEX because tag 9 shares tag 1's grid and
+    # those samples are cell CORNERS, so its lattice must be the mesh's and
+    # its statistics must be the sidecar's own -- computed here, including
+    # the far-edge replication, and never taken from the importer.
+    lm = tt.get("lightmap") or {}
+    want_n = (exp.dim_x + 1) * (exp.dim_y + 1)
+    dx, dy = exp.dim_x, exp.dim_y
+    lattice = []
+    for gy in range(dy):
+        rowv = list(exp.shade[gy * dx:(gy + 1) * dx])
+        lattice.extend(rowv + [rowv[-1]])
+    lattice.extend(lattice[-(dx + 1):])
+    want_mean = sum(lattice) / len(lattice) / 255.0
+    check(lm.get("state") == "attached" and lm.get("vertices") == want_n,
+          "the lightmap is attached to every vertex of the lattice (%d), not "
+          "per face -- tag 9 shares tag 1's corner grid" % want_n,
+          "%r" % ({k: lm.get(k) for k in ("state", "vertices")},))
+    check(abs((lm.get("mean") or 0) - want_mean) < 1e-3,
+          "and its mean equals the shade sidecar's own, replicated edge "
+          "included (%.4f)" % want_mean, "%r" % (lm.get("mean"),))
+    # It has to actually VARY, or multiplying it in changes nothing and the
+    # checks above would pass over a uniform white attribute.
+    check((lm.get("max") or 0) - (lm.get("min") or 0) > 0.5,
+          "the bake spans a real range, so multiplying it in is visible",
+          "%r..%r" % (lm.get("min"), lm.get("max")))
+
+    # THE LIGHTMAP CONTROL: --no-lightmap must leave the ground unlit.
+    workl = os.path.join(tmp, "run_real_lmctl")
+    os.makedirs(workl, exist_ok=True)
+    rc, _out, s4, _v = run_blender(blender, src, workl,
+                                   extra=["--no-props", "--no-lightmap"])
+    lm2 = ((s4 or {}).get("terrain_textures") or {}).get("lightmap") or {}
+    check(rc == 0 and lm2.get("state") == "skipped",
+          "--no-lightmap leaves tag 9 unapplied and says so",
+          "rc=%d, %r" % (rc, lm2))
 
     # THE T6 CONTROL: --no-blend must drop the overlays and keep the base.
     workb = os.path.join(tmp, "run_real_t6ctl")
