@@ -227,7 +227,8 @@ def spawn_profession_args(game_args):
 
 def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                  capture_root=None, auth_host="127.0.0.1",
-                 game_host="127.0.0.3", game_args=(), hops=()):
+                 game_host="127.0.0.3", game_args=(), hops=(),
+                 portal_host="127.0.0.1"):
     """The three server processes, as (name, host, port, argv).
 
     The game channel is served by a second authsrv.py instance: the client
@@ -240,9 +241,16 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
     capture_root overrides the vault capture dirs (tests use a temp dir).
 
     auth_host moves ONLY the authsrv listener (and must be handed to the
-    client as -authsrv too). The webgate stays on 127.0.0.1: the -portal,
-    -authsrv and handoff hosts have to be separable for a probe to say which
-    of them the client's game dial follows.
+    client as -authsrv too). portal_host does the same for the webgate and
+    DEFAULTS TO 127.0.0.1 so that separability is unchanged: the -portal,
+    -authsrv and handoff hosts still have to be separable for a probe to say
+    which of them the client's game dial follows.
+
+    It exists because 6601 was the ONE port with no override, so a second
+    session holding it blocked a run that had already moved its authsrv and
+    gamesrv aside (2026-08-15: another worktree's --keep-open run on map 449
+    held 127.0.0.1:6601 and there was no flag to route around it). Moving it
+    costs nothing: the client takes -portal as a HOST, exactly as -authsrv.
 
     game_args goes to the GAMESRV alone, and that asymmetry is the point. The
     instance loads on the game channel, so --probe, --map, --no-enemy and
@@ -257,9 +265,10 @@ def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
                 else vault_path("captures", sub))
     py = [sys.executable, "-u"]
     return [
-        ("webgate", "127.0.0.1", portal_port,
+        ("webgate", portal_host, portal_port,
          py + [os.path.join(TOOLKIT, "portal", "webgate.py"),
-               "--port", str(portal_port), "--vault", cap("portal")]),
+               "--port", str(portal_port), "--bind", portal_host,
+               "--vault", cap("portal")]),
         ("authsrv", auth_host, auth_port,
          py + [os.path.join(TOOLKIT, "authsrv", "authsrv.py"),
                "--port", str(auth_port), "--bind", auth_host,
@@ -1073,7 +1082,8 @@ def run_client(a, outdir):
     sampler = dc.Sampler()
     sampler.start()
 
-    args = ["-authsrv", a.auth_host, "-portal", "127.0.0.1", "-windowed", "-log"]
+    args = ["-authsrv", a.auth_host, "-portal", a.portal_host,
+            "-windowed", "-log"]
     acct = accounts.for_target(a.auth_host, getattr(a, "account", None))
     args += accounts.login_args(acct)
     print(f"account: {accounts.describe(acct)}")
@@ -1290,6 +1300,12 @@ def main():
                          "dials it -- it dials --game-host at hardcoded 6112, "
                          "so any other value leaves the gamesrv unreachable. "
                          "This flag ran the probe that established that.")
+    ap.add_argument("--portal-host", default="127.0.0.1",
+                    help="Loopback address for the webgate listener and the "
+                         "client's -portal flag. 127/8 only. Defaults to "
+                         "127.0.0.1, which is what every probe result so far "
+                         "was measured on; move it only to run beside another "
+                         "session that already holds 6601.")
     ap.add_argument("--auth-host", default="127.0.0.1",
                     help="Loopback address for the authsrv listener and the "
                          "client's -authsrv flag. 127/8 only. A second alias "
@@ -1426,6 +1442,7 @@ def main():
               f"{cam} camera move(s)")
 
     specs = server_specs(game_port=a.game_port, auth_host=a.auth_host,
+                         portal_host=a.portal_host,
                          game_host=a.game_host,
                          game_args=game_args, hops=hops)
     preflight(specs, replace=a.replace)

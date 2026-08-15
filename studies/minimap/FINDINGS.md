@@ -729,6 +729,41 @@ Both sent in one run, control first so a clean frame precedes the test.
 
 ---
 
+## 6g. TIER 3 — the compass picture is OURS, and we choose which part of it a map shows (A1 + A2, 2026-08-15)
+
+**Both rungs OBSERVED in two runs, and together they close the arc's original question: an authored map CAN have a compass we control.** One number carries it:
+
+| run | map 143's footprint origin | authored-colour pixels in the disc |
+|---|---|---|
+| **A1** — authored tile installed | (960, 448) → our tile **(1, 0)** | **9,246 of 24,313 — 38.0 %** (magenta 3,573, green 5,673) |
+| **A2** — same archive, origin moved | (1100, 448) → tile **(2, 0)** | **18 of 24,313 — 0.1 %** (magenta **0**) |
+
+### 6g.1 A1 — the picture is ours
+
+A 512×512 DXT1 ATEX authored from a pattern in colours no Pre-Searing art carries (magenta/green 16-px checks plus a white diagonal, so the crop's ORIENTATION is readable and not just its presence), built with `atex.build_image` and verified by decoding it back through the same reader the arc used on 484 real tiles — **0 of 5,476 sampled pixels differ by more than 60 per channel**. Its container matches a real tile structurally: DXT1, 512×512, **10 levels, "closes exactly"**; it differs only in being uncompressed, **174,868 B against ArenaNet's 54,192 stored**, which is precisely the misfit PLAN A1 predicted and why `datwrite --replace` cannot be used. Installed with `datmove` into a **throwaway** archive (`vault/run/tier3/`, a copy), journalled; it reads back **byte-identical** and all three archive checksum rules still hold.
+
+**On screen it is unmistakable** — the checkerboard and its diagonal, at one texel per terrain cell, occupying 38 % of the disc. — OBSERVED.
+
+### 6g.2 A2 — and we choose which part of the atlas a map crops
+
+`toolkit/clientpatch/footprint.py` moved `s_missionClientData[143]`'s two rects from `(960, 448, 1280, 992)` to `(1100, 448, 1420, 992)` — **6 bytes changed**, all inside the intended rects, read back by reopening the patched file and re-locating the table from scratch. Same archive, same authored tile still installed, **only the origin moved 140 cells**. The authored colour collapses from 38.0 % to **0.1 % with zero magenta**, and the disc fills with real Pre-Searing terrain instead.
+
+**So the footprint origin is the lever, and it is now measured twice over**: rung C3 showed the `0x0199` byte *selecting between* the two rects, and A2 shows *editing* a rect moving the picture. — OBSERVED.
+
+**A2's own prediction is REFUTED in the half that matters, and the module says so rather than the run discovering it.** PLAN A2 predicted that setting the rect's SIZE to our authored dims "makes the compass crop that size". The size here stayed 320×544 throughout and the crop moved anyway; the crop window is clamped by `[CompassMap+0x50..0x5c]`, latched from the **loaded map file's** cell dims (`0x008C28D0`, §6c), not from this rect. **The ORIGIN is load-bearing; the SIZE is not the lever the rung named.**
+
+### 6g.3 H3b is OBSERVED at last — in both frames, incidentally
+
+Both discs show the authored region as a **bounded square with the fallback tiled around it** — which is exactly H3b's prediction for an authored map whose file dims are smaller than its borrowed footprint, and which nothing in this arc had ever seen. It survived this long unobserved for a reason worth recording: **in the 38797 archive all four of map 143's footprint tiles are UNADDRESSABLE, and in 38833 all four resolve.** So the customarea arc's "featureless brown disc" on an authored map (§6, §23) was never about the authored map at all — it was the same archive-generation fault §6d found, and H3b could not have been seen before the generation moved.
+
+### 6g.4 What Tier 3 does NOT establish
+
+- **The authored tile is a PATTERN, not our terrain.** A1 proves the client renders art we wrote at a slot we chose; it does not render the authored map's own heightfield. Generating the tile *from* our terrain is a further step nothing here attempts.
+- **One tile, one map, one archive copy.** The collateral PLAN A1 warned about is unmeasured: tile (1, 0) is shared, so every other Pre-Searing map in that copy now has our checkerboard too, and no run has looked at one.
+- **The 0.1 % floor is not zero and is not explained** — 18 green-ish pixels survive in the A2 disc, consistent with ordinary green terrain passing a loose colour test rather than with any of our tile remaining (magenta, the unambiguous half, is exactly 0).
+
+---
+
 ## 7. Contradictions and open questions
 
 **Cross-report contradictions, surfaced rather than silently resolved:**
