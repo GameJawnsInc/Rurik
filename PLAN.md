@@ -1798,9 +1798,20 @@ naming so nobody re-opens it as work:
 
 **The one deliverable still open is rung 6**, and 38833 came and went without advancing it:
 the durability tracer sits in `vault/dat_durability/`, whose mtime is still 2026-08-13,
-because no updater touches an inert vault copy (FINDINGS §4). It needs an owner decision —
-arm an archive a real client opens, accepting either a search for an uncompressed row or one
-broken map — and it will keep costing an update every time one ships.
+because no updater touches an inert vault copy (FINDINGS §4). It will keep costing an update
+every time one ships.
+
+**The decision it needs is NOT the one this paragraph asked for until 2026-08-15.** It said
+"accepting either a search for an uncompressed row or one broken map", and both halves are
+now measured away (FINDINGS §4a): **0 of 361 map rows are stored uncompressed**, so the
+first does not exist, and `deploy.py --area sculpt --install` writes a real loadable map —
+proven surviving a play session twice — so the second is unnecessary. The broken map was an
+artifact of how the tracer was first staged. What actually remains is an **account-posture**
+call: the only updater-enabled client is the LIVE build, so a patch reaches our authored row
+only if a live client opens a modified archive (route A, §6.2). The price may be smaller
+than it sounds — the updater runs at launch, so launch-and-quit is plausibly enough, with no
+play session and nothing that loads the armed map — but that is UNVERIFIED and wants
+predicting before it is tried.
 
 **Both of the judgement calls this arc parked are now settled** (2026-08-14):
 
