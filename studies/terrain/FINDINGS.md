@@ -817,6 +817,27 @@ independent confirmation of that function.
 
 Capture: `vault/research/terrain/selector_lornars_tile8_18.bin`.
 
+> **THE CLIENT CRASHED DURING THIS RUN, and the owner noticed it before I did.**
+> My script exited the moment it saw the hit and never re-checked liveness, so
+> I reported the run clean. It was not. What the timestamps do establish is
+> that the crash came LONG AFTER the read: process start ~16:00:28.6, hit and
+> file write at 16:00:35 (t+6.4s), and the harness then logged `body is in the
+> map` at t+15.2s and held for thirteen further ticks. So the capture is not
+> from a dying process.
+>
+> The cause is NOT FOUND -- no dump, and `Gw.log` simply stops mid-auth
+> chatter with no error line. It is a fair suspicion that the instrument did
+> it: `poke()` flips page protection on executing code from inside a vectored
+> handler while ~48 threads run, and nothing here shows that is safe.
+>
+> Two internal checks argue the DATA survived regardless, and both would fail
+> on a corrupt read: `rng` is exactly `(8 << 16) ^ 18` for the block being
+> built, and all 16 selector bytes decode to valid permutations. Neither
+> happens by accident. **Treat §7.6's numbers as sound and the METHOD as
+> unproven** -- a re-run that ends with the client still alive is what turns
+> this from one good capture into a repeatable measurement, and it should
+> check liveness AFTER the hit rather than exiting on it.
+
 **What this un-blocks and what it does not.** It answers §8's top open item.
 It does NOT by itself fix the renderer: the permutation must be derived, not
 captured, because a consumer cannot ship a memory dump -- so the next question
