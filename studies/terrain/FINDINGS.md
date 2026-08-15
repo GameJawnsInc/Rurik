@@ -907,6 +907,26 @@ two blocks (§7.6) while the law itself did not move: different stream, same
 rule. The reseed `(tile_x << 16) ^ tile_y` and `trnvariation` already
 reproduce that stream.
 
+**CROSS-VALIDATED against run 2 (block (5,2), a different block), and the
+single-block caveat above was the right one to raise:**
+
+- **LAW 1 survives untouched.** Run 1: 835 uniform cells, 0 violations. Run 2:
+  363 uniform cells, 0 violations. **1,198 of 1,198 across two captures.**
+- **LAW 2's two-material pairs PREDICTED run 2 exactly.** All seven
+  two-material patterns added ZERO new values out of sample, including
+  `(0,0,0,1)` where run 1 saw n=38 and run 2 saw n=101. A candidate set
+  derived from tens of cells predicted hundreds. That is the difference
+  between a fit and a law.
+- **The three-material sets were under-sampled, exactly as flagged, and they
+  converge on SIX.** `(0,1,2,2)`, `(0,1,2,1)`, `(0,0,1,2)` and `(0,1,0,2)` all
+  reach 6 candidates once both blocks are pooled — run 1 had seen 4, 4, 1 and
+  1. Run 2 also contributes `0x6C`, a 19th permutation.
+
+So the arity is **2 candidates for a two-material cell, 6 for a
+three-material one** — which is a much sharper target for the table than "a
+small set", and 91.9% of run 2's cells (941/1024) drew a value run 1 had
+already named.
+
 **What is still needed for a consumer**, and it is now a small question rather
 than an open-ended one: the candidate TABLE (which pair each pattern maps to,
 almost certainly a static array near `0x00BF78D8`'s neighbours) and the DRAW
