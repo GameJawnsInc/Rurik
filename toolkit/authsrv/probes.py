@@ -362,17 +362,45 @@ def _level_steps(agent_id):
 
 
 def _attribute_steps(agent_id):
-    # The question is whether a 42-zero array is even well-formed. One lineage
-    # reads this payload as triplets; another never sends the message at all.
-    # If 42 is right, all three should be accepted. If the client reads
-    # triplets, 42 (not divisible by 3) is the one that should misbehave.
+    """L6's attributability check: does the PANEL show the ranks we sent?
+
+    REWRITTEN 2026-08-15. This probe used to ask whether a 42-zero array is
+    well-formed, and that question is ANSWERED -- by the client's own bytes,
+    not by a run: the handler divides the wire count by three, so 42 zeros were
+    fourteen (0,0,0) triples all along, accepted in silence
+    (studies/profession/ATTRIBUTES.md 1.2, studies/combat/PLAN.md 8a). Asking
+    it again would spend a client session re-deriving a settled fact.
+
+    The live question is the one L6 actually turns on, and it is the one thing
+    static analysis could NOT close: the write chain reaches the per-agent
+    record, and the panel's read chain comes back out of the same record
+    through AttribBtns.cpp (section 8b) -- but whether the control is bound to
+    the local player's agent id at the moment the panel is open is a runtime
+    value. This probe reads it off the screen.
+
+    THE RANKS ARE DISTINCT ON PURPOSE (12/9/6/3/1, content/world.toml). If the
+    triple's slots were mis-ordered the panel would show the right numbers
+    against the WRONG names, and distinct values are what makes that visible;
+    a uniform spread would hide it. Step 3 is the discriminator.
+    """
+    from authsrv import attribute_triples
+    warrior = ((17, 12), (18, 9), (19, 6), (20, 3), (21, 1))
     return [
         Step(2.0, 0x003A, [agent_id, []], "attributes: empty",
-             "the attribute panel (open the Hero window). Anything odd?"),
-        Step(6.0, 0x003A, [agent_id, [0, 0, 0]], "attributes: 3 zeros",
-             "same panel. Still fine?"),
-        Step(6.0, 0x003A, [agent_id, [0] * 42], "attributes: 42 zeros",
-             "same panel. If this one breaks and 3 did not, our 42 is wrong."),
+             "open the Hero window's attribute panel. Note what every "
+             "Warrior attribute reads BEFORE anything is sent -- this is the "
+             "control, and 'they were already right' is the failure this "
+             "catches."),
+        Step(6.0, 0x003A, [agent_id, list(attribute_triples(warrior))],
+             "attributes: Strength 12, Axe 9, Hammer 6, Sword 3, Tactics 1",
+             "the SAME panel. Read each of the five names and its number "
+             "aloud. All five correct is L6's criterion met."),
+        Step(6.0, 0x003A, [agent_id, list(attribute_triples(
+                 ((17, 1), (18, 3), (19, 6), (20, 9), (21, 12))))],
+             "attributes: the same five ranks REVERSED across the names",
+             "same panel. Strength must now read 1 and Tactics 12. If the "
+             "panel did not move, it is not reading what this message "
+             "writes -- and step 2 passing would have been a coincidence."),
     ]
 
 
@@ -3070,13 +3098,22 @@ PROBES = {
              "if something does). Cheapest test of that conditional.",
     ),
     "attributes": lambda a, o: Probe(
-        question="Is a 42-zero attribute array well-formed?",
-        predicts="If ATTRIBUTE_COUNT = 42 is right, all three lengths are "
-                 "accepted. If the client reads triplets, 42 misbehaves where 3 "
-                 "does not.",
+        question="Does the attribute panel show the ranks 0x003A carries -- "
+                 "i.e. is the panel bound to the agent whose record we write?",
+        predicts="Step 2 draws Strength 12, Axe Mastery 9, Hammer Mastery 6, "
+                 "Swordsmanship 3, Tactics 1, each against its own name. Step 3 "
+                 "reverses them and the panel follows. If step 2 lands and step "
+                 "3 does not, the panel is showing something cached or "
+                 "something else's; if the numbers appear against the WRONG "
+                 "names, the triple's slot order is wrong -- and 8a's reading "
+                 "of slot 2 as baseValue is what that would refute.",
         steps=_attribute_steps(a),
-        note="A null result is inconclusive -- one lineage never sends 0x003A at "
-             "all, and one parser is documented to bail without a skillbar first.",
+        note="This is L6's attributability criterion, and the ONLY part of it "
+             "static analysis could not close: the write chain and the panel's "
+             "read chain provably share one record and one locator (section "
+             "8b), but the control's runtime agent binding is not a byte "
+             "pattern. Distinct ranks are the design -- they make a slot-order "
+             "error visible instead of plausible.",
     ),
     "armor": lambda a, o: Probe(
         question="What are the two dwords in 0x006F, and does it dress the agent?",

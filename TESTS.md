@@ -819,6 +819,60 @@ Every one of these, in the order they were written:
   refused AS a bound, since row 0 reached `entries[-1]` and planned a write to the LAST
   row of the table, which a "some blocker" predicate passes because that row's
   reservation is 0 bytes. Floor 30 -> 38),
+  `toolkit/mapdata/test_datalloc.py` (the THIRD write verb: rows that did not
+  exist, and the file id that makes the client able to name them. `--replace`
+  needs a row, `datmove` needs a row; both start from one ArenaNet made, which is
+  why every authored map so far has been installed by DISPLACING a real retail
+  area. The fixture carries what the real archive has and `test_datmove`'s does
+  not -- an MFT whose size is not a block multiple, so it has genuine growth
+  slack and its reservation ends at EOF, a file-id table with headroom inside its
+  own reservation, and **an ARMED MAP HEAD beside a genuine spare**. That last
+  pairing is the bug this arc found: `datplan.free_rows` tested `size == 0`
+  alone, and `rebloat --arm` sets a live map head's size to zero ON PURPOSE, so
+  on `vault/dat_c2/Gw.dat` it returned `[71496]` -- the head of map 143, flags
+  259, USED, still chained to partner 71497 -- and `plan_insert` prefers
+  `erased[0]`. The next insert into that archive would have taken a live map's
+  head, orphaned its partner and left the file id resolving to somebody else's
+  payload, with all three crc rules still holding. It now asks the client's own
+  question, the USED flag. **Three things a one-row insert gets wrong and this
+  refuses:** a map is TWO rows chained by `alloc.nextStream` at +0x10 and
+  `plan_insert` plans no such field and returns the same row index when called
+  twice; a file id is not optional, because the open-time reconcile deletes an
+  unnamed USED|FIRST row at index >= 16 and frees its extent, so an unregistered
+  row works exactly once; and the MFT can grow ONLY into the slack of its own
+  last 512-byte block -- 424 bytes = 17 rows on the 38833 pair, where the gap
+  measure claims 4,266,920 -- because the next block is a container generation or
+  EOF. The write order is asserted as a property rather than described: payload,
+  then rows past the declared count, then the id pair past the declared table
+  size, all three invisible; then the two writes that make them exist. **Section
+  7 is the one that earns its place** -- it tears the archive at exactly that
+  window, proves `Archive()` refuses it (`entry_count * 24 != mft_size`), and
+  then proves `--revert` still works, which it did not before `mft_offset_of`
+  read the MFT address from the 32-byte header instead of by opening the whole
+  table. The recovery path could not open the archive in the one state it exists
+  for. Everything is re-derived from raw bytes by readers that import nothing
+  from `datalloc`, and the chain is walked three ways -- a Floyd walk out of
+  `int.from_bytes`, `mapchunks.MapIndex`, and the corpus-wide orphan list --
+  because the first draft asserted `nextStream` once and a sabotage that wrote 0
+  there reddened exactly one check. **Section 11 is the one that found a real
+  defect in the code it was written against.** It replays every prefix of the
+  write out of the journal and asserts the property the order exists to serve:
+  no prefix may leave a USED|FIRST_STREAM row that the file-id table does not
+  name, because that is the shape the reconcile frees and memsets. The first
+  version of `alloc()` wrote every row in one pass and called it invisible --
+  true only of APPENDED rows, since a REUSED spare is already inside the declared
+  table and goes live the instant it is written. Section 11 reported three FAILs
+  against code that was green on every other check in the file: an unnamed head
+  on disk, and, with a reused head and an appended partner, a `nextStream`
+  pointing past the declared count while the loader asserts `nextStream < count`.
+  The order now publishes the id record FIRST and reused rows LAST, taking a
+  transient dangling record -- which the client drops -- over an orphan row,
+  which it deletes. Eight sabotages, all eight red, counts in the floor comment
+  and re-measured after every change. **Also proven at full scale**: a map pair
+  allocated into a 4.2 GB copy of the live 38833 archive, preflight 10 of 10 with
+  the orphan count rising by exactly one, then reverted byte-identical by sha256.
+  No client, though: **no client has ever read a row this verb allocated**, which
+  is the same sentence `datmove` carried before FINDINGS 39. Floor 98),
   `toolkit/mapdata/test_bit31.py` (the REPLACEMENT-PENDING census -- the file ids
   carrying bit 31, which `FcArchive` binds when it has requested a replacement
   and deleted the plain name (`archive.py`:486, read out of the client). The
@@ -1780,6 +1834,34 @@ Every one of these, in the order they were written:
   proves nothing while looking like it proved everything. No vault, no socket, no
   client. ~1 s),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
+  `toolkit/clientscan/test_attribtable.py` (the client's own `s_attrib` table,
+  and the numbering verdict it settles. `studies/combat/PLAN.md` carried
+  "contiguous 0–41" — OpenTyria's, and the source of `ATTRIBUTE_COUNT = 42` —
+  against "gapped 0–44, ids 26/27/28 reserved" as CONTESTED. **Neither is
+  wrong; they answer different questions**, and the table shows both at once:
+  the INDEX SPACE is contiguous 0..50 (what `0x003A`'s first array is
+  bound-checked against, `cmp esi, 0x33`), the ten playable professions own
+  exactly **42** of those rows, and the other 9 belong to profession 11 —
+  including 26/27/28, which sit immediately before Dagger Mastery at 29 and are
+  precisely the "+3 offset" the rival scheme describes. The table is located
+  STRUCTURALLY, never by address: rows self-index at `+0x04`, professions fall
+  in 1..11, each playable profession has EXACTLY ONE primary, and the real
+  rows total 42 — a conjunction proven refutable by three sabotages (breaking
+  one self-index, adding a second Warrior primary, moving one attribute to
+  profession 11) that each make the locator refuse rather than return a
+  confident wrong offset. Section 1 also closes byte-exactly: the row after the
+  last is where `ConstAttrib.cpp`'s own path string begins, which only a
+  correct count AND stride reach. **Section 4 is the leg with no circularity**
+  — the profession column is in `Gw.exe`, the names are in the owner's
+  `Gw.dat` and come back through `textrec`, and the claim is that the 42 rows
+  the EXE gives a profession are exactly the 42 the ARCHIVE can name: one
+  partition drawn twice by two unrelated mechanisms, `named-not-real=[]`,
+  `real-not-named=[]`. It skips loudly with no archive, which is why the floor
+  is the archive-less 25 of 29 rather than the full count. Two names are pinned
+  as literals — `Strength` and `Dagger Mastery` — following this file's
+  existing two-name precedent rather than dumping 42; the emitter itself writes
+  **no** authored text, committing `name_string_id` for run-time resolution,
+  and a check asserts no string leaks into the rows),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
   `toolkit/clientscan/test_maprows.py` (the footprint join that NAMES archive map
   rows, and the negative the arc turned on. `s_missionClientData` -- the client's
@@ -2564,6 +2646,21 @@ Every one of these, in the order they were written:
   `toolkit/clientpatch/test_keytap_patch.py` (the R0b key-tap code cave: build_cave's
   edges resolve, the planted client changes only the tap and the cave, and the patcher
   refuses a changed or already-tapped binary),
+  `toolkit/clientpatch/test_footprint.py` (PLAN A2's compass-footprint patcher: the two
+  rects at `s_missionClientData[map]+0x48`/`+0x58` that the `0x0199` map-type byte picks
+  between, and whose ORIGIN decides which part of the continent atlas a map's compass
+  crops. The read is pinned against an INDEPENDENT reader -- `consttable.Table.record`,
+  what `maprows.py` and the whole minimap arc used -- because the failure this file
+  exists for does not raise: `Table.base` is already a FILE OFFSET, the first `locate()`
+  treated it as a VA and ran it through `rva_to_off`, and it printed four plausible
+  int32 from 0x400B90 bytes short. Containment could not catch that, since containment
+  only asks whether the bytes that moved sat inside the range it was TOLD to write --
+  so `sane_rect` refuses the exact garbage tuple that bug produced, and is checked to
+  ACCEPT the real rect so it is not a predicate that refuses everything. Also: writing
+  rect A leaves the adjacent B untouched, the output guard refuses the input itself,
+  `C:\gw` and every checkout while PERMITTING the vault, and the guard is asserted on
+  the SYNTAX TREE to be called exactly once from `main()` -- a guard that exists and is
+  never called being the failure `test_atex.py` §3 names),
   `toolkit/clientpatch/test_reskin.py` (the profession reskin -- repointing a SHIPPED
   profession's name string ids, which `studies/profession/RESKIN.md` chose over adding a
   twelfth id because `.rdata` has zero slack and seven of the profession tables are
@@ -2754,4 +2851,89 @@ Every one of these, in the order they were written:
   count. Both figures MEASURED 2026-08-14 and both drift per the note above; the
   ~320-file gap between them is the durable part.) A vault-less
   run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
-  empty directory rather than derived by subtraction; a vault run scores 30).
+  empty directory rather than derived by subtraction; a vault run scores 30),
+  `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
+  ArenaNet's own template — six complete cycles, two live captures, same order
+  every time: E4 at the press, E5 at cast end carrying the recharge in whole
+  seconds, E3 an aftercast later, E6 at E5+recharge to within 13.7 ms on all
+  six. The section that earns the entry is the QUEUE LAW: skill 105's two
+  cycles both exceed its 2.0 s activation by exactly the previous cast's
+  remaining aftercast, so E4 fires at accept but the cast begins when the
+  caster FREES — the naive press+activation model is refuted by +0.64 s and
+  +0.57 s residuals in the corpus, and the test drives two back-to-back
+  presses through exactly that schedule. Timing is tested by REWINDING the
+  pending entries, never by sleeping; the zero-recharge inversion pins that
+  E6 waits for its E3 because the corpus never shows them inverted; and the
+  real-content section presses skill 153 and requires E5 to carry recharge 8,
+  the value ArenaNet's own wire echoed — it SKIPS loudly on a machine with no
+  vault overlay, where sections 1–3 still run on a stubbed skill_timing),
+  `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
+  ArenaNet's own kills. Our server sent one message when an agent died —
+  `0x00F1` with the death bit — where the real service sends three: status,
+  then a `0x00EE` reward, then `0x0026` value 8, same tick, same agent. **The
+  oracle is the corpus, not a literal**: §2 re-derives the live template out of
+  `vault/captures/live/*` on every run, so adding or re-decoding a capture
+  moves the expectation instead of leaving a stale constant behind. §1 keeps
+  literals only so a vault-less machine still checks something — including that
+  the reward encodes to `ee00000000001a000000`, ArenaNet's exact bytes.
+  **§3 is what the file is really guarding.** The corpus holds a
+  richer-LOOKING template — a `0x00EE` PAIR, `[10,0]` then `[0,X]` — that is
+  not a kill shape: 6 of its 7 sightings fire 6.8–31.5 s from any death inside
+  a broadcast burst always preceded by `0x009C [agent, 100]`, and the seventh
+  landed on the Wolf's kill tick, whose `0x009C` marker is what gives the
+  coincidence away. Copying it would have looked like more fidelity and been
+  less, so §3 asserts we do not. Two counts here corrected earlier passes and
+  are asserted so they cannot drift back: the corpus holds **5 deaths, not 4**
+  (agent 38 dies twice on one connection, and the second carries neither
+  reward nor flags — a repeated `EFFECT_DEAD` awards nothing), and `0x0026`'s
+  histogram over both captures is **{9: 200, 8: 4}**, against an `authsrv.py`
+  comment that had called value 8 a single sighting from one capture's count.
+  Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
+  vault-less §1),
+  `toolkit/authsrv/test_skilldamage.py` (skill damage: the client's own
+  numbers at the player's own rank, replacing `ENEMY_SKILL_FRACTION = 0.25` —
+  a flat quarter of the player's maximum for every skill, admitted invention.
+  **The sections that refuse are the point.** The client's table gives a
+  magnitude and does NOT say what it means: `scale0/15` is `+ Damage` on Power
+  Attack and `Healing` on Restore Condition, and `type_code` cannot
+  discriminate because a Spell can heal or harm. **Three of the four skills on
+  our own enemy's bar are not damage**, so a decode that read endpoints and
+  dealt them would have had the enemy "damaging" the player with a heal for
+  10–70 and an enchantment for 40–200 — an invention wearing a measurement's
+  clothes, and worse than the flat fraction because it would look principled.
+  The meaning therefore comes from GWW's own `{{Skill progression}}` variable
+  names, quoted verbatim into `content/world.toml` with a per-skill citation;
+  §3 asserts the five non-damage skills return **None rather than 0**, and is
+  proven red by relabelling Restore Condition's `Healing` as `Holy damage`.
+  §1 reproduces both endpoints for four skills — values GWW independently
+  lists, so a match is two witnesses rather than our decoder agreeing with
+  itself. §2 walks Holy Strike's whole ladder (3 per rank, exactly) and pins
+  that rank 20 **extrapolates to 70 rather than saturating**, because the
+  client's interpolator never compares rank against 15 and a "sensible" clamp
+  is exactly what someone would add. §4 pins that a disabled `skill_arguments`
+  bit REFUSES: Rush's scale slot holds 25 — the "move 25% faster" in its
+  description — so a decode ignoring the bitfield returns a plausible number
+  instead of refusing. §5 proves the **unresolved** rounding tie-break
+  (studies/combat 8c: the client adjusts by ±1.0, not ±0.5) cannot bite,
+  because no skill in the effect table lands on a .5 at any rank 0–15 — the
+  open question is shown to cost nothing rather than assumed to. §6 is the
+  chain steps 7 and 8 exist to join: Power Attack reads Strength 12 and
+  Desperation Blow reads Tactics 1, identical 10→40 tables landing 22 points
+  apart, which is precisely what "the server models no attribute ranks" used
+  to cost. §7 asserts a `+ Damage` bonus rides the swing as ONE damage
+  message, since two would draw two numbers on screen for one hit),
+  `toolkit/authsrv/test_guards.py` (the guard contract for combat's computed
+  values: a `_fraction` refusal must land BEFORE any send or state change, not
+  after — the client dies on `fraction <= 1.0f` at CharPool.cpp:84 with no
+  server-side symptom, and on the connection thread an escaping ValueError
+  additionally closes the socket, because `handle`'s except tuple never named
+  it. Written RED-FIRST against the pre-guard tree (studies/combat/PLAN.md,
+  amendment C8b) and the red run is quoted in the file's docstring: hit_enemy
+  with a poisoned out-of-range HIT_FRACTION raised only AFTER
+  GV_ATTACK_STARTED was on the wire, the target's health was bookkept
+  100 → 0 unsent, and the swing timer was eaten — three FAILs, each now a
+  check. Every section carries an in-range CONTROL asserting the real
+  constant still sends the full effect burst, because a guard that refuses
+  everything would pass every refusal check. Dormant while every fraction is
+  a literal constant; load-bearing the day studies/combat step 8 computes
+  them from the client's skill table).

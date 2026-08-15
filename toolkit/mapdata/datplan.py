@@ -54,7 +54,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from archive import (Archive, DEFAULT_DAT, ENTRY_SIZE,  # noqa: E402
-                     MFT_MAGIC, mft_row_offset,
+                     MFT_MAGIC, mft_row_offset, FLAG_ENTRY_USED,
                      FILE_ID_TABLE_ROW, MFT_SELF_ROW, FIRST_CLAIMABLE_ROW)
 
 # Offsets into the 32-byte file header and the 24-byte MFT header, for the
@@ -352,12 +352,35 @@ def best_fit(runs, need):
 
 
 def free_rows(ar, include_reserved=False):
-    """MFT rows with size 0 -- erased slots a writer can claim without growing.
+    """MFT rows a writer can claim without growing the table.
+
+    A row is claimable when it is erased AND NOT IN USE. The second half was
+    missing until 2026-08-15: this asked `size == 0` alone, and that is not what
+    free means. `rebloat.py --arm` sets a map head's size to zero DELIBERATELY,
+    so the client recompiles the map from its partner, and an armed head is very
+    much in use -- it keeps its offset, its flags and its `nextStream` link to
+    the partner that holds the actual geometry.
+
+    MEASURED on `vault/dat_c2/Gw.dat`, the copy where an arm has actually
+    happened: this returned `[71496]` -- the armed head of map 143, flags 0x0103
+    (USED|FIRST_STREAM), chained to partner 71497. `plan_insert` prefers
+    `erased[0]` over appending, so the next insert into that archive would have
+    taken a live map's head row, orphaned its partner, and left file id 0x287D3
+    resolving to somebody else's payload. Nothing would have caught it: all three
+    crc rules still hold across the swap, and `datcheck` rule 6 skips size-0 rows
+    because they own no extent.
+
+    The client's own rule is the FLAG, not the size -- `LoadMft` pushes rows with
+    USED clear onto a spare stack and `NewEntry` pops it LIFO. This now asks the
+    same question the allocator does. On all four current archives the two
+    answers coincide, so this changes no figure that was ever right; it changes
+    the one that was wrong.
 
     Excludes the reserved low rows by default; see FIRST_CLAIMABLE_ROW.
     """
     return [e.index for e in ar.entries
             if e.size == 0
+            and not (e.flags & FLAG_ENTRY_USED)
             and (include_reserved or e.index >= FIRST_CLAIMABLE_ROW)]
 
 
