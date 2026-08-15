@@ -113,3 +113,9 @@ desktop.ini
 local.settings.json
 Accounts.json
 *.credentials
+
+# The suite runner's scheduling cache: how long each test took HERE, last time, so
+# the pool starts the long poles first. Machine-specific by nature and worthless to
+# anyone else's hardware. It is a hint and never a source of truth -- run_suite.py
+# treats a missing or malformed one as absent, so deleting it costs one slow run.
+toolkit/.suite-timings.json

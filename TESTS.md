@@ -2293,9 +2293,49 @@ Every one of these, in the order they were written:
   The cross-check is against a DIFFERENT SOURCE — the disk walk against a scan of
   CLAUDE.md, sharing no code — with a non-empty guard first, because two empty sets
   compare equal. And `--only` matching nothing exits 2: "no tests matched" with exit 0
-  is a green run over nothing, which is this repo's oldest defect. No vault, no
-  socket, no client; both halves are pure functions over a string and a tree, so
-  testing the thing that spawns 76 processes spawns none. 27 checks, ~2 s),
+  is a green run over nothing, which is this repo's oldest defect. **Section 6 covers
+  DEFECT 4, which is about wall clock rather than counting**: serial, this suite
+  measured 2,794 s over 94 files on 2026-08-14, and `toolkit/test_scrub.py` was 584 s
+  of it — while sorting near the END of the alphabet, so a pool fed in path order
+  starts its longest file last and idles behind it (~14 min instead of ~10). The
+  runner schedules longest-known-first from a gitignored `.suite-timings.json`, and an
+  UNRECORDED file goes first rather than last, because an unmeasured cost that turns
+  out to be large must not become the tail. The load-bearing check is that the
+  schedule is a **permutation** — a scheduler that drops a file makes the suite
+  quietly smaller and the run FASTER, which reads as success and is the same defect as
+  (1) from a third side — and both cache-read failures (missing, corrupt) must yield
+  `{}`, because a malformed HINT must degrade the packing and never stop the run. No
+  **Section 7 is `--since`, the only feature in the runner that can make the suite
+  SMALLER**, so both of its failure modes are reproduced rather than reasoned about.
+  Under-selection is the dangerous one — a fast green run over exactly the code that
+  moved — and over-selection is the one that makes the feature pointless, which is how
+  it gets switched off. Dependencies come from a real graph: `ast` imports, plus SPAWN
+  edges, because `test_handshake.py` does not import `authsrv.py`, it launches it as a
+  subprocess, and an import-only graph leaves it unselected when the server changes.
+  **Spawn edges are read from non-docstring string literals, and the docstring control
+  is what keeps that honest**: scanning raw source text instead put a one-decoder
+  change at **90 of 94 tests** (MEASURED 2026-08-14, this repo cites modules in prose
+  constantly); restricting the scan put the same change at 22. The refusals are the
+  other half — a `content/*.toml` or `CLAUDE.md` change ESCALATES to the full suite
+  rather than guessing, because those are read at run time by tests that never import
+  them and no graph can see the edge; one such file among Python ones still forces the
+  full run; and a diff git could not produce is a full run, not an empty one, which is
+  why `changed_since` returns `None` and never `set()`. **The exit rule is a pure
+  function so it can be checked without spawning 94 processes to learn it**: green AND
+  complete is the only 0, green-but-partial is 3 — `--only` included, which always was
+  a partial run and exited 0 for as long as the runner existed — and a failure
+  OUTRANKS partiality, because 3 on a run with a red file hides the failure behind a
+  caveat. No vault, no socket, no client; the halves under test are pure functions
+  over a string, a tree and a dict, so testing the thing that runs the whole suite runs
+  none of it — section 7 builds a synthetic `toolkit/` and the one check that touches
+  a real repo only asks git to reject a bogus ref. **DEFECT 5 is in section 1**: a
+  failing test whose entire explanation goes to STDERR was reported as
+  `FAIL … (no output)`, which names nothing and sends the reader to run the file by
+  hand — `test_movement_fidelity.py` exits 1 with a completely empty stdout when it
+  refuses to pool two client builds, and that is how it read on 2026-08-14. The note
+  now falls back to stderr, with a control that stdout still wins when it has a line:
+  stderr is a fallback, not a louder channel. The banner search stays on stdout alone,
+  because a verdict line is stdout by construction. 49 checks, ~2 s),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
   a live session on 2026-08-10. It also pins the checker's own vacuity failure — the
@@ -2418,18 +2458,40 @@ Every one of these, in the order they were written:
   `0x1B97D` on a different row in another, and both are right for their own copy
   (`studies/maprows/FINDINGS.md` §8). The server reads one archive for the
   navmesh and the client opens its own for the geometry, and nothing checked they
-  matched. The POSITIVE CONTROL is what earns the file and it is not synthetic:
-  `vault/run-live/`, a copy a client really played live from, genuinely does not
-  bind `0x8001B97D`, and the check must go FATAL on EXACTLY the two Pre-Searing
+  matched. **THIS FILE'S SUBJECT HAD THE BUG IT WAS WRITTEN TO CATCH, fixed
+  2026-08-14:** `contentids` asked `archive.file_id_table()`, which registers a
+  bit-31 id under BOTH spellings, so it cleared a pair whose client could not
+  bind the id at all -- it printed `10 of 10 agree` and the run died at
+  `Code=007`. The client's lookup is an EXACT 32-bit compare with no masking
+  (`0x0047AA20`), so the client's half now reads `file_id_table(..., raw=True)`
+  while the SERVER's half keeps the masked table, because that is what our own
+  reader really does -- measured, not assumed: the gamesrv log resolved
+  `navmesh 0x1B97D` against an archive binding only `0x8001B97D`. **That
+  asymmetry is the fix and §1b is its regression guard**; reverting the one
+  `raw=True` reddens 7 checks. The POSITIVE CONTROL is what earns the file and it
+  is not synthetic, but it MOVED: it was `vault/run-live/`, and as of 2026-08-14
+  both run-live copies bind every content id plainly, so that control had gone
+  vacuous. It is now found by PROPERTY -- any `vault/run/` archive that fails to
+  bind a content id raw -- which today is the 38797-era copy, the exact pairing
+  that died at `Code=007`. The check must go FATAL on EXACTLY the two Pre-Searing
   rows while the other eight stay green -- a guard that reddens on all ten says
-  nothing. Identity is the MFT entry's size and crc, never the row, because row
+  nothing. §2b states, rather than assumes, that the DEFAULT server pairing is
+  cross-generation and correctly refused (point `RURIK_DAT` at a same-generation
+  archive to run). `default_client_dat()` now mirrors
+  `drive_client.newest_run_exe()` by mtime instead of taking the alphabetically
+  first directory -- those were different archives AND different answers, so the
+  pre-flight was auditing a copy no run was going to open. Identity is the MFT
+  entry's size and crc, never the row, because row
   indices do not survive a patch; a one-bit crc mutation must be caught, since
   two archives resolving one id to different FILES is worse than a failed launch
   (the run produces data and looks like it worked). Section 4 asserts the
   LOOPBACK GATE on the syntax tree -- a live run answers to ArenaNet's own ids
   and must never be refused on our rows, and "the call is inside the RUN_ROOT
   branch" is invisible to a grep; the sabotage that removes the gate reddens it
-  alone. ~3 s),
+  alone. **Floor 12, deliberately BELOW the healthy score of 23**: §1b, §2 and
+  §2b all need the vault to hold an archive that is mid-replacement on a content
+  id, which is a condition we want to go away -- a floor of 23 would turn a
+  HEALED vault into a red suite. The mandatory core is §0+§1+§3+§4. ~10 s),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same
