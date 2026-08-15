@@ -125,9 +125,26 @@ python toolkit/run_suite.py
 
 One process per file, discovered from **the disk** rather than from any document, and
 `rc == 0` with no `ALL CHECKS PASSED` banner is reported `SUSPECT` rather than laundered
-into a pass. `--only <substring>` filters, `--list` enumerates and stops. Baseline
-2026-08-14: **85 green / 0 red / 0 suspect of 85, 4,161 checks, ~40 minutes.** Budget
-for that wall clock — `test_modelexport` alone is ~9 minutes and `test_scrub` ~5.
+into a pass. `--only <substring>` filters, `--list` enumerates and stops.
+
+**It runs eight files at a time, longest-first.** Baseline 2026-08-14, 94 files:
+**717 s wall — 12 minutes, down from 46.6 serial.** `--jobs 1` restores one-at-a-time
+and is how you check a suspected collision: a parallel run that disagrees with a serial
+one about any file's verdict is a collision, not a flake. (Measured when this landed:
+same verdicts, same 4,620 checks. The two files that differed between those runs failed
+STANDALONE too — see the drift warning below — so concurrency was not what moved them.)
+
+Two numbers to budget against, because they set the floor: `test_scrub` is **584 s** and
+`test_modelexport` **480 s**, together 38% of the serial work, so no amount of extra
+workers takes the wall clock below ~10 minutes. Half the suite — 47 files — finishes in
+83 seconds put together.
+
+**A red suite here is not always your change.** Several tests refuse to pool captures
+from two client builds, so a capture landing in `vault/captures/authsrv|gamesrv/` from
+ANOTHER session turns `test_origin`, `test_codec` and `test_movement_fidelity` red
+without a line of code changing. That happened on 2026-08-14. Check
+`python toolkit/test_origin.py` first: if it names two build ids, the vault drifted and
+the other two are downstream of it, not of you.
 
 Individual files, when you want one answer fast:
 

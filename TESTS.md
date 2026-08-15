@@ -2189,9 +2189,21 @@ Every one of these, in the order they were written:
   The cross-check is against a DIFFERENT SOURCE — the disk walk against a scan of
   CLAUDE.md, sharing no code — with a non-empty guard first, because two empty sets
   compare equal. And `--only` matching nothing exits 2: "no tests matched" with exit 0
-  is a green run over nothing, which is this repo's oldest defect. No vault, no
-  socket, no client; both halves are pure functions over a string and a tree, so
-  testing the thing that spawns 76 processes spawns none. 27 checks, ~2 s),
+  is a green run over nothing, which is this repo's oldest defect. **Section 6 covers
+  DEFECT 4, which is about wall clock rather than counting**: serial, this suite
+  measured 2,794 s over 94 files on 2026-08-14, and `toolkit/test_scrub.py` was 584 s
+  of it — while sorting near the END of the alphabet, so a pool fed in path order
+  starts its longest file last and idles behind it (~14 min instead of ~10). The
+  runner schedules longest-known-first from a gitignored `.suite-timings.json`, and an
+  UNRECORDED file goes first rather than last, because an unmeasured cost that turns
+  out to be large must not become the tail. The load-bearing check is that the
+  schedule is a **permutation** — a scheduler that drops a file makes the suite
+  quietly smaller and the run FASTER, which reads as success and is the same defect as
+  (1) from a third side — and both cache-read failures (missing, corrupt) must yield
+  `{}`, because a malformed HINT must degrade the packing and never stop the run. No
+  vault, no socket, no client; the halves under test are pure functions over a string,
+  a tree and a dict, so testing the thing that spawns 94 processes spawns none. 33
+  checks, ~2 s),
   `toolkit/test_srclint.py` (every `toolkit/` file, for a name a function reads that
   nothing could have bound: `ast.parse` and the whole suite passed a `NameError` into
   a live session on 2026-08-10. It also pins the checker's own vacuity failure — the

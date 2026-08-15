@@ -44,17 +44,50 @@ the output still looks like a report. So:
 Both halves are pure functions over strings so `test_run_suite.py` can drive them
 without spawning anything.
 
-    python toolkit/run_suite.py                 # everything, one process each
+WHY IT RUNS CONCURRENTLY, AND WHAT THAT DOES NOT CHANGE. Serial, this suite measured
+**2,794s over 94 files on 2026-08-14** -- and half of those files finish in under five
+seconds and are 83 seconds put together, while two of them are 38% of the run. That is
+a scheduling problem, not a testing one: every file is already its own process reading
+its own fixtures, so the only thing serial execution was buying was the order of the
+output lines. Concurrency changes **nothing** about what is asserted, what is counted,
+or what `parse_result` will call a pass -- a test that was red serially is red in a
+pool, and the check total is the same number. The report is sorted by path before it is
+printed, so two runs are diffable regardless of who finished first.
+
+The ordering is LONGEST-FIRST and that is the whole trick. Alphabetically,
+`toolkit/test_scrub.py` -- 584s, the longest pole in the suite -- sorts near the END, so
+a naive pool finishes everything else and then waits nine minutes for one file, landing
+at ~14 min instead of ~10. So each run writes what it measured to `.suite-timings.json`
+and the next run starts the known-slow files first. A file with no recorded time is
+scheduled FIRST, not last: an unknown cost that turns out to be large must not become
+the tail. The file is a cache and never a source of truth -- delete it, and the only
+consequence is one badly-packed run.
+
+WHAT CONCURRENCY CANNOT LAUNDER, because this runner's whole purpose is not lying about
+a count: a parallel run that disagrees with a serial one about ANY file's verdict is a
+collision, not a flake, and `--jobs 1` is kept so the two can be compared directly.
+That comparison was run when this landed -- 94 files, same 93/1/0 split, same 4,620
+checks, same single red file -- which is the evidence that the pool is safe here rather
+than the assumption that it is.
+
+    python toolkit/run_suite.py                 # everything, concurrently
+    python toolkit/run_suite.py --jobs 1        # one at a time, the old behaviour
     python toolkit/run_suite.py --only mapdata  # substring filter on the path
     python toolkit/run_suite.py --list          # what would run, and stop
 
 Exit code is 0 only when every file passed AND none was SUSPECT.
 """
 import argparse
+import json
 import os
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
+
+TIMINGS = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                       ".suite-timings.json")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -123,6 +156,40 @@ def run_one(rel, root=None, python=None):
     return status, checks, note, time.time() - t0
 
 
+def load_timings(path=TIMINGS):
+    """Last run's per-file seconds, or {} -- a missing or corrupt cache is not an error.
+
+    Deliberately swallows everything. This file exists to pack the pool better; a
+    runner that refused to start because a scheduling HINT was malformed would be
+    trading a real capability for a cosmetic one.
+    """
+    try:
+        with open(path, encoding="utf-8") as fh:
+            got = json.load(fh)
+        return {k: float(v) for k, v in got.items()} if isinstance(got, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_timings(times, path=TIMINGS):
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump({k: round(v, 1) for k, v in sorted(times.items())}, fh, indent=1)
+    except OSError:
+        pass
+
+
+def schedule(tests, times):
+    """Longest-known-first, unknowns before everything.
+
+    An unrecorded file sorts first BECAUSE its cost is unknown. The opposite choice --
+    treating "never measured" as "probably quick" -- is how a newly added corpus sweep
+    would end up starting last and setting the wall clock single-handedly, which is
+    exactly the shape `test_scrub.py` has today.
+    """
+    return sorted(tests, key=lambda t: (-times.get(t, float("inf")), t))
+
+
 def main():
     ap = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -130,6 +197,8 @@ def main():
                     help="run only files whose path contains this substring")
     ap.add_argument("--list", action="store_true",
                     help="print what would run and stop")
+    ap.add_argument("--jobs", "-j", type=int, default=min(8, os.cpu_count() or 1),
+                    help="files in flight at once (1 = serial, the old behaviour)")
     a = ap.parse_args()
 
     tests = find_tests()
@@ -144,26 +213,62 @@ def main():
         print(f"\n{len(tests)} file(s)")
         return 0
 
-    print(f"{len(tests)} test file(s) on disk\n", flush=True)
+    jobs = max(1, a.jobs)
+    times = load_timings()
+    order = schedule(tests, times)
+    known = sum(1 for t in order if t in times)
+    print(f"{len(tests)} test file(s) on disk, {jobs} at a time"
+          f" ({known} with a recorded time to schedule by)\n", flush=True)
+
+    results = {}
+    lock = threading.Lock()
+    t_all = time.time()
+
+    def work(rel):
+        # A worker that raises must cost ONE file, not the run. `pool.map` re-raises on
+        # iteration, so an unhandled OSError here -- a spawn failure, a full disk --
+        # would discard 93 finished results and report a traceback instead of a count,
+        # which is the same "no number at all" outcome the module docstring is about.
+        try:
+            status, checks, note, dt = run_one(rel)
+        except Exception as exc:                                   # noqa: BLE001
+            status, checks, note, dt = FAIL, None, f"runner raised: {exc!r}", 0.0
+        with lock:
+            results[rel] = (status, checks, note, dt)
+            tag = {PASS: "[PASS]", FAIL: "[FAIL]", SUSPECT: "[SUSP]"}[status]
+            shown = "   -" if checks is None else f"{checks:>4}"
+            print(f"  {len(results):>3}/{len(tests)} {tag} {rel:<50} "
+                  f"{shown} checks {dt:7.1f}s", flush=True)
+
+    with ThreadPoolExecutor(max_workers=jobs) as pool:
+        list(pool.map(work, order))
+
+    # The report is rebuilt in PATH order, never completion order, so that a parallel
+    # run and a serial one produce byte-comparable output. Finishing order is a fact
+    # about this machine's scheduler; it must not leak into the artifact people paste.
     tally = {PASS: 0, FAIL: 0, SUSPECT: 0}
     total = 0
     bad = []
-    t_all = time.time()
-    for rel in tests:
-        status, checks, note, dt = run_one(rel)
+    print()
+    for rel in sorted(results):
+        status, checks, note, dt = results[rel]
         tally[status] += 1
         if checks:
             total += checks
         shown = "   -" if checks is None else f"{checks:>4}"
         tag = {PASS: "[PASS]", FAIL: "[FAIL]", SUSPECT: "[SUSP]"}[status]
         print(f"{tag} {rel:<52} {shown} checks {dt:7.1f}s"
-              + (f"  {note[:70]}" if note else ""), flush=True)
+              + (f"  {note[:70]}" if note else ""))
         if status != PASS:
             bad.append((rel, status, note))
 
+    wall = time.time() - t_all
+    save_timings({**times, **{r: v[3] for r, v in results.items()}})
+    cpu = sum(v[3] for v in results.values())
     print("\n" + "=" * 72)
     print(f"{tally[PASS]} green / {tally[FAIL]} red / {tally[SUSPECT]} suspect "
-          f"of {len(tests)}    {total} checks    {time.time() - t_all:.0f}s")
+          f"of {len(tests)}    {total} checks    {wall:.0f}s wall"
+          + (f" ({cpu:.0f}s serial, {jobs} jobs)" if jobs > 1 else " (serial)"))
     for rel, status, note in bad:
         print(f"  {status} {rel}  {note}")
     return 0 if not bad else 1

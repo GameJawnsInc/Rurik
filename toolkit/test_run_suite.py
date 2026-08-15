@@ -19,10 +19,11 @@ sys.path.insert(0, HERE)
 import checks  # noqa: E402
 import run_suite as rs  # noqa: E402
 
-# Floor 27, MEASURED from a green run on 2026-08-13. Every check is unconditional and
+# Floor 33, MEASURED from a green run: 27 on 2026-08-13, plus section 6's six when the
+# runner learned to schedule a pool on 2026-08-14. Every check is unconditional and
 # builds its own fixtures, so there is no vault-less variant and no declared skip: a
 # score under the floor means a section crashed.
-LEDGER = checks.Ledger("run_suite: the suite runner's own counting", floor=27)
+LEDGER = checks.Ledger("run_suite: the suite runner's own counting", floor=33)
 
 
 def section_banner_not_last():
@@ -250,12 +251,65 @@ def section_refusals():
               buf.getvalue().strip()[:120])
 
 
+def section_scheduling():
+    """The pool's ordering, and the one property it must never trade for speed.
+
+    DEFECT 4, measured rather than imagined. Serial, this suite was 2,794s on
+    2026-08-14 and `toolkit/test_scrub.py` alone was 584s of it -- and `test_scrub`
+    sorts near the END of the alphabet. A pool fed in path order therefore starts its
+    longest file last and idles seven workers for nine minutes behind it: ~14 min
+    instead of ~10, for a scheduling choice nobody would defend out loud.
+
+    The FIRST check here is the one that can go red in the direction that matters. A
+    scheduler is a permutation and nothing else; one that drops a file makes the suite
+    quietly smaller, which is the exact defect this whole module exists to refuse, and
+    it would show up as a FASTER run rather than as an error.
+    """
+    print("\n6. the pool is ordered longest-first, and loses nothing doing it")
+    tests = ["toolkit/authsrv/test_a.py", "toolkit/mapdata/test_b.py",
+             "toolkit/test_scrub.py", "toolkit/test_zz.py"]
+    times = {"toolkit/authsrv/test_a.py": 3.0, "toolkit/mapdata/test_b.py": 120.0,
+             "toolkit/test_scrub.py": 584.0}
+
+    got = rs.schedule(tests, times)
+    LEDGER.ok(sorted(got) == sorted(tests) and len(got) == len(tests),
+              "the schedule is a PERMUTATION -- every file in, every file out",
+              f"{len(got)} of {len(tests)}; a scheduler that drops one makes the "
+              f"suite smaller and the run faster, which reads as success")
+    LEDGER.ok(got[-1] == "toolkit/authsrv/test_a.py",
+              "the cheapest known file is scheduled last")
+    LEDGER.ok(got.index("toolkit/test_scrub.py") < got.index("toolkit/mapdata/test_b.py"),
+              "and the 584s file starts before the 120s one -- alphabetically it is "
+              "next to LAST", f"order: {[t.split('/')[-1] for t in got]}")
+    LEDGER.ok(got[0] == "toolkit/test_zz.py",
+              "a file with NO recorded time goes first, not last",
+              "an unmeasured cost that turns out to be large must not become the tail")
+
+    # The cache is a hint. Every failure mode of reading it has to end in {}, because
+    # the alternative is a runner that will not start over a malformed scheduling file.
+    missing = rs.load_timings(os.path.join(tempfile.gettempdir(), "no-such-timings.json"))
+    LEDGER.ok(missing == {},
+              "a missing timings cache reads as {} rather than raising")
+    tmp = tempfile.mkdtemp(prefix="rurik-suite-sched-")
+    try:
+        bad = os.path.join(tmp, "corrupt.json")
+        with open(bad, "w", encoding="utf-8") as fh:
+            fh.write("{not json at all")
+        LEDGER.ok(rs.load_timings(bad) == {},
+                  "and so does a corrupt one -- a bad HINT must not stop a real run",
+                  "the run degrades to a badly-packed pool, never to no pool")
+    finally:
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     section_banner_not_last()
     section_suspect_is_not_zero()
     section_discovery()
     section_against_the_real_tree()
     section_refusals()
+    section_scheduling()
     return LEDGER.verdict()
 
 
