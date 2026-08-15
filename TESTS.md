@@ -1984,20 +1984,32 @@ Every one of these, in the order they were written:
   inside the table it had just read (internal consistency, which catches a
   corrupt read and not a moved one), and `MAIN_SWITCH_GATE` printed
   "MOVED — results are suspect" and carried on. The table addresses are now read
-  out of the `movzx`/`jmp` pair that jumps through them, so they are derived from
-  the instruction rather than remembered beside it: 10 addresses gone, 32 → 27,
-  and the rest gated. §1 is the load-bearing positive claim — the derivation must
-  land on the exact ten addresses that used to be hardcoded, which now live in
-  the test as class-(c) expectations. §3 is the half a lookup cannot fake: on the
-  older vaulted build every switch, both chains and the gate must REFUSE, and the
-  CLI must exit **2 with no traceback**, because a refusal that reads as a crash
-  gets debugged as one. §4 doctors a site by ONE byte and requires a refusal,
-  with the real site still resolving as the positive control — a checker that
-  refuses everything would pass §3 on its own. Why gated and not converted is
-  MEASURED, not preferred: the `movzx`/`jmp` switch shape occurs **596 times** in
-  `.text`, so it identifies "a switch" and never "this switch", and converting
-  means anchoring the dispatchers first. Needs the vault throughout. Floor 33,
-  ~4 s),
+  out of the `movzx`/`jmp` pair that jumps through them: 10 addresses gone,
+  32 → 27, and the rest gated. **ROUND TWO, 2026-08-14, and the file's central
+  claim is INVERTED.** Build 38833 shipped, this module refused it outright and
+  took `avevents.py`'s property map with it — being right about not knowing beats
+  being confidently wrong, and is still not being able to read the client. The 27
+  are now **ZERO**: the two dispatchers are the handlers the client's own RECEIVE
+  table gives for opcodes `0x009F` and `0x00A2` (so the chain bottoms out in
+  `RegisterMsgs`, anchored by byte shape), each handler is a forwarder with
+  **exactly one** call, the int dispatcher holds **exactly two** switch sites and
+  the float one **exactly one**, each dispatcher calls **exactly two** functions
+  holding a property switch — store then AgentView — each default is the jump
+  target the most ids share, each span is read from the `cmp`/`ja` guard, and each
+  chain's ids are parsed from its comparisons. §1 requires the derivation to
+  reproduce every address that used to be typed into the module, which now live
+  here as class-(c) expectations; that move is what took the module's census to 0,
+  since a hand-measured address is class (a) only while the TOOL computes with it.
+  §3 is the inversion: every vaulted build must be READ and all three must agree
+  — 47 int ids, 14 float, exactly {40} untouched, main switches disjoint — while
+  putting those switches at three DIFFERENT address sets, which is what a
+  derivation looks like and a lookup cannot fake. §4 keeps the framing control (a
+  site off by ONE byte is refused) and adds four sabotages, one per "exactly N"
+  guard, each with the module restored in `finally` and a positive control after.
+  Why the old form could not do better is still MEASURED: the `movzx`/`jmp` shape
+  occurs **596 times** in `.text`, so it identifies "a switch" and never "this
+  switch" — which is why the dispatchers had to be anchored first, and now are.
+  Needs the vault throughout. Floor 39, ~20 s),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins
