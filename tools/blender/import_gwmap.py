@@ -798,6 +798,16 @@ def build_terrain_overlays(obj, gwmap, name=None):
     (`OVERLAY_LIFT`) is a depth-buffer necessity of that translation and is
     labelled as ours rather than ArenaNet's.
 
+    **THE FORMULA THIS REPRODUCES IS OBSERVED, NOT ASSUMED** (FINDINGS
+    §6.4). ArenaNet's terrain pixel shader -- ps_1_1, 128 bytes at
+    `0x00A737E8`, decoded whole -- is `lrp r1, t1.wwww, t1, t0` then
+    `lrp r1, t2.wwww, t2, r1`: layer 0 opaque, each further layer lerped
+    over the accumulator by ITS OWN texture alpha. Alpha-blending coplanar
+    quads back to front computes exactly that, which is why this
+    translation is a translation of the composite and not an approximation
+    of it. The fixed-function fallback agrees from the other side
+    (`SELECTARG1`, then `BLENDTEXTUREALPHA` twice).
+
     The base object keeps its own opaque materials; overlays get their own
     alpha-blended copies, because the same texture is opaque underneath and
     masked on top.

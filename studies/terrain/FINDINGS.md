@@ -454,6 +454,52 @@ Two honest departures, both labelled at the call site:
   Blender has no equivalent, so the layers become coplanar geometry drawn
   back-to-front with a 0.35-unit lift — a translation of the composite, not
   a copy of it, and the lift is ours.
+
+### 6.4 The composite formula, OBSERVED — ArenaNet's own shader
+
+This section first shipped the formula as INFERRED, reasoning from the
+architecture ("a single pass with per-stage ops is only consistent with the
+mask being consumed in the combiner"). **It did not have to stay inferred.**
+The terrain material builder at `0x0074B9D0` (`TrnTex.cpp`) selects one of
+four paths by device caps, and the preferred one hands a **binary ps_1_1
+pixel shader, 128 bytes at `0x00A737E8`**, to `0x00664110`. Decoded whole:
+
+```
+tex t0 ; tex t1 ; tex t2 ; tex t3
+lrp r1, t1.wwww, t1, t0      ; r1 = lerp(t0, t1, t1.a)
+lrp r1, t2.wwww, t2, r1      ; r1 = lerp(r1, t2, t2.a)
+mul r0, v0, r1               ; r0 = diffuse  * r1
+mul r1, v1, r1               ; r1 = specular * r1
+lrp r0, t3.wwww, r1, r0      ; r0 = lerp(r0, r1, t3.a)
+```
+
+`lrp dst, s0, s1, s2` is `s2 + s0*(s1 - s2)`. So: **layer 0 opaque, then
+each additional layer lerped over the accumulator by ITS OWN texture
+alpha** — the formula this repo drew coplanar geometry to reproduce, read
+out of ArenaNet's shader tokens rather than argued from her architecture.
+
+The **fixed-function fallback agrees**, which is a second witness from a
+different mechanism. Path C/D build stage ops from literal tables at
+`0x00A73E08`/`0x00A73E38`, and the `GR_TEXOP → D3DTEXTUREOP` decoder at
+`0x00A65B78` (24 entries × 3 dwords, located from `Dx9ShaderStage.cpp` at
+`0x006DA8E7`) reads them as:
+
+```
+stage 0: SELECTARG1          stage 2: BLENDTEXTUREALPHA
+stage 1: BLENDTEXTUREALPHA   stage 3: MODULATE, no texture
+```
+
+That decoder is itself cross-checked four ways, the sharpest being
+ArenaNet's own assert `GrStage:350 layerFlags & GR_TEXFLAG_MODULATE_2X_ARG`
+setting op 14, which the table maps to `D3DTOP_MODULATE2X`.
+
+**Two things this opens, and they are the next visible wins.** `mul r0, v0,
+r1` modulates the blended ground by the **vertex diffuse colour** — which is
+terrain tag 9, the baked directional lightmap `terrain.py` already decodes
+and `mapexport` already ships as `.shade.u8`, and which nothing in Blender
+currently applies. And `t3` is not a tile layer at all: its alpha blends
+between the diffuse and specular lighting terms, which is what T3's fourth
+texcoord set (chunk space, one repeat per 32 cells) addresses.
 - **Which corner is the BASE rests on an assumption.** Each corner is
   fetched as `arr[(sel >> 2k) & 3]` where `sel` is a per-cell byte from a
   chunk-local array at `chunk+0x2B4` that the builder fills before the loop;
@@ -465,6 +511,17 @@ Two honest departures, both labelled at the call site:
 ---
 
 ## 7. What is still open
+
+- **Tag 9's baked lightmap is decoded, exported and UNUSED.** §6.4 shows the
+  client's own shader modulating the blended ground by the vertex diffuse
+  colour, and `terrain.py` identified tag 9 as a directional lightmap
+  (median Pearson r 0.887 over 345 maps). Applying it in Blender is the
+  cheapest remaining visual gain and needs no new reading.
+- The per-cell corner SELECTOR at `chunk+0x2B4` (§6.3) — which decides which
+  corner is the opaque base. NOT FOUND.
+- The 4-dword table at `0x00A73DF8` = `{3, 3, 3, 0x30}`, the terrain
+  factory's argument that lands at stage record +0x10. Named, not
+  understood, and asserted nowhere.
 
 - **T6**: blending between tiles — the three per-cell layers, the alpha
   mask, and which corner-tile combination selects the two overlay layers.
