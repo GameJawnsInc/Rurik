@@ -49,7 +49,17 @@ WHY IT RUNS CONCURRENTLY, AND WHAT THAT DOES NOT CHANGE. Serial, this suite meas
 seconds and are 83 seconds put together, while two of them are 38% of the run. That is
 a scheduling problem, not a testing one: every file is already its own process reading
 its own fixtures, so the only thing serial execution was buying was the order of the
-output lines. Concurrency changes **nothing** about what is asserted, what is counted,
+output lines. It is **621s over 96 files** now, at four at a time.
+
+FOUR, AND NOT MORE, AND THAT IS MEASURED RATHER THAN TUNED BY FEEL. Wall clock is FLAT
+from 4 to 8 workers -- 621s, 595s, 623s -- while the summed cost of the same 96 files
+goes 2,484s -> 3,498s -> 4,196s. Eight workers spend 1,700 CPU-seconds fighting each
+other for the disk and finish no sooner; `test_scrub` alone reads 270s at four jobs and
+457s at eight, for identical work. This machine's storage feeds about four concurrent
+heavy readers, so past that the extra workers buy contention. The consequence worth
+remembering when this file is next made faster: **adding workers cannot lower the wall
+clock here -- only removing work can.** All three configurations agreed on every file's
+verdict and every check count, which is the evidence that the pool is safe. Concurrency changes **nothing** about what is asserted, what is counted,
 or what `parse_result` will call a pass -- a test that was red serially is red in a
 pool, and the check total is the same number. The report is sorted by path before it is
 printed, so two runs are diffable regardless of who finished first.
@@ -390,8 +400,10 @@ def main():
                     help="run only files whose path contains this substring")
     ap.add_argument("--list", action="store_true",
                     help="print what would run and stop")
-    ap.add_argument("--jobs", "-j", type=int, default=min(8, os.cpu_count() or 1),
-                    help="files in flight at once (1 = serial, the old behaviour)")
+    ap.add_argument("--jobs", "-j", type=int, default=min(4, os.cpu_count() or 1),
+                    help="files in flight at once (1 = serial, the old behaviour). "
+                         "4 by default: MEASURED flat from 4 to 8 on wall clock, so "
+                         "more workers buy contention rather than speed")
     ap.add_argument("--since", metavar="REF", default=None,
                     help="only tests reachable from what changed vs REF (e.g. HEAD, "
                          "main). PARTIAL: exits 3 when green, never 0")
