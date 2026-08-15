@@ -839,6 +839,33 @@ Capture: `vault/research/terrain/selector_lornars_tile8_18.bin`.
 > showing up as a difference rather than as an assertion. Second capture:
 > `vault/research/terrain/selector_lornars_run2.bin`.
 >
+> **BOTH CRASHES WERE MISSED BY THE SAME DEFECT IN MY LOOP, and the owner
+> caught both.** The only check was "does the process still exist". It does:
+> the ArenaNet assert box is a MODAL DIALOG INSIDE THE SAME PROCESS, so
+> `Get-Process` reports ALIVE for as long as it is up. "Alive at all twelve
+> checks" and "crashed" are perfectly compatible, and no amount of polling
+> liveness would ever have separated them. `crashwatch.ps1` now watches for a
+> titled top-level window that is not `ArenaNet_Dx_Window_Class`, which is the
+> signal that actually exists -- `Crash.dmp` is NOT reliable: after the
+> 2026-08-15 crash no dump existed under the run directory or `%TEMP%`.
+>
+> **AND THE SECOND DUMP EXONERATES THE INSTRUMENT.** It is an ArenaNet
+> assertion in CHARACTER code, with no terrain frame anywhere in the trace:
+>
+>     Assertion: level < arrsize(s_attribPoints)
+>     P:\Code\Gw\Char\CharData.cpp(202)      build 38833
+>
+> `s_attribPoints` is visible at `ebx-32` as `6, 7, 9, 11, 13, 16, 20,
+> ffffffff`, and the failing thread's entry is `0x0024BB99` -- a worker, not
+> the render thread. Our three `int3` patches are all one-shot, restored
+> before this point, and none is in `CharData`. `START_LEVEL = 1`, so it is
+> not the level in `CHARACTER_UPDATE_FACTIONS` either. Filed as a server-side
+> character-data bug, out of scope for this arc.
+>
+> So §7.6's crash is now **probably the same assert rather than unexplained** —
+> same client, same server, same character — but that is INFERENCE, not
+> measurement: the first crash produced no dump. Treat it as a lead.
+>
 > **THE FIRST RUN'S CLIENT CRASHED, and the owner noticed it before I did.**
 > My script exited the moment it saw the hit and never re-checked liveness, so
 > I reported the run clean. It was not. What the timestamps do establish is
