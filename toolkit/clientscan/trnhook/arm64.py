@@ -90,7 +90,11 @@ def main(argv):
     base = keytap.module_base(pid, "Gw.exe")
     if not base:
         raise SystemExit(f"Gw.exe not found in pid {pid}")
-    hi, lo = base + HI_RVA, base + LO_RVA
+    if len(argv) > 1:
+        hi = int(argv[1], 16)
+        lo = int(argv[2], 16) if len(argv) > 2 else hi
+    else:
+        hi, lo = base + HI_RVA, base + LO_RVA
     print(f"image base 0x{base:08X}  hi 0x{hi:08X}  lo 0x{lo:08X}")
 
     armed = stuck = 0
