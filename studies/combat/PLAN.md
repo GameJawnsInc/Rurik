@@ -649,11 +649,41 @@ The operator answers yes or no, with no counting.
 | `cast_228_only` | `authsrv-20260815T184213-c1.jsonl` | `0x00E4` (228) | **nothing** |
 | `cast_prop60_only` | `authsrv-20260815T184317-c1.jsonl` | `0x009F` property 60 | **the cast sparkle on the weapon** |
 
-**ANSWERED: agent property 60 plays the cast animation; 228 is bookkeeping.**
-Each run is the other's control, and the pair closes `studies/skills` §8's
-headline open question by the very method that row prescribed — "send each in
-isolation and watch". Its own guess, the client predicting the animation
-itself, is refuted: the animation needs a message.
+**ANSWERED for the DRIVER, and OVERCLAIMED for the CONTENT — corrected below.**
+Each run is the other's control, and the pair settles which message drives a
+skill's visible effect: **property 60 does, 228 does not.** That closes
+`studies/skills` §8's question of *what triggers* it, by the very method that
+row prescribed — "send each in isolation and watch" — and refutes its own
+guess that the client predicts the animation itself.
+
+> **§16b. THE OWNER CAUGHT AN OVERCLAIM, and the probe's skill choice is why
+> (2026-08-15).** This section first read "property 60 plays the cast
+> animation". The owner's objection: *"there's more to a cast animation than a
+> simple sparkle on the weapon. it probably also has varying animations on the
+> player models themselves."* Correct, and the experiment could not have shown
+> otherwise — **`PROBE_BAR_SKILL + 4` is skill 320, Hamstring: `type_code` 14,
+> an ATTACK skill with `activation = 0.0 s`.** It does not cast at all. A
+> weapon sparkle is the whole of what it has, so "the cast animation" was
+> tested with a skill that has no cast.
+>
+> The client's own table says the same thing, and says it per skill. The six
+> animation ids at `+0x74..+0x88` — resolved as `s_effect` indices by
+> `studies/reconstruction/FINDINGS.md` §2.9.3, with 2077 as the null:
+>
+> | skill | activation | ids at `+0x74..+0x88` |
+> |---|---|---|
+> | 320 Hamstring (tested) | 0.0 s | `[566, –, –, –, –, –]` — one |
+> | 322 Power Attack | 0.0 s | `[568, –, –, –, –, –]` — one, different |
+> | 153 Vampiric Gaze | 1.0 s | `[277, –, 276, –, –, –]` — two |
+> | 105 Deathly Swarm | 2.0 s | `[204, –, 201, –, –, 199]` — three |
+> | 318 Defy Pain | 0.0 s | `[–, 595, –, –, –, –]` — one, different SLOT |
+>
+> So animation content is per-skill and multi-part, spells populate more slots
+> than attack skills, and the slot index carries role. **What is established is
+> the DRIVER (property 60, not 228); what is NOT is that one property-60 send
+> reproduces a full cast** — body animation included. `cast_spell_only` is the
+> follow-up: property 60 with **105 Deathly Swarm**, a 2.0 s spell with three
+> animation components, where a casting stance would be unmistakable.
 
 **Three independent witnesses now agree**, which is the part worth keeping:
 

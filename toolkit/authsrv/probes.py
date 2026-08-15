@@ -1891,6 +1891,46 @@ def _cast_one_steps(agent_id, which):
     return steps
 
 
+def _cast_spell_steps(agent_id):
+    """Property 60 with a REAL SPELL, because the pair above used an attack.
+
+    `cast_prop60_only` sent property 60 with `PROBE_BAR_SKILL + 4` = 320,
+    Hamstring -- `type_code` 14, an attack skill, `activation = 0.0 s`. It
+    does not cast, and the client's own table gives it ONE animation id
+    (566) with the other five slots null. So a weapon sparkle is the whole
+    of what that skill has, and calling the result "the cast animation" was
+    an overclaim the owner caught.
+
+    105 Deathly Swarm is the opposite end: a 2.0 s Necromancer spell whose
+    six animation ids are [204, -, 201, -, -, 199] -- THREE components in
+    three different slots. If one property-60 send reproduces a full cast,
+    this is where a body animation shows; if it still renders only an
+    effect, then property 60 drives the EFFECT and the body animation comes
+    from somewhere else, which is a different and more useful answer than
+    the one we nearly wrote down.
+
+    The bar is sent first with 105 in slot 5 so the client has the skill in
+    hand -- the pair above showed the client will render for a skill it has
+    on the bar, and changing that variable too would spoil the comparison.
+    """
+    bar = [PROBE_BAR_SKILL + i for i in range(8)]
+    bar[4] = 105
+    return [
+        Step(2.0, 0x00DA, [agent_id, bar, [0] * 8, 1],
+             "bar with 105 Deathly Swarm in slot 5",
+             "the bar. Slot 5 should now be a Necromancer spell, not "
+             "Hamstring."),
+        Step(8.0, 0x009F, [PROP_CAST_SKILL, agent_id, 105],
+             "property 60 = 105 Deathly Swarm (2.0 s spell)",
+             "THE CHARACTER'S BODY, not the weapon. PREDICTION: a casting "
+             "stance -- arms, posture, something the model does -- because "
+             "this skill carries three animation components where Hamstring "
+             "carried one. If all that appears is another weapon effect, "
+             "property 60 drives EFFECTS and the body animation has another "
+             "source."),
+    ]
+
+
 def _unlock_211_steps(agent_id):
     """Opcode 211 is unnamed everywhere and shaped like both unlock messages.
 
@@ -2890,6 +2930,23 @@ PROBES = {
              "animation follows property 60. This closes studies/skills "
              "section 8's headline question and refutes its own guess that "
              "the client predicts the animation itself.",
+    ),
+    "cast_spell_only": lambda a, o: Probe(
+        question="Does one property-60 send reproduce a FULL cast -- the "
+                 "body animation -- or only the skill's visible effect?",
+        predicts="A casting stance on the model. 105 Deathly Swarm is a "
+                 "2.0 s spell carrying THREE animation components "
+                 "([204, -, 201, -, -, 199] at +0x74..+0x88) where "
+                 "Hamstring, the skill the earlier pair used, carries one. "
+                 "If only an effect appears, property 60 drives EFFECTS and "
+                 "the body animation has another source -- which is the "
+                 "more useful answer of the two.",
+        steps=_cast_spell_steps(a),
+        note="Follow-up to cast_prop60_only, which the owner correctly "
+             "objected was tested with an ATTACK skill (320 Hamstring, "
+             "activation 0.0 s, one animation id) and so could never have "
+             "shown a body animation. That probe settled the DRIVER; this "
+             "one asks about the CONTENT. Watch the model, not the weapon.",
     ),
     "unlock_211": lambda a, o: Probe(
         question="What is opcode 211, the third unlock-list-shaped message?",
