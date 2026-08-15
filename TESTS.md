@@ -1780,6 +1780,34 @@ Every one of these, in the order they were written:
   proves nothing while looking like it proved everything. No vault, no socket, no
   client. ~1 s),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
+  `toolkit/clientscan/test_attribtable.py` (the client's own `s_attrib` table,
+  and the numbering verdict it settles. `studies/combat/PLAN.md` carried
+  "contiguous 0–41" — OpenTyria's, and the source of `ATTRIBUTE_COUNT = 42` —
+  against "gapped 0–44, ids 26/27/28 reserved" as CONTESTED. **Neither is
+  wrong; they answer different questions**, and the table shows both at once:
+  the INDEX SPACE is contiguous 0..50 (what `0x003A`'s first array is
+  bound-checked against, `cmp esi, 0x33`), the ten playable professions own
+  exactly **42** of those rows, and the other 9 belong to profession 11 —
+  including 26/27/28, which sit immediately before Dagger Mastery at 29 and are
+  precisely the "+3 offset" the rival scheme describes. The table is located
+  STRUCTURALLY, never by address: rows self-index at `+0x04`, professions fall
+  in 1..11, each playable profession has EXACTLY ONE primary, and the real
+  rows total 42 — a conjunction proven refutable by three sabotages (breaking
+  one self-index, adding a second Warrior primary, moving one attribute to
+  profession 11) that each make the locator refuse rather than return a
+  confident wrong offset. Section 1 also closes byte-exactly: the row after the
+  last is where `ConstAttrib.cpp`'s own path string begins, which only a
+  correct count AND stride reach. **Section 4 is the leg with no circularity**
+  — the profession column is in `Gw.exe`, the names are in the owner's
+  `Gw.dat` and come back through `textrec`, and the claim is that the 42 rows
+  the EXE gives a profession are exactly the 42 the ARCHIVE can name: one
+  partition drawn twice by two unrelated mechanisms, `named-not-real=[]`,
+  `real-not-named=[]`. It skips loudly with no archive, which is why the floor
+  is the archive-less 25 of 29 rather than the full count. Two names are pinned
+  as literals — `Strength` and `Dagger Mastery` — following this file's
+  existing two-name precedent rather than dumping 42; the emitter itself writes
+  **no** authored text, committing `name_string_id` for run-time resolution,
+  and a check asserts no string leaks into the rows),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
   `toolkit/clientscan/test_maprows.py` (the footprint join that NAMES archive map
   rows, and the negative the arc turned on. `s_missionClientData` -- the client's
@@ -2769,4 +2797,89 @@ Every one of these, in the order they were written:
   count. Both figures MEASURED 2026-08-14 and both drift per the note above; the
   ~320-file gap between them is the durable part.) A vault-less
   run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
-  empty directory rather than derived by subtraction; a vault run scores 30).
+  empty directory rather than derived by subtraction; a vault run scores 30),
+  `toolkit/authsrv/test_castcycle.py` (the four-opcode cast cycle against
+  ArenaNet's own template — six complete cycles, two live captures, same order
+  every time: E4 at the press, E5 at cast end carrying the recharge in whole
+  seconds, E3 an aftercast later, E6 at E5+recharge to within 13.7 ms on all
+  six. The section that earns the entry is the QUEUE LAW: skill 105's two
+  cycles both exceed its 2.0 s activation by exactly the previous cast's
+  remaining aftercast, so E4 fires at accept but the cast begins when the
+  caster FREES — the naive press+activation model is refuted by +0.64 s and
+  +0.57 s residuals in the corpus, and the test drives two back-to-back
+  presses through exactly that schedule. Timing is tested by REWINDING the
+  pending entries, never by sleeping; the zero-recharge inversion pins that
+  E6 waits for its E3 because the corpus never shows them inverted; and the
+  real-content section presses skill 153 and requires E5 to carry recharge 8,
+  the value ArenaNet's own wire echoed — it SKIPS loudly on a machine with no
+  vault overlay, where sections 1–3 still run on a stubbed skill_timing),
+  `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
+  ArenaNet's own kills. Our server sent one message when an agent died —
+  `0x00F1` with the death bit — where the real service sends three: status,
+  then a `0x00EE` reward, then `0x0026` value 8, same tick, same agent. **The
+  oracle is the corpus, not a literal**: §2 re-derives the live template out of
+  `vault/captures/live/*` on every run, so adding or re-decoding a capture
+  moves the expectation instead of leaving a stale constant behind. §1 keeps
+  literals only so a vault-less machine still checks something — including that
+  the reward encodes to `ee00000000001a000000`, ArenaNet's exact bytes.
+  **§3 is what the file is really guarding.** The corpus holds a
+  richer-LOOKING template — a `0x00EE` PAIR, `[10,0]` then `[0,X]` — that is
+  not a kill shape: 6 of its 7 sightings fire 6.8–31.5 s from any death inside
+  a broadcast burst always preceded by `0x009C [agent, 100]`, and the seventh
+  landed on the Wolf's kill tick, whose `0x009C` marker is what gives the
+  coincidence away. Copying it would have looked like more fidelity and been
+  less, so §3 asserts we do not. Two counts here corrected earlier passes and
+  are asserted so they cannot drift back: the corpus holds **5 deaths, not 4**
+  (agent 38 dies twice on one connection, and the second carries neither
+  reward nor flags — a repeated `EFFECT_DEAD` awards nothing), and `0x0026`'s
+  histogram over both captures is **{9: 200, 8: 4}**, against an `authsrv.py`
+  comment that had called value 8 a single sighting from one capture's count.
+  Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
+  vault-less §1),
+  `toolkit/authsrv/test_skilldamage.py` (skill damage: the client's own
+  numbers at the player's own rank, replacing `ENEMY_SKILL_FRACTION = 0.25` —
+  a flat quarter of the player's maximum for every skill, admitted invention.
+  **The sections that refuse are the point.** The client's table gives a
+  magnitude and does NOT say what it means: `scale0/15` is `+ Damage` on Power
+  Attack and `Healing` on Restore Condition, and `type_code` cannot
+  discriminate because a Spell can heal or harm. **Three of the four skills on
+  our own enemy's bar are not damage**, so a decode that read endpoints and
+  dealt them would have had the enemy "damaging" the player with a heal for
+  10–70 and an enchantment for 40–200 — an invention wearing a measurement's
+  clothes, and worse than the flat fraction because it would look principled.
+  The meaning therefore comes from GWW's own `{{Skill progression}}` variable
+  names, quoted verbatim into `content/world.toml` with a per-skill citation;
+  §3 asserts the five non-damage skills return **None rather than 0**, and is
+  proven red by relabelling Restore Condition's `Healing` as `Holy damage`.
+  §1 reproduces both endpoints for four skills — values GWW independently
+  lists, so a match is two witnesses rather than our decoder agreeing with
+  itself. §2 walks Holy Strike's whole ladder (3 per rank, exactly) and pins
+  that rank 20 **extrapolates to 70 rather than saturating**, because the
+  client's interpolator never compares rank against 15 and a "sensible" clamp
+  is exactly what someone would add. §4 pins that a disabled `skill_arguments`
+  bit REFUSES: Rush's scale slot holds 25 — the "move 25% faster" in its
+  description — so a decode ignoring the bitfield returns a plausible number
+  instead of refusing. §5 proves the **unresolved** rounding tie-break
+  (studies/combat 8c: the client adjusts by ±1.0, not ±0.5) cannot bite,
+  because no skill in the effect table lands on a .5 at any rank 0–15 — the
+  open question is shown to cost nothing rather than assumed to. §6 is the
+  chain steps 7 and 8 exist to join: Power Attack reads Strength 12 and
+  Desperation Blow reads Tactics 1, identical 10→40 tables landing 22 points
+  apart, which is precisely what "the server models no attribute ranks" used
+  to cost. §7 asserts a `+ Damage` bonus rides the swing as ONE damage
+  message, since two would draw two numbers on screen for one hit),
+  `toolkit/authsrv/test_guards.py` (the guard contract for combat's computed
+  values: a `_fraction` refusal must land BEFORE any send or state change, not
+  after — the client dies on `fraction <= 1.0f` at CharPool.cpp:84 with no
+  server-side symptom, and on the connection thread an escaping ValueError
+  additionally closes the socket, because `handle`'s except tuple never named
+  it. Written RED-FIRST against the pre-guard tree (studies/combat/PLAN.md,
+  amendment C8b) and the red run is quoted in the file's docstring: hit_enemy
+  with a poisoned out-of-range HIT_FRACTION raised only AFTER
+  GV_ATTACK_STARTED was on the wire, the target's health was bookkept
+  100 → 0 unsent, and the swing timer was eaten — three FAILs, each now a
+  check. Every section carries an in-range CONTROL asserting the real
+  constant still sends the full effect burst, because a guard that refuses
+  everything would pass every refusal check. Dormant while every fraction is
+  a literal constant; load-bearing the day studies/combat step 8 computes
+  them from the client's skill table).

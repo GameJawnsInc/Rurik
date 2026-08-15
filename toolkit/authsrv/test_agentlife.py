@@ -817,19 +817,30 @@ def section_enemy_skill():
               "a cast in flight beats everything; otherwise a slow tick lets an "
               "agent cast and swing on the same tick")
 
-    # 3. it lands, and it hurts more than a swing
+    # 3. it lands -- and slot 0 is a HEAL, so it lands nothing.
+    #
+    # REWRITTEN 2026-08-15 (studies/combat step 8). This used to assert that a
+    # landing cast deals ENEMY_SKILL_FRACTION, a flat quarter of the player's
+    # maximum for every skill on the bar. That constant is gone: the damage is
+    # now the skill's own scale endpoints interpolated at ENEMY_SKILL_RANK by
+    # the client's formula, and MOST OF THIS BAR IS NOT DAMAGE. Slot 0 is 276
+    # Restore Condition, whose 10->70 is HEALING (GWW's own progression var
+    # name), so the honest answer is that it lands no damage at all.
     state["agents"][10]["cast_lands_at"] = time.time() - 0.001
     land = _swings(state)
     fl = dmg_floats(land)
-    LEDGER.ok(len(fl) == 1 and abs(fl[0] + authsrv.ENEMY_SKILL_FRACTION) < 1e-6,
-              "and when it lands it deals the SKILL's fraction, not a swing's",
-              f"{fl} against skill {-authsrv.ENEMY_SKILL_FRACTION} and swing "
-              f"{-authsrv.ENEMY_HIT_FRACTION}")
-    LEDGER.ok(authsrv.ENEMY_SKILL_FRACTION > authsrv.ENEMY_HIT_FRACTION,
-              "and a skill is worth more than an auto-attack",
-              f"{authsrv.ENEMY_SKILL_FRACTION} vs {authsrv.ENEMY_HIT_FRACTION} -- "
-              "ours, both of them; the client carries every real number and we do "
-              "not read it yet")
+    LEDGER.ok(not fl,
+              "slot 0 lands NO damage -- its scale is Healing, not damage",
+              f"{fl} -- 276 Restore Condition heals 10-70 (GWW). The old flat "
+              f"fraction made a heal hurt the player; dealing its magnitude AS "
+              f"damage would have been worse, not better")
+    # The damage skill on the same bar, to prove the path is not simply dead.
+    holy = authsrv.skill_damage(312, authsrv.ENEMY_SKILL_RANK)
+    LEDGER.ok(holy is not None and holy[1] == "standalone"
+              and holy[0] == 46,
+              "while 312 Holy Strike on the same bar DOES damage, at 46",
+              f"{holy} -- scale 10->55 at rank {authsrv.ENEMY_SKILL_RANK} by the "
+              f"client's own interpolator; GWW calls the var `Holy damage`")
     land_ops = [op for op, _v, _l in land]
     LEDGER.ok(authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_INT not in land_ops,
               "and a landing cast sends no MELEE_ATTACK_FINISHED",
@@ -891,16 +902,25 @@ def section_enemy_skill():
                   f"a cast in flight does not land if the caster {why}",
                   "an overdue cast plus three ticks and no damage")
 
-    # 7. the skill can kill, and the kill is still the effects bit
+    # 7. the skill can kill, and the kill is still the effects bit.
+    #     Driven by the bar's DAMAGE skill (312 Holy Strike) rather than by
+    #     slot 0, which since step 8 is correctly inert: a heal lands nothing,
+    #     so repeating it forever could never reach a death and the check
+    #     would have been measuring an empty loop.
     kill_state = _world()
     sent = []
     keep = lambda op, vals, label="", quiet=False: sent.append((op, vals, label))
-    needed = int(math.ceil(1.0 / authsrv.ENEMY_SKILL_FRACTION))
+    holy_slot = next(i for i, s in enumerate(authsrv.ENEMY_SKILLS)
+                     if s[0] == 312)
+    per_hit = authsrv.skill_damage(312, authsrv.ENEMY_SKILL_RANK)[0]
+    needed = int(math.ceil(float(agents.PLAYER_HEALTH) / per_hit))
     for _ in range(needed):
+        kill_state["agents"][10]["casting"] = holy_slot
         authsrv.land_skill(keep, kill_state, 10, kill_state["agents"][10], 1)
     LEDGER.ok(kill_state["player_dead"],
-              f"{needed} skill hits kill the player",
-              f"health {kill_state['player_health']}")
+              f"{needed} Holy Strikes at {per_hit} kill the player",
+              f"health {kill_state['player_health']} -- "
+              f"{needed} x {per_hit} against {agents.PLAYER_HEALTH}")
     kills = [v for op, v, _l in sent
              if op == authsrv.GAME_SMSG_AGENT_UPDATE_STATUS
              and v == [authsrv.PLAYER_AGENT_ID, agents.EFFECT_DEAD]]
@@ -1070,8 +1090,12 @@ def section_constants():
          "take 0.2778, 0.3333, 0.3472 and 1.0 (studies/monsterai 3.4)"),
         ("ENEMY_DEST_RESEND", 120.0, "OURS", "bandwidth, not mechanics"),
         ("ENEMY_FACING_EPSILON", 0.15, "OURS", "bandwidth, not mechanics"),
-        ("ENEMY_SKILL_FRACTION", 0.25, "OURS",
-         "flat for every skill on the bar, on purpose"),
+        ("ENEMY_SKILL_RANK", 12, "OURS",
+         "the rank the enemy casts at. Replaced ENEMY_SKILL_FRACTION = 0.25 at "
+         "step 8: the MAGNITUDE is now the client's own scale endpoints, and "
+         "only the rank they are read at is ours. 12 is ArenaNet's cap for a "
+         "player (AcctTemplate:441); a monster's real rank is unknowable -- "
+         "its bar is never sent (studies/monsterai)"),
         ("ENEMY_ATTACK_SPEED", 1.33, "UPSTREAM",
          "agents.ATTACK_SPEED['axe']. The base x modifier FORMULA is corroborated "
          "against the client's own fmul; the 1.33 itself is the wiki's"),
@@ -1321,12 +1345,14 @@ def section_opcode_pins():
                 for name, opcode, _s, _w in PINNED
                 if opcode in named and name != "GAME_SMSG_" + named[opcode]]
     hits = [name for name, opcode, _s, _w in PINNED if opcode in named]
-    LEDGER.ok(not disagree and len(hits) == 8,
-              "and the eight the catalog names are named the same thing here",
-              f"{disagree or len(hits)} of 8 -- 0x0021, 0x0029, 0x002B, 0x002E, "
-              "0x0059, 0x00A6, 0x00B1, 0x00F1. The other seven have no name in "
-              "overrides.json at all, which is why their `why` column has to "
-              "carry the evidence instead")
+    LEDGER.ok(not disagree and len(hits) == 9,
+              "and the nine the catalog names are named the same thing here",
+              f"{disagree or len(hits)} of 9 -- 0x0021, 0x0029, 0x002B, 0x002E, "
+              "0x0059, 0x00A6, 0x00B1, 0x00E3, 0x00F1. (Eight until "
+              "2026-08-14, when the cast-cycle promotion named 0x00E3 "
+              "SKILL_ACTIVATED in overrides.json -- studies/combat step 3.) "
+              "The other six have no name in overrides.json at all, which is "
+              "why their `why` column has to carry the evidence instead")
 
 
 def section_opcode_catalog():
