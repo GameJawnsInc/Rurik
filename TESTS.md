@@ -2564,6 +2564,21 @@ Every one of these, in the order they were written:
   `toolkit/clientpatch/test_keytap_patch.py` (the R0b key-tap code cave: build_cave's
   edges resolve, the planted client changes only the tap and the cave, and the patcher
   refuses a changed or already-tapped binary),
+  `toolkit/clientpatch/test_footprint.py` (PLAN A2's compass-footprint patcher: the two
+  rects at `s_missionClientData[map]+0x48`/`+0x58` that the `0x0199` map-type byte picks
+  between, and whose ORIGIN decides which part of the continent atlas a map's compass
+  crops. The read is pinned against an INDEPENDENT reader -- `consttable.Table.record`,
+  what `maprows.py` and the whole minimap arc used -- because the failure this file
+  exists for does not raise: `Table.base` is already a FILE OFFSET, the first `locate()`
+  treated it as a VA and ran it through `rva_to_off`, and it printed four plausible
+  int32 from 0x400B90 bytes short. Containment could not catch that, since containment
+  only asks whether the bytes that moved sat inside the range it was TOLD to write --
+  so `sane_rect` refuses the exact garbage tuple that bug produced, and is checked to
+  ACCEPT the real rect so it is not a predicate that refuses everything. Also: writing
+  rect A leaves the adjacent B untouched, the output guard refuses the input itself,
+  `C:\gw` and every checkout while PERMITTING the vault, and the guard is asserted on
+  the SYNTAX TREE to be called exactly once from `main()` -- a guard that exists and is
+  never called being the failure `test_atex.py` §3 names),
   `toolkit/clientpatch/test_reskin.py` (the profession reskin -- repointing a SHIPPED
   profession's name string ids, which `studies/profession/RESKIN.md` chose over adding a
   twelfth id because `.rdata` has zero slack and seven of the profession tables are
