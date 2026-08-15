@@ -223,6 +223,14 @@ PYTHON_EXIT_CODE = 66
 # them, and THE Z SIGN -- 0.961 of real props reach above the terrain against
 # 0.032 for the reflected control. Sections 0-2 still score 45.
 #
+# 108 -> 114 on 2026-08-14, rung T6: section 5 recomputes the overlay
+# geometry straight from the .layers.u16 sidecar -- one face per non-base
+# layer, rotated where bit 15 is set -- and requires Blender's built
+# object to match (262,310 faces over 148,882 cells, 68,201 rotated on
+# Pre-Searing), requires all four base quadrants to be in use (T5 pinned
+# every cell to quadrant 0, which was the repetition), and adds the
+# --no-blend control. Sections 0-2b score 54.
+#
 # 92 -> 108 on 2026-08-14, rung T5 (46.0 s green): section 2b binds a
 # synthetic ground -- two decodable tiles plus one whose file id resolves to
 # nothing, which must get its OWN named empty slot rather than falling
@@ -238,7 +246,7 @@ PYTHON_EXIT_CODE = 66
 # flat-shaded where the client's vertex layouts carry normals. One check
 # per section pins CHANNEL_PACKED and all-faces-smooth, read back off the
 # scene. Sections 0-2b score 54, so a vault-less run lands 56 short.
-FLOOR = 110
+FLOOR = 118
 
 
 # ------------------------------------------------------------------ helpers
@@ -1207,6 +1215,98 @@ def _section5(check, led, blender, tmp, exp, src, summary):
           and tt["faces_smooth"] == exp.cells,
           "channel-packed mask and smooth shading on the real ground too",
           "%r, %d smooth" % (tt["image_alpha_modes"], tt["faces_smooth"]))
+
+    # ---- rung T6: the blend overlays, against the sidecar ------------------
+    # Recompute what the overlay geometry MUST be straight from the
+    # `.layers.u16` sidecar -- one face per non-base layer, rotated where
+    # bit 15 is set -- and require Blender's built object to match. The
+    # sidecar is the exporter's resolved answer and this file never asks the
+    # importer how many faces it meant to make.
+    tbl = summary.get("terrain_blend") or {}
+    words = exp.layers
+    check(words is not None and len(words) == exp.cells * 3,
+          "the export carries the resolved blend layers, three slots per cell",
+          "%r" % (words is None or len(words),))
+    if words is not None:
+        want_faces = sum(1 for i in range(exp.cells) for s in (1, 2)
+                         if words[i * 3 + s] != 0xFFFF)
+        want_rot = sum(1 for i in range(exp.cells) for s in (1, 2)
+                       if words[i * 3 + s] != 0xFFFF
+                       and words[i * 3 + s] & 0x8000)
+        want_cells = sum(1 for i in range(exp.cells)
+                         if words[i * 3 + 1] != 0xFFFF)
+        check(tbl.get("state") == "bound"
+              and tbl.get("overlay_faces") == want_faces
+              and tbl.get("cells_blended") == want_cells
+              and tbl.get("rotated_faces") == want_rot,
+              "Blender's overlay geometry is exactly the sidecar's non-base "
+              "layers -- %d faces over %d cells, %d rotated"
+              % (want_faces, want_cells, want_rot),
+              "%r" % ({k: tbl.get(k) for k in
+                       ("state", "overlay_faces", "cells_blended",
+                        "rotated_faces")},))
+        # The base quadrant must not be stuck at 0 any more: T5 pinned every
+        # cell to quadrant 0 and that is precisely the repetition T6 removes.
+        # The rationale here first read "so the ground no longer repeats one
+        # variant per tile type", and that was RETRACTED the same day: the
+        # four quadrants differ in ALPHA by ~128/255 and in RGB by only
+        # 4..21, so they are one picture with four coverage masks and
+        # variation cannot break colour repetition (FINDINGS par. 6.2b). What
+        # it does select is the per-cell MASK, which is what T5 got wrong by
+        # pinning every cell to quadrant 0.
+        check(sorted(set(tt.get("base_quadrants") or [])) == [0, 1, 2, 3],
+              "all four base quadrants are in use, so cells select their own "
+              "coverage shape instead of T5's pinned quadrant 0",
+              "%r" % (tt.get("base_quadrants"),))
+
+    # ---- tag 9's baked lightmap, against the sidecar ----------------------
+    # The attribute is per VERTEX because tag 9 shares tag 1's grid and
+    # those samples are cell CORNERS, so its lattice must be the mesh's and
+    # its statistics must be the sidecar's own -- computed here, including
+    # the far-edge replication, and never taken from the importer.
+    lm = tt.get("lightmap") or {}
+    want_n = (exp.dim_x + 1) * (exp.dim_y + 1)
+    dx, dy = exp.dim_x, exp.dim_y
+    lattice = []
+    for gy in range(dy):
+        rowv = list(exp.shade[gy * dx:(gy + 1) * dx])
+        lattice.extend(rowv + [rowv[-1]])
+    lattice.extend(lattice[-(dx + 1):])
+    want_mean = sum(lattice) / len(lattice) / 255.0
+    check(lm.get("state") == "attached" and lm.get("vertices") == want_n,
+          "the lightmap is attached to every vertex of the lattice (%d), not "
+          "per face -- tag 9 shares tag 1's corner grid" % want_n,
+          "%r" % ({k: lm.get(k) for k in ("state", "vertices")},))
+    check(abs((lm.get("mean") or 0) - want_mean) < 1e-3,
+          "and its mean equals the shade sidecar's own, replicated edge "
+          "included (%.4f)" % want_mean, "%r" % (lm.get("mean"),))
+    # It has to actually VARY, or multiplying it in changes nothing and the
+    # checks above would pass over a uniform white attribute.
+    check((lm.get("max") or 0) - (lm.get("min") or 0) > 0.5,
+          "the bake spans a real range, so multiplying it in is visible",
+          "%r..%r" % (lm.get("min"), lm.get("max")))
+
+    # THE LIGHTMAP CONTROL: --no-lightmap must leave the ground unlit.
+    workl = os.path.join(tmp, "run_real_lmctl")
+    os.makedirs(workl, exist_ok=True)
+    rc, _out, s4, _v = run_blender(blender, src, workl,
+                                   extra=["--no-props", "--no-lightmap"])
+    lm2 = ((s4 or {}).get("terrain_textures") or {}).get("lightmap") or {}
+    check(rc == 0 and lm2.get("state") == "skipped",
+          "--no-lightmap leaves tag 9 unapplied and says so",
+          "rc=%d, %r" % (rc, lm2))
+
+    # THE T6 CONTROL: --no-blend must drop the overlays and keep the base.
+    workb = os.path.join(tmp, "run_real_t6ctl")
+    os.makedirs(workb, exist_ok=True)
+    rc, _out, s3, _v = run_blender(blender, src, workb,
+                                   extra=["--no-props", "--no-blend"])
+    check(rc == 0 and s3 is not None
+          and (s3.get("terrain_blend") or {}).get("state") == "skipped"
+          and (s3.get("terrain_textures") or {}).get("state") == "bound",
+          "--no-blend draws the base layer alone and says so, while the "
+          "ground stays textured",
+          "rc=%d, %r" % (rc, s3 and s3.get("terrain_blend")))
 
     # THE FLAG CONTROL on the real map, terrain only for speed.
     work = os.path.join(tmp, "run_real_t5ctl")

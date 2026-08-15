@@ -1283,11 +1283,55 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
-### The minimap — Tier 1 complete, and the compass on our server is drawing the client's FALLBACK (2026-08-14)
+### The minimap — Tier 1 complete, and THE COMPASS DRAWS THE ATLAS: C1 ran and the fallback premise expired (2026-08-14)
+
+**READ THIS FIRST, because it retires the headline this section carried all day.** *It read "the compass on our server is drawing the client's FALLBACK", and every paragraph below was written under that premise.* **Rung C1 — the arc's first client run — put the compass on screen drawing a recognisable crop of Ascalon City on retail map 148**, our server, our DH, caged, loopback, synthetic credential. The metric is §6's own chromatic ratio with the control measured first: the previously-classified fallback frames re-read at **χ +1.154 … +1.160** by the same sampler, and this run's five frames at **+0.250 … +0.279** — against rung S5's *offline* prediction of **+0.286** for map 148's crop, computed before any frame existed and never fitted to one. **`studies/minimap/FINDINGS.md` §6d** carries it.
+
+**The condition it took, and this is the transferable part:** build **38833 against its own archive generation** (`vault/run/2026-08-13_64fae3b1369b`, `RURIK_DAT` at a post-update archive). The 38797 arm **failed at Code=007** — `content/maps.toml`'s corrected plain `0x1B97D` does not bind in the 38797/`dat_study` archives at all, only `0x8001B97D` does, and the client's lookup is an exact 32-bit compare with no retry; the server sent `0x0199`, loaded its navmesh, and the client hung up. **`toolkit/contentids.py` cleared that pair anyway** and that is a real hole: it resolves through `archive.file_id_table()`, which dual-registers a bit-31 id under both forms, so it compared row 7982 to row 7982 and never tested the form actually sent. It validates our reader's opinion, not the client's. **UNFIXED — it is §8's newest item.**
+
+**ATTRIBUTION IS NOW CLOSED TOO — rung S13, same day, static (`studies/minimap/FINDINGS.md` §6e). The cause is the ARCHIVE, and specifically the ATLAS TILE ROWS.** In every archive the fallback sessions played from, map 148's world-map tiles carry **bit 31** — replacement pending — so the **plain** id the client's own tile table holds does not bind, its exact 32-bit compare misses, the tile getter returns NULL and the fallback is tiled over the whole disc. Across the atlas: **470 of 492 tiles addressable in `run/38797` — 22 missing, 18 of them in world 1 — against 492 of 492 in `run/38833`.** Maps 143, 146 and 148 are **all world 1**, and they are the entire fallback corpus; Kamadan (world 4) was never served. **The arc's premise was a survey of one broken continent.**
+
+The other three candidates were each tested and died: the **map file** (height field byte-identical, `MAP_PARAMS`'s rect bytes identical, differing only in a trailing v4 GUID), the **client build** (all 12 `CompassMap.cpp` asserts identical and uniformly displaced +0xA0; ctor, crop, latch and fallback tiler have identical instruction counts and **zero** mnemonic mismatches; the footprint table, `s_worldData` and the tile arrays byte-identical), and the **map-type byte** (map 148's two footprints are the same rect, and a forced `--explorable` run still drew the atlas). **S9's hypothesis 2 was right in substance and refuted for the wrong reason** — the load does fail, but upstream of the loader, in a lookup that never yields a row.
+
+**This is the same defect a third time, and that is the durable lesson.** `archive.file_id_table()` dual-registers a bit-31 id, so it answered "row 44717, present" for a tile the client cannot address. It has now hidden: the map **file** id (caught by crossbuild), the **`contentids`** pre-flight (below, UNFIXED), and rung **S9's tile-presence check** — which cost S9, S12, C1 and S13 to unwind. **One predicate fixes all three: does the id bind in the form it is sent?**
+
+**Second result, small and operational:** the ground layer **arrives late** — `final.png` at the map verdict reads χ +1.182 (fallback band) and converges to +0.250 by ~t+26 s. A single early frame is not evidence of a NULL image. **Consequences: C2 and C3 are UNGATED** (they were held behind a vacuous-arm problem that no longer exists), **risk 7 is RETIRED**, and Tier 3's premise survives. Two caveats the run carries: the server ran **without a navmesh** (`Permission denied` — the client holds its own archive open, so give the server a separate copy), and `--shots` is foreground-gated, skipping 4 of 9.
+
+**Everything below this line was written under the fallback premise. The static analysis stands; the framing does not.**
+
+### `file_id_table()`'s dual registration has now hidden three failures — `contentids.py` is the one still UNFIXED (2026-08-14)
+
+**Read this as one defect with three victims, not three bugs.** `archive.file_id_table()` registers a bit-31 id under **both** its raw and its masked form — correct for finding a row, and documented in that same file as **not a model of the client**, which compares 32 bits exactly at `0x0047AA20` with no retry. Every caller that asks it "does this id resolve?" gets an answer about *our reader*.
+
+1. **The map file id** — `content/maps.toml` recorded `0x8001B97D`. Caught 2026-08-14 by the crossbuild arc; the row now reads `0x1B97D`.
+2. **Rung S9's atlas-tile presence check** — concluded "all four of map 148's tiles present in the archive the client opened", and through it the minimap arc's entire leading question. **The tiles were present as rows and unaddressable by the client**: 22 of 492 armed, 18 in world 1. It cost rungs S9, S12, C1 and S13 to unwind. Closed by S13.
+3. **`toolkit/contentids.py`** — **STILL UNFIXED**, detailed below.
+
+**The single fix:** a `binds_plainly(archive, file_id)` / `file_id_table(raw=True)` predicate, and every caller that is asking *what the client will do* uses it. Each of the three above becomes a one-line check.
+
+#### `contentids.py` clears a pair the client will refuse — found by walking into it
+
+**The guard exists to catch exactly one failure and is blind to it.** `toolkit/contentids.py` answers "do server and client agree what `content/maps.toml`'s ids NAME" by resolving both through `archive.file_id_table()` — which **deliberately registers a bit-31 id under both its raw and its masked form**, "plain ids first so that a real id can never be shadowed". That dual registration is right for finding a row and `archive.py`'s own docstring says it is **not a model of the client**: *"THE CLIENT DOES NOT MASK"*, an exact 32-bit compare at `0x0047AA20` with no retry on the map path.
+
+**Measured 2026-08-14**, reading MFT row 2 directly instead of through the helper:
+
+| archive | `0x1B97D` raw | `0x8001B97D` raw | bit-31 ids |
+|---|---|---|---|
+| `run/2026-07-29_221c13772c7a` (38797) | **absent** | row 7982 | 29 |
+| `dat_study` | **absent** | row 7982 | 25 |
+| `run/2026-08-13_64fae3b1369b` (38833) | **row 177262** | absent | **0** |
+
+`contentids` reported `10 of 10 map row(s) agree` for the 38797 pair, comparing row 7982 to row 7982. The run then died at **Code=007** with the client hanging up immediately after `0x0199`. **The guard passed, the launch proceeded, and the failure was silent on our side and unexplained on the client's** — which is the precise shape the guard was written to prevent.
+
+**Fix:** do not change `file_id_table()` — its convenience is load-bearing elsewhere. Have `contentids` resolve on the **raw** table and fail when the id `content/maps.toml` will actually put on the wire is absent from the client's archive *in the form it is sent*. The refusal must name both forms and both rows. `test_contentids.py` needs an arm that goes red on today's code: a fixture pair binding only the renamed form, asked for the plain one.
+
+### The minimap — the record under the fallback premise (superseded above)
 
 **Read [`studies/minimap/FINDINGS.md`](studies/minimap/FINDINGS.md), then its
 [`PLAN.md`](studies/minimap/PLAN.md) ladder.** Static recon over build 38797 plus the
-full live corpus; **no client was launched by any of the eleven agents on this arc**.
+full live corpus; **no client was launched for any of the STATIC rungs S1–S12** (that
+clause read "by any of the eleven agents on this arc" and stopped being true when C1 ran
+on 2026-08-14 — see the headline above).
 The pathing-map hypothesis is REFUTED: the compass, mission map and world map are three
 crops of ONE per-continent atlas of ATEX tiles compiled into the client — **492 tiles
 over three tiers, 484 resolving identically in all three vaulted archives** — cropped by
@@ -1379,8 +1423,16 @@ checks):**
    inside, so **the latch covers the whole footprint and H3 is dead here too.** All
    three named hypotheses are now refuted on retail 148 and the fault is **downstream
    of the crop**. H3b stands for authored maps, now quantified.
-2. **C1 — one loopback run, NEEDS OWNER GO-AHEAD, re-scoped a third time and its
-   numbers then corrected.** Retail map 148, our DH, caged, no probe, no `--enemy`. A
+2. ~~**C1 — one loopback run, NEEDS OWNER GO-AHEAD**~~ **— DONE 2026-08-14, and the
+   compass drew the atlas (see this section's new headline and
+   `studies/minimap/FINDINGS.md` §6d). The RPM read below was NOT performed and is
+   demoted to an optional confirmation**, because the fallback stopped reproducing and
+   there was no NULL image left to diagnose. Its predictions are still the right ones
+   to check if anybody spends the run: `+0x84 == 1`, `+0x58/+0x5c == (416, 512)`.
+   **The live next action is S13 — which of client build, archive generation or id
+   form un-NULLed it — whose first leg is static and needs no go-ahead.** Original
+   text follows.
+   Retail map 148, our DH, caged, no probe, no `--enemy`. A
    cross-process `ReadProcessMemory` of the live `CompassMap` (instance at
    `[compass+0x4C]`, lazy create `0x008BC426`; `toolkit/harness/keytap.py` already does
    ASLR-correct RPM in pure `ctypes`) reads: predicted `+0x84 == 1`,
@@ -1670,6 +1722,65 @@ which already contains the gated pattern it needs; `SIG_KEYS`' three implementat
 disagreeing on the refuse-on-2+ rule, one of them the patcher; then the build-id reader and
 the `origin.py` build stamp, without which "stamp every capture with its build" is
 unsatisfiable for half the corpus.
+
+### The update arrived — build 38833, 2026-08-14
+
+**[studies/crossbuild/FINDINGS.md](studies/crossbuild/FINDINGS.md) §7 is the record.** The
+whole arc above was built on n=2; ArenaNet shipped **38,833** on 2026-08-13, the owner took
+it on 2026-08-14, and `RUNBOOK.md` §0/§0b was walked on a real update for the first time.
+
+- **The derivation work held.** 8 of 8 signatures at their exact hit counts;
+  `msgshape` (25 tables, 666 messages, 4/4 oracles), `asserts` (`single-routine=True`),
+  `buildid` (38833), `srctree` and `dump_dh_params` (**GO**) all read the new build.
+- **`genericvalue.py` REFUSED it** — its int-main switch at `0x008129CC` is restructured —
+  and took `avevents.py`'s property map with it. That was the outstanding job named two
+  paragraphs above, and it is now the arc's one measured casualty rather than a hypothetical
+  one. It failed the *right* way: named the address, called it a finding, did not guess.
+- **The headline claim needed weakening, not strengthening.** "Any patch anchored to a raw
+  address is broken by the next build" is too strong: this 15-day bugfix left `Gw.exe` the
+  **same length** and left the build getter, assert callee, DH struct and AgentView
+  allocators at **identical addresses**. Pinned tools are *unpredictably* broken, not
+  reliably broken — worse, because they earn trust they cannot honour.
+- **`updatecheck.py` — this arc's own deliverable — printed a vacuous pass** on its first
+  firing, claiming the anchors held on a build it had never opened, because it read
+  signatures only from the vaulted builds. Fixed; it now reads the live install and names
+  what it read. `RUNBOOK.md` step 3 also omitted `--no-updater-patch` and produced a wrong
+  live-capture build; fixed, and the `CLAUDE.md` sentence that contradicted it ("the
+  updater kill switch … wanted on both configurations") is **corrected** — the switch is
+  wanted on the loopback build and must be OFF for the live-capture one.
+- **Registered, not pinned.** `pinned.BUILDS` carries 38833; `PINNED` stays **38797**,
+  spelled explicitly rather than `BUILDS[-1]`. Moving the pin is a re-measurement arc.
+- **The claimable-row collision is now 3 of 3** — this update recycled both 35300 and 35301,
+  the slots `datplan.plan_insert` claims.
+
+- **The server broke too, by the rule-book's own named defect.** `authsrv.load_keys()` did
+  `sorted(rurik_dh_*)[-1]`, so patching 38833 silently handed a 38797 client the wrong DH
+  key — handshake completes, ARC4 is noise, `Code=058`. The key is now bound to the build
+  the client announces in its version frame, with a refusal when no key matches.
+- **Suite 94/94 green, 4,686 checks, 2,721 s**, on the tree with `main` merged in. Three
+  runs: 89/5 before, 93/1 after the code fixes, 94/0 once the new loopback client was
+  caged (a UAC prompt, by design).
+
+**Next, and it now has a measured reason:** convert or gate `genericvalue.py`'s VAs, which
+would bring `avevents.py` back with it. Then the two live-memory readers in
+`itemprobe`/`agentprobe`, which on a new build do not compute a wrong number — they
+dereference a stale RVA inside a *running* client.
+
+**Both of the judgement calls this arc parked are now settled** (2026-08-14):
+
+- **`content/maps.toml`'s Pre-Searing file id is the PLAIN `0x1B97D`**, not the renamed
+  `0x8001B97D`. Bit 31 is `FcArchive` announcing a pending replacement, so the renamed form
+  was one archive copy's transient state recorded as the map's name — and 38833 installed
+  that replacement, after which it binds nowhere. `archive.py` had already drawn the rule:
+  *send the plain logical id and serve from an archive that binds it.* The plain id works on
+  **both** archive generations; a mixed pair (post-update client, pre-update server) is
+  refused by `contentids.preflight`, because the update delivered genuinely different
+  geometry. Point `RURIK_DAT` at a post-update archive to run the new client. FINDINGS §7.5a
+  has the three measured pairings.
+- **`CLAUDE.md`'s updater sentence is corrected.** The kill switch is wanted on the
+  **loopback** build and must be **OFF** for the live-capture build, which has to stream
+  content; only the multi-instance NOP is wanted on both. `RUNBOOK.md` and the vault were
+  right and now say so in one voice.
 
 ### 8.0 Next, as of 2026-08-11 (`10b11dc`+, suite 53/53, 1,982 checks)
 

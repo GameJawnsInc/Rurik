@@ -239,12 +239,30 @@ choice, plus a `--no-terrain-textures` control.
 
 </details>
 
-### T6 — blending between tiles (DEFERRED, with the reason)
+### T6 — blending between tiles — **DONE 2026-08-14**
+
+Landed; [FINDINGS.md](FINDINGS.md) §6. Two mechanisms, both read out of the
+client: the per-cell **variation** is a PRNG draw (one per cell always, even
+where tag 3 forces the value, with a generator whose magic-number modulo is
+deliberately NOT `%` — it is off by one on 3.79% of states), and the four
+quadrants of a terrain texture are **authored alpha COVERAGE shapes**, with a
+16-entry table mapping a cell's 4-bit corner mask to the quadrant that covers
+it. The mask is therefore ArenaNet's rather than a gradient we invented. The
+derivation is cross-checked three ways, including against the client's own
+inverse table in a code path that never reads the first one.
+
+The hypothesis in the deferred text below — "the alpha in these atlases is
+presumably how" — was RIGHT in outline and much too vague: the alpha is not a
+general soft edge, it is a per-corner coverage shape chosen by table.
+
+<details><summary>the original rung</summary>
 
 GW blends adjacent ground types, and the alpha in these atlases is presumably
 how. T5 gives hard edges at tile boundaries. That is honest and a great deal
 better than grey, and blending is a separate question that should not hold up
 the visible result.
+
+</details>
 
 ---
 

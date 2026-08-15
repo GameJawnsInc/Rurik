@@ -291,9 +291,33 @@ the patched client is a brick.
 
 **There are two client builds and they are not interchangeable.** The commands above
 make the loopback one — our DH parameters — into `vault/client-patched/` and
-`vault/run/`. Adding `--no-dh-patch` (and `--live` to `make_run_dir.py`) makes the
-live-capture build instead, ArenaNet's own parameters, into `vault/client-patched-live/`
-and `vault/run-live/`. Never move a build between those directories and never pick one
+`vault/run/`. The live-capture build is ArenaNet's own parameters, into
+`vault/client-patched-live/` and `vault/run-live/`:
+
+```bash
+python toolkit/clientpatch/make_custom_client.py --no-dh-patch --no-updater-patch
+```
+
+```bash
+python toolkit/clientpatch/make_run_dir.py --live
+```
+
+**`--no-updater-patch` is not optional and this line used to omit it**, which is a
+documentation bug the 38833 update caught by making somebody follow the page
+exactly. `make_custom_client.py` kills the updater **by default**, and that default
+is right for the caged loopback build (§"Stuck on Connecting to ArenaNet" — the cage
+and the pre-login patcher are in direct conflict) and **wrong for this one**: §"a
+live run writes new content into its own `Gw.dat`" below is the same document
+stating that `run-live/` must be able to stream map content. Following the old
+wording produced a 38833 live build reading `updater=killed` beside a 38797 one
+reading `updater=LIVE`, in a pair that is supposed to differ **only** in build.
+Check with `dhbuild.py` and expect `updater=LIVE` for everything under
+`run-live/` and `updater=killed` under `run/`. (`CLAUDE.md`'s launch-rule paragraph
+used to say the kill switch was "wanted on both configurations", which contradicted
+this page; **resolved 2026-08-14 in this page's favour** — the vault and the evidence
+both agree with it, and `CLAUDE.md` now names the split explicitly.)
+
+Never move a build between those directories and never pick one
 by filename: the tools decide from the DH struct, and
 
 ```bash

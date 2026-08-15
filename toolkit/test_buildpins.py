@@ -192,8 +192,8 @@ check("buildpins.py" in " ".join(skipped),
 
 live = [r for r in rows if r["klass"] == BP.LIVE]
 files = {r["file"] for r in live}
-check(len(live) == 71,
-      "71 class-(a) occurrences -- the census",
+check(len(live) == 73,
+      "73 class-(a) occurrences -- the census",
       f"{len(live)}; if this moved, the plan's cost number moved with it. 68 "
       f"until genericvalue.py stopped storing its ten table addresses; 63 after; "
       f"64 once buildid.py gave the older build a NUMBER, since a build number "
@@ -206,7 +206,12 @@ check(len(live) == 71,
       f"test_modelfile.py §5), and mapdata/atex.py's FORMAT_FLAGS_VA and "
       f"RUN_TABLE_VA (the ATEX level codec). THAT IS THE POINT OF THIS CHECK "
       f"RATHER THAN A NUISANCE: the liability grows silently, it grew 11% in the "
-      f"two days this branch was unmerged, and nothing but a literal here notices")
+      f"two days this branch was unmerged, and nothing but a literal here notices. "
+      f"73 later the same day, 2026-08-14, when ArenaNet shipped 38833 and it was "
+      f"registered in pinned.BUILDS: a build NUMBER and its SIZE are both "
+      f"build-coupled constants, so REGISTERING a build costs two pins -- the "
+      f"cheapest kind, derived and asserted against a fresh read by "
+      f"test_buildid.py §4, but the census counts them because they are real")
 check(len(files) == 9, "across 9 files", f"{len(files)}: {sorted(files)}")
 
 # The sites the plan names by hand must actually be there. A census that missed

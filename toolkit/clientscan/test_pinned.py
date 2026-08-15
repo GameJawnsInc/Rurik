@@ -65,7 +65,10 @@ import checks                                                # noqa: E402
 import pinned                                                # noqa: E402
 import vaultpath                                             # noqa: E402
 
-LEDGER = checks.Ledger("pinned client selection", floor=55)
+# floor re-measured 2026-08-14 from a real green run: 55 -> 61. Build 38833 adds
+# a stamp check and an identify() call, and the rewritten size invariant (see
+# below) contributes one assertion plus one per registered build.
+LEDGER = checks.Ledger("pinned client selection", floor=61)
 check = checks.adopt(LEDGER)
 
 
@@ -118,11 +121,43 @@ check(pinned.BUILD == pinned.PINNED.number and pinned.SIZE == pinned.PINNED.size
       and pinned.PATCHED_SHA256 == pinned.PINNED.patched,
       "the named constants are the pinned row and nothing else")
 
+# REWRITTEN 2026-08-14, and the old assertion is why. It read
+#   "the two builds differ in SIZE, so size separates them"
+# and it went RED the day build 38833 was registered, because 38833 is
+# byte-for-byte the same LENGTH as 38797 -- 10,483,904 -- while being a
+# different build. The red was correct and the CLAIM was what had to change:
+# size never separated the two copies WITHIN a build (this module's founding
+# defect), and as of the third build it does not separate builds either.
+#
+# So the invariant is inverted into the one that actually holds and that the
+# module's behaviour depends on: SHA256 IS THE DISCRIMINATOR, ALWAYS. A size
+# collision must be tolerated by `identify()`, which is asserted directly below
+# rather than left as a property of the registry's current contents.
 sizes = [b.size for b in pinned.BUILDS]
-check(len(set(sizes)) == len(sizes),
-      "the two builds differ in SIZE, so size separates them",
-      f"{sizes} -- which is why the module's founding defect is about the two "
-      f"copies WITHIN one build, not across builds")
+digests = [b.pristine for b in pinned.BUILDS]
+check(len(set(digests)) == len(digests),
+      "every build has a DISTINCT pristine sha256 -- the real discriminator",
+      f"{[d[:12] for d in digests]} -- two builds sharing a hash is impossible")
+
+collisions = len(sizes) - len(set(sizes))
+if collisions:
+    print(f"     note: {collisions} size collision(s) in the registry "
+          f"({sizes}) -- MEASURED, not a defect: 38797 and 38833 ship at the "
+          f"same length. Any build check written on size alone is now a bug.")
+
+# The collision is only safe because identify() considers EVERY same-size
+# candidate instead of assuming one. Proven, not asserted: ask it about each
+# build's own pristine image and require it to name that build.
+for b in pinned.BUILDS:
+    try:
+        path, _why = pinned.find(b.stamp)
+    except SystemExit:
+        LEDGER.skip(f"identify {b.stamp}", "not in the vault")
+        continue
+    what, detail = pinned.identify(path)
+    check(what == "pristine" and pinned.name_of(b) in detail,
+          f"identify() names build {pinned.name_of(b)} from a same-size field",
+          f"got {what!r}: {detail}")
 
 numbered = [b for b in pinned.BUILDS if b.number is not None]
 check(len({b.number for b in numbered}) == len(numbered),

@@ -165,7 +165,10 @@ MODEL_FORMAT = "rurik.gwmodel"
 MODEL_VERSIONS = (1, 2, 3)
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
+DTYPE_U16 = "uint16-le"
 DTYPE_JSON = "json"
+#: Slots per cell in the `.layers.u16` sidecar -- the client's three.
+BLEND_LAYERS = 3
 
 # The object custom property carrying the manifest across the round trip. Read
 # back by `tools/blender/export_gwmap.py`; the two agree on this name and on
@@ -188,7 +191,7 @@ class GwMap(object):
     """
 
     def __init__(self, meta, path, heights, tiles=None, shade=None,
-                 props=None):
+                 variation=None, layers=None, props=None):
         self.meta = meta
         self.path = path
         self.name = meta.get("name") or os.path.basename(path).split(".")[0]
@@ -200,6 +203,8 @@ class GwMap(object):
         self.heights = heights
         self.tiles = tiles
         self.shade = shade
+        self.variation = variation
+        self.layers = layers
         self.props = props
 
     @property
@@ -237,6 +242,28 @@ class GwMap(object):
         """
         x0, _y0, _x1, y1 = self.rect
         return x0 + i * self.pitch, y1 - j * self.pitch
+
+    def corner_shade(self):
+        """Tag 9's lightmap on the `(dimX+1) x (dimY+1)` vertex lattice.
+
+        PER VERTEX, not per face, and that follows from the file rather than
+        from taste: tag 9 holds `dimX * dimY` bytes -- the same grid as tag
+        1, whose samples are MEASURED to sit at cell CORNERS. So the far
+        column and row are replicated exactly as `corner_heights` does, and
+        for the same reason.
+
+        Returns floats in 0..1, or None when the export carried no shade.
+        """
+        if self.shade is None:
+            return None
+        dx, dy = self.dim_x, self.dim_y
+        out = []
+        for gy in range(dy):
+            row = self.shade[gy * dx:(gy + 1) * dx]
+            out.extend(row)
+            out.append(row[-1])
+        out.extend(out[-(dx + 1):])
+        return [v / 255.0 for v in out]
 
     def corner_heights(self):
         """The `(dimX+1) x (dimY+1)` lattice the CLIENT manufactures.
@@ -329,13 +356,16 @@ def load_export(json_path):
                     "holds %d" % (side["name"], side["count"],
                                   props.get("count"), n))
             continue
-        if side["count"] != cells:
-            raise ValueError("%s: %d values for a %d-cell grid"
-                             % (side["name"], side["count"], cells))
+        want = cells * (BLEND_LAYERS if side["kind"] == "layers" else 1)
+        if side["count"] != want:
+            raise ValueError("%s: %d values, expected %d for a %d-cell grid"
+                             % (side["name"], side["count"], want, cells))
         if side["dtype"] == DTYPE_F32:
             arrays[side["kind"]] = list(struct.unpack("<%df" % cells, blob))
         elif side["dtype"] == DTYPE_U8:
             arrays[side["kind"]] = blob
+        elif side["dtype"] == DTYPE_U16:
+            arrays[side["kind"]] = struct.unpack("<%dH" % want, blob)
         else:
             raise ValueError("%s: unknown dtype %r"
                              % (side["name"], side["dtype"]))
@@ -362,7 +392,8 @@ def load_export(json_path):
         raise ValueError("%s: no heights sidecar" % json_path)
     return GwMap(meta, json_path, arrays["heights"],
                  tiles=arrays.get("tiles"), shade=arrays.get("shade"),
-                 props=props)
+                 variation=arrays.get("variation"),
+                 layers=arrays.get("layers"), props=props)
 
 
 # ------------------------------------------------------------ the geometry
@@ -554,14 +585,169 @@ def _stamp(obj, gwmap):
 
 # T3's measured cell window (`studies/terrain/FINDINGS.md` §3.1): one cell is
 # one 128x128 variant of the 256x256 texture, sampling its inner 111x111
-# texels -- corners inset 8.5 texels, algebraically 128 - 17. Quadrant 0's
-# window; the module docstring says why the variation is pinned to 0.
+# texels -- corners inset 8.5 texels, algebraically 128 - 17. `tileVar[v]`
+# puts variant v at texel (128*(v&1) + 8.5, 128*(v>>1) + 8.5), so variation
+# v IS quadrant v, laid out 0 1 / 2 3.
 TEX_TILE_TEXELS = 256.0
 TEX_UV_LO = 8.5 / TEX_TILE_TEXELS
 TEX_UV_HI = 119.5 / TEX_TILE_TEXELS
+TEX_QUAD_STEP = 128.0 / TEX_TILE_TEXELS
 
 
-def apply_terrain_textures(obj, gwmap):
+def quadrant_uvs(quadrant, rotated=False):
+    """The four corner UVs for one layer, in vertex order V0..V3.
+
+    V0=(u,v), V1=(u+du,v), V2=(u,v+dv), V3=(u+du,v+dv) -- the writer's own
+    order at `0x00757A80`. A ROTATED layer swaps V0 with V3 and V1 with V2
+    (`0x00757B4B`), which is the 180-degree turn that lets four authored
+    quadrants reach all four edges and all four corners.
+
+    v is flipped for Blender exactly as the prop UVs are: Direct3D puts v=0
+    at the top of an image. That is a convention of the two tools, not a
+    fact about the archive, which is why it lives here and not in the
+    interchange.
+    """
+    ou = (quadrant & 1) * TEX_QUAD_STEP
+    ov = (quadrant >> 1) * TEX_QUAD_STEP
+    lo_u, hi_u = ou + TEX_UV_LO, ou + TEX_UV_HI
+    lo_v, hi_v = ov + TEX_UV_LO, ov + TEX_UV_HI
+    corners = [(lo_u, 1.0 - lo_v), (hi_u, 1.0 - lo_v),
+               (lo_u, 1.0 - hi_v), (hi_u, 1.0 - hi_v)]
+    if rotated:
+        corners = [corners[3], corners[2], corners[1], corners[0]]
+    return corners
+
+
+#: The colour attribute carrying tag 9's baked lightmap, read by every
+#: terrain material. One name, so base and overlay agree.
+LIGHT_ATTR = "gw_light"
+
+
+def attach_lightmap(mesh, gwmap):
+    """Tag 9 as a per-vertex colour attribute. Returns a small report.
+
+    **WHAT THIS IS.** Terrain tag 9 is a BAKED DIRECTIONAL LIGHTMAP, and
+    that is measured rather than assumed (`terrain.py`): fitting
+    `255 * max(0, N.L)` from the height field gives a median Pearson r of
+    0.887 over 345 maps, the elevation that maximises it tracks tag 0's
+    angle field with Spearman 0.9352, and the azimuth control puts the light
+    on the +x axis with no y component on 343 of 345 -- which is what the
+    client's own `TrnTexIntensity:342 lightDir.y == 0` says.
+
+    **WHY MULTIPLY.** ArenaNet's terrain pixel shader (FINDINGS §6.4, ps_1_1
+    at `0x00A737E8`) ends its tile blend with `mul r0, v0, r1` -- the
+    composited ground times the vertex diffuse colour. Multiplying a baked
+    light term into base colour is that instruction.
+
+    **WHAT IS NOT ESTABLISHED, and it is the transfer curve.** `terrain.py`
+    records that 348 of 349 maps SATURATE at 255, so the mapping from stored
+    byte to light is not settled and this module applies the simplest one
+    that respects the measurement -- `shade / 255` as a linear multiplier,
+    which leaves fully-lit ground untouched and darkens only where the bake
+    says shadow. A gamma or a scale-and-bias would also fit the corpus; none
+    is measured, so none is invented here. `--no-lightmap` is the control.
+    """
+    light = gwmap.corner_shade()
+    if light is None:
+        return {"state": "no shade sidecar"}
+    n = len(mesh.vertices)
+    if len(light) != n:
+        return {"state": "shade lattice is %d for %d vertices"
+                         % (len(light), n)}
+    attr = mesh.color_attributes.new(name=LIGHT_ATTR, type="FLOAT_COLOR",
+                                     domain="POINT")
+    flat = []
+    for v in light:
+        flat.extend((v, v, v, 1.0))
+    attr.data.foreach_set("color", flat)
+    lo = min(light)
+    hi = max(light)
+    return {"state": "attached", "vertices": n,
+            "min": round(lo, 4), "max": round(hi, 4),
+            "mean": round(sum(light) / n, 4),
+            "attribute": LIGHT_ATTR}
+
+
+def _wire_lightmap(mat, tex_node):
+    """Multiply a material's texture colour by the lightmap attribute.
+
+    Inserted between the image and Base Color, so the mask alpha wiring
+    (overlays) and the colour path stay independent.
+    """
+    nodes, links = mat.node_tree.nodes, mat.node_tree.links
+    bsdf = nodes.get("Principled BSDF")
+    if bsdf is None or tex_node is None:
+        return False
+    attr = nodes.new("ShaderNodeAttribute")
+    attr.attribute_name = LIGHT_ATTR
+    mix = nodes.new("ShaderNodeMix")
+    mix.data_type = "RGBA"
+    mix.blend_type = "MULTIPLY"
+    # Factor 1.0: the shader multiplies outright, it does not blend toward.
+    for inp in mix.inputs:
+        if inp.name == "Factor":
+            inp.default_value = 1.0
+            break
+    a = b = None
+    for inp in mix.inputs:
+        if inp.name == "A" and a is None and inp.type == "RGBA":
+            a = inp
+        elif inp.name == "B" and b is None and inp.type == "RGBA":
+            b = inp
+    out = next((o for o in mix.outputs if o.type == "RGBA"), None)
+    if a is None or b is None or out is None:
+        return False
+    links.new(tex_node.outputs["Color"], a)
+    links.new(attr.outputs["Color"], b)
+    links.new(out, bsdf.inputs["Base Color"])
+    return True
+
+
+#: Which CORNER each of a quad's four loops is, given `build_geometry`'s
+#: winding (i,j) -> (i,j+1) -> (i+1,j+1) -> (i+1,j) and the client's corner
+#: order (this, +x, +y, +xy).
+LOOP_CORNER = (0, 2, 3, 1)
+
+#: How far an overlay quad is lifted off the base, in world units, to keep
+#: the depth buffer from fighting. The cell is 96 units across and the
+#: terrain's own relief runs to thousands, so this is invisible; it is a
+#: rendering necessity of drawing two coplanar quads and NOT anything the
+#: client does -- it composites in one pass through texture stages.
+OVERLAY_LIFT = 0.35
+
+
+def _unpack_layers(gwmap):
+    """`[[(tile, quadrant, rotated), ...], ...]` per cell, or None.
+
+    Reads the `.layers.u16` sidecar: bits 0..7 tile, 8..9 quadrant, 15
+    rotated, `0xFFFF` for an unused slot. The packing is the exporter's and
+    is documented at `mapexport.build_blend_layers`.
+    """
+    words = gwmap.layers
+    if not words:
+        return None
+    per = len(words) // gwmap.cells
+    out = []
+    for i in range(gwmap.cells):
+        cell = []
+        for s in range(per):
+            w = words[i * per + s]
+            if w == 0xFFFF:
+                continue
+            cell.append((w & 0xFF, (w >> 8) & 3, bool(w & 0x8000)))
+        out.append(cell)
+    return out
+
+
+def _base_quadrants(gwmap, n):
+    """Each cell's BASE quadrant, or all-zero when the export predates T6."""
+    per_cell = _unpack_layers(gwmap)
+    if per_cell is None:
+        return [0] * n
+    return [(c[0][1] if c else 0) for c in per_cell[:n]]
+
+
+def apply_terrain_textures(obj, gwmap, lightmap=True):
     """The ground's materials, per-face indices and UVs (rung T5).
 
     Returns the summary block the dump carries, or None when the export has
@@ -575,6 +761,9 @@ def apply_terrain_textures(obj, gwmap):
         return None
     mesh = obj.data
     base = os.path.dirname(os.path.abspath(gwmap.path))
+    light_report = ({"state": "skipped"} if not lightmap
+                    else attach_lightmap(mesh, gwmap))
+    lightmap = lightmap and light_report.get("state") == "attached"
     if gwmap.tiles is None:
         # The block names textures but the export carried no tiles array, so
         # there is nothing to bind a face BY. Reported, not guessed.
@@ -631,6 +820,11 @@ def apply_terrain_textures(obj, gwmap):
                 if bsdf is not None:
                     links.new(tex.outputs["Color"],
                               bsdf.inputs["Base Color"])
+                    # Tag 9's bake, multiplied in -- the shader's own
+                    # `mul r0, v0, r1`. Skipped when the export carries no
+                    # shade, and by --no-lightmap.
+                    if lightmap:
+                        _wire_lightmap(mat, tex)
                 # NO alpha wired, deliberately: one opaque layer is the
                 # honest simplification. Wiring the mask would punch holes
                 # in the ground where the retail client blends.
@@ -652,14 +846,23 @@ def apply_terrain_textures(obj, gwmap):
     # look on every slope -- not the archive's.
     mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
 
-    # T3's UV window, identical on every face. Loop order is the quad winding
-    # from build_geometry: (i,j) -> (i,j+1) -> (i+1,j+1) -> (i+1,j), with j
-    # increasing as world y DECREASES; v is flipped for Blender exactly as
-    # the prop UVs are (Direct3D puts v=0 at the top of an image).
-    lo, hi = TEX_UV_LO, TEX_UV_HI
-    quad = [(lo, 1.0 - lo), (lo, 1.0 - hi), (hi, 1.0 - hi), (hi, 1.0 - lo)]
+    # T3's UV window, per cell. Loop order is the quad winding from
+    # build_geometry: (i,j) -> (i,j+1) -> (i+1,j+1) -> (i+1,j), and those
+    # are the client's CORNERS 0, 2, 3, 1 -- corner k being (this, +x, +y,
+    # +xy) -- so a loop takes its corner's UV through LOOP_CORNER.
+    #
+    # The QUADRANT is per cell (rung T6): where the export carries resolved
+    # blend layers, layer 0 names the base quadrant, which is tag 3's
+    # authored override or the client's per-cell PRNG draw. Without that
+    # sidecar every cell falls back to quadrant 0, which is what T5 shipped
+    # and why its ground repeated visibly.
     layer = mesh.uv_layers.new(name="UVMap")
-    flat = [c for uv in quad for c in uv] * len(mesh.polygons)
+    base_q = _base_quadrants(gwmap, len(mesh.polygons))
+    flat = []
+    for q in base_q:
+        uvs = quadrant_uvs(q)
+        for c in LOOP_CORNER:
+            flat.extend(uvs[c])
     layer.data.foreach_set("uv", flat)
 
     # Read the indices BACK off the built mesh for the digest, so anything
@@ -685,9 +888,176 @@ def apply_terrain_textures(obj, gwmap):
         "faces_per_slot": {str(k): v for k, v in sorted(counts.items())},
         "material_index_digest": digest,
         "uv_layer": "UVMap",
-        "uv_window": [lo, hi],
+        "uv_window": [TEX_UV_LO, TEX_UV_HI],
+        "base_quadrants": sorted(set(base_q)),
+        "lightmap": light_report,
         "faces_smooth": sum(smooth),
         "image_alpha_modes": modes,
+    }
+
+
+def build_terrain_overlays(obj, gwmap, name=None, lightmap=True):
+    """The BLEND layers as a second object above the ground. Rung T6.
+
+    Returns `(object, summary)` or `(None, summary)`. Each cell whose four
+    corners disagree gets one extra quad per overlay layer, carrying that
+    layer's texture at the quadrant whose authored ALPHA covers exactly the
+    corners the overlay belongs to. Nothing here invents a gradient: the
+    mask is the archive's, and this function only places it.
+
+    WHY A SEPARATE OBJECT AND NOT MORE MATERIAL SLOTS. The client draws all
+    three layers of a cell in ONE pass, binding them to three texture
+    stages, so its composite has no draw order to get wrong. Blender's
+    material system has no equivalent of "three stages over one face", so
+    the layers become coplanar geometry drawn back to front -- which is what
+    a multi-pass renderer would do and reaches the same picture. The lift
+    (`OVERLAY_LIFT`) is a depth-buffer necessity of that translation and is
+    labelled as ours rather than ArenaNet's.
+
+    **THE FORMULA THIS REPRODUCES IS OBSERVED, NOT ASSUMED** (FINDINGS
+    §6.4). ArenaNet's terrain pixel shader -- ps_1_1, 128 bytes at
+    `0x00A737E8`, decoded whole -- is `lrp r1, t1.wwww, t1, t0` then
+    `lrp r1, t2.wwww, t2, r1`: layer 0 opaque, each further layer lerped
+    over the accumulator by ITS OWN texture alpha. Alpha-blending coplanar
+    quads back to front computes exactly that, which is why this
+    translation is a translation of the composite and not an approximation
+    of it. The fixed-function fallback agrees from the other side
+    (`SELECTARG1`, then `BLENDTEXTUREALPHA` twice).
+
+    The base object keeps its own opaque materials; overlays get their own
+    alpha-blended copies, because the same texture is opaque underneath and
+    masked on top.
+    """
+    per_cell = _unpack_layers(gwmap)
+    block = gwmap.terrain_textures
+    if per_cell is None or block is None or gwmap.tiles is None:
+        return None, {"state": "no blend layers in the export"}
+
+    base = os.path.dirname(os.path.abspath(gwmap.path))
+    dx, dy = gwmap.dim_x, gwmap.dim_y
+    x0, _y0, _x1, y1 = gwmap.rect
+    pitch = gwmap.pitch
+    z = gwmap.corner_heights()
+    lit = gwmap.corner_shade() if lightmap else None
+    stride = dx + 1
+
+    mats, mat_slot = [], {}
+
+    def overlay_material(tile):
+        """One alpha-blended material per tile, made once and shared."""
+        entry = block["tiles"][tile] if tile < len(block["tiles"]) else {}
+        image_name = entry.get("image")
+        key = (os.path.basename(image_name) if image_name
+               else "gw_untextured_%X" % entry.get("file_id", 0))
+        key += ".blend"
+        if key in mat_slot:
+            return mat_slot[key]
+        mat = bpy.data.materials.get(key)
+        if mat is None:
+            mat = bpy.data.materials.new(key)
+            mat.use_nodes = True
+            nodes, links = mat.node_tree.nodes, mat.node_tree.links
+            bsdf = nodes.get("Principled BSDF")
+            if image_name:
+                tex = nodes.new("ShaderNodeTexImage")
+                img = bpy.data.images.get(os.path.basename(image_name))
+                if img is None:
+                    img = bpy.data.images.load(os.path.join(base, image_name))
+                # CHANNEL_PACKED for the same reason the base uses it: the
+                # alpha is a MASK, and premultiplying it into the colour
+                # darkens the ground (the defect found on 2026-08-14).
+                img.alpha_mode = "CHANNEL_PACKED"
+                tex.image = img
+                tex.extension = "REPEAT"
+                if bsdf is not None:
+                    links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
+                    # THE ONE PLACE ALPHA IS WIRED, and it is the whole rung:
+                    # an overlay is masked by its own texture's alpha.
+                    if "Alpha" in bsdf.inputs:
+                        links.new(tex.outputs["Alpha"], bsdf.inputs["Alpha"])
+                    if lightmap:
+                        _wire_lightmap(mat, tex)
+            for value in ("BLENDED", "BLEND"):
+                try:
+                    mat.blend_method = value
+                    break
+                except TypeError:
+                    continue
+        mat_slot[key] = len(mats)
+        mats.append(mat)
+        return mat_slot[key]
+
+    verts, faces, face_mat, face_uv = [], [], [], []
+    vert_light = []
+    counted = 0
+    for gy in range(dy):
+        a = gy * stride
+        b = a + stride
+        for gx in range(dx):
+            cell = per_cell[gy * dx + gx]
+            if len(cell) < 2:
+                continue
+            counted += 1
+            wy = y1 - gy * pitch
+            wy1 = wy - pitch
+            wx = x0 + gx * pitch
+            wx1 = wx + pitch
+            # The same four corners as the base quad, in the same winding,
+            # lifted so the depth test keeps them above it. FOUR FRESH
+            # VERTICES PER LAYER: a cell's second and third overlays need
+            # their own UVs, and Blender's UVs are per LOOP but a shared
+            # vertex would still be fine -- what would not be fine is the
+            # bookkeeping, so each face owns its corners outright.
+            for n, (tile, quad, rotated) in enumerate(cell[1:]):
+                k = len(verts)
+                lift = OVERLAY_LIFT * (n + 1)
+                verts.extend([
+                    (wx, wy, -z[a + gx] + lift),
+                    (wx, wy1, -z[b + gx] + lift),
+                    (wx1, wy1, -z[b + gx + 1] + lift),
+                    (wx1, wy, -z[a + gx + 1] + lift)])
+                if lit is not None:
+                    # The SAME lattice samples the base mesh uses, so an
+                    # overlay is lit identically to the ground under it.
+                    vert_light.extend((lit[a + gx], lit[b + gx],
+                                       lit[b + gx + 1], lit[a + gx + 1]))
+                faces.append((k, k + 1, k + 2, k + 3))
+                face_mat.append(overlay_material(tile))
+                face_uv.append(quadrant_uvs(quad, rotated))
+
+    if not faces:
+        return None, {"state": "no cell needs an overlay"}
+
+    mesh = bpy.data.meshes.new("%s.overlay" % (name or gwmap.name))
+    mesh.from_pydata(verts, [], faces)
+    mesh.update()
+    for mat in mats:
+        mesh.materials.append(mat)
+    mesh.polygons.foreach_set("material_index", face_mat)
+    mesh.polygons.foreach_set("use_smooth", [True] * len(mesh.polygons))
+    if vert_light:
+        at = mesh.color_attributes.new(name=LIGHT_ATTR, type="FLOAT_COLOR",
+                                       domain="POINT")
+        flat = []
+        for v in vert_light:
+            flat.extend((v, v, v, 1.0))
+        at.data.foreach_set("color", flat)
+    uvl = mesh.uv_layers.new(name="UVMap")
+    flat = []
+    for uvs in face_uv:
+        for c in LOOP_CORNER:
+            flat.extend(uvs[c])
+    uvl.data.foreach_set("uv", flat)
+
+    ov = bpy.data.objects.new(mesh.name, mesh)
+    bpy.context.scene.collection.objects.link(ov)
+    return ov, {
+        "state": "bound",
+        "cells_blended": counted,
+        "overlay_faces": len(faces),
+        "materials": [m.name for m in mats],
+        "lift": OVERLAY_LIFT,
+        "rotated_faces": sum(1 for c in per_cell for lay in c[1:] if lay[2]),
     }
 
 
@@ -1185,6 +1555,12 @@ def main(argv=None):
     ap.add_argument("--no-textures", action="store_true",
                     help="build prop meshes without materials or UVs -- the "
                          "control for the texture path")
+    ap.add_argument("--no-lightmap", action="store_true",
+                    help="do not multiply tag 9's baked lightmap into the "
+                         "ground -- the control for it")
+    ap.add_argument("--no-blend", action="store_true",
+                    help="draw only each cell's BASE layer -- the control "
+                         "for rung T6's overlay geometry")
     ap.add_argument("--no-terrain-textures", action="store_true",
                     help="leave the ground unmaterialed even when the export "
                          "carries the texture block -- the control for the "
@@ -1197,12 +1573,20 @@ def main(argv=None):
     obj, gwmap = import_gwmap(args.json, name=args.name, clear=args.clear)
     terrain_tex = None
     if not args.no_terrain_textures:
-        terrain_tex = apply_terrain_textures(obj, gwmap)
+        terrain_tex = apply_terrain_textures(
+            obj, gwmap, lightmap=not args.no_lightmap)
     summary = mesh_summary(obj, gwmap)
     if terrain_tex is not None:
         summary["terrain_textures"] = terrain_tex
     elif gwmap.terrain_textures is not None:
         summary["terrain_textures"] = {"state": "skipped"}
+    if not args.no_terrain_textures and not args.no_blend:
+        _ov, ovsum = build_terrain_overlays(
+            obj, gwmap, name=args.name,
+            lightmap=not args.no_lightmap)
+        summary["terrain_blend"] = ovsum
+    elif gwmap.layers:
+        summary["terrain_blend"] = {"state": "skipped"}
     prop_objs = []
     if not args.no_props and gwmap.props is not None:
         _coll, prop_objs = build_prop_objects(
@@ -1225,11 +1609,30 @@ def main(argv=None):
           "a greater stored value is LOWER in the world, FINDINGS 25)"
           % (summary["bbox"]["min"][2], summary["bbox"]["max"][2]))
     if terrain_tex is not None and terrain_tex.get("state") == "bound":
-        print("  ground        %d materials over %d tiles, every face bound "
-              "(one opaque layer, quadrant 0 -- retail blends THREE layers "
-              "per cell, T6)"
-              % (len(terrain_tex["materials"]),
-                 len(terrain_tex["tile_slot"])))
+        # This line said "one opaque layer, quadrant 0 -- retail blends THREE
+        # layers per cell, T6" until T6 landed and made both halves false.
+        # It is the readout, so it moves with the thing it describes.
+        print("  ground        %d materials over %d tiles, every face bound, "
+              "base quadrants %r"
+              % (len(terrain_tex["materials"]), len(terrain_tex["tile_slot"]),
+                 terrain_tex.get("base_quadrants", [0])))
+        lm = terrain_tex.get("lightmap") or {}
+        if lm.get("state") == "attached":
+            print("  lightmap      tag 9 multiplied in over %d vertices, "
+                  "%.3f..%.3f mean %.3f (a BAKED directional lightmap; the "
+                  "transfer curve is NOT settled, so this is shade/255)"
+                  % (lm["vertices"], lm["min"], lm["max"], lm["mean"]))
+        else:
+            print("  lightmap      %s" % lm.get("state", "absent"))
+        tbl = summary.get("terrain_blend") or {}
+        if tbl.get("state") == "bound":
+            print("  blend         %d cells blend, %d overlay faces over %d "
+                  "materials (%d rotated) -- each masked by ITS OWN texture "
+                  "alpha, the archive's mask and not a gradient we invented"
+                  % (tbl["cells_blended"], tbl["overlay_faces"],
+                     len(tbl["materials"]), tbl["rotated_faces"]))
+        else:
+            print("  blend         %s" % tbl.get("state", "absent"))
         if terrain_tex["untextured_tiles"]:
             print("                tiles %r have NO decodable texture and "
                   "draw flat magenta rather than impersonating slot 0"

@@ -38,6 +38,7 @@ than a second call to it.
 Needs the vault; every claim is about ArenaNet's bytes. Floor 19, ~50 s (it
 builds the assert corpus for both builds).
 """
+import itertools
 import os
 import sys
 
@@ -51,7 +52,11 @@ import checks                                                # noqa: E402
 import pinned                                                # noqa: E402
 import vaultpath                                             # noqa: E402
 
-LEDGER = checks.Ledger("AgentView event allocators", floor=19)
+# floor re-measured 2026-08-14 from a real green run: 19 -> 26, the third
+# vaulted build (38833) adding 7. Per-build sections mean the floor tracks how
+# many builds the vault holds, which is the intent -- a run that silently saw
+# fewer builds measured less than a healthy one.
+LEDGER = checks.Ledger("AgentView event allocators", floor=26)
 check = checks.adopt(LEDGER)
 
 # MEASURED 2026-08-12. Class-(c) expectations: a new build SHOULD move these,
@@ -59,6 +64,10 @@ check = checks.adopt(LEDGER)
 EXPECT = {
     "2026-07-29_221c13772c7a": {0x007F2E90: "action", 0x007F5340: "effect"},
     "2026-04-30_b174de1f2d8d": {0x007ECB90: "action", 0x007EF040: "effect"},
+    # 38833, MEASURED 2026-08-14 -- IDENTICAL to 38797's pair, and that is the
+    # measurement, not a copy-paste. 38797 -> 38833 is a 15-day bugfix patch
+    # that left the exe the same LENGTH and did not move this region at all.
+    "2026-08-13_64fae3b1369b": {0x007F2E90: "action", 0x007F5340: "effect"},
 }
 EXPECT_ACTION_SITES = 23
 EXPECT_ACTION_KINDS = 22
@@ -103,11 +112,33 @@ for stamp, img in IMGS.items():
           f"got {{{', '.join(f'0x{v:08X} {n}' for v, n in sorted(got.items()))}}}")
     check(len(set(got)) == 2, f"{stamp}: two distinct addresses", str(len(set(got))))
 
-if len(IMGS) >= 2:
-    a, b = [set(i.allocators) for i in IMGS.values()]
-    check(not (a & b),
-          "and NOT ONE allocator address is shared between the builds",
-          "which is what makes this a derivation rather than a lookup")
+# THIS CHECK WAS REWRITTEN 2026-08-14 AND THE OLD FORM IS WORTH KNOWING.
+# It read `a, b = [set(i.allocators) for i in IMGS.values()]` and asserted that
+# NOT ONE address is shared "between the builds". Two things broke when a third
+# build arrived, and only the first is a typo:
+#   1. the two-way unpack raises ValueError on three images -- a structural
+#      two-build assumption in a file whose whole subject is cross-build drift;
+#   2. the CLAIM is false. 38833 derives byte-identically to 38797 (both
+#      0x007F2E90/0x007F5340) because that patch did not move this region.
+# Read literally, the old check says a derivation that returns the same answer
+# on two builds has "degenerated into a lookup". That inference does not hold:
+# what makes this a derivation is that it finds the addresses WITHOUT being
+# told them, and the proof of that is the pair where they DO differ.
+# So: at least one pair must disagree, and pairs that agree are reported.
+pairs = [(s1, s2, set(i1.allocators), set(i2.allocators))
+         for (s1, i1), (s2, i2) in itertools.combinations(IMGS.items(), 2)]
+if pairs:
+    disjoint = [(s1, s2) for s1, s2, a, b in pairs if not (a & b)]
+    check(bool(disjoint),
+          f"at least one build pair derives a DISJOINT allocator set "
+          f"({len(disjoint)} of {len(pairs)} pairs) -- a lookup could not do that",
+          "every pair shares an address, so nothing here proves these were "
+          "derived rather than read out of EXPECT")
+    for s1, s2, a, b in pairs:
+        if a & b:
+            print(f"     note: {s1} and {s2} SHARE "
+                  f"{', '.join(f'0x{v:08X}' for v in sorted(a & b))} "
+                  f"-- measured, not assumed: that gap did not move this region")
 
 
 print("\n2. one anchor line is AMBIGUOUS -- the pair is what resolves it")

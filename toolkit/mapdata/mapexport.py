@@ -9,6 +9,7 @@ five files per map:
                           where it came from, and a sha256 for each sidecar
     <name>.heights.f32    dimX*dimY little-endian float32, DE-TILED
     <name>.tiles.u8       dimX*dimY tile indices, same order       (optional)
+    <name>.variation.u8   dimX*dimY tag-3 variation 0..3, same order (with tiles)
     <name>.shade.u8       dimX*dimY tag-9 bytes, same order        (optional)
     <name>.props.json     every prop placement, both streams joined (optional)
     terrain/tex_<id>.png  the map's terrain textures, keyed by FILE ID and
@@ -105,12 +106,16 @@ argmax 0.504 against 0.247 for the nearest rival -- **Kamadan is well below that
 median and is reported rather than dropped**; it is a dense city whose props sit
 on buildings, and its controls collapse just as hard.
 
-WHAT AN EXPORT IS NOT EVIDENCE OF. Tag 2's tile indices and tag 9's shade bytes
-are carried through as arrays whose MEANING is unsettled (`terrain.py` names both
-NOT FOUND / not-settled). Exporting them is transport, not understanding. Tag 3
-is deliberately not exported at all: its bit-pair position inside a byte is not
-established by anything measured, so any per-cell unpacking would be a convention
-we invented and could never refute.
+WHAT AN EXPORT IS NOT EVIDENCE OF. Tag 9's shade bytes are carried through as an
+array whose MEANING is a baked lightmap (`terrain.py`) but whose transfer curve
+is not settled. Exporting it is transport, not understanding. Tag 2's tile
+indices ARE settled since T4 -- each names a terrain texture. Tag 3 (the
+per-cell VARIATION selector) IS now exported as `.variation.u8`: its bit-pair
+position was NOT FOUND when this line first read "deliberately not exported",
+and is MEASURED as `(i & 3) * 2` since 2026-08-14 (`studies/terrain/FINDINGS.md`
+§3.3), so the per-cell unpacking is the client's convention rather than one we
+invented. The value 0 (99.94% of cells) defers to the client's per-cell PRNG,
+which the array does NOT carry -- a consumer reproduces it.
 
 THE PROPS SIDECAR (format_version 2, 2026-08-13). Every placement, from BOTH
 streams, made to check each other at export time: the Stripped chunk
@@ -229,7 +234,15 @@ MAP_RECT = struct.Struct("<4f")
 # sidecar and its `count` is the prop record count.
 DTYPE_F32 = "float32-le"
 DTYPE_U8 = "uint8"
+DTYPE_U16 = "uint16-le"
 DTYPE_JSON = "json"
+
+#: How many blend layers a cell can carry (the client's own `varIndex`
+#: assert: three texcoord sets, three layers).
+BLEND_LAYERS = 3
+#: The sentinel for an unused layer slot, matching the client's own
+#: `0xFFFF0000` fill of the slots it does not use.
+BLEND_EMPTY = 0xFFFF
 
 # The props chunks and their model dependency lists, one pair per stream.
 # `props.py` owns both codecs; `mapchunks.py` owns the dependency decode.
@@ -330,16 +343,17 @@ class MapExport:
     """One exported map, read back from disk. What `load_export` returns.
 
     Every array is in world row-major order, `gy*dim_x + gx`, with grid row 0 at
-    world maxY. `tiles` and `shade` are None when they were not exported.
-    `props` is the parsed props sidecar (a dict -- see `build_props` for its
-    shape) or None when the export has none.
+    world maxY. `tiles`, `shade` and `variation` are None when they were not
+    exported. `props` is the parsed props sidecar (a dict -- see `build_props`
+    for its shape) or None when the export has none.
     """
 
     __slots__ = ("meta", "dim_x", "dim_y", "rect", "pitch", "heights", "tiles",
-                 "shade", "props", "path")
+                 "shade", "variation", "layers", "props", "path")
 
     def __init__(self, meta, dim_x, dim_y, rect, pitch, heights, tiles=None,
-                 shade=None, props=None, path=None):
+                 shade=None, variation=None, layers=None, props=None,
+                 path=None):
         self.meta = meta
         self.dim_x = dim_x
         self.dim_y = dim_y
@@ -348,6 +362,8 @@ class MapExport:
         self.heights = heights
         self.tiles = tiles
         self.shade = shade
+        self.variation = variation
+        self.layers = layers
         self.props = props
         self.path = path
 
@@ -537,14 +553,19 @@ def load_export(json_path):
                     f"{side['name']}: manifest says {side['count']} props, "
                     f"the sidecar declares {props.get('count')} and holds {n}")
             continue
-        # the per-cell array sidecars; their count is the cell count
-        if side["count"] != cells:
+        # the per-cell array sidecars. Most hold one value per cell; the
+        # blend layers hold BLEND_LAYERS of them, and the manifest's count
+        # says which, so a truncated file is caught rather than reshaped.
+        want = cells * (BLEND_LAYERS if side["kind"] == "layers" else 1)
+        if side["count"] != want:
             raise ValueError(f"{side['name']} holds {side['count']} values for "
-                             f"a {dim_x}x{dim_y} grid ({cells} cells)")
+                             f"a {dim_x}x{dim_y} grid ({want} expected)")
         if side["dtype"] == DTYPE_F32:
             arrays[side["kind"]] = list(struct.unpack(f"<{cells}f", blob))
         elif side["dtype"] == DTYPE_U8:
             arrays[side["kind"]] = blob
+        elif side["dtype"] == DTYPE_U16:
+            arrays[side["kind"]] = list(struct.unpack(f"<{want}H", blob))
         else:
             raise ValueError(f"{side['name']}: unknown dtype "
                              f"{side['dtype']!r}")
@@ -553,6 +574,8 @@ def load_export(json_path):
         raise ValueError("export has no heights sidecar")
     return MapExport(meta, dim_x, dim_y, rect, pitch, arrays["heights"],
                      tiles=arrays.get("tiles"), shade=arrays.get("shade"),
+                     variation=arrays.get("variation"),
+                     layers=arrays.get("layers"),
                      props=props, path=json_path)
 
 
@@ -838,6 +861,62 @@ def build_terrain_textures(mf, trn, archive, table=None):
     return block, payloads
 
 
+# ------------------------------------------------------- the blend layers
+
+def build_blend_layers(trn):
+    """The RESOLVED per-cell blend layers, packed. Rung T6.
+
+    `BLEND_LAYERS` little-endian u16 per cell, world row-major:
+
+        bits 0..7   the tile byte this layer draws
+        bits 8..9   the quadrant (which 128x128 quarter of its texture)
+        bit 15      rotated 180 degrees
+        0xFFFF      the slot is unused
+
+    Layer 0 is the OPAQUE BASE and always present; layers 1 and 2 are
+    overlays whose texture alpha masks them onto the corners they cover.
+
+    WHY THIS IS RESOLVED HERE AND NOT IN THE CONSUMER. Two of the three
+    inputs are client behaviour rather than file content -- the corner
+    grouping (`trnblend`) and the per-cell PRNG that picks the base quadrant
+    where tag 3 defers (`trnvariation`) -- and both are measured, tested and
+    stdlib. `tools/blender/` cannot import `toolkit/` by design, so shipping
+    the ANSWER keeps one implementation of the client's rules instead of two,
+    and keeps the drawing side a consumer of measurements rather than a
+    second interpreter of them.
+    """
+    import trnblend
+    import trnvariation
+
+    dim_x, dim_y = trn.dim_x, trn.dim_y
+    tiles = detile(trn.tiles, dim_x, dim_y)
+    authored = trn.variation()
+    var = trnvariation.map_variation(dim_x, dim_y, authored)
+    table_a = trn.table_a
+
+    out = bytearray(dim_x * dim_y * BLEND_LAYERS * 2)
+    counts = collections.Counter()
+    for gy in range(dim_y):
+        gy1 = min(gy + 1, dim_y - 1)
+        row, row1 = gy * dim_x, gy1 * dim_x
+        for gx in range(dim_x):
+            gx1 = min(gx + 1, dim_x - 1)
+            i = row + gx
+            corners = (tiles[i], tiles[row + gx1],
+                       tiles[row1 + gx], tiles[row1 + gx1])
+            layers = trnblend.cell_layers(corners, table_a, var[i])
+            counts[len(layers)] += 1
+            for s in range(BLEND_LAYERS):
+                if s < len(layers):
+                    lay = layers[s]
+                    word = ((0x8000 if lay.rotated else 0)
+                            | ((lay.quadrant & 3) << 8) | (lay.tile & 0xFF))
+                else:
+                    word = BLEND_EMPTY
+                struct.pack_into("<H", out, (i * BLEND_LAYERS + s) * 2, word)
+    return bytes(out), dict(counts)
+
+
 # ------------------------------------------------------------- the export
 
 def build_manifest(trn, rect, name, source, tiles=True, shade=True,
@@ -869,6 +948,19 @@ def build_manifest(trn, rect, name, source, tiles=True, shade=True,
     if tiles:
         payloads.append(("tiles", f"{name}.tiles.u8", DTYPE_U8,
                          detile(trn.tiles, dim_x, dim_y), cells))
+        # The per-cell VARIATION selector (tag 3), 0..3, travels WITH the
+        # tiles: a tile byte names a 256x256 texture and the variation picks
+        # which of its four 128x128 quadrants a cell samples. Already
+        # world row-major (Terrain.variation de-tiles it), so NOT run through
+        # `detile`. 0 means "the client's per-cell PRNG picks" -- a consumer
+        # reproduces that; this array carries only the authored overrides.
+        payloads.append(("variation", f"{name}.variation.u8", DTYPE_U8,
+                         trn.variation(), cells))
+        # The RESOLVED layers (rung T6): the corner grouping and the PRNG
+        # already applied, so a consumer draws rather than re-derives.
+        blob, _census = build_blend_layers(trn)
+        payloads.append(("layers", f"{name}.layers.u16", DTYPE_U16, blob,
+                         cells * BLEND_LAYERS))
     if shade:
         payloads.append(("shade", f"{name}.shade.u8", DTYPE_U8,
                          detile(trn.shade, dim_x, dim_y), cells))

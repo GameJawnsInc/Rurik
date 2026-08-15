@@ -984,6 +984,45 @@ Every one of these, in the order they were written:
   ~17 minutes — MEASURED 2026-08-12 at 434 s for the Bloated sweep and 565 s for
   the Stripped one, which reads BOTH streams of every map, so budget for those
   two numbers rather than for a round one),
+  `toolkit/mapdata/test_trnblend.py` (rung T6's second half: WHICH textures a cell
+  blends and how each is masked. A cell samples its four corners' tile bytes, and
+  where their tile TYPES disagree — tag 4, not the raw byte, which is T2's finding
+  from the other side, so two raw tiles sharing a type make no seam — the client
+  emits overlays whose alpha covers exactly the disagreeing corners. The masking
+  is not ours to invent: each 128x128 quadrant of a terrain texture is an authored
+  COVERAGE SHAPE and a 16-entry table maps a 4-bit corner mask to the quadrant
+  (plus a 180° rotation flag, plus optionally a second layer) that covers it.
+  Section 1 runs that derivation as a check rather than trusting it: the cover
+  sets are re-derived HERE from the four unrotated single-layer rows, they must
+  equal the client's INDEPENDENT inverse table at `0x00BF7808` (`{12, 2, 5, 8}` —
+  a different array, in the lo path, which never reads the first one), and
+  predicting all 16 rows must cover each row's own mask on **15 of 16**, the miss
+  being the empty mask 0 the grouping loop cannot emit. The six two-layer rows are
+  the sharp part — a union of two separately looked-up quadrants has to land
+  exactly — and a mirror-in-x rival rotation is scored live at 8 of 16 against the
+  real rule's 15, compared to the real count rather than to a threshold, because
+  the first version asserted `< 8`, got exactly 8, and a tuned constant measures
+  nothing. Section 2 pins the selection loop with a no-bleed check (no overlay may
+  cover a corner belonging to the base) and both refusals. No vault, no client),
+  `toolkit/mapdata/test_trnvariation.py` (rung T6's first half: which of a terrain
+  texture's four 128x128 quadrants each cell samples. The per-cell arithmetic is
+  OBSERVED in build 38797 — one PRNG draw per cell ALWAYS, `quadrant = draw & 3`,
+  `seed = (tile.x << 16) ^ tile.y` — and the whole-map traversal assembled from it
+  is labelled RECONSTRUCTION, which this file can check for internal exactness and
+  explicitly cannot check against ArenaNet's output. Two traps kept armed, both of
+  them edits a later reader would think were improvements. **The generator is NOT
+  `% 2147483647`**: the client computes the modulo by magic-number division whose
+  quotient is one too high on ~3.8% of states and corrects with `+0x80000000`,
+  which does not cancel it — so section 1 SEARCHES for the disagreeing states
+  rather than quoting them, finds 7,579 of 200,000 (3.79%), and requires every one
+  to be exactly +1; a tidied-up clean-modulo port makes that check go red instead
+  of drifting on one draw in twenty-six. **An authored cell still draws**: tag 3
+  overrides the value, not the draw, so forcing one cell must move exactly ONE
+  output byte — with a live skip-the-draw rival that moves 458 of 1,024 as the
+  control. Section 4 makes the one thing the disassembly did not settle refutable
+  rather than prose: the per-ROW reseed reading makes every row of a tile identical
+  (1,984/1,984 — a stripe), the per-TILE reading leaves rows independent (23.4%),
+  and the default is pinned. No vault, no client, 0.2 s),
   `toolkit/mapdata/test_trnshadow.py` (terrain tag 7 decoded rather than carried:
   that every retail shadow block's run coding closes on 272 rows of 272 samples and
   re-encodes to ArenaNet's own bytes from the bitmap alone, that the 10x10 window
@@ -1807,9 +1846,18 @@ Every one of these, in the order they were written:
   also DELETED as one that cannot fail -- `ar.row(n).index == n`, which
   `archive.py:367` asserts internally and would have raised first -- and
   replaced by two the archive can refute. THREE scores, each measured and none
-  subtracted: **78 with client and archive, 65 with the client alone, 40 with
-  neither** -- floor 78, so a vault-less run goes red. The archive section
-  scores a fixed count however many archives a vault holds. ~2.5 s),
+  subtracted: **77 with client and archive, 64 with the client alone, 39 with
+  neither** -- floor 77, so a vault-less run goes red. The archive section
+  scores a fixed count however many archives a vault holds, and **as of
+  2026-08-14 so does section 6's checkout refusal**. It was one check PER working
+  tree, and `working_tree_roots()` answers 2 inside a git worktree against 1 in
+  the main checkout -- so the old floor of 78 silently required the suite to be
+  run from a worktree, and `run_suite.py` in `C:\gd\Rurik` reported "ONLY 77 OF A
+  DECLARED FLOOR OF 78 CHECKS RAN". A count that moves with the caller's working
+  directory cannot be a floor: the vacuity guard cannot tell it from a lost
+  section, which is the one thing it exists to catch. The refusal is now a single
+  verdict over every root, naming any it failed to refuse, so each score above is
+  one lower than before and the same in both environments. ~2.5 s),
   `toolkit/clientscan/test_skillcast.py`, `toolkit/clientscan/test_textrec.py`,
   `toolkit/clientscan/test_srctree.py` (the Cli/Srv source-tree split, on both
   vaulted builds — and it proves its own negative result can go red first. Since
@@ -1859,8 +1907,15 @@ Every one of these, in the order they were written:
   one observed on the wire shares no lineage at all. It also pins that the
   schema's stamp is nested under `provenance` and NOT a top-level key, which is
   how the first version of that check "failed". §4 requires `pinned.BUILDS` to
-  match a fresh read, so the registry stays derived rather than hand-edited.
-  Needs the vault. Floor 23, ~6 s),
+  match a fresh read, so the registry stays derived rather than hand-edited —
+  which is what let build **38833** be added on 2026-08-14 as a measurement
+  rather than a typed-in row. That build is the sharpest case for §1's argument:
+  its getter is at `0x004729E0`, the SAME address as 38797's, with the same 54
+  candidate shapes, so the returned immediate is the *only* thing separating the
+  two images and the read still lands on exactly one in-range candidate. The
+  ascending-numbers check was also respelled as a sort, because the two-build
+  spelling had to be edited the moment a third arrived.
+  Needs the vault. Floor 29 (was 23; 38833 adds 6), ~6 s),
   `toolkit/clientscan/test_avevents.py` (the two AgentView event allocators,
   located by ArenaNet's own asserts — `studies/crossbuild/FINDINGS.md` §2.5, and
   the last two addresses in that census. They were literals used to match call
@@ -1877,11 +1932,19 @@ Every one of these, in the order they were written:
   resolves to one function, and §2 measures both numbers rather than asserting
   the rule. §4 reproduces the ambiguous anchor and requires a refusal, with the
   real anchors resolving afterwards as the positive control. §3 is the half a
-  lookup cannot fake: the older build derives a different pair — **not one
+  lookup cannot fake: the 38519 build derives a different pair — **not one
   address shared** — and still reproduces the census, 23 action call sites and 22
-  kinds on both. The function-boundary walk is reimplemented in the test out of
-  `int3` padding, so it is a second witness rather than a second call to the
-  module. Needs the vault. Floor 19, ~50 s),
+  kinds on all three. The function-boundary walk is reimplemented in the test out
+  of `int3` padding, so it is a second witness rather than a second call to the
+  module. **§3 was rewritten 2026-08-14 when 38833 arrived and broke it twice:**
+  it unpacked exactly two images (`a, b = [...]`, a ValueError on three), and its
+  claim that NOT ONE address is shared *between the builds* is **false** for the
+  38797/38833 pair, which derives the same two addresses because that 15-day
+  patch did not move them. Read literally it said a derivation returning the same
+  answer on two builds has degenerated into a lookup, which does not follow. Now
+  pairwise: at least ONE pair must be disjoint — a lookup could not manage that —
+  and agreeing pairs are printed as the measurement they are.
+  Needs the vault. Floor 26 (was 19; 38833 adds 7), ~50 s),
   `toolkit/clientscan/test_genericvalue.py` (the property-id switches, and that a
   moved build cannot be read as a map — `studies/crossbuild/PLAN.md` §6.
   `genericvalue.py`'s docstring claimed "a build that moves them fails loudly
@@ -1951,7 +2014,18 @@ Every one of these, in the order they were written:
   client — a genuine pristine build — is `unknown` when asked about AS 38797,
   while identifying as itself unscoped, so the refusal is the scoping rather than
   a broken hash; and that each stamp is its own pristine sha256 prefix, so a
-  mistyped hash cannot sit in the registry looking plausible. `LIVE_INSTALL` is
+  mistyped hash cannot sit in the registry looking plausible. **The size
+  invariant was INVERTED 2026-08-14 and the old one is the lesson.** It asserted
+  "the two builds differ in SIZE, so size separates them" and went red the day
+  38833 was registered, because 38833 ships at 10,483,904 B — byte-for-byte
+  38797's length — while being a different build. The red was right and the
+  claim was wrong: size never separated the two copies *within* a build, and it
+  no longer separates builds either. It now asserts the invariant that actually
+  holds, **sha256 is the discriminator**, prints any size collision as a
+  measurement, and proves the collision is survivable by requiring `identify()`
+  to name each build from its own image — the behaviour the registry's safety
+  now rests on, rather than a property of what the vault happens to hold.
+  `LIVE_INSTALL` is
   monkeypatched to a temp path so both fallback branches run on every machine
   rather than only one with `C:\gw`. **§5 and §6 are the PROBE GATE**
   (`studies/crossbuild/FINDINGS.md` §2.1): `itemprobe.py` and `agentprobe.py`
@@ -1969,8 +2043,9 @@ Every one of these, in the order they were written:
   rejected and a correct one that must be accepted. `--any-build` is the
   deliberate override, because a gate that makes a tool unusable the day a build
   ships is one somebody deletes. Without a vault §4 skips and the run scores 43
-  against a floor of 55, so it goes red — measured with `RURIK_VAULT` pointed at
-  an empty directory, not derived by subtraction. ~2 s),
+  against a floor of **61** (was 55; 38833 adds 6), so it goes red — the 43 was
+  measured with `RURIK_VAULT` pointed at an empty directory, not derived by
+  subtraction. ~2 s),
   `toolkit/clientscan/test_msghandler.py` (the receive-handler classifier, which is
   the loopback opcode sweep's PREDICTION stated before it runs. Three corrections it
   pins, each to a claim that was in circulation: **477 of 477 table entries carry a
@@ -2538,8 +2613,26 @@ Every one of these, in the order they were written:
   real corpus and the guard would be deleted in a week — it may never be silent,
   so the count comes back in the reason, and `allow_unknown=False` exists.
   **The vault census answers what `studies/crossbuild/PLAN.md` §10 left
-  UNVERIFIED: every capture that names a build names 38797** — 1,122 files — so
-  no existing corpus figure is pooling builds, and that is asserted as an
-  invariant so the first capture from a second build turns it red. A vault-less
+  UNVERIFIED — no corpus figure pools builds — and is scoped to the RESEARCH
+  corpus: `selftest/` is excluded from the walk the way `captures-scrubbed/`
+  already is, and since 2026-08-14 that scoping is load-bearing.** Build 38833
+  shipped, and the suite's own runs began writing 38833-stamped fixtures into
+  `captures/selftest/` — `test_handshake` drives whichever client the newest
+  key matches (`studies/crossbuild/FINDINGS.md` §7.7) — so a census over the
+  whole vault went red over its own byproducts, and would go red again on every
+  future suite run. Two sessions hit that red in parallel and fixed it two
+  ways: one NAMED the off-pin files in an allowlist, which the producer refutes
+  (the suite itself writes them, so the list stales on every run), and one
+  excluded the fixtures, which stands — a self-test artifact is not research
+  data, and counting it re-creates one level up the contamination `selftest/`
+  was split out to prevent. Two checks survive from the allowlist branch: the
+  pooling refusal is EXERCISED on a real mixed pair (the fixtures supply a
+  genuine 38833 file, found by reading each candidate's bytes, never by
+  filename — a refusal that has never fired on a real artifact is the same
+  class of thing as a green test that asserts nothing), and the census's 38797
+  is cross-checked against `clientscan/pinned.py` so a moved pin turns the
+  census red until it is re-decided rather than silently re-aimed. A REAL
+  second-build capture in the research corpus still turns the census red — that
+  is the point, not a defect. A vault-less
   run scores 23 against a floor of 23, measured with `RURIK_VAULT` pointed at an
-  empty directory rather than derived by subtraction).
+  empty directory rather than derived by subtraction; a vault run scores 30).
