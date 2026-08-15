@@ -1,28 +1,39 @@
-r"""The suite runner, and the three ways its ad-hoc ancestor miscounted in one day.
+r"""The suite runner, and the five ways it has misreported a run so far.
 
-Every check here is a REPRODUCTION of a defect that actually happened on 2026-08-13
-while running this repo's own suite by hand, and each one reported a wrong number as a
-confident report rather than as an error. That is the shape worth testing: none of the
-three raised, none printed a traceback, and all three produced output that read like a
-successful run.
+Every check here is a REPRODUCTION of a defect that actually happened, and each one
+reported a wrong number -- or no number -- as a confident report rather than as an
+error. That is the shape worth testing: none raised, none printed a traceback, and all
+produced output that read like a successful run.
 
-No vault, no socket, no client. The two halves under test are pure functions over a
-string and a directory tree, which is why they can be driven directly instead of by
-spawning 75 processes to test the thing that spawns 75 processes.
+Defects 1-3 are 2026-08-13, from running this repo's suite by hand: a file list
+harvested from prose that ran 63 of 71, a fixed regex that still missed the one file
+CLAUDE.md names inside a code fence, and a banner search that scored two healthy files
+at 0 checks. Defects 4-5 are 2026-08-14, from making the run concurrent: an alphabetical
+pool that starts its 584s file LAST, and a note of `(no output)` for a test whose entire
+explanation went to stderr.
+
+No vault, no socket, no client. The halves under test are pure functions over a string,
+a tree and a dict, which is why they can be driven directly instead of by running the
+whole suite to test the thing that runs the whole suite. (Counts of test files are
+deliberately not pinned in this file's prose -- the suite was 71 files when the runner
+was written, 94 when it learned to schedule, and 96 a day later.)
 """
 import os
 import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT_FOR_GIT = os.path.dirname(HERE)      # the only check here that touches a real repo
 sys.path.insert(0, HERE)
 import checks  # noqa: E402
 import run_suite as rs  # noqa: E402
 
-# Floor 27, MEASURED from a green run on 2026-08-13. Every check is unconditional and
-# builds its own fixtures, so there is no vault-less variant and no declared skip: a
-# score under the floor means a section crashed.
-LEDGER = checks.Ledger("run_suite: the suite runner's own counting", floor=27)
+# Floor 49, MEASURED from a green run: 27 on 2026-08-13, then on 2026-08-14 section 6's
+# six for the pool's scheduling, section 7's fourteen for `--since`, and two more in
+# section 1 for defect 5 (stderr-only failures). Every check is unconditional and builds
+# its own fixtures, so there is no vault-less variant and no declared skip: a score
+# under the floor means a section crashed.
+LEDGER = checks.Ledger("run_suite: the suite runner's own counting", floor=49)
 
 
 def section_banner_not_last():
@@ -52,6 +63,18 @@ def section_banner_not_last():
     LEDGER.ok(status == rs.PASS and n == 9,
               "and when a log follows it",
               f"got {status} {n} -- test_webgate's real shape")
+
+    # DEFECT 5: the note for a file whose whole explanation went to stderr.
+    status, n, note = rs.parse_result("", 1, "refusing: two client builds in the vault")
+    LEDGER.ok(status == rs.FAIL and "two client builds" in note,
+              "a failure that printed ONLY to stderr is reported with what it said",
+              f"note={note!r} -- test_movement_fidelity.py exits 1 with an empty "
+              f"stdout, and the run used to name it '(no output)'")
+    status, _n, note = rs.parse_result("ALL CHECKS PASSED (3 checks)\ntail line\n", 1,
+                                       "a warning nobody asked about")
+    LEDGER.ok(note == "tail line",
+              "but stdout still wins the note when it has one",
+              "stderr is a fallback, not a louder channel")
 
     # THE CONTROL. Finding the banner anywhere must not mean finding it in prose that
     # merely mentions it -- a test whose own docstring quotes the phrase would
@@ -250,12 +273,182 @@ def section_refusals():
               buf.getvalue().strip()[:120])
 
 
+def section_scheduling():
+    """The pool's ordering, and the one property it must never trade for speed.
+
+    DEFECT 4, measured rather than imagined. Serial, this suite was 2,794s on
+    2026-08-14 and `toolkit/test_scrub.py` alone was 584s of it -- and `test_scrub`
+    sorts near the END of the alphabet. A pool fed in path order therefore starts its
+    longest file last and idles seven workers for nine minutes behind it: ~14 min
+    instead of ~10, for a scheduling choice nobody would defend out loud.
+
+    The FIRST check here is the one that can go red in the direction that matters. A
+    scheduler is a permutation and nothing else; one that drops a file makes the suite
+    quietly smaller, which is the exact defect this whole module exists to refuse, and
+    it would show up as a FASTER run rather than as an error.
+    """
+    print("\n6. the pool is ordered longest-first, and loses nothing doing it")
+    tests = ["toolkit/authsrv/test_a.py", "toolkit/mapdata/test_b.py",
+             "toolkit/test_scrub.py", "toolkit/test_zz.py"]
+    times = {"toolkit/authsrv/test_a.py": 3.0, "toolkit/mapdata/test_b.py": 120.0,
+             "toolkit/test_scrub.py": 584.0}
+
+    got = rs.schedule(tests, times)
+    LEDGER.ok(sorted(got) == sorted(tests) and len(got) == len(tests),
+              "the schedule is a PERMUTATION -- every file in, every file out",
+              f"{len(got)} of {len(tests)}; a scheduler that drops one makes the "
+              f"suite smaller and the run faster, which reads as success")
+    LEDGER.ok(got[-1] == "toolkit/authsrv/test_a.py",
+              "the cheapest known file is scheduled last")
+    LEDGER.ok(got.index("toolkit/test_scrub.py") < got.index("toolkit/mapdata/test_b.py"),
+              "and the 584s file starts before the 120s one -- alphabetically it is "
+              "next to LAST", f"order: {[t.split('/')[-1] for t in got]}")
+    LEDGER.ok(got[0] == "toolkit/test_zz.py",
+              "a file with NO recorded time goes first, not last",
+              "an unmeasured cost that turns out to be large must not become the tail")
+
+    # The cache is a hint. Every failure mode of reading it has to end in {}, because
+    # the alternative is a runner that will not start over a malformed scheduling file.
+    missing = rs.load_timings(os.path.join(tempfile.gettempdir(), "no-such-timings.json"))
+    LEDGER.ok(missing == {},
+              "a missing timings cache reads as {} rather than raising")
+    tmp = tempfile.mkdtemp(prefix="rurik-suite-sched-")
+    try:
+        bad = os.path.join(tmp, "corrupt.json")
+        with open(bad, "w", encoding="utf-8") as fh:
+            fh.write("{not json at all")
+        LEDGER.ok(rs.load_timings(bad) == {},
+                  "and so does a corrupt one -- a bad HINT must not stop a real run",
+                  "the run degrades to a badly-packed pool, never to no pool")
+    finally:
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def fake_tree(files):
+    """A throwaway repo root holding `toolkit/` with the given {relpath: source}."""
+    root = tempfile.mkdtemp(prefix="rurik-suite-sel-")
+    for rel, src in files.items():
+        path = os.path.join(root, rel.replace("/", os.sep))
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(src)
+    return root
+
+
+def section_selection():
+    """`--since`, and the two ways a change-scoped run lies about coverage.
+
+    Selection is the only feature here that can make the suite SMALLER, so both of its
+    failure modes are reproduced rather than reasoned about. Under-selection is the
+    dangerous one -- it looks like a fast green run over exactly the code that moved --
+    and over-selection is the one that makes the feature pointless, which is how it
+    gets switched off and stops protecting anything.
+
+    Both numbers below were MEASURED on this repo on 2026-08-14, not imagined: scanning
+    raw source text for `<name>.py` put a one-decoder change at **90 of 94 tests**,
+    because this repo's docstrings cite modules constantly; restricting the scan to
+    non-docstring string literals put the same change at 22.
+    """
+    print("\n7. --since selects by dependency, and refuses when it cannot see the edge")
+    root = fake_tree({
+        "toolkit/checks.py": "def ok(*a, **k):\n    pass\n",
+        "toolkit/leaf.py": "VALUE = 1\n",
+        "toolkit/middle.py": "import leaf\n",
+        "toolkit/server.py": "def serve():\n    pass\n",
+        "toolkit/quoted.py": "X = 2\n",
+        # imports middle, which imports leaf: the transitive case
+        "toolkit/test_chain.py": "import checks\nimport middle\n",
+        # never imports server.py -- it LAUNCHES it, the edge an import graph misses
+        "toolkit/test_spawn.py": ('import checks\nimport subprocess\n'
+                                  'subprocess.run(["python", "toolkit/server.py"])\n'),
+        # only MENTIONS quoted.py, in a docstring: prose, not a dependency
+        "toolkit/test_prose.py": ('"""Unlike toolkit/quoted.py, which does it wrong."""\n'
+                                  'import checks\n'),
+    })
+    try:
+        tests = rs.find_tests(root)
+        graph = rs.dep_graph(root)
+
+        sel, _ = rs.affected({"toolkit/leaf.py"}, tests, root, graph)
+        LEDGER.ok(sel == {"toolkit/test_chain.py"},
+                  "a transitive import selects: test_chain imports middle imports leaf",
+                  f"selected {sorted(sel)}")
+
+        sel, _ = rs.affected({"toolkit/server.py"}, tests, root, graph)
+        LEDGER.ok(sel == {"toolkit/test_spawn.py"},
+                  "a SPAWNED module selects the test that launches it without importing "
+                  "it", f"selected {sorted(sel)} -- an import-only graph selects nothing "
+                        f"here, and test_handshake.py launches authsrv.py exactly so")
+
+        # THE CONTROL for the check above. Without it, the spawn rule could be a plain
+        # text search and still pass -- and a plain text search is the 90-of-94 defect.
+        sel, _ = rs.affected({"toolkit/quoted.py"}, tests, root, graph)
+        LEDGER.ok(sel == set(),
+                  "but a DOCSTRING citation of a module is prose and selects nothing",
+                  f"selected {sorted(sel)} -- scanning raw source instead put one "
+                  f"decoder change at 90 of 94 tests on the real tree")
+
+        sel, _ = rs.affected({"toolkit/checks.py"}, tests, root, graph)
+        LEDGER.ok(sel == set(tests),
+                  "a module every test imports selects every test",
+                  f"{len(sel)} of {len(tests)}")
+
+        sel, _ = rs.affected({"toolkit/test_prose.py"}, tests, root, graph)
+        LEDGER.ok(sel == {"toolkit/test_prose.py"},
+                  "a changed TEST selects itself and nothing else")
+
+        sel, _ = rs.affected(set(), tests, root, graph)
+        LEDGER.ok(sel == set(),
+                  "an empty diff selects nothing rather than everything",
+                  "main() turns this into exit 2 and a coverage statement, never a pass")
+
+        # THE REFUSAL. content/*.toml, schema/*.json and CLAUDE.md are read at RUN time
+        # by tests that never import them, so no graph can see the edge.
+        sel, why = rs.affected({"content/npcs.toml"}, tests, root, graph)
+        LEDGER.ok(sel is None and "run time" in why,
+                  "a non-Python change ESCALATES to the full suite instead of guessing",
+                  f"reason: {why}")
+        sel, why = rs.affected({"toolkit/leaf.py", "CLAUDE.md"}, tests, root, graph)
+        LEDGER.ok(sel is None,
+                  "and one such file among Python ones still forces the full run",
+                  "the escalation is not outvoted by the changes it can resolve")
+
+        LEDGER.ok(rs.affected(None, tests, root, graph)[0] is None,
+                  "a diff git could not produce is a FULL run, not an empty one",
+                  "None and set() take different paths on purpose")
+    finally:
+        import shutil
+        shutil.rmtree(root, ignore_errors=True)
+
+    bad = rs.changed_since("no-such-ref-anywhere-xyz", ROOT_FOR_GIT)
+    LEDGER.ok(bad is None,
+              "and changed_since returns None for a ref git rejects",
+              "which main() routes to the full suite")
+
+    # The exit rule, driven directly rather than by spawning 94 processes to learn it.
+    # It is a pure function precisely so this section keeps the property the module
+    # docstring claims: no vault, no socket, no client, and nothing launched.
+    LEDGER.ok(rs.exit_code([], None) == 0,
+              "green AND complete is the only 0")
+    LEDGER.ok(rs.exit_code([], "--only mapdata") == 3,
+              "green but partial is 3 -- including for --only, which always was a "
+              "partial run and exited 0 for as long as this runner existed")
+    LEDGER.ok(rs.exit_code([("t", "FAIL", "")], None) == 1,
+              "a failure is 1")
+    LEDGER.ok(rs.exit_code([("t", "FAIL", "")], "--since HEAD") == 1,
+              "and a failure OUTRANKS partiality -- red is red whether or not the run "
+              "was scoped", "3 there would hide a failure behind a caveat")
+
+
 def main():
     section_banner_not_last()
     section_suspect_is_not_zero()
     section_discovery()
     section_against_the_real_tree()
     section_refusals()
+    section_scheduling()
+    section_selection()
     return LEDGER.verdict()
 
 
