@@ -1289,7 +1289,9 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 **The condition it took, and this is the transferable part:** build **38833 against its own archive generation** (`vault/run/2026-08-13_64fae3b1369b`, `RURIK_DAT` at a post-update archive). The 38797 arm **failed at Code=007** — `content/maps.toml`'s corrected plain `0x1B97D` does not bind in the 38797/`dat_study` archives at all, only `0x8001B97D` does, and the client's lookup is an exact 32-bit compare with no retry; the server sent `0x0199`, loaded its navmesh, and the client hung up. **`toolkit/contentids.py` cleared that pair anyway** and that is a real hole: it resolves through `archive.file_id_table()`, which dual-registers a bit-31 id under both forms, so it compared row 7982 to row 7982 and never tested the form actually sent. It validates our reader's opinion, not the client's. **UNFIXED — it is §8's newest item.**
 
-**ATTRIBUTION IS NOW CLOSED TOO — rung S13, same day, static (`studies/minimap/FINDINGS.md` §6e). The cause is the ARCHIVE, and specifically the ATLAS TILE ROWS.** In every archive the fallback sessions played from, map 148's world-map tiles carry **bit 31** — replacement pending — so the **plain** id the client's own tile table holds does not bind, its exact 32-bit compare misses, the tile getter returns NULL and the fallback is tiled over the whole disc. Across the atlas: **470 of 492 tiles addressable in `run/38797` — 22 missing, 18 of them in world 1 — against 492 of 492 in `run/38833`.** Maps 143, 146 and 148 are **all world 1**, and they are the entire fallback corpus; Kamadan (world 4) was never served. **The arc's premise was a survey of one broken continent.**
+**ATTRIBUTION IS NOW CLOSED TOO — rung S13, same day (`studies/minimap/FINDINGS.md` §6e). The cause is the ARCHIVE'S ARMED STATE, and specifically the ATLAS TILE ROWS.**
+
+> **Corrected within the hour, and the correction is load-bearing.** S13 first reported this as a *generation* difference (38797-era broken, 38833 fixed) and claimed its refutation clause did not fire. **It fired.** Three build-**38797** sessions drew a full atlas crop, and the decisive pair is `20260813T103437` (atlas) against `20260813T105432` (fallback) — **twenty minutes apart from the same run directory, same exe, same archive path.** The archive was armed under the client between those two runs. So the variable is the **armed state of the client's own `Gw.dat`, which changes over that copy's life**, not the vintage of anything; and that pair exonerates the client build by natural experiment, more cleanly than the static code diff below. The mechanism is unchanged and better supported. *(Sweep limit: of 620 frame-carrying sessions only the 320 with a hold frame are scored — 188 others read χ ≈ +0.529 off `final.png`, which is the character screen, not a compass.)* In every archive the fallback sessions played from, map 148's world-map tiles carry **bit 31** — replacement pending — so the **plain** id the client's own tile table holds does not bind, its exact 32-bit compare misses, the tile getter returns NULL and the fallback is tiled over the whole disc. Across the atlas: **470 of 492 tiles addressable in `run/38797` — 22 missing, 18 of them in world 1 — against 492 of 492 in `run/38833`.** Maps 143, 146 and 148 are **all world 1**, and they are the entire fallback corpus; Kamadan (world 4) was never served. **The arc's premise was a survey of one broken continent.**
 
 The other three candidates were each tested and died: the **map file** (height field byte-identical, `MAP_PARAMS`'s rect bytes identical, differing only in a trailing v4 GUID), the **client build** (all 12 `CompassMap.cpp` asserts identical and uniformly displaced +0xA0; ctor, crop, latch and fallback tiler have identical instruction counts and **zero** mnemonic mismatches; the footprint table, `s_worldData` and the tile arrays byte-identical), and the **map-type byte** (map 148's two footprints are the same rect, and a forced `--explorable` run still drew the atlas). **S9's hypothesis 2 was right in substance and refuted for the wrong reason** — the load does fail, but upstream of the loader, in a lookup that never yields a row.
 
@@ -1761,10 +1763,21 @@ it on 2026-08-14, and `RUNBOOK.md` §0/§0b was walked on a real update for the 
   runs: 89/5 before, 93/1 after the code fixes, 94/0 once the new loopback client was
   caged (a UAC prompt, by design).
 
-**Next, and it now has a measured reason:** convert or gate `genericvalue.py`'s VAs, which
-would bring `avevents.py` back with it. Then the two live-memory readers in
-`itemprobe`/`agentprobe`, which on a new build do not compute a wrong number — they
-dereference a stale RVA inside a *running* client.
+- **`genericvalue.py` IS DERIVED, and the casualty is closed** (FINDINGS §8). Its 27
+  build-coupled addresses are **zero**: the dispatchers are the handlers the client's own
+  receive table gives for opcodes `0x009F`/`0x00A2` — so the chain bottoms out in
+  `RegisterMsgs`, anchored by byte shape — and every switch, default, id span, chain case
+  body and gate falls out of them, with an asserted count at each link. All three vaulted
+  builds now read **47 int / 14 float ids, `{40}` untouched, main switches disjoint**, at
+  three completely different address sets. `avevents.py` is back to 39 of 67 on all three.
+  **The repo-wide class-(a) census is 73 → 46**, its first large fall.
+
+**Next, cheapest first:** the two live-memory readers in `itemprobe`/`agentprobe` — three
+RVAs, and on a new build they do not compute a wrong number, they dereference a stale
+address inside a *running* client. Then `msgshape.py`'s 25, now the largest remaining block
+(they are already derived at run time; the 25 survive as the cross-check tuple, so this is a
+bookkeeping question rather than a liability), and `pinned.py`'s 8, which are build numbers
+and sizes and cost two per registered build by construction.
 
 **Both of the judgement calls this arc parked are now settled** (2026-08-14):
 

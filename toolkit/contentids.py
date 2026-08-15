@@ -20,17 +20,29 @@ That matters here because a run uses TWO archives and nothing checked they agree
     the client   opens the `Gw.dat` in its own run directory, for the geometry
 
 `content/maps.toml` records ONE id, the server sends it, and **the client
-resolves it against a file the server never looks at**. Today the pair agrees --
-`0x8001B97D` binds to a map row in `dat_study` and in `vault/run/` both -- so
-nothing is broken. But the two copies have already drifted apart in the field
-that decides this: 25 bit-31 ids against 29. And `vault/run-live/`, the copy a
-client actually played live from, has 9 and does not bind `0x8001B97D` at all.
+resolves it against a file the server never looks at**.
 
-The failure this refuses is therefore specific and it is one action away:
-refresh `vault/run/` from a live-updated archive and the server starts sending an
-id its client cannot open. That is LOUD on the client (`failed to load` ->
-`re-bloat` -> `Creating default map` -> an assert) and **silent in the server
-log**, which is the shape that costs a session to diagnose.
+**THIS FILE HAD THE VERY BUG IT WAS WRITTEN TO CATCH, and the paragraph here
+used to say "Today the pair agrees ... so nothing is broken."** It said that
+because it asked `archive.file_id_table()`, which registers a bit-31 id under
+BOTH spellings so our tools can find the row. The client does no such thing: its
+index stores the id verbatim (`0x0047C027`) and compares 32 bits exactly
+(`0x0047AA20`) with no retry. So on 2026-08-14 this pre-flight printed
+`10 of 10 map row(s) agree` for a pair in which the client could not bind
+`0x1B97D` at all -- the launch proceeded, the server sent `0x0199` and loaded
+its navmesh, and the client hung up immediately: **`Code=007`, silent on our
+side, unexplained on the client's.** Exactly the shape described below.
+Fixed by asking the RAW table for the client's half; see `check`.
+
+The two copies drift in the field that decides this -- 25 bit-31 ids in
+`dat_study` against 29 in `vault/run/2026-07-29...`, and **0** in the build-38833
+run directory, where every pending replacement has landed.
+
+The failure this refuses is therefore specific and it has already happened once:
+refresh one side and not the other and the server starts sending an id its client
+cannot open. That is LOUD on the client (`failed to load` -> `re-bloat` ->
+`Creating default map` -> an assert) and **silent in the server log**, which is
+the shape that costs a session to diagnose.
 
 THE CHECK THAT EARNS THE FILE IS NOT "DOES IT RESOLVE". Both archives resolving
 the id is necessary and weak -- they could resolve it to different FILES. Row
@@ -83,8 +95,12 @@ class Finding:
         return f"[{self.level.upper()}] map {self.map_id} {fid}: {self.text}"
 
 
-def index(dat):
+def index(dat, raw=False):
     """({file_id: mft_row}, {row: entry}) for one archive, or (None, None).
+
+    `raw=True` asks the question the CLIENT asks -- an exact 32-bit compare with
+    no masking. See `check` for why the two sides of this file use different
+    values, and `archive.file_id_table` for what the default does instead.
 
     None rather than an exception: a machine with no vault must still be able to
     drive a client, and `check` reports the absence as a skip.
@@ -94,7 +110,7 @@ def index(dat):
     except (OSError, ValueError):
         return None, None
     try:
-        return file_id_table(ar), {e.index: e for e in ar.entries}
+        return file_id_table(ar, raw=raw), {e.index: e for e in ar.entries}
     except (OSError, ValueError):
         return None, None
     finally:
@@ -107,6 +123,17 @@ def default_client_dat():
     Found by walking the vault rather than by naming a build stamp, so it does
     not go stale on the next client update. `run-live/` is deliberately NOT a
     fallback -- that directory is ArenaNet's DH and never a loopback target.
+
+    THIS MIRRORS `drive_client.newest_run_exe()` ON PURPOSE, and it used to
+    return `sorted(...)` FIRST instead. That is a real disagreement and not a
+    tidiness point: the harness launches the run directory whose `Gw.exe` is
+    NEWEST, so a default that answered "alphabetically first" audited an archive
+    no run was going to open. On 2026-08-14 those were different directories AND
+    different answers -- `2026-07-29…` sorts first and cannot bind `0x1B97D` at
+    all, while `2026-08-13…` is what the harness would launch and binds it fine.
+    A pre-flight that checks the wrong archive is worse than none, because it
+    reports on something nobody is about to run. Selection is by mtime of the
+    EXE, not of the archive, because the exe is what the harness picks by.
     """
     try:
         import vaultpath
@@ -115,11 +142,25 @@ def default_client_dat():
         return None
     if not os.path.isdir(root):
         return None
+    cands = []
     for name in sorted(os.listdir(root)):
-        cand = os.path.join(root, name, "Gw.dat")
-        if os.path.isfile(cand):
-            return cand
-    return None
+        d = os.path.join(root, name)
+        exe, dat = os.path.join(d, "Gw.exe"), os.path.join(d, "Gw.dat")
+        if os.path.isfile(dat) and os.path.isfile(exe):
+            cands.append((exe, dat))
+    if not cands:
+        # No exe to date it by: fall back to any archive, alphabetically, so a
+        # partially-assembled vault still gets an answer rather than a crash.
+        for name in sorted(os.listdir(root)):
+            cand = os.path.join(root, name, "Gw.dat")
+            if os.path.isfile(cand):
+                return cand
+        return None
+    # `-probe` dirs are experiment copies; prefer a plain build dir, exactly as
+    # `newest_run_exe()` does.
+    plain = [c for c in cands if not os.path.dirname(c[0]).endswith("-probe")]
+    pick = plain or cands
+    return max(pick, key=lambda c: os.path.getmtime(c[0]))[1]
 
 
 def content_file_ids(world=None):
@@ -144,7 +185,19 @@ def check(client_dat, server_dat=None, world=None):
     ids = content_file_ids(world)
     findings, skips = [], []
 
-    c_tab, c_rows = index(client_dat)
+    # THE TWO SIDES ASK DIFFERENT QUESTIONS AND THAT ASYMMETRY IS THE FIX.
+    # The CLIENT's lookup is an exact 32-bit compare with no masking, so its
+    # side must be read from the RAW table. Our SERVER resolves the same id
+    # through `archive.file_id_table()`, whose masked alias is what lets it open
+    # a renamed row -- measured, not assumed: on 2026-08-14 the gamesrv log read
+    # `navmesh 0x1B97D: 58 planes` against an archive that binds only
+    # `0x8001B97D`. So the default table IS the right model of the server, and
+    # the raw one IS the right model of the client. Using the masked table for
+    # both is the defect this file was written to catch and then had itself:
+    # it cleared 38797-client vs dat_study by comparing row 7982 to row 7982,
+    # and the run died at `Code=007` with the client hanging up right after
+    # `0x0199` (studies/minimap/FINDINGS.md 6d.3).
+    c_tab, c_rows = index(client_dat, raw=True)
     s_tab, s_rows = index(server_dat)
     if c_tab is None:
         skips.append(f"client archive unreadable or absent: {client_dat}")
@@ -159,12 +212,26 @@ def check(client_dat, server_dat=None, world=None):
         fid = ids[map_id]
         c_row = c_tab.get(fid)
         if c_row is None:
+            # Name the OTHER spelling if the archive holds it, because that is
+            # the difference between "this map is missing" and "this copy has
+            # not caught up yet", and only the second tells the reader what to
+            # do. `alt` is looked up in the raw table too: it is a real stored
+            # id there, not the alias the masked table would have invented.
+            alt = fid ^ 0x80000000
+            alt_row = c_tab.get(alt)
+            extra = (f" The archive DOES hold 0x{alt:X} at row {alt_row} -- the "
+                     f"same file under the other spelling, so this copy is "
+                     f"mid-replacement rather than missing the map."
+                     if alt_row is not None else
+                     " The other spelling is not present either, so this copy "
+                     "does not carry the map at all.")
             findings.append(Finding(
                 "fatal", map_id, fid,
                 f"the CLIENT's archive does not bind this id, so the map cannot "
-                f"load. Its copy is in a different state -- a bit-31 id means a "
-                f"replacement is pending, and the plain id binds only after "
-                f"DnArchive installs it. Archive: {client_dat}"))
+                f"load. The client's lookup is an EXACT 32-bit compare with no "
+                f"masking, so a near-miss is a miss.{extra} A bit-31 id means "
+                f"FcArchive renamed the row pending a replacement; the plain id "
+                f"binds only once DnArchive installs it. Archive: {client_dat}"))
             continue
         c_ent = c_rows.get(c_row)
         if c_ent is None or c_ent.flags != MAP_FLAGS:

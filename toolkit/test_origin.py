@@ -357,9 +357,13 @@ def section_build():
         LEDGER.ok(set(known) == {38797},
                   "and that build is 38797",
                   "MEASURED 2026-08-13, still true on 2026-08-14 after build "
-                  "38833 shipped: no capture has yet been taken on it. The "
-                  "corpus figures in studies/ are not pooling builds, which "
-                  "resolves PLAN.md §10's UNVERIFIED flag")
+                  "38833 shipped: no RESEARCH capture has been taken on it. "
+                  "Said precisely because it is not the same as 'no capture' -- "
+                  "the suite's own test_handshake.py has put 38833-stamped "
+                  "files in vault/captures/selftest/, which is why the walk "
+                  "above excludes that directory. The corpus figures in "
+                  "studies/ are not pooling builds, which resolves PLAN.md "
+                  "§10's UNVERIFIED flag")
 
     # Two additions from the branch that fixed this same red in parallel (both
     # sessions hit it on 2026-08-14; the selftest exclusion above is the scoping

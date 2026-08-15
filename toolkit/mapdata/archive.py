@@ -482,8 +482,28 @@ class Archive:
                          f"entry {entry.index}")
 
 
-def file_id_table(archive):
+def file_id_table(archive, raw=False):
     """Map every file id to the MFT row that holds it.
+
+    **`raw=True` DISABLES the dual registration described below, and any caller
+    asking "what will the CLIENT do?" must pass it.** The default answers for
+    *our* reader, which registers a bit-31 id under both spellings so a row is
+    easy to find; the client does no such thing (see THE CLIENT DOES NOT MASK
+    below). Getting that backwards has now cost this repo three separate
+    failures, so the two questions are now two different calls:
+
+        file_id_table(ar)             # what OUR tools can find      (convenience)
+        file_id_table(ar, raw=True)   # what the CLIENT can address  (the truth)
+
+    The three, recorded because the pattern is what matters and not the count:
+    `content/maps.toml` carried the renamed `0x8001B97D` as if it were the map's
+    name; `toolkit/contentids.py` cleared a client/server pair that then died at
+    `Code=007` with the client hanging up right after `0x0199`; and the minimap
+    arc's rung S9 concluded "all four of map 148's tiles are present in the
+    archive the client opened" -- they were present as ROWS and unaddressable by
+    the plain id, which is why every compass frame in the vault was the NULL
+    fallback and why it took four rungs to find (studies/minimap/FINDINGS.md 6e).
+    In all three the helper answered a true thing about the wrong question.
 
     MFT row 2 is a table of (file_id, row) u32 pairs -- 171,025 of them in this
     archive, 8 bytes each, which is exactly its declared size. Nothing had to be
@@ -548,8 +568,24 @@ def file_id_table(archive):
             out.setdefault(file_id, row)
     for file_id, row in high:
         out.setdefault(file_id, row)
-        out.setdefault(file_id & ~FILE_ID_HIGH_BIT, row)
+        # THE MASKED ALIAS IS THE CONVENIENCE, AND IT IS WHAT `raw` TURNS OFF.
+        # Registering it is what lets our tools find a renamed row by the id a
+        # server sends; it is also exactly what the client will NOT do.
+        if not raw:
+            out.setdefault(file_id & ~FILE_ID_HIGH_BIT, row)
     return out
+
+
+def binds_plainly(archive, file_id):
+    """Would the CLIENT find `file_id` in this archive? (row, or None.)
+
+    The client's index stores the id verbatim (0x0047C027) and its lookup is an
+    exact 32-bit compare (0x0047AA20) with no retry on the map path, so this is
+    a raw-table hit and nothing else. Use it for any launch-time question about
+    what the client can open; `file_id_table(ar)` answers about our own reader
+    and will say yes where the client says no.
+    """
+    return file_id_table(archive, raw=True).get(file_id)
 
 
 def ffna_chunks(data):

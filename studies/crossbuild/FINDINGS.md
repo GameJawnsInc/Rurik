@@ -976,6 +976,89 @@ updater-reachable archive remains an explicit owner choice.
 
 ---
 
+## 8. `genericvalue.py` derived — the arc's one casualty, closed
+
+§7.1 left this module as the update's single measured casualty: it REFUSED build
+38833 (`the switch site at 0x008129CC ... is not a movzx/jmp pair`) and took
+`avevents.py`'s property map down with it. **Fixed 2026-08-14. Its class-(a) count
+is 27 → 0, and the repo's whole census is 73 → 46 — the first time that number has
+gone down by a lot.**
+
+### 8.1 The blocker was written down, and it was right
+
+The module's own comment said why it could not be converted, and it was correct on
+both counts:
+
+> *"WHY `at` IS STILL PINNED, measured rather than assumed: this instruction shape
+> occurs **596 times** in `.text` on build 38797, so it is not an anchor. Making
+> these fully derived means anchoring the DISPATCHERS first — they are reached
+> from the message handler — which is a separate job and is not this one."*
+
+The update turned "a separate job" into the job. And the anchor it named was
+already in the tree: `msgshape.py` derives the client's message tables from
+`RegisterMsgs` **by byte shape**, so the receive table is reachable without a
+single stored address — and the two dispatchers are simply the handlers for
+`AGENT_PROPERTY_UPDATE_INT` (`0x009F`) and `_FLOAT` (`0x00A2`).
+
+### 8.2 The chain, and the count asserted at every link
+
+Each step below is a refusal, not a search. MEASURED on all three vaulted builds.
+
+| Step | What is derived | The assertion |
+|---|---|---|
+| 1 | the RECV table entry for `0x009F` / `0x00A2` | the handler exists, or refuse |
+| 2 | handler → dispatcher | the forwarder makes **exactly 1** call |
+| 3 | int dispatcher body | **exactly 2** `movzx`/`jmp` sites: int-pre, then int-main |
+| 4 | float dispatcher body | **exactly 1**: float-main |
+| 5 | functions each dispatcher calls | **exactly 2** hold a property switch: store, then AgentView |
+| 6 | each switch's default | the jump target the most ids share |
+| 7 | each switch's id span | read from the `lea`/`cmp`/`ja` guard |
+| 8 | each chain's ids and bodies | parsed from its comparisons, after its byte string verifies |
+| 9 | each main-switch gate | **exactly 1** `test byte [ctx+0x53C], 2` per dispatcher |
+
+**Every one of those addresses reproduces build 38797's hand-measured value** —
+all seven switches, both gates, all six chain case bodies, all five spans.
+`test_genericvalue.py` §1 is that claim, and the witness now lives in the test
+rather than the module, which is what took the count to zero: under §6's taxonomy
+a hand-measured address is class (a) only for as long as the **tool** computes
+with it.
+
+### 8.3 The result, and the part a lookup cannot fake
+
+| Build | int-main site | float-main site | int / float ids handled | untouched |
+|---|---|---|---|---|
+| 38519 | `0x0080C4DC` | `0x0080CBEB` | 47 / 14 | `{40}` |
+| 38797 | `0x008129CC` | `0x008130DB` | 47 / 14 | `{40}` |
+| 38833 | `0x0081286C` | `0x00812F7B` | 47 / 14 | `{40}` |
+
+**Three builds, three disjoint address sets, one answer.** Main switches disjoint
+on all three; `avevents.py` back to 39 of 67 ids queueing an event on all three.
+Agreement on the semantics *with* disagreement on the addresses is the signature
+of a derivation, and it is the check `test_genericvalue.py` §3 now makes — a
+section that previously asserted the opposite, that the older build must REFUSE,
+because refusing was the best the pinned module could do.
+
+### 8.4 Two things worth carrying
+
+**The old §3 was not wrong, it was as good as pinning allows.** "This build moved
+something, so refuse" is the correct behaviour for a tool that cannot look; it is
+just not the same as reading the client. The arc has now produced both shapes in
+one module and the difference is visible: round one turned a silent wrong answer
+into a loud refusal, round two turned the refusal into an answer. **Only the first
+was strictly necessary; the second is what made the tool survive an update.**
+
+**And one check I wrote had to be thrown away, for the reason `PLAN.md` §6 warns
+about.** The first draft of §1 grepped `genericvalue.py` for the old literals and
+required them absent. It went red — on the module's own docstring, which names the
+seven switches and their 38797 addresses. Those are class (b), citations,
+*provenance*, and §6 is explicit: **"Add build ids; do not remove addresses."** The
+check now asks `buildpins` — the repo's own AST census — for live constants, which
+is the distinction that actually matters, and asserts the citations are still there.
+That is the same trap that cost a previous session 46 rewritten citations and 46
+reverts, and it caught me inside an hour.
+
+---
+
 ## 5. What this changes elsewhere
 
 - **`studies/datwrite/FINDINGS.md`** said *"the durability experiment is still unrun"*.

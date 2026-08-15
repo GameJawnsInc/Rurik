@@ -46,11 +46,18 @@ import checks                                                 # noqa: E402
 import contentids                                             # noqa: E402
 import vaultpath                                              # noqa: E402
 
-# MEASURED 2026-08-13: a healthy run against the vault executes 15. Set from
-# that run, not from counting `check(` calls in the source -- which is how the
-# neighbouring test_maprows.py got a floor one too high and went red naming the
-# shortfall on its first green run.
-FLOOR = 15
+# MEASURED 2026-08-14: a healthy run against THIS vault executes 23 (it was 15
+# before the raw-table fix added sections 1b and 2b). The floor is deliberately
+# NOT 23, per checks.py's own rule -- "pin the floor to its mandatory core and
+# let the optional sections declare skips."
+#
+# Sections 1b, 2 and 2b all require the vault to hold an archive that is
+# MID-REPLACEMENT on a content id. That is true today and it is a condition we
+# actively want to go away: once every copy has caught up they will skip, and a
+# floor of 23 would then turn a HEALED vault into a red suite. The mandatory
+# core once a vault exists is section 0 (3) + section 1 (4) + section 3 (2) +
+# section 4 (3) = 12, and the skips are printed either way.
+FLOOR = 12
 
 LEDGER = checks.Ledger("content file ids vs the archives a run uses",
                        floor=FLOOR)
@@ -70,6 +77,22 @@ check = checks.adopt(LEDGER)
 # archive state" cannot be satisfied by naming the wrong archive's state.
 PRESEARING_ROWS = (146, 148)
 PRESEARING_FILE_ID = 0x1B97D
+
+
+def _run_archives():
+    """Every `vault/run/<stamp>/Gw.dat`, alphabetically. [] if there is no vault."""
+    try:
+        root = os.path.join(vaultpath.vault_root(), "run")
+    except (SystemExit, OSError):
+        return []
+    if not os.path.isdir(root):
+        return []
+    out = []
+    for name in sorted(os.listdir(root)):
+        cand = os.path.join(root, name, "Gw.dat")
+        if os.path.isfile(cand):
+            out.append(cand)
+    return out
 
 
 def main():
@@ -97,15 +120,22 @@ def main():
                     "no vault/run/<stamp>/Gw.dat to check against")
         return LEDGER.verdict()
 
-    # -- 1. the real loopback pair must pass CLEAN ---------------------------
-    print("\n1. the pair a loopback run actually uses")
-    findings, skips = contentids.check(client)
-    for label, why in [(s, s) for s in skips]:
+    # -- 1. a COHERENT pair must pass CLEAN ----------------------------------
+    #
+    # The server archive is the client's OWN, which makes the pair the same
+    # generation by construction. That is not a convenience: it is the
+    # configuration the 2026-08-14 run that first drew the compass actually used
+    # (`RURIK_DAT` pointed at the client's archive), and it is the only pairing
+    # in this vault that is coherent today. Section 2b asserts that the DEFAULT
+    # server pairing is not, which is a fact about the vault rather than a bug.
+    print("\n1. a same-generation pair -- the guard must be SILENT")
+    findings, skips = contentids.check(client, client)
+    for why in skips:
         LEDGER.skip("an archive", why)
     check(bool(findings), "the check produced findings at all",
           f"{len(findings)} row(s) -- zero would mean it measured nothing")
     fatal = [f for f in findings if f.level == "fatal"]
-    check(not fatal, "no FATAL against the real loopback pair",
+    check(not fatal, "no FATAL when both sides are the same generation",
           "; ".join(repr(f) for f in fatal) if fatal else "clean")
     check(all(f.level == "ok" for f in findings),
           "every content row agrees across both archives",
@@ -113,28 +143,90 @@ def main():
     # `preflight` must not raise on the good pair -- the guard has to be silent
     # when nothing is wrong, or it will be removed.
     try:
-        contentids.preflight(client, say=lambda _m: None)
+        contentids.preflight(client, client, say=lambda _m: None)
         raised = False
     except SystemExit:
         raised = True
     check(not raised, "preflight() does NOT refuse the good pair")
 
+    # -- 1b. the CLIENT's half must be the RAW table -------------------------
+    #
+    # THE ONE-LINE INVARIANT THAT WOULD HAVE CAUGHT ALL THREE FAILURES. Our
+    # reader registers a bit-31 id under both spellings; the client compares 32
+    # bits exactly. Any archive mid-replacement therefore answers DIFFERENTLY to
+    # the two tables, and a launch-time question must use the raw one. Asserted
+    # on a real archive rather than a fixture, and skipped loudly if the vault
+    # holds no mid-replacement copy -- because then the check is vacuous.
+    print("\n1b. the raw table is what models the client")
+    from archive import Archive, file_id_table                  # noqa: PLC0415
+    armed_dat = armed_id = None
+    for cand in _run_archives():
+        try:
+            ar = Archive(cand)
+        except (OSError, ValueError):
+            continue
+        try:
+            rawt = file_id_table(ar, raw=True)
+            dual = file_id_table(ar)
+            for mid, f in sorted(ids.items()):
+                if f in dual and f not in rawt:
+                    armed_dat, armed_id = cand, f
+                    break
+        finally:
+            ar.close()
+        if armed_dat:
+            break
+    if armed_dat is None:
+        LEDGER.skip("the raw-vs-dual invariant",
+                    "no archive under vault/run/ is mid-replacement on a content "
+                    "id, so there is nothing for the two tables to disagree about")
+    else:
+        with Archive(armed_dat) as ar:
+            rawt, dual = file_id_table(ar, raw=True), file_id_table(ar)
+        check(armed_id in dual and armed_id not in rawt,
+              f"0x{armed_id:X}: the dual table binds it, the RAW table does not",
+              f"{os.path.basename(os.path.dirname(armed_dat))} -- this is exactly "
+              f"the gap that let a doomed pair through")
+        check((armed_id ^ 0x80000000) in rawt,
+              "and the archive really does hold the other spelling",
+              "otherwise the id is simply absent and proves nothing about masking")
+        # And the check itself must now refuse that archive.
+        af = [f for f in contentids.check(armed_dat, armed_dat)[0]
+              if f.level == "fatal"]
+        check(bool(af),
+              "contentids goes FATAL on it -- REGRESSION GUARD",
+              "green here means the client half is reading the masked table "
+              "again, which is the 2026-08-14 defect returning")
+
     # -- 2. the positive control, on a real archive --------------------------
+    #
+    # THE CONTROL MOVED, AND THE OLD ONE IS NOW USELESS. It was `vault/run-live/`,
+    # chosen because that copy genuinely did not bind `0x8001B97D`. As of
+    # 2026-08-14 both run-live archives bind every content id PLAINLY -- their
+    # pending replacements landed -- so they refuse nothing and would have made
+    # this section vacuously green. The archives that are mid-replacement now are
+    # the 38797-era loopback ones, and they are a better control anyway: this is
+    # the exact pairing that printed "10 of 10 agree" and then died at Code=007.
+    # Found by PROPERTY (does not bind a content id raw) rather than by name, so
+    # it does not go stale the next time the vault moves.
     print("\n2. POSITIVE CONTROL: an archive that really does not bind the id")
     live = None
-    root = os.path.join(vaultpath.vault_root(), "run-live")
-    if os.path.isdir(root):
-        for name in sorted(os.listdir(root)):
-            cand = os.path.join(root, name, "Gw.dat")
-            if os.path.isfile(cand):
-                live = cand
-                break
+    for cand in _run_archives():
+        try:
+            with contentids.Archive(cand) as ar:
+                rawt = contentids.file_id_table(ar, raw=True)
+        except (OSError, ValueError):
+            continue
+        if any(f not in rawt for f in ids.values()):
+            live = cand
+            break
     if live is None:
         LEDGER.skip("the positive control",
-                    "no vault/run-live/<stamp>/Gw.dat -- without it this file "
-                    "cannot show the guard fires on anything")
+                    "no archive under vault/run/ fails to bind a content id, so "
+                    "this file cannot show the guard fires on anything. That is "
+                    "a healthy vault, not a healthy test")
     else:
-        lf, _ls = contentids.check(live)
+        lf, _ls = contentids.check(live, live)
         bad = sorted(f.map_id for f in lf if f.level == "fatal")
         check(tuple(bad) == PRESEARING_ROWS,
               "FATAL on exactly the two Pre-Searing rows",
@@ -142,8 +234,15 @@ def main():
         check(sum(1 for f in lf if f.level == "ok") == len(lf) - len(bad),
               "every other row still passes",
               f"{sum(1 for f in lf if f.level == 'ok')} of {len(lf)}")
+        check(any("EXACT 32-bit" in f.text for f in lf if f.level == "fatal"),
+              "and it says WHY -- the client's compare is exact",
+              "a refusal that does not name the mechanism gets worked around")
+        check(any(f"0x{PRESEARING_FILE_ID | 0x80000000:X}" in f.text
+                  for f in lf if f.level == "fatal"),
+              "and it names the OTHER spelling the archive does hold",
+              "that is the difference between 'map missing' and 'copy behind'")
         try:
-            contentids.preflight(live, say=lambda _m: None)
+            contentids.preflight(live, live, say=lambda _m: None)
             refused = False
         except SystemExit as exc:
             refused = True
@@ -165,9 +264,32 @@ def main():
                   f"a refusal that does not say what to do gets worked around. "
                   f"Wanted 'archive STATE' and 0x{PRESEARING_FILE_ID:X} in: {msg[:200]}")
 
+    # -- 2b. the vault's DEFAULT pairing, stated rather than assumed ---------
+    #
+    # Not a bug in this module and not a failure: `DEFAULT_DAT` is a pre-update
+    # study archive while the client the harness would launch is post-update, so
+    # the two bind the same content id to genuinely different FILES. The guard
+    # catching that is the guard working -- and it is why the 2026-08-14 compass
+    # run had to pass `RURIK_DAT`. Asserted so that the day it changes, somebody
+    # is told rather than surprised mid-run.
+    print("\n2b. the DEFAULT server pairing, for the record")
+    dflt, _ds = contentids.check(client)
+    dbad = sorted(f.map_id for f in dflt if f.level == "fatal")
+    if dbad:
+        check(tuple(dbad) == PRESEARING_ROWS,
+              "default server pairing is FATAL on exactly the Pre-Searing rows",
+              f"{dbad} -- point RURIK_DAT at a same-generation archive to run")
+        check(any("DIFFERENT FILES" in f.text for f in dflt if f.level == "fatal"),
+              "and it is a DIFFERENT-FILE disagreement, not an unbindable id",
+              "the client binds it; the two copies just disagree about what it is")
+    else:
+        LEDGER.skip("the default-pairing assertion",
+                    "DEFAULT_DAT and the launchable client are the same "
+                    "generation now -- nothing to state")
+
     # -- 3. identity is size+crc, not 'it resolved' --------------------------
     print("\n3. two archives binding one id to DIFFERENT files is FATAL")
-    tab, rows = contentids.index(client)
+    tab, rows = contentids.index(client, raw=True)
     if tab is None:
         LEDGER.skip("the identity rule", "client archive unreadable")
     else:
@@ -185,9 +307,18 @@ def main():
         import contentids as ci
         real_index = ci.index
 
-        def fake_index(dat):
-            t, r = real_index(dat)
-            if t is None or dat != client:
+        # `raw` must be forwarded: `check()` asks the client's half with
+        # raw=True, and a stub that swallowed the kwarg would either TypeError
+        # or silently hand back the masked table -- reintroducing the very bug
+        # this file now guards, from inside the test.
+        def fake_index(dat, raw=False):
+            t, r = real_index(dat, raw=raw)
+            # BEND THE CLIENT'S HALF ONLY, and `raw` is what identifies it.
+            # The pair here is same-generation, so both sides open the SAME
+            # path -- a stub keyed on `dat` alone bends both, they agree
+            # perfectly, and the section goes green while measuring nothing.
+            # It did exactly that on the first run of this rewrite.
+            if t is None or dat != client or not raw:
                 return t, r
             r = dict(r)
             r[row] = Bent(r[row])
@@ -195,7 +326,8 @@ def main():
 
         ci.index = fake_index
         try:
-            mf = [f for f in ci.check(client)[0] if f.level == "fatal"]
+            # Same-generation pair, so the ONLY disagreement is the bent crc.
+            mf = [f for f in ci.check(client, client)[0] if f.level == "fatal"]
         finally:
             ci.index = real_index
         check(sorted(f.map_id for f in mf) == list(PRESEARING_ROWS),

@@ -48,7 +48,15 @@ import checks  # noqa: E402
 # bScan=0 defect section 9 exists for, for three days, in NO test at all --
 # the fix had landed on hold_key and press_vk and missed the third copy of
 # the same send. MEASURED from a green run, not derived.
-LEDGER = checks.Ledger("harness", floor=99)
+# 2026-08-14: 99 -> 108, for the client-selection section. A real green run
+# MEASURES 110; the floor sits two below it for the two checks that can
+# legitimately skip -- the tape chain when this vault has no 20260807T143055
+# capture, and the real-run-directory check when there is no vault/run. It is
+# NOT set to 110 for the reason the camera floor already taught this file: a
+# floor above what a healthy run produces reddens the run and says nothing.
+# Note this test cannot run vault-LESS at all -- pinned.find() refuses first --
+# so unlike test_origin.py there is no empty-vault figure to measure against.
+LEDGER = checks.Ledger("harness", floor=108)
 check = checks.adopt_named(LEDGER)
 
 
@@ -377,6 +385,118 @@ def test_stack():
             stack.stop()
 
 
+def test_select_run_exe():
+    """Which client the harness launches -- by BUILD and NAME, never by mtime.
+
+    THE REGRESSION THIS PINS, 2026-08-14. `newest_run_exe` was
+    `max(glob(vault/run/*/Gw.exe), key=os.path.getmtime)`. Build 38833 was
+    snapshotted and assembled that afternoon, became "newest", and the harness
+    silently changed which client it launches -- to a run directory whose
+    Gw.dat never had the maps 146/148 replacement installed. Nothing failed at
+    the exe; it would have failed later and elsewhere.
+
+    Filtering by build alone was NOT enough and the second half is easy to
+    miss: with 38833 excluded the newest 38797 copy is `reskin-roster`, an
+    experiment copy, still beating the canonical directory. Both halves are
+    checked here.
+
+    `buildid.read` is stubbed because these cases need a client of a stated
+    build, not a real PE. What it returns is the only thing the selector is
+    entitled to know, and the real instrument is exercised against the real
+    vault at the end of this section.
+    """
+    print("\nselecting the client to launch")
+    real_read, real_vault_path = dc.buildid.read, dc.vault_path
+    stamp = dc.pinned.PINNED.stamp
+    try:
+        def build_vault(dirs):
+            """dirs: {name: build or None-for-unreadable}, made newest-last."""
+            tmp = tempfile.mkdtemp()
+            dc.vault_path = lambda *p: os.path.join(tmp, *p)
+            says = {}
+            for i, (name, number) in enumerate(dirs.items()):
+                d = os.path.join(tmp, "run", name)
+                os.makedirs(d)
+                exe = os.path.join(d, "Gw.exe")
+                open(exe, "wb").close()
+                os.utime(exe, (1_700_000_000 + i * 60, 1_700_000_000 + i * 60))
+                says[os.path.normcase(exe)] = number
+
+            def fake_read(path):
+                n = says.get(os.path.normcase(path))
+                if n is None:
+                    raise dc.buildid.NoBuildId(f"{path}: stubbed unreadable")
+                return n, 0x004729E0, 16
+            dc.buildid.read = fake_read
+            return tmp
+
+        # The exact shape on disk on 2026-08-14, canonical dir OLDEST.
+        build_vault({stamp: dc.pinned.BUILD,
+                     f"{stamp}-probe": dc.pinned.BUILD,
+                     "reskin-roster": dc.pinned.BUILD,
+                     "2026-08-13_64fae3b1369b": 38833})
+        got, why = dc.select_run_exe()
+        check("a newer build does NOT become the default client",
+              got is not None and "2026-08-13" not in got, why)
+        check("and neither does a newer VARIANT copy of the right build",
+              got is not None and os.path.basename(os.path.dirname(got)) == stamp,
+              why)
+        check("the reason names the build and says it was not chosen by mtime",
+              str(dc.pinned.BUILD) in why and "mtime" in why, why)
+
+        # No canonical directory: a variant is usable but must be announced,
+        # because an experiment copy carries whatever that experiment changed.
+        build_vault({"reskin-roster": dc.pinned.BUILD,
+                     "2026-08-13_64fae3b1369b": 38833})
+        got, why = dc.select_run_exe()
+        check("with no canonical directory a variant is used but SAID to be one",
+              got is not None and "VARIANT" in why, why)
+
+        # Only the wrong build present -- refuse with a diagnosis, not None.
+        build_vault({"2026-08-13_64fae3b1369b": 38833})
+        got, why = dc.select_run_exe()
+        check("a vault holding only another build yields no client",
+              got is None, why)
+        check("and the refusal names what it found and what it wanted",
+              "38833" in why and str(dc.pinned.BUILD) in why, why)
+
+        # An unreadable candidate is skipped and REPORTED. "We could not look"
+        # must never quietly narrow the field the way "wrong build" does.
+        build_vault({"broken": None, stamp: dc.pinned.BUILD})
+        got, why = dc.select_run_exe()
+        check("an unreadable candidate does not stop the selection",
+              got is not None and os.path.basename(os.path.dirname(got)) == stamp)
+        check("and it is named rather than silently dropped",
+              "broken" in why, why)
+
+        build_vault({})
+        got, why = dc.select_run_exe()
+        check("an empty run root still points at make_run_dir.py",
+              got is None and "make_run_dir" in why, why)
+
+        # POSITIVE CONTROL. Every check above would also pass against a
+        # function that refused everything or returned a constant, so ask for a
+        # build that IS there and confirm it comes back.
+        build_vault({"2026-08-13_64fae3b1369b": 38833})
+        got, why = dc.select_run_exe(38833)
+        check("while a build that IS present is returned when asked for",
+              got is not None and "2026-08-13" in got, why)
+    finally:
+        dc.buildid.read, dc.vault_path = real_read, real_vault_path
+
+    # --- and the real vault, with the real instrument -------------------------
+    run_root = dc.vault_path("run")
+    if not os.path.isdir(run_root):
+        LEDGER.skip("the real run directories", "no vault/run in this vault")
+    else:
+        got, why = dc.select_run_exe()
+        if got is None:
+            LEDGER.skip("the real run directories", why.splitlines()[0])
+        else:
+            check("the client this vault would launch really is the pinned build",
+                  dc.buildid.read(got)[0] == dc.pinned.BUILD, why)
+
+
 if __name__ == "__main__":
     test_assert_safe()
     test_capture_tail()
@@ -385,6 +505,7 @@ if __name__ == "__main__":
     test_enemy_default()
     test_crash_capture_always()
     test_stack()
+    test_select_run_exe()
 
     # --- --game-args must survive a Windows path ------------------------------
     # shlex.split defaults to posix=True, where backslash is an ESCAPE, so it
