@@ -355,12 +355,30 @@ Also read `[+0x60..0x6c]` (the raw map rect) in the same pass — it is four dwo
 
 ## Tier 3 — the expensive half, only if the owner wants the picture to be ours
 
-### A1. Author one atlas tile
+### A1. Author one atlas tile — **DONE 2026-08-15. FINDINGS §6g.**
+
+**The compass picture is OURS.** A 512×512 DXT1 ATEX we authored (10 levels, "closes exactly", round-tripped at 0 of 5,476 sampled pixels off by >60) was installed with `datmove` into a throwaway archive — 174,868 B against ArenaNet's 54,192 stored, exactly the misfit this rung predicted, so `--replace` was never an option. It reads back byte-identical, the archive still passes all three checksum rules, and on screen it is **38.0 % of the disc** (9,246 of 24,313 px in colours no Pre-Searing art carries).
+
+**Not established:** the tile is a PATTERN, not our terrain — generating it from the authored heightfield is a further step. And the collateral this rung warned about is unmeasured: tile (1,0) is shared, so every other Pre-Searing map in that copy now carries it and no run has looked.
+
+---
+
+### A1-old. The rung as written
 **Prediction:** replacing the 512×512 ATEX at the tile covering map 143's footprint changes the compass, mission map **and** world map together (all read the same table, FINDINGS §3.2). If only one changes, §3.2 is wrong.
 **Procedure:** `png.py` → `dxt1.encode` → `atex` container → `datwrite --replace` if it fits (it will not — ours writes uncompressed, median tile is 110,608 B stored), else `datmove`, into a **throwaway run-directory archive only**. Follow `iconset.py`'s scars: `file_id_table` returns one-based row numbers while `Archive.entries` is positional, so `entries[row]` reads the row before the one named; check the whole plan before the Writer opens. Prefer `datwrite --restore` from a donor over `--revert` (a journal expires the moment a client runs, `studies/crossbuild/FINDINGS.md` §4c; no journal exists for the icon rows left armed in `vault/run/reskin-roster/`).
 **Cost:** 1-2 days + runs. **Collateral to state up front:** a tile spans up to four of map 143's footprint chunks, all shared with other Pre-Searing maps — arming them changes every neighbour's compass in that archive copy.
 
-### A2. Repoint the area row's footprint (the RESKIN move)
+### A2. Repoint the area row's footprint — **DONE 2026-08-15, and its own prediction is half REFUTED. FINDINGS §6g.**
+
+**We choose which part of the atlas a map crops.** `toolkit/clientpatch/footprint.py` moved map 143's two rects from (960,448,1280,992) to (1100,448,1420,992) — **6 bytes**, located structurally, written out of place, containment-checked and read back by re-locating the table in the patched file. Same archive, same authored tile, **only the origin moved**: authored colour falls from 38.0 % to **0.1 % with zero magenta** and retail terrain fills the disc.
+
+**REFUTED half:** this rung predicted that making the rect's SIZE equal our authored dims "makes the compass crop that size". The size stayed 320×544 and the crop moved anyway — the window is clamped by `[CompassMap+0x50..0x5c]`, latched from the LOADED MAP FILE's dims, not from this rect. **The ORIGIN is the lever; the SIZE is not.** The module docstring carries this so the flag's existence cannot be read as the prediction having been confirmed.
+
+**H3b is OBSERVED at last**, incidentally, in both frames: the authored region is a bounded square with fallback tiled around it. It went unseen this long because in the 38797 archive **all four** of map 143's footprint tiles are unaddressable — the customarea "brown disc" was the archive generation, not the authored map.
+
+---
+
+### A2-old. The rung as written
 **Prediction:** editing `s_missionClientData[143]`'s `+0x48..+0x54` (and `+0x58..+0x64`) to a rect whose size equals our authored dims makes the compass crop that size (32/64/96 cells instead of 320×544), and the player marker projection becomes self-consistent for the first time.
 **Procedure:** extend `toolkit/clientpatch/reskin.py`. The table is `.rdata`; the same three constraints as its four existing tables apply — locate structurally (never by address), require anchor AND shape to agree, write out of place, assert containment (every changed byte inside the intended dword) plus a read-back (`test_reskin.py`'s first version wrongly assumed "4 bytes changed" when only two moved).
 **Cost:** 1-2 days + runs. **A1 makes the compass the right *picture*; A2 makes it the right *shape*. Neither alone is enough** — which is the cost the owner should see before Tier 3 starts: making an authored map's compass right means both an archive write and a client patch.

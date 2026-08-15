@@ -207,8 +207,15 @@ def main():
     got = [repr(f) for f in MS.fields(hits[0][4])]
     check(got == ["agent_id", "u16", "u32"],
           "the client reads agent_id, u16, u32 -- what we send", f"{got}")
-    check(str(0x00E3) not in over["channels"].get("GAME_SMSG", {}),
-          "and needs no override entry")
+    # Refined 2026-08-14: this said "needs no override entry" and went red the
+    # day 0x00E3 gained a NAME row (the naming registry lives in overrides).
+    # The hazard this check retracts was a FIELD disagreement, so what must
+    # stay true is that no field correction exists -- a name-only row is the
+    # registry doing its job, not the hazard returning.
+    row = over["channels"].get("GAME_SMSG", {}).get(str(0x00E3), {})
+    check("fields" not in row,
+          "and needs no FIELD correction (name-only override rows are fine)",
+          f"override row keys: {sorted(row) or 'none'}")
 
     return LEDGER.verdict()
 

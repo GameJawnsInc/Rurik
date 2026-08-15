@@ -228,6 +228,12 @@ def main():
     global _log_path
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--bind", default="127.0.0.1",
+                    help="Loopback address to listen on. 127/8 ONLY -- this "
+                         "module promises loopback and REFUSES anything else. "
+                         "Exists so a second session can run beside one that "
+                         "already holds 127.0.0.1:6601; every probe result so "
+                         "far was measured on the default and it stays that.")
     ap.add_argument("--port", type=int, default=6601)
     ap.add_argument("--vault", default=VAULT_DEFAULT)
     a = ap.parse_args()
@@ -253,14 +259,19 @@ def main():
             HTTPServer.server_bind(self)
 
     try:
-        srv = ExclusiveHTTPServer(("127.0.0.1", a.port), Handler)
+        if not a.bind.startswith("127."):
+            raise SystemExit(
+                f"--bind {a.bind} is not in 127/8. This server answers a "
+                f"client's account and session requests with no auth of any "
+                f"kind, so it binds loopback or it does not bind.")
+        srv = ExclusiveHTTPServer((a.bind, a.port), Handler)
     except OSError as ex:
         raise SystemExit(
             f"Could not bind 127.0.0.1:{a.port} — {ex.strerror}.\n"
             f"Another webgate is almost certainly still running. Find it with\n"
             f"  netstat -ano | findstr :{a.port}\n"
             f"and stop it before starting this one.")
-    print(f"Rurik webgate on http://127.0.0.1:{a.port}  (loopback only)")
+    print(f"Rurik webgate on http://{a.bind}:{a.port}  (loopback only)")
     print(f"logging to {_log_path}")
     print("launch the client with:  -portal 127.0.0.1 -authsrv 127.0.0.1\n")
     try:
