@@ -1283,11 +1283,39 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
-### The minimap — Tier 1 complete, and the compass on our server is drawing the client's FALLBACK (2026-08-14)
+### The minimap — Tier 1 complete, and THE COMPASS DRAWS THE ATLAS: C1 ran and the fallback premise expired (2026-08-14)
+
+**READ THIS FIRST, because it retires the headline this section carried all day.** *It read "the compass on our server is drawing the client's FALLBACK", and every paragraph below was written under that premise.* **Rung C1 — the arc's first client run — put the compass on screen drawing a recognisable crop of Ascalon City on retail map 148**, our server, our DH, caged, loopback, synthetic credential. The metric is §6's own chromatic ratio with the control measured first: the previously-classified fallback frames re-read at **χ +1.154 … +1.160** by the same sampler, and this run's five frames at **+0.250 … +0.279** — against rung S5's *offline* prediction of **+0.286** for map 148's crop, computed before any frame existed and never fitted to one. **`studies/minimap/FINDINGS.md` §6d** carries it.
+
+**The condition it took, and this is the transferable part:** build **38833 against its own archive generation** (`vault/run/2026-08-13_64fae3b1369b`, `RURIK_DAT` at a post-update archive). The 38797 arm **failed at Code=007** — `content/maps.toml`'s corrected plain `0x1B97D` does not bind in the 38797/`dat_study` archives at all, only `0x8001B97D` does, and the client's lookup is an exact 32-bit compare with no retry; the server sent `0x0199`, loaded its navmesh, and the client hung up. **`toolkit/contentids.py` cleared that pair anyway** and that is a real hole: it resolves through `archive.file_id_table()`, which dual-registers a bit-31 id under both forms, so it compared row 7982 to row 7982 and never tested the form actually sent. It validates our reader's opinion, not the client's. **UNFIXED — it is §8's newest item.**
+
+**What is open is ATTRIBUTION, and it is honestly open.** Client build, archive generation (row 7982, 1,300,036 B, crc `0xA0AE500A` → row 177262, 1,300,044 B, crc `0x33F1A289`) and the id form all moved together; C1 separates none. New rung **S13**, first leg static and free. **Consequences: C2 and C3 are UNGATED** (they were held behind a vacuous-arm problem that no longer exists), **risk 7 is RETIRED**, and Tier 3's premise survives. Two caveats the run carries: the server ran **without a navmesh** (`Permission denied` — the client holds its own archive open, so give the server a separate copy), and `--shots` is foreground-gated, skipping 4 of 9.
+
+**Everything below this line was written under the fallback premise. The static analysis stands; the framing does not.**
+
+### `contentids.py` clears a pair the client will refuse — NEW 2026-08-14, found by walking into it
+
+**The guard exists to catch exactly one failure and is blind to it.** `toolkit/contentids.py` answers "do server and client agree what `content/maps.toml`'s ids NAME" by resolving both through `archive.file_id_table()` — which **deliberately registers a bit-31 id under both its raw and its masked form**, "plain ids first so that a real id can never be shadowed". That dual registration is right for finding a row and `archive.py`'s own docstring says it is **not a model of the client**: *"THE CLIENT DOES NOT MASK"*, an exact 32-bit compare at `0x0047AA20` with no retry on the map path.
+
+**Measured 2026-08-14**, reading MFT row 2 directly instead of through the helper:
+
+| archive | `0x1B97D` raw | `0x8001B97D` raw | bit-31 ids |
+|---|---|---|---|
+| `run/2026-07-29_221c13772c7a` (38797) | **absent** | row 7982 | 29 |
+| `dat_study` | **absent** | row 7982 | 25 |
+| `run/2026-08-13_64fae3b1369b` (38833) | **row 177262** | absent | **0** |
+
+`contentids` reported `10 of 10 map row(s) agree` for the 38797 pair, comparing row 7982 to row 7982. The run then died at **Code=007** with the client hanging up immediately after `0x0199`. **The guard passed, the launch proceeded, and the failure was silent on our side and unexplained on the client's** — which is the precise shape the guard was written to prevent.
+
+**Fix:** do not change `file_id_table()` — its convenience is load-bearing elsewhere. Have `contentids` resolve on the **raw** table and fail when the id `content/maps.toml` will actually put on the wire is absent from the client's archive *in the form it is sent*. The refusal must name both forms and both rows. `test_contentids.py` needs an arm that goes red on today's code: a fixture pair binding only the renamed form, asked for the plain one.
+
+### The minimap — the record under the fallback premise (superseded above)
 
 **Read [`studies/minimap/FINDINGS.md`](studies/minimap/FINDINGS.md), then its
 [`PLAN.md`](studies/minimap/PLAN.md) ladder.** Static recon over build 38797 plus the
-full live corpus; **no client was launched by any of the eleven agents on this arc**.
+full live corpus; **no client was launched for any of the STATIC rungs S1–S12** (that
+clause read "by any of the eleven agents on this arc" and stopped being true when C1 ran
+on 2026-08-14 — see the headline above).
 The pathing-map hypothesis is REFUTED: the compass, mission map and world map are three
 crops of ONE per-continent atlas of ATEX tiles compiled into the client — **492 tiles
 over three tiers, 484 resolving identically in all three vaulted archives** — cropped by
@@ -1379,8 +1407,16 @@ checks):**
    inside, so **the latch covers the whole footprint and H3 is dead here too.** All
    three named hypotheses are now refuted on retail 148 and the fault is **downstream
    of the crop**. H3b stands for authored maps, now quantified.
-2. **C1 — one loopback run, NEEDS OWNER GO-AHEAD, re-scoped a third time and its
-   numbers then corrected.** Retail map 148, our DH, caged, no probe, no `--enemy`. A
+2. ~~**C1 — one loopback run, NEEDS OWNER GO-AHEAD**~~ **— DONE 2026-08-14, and the
+   compass drew the atlas (see this section's new headline and
+   `studies/minimap/FINDINGS.md` §6d). The RPM read below was NOT performed and is
+   demoted to an optional confirmation**, because the fallback stopped reproducing and
+   there was no NULL image left to diagnose. Its predictions are still the right ones
+   to check if anybody spends the run: `+0x84 == 1`, `+0x58/+0x5c == (416, 512)`.
+   **The live next action is S13 — which of client build, archive generation or id
+   form un-NULLed it — whose first leg is static and needs no go-ahead.** Original
+   text follows.
+   Retail map 148, our DH, caged, no probe, no `--enemy`. A
    cross-process `ReadProcessMemory` of the live `CompassMap` (instance at
    `[compass+0x4C]`, lazy create `0x008BC426`; `toolkit/harness/keytap.py` already does
    ASLR-correct RPM in pure `ctypes`) reads: predicted `+0x84 == 1`,
