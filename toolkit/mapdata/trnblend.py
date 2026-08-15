@@ -61,16 +61,26 @@ So a consumer does NOT need to author blend weights: bind the layer's own
 texture at the named quadrant, let its alpha do the masking, and the seam is
 ArenaNet's.
 
-WHAT IS NOT ESTABLISHED, and it changes which tile is the BASE. Each corner
-is fetched as `arr[(sel >> 2k) & 3]` where `sel` is a per-cell byte from a
-chunk-local array at `chunk+0x2B4` that the builder fills before this loop --
-NOT map data, and where it comes from is NOT FOUND. This module assumes the
-IDENTITY selection (corner k = arr[k]), which makes corner 0 -- the base --
-this cell's own tile, agreeing with T2's separately measured "the raw tile
-byte indexes `m_tiles` directly". If that assumption is wrong the SET of
-layers is unchanged and which of them is the opaque base can differ.
-`SELECTION` is the switch, and `test_trnblend.py` keeps the consequence
-visible rather than hiding it in prose.
+**THE SELECTOR IS KNOWN WRONG HERE, NOT MERELY UNVERIFIED. READ THIS BEFORE
+TRUSTING A BOUNDARY.** Each corner is fetched as `arr[(sel >> 2k) & 3]` --
+that FORM is measured, `0x0076181B`..`0x0076185E` -- where `sel` is a per-cell
+byte. This module pins `sel` to the identity (`0xE4`), and on 2026-08-14 the
+call site settled that it is not: arg3 is read through a pointer the caller
+INCREMENTS once per cell (`inc dword ptr [ebp-0x38]`, `0x0075E10A`), so `sel`
+walks a per-cell array and varies. Where that array is filled is still NOT
+FOUND.
+
+The cost of the pin is not a subtlety, and it is the defect the owner spotted
+by isolating the overlay object: four cursors with a 2-bit pick per corner is
+an ORIENTATION mechanism -- the same authored coverage shapes reused
+permuted -- so pinning it makes every cell along a straight material boundary
+choose the same quadrant, and the boundary undulates with a period of exactly
+one cell. Retail does not. Correcting the SET of layers (which is right) does
+not correct their orientation.
+
+`SELECTION` is the switch, `studies/terrain/FINDINGS.md` §7.3 is the evidence,
+and `test_trnblend.py` keeps the consequence visible rather than hiding it in
+prose.
 """
 
 import sys
@@ -94,8 +104,58 @@ QUADRANT_COVERS = (0b1100, 0b0010, 0b0101, 0b1000)
 #: The client asserts `varIndex < arrsize(tileVar)`; three texcoord sets.
 MAX_LAYERS = 3
 
-#: How corner k is fetched. "identity" is the assumption above.
-SELECTION = "identity"
+#: How corner k is fetched. DERIVED and exact -- see `corner_selector`. This
+#: was "identity" until 2026-08-15, a pin the client contradicted on one cell
+#: in seven; it is now computed.
+SELECTION = "selection-sort-network"
+
+#: The client's comparator sequence, read at `0x0074B540`.. and confirmed
+#: against captured memory. A SELECTION SORT network: element 0 against 1, 2,
+#: 3; then 1 against 2, 3; then 2 against 3 -- exactly the order the
+#: disassembly shows (`cmp ecx,edi`, `cmp ecx,ebx`, `cmp ecx,esi`,
+#: `cmp edi,ebx`, ...). The swap is on STRICT `>`.
+SELECT_NET = ((0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3))
+
+
+def corner_selector(types):
+    """The per-cell selector byte the client keeps at `chunk+0x2B4`.
+
+    `types` is the four corner TYPES in the order (this, +x, +y, +xy); the
+    result packs the permutation the way the client reads it back,
+    `(sel >> 2k) & 3`.
+
+    **MEASURED: 2048 of 2048 cells over two captures** -- Lornar's Pass tile
+    blocks (8,18) and (4,2), against memory dumped from the running client.
+    `studies/terrain/FINDINGS.md` §7.6-§7.9. The array is filled by
+    `0x0074B440`, a method on `chunk+0x1d0` writing `this+0xE4`.
+
+    **THE SORT IS UNSTABLE, AND THAT IS THE WHOLE POINT.** A fixed comparator
+    network leaves EQUAL corners in whatever order the swaps happen to produce:
+    `(4,4,2,4)` comes out with its equal 4s ordered 1,0,3, not 0,1,3. Python's
+    `sorted()` is stable by construction and CANNOT reproduce it -- which is
+    why a stable sort plateaued at 95%/87% and why tuning the tie-break, the
+    block origin and raw-vs-mapped tile bytes all failed to move it. Reproduce
+    the network, not the intent.
+    """
+    if len(types) != 4:
+        raise ValueError(f"{len(types)} corner types, need exactly 4")
+    v = list(types)
+    idx = [0, 1, 2, 3]
+    for a, b in SELECT_NET:
+        if v[a] > v[b]:
+            v[a], v[b] = v[b], v[a]
+            idx[a], idx[b] = idx[b], idx[a]
+    return sum(idx[k] << (2 * k) for k in range(4))
+
+
+def select_corners(corners, tile_types):
+    """Reorder a cell's four corners the way the client does.
+
+    Corner k is fetched as `arr[(sel >> 2k) & 3]` (`0x0076181B`..); this is
+    that fetch with `sel` DERIVED rather than pinned to the identity.
+    """
+    sel = corner_selector(tuple(tile_types[c] for c in corners))
+    return tuple(corners[(sel >> (2 * k)) & 3] for k in range(4))
 
 
 class Layer:
@@ -220,6 +280,11 @@ def map_layers(dim_x, dim_y, tiles, tile_types, variation):
             gx1 = min(gx + 1, dim_x - 1)
             corners = (tiles[gy * dim_x + gx], tiles[gy * dim_x + gx1],
                        tiles[gy1 * dim_x + gx], tiles[gy1 * dim_x + gx1])
+            # The client permutes the corners before grouping them, and the
+            # permutation is the selector byte at `chunk+0x2B4`. Deriving it
+            # here is what makes a mixed cell pick the orientation retail
+            # picks; pinning it to the identity was wrong for 1 cell in 7.
+            corners = select_corners(corners, tile_types)
             out.append(cell_layers(corners, tile_types,
                                    variation[gy * dim_x + gx]))
     return out

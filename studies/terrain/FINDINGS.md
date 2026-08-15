@@ -461,13 +461,25 @@ DIFFERENT COVERAGE MASKS. Two consequences, and the second is a retraction:
 - **RETRACTED: that per-cell variation removes the ground's repetition.**
   §6.1 and the T6 commit message both said so, and `test_blenderimport`
   carried it as a check's rationale. It is wrong. Variation selects a
-  coverage mask; it barely moves the colour. **The visible tiling of the
-  ground at close range is INHERENT** — one cell is 96 world units showing
-  one 111-texel image of its material (T3), and the client draws exactly
-  that. What variation actually buys is correct per-cell MASK selection,
-  which is what makes tile boundaries blend; the colour repetition is
-  ArenaNet's and is not something a renderer can fix without inventing
-  detail she did not ship.
+  coverage mask; on these eight textures it barely moves the colour. What
+  variation actually buys is correct per-cell MASK selection, which is what
+  makes tile boundaries blend.
+
+> **STRUCK 2026-08-14, the same day, by the owner and then by measurement.**
+> This entry continued: *"**The visible tiling of the ground at close range
+> is INHERENT** — one cell is 96 world units showing one 111-texel image of
+> its material (T3), and the client draws exactly that … the colour
+> repetition is ArenaNet's and is not something a renderer can fix without
+> inventing detail she did not ship."* **That is false, and it was the second
+> wrong claim in this arc from the same cause** — reasoning from our own
+> render instead of comparing against the client. The owner went to Kamadan
+> in the retail client and photographed the same ground: organic grass/dirt
+> boundaries, no 96-unit grid. §7 has what the client actually does. Two
+> narrower errors inside the struck text are worth keeping visible: the RGB
+> table above is **eight** textures, and over all **101** it is 4–35 mean with
+> a max of 231 (§7.1), so "very nearly the SAME PICTURE" does not generalise;
+> and "the client draws exactly that" was never measured — the UV writer has
+> **two different rectangles** and we had only found one (§7.2).
 
 The claim that survives is narrower and still worth having: T5 pinned every
 cell to quadrant 0, which forced the WRONG COVERAGE SHAPE everywhere, not a
@@ -566,26 +578,537 @@ What is NOT settled is the transfer curve — see §7.
 
 ---
 
-## 7. What is still open
+## 7. The assembly rule — what we get wrong (2026-08-14, MEASURED)
+
+Opened because the owner isolated the overlay object in Blender and read it
+correctly on sight: *"this is similar to the Wang tiles … these connect a
+certain way in order to properly blend together different terrain textures …
+need to figure out how the game properly assembles these to not repeat corner
+tiles or use other mismatches like we're currently doing."*
+
+### 7.1 The coverage model, confirmed from the DATA (MEASURED)
+
+§6.2 derived `QUADRANT_COVERS` from the client's tables. This measures it from
+the exported pictures instead, which is a genuinely separate witness: for each
+of Kamadan's 101 terrain textures, the mean alpha of each 128×128 quadrant's
+four 64×64 corner blocks, thresholded at 128.
+
+| per-quadrant covered-corner masks | textures |
+|---|---|
+| `q0=1100 q1=0010 q2=0101 q3=1000` — **exactly `QUADRANT_COVERS`** | **97** |
+| one quadrant one corner off (threshold cases) | 4 |
+
+**97 of 101 with no fitting and no free parameter.** The Wang reading is now
+carried by the client's forward table, the client's inverse table at
+`0x00BF7808`, and the alpha channel of the art.
+
+RGB across quadrants is **not** near-identical, correcting §6.2b: 100 of 101
+textures differ, mean 4–35 of 255, max as high as 231. Quadrants are coverage
+shapes **and** distinct art.
+
+### 7.2 The UV writer has TWO rectangles, and we implement one (MEASURED)
+
+`0x00757A80`, the per-layer UV write, called once per cell from the end of
+`TrnTexBlendHi` (`0x00761A25`) with an array of up to three packed dwords.
+Each dword splits — `movzx eax, bx` / `shr ebx, 0x10` at `0x00757A9C` — into
+
+    low 16 bits  = index into a texture-pointer array at obj+0xA0 (count obj+0xA8)
+    high 16 bits = the coverage selector, or 0xFFFF for "no mask, full cell"
+
+and the call site builds it as `(cover << 16) | tex` (`shl eax,0x10; or eax,ebx`
+at `0x00761A0F`), reading `cover` from `0x00BF78DC` — the same stride-8 table
+pair §6.2 already has. `edi` inside the writer is `obj+0x3C`
+(`lea ecx,[ecx+0x3c]`, `0x00761A22`). The two paths then diverge:
+
+| | origin | span |
+|---|---|---|
+| **unmasked** (`0xFFFF`) | `obj+0x70`, `obj+0x74` | `obj+0x68`, `obj+0x6C` |
+| **masked** | `quadtable[sel & ~0x8000]` (stride 8 at `obj+0x80`) **+ the texture's own** `[tex+0x10]`, `[tex+0x14]` | `obj+0x78`, `obj+0x7C` |
+
+Two separate span fields and two separate origin schemes. **We use one
+rectangle — the inner 111/256 window at the quadrant offset — for every
+layer, and no per-texture origin at all.** The base layer in the client does
+not go through the quadrant table; it has its own `(origin, span)` pair.
+Whether those advance per cell is NOT FOUND and is the open question that
+decides whether the base repeats every 96 units (§8).
+
+The rotation reading of §6.2 survives unchanged: `test ebx, 0x8000` at
+`0x00757B43` swaps V0↔V3 and V1↔V2.
+
+### 7.3 The corner selector is per-cell DATA, and we hardcode it (MEASURED)
+
+§6.3 assumed the identity selection and the open list recorded the selector as
+NOT FOUND. Its *form* and its *traffic* are now measured, its source is not.
+
+`TrnTexBlendHi`'s prologue (`0x0076181B`..`0x0076185E`) decomposes arg3 into
+four 2-bit fields and uses each to pick one of **four** row cursors passed as
+arg2, confirming the `arr[(sel >> 2k) & 3]` form §6.3 guessed. At the call site
+(`0x0075E0E3`) arg3 is a byte read through a pointer at `[ebp-0x38]` that is
+**incremented once per cell** (`inc dword ptr [ebp-0x38]`, `0x0075E10A`). So
+`sel` walks a per-cell array and is not a constant.
+
+`trnblend.SELECTION = "identity"` pins it to `0xE4` for every cell. The
+consequence is exactly what the owner saw: along a straight material boundary
+every cell picks the same quadrant, so the authored edge undulates with a
+period of exactly one cell. **Four cursors with a 2-bit pick per corner is an
+orientation mechanism** — the same coverage shapes reused permuted — which is
+the standard way a Wang set avoids a visible repeat.
+
+Two more things this settles. arg4 is `(byte[edi] >> cl) & 3` with the shift
+base advancing by 2 per cell (`add ebx, 2`, `0x0075E10D`) — that is **terrain
+tag 3**, four cells per byte, and `TrnTexBlendHi` tests it against zero, which
+corroborates `trnvariation`'s "0 defers to the PRNG". And arg2's four entries
+are filled from two row cursors each read **before and after** a call that
+advances them, matching `trnblend`'s "corner 0 = this cell, 1 = +x, 2 = +y,
+3 = +x+y" from the other side.
+
+### 7.4 Hunting the selector's filler: three things closed, the question open
+
+The array is **`chunk+0x2B4`**, and its address is formed exactly once in the
+image — `lea eax, [ebx + 0x2b4]` at `0x0075DF60`, stored to `[ebp-0x38]` and
+walked a byte per cell. It is inline chunk memory, not a pointer: the read is
+`movzx eax, byte ptr [eax]` with no indirection.
+
+**Nothing in the image writes it.** `--field 0x2B4` finds six stores, all on
+unrelated objects (`0x004362B3`, `0x004362BC`, `0x00438ABD`, `0x00438F58`,
+`0x004393B7`, `0x00855F54`), and three address-taking sites of which only
+`0x0075DF60` is terrain — the read itself. So the fill goes through a pointer
+the anchored scan cannot follow. `codescan` names its own blind spots and one
+of them fits exactly: a method whose `this` is the RNG object at `chunk+0x2A4`
+writing `[this+0x10]` **is** `chunk+0x2B4`, spelled with displacement `0x10`,
+and no sweep for `0x2B4` can see it.
+
+**RULED OUT — it is not an undecoded terrain tag,** which is worth having
+because it is the cheap explanation and it is wrong. `terrain.py` decodes tags
+0, 1, 2, 3, 4, 5, 7, 9; tags 6 and 8 occur in none of the 349 maps and the tag
+sequence is fixed (`SEQUENCE_SHORT` / `SEQUENCE_LONG`, 325 + 24). §6.3's "NOT
+map data" therefore survives a real test rather than standing on assumption.
+
+**Two things fell out that are not about the selector at all, and both
+corroborate `trnvariation` from sites it was not built from:**
+
+- `0x00761C80` is the per-tile-block reseed, and it is
+  `(a << 16) ^ b` — `mov edx,[eax]; shl edx,0x10; xor edx,[eax+4]` — which is
+  `trnvariation.reseed` instruction for instruction.
+- `0x0046D2E0` is `RNG::seed`, and its zero-seed fallback is **`0x075BD924`**,
+  which is `trnvariation.DEFAULT_SEED`. Independent of the draw loop the
+  constant was originally read from.
+- **NEW, and unmodelled:** that seeder writes **two** state dwords, `[ecx]` and
+  `[ecx+4]`, both to the same value. `trnvariation` models a single state. Two
+  states seeded identically diverge only if they are stepped differently, so
+  this may be inert for our purposes or may be the second stream that varies
+  the selector. UNVERIFIED, and it is the cheapest lead left.
+
+**The live read was attempted 2026-08-15 and got most of the way.** Recorded
+because the two blockers cost the session and neither is about terrain:
+
+- **A loopback run could not start at all**, and the fix is not the obvious
+  one. `contentids.preflight` refuses because maps 146/148 name `0x1B97D`,
+  which no 38797-era archive binds *plainly* — row 7982 carries the bit-31
+  spelling, a rename pending a replacement the loopback builds can never
+  install because their updater is killed. **Re-cutting from `dat_study` does
+  not fix it: `dat_study` is the stale side** (`binds_plainly` is `None` there
+  too). MFT row counts place it exactly — `C:\gw` and the build-38833 run
+  directory both hold 177,753 rows, `dat_study` 177,342, the 38797 run copy
+  177,335. The pairing that passes 10/10 is **both sides at the 38833
+  generation**: client `vault/run/2026-08-13_64fae3b1369b`, server a fresh
+  study copy cut from `C:\gw` (`vault/dat_study_38833/`, additive, nothing
+  existing touched). `contentids.py`'s own docstring already says why —
+  "**0** in the build-38833 run directory, where every pending replacement has
+  landed" — and warns that refreshing one side only is the loud-on-client,
+  silent-on-server failure.
+- **`vault/content/attributes.toml` cites `toolkit/clientscan/attribtable.py`,
+  which exists only on branch `claude/combat-end-to-end-a2242b`.** Shared vault
+  data referencing an unmerged tool makes `content.py` refuse in every other
+  tree. `deploy.py --repo-content-only` is the sanctioned way past it.
+
+With that pairing the client reached Kamadan and the probe **found the map's
+tile bytes in the live process**, so the read path works. The chunk itself was
+NOT identified: the "`+0`/`+4` are the block counts" guess came from `ebx` in
+`0x0074B440`, a DIFFERENT function, and is not the chunk's layout; and the
+bytes matched are almost certainly the file buffer rather than
+`[chunk+0x80]`. It failed loudly rather than returning a wrong array, which is
+the only good thing to say about it. **Next session: anchor on the chunk, not
+on data it points at** — walk `[ebp-0x40]` in `0x0075DD50` from its own
+caller, or breakpoint-free, find the RNG pair at `+0x2A4` adjacent to a live
+`+0x1D0` subobject.
+
+**Anchoring on the chunk, 2026-08-15: four probes, no read, three facts.** The
+client was in Kamadan on loopback each time and its tile bytes were located in
+process memory every run, so the machinery works; what failed is every attempt
+to name the object that owns `+0x2B4`.
+
+- **`chunk+0x80` is `tileTypes`, NOT the tile array** — and this document's own
+  `trnblend.py` docstring already said so (*"mapped through `tileTypes`
+  (terrain tag 4, `terrain+0x80`)"*). Two probes were built on the opposite
+  reading and found per-block pointer tables. The proof is at the call site:
+  `arg2`'s four entries are filled with `movzx eax, byte ptr [eax]`, i.e. raw
+  tile BYTES 0..255, so `byte[ecx + [arg1+0x80]]` is a 256-entry table lookup.
+  **Read our own findings before re-deriving them from the disassembly.**
+- **Kamadan's `table_a` is the IDENTITY**, `0..50`. So for this map tile byte
+  == tile type and `trnblend`'s grouping is unaffected by tag 4 — worth knowing
+  before treating a Kamadan measurement as evidence about the type mapping. It
+  also makes `table_a` useless as a memory needle, which cost one timed-out
+  scan.
+- **The client stores the tile bytes in FILE order.** The detiled spelling
+  (`mapexport.detile`) does not appear anywhere in the process, so the
+  reordering is ours, applied on export, and not something the client
+  materialises. `table_b` does not appear in byte form at all.
+
+Every object reachable from a pointer to the tile array is dominated by a
+**stride-0x400 table of per-tile-block pointers** at each of `+0x80`, `+0xD8`,
+`+0xDC`, `+0xE0`, `+0x84`. So the tile-array pointer does not sit at a small
+fixed offset from the chunk, and that whole family of anchors is spent.
+**What is left is the direct route: `[ebp-0x40]` in `0x0075DD50` is the chunk,
+so take it from the function's own argument** — a breakpoint, a hook DLL
+(CLAUDE.md carve-out 3 permits the toolchain), or a hardware watchpoint on the
+tile-array pointer. Guessing offsets from data the chunk points at has now
+failed four times and should not be tried a fifth.
+
+**What this costs to finish: one live read, not more static analysis.** Two
+rounds of anchored scanning have now bounded the question without answering it,
+and `toolkit/harness/keytap.py` already does cross-process `ReadProcessMemory`
+with ASLR-correct module bases in pure `ctypes`. Reading `chunk+0x2B4` while
+standing in a map settles in one observation both what the values are and
+whether they change per tile block — which is the repo's own rule (capture and
+read; the wins never came from reasoning about the client).
+
+### 7.6 THE SELECTOR IS READ: a per-cell corner PERMUTATION (OBSERVED)
+
+**2026-08-15, Lornar's Pass, loopback, build 38833.** `int3` at `0x0075DD50`
+and `0x0075E650`, injected at **t+0.4s** -- before the map exists -- with two
+controls passing in the same run: the DLL's own `int3` seen by its handler,
+and the caller's branch point `0x007434E5` (`test eax, 0x2000`) firing, which
+is on the path and must precede either callee.
+
+    terrain hit: YES at the LO path (0x0075E650)
+    chunk 0x1CA4EFE0
+    rng +0x2A4 = 0x00080012, 0x0A0E2CE4
+
+**`chunk+0x2B4` holds 16 distinct byte values and ALL SIXTEEN ARE
+PERMUTATIONS of (0,1,2,3).** Not a subset that happens to look like one -- 16
+of 16, decoded as the client decodes them, `(sel >> 2k) & 3` for k in 0..3:
+
+| byte | (c0,c1,c2,c3) | count | byte | (c0,c1,c2,c3) | count |
+|---|---|---|---|---|---|
+| `0xE4` | (0,1,2,3) identity | 877 | `0xD8` | (0,2,1,3) | 7 |
+| `0x39` | (1,2,3,0) | 25 | `0x87` | (3,1,0,2) | 3 |
+| `0x27` | (3,1,2,0) | 21 | `0x36` | (2,1,3,0) | 2 |
+| `0xB4` | (0,1,3,2) | 16 | `0x4B` | (3,2,0,1) | 2 |
+| `0xE1` | (1,0,2,3) | 15 | `0x1E` | (2,3,1,0) | 1 |
+| `0x2D` | (1,3,2,0) | 14 | `0xC9` | (1,2,0,3) | 1 |
+| `0x78` | (0,2,3,1) | 14 | `0xD2` | (2,0,1,3) | 1 |
+| `0x4E` | (2,3,0,1) | 13 | `0xC6` | (2,1,0,3) | 12 |
+
+**85.6% identity, 14.4% permuted.** So `trnblend.SELECTION = "identity"` is
+right for six cells in seven and WRONG for the seventh, and the owner's read
+off the isolated Blender overlay -- *"these connect a certain way ... to not
+repeat corner tiles or use other mismatches like we're currently doing"* --
+is confirmed: the permutation is the orientation mechanism that stops one
+authored coverage shape repeating with a period of exactly one cell.
+
+**The array is LIVE, not a fixed table.** The DLL's own header, counted from
+memory a moment before the file was dumped, reported 18 distinct values and
+546/1024 identity; the dump reports 16 and 877. Two reads of the same address
+seconds apart disagree, which means it is regenerated per tile block -- and
+the `rng` pair beside it says which block: `0x00080012` is
+`(8 << 16) ^ 18`, `trnvariation.reseed(8, 18)` **observed live**, the third
+independent confirmation of that function.
+
+Capture: `vault/research/terrain/selector_lornars_tile8_18.bin`.
+
+> **REPLICATED 2026-08-15, and the second run ended with the client ALIVE.**
+> Same procedure, fresh process: hit at **t+6.4s** again, both controls PASS,
+> chunk `0x1AFE7CE8`. Liveness was then polled every 15s for **three minutes
+> after the hit** -- the step missing the first time -- and the client was
+> alive at all twelve checks with a flat working set (~290 MB), still alive at
+> 222s when it was stopped deliberately. So the instrument does not kill the
+> client at the hit, and the first run's crash remains unexplained rather than
+> attributable.
+>
+> **The claim replicates and the identity share does NOT:**
+>
+> | | distinct | non-permutations | identity |
+> |---|---|---|---|
+> | run 1 | 16 | **0** | 85.6% |
+> | run 2 | 18 | **0** | 50.8% |
+>
+> Union across both: **18 distinct values, all 18 permutations of (0,1,2,3),
+> zero exceptions.** The captures are not byte-identical and the identity
+> share swings from 86% to 51%, which is the per-tile-block regeneration
+> showing up as a difference rather than as an assertion. Second capture:
+> `vault/research/terrain/selector_lornars_run2.bin`.
+>
+> **BOTH CRASHES WERE MISSED BY THE SAME DEFECT IN MY LOOP, and the owner
+> caught both.** The only check was "does the process still exist". It does:
+> the ArenaNet assert box is a MODAL DIALOG INSIDE THE SAME PROCESS, so
+> `Get-Process` reports ALIVE for as long as it is up. "Alive at all twelve
+> checks" and "crashed" are perfectly compatible, and no amount of polling
+> liveness would ever have separated them. `crashwatch.ps1` now watches for a
+> titled top-level window that is not `ArenaNet_Dx_Window_Class`, which is the
+> signal that actually exists -- `Crash.dmp` is NOT reliable: after the
+> 2026-08-15 crash no dump existed under the run directory or `%TEMP%`.
+>
+> **AND THE SECOND DUMP EXONERATES THE INSTRUMENT.** It is an ArenaNet
+> assertion in CHARACTER code, with no terrain frame anywhere in the trace:
+>
+>     Assertion: level < arrsize(s_attribPoints)
+>     P:\Code\Gw\Char\CharData.cpp(202)      build 38833
+>
+> `s_attribPoints` is visible at `ebx-32` as `6, 7, 9, 11, 13, 16, 20,
+> ffffffff`, and the failing thread's entry is `0x0024BB99` -- a worker, not
+> the render thread. Our three `int3` patches are all one-shot, restored
+> before this point, and none is in `CharData`. `START_LEVEL = 1`, so it is
+> not the level in `CHARACTER_UPDATE_FACTIONS` either. Filed as a server-side
+> character-data bug, out of scope for this arc.
+>
+> So §7.6's crash is now **probably the same assert rather than unexplained** —
+> same client, same server, same character — but that is INFERENCE, not
+> measurement: the first crash produced no dump. Treat it as a lead.
+>
+> **THE FIRST RUN'S CLIENT CRASHED, and the owner noticed it before I did.**
+> My script exited the moment it saw the hit and never re-checked liveness, so
+> I reported the run clean. It was not. What the timestamps do establish is
+> that the crash came LONG AFTER the read: process start ~16:00:28.6, hit and
+> file write at 16:00:35 (t+6.4s), and the harness then logged `body is in the
+> map` at t+15.2s and held for thirteen further ticks. So the capture is not
+> from a dying process.
+>
+> The cause is NOT FOUND -- no dump, and `Gw.log` simply stops mid-auth
+> chatter with no error line. It is a fair suspicion that the instrument did
+> it: `poke()` flips page protection on executing code from inside a vectored
+> handler while ~48 threads run, and nothing here shows that is safe.
+>
+> Two internal checks argue the DATA survived regardless, and both would fail
+> on a corrupt read: `rng` is exactly `(8 << 16) ^ 18` for the block being
+> built, and all 16 selector bytes decode to valid permutations. Neither
+> happens by accident. **Treat §7.6's numbers as sound and the METHOD as
+> unproven** -- a re-run that ends with the client still alive is what turns
+> this from one good capture into a repeatable measurement, and it should
+> check liveness AFTER the hit rather than exiting on it.
+
+**What this un-blocks and what it does not.** It answers §8's top open item.
+It does NOT by itself fix the renderer: the permutation must be derived, not
+captured, because a consumer cannot ship a memory dump -- so the next question
+is what generates it, and the `rng` pair 16 bytes before it is the obvious
+suspect now that both are observable in the same read.
+
+### 7.7 What generates the permutation: corner pattern picks a PAIR, the PRNG picks one
+
+**MEASURED 2026-08-15, offline, from the run-1 capture plus the archive** — no
+client needed, which is why it is worth doing before another live run.
+
+Tile block (9,18) of Lornar's Pass, 1024 cells, corner types from terrain tag
+2 through tag 4, compared against the captured selector byte:
+
+**LAW 1 — a uniform cell is ALWAYS the identity. 835 of 835, ZERO
+counterexamples.** Not "usually": a cell whose four corners share one type is
+never permuted. That alone kills the reading that this is a per-cell random
+draw, which would put identity at 1 in 24.
+
+**LAW 2 — for a mixed cell the corner PATTERN determines a small CANDIDATE
+SET, and something picks within it.** Patterns are canonicalised
+material-agnostically (`(0,1,1,1)` means "corner 0 differs, the rest agree"):
+
+| pattern | candidates | split |
+|---|---|---|
+| `(0,0,0,0)` | `0xE4` | 835 |
+| `(0,1,1,1)` | `0x39` / `0xE4` | 24 / 15 |
+| `(0,0,0,1)` | `0x27` / `0xE4` | 21 / 17 |
+| `(0,1,0,0)` | `0xE1` / `0x78` | 15 / 12 |
+| `(0,0,1,0)` | `0xB4` / `0xC6` | 15 / 12 |
+| `(0,0,1,1)` | `0x4E` / `0xE4` | 12 / 10 |
+| `(0,1,0,1)` | `0x2D` / `0xD8` | 11 / 7 |
+| three-material patterns | 4 candidates each | n ≤ 7 |
+
+Every two-material pattern gets **exactly two** candidates in a near-even
+split; three-material patterns get four. **92.2% of the block is predictable
+from the corner pattern alone** (944/1024), and the residual is the choice
+within each pair.
+
+**So the generator is `f(corner pattern, one PRNG draw)`**, and the two halves
+explain what was previously puzzling. The pattern half is why 18 of 24
+permutations appear and the other 6 never do — only reachable candidates
+occur. The PRNG half is why the identity share swung 85.6% → 50.8% between
+two blocks (§7.6) while the law itself did not move: different stream, same
+rule. The reseed `(tile_x << 16) ^ tile_y` and `trnvariation` already
+reproduce that stream.
+
+**CROSS-VALIDATED against run 2 (block (5,2), a different block), and the
+single-block caveat above was the right one to raise:**
+
+- **LAW 1 survives untouched.** Run 1: 835 uniform cells, 0 violations. Run 2:
+  363 uniform cells, 0 violations. **1,198 of 1,198 across two captures.**
+- **LAW 2's two-material pairs PREDICTED run 2 exactly.** All seven
+  two-material patterns added ZERO new values out of sample, including
+  `(0,0,0,1)` where run 1 saw n=38 and run 2 saw n=101. A candidate set
+  derived from tens of cells predicted hundreds. That is the difference
+  between a fit and a law.
+- **The three-material sets were under-sampled, exactly as flagged, and they
+  converge on SIX.** `(0,1,2,2)`, `(0,1,2,1)`, `(0,0,1,2)` and `(0,1,0,2)` all
+  reach 6 candidates once both blocks are pooled — run 1 had seen 4, 4, 1 and
+  1. Run 2 also contributes `0x6C`, a 19th permutation.
+
+So the arity is **2 candidates for a two-material cell, 6 for a
+three-material one** — which is a much sharper target for the table than "a
+small set", and 91.9% of run 2's cells (941/1024) drew a value run 1 had
+already named.
+
+### 7.8 The writer is `0x0074B440`, and the generator is a SORT (2026-08-15)
+
+**Found by walking back from the breakpoint, which is what the working
+instrument is for.** `trnint3c.dll` captures 512 bytes of stack at the hit;
+`[esp]` is `0x007434F8` (the return address after `call 0x75e650`, confirming
+the caller) and two frames up sit `0x00745422` and `0x00745750`.
+
+That region contains `0x00745143  lea edi, [esi + 0x1d0]`, and
+`0x007451CF  call 0x74b440` passes it in `ecx`. `0x0074B440` opens
+`mov [ebp-0x20], ecx`, so `this` = `chunk+0x1d0`, and at `0x0074B4EC` it
+computes `this + 0xE4` -- **which is `chunk+0x2B4`.** The array nothing
+appeared to write is written through a displacement of `0xE4` from a
+subobject, exactly the blind spot §7.4 named. *This function was disassembled
+hours earlier in the same session and dismissed, because the `+0xe4` was
+matched against the wrong base.*
+
+**`0x0074B540`.. is a SORTING NETWORK.** It loads the four corner type bytes
+into `edx/edi/ebx/esi`, seeds four index values 0,1,2,3 in
+`[ebp-0xc]/[ebp+8]/[ebp-4]/[ebp-0x10]`, and runs `cmp` + conditional-swap
+pairs that permute **values and indices together**. The selector byte is the
+resulting index permutation.
+
+**This retires the PRNG hypothesis of §7.7.** The "coin flip" is not a random
+draw -- it is *which material has the lower type id*. Deterministic, and
+derivable from data we already ship, so a consumer needs no stream replay.
+
+Predicting the byte from a plain stable ASCENDING sort of the four corner
+types, against both captures:
+
+| capture | ascending / source-index | identity-only baseline |
+|---|---|---|
+| block (9,18) | **95.2%** | 85.6% |
+| block (5,2) | **87.0%** | 50.8% |
+
+Descending scores 81.5% / 35.4%, so the direction is settled. The arity falls
+out exactly: two materials -> 2 orderings, three -> 3! = 6, which is what
+§7.7 measured before the mechanism was known.
+
+**NOT CLOSED, and the residual has two candidate causes I have not
+separated:** the block indices `(9,18)` and `(5,2)` were INFERRED by best fit
+rather than read from the capture, so an off-by-one contaminates every cell;
+and the client's comparator/tie-break may not be a plain stable sort. Either
+produces exactly this high-but-imperfect signature. Both are cheap to settle
+-- record `tile_x`/`tile_y` in the capture (the reseed at `chunk+0x2A4`
+already encodes it) and transcribe the network's swap order literally.
+
+Stack capture: `vault/research/terrain/stack_lornars_run3.bin`.
+
+**What is still needed for a consumer**, and it is now a small question rather
+than an open-ended one: the candidate TABLE (which pair each pattern maps to,
+almost certainly a static array near `0x00BF78D8`'s neighbours) and the DRAW
+ORDER (how many PRNG values a cell consumes, and whether uniform cells consume
+one). Both are testable offline against the two captures already in the vault.
+
+### 7.9 CLOSED: a selection-sort network, 2048 of 2048 (2026-08-15)
+
+`tile_x`/`tile_y` come free from the reseed: `chunk+0x2A4`'s FIRST dword is the
+seed unstepped, so run 1's `0x00080012` is tile **(8,18)** and run 2's
+`0x00040002` is **(4,2)**. §7.7's best-fit blocks were (9,18) and (5,2) --
+**off by exactly +1 in `tile_x`, both times**, a consistent convention error
+rather than noise, and correcting it did NOT move the score. Alignment was
+never the residual.
+
+Nor was the other candidate: sorting the RAW tile bytes instead of the mapped
+types scores identically (Lornar's `table_a` is not the identity, so this was
+a real test), and reversing the tie-break collapses to 0.5%.
+
+**The residual was that the client's sort is UNSTABLE.** The misses are
+interior, scattered, and every one is a cell with EQUAL corners coming out in
+an order `sorted()` cannot produce: `(4,4,2,4)` yields its equal 4s as 1,0,3,
+not 0,1,3; `(4,4,4,2)` yields 1,2,0. A stable sort is stable by construction,
+which is why it plateaued at 95%/87% no matter what else was varied.
+
+Testing the standard 4-element comparator networks against the 39 observed
+ordering signatures identifies it outright:
+
+| network | strict `>` |
+|---|---|
+| **selection `[01][02][03][12][13][23]`** | **39/39** |
+| bubble / insertion | 30/39 |
+| optimal-4 | 29/39 |
+| odd-even | 25/39 |
+
+**That is the sequence the disassembly already showed** -- `cmp ecx,edi`,
+`cmp ecx,ebx`, `cmp ecx,esi`, `cmp edi,ebx` at `0x0074B57C`.. is element 0
+against 1, 2, 3, then 1 against 2, 3. So the code and the data agree, and the
+rule generalises to all 75 signatures rather than needing the 39-entry table.
+
+    v = corners; idx = [0,1,2,3]
+    for a, b in ((0,1),(0,2),(0,3),(1,2),(1,3),(2,3)):
+        if v[a] > v[b]: swap v[a],v[b] and idx[a],idx[b]
+    selector = sum(idx[k] << 2k)
+
+**Verified cell by cell: 1024/1024 on tile (8,18), 1024/1024 on (4,2),
+2048/2048 total.** Landed as `trnblend.corner_selector` /
+`select_corners`, wired into `map_layers`, and `SELECTION` is now
+`"selection-sort-network"` instead of `"identity"`.
+
+`test_trnblend.py` §4 runs the derivation against both captures and demands an
+exact 2048/2048; it skips loudly without the vault. **A near-match there is a
+FAIL by design** -- 95% is what the wrong model scored, and treating it as
+"close enough" is exactly how it survived three rounds of tuning.
+
+**One consequence worth stating.** The base layer is now whichever corner
+SORTS FIRST, not necessarily the cell's own tile. §6.3 flagged that "which of
+them is the opaque base can differ" if the identity assumption was wrong; it
+was, and it does. `test_trnblend`'s far-edge check asserted the old behaviour
+and was rewritten to test replication directly.
+
+### 7.5 The seam is not where it looked — a measurement, and a bug in the probe
+
+`scratchpad/composite.py` composites the ground from our own `layers.u16` in
+texture space, with no camera and no lighting, and scores
+
+    seam ratio = mean |dRGB| across cell boundaries / between interior pixels
+
+Kamadan (208,238), 6×6 cells: **0.83**. Cell boundaries are no worse than the
+texture's own gradient, so our per-cell *assembly* is continuous and the grid
+the eye reads is **not** a seam — it is the base repeating identically, which
+§8.2 says is the rectangle we did not implement.
+
+The first run of that probe scored 1.19 and it was **the probe that was
+wrong**: it flipped cell blocks for world-`+y`-up without flipping rows inside
+them, so every cell was drawn mirrored and each blend ran backwards. Recorded
+because it is the same failure mode as the render this arc has been trusting —
+a picture that looks plausible and is measuring its own bug.
+
+## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
   (§6.5) but as the simplest mapping the measurement allows, `shade / 255`
   as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
   at 255, so a gamma or a scale-and-bias would fit the corpus equally well
   and none is measured. `--no-lightmap` is the control.
-- The per-cell corner SELECTOR at `chunk+0x2B4` (§6.3) — which decides which
-  corner is the opaque base. NOT FOUND.
+- ~~The SOURCE of the per-cell corner selector.~~ **READ 2026-08-15, §7.6.**
+  `chunk+0x2B4` holds a per-cell **corner permutation**: 16 distinct bytes, all
+  16 permutations of (0,1,2,3), 85.6% identity. `trnblend.SELECTION =
+  "identity"` is right for six cells in seven and wrong for the seventh.
+  **What replaces it as the open item: what GENERATES the permutation.** The
+  array is regenerated per tile block (two reads seconds apart disagree), and
+  the PRNG pair sits 16 bytes before it at `chunk+0x2A4` — observed live as
+  `reseed(8, 18)`. A consumer must derive the permutation, not capture it.
+- **The base layer's own UV rectangle** — `obj+0x68/0x6C` (span) and
+  `obj+0x70/0x74` (origin), §7.2. If the caller advances the origin per cell
+  the base tiles continuously and there is no 96-unit repeat; if it does not,
+  there is. NOT FOUND, and it decides the thing the owner's screenshot is
+  about. The per-texture atlas origin `[tex+0x10]/[tex+0x14]` is unread too.
 - The 4-dword table at `0x00A73DF8` = `{3, 3, 3, 0x30}`, the terrain
   factory's argument that lands at stage record +0x10. Named, not
   understood, and asserted nowhere.
 
-- **T6**: blending between tiles — the three per-cell layers, the alpha
-  mask, and which corner-tile combination selects the two overlay layers.
-  DEFERRED with the reason in PLAN.md §3.
-- The per-cell variation: tag 3 is decoded (§2.1, §3.3) but not exported,
-  and the PRNG draw is not reproduced, so T5 pins quadrant 0. Also the
-  quadrant's ORIENTATION (which axis is +u) is a convention, not a
-  measurement.
+- The quadrant's ORIENTATION (which axis is `+u`) is a convention, not a
+  measurement. (The two entries that stood here — T6 "DEFERRED" and "tag 3
+  is not exported, so T5 pins quadrant 0" — were both stale: T6 landed and
+  tag 3 is exported. Struck 2026-08-14.)
 - The extra leading dependency's MEANING (§4.2): 8 files — 4 plain ATEX, 4
   DDS of which two are 512×512 V8U8 bump maps nothing decodes — paired with
   tag3b's four floats. UNVERIFIED.

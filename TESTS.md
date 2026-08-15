@@ -819,6 +819,60 @@ Every one of these, in the order they were written:
   refused AS a bound, since row 0 reached `entries[-1]` and planned a write to the LAST
   row of the table, which a "some blocker" predicate passes because that row's
   reservation is 0 bytes. Floor 30 -> 38),
+  `toolkit/mapdata/test_datalloc.py` (the THIRD write verb: rows that did not
+  exist, and the file id that makes the client able to name them. `--replace`
+  needs a row, `datmove` needs a row; both start from one ArenaNet made, which is
+  why every authored map so far has been installed by DISPLACING a real retail
+  area. The fixture carries what the real archive has and `test_datmove`'s does
+  not -- an MFT whose size is not a block multiple, so it has genuine growth
+  slack and its reservation ends at EOF, a file-id table with headroom inside its
+  own reservation, and **an ARMED MAP HEAD beside a genuine spare**. That last
+  pairing is the bug this arc found: `datplan.free_rows` tested `size == 0`
+  alone, and `rebloat --arm` sets a live map head's size to zero ON PURPOSE, so
+  on `vault/dat_c2/Gw.dat` it returned `[71496]` -- the head of map 143, flags
+  259, USED, still chained to partner 71497 -- and `plan_insert` prefers
+  `erased[0]`. The next insert into that archive would have taken a live map's
+  head, orphaned its partner and left the file id resolving to somebody else's
+  payload, with all three crc rules still holding. It now asks the client's own
+  question, the USED flag. **Three things a one-row insert gets wrong and this
+  refuses:** a map is TWO rows chained by `alloc.nextStream` at +0x10 and
+  `plan_insert` plans no such field and returns the same row index when called
+  twice; a file id is not optional, because the open-time reconcile deletes an
+  unnamed USED|FIRST row at index >= 16 and frees its extent, so an unregistered
+  row works exactly once; and the MFT can grow ONLY into the slack of its own
+  last 512-byte block -- 424 bytes = 17 rows on the 38833 pair, where the gap
+  measure claims 4,266,920 -- because the next block is a container generation or
+  EOF. The write order is asserted as a property rather than described: payload,
+  then rows past the declared count, then the id pair past the declared table
+  size, all three invisible; then the two writes that make them exist. **Section
+  7 is the one that earns its place** -- it tears the archive at exactly that
+  window, proves `Archive()` refuses it (`entry_count * 24 != mft_size`), and
+  then proves `--revert` still works, which it did not before `mft_offset_of`
+  read the MFT address from the 32-byte header instead of by opening the whole
+  table. The recovery path could not open the archive in the one state it exists
+  for. Everything is re-derived from raw bytes by readers that import nothing
+  from `datalloc`, and the chain is walked three ways -- a Floyd walk out of
+  `int.from_bytes`, `mapchunks.MapIndex`, and the corpus-wide orphan list --
+  because the first draft asserted `nextStream` once and a sabotage that wrote 0
+  there reddened exactly one check. **Section 11 is the one that found a real
+  defect in the code it was written against.** It replays every prefix of the
+  write out of the journal and asserts the property the order exists to serve:
+  no prefix may leave a USED|FIRST_STREAM row that the file-id table does not
+  name, because that is the shape the reconcile frees and memsets. The first
+  version of `alloc()` wrote every row in one pass and called it invisible --
+  true only of APPENDED rows, since a REUSED spare is already inside the declared
+  table and goes live the instant it is written. Section 11 reported three FAILs
+  against code that was green on every other check in the file: an unnamed head
+  on disk, and, with a reused head and an appended partner, a `nextStream`
+  pointing past the declared count while the loader asserts `nextStream < count`.
+  The order now publishes the id record FIRST and reused rows LAST, taking a
+  transient dangling record -- which the client drops -- over an orphan row,
+  which it deletes. Eight sabotages, all eight red, counts in the floor comment
+  and re-measured after every change. **Also proven at full scale**: a map pair
+  allocated into a 4.2 GB copy of the live 38833 archive, preflight 10 of 10 with
+  the orphan count rising by exactly one, then reverted byte-identical by sha256.
+  No client, though: **no client has ever read a row this verb allocated**, which
+  is the same sentence `datmove` carried before FINDINGS 39. Floor 98),
   `toolkit/mapdata/test_bit31.py` (the REPLACEMENT-PENDING census -- the file ids
   carrying bit 31, which `FcArchive` binds when it has requested a replacement
   and deleted the plain name (`archive.py`:486, read out of the client). The
@@ -1038,7 +1092,18 @@ Every one of these, in the order they were written:
   real rule's 15, compared to the real count rather than to a threshold, because
   the first version asserted `< 8`, got exactly 8, and a tuned constant measures
   nothing. Section 2 pins the selection loop with a no-bleed check (no overlay may
-  cover a corner belonging to the base) and both refusals. No vault, no client),
+  cover a corner belonging to the base) and both refusals. **Section 4 is the only
+  one that can refute rather than confirm**: it runs `corner_selector` against
+  `chunk+0x2B4` as the RUNNING CLIENT filled it, two int3 captures from Lornar's
+  Pass tile blocks (8,18) and (4,2), and demands **2048 of 2048 cells exactly**.
+  A near-match is a FAIL, not a rounding difference — a stable sort scores 95%/87%
+  here, which is precisely how the wrong model survived three rounds of tuning the
+  tie-break, the block origin and raw-vs-mapped tile bytes. The client's sort is
+  UNSTABLE (a selection-sort comparator network, swap on strict `>`), so equal
+  corners come out in swap order and `sorted()` can never reproduce it. Sections
+  1–3 are arithmetic and run on a bare machine; section 4 needs the vault and the
+  captures and declares `LEDGER.skip` rather than passing vacuously, which is why
+  the floor is the vault-less 26 and a full run scores 29),
   `toolkit/mapdata/test_trnvariation.py` (rung T6's first half: which of a terrain
   texture's four 128x128 quadrants each cell samples. The per-cell arithmetic is
   OBSERVED in build 38797 — one PRNG draw per cell ALWAYS, `quadrant = draw & 3`,
@@ -1387,7 +1452,24 @@ Every one of these, in the order they were written:
   existed a build written to `<main>/toolkit/` was allowed straight into version
   control. Sections 0-3 score 46 against a floor of 98, so a vault-less run goes
   red. ~12 s),
-  `toolkit/authsrv/test_spawn_burst.py`, `toolkit/authsrv/test_movement_fidelity.py`,
+  `toolkit/authsrv/test_spawn_burst.py` (the nine messages that put a body in the
+  world, and since 2026-08-15 **the one that killed the client**. Section 4 used to
+  read `0x003A`'s payload at a stride of 3 — `triples[0::3]` for the ids,
+  `[1::3]` for the ranks — which is our builder's layout checked against itself,
+  and it was green while every session ended in `Assertion: level <
+  arrsize(s_attribPoints)` / `CharData.cpp(202)`. The wire is COLUMN-MAJOR: the
+  handler computes `n = count / 3` and slices ONE flat array at `n` and `2n`, so
+  interleaving `(id, rank, rank)` puts attribute IDS in the rank column, and ids
+  run to 50 against an `arrsize` of 13. The section now slices the payload **the
+  client's way** and checks each column, including that every value the client
+  will index `s_attribPoints` with is 0..12. Its last check is a CONTROL and is
+  the one that matters: it rebuilds the interleaved layout, slices it the same
+  way, and REQUIRES an out-of-range rank to fall out — printing
+  `column2=[9, 19, 6, 6, 20]`, the 19 being exactly what the client asserted on,
+  at exactly the index it asserted at. Without it the ten checks above are ours
+  agreeing with ourselves and would pass on any self-consistent layout. Floor
+  34 -> 38. No socket, no client. ~1 s),
+  `toolkit/authsrv/test_movement_fidelity.py`,
   `toolkit/authsrv/test_agentlife.py` (WORLD_REMOVE_AGENT and its two refusals,
   that an unframeable opcode stops the framer instead of being framed past, and
   the whole enemy: a hostile that swings back, chases, turns to face you and
@@ -1808,6 +1890,35 @@ Every one of these, in the order they were written:
   existing two-name precedent rather than dumping 42; the emitter itself writes
   **no** authored text, committing `name_string_id` for run-time resolution,
   and a check asserts no string leaks into the rows),
+  `toolkit/clientscan/test_attribpoints.py` (`s_attribPoints`, its `arrsize`,
+  and the **14 it replaces**. A loopback session on build 38833 died on
+  `Assertion: level < arrsize(s_attribPoints)` / `CharData.cpp(202)`, and
+  `arrsize` turned out to be a number nobody had read: `consttable.py` carried
+  this table as **14 x 4** and it is **13 x 4**. The 14 was not a typo — it
+  CLOSED on its anchor, had a code reference behind it, and its own row noted
+  the anomaly it caused ("the leading 5 … is what `dead data` looks like from
+  the outside") without that being enough to overturn it. The cause is the
+  mirror of `test_consttable.py` §7b's: `s_worldData` had a free STRIDE, this
+  row had a free LEFT EDGE (`pad=None`), so its base was derived from its count
+  and its count came from the displacement in the `CharData:202` accessor —
+  which indexes `s_attribPoints[level - 1]` with the `- 1` folded by MSVC into
+  the displacement. Base four bytes low, count one high, and it closes because
+  the two errors are the same error. **A closure is only evidence for the term
+  you did not derive from it.** The locator takes `arrsize` from the client's
+  own `cmp esi, 0Dh` (in BOTH accessors), the base from the UNBIASED accessor
+  at `CharData:208`, and a left edge from `s_appearanceSlot`'s 8 records of 12
+  bytes ending exactly on it — three witnesses, none of them the anchor
+  arithmetic. Section 2 runs all three vaulted ArenaNet builds and gets the
+  same 13 at a DIFFERENT address on 38519, which is what separates a
+  structural locator from an address that still happens to work; a vault
+  missing a build skips it by name and then goes red on the floor, because the
+  cross-build agreement IS the claim. Seven sabotages, one per leg, each
+  required to REFUSE — and one of them earned its keep immediately: the
+  left-edge leg was computed and reported but not enforced, so the leg the
+  write-up leans on could not have failed. It refuses now. The twelve costs
+  and their sum of 97 are checked against retail's published numbers, an
+  UPSTREAM list the module never reads out of the table. No socket, no client
+  launch. ~1 s),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
   `toolkit/clientscan/test_maprows.py` (the footprint join that NAMES archive map
   rows, and the negative the arc turned on. `s_missionClientData` -- the client's
@@ -2193,10 +2304,12 @@ Every one of these, in the order they were written:
   `-1` sentinel". Re-derived from the bytes: **24 of 24 close**, 17 flush against
   their left neighbour, **four** at exactly +4 (MSVC 8-alignment, and all four are
   alignment), and **no sentinel non-closure exists** -- `s_attribPoints`'s
-  `FF FF FF FF` is the fourteenth ELEMENT of the array and `arrsize` counts it, so
-  14 x 4 lands on the anchor. What sentinels really cause is a third shape, a table
+  `FF FF FF FF` is the LAST ELEMENT of the array and `arrsize` counts it, so the
+  array lands on the anchor. What sentinels really cause is a third shape, a table
   whose left neighbour is not a string at all, which is why `s_skill`,
-  `s_missionClientData` and `s_attribPoints` declare no left edge. **The headline is
+  `s_missionClientData` and `s_attribPoints` declare no left edge -- and for
+  `s_attribPoints` that free left edge cost it a wrong COUNT for four days: it
+  shipped here as 14 x 4 and is 13 x 4, corrected 2026-08-15, §7c below. **The headline is
   deliberately the WEAK half**, because `base + count*stride == anchor` is
   definitional unless the two terms come from DIFFERENT witnesses: eight tables take
   their count from their own ascending index column and their base from the previous
@@ -2241,7 +2354,28 @@ Every one of these, in the order they were written:
   of four wrong. The one that does NOT redden under the pre-fix row is the informative
   one: the left-edge corroboration passes at 20 x 24, because 24 divides 480 and two
   readings of the SAME 480 bytes cannot see a divisor stride. Only the code witness
-  can. Floor 61 -> 69. It is also the
+  can. Floor 61 -> 69.
+  **Section 7c, added 2026-08-15, is 7b's MIRROR, and it is the row that reached a
+  player.** `s_worldData` had a free stride; `s_attribPoints` had a free left edge
+  (`pad=None`), so its base was derived from its count and its count came from the
+  displacement in the `CharData:202` accessor -- which indexes
+  `s_attribPoints[level - 1]`, with MSVC folding the `- 1` into the displacement.
+  Base four bytes low, count one high, and it closed perfectly because the two errors
+  are the same error. `(base-4, 14)` and `(base, 13)` land on the identical anchor, so
+  nothing in this module could ever have chosen; the section reproduces both readings
+  live and shows that what separates them is the CONTENT (13 opens on a strictly
+  increasing run, 14 opens on a stray `5`) and three outside witnesses, all from
+  `attribpoints.py`: the client's own `cmp esi, 0Dh` in both accessors, the UNBIASED
+  accessor at `CharData:208`, and `s_appearanceSlot`'s 8 records of 12 bytes ending
+  exactly on the corrected base. The twelve values sum to **97**, retail's published
+  cost of a rank-12 attribute, against 102 for the 14-element reading -- an UPSTREAM
+  number this module never used. The row's own note had called the stray `5` "dead
+  data" and that was not enough to overturn it, which is the lesson: **a closure is
+  only evidence for the term you did not derive from it**, and a table with a spare
+  element at the front is a table whose left edge is wrong. Floor 69 -> 74. The cost
+  of the four days it survived is in `studies/combat/PLAN.md` §14 -- a modal assert
+  box, twice, from a server that had built `0x003A`'s rank column against a bound
+  nobody had read. It is also the
   first `source = "client-table"` extraction in this repo's history: `--emit-effect`
   writes all **2,077** `s_effect` rows with provenance per row, keyed by the ARRAY
   INDEX rather than the id column (one record's id is not its index, and keying by id

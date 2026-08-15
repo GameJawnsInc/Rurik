@@ -68,8 +68,8 @@ import pinned                                                   # noqa: E402
 import vaultpath                                                # noqa: E402
 from gwpe import PE                                             # noqa: E402
 
-# Set from a real green run on the pinned pristine client: 69 (was 61 before
-# section 7b). Sections 0-4 score 28 without a vault, so a vault-less run goes
+# Set from a real green run on the pinned pristine client: 74 (was 69 before
+# section 7c). Sections 0-4 score 28 without a vault, so a vault-less run goes
 # RED and says so -- the synthetic half cannot refute anything about ArenaNet's
 # own layout, and a green exit code that measured only the fixtures would be
 # the exact defect `checks.py` exists for.
@@ -91,7 +91,14 @@ from gwpe import PE                                             # noqa: E402
 # witnesses then agree on 20 -- a corroboration between two readings of the
 # SAME 480 bytes cannot see a divisor stride, by construction. Only the two
 # checks that read the client's own code can, which is the section's point.
-LEDGER = checks.Ledger("consttable", floor=69)
+#
+# 7c is 7b's mirror, added 2026-08-15: `s_worldData` had a free STRIDE and
+# `s_attribPoints` had a free LEFT EDGE, and both closed on the anchor while
+# wrong. Its five checks all read something this module cannot compute -- the
+# client's own `cmp esi, 0Dh`, the unbiased accessor's displacement, the
+# neighbouring table's right edge, and an UPSTREAM sum -- for the same reason
+# 7b's do: a corroboration drawn from the same bytes as the claim is not one.
+LEDGER = checks.Ledger("consttable", floor=74)
 
 IMAGE_BASE = 0x00400000
 TEXT_RVA, TEXT_OFF, TEXT_SIZE = 0x1000, 0x400, 0x400
@@ -535,7 +542,11 @@ EXPECTED = {
     "s_streakClass":        (0x7BC520,     22,  16),
     "s_ticketName":         (0x639A00,     32,   4),
     "s_categoryName":       (0x639918,     37,   4),
-    "s_attribPoints":       (0x7C7B24,     14,   4),
+    # CORRECTED 2026-08-15 from (0x7C7B24, 14): the old base was the
+    # displacement of an accessor that indexes `[level - 1]`, so it pointed
+    # four bytes below the array. Section 7c binds these to attribpoints.py,
+    # which reads the count out of the client's own bound check.
+    "s_attribPoints":       (0x7C7B28,     13,   4),
 }
 
 
@@ -681,6 +692,64 @@ def section_worlddata(pe, by):
               f"measured rather than argued")
 
 
+def section_attribpoints(pe, by):
+    """The OTHER row this corpus got wrong, and it failed the other way round.
+
+    `s_worldData` had a free STRIDE. `s_attribPoints` had a free LEFT EDGE
+    (`pad=None`), so its base was derived from its count -- and the count was
+    taken from the displacement of an accessor that indexes `[level - 1]`,
+    with MSVC having folded the `- 1` in. Base four bytes low, count one high,
+    and it closed on the anchor perfectly because the two errors are the same
+    error. Nothing in this module could ever have caught that.
+
+    So the witness comes from outside again, and from a DIFFERENT method than
+    section 7b's: `attribpoints.py` reads `arrsize` out of the client's own
+    `cmp esi, 0Dh`, takes the base from the accessor that applies no bias, and
+    checks the neighbouring table's right edge lands on it. Binding the two
+    here is what stops the literal in EXPECTED and the client's own bound from
+    drifting apart again.
+    """
+    print("\n7c. s_attribPoints: the corrected row, against the client's bound")
+    import attribpoints
+    t = by["s_attribPoints"]
+    img = attribpoints.Image(pe.path)
+    r = attribpoints.locate(img)
+
+    base_va = pe.off_to_rva(t.base) + pe.image_base
+    LEDGER.ok(r["base"] == base_va and r["arrsize"] == t.count,
+              "the row's base and count are what attribpoints.py reads out of "
+              "the client's own accessors -- two methods, one answer",
+              f"anchor arithmetic 0x{base_va:08X} x {t.count}; bound check "
+              f"0x{r['base']:08X} x {r['arrsize']}")
+    LEDGER.ok(r["biased_disp"] == base_va - 4,
+              "and the OLD base is exactly the biased accessor's displacement, "
+              "which is what made the wrong reading look right",
+              f"0x{r['biased_disp']:08X} = base - 4. CharData:202 is "
+              f"`s_attribPoints[level - 1]`; CharData:208 is the unbiased one")
+    LEDGER.ok(r["neighbour_abuts"],
+              "the dword the old row absorbed belongs to s_appearanceSlot, "
+              "whose 8 records of 12 bytes end exactly on this base",
+              f"0x{r['neighbour']['base']:08X} + "
+              f"{r['neighbour']['count']}*{attribpoints.SLOT_STRIDE} = "
+              f"0x{r['neighbour_end']:08X} -- an independent left edge, which "
+              f"is the thing `pad=None` says this row does not have")
+
+    # The retired reading, reproduced live rather than described. Both close;
+    # only one has a strictly increasing run, which is what a cost table is.
+    old = [struct.unpack_from("<i", pe.data, t.base - 4 + 4 * i)[0]
+           for i in range(t.count + 1)]
+    LEDGER.ok(old[0] == 5 and r["values"][0] == 1
+              and all(b > a for a, b in zip(r["costs"], r["costs"][1:])),
+              "and 14 x 4 still CLOSES on the anchor -- it is the content that "
+              "separates them, not the arithmetic",
+              f"at 14: {old} (opens on a 5 that breaks the run); at 13: "
+              f"{r['values']} (strictly increasing, then the sentinel)")
+    LEDGER.ok(sum(r["costs"]) == 97,
+              "the twelve costs sum to 97, retail's published cost of a "
+              "rank-12 attribute -- an UPSTREAM number this module never used",
+              f"{r['costs']} -- the 14-element reading sums to 102")
+
+
 def section_effect_toml(pe, by):
     print("\n8. s_effect as a content overlay")
     import tomllib
@@ -822,6 +891,7 @@ def main():
             section_cross_tools(pe, by)
             section_census(pe, by)
             section_worlddata(pe, by)
+            section_attribpoints(pe, by)
             section_effect_toml(pe, by)
             section_judgements(pe, by)
     finally:

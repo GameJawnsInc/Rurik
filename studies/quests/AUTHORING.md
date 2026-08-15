@@ -9,13 +9,13 @@ This is a decision document, not a study. It answers one question — *is a sess
 
 ## 1. The verdict
 
-**YES, and it has already happened.** On 2026-08-15 a probe sent one hand-built `GAME_SMSG 0x0049` QUEST_ADD at a real, unmodified retail client on our own server and a quest-log entry appeared — a `?` icon under the level bar, 23.8% of that icon slot differing from a run without the message (`studies/minimap/FINDINGS.md:721`, `toolkit/authsrv/probes.py:2465`). It rendered `?` rather than a name for exactly one reason: **the probe deliberately sent three empty strings**, because the marker was what was under test and "an authored string is a separate question" (probes.py's own comment).
+**YES, and it has already happened.** On 2026-08-15 a probe sent one hand-built `GAME_SMSG 0x0049` QUEST_ADD at a real, unmodified retail client on our own server and a quest-log entry appeared — a `?` icon under the level bar, 23.8% of that icon slot differing from a run without the message (`studies/minimap/FINDINGS.md:721`, `toolkit/authsrv/probes.py:2467`). It rendered `?` rather than a name for exactly one reason: **the probe deliberately sent three empty strings**, because the marker was what was under test and "an authored string is a separate question" (probes.py's own comment).
 
 So the brief's literal question is settled OBSERVED. The question that decides whether a session is worth spending is the next one: **can a quest carry OUR words, and can a player accept and finish it.** That splits into one cheap experiment and one short chain, and the cheap experiment goes first.
 
 ### The one test that decides the naming half
 
-**Change one literal in `toolkit/authsrv/probes.py:2465` and run the existing probe once.**
+**Change one literal in `toolkit/authsrv/probes.py:2467` and run the existing probe once.**
 
 ```
   before: Step(8.0, 0x0049, [1, _SPAWN_WORLD, 148, 148, 0, "", "", "", 0], ...)
@@ -61,7 +61,7 @@ The loader is free; the **consumer** is the whole job, and it does not exist.
 | **Two dialog opcodes to name** — and they are the ones the whole path turns on. `GAME_SMSG 0x0080` and `0x0081` are unnamed in *both* files. See §6. | `msgshape.py 0x0080` → `RECV handler 0x0091e750, [string16], wire 248`; `0x0081` → `RECV handler 0x0091e770, [agent_id], wire 6`. |
 | **Zero server code.** `grep '0x0049\|QUEST_ADD\|0x0012'` over `toolkit/authsrv/authsrv.py` returns one unrelated comment at line 279. No constant, no send site, no handler. The only `0x0049` this project has ever emitted came from `probes.py`. | Confirmed by grep. |
 | **Two recorded, deliberate drops to close.** `toolkit/authsrv/test_dispatch.py:110-114`: `0x0012` is *"REAL MISSING WORK, not a no-op… Answering it needs a quest table this repo does not have, and inventing quest text is worse than the drop."* `:127-130`: `0x003B` is *"Blocked behind 0x0039… Handle it when INTERACT gets a reply."* | Read verbatim. |
-| **`0x0039` INTERACT stores and answers nothing.** `authsrv.py:5063-5064` sets `state["interacting"]` and `state["interact_byte"]`, with a comment saying the reply must wait until *"an NPC-service study says what an interaction should ANSWER"*. | This document is that study. See §6. |
+| **`0x0039` INTERACT stores and answers nothing.** `authsrv.py:5101-5102` sets `state["interacting"]` and `state["interact_byte"]`, with a comment saying the reply must wait until *"an NPC-service study says what an interaction should ANSWER"*. | This document is that study. See §6. |
 | **No id allocator, for any table.** `toolkit/contentids.py` is not one — it is a map-`file_id` consistency check between the server's and the client's archives (`:166-283`). NPC `agent_id`/`definition` values are hand-picked and coordinated by prose comment (`content/world.toml:317-320`). | Quest ids need the same convention — and §6 shows the range is far tighter than anyone assumed. |
 | **`content/*.toml` and `git` have never held a quest row.** `git log --diff-filter=A --name-only --all \| grep -i quest` → empty, all branches. `TESTS.md` word-boundary `quest` → zero. | Two lanes checked; I re-ran the git one. |
 
@@ -211,7 +211,7 @@ Ordered cheapest-first. Every rung names what can go **red**. Costs use this rep
 
 | Rung | What it is | Acceptance criterion (can go red) | Depends on | Cost |
 |---|---|---|---|---|
-| **Q0** | The naming probe of §1: `probes.py:2465` with `enc_* = [0x3D64]` and the three out-of-distribution fields corrected. | The quest log renders **`Ascalon`**, not `?`. Red if it renders `?`, blank, or the client asserts. Free rider: whether a compass starburst draws. | nothing | **1 line + 1 caged loopback run, ~40 s.** **NEEDS OWNER GO-AHEAD.** |
+| **Q0** | The naming probe of §1: `probes.py:2467` with `enc_* = [0x3D64]` and the three out-of-distribution fields corrected. | The quest log renders **`Ascalon`**, not `?`. Red if it renders `?`, blank, or the client asserts. Free rider: whether a compass starburst draws. | nothing | **1 line + 1 caged loopback run, ~40 s.** **NEEDS OWNER GO-AHEAD.** |
 
 **Do this before anything else and before writing a line of the server.** Everything from Q2 down assumes the client accepts a string id we chose; Q0 is the only thing that tests it, and it costs less than reading this paragraph.
 
@@ -298,7 +298,7 @@ Sorted by whether it is genuinely **BLOCKED** or merely **EXPENSIVE**. `CLAUDE.m
 
 ### The one that was scored BLOCKED and is not: the INTERACT reply
 
-`test_dispatch.py:127-130` gates `0x003B` behind *"Handle it when INTERACT gets a reply"*; `authsrv.py:5063`'s comment defers to *"an NPC-service study"*; three recon lanes reported the reply's shape as not existing anywhere in the repo. **It exists, it is two opcodes, and both are already in our corpus and already decoded.**
+`test_dispatch.py:127-130` gates `0x003B` behind *"Handle it when INTERACT gets a reply"*; `authsrv.py:5082`'s comment defers to *"an NPC-service study"*; three recon lanes reported the reply's shape as not existing anywhere in the repo. **It exists, it is two opcodes, and both are already in our corpus and already decoded.**
 
 I derived the client half independently:
 
@@ -380,6 +380,6 @@ The recon produced seven lanes and three adversarial passes. These are the answe
 
 ## 8. The recommendation
 
-**Next session: run Q0 — one line in `probes.py:2465`, one caged loopback run — and if it is green, spend the session on Q1 + Q1b + Q4, because the INTERACT reply is `0x0080` + `0x0081`, it is half a day, and it is the gate under R4c-1's entire quest bar.**
+**Next session: run Q0 — one line in `probes.py:2467`, one caged loopback run — and if it is green, spend the session on Q1 + Q1b + Q4, because the INTERACT reply is `0x0080` + `0x0081`, it is half a day, and it is the gate under R4c-1's entire quest bar.**
 
 **What NOT to do:** do not chase the RC4 key (it is the expensive route to content we are forbidden to commit); do not disassemble `CompassQuestEffect.cpp` before Q0 corrects the probe's two out-of-distribution fields; do not budget a live capture campaign to recover the `0x003B` code semantics, which are already on disk; do not write a `quest_type` column, which no wire message can set; and do not use a line of Fournux's naming until its `PLAN.md` §6.1 row lands.

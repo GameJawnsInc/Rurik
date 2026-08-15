@@ -379,11 +379,13 @@ def _attribute_steps(agent_id):
     value. This probe reads it off the screen.
 
     THE RANKS ARE DISTINCT ON PURPOSE (12/9/6/3/1, content/world.toml). If the
-    triple's slots were mis-ordered the panel would show the right numbers
+    payload's COLUMNS were mis-ordered the panel would show the right numbers
     against the WRONG names, and distinct values are what makes that visible;
-    a uniform spread would hide it. Step 3 is the discriminator.
+    a uniform spread would hide it. Step 3 is the discriminator. (A column
+    layout mis-built as interleaved triples does not get this far -- it
+    asserts the client dead at CharData:202; studies/combat/PLAN.md 14.)
     """
-    from authsrv import attribute_triples
+    from authsrv import attribute_columns
     warrior = ((17, 12), (18, 9), (19, 6), (20, 3), (21, 1))
     return [
         Step(2.0, 0x003A, [agent_id, []], "attributes: empty",
@@ -391,11 +393,11 @@ def _attribute_steps(agent_id):
              "Warrior attribute reads BEFORE anything is sent -- this is the "
              "control, and 'they were already right' is the failure this "
              "catches."),
-        Step(6.0, 0x003A, [agent_id, list(attribute_triples(warrior))],
+        Step(6.0, 0x003A, [agent_id, list(attribute_columns(warrior))],
              "attributes: Strength 12, Axe 9, Hammer 6, Sword 3, Tactics 1",
              "the SAME panel. Read each of the five names and its number "
              "aloud. All five correct is L6's criterion met."),
-        Step(6.0, 0x003A, [agent_id, list(attribute_triples(
+        Step(6.0, 0x003A, [agent_id, list(attribute_columns(
                  ((17, 1), (18, 3), (19, 6), (20, 9), (21, 12))))],
              "attributes: the same five ranks REVERSED across the names",
              "same panel. Strength must now read 1 and Tactics 12. If the "
