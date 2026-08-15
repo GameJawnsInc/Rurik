@@ -424,10 +424,14 @@ def section_overkill():
     agent = state["agents"][10]
     damage_vals = [vals for op, vals, _ in sent
                    if op == authsrv.GAME_SMSG_AGENT_PROPERTY_UPDATE_FLOAT_TARGET]
-    check(len(sent) == 4 and agent["dead"] is True and
+    # 6 = the swing trio, then the kill window's three (status, reward,
+    # flags). It was 4 until step 9 gave a death its reward and flags
+    # messages; the count is spelled out rather than left as a bare literal
+    # so the next change to the kill window names itself here.
+    check(len(sent) == 6 and agent["dead"] is True and
           damage_vals and damage_vals[0][3] == F32_MINUS_ONE,
           "an overkill swing sends -1.0 and the target dies",
-          f"{len(sent)} messages (swing trio + kill status), "
+          f"{len(sent)} messages (swing trio + kill window), "
           f"dead={agent['dead']}, wire fraction=0x{damage_vals[0][3]:08X}"
           if damage_vals else f"sent={sent!r}")
 

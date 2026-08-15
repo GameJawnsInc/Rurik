@@ -731,13 +731,37 @@ GAME_SMSG_AGENT_UPDATE_STATUS = 0x00F1
 # 0x1000 on 151 of 151 Plague Worm creates and 0 on the ordinary ones in the same tape.
 GAME_SMSG_AGENT_INITIAL_STATUS = 0x00F0
 # Deliberately NOT given a meaningful name. It carries [agent_id, byte] and the whole
-# corpus holds two values: 9, on every one of 140 worm creates, and 8, exactly once --
-# on the Wolf at the instant it died, alongside EFFECT_DEAD. Two values with one of them
-# seen a single time is a shape, not a semantic, and this project's rule is to refuse
-# the guess. Note also that GAME_CMSG 0x0026 is ATTACK: 0x26 is the one value ArenaNet
+# corpus holds two values: 9 and 8.
+#
+# THE "EXACTLY ONCE" HERE WAS STALE AND IS NOW MEASURED. This comment said value 8
+# was seen "exactly once -- on the Wolf at the instant it died", and concluded that
+# one sighting is a shape rather than a semantic. Re-counted 2026-08-15 over BOTH
+# live captures, all ten connections: the histogram is {9: 200, 8: 4}, and all four
+# 8s land on a death tick naming the dying agent (agent 38 t=19.912 and agent 40
+# t=23.511 in 20260807T143055; agent 43 t=36.330 and agent 278 t=23.202 in
+# 20260810T235916). The single sighting was an artifact of counting one capture.
+#
+# 4 of 4 is still not a name -- what the flag MEANS is unresolved and 8 could be a
+# bitfield rather than an enum -- but it is enough to send: value 8 accompanies a
+# kill, value 9 accompanies a create, and no other value exists in 204 samples.
+#
+# Note also that GAME_CMSG 0x0026 is ATTACK: 0x26 is the one value ArenaNet
 # sends on BOTH channels, and they are different messages. Do not reuse either name.
 GAME_SMSG_AGENT_UPDATE_FLAGS = 0x0026
 BURROW_TAIL_0026_VALUE = 9        # what every observed worm create carried
+AGENT_FLAGS_KILLED = 8            # ...and what all 4 observed deaths carried
+
+# The kill reward. OBSERVED as [attr_id, value] on the tick an agent dies, 3 of 3
+# CLEAN kills carrying exactly [0, 26]; the fourth (the Wolf) sits on a tick
+# contaminated by a coincident non-kill burst and is excluded rather than averaged
+# in -- see studies/combat/PLAN.md 13 for why that burst is a different mechanism.
+#
+# attr_id 0 = experience is UPSTREAM and UNVERIFIED; 26 is copied from the wire,
+# not derived. Whether it varies by creature is UNMEASURED: three different
+# creatures gave 26, which is evidence that it does NOT vary, at n=3.
+GAME_SMSG_AGENT_KILL_REWARD = 0x00EE
+KILL_REWARD_ATTR = 0
+KILL_REWARD_VALUE = 26
 
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037
 GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A
@@ -2260,8 +2284,24 @@ def hit_enemy(send, state, target_id, conn_id, bonus_damage=0.0):
         # death message failed before this was read out of the client
         # (studies/agentprops/FINDINGS.md 1c).
         agent["dead"], agent["died_at"] = True, now
+        # THE ORDER IS ARENANET'S, read off the two uncontaminated kills in the
+        # corpus (agent 278 t=23.202 and agent 40 t=23.511): status, then the
+        # reward, then the flags byte. Same tick, same agent, all three.
         send(GAME_SMSG_AGENT_UPDATE_STATUS, [target_id, agents.EFFECT_DEAD],
              f"KILL agent {target_id}")
+        # A SINGLE [0, 26], and the single is the finding. The pair
+        # [10,0]+[0,X] looks like the richer template and is NOT a kill shape:
+        # 6 of its 7 occurrences fire 6.8-31.5 s from any death, inside a
+        # recurring broadcast burst that is always preceded by 0x009C
+        # [agent, 100]. The seventh landed on the Wolf's kill tick by
+        # coincidence -- and that tick carries the 0x009C marker too, which is
+        # what gives the coincidence away. The three CLEAN kills carry one
+        # message and no 0x009C. studies/combat/PLAN.md 13.
+        send(GAME_SMSG_AGENT_KILL_REWARD,
+             [KILL_REWARD_ATTR, KILL_REWARD_VALUE],
+             f"kill reward [{KILL_REWARD_ATTR}, {KILL_REWARD_VALUE}]")
+        send(GAME_SMSG_AGENT_UPDATE_FLAGS, [target_id, AGENT_FLAGS_KILLED],
+             f"flags {AGENT_FLAGS_KILLED} on the dying agent {target_id}")
         print(f"[c{conn_id}] agent {target_id} ({agent['name']}) is dead; "
               f"back up in {REVIVE_AFTER:.0f}s", flush=True)
 

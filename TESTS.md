@@ -2798,6 +2798,29 @@ Every one of these, in the order they were written:
   real-content section presses skill 153 and requires E5 to carry recharge 8,
   the value ArenaNet's own wire echoed — it SKIPS loudly on a machine with no
   vault overlay, where sections 1–3 still run on a stubbed skill_timing),
+  `toolkit/authsrv/test_killwindow.py` (the kill window, checked against
+  ArenaNet's own kills. Our server sent one message when an agent died —
+  `0x00F1` with the death bit — where the real service sends three: status,
+  then a `0x00EE` reward, then `0x0026` value 8, same tick, same agent. **The
+  oracle is the corpus, not a literal**: §2 re-derives the live template out of
+  `vault/captures/live/*` on every run, so adding or re-decoding a capture
+  moves the expectation instead of leaving a stale constant behind. §1 keeps
+  literals only so a vault-less machine still checks something — including that
+  the reward encodes to `ee00000000001a000000`, ArenaNet's exact bytes.
+  **§3 is what the file is really guarding.** The corpus holds a
+  richer-LOOKING template — a `0x00EE` PAIR, `[10,0]` then `[0,X]` — that is
+  not a kill shape: 6 of its 7 sightings fire 6.8–31.5 s from any death inside
+  a broadcast burst always preceded by `0x009C [agent, 100]`, and the seventh
+  landed on the Wolf's kill tick, whose `0x009C` marker is what gives the
+  coincidence away. Copying it would have looked like more fidelity and been
+  less, so §3 asserts we do not. Two counts here corrected earlier passes and
+  are asserted so they cannot drift back: the corpus holds **5 deaths, not 4**
+  (agent 38 dies twice on one connection, and the second carries neither
+  reward nor flags — a repeated `EFFECT_DEAD` awards nothing), and `0x0026`'s
+  histogram over both captures is **{9: 200, 8: 4}**, against an `authsrv.py`
+  comment that had called value 8 a single sighting from one capture's count.
+  Proven red by setting the reward to the Wolf's contaminated 126. Floor 6, the
+  vault-less §1),
   `toolkit/authsrv/test_skilldamage.py` (skill damage: the client's own
   numbers at the player's own rank, replacing `ENEMY_SKILL_FRACTION = 0.25` —
   a flat quarter of the player's maximum for every skill, admitted invention.
