@@ -149,16 +149,37 @@ TESTS.md for `search_all` and `Archive.magic`.
 
 ### While you are working: only what your edits reach
 
-Twelve minutes is still too long after every edit, so during the loop:
+Ten minutes is still too long after every edit, so during the loop:
 
 ```bash
 python toolkit/run_suite.py --since HEAD
 ```
 
 Tests reachable from your changed modules, through a real dependency graph — imports
-plus the subprocess launches an import graph cannot see. A change under `authsrv/`,
-`schema/` or `portal/` lands around **3 minutes**; a one-module change can be
-**seconds**. `--since main` covers everything the branch touched.
+plus the subprocess launches an import graph cannot see. `--since main` covers
+everything the branch touched.
+
+**HOW MANY tests it picks does not tell you how long it takes, and the two run in
+opposite directions here.** MEASURED 2026-08-15, at the default four jobs:
+
+| a change to | selects | wall |
+|---|---|---|
+| `authsrv/authsrv.py` | 34 of 96 | **87 s** (measured) |
+| `schema/codec.py` | 39 of 96 | ~105 s |
+| `mapdata/dxt1.py` | **14 of 96** | **~390 s** |
+| `mapdata/archive.py` | 68 of 96 | ~530 s |
+| `checks.py` | 96 of 96 | the full suite |
+
+Only the first is a stopwatch figure; the rest are its arithmetic — sum the selected
+files' times, divide by four, floor at the longest single file — which came in 20%
+HIGH on the one that was checked (105 s predicted, 87 s actual), so treat them as
+budgets rather than promises.
+
+The `dxt1.py` row is the one to remember. It selects the FEWEST tests of anything in
+the table and costs four times what a change to the whole auth server costs, because
+the fourteen it picks are the expensive texture and atlas files. A small blast radius
+made of slow tests is slower than a wide one made of fast ones, so read the selection
+list rather than its length.
 
 Three behaviours worth knowing before you rely on it:
 
@@ -175,9 +196,11 @@ Three behaviours worth knowing before you rely on it:
   reachable from them at all — `rawlisten.py`, `flagscan.py`, `admin.py` among them —
   and a change confined to one of those exits 2 with a coverage statement.
 
-Selection cannot help `mapdata/` much, and the reason is the floor above: a change to
-one terrain decoder still pulls `test_modelexport` into the selection, so it lands at
-the same ~12 minutes. Fixing that is about the two hogs, not about the selector.
+Selection helps `mapdata/` least, and the table above says why: `archive.py` reaches 68
+of the 96 files, so it lands at ~530 s against the full suite's 621 s — a scoped run
+that saves about a minute and a half. That is a property of the code, not of the
+selector: `archive.py` is what almost everything under `mapdata/` opens the world
+through. Server, schema and portal work is where `--since` pays, and it pays well.
 
 **`python toolkit/run_suite.py` with no flags is the suite. Nothing else is** — that is
 the count you report, and `CLAUDE.md`'s rule is to name it.
