@@ -472,8 +472,9 @@ capture-first), projectile reconciliation (F9 — research, not build).
 | Question | Side A | Side B | Settles via |
 |---|---|---|---|
 | Attribute numbering | contiguous 0–41 (OpenTyria, single witness; current code) | gapped 0–44/51-row (3 lineages + client text-id table + measured table — CORROBORATED) | Step 5 (client-table); step 6 item 1 (wire) |
-| `0x003A` triple positions (id/rank_base/rank_bonus) | Headquarter naming (UNVERIFIED, different build) | — (no second source) | Step 5 disassembly; step 6 item 1 |
-| Panel reads the array `0x00819220` writes? | assumed by the handoff's "panel shows rank R" | NOT FOUND — no reader/study traced the panel's read path | Step 5 xref (C8a) |
+| ~~`0x003A` triple positions~~ | **RESOLVED for slots 1–2, §8a**: slot 1 = `attrib` (id), slot 2 = `baseValue` (rank), both named by the client's own asserts | slot 3 remains NOT NAMED — moves in lockstep with `baseValue`; Headquarter's `rank_bonus` still UNVERIFIED | step 6 item 1, or a rendered check |
+| ~~Panel reads the array `0x00819220` writes?~~ | **RESOLVED YES, §8b** — same TLS singleton, same locator, chain ends in `AttribBtns.cpp` vtable code | residual: the panel control's runtime `agentId` is an ASSUMPTION static analysis cannot close | step 7's operator check |
+| Tooltip rank interpolation | **RESOLVED, §8c**: `max(0, round(lo + (hi−lo)·rank/15.0))`, literal 15.0, no upper clamp | the rounding TIE-BREAK (half-up vs half-even) is unresolved — ±1.0 adjust, not ±0.5 | a rendered check on a .5-landing pair (skill 316) |
 | Client energy gate on USE_SKILL | sender disassembly: no energy check (skillcast §7) | agents.py comment: empty pool refuses all eight (5048f6a; commit msg blames missing weapon) | Loopback drain-pool probe with positive control (C10) |
 | "One cast per skill per session" without E5/E6 | skillcast study's own synthesis | flagged UNVERIFIED by both capture readers | Step 3 repeat-press acceptance (C10) |
 | E6 scheduler: keyed to E5 + recharge? | one measured cycle says yes (+3 ms) | unmeasured on the other 13+ cycles | Step 0b |
@@ -481,7 +482,7 @@ capture-first), projectile reconciliation (F9 — research, not build).
 | `0x00EE` attr_id 10 ([10,0], Wolf kill only) | — | — (wholly unknown) | Registry only; watch step 6 |
 | `0x00A4` meaning | GWCA: AGENT_PROJECTILE_LAUNCHED, never sent by anyone | monsterai: positional oracle, 13 live instances | Cross-check both readings against the 13 samples |
 | TargetBuff+0x04 | effect_type (Headquarter) | attribute_level (GWCA) | Step 6 item 3 |
-| Scaling-window values display-literal at scale? | 4-skill anecdote says yes | adrenaline precedent (`ceil(raw/25)`) says maybe not | Step 5 C6 formula; step 4 wiki sweep; step 6 item 2 |
+| ~~Scaling-window values display-literal at scale?~~ | **RESOLVED, §8c + step 4**: the endpoints ARE the displayed values (the interpolator consumes them raw at rank 0 and 15), and GWW's progression templates match all 14 | no transform like `ceil(raw/25)` appears in the path | closed |
 | `0x0037` bytes: used/max or max/used? | contested between lineages | moot only while the value is [0,0] (C12) | Step 6 item 1 |
 | ValueError on connection thread = client disconnect? | RECONSTRUCTION from CPython semantics | never exercised | Step 2's red-first test (C8b) |
 | Windup: scales with declared speed or per-creature? | ratio model (n=42, 2 speeds) | confounded with allegiance class | future capture; not this arc |
@@ -562,7 +563,97 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 2 | ✅ 2026-08-14, `cdefe83`…`e9f7b7d` (10 commits) — extraction, red-first guard contract on all seven `_fraction` functions, connection-thread catch, overkill clamp-to-kill (`_damage_fraction`), first two-thread test. `test_guards.py`, floor 35 |
 | 3 | 🔶 offline half ✅ 2026-08-14, `f5f65b2`+`77b65d1` — emitter (1,333 client-table rows, build stamped from bytes), the four-opcode cycle on the observed template, THE QUEUE LAW (E4 at accept, cast begins when the caster frees — fits 4/4 Necro cycles ≤14 ms; the naive press+activation model is refuted by +0.64 s/+0.57 s residuals), overrides names 227–230, cross-thread cast-timer test (200 presses → exactly 200 of each phase). Attack-skill E5 timing rides the weapon — recorded as unmodeled divergence. GV 58 deliberately unsent (0 of 21,543 live). **Loopback acceptance BLOCKED — see §7** |
 | 4 | ✅ 2026-08-14, `0ddfbd0`+`9d97f45`+`a7971b1` — `+0x44..+0x68` decoded as u32 (duration0/15, skill_arguments bitfield, scale0/15, bonus_scale0/15; +0x50 stays NOT FOUND). Reproduces the 4-skill FINDINGS anecdote byte-exact and asserts its green-render rule. **C7's wiki third witness ran and agrees with all 14 endpoint values GWW lists**, plus costs and recharge — and checks the other direction too (no unlisted set may render green), which is what makes Rush's constant-25-with-bit-clear a real discriminator. Emitted to the content rows; **nothing consumes them until step 8**. `test_skilltable` floor 26→46 |
-| 5–10 | ⬜ |
+| 5 | 🔶 **research half ✅ 2026-08-14, §8** — the triple's slots 1–2 named by ArenaNet's own asserts (`attrib`, `baseValue`), the panel's read path traced to `AttribBtns.cpp` (C8a closed), the tooltip formula measured (C6 closed). **Still to do in code**: adopt the gapped numbering, replace `ATTRIBUTE_COUNT = 42`, retire the stale `authsrv.py:552-557` comment, and pin the handler constants in a test |
+| 6–10 | ⬜ |
+
+## §8. Step 5's client-byte results — both critic amendments CLOSED (2026-08-14)
+
+Three read-only digs on pinned build 38797. The two headline answers come from
+**ArenaNet's own compiled assert text**, which is the strongest evidence
+available here and needs no capture.
+
+### 8a. The triple is (attrib, baseValue, ?) — two of three named by the client
+
+`0x003A`'s payload is three parallel n-dword arrays, and the writer
+`0x00819220` takes them as `(record, id, value_a, value_b)` (`ret 0x10`, four
+4-byte args). Slot identities, from the wire arrays through the writer to the
+record:
+
+| wire array | writer arg | record slot | identity | evidence |
+|---|---|---|---|---|
+| 1st (`payload+0xc`) | `[ebp+0xc]` | index, `record + id*20` | **attribute id** | bound-checked `cmp ebx, 0x33` (51) at `0x00819241`, then `lea eax,[ebx+ebx*4]; lea esi,[edi+eax*4]`. `ChCliAttrib:249 attrib < arrsize(attribState->attrib)` at `0x0081924e` — **ArenaNet's own word is `attrib`** |
+| 2nd (`+0xc+4n`) | `[ebp+0x10]` | `slot+8` | **the rank** — ArenaNet calls it **`baseValue`** | `ChCliAttrib:42 (int)attribState->attrib[attrib].baseValue >= 0` at `0x008187a7`, whose `cmp` at `0x0081879E` reads **`[esi + attrib*20 + 8]`** — that arithmetic is what ties the name to this exact slot. Separately bound-checked ≤ 12 downstream: `CharData:202 level < arrsize(s_attribPoints)` at `0x0091d511` guards `cmp esi, 0xd` before the table lookup |
+| 3rd (`+0xc+8n`) | `[ebp+0x14]` | `slot+0xc` | **NOT NAMED** | stored unmodified at `0x0081926F`; **receives the identical delta as `baseValue`** in the pending-change apply (`0x0081877C` adds the clamped delta to `+8`, `0x00818789-0x0081878C` adds the same `[edx+8]` to `+0xc`); never bound-checked, never used as an index, and not read by the reader's derived path. No assert names it |
+
+Also recovered from the same asserts: `attribState->attribPointsAvail` is
+`[record+0x434]` (`ChCliAttrib:43` at `0x008187c1`), and it takes its **own**
+delta (`[edx+0xc]`), separate from the rank's.
+
+**What this decides for step 7.** Emit the attribute id in slot 1 and the rank
+in slot 2 — both OBSERVED. Slot 3 is the open one; since the client's own apply
+path moves it in lockstep with `baseValue` from a common zero, **sending the
+rank there too reproduces the invariant the client maintains** — but that is
+RECONSTRUCTION, is labelled so at the call site, and the operator's panel check
+is what would discriminate it. Headquarter's `rank_bonus` naming stays
+UNVERIFIED; this pass neither confirms nor adopts it.
+
+### 8b. The panel DOES read what `0x003A` writes (amendment C8a — closed)
+
+The L6 acceptance criterion is sound. The read chain: reader `0x00818C90`
+(mirrors the writer's slot arithmetic exactly, `cmp ebx,0x33; lea eax,[ebx+ebx*4];
+lea esi,[edi+eax*4]`) ← its **only** caller, a `ChCliApi.cpp` thunk
+`0x0080D990` ← its **only** caller `0x008AAFA0` ← reached only through a C++
+vtable slot at `0x00B9F7F0`, inside a function cluster carrying
+`AttribBtns:268` at `0x008aaf04` — source `P:\Code\Gw\Ui\Game\Attributes\
+AttribBtns.cpp`, **the Skills & Attributes panel's own source folder**.
+
+The strongest part is that the two paths provably share one object: the write
+forwarder `0x0080EB40` (from the `0x003A` handler) and the read forwarder
+`0x0080D990` resolve their manager through **byte-identical** code —
+`call 0x0047F660` (a TLS per-thread singleton: `mov ecx,[0xc0f300]; mov eax,
+fs:[0x2c]; …`) then `ecx = [eax+0x2c] + 0xac` — and both then hand it to the
+same by-agent-id locator `0x00819340`.
+
+**The one gap, and it is honest:** whether the panel control's own `agentId`
+field (`this+8`) holds the local player's agent id while the panel is open is a
+runtime value, not a byte pattern. Static analysis cannot close it. It is the
+obvious reading (the panel only ever shows your own character, and `0x003A`
+only ever syncs the local agent) but it is an ASSUMPTION, and step 7's
+acceptance names it.
+
+### 8c. The tooltip's rank formula (amendment C6 — closed)
+
+**OBSERVED**, at `0x005A8920`, ArenaNet's one general-purpose per-rank
+interpolator — called three times from a single caller `0x004F98D0` for
+`scale0/15` (`+0x5C/+0x60`), `bonus_scale0/15` (`+0x64/+0x68`) and
+`duration0/15` (`+0x44/+0x48`), so it is not scale-specific:
+
+```
+value(rank) = max(0, round(lo + (hi - lo) * rank / 15.0))
+```
+
+- The divisor is the **literal double 15.0** — verified by a stdlib read of
+  `0x0094B930`: bytes `0000000000002e40` decode to exactly `15.0`.
+- **No upper clamp on rank.** Nothing compares the rank operand between
+  function entry and the `imul`, so ranks above 15 **linearly extrapolate**
+  rather than saturating. This matters: GW ranks exceed 12 with runes/headgear.
+- The floor at zero is ArenaNet's own assert: `ConstSkill:3769 (int)result >= 0`
+  at `0x005a8966`. The module is `ConstSkill.cpp`, identified by its own
+  asserts rather than inferred.
+
+**UNRESOLVED, and left that way:** the rounding tie-break. The CRT helper chain
+(`0x0046DF80` → `0x005B6E0B` → `_ftol2` at `0x005AEB20`) adjusts by ±**1.0**
+(verified by stdlib read of `0x0093C1D0`: `000000000000f03f` = `1.0`), not the
+textbook ±0.5, before truncating toward zero. Half-up vs half-even is not
+settled. It only bites where an endpoint pair lands on a .5 — skill 316's max
+health (10→60, 3.33/rank) is a ready discriminator whenever a rendered check is
+possible.
+
+**Tangent worth keeping:** `ConstSkill:3762 index < arrsize(s_energyTable)`
+names the energy-cost byte's lookup table — the `11→15, 12→25` encoding in
+`studies/skills` §1 is a real table in the client, not a formula.
+
+---
 
 ## §7. The loopback validation is blocked on a vault archive-state mismatch (2026-08-14)
 
