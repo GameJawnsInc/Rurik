@@ -1780,6 +1780,34 @@ Every one of these, in the order they were written:
   proves nothing while looking like it proved everything. No vault, no socket, no
   client. ~1 s),
   `toolkit/clientscan/test_skilltable.py` (client skill rows vs. the wiki),
+  `toolkit/clientscan/test_attribtable.py` (the client's own `s_attrib` table,
+  and the numbering verdict it settles. `studies/combat/PLAN.md` carried
+  "contiguous 0–41" — OpenTyria's, and the source of `ATTRIBUTE_COUNT = 42` —
+  against "gapped 0–44, ids 26/27/28 reserved" as CONTESTED. **Neither is
+  wrong; they answer different questions**, and the table shows both at once:
+  the INDEX SPACE is contiguous 0..50 (what `0x003A`'s first array is
+  bound-checked against, `cmp esi, 0x33`), the ten playable professions own
+  exactly **42** of those rows, and the other 9 belong to profession 11 —
+  including 26/27/28, which sit immediately before Dagger Mastery at 29 and are
+  precisely the "+3 offset" the rival scheme describes. The table is located
+  STRUCTURALLY, never by address: rows self-index at `+0x04`, professions fall
+  in 1..11, each playable profession has EXACTLY ONE primary, and the real
+  rows total 42 — a conjunction proven refutable by three sabotages (breaking
+  one self-index, adding a second Warrior primary, moving one attribute to
+  profession 11) that each make the locator refuse rather than return a
+  confident wrong offset. Section 1 also closes byte-exactly: the row after the
+  last is where `ConstAttrib.cpp`'s own path string begins, which only a
+  correct count AND stride reach. **Section 4 is the leg with no circularity**
+  — the profession column is in `Gw.exe`, the names are in the owner's
+  `Gw.dat` and come back through `textrec`, and the claim is that the 42 rows
+  the EXE gives a profession are exactly the 42 the ARCHIVE can name: one
+  partition drawn twice by two unrelated mechanisms, `named-not-real=[]`,
+  `real-not-named=[]`. It skips loudly with no archive, which is why the floor
+  is the archive-less 25 of 29 rather than the full count. Two names are pinned
+  as literals — `Strength` and `Dagger Mastery` — following this file's
+  existing two-name precedent rather than dumping 42; the emitter itself writes
+  **no** authored text, committing `name_string_id` for run-time resolution,
+  and a check asserts no string leaks into the rows),
   `toolkit/clientscan/test_areatable.py` (the map table and string-id decoding),
   `toolkit/clientscan/test_maprows.py` (the footprint join that NAMES archive map
   rows, and the negative the arc turned on. `s_missionClientData` -- the client's
