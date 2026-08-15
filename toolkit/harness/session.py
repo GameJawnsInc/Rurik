@@ -1466,10 +1466,14 @@ def main():
                                          f"code {proc.returncode}\n"
                                          + stack._tail(name))
                 time.sleep(0.5)
-        a.exe = a.exe or dc.newest_run_exe()
         if not a.exe:
-            raise SystemExit(f"No Gw.exe under {vault_path('run')} — "
-                             f"run make_run_dir.py first (RUNBOOK.md).")
+            # Selected by BUILD, not by mtime -- see dc.select_run_exe. A
+            # newest-wins pick sent this at the 38833 snapshot the day it
+            # landed, whose Gw.dat never had the maps 146/148 replacement.
+            a.exe, why = dc.select_run_exe()
+            if not a.exe:
+                raise SystemExit(why)
+            print(f"client: {why}")
         return run_client(a, outdir)
     except KeyboardInterrupt:
         print("\nstopping")
