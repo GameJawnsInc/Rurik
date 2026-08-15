@@ -23,6 +23,7 @@ Usage: debugread.py <pid> [seconds]
 """
 import ctypes
 import os
+import struct
 import sys
 from ctypes import wintypes
 
@@ -71,6 +72,70 @@ class DEBUG_EVENT(ctypes.Structure):
                 ("dwThreadId", wintypes.DWORD), ("u", _U)]
 
 
+
+# --- NATIVE 64-bit CONTEXT arming -------------------------------------------
+# Wow64SetThreadContext writes the 32-bit SHADOW context. The CPU debug
+# registers are per-thread NATIVE state, so on a WOW64 target they have to be
+# set in the 64-bit CONTEXT. Every silent run before this one armed the shadow
+# and then read the shadow back, so the read-back could not have caught it.
+# AMD64 CONTEXT: ContextFlags at +0x30, Dr0 at +0x48, Dr7 at +0x70, size 1232,
+# and the buffer MUST be 16-byte aligned.
+CTX_SIZE = 1232
+CONTEXT_AMD64 = 0x00100000
+CONTEXT_DEBUG_REGISTERS_64 = CONTEXT_AMD64 | 0x10
+OFF_FLAGS, OFF_DR0, OFF_DR7 = 0x30, 0x48, 0x70
+
+
+def _ctx_buf():
+    raw = ctypes.create_string_buffer(CTX_SIZE + 16)
+    addr = ctypes.addressof(raw)
+    return raw, addr + ((16 - (addr % 16)) % 16)
+
+
+def _put(p, off, val):
+    ctypes.memmove(p + off, struct.pack("<Q", val), 8)
+
+
+def _get(p, off):
+    b = (ctypes.c_char * 8).from_address(p + off)
+    return struct.unpack("<Q", bytes(b))[0]
+
+
+def arm_native(tid, hi, lo, ctl):
+    """Set Dr0/Dr1/Dr2 in the NATIVE context. Returns (ok, dr0_readback)."""
+    h = k32.OpenThread(arm64.THREAD_ACCESS, False, tid)
+    if not h:
+        return False, 0
+    raw, p = _ctx_buf()
+    k32.SuspendThread(h)
+    try:
+        ctypes.memset(p, 0, CTX_SIZE)
+        _put(p, OFF_FLAGS - 8, 0)
+        ctypes.memmove(p + OFF_FLAGS,
+                       struct.pack("<I", CONTEXT_DEBUG_REGISTERS_64), 4)
+        if not k32.GetThreadContext(h, ctypes.c_void_p(p)):
+            return False, 0
+        _put(p, OFF_DR0, hi)
+        _put(p, OFF_DR0 + 8, lo)
+        _put(p, OFF_DR0 + 16, ctl)
+        _put(p, OFF_DR7, (_get(p, OFF_DR7) & ~0xFFFFFF00) | 0x15)
+        ctypes.memmove(p + OFF_FLAGS,
+                       struct.pack("<I", CONTEXT_DEBUG_REGISTERS_64), 4)
+        if not k32.SetThreadContext(h, ctypes.c_void_p(p)):
+            return False, 0
+        # read back the NATIVE context -- the check the shadow version faked
+        raw2, p2 = _ctx_buf()
+        ctypes.memset(p2, 0, CTX_SIZE)
+        ctypes.memmove(p2 + OFF_FLAGS,
+                       struct.pack("<I", CONTEXT_DEBUG_REGISTERS_64), 4)
+        if k32.GetThreadContext(h, ctypes.c_void_p(p2)):
+            return True, _get(p2, OFF_DR0)
+        return True, 0
+    finally:
+        k32.ResumeThread(h)
+        k32.CloseHandle(h)
+
+
 def arm(tid, hi, lo, ctl):
     h = k32.OpenThread(arm64.THREAD_ACCESS, False, tid)
     if not h:
@@ -111,8 +176,15 @@ def main(argv):
         raise SystemExit(f"DebugActiveProcess failed: {ctypes.GetLastError()}")
     print("attached")
 
-    n = sum(1 for t in arm64.threads_of(pid) if arm(t, hi, lo, ctl))
-    print(f"armed {n} thread(s); watching {budget}s")
+    n = ok = 0
+    for t in arm64.threads_of(pid):
+        good, back = arm_native(t, hi, lo, ctl)
+        n += 1 if good else 0
+        ok += 1 if back == hi else 0
+    print(f"NATIVE arm: {n} accepted, {ok} verified by native read-back")
+    if not ok:
+        print("  native arming FAILED -- stop here, the result would be void")
+    print(f"watching {budget}s")
 
     ev = DEBUG_EVENT()
     hit = None
@@ -124,7 +196,7 @@ def main(argv):
             continue
         status = DBG_CONTINUE
         if ev.dwDebugEventCode == CREATE_THREAD_DEBUG_EVENT:
-            arm(ev.dwThreadId, hi, lo, ctl)      # new threads get watched too
+            arm_native(ev.dwThreadId, hi, lo, ctl)   # new threads too
         elif ev.dwDebugEventCode == EXCEPTION_DEBUG_EVENT:
             code = ev.u.Exception.ExceptionRecord.ExceptionCode
             if code == EXCEPTION_SINGLE_STEP:
