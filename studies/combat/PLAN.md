@@ -578,6 +578,135 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 9 | ✅ **2026-08-15, `34ee86b`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
 | 10 | ✅ **2026-08-15, `2610aa3`+merge** — `PLAN.md` §3 (R4a, R4b) and §8 updated dated and stamped; the profession ladder's L6 row annotated so the two ledgers agree. **Landing suite: 100 green / 1 red of 101, 4,947 checks.** The red is `test_contentids`, and it is ENVIRONMENTAL and attributed: `vault/run/2026-08-13_64fae3b1369b/Gw.dat` is held open by **another session's client, PID 16340, running from that directory since 11:47** — the archive is present (4.2 GB) and unreadable, which is the same "the client holds its own archive open" note main's own §8 carries. `test_contentids` passed at 23 checks earlier the same day with the archive free, and nothing in this arc touches archives, map content or `contentids.py`. Not killed, per the parallel-sessions rule |
 
+## §17. Attack timing: damage does land mid-animation, and the windup is OURS to choose (2026-08-15)
+
+The owner: *"we send the damage the instant the unit starts an animation — that
+isn't how the game works. you can cancel your attack animation before it hits…
+the actual hit is sent mid-animation, and only if not cancelled beforehand."*
+
+Correct on the timing, and the corpus and the client together sharpen it into
+something more actionable than "add a delay".
+
+### 17a. A hypothesis of mine, refuted
+
+I proposed that the player's wide windup spread (0.24–1.62 s) was a **pairing
+artefact** — that a swing landing no damage let a naive "nearest damage within
+4 s" reach forward to the next swing's. A correct pairing was run (a swing's
+damage must precede that attacker's NEXT `ATTACK_STARTED`, unpaired swings
+counted separately) and it **produced the identical 10-sample set**. The spread
+is a property of the data. My explanation was wrong and the number stands.
+
+### 17b. What the corpus says, correctly paired
+
+| | n paired | n unpaired | windup / declared speed |
+|---|---|---|---|
+| **agents** (6 attackers) | 41 | 8 | mean **0.4540**, sd 0.0520 |
+| **player** | 10 | 4 | mean **0.5414**, sd 0.2413 |
+
+The agent figure reproduces the published `SWING_WINDUP_RATIO = 0.4458` from an
+independent pass. **The player's is both larger and four times as scattered**,
+and only 1 of 10 samples lands inside the agents' band — so the player is not
+simply the agent model with a different constant.
+
+A correction to my own framing on the way: **the player's declared attack speed
+is 2.475 in the second capture, not 1.75** — a bow, not the melee class I
+assumed. Both subgroups (1.75, n=7; 2.475, n=3) still sit above the agent band,
+so the scatter is not a weapon-class artefact.
+
+**Two asymmetries that matter more than the ratio:**
+
+1. **For NPCs, damage and `GV_MELEE_ATTACK_FINISHED` are the SAME wire instant** —
+   gap exactly 0.000000 s in **40 of 40** measured swings. That extends
+   `land_swing`'s docstring claim (6 of 6, by byte offset) to the whole corpus.
+   So an NPC swing is: `ATTACK_STARTED` … windup … (`FINISHED` + damage
+   together). That is precisely "the hit lands mid-animation".
+2. **The player NEVER closes with `MELEE_ATTACK_FINISHED` — 0 of 14.** Four close
+   with `GV_ATTACK_STOPPED`, ten have no closing event at all. And one player
+   window carries a SECOND damage with no `ATTACK_STARTED` of its own (n=1),
+   which hints ArenaNet may send the player's `ATTACK_STARTED` on a state
+   transition (new target, re-engage) rather than once per swing the way it does
+   for NPCs. **UNVERIFIED, and it would undercut reading a per-swing windup off
+   the player at all.**
+
+### 17c. Cancellation has no dedicated signal, and the corpus has one candidate
+
+`GV_ATTACK_STOPPED` (3) is the only value that ever marks a swing not landing,
+and it is **overloaded across at least three unrelated causes**: the attacker
+dying mid-swing, the target dying, and the attacker starting a skill (which ends
+the auto-attack as a side effect). The five ids that would read as a distinct
+interrupt — `GV_INTERRUPTED` 35, `GV_ATTACK_SKILL_FINISHED` 46,
+`GV_INSTANT_SKILL_ACTIVATED` 48, `GV_ATTACK_SKILL_STOPPED` 49,
+`GV_SKILL_STOPPED` 59 — occur **zero times in 22,137 decoded GAME_SMSG**.
+
+Of 63 `ATTACK_STARTED` corpus-wide, 7 land no damage: 3 are the attacker dying,
+3 are the capture ending 0–0.4 s later (right-censored, not events), and **one
+is a real candidate** — the player, `ATTACK_STARTED` t=15.434, `ATTACK_STOPPED`
+t=16.578, no damage, no death, no skill press, preceded 57–90 ms earlier by the
+only player action in the window: two c2s `0x00C1` target-selects (clear, then
+select a different agent) while the original target was still alive.
+
+**It stays UNVERIFIED at n=1**, and for a reason worth keeping: **the corpus
+contains zero observed misses** — all 42 `MELEE_ATTACK_FINISHED` are paired with
+damage — so nothing distinguishes "cancelled" from "missed". **NEEDS-CAPTURE**:
+a narrated run where the operator deliberately cancels a swing (retarget, move,
+ESC) with marks, and ideally lands a miss for contrast.
+
+### 17d. The client does not decide when the hit lands — WE do
+
+The strongest result, and it changes what "fixing this" means. The client's
+compiled asserts carry exactly two pieces of this vocabulary —
+`m_attackInterval` and `m_attackModifier` (`AvChar.cpp:4791-4792`). `swing`,
+`windup`, `aftercast` and `interrupt` return **zero** hits; `cancel` returns
+seven, none combat-related. The enclosing function at `0x007F82C0` computes an
+attack duration as `modifier × base`, conditionally × a literal `1.25`
+(`0x950990`, verified as exactly 1.25), and hands one float to a queueing call.
+**No landing-fraction or windup constant exists in that path, and no compiled
+per-weapon attack-speed or animation-length table exists at all** — the
+`arrsize(s_*)` census over 140 sites in 61 files turns up nothing
+attack-timing-shaped.
+
+So attack timing is **server-authored per agent**, which
+`studies/enemy/PLAN.md` §6q already concluded and this re-verified
+independently. The windup is not a client constant we are failing to read; it
+is a number we choose, and the corpus is the only witness to what ArenaNet
+chose.
+
+**An instrument limitation found on the way, and it weakens every "no assert
+names X" answer in the repo:** `asserts.py`'s matcher requires `mov edx / mov
+ecx / call` in 15 contiguous bytes, and at the `m_attackInterval` site the
+compiler scheduled an `fstp st(0)` between `mov ecx` and `call`. That assert is
+therefore invisible to the tool **and does not appear in its three-item
+`--unreadable` list** — it was read by direct disassembly instead. The tool's
+own header already warns its counts are a floor; this is a concrete instance,
+and it means absence answers need a disassembly spot-check before they are
+load-bearing.
+
+### 17e. Our divergences, costed
+
+1. **The player's swing has no mid-animation window at all.** `hit_enemy`
+   (`authsrv.py:2299-2316`) sends STARTED, mutates health, sends damage and
+   sends FINISHED in one synchronous call. Called from **two threads**
+   (`attack_tick` on the world tick, `handle_skill_press` on the connection
+   thread), so any windup must be armed from either and resolved from exactly
+   one — the single-writer discipline `pending_casts`/`cast_tick` already
+   proves under a 200-press two-thread hammer.
+2. **Skill damage lands at press, not at cast end** — already recorded, and the
+   **cheaper fix**: the scheduling machinery exists and is world-tick-only, so
+   moving the `hit_enemy` call into `cast_tick`'s E5 branch also removes
+   `handle_skill_press` as a `hit_enemy` caller, which closes the F10
+   concurrency race the tests currently measure but do not assert.
+3. **`GV_ATTACK_STOPPED` is defined and never sent** (`agents.py:599`, zero uses
+   in `authsrv.py`), so we cannot express a cancel even where we detect one.
+
+**And a real bug found by code reading, not by a run:** nothing clears
+`swing_lands_at` / `cast_lands_at` across a burrow removal-and-recreate cycle.
+`remove_agent` pops the entry untouched, `burrow_tick` never touches those keys,
+and `create_agent_world` reinstalls it verbatim. A spawn can carry both
+`burrow_phase` and `attacks_back`, so a swing armed just before submerging
+survives the whole cycle — invisible while `EFFECT_TRANSITION` blocks
+evaluation — and fires on re-emergence against a stale timestamp, with no
+windup the client ever saw begin. **No test covers this combination.**
+
 ## §16. The `cast_anim` probe ran: step 4 confirmed in the client's own words, the animation still needs eyes (2026-08-15)
 
 Caged loopback, build 38833 against its own archive
