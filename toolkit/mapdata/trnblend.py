@@ -61,16 +61,26 @@ So a consumer does NOT need to author blend weights: bind the layer's own
 texture at the named quadrant, let its alpha do the masking, and the seam is
 ArenaNet's.
 
-WHAT IS NOT ESTABLISHED, and it changes which tile is the BASE. Each corner
-is fetched as `arr[(sel >> 2k) & 3]` where `sel` is a per-cell byte from a
-chunk-local array at `chunk+0x2B4` that the builder fills before this loop --
-NOT map data, and where it comes from is NOT FOUND. This module assumes the
-IDENTITY selection (corner k = arr[k]), which makes corner 0 -- the base --
-this cell's own tile, agreeing with T2's separately measured "the raw tile
-byte indexes `m_tiles` directly". If that assumption is wrong the SET of
-layers is unchanged and which of them is the opaque base can differ.
-`SELECTION` is the switch, and `test_trnblend.py` keeps the consequence
-visible rather than hiding it in prose.
+**THE SELECTOR IS KNOWN WRONG HERE, NOT MERELY UNVERIFIED. READ THIS BEFORE
+TRUSTING A BOUNDARY.** Each corner is fetched as `arr[(sel >> 2k) & 3]` --
+that FORM is measured, `0x0076181B`..`0x0076185E` -- where `sel` is a per-cell
+byte. This module pins `sel` to the identity (`0xE4`), and on 2026-08-14 the
+call site settled that it is not: arg3 is read through a pointer the caller
+INCREMENTS once per cell (`inc dword ptr [ebp-0x38]`, `0x0075E10A`), so `sel`
+walks a per-cell array and varies. Where that array is filled is still NOT
+FOUND.
+
+The cost of the pin is not a subtlety, and it is the defect the owner spotted
+by isolating the overlay object: four cursors with a 2-bit pick per corner is
+an ORIENTATION mechanism -- the same authored coverage shapes reused
+permuted -- so pinning it makes every cell along a straight material boundary
+choose the same quadrant, and the boundary undulates with a period of exactly
+one cell. Retail does not. Correcting the SET of layers (which is right) does
+not correct their orientation.
+
+`SELECTION` is the switch, `studies/terrain/FINDINGS.md` §7.3 is the evidence,
+and `test_trnblend.py` keeps the consequence visible rather than hiding it in
+prose.
 """
 
 import sys
@@ -94,7 +104,10 @@ QUADRANT_COVERS = (0b1100, 0b0010, 0b0101, 0b1000)
 #: The client asserts `varIndex < arrsize(tileVar)`; three texcoord sets.
 MAX_LAYERS = 3
 
-#: How corner k is fetched. "identity" is the assumption above.
+#: How corner k is fetched. "identity" is a PIN that the client contradicts
+#: (docstring): the real `sel` varies per cell. Kept because the correct
+#: values are NOT FOUND and a wrong-but-named constant is auditable, where a
+#: guessed-per-cell one would not be.
 SELECTION = "identity"
 
 

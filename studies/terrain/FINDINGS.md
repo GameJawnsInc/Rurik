@@ -461,13 +461,25 @@ DIFFERENT COVERAGE MASKS. Two consequences, and the second is a retraction:
 - **RETRACTED: that per-cell variation removes the ground's repetition.**
   §6.1 and the T6 commit message both said so, and `test_blenderimport`
   carried it as a check's rationale. It is wrong. Variation selects a
-  coverage mask; it barely moves the colour. **The visible tiling of the
-  ground at close range is INHERENT** — one cell is 96 world units showing
-  one 111-texel image of its material (T3), and the client draws exactly
-  that. What variation actually buys is correct per-cell MASK selection,
-  which is what makes tile boundaries blend; the colour repetition is
-  ArenaNet's and is not something a renderer can fix without inventing
-  detail she did not ship.
+  coverage mask; on these eight textures it barely moves the colour. What
+  variation actually buys is correct per-cell MASK selection, which is what
+  makes tile boundaries blend.
+
+> **STRUCK 2026-08-14, the same day, by the owner and then by measurement.**
+> This entry continued: *"**The visible tiling of the ground at close range
+> is INHERENT** — one cell is 96 world units showing one 111-texel image of
+> its material (T3), and the client draws exactly that … the colour
+> repetition is ArenaNet's and is not something a renderer can fix without
+> inventing detail she did not ship."* **That is false, and it was the second
+> wrong claim in this arc from the same cause** — reasoning from our own
+> render instead of comparing against the client. The owner went to Kamadan
+> in the retail client and photographed the same ground: organic grass/dirt
+> boundaries, no 96-unit grid. §7 has what the client actually does. Two
+> narrower errors inside the struck text are worth keeping visible: the RGB
+> table above is **eight** textures, and over all **101** it is 4–35 mean with
+> a max of 231 (§7.1), so "very nearly the SAME PICTURE" does not generalise;
+> and "the client draws exactly that" was never measured — the UV writer has
+> **two different rectangles** and we had only found one (§7.2).
 
 The claim that survives is narrower and still worth having: T5 pinned every
 cell to quadrant 0, which forced the WRONG COVERAGE SHAPE everywhere, not a
@@ -566,26 +578,133 @@ What is NOT settled is the transfer curve — see §7.
 
 ---
 
-## 7. What is still open
+## 7. The assembly rule — what we get wrong (2026-08-14, MEASURED)
+
+Opened because the owner isolated the overlay object in Blender and read it
+correctly on sight: *"this is similar to the Wang tiles … these connect a
+certain way in order to properly blend together different terrain textures …
+need to figure out how the game properly assembles these to not repeat corner
+tiles or use other mismatches like we're currently doing."*
+
+### 7.1 The coverage model, confirmed from the DATA (MEASURED)
+
+§6.2 derived `QUADRANT_COVERS` from the client's tables. This measures it from
+the exported pictures instead, which is a genuinely separate witness: for each
+of Kamadan's 101 terrain textures, the mean alpha of each 128×128 quadrant's
+four 64×64 corner blocks, thresholded at 128.
+
+| per-quadrant covered-corner masks | textures |
+|---|---|
+| `q0=1100 q1=0010 q2=0101 q3=1000` — **exactly `QUADRANT_COVERS`** | **97** |
+| one quadrant one corner off (threshold cases) | 4 |
+
+**97 of 101 with no fitting and no free parameter.** The Wang reading is now
+carried by the client's forward table, the client's inverse table at
+`0x00BF7808`, and the alpha channel of the art.
+
+RGB across quadrants is **not** near-identical, correcting §6.2b: 100 of 101
+textures differ, mean 4–35 of 255, max as high as 231. Quadrants are coverage
+shapes **and** distinct art.
+
+### 7.2 The UV writer has TWO rectangles, and we implement one (MEASURED)
+
+`0x00757A80`, the per-layer UV write, called once per cell from the end of
+`TrnTexBlendHi` (`0x00761A25`) with an array of up to three packed dwords.
+Each dword splits — `movzx eax, bx` / `shr ebx, 0x10` at `0x00757A9C` — into
+
+    low 16 bits  = index into a texture-pointer array at obj+0xA0 (count obj+0xA8)
+    high 16 bits = the coverage selector, or 0xFFFF for "no mask, full cell"
+
+and the call site builds it as `(cover << 16) | tex` (`shl eax,0x10; or eax,ebx`
+at `0x00761A0F`), reading `cover` from `0x00BF78DC` — the same stride-8 table
+pair §6.2 already has. `edi` inside the writer is `obj+0x3C`
+(`lea ecx,[ecx+0x3c]`, `0x00761A22`). The two paths then diverge:
+
+| | origin | span |
+|---|---|---|
+| **unmasked** (`0xFFFF`) | `obj+0x70`, `obj+0x74` | `obj+0x68`, `obj+0x6C` |
+| **masked** | `quadtable[sel & ~0x8000]` (stride 8 at `obj+0x80`) **+ the texture's own** `[tex+0x10]`, `[tex+0x14]` | `obj+0x78`, `obj+0x7C` |
+
+Two separate span fields and two separate origin schemes. **We use one
+rectangle — the inner 111/256 window at the quadrant offset — for every
+layer, and no per-texture origin at all.** The base layer in the client does
+not go through the quadrant table; it has its own `(origin, span)` pair.
+Whether those advance per cell is NOT FOUND and is the open question that
+decides whether the base repeats every 96 units (§8).
+
+The rotation reading of §6.2 survives unchanged: `test ebx, 0x8000` at
+`0x00757B43` swaps V0↔V3 and V1↔V2.
+
+### 7.3 The corner selector is per-cell DATA, and we hardcode it (MEASURED)
+
+§6.3 assumed the identity selection and the open list recorded the selector as
+NOT FOUND. Its *form* and its *traffic* are now measured, its source is not.
+
+`TrnTexBlendHi`'s prologue (`0x0076181B`..`0x0076185E`) decomposes arg3 into
+four 2-bit fields and uses each to pick one of **four** row cursors passed as
+arg2, confirming the `arr[(sel >> 2k) & 3]` form §6.3 guessed. At the call site
+(`0x0075E0E3`) arg3 is a byte read through a pointer at `[ebp-0x38]` that is
+**incremented once per cell** (`inc dword ptr [ebp-0x38]`, `0x0075E10A`). So
+`sel` walks a per-cell array and is not a constant.
+
+`trnblend.SELECTION = "identity"` pins it to `0xE4` for every cell. The
+consequence is exactly what the owner saw: along a straight material boundary
+every cell picks the same quadrant, so the authored edge undulates with a
+period of exactly one cell. **Four cursors with a 2-bit pick per corner is an
+orientation mechanism** — the same coverage shapes reused permuted — which is
+the standard way a Wang set avoids a visible repeat.
+
+Two more things this settles. arg4 is `(byte[edi] >> cl) & 3` with the shift
+base advancing by 2 per cell (`add ebx, 2`, `0x0075E10D`) — that is **terrain
+tag 3**, four cells per byte, and `TrnTexBlendHi` tests it against zero, which
+corroborates `trnvariation`'s "0 defers to the PRNG". And arg2's four entries
+are filled from two row cursors each read **before and after** a call that
+advances them, matching `trnblend`'s "corner 0 = this cell, 1 = +x, 2 = +y,
+3 = +x+y" from the other side.
+
+### 7.4 The seam is not where it looked — a measurement, and a bug in the probe
+
+`scratchpad/composite.py` composites the ground from our own `layers.u16` in
+texture space, with no camera and no lighting, and scores
+
+    seam ratio = mean |dRGB| across cell boundaries / between interior pixels
+
+Kamadan (208,238), 6×6 cells: **0.83**. Cell boundaries are no worse than the
+texture's own gradient, so our per-cell *assembly* is continuous and the grid
+the eye reads is **not** a seam — it is the base repeating identically, which
+§8.2 says is the rectangle we did not implement.
+
+The first run of that probe scored 1.19 and it was **the probe that was
+wrong**: it flipped cell blocks for world-`+y`-up without flipping rows inside
+them, so every cell was drawn mirrored and each blend ran backwards. Recorded
+because it is the same failure mode as the render this arc has been trusting —
+a picture that looks plausible and is measuring its own bug.
+
+## 8. What is still open
 
 - **The lightmap's TRANSFER CURVE.** Tag 9 is applied as of 2026-08-14
   (§6.5) but as the simplest mapping the measurement allows, `shade / 255`
   as a linear multiplier. `terrain.py` records that 348 of 349 maps saturate
   at 255, so a gamma or a scale-and-bias would fit the corpus equally well
   and none is measured. `--no-lightmap` is the control.
-- The per-cell corner SELECTOR at `chunk+0x2B4` (§6.3) — which decides which
-  corner is the opaque base. NOT FOUND.
+- **The SOURCE of the per-cell corner selector.** §7.3 measures its form and
+  proves it walks a per-cell array (`inc dword ptr [ebp-0x38]`), so
+  `trnblend.SELECTION = "identity"` is now known to be **wrong**, not merely
+  unverified. Where the array is filled is still NOT FOUND, and it is the
+  top item on this list: it is what makes a boundary stop repeating.
+- **The base layer's own UV rectangle** — `obj+0x68/0x6C` (span) and
+  `obj+0x70/0x74` (origin), §7.2. If the caller advances the origin per cell
+  the base tiles continuously and there is no 96-unit repeat; if it does not,
+  there is. NOT FOUND, and it decides the thing the owner's screenshot is
+  about. The per-texture atlas origin `[tex+0x10]/[tex+0x14]` is unread too.
 - The 4-dword table at `0x00A73DF8` = `{3, 3, 3, 0x30}`, the terrain
   factory's argument that lands at stage record +0x10. Named, not
   understood, and asserted nowhere.
 
-- **T6**: blending between tiles — the three per-cell layers, the alpha
-  mask, and which corner-tile combination selects the two overlay layers.
-  DEFERRED with the reason in PLAN.md §3.
-- The per-cell variation: tag 3 is decoded (§2.1, §3.3) but not exported,
-  and the PRNG draw is not reproduced, so T5 pins quadrant 0. Also the
-  quadrant's ORIENTATION (which axis is +u) is a convention, not a
-  measurement.
+- The quadrant's ORIENTATION (which axis is `+u`) is a convention, not a
+  measurement. (The two entries that stood here — T6 "DEFERRED" and "tag 3
+  is not exported, so T5 pins quadrant 0" — were both stale: T6 landed and
+  tag 3 is exported. Struck 2026-08-14.)
 - The extra leading dependency's MEANING (§4.2): 8 files — 4 plain ATEX, 4
   DDS of which two are 512×512 V8U8 bump maps nothing decodes — paired with
   tag3b's four floats. UNVERIFIED.
