@@ -308,7 +308,7 @@ and the description slot of `s2c 0x004C [80, …]` at `t=28.241` — 0.5 s later
 
 **OVERSTATED, and all three verifiers flagged it: lane C's "the compass needs no separate work" is a prediction contradicted by the repo's own screen measurement.** `studies/minimap/FINDINGS.md:721` records that firing `0x0049` at a real client registers the quest — a `?` icon appears under the level bar, 23.8% of that icon slot differing from a control run — and **the compass starburst does not draw; the disc is byte-static across the whole run.** `:727` records the cause as NOT FOUND. Subscribing is not drawing.
 
-**And nobody checked the obvious thing.** `probes.py:2465` sends `Step(8.0, 0x0049, [1, _SPAWN_WORLD, 148, 148, 0, "", "", "", 0], …)`. Measured over every live `0x0049` (n=10) and `0x0050` (n=12):
+**And nobody checked the obvious thing.** `probes.py:2467` sends `Step(8.0, 0x0049, [1, _SPAWN_WORLD, 148, 148, 0, "", "", "", 0], …)`. Measured over every live `0x0049` (n=10) and `0x0050` (n=12):
 
 | field | ArenaNet's observed values | the probe sent |
 |---|---|---|
