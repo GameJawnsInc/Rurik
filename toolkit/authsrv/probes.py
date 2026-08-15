@@ -1853,6 +1853,44 @@ def _cast_anim_steps(agent_id):
     ]
 
 
+def _cast_one_steps(agent_id, which):
+    """`cast_anim` with ONE variable, because timing discrimination failed.
+
+    The combined probe fires 228 and property 60 in the same run, eight
+    seconds apart, and asks the operator which one animated. On 2026-08-15
+    that failed for a plain reason: the operator saw a sparkle, lost count
+    of the gaps, and could not attribute it -- and an observation that
+    cannot be attributed is not evidence about either message. (The agent
+    running it had also quoted the gaps wrong, as ~3 s, because `Step`'s
+    first field is a DELAY from the previous step rather than an absolute
+    time. Both halves of that failure are worth recording.)
+
+    So: same bar, same map, same everything, and exactly ONE message under
+    test per run. The operator answers "did anything visible happen after
+    the bar settled" -- yes or no, no counting. Run both and the pair is a
+    control for each other.
+    """
+    bar = [PROBE_BAR_SKILL + i for i in range(8)]
+    steps = [
+        Step(2.0, 0x00DA, [agent_id, bar, [0] * 8, 1], "fresh skillbar",
+             "the bar, all eight ready. THE SHARED CONTROL: this message is "
+             "in both runs, so anything it causes is not the variable."),
+    ]
+    if which == "228":
+        steps.append(
+            Step(8.0, 0x00E4, [agent_id, bar[4], 0], "228, and NOTHING else",
+                 "the CHARACTER's body and the bar, for the whole rest of "
+                 "the run. PREDICTION: nothing, ever. Its handler compares "
+                 "the named agent against the local player and returns."))
+    else:
+        steps.append(
+            Step(8.0, 0x009F, [PROP_CAST_SKILL, agent_id, bar[4]],
+                 "property 60, and NOTHING else",
+                 "the CHARACTER's body. PREDICTION: the cast animation "
+                 "plays. This is the run that should show the sparkle."))
+    return steps
+
+
 def _unlock_211_steps(agent_id):
     """Opcode 211 is unnamed everywhere and shaped like both unlock messages.
 
@@ -2813,6 +2851,45 @@ PROBES = {
              "is strong enough to be worth trying to break. Watch Gw.log as "
              "well as the screen: step 4 should produce the client's own "
              "'Pending skill %u copy %d not found'.",
+    ),
+    "cast_228_only": lambda a, o: Probe(
+        question="Does opcode 228 addressed to the LOCAL player animate "
+                 "anything -- on its own, with nothing else sent?",
+        predicts="Nothing, for the whole run. 228's handler compares the "
+                 "named agent against the local player and returns before "
+                 "it reaches AgentView. Corroborated from the wire: all 7 "
+                 "0x00E4 in the live corpus name the receiving connection's "
+                 "OWN player (studies/combat 6, step 0a), so the real "
+                 "service broadcasts it uniformly and relies on this "
+                 "discard. A sparkle here REFUTES that reading.",
+        steps=_cast_one_steps(a, "228"),
+        note="ANSWERED 2026-08-15 and the prediction HELD: nothing, for the "
+             "whole run. Capture authsrv-20260815T184213-c1.jsonl -- bar at "
+             "t=2.87, 0x00E4 at t=10.88, nothing else sent, operator saw no "
+             "change. Its pair cast_prop60_only, identical but for the one "
+             "message, DID render the cast. So 228 is bookkeeping, and the "
+             "handler read, the live wire (7 of 7 name the receiving "
+             "player) and the screen all agree. Keep the probe: it is the "
+             "control half, and re-running it is how a future change to "
+             "0x00E4's handling gets caught.",
+    ),
+    "cast_prop60_only": lambda a, o: Probe(
+        question="Does agent property 60 alone play the cast animation?",
+        predicts="THIS is the one that animates -- property 60 reaches "
+                 "AvApi and queues the animation event, where 228 never "
+                 "leaves its bookkeeping array. If this run shows nothing "
+                 "and the 228 run does, the two are swapped and "
+                 "studies/skills section 8 is wrong.",
+        steps=_cast_one_steps(a, "prop60"),
+        note="ANSWERED 2026-08-15 and the prediction HELD: the operator saw "
+             "the cast sparkle on the weapon. Capture "
+             "authsrv-20260815T184317-c1.jsonl -- bar at t=2.85, property "
+             "60 at t=10.85, nothing else sent. Its pair cast_228_only, "
+             "identical but for the one message and firing at the same "
+             "t=10.88, rendered NOTHING. Same bar, same map, same hold: the "
+             "animation follows property 60. This closes studies/skills "
+             "section 8's headline question and refutes its own guess that "
+             "the client predicts the animation itself.",
     ),
     "unlock_211": lambda a, o: Probe(
         question="What is opcode 211, the third unlock-list-shaped message?",

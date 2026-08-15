@@ -629,9 +629,45 @@ that is not enough. `shotlabel --run` also declines the run outright ("no sweep
 sends in the capture") because it is built for the opcode sweep, not for probes.
 
 So the animation half stays operator-visual, which is what H5 said it would.
-The run is cheap to repeat — ~50 s — and what an operator needs to watch is
-**the character's body at two moments: t≈5 s (228, predict nothing) and
-t≈8 s (property 60, predict the cast animation)**.
+
+### §16a. SETTLED the same day, by splitting the variable
+
+The combined probe then failed for a reason worth recording: **the operator saw
+a sparkle and could not attribute it.** They lost count of the gaps, and an
+observation that cannot be tied to a message is not evidence about either one.
+The agent had also quoted the gaps wrong — as ~3 s, when `Step`'s first field
+is a DELAY from the previous step, making the real gaps ~5 s and ~8 s. Both
+halves of that failure are in `_cast_one_steps`' docstring.
+
+The fix was not better timing but **one variable per run**. Two probes,
+`cast_228_only` and `cast_prop60_only`: same bar, same map 90, same hold, the
+message under test firing at **t≈10.85 in both**, and nothing else sent at all.
+The operator answers yes or no, with no counting.
+
+| run | capture | fired at t≈10.9 | operator saw |
+|---|---|---|---|
+| `cast_228_only` | `authsrv-20260815T184213-c1.jsonl` | `0x00E4` (228) | **nothing** |
+| `cast_prop60_only` | `authsrv-20260815T184317-c1.jsonl` | `0x009F` property 60 | **the cast sparkle on the weapon** |
+
+**ANSWERED: agent property 60 plays the cast animation; 228 is bookkeeping.**
+Each run is the other's control, and the pair closes `studies/skills` §8's
+headline open question by the very method that row prescribed — "send each in
+isolation and watch". Its own guess, the client predicting the animation
+itself, is refuted: the animation needs a message.
+
+**Three independent witnesses now agree**, which is the part worth keeping:
+
+1. **The handler** — 228 compares the named agent against the local player and
+   returns before reaching AgentView (static, `studies/skills` §8).
+2. **The wire** — all 7 `0x00E4` in the live corpus name the receiving
+   connection's OWN player (§6, step 0a), so ArenaNet broadcasts it uniformly
+   and relies on the client discarding its own.
+3. **The screen** — 228 alone renders nothing; property 60 alone renders the
+   cast.
+
+That also retires the worry §6 step 0a raised against itself: 228 is not the
+caster's own feedback, and our server's use of it for wire fidelity while
+driving the animation from property 60 is the correct shape.
 
 ## §15. Step 3's loopback acceptance RAN, and both halves pass (2026-08-15)
 
