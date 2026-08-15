@@ -112,7 +112,7 @@ Every one of these, in the order they were written:
   name, the same rule the vault's DH split lives by. It also works where
   `identify()` cannot: that calls `reskin-roster` "unknown" for want of a
   recorded hash, and its exe says 38797 plainly. `buildid.read` is stubbed for
-  the seven constructed cases and run for real against the vault at the end, and
+  the ten constructed cases and run for real against the vault at the end, and
   a positive control asks for a build that IS present so the refusals cannot be
   satisfied by a function that refuses everything. An unreadable candidate is
   skipped and NAMED, because "we could not look" must never narrow the field the
