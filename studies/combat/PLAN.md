@@ -572,8 +572,8 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 5 | 🔶 **research half ✅ 2026-08-14, §8** — the triple's slots 1–2 named by ArenaNet's own asserts (`attrib`, `baseValue`), the panel's read path traced to `AttribBtns.cpp` (C8a closed), the tooltip formula measured (C6 closed). **Still to do in code**: adopt the gapped numbering, replace `ATTRIBUTE_COUNT = 42`, retire the stale `authsrv.py:552-557` comment, and pin the handler constants in a test |
 | 5 (cont.) | **code half ✅ 2026-08-15, `043e395`** — `attribtable.py` reads `s_attrib` and DISSOLVES the numbering contest (§10): index space contiguous 0..50, 42 owned by playable professions, 26/27/28 are profession 11's. 51 content rows emitted. Still open in code: `ATTRIBUTE_COUNT = 42` is a count of the wrong thing for a wire payload and step 7 replaces it |
 | 6 | ⬜ — the targeted live capture. Operator-driven; §3's shopping list |
-| 7 | 🔶 **wire half ✅ 2026-08-15, `1339bfe`** (§11) — five real triples, bounds refused not clamped, payload bound to its content row and proven red. **L6's panel criterion is UNVERIFIED and needs one caged loopback run**: `--probe attributes`, whose step 3 reverses the ranks as the discriminator |
-| 7 (fix) | ⚠️→✅ **2026-08-15** (§14) — the payload shipped INTERLEAVED and `0x003A` is column-major, so every session since died on `CharData.cpp:202`. `attribute_triples` → `attribute_columns`; `arrsize(s_attribPoints)` read at last (13, correcting `consttable.py`'s 14) by the new `attribpoints.py`. Diagnosed statically from the crash dump's own stack — no client run, no int3. **Cure is UNVERIFIED until one watched loopback session** |
+| 7 | ✅ **BOTH HALVES 2026-08-15** — wire `1339bfe` (§11), layout fixed and panel confirmed (§14g). **L6's attributability criterion is MET**: `--probe attributes` ran caged, the panel followed all three steps and the ranks matched the names, which also closes §8b's runtime-agent-binding gap by observation. Original wire note follows. 🔶→✅ (§11) — five real triples, bounds refused not clamped, payload bound to its content row and proven red. **L6's panel criterion is UNVERIFIED and needs one caged loopback run**: `--probe attributes`, whose step 3 reverses the ranks as the discriminator |
+| 7 (fix) | ⚠️→✅ **2026-08-15** (§14) — the payload shipped INTERLEAVED and `0x003A` is column-major, so every session since died on `CharData.cpp:202`. `attribute_triples` → `attribute_columns`; `arrsize(s_attribPoints)` read at last (13, correcting `consttable.py`'s 14) by the new `attribpoints.py`. Diagnosed statically from the crash dump's own stack — no client run, no int3. **Cure VERIFIED §14g**: caged run, 1,716 messages, t=78.2 s, no assert |
 | 8 | ✅ **2026-08-15, `e4bb222`** (§12) — `ENEMY_SKILL_FRACTION` retired; damage is the client's endpoints at the player's own attribute rank. **The step's premise was refuted mid-flight**: scale is not damage, 3 of the enemy's 4 skills are a heal/hex/enchantment, so meaning is GWW-sourced per skill and unmodelled skills return None. `test_skilldamage` 25 checks, sabotage-proven |
 | 9 | ✅ **2026-08-15, `34ee86b`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
 | 10 | ✅ **2026-08-15, `2610aa3`+merge** — `PLAN.md` §3 (R4a, R4b) and §8 updated dated and stamped; the profession ladder's L6 row annotated so the two ledgers agree. **Landing suite: 100 green / 1 red of 101, 4,947 checks.** The red is `test_contentids`, and it is ENVIRONMENTAL and attributed: `vault/run/2026-08-13_64fae3b1369b/Gw.dat` is held open by **another session's client, PID 16340, running from that directory since 11:47** — the archive is present (4.2 GB) and unreadable, which is the same "the client holds its own archive open" note main's own §8 carries. `test_contentids` passed at 23 checks earlier the same day with the archive free, and nothing in this arc touches archives, map content or `contentids.py`. Not killed, per the parallel-sessions rule |
@@ -764,16 +764,55 @@ address that still happens to work.
 The step-7 wire half is **still ✅** — the ids, the bounds, the refusals and
 the content binding were all right. Only the ordering was wrong.
 
+### 14g. The cure is VERIFIED, and it closed L6 on the way — OBSERVED
+
+**Run 2026-08-15, caged loopback, build 38833, map 90 explorable, synthetic
+credential.** `vault/captures/gamesrv/authsrv-20260815T180007-c1.jsonl`,
+1,716 messages, last at **t = 78.2 s**, no `Undecodable`, no disconnect. The
+client was watched with `crashwatch.ps1` rather than `Get-Process`, which is
+the only reason a clean result here means anything (§14c).
+
+**No assert.** The spawn burst's `0x003A` goes out at t = 0.85 s and the
+client runs on for another seventy-seven seconds. On the interleaved payload
+it died there every time.
+
+The wire, decoded out of the capture — column-major, count 15:
+
+```
+t= 2.876  count= 0                                    step 1, the control
+t= 8.884  ids=[17,18,19,20,21]  ranks=[12,9,6,3,1]    step 2
+t=14.896  ids=[17,18,19,20,21]  ranks=[1,3,6,9,12]    step 3, ranks REVERSED
+```
+
+**The panel followed all three steps, and the ranks matched the names**
+(operator-confirmed; per H5 no tool here can read the HUD). That is L6's
+attributability criterion **MET**, and it settles three things at once:
+
+1. **The cure works end to end** — not just "no crash", but the values
+   arriving where they belong.
+2. **§8a's reading of column 2 as `baseValue` is confirmed positionally.**
+   Step 3 holds the id column *in the same order* and reverses only the rank
+   column. If the two were swapped, mis-aligned, or read at a stride, step 3
+   would have put the right numbers against the wrong names — the failure the
+   distinct ranks (12/9/6/3/1) were chosen to make visible.
+3. **§8b's one honest gap is closed by observation.** That section could prove
+   the write chain and the panel's read chain share a record and a locator,
+   but not that the panel control's `agentId` holds the local player at
+   runtime — "a runtime value, not a byte pattern". The panel moving on step 3
+   is that value, measured.
+
+Step 1 is worth its own line: an empty `0x003A` (count 0) **clears** the
+record — the handler zeroes `+0x400/+0x404/+0x408` before its loop — so the
+control is the panel going blank *after* the spawn burst already filled it,
+which is a stronger control than a panel that was never written.
+
 ### 14f. What is still open
 
-- **L6's panel criterion remains UNVERIFIED**, unchanged by this section. It
-  needs one caged loopback run of `--probe attributes`, whose step 3 reverses
-  the ranks as the discriminator. This section fixes the message; it does not
-  prove the panel reads it.
-- **The fix is verified statically only.** The client has not been run since.
-  What would settle it is one harness session watched with `crashwatch.ps1` —
-  and that is the honest status: OBSERVED for the diagnosis, UNVERIFIED for
-  the cure.
+- ~~**L6's panel criterion remains UNVERIFIED.**~~ **CLOSED by the run in
+  §14g** — the panel followed all three steps with the ranks against the
+  right names.
+- ~~**The fix is verified statically only.**~~ **CLOSED by the same run.**
+  The diagnosis was OBSERVED before it; the cure is OBSERVED now.
 - ~~**`crashwatch.ps1` is untracked**, committed by nobody.~~ **CLOSED the
   same day**: the terrain arc landed it as `d0899cf`, "Crash detection,
   because liveness polling could never have caught it". It is the instrument
@@ -1103,6 +1142,11 @@ runtime value, not a byte pattern. Static analysis cannot close it. It is the
 obvious reading (the panel only ever shows your own character, and `0x003A`
 only ever syncs the local agent) but it is an ASSUMPTION, and step 7's
 acceptance names it.
+
+> **CLOSED 2026-08-15 by measurement, §14g.** `--probe attributes` ran caged
+> and the panel followed all three steps — including step 3, which reverses
+> the rank column while holding the id column's order — with the ranks against
+> the right names. The assumption above is now an observation.
 
 ### 8c. The tooltip's rank formula (amendment C6 — closed)
 
