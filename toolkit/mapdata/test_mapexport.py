@@ -168,16 +168,20 @@ DEFAULT_SAMPLE = 12
 # archive section reports an aggregate, so the floor is a constant rather than
 # a function of the fixture.
 #
-# Sections 0-4c alone score 111 (MEASURED by pointing --dat at a missing
-# file), so a run with no archive lands 74 short and goes RED. That is
-# deliberate and it is the whole reason the floor exists: 111 checks about a
+# Sections 0-4c alone score 114 (MEASURED by pointing --dat at a missing
+# file), so a run with no archive lands short and goes RED. That is
+# deliberate and it is the whole reason the floor exists: those checks about a
 # synthetic grid, synthetic props and synthetic textures this file built
 # itself have verified the plumbing and NOTHING about ArenaNet's layout, and a
 # green exit code there would be the `test_codec.py` failure all over again.
 # The placeholder value this constant carried while the file was being
 # written was 46, and a vault-less run duly printed ALL CHECKS PASSED --
 # which is how the number came to be measured rather than guessed.
-FLOOR = 185
+#
+# 185 -> 188 on 2026-08-14, when T6's variation sidecar joined the tiles
+# export: the synthetic fixture now packs a per-cell variation 0..3 and
+# section 1 asserts it de-tiles with the measured (i&3)*2 bit order.
+FLOOR = 188
 
 
 # ------------------------------------------------------------------ helpers
@@ -290,15 +294,20 @@ def synthetic_terrain(dim_x=SYN_X, dim_y=SYN_Y):
     heights = [0.0] * cells
     tiles = bytearray(cells)
     shade = bytearray(cells)
+    bits = bytearray(cells // 4)
     for gy in range(dim_y):
         for gx in range(dim_x):
             i = Terrain.index(gx, gy, dim_x)
             heights[i] = float(gy * dim_x + gx)
             tiles[i] = (gx + gy) % 3
             shade[i] = (gx * 7 + gy * 13) & 0xFF
+            # A per-cell variation 0..3, packed the way bits_at reads it, so
+            # a wrong bit-pair position or a wrong de-tile is visible.
+            bits[i >> 2] |= ((gx * 3 + gy) & 3) << ((i & 3) * 2)
     trn.heights = heights
     trn.tiles = bytes(tiles)
     trn.shade = bytes(shade)
+    trn.bits = bytes(bits)
     return trn
 
 
@@ -424,6 +433,12 @@ def _section1(check, tmp):
     bad_s = sum(1 for gy in range(dy) for gx in range(dx)
                 if exp.shade[gy * dx + gx] != ((gx * 7 + gy * 13) & 0xFF))
     check(bad_s == 0, "the shade bytes de-tile the same way", f"{bad_s} wrong")
+    check(exp.variation is not None and len(exp.variation) == dx * dy,
+          "the variation sidecar is present, one byte per cell (T6)")
+    bad_v = sum(1 for gy in range(dy) for gx in range(dx)
+                if exp.variation[gy * dx + gx] != ((gx * 3 + gy) & 3))
+    check(bad_v == 0, "tag 3's variation de-tiles with the measured (i&3)*2 "
+          "bit order (FINDINGS §3.3)", f"{bad_v} wrong")
 
     # Geometry the JSON promises.
     check(exp.extent == (dx * CELL_PITCH, dy * CELL_PITCH),
@@ -470,9 +485,11 @@ def _section1(check, tmp):
           and conv["sample_position"] == "cell corners",
           "the manifest states row 0 = maxY, corner samples, and that a GREATER "
           "stored value is LOWER in the world (FINDINGS 25)", sign[:80])
-    check(len(meta["sidecars"]) == 3
-          and {s["kind"] for s in meta["sidecars"]} == {"heights", "tiles", "shade"},
-          "three sidecars, each named by kind in the manifest")
+    check(len(meta["sidecars"]) == 4
+          and {s["kind"] for s in meta["sidecars"]}
+          == {"heights", "tiles", "variation", "shade"},
+          "four sidecars, each named by kind in the manifest "
+          "(variation joined tiles for T6)")
 
 
 # --- 1b. the props sidecar, built from nothing -----------------------------
@@ -544,8 +561,8 @@ def _section1b(check, tmp):
           "the props sidecar comes back DEEP-EQUAL through disk and json")
     check(meta.get("props_state") == "exported"
           and {s["kind"] for s in meta["sidecars"]}
-          == {"heights", "tiles", "shade", "props"},
-          "the manifest declares props_state and the fourth sidecar")
+          == {"heights", "tiles", "variation", "shade", "props"},
+          "the manifest declares props_state and the props sidecar")
     side = next(s for s in meta["sidecars"] if s["kind"] == "props")
     check(side["dtype"] == mapexport.DTYPE_JSON
           and side["count"] == pd["count"] and side["count"] != exp.cells,

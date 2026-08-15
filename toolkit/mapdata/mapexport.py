@@ -9,6 +9,7 @@ five files per map:
                           where it came from, and a sha256 for each sidecar
     <name>.heights.f32    dimX*dimY little-endian float32, DE-TILED
     <name>.tiles.u8       dimX*dimY tile indices, same order       (optional)
+    <name>.variation.u8   dimX*dimY tag-3 variation 0..3, same order (with tiles)
     <name>.shade.u8       dimX*dimY tag-9 bytes, same order        (optional)
     <name>.props.json     every prop placement, both streams joined (optional)
     terrain/tex_<id>.png  the map's terrain textures, keyed by FILE ID and
@@ -105,12 +106,16 @@ argmax 0.504 against 0.247 for the nearest rival -- **Kamadan is well below that
 median and is reported rather than dropped**; it is a dense city whose props sit
 on buildings, and its controls collapse just as hard.
 
-WHAT AN EXPORT IS NOT EVIDENCE OF. Tag 2's tile indices and tag 9's shade bytes
-are carried through as arrays whose MEANING is unsettled (`terrain.py` names both
-NOT FOUND / not-settled). Exporting them is transport, not understanding. Tag 3
-is deliberately not exported at all: its bit-pair position inside a byte is not
-established by anything measured, so any per-cell unpacking would be a convention
-we invented and could never refute.
+WHAT AN EXPORT IS NOT EVIDENCE OF. Tag 9's shade bytes are carried through as an
+array whose MEANING is a baked lightmap (`terrain.py`) but whose transfer curve
+is not settled. Exporting it is transport, not understanding. Tag 2's tile
+indices ARE settled since T4 -- each names a terrain texture. Tag 3 (the
+per-cell VARIATION selector) IS now exported as `.variation.u8`: its bit-pair
+position was NOT FOUND when this line first read "deliberately not exported",
+and is MEASURED as `(i & 3) * 2` since 2026-08-14 (`studies/terrain/FINDINGS.md`
+§3.3), so the per-cell unpacking is the client's convention rather than one we
+invented. The value 0 (99.94% of cells) defers to the client's per-cell PRNG,
+which the array does NOT carry -- a consumer reproduces it.
 
 THE PROPS SIDECAR (format_version 2, 2026-08-13). Every placement, from BOTH
 streams, made to check each other at export time: the Stripped chunk
@@ -330,16 +335,16 @@ class MapExport:
     """One exported map, read back from disk. What `load_export` returns.
 
     Every array is in world row-major order, `gy*dim_x + gx`, with grid row 0 at
-    world maxY. `tiles` and `shade` are None when they were not exported.
-    `props` is the parsed props sidecar (a dict -- see `build_props` for its
-    shape) or None when the export has none.
+    world maxY. `tiles`, `shade` and `variation` are None when they were not
+    exported. `props` is the parsed props sidecar (a dict -- see `build_props`
+    for its shape) or None when the export has none.
     """
 
     __slots__ = ("meta", "dim_x", "dim_y", "rect", "pitch", "heights", "tiles",
-                 "shade", "props", "path")
+                 "shade", "variation", "props", "path")
 
     def __init__(self, meta, dim_x, dim_y, rect, pitch, heights, tiles=None,
-                 shade=None, props=None, path=None):
+                 shade=None, variation=None, props=None, path=None):
         self.meta = meta
         self.dim_x = dim_x
         self.dim_y = dim_y
@@ -348,6 +353,7 @@ class MapExport:
         self.heights = heights
         self.tiles = tiles
         self.shade = shade
+        self.variation = variation
         self.props = props
         self.path = path
 
@@ -553,6 +559,7 @@ def load_export(json_path):
         raise ValueError("export has no heights sidecar")
     return MapExport(meta, dim_x, dim_y, rect, pitch, arrays["heights"],
                      tiles=arrays.get("tiles"), shade=arrays.get("shade"),
+                     variation=arrays.get("variation"),
                      props=props, path=json_path)
 
 
@@ -869,6 +876,14 @@ def build_manifest(trn, rect, name, source, tiles=True, shade=True,
     if tiles:
         payloads.append(("tiles", f"{name}.tiles.u8", DTYPE_U8,
                          detile(trn.tiles, dim_x, dim_y), cells))
+        # The per-cell VARIATION selector (tag 3), 0..3, travels WITH the
+        # tiles: a tile byte names a 256x256 texture and the variation picks
+        # which of its four 128x128 quadrants a cell samples. Already
+        # world row-major (Terrain.variation de-tiles it), so NOT run through
+        # `detile`. 0 means "the client's per-cell PRNG picks" -- a consumer
+        # reproduces that; this array carries only the authored overrides.
+        payloads.append(("variation", f"{name}.variation.u8", DTYPE_U8,
+                         trn.variation(), cells))
     if shade:
         payloads.append(("shade", f"{name}.shade.u8", DTYPE_U8,
                          detile(trn.shade, dim_x, dim_y), cells))

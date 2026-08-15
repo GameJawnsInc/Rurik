@@ -496,20 +496,36 @@ class Terrain:
         return self.tiles[self.index(gx, gy, self.dim_x)]
 
     def bits_at(self, gx, gy):
-        """Tag 3's two bits for one cell. INFERRED, and deliberately unused.
+        """Tag 3's two bits for one cell: the per-cell tile VARIATION selector.
 
         The record is exactly `dimX*dimY/4` bytes, so two bits per cell is
-        arithmetically forced and that much is MEASURED. Everything else here --
-        that the cells are ordered by the same tiled index as tags 1/2/9, and
-        that bit pair `i` sits at `(i & 3) * 2` within its byte -- is a guess
-        that no measurement we have can refute, because any self-consistent
-        convention round-trips.
+        arithmetically forced. That the cells are ordered by the same tiled
+        index as tags 1/2/9, and that bit pair `i` sits at `(i & 3) * 2`
+        within its byte, was INFERRED while the field had no meaning -- and is
+        now MEASURED (`studies/terrain/FINDINGS.md` §3.3, 2026-08-14): the
+        client's own de-tiler reads the buffer with a shift counter starting
+        at 0 stepping `+2 & 7`, which is exactly this, and the corpus's
+        cross-byte co-occurrence agrees against the reversed reading (z=31).
 
-        `encode()` never calls this. If it did, the round-trip would stop being
-        evidence of anything.
+        The value selects a 128x128 quadrant of the cell's 256x256 texture:
+        1/2/3 force quadrant 1/2/3, 0 means "take the per-cell PRNG's pick"
+        (§3.2). `encode()` still never calls this -- the round-trip carries
+        tag 3 verbatim -- so the round-trip stays evidence of framing only.
         """
         i = self.index(gx, gy, self.dim_x)
         return (self.bits[i >> 2] >> ((i & 3) * 2)) & 0x3
+
+    def variation(self):
+        """Per-cell variation bytes (0..3), DE-TILED to world row-major.
+
+        `out[gy * dimX + gx]` is `bits_at(gx, gy)`. This is the authored
+        override only: 0 (the vast majority of cells -- 99.94% over 24 maps)
+        means the client draws a quadrant from its per-cell PRNG, which a
+        consumer reproduces at render time rather than reading here.
+        """
+        return bytes(self.bits_at(gx, gy)
+                     for gy in range(self.dim_y)
+                     for gx in range(self.dim_x))
 
     # -- decoding --------------------------------------------------------
 
