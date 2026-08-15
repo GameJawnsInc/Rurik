@@ -101,6 +101,16 @@ GRANDFATHERED = {
     # is self-serving, the check that matters is unchanged and cheap to apply -- read
     # the citations and ask whether any argues for nothing.
     os.path.join("studies", "minimap", "FINDINGS.md"): 40,    # 25: the atlas chain, the draw/ping triple, the fog partition
+    # 15 on 2026-08-15, over NEWCOMER_CEILING on the arc's first commit, which is what
+    # this row is for. 25 is the proportion the four 11-12 entries above already carry,
+    # not a new number. The document argues from every one of them: `QuestChallenge:197`
+    # and `QuestMission:81` are what fix QUEST_TYPE_CHALLENGE to 0 and QUEST_TYPE_MISSION
+    # to 1 -- the second is a tail-call site `asserts.py` cannot see, so the quote IS the
+    # measurement; `ChCliApi:667` names the bit `0x004C` sets and `0x0054` gates on;
+    # `GmQuestComplete:611` bounds the medal; `ChCliApi.cpp:4237` supplies the client's
+    # own noun for a quest-log row. Apply the check this file's docstring names -- read
+    # them and ask whether any argues for nothing.
+    os.path.join("studies", "quests", "FINDINGS.md"): 25,     # 15: the questType enum, the flag gates, challengeSortArray
 }
 
 # A dump landing anywhere in the tree moves this even if no single file trips its own
