@@ -203,7 +203,7 @@ def main(argv):
                 h = k32.OpenThread(arm64.THREAD_ACCESS, False, ev.dwThreadId)
                 c = arm64.WOW64_CONTEXT()
                 c.ContextFlags = (arm64.WOW64_CONTEXT_DEBUG_REGISTERS
-                                  | arm64.WOW64_CONTEXT_i386 | 0x2)  # +CONTROL
+                                  | arm64.WOW64_CONTEXT_i386 | 0x1)  # +CONTEXT_CONTROL (Eip)
                 if h and k32.Wow64GetThreadContext(h, ctypes.byref(c)):
                     which = ("hi" if c.Eip == hi else
                              "lo" if c.Eip == lo else
