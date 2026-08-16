@@ -386,12 +386,27 @@ readers at those addresses is permitted under CLAUDE.md carve-out (1) for `codes
 Do this before spending a live session on `k`.
 
 **And a real bug this family found, worth landing on its own:** OBSERVED,
-`toolkit/authsrv/behaviourrun.py:255` is `"pos": tuple(v[3:5])`, but a create is 24 fields
+`toolkit/authsrv/behaviourrun.py:255` was `"pos": tuple(v[3:5])`, but a create is 24 fields
 with the opcode at index 0 and the position a **tuple at `v[5]`** — reproduced:
 `RAW create len 24  v[0..6] = [32, 1, 18, 3, 0, (12169.0, 3222.0), 21]`, confirmed against
-`agents.py:529-541`. Today the analyser reads agent 278's position as `(1, 9)`. The test
-passes because `test_behaviourrun.py:140-141` uses a hand-made 5-field fixture that has
+`agents.py:529-541`. The analyser read agent 278's position as `(1, 9)`. The test
+passed because `test_behaviourrun.py:140-141` used a hand-made 5-field fixture that has
 never existed on any wire.
+**FIXED 2026-08-16, commit `c8c9c32` (merged to `main` as `65d803a`, merged here
+2a2bd54).** `encounters()` reads `tuple(v[5])` behind a `len(v) > 5` guard, and the test
+builds real 24-value decoded creates. The trap was proven fixture-first: the corrected
+fixture against the unfixed analyser went red on exactly one check — separation
+9.0554 = √(1²+9²), the (type, kind) pair read as a coordinate — then green at its
+36-check floor with the fix. **No published number was tainted**: `analyse()` had never
+run on a marked capture (`studies/monsterai/FINDINGS.md` §7.7.1), and the ~65/~599/~706
+per-model range figures cited in this section came from the separately-audited corpus
+scripts (`test_burrow.py:73`'s `V_POS = 5` was the committed witness throughout). The
+defect was isolated to `behaviourrun.py`.
+**Rung 6 caveat inherited from the fix:** non-living creates carry other (type, kind)
+values (a raw tag-3 create shows `v[3]=3, v[4]=0`), so the fixed reader takes `v[5]`
+regardless of class — but any kind-FILTERING must read `v[4]`, which is also
+`agentroster.py`'s convention (it partitions on the tag in `v[2]` and never touches
+`v[3]`/`v[4]` as positions).
 
 ### 3.3 Conditions, isolated one per NPC — the ten Students
 
@@ -809,7 +824,8 @@ disassembly of the readers at `0x5fa8de`–`0x5fc136` (carve-out (1), `codescan.
 Slashing/…/Sacrificial, **unread by anything**, and damage *type* is modelled nowhere);
 `s_effect` (§3.3); the property-44 pip quantum; the `0x00A4` projectile cross-check against
 the 13 samples already in the vault; the property-17 zero-variance test; the
-`behaviourrun.py:255` `v[3:5]` bug; **whether `0x005F` is readable at all**, which decides
+~~`behaviourrun.py:255` `v[3:5]` bug~~ (FIXED on `main`, `c8c9c32` — see §3.2's
+correction block); **whether `0x005F` is readable at all**, which decides
 whether §3.1 has a cross-check; and testing the wiki damage formula against the 22,524
 messages we already hold, which S3's own gap list flags as a free falsification nobody has
 attempted.
