@@ -507,7 +507,7 @@ HEROES = 40          # ChCliApi:4446 `hero < HEROES`, `cmp esi,0x28`. OBSERVED.
 HERO_UNUSED = 0      # ChCliApi:4447, fires only on `test esi,esi`. OBSERVED.
 
 
-def party_hero_add(party_id, hero_index, agent_id, unk_a=0, unk_b=0):
+def party_hero_add(party_id, word_a, agent_id, hero_key=0, unk_b=0):
     """GAME_SMSG 0x01C2 / 450 -- one hero row in the party roster.
 
     THE SHAPE CORRECTS THE UPSTREAM. OpenTyria's GameMsg.h:466-473 gives
@@ -516,21 +516,31 @@ def party_hero_add(party_id, hero_index, agent_id, unk_a=0, unk_b=0):
     u8, u8]`, 10 bytes. Three words and two bytes.
     studies/heroes/FINDINGS.md 1.2.
 
-    THE WORD ORDER IS MEASURED, NOT ARGUED. hero_index is msg+8 (stored to
-    entry+0x4); agent_id is msg+0xc (stored to entry+0x0). These parameters
-    were `word_a`/`word_b` until 2026-08-16, positional on purpose, because
-    the natural tie-breaks had failed twice: the storage-order analogy with
-    0x01BF was REFUTED (0x01C2's worker has NO dedupe scan, it appends
-    unconditionally), and GmHeroCommander's `heroData->agentId` resolves
-    through ctx+0x2c+0x584 -- the 0x0074 DATA CACHE record, not this entry.
-    The H1/H2 arm pair settled it by construction: the body lived at agent
-    200, outside the 1..39 hero-index range, so whichever position 200 had
-    to occupy for the row to render is the agent id -- and only the arm
-    with 200 at msg+0xc rendered. studies/heroes/FINDINGS.md 11.1.
+    WHAT EACH IDENTITY FIELD IS, and how sure -- this signature has been
+    renamed twice in one day (2026-08-16) and the names now track the
+    evidence rather than either day's guess:
 
-    No range guard on hero_index beyond the u16, deliberately: the settling
-    arm ITSELF had to send 200 in this slot (H1, the control), and a guard
-    here would have refused the experiment that earned the names.
+    * `agent_id` is msg+0xc (stored to entry+0x0). MEASURED, the one thing
+      H1/H2 truly settled: the body lived at agent 200, outside every other
+      candidate range, and the row rendered only with 200 here (11.1).
+    * `word_a` is msg+8 (stored to entry+0x4). UNVERIFIED, owner-leaning --
+      it was 'hero index' for a few hours on 11.1's overstatement, but it
+      was only ever shown to accept 1 and reject 200, and player number,
+      hero index and owner agent id are ALL 1 in every rig that rendered.
+      GmHeroCommander's scan filters this field against ctx[0x44][0x2ac],
+      a "my id" accessor with 45 call sites, which suggests OWNER (17.3).
+      Separating the three needs a rig where they differ. The positional
+      name is back on purpose: naming it would bake the confound in.
+    * `hero_key` is msg+0x10 (stored to entry+0x8). What the commander
+      scan reads as its container key is SOURCED (17.1); that the HERO ID
+      belongs in it is RECONSTRUCTION -- sending it did NOT fix the
+      commander click, which 17.2 refuted head-on. Kept because entry+0x8
+      *is* the key and 0 was never a defensible value.
+
+    No range guard on word_a or hero_key beyond the wire widths,
+    deliberately: the settling arms themselves had to send out-of-range
+    values (H1 put 200 at msg+8), and a guard here would have refused the
+    experiments that earned these notes.
 
     The client also pushes TWO HARDCODED ZERO DWORDS into entry+0xc and
     +0x10 that never touch the wire -- worth knowing before anyone reads the
@@ -544,15 +554,15 @@ def party_hero_add(party_id, hero_index, agent_id, unk_a=0, unk_b=0):
             f"silent-on-zero branch as party_henchman_add, and 0x01C2 uses "
             f"the IDENTICAL [this+0x3c]/[this+0x44] party lookup (OBSERVED), "
             f"so it inherits the same 'party must be built first' gate")
-    for nm, v in (("hero_index", hero_index), ("agent_id", agent_id)):
+    for nm, v in (("word_a", word_a), ("agent_id", agent_id)):
         if not 0 <= v <= 0xFFFF:
             raise ValueError(f"{nm}={v} does not fit the u16 the client reads")
-    for nm, v in (("unk_a", unk_a), ("unk_b", unk_b)):
+    for nm, v in (("hero_key", hero_key), ("unk_b", unk_b)):
         if not 0 <= v <= 255:
             raise ValueError(f"{nm}={v} does not fit the u8 the client reads")
-    return (0x01C2, [party_id, hero_index, agent_id, unk_a, unk_b],
-            f"PARTY_HERO_ADD(party {party_id}, hero {hero_index}, agent "
-            f"{agent_id}, {unk_a}, {unk_b})")
+    return (0x01C2, [party_id, word_a, agent_id, hero_key, unk_b],
+            f"PARTY_HERO_ADD(party {party_id}, word_a {word_a}, agent "
+            f"{agent_id}, key {hero_key}, {unk_b})")
 
 
 def mercenary_info(hero_id, b1=0, b2=0, b3=0, d1=0, d2=0, b4=0, b5=0,

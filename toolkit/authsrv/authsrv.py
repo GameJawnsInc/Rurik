@@ -2250,11 +2250,14 @@ HERO_AGENT_ID = 200
 HERO_DEFINITION = 10
 HERO_BODY = False
 # Swap 0x01C2's two u16s. This flag used to BE the experiment -- one word is
-# an agent id and one a hero index, and the client's own code does not say
-# which -- and the experiment ran 2026-08-16: msg+8 is the HERO INDEX, msg+0xc
-# is the AGENT ID (studies/heroes/FINDINGS.md 11.1; H1, the old default order,
-# rendered NOTHING). The default now sends the measured order, and this flag
-# sends the refuted H1 order as the control arm.
+# an agent id and one is something else, and the client's own code does not
+# say which is which. Where it stands after two rounds the same day
+# (2026-08-16): msg+0xc is the AGENT ID -- solid, H1/H2's one real settlement
+# (studies/heroes/FINDINGS.md 11.1 as narrowed by 17.3) -- and msg+8 is
+# UNVERIFIED, owner-leaning (the commander scan filters it against a "my id"
+# accessor, but player number, hero index and owner agent id were ALL 1 in
+# every rig that rendered). The default sends PLAYER_NUMBER there; this flag
+# exchanges the words, i.e. re-sends H1, the order that rendered nothing.
 HERO_SWAP = False
 # 0x0072 is HERO ACTIVATE, not a diagnostic -- that was its working name for
 # one day. Its four fields are exactly the client's own format string,
@@ -6500,16 +6503,36 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 send(*agents.mercenary_info(
                                     HERO, b1=_hb[0], b2=_hb[1], b3=_hb[2],
                                     d3=HERO_FLAG, chunk=HERO_CHUNK))
-                            # msg+8 is the HERO INDEX, msg+0xc the AGENT ID --
-                            # measured, not argued: H2 rendered and H1 did not
-                            # (studies/heroes/FINDINGS.md 11.1). The default was
-                            # the H1 order until 2026-08-16; --hero-swap now
-                            # re-sends that refuted order as the control arm.
-                            _hero_ix, _agent = HERO, HERO_AGENT_ID
+                            # What 0x01C2's identity words mean, per
+                            # GmHeroCommander's own party scan
+                            # (studies/heroes/FINDINGS.md 17, superseding
+                            # 11.1's overstatement):
+                            #   msg+8    -> entry+0x4 : filtered against
+                            #               ctx[0x44][0x2ac], a "my id"
+                            #               accessor -- OWNER-leaning but
+                            #               UNVERIFIED (only ever accepted 1,
+                            #               and player number, hero index and
+                            #               owner agent id are ALL 1 in every
+                            #               rig that rendered -- 17.3's
+                            #               confound). We send PLAYER_NUMBER
+                            #               as the better-founded value.
+                            #   msg+0xc  -> entry+0x0 : the AGENT ID -- solid,
+                            #               the one word H1/H2 actually settled
+                            #               (200 rendered only here).
+                            #   msg+0x10 -> entry+0x8 : the key the commander
+                            #               scan reads (SOURCED). Filling it
+                            #               with the hero id is RECONSTRUCTION,
+                            #               kept as better-founded -- 17.2
+                            #               REFUTED the prediction that it
+                            #               fixes the commander click.
+                            # --hero-swap still exchanges the two words; it was
+                            # the arm that (with player number == hero id == 1)
+                            # could not tell owner from hero index apart.
+                            _wa, _agent = PLAYER_NUMBER, HERO_AGENT_ID
                             if HERO_SWAP:
-                                _hero_ix, _agent = _agent, _hero_ix
+                                _wa, _agent = _agent, _wa
                             _inside = _inside + (agents.party_hero_add(
-                                1, _hero_ix, _agent),)
+                                1, _wa, _agent, hero_key=HERO),)
                         for op, vals, label in agents.party_build(
                                 1, PLAYER_NUMBER, inside_window=_inside):
                             send(op, vals, label)
@@ -7467,12 +7490,12 @@ def main():
                          "carries NO model_id, so a hero's model cannot come "
                          "from the hero table and must be a placeholder.")
     ap.add_argument("--hero-swap", action="store_true",
-                    help="Exchange 0x01C2's two u16s, i.e. send the REFUTED "
-                         "H1 order (agent id at msg+8). The word order was "
-                         "settled 2026-08-16 -- msg+8 hero index, msg+0xc "
-                         "agent id, studies/heroes/FINDINGS.md 11.1 -- and "
-                         "the default sends it; this flag is the control arm "
-                         "that should render nothing.")
+                    help="Exchange 0x01C2's two identity words, i.e. send "
+                         "the H1 order (agent id at msg+8), which rendered "
+                         "nothing. msg+0xc = agent id is solid; msg+8 is "
+                         "UNVERIFIED, owner-leaning, and the default sends "
+                         "the player number there. heroes FINDINGS 11.1 as "
+                         "narrowed by 17.3. This flag is the control arm.")
     ap.add_argument("--hero-activate", "--hero-diagnostic", action="store_true",
                     dest="hero_activate",
                     help="Send 0x0072 HeroActivate last. Its four fields are "
@@ -7725,7 +7748,7 @@ def main():
         global HERO_BODY_NPC
         # Fail HERE, not inside instance bring-up, and mirror the client's own
         # two asserts rather than inventing a range.
-        agents.party_hero_add(1, a.hero, HERO_AGENT_ID)
+        agents.party_hero_add(1, PLAYER_NUMBER, HERO_AGENT_ID, hero_key=a.hero)
         agents.mercenary_info(a.hero)
         HERO = a.hero
         HERO_BODY = a.hero_body
@@ -7762,13 +7785,16 @@ def main():
                   f"is wrong and the chunk is load-bearing.")
         if HERO_BODY:
             agents.npc_template(HERO_BODY_NPC)
-        _wa, _wb = (HERO_AGENT_ID, HERO) if HERO_SWAP else (HERO, HERO_AGENT_ID)
-        print(f"HERO: 0x01C2 msg+8={_wa} msg+0xc={_wb} (swap={HERO_SWAP}) "
-              f"inside the build window; 0x0074 first={HERO_INFO}; "
+        _wa, _wb = ((HERO_AGENT_ID, PLAYER_NUMBER) if HERO_SWAP
+                    else (PLAYER_NUMBER, HERO_AGENT_ID))
+        print(f"HERO: 0x01C2 msg+8={_wa} msg+0xc={_wb} msg+0x10={HERO} "
+              f"(swap={HERO_SWAP}) inside the build window; "
+              f"0x0074 first={HERO_INFO}; "
               f"body={'agent %d' % HERO_AGENT_ID if HERO_BODY else 'NONE'}; "
               f"0x0072 activate={HERO_ACTIVATE}. "
-              f"Word order is MEASURED: msg+8 hero index, msg+0xc agent id "
-              f"(heroes FINDINGS 11.1); swap re-sends the refuted H1 order.")
+              f"msg+0xc = agent id is MEASURED; msg+8 is UNVERIFIED, "
+              f"owner-leaning; msg+0x10 is the commander-scan key, hero id "
+              f"there is RECONSTRUCTION (heroes FINDINGS 11.1, 17).")
 
     if a.henchman is not None:
         global HENCHMAN
