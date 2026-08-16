@@ -385,6 +385,19 @@ look statically recoverable, and the bow ranges it can give us do not.** Disasse
 readers at those addresses is permitted under CLAUDE.md carve-out (1) for `codescan.py`.
 Do this before spending a live session on `k`.
 
+> **RUNG 3 CORRECTION (2026-08-16, `FINDINGS.md` B1 — annotated, not deleted, so the
+> superseded reading cannot be re-derived from this paragraph).** The scan's counts
+> reproduce exactly, but the RECONSTRUCTION is REFUTED: the ladder sites are `.rdata`
+> byte-straddles inside `s_skill` itself (0x47C = 7 records; each "float" is two zero
+> bytes + the low 16 bits of the name string id at +0x98, 13/13), the 166.0s are ASCII
+> `&C` in menu strings, the 1012.0s are instruction-stream tails — there are no readers
+> at those addresses to disassemble. One hit was real: 144.0 at `0x59ea78` is
+> `s_skill[567].+0x6C`. **The asymmetry conclusion survives by a different route**: the
+> radii live in `s_skill` field +0x6C — adjacent 156, nearby 240, in-the-area 312,
+> earshot 1000, spirit 2500, nature 3500, compass 5000, touch 144 — with the +10/12
+> delta against GWW's measured numbers hypothesised as target bounding radius, which
+> the Isle markers test. Bow ranges stay NOT FOUND four ways: capture-only.
+
 **And a real bug this family found, worth landing on its own:** OBSERVED,
 `toolkit/authsrv/behaviourrun.py:255` was `"pos": tuple(v[3:5])`, but a create is 24 fields
 with the opcode at index 0 and the position a **tuple at `v[5]`** — reproduced:
@@ -485,6 +498,13 @@ map, the durations on the wire, the `+0x04` discriminant and the buffId allocati
   96 — i.e. **property 44 = (pips × 2 hp/s) / max_health, quantised per agent**. Closable
   offline today. Note also that the design's value list dropped the single **negative**
   sample, which is the corpus's only degeneration-shaped observation.
+  > **RUNG 3 (2026-08-16, `FINDINGS.md` B4): CONFIRMED, with two corrections.** The
+  > property rides **`0x00A2`**, not `0x009F` (this applies to props 34 and 43 in this
+  > section too), and the overlap the skeptic said didn't exist is the PLAYER (tag-3,
+  > invisible to an NPC-keyed join): H = 100 measured, 0.02/0.04 = 1 and 2 quanta of
+  > 2/100, exact, in two captures, plus a dynamic integration check at 0.5%. Property
+  > 44 is the net regen **rate** in max-health fractions per second. "One step = one
+  > HUD pip" stays UNVERIFIED — a screen question, and the Students close it.
 - **The ally/foe split is the family's largest risk and was disclosed and then not
   propagated.** Five of ten Students are allies, and no wiki text says an ally Student
   applies anything to a passing player — yet the design's cleanest number-vs-number check
@@ -503,6 +523,16 @@ map, the durations on the wire, the `+0x04` discriminant and the buffId allocati
 `0x7A2CA8..0x7AAE78, 2077 × 16`, index column at +0x00, with **one index hole at row 2036
 holding 2077** — and 2077 is exactly the Cracked Armor skill id measured out of `s_skill`.
 No tool in this repo reads it.
+
+> **RUNG 3 (2026-08-16, `FINDINGS.md` B3): opened, and the premise DISSOLVES.**
+> `s_effect` is the skill-VFX asset table — +0x04 is a `Gw.dat` FFNA **model file id**
+> (2076/2076 bind vs 0/2000 random control; `consttable.py`'s `name_id` naming is
+> wrong and tracked as a repo fix). Skills reference rows via six unparsed slots at
+> `s_skill +0x74..+0x88`, sentinel 2077; the ten condition skills have all slots at
+> sentinel — **conditions own zero effect rows**, and rows 478-486 belong to Monk
+> spells (the numeric collision with the condition skill-id block was the illusion).
+> The hole is a decommissioned row stamped with the engine's own null (2077 =
+> arrsize); "2077 = Cracked Armor's skill id" is numerology, retired.
 
 **And the largest single miss across all four families:** hexes and enchantments have **no
 instrument at all**, while UPSTREAM (`gww-facts.md:385-388`) the Master of Magic is
@@ -831,11 +861,27 @@ messages we already hold, which S3's own gap list flags as a free falsification 
 attempted.
 *Exit:* each item ANSWERED or explicitly declared unreachable offline, written into
 `studies/isle/FINDINGS.md`, **before any live minute is spent**.
+**DONE 2026-08-16** — `FINDINGS.md`, eight bench items + three skeptic passes, every
+item ANSWERED (B7 delegated to `main`'s fix). Headlines: the AoE radii ARE static —
+`s_skill +0x6C` = 156/240/312/1000/2500/3500/5000, with the +10/12 bounding-radius
+hypothesis left for the Isle markers; **rung 7 is unblocked** — coded-string numeric
+arguments are cleartext varints, so the Master of Damage's numbers are extractable
+(as candidates) without any key, and the `/bow` report rides `0x5D`, the channel the
+corpus already decodes; `0x00A4` = shooter/aim-point/flight-time (combat F9 resolved);
+prop 44 = net regen rate on `0x00A2`, quanta of 2/H, confirmed on the player; the p17
+counterexample dissolved and a lone p17 kills (17 REPLACES 16 on the ledger); the
+formula bench: quantization CORROBORATED 49/49, skill-base exact at rank 0, the
+armor exponent NOT REACHED without the Suits. Rung 7 inherits the
+**(target, cause, swing-kind)** scoping rule.
 
 **Rung 4 — the loopback probes.** Our server, our client, no ArenaNet.
 The `0x0042` condition render via `probes.py:1962` with skills 478/480/482; the lone
-property-17 render (settles the CONTESTED "17 replaces 16"); the energy drain-pool probe
-with a positive control; the EncString render probe (the Hatcher precedent). Each of these
+property-17 render (now a presentation question only — B6 settled the ledger half:
+17 replaces 16); the coded-string round-trip + role-binding probe (B8: send a known
+template sid + two known value-word args on `0x5D`/`0x5F`, predict render with no
+"Invalid coded string" log, and our varint encode round-tripping); the energy
+drain-pool probe with a positive control; the EncString render probe (the Hatcher
+precedent). Each of these
 answers a question a live session cannot.
 *Exit:* each named question resolved on our own client with an operator-confirmed render,
 per the repo's rendered-acceptance rule.

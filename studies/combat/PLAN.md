@@ -249,10 +249,14 @@ unrecorded); monster energy 0 observed; monster skill bars STRUCTURALLY
 UNREACHABLE — ArenaNet never sends them (0 of 11 `0x00DA` name a hostile): bars are
 infer-from-casts forever.
 
-**F9. Projectiles — `0x00A4` has two unreconciled readings. CONTESTED:** GWCA's
-AGENT_PROJECTILE_LAUNCHED (nobody sends it) vs monsterai's positional-oracle reading
-(13 live instances, Vec2 = target's world position). The studies never cross-checked.
-IN-CORPUS (13 samples) for whoever reconciles them.
+**F9. Projectiles — `0x00A4` has two unreconciled readings. ~~CONTESTED~~ RESOLVED
+2026-08-16 (`studies/isle/FINDINGS.md` B5):** the two readings were halves of one
+message. `v[1]` = the shooter, `v[2]` = the target's position at the shot, `v[4]` as
+f32 = **flight time in seconds** — predicts the subsequent damage arrival to mean
+|err| 9.3 ms across all 13 samples. Projectile speed is per-weapon/creature (the one
+NPC shot: 706.2 u / 0.5885 s = 1200.0 u/s exactly). `v[5]` as a skill id is REFUTED;
+`v[7]` (0 wand-session, 1 bow-session) stays CONTESTED between weapon-class flag and
+per-session constant — one Isle melee comparison shot discriminates.
 
 **F10. Unsynchronized shared combat state across the two live threads.** No lock, no
 concurrency test; the snapshot-for-iteration comments guard dict-resize, not
@@ -486,7 +490,7 @@ capture-first), projectile reconciliation (F9 — research, not build).
 | E6 scheduler: keyed to E5 + recharge? | one measured cycle says yes (+3 ms) | unmeasured on the other 13+ cycles | Step 0b |
 | `0x00E4` in the self-cast cycle: consumed or discarded? | live server sends it in every cycle | in-tree MEASURED: handler returns early on self | Step 0a + step 3's discriminating operator check (C1) |
 | ~~`0x00EE` attr_id 10~~ | **RESOLVED as NOT-A-KILL-SHAPE, §13**: the `[10,0]`+`[0,X]` pair is a broadcast burst marked by `0x009C`, 6 of 7 sightings far from any death | what the burst itself IS remains unknown, and what attr_id 10 means inside it | a capture with marks on the burst |
-| `0x00A4` meaning | GWCA: AGENT_PROJECTILE_LAUNCHED, never sent by anyone | monsterai: positional oracle, 13 live instances | Cross-check both readings against the 13 samples |
+| ~~`0x00A4` meaning~~ | **RESOLVED 2026-08-16, `studies/isle/FINDINGS.md` B5** — both readings were halves of one message: shooter + target-position + flight-time-f32 (13/13, mean err 9.3 ms) | residual: `v[7]` weapon-class-vs-session flag, one Isle melee shot settles it | closed by the rung-3 bench |
 | TargetBuff+0x04 | effect_type (Headquarter) | attribute_level (GWCA) | Step 6 item 3 |
 | ~~Scaling-window values display-literal at scale?~~ | **RESOLVED, §8c + step 4**: the endpoints ARE the displayed values (the interpolator consumes them raw at rank 0 and 15), and GWW's progression templates match all 14 | no transform like `ceil(raw/25)` appears in the path | closed |
 | `0x0037` bytes: used/max or max/used? | contested between lineages | moot only while the value is [0,0] (C12) | Step 6 item 1 |
