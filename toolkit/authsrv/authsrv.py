@@ -2249,8 +2249,12 @@ HERO = None
 HERO_AGENT_ID = 200
 HERO_DEFINITION = 10
 HERO_BODY = False
-# Swap 0x01C2's two u16s. The whole point of the arm: one is an agent id and
-# one is a hero index, and the client's own code does not say which.
+# Swap 0x01C2's two u16s. This flag used to BE the experiment -- one word is
+# an agent id and one a hero index, and the client's own code does not say
+# which -- and the experiment ran 2026-08-16: msg+8 is the HERO INDEX, msg+0xc
+# is the AGENT ID (studies/heroes/FINDINGS.md 11.1; H1, the old default order,
+# rendered NOTHING). The default now sends the measured order, and this flag
+# sends the refuted H1 order as the control arm.
 HERO_SWAP = False
 # 0x0072 is HERO ACTIVATE, not a diagnostic -- that was its working name for
 # one day. Its four fields are exactly the client's own format string,
@@ -6496,15 +6500,16 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 send(*agents.mercenary_info(
                                     HERO, b1=_hb[0], b2=_hb[1], b3=_hb[2],
                                     d3=HERO_FLAG, chunk=HERO_CHUNK))
-                            # word_a is msg+8 (-> entry+0x4), word_b is msg+0xc
-                            # (-> entry+0x0). Which is the agent id is exactly
-                            # what this arm asks, so the two carry DIFFERENT
-                            # values and --hero-swap exchanges them.
-                            _wa, _wb = HERO_AGENT_ID, HERO
+                            # msg+8 is the HERO INDEX, msg+0xc the AGENT ID --
+                            # measured, not argued: H2 rendered and H1 did not
+                            # (studies/heroes/FINDINGS.md 11.1). The default was
+                            # the H1 order until 2026-08-16; --hero-swap now
+                            # re-sends that refuted order as the control arm.
+                            _hero_ix, _agent = HERO, HERO_AGENT_ID
                             if HERO_SWAP:
-                                _wa, _wb = _wb, _wa
+                                _hero_ix, _agent = _agent, _hero_ix
                             _inside = _inside + (agents.party_hero_add(
-                                1, _wa, _wb),)
+                                1, _hero_ix, _agent),)
                         for op, vals, label in agents.party_build(
                                 1, PLAYER_NUMBER, inside_window=_inside):
                             send(op, vals, label)
@@ -7462,10 +7467,12 @@ def main():
                          "carries NO model_id, so a hero's model cannot come "
                          "from the hero table and must be a placeholder.")
     ap.add_argument("--hero-swap", action="store_true",
-                    help="Exchange 0x01C2's two u16s. One is an agent id and "
-                         "one a hero index and the client does not say which; "
-                         "the two arms differ ONLY in this, so whichever "
-                         "renders names the field.")
+                    help="Exchange 0x01C2's two u16s, i.e. send the REFUTED "
+                         "H1 order (agent id at msg+8). The word order was "
+                         "settled 2026-08-16 -- msg+8 hero index, msg+0xc "
+                         "agent id, studies/heroes/FINDINGS.md 11.1 -- and "
+                         "the default sends it; this flag is the control arm "
+                         "that should render nothing.")
     ap.add_argument("--hero-activate", "--hero-diagnostic", action="store_true",
                     dest="hero_activate",
                     help="Send 0x0072 HeroActivate last. Its four fields are "
@@ -7718,7 +7725,7 @@ def main():
         global HERO_BODY_NPC
         # Fail HERE, not inside instance bring-up, and mirror the client's own
         # two asserts rather than inventing a range.
-        agents.party_hero_add(1, HERO_AGENT_ID, a.hero)
+        agents.party_hero_add(1, a.hero, HERO_AGENT_ID)
         agents.mercenary_info(a.hero)
         HERO = a.hero
         HERO_BODY = a.hero_body
@@ -7755,13 +7762,13 @@ def main():
                   f"is wrong and the chunk is load-bearing.")
         if HERO_BODY:
             agents.npc_template(HERO_BODY_NPC)
-        _wa, _wb = (HERO, HERO_AGENT_ID) if HERO_SWAP else (HERO_AGENT_ID, HERO)
-        print(f"HERO: 0x01C2 wordA={_wa} wordB={_wb} (swap={HERO_SWAP}) "
+        _wa, _wb = (HERO_AGENT_ID, HERO) if HERO_SWAP else (HERO, HERO_AGENT_ID)
+        print(f"HERO: 0x01C2 msg+8={_wa} msg+0xc={_wb} (swap={HERO_SWAP}) "
               f"inside the build window; 0x0074 first={HERO_INFO}; "
               f"body={'agent %d' % HERO_AGENT_ID if HERO_BODY else 'NONE'}; "
               f"0x0072 activate={HERO_ACTIVATE}. "
-              f"200 is outside 1..39 ON PURPOSE — whichever word must hold it "
-              f"for the row to render is the agent id.")
+              f"Word order is MEASURED: msg+8 hero index, msg+0xc agent id "
+              f"(heroes FINDINGS 11.1); swap re-sends the refuted H1 order.")
 
     if a.henchman is not None:
         global HENCHMAN

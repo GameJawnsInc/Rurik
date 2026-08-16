@@ -507,7 +507,7 @@ HEROES = 40          # ChCliApi:4446 `hero < HEROES`, `cmp esi,0x28`. OBSERVED.
 HERO_UNUSED = 0      # ChCliApi:4447, fires only on `test esi,esi`. OBSERVED.
 
 
-def party_hero_add(party_id, word_a, word_b, unk_a=0, unk_b=0):
+def party_hero_add(party_id, hero_index, agent_id, unk_a=0, unk_b=0):
     """GAME_SMSG 0x01C2 / 450 -- one hero row in the party roster.
 
     THE SHAPE CORRECTS THE UPSTREAM. OpenTyria's GameMsg.h:466-473 gives
@@ -516,20 +516,21 @@ def party_hero_add(party_id, word_a, word_b, unk_a=0, unk_b=0):
     u8, u8]`, 10 bytes. Three words and two bytes.
     studies/heroes/FINDINGS.md 1.2.
 
-    WHY THE TWO WORDS ARE CALLED word_a AND word_b. One of them is an agent
-    id and the other a hero index, and WE DO NOT KNOW WHICH -- the natural
-    tie-break failed twice over. (1) The storage-order analogy with 0x01BF
-    ("the dedupe key is stored first, so entry+0 is the key") was REFUTED:
-    0x01C2's worker has NO dedupe scan at all, it appends unconditionally.
-    (2) GmHeroCommander's `heroData->agentId` looked like the anchor and is
-    not -- it resolves through ctx+0x2c+0x584, which is the 0x0074 DATA
-    CACHE record, not this party-roster entry.
+    THE WORD ORDER IS MEASURED, NOT ARGUED. hero_index is msg+8 (stored to
+    entry+0x4); agent_id is msg+0xc (stored to entry+0x0). These parameters
+    were `word_a`/`word_b` until 2026-08-16, positional on purpose, because
+    the natural tie-breaks had failed twice: the storage-order analogy with
+    0x01BF was REFUTED (0x01C2's worker has NO dedupe scan, it appends
+    unconditionally), and GmHeroCommander's `heroData->agentId` resolves
+    through ctx+0x2c+0x584 -- the 0x0074 DATA CACHE record, not this entry.
+    The H1/H2 arm pair settled it by construction: the body lived at agent
+    200, outside the 1..39 hero-index range, so whichever position 200 had
+    to occupy for the row to render is the agent id -- and only the arm
+    with 200 at msg+0xc rendered. studies/heroes/FINDINGS.md 11.1.
 
-    So the names are positional on purpose: word_a is msg+8 (stored to
-    entry+0x4), word_b is msg+0xc (stored to entry+0x0). Naming either one
-    `agent_id` here would bake a guess into the call site, which is exactly
-    how UPSTREAM becomes fact. The caged arm settles it by making the two
-    disagree and seeing which one a live body must match.
+    No range guard on hero_index beyond the u16, deliberately: the settling
+    arm ITSELF had to send 200 in this slot (H1, the control), and a guard
+    here would have refused the experiment that earned the names.
 
     The client also pushes TWO HARDCODED ZERO DWORDS into entry+0xc and
     +0x10 that never touch the wire -- worth knowing before anyone reads the
@@ -543,15 +544,15 @@ def party_hero_add(party_id, word_a, word_b, unk_a=0, unk_b=0):
             f"silent-on-zero branch as party_henchman_add, and 0x01C2 uses "
             f"the IDENTICAL [this+0x3c]/[this+0x44] party lookup (OBSERVED), "
             f"so it inherits the same 'party must be built first' gate")
-    for nm, v in (("word_a", word_a), ("word_b", word_b)):
+    for nm, v in (("hero_index", hero_index), ("agent_id", agent_id)):
         if not 0 <= v <= 0xFFFF:
             raise ValueError(f"{nm}={v} does not fit the u16 the client reads")
     for nm, v in (("unk_a", unk_a), ("unk_b", unk_b)):
         if not 0 <= v <= 255:
             raise ValueError(f"{nm}={v} does not fit the u8 the client reads")
-    return (0x01C2, [party_id, word_a, word_b, unk_a, unk_b],
-            f"PARTY_HERO_ADD(party {party_id}, wordA {word_a}, wordB "
-            f"{word_b}, {unk_a}, {unk_b})")
+    return (0x01C2, [party_id, hero_index, agent_id, unk_a, unk_b],
+            f"PARTY_HERO_ADD(party {party_id}, hero {hero_index}, agent "
+            f"{agent_id}, {unk_a}, {unk_b})")
 
 
 def mercenary_info(hero_id, b1=0, b2=0, b3=0, d1=0, d2=0, b4=0, b5=0,

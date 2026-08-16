@@ -368,6 +368,20 @@ properties) actually does. `PublicLevel` (36) goes there, and it is the property
 this project has OBSERVED the client accept three times without ever confirming
 a visible effect.
 
+> **CORRECTED 2026-08-16, by running the executable authority §3b names.**
+> Both halves of the paragraph above are stale.
+> `genericvalue.py --id 36` derives that 36 does NOT fall to a generic case —
+> it has a real int-main case body at `0x00812D6E` (build 38797, pinned
+> pristine), and disassembly (`codescan.py --dis 0x00812D6E`) shows two
+> container calls keyed on the agent id against manager+0x7CC (`0x00817BE0`,
+> then `0x0080BC90` returning the per-agent entry), a store of the value to
+> **entry+0x2C**, and a call to `0x007DFE10(agent, value)` — a persistent
+> per-agent write plus a notification, SOURCED. And "never confirming a
+> visible effect" expired separately: prop 36 = 1/15/20 moved the party-roster
+> level readout `W1`/`W15`/`W20` exactly
+> (`../profession/RESKIN.md`, harness 20260813T172323). See
+> `../unitsetup/FINDINGS.md` §8 Q4 and §7 resolution 3.
+
 ---
 
 ## 5. Method, and how to reproduce
