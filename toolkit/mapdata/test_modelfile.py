@@ -191,7 +191,9 @@ F11_TOL = 1e-5
 # So a bare-machine run lands 28 short and goes RED: a synthetic model file
 # this test built has verified the plumbing and NOTHING about ArenaNet's
 # bytes. `--all` adds 10 checks; its runtime is in the module docstring.
-FLOOR = 61
+# 2026-08-16: +3 (the block-H fixture and the error-0x1D refusal, rung U1
+# of studies/unitmodels/PLAN.md), 61 -> 64, measured green before raising.
+FLOOR = 64
 
 
 # ------------------------------------------------------------------ helpers
@@ -533,6 +535,34 @@ def _section1(check):
                             + struct.pack("<II", 0xFA1, 1) + b"\x00")
     check(lone.geometry() is None,
           "a file with no geometry chunk answers None, not an error")
+
+    # BLOCK H, exercised for the first time anywhere (2026-08-16): it
+    # occurs on 0 of 20,661 archive geometry chunks (unitmodels FINDINGS
+    # §4.1), so the models arc's 20,661/20,661 closure was never evidence
+    # for the H term and only a fixture can test it. H = streak systems
+    # (16 B each, u8@0x31) + streaks (0x54 B each, u8@0x32), consumed
+    # between the collision meshes and block I.
+    h_pay = bytearray(synth_geometry())
+    h_pay[0x31], h_pay[0x32] = 2, 1
+    h_pay += b"\xCC" * (16 * 2 + 0x54 * 1)
+    h_geo = ModelGeometry.decode(bytes(h_pay))
+    check(h_geo.num_models == 2 and h_geo.starts == (0x54,),
+          "a block-H-carrying chunk decodes: the H term consumes "
+          "16a + 0x54b and the walk still closes on the final byte")
+    check(raises(ModelGeometry.decode, bytes(h_pay[:-4])),
+          "and the H term is load-bearing: the same chunk 4 bytes short "
+          "is refused rather than closed")
+    bad_h = bytearray(h_pay)
+    bad_h[0x32] = 0
+    err = None
+    try:
+        ModelGeometry.decode(bytes(bad_h))
+    except Undecodable as exc:
+        err = exc
+    check(err is not None and "0x1D" in str(err),
+          "streak systems with zero streaks is refused the way the client "
+          "refuses it (error 0x1D at 0x00795664)",
+          str(err) if err else "returned normally")
 
 
 # --- 2-4. the archive -------------------------------------------------------

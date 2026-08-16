@@ -14,10 +14,14 @@ rung M3.
 WHAT A MODEL FILE IS. `ffna` type 2, reached from a map's props chunk by index:
 Stripped prop `model` -> chunk 0x11000004 / Bloated 0x21000004 -> the pair
 formula (`mapchunks.dependency_file_id`) -> the archive's file-id table. Chunk
-map (MEASURED over 2,048 files, 14-map sample): 0xFA0 geometry, 0xFA1/0xFA5
-texture filenames, 0xFA6, 0xFAD AMAT materials. This module decodes the
-GEOMETRY chunk; the texture chunks are carried as opaque payloads a later rung
-resolves (`atex.py` already decodes what they point at).
+map (corrected 2026-08-16 by the unit-model arc, `studies/unitmodels/
+FINDINGS.md`): 0xFA0 geometry, 0xFA1 the SKELETON/ANIMATION chunk (decoded by
+`skelfile.py`; tiny and degenerate on props, tens-to-hundreds of KB on unit
+bodies -- the "texture filenames" reading this line once carried was refuted
+in the models study's own §6.1), 0xFA5 the texture list, 0xFA6 the sound-cue
+list, 0xFAD AMAT materials. This module decodes the GEOMETRY chunk and
+carries the others as opaque payloads (`atex.py` decodes what 0xFA5 points
+at).
 
 THE GEOMETRY CHUNK. A 0x54-byte preamble region, then `num_models` sub-model
 records, then `collision_count` collision meshes, closing on the chunk's exact
@@ -163,11 +167,12 @@ from archive import Archive, ffna_chunks, ffna_type, file_id_table, \
     DEFAULT_DAT  # noqa: E402
 import mapchunks  # noqa: E402
 
-#: The chunk ids a model file carries (MEASURED census, 14-map sample).
+#: The chunk ids a model file carries (MEASURED census, 14-map sample;
+#: names corrected 2026-08-16 -- see studies/unitmodels/FINDINGS.md).
 GEOMETRY_CHUNK = 0x00000FA0
-TEXNAME_CHUNK_A = 0x00000FA1
-TEXNAME_CHUNK_B = 0x00000FA5
-UNKNOWN_CHUNK_FA6 = 0x00000FA6
+SKELETON_CHUNK = 0x00000FA1     # skeleton/animation; decoded by skelfile.py
+TEXNAME_CHUNK_B = 0x00000FA5    # the texture list (models FINDINGS §6.1)
+SOUNDCUE_CHUNK_FA6 = 0x00000FA6  # sound-cue list (unitmodels FINDINGS §5.2)
 AMAT_CHUNK = 0x00000FAD
 
 MODEL_FFNA_TYPE = 2
@@ -554,6 +559,10 @@ def material_block_start(payload):
             f"MdlLoad.cpp refuses it at 0x00794586")
     w = _Cursor(payload)
     w.at = PREAMBLE_MIN
+    # Block A is the model's LIGHTS (named 2026-08-16, studies/unitmodels/
+    # FINDINGS.md §4.4): u8@0x30 -> m_lightCount at geom+0x48, pinned from
+    # two consumers (MdlAnim:1956 and MdlCombine:1949). 26 of 20,661
+    # archive geometry chunks carry one.
     if _u8(payload, 0x30):                                          # A
         w.take(28 * _u8(payload, 0x30), "block A")
     for _ in range(_u16(payload, 0x50)):                            # B
@@ -858,11 +867,41 @@ def trailing_end(payload, at):
         H  0x0079564A  if u8@0x31: 16*u8@0x31 + 0x54*u8@0x32
         I  0x0079574D  u32@0x48 records of 4 bytes, each + 8*u32@rec
         J  0x007957B4  if u32@0x34: that many bytes (0x00795DA0)
+
+    NAMED 2026-08-16 by the unit-model arc (studies/unitmodels/FINDINGS.md
+    §4), with the caveats that keep the names honest:
+
+      * H = STREAK SYSTEMS + STREAKS (m_streakSystemCount/m_streakCount,
+        geom+0x90..+0x9C, MdlCombine:2023 + MdlAnim:1122) -- and it occurs
+        on **0 of 20,661** geometry chunks in the full retail archive, so
+        this walk's H term has never been exercised by any corpus file and
+        the client's own refusal (u8@0x31 != 0 with u8@0x32 == 0 is error
+        0x1D at 0x00795664) is NOT implemented here -- moot at zero
+        occurrences, recorded so a future file that hits it is understood.
+      * I = the `vo`/`objCurr` SWITCHABLE-PART command lists (MdlAnim:1665,
+        MdlCombine:1940; each record a bit of a 32-bit instance mask, so
+        u32@0x48 <= 32). Present on 9,571 of 20,661 -- mostly PROPS, not a
+        unit marker.
+      * J = `m_sClouds` PARTICLE SOURCES + EMITTERS (MdlBuild:289-292,
+        MdlAnim:1121): u32@0x38 records of 0x58, u32@0x3C of 0x50, u32@0x40
+        of 0x18. The u32@0x34 byte count consumed here is gated by the
+        client's OWN equality `0x58a + 0x50b + 0x18c` at 0x0079621C -- so
+        treating J as one opaque span is sound, and a finer walk could
+        never disagree with this one on a file the client accepts.
     """
     w = _Cursor(payload)
     w.at = at
-    if _u8(payload, 0x31):                                          # H
-        w.take(16 * _u8(payload, 0x31) + 0x54 * _u8(payload, 0x32),
+    h_systems = _u8(payload, 0x31)
+    if h_systems:                                                   # H
+        # The client's own refusal, implemented 2026-08-16 with the U1
+        # fixture that finally exercises this term: streak systems with
+        # zero streaks is error 0x1D at 0x00795664. Moot on the corpus (H
+        # occurs on 0 of 20,661 geometry chunks) but a synthetic file that
+        # hits it must be refused the way the client refuses it.
+        if _u8(payload, 0x32) == 0:
+            raise Undecodable("block H: streak systems with zero streaks "
+                              "(0x00795664 refuses, error 0x1D)")
+        w.take(16 * h_systems + 0x54 * _u8(payload, 0x32),
                "block H")
     for _ in range(_u32(payload, 0x48)):                            # I
         rec = w.at

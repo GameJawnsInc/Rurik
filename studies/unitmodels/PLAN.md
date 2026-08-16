@@ -74,4 +74,5 @@ drives any client run; every new test lands in TESTS.md in the same commit.
 | Rung | Status |
 |---|---|
 | Recon (pre-U1) | **DONE 2026-08-16** — [FINDINGS.md](FINDINGS.md); artifacts in `vault/research/unitmodels/2026-08-16-recon/` |
-| U1–U7 | not started |
+| U1 | **DONE 2026-08-16** — `toolkit/mapdata/skelfile.py` + `test_skelfile.py` (71 checks, floor 63; `--all` walks the complete flags=515 population and pins closure at exactly 14,571/14,571), reviewed against the research walker (2,542 sequence records byte-identical, spans tile 501/501). The sabotage ceilings are the rung's own correction: "collapses to zero" was a sample truth, six variants carry 1–29 full-population aliasing survivors (FINDINGS §3.6). Housekeeping landed: modelfile A/H/I/J docstring names, the block-H fixture + client error-0x1D refusal in `modelfile.py`/`test_modelfile.py` (floor 61→64), n56 fixture, M6b closed, smsg §0x0057 answered. |
+| U2–U7 | not started; U2 and U3 can run as parallel arcs |

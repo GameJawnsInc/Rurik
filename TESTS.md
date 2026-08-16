@@ -750,10 +750,70 @@ Every one of these, in the order they were written:
   9,128, ten values all <= 9, so it is an index whose purpose stays UNVERIFIED.
   A sabotage that quietly reads the 3D radius as the 2D
   one was built and run and reddens 5 checks from three directions, the
-  synthetic literal plus both maps' oracle and rival. Three scores, each
-  MEASURED rather than subtracted, because the file needs TWO vault artifacts
-  that fail independently: 57 with archive + client image, 33 with the client
-  image alone, **29 with neither** -- against a floor of 57. ~121 s),
+  synthetic literal plus both maps' oracle and rival. **The block-H fixture
+  (2026-08-16, rung U1): block H occurs on 0 of 20,661 archive geometry
+  chunks, so the 20,661/20,661 closure was never evidence for the H term --
+  a synthetic H-carrying chunk now decodes and closes, the same chunk 4
+  bytes short refuses, and streak-systems-with-zero-streaks is refused the
+  way the client refuses it (error 0x1D at 0x00795664, a refusal
+  `trailing_end` did not implement until the fixture existed to test it).**
+  Three scores, each MEASURED rather than subtracted, because the file needs
+  TWO vault artifacts that fail independently -- against a floor of 64
+  (61 -> 64 with the H fixture, measured green before raising). ~121 s),
+  `toolkit/mapdata/test_skelfile.py` (the SKELETON/ANIMATION chunk `0xFA1` --
+  rung U1 of `studies/unitmodels/PLAN.md`, the 2026-08-16 recon's verified
+  walker promoted to committed code. **The headline is closure, and here
+  closure is OUR assertion, not the client's**: the FA1 parser's success path
+  at `0x00796905` never compares its cursor to the chunk's end, so
+  `cursor == len(payload)` is a check the artifact can refuse -- the study
+  measured **14,571/14,571 byte-exact over the complete flags=515
+  population**, and `--all` reproduces that number exactly from committed
+  code (plus the population identities: 21,421 heads, exactly one non-ffna
+  anomaly at the known row 8316). The default run is a deterministic
+  stride-89 sample: 241 rows -> 160 FA1 carriers, closure 160/160. **The
+  synthetic section is the part no census can replace**: `n56`'s stride
+  fires on 0 of 14,571 corpus files (disasm-only, UNVERIFIED), so the
+  builder -- which writes payloads from ITS OWN size literals, the
+  full-options fixture pinned to a HAND-COMPUTED 623 bytes -- is the only
+  place `n56_mult` is testable, and it is sabotaged in both directions
+  there, one check per variant. Every sampled payload is also walked by an
+  independent straight-line transliteration with hardcoded strides
+  (agreement on the closure VERDICT, 160/160 -- the cursors are not compared
+  to each other because on success each equals the end by its own
+  arithmetic and the comparison could not fail; the review struck this
+  file's original claim). The transliteration's moved-n38 variant is the
+  ORDER CONTROL with its vacuous half SPLIT: collapses on all files with
+  n38 and n3C non-zero, still closes on the n38>0/n3C==0 files where the
+  loop runs over unmoved bytes (34 sampled), and the n38==0 population is
+  EXCLUDED as untestable rather than counted -- two textually identical
+  code paths cannot disagree.
+  Sixteen one-term sabotages scored ONLY over the subpopulation that fired
+  each term, each held to its MEASURED full-population aliasing ceiling --
+  and the ceilings are themselves the file's first correction: "collapses to
+  zero" passed at n=160 and at the study's n=600 and was REFUTED at
+  n=14,571, where six "clean" variants carry 1-29 survivors (worst 0.2%,
+  hdr=0x5C) by the same shifted-read aliasing the study verified for
+  n38_mult; survivor rows are printed, exceeding a ceiling is a regression
+  (`n38_mult`/`n50_mult` stay under a 25% minority bound, measured 12.0%
+  full-population). Invariants
+  the decoder cannot force: span binding `lo <= hi <= n3C` over every
+  sampled sequence record (628, 0 violations; 50,127 in the study), key
+  times NON-DECREASING per span with strictness deliberately NOT asserted
+  (10 corpus files carry exact duplicates; ArenaNet's MdlAnim:367 reads a
+  different array), the 1/30 s key grid at >= 99%, and **the COMPOSITED
+  equivalence** -- FA1 flag bit 0 <=> the container has no geometry chunk,
+  two independent places in the archive, 160/160 sampled and 14,571/14,571
+  in the study; flag bits 3/5/6/7 checked through the module's OWN
+  `flags_presence()` rather than a private copy of its pairs (the review
+  caught the test measuring its own inline table while the shipped method
+  went uncovered), 640/640. Anchors pinned by byte size: 116228 the
+  hatcher's COMPOSITED shell (29,495 B, no geometry), 116366 the
+  self-contained worm (82,169 B, also reached via `Skeleton.load`), and
+  116703 the 0x0057 body pinned to carry NO FA1 at all -- the absence is
+  the composite mechanism's other half. 71 checks against a floor of 63
+  (the mandatory core is 53; the corpus sabotage and order-control pools
+  can legitimately empty on another sample and declare skips). ~25 s;
+  `--all` reads every head row, ~25-45 min),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against

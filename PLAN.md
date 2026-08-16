@@ -1299,16 +1299,21 @@ flags-2817 stream mystery is solved (stream-chain tails). The full evidence base
 round-trip authorship (U1–U7, summit: modify an animation, rebuild the archive, the
 loopback client renders it) is [studies/unitmodels/PLAN.md](studies/unitmodels/PLAN.md).
 
-**The next action is U1 and it is time-sensitive in one respect**: the verified FA1
-walker and every census artifact live in `vault/research/unitmodels/2026-08-16-recon/`
-(preserved from session scratch), but **nothing in `toolkit/` decodes FA1 yet** — U1
-promotes the walker to committed, floor-guarded code with synthetic fixtures for the
-terms the corpus never exercises (n56, block H). Still undecoded, honestly:
-blk2C/blk48's element contents (the animation keys' payload — strides exact, semantics
-unnamed; the quaternion reading REFUTED), FA1 flag bits 1–2, the m_skel/m_geom object
-identity, and the mid/tail chunk families. GW1 units read as rigid-segment models —
-zero skinning vocabulary in 19,758 assert sites — which, if it survives U2, makes
-custom-unit authoring markedly simpler than a skinned-mesh format would.
+**U1 landed the same day**: `toolkit/mapdata/skelfile.py` decodes FA1 (typed
+sequences/key-times layer, byte-span preservation for the U6 writer), and
+`test_skelfile.py` (71 checks, floor 63) pins closure at exactly **14,571/14,571 under
+`--all`** plus the COMPOSITED and span-binding oracles; the synthetic fixtures cover
+what the corpus cannot (n56 fires on 0 files; block H on 0 of 20,661, now exercised in
+`test_modelfile.py` together with the client's error-0x1D refusal). The full-population
+run also CORRECTED the study's sabotage table — six "clean" variants carry 1–29
+aliasing survivors at n=14,571 (FINDINGS §3.6) — and the measured ceilings are pinned.
+**Next is U2 (name the animation payloads) and U3 (companion chunks + the object
+model), which can run as parallel arcs** — `studies/unitmodels/PLAN.md` §2. Still
+undecoded, honestly: blk2C/blk48's element contents (strides exact, semantics unnamed;
+the quaternion reading REFUTED), FA1 flag bits 1–2, the m_skel/m_geom object identity,
+and the mid/tail chunk families. GW1 units read as rigid-segment models — zero skinning
+vocabulary in 19,758 assert sites — which, if it survives U2, makes custom-unit
+authoring markedly simpler than a skinned-mesh format would.
 
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
 
