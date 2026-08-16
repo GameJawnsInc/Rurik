@@ -627,10 +627,15 @@ skill bars and attributes have **no known delivery mechanism** on the wire, and
 
 So §4 is no longer only an absence in our scans. The client has told us what the next message
 must carry, and the next question is concrete rather than open-ended: **what writes a HERO's
-attribute record?** The `0x0074` chunk is the first place to look — it has ten unexplained
-dwords the client splits into two 5-dword groups at record `+0x4c` and `+0x60` (§1.3), and a
-20-byte group is the right size for an attribute block. That is a hypothesis with a shape,
-and the arm that tests it is cheap: vary the chunk and re-send the diagnostic.
+attribute record?** The `0x0074` chunk was the first place to look — ten unexplained dwords
+the client splits into two 5-dword groups at record `+0x4c` and `+0x60` (§1.3), and 20 bytes
+is exactly one attribute entry.
+
+> **That hypothesis was tested the same day and is REFUTED — §12.** The chunk is 40 bytes
+> written into the wrong structure: `attribState` is a separate `0x43c`-stride record,
+> binary-searched by a key, holding `attrib[51]` of 20 bytes each. The live lead is now the
+> **template system** (§12.3), which has `attribCount` + `attrib[]` + `attribValue[]` and
+> named asserts to find it by.
 
 ### 11.5 What is now closed, and what is not
 
@@ -639,6 +644,69 @@ and the arm that tests it is cheap: vary the chunk and re-send the diagnostic.
 **Still open and unchanged:** hero **skill-bar** delivery (§4) — now with a named next gate;
 the **c2s** direction (§3.3); `0x0074`'s remaining 17 fields; and whether a hero needs
 anything beyond attributes before it is a working party member.
+
+## 12. The attribute-chunk hypothesis — REFUTED, with the prediction on record
+
+§11.4 proposed that `0x0074`'s two unexplained 5-dword groups (record `+0x4c`/`+0x60`) are
+the hero's attribute block, on the strength of a size coincidence. **It is wrong, and the
+static read said so before the run.**
+
+### 12.1 What `attribState` actually is
+
+Reading `ChCliAttrib.cpp:156` (`0x00818c77`, build 38833) rather than guessing at it:
+
+- The asserting function `0x00818C60` calls a resolver `0x00819430`, asserts the result
+  non-null, then returns `[esi+0x434]`.
+- The resolver is a **binary search** over an array of **stride `0x43c` (1084 B)**, keyed by
+  a dword at record `+0x0`. It is a pure lookup — all four of its callers are ChCliAttrib's
+  own getters (lines 133/146/156/166), so nothing here creates a record.
+- The `attrib[]` bound is `cmp ebx, 0x33` = **51** (`ChCliAttrib:177`,
+  `attrib < arrsize(attribState->attrib)`), and the caller's index math
+  `lea eax,[eax+eax*4]; lea eax,[eax+1]; lea eax,[esi+eax*4]` = `20*i + 4` gives
+  **20 bytes per attribute entry, array starting at record+4**. 51 × 20 = 1020, and
+  `1084 − 1024 = 60` bytes of tail — which is where `+0x434` lives.
+
+The structure's own field names come from its asserts:
+`attribState->attrib[attrib].baseValue >= 0` (`:42`) and `attribState->attribPointsAvail >= 0`
+(`:43`).
+
+### 12.2 The prediction, and the arm that could have refuted it
+
+> **Stated before the run:** the assert will stay `attribState`, because attribState is a
+> separate `0x43c`-stride keyed record holding 1020 bytes of attribute array, while
+> `0x0074`'s chunk is **40 bytes written into a different structure**. If the assert moves,
+> the prediction is wrong and the chunk is load-bearing.
+
+The arm loaded every byte the hypothesis could want: chunk = ten dwords of `12` (the
+attribute rank cap named by `AcctTemplate:441`), the **flag set non-zero** so the client
+takes its *conditional third copy* of the second group to record `+0x74` — a branch no
+previous run had exercised at all — and the three leading `u8`s at 20/3/6.
+
+**Result: `Assertion: attribState  ChCliAttrib.cpp(156)`, unchanged.** Byte-identical
+outcome to the all-zero arm. The chunk is not the attribute block, and the third-copy branch
+does not reach attribState either.
+
+### 12.3 What the refutation bought
+
+Three new measurements and a better lead, which is why a stated-and-failed prediction is
+worth more than an unstated one:
+
+- **`attribState` geometry** (§12.1) — stride, key, 51-entry array, 20-byte entries. This is
+  the shape any future "author a hero build" work has to fill.
+- **The attribute count is 51** and the **rank cap is 12** (`AcctTemplate:441`
+  `data.attribValue[index] <= 12`), both OBSERVED.
+- **The next candidate is the TEMPLATE system, and it now has named asserts.**
+  `AcctTemplate:422/423` bound a `data.attribCount` against `arrsize(data.attrib)` and
+  against **16**; `:440` bounds `data.attrib[index] < CHAR_ATTRIBS`; and
+  `TemplatesCode:168` / `TemplatesHelpers:368` both bound
+  `m_skillTemplateData.attribCount` against `marrsize(AccountTemplateDataSkill, attrib)`.
+  A struct carrying `attribCount` + `attrib[]` + `attribValue[]` **is** a build — which is
+  exactly §4's "packed template blob" candidate, no longer a guess about where to look.
+
+**What is still NOT FOUND:** what creates an `attribState` entry. The only stride-`0x43c`
+site outside ChCliAttrib resolves to generic `Array.cpp` growth code, so the insert path is a
+vector push with no message traced into it — the same wall §4 hit, now one structure closer
+and with the array's exact shape known.
 
 ## 9. Defects and corrections this arc produced
 
