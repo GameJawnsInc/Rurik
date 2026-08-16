@@ -95,7 +95,13 @@ promoted, so nothing in `toolkit/` opens a model file today.
 5. **Model-space conventions**: winding, normals, and the local z sign
    against the world's (FINDINGS 25 negation is about the WORLD; whether a
    model's local frame shares it is unmeasured).
-6. **The flags-2817 second stream** — 21,420 type-2 rows nobody has opened.
+6. ~~**The flags-2817 second stream** — 21,420 type-2 rows nobody has
+   opened.~~ **RESOLVED 2026-08-16 by the unit-model arc**
+   ([../unitmodels/FINDINGS.md](../unitmodels/FINDINGS.md) §2.2): it is the
+   tail of a bijective 3-row `nextStream` chain (515 head → 1 mid → 2817
+   tail) behind 94.8% of model heads; mid/tail rows are themselves valid
+   ffna type-2 containers carrying their own chunk families, purpose still
+   UNVERIFIED.
 
 ## 3. The ladder
 
