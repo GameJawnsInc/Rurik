@@ -109,7 +109,7 @@ def _dialog_window(send, agent_id, text, options):
         send(GAME_SMSG_NPC_DIALOG_OPTION,
              [questdefs.option_kind(code), label,
               questdefs.encode_service_select(qid, code),
-              questdefs.OPTION_NO_ICON],
+              questdefs.OPTION_FIELD4_ALWAYS],
              f"DIALOG_OPTION(quest {qid} code 0x{code:02X} "
              f"kind {questdefs.option_kind(code)})")
 
@@ -212,7 +212,7 @@ def _list_screen(send, agent_id, lines):
              [questdefs.option_kind(show),
               questdefs.enc_string(row.get("enc_name") or []),
               questdefs.encode_service_select(qid, show),
-              questdefs.OPTION_NO_ICON],
+              questdefs.OPTION_FIELD4_ALWAYS],
              f"DIALOG_OPTION(quest {qid} code 0x{show:02X} "
              f"kind {questdefs.option_kind(show)})")
 

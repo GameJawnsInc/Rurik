@@ -193,10 +193,35 @@ def encode_service_select(quest_id, code):
     return SERVICE_TAG_BIT | (quest_id << 8) | code
 
 
-# Field 4, 0xFFFFFFFF in 41 of 41 samples (the earlier "37 of 37" was a floor
-# from a partial census). Never seen taking another value, so what it MEANS is
-# UNVERIFIED -- this name says where it came from, not what it does.
-OPTION_NO_ICON = 0xFFFFFFFF
+# Field 4, 0xFFFFFFFF in 41 of 41 samples. Never seen taking another value.
+#
+# IT WAS CALLED OPTION_NO_ICON AND THAT NAME WAS WRONG. The icon does not come
+# from this field at all -- it comes from the KIND, measured on screen
+# 2026-08-16 (vault/captures/harness/20260816T111948): one option of every kind
+# in one window drew six different icons while every field 4 was 0xFFFFFFFF.
+# A name invented from "it is always the same value" outlived its evidence by
+# three weeks, which is the failure this repo's labelling vocabulary exists to
+# prevent.
+#
+# TWO READINGS SURVIVE and neither is testable from the corpus: the field may be
+# an icon OVERRIDE whose 0xFFFFFFFF means "use the kind's own", or it may have
+# nothing to do with icons. The name below says only what is known.
+OPTION_FIELD4_ALWAYS = 0xFFFFFFFF
+
+# What each kind DRAWS, measured in one frame with six lines in one window so
+# the icons are compared rather than recalled:
+#
+#   16  accept       green tick
+#   17  decline      red prohibition sign
+#   18  available    gold '!'        <- the '!' the owner described
+#   21  advance      green dot
+#   22  in progress  gold '?'        <- and the '?'
+#   23  turn in      a bag
+#
+# So the '!' and the '?' are ONE mechanism: the option kind, which is bound 1:1
+# to the 0x003B code. Three runs looked for them over the NPC's head first.
+OPTION_ICONS = {16: "green tick", 17: "red prohibition", 18: "gold !",
+                21: "green dot", 22: "gold ?", 23: "a bag"}
 
 
 def option_kind(code):
