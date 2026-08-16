@@ -1,0 +1,123 @@
+# The quest table.
+#
+# WHAT A ROW IS. A quest as the CLIENT can express it, plus the state OUR server
+# holds to run it. Those are different things and the row says which is which:
+# `quest_id` and `enc_name` go on the wire in GAME_SMSG 0x0049 and are the
+# client's vocabulary; `description` and `objectives` are OUR PROSE, sent in
+# 0x004C when the client asks for them with GAME_CMSG 0x0012.
+#
+# WHY THERE IS NO `wire_framing = "bare"` ROW HERE ANY MORE. There was, on
+# 2026-08-15, as the control half of one experiment with one variable. It ran,
+# and it did not merely fail to render -- it KILLED THE CLIENT on ArenaNet's own
+# bound check:
+#
+#     Assertion: (codedString[0] & ~WORD_BIT_MORE) >= WORD_VALUE_BASE
+#     P:\Code\Engine\Text\TextApi.cpp(585)                    build 38833
+#
+# A coded string reads a word < 0x100 as a MARKER and >= 0x100 as a 0x100-biased
+# varint, so our ASCII prose is entirely sub-0x100 and cannot introduce a
+# literal run. `questdefs.coded_literal` now refuses to build one rather than
+# letting it reach a client, and the row is gone because a content row that
+# crashes a client on request is a trap, not a control. The finding it bought is
+# in studies/quests/FINDINGS.md; keeping the row would only buy it again.
+#
+# STRING COLUMNS HOLD WIRE CODE UNITS, NOT ARCHIVE STRING IDS. `enc_name =
+# [0x3D64]` is the u16 the server puts on the wire; the archive id it denotes is
+# 0x3D64 - 0x100 = 15460, which textrec.py resolves to 'Ascalon'. Reading the
+# TOML number as a string id gives 15716, an encrypted record returning None.
+# Same column, two numbers, and only one is what codec.py wants.
+
+[quest.rurik_first_errand]
+quest_id     = 1463
+enc_name     = [0x3D64]
+description  = "Follow the green arrow to my companion, then return to me."
+objectives   = "Speak with the scout, then return."
+wire_framing = "template"
+# What the giver SAYS when the player interacts, sent as GAME_SMSG 0x0080 and
+# flushed by 0x0081. A narrower field than the two above -- string16(122), not
+# 128 -- and questdefs checks it against its own width for that reason.
+# THE OFFER SCREEN's prose -- what the giver says while the quest is on offer,
+# sent as GAME_SMSG 0x0080 and flushed by 0x0081.
+giver_dialogue = "Well met. My companion waits nearby with word I need. Bring it to me."
+# THE TURN-IN SCREEN's prose, and it is a SEPARATE column because ArenaNet uses
+# a separate string: the offer and turn-in dialog lines are two distinct ids in
+# 6 of 6 observed pairs. One `description` column cannot express both screens.
+turn_in_dialogue = "You have my thanks. Take this for your trouble."
+# WHILE THE QUEST IS IN PROGRESS. A third screen, and the reason the objective
+# state below exists: an in-progress quest is offered as option kind 22, which
+# draws the gold '?' -- MEASURED 2026-08-16. Without an objective to be part
+# way through, a server jumps straight from '!' to the turn-in bag and kind 22
+# never fires at all, which is what ours did.
+in_progress_dialogue = "Not yet. Follow the arrow -- my companion is waiting."
+# The objectives line after the objective is met, sent as 0x0054. The client
+# REFUSES 0x0054 for a quest it has no description for -- flag bit 0,
+# CHAR_CHALLENGE_FLAG_DESC_FILLED, is set by 0x004C and gates the whole handler
+# at 0x0080F9CD -- so the server must have answered 0x0012 first or this is a
+# silent no-op that looks exactly like the client ignoring us.
+objectives_done = "Return to me. [scout spoken to]"
+# WHAT THE OBJECTIVE NPC SAYS. It had no voice at all: talking to it ticked
+# a flag and opened nothing, so the second half of the quest happened with
+# no dialogue and the NPC read as scenery with a trigger on it. One line,
+# ours, shown on the interact that completes the objective.
+objective_dialogue = "You're the one the guard sent? Tell him the road is clear."
+
+# WHO GIVES IT AND WHO COMPLETES IT -- TWO NPCs, deliberately. The owner asked
+# for two: a quest that is entirely walked through its giver is a degenerate
+# case that never exercises going somewhere, and "speak to the gate guard, then
+# return" is the shape both mandatory Pre-Searing quests have.
+#
+# THEY MUST LOOK DIFFERENT, and the first version's did not: both bodies carried
+# definition 1480 and rendered as two identical "Ascalonian Guard" nameplates
+# with nothing on screen to tell the giver from the objective. The guard now
+# takes definition 1473 -- a different model id and a different profession, from
+# the same live capture -- so a screenshot is never ambiguous about which NPC is
+# which. That is a measurement property, not decoration: an ambiguous frame is
+# an unreadable result.
+#
+# AGENT ids, still, and still crude: per-connection and per-spawn, so this binds
+# to the probe world rather than to characters in a place. R5's job.
+giver_agent     = 99
+objective_agent = 98
+
+# THE REWARD. Ours, and small on purpose. ArenaNet renders a reward as `Reward:`
+# followed by one line per slot, INSIDE the description string -- there is no
+# reward message. `reward_gold` is commented out rather than set to 0 because a
+# zero draws a line reading zero; omitting the key omits the line, exactly as
+# the stock "A Personal Vault" screen does with its lone `500 Experience`.
+#
+# NOTHING IS GRANTED. The reward GRANT protocol is 0 of 23,495 messages in the
+# corpus -- the operator never completed a quest on a live capture -- so this
+# draws a promise the server cannot yet honour. Named in FINDINGS rather than
+# hidden behind a plausible-looking number.
+reward_experience = 100
+# reward_gold = 10
+
+[quest.rurik_first_errand.provenance]
+source = "invented"
+note = """
+Ours -- the quest, its words, its id. `source = "invented"` is the whole
+obligation: no extractor, no build, no capture, because nothing here was read
+out of anybody's client. This is the cleaner authoring story and the reason
+studies/quests/AUTHORING.md 5 judges Route B better than reproducing ArenaNet's
+quests: their description ids resolve to encrypted archive records whose key is
+NOT FOUND, so their prose was never reachable to copy even if we had wanted it.
+
+`enc_name` cites ArenaNet's own string id 0x3D64 and that is deliberate and
+permitted: commit the id, resolve the string from the owner's own archive at
+run time, exactly as content/maps.toml already does. It is a PLACEHOLDER -- the
+name reads 'Ascalon' because that id is the one value proven to render (Q0).
+Authoring our own NAME means writing a plain text record with
+toolkit/mapdata/textwrite.py and committing a bare id of ours; that is rung Q2b
+and it has not happened. The DESCRIPTION and OBJECTIVES below need none of that
+-- they are literals, and the 0x004C field holds 128 code units.
+
+`wire_framing = "template"` wraps the literal as ArenaNet's own 0x004C does:
+0x0BA9 (the `%str1%` template id) then 0x0107 (the marker preceding every
+literal run in the corpus) then the UTF-16, then 0x0001. The three are MEASURED
+constants read off our own captures; the words between them are ours.
+
+quest_id 1463 sits under the client's own bound -- UiCtlWebLink.cpp:576 asserts
+`challengeId < CHALLENGES`, and CHALLENGES is 1465 on build 38797. There is no
+high band to author into: the corpus maximum is 1462, so 1463 and 1464 are the
+only free ids beneath the bound.
+"""

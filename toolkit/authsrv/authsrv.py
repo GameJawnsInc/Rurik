@@ -51,6 +51,458 @@ import probes  # noqa: E402
 import labelrun  # noqa: E402
 import agents  # noqa: E402
 import origin  # noqa: E402
+import questdefs  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "harness"))
+import control  # noqa: E402
+
+_QUEST_ROWS = None
+
+
+def quest_rows():
+    """{quest_id: row} from content/, loaded once.
+
+    Cached because the fetch it answers is a per-quest pull and re-reading the
+    whole content store inside a dispatch arm would put a TOML parse on the
+    latency path of a message ArenaNet answers in 30-60 ms. Not cached across
+    a hot reload, because there is no hot reload.
+    """
+    global _QUEST_ROWS
+    if _QUEST_ROWS is None:
+        _QUEST_ROWS = questdefs.load()
+    return _QUEST_ROWS
+
+
+# --------------------------------------------------------------- quest dialog
+#
+# THE FLOW IS TWO SCREENS AND WE BUILT ONE. Corrected 2026-08-16 against the
+# live corpus; studies/quests/FINDINGS.md has the tables.
+#
+#   SCREEN 1, the list. One 0x0080 (a short greeting), one 0x0081 to open the
+#   window, then one 0x007E per quest whose tag carries code 0x03 -- "show me
+#   this one". The option's LABEL is the quest's NAME, not an action.
+#
+#   SCREEN 2, the description. Sent in reply to a code-0x03 select: one 0x0080
+#   carrying the quest's own prose and its reward line, one 0x0081, then TWO
+#   options -- kind 16 code 0x01 Accept and kind 17 code 0x02 Decline.
+#
+# AND THE SHORTCUT: when an NPC has exactly ONE actionable line, ArenaNet skips
+# screen 1 entirely and opens screen 2 on the INTERACT itself, 7 of 7. Both
+# mandatory Pre-Searing quests are single-quest givers, so for us the shortcut
+# is the common path rather than an optimisation.
+#
+# ONE 0x0080 PER WINDOW, ALWAYS. 28 of 28 text-bearing windows carry exactly
+# one. The body at 0x00811740 CONCATENATES into a single buffer over the
+# previous terminator, so the loop this replaced -- one 0x0080 per quest row --
+# rendered N rows as one run-on paragraph rather than N lines. That was a live
+# bug found statically, never on screen, because our world has one quest.
+
+
+def _dialog_window(send, agent_id, text, options):
+    """One 0x0080, one 0x0081, then the options. The only correct order.
+
+    0x0081 opens the window and ZEROES the text accumulator, so options sent
+    before it land in a buffer that is then cleared -- which renders as text
+    with nothing to click and reads as "0x007E does not work".
+    """
+    send(GAME_SMSG_NPC_DIALOG_TEXT, [text], "NPC_DIALOG_TEXT")
+    send(GAME_SMSG_NPC_DIALOG_SHOW, [agent_id],
+         f"NPC_DIALOG_SHOW(agent {agent_id})")
+    for qid, code, label in options:
+        send(GAME_SMSG_NPC_DIALOG_OPTION,
+             [questdefs.option_kind(code), label,
+              questdefs.encode_service_select(qid, code),
+              questdefs.OPTION_FIELD4_ALWAYS],
+             f"DIALOG_OPTION(quest {qid} code 0x{code:02X} "
+             f"kind {questdefs.option_kind(code)})")
+
+
+def _close_dialog(send, agent_id, why):
+    """A BARE 0x0081 -- no 0x0080 before it -- closes the open window.
+
+    RECONSTRUCTION on the meaning, OBSERVED on the association: ArenaNet sends
+    one after 12 of 12 selects that end an exchange, and no bare flush is ever
+    followed by an option. The body posts frame 0x100000A6 with the accumulator
+    empty, so the window has nothing to draw.
+    """
+    send(GAME_SMSG_NPC_DIALOG_SHOW, [agent_id], f"DIALOG_CLOSE({why})")
+
+
+def _quest_lines(state):
+    """[(quest_id, code, row)] this NPC can act on, given what the player holds.
+
+    One entry per quest, and the code says which screen it leads to. Recomputed
+    on every INTERACT rather than cached: ArenaNet returned an in-progress line
+    and a turn-in line for the same quest 0.83 s apart because an objective
+    completed in between.
+
+    THREE STATES, not two, and the middle one is why this exists. A quest that
+    is HELD but whose objective is not met is offered as SERVICE_IN_PROGRESS
+    (code 0x05, option kind 22), which draws the gold '?'. Until 2026-08-16
+    this function returned SERVICE_TURN_IN the moment a quest was held, so kind
+    22 was unreachable and a quest went straight from '!' to the turn-in bag.
+
+    Bound to the agent being talked to, via the row's `giver_agent`. That is a
+    real binding where the old one was "every quest speaks at every NPC" -- but
+    it binds to an AGENT ID, which is per-connection and per-spawn, so it is a
+    probe-world binding rather than a content one. Said here and in the row.
+    """
+    held = state.setdefault("quests", set())
+    done = state.setdefault("objectives_done", set())
+    agent = state.get("interacting")
+    out = []
+    for qid in sorted(quest_rows()):
+        row = quest_rows()[qid]
+        if not row.get("giver_dialogue"):
+            continue
+        if row.get("giver_agent") not in (None, agent):
+            continue
+        if qid not in held:
+            code = questdefs.SERVICE_SHOW
+        elif qid in done:
+            code = questdefs.SERVICE_TURN_IN
+        else:
+            code = questdefs.SERVICE_IN_PROGRESS
+        out.append((qid, code, row))
+    return out
+
+
+def _objective_quests(state, agent):
+    """[(quest_id, row)] this agent COMPLETES, and that the player is mid-way in.
+
+    Separate from `_quest_lines` on purpose: the objective NPC is not a giver
+    and must not offer the quest. Talking to it is an EVENT, not a menu.
+    """
+    held = state.setdefault("quests", set())
+    done = state.setdefault("objectives_done", set())
+    return [(qid, quest_rows()[qid]) for qid in sorted(held)
+            if qid not in done
+            and quest_rows().get(qid, {}).get("objective_agent") == agent]
+
+
+# How close you must stand to talk. OURS -- the same status as ATTACK_RANGE and
+# AGGRO_RANGE above, and said plainly: nothing has measured ArenaNet's.
+#
+# WHAT IS MEASURED IS THE BEHAVIOUR, and it is why this gate exists at all. The
+# CLIENT sends 0x0039 on the click, from wherever you are standing, and then
+# walks you over -- so range is not something the client enforces before asking.
+# ArenaNet's server answers only some of them: 29 interacts in the live corpus,
+# 23 followed by an 0x0081 within 8 s naming the same agent, and 6 followed by
+# nothing. FINDINGS 2.5 already reads those 6 as the repeat-clicks a player
+# emits while walking into range, which is exactly the shape of a server that
+# ignores an out-of-range interact rather than refusing it.
+#
+# So: SILENCE, not a refusal message. Our server previously answered every
+# interact at any distance, which let the owner hold a conversation from across
+# the plaza. An attempt to measure the real number off the corpus produced
+# nothing usable -- the player's position is unknown at most interact moments
+# and the agent positions available are stale spawn coordinates, giving 541 to
+# 4275 units, which is not a range, it is a bad join. Left as ours until a probe
+# walks a player in and finds the boundary.
+INTERACT_RANGE = 250.0
+
+
+def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
+    """Everything an INTERACT does, whichever side asked for it.
+
+    Lifted out of the dispatch arm so harness/control.py can drive it
+    without synthesising a click. A caller off the WIRE passes the
+    client's own trailing byte; the harness passes 0, which is what all
+    four samples in the corpus carry anyway.
+
+    The split is the honest one: this function is the CONSEQUENCE of an
+    interact and is identical either way, so a harness-driven run
+    exercises exactly the code a click does. What it does not exercise is
+    the client deciding to send 0x0039, which is separately OBSERVED.
+    """
+    px, py = state["pos"]
+    spot = state.get("agent_pos", {}).get(agent_id)
+    if spot is not None:
+        gap = math.hypot(spot[0] - px, spot[1] - py)
+        if gap > INTERACT_RANGE:
+            # SILENTLY, as ArenaNet does. A refusal message would be a
+            # behaviour no capture shows, and the client is already walking the
+            # player over -- the next click, when it lands, is the one that
+            # gets an answer.
+            print(f"[c{conn_id}] INTERACT with agent {agent_id} at {gap:.0f}u "
+                  f"is beyond INTERACT_RANGE ({INTERACT_RANGE:.0f}u) -- "
+                  f"ignored, which is what ArenaNet does with 6 of its 29",
+                  flush=True)
+            return
+    state["interacting"] = agent_id
+    state["interact_byte"] = interact_byte
+    # ANSWER IT. The comment above used to end "until an
+    # NPC-service study says what an interaction should
+    # ANSWER" -- studies/quests/ is that study, and the
+    # answer is the 0x0080/0x0081 pair.
+    #
+    # Every quest row with a giver line speaks here, which
+    # is deliberately cruder than a real giver binding: we
+    # have no npc->quest column yet (AUTHORING's [server]
+    # block is a proposal, not a schema), so this makes the
+    # WINDOW testable without inventing that binding first.
+    # Q5 is where the id actually has to matter, and this
+    # comment is what says the two are not the same rung.
+    # TALKING TO THE OBJECTIVE NPC IS AN EVENT, not a menu.
+    # It fires before the menu below so that a giver which
+    # is also its own objective NPC completes first and then
+    # offers the turn-in, rather than showing '?' one
+    # interaction late.
+    spoke_objective = False
+    for oqid, orow in _objective_quests(state, agent_id):
+        state.setdefault("objectives_done", set()).add(oqid)
+        print(f"[c{conn_id}] objective for quest {oqid} met "
+              f"at agent {agent_id}")
+        # 0x0054 IS A SILENT NO-OP unless 0x004C has been
+        # sent for this quest: flag bit 0 (DESC_FILLED) is
+        # set by 0x004C's body and gates 0x0054's entirely
+        # at 0x0080F9CD. The client asks for the
+        # description on accept in 4 of 4, so it normally
+        # has been -- but "normally" is not a guarantee, so
+        # send it if we have not, rather than emit an
+        # update that vanishes and looks like the client
+        # ignoring us.
+        if oqid not in state.setdefault("desc_sent", set()):
+            _send_description(send, state, oqid, orow)
+        ofr = orow.get("wire_framing", "template")
+        send(GAME_SMSG_QUEST_OBJECTIVES_UPDATE,
+             [oqid, questdefs.coded_literal(
+                 orow.get("objectives_done")
+                 or orow.get("objectives", ""), ofr)],
+             f"QUEST_OBJECTIVES_UPDATE[{oqid}]")
+        # The mark moves in the SAME batch as the message that moved the
+        # quest: the objective NPC's arrow comes down and the giver's goes
+        # up. That is one visible event and must not arrive as two.
+        _send_markers(send, state, " (objective met)")
+        # AND IT SPEAKS. The objective NPC had no voice: talking to it ticked a
+        # flag and opened no window, so half the quest happened in silence and
+        # the NPC read as scenery with a trigger attached. One line, no options
+        # -- there is nothing to choose here, the visit IS the objective.
+        say = orow.get("objective_dialogue")
+        if say:
+            _dialog_window(send, agent_id,
+                           questdefs.coded_literal(
+                               say, orow.get("wire_framing", "template"),
+                               limit=questdefs.DIALOG_UNITS),
+                           [])
+            spoke_objective = True
+    lines = [] if spoke_objective else _quest_lines(state)
+    if len(lines) == 1 and lines[0][1] != questdefs.SERVICE_IN_PROGRESS:
+        # THE SINGLE-QUEST SHORTCUT, 7 of 7 on ArenaNet's wire and the common
+        # path for us: one actionable line means the list screen is skipped and
+        # the DESCRIPTION screen opens on the interact itself.
+        #
+        # IT DOES NOT APPLY TO IN_PROGRESS, and the corpus says why: screen 2
+        # only ever carries kinds 16, 17 and 23, while 15, 18, 21 and 22 appear
+        # ONLY on the 10-unit menu -- 41 of 41, zero crossovers. A lone SHOW
+        # collapses because its kind-18 line is REPLACED by the 16/17 pair on
+        # the way; a lone TURN_IN is already a screen-2 kind. Kind 22 has no
+        # screen-2 form at all, so shortcutting it drops the option entirely.
+        #
+        # MEASURED by doing it. The first version shortcut every single line and
+        # sent an options-free screen for in-progress. The run drove the whole
+        # lifecycle and emitted 0 of kind 22: the state existed, the screen
+        # opened, and the one option it was built for was never on it.
+        _quest_screen(send, agent_id, *lines[0])
+    elif lines:
+        _list_screen(send, agent_id, lines)
+    # Refreshed on EVERY interact, not only when a line was shown: 13 of 14
+    # option-bearing 0x0081s in the corpus carry the speaker's current mark
+    # alongside, which is what makes the client self-correct after an agent
+    # is destroyed and re-created as it leaves and re-enters view.
+    _send_markers(send, state)
+
+
+def _send_description(send, state, qid, row):
+    """0x004C for one quest, and remember that we sent it.
+
+    The bookkeeping is not decoration: 0x0054 is a silent no-op until this has
+    gone out for the same quest, so the objective path needs to know whether it
+    can rely on the client having asked.
+    """
+    desc, obj = questdefs.description_fields(row)
+    send(GAME_SMSG_QUEST_DESCRIPTION, [qid, desc, obj],
+         f"QUEST_DESCRIPTION[{qid} {row.get('wire_framing', 'template')}]")
+    state.setdefault("desc_sent", set()).add(qid)
+
+
+def _quest_prose(row, text):
+    """A screen's prose with the row's reward block appended, if it has one.
+
+    ArenaNet puts the reward INSIDE the description string -- there is no reward
+    message -- so this is where it belongs. The length check runs after the
+    append, because 19 units of reward can push a line that passed on its own
+    over the field.
+
+    SLOT A IS EXPERIENCE, CORROBORATED 2026-08-16: a live client rendered
+    `Reward: / 500 Experience` for a stock quest, and 500 is exactly what slot A
+    carries for quests 82, 86 and 1462. The rival assignment would have put 500
+    in the gold line.
+    """
+    framing = row.get("wire_framing", "template")
+    xp = row.get("reward_experience")
+    if xp is None:
+        return questdefs.coded_literal(text, framing,
+                                       limit=questdefs.DIALOG_UNITS)
+    return questdefs.with_reward(text, int(xp), row.get("reward_gold"),
+                                 framing, limit=questdefs.DIALOG_UNITS)
+
+
+def _quest_screen(send, agent_id, qid, code, row):
+    """Screen 2: the quest's own prose, then accept+decline, or turn-in alone.
+
+    The reward belongs in this text and ours carries none -- the reward line is
+    a run of template ids inside the description string, and which of its two
+    numeric slots is XP and which is gold is UNVERIFIED behind an RC4 key that
+    is NOT FOUND. Drawing a reward we cannot honour would be a correct-looking
+    line with nothing behind it; the grant protocol is 0 of 23,495 in the
+    corpus and is a separate arc.
+    """
+    framing = row.get("wire_framing", "template")
+    if code == questdefs.SERVICE_IN_PROGRESS:
+        # THE MIDDLE SCREEN, and the one kind 22 exists for. RECONSTRUCTION on
+        # the options: code 0x05 is OFFERED 3 times in the corpus and CLICKED
+        # zero, so what a player gets after selecting an in-progress quest is
+        # unmeasured. A reminder of what is left to do, with no action to take,
+        # is the least invented thing available -- the quest is already held,
+        # so there is nothing to accept, and it is not complete, so there is
+        # nothing to turn in. The window's own X is the way out.
+        _dialog_window(
+            send, agent_id,
+            questdefs.coded_literal(row.get("in_progress_dialogue") or
+                                    row["giver_dialogue"], framing,
+                                    limit=questdefs.DIALOG_UNITS),
+            [])
+        return
+    if code == questdefs.SERVICE_TURN_IN:
+        _dialog_window(
+            send, agent_id,
+            _quest_prose(row, row.get("turn_in_dialogue")
+                         or row["giver_dialogue"]),
+            [(qid, questdefs.SERVICE_TURN_IN,
+              questdefs.coded_literal(row.get("turn_in_label", "Accept"),
+                                      framing))])
+        return
+    # The OFFER screen. Both options, always: kind 17 / code 0x02 accompanies
+    # every kind-16 accept in 11 of 11 bursts, and a description screen with no
+    # decline line has no way out.
+    _dialog_window(
+        send, agent_id,
+        _quest_prose(row, row["giver_dialogue"]),
+        [(qid, questdefs.SERVICE_ACCEPT,
+          questdefs.coded_literal(row.get("accept_label", "Accept"), framing)),
+         (qid, questdefs.SERVICE_DECLINE,
+          questdefs.coded_literal(row.get("decline_label", "Decline"),
+                                  framing))])
+
+
+def _list_screen(send, agent_id, lines):
+    """Screen 1: a short greeting, then one entry per quest, labelled by NAME.
+
+    Each option's tag carries code 0x03 -- "show me this one" -- and its label
+    is the quest's own name in 11 of 11, not an action verb. Unreachable in a
+    one-quest world; written because the shortcut above is the SPECIAL case and
+    a reader should be able to see what it is special against.
+    """
+    first = lines[0][2]
+    framing = first.get("wire_framing", "template")
+    send(GAME_SMSG_NPC_DIALOG_TEXT,
+         [questdefs.coded_literal(first.get("list_greeting",
+                                            "What can I do for you?"),
+                                  framing, limit=questdefs.DIALOG_UNITS)],
+         "NPC_DIALOG_TEXT(list)")
+    send(GAME_SMSG_NPC_DIALOG_SHOW, [agent_id],
+         f"NPC_DIALOG_SHOW(agent {agent_id})")
+    for qid, code, row in lines:
+        # THE CODE GOES ON AS IT IS. This used to squash everything that was not
+        # TURN_IN down to SHOW, which silently rewrote the in-progress state
+        # into "quest available" -- the menu drew kind 18 and a gold '!' for a
+        # quest the player was already carrying. Found by running the lifecycle
+        # and watching for kind 22, which never appeared even after the
+        # shortcut was fixed to let the menu render at all. Two separate bugs,
+        # both invisible without a run, both between a correct state machine and
+        # the wire.
+        send(GAME_SMSG_NPC_DIALOG_OPTION,
+             [questdefs.option_kind(code),
+              questdefs.enc_string(row.get("enc_name") or []),
+              questdefs.encode_service_select(qid, code),
+              questdefs.OPTION_FIELD4_ALWAYS],
+             f"DIALOG_OPTION(quest {qid} code 0x{code:02X} "
+             f"kind {questdefs.option_kind(code)})")
+
+
+def _quest_markers(state):
+    """{agent_id: value-or-None} for every agent any quest row names.
+
+    THE MARKER MOVES WITH THE OBJECTIVE, and getting that wrong is what made the
+    first version nonsense on screen. The giver kept its mark after the player
+    accepted, so a quest reading "speak to the gate guard, then return to me"
+    pointed the player back at the person who had just spoken -- and the second
+    NPC, the one the quest is actually about, wore nothing at all.
+
+    Per quest, three states and where each puts a mark:
+
+        not held         giver = 5 ('!', take this)      objective = clear
+        held, undone     giver = clear                   objective = 4 (arrow)
+        held, done       giver = 4 (arrow, come back)    objective = clear
+
+    So value 4 is "YOUR OBJECTIVE IS HERE", which is why it draws a down arrow
+    rather than the '?' this file assumed for a day -- the '?' is the dialog
+    option's kind, and a different thing entirely.
+
+    Returned as a dict rather than sent directly so one pass decides every
+    agent's mark and no agent is written twice with different values. With more
+    than one quest row two quests could want different marks on one agent; the
+    highest wins, which is a rule nothing has measured -- flagged rather than
+    hidden, and harmless while exactly one row exists.
+    """
+    held = state.setdefault("quests", set())
+    done = state.setdefault("objectives_done", set())
+    marks = {}
+
+    def want(agent, value):
+        if agent is None:
+            return
+        prev = marks.get(agent)
+        if prev is None or (value is not None and value > prev):
+            marks[agent] = value
+
+    for qid in sorted(quest_rows()):
+        row = quest_rows()[qid]
+        giver, objective = row.get("giver_agent"), row.get("objective_agent")
+        if qid not in held:
+            want(giver, QUEST_MARKER_OFFER)
+            want(objective, None)
+        elif qid in done:
+            want(giver, QUEST_MARKER_TURN_IN)
+            want(objective, None)
+        else:
+            want(giver, None)
+            want(objective, QUEST_MARKER_TURN_IN)
+    return marks
+
+
+def _send_markers(send, state, why=""):
+    """Push every agent's mark, set or cleared, in one batch.
+
+    ONE BATCH because ArenaNet's own updates ride the same millisecond as the
+    quest message that caused them -- never a later tick -- and because the
+    giver's clear and the objective's set are two halves of one visible event.
+    Sent separately they would read as a flicker.
+
+    THE CLEAR IS A DIFFERENT PROPERTY: no property-11 value removes a mark, so
+    [11, agent, 0] would be inventing one. ArenaNet sends property 12 = 0, and
+    the marker-states probe confirmed on screen that it takes the glyph down.
+    """
+    for agent, value in sorted(_quest_markers(state).items()):
+        if value is None:
+            send(GAME_SMSG_AGENT_GENERIC_VALUE,
+                 [PROP_QUEST_MARKER_CLEAR, agent, 0],
+                 f"QUEST_MARKER_CLEAR(agent {agent}){why}")
+        else:
+            send(GAME_SMSG_AGENT_GENERIC_VALUE,
+                 [PROP_QUEST_MARKER, agent, value],
+                 f"QUEST_MARKER(agent {agent}) = {value}{why}")
 
 
 def _f32(x):
@@ -424,17 +876,24 @@ def char_settings_for(profession, settings=None):
 SPAWN_PROFESSION = PROF_WARRIOR
 
 
-def spawn_profession_values(profession=None):
+def spawn_profession_values(profession=None, agent_id=None):
     """The 0x00B7 payload for the spawn burst, built THROUGH the guard.
 
     agents.agent_set_profession is the server's own bound check; building the
     burst payload from it rather than beside it is the same rule the probes
     follow -- custom=True is derived here, not defaulted, so an out-of-band
     spawn profession still traverses the u8 ceiling and the 0-refusal.
+
+    `agent_id` exists because 0x00B7 is AGENT-KEYED and a hero needs its own
+    (studies/heroes/FINDINGS.md 14.1). The array it writes, ctx[0x2c]+0x6BC, is
+    what the ATTRIBUTE code reads when it asks an agent for its professions, and
+    an agent missing from it yields an out-of-range profession and asserts
+    ConstChar:1296. Defaulting to the player leaves every existing caller
+    unchanged.
     """
     p = SPAWN_PROFESSION if profession is None else profession
     return agents.agent_set_profession(
-        PLAYER_AGENT_ID, p, 0,
+        PLAYER_AGENT_ID if agent_id is None else agent_id, p, 0,
         custom=p > agents.CHAR_PROFESSIONS - 1) + [0]
 
 
@@ -1354,6 +1813,92 @@ GAME_CMSG_INTERACT_PLAYER = 0x0033
 # own server demonstrably does not have.
 GAME_CMSG_INTERACT_AGENT = 0x0039
 
+# The client's FETCH for a quest's description, and our answer to it.
+#
+# It is a pull on a failure branch: the client reaches this sender only when a
+# quest-description lookup MISSES, and ArenaNet answers GAME_SMSG 0x004C in
+# 30.7-61.5 ms. So the responder is what is mandatory, not any particular
+# moment to volunteer the text -- studies/quests/FINDINGS.md 2.3 refuted the
+# tempting opposite reading ("do not send 0x004C unsolicited") on ArenaNet's
+# own traffic, where quest 1462 gets a pushed 0x004C and the client asks anyway.
+#
+# 0x004C's body SETS FLAG BIT 0 of the log entry, CHAR_CHALLENGE_FLAG_DESC_FILLED
+# (ChCliApi.cpp:667, compiled `test al, 1`), and 0x0054's body RETURNS
+# IMMEDIATELY if that bit is clear (`test byte ptr [edi+4], 1; je` at
+# 0x0080F9CD). So an objectives update sent before the description is answered
+# is a SILENT NO-OP that looks exactly like the client ignoring us -- and
+# ArenaNet trips its own trap twice in our corpus. Order matters; this is the
+# message that unlocks the other.
+GAME_CMSG_REQUEST_QUEST_INFO = 0x0012
+GAME_SMSG_QUEST_DESCRIPTION = 0x004C
+# The objectives line. A SILENT NO-OP unless 0x004C has been sent for the
+# same quest first: 0x004C's body sets flag bit 0 (DESC_FILLED) at
+# 0x0080F2D0 and 0x0054's body returns immediately without it at
+# 0x0080F9CD. ArenaNet trips its own gate twice in the corpus, so the
+# ordering is not folklore.
+GAME_SMSG_QUEST_OBJECTIVES_UPDATE = 0x0054
+
+# The NPC dialog window, and it is a PAIR with an order that is not arbitrary.
+#
+# RECONSTRUCTION, from the two handler bodies (studies/quests/FINDINGS.md 2.5):
+# 0x0080's body at 0x00811740 APPENDS its one string16 into an array at
+# charContext+0x2C,+0x14 bounded by the count at +0x1C -- it is a text
+# ACCUMULATOR, one line per message. 0x0081's body at 0x008117B0 builds
+# {1, agent_id, text_ptr} pointing at that same buffer, posts UI frame message
+# 0x100000A6, and then ZEROES the count. It is the FLUSH, tagged with who is
+# speaking.
+#
+# So: one or more 0x0080, then one 0x0081. ArenaNet's own wire agrees --
+# `s2c 0x80 [str<43u>]` then `s2c 0x81 [99]`, 11 of 11 times in each keyed
+# session. AUTHORING.md's Q4 line says "0x0081 then 0x0080"; that is the
+# document being loose, and the bodies are the authority.
+#
+# Naming these closes what test_dispatch called the gate on 0x003B: "blocked
+# behind 0x0039 -- this server does not answer an interaction, so no window is
+# ever open and no selection can be made."
+GAME_SMSG_NPC_DIALOG_TEXT = 0x0080
+GAME_SMSG_NPC_DIALOG_SHOW = 0x0081
+
+# What the player PICKED in the window the pair above opened, and the reply that
+# puts the quest in their log. The whole meaning is one dword,
+# 0x800000 | (quest_id << 8) | code -- see questdefs.decode_service_select for
+# why the high byte gates it and why no DECLINE code is modelled.
+GAME_CMSG_NPC_SERVICE_SELECT = 0x003B
+GAME_SMSG_QUEST_ADD = 0x0049
+
+# The clickable line in an open dialog: [kind, label, tag, 0xFFFFFFFF], where
+# the TAG is the exact dword the client sends back in 0x003B. MEASURED: 22 of
+# 22 clicks in both keyed sessions were announced by a prior 0x007E carrying
+# that dword, zero counterexamples. studies/quests/FINDINGS.md, candidate 2.
+GAME_SMSG_NPC_DIALOG_OPTION = 0x007E
+
+# The overhead marker. 0x009F is [property_id, agent_id, value]; property 11
+# carries the glyph state and property 12 = 0 is the CLEAR -- there is no
+# property-11 value that removes a marker.
+GAME_SMSG_AGENT_GENERIC_VALUE = 0x009F
+PROP_QUEST_MARKER = 11
+PROP_QUEST_MARKER_CLEAR = 12
+# The three values, and what each DRAWS -- OBSERVED 2026-08-16 by walking one
+# NPC through all of them with --shots 1
+# (vault/captures/harness/20260816T104707). The glyphs are not what this file
+# claimed for a day: 4 draws a green DOWN ARROW, not a '?'.
+QUEST_MARKER_ADVANCE = 3     # in progress. Draws a down arrow, and NOTHING in
+                             # this run tells 3 apart from 4 -- four frames of
+                             # each, same glyph, differing only in bob phase.
+                             # Unemitted, and now for a second reason: we cannot
+                             # say what sending it would communicate.
+QUEST_MARKER_TURN_IN = 4     # a held quest can be turned in HERE. Green DOWN
+                             # ARROW: "this NPC is your objective". The name is
+                             # about the STATE, which the corpus fixes; the
+                             # glyph is what this run measured.
+QUEST_MARKER_OFFER = 5       # at least one quest to offer. Green '!'.
+
+# The two halves of a turn-in. 0x0052's body at 0x0080F7A0 is the real deleter
+# -- it memmoves the tail of charContext+0x52C down, decrements the count at
+# +0x534 and frees the five pointer slots -- and 0x004A unlists.
+GAME_SMSG_QUEST_REMOVE = 0x0052
+GAME_SMSG_QUEST_REMOVE_AND_UNLIST = 0x004A
+
 # The client asks to use a skill and then WAITS to be told it worked. Pressing a
 # skill plays the bar animation and never casts, which is the same shape as every
 # other bug this project has had: the client asks, we say nothing.
@@ -1668,6 +2213,82 @@ FILE_ID_OVERRIDE = None
 # which is this server's behaviour up to 2026-08-13 and is therefore the control
 # arm rather than a disabled feature.
 PLAYER_FLAGS = None
+
+# Set from --henchman <npc key>. The content key whose enc_name rides one extra
+# GAME_SMSG 0x01BF inside the party build window, plus PLAYER_PARTY_SIZE raised
+# to 2 so the per-player display array agrees with a two-member roster. None is
+# the CONTROL ARM -- this server's behaviour up to 2026-08-16, one roster row --
+# and it is the default for the same reason PLAYER_FLAGS is: a default-on flag
+# leaves nothing to diff against. studies/heroes/FINDINGS.md 7.1.
+HENCHMAN = None
+
+# Clear of everything already allocated -- 1 is the player, 2..7 the probes, 10
+# the standing enemy, 20..22 the world NPCs. Reusing an id would leave the
+# client holding one agent's state under another's name, which is the same
+# collision ENEMY_AGENT_ID's comment is about.
+HENCHMAN_AGENT_ID = 30
+# Clear of ENEMY_DEFINITION and the probes' definition 2, for the same reason
+# the agent id is: a definition index is a raw array index on the client.
+HENCHMAN_DEFINITION = 9
+# Set from --henchman-body. Arm two: the roster row alone is arm one.
+HENCHMAN_BODY = False
+# Wire-side-only overrides, so 0x01BF can disagree with the body's 0x0056.
+HENCHMAN_WIRE_NAME = None
+HENCHMAN_WIRE_PROF = None
+HENCHMAN_WIRE_LEVEL = None
+
+# --- the hero arm -------------------------------------------------------
+# Set from --hero <s_heroClientData index, 1..39>. None is the control arm.
+HERO = None
+# The hero's world body. 200 is deliberately OUTSIDE the 1..39 hero-index
+# range, and that is what makes the word-order arm readable: a word carrying
+# 200 CANNOT be a legal hero index (ChCliApi:4446 `hero < HEROES`, HEROES==40),
+# so whichever position 200 must occupy for the row to render is the agent id.
+# An id inside 1..39 would have let both readings fit, which is the confound
+# the henchman arm nearly shipped with.
+HERO_AGENT_ID = 200
+HERO_DEFINITION = 10
+HERO_BODY = False
+# Swap 0x01C2's two u16s. The whole point of the arm: one is an agent id and
+# one is a hero index, and the client's own code does not say which.
+HERO_SWAP = False
+# 0x0072 is HERO ACTIVATE, not a diagnostic -- that was its working name for
+# one day. Its four fields are exactly the client's own format string,
+# `HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)`, and sending it
+# is what makes the client resolve the hero's NAME from s_heroClientData and
+# enable its commander-slot flag. studies/heroes/FINDINGS.md 15.
+HERO_ACTIVATE = False
+# HeroActivate's field 3. Zero is what every run so far has sent. A NON-zero id
+# is a refutable question rather than a fix: ItCliApi:1194 asserts
+# `context->inventoryTable.Get(inventoryId)`, so if field 3 really is an
+# inventory-table key, an id naming no inventory should trip THAT assert and
+# name the field by experiment. Silence means it is inert on this path.
+HERO_INVENTORY = 0
+# 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
+# key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
+# 0x0072's hero id, which is the only way to tell which message supplies the
+# hero's identity. studies/heroes/FINDINGS.md 19.
+HERO_ROSTER_ID = None
+# HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
+HERO_AI_MODE = 0
+# Send 0x0074 first to populate the data cache -- the route's whole ordering
+# hypothesis. --no-hero-info drops it so the arm can ask whether it was needed.
+HERO_INFO = True
+# Send the 0x0037 + 0x003A pair for the HERO's agent. DEFAULT OFF, and the
+# default is the finding: this pair DOES clear the attribState gate (the assert
+# moves on, measured), but it then takes the client down on
+#   profession < arrsize(s_profChapter)   ConstChar.cpp(1296)
+# and it does so with or without the trailing 0x0072 -- so as constructed it
+# REGRESSES a hero that otherwise renders fine. Opt in with --hero-attribs to
+# continue the investigation; leave it off to keep a working hero.
+# studies/heroes/FINDINGS.md 13.
+# 0x0074's ten unexplained dwords, and the u32 flag that gates the client's
+# CONDITIONAL third copy of the second group to record+0x74. Both exist to test
+# one hypothesis and to let it FAIL: if the trailing 0x0072 still asserts
+# attribState no matter what rides here, the chunk is not the attribute block.
+HERO_CHUNK = None
+HERO_FLAG = 0
+HERO_BYTES = None
 
 # Set from --netgraph. One byte of UI-overlay flags sent once, after the
 # instance loads, as GAME_SMSG_UI_OVERLAY_FLAGS. None means send nothing at
@@ -4580,6 +5201,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         s2c_seq = itertools.count()
 
         def send(opcode, values, label, quiet=False):
+            # WHERE EVERY BODY IS, recorded from the message that puts it there.
+            # The interact range gate needs an agent's position and there was
+            # nowhere to get one: probes create agents by sending 0x0020
+            # directly, so no spawn bookkeeping sees them. Hooking the send is
+            # the one place that catches every create whatever sent it.
+            #
+            # Field order is create_agent()'s: [agent_id, model, type, kind,
+            # (x, y), plane, ...]. Positions go stale when an agent walks --
+            # nothing ours walks today, and a stale position makes the gate
+            # WRONG rather than absent, which is worth saying out loud.
+            if opcode == GAME_SMSG_WORLD_CREATE_AGENT and len(values) > 4:
+                spot = values[4]
+                if isinstance(spot, (list, tuple)) and len(spot) == 2:
+                    state.setdefault("agent_pos", {})[values[0]] = (
+                        float(spot[0]), float(spot[1]))
             blob = codec.encode(smsg, opcode, values)
             with send_lock:
                 seq = next(s2c_seq)
@@ -4793,6 +5429,30 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  "WORLD_SIMULATION_TICK", quiet=True)
                         except OSError:
                             return
+                    # THE HARNESS CONTROL SLOT. Polled here rather than given a
+                    # thread of its own because this loop already runs 20 times
+                    # a second and holds the send lock's usual context -- a
+                    # second thread calling `send` would interleave a dialog
+                    # burst with a simulation tick for no gain.
+                    #
+                    # NOT A CLICK, and the log line says so every time: the
+                    # client sent nothing. See harness/control.py for why the
+                    # distinction is the whole point of the module.
+                    try:
+                        want = control.take_interact()
+                    except OSError:
+                        want = None
+                    if want is not None:
+                        print(f"[c{conn_id}] HARNESS INTERACT with agent "
+                              f"{want} -- driven by the action script, NOT by "
+                              f"a client click. Everything downstream is real.",
+                              flush=True)
+                        try:
+                            _handle_interact(send, state, conn_id, want)
+                        except Exception as exc:      # a probe must not die here
+                            print(f"[c{conn_id}] harness interact failed: "
+                                  f"{type(exc).__name__}: {exc}", flush=True)
+
                     # Anything the world owes on a timer goes here. Bodies get
                     # back up whether or not the player is moving, so this must
                     # be above the destination check that skips the rest.
@@ -5129,8 +5789,135 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # with its values, so the count is in the capture; what
                         # belongs in `state` is the CURRENT interaction, not a
                         # statistic about how many there have been.
-                        state["interacting"] = values[1]
-                        state["interact_byte"] = values[2]
+                        _handle_interact(send, state, conn_id,
+                                         values[1], values[2])
+                    elif opcode == GAME_CMSG_NPC_SERVICE_SELECT:
+                        # Closes test_dispatch's other recorded drop, whose
+                        # reason was "blocked behind 0x0039: this server does
+                        # not answer an interaction, so no window is ever open
+                        # and no selection can be made." Q4 opened the window.
+                        picked = questdefs.decode_service_select(values[1])
+                        if picked is None:
+                            # A non-quest service family -- merchant, skill
+                            # unlock, hero unlock. All 22 captured selects are
+                            # quest-family, so this branch has NEVER been seen
+                            # on any wire we hold; say so rather than guess.
+                            print(f"[c{conn_id}] NPC_SERVICE_SELECT "
+                                  f"0x{values[1]:06X}: not the quest family "
+                                  f"(high byte set or tag bit clear). No "
+                                  f"capture in this repo holds one.")
+                        else:
+                            qid, code = picked
+                            row = quest_rows().get(qid)
+                            print(f"[c{conn_id}] NPC_SERVICE_SELECT quest "
+                                  f"{qid} code 0x{code:02X}"
+                                  + ("" if row else " -- NOT IN content/quests.toml"))
+                            if row and code == questdefs.SERVICE_ACCEPT:
+                                # The marker goes at the player's own position
+                                # and the map ids are the instance's, which is
+                                # a PLACEHOLDER: a real giver would put it at
+                                # the objective. The quest row has no marker
+                                # column yet, and inventing coordinates it does
+                                # not carry would be a number nobody measured.
+                                mid = state["map_id"]
+                                nm = questdefs.enc_string(row.get("enc_name") or [])
+                                send(GAME_SMSG_QUEST_ADD,
+                                     [qid, tuple(state["pos"]), 0, mid, 32,
+                                      nm, nm, nm, mid],
+                                     f"QUEST_ADD[{qid}] (accepted)")
+                                state.setdefault("quests", set()).add(qid)
+                                # The marker moves in the SAME batch as the
+                                # quest message that caused it -- never on a
+                                # later tick -- and then the window closes.
+                                _send_markers(send, state, " (accepted)")
+                                _close_dialog(send, state["interacting"],
+                                              "accepted")
+                            elif row and code == questdefs.SERVICE_TURN_IN:
+                                # ONE 0x0052, NOT TWO, AND THAT IS THE
+                                # EXPERIMENT. ArenaNet sends 0x0052 twice then
+                                # 0x004A, 3 of 3 -- but studies/quests 4.2 flags
+                                # the doubling as exactly the shape a PARTY
+                                # BROADCAST would have, and every live session
+                                # is a solo operator, so the corpus cannot tell
+                                # a protocol requirement from one player's copy
+                                # of a two-player message. Sending one is the
+                                # discriminator: if the quest leaves the log,
+                                # the second was never for us.
+                                #
+                                # NO REWARD IS GRANTED HERE and the acceptance
+                                # criterion must not claim one -- the whole
+                                # completion family (0x004E, 0x006C, 0x0096,
+                                # 0x0097, 0x00FB) is 0 of 22,524 in the corpus.
+                                send(GAME_SMSG_QUEST_REMOVE, [qid],
+                                     f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
+                                send(GAME_SMSG_QUEST_REMOVE_AND_UNLIST, [qid],
+                                     f"QUEST_REMOVE_AND_UNLIST[{qid}]")
+                                state.setdefault("quests", set()).discard(qid)
+                                _send_markers(send, state, " (turned in)")
+                                _close_dialog(send, state["interacting"],
+                                              "turned in")
+                            elif row and code == questdefs.SERVICE_SHOW:
+                                # THE MIDDLE SCREEN, and this arm used to send
+                                # NOTHING on the recorded ground that "ArenaNet
+                                # sends no quest reply here either". That was
+                                # right about the QUEST family and wrong about
+                                # the DIALOG family: ArenaNet answers a code-3
+                                # select with a full description screen in
+                                # 40-48 ms, 4 of 4. A player who clicked a quest
+                                # name got a dead window.
+                                _quest_screen(send, state["interacting"],
+                                              qid, questdefs.SERVICE_SHOW, row)
+                            elif row and code == questdefs.SERVICE_IN_PROGRESS:
+                                # Clicking the '?' line. RECONSTRUCTION: offered
+                                # 3 times in the corpus and clicked 0, so the
+                                # consequence is unmeasured and this shows the
+                                # reminder screen rather than inventing a state
+                                # change on a quest already held.
+                                print(f"[c{conn_id}]   code 0x05 IN PROGRESS: "
+                                      f"showing the reminder. Offered 3 times "
+                                      f"in the corpus, clicked 0 -- the "
+                                      f"consequence is ours, not measured.")
+                                _quest_screen(send, state["interacting"], qid,
+                                              questdefs.SERVICE_IN_PROGRESS, row)
+                            elif row and code == questdefs.SERVICE_DECLINE:
+                                # CHANGES NOTHING, DELIBERATELY. GWW says a
+                                # declined quest stays available; the wire is
+                                # silent, because the option is offered 11 of 11
+                                # and clicked 0 of 11. So close the window and
+                                # say the consequence is unmeasured rather than
+                                # replicate a guess.
+                                print(f"[c{conn_id}]   code 0x02 DECLINE: no "
+                                      f"state change. The offer is OBSERVED "
+                                      f"(11 of 11) and the consequence is NOT "
+                                      f"-- nobody in the corpus ever declined.")
+                                _close_dialog(send, state["interacting"],
+                                              "declined")
+                    elif opcode == GAME_CMSG_REQUEST_QUEST_INFO:
+                        # Closes test_dispatch's recorded drop, whose reason was
+                        # "answering it needs a quest table this repo does not
+                        # have, and inventing quest text is worse than the drop."
+                        # The table now exists (content/quests.toml) and the text
+                        # is INVENTED ON PURPOSE -- ours, not a transcription of
+                        # ArenaNet's, which we could not make even if we wanted
+                        # it: their description ids resolve to encrypted archive
+                        # records whose key is NOT FOUND.
+                        #
+                        # An id we do not hold gets NO REPLY rather than an empty
+                        # 0x004C. An empty answer would set DESC_FILLED on an
+                        # entry we know nothing about and silently arm the
+                        # 0x0054 gate above -- the client would then accept
+                        # objective updates for a quest that has no description,
+                        # which is a worse state than the unanswered fetch and a
+                        # much harder one to see.
+                        qid = values[1]
+                        row = quest_rows().get(qid)
+                        if row is None:
+                            print(f"[c{conn_id}] REQUEST_QUEST_INFO for quest "
+                                  f"{qid}, which content/quests.toml does not "
+                                  f"hold -- not answering (an empty 0x004C "
+                                  f"would set DESC_FILLED on an unknown entry)")
+                        else:
+                            _send_description(send, state, qid, row)
                     elif opcode == GAME_CMSG_TARGET_SELECT:
                         # The client TELLS us the selection; it does not ask.
                         # Measured on ArenaNet's wire: nothing target-shaped
@@ -5690,9 +6477,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # fires only on a LEADER CHANGE, so leader-first makes
                         # the change a no-op against the default and nothing is
                         # notified.
+                        _party_size = 1 if HENCHMAN is None else 2
                         send(GAME_SMSG_PLAYER_PARTY_SIZE,
-                             agents.player_party_size(PLAYER_NUMBER, 1),
-                             "PLAYER_PARTY_SIZE(1)")
+                             agents.player_party_size(PLAYER_NUMBER,
+                                                      _party_size),
+                             f"PLAYER_PARTY_SIZE({_party_size})")
                         send(GAME_SMSG_PLAYER_SET_PARTY,
                              agents.player_set_party(PLAYER_NUMBER, PLAYER_NUMBER),
                              "PLAYER_SET_PARTY(self is leader)")
@@ -5704,8 +6493,72 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # key router before its arm ever ran. Retail's own
                         # four-message sequence, in retail's own position,
                         # 8 of 8 live connections.
+                        # The roster row rides INSIDE that window when
+                        # --henchman is set (studies/heroes/FINDINGS.md 7.1).
+                        # No world body: this deliberately isolates the roster
+                        # question from the agent question, because if the row
+                        # draws with no agent behind it then PtRoster:602's
+                        # frame lookup by agentId is not a precondition, and if
+                        # it does not, adding the body is the next arm rather
+                        # than a confound already baked in.
+                        _inside = ()
+                        if HENCHMAN is not None:
+                            _hench = agents.npc_template(HENCHMAN)
+                            # THE DISCRIMINATOR. With the defaults, 0x01BF and
+                            # the body's 0x0056 carry the SAME name/prof/level,
+                            # so a rendered row cannot say which one it read --
+                            # a confound, not a result. These three override
+                            # the WIRE side only, leaving the body alone, so
+                            # the row's own text names its source field by
+                            # field. studies/heroes/FINDINGS.md §7.1.
+                            _wname = (agents.npc_template(HENCHMAN_WIRE_NAME)
+                                      ["enc_name"] if HENCHMAN_WIRE_NAME
+                                      else _hench["enc_name"])
+                            _inside = (agents.party_henchman_add(
+                                1, HENCHMAN_AGENT_ID, _wname,
+                                _hench["profession"] if HENCHMAN_WIRE_PROF
+                                is None else HENCHMAN_WIRE_PROF,
+                                _hench["level"] if HENCHMAN_WIRE_LEVEL
+                                is None else HENCHMAN_WIRE_LEVEL),)
+                        if HERO is not None:
+                            # 0x0074 goes BEFORE the build window, by analogy
+                            # with 0x0056-before-0x0020: its worker looks up OR
+                            # CREATES the per-hero record in the local player's
+                            # context (+0x584), so it is the only candidate we
+                            # have for the thing 0x0072's gate wants to exist.
+                            # An ordering hypothesis, stated as one.
+                            if HERO_INFO:
+                                _hb = HERO_BYTES or (0, 0, 0)
+                                send(*agents.mercenary_info(
+                                    HERO, b1=_hb[0], b2=_hb[1], b3=_hb[2],
+                                    d3=HERO_FLAG, chunk=HERO_CHUNK))
+                            # word_a is msg+8 (-> entry+0x4), word_b is msg+0xc
+                            # (-> entry+0x0). Which is the agent id is exactly
+                            # what this arm asks, so the two carry DIFFERENT
+                            # values and --hero-swap exchanges them.
+                            # CORRECTED 2026-08-16 from GmHeroCommander's own
+                            # party scan (studies/heroes/FINDINGS.md 17):
+                            #   msg+8    -> entry+0x4 : the OWNER player id,
+                            #               filtered against ctx[0x44][0x2ac]
+                            #   msg+0xc  -> entry+0x0 : the agent id
+                            #   msg+0x10 -> entry+0x8 : the HERO ID, and it is
+                            #               the key the commander container is
+                            #               built under.
+                            # We had been leaving msg+0x10 at 0, so our hero's
+                            # commander was registered under 0 and the panel
+                            # click looked up a real hero id and missed.
+                            # --hero-swap still exchanges the two words; it was
+                            # the arm that (with player number == hero id == 1)
+                            # could not tell owner from hero index apart.
+                            _wa, _wb = PLAYER_NUMBER, HERO_AGENT_ID
+                            if HERO_SWAP:
+                                _wa, _wb = _wb, _wa
+                            _inside = _inside + (agents.party_hero_add(
+                                1, _wa, _wb,
+                                HERO if HERO_ROSTER_ID is None
+                                else HERO_ROSTER_ID),)
                         for op, vals, label in agents.party_build(
-                                1, PLAYER_NUMBER):
+                                1, PLAYER_NUMBER, inside_window=_inside):
                             send(op, vals, label)
                         # ...and the player-record flag word, in retail's own
                         # position: BEFORE the agent create, 423 sends over 12 of
@@ -5942,6 +6795,144 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         elif SPAWN_ENEMY:
                             spawn_enemy(send, state,
                                         (pos[0], pos[1], cfg[2]), conn_id)
+                        # The henchman's BODY, at the id its roster row names.
+                        # Arm two of the staged demo: arm one sent 0x01BF with
+                        # no body and MEASURED that the row draws anyway --
+                        # standalone, so PtRoster:602's frame lookup is not a
+                        # precondition for the row existing -- but the row came
+                        # up "Lvl 255 ..." with no name. This arm asks whether
+                        # the CONTENT is what needs the agent. ~150 units out,
+                        # because a body at the spawn point reads as "nothing
+                        # appeared" (studies/enemy/PLAN.md's probe distance).
+                        if HENCHMAN is not None and HENCHMAN_BODY:
+                            _hn = agents.npc_template(HENCHMAN)
+                            _hx, _hy = pos[0] + 150.0, pos[1]
+                            create_agent_world(
+                                send, state, HENCHMAN_AGENT_ID,
+                                {"pos": (_hx, _hy), "plane": cfg[2],
+                                 "health": 100.0, "max_health": 100.0,
+                                 "dead": False, "name": _hn["name"],
+                                 "npc": _hn,
+                                 "definition": HENCHMAN_DEFINITION,
+                                 "allegiance": agents.ALLEGIANCE_PLAYER,
+                                 "effects": 0,
+                                 # create_agent_world reads these; leaving one
+                                 # out killed the WORLD TICK THREAD, and the
+                                 # client's Code=007 named it "connection
+                                 # lost" -- our crash, not its refusal.
+                                 "attack_speed": ENEMY_ATTACK_SPEED,
+                                 "resend_definition": True,
+                                 "attacks_back": False,
+                                 "skills": [], "skill_ready": []},
+                                "henchman body", conn_id=conn_id)
+                        # The hero's body, at HERO_AGENT_ID. MANDATORY for the
+                        # commander binding rather than optional like the
+                        # henchman's: GmHeroCommander:120/121 assert a
+                        # resolvable heroData AND a non-zero heroData->agentId
+                        # before a slot binds. The henchman arm also measured
+                        # that the roster row reads the AGENT for its name,
+                        # profession and level, so a bodiless hero row would be
+                        # expected to render as empty as the henchman's did.
+                        if HERO is not None and HERO_BODY:
+                            _hro = agents.npc_template(HERO_BODY_NPC)
+                            _rx, _ry = pos[0] - 150.0, pos[1]
+                            create_agent_world(
+                                send, state, HERO_AGENT_ID,
+                                {"pos": (_rx, _ry), "plane": cfg[2],
+                                 "health": 100.0, "max_health": 100.0,
+                                 "dead": False, "name": _hro["name"],
+                                 "npc": _hro,
+                                 "definition": HERO_DEFINITION,
+                                 "allegiance": agents.ALLEGIANCE_PLAYER,
+                                 "effects": 0,
+                                 "attack_speed": ENEMY_ATTACK_SPEED,
+                                 "resend_definition": True,
+                                 "attacks_back": False,
+                                 "skills": [], "skill_ready": []},
+                                "hero body", conn_id=conn_id)
+                        # THE HERO'S ATTRIBUTE STATE, and it is not a new
+                        # mechanism -- it is the pair the PLAYER's own agent
+                        # already gets, addressed to the hero's agent instead.
+                        # 0x0037 is what CREATES the attribState record
+                        # (handler 0x0091D8C0 -> 0x0080EAA0 -> the ChCliAttrib
+                        # creator 0x008199C0, whose own guard is ChCliAttrib:313
+                        # `!attribState`); 0x003A then fills attrib[] through
+                        # the per-attribute setter. Both are keyed by AGENT id,
+                        # which is why a hero can have one at all.
+                        # This is the message the arc spent two refuted
+                        # hypotheses looking for, and we already had it.
+                        if HERO is not None and HERO_ATTRIBS:
+                            # 0x00B7 FIRST, and read the reason before moving
+                            # it. THERE ARE TWO PROFESSION STORES and this arc
+                            # conflated them for a day:
+                            #   0x00A6 writes the AGENT's profession bytes --
+                            #     what the roster label builder reads, which is
+                            #     why the hero row already said "Mo1".
+                            #   0x00B7 writes the array at ctx[0x2c]+0x6BC --
+                            #     what the ATTRIBUTE code reads.
+                            # The attribute function 0x00819EF0 takes the
+                            # attribState record, reads its agent id, looks the
+                            # agent's primary and secondary up in +0x6BC, and
+                            # hands each to s_profChapter (0x005AB800, bound
+                            # 11) guarded ONLY against 0. An agent absent from
+                            # +0x6BC yields an out-of-range profession and
+                            # asserts ConstChar:1296 -- exactly what a hero
+                            # got, because we had only ever sent 0x00B7 for
+                            # the player. studies/heroes/FINDINGS.md 14.
+                            # ORDER IS LOAD-BEARING, and this server already
+                            # knew it: the player's own pair is sent points
+                            # FIRST, profession SECOND, and the comment above
+                            # that pair names the exact cost of the other
+                            # order -- `Assertion: attribState
+                            # ChCliAttrib.cpp(435)` with 0xb7 in the stack.
+                            # Sending 0x00B7 first for the hero reproduced
+                            # that assert on 2026-08-16, which is the repo's
+                            # own recorded knowledge re-earning itself.
+                            _hprof = (agents.npc_template(HERO_BODY_NPC)
+                                      ["profession"] if HERO_BODY else 1)
+                            send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
+                                 [HERO_AGENT_ID, ATTRIBUTE_POINTS,
+                                  ATTRIBUTE_POINTS],
+                                 f"AGENT_ATTRIBUTE_POINTS(hero agent "
+                                 f"{HERO_AGENT_ID})")
+                            send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
+                                 spawn_profession_values(_hprof,
+                                                         HERO_AGENT_ID),
+                                 f"PLAYER_UPDATE_PROFESSION(hero agent "
+                                 f"{HERO_AGENT_ID}, prof {_hprof})")
+                            _hcols = attribute_columns()
+                            send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
+                                 [HERO_AGENT_ID, _hcols],
+                                 f"AGENT_UPDATE_ATTRIBUTES(hero agent "
+                                 f"{HERO_AGENT_ID}, {len(_hcols) // 3} attrs)")
+                        # THE HERO'S SKILL BAR, and it is the same message the
+                        # player's bar rides -- 0x00DA is
+                        # [agent_id, array32[8], array32[8], u8], AGENT-KEYED
+                        # with an eight-slot array. studies/heroes/FINDINGS.md
+                        # 4 recorded "no skill-bar-shaped field anywhere" and
+                        # that was a SCOPING error, not an absence: the search
+                        # covered the party messages and the SEND-direction
+                        # shapes, and this is a RECV message this server has
+                        # been sending for the player all along. Fourth time
+                        # this arc that the mechanism was already in the tree.
+                        if HERO is not None and HERO_SKILLBAR:
+                            _hskills = list(SKILLBAR)[:SKILLBAR_SLOTS]
+                            _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
+                            send(GAME_SMSG_SKILLBAR_UPDATE,
+                                 [HERO_AGENT_ID, _hskills,
+                                  SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
+                                 f"SKILLBAR_UPDATE(hero agent "
+                                 f"{HERO_AGENT_ID}){_hskills}")
+                        # LAST, and it is a question rather than payload. It
+                        # asserted all-zero on 2026-08-12 under this same
+                        # client state minus our messages; if it now completes
+                        # silently, something we sent created the record the
+                        # charHeroData gate wants. Both outcomes are readouts,
+                        # and an EARLY assert (before this line) would itself
+                        # name the commander-binding trigger.
+                        if HERO is not None and HERO_ACTIVATE:
+                            send(*agents.hero_activate(HERO, HERO_AGENT_ID,
+                                                 HERO_INVENTORY, HERO_AI_MODE))
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -6486,6 +7477,115 @@ def main():
                          "1 -> +0x58, studies/minimap/FINDINGS.md §3.3), so on a row "
                          "where those differ this is a real lever on the picture. "
                          "Refused together with --explorable: they contradict.")
+    ap.add_argument("--henchman", default=None, metavar="NPC_KEY",
+                    help="Add one henchman row to the party roster: send "
+                         "GAME_SMSG 0x01BF inside the party build window "
+                         "carrying NPC_KEY's enc_name, and raise "
+                         "PLAYER_PARTY_SIZE to 2. NO world body is created — "
+                         "this isolates the roster question from the agent "
+                         "question. Omit for the control arm (one roster row). "
+                         "The 2026-08-12 sweep scored this opcode SILENT, but "
+                         "with an all-zero payload whose party_id=0 resolved a "
+                         "NULL party; the server has since learned to build "
+                         "one, which is the condition that changed. "
+                         "studies/heroes/FINDINGS.md §7.1")
+    ap.add_argument("--henchman-body", action="store_true",
+                    help="With --henchman, also create the henchman's world "
+                         "body at the SAME agent id its roster row names, "
+                         "~150 units from spawn. Arm two of the staged demo: "
+                         "arm one measured that the row draws with no body at "
+                         "all, but with no name and 'Lvl 255'. This asks "
+                         "whether the row's CONTENT is what needs the agent.")
+    ap.add_argument("--hero", type=int, default=None, metavar="INDEX",
+                    help="Add a HERO row to the party roster: send 0x01C2 "
+                         "inside the party build window for s_heroClientData "
+                         "index INDEX (1..39; 0 is HERO_UNUSED and 40 is the "
+                         "bound). Omit for the control arm. Unlike a "
+                         "henchman, a hero carries NO name on the wire — the "
+                         "client resolves its identity through the static "
+                         "table. studies/heroes/FINDINGS.md §7.2")
+    ap.add_argument("--hero-body", action="store_true",
+                    help="Also create the hero's world body at agent "
+                         "200 (deliberately outside the 1..39 hero-index "
+                         "range, so the word-order arm is readable). "
+                         "GmHeroCommander:120/121 demand a non-zero agentId.")
+    ap.add_argument("--hero-body-npc", default="hatcher", metavar="NPC_KEY",
+                    help="Content row to borrow a body from: s_heroClientData "
+                         "carries NO model_id, so a hero's model cannot come "
+                         "from the hero table and must be a placeholder.")
+    ap.add_argument("--hero-swap", action="store_true",
+                    help="Exchange 0x01C2's two u16s. One is an agent id and "
+                         "one a hero index and the client does not say which; "
+                         "the two arms differ ONLY in this, so whichever "
+                         "renders names the field.")
+    ap.add_argument("--hero-activate", "--hero-diagnostic", action="store_true",
+                    dest="hero_activate",
+                    help="Send 0x0072 HeroActivate last. Its four fields are "
+                         "the client's own format string (hero, agent, "
+                         "inventoryId, aiMode). WITHOUT it the roster row is "
+                         "labelled from the BODY's agent; WITH it the client "
+                         "resolves the hero's own name from s_heroClientData "
+                         "and enables its commander-slot flag. Opened this arc "
+                         "as a refutable diagnostic and turned out to be the "
+                         "activation itself.")
+    ap.add_argument("--no-hero-info", action="store_true",
+                    help="Drop the leading 0x0074. The route sends it first on "
+                         "the hypothesis that it creates the data-cache "
+                         "record; this asks whether it was needed.")
+    ap.add_argument("--no-hero-skillbar", action="store_true",
+                    help="Omit the hero's 0x00DA skill bar. 0x00DA is "
+                         "agent-keyed with an eight-slot array and is the same "
+                         "message the player's bar rides -- section 4's 'no "
+                         "skill-bar field anywhere' was a scoping error.")
+    ap.add_argument("--no-hero-attribs", action="store_true",
+                    help="Omit the hero's attribute state (0x0037 -> 0x00B7 -> "
+                         "0x003A). That trio is what completes the hero "
+                         "record; without it the row still draws but is "
+                         "labelled from the BODY's agent instead of resolving "
+                         "the hero's own name from s_heroClientData. The "
+                         "control arm for section 14.")
+    ap.add_argument("--hero-roster-id", type=int, default=None, metavar="N",
+                    help="Override 0x01C2's msg+0x10 only, leaving 0x0074 and "
+                         "0x0072 on --hero's value. Three fields normally "
+                         "carry the same hero id, so nothing can say which one "
+                         "the client reads the identity from; this splits them.")
+    ap.add_argument("--hero-inventory", type=lambda x: int(x,0), default=0,
+                    metavar="N",
+                    help="HeroActivate's inventoryId (field 3), 0 so far. "
+                         "ItCliApi:1194 asserts inventoryTable.Get(inventoryId), "
+                         "so a non-zero id naming no inventory should trip that "
+                         "assert and NAME the field by experiment.")
+    ap.add_argument("--hero-ai-mode", type=int, default=0, metavar="N",
+                    help="HeroActivate's aiMode (field 4): 0/1/2 = the three "
+                         "CHAR_AI_MODES stances Fight/Guard/Avoid Combat.")
+    ap.add_argument("--hero-chunk", default=None, metavar="LIST|N",
+                    help="0x0074's ten trailing dwords: one int fills all "
+                         "ten, or a comma list of up to ten. The client "
+                         "copies them as TWO 5-dword groups to record +0x4c "
+                         "and +0x60, and 5 dwords is exactly one "
+                         "attribState->attrib entry — which is the hypothesis "
+                         "this flag exists to TEST, and to let fail.")
+    ap.add_argument("--hero-flag", type=lambda s: int(s, 0), default=0,
+                    metavar="N",
+                    help="The u32 before the chunk. Non-zero makes the client "
+                         "take its CONDITIONAL third copy of the second group "
+                         "to record+0x74, so this is the only way to exercise "
+                         "that branch at all.")
+    ap.add_argument("--hero-bytes", default=None, metavar="A,B,C",
+                    help="0x0074's three leading u8s (record +8/+0xc/+0x10). "
+                         "Upstream guesses level/primary/secondary; unnamed "
+                         "here because no consumer was traced to a bound.")
+    ap.add_argument("--henchman-wire-name", default=None, metavar="NPC_KEY",
+                    help="Put a DIFFERENT row's enc_name on 0x01BF than the "
+                         "one the body's 0x0056 carries. With --henchman-body "
+                         "the two otherwise agree, so the rendered row cannot "
+                         "say which it read.")
+    ap.add_argument("--henchman-wire-prof", type=int, default=None,
+                    metavar="N", help="Override 0x01BF's first trailing byte "
+                                      "only (upstream calls it profession).")
+    ap.add_argument("--henchman-wire-level", type=int, default=None,
+                    metavar="N", help="Override 0x01BF's second trailing byte "
+                                      "only (upstream calls it level).")
     ap.add_argument("--player-flags", type=lambda s: int(s, 0), default=None,
                     metavar="VALUE",
                     help="Send GAME_SMSG 0x003C (player number, VALUE, mask 7) "
@@ -6669,6 +7769,102 @@ def main():
               f"once after the instance loads"
               + (f" -- {', '.join(bits)}" if bits else
                  " -- no bits set, which CLEARS all three"))
+
+    if a.hero is not None:
+        global HERO, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
+        global HERO_BODY_NPC
+        # Fail HERE, not inside instance bring-up, and mirror the client's own
+        # two asserts rather than inventing a range.
+        agents.party_hero_add(1, HERO_AGENT_ID, a.hero)
+        agents.mercenary_info(a.hero)
+        HERO = a.hero
+        HERO_BODY = a.hero_body
+        HERO_BODY_NPC = a.hero_body_npc
+        HERO_SWAP = a.hero_swap
+        HERO_ACTIVATE = a.hero_activate
+        global HERO_INVENTORY, HERO_AI_MODE
+        HERO_INVENTORY = a.hero_inventory
+        global HERO_ROSTER_ID
+        HERO_ROSTER_ID = a.hero_roster_id
+        HERO_AI_MODE = a.hero_ai_mode
+        HERO_INFO = not a.no_hero_info
+        global HERO_ATTRIBS
+        HERO_ATTRIBS = not a.no_hero_attribs
+        global HERO_SKILLBAR
+        HERO_SKILLBAR = not a.no_hero_skillbar
+        global HERO_CHUNK, HERO_FLAG, HERO_BYTES
+        HERO_FLAG = a.hero_flag
+        if a.hero_chunk:
+            _p = [int(x, 0) for x in a.hero_chunk.split(",")]
+            HERO_CHUNK = (_p * 10)[:10] if len(_p) == 1 else _p + [0] * (10 - len(_p))
+            if len(_p) > 10:
+                raise SystemExit("--hero-chunk takes at most ten dwords")
+        if a.hero_bytes:
+            HERO_BYTES = [int(x, 0) for x in a.hero_bytes.split(",")]
+            if len(HERO_BYTES) != 3:
+                raise SystemExit("--hero-bytes takes exactly three: A,B,C")
+        agents.mercenary_info(HERO, d3=HERO_FLAG, chunk=HERO_CHUNK)
+        if HERO_CHUNK or HERO_FLAG or HERO_BYTES:
+            print(f"HERO 0x0074 PAYLOAD: bytes={HERO_BYTES} flag={HERO_FLAG} "
+                  f"chunk={HERO_CHUNK}. PREDICTION ON RECORD: the trailing "
+                  f"0x0072 still asserts attribState, because attribState is "
+                  f"a separate 0x43c-stride keyed record holding attrib[51] "
+                  f"of 5 dwords (1020 B) and this chunk is 40 B into a "
+                  f"different structure. If the assert MOVES, that prediction "
+                  f"is wrong and the chunk is load-bearing.")
+        if HERO_BODY:
+            agents.npc_template(HERO_BODY_NPC)
+        _wa, _wb = (HERO, HERO_AGENT_ID) if HERO_SWAP else (HERO_AGENT_ID, HERO)
+        print(f"HERO: 0x01C2 wordA={_wa} wordB={_wb} (swap={HERO_SWAP}) "
+              f"inside the build window; 0x0074 first={HERO_INFO}; "
+              f"body={'agent %d' % HERO_AGENT_ID if HERO_BODY else 'NONE'}; "
+              f"0x0072 activate={HERO_ACTIVATE}. "
+              f"200 is outside 1..39 ON PURPOSE — whichever word must hold it "
+              f"for the row to render is the agent id.")
+
+    if a.henchman is not None:
+        global HENCHMAN
+        try:
+            _h = agents.npc_template(a.henchman)
+        except Exception as exc:
+            raise SystemExit(
+                f"--henchman {a.henchman!r}: no such NPC row in content "
+                f"({exc}). The name must be an EncString from the content "
+                f"store -- string ids the client resolves against the owner's "
+                f"own archive -- because text cannot be invented for this "
+                f"field and a wrong row is a silent absent name.")
+        # Fail here, not inside instance bring-up: the 2026-08-13 lesson is
+        # that a codec throw during the load still lets the harness report
+        # PASS with the body simply missing.
+        agents.party_henchman_add(1, HENCHMAN_AGENT_ID, _h["enc_name"],
+                                  _h["profession"], _h["level"])
+        HENCHMAN = a.henchman
+        if (a.henchman_wire_name or a.henchman_wire_prof is not None
+                or a.henchman_wire_level is not None):
+            global HENCHMAN_WIRE_NAME, HENCHMAN_WIRE_PROF, HENCHMAN_WIRE_LEVEL
+            HENCHMAN_WIRE_NAME = a.henchman_wire_name
+            HENCHMAN_WIRE_PROF = a.henchman_wire_prof
+            HENCHMAN_WIRE_LEVEL = a.henchman_wire_level
+            if HENCHMAN_WIRE_NAME:
+                agents.npc_template(HENCHMAN_WIRE_NAME)   # fail here, not later
+            print(f"HENCHMAN WIRE OVERRIDE: 0x01BF carries name="
+                  f"{HENCHMAN_WIRE_NAME or HENCHMAN}, prof="
+                  f"{HENCHMAN_WIRE_PROF}, level={HENCHMAN_WIRE_LEVEL} while "
+                  f"the body keeps '{HENCHMAN}'s own. The rendered row now "
+                  f"names its SOURCE field by field.")
+        if a.henchman_body:
+            global HENCHMAN_BODY
+            HENCHMAN_BODY = True
+            print(f"HENCHMAN BODY: also creating agent {HENCHMAN_AGENT_ID} "
+                  f"(definition {HENCHMAN_DEFINITION}, ALLEGIANCE_PLAYER) "
+                  f"~150u from spawn, at the id the roster row names.")
+        print(f"HENCHMAN: sending 0x01BF (party 1, agent "
+              f"{HENCHMAN_AGENT_ID}, {len(_h['enc_name'])} name ids from "
+              f"'{a.henchman}') inside the party build window, and "
+              f"PLAYER_PARTY_SIZE(2). The two trailing bytes carry "
+              f"{_h['profession']}/{_h['level']} — upstream calls them "
+              f"profession/level and NO ASSERT NAMES THEM, so the rendered "
+              f"row is the readout.")
 
     if a.player_flags is not None:
         global PLAYER_FLAGS

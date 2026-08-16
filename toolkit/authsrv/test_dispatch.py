@@ -107,11 +107,13 @@ DROPPED_ON_PURPOSE = {
             "GlobalMemoryStatusEx. Every field is about the MACHINE and none is "
             "about the world, and ArenaNet's server sends nothing back. There is "
             "no state here for a game server to hold.",
-    0x0012: "REQUEST_QUEST_INFO (29) -- REAL MISSING WORK, not a no-op. It is a "
-            "FETCH: the client reaches the sender only on the failure branch of "
-            "a quest-description lookup, and ArenaNet answers GAME_SMSG 0x004C "
-            "in 30.7-61.5 ms. Answering it needs a quest table this repo does "
-            "not have, and inventing quest text is worse than the drop.",
+# 0x0012 REQUEST_QUEST_INFO was here, and its reason was "answering it needs a
+# quest table this repo does not have, and inventing quest text is worse than
+# the drop". ARMED 2026-08-15: content/quests.toml is that table, and the text
+# is invented ON PURPOSE rather than transcribed -- ArenaNet's own description
+# ids resolve to encrypted archive records whose key is NOT FOUND, so their
+# words were never reachable to copy. studies/quests/ is the study the reason
+# was waiting on.
     0x002B: "COMPASS_DRAW (5 loopback, 1 live) -- the player drawing or "
             "pinging on their own compass: a client-allocated stroke handle "
             "plus 1-16 knots, each two signed int16 packed low-half-first in "
@@ -124,10 +126,13 @@ DROPPED_ON_PURPOSE = {
             "at all. THIS SERVER HAS NO PARTY, so there is nobody to broadcast "
             "to; the drop costs nothing today and the work is one arm the day a "
             "second client connects. studies/minimap/FINDINGS.md 4.1.",
-    0x003B: "NPC_SERVICE_SELECT (0 loopback, 22 live) -- what the player picked "
-            "in an NPC service window. Blocked behind 0x0039 above: this server "
-            "does not answer an interaction, so no window is ever open and no "
-            "selection can be made. Handle it when INTERACT gets a reply.",
+# 0x003B NPC_SERVICE_SELECT was here, blocked behind 0x0039 -- "this server does
+# not answer an interaction, so no window is ever open and no selection can be
+# made. Handle it when INTERACT gets a reply." ARMED 2026-08-15: INTERACT got its
+# reply (0x0080 + 0x0081, Q4, a window on screen), so the block is gone and the
+# arm decodes 0x800000 | (quest_id << 8) | code. Only the QUEST family is
+# handled; the other four service families named in overrides.json have never
+# appeared on any wire this repo holds, and the arm says so rather than guessing.
     0x0060: "CHAR_CREATE_SET_CHAPTER_PROFESSION (0 loopback, 10 live) -- "
             "character creation, which this server does not implement at all: "
             "it serves one fixed character from content/, and the create flow "
@@ -301,6 +306,37 @@ def dispatch_arms(tree):
             "AUTH_CMSG": harvest(node.orelse, "AUTH_CMSG_")}
 
 
+def _state_writing_helpers(tree):
+    """Module-level functions that take `state` and assign into it.
+
+    An arm may DELEGATE its whole body to one -- `_handle_interact` exists
+    because the harness's `interact:` verb drives the same consequence without a
+    click, and the two callers must not be two implementations. Following one
+    level of delegation keeps this check honest about that while leaving its
+    teeth in: `elif opcode == X: pass` still stores nothing, and so does a call
+    to a helper that stores nothing.
+
+    ONE LEVEL ONLY, deliberately. Chasing arbitrary depth would eventually
+    credit an arm for a store several hops away that no longer has anything to
+    do with the message, which is the same over-crediting the `orelse` rule
+    above refuses.
+    """
+    out = set()
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        if not any(a.arg == "state" for a in node.args.args):
+            continue
+        if any(_writes_state(s) for s in node.body):
+            out.add(node.name)
+    return out
+
+
+def _calls_state_writer(stmt, helpers):
+    return any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+               and n.func.id in helpers for n in ast.walk(stmt))
+
+
 def _writes_state(stmt):
     """Does `stmt` assign into `state[...]` anywhere inside it?"""
     for node in ast.walk(stmt):
@@ -332,6 +368,7 @@ def state_writing_arms(tree):
     one after it.
     """
     consts = int_constants(tree)
+    helpers = _state_writing_helpers(tree)
     node = game_dispatch_if(tree)
     if node is None:
         return set()
@@ -343,7 +380,8 @@ def state_writing_arms(tree):
             ops = {consts[n.id] for n in ast.walk(sub.test)
                    if isinstance(n, ast.Name)
                    and n.id.startswith("GAME_CMSG_") and n.id in consts}
-            if ops and any(_writes_state(s) for s in sub.body):
+            if ops and any(_writes_state(s) or _calls_state_writer(s, helpers)
+                           for s in sub.body):
                 out |= ops
     return out
 

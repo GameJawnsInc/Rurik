@@ -1,0 +1,78 @@
+# The unit-model / animation arc — scope and ladder
+
+**PROPOSAL, 2026-08-16.** A proposal until the owner adopts it, like every scope
+in this repo. Written at the end of the recon session that produced
+[FINDINGS.md](FINDINGS.md) — the arc's evidence base — with the goal the owner
+set for it: **round-trip authorship** of unit models and animation, the same
+verbatim-first ladder shape the prop-model arc (M1–M6) climbed.
+
+**Goal:** a unit's skeleton/animation chunk decoded by committed, floor-guarded
+toolkit code; its body, textures, sounds and animation metadata exported; the
+export re-serialized byte-identically; and finally a deliberate modification —
+a retimed animation, a swapped body — rendered by the loopback client from a
+rebuilt archive.
+
+Labels are the project vocabulary
+([../character/FINDINGS.md](../character/FINDINGS.md)).
+
+---
+
+## 1. Where this arc starts
+
+Everything below is already MEASURED/SOURCE-CODE in [FINDINGS.md](FINDINGS.md);
+cited, not restated:
+
+- `0x00000FA1` is the skeleton/animation chunk, parser `0x00796310`, header
+  0x58 bytes, 15 gated blocks; the derived walk closes byte-exact on
+  **14,571/14,571** — the complete flags=515 FA1 population (§3).
+- The COMPOSITED bit ⟺ no-FA0 rule, confirmed archive-side (14,571/14,571)
+  and wire-side (8/8, 36/36, 43/43) by independent agents (§1, §5.4).
+- Trailing blocks named: H streaks (0 occurrences archive-wide), I switchable
+  parts, J particle clouds + emitters (§4). FA6 = sound cues = `m_soundPaths`
+  (231/231 MPEG oracle); FA8 = linked models, resolved recursively (§5).
+- **What does NOT exist is committed code**: the verified walker and every
+  census live in `vault/research/unitmodels/2026-08-16-recon/`, not in
+  `toolkit/`. That is U1, and it is first on purpose — the M1 lesson.
+- The honest unknowns are FINDINGS §6, ranked: blk2C/blk48 element contents,
+  flag bits 1–2, the m_skel/m_geom object identity, the mid/tail chunk
+  families, FAE, the ffna type-8 parameter stream.
+
+## 2. The ladder — U1..U7
+
+Each rung has a criterion the artifact can refute and a kill/keep decision,
+per the M-ladder's pattern. The summit is round-trip authorship: export a
+unit's skeleton/animation data, modify it, re-import it, and the client
+renders it on the loopback server. Sessions are estimates, not commitments.
+
+| Rung | What | Acceptance criterion (checkable) | Est. |
+|---|---|---|---|
+| **U1** | **The FA1 decoder as committed code** — promote the verified walker (`vault/research/unitmodels/2026-08-16-recon/verify/fa1walk.py`) to `toolkit/mapdata/` (e.g. `skelfile.py`) + test, with the TESTS.md entry in the same commit (`test_srclint.py` §7 goes red otherwise) | The committed module reproduces **14,571/14,571 byte-exact closure** over the full flags=515 population under `--all`, with a `checks.py` floor set from a real green run. The span-binding invariant (`lo ≤ hi ≤ n3C`, 0 violations) and the flag-bitmap equivalences (FINDINGS §3.8) are pinned as oracles the decoder cannot force. **Synthetic fixtures** (struct.pack, no ArenaNet bytes) exercise what the corpus cannot: n56, block H, and the client's H error-0x1D refusal — the block-H lesson says a term zero files exercise needs a fixture, not another census. UNVERIFIED terms (n56 stride; fixed-block order) carried as flagged comments with VAs. Also lands FINDINGS §6.12's housekeeping: modelfile.py docstring names for A/H/I/J. | 1 session |
+| **U2** | **Name the animation payloads** — disassemble MdlAnim/MdlDecomp's consumers of m_skel+0xB4 (blk2C) and +0xC4 (blk48); resolve flag bits 1–2; settle MdlAnim:367's array and the 10 duplicate-time files; name the 23-byte record's fields and the n14 vec3 records | Every newly named field carries a **refutable corpus prediction stated before the run** (the span-binding pattern) plus a control that fails — a field that cannot earn that stays `u32 @ +0xNN, UNVERIFIED`. Specific refutable targets: the duplicate-time files either trip a located retail assert path or MdlAnim:367's array is located elsewhere and its construction read; bits 1–2 get a consumer-side meaning tested against the 14,571-row corpus. Kill: if two sessions of disasm cannot name blk2C's elements, ship the strides as-is (U5/U6 do not need the semantics — byte-preservation does) and record the wall. | 1–2 sessions |
+| **U3** | **The companion chunks and the object model** — a committed decoder for FA6/FA8/FAD/FAE with the **null-word-terminated pathName rule** (not fixed-6); confirm the FA6 ⟺ m_soundPaths join at the MdlAnim:2040 consumer; settle the m_skel/m_geom identity and the dual +0xA4 writers (construction at `0x0077B7C0`); classify the mid/tail chain families' fetch sites the way FA0/FA5's were | Decoder closes the **complete FA6-first population (388/388)** and every sampled FA8/FAD chunk, with the FA5 null-slot population as the framing control (fixed-6 must fail on it, 390 chunks). The FA6→type-8→MPEG chain is a test oracle (231/231 pattern re-run by the committed code). The object-identity question moves from OPEN to a labeled answer with compiled evidence, or is recorded as split with the exact instruction that blocks it. FA8 evidence widened past 25 chunks before anything leans on it. Mid/tail: at least the fetch-site VAs and consumer TUs named per chunk id, or NOT FOUND with the range searched. | 1–2 sessions |
+| **U4** | **The assembly resolver: wire → file closure** — a committed tool that, given a 0x0056/0x0057 definition (from a capture or from `content/*.toml` rows with per-row provenance), resolves the full file set the client would load: shell → FA8 links (recursive, cached) → 0x0057 bodies → FA5 textures → FA6 sound descriptors | Over the three live captures' **54 pooled definitions: 54/54 resolve**, and the tool *derives* (does not assume) the COMPOSITED rule — 8/8, 36/36, 43/43 reproduced from the archive bit, cross-checked against wire presence of 0x0057. Refuses to pool captures across origins (`origin.py`). Our server can then serve a unit definition whose ids come from content rows — the hatcher pair (1471: 116228+116703) as the named first case. | 1 session |
+| **U5** | **Unit body export + measured viewer** — extend the modelexport/Blender path to unit bodies: FA0 geometry + FA5 textures + an FA1 sidecar (sequences, key times, tags) | Hatcher body (116703) and worm (116366) export; the models-arc **re-interleave check** holds on their geometry; the sidecar's sequence count/durations equal the committed decoder's values read back off disk (serialisation must not change them — the M3 pattern). The render is **measured headless** (geometry-above-terrain / pixel checks), never eyeballed — per the repo's "measure the scene, not the export". Kill: animation *playback* is explicitly out of scope here (blk2C semantics may still be closed); a posed static body is the deliverable. | 1 session |
+| **U6** | **Re-import, no-op round trip** — an FA1 (and container) writer: export → re-serialize unmodified → byte-identical; then into a rebuilt archive via the datwrite path | **Byte-identity for every chunk** on both anchors and a strided corpus sample (datwrite's discipline); the two UNVERIFIED zones (n56, fixed-block order) are exactly why identity, not re-parse equivalence, is the criterion — a wrong block order survives re-parse but not identity. Writer refuses non-`vault/exports/` destinations from birth (`resolve_outdir` delegation, asserted by the test). | 1 session |
+| **U7** | **SUMMIT: modify, and the client renders it** — a deliberate, minimal modification (first target: retime one sequence by scaling its n3C key times — pure MEASUREMENT-side integers; second target: swap a definition's 0x0057 body id server-side) re-imported into the loopback build's archive; owner-driven client run against our server per RUNBOOK | The client **loads the map with the modified archive and does not trip a MdlLoad/MdlSeq/MdlAnim assert** (the assert vocabulary of FINDINGS §3 is the failure oracle — a crash names its line); the modification is visible and **measured**, not eyeballed (the retimed animation's period from a capture/recording, or the swapped body confirmed by the 0x0056/0x0057 the server sent vs. what renders). Testing instructions written for the owner — the harness cannot aim or time screenshots. **Kill/keep**: if the client rejects the rebuilt archive for a reason outside FA1 — the untouched mid/tail chain rows are the prime suspect — the run records *which gate fired*; that failure is itself the result, and it names the next chunk family for U3's follow-up rather than sinking the rung silently. | 1–2 sessions |
+
+**Order:** U1 before everything (the oracle must live in committed,
+floor-guarded code before anything leans on it — the M1 lesson, and the
+walker currently lives in `vault/research/`, not `toolkit/`). U2 and U3 can
+run in parallel arcs (separate worktrees). U4 needs U3's FA8 rule; U5 needs
+U1; U6 needs U1 and profits from U3 (the container writer must re-emit
+FA6/FA8 untouched); U7 needs U6 and an owner go-ahead for the client run.
+U2's semantics are NOT on U6/U7's critical path — byte-preservation carries
+undecoded blocks verbatim, which is the same posture `modelfile.py` takes
+with bits 1/3.
+
+**Standing constraints:** no ArenaNet bytes in the repo (fixtures are
+struct.pack); exports to `vault/exports/` only; loopback client only, DH
+binding checked by `dhbuild.py`/`assert_launch_safe` as always; the owner
+drives any client run; every new test lands in TESTS.md in the same commit.
+
+## 3. Status
+
+| Rung | Status |
+|---|---|
+| Recon (pre-U1) | **DONE 2026-08-16** — [FINDINGS.md](FINDINGS.md); artifacts in `vault/research/unitmodels/2026-08-16-recon/` |
+| U1 | **DONE 2026-08-16** — `toolkit/mapdata/skelfile.py` + `test_skelfile.py` (71 checks, floor 63; `--all` walks the complete flags=515 population and pins closure at exactly 14,571/14,571), reviewed against the research walker (2,542 sequence records byte-identical, spans tile 501/501). The sabotage ceilings are the rung's own correction: "collapses to zero" was a sample truth, six variants carry 1–29 full-population aliasing survivors (FINDINGS §3.6). Housekeeping landed: modelfile A/H/I/J docstring names, the block-H fixture + client error-0x1D refusal in `modelfile.py`/`test_modelfile.py` (floor 61→64), n56 fixture, M6b closed, smsg §0x0057 answered. |
+| U2–U7 | not started; U2 and U3 can run as parallel arcs |

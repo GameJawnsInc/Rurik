@@ -55,6 +55,7 @@ from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 from livecapture import CaptureTail, by  # noqa: E402
 import drive_client as dc  # noqa: E402
+import control  # noqa: E402
 import cage  # noqa: E402
 import accounts  # noqa: E402
 
@@ -223,6 +224,53 @@ def spawn_profession_args(game_args):
         if tok.startswith("--spawn-profession="):
             return [tok]
     return []
+
+
+# A run that cannot be pinned to one map must not narrow the pre-flight. Tape
+# playback picks its own map from the recording's 0x0195, and a tape CHAIN hops
+# between maps by design -- so for these, which map loads is not ours to say.
+_TRAVELLING_FLAGS = ("--tape", "--tape-chain", "--tape-connection",
+                     "--tape-chain-from", "--labelrun")
+
+
+def served_maps(game_args):
+    """{map_id} the run will load, or None when that cannot be known.
+
+    Feeds `contentids.preflight(served=...)`, whose whole safety rests on the
+    None case: None means "check every content row", so every path through here
+    that is not certain returns None and loses no protection.
+
+    Returns None -- deliberately, not an empty set -- when:
+
+      * no `--map` is given, because the gamesrv then picks its own default and
+        this function would be guessing;
+      * any tape flag is present, because the recording decides the map and a
+        chain deliberately moves between them. Narrowing there would clear a
+        row the run is about to load, which is worse than the false positive
+        this function exists to remove;
+      * `--map` is present but its value is not an integer, which is a typo the
+        gamesrv will reject anyway -- and a guard must not be disarmed by a
+        malformed argument.
+
+    `--file-id` is NOT excluded, and the direction is deliberate: it re-points
+    the served slot at other geometry, so the content row's binding is bypassed
+    rather than relied on. Keeping the row in scope only ever refuses MORE.
+    """
+    args = list(game_args)
+    if any(tok.split("=", 1)[0] in _TRAVELLING_FLAGS for tok in args):
+        return None
+    raw = None
+    for i, tok in enumerate(args):
+        if tok == "--map" and i + 1 < len(args):
+            raw = args[i + 1]
+        elif tok.startswith("--map="):
+            raw = tok.split("=", 1)[1]
+    if raw is None:
+        return None
+    try:
+        return {int(raw, 0)}
+    except (TypeError, ValueError):
+        return None
 
 
 def server_specs(portal_port=6601, auth_port=6112, game_port=6112,
@@ -1098,7 +1146,9 @@ def run_client(a, outdir):
         args.append(extra)
     if getattr(a, "client_arg", None):
         print(f"extra client flags: {' '.join(a.client_arg)}")
-    host = dc.assert_safe(a.exe, args)
+    host = dc.assert_safe(a.exe, args,
+                          served_maps=served_maps(split_args(
+                              getattr(a, "game_args", ""))))
     # Both launch sites run the gate independently rather than one trusting the other.
     # A guard that only guards one of two doors is the shape of the defect it is here
     # to prevent -- vault/run held two patched binaries and one was caged.
@@ -1124,7 +1174,18 @@ def run_client(a, outdir):
                 sent.append({"spec": spec, "sent": False})
                 print(f"  action {spec}: NO WINDOW", flush=True)
                 continue
-            if kind == "click":
+            if kind == "interact":
+                # NOT INPUT. Asks the SERVER to run its own INTERACT arm for a
+                # named agent, because this harness cannot aim: projecting an
+                # agent's world position to a screen pixel needs a camera yaw
+                # nothing here tracks, and a blind click at a guessed spot
+                # failed three runs running without producing one interaction.
+                # Everything downstream is real -- real messages, real client,
+                # real screen. The click is what did not happen, and the
+                # gamesrv prints the same caveat when it fires.
+                control.request_interact(int(parts[2]))
+                delivered = True
+            elif kind == "click":
                 fx, fy = (float(v) for v in parts[2].split(","))
                 delivered = dc.click(hwnd, proc.pid, fx, fy)
             elif kind == "enter":

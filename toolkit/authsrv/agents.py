@@ -366,7 +366,7 @@ def secondary_bits(*professions):
 ALL_SECONDARIES = secondary_bits(*range(1, CHAR_PROFESSIONS))
 
 
-def party_build(party_id=1, player_number=None):
+def party_build(party_id=1, player_number=None, inside_window=()):
     """The four messages that BUILD a party and make it yours.
 
     THE PARTY WINDOW'S GATE, and it is one value read in two places
@@ -399,6 +399,15 @@ def party_build(party_id=1, player_number=None):
         documented no-op at 0x0085879E, so a zero here fails SILENTLY, which
         is the one failure mode we cannot see.
 
+    `inside_window` is any extra roster rows -- party_henchman_add() results --
+    to send BETWEEN add-member and commit. They go here rather than at the call
+    site because the window is where the asserts above live, and a caller that
+    places them itself has to re-derive the same three constraints. Whether
+    0x01BF must sit inside the window or also works post-commit is UNTESTED:
+    its worker never READS the [record+0x78] build flag, it SETS it, exactly as
+    0x01CB's worker does -- which leans "post-commit works too" without closing
+    it. Inside is the position that matches the sibling we have measured.
+
     Returns [(opcode, values, label)] in the order they must be sent.
     """
     if not 1 <= party_id <= 20:
@@ -409,13 +418,222 @@ def party_build(party_id=1, player_number=None):
     if player_number is None:
         raise ValueError("player_number is required: it must match the value "
                          "0x00B0/0x00B1 carry, or the member added is not you")
+    for msg in inside_window:
+        if msg[1][0] != party_id:
+            raise ValueError(
+                f"{msg[2]} names party {msg[1][0]} but the window being "
+                f"opened is party {party_id}: the roster row would index a "
+                f"different manager slot, and 0x01BF fails SILENTLY when the "
+                f"slot is empty -- no assert, no reply, nothing to see")
     return [
         (0x01D2, [party_id], f"PARTY_BUILD_BEGIN({party_id})"),
         (0x01CB, [party_id, player_number, 1],
          f"PARTY_ADD_MEMBER({party_id}, player {player_number})"),
+        *inside_window,
         (0x01D3, [party_id], f"PARTY_BUILD_COMMIT({party_id})"),
         (0x01B2, [party_id, 1], f"PARTY_SET_MINE({party_id})"),
     ]
+
+
+def party_henchman_add(party_id, agent_id, enc_name, unk_a=0, unk_b=0):
+    """GAME_SMSG 0x01BF / 447 -- one henchman row in the party roster.
+
+    THE SHAPE IS THE CLIENT'S OWN, not an upstream's: read from descriptor
+    table 0x00bcb788, handler 0x00856b00, worker 0x00858cb0, traced
+    store-by-store (studies/heroes/FINDINGS.md 1.1). `[u16, u16,
+    string16(20), u8, u8]`, 50 bytes. This CORROBORATES GWCA's published
+    shape from an independent witness -- and `schema/messages.json` "447"
+    carries the same string16 cap of 20, a third agreement.
+
+    THE FIELDS, by what the client DOES with them rather than by name:
+      * party_id indexes the party manager's pointer array at [this+0x3c],
+        bound-checked against [this+0x44]. THE PARTY MUST BE BUILT FIRST.
+        This is the gate the 2026-08-12 sweep hit: an all-zero 0x01BF takes
+        the party_id==0 branch at 0x00858CD0, which resolves the "current
+        party" slot from [this+0x50] -- NULL, because nothing had been
+        built -- and returns SILENTLY. Zero is the one failure we cannot
+        see, exactly as for 0x01B2, so it is refused here.
+      * agent_id is the DEDUPE KEY: the worker scans existing 0x34-byte
+        entries for it (loop 0x858D06-0x858D3C) before appending, then
+        stores it as the entry's first dword.
+      * enc_name is a REAL WIRE STRING, and it is the whole reason the
+        henchman is easier than the hero: a henchman carries its identity
+        with it, while 0x01C2 carries no name and must resolve through
+        s_heroClientData. Pre-encoded string ids, never text.
+
+    THE TWO TRAILING BYTES ARE NOT FOUND. GWCA and OpenTyria call them
+    profession and level; the client stores them to entry+0x2c and
+    entry+0x30 and NO ASSERT ANYWHERE NAMES THEM (`asserts.py --grep
+    henchman` returns four sites, none about a level or a profession). They
+    are unk_a/unk_b here on purpose -- naming them after one lineage's word
+    is how UPSTREAM becomes fact by repetition. Send distinguishable values
+    and read the rendered row.
+
+    Returns (opcode, values, label).
+    """
+    if not 1 <= party_id <= 20:
+        raise ValueError(
+            f"party id {party_id} outside 1..20: same manager bound as "
+            f"party_build (`cmp [esi+8], 0x14`), and 0 is the silent "
+            f"'current party' branch at 0x00858CD0 -- with no party built it "
+            f"resolves NULL and the message vanishes with no assert, which "
+            f"is exactly the 2026-08-12 sweep's SILENT result")
+    if not isinstance(agent_id, int) or agent_id <= 0:
+        raise ValueError(
+            f"agent_id {agent_id!r} must be a positive int: it is the "
+            f"worker's dedupe key and the entry's first dword, and "
+            f"PtRoster:602 looks the roster row's frame up BY it")
+    if not isinstance(enc_name, str):
+        raise ValueError(
+            f"enc_name must be an ENCODED string (see _encstring), not "
+            f"{type(enc_name).__name__}: the content store holds string ids "
+            f"as a list of ints and the codec refuses the raw list")
+    if len(enc_name) > 20:
+        raise ValueError(
+            f"enc_name is {len(enc_name)} code units, over 0x01BF's cap of "
+            f"20 -- the client's own descriptor says string16(20) and so "
+            f"does schema/messages.json. The measured failure mode is the "
+            f"2026-08-13 one: the codec throws inside instance bring-up, the "
+            f"harness still reports PASS, and the row is simply absent")
+    for nm, v in (("unk_a", unk_a), ("unk_b", unk_b)):
+        if not 0 <= v <= 255:
+            raise ValueError(f"{nm}={v} does not fit the u8 the client reads")
+    return (0x01BF, [party_id, agent_id, enc_name, unk_a, unk_b],
+            f"PARTY_HENCHMAN_ADD(party {party_id}, agent {agent_id}, "
+            f"{len(enc_name)} name ids, {unk_a}, {unk_b})")
+
+
+HEROES = 40          # ChCliApi:4446 `hero < HEROES`, `cmp esi,0x28`. OBSERVED.
+HERO_UNUSED = 0      # ChCliApi:4447, fires only on `test esi,esi`. OBSERVED.
+
+
+def party_hero_add(party_id, word_a, word_b, unk_a=0, unk_b=0):
+    """GAME_SMSG 0x01C2 / 450 -- one hero row in the party roster.
+
+    THE SHAPE CORRECTS THE UPSTREAM. OpenTyria's GameMsg.h:466-473 gives
+    PARTY_HERO_ADD "a uint8 level"; the client's own descriptor (table
+    0x00bcb788, handler 0x00856b80, worker 0x00858f50) is `[u16, u16, u16,
+    u8, u8]`, 10 bytes. Three words and two bytes.
+    studies/heroes/FINDINGS.md 1.2.
+
+    WHY THE TWO WORDS ARE CALLED word_a AND word_b. One of them is an agent
+    id and the other a hero index, and WE DO NOT KNOW WHICH -- the natural
+    tie-break failed twice over. (1) The storage-order analogy with 0x01BF
+    ("the dedupe key is stored first, so entry+0 is the key") was REFUTED:
+    0x01C2's worker has NO dedupe scan at all, it appends unconditionally.
+    (2) GmHeroCommander's `heroData->agentId` looked like the anchor and is
+    not -- it resolves through ctx+0x2c+0x584, which is the 0x0074 DATA
+    CACHE record, not this party-roster entry.
+
+    So the names are positional on purpose: word_a is msg+8 (stored to
+    entry+0x4), word_b is msg+0xc (stored to entry+0x0). Naming either one
+    `agent_id` here would bake a guess into the call site, which is exactly
+    how UPSTREAM becomes fact. The caged arm settles it by making the two
+    disagree and seeing which one a live body must match.
+
+    The client also pushes TWO HARDCODED ZERO DWORDS into entry+0xc and
+    +0x10 that never touch the wire -- worth knowing before anyone reads the
+    entry layout and looks for the fields that fill them.
+
+    Returns (opcode, values, label).
+    """
+    if not 1 <= party_id <= 20:
+        raise ValueError(
+            f"party id {party_id} outside 1..20: same bound and the same "
+            f"silent-on-zero branch as party_henchman_add, and 0x01C2 uses "
+            f"the IDENTICAL [this+0x3c]/[this+0x44] party lookup (OBSERVED), "
+            f"so it inherits the same 'party must be built first' gate")
+    for nm, v in (("word_a", word_a), ("word_b", word_b)):
+        if not 0 <= v <= 0xFFFF:
+            raise ValueError(f"{nm}={v} does not fit the u16 the client reads")
+    for nm, v in (("unk_a", unk_a), ("unk_b", unk_b)):
+        if not 0 <= v <= 255:
+            raise ValueError(f"{nm}={v} does not fit the u8 the client reads")
+    return (0x01C2, [party_id, word_a, word_b, unk_a, unk_b],
+            f"PARTY_HERO_ADD(party {party_id}, wordA {word_a}, wordB "
+            f"{word_b}, {unk_a}, {unk_b})")
+
+
+def mercenary_info(hero_id, b1=0, b2=0, b3=0, d1=0, d2=0, b4=0, b5=0,
+                   d3=0, chunk=None, enc_name=""):
+    """GAME_SMSG 0x0074 / 116 -- the per-hero DATA CACHE record.
+
+    THE UPSTREAM SHAPE IS REFUTED. GWCA and OpenTyria publish
+    `{hero_id, level, primary, secondary}`; the client's own decoder reads
+    TWENTY fields, 127 bytes: `[u16, u8,u8,u8, u32,u32, u8,u8, u32, u32x10,
+    string16(32)]`. Handler 0x0091e2f0 -> 0x00811560 -> 0x0081db20, which
+    looks up OR CREATES a record keyed by the first field inside the LOCAL
+    PLAYER's context at ctx+0x2c+0x584. studies/heroes/FINDINGS.md 1.3.
+
+    Every field but the first is named for its TYPE and defaulted to zero,
+    because that is what we know. What survives of the upstream reading is
+    only that b1/b2/b3 land at record +8/+0xc/+0x10 -- consistent with
+    level/primary/secondary and NOT confirmed, since no consumer of +0xc or
+    +0x10 was traced to a profession bound-check. Do not rename them until
+    one is.
+
+    `chunk` is the ten trailing dwords, which the client splits into TWO
+    5-dword groups stored at record +0x4c and +0x60 (with a conditional
+    third copy to +0x74). Two parallel 20-byte groups, meaning NOT FOUND.
+
+    Returns (opcode, values, label).
+    """
+    if not HERO_UNUSED < hero_id < HEROES:
+        raise ValueError(
+            f"hero id {hero_id} outside 1..{HEROES - 1}: ChCliApi:4446 "
+            f"asserts `hero < HEROES` (cmp esi,0x28, HEROES==40) and :4447 "
+            f"asserts `hero != HERO_UNUSED` (==0). Row 0 of "
+            f"s_heroClientData is the reserved placeholder and its name "
+            f"resolves to the empty string, so 0 is not merely rejected -- "
+            f"it is the sentinel meaning 'no hero'")
+    chunk = list(chunk or [0] * 10)
+    if len(chunk) != 10:
+        raise ValueError(
+            f"chunk is {len(chunk)} dwords, not 10: the client copies it as "
+            f"two 5-dword groups to record +0x4c and +0x60, so a short list "
+            f"would silently shift the second group")
+    if not isinstance(enc_name, str):
+        raise ValueError("enc_name must be an ENCODED string (see _encstring)")
+    if len(enc_name) > 32:
+        raise ValueError(
+            f"enc_name is {len(enc_name)} code units, over 0x0074's cap of 32")
+    return (0x0074,
+            [hero_id, b1, b2, b3, d1, d2, b4, b5, d3, *chunk, enc_name],
+            f"MERCENARY_INFO(hero {hero_id}, {len(enc_name)} name ids)")
+
+
+def hero_activate(hero_id, agent_id, inventory_id=0, ai_mode=0):
+    """GAME_SMSG 0x0072 / 114 -- HERO ACTIVATE.
+
+    THIS MESSAGE IS AN EXPERIMENT WITH ITS PREDICTION ALREADY ON RECORD.
+    The 2026-08-12 smsgsweep sent it all-zero and the client ASSERTED:
+    charHeroData wants a hero record and a level-1 character has none. That
+    is a CLIENT-STATE gate, not a payload gate -- no value on the wire opens
+    it (studies/smsgsweep/FINDINGS.md 5d).
+
+    So sending it LAST, after 0x0074 and 0x01C2, is a refutable question
+    with two outcomes and both are informative: assert again means nothing
+    we sent created the record the gate wants, and silence means something
+    did. What creates charHeroData is NOT FOUND by any static route --
+    ChCliHero has two structures (0x9C-stride via 0x0081D830, a 36-byte
+    list via 0x0081D880) and no message was traced into either.
+
+    THE FIELD NAMES ARE THE CLIENT'S OWN. `0x0072`'s worker calls out through
+    0x0046ed40 with the format string at 0xa95888:
+    `HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)` -- four
+    fields, in this order, matching the descriptor
+    `[word, agent_id, dword, dword]` exactly. `aiMode` is the Fight/Guard/
+    Avoid-Combat stance (CHAR_AI_MODES == 3), so the stance IS server-settable,
+    which is a partial answer to the arc's c2s question: we cannot yet see the
+    client CHANGE it, but we can set it.
+
+    Returns (opcode, values, label).
+    """
+    if not HERO_UNUSED < hero_id < HEROES:
+        raise ValueError(f"hero id {hero_id} outside 1..{HEROES - 1}")
+    return (0x0072, [hero_id, agent_id, inventory_id, ai_mode],
+            f"HERO_ACTIVATE(hero {hero_id}, agent {agent_id}, "
+            f"inventory {inventory_id}, aiMode {ai_mode})")
 
 
 def player_flags(player_number, value, mask=7):

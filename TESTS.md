@@ -750,10 +750,70 @@ Every one of these, in the order they were written:
   9,128, ten values all <= 9, so it is an index whose purpose stays UNVERIFIED.
   A sabotage that quietly reads the 3D radius as the 2D
   one was built and run and reddens 5 checks from three directions, the
-  synthetic literal plus both maps' oracle and rival. Three scores, each
-  MEASURED rather than subtracted, because the file needs TWO vault artifacts
-  that fail independently: 57 with archive + client image, 33 with the client
-  image alone, **29 with neither** -- against a floor of 57. ~121 s),
+  synthetic literal plus both maps' oracle and rival. **The block-H fixture
+  (2026-08-16, rung U1): block H occurs on 0 of 20,661 archive geometry
+  chunks, so the 20,661/20,661 closure was never evidence for the H term --
+  a synthetic H-carrying chunk now decodes and closes, the same chunk 4
+  bytes short refuses, and streak-systems-with-zero-streaks is refused the
+  way the client refuses it (error 0x1D at 0x00795664, a refusal
+  `trailing_end` did not implement until the fixture existed to test it).**
+  Three scores, each MEASURED rather than subtracted, because the file needs
+  TWO vault artifacts that fail independently -- against a floor of 64
+  (61 -> 64 with the H fixture, measured green before raising). ~121 s),
+  `toolkit/mapdata/test_skelfile.py` (the SKELETON/ANIMATION chunk `0xFA1` --
+  rung U1 of `studies/unitmodels/PLAN.md`, the 2026-08-16 recon's verified
+  walker promoted to committed code. **The headline is closure, and here
+  closure is OUR assertion, not the client's**: the FA1 parser's success path
+  at `0x00796905` never compares its cursor to the chunk's end, so
+  `cursor == len(payload)` is a check the artifact can refuse -- the study
+  measured **14,571/14,571 byte-exact over the complete flags=515
+  population**, and `--all` reproduces that number exactly from committed
+  code (plus the population identities: 21,421 heads, exactly one non-ffna
+  anomaly at the known row 8316). The default run is a deterministic
+  stride-89 sample: 241 rows -> 160 FA1 carriers, closure 160/160. **The
+  synthetic section is the part no census can replace**: `n56`'s stride
+  fires on 0 of 14,571 corpus files (disasm-only, UNVERIFIED), so the
+  builder -- which writes payloads from ITS OWN size literals, the
+  full-options fixture pinned to a HAND-COMPUTED 623 bytes -- is the only
+  place `n56_mult` is testable, and it is sabotaged in both directions
+  there, one check per variant. Every sampled payload is also walked by an
+  independent straight-line transliteration with hardcoded strides
+  (agreement on the closure VERDICT, 160/160 -- the cursors are not compared
+  to each other because on success each equals the end by its own
+  arithmetic and the comparison could not fail; the review struck this
+  file's original claim). The transliteration's moved-n38 variant is the
+  ORDER CONTROL with its vacuous half SPLIT: collapses on all files with
+  n38 and n3C non-zero, still closes on the n38>0/n3C==0 files where the
+  loop runs over unmoved bytes (34 sampled), and the n38==0 population is
+  EXCLUDED as untestable rather than counted -- two textually identical
+  code paths cannot disagree.
+  Sixteen one-term sabotages scored ONLY over the subpopulation that fired
+  each term, each held to its MEASURED full-population aliasing ceiling --
+  and the ceilings are themselves the file's first correction: "collapses to
+  zero" passed at n=160 and at the study's n=600 and was REFUTED at
+  n=14,571, where six "clean" variants carry 1-29 survivors (worst 0.2%,
+  hdr=0x5C) by the same shifted-read aliasing the study verified for
+  n38_mult; survivor rows are printed, exceeding a ceiling is a regression
+  (`n38_mult`/`n50_mult` stay under a 25% minority bound, measured 12.0%
+  full-population). Invariants
+  the decoder cannot force: span binding `lo <= hi <= n3C` over every
+  sampled sequence record (628, 0 violations; 50,127 in the study), key
+  times NON-DECREASING per span with strictness deliberately NOT asserted
+  (10 corpus files carry exact duplicates; ArenaNet's MdlAnim:367 reads a
+  different array), the 1/30 s key grid at >= 99%, and **the COMPOSITED
+  equivalence** -- FA1 flag bit 0 <=> the container has no geometry chunk,
+  two independent places in the archive, 160/160 sampled and 14,571/14,571
+  in the study; flag bits 3/5/6/7 checked through the module's OWN
+  `flags_presence()` rather than a private copy of its pairs (the review
+  caught the test measuring its own inline table while the shipped method
+  went uncovered), 640/640. Anchors pinned by byte size: 116228 the
+  hatcher's COMPOSITED shell (29,495 B, no geometry), 116366 the
+  self-contained worm (82,169 B, also reached via `Skeleton.load`), and
+  116703 the 0x0057 body pinned to carry NO FA1 at all -- the absence is
+  the composite mechanism's other half. 71 checks against a floor of 63
+  (the mandatory core is 53; the corpus sabotage and order-control pools
+  can legitimately empty on another sample and declare skips). ~25 s;
+  `--all` reads every head row, ~25-45 min),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against
@@ -2701,7 +2761,48 @@ Every one of these, in the order they were written:
   alone. **Floor 12, deliberately BELOW the healthy score of 23**: §1b, §2 and
   §2b all need the vault to hold an archive that is mid-replacement on a content
   id, which is a condition we want to go away -- a floor of 23 would turn a
-  HEALED vault into a red suite. The mandatory core is §0+§1+§3+§4. ~10 s),
+  HEALED vault into a red suite. The mandatory core is §0+§1+§3+§4. **§5, added
+  2026-08-15, pins the SCOPING**: `preflight(served=...)` narrows what is fatal
+  to the maps a run actually loads, because the guard's own rationale is per-map
+  and refusing a map-449 run over map 148's row had blocked EVERY loopback run
+  in the repo -- this file's own docstring names that cost ("one that refuses
+  everything gets deleted the first time it blocks a run"). §5 is SYNTHETIC, so
+  unlike §1b/§2/§2b it can never skip and joins the mandatory core, taking the
+  floor to 19. The check that matters most is the fail-closed one: an EMPTY set
+  must refuse exactly as `None` does, because a caller whose `--map` parse came
+  back empty must not thereby clear the whole table. Out-of-scope disagreements
+  are demoted and PRINTED, never hidden, and returned with level `fatal`
+  intact. ~10 s),
+  `toolkit/test_quests.py` (the quest table and the coded string its prose goes
+  on the wire as. Asked for by name in `studies/quests/FINDINGS.md` §7.9, whose
+  reason is the one CLAUDE.md opens with -- a quests table with nothing checking
+  it is a wish. **Its subject is the first authored PROSE this project has ever
+  put on a wire**, and the sharp edge is that a coded string reads a word
+  `< 0x100` as a MARKER and `>= 0x100` as a `0x100`-biased varint, so an ASCII
+  sentence is entirely sub-`0x100` and is not text to that parser at all --
+  §5 asserts exactly that about our own rows, which is what makes `bare` a
+  CONTROL PREDICTED TO FAIL rather than a style option. §4 is the refutable
+  half: `template` framing must add exactly `0x0BA9 0x0107 … 0x0001` and
+  stripping it must return the bare text character for character, because a
+  framing that reordered or dropped a unit would still fit the field and still
+  pass the width check. §2 does NOT read a provenance field back out of a dict
+  -- `rows()` returns rows with provenance already stripped, so that would be a
+  decoration; it WRITES a quest row without one and requires the loader to
+  refuse it, with the well-formed row as the positive control. §6 breaks each
+  refusal on purpose, including the off-by-three where 126 units fit `bare` and
+  do not fit `template` -- an error that would only ever show up on screen.
+  **What it deliberately does NOT assert is which framing is correct**: only a
+  client can say, and asserting one here would be two of our own components
+  agreeing and calling it evidence. No vault, no client, no socket, so nothing
+  can skip. §7 pins the two field widths APART -- `0x0080`'s dialog line is
+  `string16(122)` and `0x004C`'s description is `string16(128)`, six units
+  distant, and the check that earns its place is the one asserting a line which
+  FITS the description field is REFUSED for the dialog one; a single shared
+  constant would pass everything else and put that error where only a screen
+  could find it. Floor 17 against a healthy 22, and the derivation is in the
+  file: 13 checks are row-count independent and each quest row adds 4 (5 with a
+  `giver_dialogue`), so 17 is what the smallest table that can exist executes;
+  §0 already catches an empty one. ~2 s),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same

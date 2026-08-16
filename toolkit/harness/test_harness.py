@@ -280,6 +280,105 @@ def test_enemy_default():
 
 # ------------------------------------------------------- crash on every path ----
 
+def test_served_maps():
+    """Which map a run pins -- and, far more importantly, when we cannot say.
+
+    This feeds `contentids.preflight(served=...)`, which narrows what the
+    content-id pre-flight will REFUSE over. So every check below that expects
+    None is a check that the guard keeps its full width: None means "check every
+    content row". Getting a False positive here costs a blocked run; getting a
+    False NEGATIVE here means a client loads a map whose geometry the server is
+    not pathing against, and the run "looks like it worked" -- which is the
+    failure contentids.py was written for.
+    """
+    check("no --map means the gamesrv picks its own, so we do not guess",
+          session.served_maps([]) is None)
+    check("--map 449 pins one map",
+          session.served_maps(["--map", "449"]) == {449})
+    check("and the = spelling parses the same",
+          session.served_maps(["--map=449"]) == {449})
+    check("a hex map id parses, because argparse would take one",
+          session.served_maps(["--map", "0x1C1"]) == {449})
+    # The travelling cases. A tape decides its own map from the recording's
+    # 0x0195 and a chain deliberately hops between maps, so a --map alongside
+    # them does NOT describe where the client ends up.
+    check("--tape wins over a --map that is also present",
+          session.served_maps(["--tape", "cap", "--map", "449"]) is None)
+    check("--tape-chain likewise -- a chain moves between maps by design",
+          session.served_maps(["--tape-chain", "cap", "--map", "449"]) is None)
+    check("--labelrun likewise",
+          session.served_maps(["--labelrun", "--map", "449"]) is None)
+    # A malformed value must widen the guard, never disarm it.
+    check("a non-numeric --map returns None rather than an empty set",
+          session.served_maps(["--map", "kamadan"]) is None)
+    check("and a trailing --map with no value does too",
+          session.served_maps(["--map"]) is None)
+    # The empty set is the shape that would clear the whole table if
+    # contentids.preflight treated it as a scope. Nothing here may produce one.
+    for argv in ([], ["--map"], ["--map", "x"], ["--tape", "c"],
+                 ["--probe", "quest_name"]):
+        got = session.served_maps(argv)
+        check(f"served_maps({argv!r}) never returns an empty set",
+              got is None or got)
+
+
+def test_interact_control():
+    """The one-slot mailbox behind the `interact:` action verb.
+
+    It exists because the harness cannot aim: projecting an agent's world
+    position to a screen pixel needs a camera yaw nothing tracks, and a blind
+    click failed three runs running without producing one interaction. So the
+    verb asks the SERVER to run its own interact arm. Everything downstream is
+    real; the click is what did not happen, and both halves say so out loud.
+    """
+    import control
+    control.clear()
+    check("an empty slot reads as None", control.take_interact() is None)
+
+    control.request_interact(99)
+    check("a request round-trips", control.take_interact() == 99)
+    check("and the slot is EMPTY afterwards -- read-and-clear",
+          control.take_interact() is None)
+
+    # Last write wins. A queue would let an action script get ahead of a server
+    # that is mid-dialog and deliver a burst with no relation to the screen.
+    control.request_interact(1)
+    control.request_interact(2)
+    check("two requests before a read leave the LAST one, not a queue",
+          control.take_interact() == 2)
+    check("and nothing behind it", control.take_interact() is None)
+
+    control.request_interact(7)
+    control.clear()
+    check("clear() drops a pending request",
+          control.take_interact() is None,
+          "a slot left by a killed run would otherwise fire into the next "
+          "session's first seconds and get blamed on the protocol")
+
+    # The verb has to be REACHABLE, not merely implemented: an action kind the
+    # dispatcher does not know is silently skipped, which is the same shape of
+    # failure as the blind click this replaces.
+    here = os.path.dirname(os.path.abspath(__file__))
+    src = open(os.path.join(here, "drive_client.py"),
+               encoding="utf-8").read()
+    check('kind == "interact"' in src,
+          "drive_client dispatches the `interact` kind")
+    check("interact:<agent_id>" in src,
+          "and --actions' own help lists it",
+          "a verb nobody can discover is one nobody uses")
+    srv = open(os.path.join(os.path.dirname(here), "authsrv",
+                            "authsrv.py"), encoding="utf-8").read()
+    check("control.take_interact()" in srv and "_handle_interact" in srv,
+          "and the gamesrv polls the slot into its real interact arm",
+          "the same function the wire path calls, so a harness-driven run "
+          "exercises exactly the code a click does")
+    check("NOT by " in srv or "NOT a click" in srv or "not by a client" in srv.lower(),
+          "and says on every fire that no click happened",
+          "the upstream half is synthetic and a run that forgets to say so is "
+          "evidence with a missing caveat")
+    control.clear()
+
+
 def test_crash_capture_always():
     """The crash dialog is read on EVERY run, not just --keep-open ones.
 
@@ -503,6 +602,8 @@ if __name__ == "__main__":
     test_preflight_helpers()
     test_game_args()
     test_enemy_default()
+    test_served_maps()
+    test_interact_control()
     test_crash_capture_always()
     test_stack()
     test_select_run_exe()
