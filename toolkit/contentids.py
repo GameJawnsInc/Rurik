@@ -283,26 +283,74 @@ def check(client_dat, server_dat=None, world=None):
     return findings, skips
 
 
-def preflight(client_dat, server_dat=None, say=print, refuse=True):
+def preflight(client_dat, server_dat=None, say=print, refuse=True, served=None):
     """Print the verdict; raise SystemExit on a fatal finding when `refuse`.
 
     Called from `drive_client.assert_safe`, beside the other launch refusals, so
     that a divergence is caught before a client is started rather than as an
     assert thirty seconds later.
+
+    `served` NARROWS WHAT IS FATAL TO THE MAPS THE RUN WILL ACTUALLY LOAD, and
+    the reason is this function's own rationale: the danger is that the server
+    paths against geometry the client is not drawing, which is a fact about the
+    map being loaded and about no other row. Refusing a run on map 449 because
+    map 148's row disagrees is not caution, it is a false positive -- and this
+    file's test says out loud what that costs: "one that refuses everything gets
+    deleted the first time it blocks a run." That happened on 2026-08-15: every
+    loopback run in the repo was blocked by two Pre-Searing rows no run touched,
+    after the terrain arc's allocation work rewrote map 148 in one client
+    archive and left the others mid-replacement.
+
+    THE CONTRACT IS FAIL-CLOSED, and it is the whole safety of the change:
+
+      * `served=None` means "the caller does not know which maps will load" and
+        every row stays fatal. That is the historical behaviour and it is the
+        DEFAULT, so a caller that forgets to pass anything loses no protection.
+      * An EMPTY collection is treated as None, NOT as "narrow to nothing".
+        This is the sharp edge. A caller that parses `--map` out of an argv and
+        comes back with nothing must not thereby clear the whole table -- a
+        parse miss would silently disable the guard, which is exactly the shape
+        of failure the guard exists to prevent.
+      * Out-of-scope disagreements are DEMOTED, never hidden. They print as
+        `[FATAL, not served]`, are counted in the summary line, and are returned
+        to the caller with their level intact. A narrowing that made the archive
+        state invisible would trade a false positive for a silent one.
+      * A map named in `served` that has NO content row is reported, because
+        "nothing disagreed" and "nothing was checked" must not look alike.
     """
     findings, skips = check(client_dat, server_dat, None)
+    scope = None
+    if served:
+        scope = {int(m) for m in served}
     fatal = [f for f in findings if f.level == "fatal"]
     warn = [f for f in findings if f.level == "warn"]
     for s in skips:
         say(f"  [SKIP] content file ids -- {s}")
     for f in warn:
         say(f"  [WARN] {f!r}")
-    if not fatal:
+
+    blocking = fatal
+    if scope is not None:
+        blocking = [f for f in fatal if f.map_id in scope]
+        for f in fatal:
+            if f.map_id not in scope:
+                say(f"  [FATAL, not served] {f!r}")
+        if len(blocking) != len(fatal):
+            say(f"  content file ids: scoped to the map(s) this run serves "
+                f"({', '.join(str(m) for m in sorted(scope))}); "
+                f"{len(fatal) - len(blocking)} disagreeing row(s) left "
+                f"unresolved but not loaded by this run")
+        known = {f.map_id for f in findings}
+        for m in sorted(scope - known):
+            say(f"  [NOTE] map {m} has no content/maps.toml row, so this "
+                f"pre-flight checked nothing for the map being served")
+
+    if not blocking:
         if findings:
             say(f"  content file ids: {len(findings) - len(warn)} of "
                 f"{len(findings)} map row(s) agree across both archives")
         return findings
-    lines = "\n".join(f"  {f!r}" for f in fatal)
+    lines = "\n".join(f"  {f!r}" for f in blocking)
     if refuse:
         raise SystemExit(
             f"REFUSING to launch: content/maps.toml disagrees with the archives "
@@ -311,7 +359,7 @@ def preflight(client_dat, server_dat=None, say=print, refuse=True):
             f"(studies/maprows/FINDINGS.md 8).\n"
             f"  server archive: {server_dat or DEFAULT_DAT}\n"
             f"  client archive: {client_dat}")
-    for f in fatal:
+    for f in blocking:
         say(f"  [FATAL] {f!r}")
     return findings
 

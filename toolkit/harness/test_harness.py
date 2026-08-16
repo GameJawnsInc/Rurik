@@ -280,6 +280,48 @@ def test_enemy_default():
 
 # ------------------------------------------------------- crash on every path ----
 
+def test_served_maps():
+    """Which map a run pins -- and, far more importantly, when we cannot say.
+
+    This feeds `contentids.preflight(served=...)`, which narrows what the
+    content-id pre-flight will REFUSE over. So every check below that expects
+    None is a check that the guard keeps its full width: None means "check every
+    content row". Getting a False positive here costs a blocked run; getting a
+    False NEGATIVE here means a client loads a map whose geometry the server is
+    not pathing against, and the run "looks like it worked" -- which is the
+    failure contentids.py was written for.
+    """
+    check("no --map means the gamesrv picks its own, so we do not guess",
+          session.served_maps([]) is None)
+    check("--map 449 pins one map",
+          session.served_maps(["--map", "449"]) == {449})
+    check("and the = spelling parses the same",
+          session.served_maps(["--map=449"]) == {449})
+    check("a hex map id parses, because argparse would take one",
+          session.served_maps(["--map", "0x1C1"]) == {449})
+    # The travelling cases. A tape decides its own map from the recording's
+    # 0x0195 and a chain deliberately hops between maps, so a --map alongside
+    # them does NOT describe where the client ends up.
+    check("--tape wins over a --map that is also present",
+          session.served_maps(["--tape", "cap", "--map", "449"]) is None)
+    check("--tape-chain likewise -- a chain moves between maps by design",
+          session.served_maps(["--tape-chain", "cap", "--map", "449"]) is None)
+    check("--labelrun likewise",
+          session.served_maps(["--labelrun", "--map", "449"]) is None)
+    # A malformed value must widen the guard, never disarm it.
+    check("a non-numeric --map returns None rather than an empty set",
+          session.served_maps(["--map", "kamadan"]) is None)
+    check("and a trailing --map with no value does too",
+          session.served_maps(["--map"]) is None)
+    # The empty set is the shape that would clear the whole table if
+    # contentids.preflight treated it as a scope. Nothing here may produce one.
+    for argv in ([], ["--map"], ["--map", "x"], ["--tape", "c"],
+                 ["--probe", "quest_name"]):
+        got = session.served_maps(argv)
+        check(f"served_maps({argv!r}) never returns an empty set",
+              got is None or got)
+
+
 def test_crash_capture_always():
     """The crash dialog is read on EVERY run, not just --keep-open ones.
 
@@ -503,6 +545,7 @@ if __name__ == "__main__":
     test_preflight_helpers()
     test_game_args()
     test_enemy_default()
+    test_served_maps()
     test_crash_capture_always()
     test_stack()
     test_select_run_exe()
