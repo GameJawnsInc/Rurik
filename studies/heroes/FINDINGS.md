@@ -1398,6 +1398,64 @@ player rather than the hero, and the run would measure our own inconsistency. Th
 version of the test is to move `PLAYER_AGENT_ID` itself, which touches the spawn path and
 deserves its own arm rather than a footnote to this one.
 
+## 23. A FULL AUTHORED PARTY — three heroes and a henchman, in one roster
+
+The capability step. `--hero` now takes a list, and every hero gets its own agent id and
+definition from one place (`hero_slots()`), because an agent id reused for a second body
+leaves the client holding one agent's state under another's name.
+
+```
+0x01BF PARTY_HENCHMAN_ADD (party 1, agent 30,  ...)
+0x01C2 PARTY_HERO_ADD     (party 1, owner 1, agent 200, hero 1)
+0x01C2 PARTY_HERO_ADD     (party 1, owner 1, agent 201, hero 2)
+0x01C2 PARTY_HERO_ADD     (party 1, owner 1, agent 202, hero 3)
+... bodies, attribute trios, skill bars, then one HERO_ACTIVATE each
+```
+
+**The Party Members window:**
+
+```
+    W0 Test Warrior
+[1] Mo1 Norgu
+[2] Mo1 Goren
+[3] Mo1 Tahlkora
+    Mo1 Hatcher [Collector]
+```
+
+### 23.1 What this measures that a single hero could not
+
+- **The commander slot array assigns sequentially and independently.** Slots 1, 2, 3 appear
+  as separate numbered buttons, one per hero — the `heroCommanderSlot[7]` array of §3.1
+  filling up, not a single slot being reused.
+- **Each hero resolves its OWN identity.** Three different `s_heroClientData` rows render
+  three different names from three `0x0074` records keyed by three hero ids. The keyed-record
+  model of §20 holds at n=3, which is the first time it has been tested past one.
+- **Heroes and henchmen coexist in one roster, and the client distinguishes them visually.**
+  The henchman row has **no numbered button**; the heroes do. That is §3.1's reconstruction
+  (individually-flaggable hero slots vs henchmen-as-a-group) and the wiki's "three individual
+  flags plus one all-heroes-and-henchmen" (§6), both now visible on screen rather than
+  inferred from an 8-way dispatch.
+- **`s_heroClientData` row 3 = `Tahlkora`, confirmed from the screen.** Predicted in §19 from
+  `textrec.py` before the run that would show it; the row never rendered in that arm because
+  the client ignored `msg+0x10`. It renders here. Rows **1, 2 and 3** are now each confirmed
+  from two unrelated directions — archive resolution and the client's own rendering.
+
+### 23.2 Guards, mirroring the client's own bounds
+
+`--hero` refuses more than **7** (`PtPlayer:332` and `GmHeroCommander:214` both `cmp 7`,
+`GmView:4330` names exactly HERO1..HERO7), refuses a **duplicate** hero id (each `0x0074`
+record is keyed by that id, so two agents would select one record), and each id still
+traverses the 1..39 bound. All four refusals verified.
+
+The single-hero experiment flags (`--hero-owner`, `--hero-swap`, `--hero-roster-id`,
+`--hero-activate-id`) apply to the **first** hero only, so a probe arm can never silently
+rewrite a whole roster.
+
+### 23.3 Bodies are fanned out
+
+120 units apart along y, because bodies sharing a spot read as one body and "nothing
+appeared" is a failure this repo has already paid for once.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows
