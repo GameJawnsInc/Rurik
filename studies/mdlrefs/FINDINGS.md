@@ -303,6 +303,15 @@ mid/tail families split cleanly by consumer TU:
 | 0xFAC | `0x007783C2` | fn `0x00778350` (MdlApi): the tail's 12-byte manifest — gate `size >= 0xC && u32@0 == 1`, exposes `u32@+4` and `u32@+8` as out-params (`0x007783DC–0x007783F4`) |
 | 0xFA4 | `0x00778418` | same fn → parser `0x00778BB0` |
 | 0xFA7 | `0x00778450` | same fn → parser `0x00778A90` |
+
+The FAC/FA4/FA7 reader `0x00778350` has four direct callers, and they name
+what the tail stream IS: `Engine\Map\Props\PrCollision.cpp`
+(`0x0073A86C`), `Engine\Map\Zones\ZnDef.cpp` (`0x0076ECB2`), and two
+MdlTex sites (`0x0078DD9B`, beside MdlTex:2888
+`! (curr->flags & MODEL_FLAG_COLLISION_END)`; `0x0078E598`). With FAB's
+`planes` going to the sight builder, the tail family reads as the model's
+COLLISION/VISIBILITY payload, consumed by the map-side systems
+(RECONSTRUCTION from consumer identity; chunk contents still unread).
 | 0xFAB | `0x00778531` | fn `0x007784A0` (MdlApi:1431–1433, args named `flags`/`planeCounts`/`planes`) — 0xFAB carries PLANE data. Two callers: MdlTex (`0x0078DA93`, beside MdlTex:2842/2843 `fileName`/`pathFlatGeosets`) and **Engine\Map\Sight\StBuild.cpp** (`0x007412E0`) — the sight builder reads it |
 
 Both functions obtain their container the same way: resolve a file
@@ -320,9 +329,14 @@ with the search stopping at that named function.
 ### 6.2 Mids: decompile-side consumption in MdlDecomp.cpp — a 1:1 mirror
 
 The big MdlDecomp function at `0x0079CFC0` reads mid chunks from one
-container and pairs each with a model chunk fetched from another via the
-second Riff accessor `0x00907FB0` (same TU; takes `(ctx, chunk_id)`;
-paired release `0x00908160`; role unnamed beyond this use):
+container and pairs each with a model chunk accessed through
+`0x00907FB0` — and that accessor is the WRITE side: its own asserts are
+`riff` (Riff:315) and `riff->flags & (RIFF_CREATE_WRITE |
+RIFF_CREATE_APPEND)` (Riff:317, VA `0x0090800A`), so the paired container
+is being APPENDED, not read (paired close `0x00908160`). The direction is
+therefore: read mid chunk 0xBBn, write/translate into chunk 0xFAn of an
+output model container — the mid stream holds what the decompiler needs
+to reconstruct the authoring-side model file:
 
 | mid id | fetch VA | paired model/tail chunk | pairing VA |
 |---|---|---|---|
@@ -342,9 +356,10 @@ paired release `0x00908160`; role unnamed beyond this use):
 (The four-entry table loop runs `0x0079D0A1–0x0079D13C`, ids at
 `[ebp-0x6C..]` paired against `[ebp-0x5C..]`.) The mid family is therefore
 **the model's chunk-id space mirrored into the mid stream** — per-model-
-chunk companion data consumed by the decompile/export path (MdlDecomp is
-where the `MDLEXP_` vocabulary lives, UM §3.10), plus a filename chunk
-(0xBBD) and two sequence-adjacent ids (0xFA3/0xFAA). The pairing
+chunk companion data that the decompile/export path (MdlDecomp, where
+the `MDLEXP_` vocabulary lives, UM §3.10) expands back into the model's
+own chunk-id space on write, plus a filename chunk (0xBBD) and two
+sequence-adjacent ids (0xFA3/0xFAA). The pairing
 0xBBE↔0xFA9 predicted a model chunk 0xFA9 from the code side before the
 corpus sweep found its 2 carriers (§3.3) — a small blind cross-check that
 landed.
