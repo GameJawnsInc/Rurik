@@ -126,10 +126,13 @@ DROPPED_ON_PURPOSE = {
             "at all. THIS SERVER HAS NO PARTY, so there is nobody to broadcast "
             "to; the drop costs nothing today and the work is one arm the day a "
             "second client connects. studies/minimap/FINDINGS.md 4.1.",
-    0x003B: "NPC_SERVICE_SELECT (0 loopback, 22 live) -- what the player picked "
-            "in an NPC service window. Blocked behind 0x0039 above: this server "
-            "does not answer an interaction, so no window is ever open and no "
-            "selection can be made. Handle it when INTERACT gets a reply.",
+# 0x003B NPC_SERVICE_SELECT was here, blocked behind 0x0039 -- "this server does
+# not answer an interaction, so no window is ever open and no selection can be
+# made. Handle it when INTERACT gets a reply." ARMED 2026-08-15: INTERACT got its
+# reply (0x0080 + 0x0081, Q4, a window on screen), so the block is gone and the
+# arm decodes 0x800000 | (quest_id << 8) | code. Only the QUEST family is
+# handled; the other four service families named in overrides.json have never
+# appeared on any wire this repo holds, and the arm says so rather than guessing.
     0x0060: "CHAR_CREATE_SET_CHAPTER_PROFESSION (0 loopback, 10 live) -- "
             "character creation, which this server does not implement at all: "
             "it serves one fixed character from content/, and the create flow "

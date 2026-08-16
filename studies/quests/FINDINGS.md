@@ -50,6 +50,21 @@ P:\Code\Engine\Text\TextApi.cpp(585)                     build 38833
 
 **What Q4 did NOT settle, and it is the next rung rather than a caveat.** The server answers *any* interaction with *every* quest row's giver line, because there is no npc→quest binding column yet — `AUTHORING.md` §3's `[quest.X.server]` block is a proposal, not a schema. The window is real; **whose** window it is, is not yet modelled. And nothing here is a *choice*: `0x003B NPC_SERVICE_SELECT` is still unanswered, so the window has our text and no accept button behaviour. That is Q5.
 
+**Q5, 2026-08-15: the server half is done; the CLICKABLE OPTION is not, and the arc now has a measured negative about where it comes from.**
+
+**Done, and tested against ArenaNet's own dwords.** `GAME_CMSG 0x003B` decodes as §2.4 says — `questdefs.decode_service_select` turns `0x805003`, `0x805001` and `0x85B601` into (80, 3), (80, 1) and (1462, 1), with an encoder as its inverse and refusals for a clear tag bit or a set high byte. The server answers code `0x01` with `0x0049` from the quest row and deliberately answers code `0x03` with **nothing**, because ArenaNet's own server sends no quest-family reply to an offer (2 of 2). `test_dispatch`'s second recorded drop is closed. — OBSERVED for the decode, RECONSTRUCTION for the arm, which no client has yet exercised.
+
+**NOT FOUND, and this is the useful part: the clickable option is NOT carried by the dialog string.** The hypothesis was reasonable and the corpus supported it — there is no server message between `0x0039 INTERACT` and the player's `0x003B quest=80 code=3`, and the two captured offer lines share the prefix `2AE6 F9CB E939 5DD2 010A` while differing only in one varint group (`3377 DF18 F3B0 201F` against `3375 FE11 D56F 2195`), which looked exactly like a quest slot.
+
+**It is refuted by replay.** Sending ArenaNet's own ten words verbatim through our `0x0080`/`0x0081` pair at our own NPC renders the *same window* — the string resolves to a readable generic greeting ending in an invitation to talk, so those ids are **plain records, not encrypted** — and produces **no clickable option and no `0x003B`, across two runs with the click placed on the greeting's own last line**. Capture `vault/captures/harness/20260815T214832`; `NPC_SERVICE_SELECT` appears 0 times in the gamesrv log, and the only c2s opcodes in the whole session are the movement and housekeeping set.
+
+So the varint group that varies between the two captured lines is **not** a quest id being handed to the option renderer. What it is remains open.
+
+**What that leaves, in the order worth trying:**
+1. **The agent, not the string.** ArenaNet's speaker was agent 99, a real quest giver; ours is agent 10, a `hatcher` collector. The client may decide what a dialog offers from the agent's own definition or model id, which our spawn does not share. Cheapest test: spawn an agent carrying a known giver's definition and replay the same line.
+2. **A message we are not sending.** Something earlier in the session may arm the NPC's option list; the corpus was searched only between INTERACT and the click, which is where the hypothesis came from and also where its blind spot is. Widen the window to the whole session and diff what precedes a giver interaction against a non-giver one.
+3. **A marker we dropped.** The greeting rendered, so the framing is right, but a clickable run may need a marker the greeting does not contain — in which case the OFFER line at `t=27.719` (43 units, sent *after* the first click) is the one to replay, not the greeting.
+
 **Still not settled: the compass marker.** This run was on **map 449**, not 148, so it says nothing about §7.3 — map 148 cannot load at all right now (see below), and the marker coordinates are 148's. The free rider went unclaimed and §7.3's test is still open.
 
 **Not settled, and it blocked this run first: map 148 is unloadable.** `contentids.py` refuses it, correctly — no client archive in the vault binds `0x1B97D` the way the server's `dat_study` copy does. Four run dirs hold it only under the bit-31 mid-replacement spelling; the 38833 copy binds it to a file 8 bytes larger, written by the terrain arc's allocation work. This is archive state, not a quest question, and it is why Q0 ran on 449.
