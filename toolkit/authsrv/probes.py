@@ -2716,6 +2716,12 @@ GENERIC_VALUE = 0x009F
 PROP_QUEST_MARKER = 11
 QUEST_MARKER_OFFER = 5
 QUEST_MARKER_TURN_IN = 4
+# The third value, n=4 in the corpus, on the agent that offers code 0x04
+# (advance). We emit it nowhere, because what it DRAWS is unmeasured.
+QUEST_MARKER_ADVANCE = 3
+# The CLEAR is a different PROPERTY, not a property-11 value: no value of 11
+# ever removes a marker, and sending [11, agent, 0] would invent one.
+PROP_QUEST_MARKER_CLEAR = 12
 
 
 # 111 and 222 are chosen to be UNMISTAKABLE and outside every observed value.
@@ -2763,6 +2769,66 @@ def _quest_reward_steps():
              "no clicking and no log keypress to read. Two independent views of "
              "the same string is the point: if they disagree, the suffix is not "
              "position-independent and that is its own finding."),
+    ]
+
+
+def _quest_marker_states_steps(origin):
+    """Walk one NPC through every marker state, holding each long enough to see.
+
+    Four questions in one run, and each state is a separate screenshot rather
+    than a separate session so the glyphs are comparable pixel for pixel: same
+    NPC, same camera, same frame position, one variable.
+    """
+    ox, oy, plane = origin
+    hold = 7.0
+    return [
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}",
+             "nothing yet, and mandatory before the create."),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
+        Step(3.0, 0x0020,
+             create_agent(_GIVER_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 150, oy, plane),
+             f"WORLD_CREATE_AGENT({_GIVER_AGENT})",
+             "a body, with NO marker over its head. This is the baseline every "
+             "state below is compared against, and it matters: without it, "
+             "'a glyph is there' cannot be told from 'a glyph changed'."),
+        Step(3.0, GENERIC_VALUE,
+             [PROP_QUEST_MARKER, _GIVER_AGENT, QUEST_MARKER_OFFER],
+             "property 11 = 5",
+             "A GREEN '!'. Already seen in quest_giver_mark; here it is the "
+             "control that proves the sequence is working before the states "
+             "nobody has looked at."),
+        Step(hold, GENERIC_VALUE,
+             [PROP_QUEST_MARKER, _GIVER_AGENT, QUEST_MARKER_TURN_IN],
+             "property 11 = 4",
+             "MEASURED: A GREEN DOWN ARROW, not a '?'. Our server sends this "
+             "on every accept and three runs went by without capturing it, "
+             "because the accept/turn-in cycles outran the screenshot interval. "
+             "The '?' reading was INFERENCE and it was WRONG -- the glyph is an "
+             "arrow, which reads as 'this NPC is your objective'. The STATE the "
+             "value marks is unchanged and still fixed by the corpus."),
+        Step(hold, GENERIC_VALUE,
+             [PROP_QUEST_MARKER, _GIVER_AGENT, QUEST_MARKER_ADVANCE],
+             "property 11 = 3",
+             "UNKNOWN, and that is why it is here. Value 3 occurs 4 times in "
+             "the corpus on the agent that offers code 0x04 (advance). Whether "
+             "it draws a THIRD glyph or repeats 4's is unmeasured, and we emit "
+             "it nowhere precisely because nobody knows. MEASURED: the same "
+             "down arrow as 4, four frames of each, differing only in bob "
+             "phase -- so 3 and 4 are INDISTINGUISHABLE on this surface, and "
+             "whatever separates them is not the overhead glyph."),
+        Step(hold, GENERIC_VALUE,
+             [PROP_QUEST_MARKER_CLEAR, _GIVER_AGENT, 0],
+             "property 12 = 0 -- THE CLEAR",
+             "NO GLYPH AT ALL, back to the baseline frame. This is "
+             "RECONSTRUCTION today: property 12 is 0 in 22 of 22 and 16 of 16 "
+             "sends, so its value range is never exercised and the reading "
+             "rests on consequence alone. If the marker survives, our server "
+             "has no way to take a marker down and every giver keeps its glyph "
+             "forever."),
     ]
 
 
@@ -2933,6 +2999,26 @@ def _quest_offer_steps():
 
 
 PROBES = {
+    "quest_marker_states": lambda a, o: Probe(
+        question="What does each 0x009F property-11 value actually DRAW, and "
+                 "does property 12 = 0 take a marker down?",
+        predicts="5 draws '!', 4 draws '?', and 12=0 clears back to a bare "
+                 "head. Value 3 is genuinely open -- it may draw a third glyph "
+                 "or repeat 4's. The '?' is the one this run exists for: our "
+                 "server has sent 4 on every accept since the two-screen flow "
+                 "landed, three runs have gone by, and not one captured it, "
+                 "because the accept/turn-in cycles ran faster than the "
+                 "screenshot interval. The reading is inference from the owner "
+                 "and the corpus, and inference is not what this project "
+                 "counts as an answer.",
+        steps=_quest_marker_states_steps(o),
+        note="RUN WITH --shots 1 and a hold long enough for all four states -- "
+             "each is held 7 s, so ~7 frames apiece and no state can be missed "
+             "between shots the way it was three times before. --map 449, no "
+             "clicks, no keys: the whole measurement is the NPC's head across "
+             "five frames, including the pre-marker baseline. Compare frames, "
+             "do not read one in isolation.",
+    ),
     "quest_reward": lambda a, o: Probe(
         question="Which of the reward block's two numeric slots is experience "
                  "and which is gold?",

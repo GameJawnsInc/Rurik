@@ -239,8 +239,12 @@ def _send_marker(send, state, agent_id):
     THE CLEAR IS A DIFFERENT PROPERTY, and that is the part we had missing: there
     is no property-11 value meaning "no marker" -- sending [11, agent, 0] would
     be inventing a value that never occurs. ArenaNet sends property 12 = 0.
-    RECONSTRUCTION: prop 12 is 0 in 22 of 22 and 16 of 16 sends, so its value
-    range is never exercised and the reading rests on consequence alone.
+
+    OBSERVED 2026-08-16, promoted from RECONSTRUCTION: the marker-states probe
+    sent [12, agent, 0] after holding a glyph and the head went bare, back to
+    the pre-marker baseline frame. Its VALUE range is still never exercised --
+    0 in 22 of 22 and 16 of 16 -- so "property 12 clears" is measured and "what
+    a non-zero property 12 would do" remains unknown.
     """
     v = _quest_marker_value(state)
     if v is None:
@@ -1612,9 +1616,20 @@ GAME_SMSG_NPC_DIALOG_OPTION = 0x007E
 GAME_SMSG_AGENT_GENERIC_VALUE = 0x009F
 PROP_QUEST_MARKER = 11
 PROP_QUEST_MARKER_CLEAR = 12
-QUEST_MARKER_ADVANCE = 3     # in progress, not yet turn-in-able. n=4, unemitted
-QUEST_MARKER_TURN_IN = 4     # a held quest can be turned in HERE
-QUEST_MARKER_OFFER = 5       # at least one quest available to offer
+# The three values, and what each DRAWS -- OBSERVED 2026-08-16 by walking one
+# NPC through all of them with --shots 1
+# (vault/captures/harness/20260816T104707). The glyphs are not what this file
+# claimed for a day: 4 draws a green DOWN ARROW, not a '?'.
+QUEST_MARKER_ADVANCE = 3     # in progress. Draws a down arrow, and NOTHING in
+                             # this run tells 3 apart from 4 -- four frames of
+                             # each, same glyph, differing only in bob phase.
+                             # Unemitted, and now for a second reason: we cannot
+                             # say what sending it would communicate.
+QUEST_MARKER_TURN_IN = 4     # a held quest can be turned in HERE. Green DOWN
+                             # ARROW: "this NPC is your objective". The name is
+                             # about the STATE, which the corpus fixes; the
+                             # glyph is what this run measured.
+QUEST_MARKER_OFFER = 5       # at least one quest to offer. Green '!'.
 
 # The two halves of a turn-in. 0x0052's body at 0x0080F7A0 is the real deleter
 # -- it memmoves the tail of charContext+0x52C down, decrements the count at

@@ -163,6 +163,24 @@ On screen afterwards: **Active Quests empty, Quest Summary empty, and the tracke
 
 ~~**Remaining candidates are now 2 and 3 above**~~, and 2 should be done properly before 3: the earlier scan looked only at the window between `INTERACT` and the click, which is where the original hypothesis came from and also its blind spot. Widen it to the whole session and diff what precedes a giver interaction against a non-giver one. `0x004B` (bulk assign of the `+0x518` list, `array32[64]`) and `0x00FA` (`array32[32]`, once per session at map load) are the two load-time bulk assignments in the corpus that **carried empty arrays and therefore no evidence**, and a per-NPC available-quest list is exactly the shape either could have.
 
+**The overhead marker glyphs, MEASURED 2026-08-16 — and one of them refutes a reading this document carried.**
+
+`--probe quest_marker_states` walked one NPC through every state with `--shots 1`, holding each 7 s so no state could fall between frames the way it had three times before. `vault/captures/harness/20260816T104707`.
+
+| property | glyph | label |
+|---|---|---|
+| *(none yet)* | nothing | the baseline, and it is what makes the rest a measurement rather than a description |
+| `11 = 5` | green **`!`** | OBSERVED |
+| `11 = 4` | green **down arrow** | OBSERVED |
+| `11 = 3` | green down arrow, **indistinguishable from 4** | OBSERVED |
+| `12 = 0` | nothing — back to baseline | OBSERVED (was RECONSTRUCTION) |
+
+**`4` does not draw a `?`.** This document and `questdefs.py` both said it did, on the strength of the owner's description of the in-game behaviour plus the corpus's state transitions. The state reading was right — 4 *is* what ArenaNet sends when a held quest is turn-in-able at that NPC, and the accept/turn-in flips are unchanged — but the glyph is an **arrow**, which reads as *"this NPC is your objective"*. The `?` the owner described is real in-game; mapping it onto property-11 value 4 on this NPC was the inference, and that is what fell. Where the `?` does come from is now an open question, and the two surfaces this run did not touch are the dialog window and the compass.
+
+**`3` and `4` are the same glyph here.** Four frames of each, differing only in the marker's bob phase. Whatever distinguishes them is not the overhead mark, so a state machine cannot use the glyph to tell them apart — and we still emit 3 nowhere, now for a second reason: we cannot say what sending it would communicate.
+
+**The CLEAR is measured.** `[12, agent, 0]` took the glyph down to a bare head. Its *value* range is still never exercised (0 in 22 of 22 and 16 of 16), so "property 12 clears" is OBSERVED and "what a non-zero property 12 does" is not.
+
 **Still not settled: the compass marker.** This run was on **map 449**, not 148, so it says nothing about §7.3 — map 148 cannot load at all right now (see below), and the marker coordinates are 148's. The free rider went unclaimed and §7.3's test is still open.
 
 **Not settled, and it blocked this run first: map 148 is unloadable.** `contentids.py` refuses it, correctly — no client archive in the vault binds `0x1B97D` the way the server's `dat_study` copy does. Four run dirs hold it only under the bit-31 mid-replacement spelling; the 38833 copy binds it to a file 8 bytes larger, written by the terrain arc's allocation work. This is archive state, not a quest question, and it is why Q0 ran on 449.
