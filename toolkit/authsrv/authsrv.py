@@ -2416,6 +2416,12 @@ def handle_skill_press(values, send, state, conn_id, opcode):
          f"cast animation: player casts {skill_id}")
     state.setdefault("pending_casts", []).append({
         "skill_id": skill_id, "copy": copy,
+        # The target rides the pending entry so the DAMAGE can land at cast
+        # end rather than at the press -- see cast_tick's E5 branch. Storing
+        # the id rather than the agent is deliberate: the agent may be dead,
+        # revived or removed by the time the cast completes, and hit_enemy
+        # re-reads it from state and refuses a corpse.
+        "target": target,
         "e5_at": e5_at, "e3_at": e5_at + aftercast,
         "e6_at": e5_at + recharge, "recharge": int(recharge),
         "e5_sent": False, "e3_sent": False,
@@ -2424,40 +2430,35 @@ def handle_skill_press(values, send, state, conn_id, opcode):
           f"agent {target or 'nothing'}: E5 in {e5_at - now:.2f}s, "
           f"recharge {recharge:.0f}s", flush=True)
 
-    # A skill aimed at something hostile does what a click does, PLUS its own
-    # "+ Damage" if it has one. Since 2026-08-15 the "by how much" is no longer
-    # ours: the magnitude is the client's own scale endpoints interpolated at
-    # the player's rank IN THAT SKILL'S OWN ATTRIBUTE (studies/combat 12), so
-    # Power Attack lands harder than Desperation Blow because Strength 12 beats
-    # Tactics 1 -- which is the whole point of having ranks at all.
+    # NO DAMAGE HERE. It lands at cast end, in cast_tick's E5 branch.
     #
-    # A skill whose scale is not damage adds nothing and the swing stands
-    # alone. That covers most of this bar: two stances, two health buffs and a
-    # condition. Guessing an effect for those is the invention this arc exists
-    # to remove.
+    # Until 2026-08-15 this function resolved the hit synchronously, at the
+    # PRESS -- so a two-second spell dealt its damage before its own casting
+    # animation had begun, and nothing could interrupt it because there was no
+    # interval to interrupt. The owner named it: "we send the damage the
+    # instant the unit starts an animation -- that isn't how the game works...
+    # the actual hit is sent mid-animation, and only if not cancelled". The
+    # corpus agrees, and says it most clearly on the NPC side, where damage and
+    # GV_MELEE_ATTACK_FINISHED are the SAME wire instant 40 of 40 and both sit
+    # a windup after ATTACK_STARTED (studies/combat/PLAN.md 17b).
     #
-    # Damage stays AT PRESS rather than at cast end, and that is still a known
-    # divergence rather than a decision this step revisited: the magnitudes
-    # moved here, the timing did not.
-    bonus = 0.0
-    if target:
-        found = skill_damage(skill_id, player_rank_for_skill(skill_id))
-        if found and found[1] == "additive":
-            bonus = float(found[0])
+    # THREE THINGS THIS BUYS beyond fidelity, and the third was the reason to
+    # do this one first:
+    #   * the cast becomes interruptible in principle -- there is now a real
+    #     window between press and hit for a cancel to land in;
+    #   * the damage computation moves to the WORLD TICK, which catches
+    #     ValueError (its except at the tick body). It used to run here, on
+    #     the connection thread, and `skill_damage` can raise on a content row
+    #     whose scale set is disabled -- outside the try that used to wrap only
+    #     the hit_enemy call. That was a live hazard on the socket-closing path;
+    #   * handle_skill_press stops being a hit_enemy caller at all, so
+    #     hit_enemy is reached from ONE thread and F10's measured-but-unasserted
+    #     concurrency race (test_guards section 11) is closed by construction
+    #     rather than by a lock.
     #
-    # THE SAME ValueError CONTRACT world_tick has, because this runs on the
-    # CONNECTION thread: handle's except tuple is ConnectionError /
-    # socket.timeout / OSError only, so an escaping refusal would run the
-    # finally, close the socket, and disconnect the client over a number that
-    # was -- by design -- never sent. The world tick logs and keeps ticking
-    # (its except at the tick body); a skill press logs and keeps the
-    # connection. Refusing the VALUE must never cost more than the value.
-    if target:
-        try:
-            hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
-        except ValueError as ex:
-            print(f"[c{conn_id}] skill press REFUSED a value: {ex}",
-                  flush=True)
+    # The ValueError catch that used to sit here went with it. Nothing on this
+    # path can raise one now, and a catch guarding nothing is a claim that
+    # something still does.
 
 
 def cast_tick(send, state, conn_id):
@@ -2472,6 +2473,12 @@ def cast_tick(send, state, conn_id):
     Phase order within a cycle is pinned to the observed one: E5, then E3,
     then E6 -- E6 never precedes E3 in the corpus, so a zero-recharge skill
     waits for its E3 rather than closing the cycle early.
+
+    SINCE 2026-08-15 THIS ALSO LANDS THE DAMAGE, in the E5 branch. It used to
+    happen at the press, which put a spell's hit before its own casting
+    animation and left no interval for anything to interrupt. Moving it here
+    is what makes hit_enemy single-threaded: this function is the only caller
+    left besides attack_tick, and both run on the world tick.
     """
     pending = state.get("pending_casts")
     if not pending:
@@ -2486,6 +2493,30 @@ def cast_tick(send, state, conn_id):
                  f"SKILL_RECHARGE(skill {cast['skill_id']}, "
                  f"{cast['recharge']}s)")
             cast["e5_sent"] = True
+            # AND THE HIT LANDS HERE, at cast end rather than at the press.
+            #
+            # E5 is the cast completing -- it is what carries the recharge and
+            # starts it -- so it is the phase a skill's effect belongs to. The
+            # ORDER within this instant (E5 before the damage) is OURS and
+            # UNMEASURED: the corpus shows the player's cast cycle and shows
+            # damage, but no capture pins which of the two the server writes
+            # first. The NPC precedent is the reverse of the intuitive one
+            # (FINISHED then damage, land_swing's docstring), so this is worth
+            # a capture rather than a guess.
+            #
+            # A skill aimed at something hostile still does what a click does,
+            # PLUS its own "+ Damage" if it has one -- unchanged from the press
+            # path, magnitudes and all (studies/combat 12). What changed is
+            # only WHEN. hit_enemy re-reads the target from state, so a corpse,
+            # a removed agent or a revived one is handled there rather than by
+            # anything cached at press time.
+            target = cast.get("target")
+            if target:
+                bonus, found = 0.0, skill_damage(
+                    cast["skill_id"], player_rank_for_skill(cast["skill_id"]))
+                if found and found[1] == "additive":
+                    bonus = float(found[0])
+                hit_enemy(send, state, target, conn_id, bonus_damage=bonus)
         if cast["e5_sent"] and not cast["e3_sent"] and now >= cast["e3_at"]:
             send(GAME_SMSG_SKILL_ACTIVATED,
                  [PLAYER_AGENT_ID, cast["skill_id"], cast["copy"]],

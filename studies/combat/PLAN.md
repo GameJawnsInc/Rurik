@@ -578,6 +578,62 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 9 | ✅ **2026-08-15, `34ee86b`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
 | 10 | ✅ **2026-08-15, `2610aa3`+merge** — `PLAN.md` §3 (R4a, R4b) and §8 updated dated and stamped; the profession ladder's L6 row annotated so the two ledgers agree. **Landing suite: 100 green / 1 red of 101, 4,947 checks.** The red is `test_contentids`, and it is ENVIRONMENTAL and attributed: `vault/run/2026-08-13_64fae3b1369b/Gw.dat` is held open by **another session's client, PID 16340, running from that directory since 11:47** — the archive is present (4.2 GB) and unreadable, which is the same "the client holds its own archive open" note main's own §8 carries. `test_contentids` passed at 23 checks earlier the same day with the archive free, and nothing in this arc touches archives, map content or `contentids.py`. Not killed, per the parallel-sessions rule |
 
+## §18. Skill damage moved to cast end, and it is on the wire (2026-08-16)
+
+The first of §17e's three divergences, fixed and verified at a client.
+
+**What changed.** `handle_skill_press` no longer resolves the hit. The pending
+cast entry carries its `target`, and `cast_tick`'s **E5 branch** — the phase
+that IS the cast completing — calls `hit_enemy`. Magnitudes are untouched;
+only the timing moved.
+
+**Verified on the wire** (caged loopback, 38833, map 90 explorable,
+`--enemy --practice-target`, `authsrv-20260816T145306-c1.jsonl`,
+`RUN VERDICT: PASS`, no assert). Two presses of slot 7 (322 Power Attack):
+
+| seq | t | message |
+|---|---|---|
+| 325 | 11.9547 | cast animation — the press |
+| 327 | **12.0024** | **E5, cast end** |
+| 328 | 12.0026 | attack_started |
+| 329 | **12.0028** | **damage 49** |
+
+Damage now follows E5 and is emitted from the world tick. Before this it was
+sent inside `handle_skill_press`, synchronously, ahead of E5.
+
+**An honest limit on this demonstration.** 322's activation is **0.0 s**, so
+the 48 ms gap in cycle 2 is world-tick latency, not an activation window —
+cycle 1's gap is ~1.2 ms, where the tick happened to fire at once. The change
+is proven (the damage is no longer synchronous with the press, and comes from
+the other thread), but **a skill with a nonzero activation on the player's bar
+would show the real window**, and the Warrior test bar has none. That is the
+cheap follow-up: put a 1–2 s activation skill in a slot and re-run.
+
+**What it bought beyond fidelity**, both now asserted rather than argued:
+
+- **F10 is closed by construction.** `hit_enemy`'s only callers are now
+  `attack_tick` and `cast_tick`, both world-tick. `test_guards` §11 walks the
+  module's own source and reddens if a third appears — proven by re-adding a
+  `handle_skill_press` caller, which produced
+  `callers=['attack_tick', 'cast_tick', 'handle_skill_press']` and a FAIL.
+- **A live hazard on the socket-closing path went with it.** `skill_damage`
+  can raise on a content row whose scale set is disabled, and it used to run
+  on the **connection thread** *outside* the try that wrapped only the
+  `hit_enemy` call. It now runs on the world tick, which catches `ValueError`
+  at the tick body.
+
+`test_guards` §2 was rewritten rather than patched: it asserted the connection
+thread's refusal contract, which is now unreachable by construction, so it
+would have been testing a path that no longer exists. It now checks what
+replaced it — a press sends E4 and the cast animation, spends no health and no
+swing timer, and the hit arrives only when `cast_tick` reaches E5. Floor 37 → 40.
+
+**Still open from §17e:** the player's auto-attack swing has no windup at all
+(`hit_enemy` still sends STARTED, damage and FINISHED in one instant), nothing
+can cancel an in-flight swing or cast, and `GV_ATTACK_STOPPED` is defined but
+never sent. Plus the burrow bug: `swing_lands_at` / `cast_lands_at` survive a
+removal-and-recreate cycle.
+
 ## §17. Attack timing: damage does land mid-animation, and the windup is OURS to choose (2026-08-15)
 
 The owner: *"we send the damage the instant the unit starts an animation — that
