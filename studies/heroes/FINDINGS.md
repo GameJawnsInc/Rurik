@@ -578,7 +578,9 @@ confound the henchman arm nearly shipped with.
 > **`0x01C2` msg+0xc (→ entry+0x0) is the AGENT ID.** *(The second half of this claim —
 > "msg+8 is the HERO INDEX" — is **CORRECTED in §17.3**: the arm could not distinguish hero
 > index from owner player number from owner agent id, because all three are 1 in this rig.
-> `msg+8` is UNVERIFIED; the agent-id half stands.)*
+> `msg+8` is UNVERIFIED; the agent-id half stands. **§18 then settled the negative by
+> experiment: `msg+8` carried 1 while the hero was 2 and the row still rendered as hero 2,
+> so it is definitively NOT the hero index.**)*
 
 And that yields a tidy structural fact across both messages: **entry+0x0 holds the agent id
 in `0x01BF` *and* `0x01C2`** — consistent storage, different wire order. The refuted
@@ -1149,6 +1151,46 @@ is to identify which GmView event calls `0x004E5D85`, and whether anything serve
 provoke it. If nothing can, the commander panel is simply outside what a server authors, and
 the hero — which renders, is named from `s_heroClientData`, carries attributes and a skill
 bar, and has its commander flag lit — is already complete for every purpose the wire controls.
+
+## 18. Hero index 2 — the confound is broken, and `msg+8` is not the hero index
+
+§17.3 said separating `0x01C2`'s `msg+8` needed a rig where player number, player agent id
+and hero index are not all 1. Hero index **2** is that rig.
+
+The wire, with all three finally distinct:
+
+```
+0x0074  MERCENARY_INFO (hero 2, ...)
+0x01C2  PARTY_HERO_ADD (party 1, wordA 1, wordB 200, 2, 0)
+        msg+8 = 1 (player number)   msg+0xc = 200 (agent)   msg+0x10 = 2 (hero id)
+0x0072  HERO_ACTIVATE (hero 2, agent 200, inventory 0, aiMode 0)
+```
+
+**The row renders, and it reads `Mo1 Goren`.**
+
+Two results, one negative and one positive:
+
+- **`msg+8` is NOT the hero index — OBSERVED.** It carried **1** while the hero was **2**,
+  and the row rendered anyway with hero 2's identity. §11.1's original reading is now
+  refuted by experiment rather than merely doubted (§17.3 doubted it; this settles it).
+  What `msg+8` *is* remains **UNVERIFIED**: it accepts 1 and rejects 200, and the scan's
+  filter (§17.1) compares `entry+4` against a widely-used "my id" accessor, which points at
+  **owner**. Our `PLAYER_NUMBER` and `PLAYER_AGENT_ID` are both 1, so owner-player-number
+  and owner-agent-id are still indistinguishable — a narrower confound than before, and the
+  rig to break it is a player number that differs from the player's agent id.
+- **`s_heroClientData` row 2 is `Goren`, confirmed from the screen.** The recon resolved rows
+  1 and 2 as Norgu and Goren via `textrec.py` against the archive; both are now independently
+  confirmed by the client rendering them, from a different direction entirely. The hero
+  catalogue reading is solid.
+
+**Still confounded, and worth naming:** three fields carried the value 2 in this run —
+`0x0074`'s hero id, `0x01C2`'s `msg+0x10`, and `0x0072`'s hero id. So "the identity comes
+from the hero id" is established, but *which message* supplies it is not. The discriminator
+is one run: give `0x01C2`'s `msg+0x10` a different value (say 3) while `0x0074`/`0x0072`
+keep 2, and read which name appears.
+
+The commander slot stayed bound and flag 1 stayed green throughout, so nothing here
+regressed the working hero.
 
 ## 9. Defects and corrections this arc produced
 
