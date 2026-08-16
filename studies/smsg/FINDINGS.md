@@ -881,7 +881,7 @@ Reached: `CharMsg.cpp`, `ChCliApi.cpp`
 
 **Ruled out:** field 1 = agent id -- disjoint value range from 0x0020's agent ids, and far too few distinct values; a per-spawn message -- it is re-sent per NPC type per session, always as the second half of an 0x0056/0x0057 pair; the array32[8] being a fixed-size array -- observed lengths are 1 and 2; 8 is the client's asserted maximum, not the wire length
 
-**Still open:** What the individual composite dwords encode (which model piece / colour each one selects) -- that lives in CpsApi/CpsData, not in this handler.; What 0x0056's own eight fields mean; only that it keys the same record was established here.
+**Still open:** ~~What the individual composite dwords encode (which model piece / colour each one selects) -- that lives in CpsApi/CpsData, not in this handler.~~ **ANSWERED 2026-08-16 by the unit-model arc** ([../unitmodels/FINDINGS.md](../unitmodels/FINDINGS.md) §5.4): the composite dwords are archive FILE IDS of geometry-bearing ffna type-2 files (43/43 resolve, every one carrying an FA0 chunk), sent exactly when the 0x0056 file's skeleton carries MODEL_SKELETON_FLAG_COMPOSITED (= no geometry of its own; 36/36 and 8/8 on the same capture). What remains open of the original question is only per-dword colour/piece *selection* when a list has more than one entry (observed lengths 1 and 2). What 0x0056's own eight fields mean is still open; only that it keys the same record was established here.
 
 **For our server:** Emitting 0x0056+0x0057 for each NPC type we spawn is what would give our NPCs their real look instead of whatever the client falls back to for an unknown composite.
 

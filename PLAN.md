@@ -1283,6 +1283,33 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
+### Unit models and animation — the skeleton chunk is decoded; the arc has a ladder (2026-08-16)
+
+**`0x00000FA1` is the skeleton/animation chunk, and it is structurally decoded** —
+parser found at `0x00796310` (it is the models arc's mystery "second geometry-object
+producer"), header and 15 gated blocks derived from disassembly, and the derived walk
+closes byte-exact on **14,571 of 14,571 FA1 chunks, the complete flags=515 population**,
+with closure being our check rather than the client's. The COMPOSITED bit ⟺ no-geometry
+rule was measured from the archive and from live wire traffic by agents that did not know
+each other's result (14,571/14,571; 8/8, 36/36, 43/43). Trailing blocks H/I/J named
+(streaks / switchable parts / particle clouds+emitters), FA6 = the model's sound-cue list
+(231/231 MPEG-header oracle), FA8 = recursively-resolved linked models, and the
+flags-2817 stream mystery is solved (stream-chain tails). The full evidence base is
+[studies/unitmodels/FINDINGS.md](studies/unitmodels/FINDINGS.md); the ladder to
+round-trip authorship (U1–U7, summit: modify an animation, rebuild the archive, the
+loopback client renders it) is [studies/unitmodels/PLAN.md](studies/unitmodels/PLAN.md).
+
+**The next action is U1 and it is time-sensitive in one respect**: the verified FA1
+walker and every census artifact live in `vault/research/unitmodels/2026-08-16-recon/`
+(preserved from session scratch), but **nothing in `toolkit/` decodes FA1 yet** — U1
+promotes the walker to committed, floor-guarded code with synthetic fixtures for the
+terms the corpus never exercises (n56, block H). Still undecoded, honestly:
+blk2C/blk48's element contents (the animation keys' payload — strides exact, semantics
+unnamed; the quaternion reading REFUTED), FA1 flag bits 1–2, the m_skel/m_geom object
+identity, and the mid/tail chunk families. GW1 units read as rigid-segment models —
+zero skinning vocabulary in 19,758 assert sites — which, if it survives U2, makes
+custom-unit authoring markedly simpler than a skinned-mesh format would.
+
 ### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
 
 **A quest we authored is offered, accepted, tracked, advanced and turned in at a real
