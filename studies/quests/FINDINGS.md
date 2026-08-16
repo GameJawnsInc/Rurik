@@ -137,7 +137,27 @@ s2c 0x004C         QUEST_DESCRIPTION[1463 template]
 
 On screen: a quest log reading **Primary Quests → Ascalon** with an Abandon button, a Quest Summary carrying **our objectives and our description**, and a tracker line under the level bar. **This is the first authored quest in this project to exist in a retail client's quest log, and the first authored prose of any kind to reach one.** It also retires Q3's acceptance criterion in the same run — the detail pane shows our description, and `0x004C`'s `template` framing is confirmed on a live client rather than offline.
 
-**Still open:** `0x007E`'s `field1` kind enum (7 values, none named), whether an option can be declined, and the turn-in half — `0x003B` code `0x07` is decoded and unarmed.
+#### Q7: the quest leaves the log, and ArenaNet's doubled `0x0052` is NOT required
+
+**OBSERVED**, `vault/captures/harness/20260816T002523`, build 38833, map 449. The server now runs the lifecycle rather than replaying a script: the probe places the giver and stops, and every quest message after that is a reply to a click.
+
+```
+c2s 0x0039 INTERACT      -> 0x0080 our line, 0x0081 flush, 0x007E accept option
+c2s 0x003B 0x85B701      -> 0x0049 QUEST_ADD[1463],  then 0x0012 -> 0x004C
+c2s 0x0039 INTERACT      -> the same window, now carrying the TURN-IN option
+c2s 0x003B 0x85B707      -> 0x0052 QUEST_REMOVE[1463]  (ONCE)
+                            0x004A QUEST_REMOVE_AND_UNLIST[1463]
+```
+
+On screen afterwards: **Active Quests empty, Quest Summary empty, and the tracker line under the level bar gone.** The dialog offers *"I spoke to the gate guard."* rather than the accept line, so the giver's offer switches on held state.
+
+**The doubling is not load-bearing. OBSERVED.** ArenaNet sends `0x0052` twice then `0x004A`, 3 of 3, and §4.2 flagged that as exactly the shape a party broadcast would have. **One `0x0052` removes the quest.** That is consistent with `0x0052`'s body at `0x0080F7A0` being a binary-search deleter — a second call has nothing to find — and it means a solo corpus could never have separated "protocol" from "one player's copy of a two-player message" by counting.
+
+**It does not prove the second copy IS a party broadcast**, and nothing here can: every live session is a solo operator. What is now established is narrower and enough to build on — **the second `0x0052` is not required for the client to remove a quest**, so our server sends one. The party reading stays UNVERIFIED and its test is still §4.3 item 3, a two-player capture.
+
+**No reward was granted and none was looked for.** The completion family (`0x004E`, `0x006C`, `0x0096`, `0x0097`, `0x00FB`) is still 0 of 22,524.
+
+**Still open:** `0x007E`'s `field1` kind enum (7 values, none named); whether an option can be declined; **and the marker is not maintained** — we send `0x009F [11, agent, 5]` once and never update it, where ArenaNet flips it to 4 on accept and back to 5 on turn-in. The giver keeps a green `!` while holding a quest it cannot offer. That is a server-side gap, not a protocol unknown, and the transitions to copy are already measured above.
 
 **Superseded: candidate 3** (replay the 43-unit offer line) is moot; the option was never in the dialog string.
 

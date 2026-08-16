@@ -37,6 +37,12 @@ wire_framing = "template"
 # flushed by 0x0081. A narrower field than the two above -- string16(122), not
 # 128 -- and questdefs checks it against its own width for that reason.
 giver_dialogue = "Well met, traveller. Speak to the gate guard for me, and I will see you rewarded."
+# The two clickable lines, sent as GAME_SMSG 0x007E after the window opens. Our
+# words. Which one the giver offers depends on whether the player already holds
+# the quest, and the option's TAG carries the 0x003B code the click returns --
+# accept (0x01) or turn in (0x07).
+accept_label = "Accept: A First Errand"
+turn_in_label = "I spoke to the gate guard."
 
 [quest.rurik_first_errand.provenance]
 source = "invented"

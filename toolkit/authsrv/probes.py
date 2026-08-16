@@ -2781,6 +2781,35 @@ OPTION_KIND_QUEST = 18
 OPTION_NO_ICON = 0xFFFFFFFF
 
 
+def _quest_turnin_steps(origin):
+    """Place the giver and stop. The SERVER drives everything after that.
+
+    Unlike every other probe in this arc, the interesting messages here are not
+    steps -- they are the server's replies to what the player does. That is the
+    point: Q7 is the first rung where our server runs a quest lifecycle rather
+    than replaying a script at a client.
+    """
+    ox, oy, plane = origin
+    return [
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
+        Step(3.0, 0x0020,
+             create_agent(_GIVER_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 150, oy, plane),
+             f"WORLD_CREATE_AGENT({_GIVER_AGENT})",
+             "the giver, 150u out, with its own nameplate."),
+        Step(2.0, GENERIC_VALUE,
+             [PROP_QUEST_MARKER, _GIVER_AGENT, QUEST_MARKER_OFFER],
+             f"GENERIC_VALUE property {PROP_QUEST_MARKER} = "
+             f"{QUEST_MARKER_OFFER}",
+             "the green '!'. NOW CLICK THE NPC, then the option, then the NPC "
+             "again, then the option again -- the server answers each."),
+    ]
+
+
 def _quest_option_steps(origin):
     ox, oy, plane = origin
     row = questdefs.load()[1463]
@@ -2851,6 +2880,30 @@ def _quest_offer_steps():
 
 
 PROBES = {
+    "quest_turnin": lambda a, o: Probe(
+        question="Does a quest LEAVE the log on turn-in -- and is ArenaNet's "
+                 "DOUBLED 0x0052 a protocol requirement or a party broadcast?",
+        predicts="The whole lifecycle runs from four clicks: interact -> accept "
+                 "-> interact -> turn in, and the quest LEAVES the log. The "
+                 "second prediction is the one worth the run: our server sends "
+                 "0x0052 ONCE, not twice. ArenaNet sends it twice 3 of 3, but "
+                 "every live session is a SOLO operator, so the corpus cannot "
+                 "tell a protocol requirement from one player's copy of a "
+                 "two-player broadcast -- and 0x0052's body is a deleter that "
+                 "binary-searches the id, so a second one has nothing to find. "
+                 "If the quest leaves the log on a single 0x0052, the doubling "
+                 "was never for us. If it does NOT leave, the double is "
+                 "load-bearing and that is the finding instead. NO REWARD is "
+                 "granted and none should be looked for: the whole completion "
+                 "family is 0 of 22,524 in the corpus.",
+        steps=_quest_turnin_steps(o),
+        note="RUN ON --map 449. The probe only PLACES the giver; every quest "
+             "message after that is the server answering a click, which is what "
+             "makes this the first rung where our server runs a lifecycle "
+             "rather than replaying a script. Click the NPC around "
+             "(0.499, 0.625) and the option around (0.480, 0.545) at "
+             "1936x1040, twice each, then press L.",
+    ),
     "quest_option": lambda a, o: Probe(
         question="Can a player accept OUR quest, from OUR dialog, by clicking "
                  "an option we sent -- the whole Q5 loop end to end?",

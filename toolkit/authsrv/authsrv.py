@@ -1418,6 +1418,18 @@ GAME_SMSG_NPC_DIALOG_SHOW = 0x0081
 GAME_CMSG_NPC_SERVICE_SELECT = 0x003B
 GAME_SMSG_QUEST_ADD = 0x0049
 
+# The clickable line in an open dialog: [kind, label, tag, 0xFFFFFFFF], where
+# the TAG is the exact dword the client sends back in 0x003B. MEASURED: 22 of
+# 22 clicks in both keyed sessions were announced by a prior 0x007E carrying
+# that dword, zero counterexamples. studies/quests/FINDINGS.md, candidate 2.
+GAME_SMSG_NPC_DIALOG_OPTION = 0x007E
+
+# The two halves of a turn-in. 0x0052's body at 0x0080F7A0 is the real deleter
+# -- it memmoves the tail of charContext+0x52C down, decrements the count at
+# +0x534 and frees the five pointer slots -- and 0x004A unlists.
+GAME_SMSG_QUEST_REMOVE = 0x0052
+GAME_SMSG_QUEST_REMOVE_AND_UNLIST = 0x004A
+
 # The client asks to use a skill and then WAITS to be told it worked. Pressing a
 # skill plays the bar animation and never casts, which is the same shape as every
 # other bug this project has had: the client asks, we say nothing.
@@ -5190,6 +5202,35 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # that followed.
                             send(GAME_SMSG_NPC_DIALOG_SHOW, [values[1]],
                                  f"NPC_DIALOG_SHOW(agent {values[1]})")
+                            # AND THE OPTIONS, WHICH MUST COME AFTER THE FLUSH.
+                            # 0x0081 opens the window; 0x007E appends a line to
+                            # an OPEN one. Sending options first puts them in
+                            # the buffer 0x0081 then zeroes, and the window
+                            # renders text with nothing to click -- which looks
+                            # exactly like 0x007E not working. MEASURED the hard
+                            # way on 2026-08-15, and it is ArenaNet's own order
+                            # at t=26.816: 0x0080, 0x0081, then two 0x007E.
+                            held = state.setdefault("quests", set())
+                            for qid in sorted(quest_rows()):
+                                row = quest_rows()[qid]
+                                if not questdefs.dialogue_field(row):
+                                    continue
+                                turn_in = qid in held
+                                code = (questdefs.SERVICE_TURN_IN if turn_in
+                                        else questdefs.SERVICE_ACCEPT)
+                                label = (row.get("turn_in_label")
+                                         if turn_in else row.get("accept_label"))
+                                if not label:
+                                    continue
+                                send(GAME_SMSG_NPC_DIALOG_OPTION,
+                                     [questdefs.OPTION_KIND_QUEST,
+                                      questdefs.coded_literal(
+                                          label,
+                                          row.get("wire_framing", "template")),
+                                      questdefs.encode_service_select(qid, code),
+                                      questdefs.OPTION_NO_ICON],
+                                     f"DIALOG_OPTION(quest {qid} code "
+                                     f"0x{code:02X})")
                     elif opcode == GAME_CMSG_NPC_SERVICE_SELECT:
                         # Closes test_dispatch's other recorded drop, whose
                         # reason was "blocked behind 0x0039: this server does
@@ -5224,6 +5265,28 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                      [qid, tuple(state["pos"]), 0, mid, 32,
                                       nm, nm, nm, mid],
                                      f"QUEST_ADD[{qid}] (accepted)")
+                                state.setdefault("quests", set()).add(qid)
+                            elif row and code == questdefs.SERVICE_TURN_IN:
+                                # ONE 0x0052, NOT TWO, AND THAT IS THE
+                                # EXPERIMENT. ArenaNet sends 0x0052 twice then
+                                # 0x004A, 3 of 3 -- but studies/quests 4.2 flags
+                                # the doubling as exactly the shape a PARTY
+                                # BROADCAST would have, and every live session
+                                # is a solo operator, so the corpus cannot tell
+                                # a protocol requirement from one player's copy
+                                # of a two-player message. Sending one is the
+                                # discriminator: if the quest leaves the log,
+                                # the second was never for us.
+                                #
+                                # NO REWARD IS GRANTED HERE and the acceptance
+                                # criterion must not claim one -- the whole
+                                # completion family (0x004E, 0x006C, 0x0096,
+                                # 0x0097, 0x00FB) is 0 of 22,524 in the corpus.
+                                send(GAME_SMSG_QUEST_REMOVE, [qid],
+                                     f"QUEST_REMOVE[{qid}] (turn-in, 1 of 1)")
+                                send(GAME_SMSG_QUEST_REMOVE_AND_UNLIST, [qid],
+                                     f"QUEST_REMOVE_AND_UNLIST[{qid}]")
+                                state.setdefault("quests", set()).discard(qid)
                             elif row and code == questdefs.SERVICE_OFFER:
                                 # 2 of 2 in the corpus: the offer draws no
                                 # quest-family reply. Answering it would invent
