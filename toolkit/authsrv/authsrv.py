@@ -2274,6 +2274,11 @@ HERO_ROSTER_ID = None
 # follows 0x0074, or it follows 0x0072, or 0x0072 asserts charHeroData because
 # its field 1 selects the record 0x0074 made. studies/heroes/FINDINGS.md 20.
 HERO_ACTIVATE_ID = None
+# 0x01C2's msg+8, overridable. The field accepts 1 and rejects 200 (H1/H2) and
+# is NOT the hero index (18), but PLAYER_NUMBER and PLAYER_AGENT_ID are both 1
+# in the default rig so owner-player and owner-agent cannot be told apart.
+# Pair with --player-number to break that. studies/heroes/FINDINGS.md 21.
+HERO_OWNER = None
 # HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
 HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
@@ -6524,7 +6529,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # --hero-swap still exchanges the two words; it was
                             # the arm that (with player number == hero id == 1)
                             # could not tell owner from hero index apart.
-                            _wa, _wb = PLAYER_NUMBER, HERO_AGENT_ID
+                            _wa = (PLAYER_NUMBER if HERO_OWNER is None
+                                   else HERO_OWNER)
+                            _wb = HERO_AGENT_ID
                             if HERO_SWAP:
                                 _wa, _wb = _wb, _wa
                             _inside = _inside + (agents.party_hero_add(
@@ -7520,6 +7527,16 @@ def main():
                          "labelled from the BODY's agent instead of resolving "
                          "the hero's own name from s_heroClientData. The "
                          "control arm for section 14.")
+    ap.add_argument("--player-number", type=int, default=None, metavar="N",
+                    help="The in-instance player number, normally 1 -- which is "
+                         "also PLAYER_AGENT_ID, and that coincidence is what "
+                         "makes 0x01C2's msg+8 undecidable. Set it to something "
+                         "else and the two namespaces separate.")
+    ap.add_argument("--hero-owner", type=int, default=None, metavar="N",
+                    help="Override 0x01C2's msg+8 only (normally the player "
+                         "number). With --player-number, this is the arm that "
+                         "says whether the field is the owner's PLAYER NUMBER "
+                         "or the owner's AGENT ID.")
     ap.add_argument("--hero-activate-id", type=int, default=None, metavar="N",
                     help="Override 0x0072's hero id only, leaving 0x0074 on "
                          "--hero's value. Splits the last confound: which of "
@@ -7750,6 +7767,15 @@ def main():
               + (f" -- {', '.join(bits)}" if bits else
                  " -- no bits set, which CLEARS all three"))
 
+    if a.player_number is not None:
+        global PLAYER_NUMBER
+        if not 1 <= a.player_number <= 255:
+            raise SystemExit("--player-number outside 1..255")
+        PLAYER_NUMBER = a.player_number
+        print(f"PLAYER_NUMBER: {PLAYER_NUMBER} (PLAYER_AGENT_ID stays "
+              f"{PLAYER_AGENT_ID}) -- the two namespaces are now distinct, "
+              f"which is the whole point of the arm.")
+
     if a.hero is not None:
         global HERO, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
         global HERO_BODY_NPC
@@ -7768,6 +7794,8 @@ def main():
         HERO_ROSTER_ID = a.hero_roster_id
         global HERO_ACTIVATE_ID
         HERO_ACTIVATE_ID = a.hero_activate_id
+        global HERO_OWNER
+        HERO_OWNER = a.hero_owner
         HERO_AI_MODE = a.hero_ai_mode
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS

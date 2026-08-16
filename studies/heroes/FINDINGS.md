@@ -580,7 +580,8 @@ confound the henchman arm nearly shipped with.
 > index from owner player number from owner agent id, because all three are 1 in this rig.
 > `msg+8` is UNVERIFIED; the agent-id half stands. **§18 then settled the negative by
 > experiment: `msg+8` carried 1 while the hero was 2 and the row still rendered as hero 2,
-> so it is definitively NOT the hero index.**)*
+> so it is definitively NOT the hero index. **§21 then identified it positively: it is the
+> OWNER PLAYER NUMBER.**)*
 
 And that yields a tidy structural fact across both messages: **entry+0x0 holds the agent id
 in `0x01BF` *and* `0x01C2`** — consistent storage, different wire order. The refuted
@@ -1292,6 +1293,54 @@ Three arcs of confound-splitting, each one field at a time, and the shape that e
 `0x0074`'s other 17 fields, `msg+0x10`'s real role (§19.2 — inert on everything observable),
 the commander-panel click (§17.4 — probably a client-side UI event, not a message), the
 untested `aiMode`, and follow AI.
+
+## 21. `msg+8` is the OWNER PLAYER NUMBER — and the arm exposed two "my id" notions
+
+The rig §18 asked for: `--player-number 2` makes `PLAYER_NUMBER` (2) differ from
+`PLAYER_AGENT_ID` (1), so the two candidate readings of `0x01C2`'s `msg+8` finally separate.
+`--hero-owner` overrides `msg+8` alone. Two arms differing in nothing else:
+
+| arm | `msg+8` | roster row | commander slot / flag 1 |
+|---|---|---|---|
+| **A** | **2** (the player number) | **`Mo1 Goren` renders** | **absent / greyed** |
+| **B** | **1** (the agent id) | **no hero row** | **bound / green** |
+
+### 21.1 The answer
+
+**`msg+8` is the owner PLAYER NUMBER — OBSERVED.** The roster row renders exactly when
+`msg+8` equals the player number this server declared, and not when it equals the agent id.
+That is consistent across all three rigs now: the original (`PLAYER_NUMBER` 1, `msg+8` 1 →
+renders), H1 (`msg+8` 200 → no row), and arms A/B here. §11.1's "hero index" reading was
+withdrawn in §17.3, refuted in §18, and the field is now positively identified rather than
+merely narrowed.
+
+### 21.2 The unexpected half: the two filters disagree
+
+Arms A and B are **exact mirrors** — whichever value makes the roster row appear makes the
+commander binding vanish, and vice versa. Both consumers read the same `entry+4`, so they
+must be comparing it against **different** "my id" values:
+
+- the **roster UI** compares against the player number we declared (2),
+- the **`GmHeroCommander` scan** (§17.1) compares `entry+4` against `ctx[0x44][0x2ac]`, which
+  evidently stayed **1**.
+
+**RECONSTRUCTION, and the honest reading:** `--player-number` changes only what *we send*, not
+what the client believes about itself. `ctx[0x44][0x2ac]` is computed from something our
+override never touched, so forcing `PLAYER_NUMBER` to 2 **desynchronised** the client's own
+notion of "me" from ours. In the default rig both are 1 and everything agrees, which is why
+the hero worked all along.
+
+**What is still not settled:** whether `ctx[0x44][0x2ac]` is the player's *agent id* or a
+client-side *player number* derived elsewhere — because in this rig it is 1, and so is
+`PLAYER_AGENT_ID`. Breaking that needs the client's own value moved, not ours, which means
+finding what writes it rather than another flag on our side.
+
+### 21.3 The practical consequence
+
+Do not use `--player-number` for anything but this experiment. It puts the server's claimed
+player number out of step with the client's internal one, and the visible symptom is
+narrow and misleading: the roster row and the commander binding become mutually exclusive.
+The default (1) is the value that satisfies both, and it is the default for that reason.
 
 ## 9. Defects and corrections this arc produced
 
