@@ -1411,6 +1411,13 @@ GAME_SMSG_QUEST_DESCRIPTION = 0x004C
 GAME_SMSG_NPC_DIALOG_TEXT = 0x0080
 GAME_SMSG_NPC_DIALOG_SHOW = 0x0081
 
+# What the player PICKED in the window the pair above opened, and the reply that
+# puts the quest in their log. The whole meaning is one dword,
+# 0x800000 | (quest_id << 8) | code -- see questdefs.decode_service_select for
+# why the high byte gates it and why no DECLINE code is modelled.
+GAME_CMSG_NPC_SERVICE_SELECT = 0x003B
+GAME_SMSG_QUEST_ADD = 0x0049
+
 # The client asks to use a skill and then WAITS to be told it worked. Pressing a
 # skill plays the bar animation and never casts, which is the same shape as every
 # other bug this project has had: the client asks, we say nothing.
@@ -5183,6 +5190,46 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # that followed.
                             send(GAME_SMSG_NPC_DIALOG_SHOW, [values[1]],
                                  f"NPC_DIALOG_SHOW(agent {values[1]})")
+                    elif opcode == GAME_CMSG_NPC_SERVICE_SELECT:
+                        # Closes test_dispatch's other recorded drop, whose
+                        # reason was "blocked behind 0x0039: this server does
+                        # not answer an interaction, so no window is ever open
+                        # and no selection can be made." Q4 opened the window.
+                        picked = questdefs.decode_service_select(values[1])
+                        if picked is None:
+                            # A non-quest service family -- merchant, skill
+                            # unlock, hero unlock. All 22 captured selects are
+                            # quest-family, so this branch has NEVER been seen
+                            # on any wire we hold; say so rather than guess.
+                            print(f"[c{conn_id}] NPC_SERVICE_SELECT "
+                                  f"0x{values[1]:06X}: not the quest family "
+                                  f"(high byte set or tag bit clear). No "
+                                  f"capture in this repo holds one.")
+                        else:
+                            qid, code = picked
+                            row = quest_rows().get(qid)
+                            print(f"[c{conn_id}] NPC_SERVICE_SELECT quest "
+                                  f"{qid} code 0x{code:02X}"
+                                  + ("" if row else " -- NOT IN content/quests.toml"))
+                            if row and code == questdefs.SERVICE_ACCEPT:
+                                # The marker goes at the player's own position
+                                # and the map ids are the instance's, which is
+                                # a PLACEHOLDER: a real giver would put it at
+                                # the objective. The quest row has no marker
+                                # column yet, and inventing coordinates it does
+                                # not carry would be a number nobody measured.
+                                mid = state["map_id"]
+                                nm = questdefs.enc_string(row.get("enc_name") or [])
+                                send(GAME_SMSG_QUEST_ADD,
+                                     [qid, tuple(state["pos"]), 0, mid, 32,
+                                      nm, nm, nm, mid],
+                                     f"QUEST_ADD[{qid}] (accepted)")
+                            elif row and code == questdefs.SERVICE_OFFER:
+                                # 2 of 2 in the corpus: the offer draws no
+                                # quest-family reply. Answering it would invent
+                                # a behaviour ArenaNet's server does not have.
+                                print(f"[c{conn_id}]   offer opened; ArenaNet "
+                                      f"sends no quest reply here either")
                     elif opcode == GAME_CMSG_REQUEST_QUEST_INFO:
                         # Closes test_dispatch's recorded drop, whose reason was
                         # "answering it needs a quest table this repo does not

@@ -123,6 +123,46 @@ def enc_string(units):
     return "".join(chr(int(u)) for u in units)
 
 
+# GAME_CMSG 0x003B packs its whole meaning into one dword. OBSERVED, 22 of 22
+# samples in the live corpus, every one with high byte 0x00 -- the quest-dialog
+# family. studies/quests/FINDINGS.md 2.4.
+SERVICE_TAG_BIT = 0x800000
+
+# The codes, derived from CONSEQUENCE rather than from any name in the client:
+# 0x01 draws GAME_SMSG 0x0049 within 30-55 ms in 5 of 5, and 0x07 draws
+# 0x0052 x2 + 0x004A in 3 of 3, across five independent quest ids. The English
+# words are OURS -- RECONSTRUCTION on top of an OBSERVED consequence.
+SERVICE_OFFER = 0x03        # opens the offer; no quest-family reply, 2 of 2
+SERVICE_ACCEPT = 0x01
+SERVICE_STEP = 0x04         # objectives update + marker move, n=1
+SERVICE_TURN_IN = 0x07
+# NOT FOUND: a DECLINE code. No 0x003B value in the corpus produces a refusal,
+# because the operator never declined. Do not invent one.
+
+
+def decode_service_select(value):
+    """(quest_id, code) out of GAME_CMSG 0x003B's dword, or None.
+
+    None rather than a guess when the tag bit is clear or the high byte is set:
+    those are the OTHER service families -- overrides.json names 8 callers
+    across GmNpc, VnLearnSkill, VnUnlockSkill, VnUnlockItem and VnUnlockHero --
+    and all 22 captured selects are high-byte 0x00. A decoder that returned a
+    quest id for a merchant purchase would be inventing one.
+    """
+    if not isinstance(value, int) or value < 0:
+        return None
+    if (value >> 24) != 0 or not (value & SERVICE_TAG_BIT):
+        return None
+    return ((value & 0x7FFFFF) >> 8, value & 0xFF)
+
+
+def encode_service_select(quest_id, code):
+    """The inverse, for tests. A decoder with no encoder is hard to refute."""
+    if not (0 <= quest_id <= 0x7FFF) or not (0 <= code <= 0xFF):
+        raise ValueError(f"quest {quest_id} / code {code} does not fit the tag")
+    return SERVICE_TAG_BIT | (quest_id << 8) | code
+
+
 def load(world=None):
     """{quest_id: row} for every content quest row.
 

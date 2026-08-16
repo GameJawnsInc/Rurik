@@ -37,6 +37,14 @@ So the brief's literal question is settled OBSERVED. The question that decides w
 >
 > **What it did not settle:** the server answers *any* interaction with *every* quest's giver line, because there is still no npc→quest binding — §3's `[quest.X.server]` block remains a proposal. And `0x003B` is still unanswered, so nothing can be *accepted* yet. **That is Q5, and it is now the only thing between here and a quest a player can take.**
 >
+> ### Q5 IS HALF DONE, AND THE OTHER HALF NOW HAS A MEASURED NEGATIVE
+>
+> **Done:** `0x003B` decodes (`0x800000 | quest_id<<8 | code`), verified against three of ArenaNet's own dwords with an encoder as inverse; the server answers code `0x01` with `0x0049` from the quest row and code `0x03` with nothing, matching ArenaNet 2 of 2. `test_dispatch`'s second recorded drop is closed. **No client has exercised the arm**, so it is RECONSTRUCTION until one does.
+>
+> **Not done, and it is the rung's real content:** nothing we send makes a **clickable option** appear, so no client has ever sent us a `0x003B`. Replaying ArenaNet's own greeting line verbatim renders the same text and **no option**, across two runs with the click placed on the greeting's own last line. That refutes the natural hypothesis (the option is in the dialog string) and points at the **agent** instead — theirs was a real giver, ours is a collector.
+>
+> **Consequence for this document:** Q5's acceptance criterion as written — *"the player clicks accept in a window we opened"* — cannot be met until the option renders, and that is now its own rung with three named candidates (FINDINGS, Q5 section). The rest of the ladder is unaffected: Q6 (instance replay) and Q7 (turn-in) both drive off `0x003B` codes and inherit the same blocker, so **the option renderer is now the critical path**, not any of the six verbs.
+>
 > **Three things Q0 did NOT settle, stated so the green does not spread further than it earned:**
 > 1. **The compass free rider went unclaimed.** The run was on map 449, so the marker fields were 449's and §7.3 is untouched. Map **148 cannot load at all**: no client archive in the vault binds `0x1B97D` as the server's does — four run dirs hold only the bit-31 mid-replacement spelling and the 38833 copy binds a rewritten file. That is archive state from the terrain arc, not a quest problem, and it is the first thing to fix before the compass question can be asked.
 > 2. **`0x004C` was never sent**, so no authored *prose* has reached a client — only an 8-unit name slot. Route B's claim that description and objectives hold ~125 characters is still RECONSTRUCTION, and rung Q3 is still its test.

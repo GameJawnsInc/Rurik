@@ -2604,7 +2604,63 @@ def _npc_dialog_steps():
     ]
 
 
+# ArenaNet's OWN dialog line from vault/captures/live/20260807T143055 at
+# t=26.816 -- the one whose window the player clicked to produce
+# `0x003B quest=80 code=0x03`. Ten code units, transcribed as MEASUREMENT: these
+# are string IDS and markers, not text. We cannot read what it says and do not
+# need to -- 44 of 44 name slots in the corpus resolve to encrypted archive
+# records whose key is NOT FOUND, which is exactly why transcribing this is
+# permitted and transcribing their prose is not.
+#
+# WHY REPLAY IT AT ALL. Q5 needs the client to send 0x003B, and the client only
+# sends it when the player clicks an OPTION. Our own Q4 window had text and no
+# option, so the markup that makes one is unrecovered. There is no server
+# message between INTERACT and that click naming quest 80, so the quest id must
+# be IN this string. Replaying it asks the client where: if it comes back as
+# `0x003B quest=80`, the id is in these ten words and the client has told us so.
+_ARENANET_OFFER_LINE = [0x2AE6, 0xF9CB, 0xE939, 0x5DD2, 0x010A,
+                        0x3377, 0xDF18, 0xF3B0, 0x201F, 0x0001]
+
+
+def _quest_offer_steps():
+    return [
+        Step(6.0, 0x0080, [questdefs.enc_string(_ARENANET_OFFER_LINE)],
+             "0x0080 carrying ArenaNet's own captured offer line, verbatim",
+             "nothing yet -- 0x0080 accumulates."),
+        Step(10.0, 0x0081, [_TEST_NPC_AGENT],
+             f"0x0081 flush at agent {_TEST_NPC_AGENT}",
+             "A WINDOW WITH A CLICKABLE OPTION, unlike Q4's, which had text "
+             "and no option. THE MEASUREMENT IS WHAT THE CLICK SENDS: if "
+             "`c2s 0x003B quest=80` appears in the log, the quest id lives in "
+             "those ten words and the client has just told us where. Our server "
+             "will then answer 'quest 80 NOT IN content/quests.toml', which is "
+             "the correct refusal and not a failure of this probe."),
+    ]
+
+
 PROBES = {
+    "quest_offer": lambda a, o: Probe(
+        question="Where does the clickable quest option come from -- and is the "
+                 "quest id inside the dialog string itself?",
+        predicts="A CLICKABLE OPTION RENDERS, and clicking it sends "
+                 "`0x003B quest=80 code=0x03`. The corpus shows no server "
+                 "message between INTERACT and that click naming quest 80, and "
+                 "the two captured offer lines differ ONLY in one varint group "
+                 "(3377 DF18 F3B0 201F against 3375 FE11 D56F 2195) while "
+                 "sharing the prefix 2AE6 F9CB E939 5DD2 010A -- so that group "
+                 "is where the quest lives. If NO option renders, the option is "
+                 "not carried by the string and something else in the corpus "
+                 "arms it. If an option renders but the click reports a "
+                 "DIFFERENT quest id, the mapping is client-side and the string "
+                 "is only a label.",
+        steps=_quest_offer_steps(),
+        note="RUN WITH --enemy --practice-target --map 449, and CLICK THE "
+             "OPTION -- an --actions `click:` step lands during the hold, since "
+             "the action script runs on the client's clock rather than after "
+             "the probe. The line is ArenaNet's own bytes replayed verbatim: "
+             "string ids and markers, never text, and we could not read the "
+             "text if we wanted to.",
+    ),
     "npc_dialog": lambda a, o: Probe(
         question="Is GAME_SMSG 0x0080 + 0x0081 the NPC dialog window -- the "
                  "reply to INTERACT that test_dispatch called this server's "

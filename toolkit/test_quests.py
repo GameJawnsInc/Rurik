@@ -203,7 +203,35 @@ def main():
               f"quest {qid}'s giver line is framed and fits 0x0080",
               f"{len(line)} of {questdefs.DIALOG_UNITS} code units")
 
-    print("\n8. the enc_* columns are WIRE code units, not archive string ids")
+    print("\n8. the 0x003B service tag decodes, and refuses what is not ours")
+    check(questdefs.decode_service_select(0x805003) == (80, 0x03)
+          and questdefs.decode_service_select(0x805001) == (80, 0x01)
+          and questdefs.decode_service_select(0x85B601) == (1462, 0x01),
+          "three raw dwords off ArenaNet's wire decode to their known pairs",
+          "0x805003 -> quest 80 code 3, 0x805001 -> 80/1, 0x85B601 -> 1462/1")
+    check(questdefs.encode_service_select(80, 0x01) == 0x805001,
+          "and the encoder is the exact inverse",
+          "a decoder with no encoder is hard to refute")
+    for qid in (1, 80, 218, 1462, 0x7FFF):
+        for code in (0x01, 0x03, 0x07, 0xFF):
+            got = questdefs.decode_service_select(
+                questdefs.encode_service_select(qid, code))
+            if got != (qid, code):
+                break
+        else:
+            continue
+        break
+    check(got == (qid, code), "round trip holds across the id and code range",
+          f"last: quest {qid} code 0x{code:02X} -> {got}")
+    check(questdefs.decode_service_select(0x005001) is None,
+          "a dword with the TAG BIT CLEAR is refused, not decoded",
+          "0x800000 is what says 'quest family'")
+    check(questdefs.decode_service_select(0x01805001) is None,
+          "and one with a HIGH BYTE set is refused",
+          "all 22 captured selects are high-byte 0x00; the other four service "
+          "families would decode to a fictional quest id")
+
+    print("\n9. the enc_* columns are WIRE code units, not archive string ids")
     # The trap FINDINGS 3.5 names: 0x3D64 on the wire denotes archive id 15460.
     # Conflating them resolves to 15716, an encrypted record returning None.
     for qid, row in sorted(rows.items()):
