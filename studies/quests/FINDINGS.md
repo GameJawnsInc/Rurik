@@ -92,7 +92,56 @@ P:\Code\Base\rtl\Array.h(587)                    build 38833
 
 with `Arg:01880000` (0x188) and `Arg:00000063` (agent 99) on the create frame, and `Pc:00117bdb` rebasing to `0x487BDB` — the assert routine at `0x00487BC0`. `agents.npc_properties`' own docstring already says this: *"the definition index is a raw array index on the client, and creating an agent whose definition was never sent takes the client down on `index < m_count`"*. The failure was a bad number, not a new mechanism, and it reproduced a documented one. Two things follow: **push `0x0056`/`0x0057` before any create on a definition the client has not been told about**, and the `WORLD_CREATE_AGENT` model dword is `MONSTER_BASE | def` where the definition is the **low 16+ bits in decimal** — read the hex carefully.
 
-**Remaining candidates are now 2 and 3 above**, and 2 should be done properly before 3: the earlier scan looked only at the window between `INTERACT` and the click, which is where the original hypothesis came from and also its blind spot. Widen it to the whole session and diff what precedes a giver interaction against a non-giver one. `0x004B` (bulk assign of the `+0x518` list, `array32[64]`) and `0x00FA` (`array32[32]`, once per session at map load) are the two load-time bulk assignments in the corpus that **carried empty arrays and therefore no evidence**, and a per-NPC available-quest list is exactly the shape either could have.
+#### Candidate 2 CONFIRMED, twice over: `0x009F` property 11 is the marker, and `GAME_SMSG 0x007E` is the option
+
+Widening the scan from the INTERACT-to-click window to the whole session — the blind spot named above — found **two** messages, and they do different jobs.
+
+**`GENERIC_VALUE 0x009F` property 11 is the quest-giver marker. OBSERVED.** It lands on 5 of 68 created agents in `:60935` and 9 of 88 in `:62994`, covers every dialog speaker in both, and takes exactly two values. The transitions fix their meaning against the quest lifecycle:
+
+```
+17.941  PROP11 agent 40 = 5                        map load, no interaction yet
+28.179  QUEST_ADD 80      + PROP11 agent 40 = 4    accepted; 40 becomes turn-in
+46.797  QUEST_REMOVE 80   + PROP11 agent 40 = 5    turned in at 40; back to 5
+66.737  PROP11 agent 36 = 4                        quest 218 held, turned in at 36
+```
+
+**5 = has a quest to offer, 4 = turn one in here** — the green `!` and green `?`. RECONSTRUCTION for the two English words, OBSERVED for the transitions (2 of 2 in each direction). Confirmed on screen: sending `0x009F [11, agent, 5]` puts a green exclamation over the NPC's head (`vault/captures/harness/20260815T235047`). **This closes part of §7's open question about `0x009F`'s property enum, which the smsg pass left as "naming them needs a probe".**
+
+**And it is NOT what makes an option clickable** — the probe was built to separate the glyph from the option and did: the `!` appeared and the dialog stayed plain text.
+
+**`GAME_SMSG 0x007E` is the dialog option. OBSERVED, and the check could have failed.** Shape `[u8 kind, string16(128) label, u32 tag, u32]` from the client's own RECV descriptor and `schema/messages.json`, which agree. **The tag is the exact dword the client sends back in `0x003B` if that line is clicked**, and the refutable form of the claim is that no click can arrive unannounced:
+
+> **22 of 22 clicks across both keyed sessions were announced by a prior `0x007E` on the same connection carrying the exact dword. Zero counterexamples.**
+
+`t=26.816` announces `0x805003`; the player sends exactly that at `t=27.679`. `t=28.479` announces `0x85B603`; sent at `t=28.780`. `field1` takes 15,16,17,18,21,22,23 (an option kind, unnamed; quest offers use 18) and `field4` is `0xFFFFFFFF` in 37 of 37.
+
+**ORDER MATTERS, and getting it wrong looks exactly like the message not working.** ArenaNet's burst is `0x0080` → `0x0081` → `0x007E`. The first attempt sent the option *before* the flush, into a buffer `0x0081` then zeroed; the window opened with our prose and no clickable line. `0x0081` opens the window; options are appended to an open one.
+
+#### Q5's acceptance criterion is MET
+
+`vault/captures/harness/20260816T000109`, build 38833, map 449 — the whole loop, every message ours:
+
+```
+s2c 0x0056/0x0057  def 1480          the giver's type
+s2c 0x0020         agent 99          a body with its nameplate
+s2c 0x009F [11,99,5]                 the green '!'
+s2c 0x0080         our giver_dialogue from content/quests.toml
+s2c 0x0081         flush -> the window opens
+s2c 0x007E [18, "Accept: A First Errand", 0x85B701, 0xFFFFFFFF]
+c2s 0x003B 0x85B701                  THE PLAYER CLICKED OUR OPTION
+    NPC_SERVICE_SELECT quest 1463 code 0x01
+s2c 0x0049         QUEST_ADD[1463] built from the content row
+c2s 0x0012         REQUEST_QUEST_INFO -- the client asks, 1 of 1
+s2c 0x004C         QUEST_DESCRIPTION[1463 template]
+```
+
+On screen: a quest log reading **Primary Quests → Ascalon** with an Abandon button, a Quest Summary carrying **our objectives and our description**, and a tracker line under the level bar. **This is the first authored quest in this project to exist in a retail client's quest log, and the first authored prose of any kind to reach one.** It also retires Q3's acceptance criterion in the same run — the detail pane shows our description, and `0x004C`'s `template` framing is confirmed on a live client rather than offline.
+
+**Still open:** `0x007E`'s `field1` kind enum (7 values, none named), whether an option can be declined, and the turn-in half — `0x003B` code `0x07` is decoded and unarmed.
+
+**Superseded: candidate 3** (replay the 43-unit offer line) is moot; the option was never in the dialog string.
+
+~~**Remaining candidates are now 2 and 3 above**~~, and 2 should be done properly before 3: the earlier scan looked only at the window between `INTERACT` and the click, which is where the original hypothesis came from and also its blind spot. Widen it to the whole session and diff what precedes a giver interaction against a non-giver one. `0x004B` (bulk assign of the `+0x518` list, `array32[64]`) and `0x00FA` (`array32[32]`, once per session at map load) are the two load-time bulk assignments in the corpus that **carried empty arrays and therefore no evidence**, and a per-NPC available-quest list is exactly the shape either could have.
 
 **Still not settled: the compass marker.** This run was on **map 449**, not 148, so it says nothing about §7.3 — map 148 cannot load at all right now (see below), and the marker coordinates are 148's. The free rider went unclaimed and §7.3's test is still open.
 

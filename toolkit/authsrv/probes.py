@@ -2698,6 +2698,142 @@ def _quest_giver_def_steps(origin):
     ]
 
 
+# GENERIC_VALUE 0x009F is [property_id, agent_id, value]. Property 11 is the
+# QUEST MARKER, MEASURED across both keyed sessions -- it lands on 5 of 68
+# created agents in :60935 and 9 of 88 in :62994, covers every dialog speaker in
+# both, and takes only two values. The trace that fixes their meaning:
+#
+#   17.941  PROP11 agent 40 = 5                       map load, no interaction yet
+#   28.179  QUEST_ADD 80        + PROP11 agent 40 = 4  accepted; 40 becomes turn-in
+#   46.797  QUEST_REMOVE 80     + PROP11 agent 40 = 5  turned in at 40; back to 5
+#   66.737  PROP11 agent 36 = 4                        quest 218 held, turned in at 36
+#
+# So 5 = "has a quest to OFFER" and 4 = "turn one in HERE" -- the green '!' and
+# green '?' every Guild Wars player knows. Agent 99 holds 5 throughout, being an
+# offerer the whole time. RECONSTRUCTION for the two English words; OBSERVED for
+# the transitions, which flip with the quest lifecycle 2 of 2 in each direction.
+GENERIC_VALUE = 0x009F
+PROP_QUEST_MARKER = 11
+QUEST_MARKER_OFFER = 5
+QUEST_MARKER_TURN_IN = 4
+
+
+def _quest_giver_mark_steps(origin):
+    ox, oy, plane = origin
+    return [
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}",
+             "nothing yet -- and mandatory before the create, or Array.h:587."),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}",
+             "still nothing."),
+        Step(3.0, 0x0020,
+             create_agent(_GIVER_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 150, oy, plane),
+             f"WORLD_CREATE_AGENT({_GIVER_AGENT}), the giver's own definition",
+             "a body with the guard's nameplate, as quest_giver_def already "
+             "showed. No marker over its head yet."),
+        Step(2.0, GENERIC_VALUE,
+             [PROP_QUEST_MARKER, _GIVER_AGENT, QUEST_MARKER_OFFER],
+             f"GENERIC_VALUE property {PROP_QUEST_MARKER} = "
+             f"{QUEST_MARKER_OFFER} on agent {_GIVER_AGENT} -- THE MARKER",
+             "A GREEN '!' OVER THE NPC'S HEAD. This is the message ArenaNet "
+             "sends at map load for every quest giver, and the one this arc "
+             "missed twice by searching only between INTERACT and the click. "
+             "If the exclamation appears, property 11 is named."),
+        Step(4.0, 0x0080, [questdefs.enc_string(_ARENANET_OFFER_LINE)],
+             "0x0080, the same captured greeting as the two runs before",
+             "nothing yet -- 0x0080 accumulates."),
+        Step(8.0, 0x0081, [_GIVER_AGENT],
+             f"0x0081 flush at agent {_GIVER_AGENT}",
+             "THE QUESTION: is the last line CLICKABLE NOW? Two runs sent this "
+             "identical greeting -- one at a hatcher, one at this very "
+             "definition -- and both rendered plain text with no option and no "
+             "0x003B. The marker is the only thing added. If an option renders, "
+             "the client arms a dialog's quest options from property 11 and "
+             "candidate 2 is confirmed. If it still does not, the marker is "
+             "only the overhead glyph and the option needs the quest id from "
+             "somewhere this arc has still not found."),
+    ]
+
+
+# GAME_SMSG 0x007E IS THE DIALOG OPTION. [u8 kind, string16(128) label,
+# u32 tag, u32 0xFFFFFFFF], from the client's own RECV descriptor and
+# schema/messages.json, which agree.
+#
+# The tag is the DWORD THE CLIENT WILL SEND BACK in GAME_CMSG 0x003B if the
+# player clicks that line -- the same 0x800000 | (quest_id << 8) | code the
+# accept arm already decodes. MEASURED, and the check could have failed:
+# **22 of 22 clicks across both keyed sessions were announced by a prior 0x007E
+# on the same connection, with zero counterexamples.** t=26.816 announces
+# 0x805003 and the player sends exactly that at t=27.679; t=28.479 announces
+# 0x85B603 and the player sends it at t=28.780.
+#
+# This is what two earlier runs were missing, and it was never in the dialog
+# string, the agent's definition or the quest marker. It arrives beside the
+# 0x0080/0x0081 pair and nothing had looked at it.
+#
+# field1 takes 15,16,17,18,21,22,23 in the corpus -- an option KIND or icon,
+# unnamed. 18 is what the quest offers used. field4 is 0xFFFFFFFF in 37 of 37.
+DIALOG_OPTION = 0x007E
+OPTION_KIND_QUEST = 18
+OPTION_NO_ICON = 0xFFFFFFFF
+
+
+def _quest_option_steps(origin):
+    ox, oy, plane = origin
+    row = questdefs.load()[1463]
+    tag = questdefs.encode_service_select(1463, questdefs.SERVICE_ACCEPT)
+    return [
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
+        Step(3.0, 0x0020,
+             create_agent(_GIVER_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 150, oy, plane),
+             f"WORLD_CREATE_AGENT({_GIVER_AGENT})", "a body with a nameplate."),
+        Step(2.0, GENERIC_VALUE,
+             [PROP_QUEST_MARKER, _GIVER_AGENT, QUEST_MARKER_OFFER],
+             f"GENERIC_VALUE property {PROP_QUEST_MARKER} = "
+             f"{QUEST_MARKER_OFFER} -- the green '!'",
+             "the exclamation mark, already confirmed by quest_giver_mark."),
+        Step(3.0, 0x0080,
+             [questdefs.coded_literal(row["giver_dialogue"],
+                                      row.get("wire_framing", "template"),
+                                      limit=questdefs.DIALOG_UNITS)],
+             "0x0080 carrying OUR OWN giver line from content/quests.toml",
+             "nothing yet -- 0x0080 accumulates. Note this is our prose, not "
+             "ArenaNet's replayed greeting: the two earlier runs borrowed their "
+             "line because ours had never been tested in a dialog."),
+        # ORDER MATTERS AND THE FIRST ATTEMPT HAD IT BACKWARDS. ArenaNet's own
+        # t=26.816 burst is 0x0080, then 0x0081, THEN the two 0x007E options,
+        # then the marker. Sending the option before the flush put it into a
+        # text buffer that 0x0081 then zeroed, and the window opened with our
+        # prose and no clickable line -- which looked exactly like "0x007E does
+        # not work" and was really "0x0081 opens the window; options are
+        # appended to an open one".
+        Step(6.0, 0x0081, [_GIVER_AGENT],
+             f"0x0081 flush at agent {_GIVER_AGENT}",
+             "the window opens with OUR prose. The option arrives next."),
+        Step(1.0, DIALOG_OPTION,
+             [OPTION_KIND_QUEST,
+              questdefs.coded_literal("Accept: A First Errand",
+                                      "template", limit=128),
+              tag, OPTION_NO_ICON],
+             f"0x007E DIALOG OPTION -- our label, tag 0x{tag:06X} "
+             f"(quest 1463, code 0x{questdefs.SERVICE_ACCEPT:02X} ACCEPT)",
+             "THE WHOLE LOOP: a CLICKABLE LINE appended to the open window. "
+             f"Clicking it must send `c2s 0x003B 0x{tag:06X}`, which our accept "
+             "arm decodes to quest 1463 code 1 and answers with 0x0049 built "
+             "from the content row -- so the quest appears in the log named "
+             "'Ascalon'. Red at any link: no option drawn, no 0x003B, a "
+             "different dword, or a 0x0049 that draws no log entry."),
+    ]
+
+
 def _quest_offer_steps():
     return [
         Step(6.0, 0x0080, [questdefs.enc_string(_ARENANET_OFFER_LINE)],
@@ -2715,6 +2851,45 @@ def _quest_offer_steps():
 
 
 PROBES = {
+    "quest_option": lambda a, o: Probe(
+        question="Can a player accept OUR quest, from OUR dialog, by clicking "
+                 "an option we sent -- the whole Q5 loop end to end?",
+        predicts="A WINDOW WITH OUR TEXT AND A CLICKABLE LINE, and clicking it "
+                 "sends `c2s 0x003B 0x85B701` (quest 1463, code 1), which the "
+                 "accept arm answers with 0x0049 from content/quests.toml so "
+                 "the quest appears in the log. 0x007E is the option message "
+                 "and the confidence is high for one reason: 22 of 22 clicks "
+                 "in both keyed sessions were announced by a prior 0x007E "
+                 "carrying the exact dword, zero counterexamples. Four things "
+                 "can still go red independently -- no option drawn, no 0x003B, "
+                 "a dword we did not predict, or a 0x0049 that draws no log "
+                 "entry -- and each names a different broken link.",
+        steps=_quest_option_steps(o),
+        note="RUN ON --map 449. Click the option line in the window, around "
+             "(0.491, 0.541) at 1936x1040. This is the first probe in the arc "
+             "whose dialog text is OURS rather than ArenaNet's replayed line.",
+    ),
+    "quest_giver_mark": lambda a, o: Probe(
+        question="Does GENERIC_VALUE property 11 -- the quest marker -- arm the "
+                 "clickable option that two earlier runs could not produce?",
+        predicts="A GREEN '!' OVER THE NPC, and the greeting's last line "
+                 "becomes CLICKABLE, sending 0x003B. Property 11 was found by "
+                 "widening the corpus scan from the INTERACT-to-click window to "
+                 "the whole session, which is where it was hiding: ArenaNet "
+                 "writes it AT MAP LOAD, 4 of 4 speakers covered, on 5 of 68 "
+                 "created agents, with exactly two values whose transitions "
+                 "track the quest lifecycle (5 -> 4 on accept, 4 -> 5 on turn "
+                 "in, 2 of 2 each way). The marker alone may still not carry "
+                 "WHICH quest, in which case the '!' appears and no option "
+                 "does -- and that separates the glyph from the option "
+                 "cleanly, which no run so far has done.",
+        steps=_quest_giver_mark_steps(o),
+        note="RUN ON --map 449. One variable against quest_giver_def: the "
+             "0x009F property-11 write. Click the window's last line around "
+             "(0.491, 0.541) at 1936x1040. Watch the NPC's HEAD as well as the "
+             "window -- the glyph and the option are two separate outcomes and "
+             "this run can produce either without the other.",
+    ),
     "quest_giver_def": lambda a, o: Probe(
         question="Does the clickable quest option come from the AGENT rather "
                  "than the dialog string -- specifically, from its definition?",
