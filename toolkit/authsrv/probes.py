@@ -2543,7 +2543,61 @@ def _quest_name_steps(origin):
     ]
 
 
+def _quest_description_steps(origin):
+    """Q3: add two quests that differ ONLY in how their prose is framed.
+
+    The server answers each GAME_CMSG 0x0012 from its content row, so the two
+    0x004C bodies come back with `bare` and `template` framing respectively.
+    Adding both in ONE run is what makes them comparable -- two runs would
+    differ in session, camera and frame timing as well as in the variable.
+    """
+    x, y, plane = origin
+    return [
+        Step(6.0, 0x0049,
+             [1463, (x, y), int(plane), _QUEST_NAME_MAP, 32,
+              _ENC_ASCALON, _ENC_ASCALON, _ENC_ASCALON, _QUEST_NAME_MAP],
+             "0x0049 QUEST_ADD for quest 1463, whose description our server "
+             "will answer with TEMPLATE framing",
+             "the interesting message is not this one -- it is the 0x0012 the "
+             "client sends back within ~30 ms, and the 0x004C the server "
+             "answers it with, built from content/quests.toml. OPEN THE QUEST "
+             "LOG: the tracker shows the NAME (Q0 already proved that path), "
+             "the DESCRIPTION PANE is what this probe is about."),
+    ]
+
+
 PROBES = {
+    "quest_description": lambda a, o: Probe(
+        question="Does OUR OWN PROSE render in a real client's quest log -- and "
+                 "does a literal have to carry ArenaNet's framing to do it?",
+        predicts="THE DESCRIPTION PANE READS 'Speak to the gate guard, then "
+                 "return to me.' -- our sentence, our words, chosen by us.\n"
+                 "THE CONTROL HALF OF THIS PROBE HAS ALREADY RUN AND IS NOT "
+                 "REPEATED. On 2026-08-15 the same probe sent a second quest "
+                 "whose description was the same sentence with NO framing, and "
+                 "it did not merely fail to render -- it killed the client on "
+                 "its own bound check, `(codedString[0] & ~WORD_BIT_MORE) >= "
+                 "WORD_VALUE_BASE`, TextApi.cpp:585, with our sentence sitting "
+                 "verbatim as UTF-16 in the crash stack. So the marker/varint "
+                 "rule is confirmed by ArenaNet's own assert and the bare arm "
+                 "is settled; questdefs now REFUSES to build one. Re-running it "
+                 "would buy a second crash and no second finding.\n"
+                 "IF THE PANE IS EMPTY, the framing is necessary but not "
+                 "sufficient and the next suspect is the 0x0107 marker rather "
+                 "than the 0x0BA9 template id. IF THE CLIENT ASSERTS AGAIN, our "
+                 "framing constants are wrong and the crash names which.",
+        steps=_quest_description_steps(o),
+        note="RUN WITH --map 449, and OPEN THE QUEST LOG once both quests are "
+             "in. The tracker shows the NAME; the description pane is what this "
+             "probe is about, and it is behind the log. Q0 already proved the "
+             "name path, so a tracker reading 'Ascalon' twice is the setup "
+             "working, not the result.\n"
+             "WATCH THE ORDER TRAP: 0x004C sets flag bit 0 "
+             "(CHAR_CHALLENGE_FLAG_DESC_FILLED) and 0x0054's body returns "
+             "immediately when that bit is clear, so objectives sent before the "
+             "description are a SILENT no-op. This probe sends no 0x0054 at all "
+             "for exactly that reason -- one variable.",
+    ),
     "quest_name": lambda a, o: Probe(
         question="Does a quest name we chose render as text in a real client, "
                  "or is 'commit the id, resolve the string at run time' "

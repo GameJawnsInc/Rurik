@@ -1,0 +1,170 @@
+"""Quest rows out of content/, and the coded string a quest field goes on as.
+
+    python toolkit/authsrv/questdefs.py          # what the content store holds
+
+WHY THIS IS ITS OWN MODULE. The server needs two things to answer GAME_CMSG
+0x0012 REQUEST_QUEST_INFO: which quest a u32 names, and what bytes our prose
+becomes. The second is the interesting half and it is testable with no socket,
+no client and no vault, so it lives where a test can reach it rather than
+inline in a dispatch arm.
+
+THE CODED STRING, AND WHY A BARE SENTENCE IS NOT ONE. `studies/textrec/
+FINDINGS.md` 4 derived the rule from the client's own TextParser.cpp and
+`studies/quests/FINDINGS.md` 3.2 confirmed it against ArenaNet's wire, 66 of 66
+byte-identical: in a coded string, a word **< 0x100 is a MARKER** and a word
+**>= 0x100 is a 0x100-biased varint** naming an archive string id. Our own
+prose is ASCII, so every code unit in it is below 0x100 -- which means a
+sentence sent verbatim is not text to this parser at all, it is a run of
+markers.
+
+ArenaNet never sends one bare. Every literal in the live corpus arrives framed:
+
+    0x0BA9  the `%str1%` template id (archive id 2729, a PLAIN record)
+    0x0107  the marker that precedes the literal run
+    <the UTF-16 code units>
+    0x0001  terminator
+
+OBSERVED, in the 0x004C for quest 80 and in the 0x0080 dialog text, where the
+substituted literal is the player's own character name.
+
+**Both spellings are offered and NEITHER is asserted correct**, because no
+string we built has ever been sent to a client -- `probes.py`'s Q0 sent a bare
+string ID (which needs no framing, being >= 0x100) and that is a different
+question from a literal. `content/quests.toml` carries `wire_framing` per row
+so one run can tell them apart. When the run has spoken, delete the loser here
+and say so in FINDINGS -- do not leave both and call it flexibility.
+
+PROVENANCE. Nothing here reads ArenaNet's text. `0x0BA9`, `0x0107` and `0x0001`
+are three MEASURED constants -- a template id, a marker and a terminator, read
+off our own captures -- and the words they wrap are ours.
+
+Standard library only.
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import content                                              # noqa: E402
+
+# MEASURED, from the live corpus (studies/quests/FINDINGS.md 3.3): the framing
+# ArenaNet puts around every literal it substitutes into a coded string.
+TEMPLATE_STR1 = 0x0BA9      # archive id 2729, `%str1%`, a plain record
+LITERAL_MARK = 0x0107       # archive id 263, precedes the literal run
+LITERAL_END = 0x0001        # terminator
+
+# The client's own field width for both 0x004C slots, from its RECV descriptor
+# (msgshape.py 0x004C -> string16(128)) and from schema/messages.json, which
+# agree. 128 CODE UNITS, and the framing spends 3 of them.
+FIELD_UNITS = 128
+
+FRAMINGS = ("bare", "template")
+
+
+def coded_literal(text, framing="template"):
+    """Our prose as the code-unit string `codec.encode` wants for a string16.
+
+    Returns a `str`, not a list: `codec.py` takes a `str` and encodes it as
+    UTF-16 code units, so the caller must hand it characters. That conversion
+    is the trap `studies/quests/FINDINGS.md` 3.5 names.
+
+    Raises ValueError rather than truncating when the result will not fit the
+    field. A silently clipped description would render as a half sentence and
+    read as a client-side failure, which is the shape of bug this project keeps
+    paying for -- the server would look correct and the screen would not.
+    """
+    if framing not in FRAMINGS:
+        raise ValueError(f"unknown wire_framing {framing!r}; "
+                         f"expected one of {FRAMINGS}")
+    units = [ord(c) for c in text]
+    if any(u > 0xFFFF for u in units):
+        raise ValueError("astral characters do not fit one UTF-16 code unit; "
+                         "the wire field is a u16 array")
+    if framing == "template":
+        units = [TEMPLATE_STR1, LITERAL_MARK] + units + [LITERAL_END]
+    elif units and (units[0] & ~0x8000) < 0x100:
+        # MEASURED 2026-08-15, by doing it: a 0x004C whose description began
+        # `0x53` ('S') killed a real client on its own bound check --
+        #     Assertion: (codedString[0] & ~WORD_BIT_MORE) >= WORD_VALUE_BASE
+        #     P:\Code\Engine\Text\TextApi.cpp(585)          build 38833
+        # -- and `asserts.py --grep WORD_VALUE_BASE` finds that same expression
+        # at 0x007c9b1d, with five more sites across TextParser and TextEncode.
+        # The crash stack carried our sentence verbatim as UTF-16, so the bytes
+        # arrived intact and the FIRST WORD is what it refused.
+        #
+        # That is studies/textrec's marker/varint rule confirmed by the client's
+        # own assert, naming both constants. So this is not a style preference:
+        # a literal run MUST be introduced by a word >= WORD_VALUE_BASE, which
+        # is what `template` framing's 0x0BA9 does. Refused here rather than on
+        # the wire, because the failure mode is a CRASH DIALOG, not a bad glyph.
+        raise ValueError(
+            f"bare framing would put 0x{units[0]:04X} first, which is below "
+            f"WORD_VALUE_BASE (0x100). The client asserts on exactly this "
+            f"(TextApi.cpp:585) and dies -- MEASURED, not predicted. Use "
+            f"wire_framing = \"template\"; `bare` is only for a payload that "
+            f"already starts with a string id.")
+    if len(units) > FIELD_UNITS:
+        raise ValueError(
+            f"{len(units)} code units exceeds the client's {FIELD_UNITS}-unit "
+            f"field ({framing} framing spends "
+            f"{3 if framing == 'template' else 0} on the framing itself). "
+            f"Shorten the text; do not truncate it here.")
+    return "".join(chr(u) for u in units)
+
+
+def enc_string(units):
+    """A list of wire code units (an `enc_*` column) as a `str` for the codec."""
+    return "".join(chr(int(u)) for u in units)
+
+
+def load(world=None):
+    """{quest_id: row} for every content quest row.
+
+    Keyed by the u32 the WIRE uses, not by the TOML section name, because that
+    is what arrives in GAME_CMSG 0x0012 and what the server has to look up.
+    """
+    world = world or content.load()
+    out = {}
+    for name, row in world.rows("quest").items():
+        qid = row.get("quest_id")
+        if qid is None:
+            raise ValueError(f"content quest row {name!r} has no quest_id")
+        if qid in out:
+            raise ValueError(
+                f"two content quest rows claim quest_id {qid}: "
+                f"{out[qid]['_name']!r} and {name!r}. The id is the client's "
+                f"only handle on a quest, so a duplicate is a row that can "
+                f"never be addressed.")
+        row = dict(row)
+        row["_name"] = name
+        out[qid] = row
+    return out
+
+
+def description_fields(row):
+    """(description, objectives) as codec-ready strings for GAME_SMSG 0x004C."""
+    framing = row.get("wire_framing", "template")
+    return (coded_literal(row.get("description", ""), framing),
+            coded_literal(row.get("objectives", ""), framing))
+
+
+def main():
+    quests = load()
+    if not quests:
+        print("no quest rows in content/")
+        return 0
+    print(f"{len(quests)} quest row(s):\n")
+    for qid in sorted(quests):
+        row = quests[qid]
+        desc, obj = description_fields(row)
+        print(f"  {qid:>5}  {row['_name']}")
+        print(f"         enc_name    {row.get('enc_name')}")
+        print(f"         framing     {row.get('wire_framing', 'template')}")
+        print(f"         description {len(desc)} code units, "
+              f"first: {[hex(ord(c)) for c in desc[:4]]}")
+        print(f"         objectives  {len(obj)} code units")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

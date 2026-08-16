@@ -51,6 +51,23 @@ import probes  # noqa: E402
 import labelrun  # noqa: E402
 import agents  # noqa: E402
 import origin  # noqa: E402
+import questdefs  # noqa: E402
+
+_QUEST_ROWS = None
+
+
+def quest_rows():
+    """{quest_id: row} from content/, loaded once.
+
+    Cached because the fetch it answers is a per-quest pull and re-reading the
+    whole content store inside a dispatch arm would put a TOML parse on the
+    latency path of a message ArenaNet answers in 30-60 ms. Not cached across
+    a hot reload, because there is no hot reload.
+    """
+    global _QUEST_ROWS
+    if _QUEST_ROWS is None:
+        _QUEST_ROWS = questdefs.load()
+    return _QUEST_ROWS
 
 
 def _f32(x):
@@ -1353,6 +1370,25 @@ GAME_CMSG_INTERACT_PLAYER = 0x0033
 # at every quest giver the player talks to -- inventing a behaviour ArenaNet's
 # own server demonstrably does not have.
 GAME_CMSG_INTERACT_AGENT = 0x0039
+
+# The client's FETCH for a quest's description, and our answer to it.
+#
+# It is a pull on a failure branch: the client reaches this sender only when a
+# quest-description lookup MISSES, and ArenaNet answers GAME_SMSG 0x004C in
+# 30.7-61.5 ms. So the responder is what is mandatory, not any particular
+# moment to volunteer the text -- studies/quests/FINDINGS.md 2.3 refuted the
+# tempting opposite reading ("do not send 0x004C unsolicited") on ArenaNet's
+# own traffic, where quest 1462 gets a pushed 0x004C and the client asks anyway.
+#
+# 0x004C's body SETS FLAG BIT 0 of the log entry, CHAR_CHALLENGE_FLAG_DESC_FILLED
+# (ChCliApi.cpp:667, compiled `test al, 1`), and 0x0054's body RETURNS
+# IMMEDIATELY if that bit is clear (`test byte ptr [edi+4], 1; je` at
+# 0x0080F9CD). So an objectives update sent before the description is answered
+# is a SILENT NO-OP that looks exactly like the client ignoring us -- and
+# ArenaNet trips its own trap twice in our corpus. Order matters; this is the
+# message that unlocks the other.
+GAME_CMSG_REQUEST_QUEST_INFO = 0x0012
+GAME_SMSG_QUEST_DESCRIPTION = 0x004C
 
 # The client asks to use a skill and then WAITS to be told it worked. Pressing a
 # skill plays the bar animation and never casts, which is the same shape as every
@@ -5100,6 +5136,35 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # statistic about how many there have been.
                         state["interacting"] = values[1]
                         state["interact_byte"] = values[2]
+                    elif opcode == GAME_CMSG_REQUEST_QUEST_INFO:
+                        # Closes test_dispatch's recorded drop, whose reason was
+                        # "answering it needs a quest table this repo does not
+                        # have, and inventing quest text is worse than the drop."
+                        # The table now exists (content/quests.toml) and the text
+                        # is INVENTED ON PURPOSE -- ours, not a transcription of
+                        # ArenaNet's, which we could not make even if we wanted
+                        # it: their description ids resolve to encrypted archive
+                        # records whose key is NOT FOUND.
+                        #
+                        # An id we do not hold gets NO REPLY rather than an empty
+                        # 0x004C. An empty answer would set DESC_FILLED on an
+                        # entry we know nothing about and silently arm the
+                        # 0x0054 gate above -- the client would then accept
+                        # objective updates for a quest that has no description,
+                        # which is a worse state than the unanswered fetch and a
+                        # much harder one to see.
+                        qid = values[1]
+                        row = quest_rows().get(qid)
+                        if row is None:
+                            print(f"[c{conn_id}] REQUEST_QUEST_INFO for quest "
+                                  f"{qid}, which content/quests.toml does not "
+                                  f"hold -- not answering (an empty 0x004C "
+                                  f"would set DESC_FILLED on an unknown entry)")
+                        else:
+                            desc, obj = questdefs.description_fields(row)
+                            send(GAME_SMSG_QUEST_DESCRIPTION, [qid, desc, obj],
+                                 f"QUEST_DESCRIPTION[{qid} "
+                                 f"{row.get('wire_framing', 'template')}]")
                     elif opcode == GAME_CMSG_TARGET_SELECT:
                         # The client TELLS us the selection; it does not ask.
                         # Measured on ArenaNet's wire: nothing target-shaped

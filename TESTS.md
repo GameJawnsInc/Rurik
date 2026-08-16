@@ -2687,7 +2687,43 @@ Every one of these, in the order they were written:
   alone. **Floor 12, deliberately BELOW the healthy score of 23**: §1b, §2 and
   §2b all need the vault to hold an archive that is mid-replacement on a content
   id, which is a condition we want to go away -- a floor of 23 would turn a
-  HEALED vault into a red suite. The mandatory core is §0+§1+§3+§4. ~10 s),
+  HEALED vault into a red suite. The mandatory core is §0+§1+§3+§4. **§5, added
+  2026-08-15, pins the SCOPING**: `preflight(served=...)` narrows what is fatal
+  to the maps a run actually loads, because the guard's own rationale is per-map
+  and refusing a map-449 run over map 148's row had blocked EVERY loopback run
+  in the repo -- this file's own docstring names that cost ("one that refuses
+  everything gets deleted the first time it blocks a run"). §5 is SYNTHETIC, so
+  unlike §1b/§2/§2b it can never skip and joins the mandatory core, taking the
+  floor to 19. The check that matters most is the fail-closed one: an EMPTY set
+  must refuse exactly as `None` does, because a caller whose `--map` parse came
+  back empty must not thereby clear the whole table. Out-of-scope disagreements
+  are demoted and PRINTED, never hidden, and returned with level `fatal`
+  intact. ~10 s),
+  `toolkit/test_quests.py` (the quest table and the coded string its prose goes
+  on the wire as. Asked for by name in `studies/quests/FINDINGS.md` §7.9, whose
+  reason is the one CLAUDE.md opens with -- a quests table with nothing checking
+  it is a wish. **Its subject is the first authored PROSE this project has ever
+  put on a wire**, and the sharp edge is that a coded string reads a word
+  `< 0x100` as a MARKER and `>= 0x100` as a `0x100`-biased varint, so an ASCII
+  sentence is entirely sub-`0x100` and is not text to that parser at all --
+  §5 asserts exactly that about our own rows, which is what makes `bare` a
+  CONTROL PREDICTED TO FAIL rather than a style option. §4 is the refutable
+  half: `template` framing must add exactly `0x0BA9 0x0107 … 0x0001` and
+  stripping it must return the bare text character for character, because a
+  framing that reordered or dropped a unit would still fit the field and still
+  pass the width check. §2 does NOT read a provenance field back out of a dict
+  -- `rows()` returns rows with provenance already stripped, so that would be a
+  decoration; it WRITES a quest row without one and requires the loader to
+  refuse it, with the well-formed row as the positive control. §6 breaks each
+  refusal on purpose, including the off-by-three where 126 units fit `bare` and
+  do not fit `template` -- an error that would only ever show up on screen.
+  **What it deliberately does NOT assert is which framing is correct**: only a
+  client can say, and asserting one here would be two of our own components
+  agreeing and calling it evidence. No vault, no client, no socket, so nothing
+  can skip. Floor 17 against a healthy 21, and the derivation is in the file:
+  13 checks are row-count independent and each quest row adds 4, so 17 is what
+  the smallest table that can exist executes; §0 already catches an empty one.
+  ~2 s),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same
