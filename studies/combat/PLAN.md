@@ -578,6 +578,73 @@ different report.json shapes into the same tree, for any future cataloger.)
 | 9 | ✅ **2026-08-15, `34ee86b`** (§13) — the kill window is three messages in ArenaNet's order, reward byte-identical. The richer-looking `0x00EE` PAIR is refused as a non-kill mechanism, and two of this arc's own counts were corrected (5 deaths not 4; `0x0026`=8 four times not once). `test_killwindow` takes the corpus as its oracle, 21 checks |
 | 10 | ✅ **2026-08-15, `2610aa3`+merge** — `PLAN.md` §3 (R4a, R4b) and §8 updated dated and stamped; the profession ladder's L6 row annotated so the two ledgers agree. **Landing suite: 100 green / 1 red of 101, 4,947 checks.** The red is `test_contentids`, and it is ENVIRONMENTAL and attributed: `vault/run/2026-08-13_64fae3b1369b/Gw.dat` is held open by **another session's client, PID 16340, running from that directory since 11:47** — the archive is present (4.2 GB) and unreadable, which is the same "the client holds its own archive open" note main's own §8 carries. `test_contentids` passed at 23 checks earlier the same day with the archive free, and nothing in this arc touches archives, map content or `contentids.py`. Not killed, per the parallel-sessions rule |
 
+## §19. The player's windup: the anomaly was skill damage, and §17b was contaminated (2026-08-16)
+
+§17b measured the player's windup ratio at **0.5414, sd 0.2413** against the
+agents' tight **0.4540, sd 0.0520**, and concluded the player "is not the agent
+model with a different constant". It also flagged an anomaly — a player window
+carrying a second damage with no `ATTACK_STARTED` — and raised the possibility
+that ArenaNet sends the player's `ATTACK_STARTED` on **re-engagement** rather
+than per swing, which would make a per-swing windup unmeasurable.
+
+**Both readings were wrong, and the cause is one filter.** The measurement
+counted properties 16/17/18/55 as "damage" and paired them against
+`ATTACK_STARTED`. The player's stream **interleaves auto-attacks and skills**,
+so skill damage was being paired against swing starts.
+
+The clearest instance, conn `:64103` at t=9.744 — the exact instant skill 153's
+E5 fired:
+
+```
+damage prop=55  victim=31 (the PLAYER)  frac=+0.1800   <- a HEAL
+damage prop=55  victim=40 (the Wolf)    frac=-0.1875   <- damage
+```
+
+That is **Vampiric Gaze's life-steal**, both halves, on the armour-ignoring
+property. Neither is a swing. The magnitudes separate the two populations
+cleanly within a connection: auto-attacks land at **−0.0417 / −0.0312**, skills
+at −0.1875, −0.2292, −0.5, −0.625, −0.75.
+
+### What the corrected reading says
+
+**1. `ATTACK_STARTED` is PER SWING, not per engagement. The re-engagement
+hypothesis is REFUTED.** Conn `:64103` carries **7 starts in 18 s** — roughly
+one per attack interval — where a per-engagement message would have produced
+one or two. The "second damage with no start" that suggested otherwise was
+skill damage every time.
+
+**2. The scatter was contamination, not a property of the player.** Isolating
+property 16 at swing magnitude on the one connection with enough auto-attacks
+(`:64103`, declared speed 1.75):
+
+| start | windup | ratio | |
+|---|---|---|---|
+| 5.371 | 1.578 | 0.9017 | first of engagement |
+| 7.597 | 1.094 | 0.6251 | |
+| 15.024 | 0.802 | **0.4583** | in the agent band |
+| 16.744 | 0.817 | **0.4669** | in the agent band |
+
+Two of four sit inside the agents' observed band [0.4263, 0.4600], and the two
+long ones are the **opening swings of an engagement**, which is what closing to
+melee range would look like — the server starts the swing when the attack is
+ordered, and the landing waits on arrival.
+
+**3. But n is 4, and that is the honest headline.** One connection, one weapon
+speed, two clean samples. **This does not establish a player ratio**; what it
+establishes is that §17b's number was measuring something else, and that the
+corpus does **not** refute using the agent model for the player. The earlier
+"the player is different" conclusion is withdrawn.
+
+**Consequence for the unfixed auto-attack windup (§17e item 1):** copying
+`swing_windup`'s ratio to the player is now the *defensible* default rather
+than a guess contradicted by evidence — with the first-swing case explicitly
+unmodelled, since our server does not move the player and cannot express
+"still closing to range".
+
+**NEEDS-CAPTURE to settle it properly:** a run where the operator auto-attacks
+a stationary target **from inside melee range, with no skills pressed**, for
+20+ swings. That isolates the population this corpus only ever gives four of.
+
 ## §18. Skill damage moved to cast end, and it is on the wire (2026-08-16)
 
 The first of §17e's three divergences, fixed and verified at a client.
@@ -696,6 +763,14 @@ so the scatter is not a weapon-class artefact.
    transition (new target, re-engage) rather than once per swing the way it does
    for NPCs. **UNVERIFIED, and it would undercut reading a per-swing windup off
    the player at all.**
+
+> **SUPERSEDED 2026-08-16 by §19, and the ratio above with it.** The second
+> damage was SKILL damage — the player's stream interleaves auto-attacks and
+> casts, and this pass counted properties 16/17/18/55 alike, pairing life-steal
+> and spell hits against swing starts. `ATTACK_STARTED` **is** per swing (7 in
+> 18 s on one connection), the re-engagement hypothesis is refuted, and the
+> 0.5414/0.2413 figure is contamination rather than a property of the player.
+> Read §19 before using any number in this subsection.
 
 ### 17c. Cancellation has no dedicated signal, and the corpus has one candidate
 
