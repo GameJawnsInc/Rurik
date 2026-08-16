@@ -43,11 +43,32 @@ LEDGER = checks.Ledger("behaviourrun", floor=36)
 check = checks.adopt(LEDGER)
 
 ATTACK_STARTED = 4          # agents.GV_ATTACK_STARTED, written as a literal on purpose
+INF = float("inf")
 
 
 def mark(n, label, wire_t):
     return {"kind": "mark", "n": n, "label": label, "wire_t": wire_t,
             "wall": 1_700_000_000.0 + wire_t, "perf": 500.0 + wire_t}
+
+
+def create(t, agent_id, model_id, x, y):
+    """A decoded WORLD_CREATE_AGENT exactly as the framer hands it over: the opcode
+    at index 0, then agents.create_agent's 23 payload fields -- so the position
+    TUPLE sits at v[5], behind type (v[3]) and kind (v[4]).
+
+    The fixture this replaced was five hand-made values that never existed on any
+    wire, shaped to agree with the analyser's own bug: on a real decoded create
+    v[3:5] is (type, kind) = (1, 9), and the analyser read exactly that as a
+    coordinate while this test stayed green (studies/isle/PLAN.md 3.2). The shape
+    is written out as a literal, like every other message in this file, rather
+    than imported from agents.create_agent -- a drift in the builder must not
+    silently re-shape the fixture underneath the analyser.
+    """
+    return (t, BR.CREATE,
+            [BR.CREATE, agent_id, model_id, 1, 9,        # opcode; type LIVING, kind
+             (float(x), float(y)), 1, (1.0, 0.0), 1,     # pos tuple, plane, facing
+             288.0, 1.0, 0x41400000, 0x6D6F6E73,         # speed; 'mons' allegiance
+             0, 0, 0, 0, 0, (0.0, 0.0), (INF, INF), 0, 0, (INF, INF), 0])
 
 
 def main():
@@ -137,7 +158,7 @@ def main():
 
     # ---- 4. encounters: resolved, or withheld -------------------------------
     print("\n4. a subject that moved is UNRESOLVED, never estimated")
-    still = [(1.0, BR.CREATE, [0x20, 100, 0x20000001, 1000.0, 0.0]),
+    still = [create(1.0, 100, 0x20000001, 1000.0, 0.0),
              (5.0, BR.INT_TARGET, [0xA0, ATTACK_STARTED, 100, 7])]
     rows = BR.encounters(still)
     check(len(rows) == 1 and rows[0]["resolved"] and rows[0]["reaction"] is not None,
@@ -149,7 +170,7 @@ def main():
 
     for op, name in ((BR.MOVE_TO_POINT, "0x0029"), (BR.UPDATE_DESTINATION, "0x002A"),
                      (BR.UPDATE_SPEED, "0x002B")):
-        moved = [(1.0, BR.CREATE, [0x20, 100, 0x20000001, 1000.0, 0.0]),
+        moved = [create(1.0, 100, 0x20000001, 1000.0, 0.0),
                  (3.0, op, [op, 100, 0.0, 0.0]),
                  (5.0, BR.INT_TARGET, [0xA0, ATTACK_STARTED, 100, 7])]
         r = BR.encounters(moved)[0]
@@ -161,7 +182,7 @@ def main():
     # movement AFTER the reaction does not disqualify: the position at the reaction is
     # still the create coordinate. Getting this backwards would withhold every subject
     # that chased the player after striking, which is most of them.
-    after = [(1.0, BR.CREATE, [0x20, 100, 0x20000001, 1000.0, 0.0]),
+    after = [create(1.0, 100, 0x20000001, 1000.0, 0.0),
              (5.0, BR.INT_TARGET, [0xA0, ATTACK_STARTED, 100, 7]),
              (6.0, BR.MOVE_TO_POINT, [0x29, 100, 0.0, 0.0])]
     check(BR.encounters(after)[0]["resolved"],
@@ -171,8 +192,8 @@ def main():
 
     # ---- 5. models are never pooled -----------------------------------------
     print("\n5. no summary pools across model ids")
-    two = [(1.0, BR.CREATE, [0x20, 100, 0x20000001, 100.0, 0.0]),
-           (1.1, BR.CREATE, [0x20, 200, 0x20000002, 900.0, 0.0]),
+    two = [create(1.0, 100, 0x20000001, 100.0, 0.0),
+           create(1.1, 200, 0x20000002, 900.0, 0.0),
            (5.0, BR.INT_TARGET, [0xA0, ATTACK_STARTED, 100, 7]),
            (5.1, BR.INT_TARGET, [0xA0, ATTACK_STARTED, 200, 7])]
     groups = BR.by_model(BR.encounters(two))
