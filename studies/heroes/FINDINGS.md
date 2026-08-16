@@ -927,6 +927,85 @@ sabotaging the **player's** site (first) now fails too, where the old logic woul
 it. The arc got lucky in the safe direction — the new site happened to be last, so the hole
 announced itself instead of hiding.
 
+## 15. The skill bar — §4's negative was a SCOPING ERROR, and `0x0072` is HeroActivate
+
+### 15.1 `0x00DA` was in our tree the whole time
+
+**§4 is CORRECTED.** It recorded "no skill-bar-shaped field (8 discrete skill ids) anywhere"
+after scanning `0x0074`, `0x01BF`, `0x01C2` and every declared **SEND**-direction shape. That
+search space excluded the answer:
+
+**`0x00DA` SKILLBAR_UPDATE — `[agent_id, array32[8], array32[8], u8]`, RECV, agent-keyed,
+eight slots.**
+
+It is a server→client message this repo has been sending **for the player every session**.
+The negative was never about the wire; it was about where we looked. **That is the fourth
+time in this arc that the mechanism was already in the tree** — after `0x0037`, `0x003A` and
+`0x00B7`. The recurring shape is worth naming: *every* piece of a hero turned out to be an
+existing **agent-keyed** message we only ever addressed to the player.
+
+Sent to the hero's agent it is accepted — 75 bytes, eight skill ids, no assert.
+
+> **Honest limit: this is delivery, not display.** The hero's bar is accepted and the client
+> survives, but **I have not seen it rendered.** The hero panel is opened by clicking the
+> commander-slot button, and that click **crashes the client** (§15.3). So "the hero has a
+> skill bar" is supported by the message's shape and its acceptance, not by a screenshot of
+> eight icons. Do not upgrade this to OBSERVED-on-screen until someone sees the bar.
+
+### 15.2 `0x0072` is HeroActivate, not a diagnostic
+
+The arc opened this message as a refutable probe. It is the **activation**, and the client
+names its own fields: the worker's miss path calls out with the format string at `0xa95888`,
+
+`HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)`
+
+— four fields, in that order, matching the descriptor `[word, agent_id, dword, dword]`
+exactly. Renamed `agents.hero_activate(hero_id, agent_id, inventory_id, ai_mode)`.
+
+**Measured, and this is the readout that settles it.** Two runs identical but for `0x0072`:
+
+| `0x0072` | roster row | commander flag 1 |
+|---|---|---|
+| not sent | `Mo1 Hatcher [Collector]` — the **body's** name | greyed |
+| **sent** | **`Mo1 Norgu`** — `s_heroClientData` row 1 | **green, enabled** |
+
+So `0x0072` is what promotes a labelled body into a **hero**: the client switches the roster
+label from the agent to the static hero table, and `GmHeroCommander` binds the slot (which
+needs non-null `heroData` and non-zero `agentId`, asserts `:120`/`:121`). §14.4 credited the
+name switch to "the record being complete"; **that was half right and is now sharpened** —
+completeness is necessary, and `0x0072` is the trigger.
+
+**And `aiMode` is field 4.** The Fight/Guard/Avoid-Combat stance (`CHAR_AI_MODES == 3`, §3.2)
+is therefore **server-settable**, a partial answer to §3.3: we still cannot see the client
+*change* stance c2s, but we can *set* it. That is one of the arc's oldest open questions
+moving, from the wrong direction to the useful one.
+
+### 15.3 The commander-slot click crashes — a new, bounded unknown
+
+Clicking the hero's commander-slot button (the enabled `1`) takes the client down. It is a
+**UI path we have never fed**, and the obvious suspect is named in the very format string
+above: **`inventoryId`**, which we send as 0. A hero panel wants equipment. Bounded, cheap to
+attack next, and it is the reason §15.1's limit stands.
+
+### 15.4 The complete hero, as it now stands
+
+```
+0x0074  MERCENARY_INFO           hero index 1..39        creates charHeroData
+0x01D2/0x01CB                    party build window
+0x01C2  PARTY_HERO_ADD           msg+8 hero index, msg+0xc AGENT ID
+0x01D3/0x01B2                    commit + set mine
+0x0056/0x0057/0x0020             the body, at that agent id
+0x00A6  AGENT_SET_PROFESSION     the agent's own profession bytes
+0x0037  AGENT_ATTRIBUTE_POINTS   creates attribState          0x00B7  PLAYER_UPDATE_PROFESSION ctx+0x6BC, for the HERO       > order matters
+0x003A  AGENT_UPDATE_ATTRIBUTES  fills attrib[]               /
+0x00DA  SKILLBAR_UPDATE          the eight slots
+0x0072  HERO_ACTIVATE            hero, agent, inventoryId, aiMode
+```
+
+**Still open:** the commander-panel click (§15.3), `inventoryId`/equipment, `0x0074`'s other
+17 fields, the **c2s** direction proper (§3.3 — placing a flag, changing stance from the
+client), and follow AI.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows
