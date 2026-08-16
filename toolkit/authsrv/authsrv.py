@@ -180,6 +180,28 @@ def _objective_quests(state, agent):
             and quest_rows().get(qid, {}).get("objective_agent") == agent]
 
 
+# How close you must stand to talk. OURS -- the same status as ATTACK_RANGE and
+# AGGRO_RANGE above, and said plainly: nothing has measured ArenaNet's.
+#
+# WHAT IS MEASURED IS THE BEHAVIOUR, and it is why this gate exists at all. The
+# CLIENT sends 0x0039 on the click, from wherever you are standing, and then
+# walks you over -- so range is not something the client enforces before asking.
+# ArenaNet's server answers only some of them: 29 interacts in the live corpus,
+# 23 followed by an 0x0081 within 8 s naming the same agent, and 6 followed by
+# nothing. FINDINGS 2.5 already reads those 6 as the repeat-clicks a player
+# emits while walking into range, which is exactly the shape of a server that
+# ignores an out-of-range interact rather than refusing it.
+#
+# So: SILENCE, not a refusal message. Our server previously answered every
+# interact at any distance, which let the owner hold a conversation from across
+# the plaza. An attempt to measure the real number off the corpus produced
+# nothing usable -- the player's position is unknown at most interact moments
+# and the agent positions available are stale spawn coordinates, giving 541 to
+# 4275 units, which is not a range, it is a bad join. Left as ours until a probe
+# walks a player in and finds the boundary.
+INTERACT_RANGE = 250.0
+
+
 def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
     """Everything an INTERACT does, whichever side asked for it.
 
@@ -193,6 +215,20 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
     exercises exactly the code a click does. What it does not exercise is
     the client deciding to send 0x0039, which is separately OBSERVED.
     """
+    px, py = state["pos"]
+    spot = state.get("agent_pos", {}).get(agent_id)
+    if spot is not None:
+        gap = math.hypot(spot[0] - px, spot[1] - py)
+        if gap > INTERACT_RANGE:
+            # SILENTLY, as ArenaNet does. A refusal message would be a
+            # behaviour no capture shows, and the client is already walking the
+            # player over -- the next click, when it lands, is the one that
+            # gets an answer.
+            print(f"[c{conn_id}] INTERACT with agent {agent_id} at {gap:.0f}u "
+                  f"is beyond INTERACT_RANGE ({INTERACT_RANGE:.0f}u) -- "
+                  f"ignored, which is what ArenaNet does with 6 of its 29",
+                  flush=True)
+            return
     state["interacting"] = agent_id
     state["interact_byte"] = interact_byte
     # ANSWER IT. The comment above used to end "until an
@@ -212,6 +248,7 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
     # is also its own objective NPC completes first and then
     # offers the turn-in, rather than showing '?' one
     # interaction late.
+    spoke_objective = False
     for oqid, orow in _objective_quests(state, agent_id):
         state.setdefault("objectives_done", set()).add(oqid)
         print(f"[c{conn_id}] objective for quest {oqid} met "
@@ -237,7 +274,19 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
         # quest: the objective NPC's arrow comes down and the giver's goes
         # up. That is one visible event and must not arrive as two.
         _send_markers(send, state, " (objective met)")
-    lines = _quest_lines(state)
+        # AND IT SPEAKS. The objective NPC had no voice: talking to it ticked a
+        # flag and opened no window, so half the quest happened in silence and
+        # the NPC read as scenery with a trigger attached. One line, no options
+        # -- there is nothing to choose here, the visit IS the objective.
+        say = orow.get("objective_dialogue")
+        if say:
+            _dialog_window(send, agent_id,
+                           questdefs.coded_literal(
+                               say, orow.get("wire_framing", "template"),
+                               limit=questdefs.DIALOG_UNITS),
+                           [])
+            spoke_objective = True
+    lines = [] if spoke_objective else _quest_lines(state)
     if len(lines) == 1 and lines[0][1] != questdefs.SERVICE_IN_PROGRESS:
         # THE SINGLE-QUEST SHORTCUT, 7 of 7 on ArenaNet's wire and the common
         # path for us: one actionable line means the list screen is skipped and
@@ -328,11 +377,10 @@ def _quest_screen(send, agent_id, qid, code, row):
     if code == questdefs.SERVICE_TURN_IN:
         _dialog_window(
             send, agent_id,
-            questdefs.coded_literal(row.get("turn_in_dialogue") or
-                                    row["giver_dialogue"], framing,
-                                    limit=questdefs.DIALOG_UNITS),
+            _quest_prose(row, row.get("turn_in_dialogue")
+                         or row["giver_dialogue"]),
             [(qid, questdefs.SERVICE_TURN_IN,
-              questdefs.coded_literal(row.get("turn_in_label", "Complete"),
+              questdefs.coded_literal(row.get("turn_in_label", "Accept"),
                                       framing))])
         return
     # The OFFER screen. Both options, always: kind 17 / code 0x02 accompanies
@@ -340,8 +388,7 @@ def _quest_screen(send, agent_id, qid, code, row):
     # decline line has no way out.
     _dialog_window(
         send, agent_id,
-        questdefs.coded_literal(row["giver_dialogue"], framing,
-                                limit=questdefs.DIALOG_UNITS),
+        _quest_prose(row, row["giver_dialogue"]),
         [(qid, questdefs.SERVICE_ACCEPT,
           questdefs.coded_literal(row.get("accept_label", "Accept"), framing)),
          (qid, questdefs.SERVICE_DECLINE,
@@ -5040,6 +5087,21 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
         s2c_seq = itertools.count()
 
         def send(opcode, values, label, quiet=False):
+            # WHERE EVERY BODY IS, recorded from the message that puts it there.
+            # The interact range gate needs an agent's position and there was
+            # nowhere to get one: probes create agents by sending 0x0020
+            # directly, so no spawn bookkeeping sees them. Hooking the send is
+            # the one place that catches every create whatever sent it.
+            #
+            # Field order is create_agent()'s: [agent_id, model, type, kind,
+            # (x, y), plane, ...]. Positions go stale when an agent walks --
+            # nothing ours walks today, and a stale position makes the gate
+            # WRONG rather than absent, which is worth saying out loud.
+            if opcode == GAME_SMSG_WORLD_CREATE_AGENT and len(values) > 4:
+                spot = values[4]
+                if isinstance(spot, (list, tuple)) and len(spot) == 2:
+                    state.setdefault("agent_pos", {})[values[0]] = (
+                        float(spot[0]), float(spot[1]))
             blob = codec.encode(smsg, opcode, values)
             with send_lock:
                 seq = next(s2c_seq)
