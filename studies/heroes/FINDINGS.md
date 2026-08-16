@@ -1192,6 +1192,57 @@ keep 2, and read which name appears.
 The commander slot stayed bound and flag 1 stayed green throughout, so nothing here
 regressed the working hero.
 
+## 19. Splitting `msg+0x10` — `0x01C2` carries no hero identity at all
+
+The last confound from §18: three fields carried the value 2, so "identity comes from the
+hero id" was established while *which message* supplies it was not. One run splits them.
+
+Prediction on record before the run, with the target named: `s_heroClientData` row 3's name
+id is 36274, which `textrec.py` resolves to **Tahlkora**. So — **Tahlkora** means the
+identity comes from `0x01C2`'s `msg+0x10`; **Goren** means it comes from `0x0074`/`0x0072`.
+
+```
+0x0074  MERCENARY_INFO (hero 2)
+0x01C2  PARTY_HERO_ADD (party 1, wordA 1, wordB 200, 3, 0)   <- msg+0x10 = 3
+0x0072  HERO_ACTIVATE  (hero 2, agent 200, 0, 0)
+```
+
+**The row reads `Mo1 Goren`.**
+
+### 19.1 The result
+
+**The hero's identity comes from `0x0074`/`0x0072`, not from `0x01C2`.** The party-add
+message carried a *different* hero id and the client ignored it completely — no crash, no
+change, no Tahlkora.
+
+That sharpens §0's framing further than it was stated. The original claim was "a hero carries
+**no name** on the wire and must resolve through `s_heroClientData`". The stronger, measured
+version is: **`0x01C2` carries no hero IDENTITY at all.** Its five fields are a party id, an
+owner-ish word (§18: not the hero index, still UNVERIFIED between owner-player and
+owner-agent), the agent id, and two bytes. The hero's *whole* identity arrives on the
+data-cache family.
+
+### 19.2 `msg+0x10` is inert on everything observable
+
+Worth stating plainly because it is now doubly unconfirmed:
+
+- §17.1 read it as the **commander key**, from `GmHeroCommander`'s scan taking `[edi+8]`.
+- §17.2 put the hero id there and the panel click asserted **identically** — no fix.
+- §19 puts a *wrong* value there and **nothing changes** — no name change, no crash.
+
+So `msg+0x10` does not drive the roster label, does not repair the commander click, and does
+not complain when wrong. The scan genuinely reads `entry+8` — that disassembly stands — but
+every consequence we can observe is indifferent to it, which is consistent with §17.2's
+leading explanation that **the scan never runs** in our session. Its role stays
+**RECONSTRUCTION**, and the value we send (the hero id) is a best guess, not a measurement.
+
+### 19.3 What is left
+
+One confound survives: `0x0074` and `0x0072` both carried hero 2, so which of the two
+supplies the identity is undetermined. The same trick splits them — give `0x0072` a different
+hero id from `0x0074`'s — with the caveat that `0x0072` is the activation and may simply
+assert rather than render, which would itself be an answer.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

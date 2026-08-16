@@ -2264,6 +2264,11 @@ HERO_ACTIVATE = False
 # inventory-table key, an id naming no inventory should trip THAT assert and
 # name the field by experiment. Silence means it is inert on this path.
 HERO_INVENTORY = 0
+# 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
+# key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
+# 0x0072's hero id, which is the only way to tell which message supplies the
+# hero's identity. studies/heroes/FINDINGS.md 19.
+HERO_ROSTER_ID = None
 # HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
 HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
@@ -6518,7 +6523,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             if HERO_SWAP:
                                 _wa, _wb = _wb, _wa
                             _inside = _inside + (agents.party_hero_add(
-                                1, _wa, _wb, HERO),)
+                                1, _wa, _wb,
+                                HERO if HERO_ROSTER_ID is None
+                                else HERO_ROSTER_ID),)
                         for op, vals, label in agents.party_build(
                                 1, PLAYER_NUMBER, inside_window=_inside):
                             send(op, vals, label)
@@ -7506,6 +7513,11 @@ def main():
                          "labelled from the BODY's agent instead of resolving "
                          "the hero's own name from s_heroClientData. The "
                          "control arm for section 14.")
+    ap.add_argument("--hero-roster-id", type=int, default=None, metavar="N",
+                    help="Override 0x01C2's msg+0x10 only, leaving 0x0074 and "
+                         "0x0072 on --hero's value. Three fields normally "
+                         "carry the same hero id, so nothing can say which one "
+                         "the client reads the identity from; this splits them.")
     ap.add_argument("--hero-inventory", type=lambda x: int(x,0), default=0,
                     metavar="N",
                     help="HeroActivate's inventoryId (field 3), 0 so far. "
@@ -7741,6 +7753,8 @@ def main():
         HERO_ACTIVATE = a.hero_activate
         global HERO_INVENTORY, HERO_AI_MODE
         HERO_INVENTORY = a.hero_inventory
+        global HERO_ROSTER_ID
+        HERO_ROSTER_ID = a.hero_roster_id
         HERO_AI_MODE = a.hero_ai_mode
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS
