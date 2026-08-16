@@ -302,13 +302,20 @@ def intended_target(args):
     return seen.get("-authsrv") or next(iter(seen.values()))
 
 
-def assert_safe(exe, args):
+def assert_safe(exe, args, served_maps=None):
     """Refuse a binary we do not stage, and an argv that cannot mean one thing.
 
     Returns the host this argv points at, for the caller to hand to
     `cage.assert_launch_safe` -- which is what decides whether THIS binary may be
     pointed THERE. The split is deliberate: this function is about the argv, that one
     is about the bytes, and neither can answer the other's question.
+
+    `served_maps` is passed straight to `contentids.preflight`, which treats
+    None -- the default -- as "check every content row". A caller that knows
+    which map its run pins (the gamesrv's `--map`) narrows the content-id
+    pre-flight to it; a caller that says nothing keeps the historical, wider
+    refusal. See `session.served_maps` for when narrowing is legitimate and
+    `contentids.preflight` for why an empty set is not.
     """
     real = os.path.normcase(os.path.abspath(exe))
     if not any(real.startswith(root + os.sep) for root in (RUN_ROOT, LIVE_ROOT)):
@@ -344,7 +351,7 @@ def assert_safe(exe, args):
     # nothing about it and refusing on our rows would be wrong.
     if real.startswith(RUN_ROOT + os.sep) and os.path.isfile(dat):
         import contentids
-        contentids.preflight(dat)
+        contentids.preflight(dat, served=served_maps)
     return intended_target(args)
 
 

@@ -57,7 +57,11 @@ import vaultpath                                              # noqa: E402
 # floor of 23 would then turn a HEALED vault into a red suite. The mandatory
 # core once a vault exists is section 0 (3) + section 1 (4) + section 3 (2) +
 # section 4 (3) = 12, and the skips are printed either way.
-FLOOR = 12
+#
+# 2026-08-15: +7 for section 5, which is SYNTHETIC -- it fakes `check`'s return
+# and needs no vault at all, so unlike 1b/2/2b it can never skip and belongs in
+# the mandatory core rather than above it. 12 + 7 = 19.
+FLOOR = 19
 
 LEDGER = checks.Ledger("content file ids vs the archives a run uses",
                        floor=FLOOR)
@@ -363,6 +367,65 @@ def main():
     check(gated,
           "and the call sits inside an `if` testing RUN_ROOT",
           "a live run answers to ArenaNet and must never be refused on our rows")
+
+    # -- 5. scoping to the map actually served ------------------------------
+    # SYNTHETIC ON PURPOSE, and therefore mandatory core: it needs no vault, so
+    # it cannot skip, and the semantics it pins are the ones that decide whether
+    # this guard still guards. Real findings are driven by whatever state the
+    # vault happens to be in; these are chosen so each rule can be broken alone.
+    print("\n5. the pre-flight narrows to the served map, and fails closed")
+    fatal_148 = contentids.Finding("fatal", 148, 0x1B97D, "different files")
+    ok_449 = contentids.Finding("ok", 449, 0x345CC, "same 1 B crc 0x0")
+    real_check = contentids.check
+    try:
+        contentids.check = lambda *a, **k: ([fatal_148, ok_449], [])
+
+        def run(served):
+            """(refused, printed lines, returned findings)."""
+            out = []
+            try:
+                got = contentids.preflight("c.dat", "s.dat", say=out.append,
+                                           served=served)
+                return False, out, got
+            except SystemExit:
+                return True, out, None
+
+        refused, _, _ = run(None)
+        check(refused,
+              "served=None still refuses -- the historical behaviour is the "
+              "default, so a caller that passes nothing loses no protection")
+
+        refused, lines, got = run({449})
+        check(not refused,
+              "a run serving only 449 is NOT refused by map 148's row",
+              "the false positive that blocked every loopback run on 2026-08-15")
+        check(any("not served" in ln for ln in lines),
+              "and the out-of-scope disagreement is still PRINTED",
+              "demoting it must not make the archive state invisible")
+        check(got and any(f.level == "fatal" for f in got),
+              "and it is returned with level 'fatal' intact",
+              "the caller sees the same facts; only what BLOCKS changed")
+
+        refused, _, _ = run({148})
+        check(refused,
+              "a run that actually serves 148 is still refused",
+              "the positive control -- narrowing that cleared this would be a "
+              "guard that no longer guards")
+
+        refused, _, _ = run(set())
+        check(refused,
+              "AN EMPTY SET REFUSES, exactly as None does -- FAIL CLOSED",
+              "a caller whose --map parse came back empty must not thereby "
+              "clear the whole table; that is how a guard gets silently disarmed")
+
+        refused, lines, _ = run({999})
+        check(not refused and any("no content/maps.toml row" in ln
+                                  for ln in lines),
+              "a served map with no content row is reported, not passed in "
+              "silence",
+              "'nothing disagreed' and 'nothing was checked' must not look alike")
+    finally:
+        contentids.check = real_check
 
     print(f"\nread the archives in {time.perf_counter() - t0:.1f}s")
     return LEDGER.verdict()

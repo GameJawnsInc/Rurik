@@ -2453,6 +2453,15 @@ def _fog_mark_steps():
 # wrong would put the marker 96x too far out and read as "nothing drew".
 _SPAWN_WORLD = (9826.0, 8077.0)
 
+# ONE code unit, 0x3D64 -- the WIRE WORD, not the archive string id. textrec
+# takes the id, which is 0x3D64 - 0x100 = 15460 and resolves to 'Ascalon'; the
+# two differ by exactly the coded-string bias, and conflating them is the trap
+# studies/quests/FINDINGS.md 3.5 names (15716 resolves to None). Built with
+# chr() rather than a literal glyph because that is the sender form 3.5
+# documents -- codec.py takes a str, not a list of code units -- and because a
+# CJK character in a source literal does not survive every editor intact.
+_ENC_ASCALON = chr(0x3D64)
+
 
 def _compass_quest_steps():
     return [
@@ -2464,17 +2473,100 @@ def _compass_quest_steps():
              "entry with no compass glyph of its own. If something DOES draw "
              "here, the null control is the finding and 0x0049's arm below is "
              "confounded by it."),
-        Step(8.0, 0x0049, [1, _SPAWN_WORLD, 148, 148, 0, "", "", "", 0],
-             "0x0049 QUEST_ADD at the player's own position, map 148",
-             "a GREEN STARBURST on the compass at the player, and a quest-log "
-             "entry. The vec2 is inside map 148's rect and the map id is our "
-             "own slot, so both of PLAN C4's stated preconditions hold. Empty "
-             "strings are deliberate: the marker is what is under test, not the "
-             "text, and an authored string is a separate question."),
+        Step(8.0, 0x0049, [1, _SPAWN_WORLD, 0, 148, 32,
+                           _ENC_ASCALON, _ENC_ASCALON, _ENC_ASCALON, 148],
+             "0x0049 QUEST_ADD carrying ArenaNet's own string id 0x3D64 in all "
+             "three slots, with plane/flags/home_map moved inside ArenaNet's "
+             "observed distribution",
+             "THE QUEST LOG READS 'Ascalon' RATHER THAN '?'. 0x3D64 is the word "
+             "ArenaNet itself puts in slot 0 of every quest add in the live "
+             "corpus (10 of 10); textrec.py resolves it as string id 15460 -> "
+             "'Ascalon', a PLAIN record needing no key, while the rival "
+             "raw-word reading gives 15716 -> None. One literal therefore tests "
+             "the whole chain -- wire code unit, the client's own id->text seam "
+             "at 0x007C93F0, rendered glyph. A '?' or a blank means our coded "
+             "string is wrong ON THE WIRE even though it re-encodes "
+             "byte-identically offline (66 of 66 against ArenaNet's own words), "
+             "and every authored string downstream is suspect.\n"
+             "SECOND ARM, a free rider on the same run: 6f.5 recorded 'no "
+             "compass starburst' as NOT FOUND, but the run that produced it "
+             "sent plane=148 and home_map=0 -- values ArenaNet NEVER sends "
+             "(observed n=10: plane in {0,26}, home_map in {146,148}, flags=32 "
+             "in 8 of 10). Corrected here. If a starburst now draws, 6f.5's "
+             "NOT FOUND was a malformed probe rather than an unknown protocol, "
+             "and CompassQuestEffect.cpp does not need disassembling."),
+    ]
+
+
+# Q0 from studies/quests/AUTHORING.md, isolated from the compass question.
+#
+# WHY THIS IS A SEPARATE PROBE RATHER THAN A FLAG ON compass_quest. That probe
+# is a MARKER experiment on map 148 and its vec2 is that map's spawn in
+# absolute world units -- its own note says MAP 148 ONLY, and changing its
+# coordinates would silently invalidate the 6f.5 result it is the control for.
+# Map 148 is unrunnable today for a reason that has nothing to do with quests:
+# contentids.py refuses the launch because no client archive in the vault binds
+# 0x1B97D the way the server's does -- four run dirs hold it only under the
+# bit-31 mid-replacement spelling, and the 38833 copy binds it to a rewritten
+# file 8 bytes larger than the server's.
+#
+# So this probe asks the ONE Q0 question that does not need map 148 -- does a
+# string id WE choose come back as rendered text -- and it takes its position
+# from the LIVE origin, so the payload is coherent on whatever map loads. What
+# it deliberately does NOT measure is the compass starburst: that needs 148's
+# own coordinates, and answering it here would be answering a question this
+# run cannot ask.
+_QUEST_NAME_MAP = 449          # Kamadan -- both archives agree on it today
+
+
+def _quest_name_steps(origin):
+    x, y, plane = origin
+    return [
+        Step(8.0, 0x0049,
+             [1, (x, y), int(plane), _QUEST_NAME_MAP, 32,
+              _ENC_ASCALON, _ENC_ASCALON, _ENC_ASCALON, _QUEST_NAME_MAP],
+             "0x0049 QUEST_ADD carrying string id 0x3D64 in all three string "
+             "slots, at the live map's own spawn",
+             "THE QUEST TRACKER READS 'Ascalon' RATHER THAN '?'. The run that "
+             "produced 6f.5's '?' sent three EMPTY strings deliberately, "
+             "because the marker was what was under test. This sends the one "
+             "word ArenaNet itself puts in slot 0 of every quest add in the "
+             "live corpus (10 of 10). textrec.py resolves 0x3D64 as string id "
+             "15460 -> 'Ascalon', a PLAIN record needing no key; the rival "
+             "raw-word reading gives 15716 -> None. One literal therefore "
+             "tests the whole chain -- our wire code unit, the client's own "
+             "id->text seam at 0x007C93F0, a rendered glyph. A '?' or a blank "
+             "means our coded-string construction is wrong ON THE WIRE even "
+             "though it re-encodes byte-identically offline against "
+             "ArenaNet's own words (66 of 66), and every authored string "
+             "downstream is suspect."),
     ]
 
 
 PROBES = {
+    "quest_name": lambda a, o: Probe(
+        question="Does a quest name we chose render as text in a real client, "
+                 "or is 'commit the id, resolve the string at run time' "
+                 "something this project has only ever done in one direction?",
+        predicts="THE QUEST TRACKER READS 'Ascalon'. Everything the quests arc "
+                 "established about coded strings is DECODE-side: we have "
+                 "parsed ArenaNet's and re-encoded them byte-identically, but "
+                 "no string we built has ever been sent to a client -- "
+                 "compass_quest sent three empty ones on purpose. If this "
+                 "renders, the naming half of quest authoring is done and the "
+                 "problem reduces to 'which string id'. If it renders '?' or "
+                 "blank, an offline round trip agreeing with itself was never "
+                 "evidence and the string16 encoding becomes rung 1.",
+        steps=_quest_name_steps(o),
+        note="RUN WITH --map 449. The map is not incidental: map 148, which "
+             "the sibling compass_quest probe uses, cannot load at all right "
+             "now because no client archive in the vault binds its file id the "
+             "way the server's does (contentids.py refuses the launch, and it "
+             "is right to). 449 is one of the eight rows both archives agree "
+             "on. The quest tracker is map-independent, so nothing about this "
+             "question is weakened by the substitution -- but the COMPASS arm "
+             "is not measured here and must not be read out of this run.",
+    ),
     "compass_fog_nomark": lambda a, o: Probe(
         question="PLAN C4 isolation, half 1 of 2: what does the fog INIT PAIR "
                  "alone reveal, with no 0x008C mark?",
