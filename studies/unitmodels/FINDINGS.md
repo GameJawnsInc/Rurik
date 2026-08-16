@@ -122,8 +122,13 @@ MEASURED. Every flags=515 head carries a nonzero `alloc.nextStream`:
   always `0xFAC` (+ `0xFA4`, `0xFA7`, sometimes `0xFAB`; 5 sub-signatures).
   Purpose **UNVERIFIED** — no disassembly of their fetch sites has been done;
   the way FA0/FA1's fetch sites were read is the template (§6).
-- `0xFA2` and `0xFA9` were observed nowhere in any sweep — NOT FOUND, stated
-  as the ranges searched.
+- `0xFA2` was observed nowhere in any sweep — NOT FOUND, stated as the
+  ranges searched. ~~`0xFA9` likewise~~ **REFINED by U3's full-population
+  sweep, 2026-08-16**: `0xFA9` EXISTS — 2 heads (rows 176432/176439),
+  byte-identical 5,340-byte payloads, not a reference list; the strided
+  sweeps this section reported could not see a 2-row population
+  ([../mdlrefs/FINDINGS.md](../mdlrefs/FINDINGS.md) §3.3). Contents
+  UNVERIFIED (parser `0x00796C30`).
 - FA1 exists **only** on head rows: 0/2,722 sampled mid rows and 0/2,678
   sampled tail rows carry one (floor, stride-8 samples).
 
@@ -762,11 +767,14 @@ Ranked; each names the tool that can settle it. These feed the ladder in
 2. **Flag bits 1 and 2** — the only two bits the FA1 parser reads
    (`test byte [ebx+8], 6` → sets m_skeletonFlags bit 0) and the only two with
    no corpus correlate over 14,571 chunks.
-3. **The object identity** — m_skel vs m_geom (§3.2): one allocation or two;
-   the dual writers of +0xA4; what `u16@+0x52 → m_geoCount` means on a file
-   carrying both chunks; the n14 records' three vec3 slots. Disassemble the
-   construction at `0x0077B7C0` and the member layout of the consumers'
-   `[+0x8]`/`[+0xC]`.
+3. ~~**The object identity** — m_skel vs m_geom (§3.2)~~ **ANSWERED by U3,
+   2026-08-16** ([../mdlrefs/FINDINGS.md](../mdlrefs/FINDINGS.md) §5,
+   review-confirmed): TWO objects of two MdlBuild classes (0x15C geometry /
+   0x11C skeleton, distinct vtables and deleting destructors, one
+   kind-keyed cache at `0xF26F10`); the dual +0xA4 writers target
+   different fields of different classes sharing only a displacement —
+   §3.2's tension was the one-object assumption. B's constructor pre-fills
+   the three n14 vec3 slots at +0x48 (defaults the records overwrite).
 4. **MdlAnim:367's actual array**, and the 10 duplicate-key-time files —
    different array (likely: stride-4 `fild` vs our 8-byte records) or a retail
    assert those files would trip. Also the 23-byte record's six unnamed fields
@@ -775,12 +783,22 @@ Ranked; each names the tool that can settle it. These feed the ladder in
    test the stride.
 6. **The second FA1 consumer** `0x0079E860` and its walker `0x0079E420` — a
    validator or preload/rewrite path, undetermined (relevant to authoring).
-7. **The mid/tail chain chunk families** (`0xBB8–0xBC1`, `0xFA3/0xFAA`;
-   `0xFA4/0xFA7/0xFAB/0xFAC`) — never disassembled; the hypothesis that they
-   are skeleton/emitter/sound metadata is plausible and UNVERIFIED. Also
-   0xFAE (population ≈8), and the type-8 descriptor's chunk-0x2 tag stream.
-8. **The FA1-only class** (~312 files) — partially explained as FA8 targets;
-   coverage unmeasured. And why FA8 lists duplicate a linked file's own list
+7. ~~**The mid/tail chain chunk families**~~ **CLASSIFIED by U3, 2026-08-16**
+   ([../mdlrefs/FINDINGS.md](../mdlrefs/FINDINGS.md) §6, review-confirmed):
+   tails = the model's collision/visibility payload consumed at runtime by
+   MdlApi (callers PrCollision/ZnDef/Sight/MdlTex); mids = MdlDecomp's
+   decompile-side 1:1 mirror of the model's own chunk ids — and the
+   skeleton/emitter/sound-metadata hypothesis above is accordingly
+   REFUTED. The 0xBBE↔0xFA9 pairing predicted chunk FA9 from the code
+   side before the corpus produced its 2 carriers. FAE's population is
+   exactly 6 (not ≈8) — a linked-model list whose targets all carry
+   geometry, the inverse of FA8. Chunk CONTENTS beyond 0xFAC's manifest,
+   and the type-8 chunk-0x2 tag stream, stay open (mdlrefs §8).
+8. **The FA1-only class** — ~~coverage unmeasured~~ **MEASURED by U3,
+   2026-08-16**: exactly 311 heads, of which **284 (91.3%) are FA8
+   targets** ([../mdlrefs/FINDINGS.md](../mdlrefs/FINDINGS.md) §7; the 27
+   uncovered rows are listed in the sweep artifacts). Still open: how the
+   27 are reached, and why FA8 lists duplicate a linked file's own list
    when the loader resolves recursively anyway.
 9. **Block-level leftovers**: block E (11.1%, unnamed), block F record fields,
    block J region-3 records, geom+0x5C's name, `vo` types 1 (n=5) and 5
