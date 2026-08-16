@@ -602,8 +602,8 @@ def mercenary_info(hero_id, b1=0, b2=0, b3=0, d1=0, d2=0, b4=0, b5=0,
             f"MERCENARY_INFO(hero {hero_id}, {len(enc_name)} name ids)")
 
 
-def hero_data_gate(hero_id, agent_id, d1=0, d2=0):
-    """GAME_SMSG 0x0072 / 114 -- sent as a DIAGNOSTIC, not as payload.
+def hero_activate(hero_id, agent_id, inventory_id=0, ai_mode=0):
+    """GAME_SMSG 0x0072 / 114 -- HERO ACTIVATE.
 
     THIS MESSAGE IS AN EXPERIMENT WITH ITS PREDICTION ALREADY ON RECORD.
     The 2026-08-12 smsgsweep sent it all-zero and the client ASSERTED:
@@ -618,16 +618,22 @@ def hero_data_gate(hero_id, agent_id, d1=0, d2=0):
     ChCliHero has two structures (0x9C-stride via 0x0081D830, a 36-byte
     list via 0x0081D880) and no message was traced into either.
 
-    Field 2 is typed `agent_id` by msgshape.py's own field-typer,
-    independently of any hero-specific naming.
+    THE FIELD NAMES ARE THE CLIENT'S OWN. `0x0072`'s worker calls out through
+    0x0046ed40 with the format string at 0xa95888:
+    `HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)` -- four
+    fields, in this order, matching the descriptor
+    `[word, agent_id, dword, dword]` exactly. `aiMode` is the Fight/Guard/
+    Avoid-Combat stance (CHAR_AI_MODES == 3), so the stance IS server-settable,
+    which is a partial answer to the arc's c2s question: we cannot yet see the
+    client CHANGE it, but we can set it.
 
     Returns (opcode, values, label).
     """
     if not HERO_UNUSED < hero_id < HEROES:
         raise ValueError(f"hero id {hero_id} outside 1..{HEROES - 1}")
-    return (0x0072, [hero_id, agent_id, d1, d2],
-            f"HERO_DATA_GATE(hero {hero_id}, agent {agent_id}) "
-            f"[DIAGNOSTIC: asserted all-zero on 2026-08-12]")
+    return (0x0072, [hero_id, agent_id, inventory_id, ai_mode],
+            f"HERO_ACTIVATE(hero {hero_id}, agent {agent_id}, "
+            f"inventory {inventory_id}, aiMode {ai_mode})")
 
 
 def player_flags(player_number, value, mask=7):

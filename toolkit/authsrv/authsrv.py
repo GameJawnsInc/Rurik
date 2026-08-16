@@ -876,17 +876,24 @@ def char_settings_for(profession, settings=None):
 SPAWN_PROFESSION = PROF_WARRIOR
 
 
-def spawn_profession_values(profession=None):
+def spawn_profession_values(profession=None, agent_id=None):
     """The 0x00B7 payload for the spawn burst, built THROUGH the guard.
 
     agents.agent_set_profession is the server's own bound check; building the
     burst payload from it rather than beside it is the same rule the probes
     follow -- custom=True is derived here, not defaulted, so an out-of-band
     spawn profession still traverses the u8 ceiling and the 0-refusal.
+
+    `agent_id` exists because 0x00B7 is AGENT-KEYED and a hero needs its own
+    (studies/heroes/FINDINGS.md 14.1). The array it writes, ctx[0x2c]+0x6BC, is
+    what the ATTRIBUTE code reads when it asks an agent for its professions, and
+    an agent missing from it yields an out-of-range profession and asserts
+    ConstChar:1296. Defaulting to the player leaves every existing caller
+    unchanged.
     """
     p = SPAWN_PROFESSION if profession is None else profession
     return agents.agent_set_profession(
-        PLAYER_AGENT_ID, p, 0,
+        PLAYER_AGENT_ID if agent_id is None else agent_id, p, 0,
         custom=p > agents.CHAR_PROFESSIONS - 1) + [0]
 
 
@@ -2245,9 +2252,20 @@ HERO_BODY = False
 # Swap 0x01C2's two u16s. The whole point of the arm: one is an agent id and
 # one is a hero index, and the client's own code does not say which.
 HERO_SWAP = False
-# Send the trailing 0x0072 diagnostic. It ASSERTED all-zero on 2026-08-12, so
-# an assert dialog and a silence are BOTH readouts.
-HERO_DIAGNOSTIC = False
+# 0x0072 is HERO ACTIVATE, not a diagnostic -- that was its working name for
+# one day. Its four fields are exactly the client's own format string,
+# `HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)`, and sending it
+# is what makes the client resolve the hero's NAME from s_heroClientData and
+# enable its commander-slot flag. studies/heroes/FINDINGS.md 15.
+HERO_ACTIVATE = False
+# HeroActivate's field 3. Zero is what every run so far has sent. A NON-zero id
+# is a refutable question rather than a fix: ItCliApi:1194 asserts
+# `context->inventoryTable.Get(inventoryId)`, so if field 3 really is an
+# inventory-table key, an id naming no inventory should trip THAT assert and
+# name the field by experiment. Silence means it is inert on this path.
+HERO_INVENTORY = 0
+# HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
+HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
 # hypothesis. --no-hero-info drops it so the arm can ask whether it was needed.
 HERO_INFO = True
@@ -6792,16 +6810,67 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # This is the message the arc spent two refuted
                         # hypotheses looking for, and we already had it.
                         if HERO is not None and HERO_ATTRIBS:
+                            # 0x00B7 FIRST, and read the reason before moving
+                            # it. THERE ARE TWO PROFESSION STORES and this arc
+                            # conflated them for a day:
+                            #   0x00A6 writes the AGENT's profession bytes --
+                            #     what the roster label builder reads, which is
+                            #     why the hero row already said "Mo1".
+                            #   0x00B7 writes the array at ctx[0x2c]+0x6BC --
+                            #     what the ATTRIBUTE code reads.
+                            # The attribute function 0x00819EF0 takes the
+                            # attribState record, reads its agent id, looks the
+                            # agent's primary and secondary up in +0x6BC, and
+                            # hands each to s_profChapter (0x005AB800, bound
+                            # 11) guarded ONLY against 0. An agent absent from
+                            # +0x6BC yields an out-of-range profession and
+                            # asserts ConstChar:1296 -- exactly what a hero
+                            # got, because we had only ever sent 0x00B7 for
+                            # the player. studies/heroes/FINDINGS.md 14.
+                            # ORDER IS LOAD-BEARING, and this server already
+                            # knew it: the player's own pair is sent points
+                            # FIRST, profession SECOND, and the comment above
+                            # that pair names the exact cost of the other
+                            # order -- `Assertion: attribState
+                            # ChCliAttrib.cpp(435)` with 0xb7 in the stack.
+                            # Sending 0x00B7 first for the hero reproduced
+                            # that assert on 2026-08-16, which is the repo's
+                            # own recorded knowledge re-earning itself.
+                            _hprof = (agents.npc_template(HERO_BODY_NPC)
+                                      ["profession"] if HERO_BODY else 1)
                             send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
                                  [HERO_AGENT_ID, ATTRIBUTE_POINTS,
                                   ATTRIBUTE_POINTS],
                                  f"AGENT_ATTRIBUTE_POINTS(hero agent "
                                  f"{HERO_AGENT_ID})")
+                            send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
+                                 spawn_profession_values(_hprof,
+                                                         HERO_AGENT_ID),
+                                 f"PLAYER_UPDATE_PROFESSION(hero agent "
+                                 f"{HERO_AGENT_ID}, prof {_hprof})")
                             _hcols = attribute_columns()
                             send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
                                  [HERO_AGENT_ID, _hcols],
                                  f"AGENT_UPDATE_ATTRIBUTES(hero agent "
                                  f"{HERO_AGENT_ID}, {len(_hcols) // 3} attrs)")
+                        # THE HERO'S SKILL BAR, and it is the same message the
+                        # player's bar rides -- 0x00DA is
+                        # [agent_id, array32[8], array32[8], u8], AGENT-KEYED
+                        # with an eight-slot array. studies/heroes/FINDINGS.md
+                        # 4 recorded "no skill-bar-shaped field anywhere" and
+                        # that was a SCOPING error, not an absence: the search
+                        # covered the party messages and the SEND-direction
+                        # shapes, and this is a RECV message this server has
+                        # been sending for the player all along. Fourth time
+                        # this arc that the mechanism was already in the tree.
+                        if HERO is not None and HERO_SKILLBAR:
+                            _hskills = list(SKILLBAR)[:SKILLBAR_SLOTS]
+                            _hskills += [0] * (SKILLBAR_SLOTS - len(_hskills))
+                            send(GAME_SMSG_SKILLBAR_UPDATE,
+                                 [HERO_AGENT_ID, _hskills,
+                                  SKILLBAR_PVP_MASKS, SKILLBAR_TRAILER],
+                                 f"SKILLBAR_UPDATE(hero agent "
+                                 f"{HERO_AGENT_ID}){_hskills}")
                         # LAST, and it is a question rather than payload. It
                         # asserted all-zero on 2026-08-12 under this same
                         # client state minus our messages; if it now completes
@@ -6809,8 +6878,9 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # charHeroData gate wants. Both outcomes are readouts,
                         # and an EARLY assert (before this line) would itself
                         # name the commander-binding trigger.
-                        if HERO is not None and HERO_DIAGNOSTIC:
-                            send(*agents.hero_data_gate(HERO, HERO_AGENT_ID))
+                        if HERO is not None and HERO_ACTIVATE:
+                            send(*agents.hero_activate(HERO, HERO_AGENT_ID,
+                                                 HERO_INVENTORY, HERO_AI_MODE))
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -7396,23 +7466,41 @@ def main():
                          "one a hero index and the client does not say which; "
                          "the two arms differ ONLY in this, so whichever "
                          "renders names the field.")
-    ap.add_argument("--hero-diagnostic", action="store_true",
-                    help="Send 0x0072 LAST as a refutable question. It "
-                         "ASSERTED all-zero on 2026-08-12 because "
-                         "charHeroData had no record; a silence now means "
-                         "something we sent created one. Both are readouts.")
+    ap.add_argument("--hero-activate", "--hero-diagnostic", action="store_true",
+                    dest="hero_activate",
+                    help="Send 0x0072 HeroActivate last. Its four fields are "
+                         "the client's own format string (hero, agent, "
+                         "inventoryId, aiMode). WITHOUT it the roster row is "
+                         "labelled from the BODY's agent; WITH it the client "
+                         "resolves the hero's own name from s_heroClientData "
+                         "and enables its commander-slot flag. Opened this arc "
+                         "as a refutable diagnostic and turned out to be the "
+                         "activation itself.")
     ap.add_argument("--no-hero-info", action="store_true",
                     help="Drop the leading 0x0074. The route sends it first on "
                          "the hypothesis that it creates the data-cache "
                          "record; this asks whether it was needed.")
-    ap.add_argument("--hero-attribs", action="store_true",
-                    help="Send the 0x0037 + 0x003A pair for the hero's agent. "
-                         "0x0037 CREATES the attribState record whose absence "
-                         "asserted at ChCliAttrib.cpp:156 and 0x003A fills it "
-                         "-- measured, the gate moves. But the client then "
-                         "dies on ConstChar.cpp:1296, with or without the "
-                         "0x0072 diagnostic, so this is OFF by default: it "
-                         "regresses a hero that otherwise renders.")
+    ap.add_argument("--no-hero-skillbar", action="store_true",
+                    help="Omit the hero's 0x00DA skill bar. 0x00DA is "
+                         "agent-keyed with an eight-slot array and is the same "
+                         "message the player's bar rides -- section 4's 'no "
+                         "skill-bar field anywhere' was a scoping error.")
+    ap.add_argument("--no-hero-attribs", action="store_true",
+                    help="Omit the hero's attribute state (0x0037 -> 0x00B7 -> "
+                         "0x003A). That trio is what completes the hero "
+                         "record; without it the row still draws but is "
+                         "labelled from the BODY's agent instead of resolving "
+                         "the hero's own name from s_heroClientData. The "
+                         "control arm for section 14.")
+    ap.add_argument("--hero-inventory", type=lambda x: int(x,0), default=0,
+                    metavar="N",
+                    help="HeroActivate's inventoryId (field 3), 0 so far. "
+                         "ItCliApi:1194 asserts inventoryTable.Get(inventoryId), "
+                         "so a non-zero id naming no inventory should trip that "
+                         "assert and NAME the field by experiment.")
+    ap.add_argument("--hero-ai-mode", type=int, default=0, metavar="N",
+                    help="HeroActivate's aiMode (field 4): 0/1/2 = the three "
+                         "CHAR_AI_MODES stances Fight/Guard/Avoid Combat.")
     ap.add_argument("--hero-chunk", default=None, metavar="LIST|N",
                     help="0x0074's ten trailing dwords: one int fills all "
                          "ten, or a comma list of up to ten. The client "
@@ -7626,7 +7714,7 @@ def main():
                  " -- no bits set, which CLEARS all three"))
 
     if a.hero is not None:
-        global HERO, HERO_BODY, HERO_SWAP, HERO_DIAGNOSTIC, HERO_INFO
+        global HERO, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
         global HERO_BODY_NPC
         # Fail HERE, not inside instance bring-up, and mirror the client's own
         # two asserts rather than inventing a range.
@@ -7636,10 +7724,15 @@ def main():
         HERO_BODY = a.hero_body
         HERO_BODY_NPC = a.hero_body_npc
         HERO_SWAP = a.hero_swap
-        HERO_DIAGNOSTIC = a.hero_diagnostic
+        HERO_ACTIVATE = a.hero_activate
+        global HERO_INVENTORY, HERO_AI_MODE
+        HERO_INVENTORY = a.hero_inventory
+        HERO_AI_MODE = a.hero_ai_mode
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS
-        HERO_ATTRIBS = a.hero_attribs
+        HERO_ATTRIBS = not a.no_hero_attribs
+        global HERO_SKILLBAR
+        HERO_SKILLBAR = not a.no_hero_skillbar
         global HERO_CHUNK, HERO_FLAG, HERO_BYTES
         HERO_FLAG = a.hero_flag
         if a.hero_chunk:
@@ -7666,7 +7759,7 @@ def main():
         print(f"HERO: 0x01C2 wordA={_wa} wordB={_wb} (swap={HERO_SWAP}) "
               f"inside the build window; 0x0074 first={HERO_INFO}; "
               f"body={'agent %d' % HERO_AGENT_ID if HERO_BODY else 'NONE'}; "
-              f"trailing 0x0072 diagnostic={HERO_DIAGNOSTIC}. "
+              f"0x0072 activate={HERO_ACTIVATE}. "
               f"200 is outside 1..39 ON PURPOSE — whichever word must hold it "
               f"for the row to render is the agent id.")
 

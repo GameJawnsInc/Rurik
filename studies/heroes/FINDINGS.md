@@ -810,6 +810,264 @@ callers, and three of them — `0x00819FF2`, `0x0081A092`, `0x0081A261` — sit 
 code the pair activates. Read those three and find where the out-of-range `profession` is
 loaded from. That is a desk task needing no client.
 
+## 14. THE HERO IS AUTHORED — every gate cleared, and the row draws `Norgu`
+
+Reading the three callers named at the end of §13 answered it, and the answer was one
+message plus one ordering. **The full chain now completes and the client survives it.**
+
+### 14.1 Where the bad profession came from
+
+The three callers of the profession getter `0x005AB800` all sit in one function,
+**`0x00819EF0`**, whose prologue is the whole answer:
+
+```
+0x00819EF8  mov esi,[ebp+8]        ; the attribState record
+0x00819F17  call 0x47f660          ; GetLocalPlayerContext()
+0x00819F1E  mov ebx,[eax+0x2c]
+0x00819F21  add ebx,0x6bc          ; <-- ctx[0x2c]+0x6BC
+0x00819F2C  call 0x81fad0          ; (array, [esi] = agent id) -> primary   -> [ebp-8]
+0x00819F3F  mov [ebp-0x1c],eax     ;                          -> secondary -> [ebp-0x1c]
+```
+
+It takes the attribState record, reads **its agent id**, and looks that agent's **primary and
+secondary professions** up in the array at `ctx[0x2c]+0x6BC`. Callers 2 and 3
+(`0x0081A092`, `0x0081A261`) then hand each straight to `s_profChapter` **guarded only
+against 0, never against the bound**. Caller 1 (`0x00819FF2`) is a different shape — it maps
+an *attribute* to its profession via `s_attrib` first.
+
+**`ctx[0x2c]+0x6BC` is the array `studies/profession/RUNS.md` already identified as written
+only by `0x00B7` — and we had only ever sent `0x00B7` for the player.** An agent absent from
+it yields an out-of-range profession, and `ConstChar:1296` fires.
+
+> **THERE ARE TWO PROFESSION STORES, and conflating them cost this arc an afternoon.**
+> `0x00A6` writes the **agent's** profession bytes — what the roster label builder reads,
+> which is why the hero row already said `Mo1`. `0x00B7` writes the **`+0x6BC` array** — what
+> the **attribute** code reads. Setting one does nothing for the other. That is why matching
+> the body's profession (§13.2) changed nothing: it was `0x00A6`'s store all along.
+
+### 14.2 `s_attrib`, read in passing
+
+51 rows × 20 B at **`0x00A35740`**: `+0x00` profession, `+0x04` a **self-referential index**
+(row *i* holds *i* — a closure the artifact could have refuted), `+0x08`/`+0x0C` string ids,
+`+0x10` an **is-primary** flag set on **exactly ten rows, one per profession 1..10**.
+Attribute **17 is Strength** (profession 1), matching the player ranks this server sends.
+
+**Attributes 26–28 and 45–50 carry profession `11`** — out of range for `s_profChapter`.
+Those are the PvE title tracks, which belong to no profession, and they are why the guard at
+caller 1 exists at all.
+
+### 14.3 The last gate was ORDER, and this repo already knew it
+
+With `0x00B7` sent for the hero, `ConstChar:1296` cleared and the assert moved to
+**`attribState`, `ChCliAttrib.cpp(435)`** — a *different line* from the `:156` that opened
+§12. The fix was not new information: `authsrv.py`'s own comment above the player's pair
+records that exact assert with `0xb7` named in the stack trace, and the remedy —
+**points first, profession second**. Sending `0x00B7` before `0x0037` reproduced it exactly.
+
+**The complete chain, all four gates, each cleared by a measured change:**
+
+| gate | assert | cleared by |
+|---|---|---|
+| 1 | `charHeroData` `ChCliHero.cpp(199)` | `0x0074` |
+| 2 | `attribState` `ChCliAttrib.cpp(156)` | `0x0037` |
+| 3 | `profession < arrsize(s_profChapter)` `ConstChar.cpp(1296)` | `0x00B7` **for the hero's agent** |
+| 4 | `attribState` `ChCliAttrib.cpp(435)` | **order**: `0x0037` → `0x00B7` → `0x003A` |
+
+And the `0x0072` diagnostic — which **ASSERTED** on 2026-08-12 under this same client state
+minus our messages — now **completes silently**. That was the refutable experiment this arc
+opened with, and it has flipped.
+
+### 14.4 The payoff: the row stops saying "Hatcher" and starts saying "Norgu"
+
+The measurement that makes this more than "no crash". With the hero record incomplete, the
+row read `Mo1 Hatcher [Collector]` — the **body's** name, per §10.2's rule that the roster
+label builder reads the agent. With the record **complete**, the same run's row reads:
+
+**`Mo1 Norgu`**
+
+Norgu is `s_heroClientData` row 1. **The client switched name sources.** Once the hero data
+record is satisfied, the roster stops labelling from the agent and resolves the hero's own
+identity from the static table — which is exactly §0's claim, *"a hero carries no name and
+must resolve its identity through `s_heroClientData`"*, now measured rather than argued. It
+also independently confirms the recon's row-1 resolution, from the screen instead of from
+`textrec.py`.
+
+`--hero-attribs` is **ON** by default again; `--no-hero-attribs` is the control arm, and it
+is a real one — it produces a hero row labelled from the body instead of the hero table.
+
+### 14.5 What a hero now needs, end to end
+
+```
+0x0074  MERCENARY_INFO          hero index 1..39      -> creates charHeroData
+0x01D2/0x01CB                   party build window
+0x01C2  PARTY_HERO_ADD          msg+8 = hero index, msg+0xc = AGENT ID
+0x01D3/0x01B2                   commit + set mine
+0x0056/0x0057/0x0020            the body, at that agent id
+0x00A6  AGENT_SET_PROFESSION    the agent's own profession bytes
+0x0037  AGENT_ATTRIBUTE_POINTS  creates attribState        <-- order
+0x00B7  PLAYER_UPDATE_PROFESSION  ctx+0x6BC, for the HERO   <-- is
+0x003A  AGENT_UPDATE_ATTRIBUTES   fills attrib[]            <-- load-bearing
+```
+
+**Still open:** the hero's **skill bar** (§4 — the attribute half is now solved, the eight
+skill slots are not), the **c2s** direction (§3.3), `0x0074`'s remaining 17 fields, and
+follow AI.
+
+### 14.6 A guard this arc strengthened
+
+Adding the hero's `0x00B7` turned `test_agentlife`'s syntax-tree check red, correctly: it
+requires every `0x00B7` send site to build through `spawn_profession_values()` rather than a
+literal list, and the hero's site did not. Fixed by giving the builder an `agent_id`
+parameter (defaulting to the player, so no existing caller moved).
+
+The check itself had a latent hole — it **reassigned** its verdict per match, so with two
+send sites it graded only whichever came **last** in the file. It is now `all()` over a
+counted list. Proven both ways: sabotaging the hero's site (last) fails as before, and
+sabotaging the **player's** site (first) now fails too, where the old logic would have passed
+it. The arc got lucky in the safe direction — the new site happened to be last, so the hole
+announced itself instead of hiding.
+
+## 15. The skill bar — §4's negative was a SCOPING ERROR, and `0x0072` is HeroActivate
+
+### 15.1 `0x00DA` was in our tree the whole time
+
+**§4 is CORRECTED.** It recorded "no skill-bar-shaped field (8 discrete skill ids) anywhere"
+after scanning `0x0074`, `0x01BF`, `0x01C2` and every declared **SEND**-direction shape. That
+search space excluded the answer:
+
+**`0x00DA` SKILLBAR_UPDATE — `[agent_id, array32[8], array32[8], u8]`, RECV, agent-keyed,
+eight slots.**
+
+It is a server→client message this repo has been sending **for the player every session**.
+The negative was never about the wire; it was about where we looked. **That is the fourth
+time in this arc that the mechanism was already in the tree** — after `0x0037`, `0x003A` and
+`0x00B7`. The recurring shape is worth naming: *every* piece of a hero turned out to be an
+existing **agent-keyed** message we only ever addressed to the player.
+
+Sent to the hero's agent it is accepted — 75 bytes, eight skill ids, no assert.
+
+> **Honest limit: this is delivery, not display.** The hero's bar is accepted and the client
+> survives, but **I have not seen it rendered.** The hero panel is opened by clicking the
+> commander-slot button, and that click **crashes the client** (§15.3). So "the hero has a
+> skill bar" is supported by the message's shape and its acceptance, not by a screenshot of
+> eight icons. Do not upgrade this to OBSERVED-on-screen until someone sees the bar.
+
+### 15.2 `0x0072` is HeroActivate, not a diagnostic
+
+The arc opened this message as a refutable probe. It is the **activation**, and the client
+names its own fields: the worker's miss path calls out with the format string at `0xa95888`,
+
+`HeroActivate (hero %d, agent %d, inventoryId %d, aiMode %d)`
+
+— four fields, in that order, matching the descriptor `[word, agent_id, dword, dword]`
+exactly. Renamed `agents.hero_activate(hero_id, agent_id, inventory_id, ai_mode)`.
+
+**Measured, and this is the readout that settles it.** Two runs identical but for `0x0072`:
+
+| `0x0072` | roster row | commander flag 1 |
+|---|---|---|
+| not sent | `Mo1 Hatcher [Collector]` — the **body's** name | greyed |
+| **sent** | **`Mo1 Norgu`** — `s_heroClientData` row 1 | **green, enabled** |
+
+So `0x0072` is what promotes a labelled body into a **hero**: the client switches the roster
+label from the agent to the static hero table, and `GmHeroCommander` binds the slot (which
+needs non-null `heroData` and non-zero `agentId`, asserts `:120`/`:121`). §14.4 credited the
+name switch to "the record being complete"; **that was half right and is now sharpened** —
+completeness is necessary, and `0x0072` is the trigger.
+
+**And `aiMode` is field 4.** The Fight/Guard/Avoid-Combat stance (`CHAR_AI_MODES == 3`, §3.2)
+is therefore **server-settable**, a partial answer to §3.3: we still cannot see the client
+*change* stance c2s, but we can *set* it. That is one of the arc's oldest open questions
+moving, from the wrong direction to the useful one.
+
+### 15.3 The commander-slot click crashes — a new, bounded unknown
+
+Clicking the hero's commander-slot button (the enabled `1`) takes the client down. It is a
+**UI path we have never fed**, and the obvious suspect is named in the very format string
+above: **`inventoryId`**, which we send as 0. A hero panel wants equipment. Bounded, cheap to
+attack next, and it is the reason §15.1's limit stands.
+
+### 15.4 The complete hero, as it now stands
+
+```
+0x0074  MERCENARY_INFO           hero index 1..39        creates charHeroData
+0x01D2/0x01CB                    party build window
+0x01C2  PARTY_HERO_ADD           msg+8 hero index, msg+0xc AGENT ID
+0x01D3/0x01B2                    commit + set mine
+0x0056/0x0057/0x0020             the body, at that agent id
+0x00A6  AGENT_SET_PROFESSION     the agent's own profession bytes
+0x0037  AGENT_ATTRIBUTE_POINTS   creates attribState          0x00B7  PLAYER_UPDATE_PROFESSION ctx+0x6BC, for the HERO       > order matters
+0x003A  AGENT_UPDATE_ATTRIBUTES  fills attrib[]               /
+0x00DA  SKILLBAR_UPDATE          the eight slots
+0x0072  HERO_ACTIVATE            hero, agent, inventoryId, aiMode
+```
+
+**Still open:** the commander-panel click (§15.3), `inventoryId`/equipment, `0x0074`'s other
+17 fields, the **c2s** direction proper (§3.3 — placing a flag, changing stance from the
+client), and follow AI.
+
+## 16. `inventoryId` — REFUTED as the cause, twice, and the real one is named
+
+§15.3 nominated `inventoryId` (HeroActivate field 3, sent as 0) as the suspect behind the
+commander-panel click crash. **It is not, and the suspicion was mine to retract.**
+
+### 16.1 The click crash is `commander`, not inventory
+
+Naming the assert should have come first. It is:
+
+```
+Assertion: commander        P:\Code\Gw\Ui\Game\GmView.cpp(5890)
+```
+
+Not one of the eight inventory asserts — `ItCliApi:1194`
+`context->inventoryTable.Get(inventoryId)` was the plausible one. `asserts.py` does not read
+line 5890; it is one of the 371 sites its fixed patterns miss, a live reminder that its
+answers are floors. The site is `0x004E38EB`, `push 0x1702` = 5890.
+
+### 16.2 And a non-zero `inventoryId` changes nothing
+
+Two runs with `inventoryId = 1`:
+
+- **On the activation path:** accepted, no assert. It does **not** trip `ItCliApi:1194`, so
+  the field is not validated anywhere this arc can reach.
+- **With the commander click:** the **identical** `commander` / `GmView.cpp(5890)` assert.
+
+So `inventoryId` is **inert on every reachable path** and is **not** what the click wants.
+Both outcomes the experiment allowed came back negative — the field's meaning stays NOT
+FOUND, but the crash is no longer mis-attributed to it.
+
+### 16.3 What the click actually wants
+
+Read statically this time, rather than guessed:
+
+- Commander objects live in a **container at `ctx+0x20`**. `heroCommanderSlot[7]` at
+  `ctx+0x30..+0x4c` holds **keys into it**, not the objects: the slot version
+  (`0x00524DD0`) bound-checks `cmp ecx,7`, reads `[eax + ecx*4 + 0x30]`, and looks *that* up
+  in `ctx+0x20`.
+- **`0x00524C40` is a GET-OR-CREATE** — it looks up `ctx+0x20` and, on a miss, walks the
+  7-slot array to make one. `GmHeroCommander:81`'s `slotIndex < arrsize(...)` lives inside it.
+- **`0x00524DB0`, the one the click uses, does NOT create.** It looks up and asserts. That
+  asymmetry is the whole bug: our hero has no entry in `ctx+0x20`, and the click takes the
+  non-creating path.
+- The creator's second caller, `0x00524FA4`, sits in a **loop over 12-byte entries at
+  `ebp-0x58`** — the `activeHeroes` stack buffer built by scanning the party's agents
+  (`GmHeroCommander:214`, `cmp ebx,7`).
+
+**So the next question is precise:** the party-agent scan that fills `activeHeroes` and
+creates a commander per entry either never runs for our hero, or registers it under a key
+different from the one `GmView:5890` looks up. Deciding which is desk work on `0x00524F80`'s
+scan filter and its key — no client needed.
+
+*(One tension worth carrying: commander **flag 1 is enabled on screen**, so part of this
+machinery did bind, while the container lookup still misses. A key mismatch fits that better
+than "the scan never ran".)*
+
+### 16.4 Also wired, and NOT tested
+
+`--hero-ai-mode` now sets HeroActivate's field 4, the Fight/Guard/Avoid-Combat stance. It is
+**untested**: no run has varied it, and nothing here is evidence that the stance takes
+effect. It exists so the next session can ask.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows
