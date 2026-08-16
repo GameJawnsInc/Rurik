@@ -240,6 +240,24 @@ The quest gains a second NPC. `giver_agent` offers it; `objective_agent` — the
 
 **Two things in the new path are RECONSTRUCTION and labelled so in the code.** What a code-`0x05` click does — offered 3 times in the corpus, clicked 0 — so our arm shows a reminder screen with no options rather than inventing a state change. And `objective_agent` binds by **agent id**, which is per-connection and per-spawn: a probe-world binding, not a content one. A real binding needs a spawn row with a stable key, which is rung R5.
 
+**THE `?` IS OPTION KIND 22, IN THE DIALOG — OBSERVED 2026-08-16, on the owner's screen.**
+
+Three runs looked for it over the NPC's head and it was never there: property 11 draws eight glyphs across values 0–9 and not one is a `?`. It is the **option kind on the dialog line**. A window titled with the NPC's name shows the quest as one clickable row, and while the quest is held-and-unfinished that row carries a gold `?` where an available quest carries a `!`.
+
+So the icon column of `0x007E` is the KIND field, and the kind↔code table already measured from the corpus is the whole vocabulary:
+
+| kind | code | icon |
+|---|---|---|
+| 18 | `0x03` | `!` — a quest available to take |
+| 22 | `0x05` | **`?`** — one already in progress |
+| 16 | `0x01` | green tick — Accept |
+| 17 | `0x02` | red prohibition — Decline |
+| 23 | `0x07` | a bag — turn in |
+
+**Field 4 is exonerated.** It is `0xFFFFFFFF` in 41 of 41 and this repo named it `OPTION_NO_ICON` on that evidence alone — a guess dressed as a name. The icon comes from the kind, so field 4 is unexplained again and the name should be read as a placeholder, not a finding.
+
+**Why it took three runs.** The owner's phrasing — a `?` "instead of a `!`" — is exactly right about the game and I mapped it onto the overhead marker, which is the other place a `!` appears. The corpus could not settle it either way: kind 22 is offered 3 times and clicked 0, so nothing in the capture shows what it renders. The measurement needed a person to talk to an NPC and look.
+
 **Still not settled: the compass marker.** This run was on **map 449**, not 148, so it says nothing about §7.3 — map 148 cannot load at all right now (see below), and the marker coordinates are 148's. The free rider went unclaimed and §7.3's test is still open.
 
 **Not settled, and it blocked this run first: map 148 is unloadable.** `contentids.py` refuses it, correctly — no client archive in the vault binds `0x1B97D` the way the server's `dat_study` copy does. Four run dirs hold it only under the bit-31 mid-replacement spelling; the 38833 copy binds it to a file 8 bytes larger, written by the terrain arc's allocation work. This is archive state, not a quest question, and it is why Q0 ran on 449.

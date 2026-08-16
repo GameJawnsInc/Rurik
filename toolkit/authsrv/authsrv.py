@@ -270,6 +270,28 @@ def _send_description(send, state, qid, row):
     state.setdefault("desc_sent", set()).add(qid)
 
 
+def _quest_prose(row, text):
+    """A screen's prose with the row's reward block appended, if it has one.
+
+    ArenaNet puts the reward INSIDE the description string -- there is no reward
+    message -- so this is where it belongs. The length check runs after the
+    append, because 19 units of reward can push a line that passed on its own
+    over the field.
+
+    SLOT A IS EXPERIENCE, CORROBORATED 2026-08-16: a live client rendered
+    `Reward: / 500 Experience` for a stock quest, and 500 is exactly what slot A
+    carries for quests 82, 86 and 1462. The rival assignment would have put 500
+    in the gold line.
+    """
+    framing = row.get("wire_framing", "template")
+    xp = row.get("reward_experience")
+    if xp is None:
+        return questdefs.coded_literal(text, framing,
+                                       limit=questdefs.DIALOG_UNITS)
+    return questdefs.with_reward(text, int(xp), row.get("reward_gold"),
+                                 framing, limit=questdefs.DIALOG_UNITS)
+
+
 def _quest_screen(send, agent_id, qid, code, row):
     """Screen 2: the quest's own prose, then accept+decline, or turn-in alone.
 

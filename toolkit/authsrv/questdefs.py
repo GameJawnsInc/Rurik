@@ -301,28 +301,43 @@ PARAGRAPH_BREAK = chr(0x0002) + chr(0x0102)
 REWARD_SLOT_NAMES = ("experience (ref 10730)", "gold (ref 10732)")
 
 
-def reward_run(slot_a, slot_b):
-    """The 19-code-unit reward suffix, as a codec-ready str.
+def reward_run(slot_a, slot_b=None):
+    """The reward suffix, as a codec-ready str. 19 code units, or 12 with no B.
 
     `0101 <word>` is a numeric argument whose value is `word - 0x100`
     (CORROBORATED: quest 62's fourth run feeds the PLAIN template 2438,
     `%str1%: %num1%`, exactly `0101 0104`). So each number is bounded by what
     fits one u16 after the bias.
+
+    `slot_b=None` OMITS the second line entirely, which is what a quest with no
+    gold needs -- ArenaNet's own "A Personal Vault" renders `Reward: / 500
+    Experience` and nothing else. Emitting a zero would draw a line reading
+    zero, which is worse than drawing none.
+
+    SLOT A IS EXPERIENCE, promoted from the seven-quest magnitude argument to
+    CORROBORATED 2026-08-16: a live client showed `Reward: 500 Experience` for a
+    stock quest, and 500 is exactly what slot A carries for quests 82, 86 and
+    1462. The rival assignment would have put 500 in the gold line. Slot B is
+    presumed gold and is still RECONSTRUCTION -- no screenshot has yet shown a
+    two-line reward.
     """
-    for n in (slot_a, slot_b):
+    slots = [slot_a] if slot_b is None else [slot_a, slot_b]
+    for n in slots:
         if not isinstance(n, int) or not (0 <= n <= 0xFFFF - 0x100):
             raise ValueError(
                 f"reward slot {n!r} does not fit a 0x100-biased u16 argument; "
                 f"the range is 0..{0xFFFF - 0x100}")
     units = ([RUN_SEPARATOR] + list(REWARD_HEADER)
              + [RUN_SEPARATOR] + list(REWARD_SLOT_A)
-             + [NUMERIC_ARG, 0x100 + slot_a]
-             + [RUN_SEPARATOR] + list(REWARD_SLOT_B)
-             + [NUMERIC_ARG, 0x100 + slot_b])
+             + [NUMERIC_ARG, 0x100 + slot_a])
+    if slot_b is not None:
+        units += ([RUN_SEPARATOR] + list(REWARD_SLOT_B)
+                  + [NUMERIC_ARG, 0x100 + slot_b])
     return "".join(chr(u) for u in units)
 
 
-def with_reward(text, slot_a, slot_b, framing="template", limit=FIELD_UNITS):
+def with_reward(text, slot_a, slot_b=None, framing="template",
+                limit=FIELD_UNITS):
     """A description with its reward block appended, length-checked AFTER.
 
     The order matters and is the whole reason this is not two calls at the call

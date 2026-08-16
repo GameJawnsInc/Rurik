@@ -2787,6 +2787,13 @@ _MARKER_SWEEP = (5, 0, 1, 2, 6, 7, 8, 9)
 
 
 _OBJECTIVE_AGENT = 98
+# A DIFFERENT definition from the giver's 1480, and that is the point: the
+# first version gave both bodies 1480 and put two identical 'Ascalonian Guard'
+# nameplates on screen with nothing to tell the giver from the objective. 1473
+# is another live NPC from the same capture, with its own model id and its own
+# profession. An ambiguous frame is an unreadable result.
+_OBJECTIVE_DEFINITION = 1473
+_OBJECTIVE_NPC = npc_template('def_1473')
 
 
 def _quest_objective_steps(origin):
@@ -2797,9 +2804,8 @@ def _quest_objective_steps(origin):
     the giver shows '?' between accept and completion, which is what a real
     quest looks like and what our server could not express until now.
 
-    Both bodies share definition 1480 -- the live giver's -- because what is
-    under test is the option kind, not the model, and a second definition would
-    be a second variable.
+    The two bodies carry DIFFERENT definitions so a screenshot can never be
+    ambiguous about which is which -- see _OBJECTIVE_DEFINITION.
     """
     ox, oy, plane = origin
     return [
@@ -2813,9 +2819,17 @@ def _quest_objective_steps(origin):
                           AGENT_KIND_NPC, ox + 150, oy - 130, plane),
              f"WORLD_CREATE_AGENT({_GIVER_AGENT}) -- THE GIVER",
              "a body ahead and to one side."),
+        Step(1.0, 0x0056,
+             npc_properties(_OBJECTIVE_DEFINITION, _OBJECTIVE_NPC),
+             f"NPC_UPDATE_PROPERTIES def {_OBJECTIVE_DEFINITION} -- the "
+             f"GUARD's OWN type, so the two are told apart on sight",
+             "nothing yet."),
+        Step(0.5, 0x0057, npc_model(_OBJECTIVE_DEFINITION, _OBJECTIVE_NPC),
+             f"NPC_UPDATE_MODEL def {_OBJECTIVE_DEFINITION}",
+             "still nothing."),
         Step(1.0, 0x0020,
              create_agent(_OBJECTIVE_AGENT,
-                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          CHAR_CLASS_MONSTER_BASE | _OBJECTIVE_DEFINITION,
                           AGENT_KIND_NPC, ox + 150, oy + 130, plane),
              f"WORLD_CREATE_AGENT({_OBJECTIVE_AGENT}) -- THE GATE GUARD",
              "a second body BESIDE the first rather than opposite it. The first "
