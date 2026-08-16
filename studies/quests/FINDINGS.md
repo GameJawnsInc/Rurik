@@ -258,6 +258,13 @@ So the icon column of `0x007E` is the KIND field, and the kind↔code table alre
 
 **Why it took three runs.** The owner's phrasing — a `?` "instead of a `!`" — is exactly right about the game and I mapped it onto the overhead marker, which is the other place a `!` appears. The corpus could not settle it either way: kind 22 is offered 3 times and clicked 0, so nothing in the capture shows what it renders. The measurement needed a person to talk to an NPC and look.
 
+**KNOWN BUGS, LEFT OPEN 2026-08-16 by the owner's decision — and they are ONE fix, not two.**
+
+1. **`INTERACT_RANGE = 250.0` is too far.** Ours, admitted unmeasured. Reading ArenaNet's off the corpus failed: the player's position is unknown at most interact moments and the agent positions available are stale spawn coordinates, giving 541–4275 units, which is a bad join rather than a range.
+2. **Clicking an NPC does not walk the player to it.** In stock, a click on a distant NPC walks you over and the dialog opens on arrival; ours does not move the player at all.
+
+**Why they are one fix:** the range gate is only correct once the walk exists. Tightening (1) without (2) would leave a player unable to talk to anything they are not already standing on — the quest would become unplayable in exactly the way the gate was meant to make it realistic. The corpus supports the pair: the client sends `0x0039` from wherever the player stands and ArenaNet answers 23 of 29, leaving 6 unanswered, which is a server ignoring an out-of-range ask while the client walks the player in.
+
 **Still not settled: the compass marker.** This run was on **map 449**, not 148, so it says nothing about §7.3 — map 148 cannot load at all right now (see below), and the marker coordinates are 148's. The free rider went unclaimed and §7.3's test is still open.
 
 **Not settled, and it blocked this run first: map 148 is unloadable.** `contentids.py` refuses it, correctly — no client archive in the vault binds `0x1B97D` the way the server's `dat_study` copy does. Four run dirs hold it only under the bit-31 mid-replacement spelling; the 38833 copy binds it to a file 8 bytes larger, written by the terrain arc's allocation work. This is archive state, not a quest question, and it is why Q0 ran on 449.

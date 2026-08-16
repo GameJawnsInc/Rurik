@@ -1283,6 +1283,35 @@ bare-machine requirement — say so and this entry gets corrected rather than re
 
 ## 8. Immediate next actions
 
+### Quests — the lifecycle runs end to end; two known bugs left open (2026-08-16)
+
+**A quest we authored is offered, accepted, tracked, advanced and turned in at a real
+client**, with the offer and turn-in screens carrying a reward line and the marker moving
+between giver and objective NPC. `studies/quests/` has the arc; `content/quests.toml` is the
+table; `toolkit/test_quests.py` (62 checks) is what holds it.
+
+**TWO BUGS ARE KNOWN AND DELIBERATELY LEFT** — owner's call, end of session 2026-08-16.
+Neither blocks the lifecycle; both are wrong against stock and should be fixed before this
+is called done.
+
+1. **`INTERACT_RANGE = 250.0` is TOO FAR.** Owner walked it and says so. The constant is
+   ours and admitted unmeasured — an attempt to read ArenaNet's off the corpus produced
+   541–4275 units, which is a bad join rather than a range (the player's position is unknown
+   at most interact moments and the agent positions available are stale spawn coordinates).
+   The cheap fix is a probe that walks a player in and finds the boundary the client itself
+   uses; the cheaper one is to take the owner's number.
+2. **Clicking an NPC does not AUTO-WALK the player to it.** In stock, clicking a distant NPC
+   walks you over and the dialog opens on arrival. Ours does not move the player at all, so
+   with (1) fixed the player would simply be unable to talk to anything they are not already
+   standing on. **These two are one fix, not two** — the range gate is only correct once the
+   walk exists, and shipping the gate alone would make the quest unplayable.
+
+**What is NOT done beyond those:** no reward is GRANTED (the grant protocol is 0 of 23,495 in
+the corpus and is its own arc), quest names are ArenaNet's string ids rather than ours
+(rung Q2b, `textwrite.py`), and the giver/objective binding is by AGENT ID, which is
+per-connection and per-spawn — a probe-world binding, not a content one (R5's job).
+
+
 ### Heroes and henchmen — R4c-H MET; the henchman is authored (2026-08-16)
 
 **The caged run happened and R4c-H passes** — `studies/heroes/FINDINGS.md` §10, four arms,
