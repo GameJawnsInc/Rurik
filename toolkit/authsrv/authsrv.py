@@ -2264,6 +2264,21 @@ HERO_ACTIVATE = False
 # inventory-table key, an id naming no inventory should trip THAT assert and
 # name the field by experiment. Silence means it is inert on this path.
 HERO_INVENTORY = 0
+# 0x01C2's msg+0x10 -- the field GmHeroCommander's scan reads as the commander
+# key. Normally the hero id; overridable so it can DISAGREE with 0x0074's and
+# 0x0072's hero id, which is the only way to tell which message supplies the
+# hero's identity. studies/heroes/FINDINGS.md 19.
+HERO_ROSTER_ID = None
+# 0x0072's hero id, overridable so ACTIVATE can name a different hero from the
+# one 0x0074 created a record for. Three outcomes, all informative: the name
+# follows 0x0074, or it follows 0x0072, or 0x0072 asserts charHeroData because
+# its field 1 selects the record 0x0074 made. studies/heroes/FINDINGS.md 20.
+HERO_ACTIVATE_ID = None
+# 0x01C2's msg+8, overridable. The field accepts 1 and rejects 200 (H1/H2) and
+# is NOT the hero index (18), but PLAYER_NUMBER and PLAYER_AGENT_ID are both 1
+# in the default rig so owner-player and owner-agent cannot be told apart.
+# Pair with --player-number to break that. studies/heroes/FINDINGS.md 21.
+HERO_OWNER = None
 # HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
 HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
@@ -5340,7 +5355,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # Still worth setting for any combat test, but only so a silent drop
             # at the send leaf cannot be confused with the switch's choice.
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
-                 [1,          # agent_id -- the player's own agent, 1 for the first
+                 [PLAYER_AGENT_ID,   # the player's own agent. A LITERAL 1 sat
+                              # here until 2026-08-16, which is a trap rather
+                              # than a bug while the constant is also 1: this
+                              # field is what the client stores at
+                              # ctx[0x44][0x2ac] (handler 0x0084EF00), and
+                              # GmHeroCommander's scan filters hero entries by
+                              # comparing that value against 0x01C2's msg+8.
+                              # A literal here silently stops tracking the
+                              # constant. studies/heroes/FINDINGS.md 22.
                   map_id,     # echoed from the version frame, not guessed
                   # The map's own kind, not a global switch. The client's
                   # AreaInfo type says which is which -- 2 explorable, 10
@@ -6500,11 +6523,29 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # (-> entry+0x0). Which is the agent id is exactly
                             # what this arm asks, so the two carry DIFFERENT
                             # values and --hero-swap exchanges them.
-                            _wa, _wb = HERO_AGENT_ID, HERO
+                            # CORRECTED 2026-08-16 from GmHeroCommander's own
+                            # party scan (studies/heroes/FINDINGS.md 17):
+                            #   msg+8    -> entry+0x4 : the OWNER player id,
+                            #               filtered against ctx[0x44][0x2ac]
+                            #   msg+0xc  -> entry+0x0 : the agent id
+                            #   msg+0x10 -> entry+0x8 : the HERO ID, and it is
+                            #               the key the commander container is
+                            #               built under.
+                            # We had been leaving msg+0x10 at 0, so our hero's
+                            # commander was registered under 0 and the panel
+                            # click looked up a real hero id and missed.
+                            # --hero-swap still exchanges the two words; it was
+                            # the arm that (with player number == hero id == 1)
+                            # could not tell owner from hero index apart.
+                            _wa = (PLAYER_NUMBER if HERO_OWNER is None
+                                   else HERO_OWNER)
+                            _wb = HERO_AGENT_ID
                             if HERO_SWAP:
                                 _wa, _wb = _wb, _wa
                             _inside = _inside + (agents.party_hero_add(
-                                1, _wa, _wb),)
+                                1, _wa, _wb,
+                                HERO if HERO_ROSTER_ID is None
+                                else HERO_ROSTER_ID),)
                         for op, vals, label in agents.party_build(
                                 1, PLAYER_NUMBER, inside_window=_inside):
                             send(op, vals, label)
@@ -6879,8 +6920,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # and an EARLY assert (before this line) would itself
                         # name the commander-binding trigger.
                         if HERO is not None and HERO_ACTIVATE:
-                            send(*agents.hero_activate(HERO, HERO_AGENT_ID,
-                                                 HERO_INVENTORY, HERO_AI_MODE))
+                            send(*agents.hero_activate(
+                                HERO if HERO_ACTIVATE_ID is None
+                                else HERO_ACTIVATE_ID,
+                                HERO_AGENT_ID, HERO_INVENTORY, HERO_AI_MODE))
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -7492,6 +7535,25 @@ def main():
                          "labelled from the BODY's agent instead of resolving "
                          "the hero's own name from s_heroClientData. The "
                          "control arm for section 14.")
+    ap.add_argument("--player-number", type=int, default=None, metavar="N",
+                    help="The in-instance player number, normally 1 -- which is "
+                         "also PLAYER_AGENT_ID, and that coincidence is what "
+                         "makes 0x01C2's msg+8 undecidable. Set it to something "
+                         "else and the two namespaces separate.")
+    ap.add_argument("--hero-owner", type=int, default=None, metavar="N",
+                    help="Override 0x01C2's msg+8 only (normally the player "
+                         "number). With --player-number, this is the arm that "
+                         "says whether the field is the owner's PLAYER NUMBER "
+                         "or the owner's AGENT ID.")
+    ap.add_argument("--hero-activate-id", type=int, default=None, metavar="N",
+                    help="Override 0x0072's hero id only, leaving 0x0074 on "
+                         "--hero's value. Splits the last confound: which of "
+                         "the two data-cache messages supplies the identity.")
+    ap.add_argument("--hero-roster-id", type=int, default=None, metavar="N",
+                    help="Override 0x01C2's msg+0x10 only, leaving 0x0074 and "
+                         "0x0072 on --hero's value. Three fields normally "
+                         "carry the same hero id, so nothing can say which one "
+                         "the client reads the identity from; this splits them.")
     ap.add_argument("--hero-inventory", type=lambda x: int(x,0), default=0,
                     metavar="N",
                     help="HeroActivate's inventoryId (field 3), 0 so far. "
@@ -7713,6 +7775,15 @@ def main():
               + (f" -- {', '.join(bits)}" if bits else
                  " -- no bits set, which CLEARS all three"))
 
+    if a.player_number is not None:
+        global PLAYER_NUMBER
+        if not 1 <= a.player_number <= 255:
+            raise SystemExit("--player-number outside 1..255")
+        PLAYER_NUMBER = a.player_number
+        print(f"PLAYER_NUMBER: {PLAYER_NUMBER} (PLAYER_AGENT_ID stays "
+              f"{PLAYER_AGENT_ID}) -- the two namespaces are now distinct, "
+              f"which is the whole point of the arm.")
+
     if a.hero is not None:
         global HERO, HERO_BODY, HERO_SWAP, HERO_ACTIVATE, HERO_INFO
         global HERO_BODY_NPC
@@ -7727,6 +7798,12 @@ def main():
         HERO_ACTIVATE = a.hero_activate
         global HERO_INVENTORY, HERO_AI_MODE
         HERO_INVENTORY = a.hero_inventory
+        global HERO_ROSTER_ID
+        HERO_ROSTER_ID = a.hero_roster_id
+        global HERO_ACTIVATE_ID
+        HERO_ACTIVATE_ID = a.hero_activate_id
+        global HERO_OWNER
+        HERO_OWNER = a.hero_owner
         HERO_AI_MODE = a.hero_ai_mode
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS

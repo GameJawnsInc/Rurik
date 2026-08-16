@@ -654,6 +654,18 @@ observed bug. Upstream's tolerance is the one constant in the whole reference
 its own author labels as invented. Keep ours; note that it is a choice, not a
 correction of upstream.
 
+**SUPERSEDED in code (note added 2026-08-16): the override was reversed, and
+this section is the stale side.** The live 0x0047 handler now accepts the
+client's position and plane unconditionally — "THE SERVER NO LONGER ARGUES" —
+recording the disagreement instead of correcting it
+(`toolkit/authsrv/authsrv.py:6337-6371`). The session that settled it is
+recorded in that comment: all seven corrections it sent were indefensible on
+review (two were plane changes we could not see because clicking sends no
+keyboard packets; two snapped the player off collision geometry our trapezoids
+have never read; teleporting a player nine units is pure damage). `on_mesh` is
+still measured per stop (57/61 on our mesh) as evidence about our map data, not
+grounds for moving the player. See `../unitsetup/FINDINGS.md` §3.
+
 ### 8. Traps to carry forward if we ever port more of this code
 
 - `Vec2f_Dist2` returns **true Euclidean distance** despite the name — it calls
