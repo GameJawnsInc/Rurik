@@ -107,11 +107,13 @@ DROPPED_ON_PURPOSE = {
             "GlobalMemoryStatusEx. Every field is about the MACHINE and none is "
             "about the world, and ArenaNet's server sends nothing back. There is "
             "no state here for a game server to hold.",
-    0x0012: "REQUEST_QUEST_INFO (29) -- REAL MISSING WORK, not a no-op. It is a "
-            "FETCH: the client reaches the sender only on the failure branch of "
-            "a quest-description lookup, and ArenaNet answers GAME_SMSG 0x004C "
-            "in 30.7-61.5 ms. Answering it needs a quest table this repo does "
-            "not have, and inventing quest text is worse than the drop.",
+# 0x0012 REQUEST_QUEST_INFO was here, and its reason was "answering it needs a
+# quest table this repo does not have, and inventing quest text is worse than
+# the drop". ARMED 2026-08-15: content/quests.toml is that table, and the text
+# is invented ON PURPOSE rather than transcribed -- ArenaNet's own description
+# ids resolve to encrypted archive records whose key is NOT FOUND, so their
+# words were never reachable to copy. studies/quests/ is the study the reason
+# was waiting on.
     0x002B: "COMPASS_DRAW (5 loopback, 1 live) -- the player drawing or "
             "pinging on their own compass: a client-allocated stroke handle "
             "plus 1-16 knots, each two signed int16 packed low-half-first in "

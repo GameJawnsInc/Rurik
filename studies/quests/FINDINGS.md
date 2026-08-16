@@ -25,6 +25,23 @@
 - **`studies/minimap/FINDINGS.md:721`'s reading of the `?` is REFUTED.** It recorded the icon as *"the empty name string we deliberately sent"*. It is not: the `?` is the quest **icon** and it is still there in this run, *beside* the name. What the empty strings produced was **no text at all**. Anyone reasoning from "the `?` is the name" would conclude the name field renders as a literal glyph and stop looking.
 - **The client asked us for the description, unprompted.** `c2s 0x8012 REQUEST_QUEST_INFO` arrived seconds after our `0x0049`, and our server has no arm for it (`test_dispatch.py:110-114`'s recorded drop, which the log names). That is §2.3's *"the client asks in 4 of 4 accepts regardless"* reproduced on **our** wire against a quest **we** invented — the strongest available corroboration that the client took the entry as a real quest rather than tolerating a malformed one.
 
+**SETTLED 2026-08-15, SAME DAY: our own PROSE renders too, and the bare/framed question was answered by a crash.** Rung Q3 ran (`probes.py`, `quest_description`; build 38833, map 449, loopback, caged). The server now answers `GAME_CMSG 0x0012` with a `GAME_SMSG 0x004C` built from `content/quests.toml`, and the client's Quest Log shows **our sentence**: *"Speak to the gate guard, then return to me."* under *Quest Summary*, with our objective *"Return to the guard."* above it and repeated in the tracker. — OBSERVED, capture `vault/captures/harness/20260815T204539`.
+
+**The control arm killed the client, and that is the better half of the result.** The same probe first sent a second quest whose description was the identical sentence with **no framing**. It did not merely fail to render:
+
+```
+Assertion: (codedString[0] & ~WORD_BIT_MORE) >= WORD_VALUE_BASE
+P:\Code\Engine\Text\TextApi.cpp(585)                     build 38833
+```
+
+`asserts.py --grep WORD_VALUE_BASE` finds that same expression at `0x007c9b1d`, with five more sites across `TextParser.cpp` and `TextEncode.cpp`. The crash stack carried our sentence verbatim as UTF-16 (`S.p.e.a.k. .t.o. .t.h.e. .g.a.t.e...`) beside frame id `1000014f` and opcode `0000004c`, so the bytes arrived intact and **the first word is what it refused**. §3.2's marker/varint rule — derived from `TextParser.cpp` and confirmed 66/66 against ArenaNet's wire — is now **confirmed by the client's own assert, which names both constants**. A literal run must be introduced by a word ≥ `WORD_VALUE_BASE`; `toolkit/authsrv/questdefs.py` refuses to build one that is not, citing this crash. — OBSERVED.
+
+**Three things fell out that no lane predicted.**
+
+- **`0x004C` carries the objectives too**, so nothing needed `0x0054`: its second `string16` rendered as the bulleted objective and in the tracker. §2.2's warning that `0x0054` is a silent no-op before `0x004C` stands, and this run simply never had to reach it.
+- **The client composes the heading itself.** The pane reads *"Ascalon (Kamadan, Jewel of Istan):"* — our name id plus **the map's own name, which we never sent**. The client resolves that from the instance, so a quest's displayed heading is not wholly ours to author.
+- **§1.4's grouping model is confirmed and one heading id is now named.** We sent `flags = 32` (`0x20`), and §1.4 reads `test al, 0x20 → sortCode 1` with heading string id `0x464` (1124). The quest appeared under **"Primary Quests"**. That is the flag→group→heading chain measured end to end from the wire to the glyph, and it means **we can choose a quest's log section from the server** by picking the flag bit. — OBSERVED.
+
 **Still not settled: the compass marker.** This run was on **map 449**, not 148, so it says nothing about §7.3 — map 148 cannot load at all right now (see below), and the marker coordinates are 148's. The free rider went unclaimed and §7.3's test is still open.
 
 **Not settled, and it blocked this run first: map 148 is unloadable.** `contentids.py` refuses it, correctly — no client archive in the vault binds `0x1B97D` the way the server's `dat_study` copy does. Four run dirs hold it only under the bit-31 mid-replacement spelling; the 38833 copy binds it to a file 8 bytes larger, written by the terrain arc's allocation work. This is archive state, not a quest question, and it is why Q0 ran on 449.

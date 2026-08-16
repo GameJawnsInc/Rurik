@@ -1,0 +1,65 @@
+# The quest table.
+#
+# WHAT A ROW IS. A quest as the CLIENT can express it, plus the state OUR server
+# holds to run it. Those are different things and the row says which is which:
+# `quest_id` and `enc_name` go on the wire in GAME_SMSG 0x0049 and are the
+# client's vocabulary; `description` and `objectives` are OUR PROSE, sent in
+# 0x004C when the client asks for them with GAME_CMSG 0x0012.
+#
+# WHY THERE IS NO `wire_framing = "bare"` ROW HERE ANY MORE. There was, on
+# 2026-08-15, as the control half of one experiment with one variable. It ran,
+# and it did not merely fail to render -- it KILLED THE CLIENT on ArenaNet's own
+# bound check:
+#
+#     Assertion: (codedString[0] & ~WORD_BIT_MORE) >= WORD_VALUE_BASE
+#     P:\Code\Engine\Text\TextApi.cpp(585)                    build 38833
+#
+# A coded string reads a word < 0x100 as a MARKER and >= 0x100 as a 0x100-biased
+# varint, so our ASCII prose is entirely sub-0x100 and cannot introduce a
+# literal run. `questdefs.coded_literal` now refuses to build one rather than
+# letting it reach a client, and the row is gone because a content row that
+# crashes a client on request is a trap, not a control. The finding it bought is
+# in studies/quests/FINDINGS.md; keeping the row would only buy it again.
+#
+# STRING COLUMNS HOLD WIRE CODE UNITS, NOT ARCHIVE STRING IDS. `enc_name =
+# [0x3D64]` is the u16 the server puts on the wire; the archive id it denotes is
+# 0x3D64 - 0x100 = 15460, which textrec.py resolves to 'Ascalon'. Reading the
+# TOML number as a string id gives 15716, an encrypted record returning None.
+# Same column, two numbers, and only one is what codec.py wants.
+
+[quest.rurik_first_errand]
+quest_id     = 1463
+enc_name     = [0x3D64]
+description  = "Speak to the gate guard, then return to me."
+objectives   = "Return to the guard."
+wire_framing = "template"
+
+[quest.rurik_first_errand.provenance]
+source = "invented"
+note = """
+Ours -- the quest, its words, its id. `source = "invented"` is the whole
+obligation: no extractor, no build, no capture, because nothing here was read
+out of anybody's client. This is the cleaner authoring story and the reason
+studies/quests/AUTHORING.md 5 judges Route B better than reproducing ArenaNet's
+quests: their description ids resolve to encrypted archive records whose key is
+NOT FOUND, so their prose was never reachable to copy even if we had wanted it.
+
+`enc_name` cites ArenaNet's own string id 0x3D64 and that is deliberate and
+permitted: commit the id, resolve the string from the owner's own archive at
+run time, exactly as content/maps.toml already does. It is a PLACEHOLDER -- the
+name reads 'Ascalon' because that id is the one value proven to render (Q0).
+Authoring our own NAME means writing a plain text record with
+toolkit/mapdata/textwrite.py and committing a bare id of ours; that is rung Q2b
+and it has not happened. The DESCRIPTION and OBJECTIVES below need none of that
+-- they are literals, and the 0x004C field holds 128 code units.
+
+`wire_framing = "template"` wraps the literal as ArenaNet's own 0x004C does:
+0x0BA9 (the `%str1%` template id) then 0x0107 (the marker preceding every
+literal run in the corpus) then the UTF-16, then 0x0001. The three are MEASURED
+constants read off our own captures; the words between them are ours.
+
+quest_id 1463 sits under the client's own bound -- UiCtlWebLink.cpp:576 asserts
+`challengeId < CHALLENGES`, and CHALLENGES is 1465 on build 38797. There is no
+high band to author into: the corpus maximum is 1462, so 1463 and 1464 are the
+only free ids beneath the bound.
+"""
