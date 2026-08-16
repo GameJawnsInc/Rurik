@@ -336,7 +336,67 @@ def main():
           "two kinds sharing an icon would be indistinguishable to a player, "
           "which is what the property-11 sweep kept producing")
 
-    print("\n14. the enc_* columns are WIRE code units, not archive string ids")
+    print("\n14. the objective state machine, driven through a whole quest")
+    # WHY THIS IS A UNIT TEST AND NOT A CLIENT RUN. Kind 22's RENDERING is
+    # already measured -- dialog_icons put one option of every kind in one
+    # window and 22 drew the gold '?'. What was unverified is that our server
+    # ever EMITS it, and that is pure logic over quest state. Driving it here is
+    # refutable in milliseconds; driving it on screen needs a five-click
+    # sequence against two NPCs whose screen positions the harness cannot
+    # reliably hit, which cost three runs and produced no interaction at all.
+    sys.path.insert(0, os.path.join(HERE, "authsrv"))
+    sys.path.insert(0, os.path.join(HERE, "schema"))
+    import authsrv                                          # noqa: E402
+
+    row = questdefs.load()[1463]
+    giver, guard = row["giver_agent"], row["objective_agent"]
+    check(giver != guard,
+          "the giver and the objective NPC are different agents",
+          "one NPC that both gives and completes cannot show an in-progress "
+          "state at all -- it is the two-NPC walk that makes kind 22 reachable")
+
+    st = {"interacting": giver}
+    lines = authsrv._quest_lines(st)
+    check([c for _q, c, _r in lines] == [questdefs.SERVICE_SHOW],
+          "before accepting, the giver offers SHOW (code 0x03, kind 18, '!')",
+          str(lines))
+
+    st["quests"] = {1463}
+    lines = authsrv._quest_lines(st)
+    check([c for _q, c, _r in lines] == [questdefs.SERVICE_IN_PROGRESS],
+          "once held and the objective unmet, it offers IN_PROGRESS "
+          "(0x05, kind 22, the gold '?')",
+          "THE STATE THAT DID NOT EXIST: before this, a held quest returned "
+          "TURN_IN immediately and kind 22 was unreachable")
+    check(questdefs.option_kind(lines[0][1]) == 22
+          and questdefs.OPTION_ICONS[22] == "gold ?",
+          "and that code really does select the '?' icon",
+          "joins the state machine to the measured icon table")
+
+    check(authsrv._objective_quests(st, guard) == [(1463, row)]
+          or [q for q, _r in authsrv._objective_quests(st, guard)] == [1463],
+          "the gate guard is the agent that completes it")
+    check(authsrv._objective_quests(st, giver) == [],
+          "and the GIVER does not complete its own objective",
+          "otherwise accepting and finishing would coincide again and the "
+          "middle state would collapse back to nothing")
+
+    st["objectives_done"] = {1463}
+    lines = authsrv._quest_lines(st)
+    check([c for _q, c, _r in lines] == [questdefs.SERVICE_TURN_IN],
+          "with the objective met, the giver offers TURN_IN (0x07, kind 23)",
+          str(lines))
+    check(authsrv._objective_quests(st, guard) == [],
+          "and the guard has nothing left to complete",
+          "a second visit must not re-fire the objective")
+
+    st["interacting"] = guard
+    check(authsrv._quest_lines(st) == [],
+          "the gate guard never OFFERS the quest, whatever the state",
+          "it is an objective, not a second giver -- talking to it is an "
+          "event, not a menu")
+
+    print("\n15. the enc_* columns are WIRE code units, not archive string ids")
     # The trap FINDINGS 3.5 names: 0x3D64 on the wire denotes archive id 15460.
     # Conflating them resolves to 15716, an encrypted record returning None.
     for qid, row in sorted(rows.items()):

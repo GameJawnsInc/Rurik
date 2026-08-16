@@ -43,6 +43,28 @@ giver_dialogue = "Well met, traveller. Speak to the gate guard for me, and I wil
 # a separate string: the offer and turn-in dialog lines are two distinct ids in
 # 6 of 6 observed pairs. One `description` column cannot express both screens.
 turn_in_dialogue = "You have my thanks, traveller. The gate guard speaks well of you."
+# WHILE THE QUEST IS IN PROGRESS. A third screen, and the reason the objective
+# state below exists: an in-progress quest is offered as option kind 22, which
+# draws the gold '?' -- MEASURED 2026-08-16. Without an objective to be part
+# way through, a server jumps straight from '!' to the turn-in bag and kind 22
+# never fires at all, which is what ours did.
+in_progress_dialogue = "The gate guard is by the arch. Speak with him, then come back to me."
+# The objectives line after the objective is met, sent as 0x0054. The client
+# REFUSES 0x0054 for a quest it has no description for -- flag bit 0,
+# CHAR_CHALLENGE_FLAG_DESC_FILLED, is set by 0x004C and gates the whole handler
+# at 0x0080F9CD -- so the server must have answered 0x0012 first or this is a
+# silent no-op that looks exactly like the client ignoring us.
+objectives_done = "Return to the guard. [done]"
+
+# WHO GIVES IT AND WHO COMPLETES IT. Two agent ids, and they are AGENT ids
+# rather than content keys, which is crude: an agent id is per-connection and
+# per-spawn, so this binds the quest to the probe world rather than to a
+# character in a place. A real binding needs a spawn row with a stable key and
+# a `content/world.toml` entry to point at, which is rung R5's job. Written
+# this way so the state machine can be exercised at all, and named here so the
+# next session does not mistake it for a schema decision.
+giver_agent     = 99
+objective_agent = 98
 # The clickable lines, sent as 0x007E AFTER the window opens. Our words. The
 # option's TAG carries the 0x003B code the click returns, and the option's KIND
 # is bound to that code 1:1 -- accept 0x01/16, decline 0x02/17, turn in 0x07/23.
