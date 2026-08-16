@@ -810,6 +810,123 @@ callers, and three of them — `0x00819FF2`, `0x0081A092`, `0x0081A261` — sit 
 code the pair activates. Read those three and find where the out-of-range `profession` is
 loaded from. That is a desk task needing no client.
 
+## 14. THE HERO IS AUTHORED — every gate cleared, and the row draws `Norgu`
+
+Reading the three callers named at the end of §13 answered it, and the answer was one
+message plus one ordering. **The full chain now completes and the client survives it.**
+
+### 14.1 Where the bad profession came from
+
+The three callers of the profession getter `0x005AB800` all sit in one function,
+**`0x00819EF0`**, whose prologue is the whole answer:
+
+```
+0x00819EF8  mov esi,[ebp+8]        ; the attribState record
+0x00819F17  call 0x47f660          ; GetLocalPlayerContext()
+0x00819F1E  mov ebx,[eax+0x2c]
+0x00819F21  add ebx,0x6bc          ; <-- ctx[0x2c]+0x6BC
+0x00819F2C  call 0x81fad0          ; (array, [esi] = agent id) -> primary   -> [ebp-8]
+0x00819F3F  mov [ebp-0x1c],eax     ;                          -> secondary -> [ebp-0x1c]
+```
+
+It takes the attribState record, reads **its agent id**, and looks that agent's **primary and
+secondary professions** up in the array at `ctx[0x2c]+0x6BC`. Callers 2 and 3
+(`0x0081A092`, `0x0081A261`) then hand each straight to `s_profChapter` **guarded only
+against 0, never against the bound**. Caller 1 (`0x00819FF2`) is a different shape — it maps
+an *attribute* to its profession via `s_attrib` first.
+
+**`ctx[0x2c]+0x6BC` is the array `studies/profession/RUNS.md` already identified as written
+only by `0x00B7` — and we had only ever sent `0x00B7` for the player.** An agent absent from
+it yields an out-of-range profession, and `ConstChar:1296` fires.
+
+> **THERE ARE TWO PROFESSION STORES, and conflating them cost this arc an afternoon.**
+> `0x00A6` writes the **agent's** profession bytes — what the roster label builder reads,
+> which is why the hero row already said `Mo1`. `0x00B7` writes the **`+0x6BC` array** — what
+> the **attribute** code reads. Setting one does nothing for the other. That is why matching
+> the body's profession (§13.2) changed nothing: it was `0x00A6`'s store all along.
+
+### 14.2 `s_attrib`, read in passing
+
+51 rows × 20 B at **`0x00A35740`**: `+0x00` profession, `+0x04` a **self-referential index**
+(row *i* holds *i* — a closure the artifact could have refuted), `+0x08`/`+0x0C` string ids,
+`+0x10` an **is-primary** flag set on **exactly ten rows, one per profession 1..10**.
+Attribute **17 is Strength** (profession 1), matching the player ranks this server sends.
+
+**Attributes 26–28 and 45–50 carry profession `11`** — out of range for `s_profChapter`.
+Those are the PvE title tracks, which belong to no profession, and they are why the guard at
+caller 1 exists at all.
+
+### 14.3 The last gate was ORDER, and this repo already knew it
+
+With `0x00B7` sent for the hero, `ConstChar:1296` cleared and the assert moved to
+**`attribState`, `ChCliAttrib.cpp(435)`** — a *different line* from the `:156` that opened
+§12. The fix was not new information: `authsrv.py`'s own comment above the player's pair
+records that exact assert with `0xb7` named in the stack trace, and the remedy —
+**points first, profession second**. Sending `0x00B7` before `0x0037` reproduced it exactly.
+
+**The complete chain, all four gates, each cleared by a measured change:**
+
+| gate | assert | cleared by |
+|---|---|---|
+| 1 | `charHeroData` `ChCliHero.cpp(199)` | `0x0074` |
+| 2 | `attribState` `ChCliAttrib.cpp(156)` | `0x0037` |
+| 3 | `profession < arrsize(s_profChapter)` `ConstChar.cpp(1296)` | `0x00B7` **for the hero's agent** |
+| 4 | `attribState` `ChCliAttrib.cpp(435)` | **order**: `0x0037` → `0x00B7` → `0x003A` |
+
+And the `0x0072` diagnostic — which **ASSERTED** on 2026-08-12 under this same client state
+minus our messages — now **completes silently**. That was the refutable experiment this arc
+opened with, and it has flipped.
+
+### 14.4 The payoff: the row stops saying "Hatcher" and starts saying "Norgu"
+
+The measurement that makes this more than "no crash". With the hero record incomplete, the
+row read `Mo1 Hatcher [Collector]` — the **body's** name, per §10.2's rule that the roster
+label builder reads the agent. With the record **complete**, the same run's row reads:
+
+**`Mo1 Norgu`**
+
+Norgu is `s_heroClientData` row 1. **The client switched name sources.** Once the hero data
+record is satisfied, the roster stops labelling from the agent and resolves the hero's own
+identity from the static table — which is exactly §0's claim, *"a hero carries no name and
+must resolve its identity through `s_heroClientData`"*, now measured rather than argued. It
+also independently confirms the recon's row-1 resolution, from the screen instead of from
+`textrec.py`.
+
+`--hero-attribs` is **ON** by default again; `--no-hero-attribs` is the control arm, and it
+is a real one — it produces a hero row labelled from the body instead of the hero table.
+
+### 14.5 What a hero now needs, end to end
+
+```
+0x0074  MERCENARY_INFO          hero index 1..39      -> creates charHeroData
+0x01D2/0x01CB                   party build window
+0x01C2  PARTY_HERO_ADD          msg+8 = hero index, msg+0xc = AGENT ID
+0x01D3/0x01B2                   commit + set mine
+0x0056/0x0057/0x0020            the body, at that agent id
+0x00A6  AGENT_SET_PROFESSION    the agent's own profession bytes
+0x0037  AGENT_ATTRIBUTE_POINTS  creates attribState        <-- order
+0x00B7  PLAYER_UPDATE_PROFESSION  ctx+0x6BC, for the HERO   <-- is
+0x003A  AGENT_UPDATE_ATTRIBUTES   fills attrib[]            <-- load-bearing
+```
+
+**Still open:** the hero's **skill bar** (§4 — the attribute half is now solved, the eight
+skill slots are not), the **c2s** direction (§3.3), `0x0074`'s remaining 17 fields, and
+follow AI.
+
+### 14.6 A guard this arc strengthened
+
+Adding the hero's `0x00B7` turned `test_agentlife`'s syntax-tree check red, correctly: it
+requires every `0x00B7` send site to build through `spawn_profession_values()` rather than a
+literal list, and the hero's site did not. Fixed by giving the builder an `agent_id`
+parameter (defaulting to the player, so no existing caller moved).
+
+The check itself had a latent hole — it **reassigned** its verdict per match, so with two
+send sites it graded only whichever came **last** in the file. It is now `all()` over a
+counted list. Proven both ways: sabotaging the hero's site (last) fails as before, and
+sabotaging the **player's** site (first) now fails too, where the old logic would have passed
+it. The arc got lucky in the safe direction — the new site happened to be last, so the hole
+announced itself instead of hiding.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

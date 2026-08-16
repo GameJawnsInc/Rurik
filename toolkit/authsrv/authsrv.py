@@ -876,17 +876,24 @@ def char_settings_for(profession, settings=None):
 SPAWN_PROFESSION = PROF_WARRIOR
 
 
-def spawn_profession_values(profession=None):
+def spawn_profession_values(profession=None, agent_id=None):
     """The 0x00B7 payload for the spawn burst, built THROUGH the guard.
 
     agents.agent_set_profession is the server's own bound check; building the
     burst payload from it rather than beside it is the same rule the probes
     follow -- custom=True is derived here, not defaulted, so an out-of-band
     spawn profession still traverses the u8 ceiling and the 0-refusal.
+
+    `agent_id` exists because 0x00B7 is AGENT-KEYED and a hero needs its own
+    (studies/heroes/FINDINGS.md 14.1). The array it writes, ctx[0x2c]+0x6BC, is
+    what the ATTRIBUTE code reads when it asks an agent for its professions, and
+    an agent missing from it yields an out-of-range profession and asserts
+    ConstChar:1296. Defaulting to the player leaves every existing caller
+    unchanged.
     """
     p = SPAWN_PROFESSION if profession is None else profession
     return agents.agent_set_profession(
-        PLAYER_AGENT_ID, p, 0,
+        PLAYER_AGENT_ID if agent_id is None else agent_id, p, 0,
         custom=p > agents.CHAR_PROFESSIONS - 1) + [0]
 
 
@@ -6792,11 +6799,44 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # This is the message the arc spent two refuted
                         # hypotheses looking for, and we already had it.
                         if HERO is not None and HERO_ATTRIBS:
+                            # 0x00B7 FIRST, and read the reason before moving
+                            # it. THERE ARE TWO PROFESSION STORES and this arc
+                            # conflated them for a day:
+                            #   0x00A6 writes the AGENT's profession bytes --
+                            #     what the roster label builder reads, which is
+                            #     why the hero row already said "Mo1".
+                            #   0x00B7 writes the array at ctx[0x2c]+0x6BC --
+                            #     what the ATTRIBUTE code reads.
+                            # The attribute function 0x00819EF0 takes the
+                            # attribState record, reads its agent id, looks the
+                            # agent's primary and secondary up in +0x6BC, and
+                            # hands each to s_profChapter (0x005AB800, bound
+                            # 11) guarded ONLY against 0. An agent absent from
+                            # +0x6BC yields an out-of-range profession and
+                            # asserts ConstChar:1296 -- exactly what a hero
+                            # got, because we had only ever sent 0x00B7 for
+                            # the player. studies/heroes/FINDINGS.md 14.
+                            # ORDER IS LOAD-BEARING, and this server already
+                            # knew it: the player's own pair is sent points
+                            # FIRST, profession SECOND, and the comment above
+                            # that pair names the exact cost of the other
+                            # order -- `Assertion: attribState
+                            # ChCliAttrib.cpp(435)` with 0xb7 in the stack.
+                            # Sending 0x00B7 first for the hero reproduced
+                            # that assert on 2026-08-16, which is the repo's
+                            # own recorded knowledge re-earning itself.
+                            _hprof = (agents.npc_template(HERO_BODY_NPC)
+                                      ["profession"] if HERO_BODY else 1)
                             send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
                                  [HERO_AGENT_ID, ATTRIBUTE_POINTS,
                                   ATTRIBUTE_POINTS],
                                  f"AGENT_ATTRIBUTE_POINTS(hero agent "
                                  f"{HERO_AGENT_ID})")
+                            send(GAME_SMSG_PLAYER_UPDATE_PROFESSION,
+                                 spawn_profession_values(_hprof,
+                                                         HERO_AGENT_ID),
+                                 f"PLAYER_UPDATE_PROFESSION(hero agent "
+                                 f"{HERO_AGENT_ID}, prof {_hprof})")
                             _hcols = attribute_columns()
                             send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
                                  [HERO_AGENT_ID, _hcols],
@@ -7405,14 +7445,13 @@ def main():
                     help="Drop the leading 0x0074. The route sends it first on "
                          "the hypothesis that it creates the data-cache "
                          "record; this asks whether it was needed.")
-    ap.add_argument("--hero-attribs", action="store_true",
-                    help="Send the 0x0037 + 0x003A pair for the hero's agent. "
-                         "0x0037 CREATES the attribState record whose absence "
-                         "asserted at ChCliAttrib.cpp:156 and 0x003A fills it "
-                         "-- measured, the gate moves. But the client then "
-                         "dies on ConstChar.cpp:1296, with or without the "
-                         "0x0072 diagnostic, so this is OFF by default: it "
-                         "regresses a hero that otherwise renders.")
+    ap.add_argument("--no-hero-attribs", action="store_true",
+                    help="Omit the hero's attribute state (0x0037 -> 0x00B7 -> "
+                         "0x003A). That trio is what completes the hero "
+                         "record; without it the row still draws but is "
+                         "labelled from the BODY's agent instead of resolving "
+                         "the hero's own name from s_heroClientData. The "
+                         "control arm for section 14.")
     ap.add_argument("--hero-chunk", default=None, metavar="LIST|N",
                     help="0x0074's ten trailing dwords: one int fills all "
                          "ten, or a comma list of up to ten. The client "
@@ -7639,7 +7678,7 @@ def main():
         HERO_DIAGNOSTIC = a.hero_diagnostic
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS
-        HERO_ATTRIBS = a.hero_attribs
+        HERO_ATTRIBS = not a.no_hero_attribs
         global HERO_CHUNK, HERO_FLAG, HERO_BYTES
         HERO_FLAG = a.hero_flag
         if a.hero_chunk:

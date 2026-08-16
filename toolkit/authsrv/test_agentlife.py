@@ -2254,18 +2254,26 @@ def section_spawn_profession():
     # from a literal list. A grep cannot tell a call site from this comment.
     with open(authsrv.__file__, encoding="utf-8") as f:
         tree = ast.parse(f.read())
-    wired = False
-    for node in ast.walk(tree):
-        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-                and node.func.id == "send" and node.args
-                and isinstance(node.args[0], ast.Name)
-                and node.args[0].id == "GAME_SMSG_PLAYER_UPDATE_PROFESSION"):
-            wired = any(isinstance(inner, ast.Call)
-                        and isinstance(inner.func, ast.Name)
-                        and inner.func.id == "spawn_profession_values"
-                        for inner in ast.walk(node.args[1]))
+    # EVERY send site, not just the last. This used to REASSIGN `wired` per
+    # match, so with two 0x00B7 sites it graded only whichever came last in the
+    # file -- a second site could bypass the builder and stay green. 2026-08-16
+    # added the hero's own 0x00B7 (agent-keyed, studies/heroes/FINDINGS.md 14.1)
+    # and turned that latent hole into a real one, in the safe direction: the
+    # new site was last, so it failed loudly instead of hiding. `all()` over a
+    # counted list is strictly stronger and still requires at least one site.
+    sites = [node for node in ast.walk(tree)
+             if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                 and node.func.id == "send" and node.args
+                 and isinstance(node.args[0], ast.Name)
+                 and node.args[0].id == "GAME_SMSG_PLAYER_UPDATE_PROFESSION")]
+    wired = bool(sites) and all(
+        any(isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Name)
+            and inner.func.id == "spawn_profession_values"
+            for inner in ast.walk(node.args[1]))
+        for node in sites)
     LEDGER.ok(wired,
-              "the burst's 0x00B7 send site calls the builder (syntax tree)",
+              "EVERY 0x00B7 send site calls the builder (syntax tree)",
               "a literal list restored at the send site would disconnect "
               "--spawn-profession while the builder's own checks stay green")
 
