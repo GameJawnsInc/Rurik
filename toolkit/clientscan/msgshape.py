@@ -250,7 +250,15 @@ def fields(cmds):
         elif t in (5, 9):
             out.append(Field("blob", t, index, count, wire=count))
         elif t == 7:
-            out.append(Field("wstring", t, index, count, wire=2 + 2 * count))
+            # `cap=count` matters: __repr__ prints the capacity, so omitting it
+            # made EVERY wide string display as `string16(0)` regardless of its
+            # true width -- the array branch above has always passed it. The
+            # number was only recoverable by back-solving from the wire total
+            # (0x01BF: 50 B - 8 B of fixed fields = 42 = 2 + 2*20), which is a
+            # capacity a reader has no reason to distrust and every reason to
+            # quote. Found 2026-08-15, studies/heroes/FINDINGS.md 9.
+            out.append(Field("wstring", t, index, count, cap=count,
+                             wire=2 + 2 * count))
         elif t == 12:
             out.append(Field("nested", t, index, count, wire=1))
         else:
