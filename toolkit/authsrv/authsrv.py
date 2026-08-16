@@ -2230,6 +2230,28 @@ HENCHMAN_WIRE_NAME = None
 HENCHMAN_WIRE_PROF = None
 HENCHMAN_WIRE_LEVEL = None
 
+# --- the hero arm -------------------------------------------------------
+# Set from --hero <s_heroClientData index, 1..39>. None is the control arm.
+HERO = None
+# The hero's world body. 200 is deliberately OUTSIDE the 1..39 hero-index
+# range, and that is what makes the word-order arm readable: a word carrying
+# 200 CANNOT be a legal hero index (ChCliApi:4446 `hero < HEROES`, HEROES==40),
+# so whichever position 200 must occupy for the row to render is the agent id.
+# An id inside 1..39 would have let both readings fit, which is the confound
+# the henchman arm nearly shipped with.
+HERO_AGENT_ID = 200
+HERO_DEFINITION = 10
+HERO_BODY = False
+# Swap 0x01C2's two u16s. The whole point of the arm: one is an agent id and
+# one is a hero index, and the client's own code does not say which.
+HERO_SWAP = False
+# Send the trailing 0x0072 diagnostic. It ASSERTED all-zero on 2026-08-12, so
+# an assert dialog and a silence are BOTH readouts.
+HERO_DIAGNOSTIC = False
+# Send 0x0074 first to populate the data cache -- the route's whole ordering
+# hypothesis. --no-hero-info drops it so the arm can ask whether it was needed.
+HERO_INFO = True
+
 # Set from --netgraph. One byte of UI-overlay flags sent once, after the
 # instance loads, as GAME_SMSG_UI_OVERLAY_FLAGS. None means send nothing at
 # all, which is deliberately distinct from sending 0: the handler CLEARS three
@@ -6429,6 +6451,24 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 is None else HENCHMAN_WIRE_PROF,
                                 _hench["level"] if HENCHMAN_WIRE_LEVEL
                                 is None else HENCHMAN_WIRE_LEVEL),)
+                        if HERO is not None:
+                            # 0x0074 goes BEFORE the build window, by analogy
+                            # with 0x0056-before-0x0020: its worker looks up OR
+                            # CREATES the per-hero record in the local player's
+                            # context (+0x584), so it is the only candidate we
+                            # have for the thing 0x0072's gate wants to exist.
+                            # An ordering hypothesis, stated as one.
+                            if HERO_INFO:
+                                send(*agents.mercenary_info(HERO))
+                            # word_a is msg+8 (-> entry+0x4), word_b is msg+0xc
+                            # (-> entry+0x0). Which is the agent id is exactly
+                            # what this arm asks, so the two carry DIFFERENT
+                            # values and --hero-swap exchanges them.
+                            _wa, _wb = HERO_AGENT_ID, HERO
+                            if HERO_SWAP:
+                                _wa, _wb = _wb, _wa
+                            _inside = _inside + (agents.party_hero_add(
+                                1, _wa, _wb),)
                         for op, vals, label in agents.party_build(
                                 1, PLAYER_NUMBER, inside_window=_inside):
                             send(op, vals, label)
@@ -6697,6 +6737,40 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  "attacks_back": False,
                                  "skills": [], "skill_ready": []},
                                 "henchman body", conn_id=conn_id)
+                        # The hero's body, at HERO_AGENT_ID. MANDATORY for the
+                        # commander binding rather than optional like the
+                        # henchman's: GmHeroCommander:120/121 assert a
+                        # resolvable heroData AND a non-zero heroData->agentId
+                        # before a slot binds. The henchman arm also measured
+                        # that the roster row reads the AGENT for its name,
+                        # profession and level, so a bodiless hero row would be
+                        # expected to render as empty as the henchman's did.
+                        if HERO is not None and HERO_BODY:
+                            _hro = agents.npc_template(HERO_BODY_NPC)
+                            _rx, _ry = pos[0] - 150.0, pos[1]
+                            create_agent_world(
+                                send, state, HERO_AGENT_ID,
+                                {"pos": (_rx, _ry), "plane": cfg[2],
+                                 "health": 100.0, "max_health": 100.0,
+                                 "dead": False, "name": _hro["name"],
+                                 "npc": _hro,
+                                 "definition": HERO_DEFINITION,
+                                 "allegiance": agents.ALLEGIANCE_PLAYER,
+                                 "effects": 0,
+                                 "attack_speed": ENEMY_ATTACK_SPEED,
+                                 "resend_definition": True,
+                                 "attacks_back": False,
+                                 "skills": [], "skill_ready": []},
+                                "hero body", conn_id=conn_id)
+                        # LAST, and it is a question rather than payload. It
+                        # asserted all-zero on 2026-08-12 under this same
+                        # client state minus our messages; if it now completes
+                        # silently, something we sent created the record the
+                        # charHeroData gate wants. Both outcomes are readouts,
+                        # and an EARLY assert (before this line) would itself
+                        # name the commander-binding trigger.
+                        if HERO is not None and HERO_DIAGNOSTIC:
+                            send(*agents.hero_data_gate(HERO, HERO_AGENT_ID))
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -7260,6 +7334,37 @@ def main():
                          "arm one measured that the row draws with no body at "
                          "all, but with no name and 'Lvl 255'. This asks "
                          "whether the row's CONTENT is what needs the agent.")
+    ap.add_argument("--hero", type=int, default=None, metavar="INDEX",
+                    help="Add a HERO row to the party roster: send 0x01C2 "
+                         "inside the party build window for s_heroClientData "
+                         "index INDEX (1..39; 0 is HERO_UNUSED and 40 is the "
+                         "bound). Omit for the control arm. Unlike a "
+                         "henchman, a hero carries NO name on the wire — the "
+                         "client resolves its identity through the static "
+                         "table. studies/heroes/FINDINGS.md §7.2")
+    ap.add_argument("--hero-body", action="store_true",
+                    help="Also create the hero's world body at agent "
+                         "200 (deliberately outside the 1..39 hero-index "
+                         "range, so the word-order arm is readable). "
+                         "GmHeroCommander:120/121 demand a non-zero agentId.")
+    ap.add_argument("--hero-body-npc", default="hatcher", metavar="NPC_KEY",
+                    help="Content row to borrow a body from: s_heroClientData "
+                         "carries NO model_id, so a hero's model cannot come "
+                         "from the hero table and must be a placeholder.")
+    ap.add_argument("--hero-swap", action="store_true",
+                    help="Exchange 0x01C2's two u16s. One is an agent id and "
+                         "one a hero index and the client does not say which; "
+                         "the two arms differ ONLY in this, so whichever "
+                         "renders names the field.")
+    ap.add_argument("--hero-diagnostic", action="store_true",
+                    help="Send 0x0072 LAST as a refutable question. It "
+                         "ASSERTED all-zero on 2026-08-12 because "
+                         "charHeroData had no record; a silence now means "
+                         "something we sent created one. Both are readouts.")
+    ap.add_argument("--no-hero-info", action="store_true",
+                    help="Drop the leading 0x0074. The route sends it first on "
+                         "the hypothesis that it creates the data-cache "
+                         "record; this asks whether it was needed.")
     ap.add_argument("--henchman-wire-name", default=None, metavar="NPC_KEY",
                     help="Put a DIFFERENT row's enc_name on 0x01BF than the "
                          "one the body's 0x0056 carries. With --henchman-body "
@@ -7454,6 +7559,29 @@ def main():
               f"once after the instance loads"
               + (f" -- {', '.join(bits)}" if bits else
                  " -- no bits set, which CLEARS all three"))
+
+    if a.hero is not None:
+        global HERO, HERO_BODY, HERO_SWAP, HERO_DIAGNOSTIC, HERO_INFO
+        global HERO_BODY_NPC
+        # Fail HERE, not inside instance bring-up, and mirror the client's own
+        # two asserts rather than inventing a range.
+        agents.party_hero_add(1, HERO_AGENT_ID, a.hero)
+        agents.mercenary_info(a.hero)
+        HERO = a.hero
+        HERO_BODY = a.hero_body
+        HERO_BODY_NPC = a.hero_body_npc
+        HERO_SWAP = a.hero_swap
+        HERO_DIAGNOSTIC = a.hero_diagnostic
+        HERO_INFO = not a.no_hero_info
+        if HERO_BODY:
+            agents.npc_template(HERO_BODY_NPC)
+        _wa, _wb = (HERO, HERO_AGENT_ID) if HERO_SWAP else (HERO_AGENT_ID, HERO)
+        print(f"HERO: 0x01C2 wordA={_wa} wordB={_wb} (swap={HERO_SWAP}) "
+              f"inside the build window; 0x0074 first={HERO_INFO}; "
+              f"body={'agent %d' % HERO_AGENT_ID if HERO_BODY else 'NONE'}; "
+              f"trailing 0x0072 diagnostic={HERO_DIAGNOSTIC}. "
+              f"200 is outside 1..39 ON PURPOSE — whichever word must hold it "
+              f"for the row to render is the agent id.")
 
     if a.henchman is not None:
         global HENCHMAN

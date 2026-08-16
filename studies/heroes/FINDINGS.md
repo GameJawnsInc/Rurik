@@ -422,15 +422,19 @@ replay, so any `0x01BF` we send is necessarily authored.
    RECONSTRUCTION until then.
 2. **Do the add messages have to sit inside the `0x01D2`..`0x01D3` window?** Probe both
    arms; retail's own placement is unknowable from our corpus (0 live hits).
-3. **What creates the `charHeroData` record?** The trailing `0x0072` diagnostic answers it
-   cheapest.
+3. ~~**What creates the `charHeroData` record?**~~ **ANSWERED §11.3: `0x0074`.** The
+   trailing diagnostic did answer it cheapest — one message's presence flips the assert
+   between `charHeroData` and `attribState`.
 4. ~~**Does the roster row require a matching live world agent?**~~ **ANSWERED §10.1: no.**
-   The row draws standalone; it is its CONTENT that needs the agent.
+   The row draws standalone; it is its CONTENT that needs the agent. **And §11.1 settles
+   `0x01C2`'s word order: msg+0xc is the agent id, msg+8 the hero index.**
 5. ~~**What do `0x01BF`'s two trailing `u8`s mean?**~~ **PARTIALLY ANSWERED §10.2** — not
    what the roster row renders, which is the reading upstream's names invite. Purpose still
    NOT FOUND; the untested candidate is the outpost hiring UI.
-6. **Where do hero skill bars come from?** Needs either a targeted search of blob-shaped
-   message shapes or a live capture that recruits a hero.
+6. **Where do hero skill bars and ATTRIBUTES come from?** Still NOT FOUND — but §11.4
+   renames it: the client now asserts `attribState` (`ChCliAttrib.cpp:156`) as the next
+   gate, so the question is "what writes a hero's attribute record", and `0x0074`'s two
+   unexplained 5-dword groups are the shaped hypothesis to test first.
 7. **Retry the family under `--encstring`** — never done; it flipped six other opcodes.
 8. **A live capture at a henchman outpost** is the only source of OBSERVED ground truth for
    retail's send order and field values. Post-Searing Ascalon City, four level-3 henchmen
@@ -542,6 +546,99 @@ Authoring a henchman is **done as a mechanism**: `agents.party_henchman_add()` +
 and the three `--henchman-wire-*` discriminator flags). Unchanged by this run: **follow AI**
 (movement messages exist, so it is work rather than an unknown), the **c2s** direction
 (§3.3), and the whole **hero** route, whose blockers are in §7.2.
+
+## 11. THE HERO ARM — the word order is settled, and `0x0074` opens the gate
+
+**Run 2026-08-16, same cage, same build 38833, map 90, five arms.** The hero route was the
+one §7.2 called UNCERTAIN, with three named blockers. Two of them are now closed by
+measurement and the third has moved to a new, named place.
+
+| arm | `0x01C2` words | body | `0x0074` | roster | trailing `0x0072` |
+|---|---|---|---|---|---|
+| H1 | wordA=200 wordB=1 | ✔ | ✔ | **1 row** — no hero | — |
+| H2 | **wordA=1 wordB=200** | ✔ | ✔ | **2 rows**, `Mo1 Hatcher [Collecto…]` + slot button `1` | — |
+| H3 | as H2 | ✔ | ✔ | — | **`attribState`**, `ChCliAttrib.cpp(156)` |
+| H4 | as H2 | ✔ | **✗** | — | **`charHeroData`**, `ChCliHero.cpp(199)` |
+
+### 11.1 Which `u16` is the agent id — settled, and the design is why
+
+The blocker was that `0x01C2` carries two `u16` identity words and *nothing in the client
+says which is which* — the storage-order analogy was refuted (no dedupe scan) and
+`GmHeroCommander`'s `heroData->agentId` turned out to resolve through the `0x0074` data
+cache, not this entry.
+
+The arm settles it by construction: the body was created at **agent 200**, deliberately
+**outside the 1..39 hero-index range** (`ChCliApi:4446` `hero < HEROES`, HEROES==40). A word
+carrying 200 *cannot* be a legal hero index, so whichever position it must occupy for the row
+to render is the agent id. An id inside 1..39 would have let both readings fit — the same
+confound the henchman arm nearly shipped with.
+
+**H1 renders nothing; H2 renders the hero.** Therefore:
+
+> **`0x01C2` msg+0xc (→ entry+0x0) is the AGENT ID; msg+8 (→ entry+0x4) is the HERO INDEX.**
+
+And that yields a tidy structural fact across both messages: **entry+0x0 holds the agent id
+in `0x01BF` *and* `0x01C2`** — consistent storage, different wire order. The refuted
+"entry+0 is the key by analogy" reasoning (§1.2) reached the right offset for the wrong
+reason; the offset is now measured rather than argued.
+
+### 11.2 The hero row is a henchman row plus a commander slot
+
+H2's row reads `Mo1 Hatcher [Collecto…]` — **the body's** name, profession and level again,
+exactly as §10.2 measured for the henchman. The roster label builder reads the agent, and
+that now holds across both message families and three separate arms.
+
+What the hero row has that the henchman's does not is a **numbered commander-slot button
+`1`** drawn to its left — the `GmHeroCommander` per-slot UI (§3.1's 7-slot array), bound
+here because the row named a hero index and a live agent with a non-zero id, which is what
+`GmHeroCommander:120/121` assert.
+
+### 11.3 `0x0074` creates the `charHeroData` record — a single-variable proof
+
+§7.2's blocker "what creates the `charHeroData` record that `0x0072` gates on" was **NOT
+FOUND by any static route**: `ChCliHero` has two hero-indexed structures and no message could
+be traced into either. The trailing-`0x0072` diagnostic was designed for exactly this, with
+its prediction on record — the sweep had it ASSERT on `charHeroData`.
+
+H3 and H4 differ by **one message**. With `0x0074`, the client clears the hero-record gate and
+dies deeper. Without it, it dies on the original gate:
+
+```
+H3 (0x0074 sent):   Assertion: attribState     P:\Code\Gw\Char\Cli\ChCliAttrib.cpp(156)
+H4 (0x0074 dropped): Assertion: charHeroData   P:\Code\Gw\Char\Cli\ChCliHero.cpp(199)
+```
+
+> **`0x0074` MERCENARY_INFO is what creates the hero data record.** Its worker's "look up OR
+> CREATE keyed by the first field at `ctx+0x2c+0x584`" (§1.3) is not just a plausible reading
+> of the disassembly — it is the observed effect.
+
+*(Both asserts are quoted as the single-assert evidence for a specific claim, which the
+provenance gate permits; and a crash dialog is text the retail client shows any player who
+crashes, which CLAUDE.md names explicitly as not extraction. Nothing was sent to ArenaNet —
+the reporter's send button was never pressed.)*
+
+### 11.4 The gate did not vanish, it MOVED — and where it moved to is the point
+
+`attribState` in **`ChCliAttrib.cpp`** is the hero's **attribute state**, and the client is
+now asking for it *by name*. That lands precisely on §4, the arc's sharpest negative: hero
+skill bars and attributes have **no known delivery mechanism** on the wire, and
+`GmDeckBuilder`'s attribute getters resolve unconditionally to the *local player's* record at
+`ctx+0x2c+0x6bc`.
+
+So §4 is no longer only an absence in our scans. The client has told us what the next message
+must carry, and the next question is concrete rather than open-ended: **what writes a HERO's
+attribute record?** The `0x0074` chunk is the first place to look — it has ten unexplained
+dwords the client splits into two 5-dword groups at record `+0x4c` and `+0x60` (§1.3), and a
+20-byte group is the right size for an attribute block. That is a hypothesis with a shape,
+and the arm that tests it is cheap: vary the chunk and re-send the diagnostic.
+
+### 11.5 What is now closed, and what is not
+
+**Closed by this arm:** `0x01C2`'s word order (§8 q4 for heroes); what creates
+`charHeroData` (§8 q3); that a hero row renders at all and that it, too, reads the agent.
+**Still open and unchanged:** hero **skill-bar** delivery (§4) — now with a named next gate;
+the **c2s** direction (§3.3); `0x0074`'s remaining 17 fields; and whether a hero needs
+anything beyond attributes before it is a working party member.
 
 ## 9. Defects and corrections this arc produced
 
