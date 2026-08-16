@@ -703,6 +703,34 @@ worth more than an unstated one:
   A struct carrying `attribCount` + `attrib[]` + `attribValue[]` **is** a build — which is
   exactly §4's "packed template blob" candidate, no longer a guess about where to look.
 
+### 12.4 `s_attribPoints` — a clean two-witness corroboration
+
+Chased from `CharData:202` (`level < arrsize(s_attribPoints)`), which bounds at
+`cmp esi,0xd` = **13**, and the access `mov eax,[esi*4 + 0xbc8b24]` gives a dword table at
+**`0x00BC8B24`**. It **closes**: index 13 is `0xFFFFFFFF`, a sentinel sitting exactly where
+the assert's bound stops — a check the artifact could have refuted and did not.
+
+| rank | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **client** `s_attribPoints[rank]` | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 9 | 11 | 13 | 16 | 20 |
+| **WIKI** cost to reach rank | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 9 | 11 | 13 | 16 | 20 |
+
+WIKI (GWW, *Attribute point* §Points required to increase rank, read 2026-08-16): the same
+twelve numbers, totalling **97** to reach rank 12. **CORROBORATED** — a table read out of the
+binary and twenty years of player observation agreeing exactly, and the two share no author,
+code or ancestry, which is the kind of agreement the `ldufr`/GWCA cluster cannot give.
+
+Index `[0]` is `5`, which does **not** fit the cost curve; the dword before the table is also
+`5`, so `[0]` is most likely a neighbour's tail or unused. Flagged rather than explained —
+**NOT FOUND**.
+
+Two more WIKI facts that pin the frame: attribute rank **12 is the maximum obtainable by
+spending points** (corroborating `AcctTemplate:441` `attribValue[index] <= 12` from the
+player-visible side), and a character has at most **200 attribute points** at level 20 with
+both attribute quests — which is what `attribState->attribPointsAvail` (`ChCliAttrib:43`)
+counts down from. The profession table also sums to ~42 attributes plus 8 PvE title tracks,
+consistent with `CHAR_ATTRIBS` = **51**.
+
 **What is still NOT FOUND:** what creates an `attribState` entry. The only stride-`0x43c`
 site outside ChCliAttrib resolves to generic `Array.cpp` growth code, so the insert path is a
 vector push with no message traced into it — the same wall §4 hit, now one structure closer
