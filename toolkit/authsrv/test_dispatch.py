@@ -306,6 +306,37 @@ def dispatch_arms(tree):
             "AUTH_CMSG": harvest(node.orelse, "AUTH_CMSG_")}
 
 
+def _state_writing_helpers(tree):
+    """Module-level functions that take `state` and assign into it.
+
+    An arm may DELEGATE its whole body to one -- `_handle_interact` exists
+    because the harness's `interact:` verb drives the same consequence without a
+    click, and the two callers must not be two implementations. Following one
+    level of delegation keeps this check honest about that while leaving its
+    teeth in: `elif opcode == X: pass` still stores nothing, and so does a call
+    to a helper that stores nothing.
+
+    ONE LEVEL ONLY, deliberately. Chasing arbitrary depth would eventually
+    credit an arm for a store several hops away that no longer has anything to
+    do with the message, which is the same over-crediting the `orelse` rule
+    above refuses.
+    """
+    out = set()
+    for node in tree.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        if not any(a.arg == "state" for a in node.args.args):
+            continue
+        if any(_writes_state(s) for s in node.body):
+            out.add(node.name)
+    return out
+
+
+def _calls_state_writer(stmt, helpers):
+    return any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+               and n.func.id in helpers for n in ast.walk(stmt))
+
+
 def _writes_state(stmt):
     """Does `stmt` assign into `state[...]` anywhere inside it?"""
     for node in ast.walk(stmt):
@@ -337,6 +368,7 @@ def state_writing_arms(tree):
     one after it.
     """
     consts = int_constants(tree)
+    helpers = _state_writing_helpers(tree)
     node = game_dispatch_if(tree)
     if node is None:
         return set()
@@ -348,7 +380,8 @@ def state_writing_arms(tree):
             ops = {consts[n.id] for n in ast.walk(sub.test)
                    if isinstance(n, ast.Name)
                    and n.id.startswith("GAME_CMSG_") and n.id in consts}
-            if ops and any(_writes_state(s) for s in sub.body):
+            if ops and any(_writes_state(s) or _calls_state_writer(s, helpers)
+                           for s in sub.body):
                 out |= ops
     return out
 
