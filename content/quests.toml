@@ -30,31 +30,31 @@
 [quest.rurik_first_errand]
 quest_id     = 1463
 enc_name     = [0x3D64]
-description  = "Speak to the gate guard, then return to me."
-objectives   = "Return to the guard."
+description  = "Follow the green arrow to my companion, then return to me."
+objectives   = "Speak with the scout, then return."
 wire_framing = "template"
 # What the giver SAYS when the player interacts, sent as GAME_SMSG 0x0080 and
 # flushed by 0x0081. A narrower field than the two above -- string16(122), not
 # 128 -- and questdefs checks it against its own width for that reason.
 # THE OFFER SCREEN's prose -- what the giver says while the quest is on offer,
 # sent as GAME_SMSG 0x0080 and flushed by 0x0081.
-giver_dialogue = "Well met, traveller. Speak to the gate guard for me, and I will see you rewarded."
+giver_dialogue = "Well met. My companion waits nearby with word I need. Bring it to me."
 # THE TURN-IN SCREEN's prose, and it is a SEPARATE column because ArenaNet uses
 # a separate string: the offer and turn-in dialog lines are two distinct ids in
 # 6 of 6 observed pairs. One `description` column cannot express both screens.
-turn_in_dialogue = "You have my thanks, traveller. The gate guard speaks well of you."
+turn_in_dialogue = "You have my thanks. Take this for your trouble."
 # WHILE THE QUEST IS IN PROGRESS. A third screen, and the reason the objective
 # state below exists: an in-progress quest is offered as option kind 22, which
 # draws the gold '?' -- MEASURED 2026-08-16. Without an objective to be part
 # way through, a server jumps straight from '!' to the turn-in bag and kind 22
 # never fires at all, which is what ours did.
-in_progress_dialogue = "The gate guard is by the arch. Speak with him, then come back to me."
+in_progress_dialogue = "Not yet. Follow the arrow -- my companion is waiting."
 # The objectives line after the objective is met, sent as 0x0054. The client
 # REFUSES 0x0054 for a quest it has no description for -- flag bit 0,
 # CHAR_CHALLENGE_FLAG_DESC_FILLED, is set by 0x004C and gates the whole handler
 # at 0x0080F9CD -- so the server must have answered 0x0012 first or this is a
 # silent no-op that looks exactly like the client ignoring us.
-objectives_done = "Return to the guard. [done]"
+objectives_done = "Return to me. [scout spoken to]"
 
 # WHO GIVES IT AND WHO COMPLETES IT -- TWO NPCs, deliberately. The owner asked
 # for two: a quest that is entirely walked through its giver is a degenerate

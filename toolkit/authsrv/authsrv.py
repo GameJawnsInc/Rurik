@@ -233,6 +233,10 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
                  orow.get("objectives_done")
                  or orow.get("objectives", ""), ofr)],
              f"QUEST_OBJECTIVES_UPDATE[{oqid}]")
+        # The mark moves in the SAME batch as the message that moved the
+        # quest: the objective NPC's arrow comes down and the giver's goes
+        # up. That is one visible event and must not arrive as two.
+        _send_markers(send, state, " (objective met)")
     lines = _quest_lines(state)
     if len(lines) == 1 and lines[0][1] != questdefs.SERVICE_IN_PROGRESS:
         # THE SINGLE-QUEST SHORTCUT, 7 of 7 on ArenaNet's wire and the common
@@ -253,8 +257,11 @@ def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
         _quest_screen(send, agent_id, *lines[0])
     elif lines:
         _list_screen(send, agent_id, lines)
-    if lines:
-        _send_marker(send, state, agent_id)
+    # Refreshed on EVERY interact, not only when a line was shown: 13 of 14
+    # option-bearing 0x0081s in the corpus carry the speaker's current mark
+    # alongside, which is what makes the client self-correct after an agent
+    # is destroyed and re-created as it leaves and re-enters view.
+    _send_markers(send, state)
 
 
 def _send_description(send, state, qid, row):
@@ -377,43 +384,78 @@ def _list_screen(send, agent_id, lines):
              f"kind {questdefs.option_kind(code)})")
 
 
-def _quest_marker_value(state):
-    """The 0x009F property-11 value for our single giver, or None to CLEAR.
+def _quest_markers(state):
+    """{agent_id: value-or-None} for every agent any quest row names.
 
-    5 = has at least one quest available to offer; 4 = a quest the player holds
-    can be turned in here. Value 3 (a quest in progress that CANNOT yet be
-    turned in) exists on the wire, n=4, and we never emit it because we have no
-    objective state to be mid-way through. None means send the CLEAR instead.
+    THE MARKER MOVES WITH THE OBJECTIVE, and getting that wrong is what made the
+    first version nonsense on screen. The giver kept its mark after the player
+    accepted, so a quest reading "speak to the gate guard, then return to me"
+    pointed the player back at the person who had just spoken -- and the second
+    NPC, the one the quest is actually about, wore nothing at all.
+
+    Per quest, three states and where each puts a mark:
+
+        not held         giver = 5 ('!', take this)      objective = clear
+        held, undone     giver = clear                   objective = 4 (arrow)
+        held, done       giver = 4 (arrow, come back)    objective = clear
+
+    So value 4 is "YOUR OBJECTIVE IS HERE", which is why it draws a down arrow
+    rather than the '?' this file assumed for a day -- the '?' is the dialog
+    option's kind, and a different thing entirely.
+
+    Returned as a dict rather than sent directly so one pass decides every
+    agent's mark and no agent is written twice with different values. With more
+    than one quest row two quests could want different marks on one agent; the
+    highest wins, which is a rule nothing has measured -- flagged rather than
+    hidden, and harmless while exactly one row exists.
     """
-    lines = _quest_lines(state)
-    if not lines:
-        return None
-    if any(code == questdefs.SERVICE_TURN_IN for _q, code, _r in lines):
-        return QUEST_MARKER_TURN_IN
-    return QUEST_MARKER_OFFER
+    held = state.setdefault("quests", set())
+    done = state.setdefault("objectives_done", set())
+    marks = {}
+
+    def want(agent, value):
+        if agent is None:
+            return
+        prev = marks.get(agent)
+        if prev is None or (value is not None and value > prev):
+            marks[agent] = value
+
+    for qid in sorted(quest_rows()):
+        row = quest_rows()[qid]
+        giver, objective = row.get("giver_agent"), row.get("objective_agent")
+        if qid not in held:
+            want(giver, QUEST_MARKER_OFFER)
+            want(objective, None)
+        elif qid in done:
+            want(giver, QUEST_MARKER_TURN_IN)
+            want(objective, None)
+        else:
+            want(giver, None)
+            want(objective, QUEST_MARKER_TURN_IN)
+    return marks
 
 
-def _send_marker(send, state, agent_id):
-    """Set or clear the overhead marker to match the player's quest state.
+def _send_markers(send, state, why=""):
+    """Push every agent's mark, set or cleared, in one batch.
 
-    THE CLEAR IS A DIFFERENT PROPERTY, and that is the part we had missing: there
-    is no property-11 value meaning "no marker" -- sending [11, agent, 0] would
-    be inventing a value that never occurs. ArenaNet sends property 12 = 0.
+    ONE BATCH because ArenaNet's own updates ride the same millisecond as the
+    quest message that caused them -- never a later tick -- and because the
+    giver's clear and the objective's set are two halves of one visible event.
+    Sent separately they would read as a flicker.
 
-    OBSERVED 2026-08-16, promoted from RECONSTRUCTION: the marker-states probe
-    sent [12, agent, 0] after holding a glyph and the head went bare, back to
-    the pre-marker baseline frame. Its VALUE range is still never exercised --
-    0 in 22 of 22 and 16 of 16 -- so "property 12 clears" is measured and "what
-    a non-zero property 12 would do" remains unknown.
+    THE CLEAR IS A DIFFERENT PROPERTY: no property-11 value removes a mark, so
+    [11, agent, 0] would be inventing one. ArenaNet sends property 12 = 0, and
+    the marker-states probe confirmed on screen that it takes the glyph down.
     """
-    v = _quest_marker_value(state)
-    if v is None:
-        send(GAME_SMSG_AGENT_GENERIC_VALUE, [PROP_QUEST_MARKER_CLEAR,
-                                             agent_id, 0],
-             f"QUEST_MARKER_CLEAR(agent {agent_id})")
-    else:
-        send(GAME_SMSG_AGENT_GENERIC_VALUE, [PROP_QUEST_MARKER, agent_id, v],
-             f"QUEST_MARKER(agent {agent_id}) = {v}")
+    for agent, value in sorted(_quest_markers(state).items()):
+        if value is None:
+            send(GAME_SMSG_AGENT_GENERIC_VALUE,
+                 [PROP_QUEST_MARKER_CLEAR, agent, 0],
+                 f"QUEST_MARKER_CLEAR(agent {agent}){why}")
+        else:
+            send(GAME_SMSG_AGENT_GENERIC_VALUE,
+                 [PROP_QUEST_MARKER, agent, value],
+                 f"QUEST_MARKER(agent {agent}) = {value}{why}")
 
 
 def _f32(x):
@@ -5611,7 +5653,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # The marker moves in the SAME batch as the
                                 # quest message that caused it -- never on a
                                 # later tick -- and then the window closes.
-                                _send_marker(send, state, state["interacting"])
+                                _send_markers(send, state, " (accepted)")
                                 _close_dialog(send, state["interacting"],
                                               "accepted")
                             elif row and code == questdefs.SERVICE_TURN_IN:
@@ -5635,7 +5677,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 send(GAME_SMSG_QUEST_REMOVE_AND_UNLIST, [qid],
                                      f"QUEST_REMOVE_AND_UNLIST[{qid}]")
                                 state.setdefault("quests", set()).discard(qid)
-                                _send_marker(send, state, state["interacting"])
+                                _send_markers(send, state, " (turned in)")
                                 _close_dialog(send, state["interacting"],
                                               "turned in")
                             elif row and code == questdefs.SERVICE_SHOW:
