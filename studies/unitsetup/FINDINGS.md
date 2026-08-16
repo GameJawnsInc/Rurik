@@ -6,6 +6,8 @@ Labels are the vocabulary of [../character/FINDINGS.md](../character/FINDINGS.md
 
 Three contradictions flagged by the review pass are resolved in §7, each by reading the cited files; the resolutions are also applied inline where the affected claims appear.
 
+**File:line citations were read at commit `fd63344`.** `main` had already grown `toolkit/authsrv/authsrv.py` by ~29 lines (insertions near :2252 and :6842) before this doc merged, so numbers cited above those points drift by that much — re-locate by symbol or quoted comment, not by number, the same way [../monsterai/FINDINGS.md](../monsterai/FINDINGS.md) is read.
+
 ---
 
 ## 1. The one-page answer: server → wire → client, in order
