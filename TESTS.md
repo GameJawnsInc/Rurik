@@ -810,10 +810,24 @@ Every one of these, in the order they were written:
   hatcher's COMPOSITED shell (29,495 B, no geometry), 116366 the
   self-contained worm (82,169 B, also reached via `Skeleton.load`), and
   116703 the 0x0057 body pinned to carry NO FA1 at all -- the absence is
-  the composite mechanism's other half. 71 checks against a floor of 63
-  (the mandatory core is 53; the corpus sabotage and order-control pools
-  can legitimately empty on another sample and declare skips). ~25 s;
-  `--all` reads every head row, ~25-45 min),
+  the composite mechanism's other half. **Section 0b is rung U2's typed
+  animation layer** (`studies/anim/FINDINGS.md`): a second builder with
+  its own literals packs REAL channel content -- blk2C's times-prefix SoA
+  sections (N int32 times then N vec3f / N float4 quaternions; the AoS
+  "16-byte group" framing was the wrong overlay and its quaternion
+  refutation an artifact of it, re-measured 16,263,916/16,263,916
+  unit-norm at full population), blk48's 4-byte sub-header and two vec3
+  sections with the bit-27 loop flag, n40's sorted-seq-index-then-18-byte-
+  bodies sound events, n3E's {type, param} event track, and the sequence
+  record's start/end clamp window (MdlSeq 0x00792F56) -- and `anims()`/
+  `tracks()`/`sound_events()`/`event_track()`/`sequences()` must read it
+  all back, plus four worm-anchor checks of the invariants the decoder
+  cannot force (emitter-attach bits summing to n34, the invariant
+  MdlAnim:1121 enforces at runtime, measured 14,571/14,571; 3,919/3,919
+  unit quaternions; the sorted sound-event index prefix). 88 checks
+  against a floor of 80 (the mandatory core is 70; the corpus sabotage
+  and order-control pools can legitimately empty on another sample and
+  declare skips). ~25 s; `--all` reads every head row, ~25-45 min),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against

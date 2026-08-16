@@ -390,6 +390,115 @@ def section0(check):
                   "(order is real where counts come off the stream)")
 
 
+def synth_anim():
+    """The U2 typed-layer fixture: an FA1 whose channel PAYLOADS carry real
+    content (synth() fills them with 0xAA), built from its own literals so
+    the accessors and the builder are two derivations that must meet.
+
+    Layout under test (studies/anim/FINDINGS.md §2): blk2C payload
+    sections are times-prefix SoA -- w0 int32 times + w0 vec3f, w2 int32
+    times + w2 float4, w4 absent here; blk48's sub-header is 4 bytes and
+    both its sections are times + vec3f; n40 is n40 sorted u32 seq
+    indices then n40 18-byte bodies; n3E is times then {type, param}.
+    """
+    h = bytearray(0x58)
+    struct.pack_into("<I", h, 0x00, SKELETON_VERSION)
+    struct.pack_into("<I", h, 0x18, 1)               # n18 = 1 sequence
+    struct.pack_into("<I", h, 0x2C, 1)               # n2C = 1 node
+    struct.pack_into("<H", h, 0x3C, 2)               # n3C = 2 keys
+    struct.pack_into("<H", h, 0x3E, 2)               # n3E = 2 events
+    struct.pack_into("<I", h, 0x40, 1)               # n40 = 1 sound event
+    struct.pack_into("<I", h, 0x44, 1)               # n44 = 1 tail record
+    struct.pack_into("<I", h, 0x48, 1)               # n48 = 1 track
+    h[0x08] = 0x30                                   # bits 4|5: n18, n48
+    out = bytearray(h)
+    # blk2C: fixed {base, flags bit28}, payload w0=2, w2=2, w4=0
+    out += struct.pack("<3fI", 1.5, 2.5, 3.5, 0x10000000)
+    out += struct.pack("<3H", 2, 2, 0)
+    out += struct.pack("<2i", 0, 100000)             # trans times
+    out += struct.pack("<6f", 0, 0, 0, 10, 20, 30)   # trans vec3s
+    out += struct.pack("<2i", 0, 100000)             # rot times
+    out += struct.pack("<8f", 0, 0, 0, 1, 1, 0, 0, 0)  # rot quats
+    # keys (SoA), then the 23-byte sequence record
+    out += struct.pack("<2i", 0, 100000)
+    out += bytes((2, 6))
+    seq = bytearray(23)
+    seq[0x00] = 7
+    struct.pack_into("<I", seq, 0x01, 42)
+    struct.pack_into("<I", seq, 0x05, 0)             # clamp-window start
+    struct.pack_into("<I", seq, 0x09, 100000)        # clamp-window end
+    seq[0x0D], seq[0x0E] = 0, 2                      # lo, hi
+    struct.pack_into("<I", seq, 0x0F, 0)
+    struct.pack_into("<f", seq, 0x13, 1.0)
+    out += seq
+    # n40 (SoA: index array then 18-byte bodies), then the n44 tail
+    out += struct.pack("<I", 0)                      # seq index 0
+    out += struct.pack("<iI", 50000, 0) + bytes(10)  # body: time, path, tail
+    out += bytes(range(12))                          # n44: carried raw
+    # blk48: fixed {base, flags bit27, u10}, payload w0=2, w2=0
+    out += struct.pack("<3fII", 0.0, 0.0, 0.5, 0x08000000, 9)
+    out += struct.pack("<2H", 2, 0)
+    out += struct.pack("<2i", 0, 200000)
+    out += struct.pack("<6f", 0, 0, 1, 0, 0, 2)
+    # n3E: arrA times, arrB {type, param}
+    out += struct.pack("<2i", 0, 50000)
+    out += struct.pack("<4I", 0, 0, 1, 5)
+    return bytes(out)
+
+
+def section0b(check):
+    print("\n== section 0b: the U2 typed animation layer (no vault) ==")
+    p = synth_anim()
+    r = walk(p)
+    check(r["ok"], "anim fixture closes", f"gate {r['gate']}")
+    sk = Skeleton.decode(p)
+
+    an = sk.anims()
+    check(len(an) == 1, "anims(): one record per node (n2C)")
+    a = an[0]
+    check(a["base"] == (1.5, 2.5, 3.5),
+          "anims(): the record's first 12 bytes are the base vec3")
+    check(a["flags"] == 0x10000000 and a["emitter_count"] == 0
+          and not a["light_attach"],
+          "anims(): flags dword and its named bit-fields round-trip")
+    check(a["trans"] == ([0, 100000],
+                         [(0.0, 0.0, 0.0), (10.0, 20.0, 30.0)]),
+          "anims(): translation channel is times-prefix SoA "
+          "(N int32 times, then N vec3f)")
+    check(a["rot"] == ([0, 100000],
+                       [(0.0, 0.0, 0.0, 1.0), (1.0, 0.0, 0.0, 0.0)]),
+          "anims(): rotation channel is times then float4 quaternions")
+    check(a["aux"] is None, "anims(): absent w4 section reads as None")
+
+    tr = sk.tracks()
+    check(len(tr) == 1 and tr[0]["base"] == (0.0, 0.0, 0.5)
+          and tr[0]["u10"] == 9 and tr[0]["looping"],
+          "tracks(): blk48 record fields, including the bit-27 loop flag")
+    check(tr[0]["ch0"] == ([0, 200000],
+                           [(0.0, 0.0, 1.0), (0.0, 0.0, 2.0)])
+          and tr[0]["ch1"] is None,
+          "tracks(): blk48 sections are times + vec3f after a 4-byte "
+          "sub-header")
+
+    ev = sk.sound_events()
+    check(ev == [{"seq": 0, "time": 50000, "path_index": 0,
+                  "raw_tail": bytes(10)}],
+          "sound_events(): n40 is SoA -- seq-index array, then 18-byte "
+          "{time, pathIndex} bodies")
+
+    times, recs = sk.event_track()
+    check(times == [0, 50000] and recs == [(0, 0), (1, 5)],
+          "event_track(): n3E arrA times + arrB {type, param} records")
+
+    s = sk.sequences()[0]
+    check(s["u8_00"] == 7 and s["u32_01"] == 42 and s["u32_0F"] == 0,
+          "sequences(): raw fields round-trip")
+    check(s["start"] == 0 and s["end"] == 100000
+          and s["start"] == s["u32_05"] and s["end"] == s["u32_09"],
+          "sequences(): start/end (the MdlSeq 0x00792F56 clamp window, "
+          "disk u32@+0x05/+0x09) alias the raw fields")
+
+
 def section1(check, ar, idt):
     print("\n== section 1: the anchors ==")
     shell = ar.read(ar.row(idt[ANCHOR_SHELL]))
@@ -421,6 +530,30 @@ def section1(check, ar, idt):
           if sk is not None else None),
           "Skeleton.load(file_id) resolves through the id table to the "
           "same payload as the container path")
+
+    # U2 typed layer against real bytes (values measured 2026-08-16; a
+    # drift here is a decoder regression, the archive is pinned).
+    an = sk.anims()
+    check(len(an) == 20, "worm anims(): 20 nodes (n2C)")
+    check(sum(a["emitter_count"] for a in an) == 10 == sk.header["n34"],
+          "worm: blk2C emitter-attach counts sum to n34 -- the invariant "
+          "the MdlAnim:1121 assert enforces at runtime, from file bytes "
+          "the decoder cannot force")
+    import math as _math
+    quats = [q for a in an if a["rot"] for q in a["rot"][1]]
+    unit = sum(1 for q in quats
+               if abs(_math.sqrt(sum(c * c for c in q)) - 1) < 0.01)
+    check(len(quats) == 3919 and unit == 3919,
+          "worm: all 3,919 rotation-channel float4s are unit quaternions "
+          "within 1% -- the reading the misaligned 2026-08-16 overlay "
+          "refuted at 4/19,460",
+          f"{unit}/{len(quats)}")
+    ev = sk.sound_events()
+    check(len(ev) == 6
+          and [e["seq"] for e in ev] == sorted(e["seq"] for e in ev)
+          and all(e["seq"] < sk.seq_count for e in ev),
+          "worm: 6 sound events, seq-index prefix sorted (the client "
+          "binary-searches it) and in range")
 
 
 def section2(check, led, ar, stride):
@@ -611,15 +744,17 @@ def main():
                          "decompresses every head row, ~45 min)")
     args = ap.parse_args()
 
-    # Floor from the real green default run, 2026-08-16: 71 checks executed
-    # (stride 89, the study archive). Set below that only by the checks
-    # whose pools can legitimately empty on a different sample (the 16
-    # corpus sabotage variants and the two order-control halves declare
-    # skips); the mandatory core is 53.
-    led = checks.Ledger("skeleton chunk (0xFA1)", floor=63)
+    # Floor from the real green default run, 2026-08-16: 88 checks executed
+    # (stride 89, the study archive; 71 before the U2 typed-layer section
+    # 0b and its four anchor checks landed later the same day). Set below
+    # that only by the checks whose pools can legitimately empty on a
+    # different sample (the 16 corpus sabotage variants and the two
+    # order-control halves declare skips); the mandatory core is 70.
+    led = checks.Ledger("skeleton chunk (0xFA1)", floor=80)
     check = checks.adopt(led)
 
     section0(check)
+    section0b(check)
 
     dat = os.path.join(
         vaultpath.require_dir("dat_study", why="the FA1 closure corpus"),

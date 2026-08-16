@@ -71,9 +71,38 @@ WHAT IS DECODED, and what stays bytes:
     at MdlLoad:373) and blk48 (n48 @ +0x48, ALSO asserted `animCount` at
     MdlLoad:432, and INDEPENDENT of n2C: equal on 242 of 971 files where
     both fire; the shared assert name is a helper parameter, not equality)
-    — are carried as OPAQUE byte spans. Their strides are byte-exact;
-    their element contents are NOT DECODED (a unit-quaternion reading was
-    REFUTED at 4/19,460, median norm 6.07).
+    — are carried as OPAQUE byte spans by the walk, and DECODED by the
+    typed layer (U2, 2026-08-16 — `studies/anim/FINDINGS.md`):
+      - blk2C: ONE RECORD PER ANIMATED NODE — n2C is the node count.
+        Disk record {f32 base[3]; u32 flags}; payload {u16 w0,w2,w4} then
+        three TIMES-PREFIX SoA channel sections: w0 int32 key times +
+        w0 vec3f (translation, lerped, applied base+delta — sampler
+        0x00782910), w2 int32 times + w2 float4 QUATERNIONS
+        (shortest-path nlerp, 0x00782990/0x00783D70; 16,263,916 of
+        16,263,916 corpus values unit-norm within 1%), w4 int32 times +
+        w4 vec3f (same sampler, applier 0x006747A0 — semantic UNVERIFIED,
+        carried as "aux"). Record flags: bits 8-12 = how many n34
+        emitter-attachment records bind to this node (sum == n34 on
+        14,571/14,571), bit 26 = node carries the next block-A light
+        (sum == the FA0's light count on 13,812/13,812 measurable files),
+        bit 28 = skip the node's Gr commit, bits 30/31 = mirror transform;
+        low byte and the rest UNNAMED. `anims()` returns all of it.
+      - blk48: {f32 base[3]; u32 flags; u32 u10} + {u16 w0,w2} and TWO
+        vec3 channel sections of the same SoA shape, applied to a second
+        Gr channel-set; flags bit 27 = LOOPING (time = global 1e-5 s
+        clock modulo the record's own last key time) and is the ONLY bit
+        set anywhere in the corpus (1,300 of 1,794 records).
+        `tracks()` returns them.
+    The 2026-08-16 recon's "(w0+w4) 16-byte groups + w2 20-byte groups"
+    was the WRONG OVERLAY — byte-count-identical, shape-wrong — and its
+    quaternion refutation (4/19,460) was true of that overlay only; the
+    U2 corpus run reproduces it as the control (6/19,460) beside the
+    corrected layout's 100.000%. Channel time prefixes carry the
+    MdlAnim:328/367 asserts (`keyCount >= 2`, strictly increasing at the
+    searched index): no corpus section has count exactly 1 (0/102,727),
+    times never decrease (see test), but exact DUPLICATE times occur in
+    ~1-3% of sections and are harmless — the client's binary search lands
+    on the last duplicate, so the asserted pair is never a duplicate.
   * `n2C == 0` is the client's own HARD REJECT (error 12, `0079644E`), not
     a stride failure — and it never occurs in the corpus (0/14,571).
   * Every block's byte span is recorded in `.spans`, in stream order,
@@ -445,21 +474,34 @@ class Skeleton:
         return None
 
     def sequences(self):
-        """The n18 records: lo/hi named (span selectors), the rest raw.
+        """The n18 records: lo/hi and start/end named, the rest raw.
 
         lo/hi earned their names by the refutable span-binding prediction
-        `lo <= hi <= n3C` (50,127/50,127); the six other fields are carried
-        under offset names because nothing has earned more.
+        `lo <= hi <= n3C` (50,127/50,127). start/end (disk u32@+0x05 and
+        u32@+0x09, also kept under their raw keys) are the sequence's
+        playback clamp window in 1e-5 s: MdlSeq's play call computes
+        `current = clamp(offset*1e5 + start, .., end)` at 0x00792F56
+        (U2, studies/anim/FINDINGS.md #2.7). They are windows on the
+        FILE-GLOBAL track timeline the blk2C/blk48 channel times live on
+        -- NOT the span's n3C key times: that binding was REFUTED at
+        181/21,535 and 1/21,534 (off-by-one rivals 15 and 12 of 9,321),
+        and per-file the windows are consecutive non-overlapping ranges.
+        The other four fields are carried under offset names because
+        nothing has earned more (u32@+0x01 is handed to attached child
+        models at sequence start, 0x00793540 -> 0x00792CA0; hash-like in
+        the corpus; UNVERIFIED).
         """
         off, _ = self._span("seqs")
         p, out = self.payload, []
         for i in range(self.header["n18"]):
             o = off + i * TERMS["n18_elem"]
+            start = struct.unpack_from("<I", p, o + 5)[0]
+            end = struct.unpack_from("<I", p, o + 9)[0]
             out.append({
                 "u8_00": p[o],
                 "u32_01": struct.unpack_from("<I", p, o + 1)[0],
-                "u32_05": struct.unpack_from("<I", p, o + 5)[0],
-                "u32_09": struct.unpack_from("<I", p, o + 9)[0],
+                "u32_05": start, "start": start,
+                "u32_09": end, "end": end,
                 "lo": p[o + 0x0D], "hi": p[o + 0x0E],
                 "u32_0F": struct.unpack_from("<I", p, o + 0x0F)[0],
                 "f32_13": struct.unpack_from("<f", p, o + 0x13)[0],
@@ -487,6 +529,122 @@ class Skeleton:
             return None
         off, size = s
         return self.payload[off:off + size]
+
+    # -- the U2 animation layer (studies/anim/FINDINGS.md) ------------------
+    #
+    # Layout SOURCE-CODE from the MdlAnim consumers (build 38797); every
+    # name below earned a corpus prediction stated before the run -- the
+    # counts are in the module docstring and the study doc. Fields nothing
+    # earned stay raw ("aux", "u10", "raw_tail").
+
+    @staticmethod
+    def _channel(p, off, n, vbytes, fmt):
+        """One times-prefix SoA channel: n int32 times, then n values."""
+        times = list(struct.unpack_from(f"<{n}i", p, off))
+        vals, vo = [], off + 4 * n
+        for k in range(n):
+            vals.append(struct.unpack_from(fmt, p, vo + vbytes * k))
+        return times, vals
+
+    def anims(self):
+        """The blk2C records: one per animated node (n2C = node count).
+
+        Returns dicts: base (f32 x3), flags (u32), emitter_count (flags
+        bits 8-12 -- n34 records bound to this node; corpus sum == n34 on
+        14,571/14,571), light_attach (bit 26), trans/rot/aux -- each None
+        or (times, values): trans/aux values are vec3 f32, rot values are
+        float4 quaternions (nlerp'd by the client, 100.000% unit-norm in
+        the corpus). Times are int32 in 1e-5 s.
+        """
+        blk = self.block_bytes("blk2C")
+        n2c, out = self.header["n2C"], []
+        off = 16 * n2c
+        for r in range(n2c):
+            base = struct.unpack_from("<3f", blk, 16 * r)
+            flags = struct.unpack_from("<I", blk, 16 * r + 12)[0]
+            w0, w2, w4 = struct.unpack_from("<3H", blk, off)
+            off += 6
+            rec = {"base": base, "flags": flags,
+                   "emitter_count": (flags >> 8) & 0x1F,
+                   "light_attach": bool(flags >> 26 & 1),
+                   "trans": None, "rot": None, "aux": None}
+            if w0:
+                rec["trans"] = self._channel(blk, off, w0, 12, "<3f")
+                off += w0 * 16
+            if w2:
+                rec["rot"] = self._channel(blk, off, w2, 16, "<4f")
+                off += w2 * 20
+            if w4:
+                rec["aux"] = self._channel(blk, off, w4, 12, "<3f")
+                off += w4 * 16
+            out.append(rec)
+        return out
+
+    def tracks(self):
+        """The blk48 records (channel-set-3 tracks; 0x0078032A).
+
+        Dicts: base, flags, u10 (disk +0x10, no located consumer),
+        looping (flags bit 27 -- the only bit the corpus ever sets),
+        ch0/ch1 -- None or (times, vec3 values), same SoA shape as
+        anims() but a 4-byte {w0,w2} sub-header and 16 B per key in both
+        sections.
+        """
+        blk = self.block_bytes("blk48")
+        if blk is None:
+            return []
+        n48, out = self.header["n48"], []
+        off = 20 * n48
+        for r in range(n48):
+            base = struct.unpack_from("<3f", blk, 20 * r)
+            flags, u10 = struct.unpack_from("<II", blk, 20 * r + 12)
+            w0, w2 = struct.unpack_from("<2H", blk, off)
+            off += 4
+            rec = {"base": base, "flags": flags, "u10": u10,
+                   "looping": bool(flags >> 27 & 1), "ch0": None,
+                   "ch1": None}
+            if w0:
+                rec["ch0"] = self._channel(blk, off, w0, 12, "<3f")
+                off += w0 * 16
+            if w2:
+                rec["ch1"] = self._channel(blk, off, w2, 12, "<3f")
+                off += w2 * 16
+            out.append(rec)
+        return out
+
+    def sound_events(self):
+        """The n40 region of the n40n44 blob, in the CLIENT's framing
+        (0x00780C70): n40 SORTED u32 sequence indices, then n40 18-byte
+        bodies {i32 time; u32 path_index; 10 raw bytes}. path_index is
+        MdlAnim:2040's `pathIndex < m_skel->m_soundPathCount` and indexes
+        the FA6 (m_soundPaths) array. Returns dicts with seq, time,
+        path_index, raw_tail.
+        """
+        off, _ = self._span("n40n44")
+        p, n40, out = self.payload, self.header["n40"], []
+        body0 = off + 4 * n40
+        for k in range(n40):
+            b = body0 + 18 * k
+            out.append({
+                "seq": struct.unpack_from("<I", p, off + 4 * k)[0],
+                "time": struct.unpack_from("<i", p, b)[0],
+                "path_index": struct.unpack_from("<I", p, b + 4)[0],
+                "raw_tail": p[b + 8:b + 18]})
+        return out
+
+    def event_track(self):
+        """The n3E timed event track (0x0077FE70): (times, records) --
+        times int32 (binary-searched by the client), records {u32 type;
+        u32 param}; type 0's param indexes the container's FAE list (a
+        model file reference, loaded on the event)."""
+        n = self.header["n3E"]
+        if not n:
+            return [], []
+        a_off, _ = self._span("n3E_a")
+        b_off, _ = self._span("n3E_b")
+        times = list(struct.unpack_from(f"<{n}i", self.payload, a_off))
+        recs = [struct.unpack_from("<II", self.payload, b_off + 8 * k)
+                for k in range(n)]
+        return times, recs
 
     def flags_presence(self):
         """The four testable (bit, block-nonzero) pairs of the +0x08 bitmap.
