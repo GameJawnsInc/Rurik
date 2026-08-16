@@ -177,6 +177,16 @@ Three consequences worth having:
   `!((effects >> 4) & 1)` first. The client only refills an agent it does not
   believe is dead. That behaviour was OBSERVED days before the reason was found.
 
+  **SUPERSEDED 2026-08-13 (note added 2026-08-16): the refill reading itself
+  was wrong.** Property 42 grants a delta — `health += (new_max − old_max)` —
+  and never refills: measured by HUD numbers rather than bar fills, raising the
+  max gave exactly old health plus the difference, reversibly, and re-sending
+  the current maximum is a no-op (harness 20260813T215004,
+  `../profession/RESKIN.md` §18.13; encoded at
+  `toolkit/authsrv/agents.py:118-132`). The death-bit gate this bullet
+  describes still stands on its own evidence; what it "explained" was a
+  mis-reading of bar fills. See `../unitsetup/FINDINGS.md` §7, resolution 1.
+
 **The effects word is a bitfield and only bit 4 is identified.** The other 31
 bits are unread. Nothing here says what they are, and the client's own handler
 tests only this one at `0x008183F0` — the rest are consumed elsewhere.

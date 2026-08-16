@@ -6500,11 +6500,25 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # (-> entry+0x0). Which is the agent id is exactly
                             # what this arm asks, so the two carry DIFFERENT
                             # values and --hero-swap exchanges them.
-                            _wa, _wb = HERO_AGENT_ID, HERO
+                            # CORRECTED 2026-08-16 from GmHeroCommander's own
+                            # party scan (studies/heroes/FINDINGS.md 17):
+                            #   msg+8    -> entry+0x4 : the OWNER player id,
+                            #               filtered against ctx[0x44][0x2ac]
+                            #   msg+0xc  -> entry+0x0 : the agent id
+                            #   msg+0x10 -> entry+0x8 : the HERO ID, and it is
+                            #               the key the commander container is
+                            #               built under.
+                            # We had been leaving msg+0x10 at 0, so our hero's
+                            # commander was registered under 0 and the panel
+                            # click looked up a real hero id and missed.
+                            # --hero-swap still exchanges the two words; it was
+                            # the arm that (with player number == hero id == 1)
+                            # could not tell owner from hero index apart.
+                            _wa, _wb = PLAYER_NUMBER, HERO_AGENT_ID
                             if HERO_SWAP:
                                 _wa, _wb = _wb, _wa
                             _inside = _inside + (agents.party_hero_add(
-                                1, _wa, _wb),)
+                                1, _wa, _wb, HERO),)
                         for op, vals, label in agents.party_build(
                                 1, PLAYER_NUMBER, inside_window=_inside):
                             send(op, vals, label)

@@ -575,7 +575,10 @@ confound the henchman arm nearly shipped with.
 
 **H1 renders nothing; H2 renders the hero.** Therefore:
 
-> **`0x01C2` msg+0xc (→ entry+0x0) is the AGENT ID; msg+8 (→ entry+0x4) is the HERO INDEX.**
+> **`0x01C2` msg+0xc (→ entry+0x0) is the AGENT ID.** *(The second half of this claim —
+> "msg+8 is the HERO INDEX" — is **CORRECTED in §17.3**: the arm could not distinguish hero
+> index from owner player number from owner agent id, because all three are 1 in this rig.
+> `msg+8` is UNVERIFIED; the agent-id half stands.)*
 
 And that yields a tidy structural fact across both messages: **entry+0x0 holds the agent id
 in `0x01BF` *and* `0x01C2`** — consistent storage, different wire order. The refuted
@@ -1067,6 +1070,85 @@ than "the scan never ran".)*
 `--hero-ai-mode` now sets HeroActivate's field 4, the Fight/Guard/Avoid-Combat stance. It is
 **untested**: no run has varied it, and nothing here is evidence that the stance takes
 effect. It exists so the next session can ask.
+
+## 17. The desk work: the commander mechanism mapped, the prediction refuted
+
+Asked to do desk work rather than more runs, so: the whole commander path is now read out of
+the binary. It produced one prediction, the prediction was **wrong**, and what it eliminated
+is worth more than what it proposed.
+
+### 17.1 The mechanism, end to end
+
+**The iterator `0x008563B0(partyId, index)`** — read in full rather than guessed at:
+
+```
+esi = ctx[0x4c]                      ; the party manager
+partyId == 0 -> esi = esi[0x54]      ; "my party" (RESKIN §17's PyCliGetMyPartyId pointer)
+index >= esi[0x2c] -> return 0       ; count
+return esi[0x24] + index*24          ; base + index * 0x18
+```
+
+**Stride `0x18` is exactly `0x01C2`'s entry size**, so this walks the hero entries our
+`PARTY_HERO_ADD` appends. That much is structural and solid.
+
+**The scan `0x00524E00`** iterates it and, per entry:
+
+| it reads | `0x01C2` wrote there |
+|---|---|
+| `cmp [edi+4], ctx[0x44][0x2ac]` — the filter | `msg+8` |
+| `mov eax,[edi+8]` — the **commander key** | `msg+0x10` |
+
+and writes `activeHeroes[n] = {slot, -1, key}` (12-byte entries at `ebp-0x58`), bounded by
+`GmHeroCommander:214`'s `cmp ebx,7`. Then `0x00524FA4` calls the **get-or-create**
+`0x00524C40` with that key.
+
+**The asymmetry that is the bug:** `0x00524C40` creates on a miss; `0x00524DB0` — the
+resolver `GmView:5890`'s click uses — only looks up, and asserts. Our hero has no entry in
+the `ctx+0x20` container, so the click dies.
+
+### 17.2 The prediction, and its refutation
+
+We had been leaving `msg+0x10` at **0**, so the reading was: the commander gets registered
+under key 0 while the click looks up a real hero id. Prediction: put the hero id in
+`msg+0x10` and the click stops asserting.
+
+**Refuted.** With `0x01C2` carrying `(1, 200, 1, 0)` the click produces the **identical**
+`commander` / `GmView.cpp(5890)`. No regression either — the roster still reads `Mo1 Norgu`
+with slot 1 bound and flag 1 green — so the change is kept as the better-founded value
+(`entry+8` *is* what the scan reads as the key) but it is **RECONSTRUCTION, not a fix**.
+
+**What that eliminates is the useful part.** The scan `0x00524E00` has **exactly one caller**,
+`0x004E5D85`, inside a GmView **event** handler. If putting the right key in the right field
+changes nothing, the leading explanation is no longer "wrong key" but **"the scan never
+runs"** — the commander container is populated by a client-side UI event we do not trigger,
+not by anything on the wire. That would make the commander panel not server-reachable at all,
+which is a different and more useful shape of answer than another field to guess at.
+
+### 17.3 A correction to §11.1, and the confound behind it
+
+§11.1 concluded `0x01C2`'s `msg+8` is the **hero index**. **That is not established, and I
+overstated it.**
+
+What H1/H2 actually proved is narrower: `msg+0xc` is the **agent id** — solid, because 200
+lies outside every other candidate range and the row only rendered when 200 sat there. But
+`msg+8` was only ever shown to accept `1` and reject `200`, and in this test rig
+**`PLAYER_NUMBER`, `PLAYER_AGENT_ID` and the hero index are all 1**. Hero index, owner player
+number and owner agent id are therefore indistinguishable, and §17.1's filter
+(`[edi+4]` vs a widely-used "my id" accessor with 45 call sites) actively suggests *owner*
+rather than *hero index*.
+
+**`msg+8` is UNVERIFIED**, and separating it needs a rig where those three values differ —
+a different player number, or a hero index ≥ 2. That is the confound this arc warned about
+when designing the agent-200 arm, and then walked into one field over.
+
+### 17.4 Where this leaves the click
+
+Three failed fixes now (`inventoryId` twice, the commander key once), which is well past the
+stop-and-study line. The study says: **stop treating it as a missing message.** The next move
+is to identify which GmView event calls `0x004E5D85`, and whether anything server-side can
+provoke it. If nothing can, the commander panel is simply outside what a server authors, and
+the hero — which renders, is named from `s_heroClientData`, carries attributes and a skill
+bar, and has its commander flag lit — is already complete for every purpose the wire controls.
 
 ## 9. Defects and corrections this arc produced
 

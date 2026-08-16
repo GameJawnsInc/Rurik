@@ -582,6 +582,19 @@ max-health-and-heal. Anything that wants an agent at partial health must set the
 max and then damage it down, which is what our probes have been doing by luck
 rather than by design.
 
+> **SUPERSEDED 2026-08-13 (note added 2026-08-16): the "AND refills" half is
+> REFUTED.** A later HUD-number measurement — at 25/100, max→200 read **125**,
+> the delta's prediction, not 200 — shows property 42 grants
+> `health += (new_max − old_max)` and never refills; re-sending the current
+> maximum is a no-op (harness 20260813T215004,
+> `studies/profession/RESKIN.md` §18.13; live authority
+> `toolkit/authsrv/agents.py:118-132`, which names Headquarter's `health = 1.f`
+> as the UPSTREAM source of the error). The practical consequence above
+> survives — 42 still cannot SET current health — but the max→0 "refilled to
+> full" frame in the table is now UNVERIFIED in mechanism: a negative delta
+> should not fill a bar. See `studies/unitsetup/FINDINGS.md` §7, resolution 1,
+> and its open question 5.
+
 **`CharPool.cpp` corroborates §6b in ArenaNet's own vocabulary.** The crash
 dump's string region carries that file's assert expressions, and beside
 `range > 0` sits **`fraction <= 1.0f`**. *Fraction* is their word for it. §6b
