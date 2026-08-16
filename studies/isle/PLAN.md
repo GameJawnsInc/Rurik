@@ -781,6 +781,17 @@ client, no ArenaNet.
 *Exit:* a committed tool that reproduces S4's map-148 cross-session table (agent 44, slot
 1470, model 116698, pos (8436, 4819) in both sessions), partitioning on the class tag, with
 its `TESTS.md` row in the same commit.
+**DONE 2026-08-16** — `toolkit/authsrv/agentroster.py` + `test_agentroster.py` (27 checks,
+floor 27, green). The exit criterion reproduced exactly: the pinned station stands in both
+map-148 sessions, x4 creates each, agent 44, `nonc`. Two measured extras: map 164's whole
+outpost joins **6/0/0** (every non-player station byte-stable), and the partition sabotage
+is now quantified — 331 player creates masked unconditionally yield **0 collisions** with
+declared definitions and **72 phantom slots**, so the failure mode of skipping the
+partition is invention, not corruption. OBSERVED in passing, RECONSTRUCTION on the reading:
+static NPC stations carry integer coordinates while wanderer re-creates carry fractional
+ones — consistent with authored spawn points being integers and re-creates sampling a
+moving body, useful as a static/wandering discriminant for the Isle roster but not yet a
+rule anything enforces.
 
 **Rung 2 — the cancellation check: does the capture account own a character that can reach
 map 280?** OBSERVED: every decrypted live game connection is map 0/146/148/164 and the
