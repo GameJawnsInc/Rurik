@@ -55,6 +55,11 @@ in_progress_dialogue = "Not yet. Follow the arrow -- my companion is waiting."
 # at 0x0080F9CD -- so the server must have answered 0x0012 first or this is a
 # silent no-op that looks exactly like the client ignoring us.
 objectives_done = "Return to me. [scout spoken to]"
+# WHAT THE OBJECTIVE NPC SAYS. It had no voice at all: talking to it ticked
+# a flag and opened nothing, so the second half of the quest happened with
+# no dialogue and the NPC read as scenery with a trigger on it. One line,
+# ours, shown on the interact that completes the objective.
+objective_dialogue = "You're the one the guard sent? Tell him the road is clear."
 
 # WHO GIVES IT AND WHO COMPLETES IT -- TWO NPCs, deliberately. The owner asked
 # for two: a quest that is entirely walked through its giver is a degenerate
