@@ -181,6 +181,30 @@ On screen afterwards: **Active Quests empty, Quest Summary empty, and the tracke
 
 **The CLEAR is measured.** `[12, agent, 0]` took the glyph down to a bare head. Its *value* range is still never exercised (0 in 22 of 22 and 16 of 16), so "property 12 clears" is OBSERVED and "what a non-zero property 12 does" is not.
 
+**The property-11 glyph vocabulary, swept 2026-08-16 — and the `?` is NOT IN IT.**
+
+`--probe quest_marker_sweep` walked one NPC through values 0–9 with a **CLEAR between every value**, so each is a run of glyph-bearing frames bracketed by bare ones and the frame→value mapping is read off the green-pixel trace rather than computed from the probe clock. `vault/captures/harness/20260816T110535`.
+
+| value | glyph | |
+|---|---|---|
+| 0 | green **`!`** | same as 5 — 0 is *not* "no marker" |
+| 1 | green **diamond / gem** | stable across its frames |
+| 2 | a **rotating** object | changes shape frame to frame; not nameable from 3 frames |
+| 3 | green **down arrow** | *(earlier run)* |
+| 4 | green **down arrow** | *(earlier run)*, indistinguishable from 3 |
+| 5 | green **`!`** | the control |
+| 6 | faint vertical shape | translucent |
+| 7 | solid vertical shape | |
+| 8, 9 | **nothing** | |
+
+**Eight of ten values draw something.** The corpus only ever carries 3, 4 and 5, so the overhead marker vocabulary is substantially wider than one operator's route revealed — which is what the "two witnesses to a route, not to the protocol" caveat has been warning about since §4.1.
+
+**NOT FOUND: a `?` anywhere in 0..9.** The owner reports a `?` replacing the `!` over an NPC whose given quest is in progress. The in-progress states are exactly 3 and 4, and on build 38833 both draw a **down arrow**. So on this build, that surface, that NPC, the `?` is not what property 11 renders.
+
+**Method note that cost two readings before it was adopted.** These are 3D icons; value 2's changes shape frame to frame. A single frame is therefore not a reliable glyph identification, and any claim made from one — including this document's earlier "4 draws `?`" — should be re-read as a claim about one animation phase. Values 0, 1, 3, 4 and 5 were checked across multiple frames and are stable; 2, 6 and 7 were not, and their rows above are correspondingly weaker.
+
+**Where the `?` might still be, neither checked:** the **quest tracker** under the level bar — `studies/minimap/FINDINGS.md:721` recorded a `?` there when `0x0049` fired with EMPTY strings, which reads as a missing-text placeholder rather than a state marker, and our reward run showed real text in that slot with no `?` — and the **dialog window**. Both are surfaces no run in this arc has interrogated.
+
 **Still not settled: the compass marker.** This run was on **map 449**, not 148, so it says nothing about §7.3 — map 148 cannot load at all right now (see below), and the marker coordinates are 148's. The free rider went unclaimed and §7.3's test is still open.
 
 **Not settled, and it blocked this run first: map 148 is unloadable.** `contentids.py` refuses it, correctly — no client archive in the vault binds `0x1B97D` the way the server's `dat_study` copy does. Four run dirs hold it only under the bit-31 mid-replacement spelling; the 38833 copy binds it to a file 8 bytes larger, written by the terrain arc's allocation work. This is archive state, not a quest question, and it is why Q0 ran on 449.

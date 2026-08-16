@@ -2772,6 +2772,69 @@ def _quest_reward_steps():
     ]
 
 
+# The values quest_marker_states already drew: 5 -> '!', 4 and 3 -> a down
+# arrow, and 12=0 -> nothing. None of them is a '?', which the owner reports
+# seeing over an NPC whose given quest is in progress. So either the '?' is a
+# value ArenaNet never sent in our two-session corpus, or it is not this
+# property at all.
+#
+# STATIC SEARCH BOUNDED NOTHING, and that is why this is a sweep. 0x009F's body
+# at 0x008128F0 dispatches on the PROPERTY id through a 61-entry table at
+# 0x00812EE0, and 56 of the 61 -- including 11 and 12 -- fall through to one
+# shared case at 0x008129B0. The glyph choice is made further downstream, so the
+# property switch cannot tell us how many VALUES are meaningful.
+_MARKER_SWEEP = (5, 0, 1, 2, 6, 7, 8, 9)
+
+
+def _quest_marker_sweep_steps(origin):
+    """Walk property 11 across the values the corpus never showed us.
+
+    5 goes FIRST as an in-run control: it is the one value whose glyph is
+    already measured, so if the '!' does not appear the run is broken and no
+    later frame means anything. Everything after it is unmeasured.
+    """
+    ox, oy, plane = origin
+    hold = 5.0
+    steps = [
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
+        Step(3.0, 0x0020,
+             create_agent(_GIVER_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 150, oy, plane),
+             f"WORLD_CREATE_AGENT({_GIVER_AGENT})",
+             "a bare head -- the baseline every frame below is read against."),
+    ]
+    # A CLEAR BETWEEN EVERY VALUE, and it is what makes the run readable. The
+    # first version ran the values back to back and the frame-to-value mapping
+    # then rested on arithmetic across two clocks that start at different
+    # events -- the exact reasoning that has already misled this arc twice.
+    # With a clear between each, every value is a RUN of glyph-bearing frames
+    # bracketed by bare ones, so the boundaries are visible in the green-pixel
+    # trace and no mapping has to be assumed.
+    for i, v in enumerate(_MARKER_SWEEP):
+        if v == 5:
+            watch = ("the green '!', ALREADY MEASURED. The control: if it does "
+                     "not draw, the run is broken and no later frame counts.")
+        else:
+            watch = (f"UNKNOWN. Value {v} appears in neither keyed session, so "
+                     f"nothing predicts it -- a '?', another glyph, or nothing "
+                     f"at all are all live. A '?' here names the value the "
+                     f"owner has been describing.")
+        steps.append(Step(hold if i else 3.0, GENERIC_VALUE,
+                          [PROP_QUEST_MARKER, _GIVER_AGENT, v],
+                          f"property 11 = {v}", watch))
+        steps.append(Step(3.0, GENERIC_VALUE,
+                          [PROP_QUEST_MARKER_CLEAR, _GIVER_AGENT, 0],
+                          f"clear, separating {v} from what follows",
+                          "a bare head. This frame is a SEPARATOR, not a "
+                          "measurement -- it is what lets the value above be "
+                          "attributed without counting frames."))
+    return steps
+
+
 def _quest_marker_states_steps(origin):
     """Walk one NPC through every marker state, holding each long enough to see.
 
@@ -2999,6 +3062,24 @@ def _quest_offer_steps():
 
 
 PROBES = {
+    "quest_marker_sweep": lambda a, o: Probe(
+        question="Where does the '?' over a quest NPC's head actually come "
+                 "from? Is it a property-11 value the corpus never showed us?",
+        predicts="ONE OF 0, 1, 2, 6, 7, 8, 9 DRAWS A '?', and the rest draw "
+                 "nothing. The corpus only ever carries 3, 4 and 5 -- and it is "
+                 "one operator's route run twice, so absence there is weak "
+                 "evidence about the protocol. quest_marker_states measured "
+                 "5 -> '!', 4 and 3 -> a down arrow, none of them a '?'. The "
+                 "rival outcome is real and would be worth as much: if NOTHING "
+                 "in this sweep draws a '?', the glyph is not property 11 at "
+                 "all, and the next places to look are the dialog window and "
+                 "the compass -- neither of which any run has touched.",
+        steps=_quest_marker_sweep_steps(o),
+        note="RUN WITH --shots 1, --map 449, no clicks. Value 5 goes first as "
+             "an in-run control. Read the frames as a strip against the bare "
+             "head, not one at a time -- reading frames in isolation is how the "
+             "'?' claim survived three runs unchallenged.",
+    ),
     "quest_marker_states": lambda a, o: Probe(
         question="What does each 0x009F property-11 value actually DRAW, and "
                  "does property 12 = 0 take a marker down?",
