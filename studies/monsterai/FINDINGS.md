@@ -974,7 +974,9 @@ The step table lives in the analyser rather than beside the narrator so the two 
 drift: the thing that prompts the operator and the thing that windows the result are the
 same list.
 
-`test_behaviourrun.py`, **35 checks, no vault**, pins the three refusals — UNRESOLVED
+`test_behaviourrun.py`, **36 checks, no vault** (35 when it landed; the 36th arrived
+with §7.7.1's correction — the MARK file must carry both clocks — in `1598f61`, and
+this count read 35 until 2026-08-16), pins the three refusals — UNRESOLVED
 rather than estimated positions, no pooling across model ids, and the client-half control
 predicate whose decisive case is a control window carrying 200 server messages that must
 still pass. Both sabotages redden: letting `separation` estimate costs 3 checks, and
