@@ -231,7 +231,46 @@ def main():
           "all 22 captured selects are high-byte 0x00; the other four service "
           "families would decode to a fictional quest id")
 
-    print("\n9. the enc_* columns are WIRE code units, not archive string ids")
+    print("\n9. option KIND is bound to the 0x003B code, one to one")
+    # The pairing our server shipped for a day -- kind 18 with codes 0x01 and
+    # 0x07 -- occurs 0 times in 41 samples on ArenaNet's wire. These checks are
+    # what stop it coming back.
+    check(questdefs.option_kind(questdefs.SERVICE_ACCEPT) == 16
+          and questdefs.option_kind(questdefs.SERVICE_DECLINE) == 17
+          and questdefs.option_kind(questdefs.SERVICE_SHOW) == 18
+          and questdefs.option_kind(questdefs.SERVICE_TURN_IN) == 23,
+          "accept/decline/show/turn-in map to kinds 16/17/18/23",
+          "measured 41 of 41 across both keyed sessions")
+    check(len(set(questdefs.OPTION_KIND.values()))
+          == len(questdefs.OPTION_KIND),
+          "the mapping is injective -- no two codes share a kind",
+          "a shared kind would mean the client cannot tell two options apart")
+    bad = False
+    try:
+        questdefs.option_kind(0x99)
+    except ValueError:
+        bad = True
+    check(bad, "an unmeasured code RAISES rather than defaulting to 18",
+          "a default is what silently reproduced the wrong pairing")
+
+    print("\n10. decline is a real code, and only half of it is known")
+    check(questdefs.SERVICE_DECLINE == 0x02,
+          "decline is 0x02", "kind 17, offered beside every accept, 11 of 11")
+    check(questdefs.encode_service_select(1463, questdefs.SERVICE_DECLINE)
+          == 0x85B702,
+          "and it encodes into the tag like any other code")
+    # The honest half: the offer is observed, the consequence is not. This check
+    # asserts the DOCUMENTATION says so, because that is the only thing standing
+    # between a future session and an invented refusal behaviour.
+    src = open(os.path.join(HERE, "authsrv", "questdefs.py"),
+               encoding="utf-8").read()
+    check("CONSEQUENCE is not" in src or "consequence is still unmeasured" in src
+          or "the CONSEQUENCE is not" in src,
+          "and questdefs says the CONSEQUENCE is unmeasured",
+          "0 of 11 offers were ever clicked; GWW says declined quests stay "
+          "available and the wire cannot confirm it")
+
+    print("\n11. the enc_* columns are WIRE code units, not archive string ids")
     # The trap FINDINGS 3.5 names: 0x3D64 on the wire denotes archive id 15460.
     # Conflating them resolves to 15716, an encrypted record returning None.
     for qid, row in sorted(rows.items()):

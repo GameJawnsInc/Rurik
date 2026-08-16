@@ -790,3 +790,270 @@ cd <tree> && python toolkit/origin.py
 ```
 
 Three measurements in this document came from short scratch scripts rather than committed tools, and each is named where it is used: the `push imm32` frame-bus scan classified by its following call (§1.6), the tail-call assert regex `\xc7\x45\x08(....)\xba(....)\xb9(....)\x5d(\xe9|\xeb)` over `.text` (§1.3), and the `0x0080`/`0x0081` window join over `cmsgstream.timed` (§2.5). **The first two belong in `toolkit/clientscan/asserts.py` and the third in a test; until they land, treat their numbers as reproducible-by-rewriting rather than reproducible-by-running.**
+
+---
+
+### 8. The two-screen dialogue — the correction, the tables that force it, and the marker rule
+
+**Date:** 2026-08-16 · **Method:** four recon lanes over the same corpus (option/code census; the description-and-reward screen; the single-quest quirk and the menu screen; marker semantics), then one adversarial verification pass run against the artifacts rather than the lanes' prose. Every number below was re-measured for this section; where the verifier corrected a lane, the corrected wording is what appears here. No client, game or server was launched. `C:\gw` was untouched.
+
+**Corpus for the whole section:** the two keyed live sessions that carry quest traffic, `20260807T143055` and `20260810T235916`. `20260807T133758` carries **0** `0x007E`, **0** `0x003B` and no quest opcodes and contributes nothing. `cmsgstream.frame_report` residual **0** on 24 of 24 connection rows (12 connections, both directions), so every census here is exact for the corpus rather than best-effort.
+
+**One caveat that qualifies every "both sessions reproduce it" below, and §4.1 already established it:** the two sessions are *the same scripted route run twice*, with two characters. Reproduction across them is replication of a route, not an independent sample of the protocol. Two witnesses to a route is what it is worth.
+
+---
+
+#### 8.1 The correction: we collapsed two screens into one
+
+**Our server implements a one-screen flow. ArenaNet's is two.** The `INTERACT` arm in `authsrv.py` builds a list in which each line is *the accept itself* — it emits `OPTION_KIND_QUEST` (18) carrying `SERVICE_ACCEPT` (`0x01`), and a second line carrying `0x07` for a turn-in — so clicking a quest's name in our window immediately adds the quest. §0's Q5 acceptance run is the proof that this is what we built: `0x007E [18, "Accept: …", 0x85B701, 0xFFFFFFFF]` → click → `0x0049`. It worked, and it is the wrong shape.
+
+**What the corpus shows.** A dialogue option carrying a quest name is an **entry point**, not an accept. Clicking it (code `0x03`) draws a *second screen* — the quest's description prose, its reward, an **Accept** line and a **Decline** line — and only the Accept line adds the quest. The two screens are distinguishable from the wire without reading a word of prose:
+
+| | screen 1 — the MENU | screen 2 — the DESCRIPTION |
+|---|---|---|
+| `0x0080` text | exactly **10** code units, one constant template | **40–62** code units, leading with the quest's own string id |
+| option kinds | 18, 22, 21, 15 | 16 + 17, or 23 alone |
+| n (screens) | 9 | 17 |
+| n (options) | 13 | 28 |
+
+**OBSERVED, and this is a partition with zero crossovers: 41 of 41.** Kinds {15, 18, 21, 22} occur *only* on 10-unit screens (`{10:13}`); kinds {16, 17, 23} occur *only* on screens of 40–62 units (kind 16 `{40:2, 41:1, 43:2, 44:1, 56:1, 59:3, 62:1}`, kind 17 identical, kind 23 `{40:2, 43:2, 56:1, 59:1}`). A single `0x0080` field carries both; nothing else in the message distinguishes them.
+
+**The narrative, re-measured, `20260807T143055` connection `:60935`, agent 99:**
+
+```
+26.816  s2c 0x0080(10u) 0x0081  0x007E kind=18 tag=0x805003   quest 80   code 3
+                                0x007E kind=18 tag=0x85B603   quest 1462 code 3
+27.679  c2s 0x003B 0x805003                                   the NAME was clicked
+27.719  s2c 0x0080(43u) 0x0081  0x007E kind=16 tag=0x805001   quest 80   code 1   ACCEPT
+                                0x007E kind=17 tag=0x805002   quest 80   code 2   DECLINE
+28.147  c2s 0x003B 0x805001                                   the ACCEPT was clicked
+28.179  s2c 0x0049 QUEST_ADD[80] · 0x0081 (bare)              added, and the window closes
+```
+
+**So §0's Q5 result is confirmed as a mechanism and wrong as a model.** The tag round-trip, the ordering rule and `decode_service_select` all stand unchanged. What is wrong is that our single option pairs kind 18 with code `0x01` — **a pairing that occurs 0 times in 41 samples** — and that a player of our server can accept a quest without ever being shown its description, its reward, or a way to refuse.
+
+---
+
+#### 8.2 The kind × code table, complete
+
+**OBSERVED. The kind field of `0x007E` and the low byte of its tag are in bijection — seven kinds, seven codes, one pair each, 41 of 41, zero off-diagonal.** Both sessions independently exhibit all seven pairs.
+
+| kind | code | n | 143055 | 235916 | offered | clicked | reading | label |
+|---|---|---|---|---|---|---|---|---|
+| 15 | `0x80` | 2 | 1 | 1 | 2 | **0** | *unexplained* — see below | one fixed id, 10725 |
+| 16 | `0x01` | 11 | 6 | 5 | 11 | 10 | **accept** | per-quest |
+| 17 | `0x02` | 11 | 6 | 5 | 11 | **0** | **decline** | per-quest |
+| 18 | `0x03` | 6 | 3 | 3 | 6 | 4 | **quest name / entry point** | the quest's own name id |
+| 21 | `0x04` | 2 | 1 | 1 | 2 | 2 | **advance** | the quest's own name id |
+| 22 | `0x05` | 3 | 2 | 1 | 3 | **0** | **in progress** | the quest's own name id |
+| 23 | `0x07` | 6 | 3 | 3 | 6 | 6 | **turn in** | one fixed id, 10719 |
+| | | **41** | 22 | 19 | 41 | **22** | | |
+
+Codes `0x00` and `0x06` never appear. Kinds **19 and 20 are absent** — an unexplained gap between 18 and 21. Kind **12** (`0x0C`) is special-cased inside the client's own option handler at `0x00509582` (`cmp dword ptr [edi], 0xc / jne`, and on equal it returns without creating an option frame) and appears **0** times on the wire.
+
+**These are floors on the protocol, not a census of it.** Twenty-two clicks are one operator's route run twice. Four codes of seven were ever clicked; three were only ever offered.
+
+**Kind 15 is not a quest option at all. OBSERVED.** Its tag is `0x00000080` — the `0x800000` tag bit is **clear** and the quest-id field is 0 — the only `0x007E` in the corpus whose tag is not a quest tag (bit-23 census: set 39, clear 2; high byte `{0: 41}`). `questdefs.decode_service_select` correctly returns `None` for it, and `encode_service_select` **cannot emit it**, because it unconditionally ORs `SERVICE_TAG_BIT`.
+
+**Kind 15's placement is OBSERVED; its meaning is RECONSTRUCTION.** Both occurrences are at agent 36, on the `INTERACT` immediately after that NPC's last held quest was turned in and unlisted — `t=93.314` after `0x004A[82]` at `t=92.792`, and `t=128.454` after `0x004A[86]` at `t=126.917`. It was never clicked and its label id is `needs_key = True`. "The screen an NPC shows when it has nothing left" is a reading of its position in a timeline. Three lanes labelled this three different ways (RECONSTRUCTION / UNVERIFIED / OBSERVED) off identical evidence; **RECONSTRUCTION is the correct one.**
+
+**Kind 21 IS a quest option and it was clicked, 2 of 2. OBSERVED.** Code `0x04`, quest 62, offered by agent 7 on `:64102` (`t=218.512`, clicked `t=221.576`) and agent 8 on `:49160` (`t=266.312`, clicked `t=266.856`) — in both cases on a *different map connection* from the NPC that gave quest 62, ~45 s after the accept. Its reply is `0x0054 QUEST_OBJECTIVES_UPDATE[62]` + `0x0051 QUEST_MOVE_MARKER[62]` and **no `0x0049`, no `0x004A`** — an advance, not an add and not a completion — followed by a 4-code-unit screen with zero options.
+
+**A confound two lanes reported as part of that reply and it is not.** The same 46 ms batch also carries `0x0054[1462]` + `0x0051[1462]`. That pair also rides the code-`0x01` replies at `t=173.527` / `t=220.709` and the code-`0x07` replies at `t=92.746` / `t=126.864`. It is ambient to quest 1462 and must not be attributed to code `0x04`.
+
+**Two corrections to §0's Candidate 2 block fall out of the full census.**
+
+- **`field4` is `0xFFFFFFFF` in 41 of 41, not "37 of 37".** The same 37 is asserted in `toolkit/authsrv/questdefs.py:170`. **Where 37 came from could not be reconstructed** — restricting to the four town/explorable connections (`:60935`, `:62994`, `:61193`, `:61624`) gives **39**, and no subset the verifier could construct gives 37. Fix the number; `OPTION_NO_ICON` is unchanged.
+- **The reply-count table in §2.4 is per-session, not per-corpus.** Reading both sessions doubles it: code `0x01` n=**10** (6× `{0x49,0x4C}`, 4× `{0x49,0x4C,0x51,0x54}` where the `0x51`/`0x54` name quest 1462); code `0x07` n=**6** (`0x0052`×2 then `0x004A` in 6 of 6); code `0x03` n=**4**; code `0x04` n=**2**.
+
+**Per-quest label ids are adjacent by role. OBSERVED.** The accept-line id is exactly one below the decline-line id, 6 of 6 in the four-unit form: q62 `0x166A`/`0x166B`, q80 `0x1704`/`0x1705`, q82 `0x1716`/`0x1717`, q86 `0x1744`/`0x1745`, q218 `0x14EE`/`0x14EF`, q222 `0x150A`/`0x150B`. Kinds 18, 21 and 22 all reuse the quest's **own name id** — byte-identical to slot 1 of `0x0049`/`0x0050` in 11 of 11, e.g. quest 80's name `1703 A86E 9E9B 4C82` is also its kind-18 and its kind-22 label.
+
+**UNVERIFIED and flagged before use: the five-unit varint form.** Quest 1462's ids were published by one lane as name 80660, accept 80672, decline 80673, off a 5-unit run with prefix `0x8102`. Every four-unit id in the pool re-measures exactly; **these three did not reproduce under `textrec.REF_BIAS`**, and the decoder that produced them is not in the evidence. Do not put those numbers in a document or a content row until the decode is named.
+
+---
+
+#### 8.3 Code `0x02` is DECLINE, and why a click-only search could not see it
+
+**OBSERVED. The decline line is on the wire and it is paired with its accept without exception: every kind-16 option is accompanied, in the same burst at the same timestamp, by a kind-17 option carrying the same quest id and code `0x02`. Kind-16 with a same-burst same-quest kind-17: 11. Kind-16 without: 0. Kind-17 without a kind-16: 0.**
+
+**The consequence remains NOT FOUND, and that half must not be invented.** Code `0x02` was clicked **0 of 22** times — the operator never declined — so no s2c reply to a decline exists anywhere in the corpus. GWW says declined quests remain available; the wire is silent.
+
+**`questdefs.py:138`'s "NOT FOUND: a DECLINE code. Do not invent one" is now half wrong, in the direction that matters.** The value *is* observed. Leaving the comment as it stands invites a future session to re-derive it or, worse, to invent a different number.
+
+**The methodological lesson, and it is worth one sentence because it cost this arc a whole rung: §2.4 derived the code semantics from *consequence*, which can only see codes the operator clicked — an option that is offered and never selected is invisible to a click-driven search, and the decline line was sitting in 11 `0x007E` messages the whole time.** Census the **offers** as well as the clicks; the two ledgers answer different questions.
+
+---
+
+#### 8.4 Screen 2 — the description, and where the reward actually is
+
+**OBSERVED. Every `0x003B` code `0x03` is answered with exactly four messages in a fixed order: `0x0080`, `0x0081`, `0x007E` (kind 16), `0x007E` (kind 17). 4 of 4**, at `+0.037` to `+0.048` s. Never two `0x0080`, never one or three options.
+
+**OBSERVED. A check that could have failed and did not.** Screen 2's line length differs between the two sessions by exactly the difference in the player's character-name length: q80 is 43 units in `143055` and 40 in `235916`; q1462 is 44 and 41. The substituted literal is 11 code units (`<11 UTF-16 units: the player's own character name>`) against 8 (`<8 UTF-16 units: the second character name>`). 11 − 8 = 3 = 43 − 40 = 44 − 41.
+
+**OBSERVED, and it is the finding that makes reward authoring cheap: there is no reward message and no reward string. The reward is a 19-code-unit SUFFIX inside the same coded string, byte-identical between the `0x0080` dialog line and `0x004C`'s description slot in 17 of 17 (screen, quest) pairs.**
+
+```
+0002 2AE8 E7D4 E5CC 3672            ref 10728
+0002 2AEA 8C3F B519 6611 0101 <A>   ref 10730, one numeric argument
+0002 2AEC DAC7 81AE 3482 0101 <B>   ref 10732, one numeric argument
+```
+
+All three ids are `needs_key = True` — ArenaNet's own generic strings, encrypted, shared by every quest. **So a reward block costs us three ids and two numbers of our own and no authored text from either side**, which is exactly CLAUDE.md's "commit the id, resolve the string at run time".
+
+**CORROBORATED (not OBSERVED): `0101 <word>` is a numeric argument with value `word − 0x100`.** The offset is `textrec.REF_BIAS = 256`, our own decoder's convention, and the discriminator is read out of the owner's archive rather than off a rendered pane: quest 62's fourth run feeds the **plain** template 2438 (`%str1%: %num1%`, `needs_key = False`) exactly `0101 0104` in its numeric slot. The rival reading — that these are string ids — would resolve the reward numbers to plain UI records 100, 250, 500, 25 and 10, which are unrelated records of the wrong kind and length for a reward line. The arithmetic then gives:
+
+| quest | A (ref 10730) | B (ref 10732) |
+|---|---|---|
+| 80 | 100 | 10 |
+| 218, 222, 62 | 250 | 25 |
+| 82, 86 | 500 | 25 |
+| 1462 | 500 | 100 |
+
+**"A is experience and B is gold" is RECONSTRUCTION and must stay that way until a probe runs.** The templates are encrypted and the RC4 key is NOT FOUND (§3.3), so neither the wire nor the archive can settle which slot is which. The magnitudes fit; that is a plausibility argument, not a measurement.
+
+**Two quests carry extra reward runs our schema has no column for. OBSERVED.** Quests 82 and 86 append two `ref 10738` blocks each (35 units total), whose arguments are **plain** ids (25126/25030 and 26146/26250). Quest 62 appends a `ref 10735` block (38 units) whose second argument is plain template 2438 fed `Armor` (id 2372) and the number 4 — an item reward.
+
+**OBSERVED. Offer prose and turn-in prose are different authored strings, and the turn-in id is the offer id + 2**, 6 of 6 across four quests and both sessions: q80 `0x1706`→`0x1708`, q218 `0x14EA`→`0x14EC`, q82 `0x1718`→`0x171A`, q222 `0x1506`→`0x1508`, q86 `0x1746`→`0x1748`. A single description column in `content/quests.toml` cannot express the turn-in screen.
+
+**OBSERVED. The paragraph framing differs by screen and is not cosmetic.** The offer dialog line separates with `0002 0107` (id 7) and appends a trailing `0002 0107`; the quest-log entry and the turn-in dialog line separate with `0002 0102 0002 0102` (id 2) and append nothing. Build the two heads separately.
+
+**OBSERVED. The turn-in screen is never reached by a code-3 step.** It arrives directly on `INTERACT` with exactly one option, kind 23 / code `0x07`, whose label is a **single shared id in 6 of 6 across five quests** (`2ADF E839 B6FB 19A9`, id 10719). `content/quests.toml`'s per-quest `turn_in_label` is modelling something that does not vary.
+
+**OBSERVED. There is headroom.** `0x0080` caps at 122 code units; ArenaNet's own maximum is 62. The reward run costs 19 (35–38 with an item line), so a description plus a reward fits — but the length check must run **after** the reward run is appended.
+
+**NOT FOUND, and no lane said it: no reward is ever paid anywhere in this corpus.** The completion family `0x004E`, `0x006C`, `0x0096`, `0x0097`, `0x00FB` is **0 of 22,524** s2c and **0 of 971** c2s (§4.2). Everything above is about the *promise* rendered inside a description string. The grant protocol is entirely unobserved and is a separate arc.
+
+---
+
+#### 8.5 The single-quest collapse — the server does it, not the client
+
+**OBSERVED. The quirk is on the wire.** Nine of 18 `INTERACT`-caused screens skipped the menu: on a bare `c2s 0x0039` with no `0x003B` before it, the server sent the description screen directly. Two clean fresh-NPC cases: `:62994` `t=172.712` agent 175 (prior `INTERACT` at `t=167.737`, prior `0x003B` **79.966 s** earlier) → `0x0080` 62 units leading id 5484, `0x0081`, kind 16 `0x803E01`, kind 17 `0x803E02`; and `:61624` `t=220.044` agent 76, same leading id, same two tags.
+
+**The client cannot be manufacturing it.** The description text arrives *inside* `0x0080` and leads with a different string id from the menu template, and residual is 0 on 24 of 24 connection rows, so nothing was dropped.
+
+**And the collapsed screen is byte-identical to the screen the click would have produced. OBSERVED — this is the strongest single measurement in §8.** Quest 82's description screen appears twice at agent 36 on `:62994`: at `t=70.441` as the reply to a code-`0x07` select, and at `t=72.727` as the reply to a bare `INTERACT` at `t=71.757`. Both emit the identical 59-unit `0x0080` leading `1718 A245 9F9C 4859` and the identical pair kind 16 `0x805201` / kind 17 `0x805202`. **The collapse is literally "send the screen the code-3 click would have produced" — one branch over one already-built responder, not a second code path.**
+
+**The refutable form, and it passed: across all 40 screens, ZERO carry exactly one kind-18 line.** Kind-18-per-screen is `{0: 36, 1: 2, 2: 2}`, and both of the "1"s (`t=28.479`, `t=27.983`) pair the kind-18 with a kind-22 in-progress line. A server that always built a list would produce lone kind-18 screens; there are none.
+
+**The trigger, corrected — and one lane's refinement is refuted by that lane's own data.** It is **not** "one actionable line". At `t=218.512` agent 7 presented exactly one line, kind 21 / code `0x04`, the operator clicked it and it did advance the quest — and the server still sent the 10-unit **menu** framing.
+
+> **The collapse fires when the NPC has exactly one OFFER or one TURN-IN to present — 7 of 7 (agents 40, 36, 36, 175 / 40, 36, 76). A lone in-progress line (kind 22, `t=91.052`) or a lone advance line (kind 21, `t=218.512` and `t=266.312`) still gets the menu — 3 of 3.** The discriminator is the option's kind/code family, not whether the line can be clicked.
+
+**GWW's rule, measured.** All four description screens reached via a code-`0x03` click were at the session's **first giver** (agent 99 on `:60935`, agent 53 on `:61193`) — the only NPCs that ever showed a **two**-line list. Every description screen reached with no code-`0x03` click was at an NPC that never showed a list of more than one line. Every list screen in the corpus carries 1 or 2 lines.
+
+**OBSERVED. The menu screen's text is one CONSTANT template plus one VARYING argument.** All 9 menus are `2AE6 F9CB E939 5DD2 010A <4 units> 0001` — id 10726, the plain markup token id 10 (`[topic-f]`, the parameter introducer), one reference, id 1 (`[null]`, the terminator). The 5-unit prefix and the 1-unit suffix are byte-identical across two sessions, five agents, six connections and two characters. Only the middle reference varies: six distinct values over nine screens — ids 12917 (×2), 12919, 12923, 13046 (×2), 5661 (×2), 5707.
+
+**This closes §0's dangling "what it is remains open".** The Q5 block records that the two captured offer lines share the prefix `2AE6 F9CB E939 5DD2 010A` and differ only in one varint group (`3377 …` against `3375 …`), and that replaying them produced no clickable option. Those groups are **12919 and 12917 — the NPC's greeting paragraph, which changes with quest state.** Agent 99 shows 12919 at `t=26.816` before the accept and 12917 at `t=28.479` after; agent 53 shows 12923 then 12917. The option was never in the string; it is `0x007E`, exactly as §0 concluded, and the varying group is the greeting itself.
+
+**CONTESTED, cause UNVERIFIED: the same NPC in the same state gave different greeting paragraphs in the two sessions** — 12919 (138 record symbols) against 12923 (258), with the same two kind-18 options in both, converging on 12917 after the accept. A 120-symbol difference cannot be a character-name substitution. What selects it — profession, gender, or a random pick — is unknown, n=1 pair. (And "the same NPC" is itself inferred: agent 99 on `:60935` and agent 53 on `:61193` are different ids on different connections, related only by role and by both offering quests 80 and 1462.)
+
+**OBSERVED. `0x0081` flushes 40 windows: lines-per-flush `{1: 28, 0: 12}`, options-per-flush `{2: 15, 1: 11, 0: 14}`.** No window carries three options, no `0x007E` ever arrives before its flush (41 of 41 after), and no `0x0080` is ever left unflushed (0 of 28). **Two options is a floor, not a ceiling** — the `0x007E` receive path carries no array, no counter and no bound. `0x00811720` is `push 0 / push [ebp+8] / push 0x100000a3 / call 0x633d70 / add esp,0xc / ret`, and the `GmNpc` subscriber at `0x00509582` creates a fresh child frame per option and records only the *first* at `[esi+0x20]`. **That the client has no maximum anywhere is NOT FOUND, not observed** — `asserts.py`'s module lists are a floor by the tool's own banner (6 readable `GmNpc` sites, 3 unreadable, ~370 unmatched call sites corpus-wide).
+
+**RECONSTRUCTION from `0x00811740`, with no wire witness: a second `0x0080` concatenates into the same buffer rather than starting a new line.** The body computes its write offset as `mov edi,[esi+0x1c] / lea ecx,[edi-1] / neg edi / sbb edi,edi / and edi,ecx`, i.e. it appends starting at index count−1, overwriting the previous terminator, guarded by `Array:587 index < m_count`. **ArenaNet never sends two `0x0080` per window (0 of 40)**, so our accumulate-then-flush model has never been exercised against their usage — and our server's one-`0x0080`-per-quest-row loop renders, under this reading, as one run-on paragraph.
+
+**The window close, and the three lanes disagreed about it.** **OBSERVED:** twelve **bare** flushes (a `0x0081` with no `0x0080` since the previous flush), 12 of 12 following a `c2s 0x003B` — 10 accepts and 2 terminal turn-ins — and **0 of 12 followed by any option**. Each names the giver agent, never 0. **RECONSTRUCTION:** that a bare flush *means close*. `0x008117B0` builds `{1, agent_id, textptr}` where `textptr` is null when the count is zero, posts frame `0x100000A6`, then zeroes the count — so "close the window" and "display a window with no lines" are the same bytes, and nothing has been fired at a client. **`GAME_SMSG 0x007F` occurs 0 times in 22,137 s2c messages**, so there is no explicit close *opcode*; the bare-flush association is what stands in for one.
+
+**Corrected count:** there are **14** zero-option flushes, and 14 of 14 carry the speaker's recomputed marker. Twelve of them are bare; the other two (`t=221.623` agent 7, `t=266.891` agent 8, the code-`0x04` follow-ups) carry a 4-code-unit line (`166D D0B8 9207 0683`) and no option. The "10 of 10" one lane reported is short by four, and conflates the two categories.
+
+---
+
+#### 8.6 The marker, per NPC, over the whole lifecycle
+
+**OBSERVED. `0x009F` property 11 takes THREE values, not two.** Census `{3: 2, 4: 6, 5: 40}` n=48 in `143055` and `{3: 2, 4: 6, 5: 33}` n=41 in `235916`. Value 0 never occurs, 0 of 89. **§0's Candidate 2 block and `probes.py:2701-2718` both say "exactly two values"** — that is true of the scope they measured (`:60935` + `:62994` gives `{5: 37, 4: 6}`) and false of the corpus. All four value-3 sends are on the outpost connections: agent 7 at `t=214.656` / `t=218.512` (`:64102`) and agent 8 at `t=262.549` / `t=266.312` (`:49160`) — the same agents that carry kind 21.
+
+**RECONSTRUCTION, and it is the message the arc was missing: `0x009F` property 12 = 0 is the marker CLEAR.** Without it the model is incoherent — NPCs appear to hold a stale `!` for 18 s. With it, 18 of 18 quest-concluding clicks across both sessions are explained with zero counterexamples. It is 0 in **22 of 22** sends in `143055` and **16 of 16** in `235916`, so the property's own value range is never exercised and the reading rests entirely on consequence.
+
+**REFUTED: the rival reading "property 12 = 0 means the dialog closed."** Two independent refutations. (1) `235916` `t=99.549` emits four prop-12 sends with no `0x0081` anywhere near and no `INTERACT` within seconds. (2) `t=28.179` and `t=27.659` are zero-option flushes — the dialog-closing form — and carry prop 11 = 5 with **no** prop 12, because the giver still had quest 1462 to offer.
+
+**OBSERVED. Value 4 is not "a quest this NPC gave is in progress". It is "a quest you hold can be turned in HERE, NOW", and the in-progress window is marker-free.** Agent 36 on `:62994` gives quest 82 at `t=73.376`, is cleared by prop 12 at `t=73.431`, and carries **no marker for 17.7 s** — until `t=91.136`, the same batch as `0x004D[82]` + `0x004C[82]`, the moment the objective completed. Quest 86 repeats it with a twist: the objective completes at `t=99.549` while agent 36 is out of view (removed `t=86.929`), so the 4 arrives on the re-create at `t=108.805`.
+
+**OBSERVED. The marker follows the NEXT NPC, not the giver.** Quest 80's giver (agent 99 / 53) holds 5 through the entire accept and never takes 4; the turn-in NPC (agent 40) flips 5→4 in the *same millisecond batch* as `QUEST_ADD 80` (`t=28.179` / `t=27.659`) and 4→5 in the same batch as `QUEST_REMOVE 80` (`t=46.797` / `t=45.208`). This is the give-here/turn-in-there case, and it is the one our server has no model for at all.
+
+**OBSERVED. Value 3 is the mid-quest advance marker** — the NPC where an active quest's next dialogue step happens, whose click advances objectives without removing the quest. n=2, one per session, both the identical scenario, and both on the agent that offers kind 21 / code `0x04`.
+
+**OBSERVED. On turn-in the marker is RECOMPUTED, not reset to 5.** It becomes 5 when the NPC gains a follow-up quest and is cleared when it does not — 6 of 6 turn-ins, zero counterexamples: `t=46.765` → `p11[40]=5` (agent 40 then offers 218); `t=70.407` → `p11[36]=5` (offers 82); `t=92.746` → `p12[36]=0` (nothing left).
+
+**OBSERVED, and it is a broadcast, not a targeted clear.** On a quest-log mutation the server re-emits marker state for every NPC on the connection whose state it recomputes. `t=47.655` carries prop 12 = 0 for agents **99, 42 and 40** — five sends to three agents — including a redundant re-clear of agent 99, which had already been cleared 18.5 s earlier at `t=29.197`. `t=45.936` repeats it. Turning a quest in can also *raise* markers on NPCs the player never touched: `t=92.792` carries `p11[48]=5`, `p11[32]=5`×2, `p11[41]=5`×2 alongside `QUEST_REMOVE 82`.
+
+**OBSERVED. The option-bearing dialog window carries the speaker's marker, 12 of 14 and 11 of 12.** The exceptions are the kind-15 screen (both sessions) and the lone kind-22 in-progress screen at `t=91.052` — both of which carry prop 12 = 0 instead, with the prop-11 = 4 arriving 84 ms later inside the objectives batch.
+
+**OBSERVED. Every prop-11 send follows a `WORLD_CREATE_AGENT` for that agent; none precedes one.** Message-index gap: min 2, median 4, max 1306 / 1419. The server is not strict in the other direction — 2 orphans in session 1 (`[11, 41, 5]` at `t=92.792`, whose agent was removed at `t=74.199`), 0 in session 2.
+
+**OBSERVED, meaning RECONSTRUCTION: a re-create can omit the prop-11 send.** Agent 42 on `:60935` is created at `t=20.137` with `0x009F [11, 42, 5]` and re-created at `t=40.200` with a byte-identical create payload (same model dword 536872392, same position, same rotation) and **no** `0x009F`; `:61193` reproduces it. **Whether the client then draws nothing, or keeps the marker it had, is NOT FOUND** — the server subsequently sends prop 12 = 0 to that same agent at `t=47.655`, which fits either reading.
+
+**Scope warning that three lanes tripped over: agent ids are per connection.** Agent 40 on `:62994` never receives prop 11; agent 40 on `:60935` receives it eight times and is one of the two most-marked NPCs in the corpus. Any table of agents needs the connection in the key.
+
+**The owner's rule 5 = "has a quest available" survives, with the denominator stated.** Zero counterexamples among the **10 NPCs (5 per session) the operator actually opened a dialog with**. The remaining 23 marked agents carry 5 and were never spoken to, so nothing in this corpus can confirm or refute their marker. "Zero counterexamples over 89 sends" reads as n=89; the testable n is 10.
+
+**The exact rule our server should implement**, evaluated fresh per (NPC, player quest state) at every agent create and again on every quest-log mutation:
+
+```
+5  the NPC has >= 1 quest available to OFFER
+4  a quest the player holds can be TURNED IN at this NPC right now
+3  a quest the player holds has its next dialogue STEP at this NPC
+–  otherwise: send nothing on create; send 0x009F [12, agent, 0] on a live agent
+```
+
+There is **no** property-11 value that clears a marker. Sending `[11, agent, 0]` invents a value that occurs 0 times in 89 sends.
+
+---
+
+#### 8.7 What our server must change, in order
+
+1. **Bind the option kind to the code.** `authsrv.py`'s `INTERACT` arm emits (kind 18, code `0x01`) and (kind 18, code `0x07`); neither pair exists on ArenaNet's wire, 0 of 41. Add a code→kind map in `questdefs.py` (`0x01`→16, `0x02`→17, `0x03`→18, `0x04`→21, `0x05`→22, `0x07`→23) and build every `0x007E` through it, so a mismatched pair cannot be constructed.
+2. **Build screen 1 (the menu).** One `0x0080` carrying the short greeting, one `0x0081`, then one `0x007E` per line: kind 18 / code `0x03` per available quest (label = the quest's **name** id, 11 of 11), kind 22 / code `0x05` per held in-progress quest, kind 21 / code `0x04` for an advance step.
+3. **Build screen 2 (the description) and answer code `0x03` with it.** The arm currently sends **nothing**, on the recorded ground that ArenaNet sends no quest-family reply to an offer. That is right about the *quest* family and wrong about the *dialog* family, and it is the single load-bearing defect: today a player who clicks a quest name in our window gets no screen at all. Send `0x0080` (description + reward run), `0x0081`, `0x007E` kind 16 code `0x01`, `0x007E` kind 17 code `0x02` — 4 of 4, in that order.
+4. **Send the decline line, always**, and add a `0x003B` arm for code `0x02` that changes no state and **logs that its consequence is unmeasured** rather than replicating a guess. Add `SERVICE_DECLINE = 0x02` to `questdefs.py` with that note, and correct line 138.
+5. **Adopt the collapse.** When the NPC has exactly one OFFER or one TURN-IN, skip the menu and send the description screen on the `INTERACT` itself — 7 of 7. A lone in-progress or advance line still gets the menu — 3 of 3. Both mandatory Pre-Searing quests are single-quest cases, so our always-a-list behaviour is the wrong screen in the case that matters most.
+6. **Build the turn-in screen**, which the server does not have: one `0x0080` carrying the **turn-in** prose (a different string from the offer), one `0x0081`, one `0x007E` kind 23 / code `0x07` whose label is the shared generic id, not a per-quest column.
+7. **Send exactly one `0x0080` per window.** The current loop sends one per quest row; under `0x00811740`'s concatenation they render as one run-on paragraph, and ArenaNet sends one in 28 of 28.
+8. **Close the window.** Append a bare `0x0081` naming the giver agent after every accept (10 of 10) and after a turn-in that does not chain into a new offer (2 of 6; the other 4 open the giver's next offer screen). Our server sends `QUEST_ADD` and stops, leaving the window open with a consumed option in it.
+9. **Add the marker clear and recompute the marker.** Send `0x009F [12, agent, 0]` where a marker should disappear; ride every marker update in the same batch as the quest message that caused it; set 4 when the quest becomes turn-in-able (which for a real objective is `0x004D`+`0x004C`, not the accept); re-send on every dialog open and every agent re-create, and deliberately omit it when the NPC has none. Do **not** copy ArenaNet's doubled sends — they are one recompute per log mutation, and commit `a70387b` already established the doubled `0x0052` is not required.
+10. **Add a reward-run builder** to `questdefs.py`: append `0002 2AE8 E7D4 E5CC 3672 0002 2AEA 8C3F B519 6611 0101 <0x100+A> 0002 2AEC DAC7 81AE 3482 0101 <0x100+B>` to both the `0x0080` line and the `0x004C` description slot (byte-identical there in 17 of 17), with A and B our own numbers bounded to `0..0xFEFF`. Three ArenaNet ids cited, zero ArenaNet text held. Run the 122-unit length check **after** the append.
+11. **Split `content/quests.toml`'s prose columns** into offer and turn-in, and build the two paragraph heads separately (`0002 0107` + trailing for the offer line; `0002 0102 0002 0102` and no trailing for the log entry and the turn-in line). Drop `turn_in_label` as a per-quest column.
+12. **Decide what to do about kind 15.** `decode_service_select` rejects its tag (`0x800000` clear → `None`) and `encode_service_select` cannot build it. Either never emit it, or give `0x003B` a non-quest arm first.
+13. **Fix the two numbers this section corrects** — `field4` 41 of 41 (`questdefs.py:170` and §0), and property 11's three values (§0 and `probes.py:2701-2718`, which is the comment a future session will read *before* writing the marker code).
+14. **Run two probes before any of this ships.** (a) Send `0x009F [11, agent, 5]`, screenshot, then `[12, agent, 0]`, screenshot — that moves the clear from RECONSTRUCTION to OBSERVED and shows in the same run whether 3 and 4 draw different glyphs. `_quest_giver_mark_steps` in `probes.py:2724` is two `Step`s from being it. (b) Send `0x004C` citing 10728/10730/10732 with distinguishable numbers (111, 222) and read which line shows which — the only way to learn which reward slot is experience and which is gold.
+
+---
+
+#### 8.8 Still NOT FOUND
+
+- **The consequence of code `0x02` (decline).** Offered 11 times, clicked 0 of 22. The value is observed; the refusal behaviour is not.
+- **The consequence of code `0x05` (in-progress line).** Offered 3 times, clicked 0 of 22.
+- **The consequence of code `0x80` / kind 15**, and what kind 15 *is*. Offered twice, clicked 0 of 22, label id 10725 encrypted, tag rejected by our own decoder.
+- **Any explicit dialog-CLOSE opcode.** `0x007F` is 0 of 22,137. The bare-flush association is 12 of 12, but "means close" is RECONSTRUCTION and has never been fired at a client.
+- **Whether property 12 = 0 actually clears anything.** It is 0 in 38 of 38 sends across both sessions, so the property's value range is never exercised; the entire reading rests on consequence. Cheapest open item in the arc.
+- **The other arm of property 12.** At `t=91.052-91.136` and `t=99.549` it is broadcast to agents that never carried property 11 *on that connection* (43, 44, 45, 46, 37, 38, 39, 40, 92 / 37, 38, 39, 40 — all kind 9, create payloads `0x2000059A`, `0x2000058C`, `0x200008E8`). What that does is unknown.
+- **The rendered text of the reward templates** 10726, 10728, 10730, 10732, 10735, 10738, 10742 and the option labels 10719, 10725 — all `needs_key = True`, RC4 key NOT FOUND (§3.3). Seven splits of the trailing varint were tested against ids 10726, 5635 and 12919; best ASCII fraction 0.91, none clean.
+- **Which reward number is experience and which is gold.** Unresolvable from wire or archive; probe only.
+- **The whole payment side.** Zero reward grants in the corpus (§4.2's five opcodes, 0 of 22,524 s2c and 0 of 971 c2s).
+- **Any kind or code outside the seven observed pairs**, and any `0x007E` tag with a non-zero high byte — no merchant, skill-unlock, item-unlock or hero-unlock service option reaches the wire, 0 of 41 offers and 0 of 22 clicks. This bounds day-one generality; it does not prove the families absent.
+- **Kinds 19 and 20**, absent from the corpus; and **kind 12**, which the client special-cases and which never appears.
+- **Any maximum option count.** Two per window is a floor. The client path has no array, counter or bound, and `asserts.py`'s "no assert names a count" is a floor by the tool's own banner, not a census.
+- **Whether a multi-`0x0080` window renders as multiple paragraphs.** 0 of 40 flushes carry two lines, so our accumulator model has no wire witness at all.
+- **What selects between greeting paragraphs 12919 and 12923** for the same NPC in the same state across the two sessions. n=1 pair.
+- **Why agent 42 carries a marker at map load in both sessions**, and why accepting quest 218/222 from agent 40 clears it in the same batch. Never spoken to; create payload byte-identical across sessions. The obvious reading — a second giver for the same quest — is untested.
+- **Why the quest-log `0x004C[0]` carries the `%str1%` character-name substitution for quests 80, 218 and 222 but not for 62, 82, 86 and 1462**, while the dialog line always carries it. The split is measured; the cause is not.
+- **Quest 1462's five-unit varint ids** (published as 80660 / 80672 / 80673), which did not reproduce under `REF_BIAS = 256`. Name the decoder before those numbers reach a document or a content row.
+- **Everything static here is build 38797** (`0x00811720`, `0x00811740`, `0x008117B0`, `0x00509582`, `0x0091E710`) and none of it has been re-checked against 38833.
+
+---
+
+#### Reproducing §8
+
+```bash
+cd <tree> && git rev-parse --show-toplevel
+cd <tree> && python toolkit/vaultpath.py
+cd <tree> && python toolkit/authsrv/cmsgstream.py 20260807T143055 game   # and 20260810T235916, 20260807T133758
+cd <tree> && python toolkit/clientscan/msgshape.py 0x007E                # and 0x0080, 0x0081
+cd <tree> && python toolkit/clientscan/codescan.py --dis 0x0091e710 --count 60
+cd <tree> && python toolkit/clientscan/codescan.py --dis 0x811720 --count 40
+cd <tree> && python toolkit/clientscan/codescan.py --dis 0x811740 --count 50
+cd <tree> && python toolkit/clientscan/codescan.py --dis 0x8117b0 --count 45
+cd <tree> && python toolkit/clientscan/codescan.py --dis 0x00509582 --count 45
+cd <tree> && python toolkit/clientscan/asserts.py --file GmNpc
+cd <tree> && python toolkit/clientscan/textrec.py --dat <vault>/dat_study/Gw.dat 1 2 7 10 11 2372 2438 10719 10725 10726 10728 10730 10732 10735 10738
+```
+
+**Every wire measurement in §8 came from scratch scripts over `cmsgstream.timed`, not from a committed tool**, and that is debt in the same shape §7.9 already names: the `0x007E` option/click ledger, the screen builder that groups `0x0080*` → `0x0081` → `0x007E*`, and the `0x009F` property census. Set `PYTHONIOENCODING=utf-8:replace` or printing coded strings fails on cp1252. **Sort merged c2s/s2c rows by TIMESTAMP ONLY** — sorting the whole tuple reorders same-timestamp frames by opcode, puts `0x007E` (126) ahead of `0x0080` (128), and manufactures a refutation of the ordering rule the server depends on. Until these land as a `test_quests.py`, treat their numbers as reproducible-by-rewriting rather than reproducible-by-running.
