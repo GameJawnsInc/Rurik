@@ -358,6 +358,28 @@ term (full table in the verification run records). Nearly all collapse to
   header, the key array independently located — holds over **50,127 records,
   21,535 non-zero spans, zero violations**.
 
+**CORRECTED at full population by U1's committed test, 2026-08-16 (later the
+same day).** The per-variant `survives=0` figures above were measured at
+n=600 per variant; `test_skelfile.py --all` re-ran sixteen variants over
+every file that exercises each term and found aliasing survivors in **six
+variants both samples had called clean**: hdr=0x54 — 1 of 14,571; hdr=0x5C —
+29 of 14,571; n14_elem=12 — 1 of 14,344; n34_elem=20 — 1 of 4,938;
+b2c_sub=4 — 1 of 14,571; n3c_elem=4 — 1 of 1,144; n18_elem=0x16 — 2 of
+14,571. Same mechanism as the n38 survivor above (a shifted read landing on
+bytes that re-close the walk; RECONSTRUCTION for these six — the rows are
+printed by the run, not yet individually inspected). The rows: **31419
+survives THREE distinct mutations** (hdr=0x54, n14_elem=12, n34_elem=20 —
+whatever its bytes are, they absorb a ±4 shift three ways, the obvious first
+target for inspection); b2c_sub=4 → 33554; n3c_elem=4 → 153847;
+n18_elem=0x16 → 11279 + 150877; hdr=0x5C's 29 include 32876, 33159, 33168,
+38002, 38862, 38885, 39950, 69522. Worst
+case 0.2%, so every term stays load-bearing — but "collapses to zero" was a
+sample truth, and closure on any SINGLE file is correspondingly not proof of
+the layout on that file. The test pins the measured ceilings; a run above
+one is a regression, not noise. Its other full-population figures land
+exactly on the study's: closure 14,571/14,571, order control 690 non-vacuous
+→ 0, grid 31,556/31,571 (99.95%), n38_mult 433/3,613 (12.0%).
+
 ### 3.7 Corrections the full-population run forced on the derivation — RECORDED
 
 **(a) The format floor is 133 bytes, not the recon's "exactly 149".** 149 is
@@ -777,8 +799,11 @@ Ranked; each names the tool that can settle it. These feed the ladder in
 **Session artifacts are preserved**: the verified FA1 walker
 (`verify/fa1walk.py`), the census scripts/JSONL (`census/`), the sabotage
 runs, and the per-TU assert sweeps were copied out of the session scratchpad
-to `vault/research/unitmodels/2026-08-16-recon/` (225 files). U1 promotes the
-walker to `toolkit/`; nothing in the repo itself currently decodes FA1.
+to `vault/research/unitmodels/2026-08-16-recon/` (225 files). **U1 landed
+the same day**: `toolkit/mapdata/skelfile.py` is the committed decoder,
+`test_skelfile.py` pins the full-population closure, and the research walker
+is now the reference the committed code was reviewed against, not the only
+implementation.
 
 ---
 
