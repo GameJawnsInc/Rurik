@@ -61,9 +61,38 @@ P:\Code\Engine\Text\TextApi.cpp(585)                     build 38833
 So the varint group that varies between the two captured lines is **not** a quest id being handed to the option renderer. What it is remains open.
 
 **What that leaves, in the order worth trying:**
-1. **The agent, not the string.** ArenaNet's speaker was agent 99, a real quest giver; ours is agent 10, a `hatcher` collector. The client may decide what a dialog offers from the agent's own definition or model id, which our spawn does not share. Cheapest test: spawn an agent carrying a known giver's definition and replay the same line.
+1. ~~**The agent, not the string.**~~ **REFUTED 2026-08-15, and see below.**
 2. **A message we are not sending.** Something earlier in the session may arm the NPC's option list; the corpus was searched only between INTERACT and the click, which is where the hypothesis came from and also where its blind spot is. Widen the window to the whole session and diff what precedes a giver interaction against a non-giver one.
 3. **A marker we dropped.** The greeting rendered, so the framing is right, but a clickable run may need a marker the greeting does not contain — in which case the OFFER line at `t=27.719` (43 units, sent *after* the first click) is the one to replay, not the greeting.
+
+#### Candidate 1 tested and REFUTED: the giver's own definition is not what arms the option
+
+**OBSERVED**, `vault/captures/harness/20260815T222238`, build 38833, map 449, probe `quest_giver_def`. One variable against the `quest_offer` run: the speaker's definition. Everything else — the replayed ten-word greeting, the flush, the click positions — identical.
+
+The three live givers' definitions, MEASURED by the interval join off `WORLD_CREATE_AGENT`:
+
+| agent | t | model dword | definition | allegiance |
+|---|---|---|---|---|
+| 99 | 20.140 | `0x200005C8` | **1480** | `play` |
+| 40 | 17.941 | `0x200005B3` | **1459** | `nonc` |
+| 36 | 66.737 | `0x200005C1` | **1473** | `nonc` |
+
+All three are `CHAR_CLASS_MONSTER_BASE | def` with `AGENT_KIND_NPC` — the same class and kind our own spawns already use — so the definition number is the only difference. The allegiances differ *between* givers, so allegiance is not the marker either.
+
+**The definition took effect, and visibly.** Spawning agent 99 with definition 1480 changed the nameplate and the dialog window's title from `Hatcher [Collector]` to the guard's own name, resolved by the client from its own archive out of the `enc_name` ids in `vault/content/npcs.toml`. That is CLAUDE.md's "commit the id, resolve the string at run time" confirmed a second time, now for an NPC name rather than a quest name.
+
+**And it changed nothing about the option.** Same two paragraphs, no clickable line, `NPC_SERVICE_SELECT` 0 times in the gamesrv log, and the session's c2s set is the movement and housekeeping opcodes only. **So a real giver's definition is not sufficient to arm a quest option**, and candidate 1 is dead.
+
+**A hazard found the expensive way, and it is already documented in this repo.** The first version of this probe used definition **392**, from reading `536872392` as `0x20000188`. It is `0x200005C8`. Definition 392 was never defined by anyone, and creating an agent on it took the client down:
+
+```
+Assertion: index < m_count
+P:\Code\Base\rtl\Array.h(587)                    build 38833
+```
+
+with `Arg:01880000` (0x188) and `Arg:00000063` (agent 99) on the create frame, and `Pc:00117bdb` rebasing to `0x487BDB` — the assert routine at `0x00487BC0`. `agents.npc_properties`' own docstring already says this: *"the definition index is a raw array index on the client, and creating an agent whose definition was never sent takes the client down on `index < m_count`"*. The failure was a bad number, not a new mechanism, and it reproduced a documented one. Two things follow: **push `0x0056`/`0x0057` before any create on a definition the client has not been told about**, and the `WORLD_CREATE_AGENT` model dword is `MONSTER_BASE | def` where the definition is the **low 16+ bits in decimal** — read the hex carefully.
+
+**Remaining candidates are now 2 and 3 above**, and 2 should be done properly before 3: the earlier scan looked only at the window between `INTERACT` and the click, which is where the original hypothesis came from and also its blind spot. Widen it to the whole session and diff what precedes a giver interaction against a non-giver one. `0x004B` (bulk assign of the `+0x518` list, `array32[64]`) and `0x00FA` (`array32[32]`, once per session at map load) are the two load-time bulk assignments in the corpus that **carried empty arrays and therefore no evidence**, and a per-NPC available-quest list is exactly the shape either could have.
 
 **Still not settled: the compass marker.** This run was on **map 449**, not 148, so it says nothing about §7.3 — map 148 cannot load at all right now (see below), and the marker coordinates are 148's. The free rider went unclaimed and §7.3's test is still open.
 

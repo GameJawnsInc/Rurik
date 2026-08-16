@@ -36,7 +36,7 @@ from agents import (                                        # noqa: E402
     CHAR_CLASS_MONSTER_BASE, CHAR_CLASS_PLAYER_BASE, DEFAULT_RUN_SPEED,
     ALLEGIANCE_HOSTILE, EFFECT_DEAD, EFFECT_TRANSITION, HATCHER, INF, WORLD,
     agent_set_profession, agent_set_secondary_bits, create_agent, npc_model,
-    npc_properties)
+    npc_properties, npc_template)
 
 # The hostile the normal map load spawns. Read from content, the same row
 # authsrv.py reads, so the removal probe cannot drift from what is in the world.
@@ -2622,6 +2622,82 @@ _ARENANET_OFFER_LINE = [0x2AE6, 0xF9CB, 0xE939, 0x5DD2, 0x010A,
                         0x3377, 0xDF18, 0xF3B0, 0x201F, 0x0001]
 
 
+# The definitions the three live quest givers actually carried, MEASURED off
+# WORLD_CREATE_AGENT in vault/captures/live/20260807T143055 by the interval join
+# (the create in effect when the agent SPOKE, not its last create):
+#
+#   agent 99  t=20.140  model 0x200005C8  def 1480  allegiance 'play'  kind 9
+#   agent 40  t=17.941  model 0x200005B3  def 1459  allegiance 'nonc'  kind 9
+#   agent 36  t=66.737  model 0x200005C1  def 1473  allegiance 'nonc'  kind 9
+#
+# All three are CHAR_CLASS_MONSTER_BASE | def with AGENT_KIND_NPC -- the same
+# class and kind our own spawns already use -- so the definition NUMBER is the
+# only thing that differs, which is what makes this a one-variable test. Note
+# the allegiances differ between givers ('play' against 'nonc'), so allegiance
+# is not what marks a giver.
+#
+# THE DEFINITION MUST BE PUSHED FIRST, and this comment is here because the
+# first version of this probe did not and TOOK THE CLIENT DOWN:
+#
+#     Assertion: index < m_count
+#     P:\Code\Base\rtl\Array.h(587)                          build 38833
+#
+# which is exactly what `agents.npc_properties` already documents -- "the
+# definition index is a raw array index on the client, and creating an agent
+# whose definition was never sent takes the client down". The mistake was not
+# the missing push, it was a BAD NUMBER: 536872392 was read as 0x20000188 and
+# so as definition 392, when it is 0x200005C8 and definition 1480. 392 was
+# never defined by anyone, so the create indexed past the end. Slot 1480 is in
+# vault/content/npcs.toml already, extracted from this same capture, and
+# npcdefs' own docstring cites it.
+GIVER_DEFINITION = 1480         # agent 99's, the one whose line we replay
+_GIVER_AGENT = 99
+# npc_template, NOT WORLD.rows(...) -- the raw row's `enc_name` is a LIST of
+# string ids and the codec wants an encoded str. Reaching for the row directly
+# gives `string of 26 code units exceeds cap 8`, which is the error
+# npc_template's own docstring exists to prevent. Hit it anyway on the first try.
+GIVER_NPC = npc_template("def_1480")
+
+
+def _quest_giver_def_steps(origin):
+    ox, oy, plane = origin
+    return [
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION} -- the live "
+             f"giver's own type, from vault/content/npcs.toml",
+             "nothing yet. This defines a TYPE, not a body -- and it is NOT "
+             "optional: without it the create indexes past the end of the "
+             "definition array and the client dies on Array.h:587."),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_MODEL def {GIVER_DEFINITION} -> model "
+             f"{GIVER_NPC['model_id']}",
+             "still nothing. One more message before a body can appear."),
+        Step(4.0, 0x0020,
+             create_agent(_GIVER_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 150, oy, plane),
+             f"WORLD_CREATE_AGENT({_GIVER_AGENT}) with the LIVE GIVER's "
+             f"definition {GIVER_DEFINITION}, 150u from the player",
+             "a body appears, carrying the same type ArenaNet's own quest giver "
+             "carried. The definition is the ONLY thing changed from the "
+             "quest_offer run, which used the hatcher's."),
+        Step(8.0, 0x0080, [questdefs.enc_string(_ARENANET_OFFER_LINE)],
+             "0x0080 carrying the same captured greeting as quest_offer",
+             "nothing yet -- 0x0080 accumulates."),
+        Step(12.0, 0x0081, [_GIVER_AGENT],
+             f"0x0081 flush at agent {_GIVER_AGENT}",
+             "THE WHOLE QUESTION: does a CLICKABLE OPTION appear now that the "
+             "speaker carries a real giver's definition? quest_offer sent this "
+             "identical line at a hatcher (definition 3) and got text with no "
+             "option and no 0x003B. If an option renders here, the client reads "
+             "what a dialog offers from the AGENT, and definition 1480 is enough "
+             "to arm it. If it still does not, the definition is not the "
+             "discriminator either and the remaining candidates are a message "
+             "earlier in the session, or the 43-unit OFFER line rather than "
+             "this greeting."),
+    ]
+
+
 def _quest_offer_steps():
     return [
         Step(6.0, 0x0080, [questdefs.enc_string(_ARENANET_OFFER_LINE)],
@@ -2639,6 +2715,26 @@ def _quest_offer_steps():
 
 
 PROBES = {
+    "quest_giver_def": lambda a, o: Probe(
+        question="Does the clickable quest option come from the AGENT rather "
+                 "than the dialog string -- specifically, from its definition?",
+        predicts="A CLICKABLE OPTION APPEARS, where quest_offer's identical "
+                 "line at a hatcher produced text and none. quest_offer "
+                 "refuted 'the option is in the string' by replaying "
+                 "ArenaNet's own ten words verbatim and getting no option and "
+                 "no 0x003B; the surviving difference is the speaker. Theirs "
+                 "was definition 392 and ours was 3. A SECOND prediction, "
+                 "cheaper and independent: the body renders at all WITHOUT a "
+                 "0x0056/0x0057 pair, because ArenaNet never defines 392 in the "
+                 "capture -- if it does render, these types live in the "
+                 "client's own data, which is a fact worth having whatever the "
+                 "option does.",
+        steps=_quest_giver_def_steps(o),
+        note="RUN ON --map 449 and CLICK THE LINE the window's text ends with, "
+             "around (0.491, 0.541) at 1936x1040 -- that is where quest_offer's "
+             "greeting put it. One variable against quest_offer: the definition. "
+             "Everything else, including the replayed line, is identical.",
+    ),
     "quest_offer": lambda a, o: Probe(
         question="Where does the clickable quest option come from -- and is the "
                  "quest id inside the dialog string itself?",
