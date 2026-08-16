@@ -36,12 +36,24 @@ wire_framing = "template"
 # What the giver SAYS when the player interacts, sent as GAME_SMSG 0x0080 and
 # flushed by 0x0081. A narrower field than the two above -- string16(122), not
 # 128 -- and questdefs checks it against its own width for that reason.
+# THE OFFER SCREEN's prose -- what the giver says while the quest is on offer,
+# sent as GAME_SMSG 0x0080 and flushed by 0x0081.
 giver_dialogue = "Well met, traveller. Speak to the gate guard for me, and I will see you rewarded."
-# The two clickable lines, sent as GAME_SMSG 0x007E after the window opens. Our
-# words. Which one the giver offers depends on whether the player already holds
-# the quest, and the option's TAG carries the 0x003B code the click returns --
-# accept (0x01) or turn in (0x07).
-accept_label = "Accept: A First Errand"
+# THE TURN-IN SCREEN's prose, and it is a SEPARATE column because ArenaNet uses
+# a separate string: the offer and turn-in dialog lines are two distinct ids in
+# 6 of 6 observed pairs. One `description` column cannot express both screens.
+turn_in_dialogue = "You have my thanks, traveller. The gate guard speaks well of you."
+# The clickable lines, sent as 0x007E AFTER the window opens. Our words. The
+# option's TAG carries the 0x003B code the click returns, and the option's KIND
+# is bound to that code 1:1 -- accept 0x01/16, decline 0x02/17, turn in 0x07/23.
+#
+# ArenaNet uses ONE generic string for every accept, decline and turn-in line
+# (identical code units across five quests), so these are really UI labels
+# rather than quest content. They are per-row here because our text is ours and
+# a row is where our words live; if a second quest ever repeats them verbatim,
+# move them to one place rather than copying.
+accept_label = "Accept"
+decline_label = "Decline"
 turn_in_label = "I spoke to the gate guard."
 
 [quest.rurik_first_errand.provenance]

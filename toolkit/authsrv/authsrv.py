@@ -70,6 +70,188 @@ def quest_rows():
     return _QUEST_ROWS
 
 
+# --------------------------------------------------------------- quest dialog
+#
+# THE FLOW IS TWO SCREENS AND WE BUILT ONE. Corrected 2026-08-16 against the
+# live corpus; studies/quests/FINDINGS.md has the tables.
+#
+#   SCREEN 1, the list. One 0x0080 (a short greeting), one 0x0081 to open the
+#   window, then one 0x007E per quest whose tag carries code 0x03 -- "show me
+#   this one". The option's LABEL is the quest's NAME, not an action.
+#
+#   SCREEN 2, the description. Sent in reply to a code-0x03 select: one 0x0080
+#   carrying the quest's own prose and its reward line, one 0x0081, then TWO
+#   options -- kind 16 code 0x01 Accept and kind 17 code 0x02 Decline.
+#
+# AND THE SHORTCUT: when an NPC has exactly ONE actionable line, ArenaNet skips
+# screen 1 entirely and opens screen 2 on the INTERACT itself, 7 of 7. Both
+# mandatory Pre-Searing quests are single-quest givers, so for us the shortcut
+# is the common path rather than an optimisation.
+#
+# ONE 0x0080 PER WINDOW, ALWAYS. 28 of 28 text-bearing windows carry exactly
+# one. The body at 0x00811740 CONCATENATES into a single buffer over the
+# previous terminator, so the loop this replaced -- one 0x0080 per quest row --
+# rendered N rows as one run-on paragraph rather than N lines. That was a live
+# bug found statically, never on screen, because our world has one quest.
+
+
+def _dialog_window(send, agent_id, text, options):
+    """One 0x0080, one 0x0081, then the options. The only correct order.
+
+    0x0081 opens the window and ZEROES the text accumulator, so options sent
+    before it land in a buffer that is then cleared -- which renders as text
+    with nothing to click and reads as "0x007E does not work".
+    """
+    send(GAME_SMSG_NPC_DIALOG_TEXT, [text], "NPC_DIALOG_TEXT")
+    send(GAME_SMSG_NPC_DIALOG_SHOW, [agent_id],
+         f"NPC_DIALOG_SHOW(agent {agent_id})")
+    for qid, code, label in options:
+        send(GAME_SMSG_NPC_DIALOG_OPTION,
+             [questdefs.option_kind(code), label,
+              questdefs.encode_service_select(qid, code),
+              questdefs.OPTION_NO_ICON],
+             f"DIALOG_OPTION(quest {qid} code 0x{code:02X} "
+             f"kind {questdefs.option_kind(code)})")
+
+
+def _close_dialog(send, agent_id, why):
+    """A BARE 0x0081 -- no 0x0080 before it -- closes the open window.
+
+    RECONSTRUCTION on the meaning, OBSERVED on the association: ArenaNet sends
+    one after 12 of 12 selects that end an exchange, and no bare flush is ever
+    followed by an option. The body posts frame 0x100000A6 with the accumulator
+    empty, so the window has nothing to draw.
+    """
+    send(GAME_SMSG_NPC_DIALOG_SHOW, [agent_id], f"DIALOG_CLOSE({why})")
+
+
+def _quest_lines(state):
+    """[(quest_id, code, row)] this NPC can act on, given what the player holds.
+
+    One entry per quest, and the code says which screen it leads to. Recomputed
+    on every INTERACT rather than cached: ArenaNet returned an in-progress line
+    and a turn-in line for the same quest 0.83 s apart because an objective
+    completed in between.
+
+    Every quest row speaks at every NPC, which is cruder than a real giver
+    binding and stays that way deliberately -- `content/quests.toml` has no
+    npc->quest column, and inventing one here would put a schema decision in a
+    dispatch arm. It is honest for a one-quest, one-giver world and nothing
+    more.
+    """
+    held = state.setdefault("quests", set())
+    out = []
+    for qid in sorted(quest_rows()):
+        row = quest_rows()[qid]
+        if not row.get("giver_dialogue"):
+            continue
+        # Turn-in-able the moment it is held: this quest's objective is "speak
+        # to the guard", so accept and completion coincide. A quest with real
+        # objectives would gate this on their state, which we do not track.
+        out.append((qid, questdefs.SERVICE_TURN_IN if qid in held
+                    else questdefs.SERVICE_SHOW, row))
+    return out
+
+
+def _quest_screen(send, agent_id, qid, code, row):
+    """Screen 2: the quest's own prose, then accept+decline, or turn-in alone.
+
+    The reward belongs in this text and ours carries none -- the reward line is
+    a run of template ids inside the description string, and which of its two
+    numeric slots is XP and which is gold is UNVERIFIED behind an RC4 key that
+    is NOT FOUND. Drawing a reward we cannot honour would be a correct-looking
+    line with nothing behind it; the grant protocol is 0 of 23,495 in the
+    corpus and is a separate arc.
+    """
+    framing = row.get("wire_framing", "template")
+    if code == questdefs.SERVICE_TURN_IN:
+        _dialog_window(
+            send, agent_id,
+            questdefs.coded_literal(row.get("turn_in_dialogue") or
+                                    row["giver_dialogue"], framing,
+                                    limit=questdefs.DIALOG_UNITS),
+            [(qid, questdefs.SERVICE_TURN_IN,
+              questdefs.coded_literal(row.get("turn_in_label", "Complete"),
+                                      framing))])
+        return
+    # The OFFER screen. Both options, always: kind 17 / code 0x02 accompanies
+    # every kind-16 accept in 11 of 11 bursts, and a description screen with no
+    # decline line has no way out.
+    _dialog_window(
+        send, agent_id,
+        questdefs.coded_literal(row["giver_dialogue"], framing,
+                                limit=questdefs.DIALOG_UNITS),
+        [(qid, questdefs.SERVICE_ACCEPT,
+          questdefs.coded_literal(row.get("accept_label", "Accept"), framing)),
+         (qid, questdefs.SERVICE_DECLINE,
+          questdefs.coded_literal(row.get("decline_label", "Decline"),
+                                  framing))])
+
+
+def _list_screen(send, agent_id, lines):
+    """Screen 1: a short greeting, then one entry per quest, labelled by NAME.
+
+    Each option's tag carries code 0x03 -- "show me this one" -- and its label
+    is the quest's own name in 11 of 11, not an action verb. Unreachable in a
+    one-quest world; written because the shortcut above is the SPECIAL case and
+    a reader should be able to see what it is special against.
+    """
+    first = lines[0][2]
+    framing = first.get("wire_framing", "template")
+    send(GAME_SMSG_NPC_DIALOG_TEXT,
+         [questdefs.coded_literal(first.get("list_greeting",
+                                            "What can I do for you?"),
+                                  framing, limit=questdefs.DIALOG_UNITS)],
+         "NPC_DIALOG_TEXT(list)")
+    send(GAME_SMSG_NPC_DIALOG_SHOW, [agent_id],
+         f"NPC_DIALOG_SHOW(agent {agent_id})")
+    for qid, code, row in lines:
+        show = (questdefs.SERVICE_TURN_IN if code == questdefs.SERVICE_TURN_IN
+                else questdefs.SERVICE_SHOW)
+        send(GAME_SMSG_NPC_DIALOG_OPTION,
+             [questdefs.option_kind(show),
+              questdefs.enc_string(row.get("enc_name") or []),
+              questdefs.encode_service_select(qid, show),
+              questdefs.OPTION_NO_ICON],
+             f"DIALOG_OPTION(quest {qid} code 0x{show:02X} "
+             f"kind {questdefs.option_kind(show)})")
+
+
+def _quest_marker_value(state):
+    """The 0x009F property-11 value for our single giver, or None to CLEAR.
+
+    5 = has at least one quest available to offer; 4 = a quest the player holds
+    can be turned in here. Value 3 (a quest in progress that CANNOT yet be
+    turned in) exists on the wire, n=4, and we never emit it because we have no
+    objective state to be mid-way through. None means send the CLEAR instead.
+    """
+    lines = _quest_lines(state)
+    if not lines:
+        return None
+    if any(code == questdefs.SERVICE_TURN_IN for _q, code, _r in lines):
+        return QUEST_MARKER_TURN_IN
+    return QUEST_MARKER_OFFER
+
+
+def _send_marker(send, state, agent_id):
+    """Set or clear the overhead marker to match the player's quest state.
+
+    THE CLEAR IS A DIFFERENT PROPERTY, and that is the part we had missing: there
+    is no property-11 value meaning "no marker" -- sending [11, agent, 0] would
+    be inventing a value that never occurs. ArenaNet sends property 12 = 0.
+    RECONSTRUCTION: prop 12 is 0 in 22 of 22 and 16 of 16 sends, so its value
+    range is never exercised and the reading rests on consequence alone.
+    """
+    v = _quest_marker_value(state)
+    if v is None:
+        send(GAME_SMSG_AGENT_GENERIC_VALUE, [PROP_QUEST_MARKER_CLEAR,
+                                             agent_id, 0],
+             f"QUEST_MARKER_CLEAR(agent {agent_id})")
+    else:
+        send(GAME_SMSG_AGENT_GENERIC_VALUE, [PROP_QUEST_MARKER, agent_id, v],
+             f"QUEST_MARKER(agent {agent_id}) = {v}")
+
+
 def _f32(x):
     """A float as the dword the codec will put on the wire.
 
@@ -1423,6 +1605,16 @@ GAME_SMSG_QUEST_ADD = 0x0049
 # 22 clicks in both keyed sessions were announced by a prior 0x007E carrying
 # that dword, zero counterexamples. studies/quests/FINDINGS.md, candidate 2.
 GAME_SMSG_NPC_DIALOG_OPTION = 0x007E
+
+# The overhead marker. 0x009F is [property_id, agent_id, value]; property 11
+# carries the glyph state and property 12 = 0 is the CLEAR -- there is no
+# property-11 value that removes a marker.
+GAME_SMSG_AGENT_GENERIC_VALUE = 0x009F
+PROP_QUEST_MARKER = 11
+PROP_QUEST_MARKER_CLEAR = 12
+QUEST_MARKER_ADVANCE = 3     # in progress, not yet turn-in-able. n=4, unemitted
+QUEST_MARKER_TURN_IN = 4     # a held quest can be turned in HERE
+QUEST_MARKER_OFFER = 5       # at least one quest available to offer
 
 # The two halves of a turn-in. 0x0052's body at 0x0080F7A0 is the real deleter
 # -- it memmoves the tail of charContext+0x52C down, decrements the count at
@@ -5211,49 +5403,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # WINDOW testable without inventing that binding first.
                         # Q5 is where the id actually has to matter, and this
                         # comment is what says the two are not the same rung.
-                        spoke = False
-                        for qid in sorted(quest_rows()):
-                            line = questdefs.dialogue_field(quest_rows()[qid])
-                            if line:
-                                send(GAME_SMSG_NPC_DIALOG_TEXT, [line],
-                                     f"NPC_DIALOG_TEXT(quest {qid})")
-                                spoke = True
-                        if spoke:
-                            # The FLUSH, and it must come last: 0x0081 zeroes
-                            # the accumulator it displays, so sending it first
-                            # would show an empty window and clear the lines
-                            # that followed.
-                            send(GAME_SMSG_NPC_DIALOG_SHOW, [values[1]],
-                                 f"NPC_DIALOG_SHOW(agent {values[1]})")
-                            # AND THE OPTIONS, WHICH MUST COME AFTER THE FLUSH.
-                            # 0x0081 opens the window; 0x007E appends a line to
-                            # an OPEN one. Sending options first puts them in
-                            # the buffer 0x0081 then zeroes, and the window
-                            # renders text with nothing to click -- which looks
-                            # exactly like 0x007E not working. MEASURED the hard
-                            # way on 2026-08-15, and it is ArenaNet's own order
-                            # at t=26.816: 0x0080, 0x0081, then two 0x007E.
-                            held = state.setdefault("quests", set())
-                            for qid in sorted(quest_rows()):
-                                row = quest_rows()[qid]
-                                if not questdefs.dialogue_field(row):
-                                    continue
-                                turn_in = qid in held
-                                code = (questdefs.SERVICE_TURN_IN if turn_in
-                                        else questdefs.SERVICE_ACCEPT)
-                                label = (row.get("turn_in_label")
-                                         if turn_in else row.get("accept_label"))
-                                if not label:
-                                    continue
-                                send(GAME_SMSG_NPC_DIALOG_OPTION,
-                                     [questdefs.OPTION_KIND_QUEST,
-                                      questdefs.coded_literal(
-                                          label,
-                                          row.get("wire_framing", "template")),
-                                      questdefs.encode_service_select(qid, code),
-                                      questdefs.OPTION_NO_ICON],
-                                     f"DIALOG_OPTION(quest {qid} code "
-                                     f"0x{code:02X})")
+                        lines = _quest_lines(state)
+                        if len(lines) == 1:
+                            # THE SINGLE-QUEST SHORTCUT, 7 of 7 on ArenaNet's
+                            # wire and the common path for us: one actionable
+                            # line means the list screen is skipped and the
+                            # DESCRIPTION screen opens on the interact itself.
+                            _quest_screen(send, values[1], *lines[0])
+                        elif lines:
+                            _list_screen(send, values[1], lines)
+                        if lines:
+                            _send_marker(send, state, values[1])
                     elif opcode == GAME_CMSG_NPC_SERVICE_SELECT:
                         # Closes test_dispatch's other recorded drop, whose
                         # reason was "blocked behind 0x0039: this server does
@@ -5289,6 +5449,12 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                       nm, nm, nm, mid],
                                      f"QUEST_ADD[{qid}] (accepted)")
                                 state.setdefault("quests", set()).add(qid)
+                                # The marker moves in the SAME batch as the
+                                # quest message that caused it -- never on a
+                                # later tick -- and then the window closes.
+                                _send_marker(send, state, state["interacting"])
+                                _close_dialog(send, state["interacting"],
+                                              "accepted")
                             elif row and code == questdefs.SERVICE_TURN_IN:
                                 # ONE 0x0052, NOT TWO, AND THAT IS THE
                                 # EXPERIMENT. ArenaNet sends 0x0052 twice then
@@ -5310,12 +5476,33 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 send(GAME_SMSG_QUEST_REMOVE_AND_UNLIST, [qid],
                                      f"QUEST_REMOVE_AND_UNLIST[{qid}]")
                                 state.setdefault("quests", set()).discard(qid)
-                            elif row and code == questdefs.SERVICE_OFFER:
-                                # 2 of 2 in the corpus: the offer draws no
-                                # quest-family reply. Answering it would invent
-                                # a behaviour ArenaNet's server does not have.
-                                print(f"[c{conn_id}]   offer opened; ArenaNet "
-                                      f"sends no quest reply here either")
+                                _send_marker(send, state, state["interacting"])
+                                _close_dialog(send, state["interacting"],
+                                              "turned in")
+                            elif row and code == questdefs.SERVICE_SHOW:
+                                # THE MIDDLE SCREEN, and this arm used to send
+                                # NOTHING on the recorded ground that "ArenaNet
+                                # sends no quest reply here either". That was
+                                # right about the QUEST family and wrong about
+                                # the DIALOG family: ArenaNet answers a code-3
+                                # select with a full description screen in
+                                # 40-48 ms, 4 of 4. A player who clicked a quest
+                                # name got a dead window.
+                                _quest_screen(send, state["interacting"],
+                                              qid, questdefs.SERVICE_SHOW, row)
+                            elif row and code == questdefs.SERVICE_DECLINE:
+                                # CHANGES NOTHING, DELIBERATELY. GWW says a
+                                # declined quest stays available; the wire is
+                                # silent, because the option is offered 11 of 11
+                                # and clicked 0 of 11. So close the window and
+                                # say the consequence is unmeasured rather than
+                                # replicate a guess.
+                                print(f"[c{conn_id}]   code 0x02 DECLINE: no "
+                                      f"state change. The offer is OBSERVED "
+                                      f"(11 of 11) and the consequence is NOT "
+                                      f"-- nobody in the corpus ever declined.")
+                                _close_dialog(send, state["interacting"],
+                                              "declined")
                     elif opcode == GAME_CMSG_REQUEST_QUEST_INFO:
                         # Closes test_dispatch's recorded drop, whose reason was
                         # "answering it needs a quest table this repo does not

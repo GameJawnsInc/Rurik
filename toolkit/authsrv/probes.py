@@ -2777,6 +2777,11 @@ def _quest_giver_mark_steps(origin):
 # field1 takes 15,16,17,18,21,22,23 in the corpus -- an option KIND or icon,
 # unnamed. 18 is what the quest offers used. field4 is 0xFFFFFFFF in 37 of 37.
 DIALOG_OPTION = 0x007E
+# The kind that goes with code 0x03, "show me this quest". The corpus binds
+# kind to code 1:1 in 41 of 41, so a probe that hardcodes a kind is only correct
+# for one code -- questdefs.option_kind() is the general answer and this
+# constant exists because the quest_option probe below predates the table and is
+# kept as the record of that run.
 OPTION_KIND_QUEST = 18
 OPTION_NO_ICON = 0xFFFFFFFF
 

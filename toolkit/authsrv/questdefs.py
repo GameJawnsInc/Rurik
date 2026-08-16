@@ -132,12 +132,42 @@ SERVICE_TAG_BIT = 0x800000
 # 0x01 draws GAME_SMSG 0x0049 within 30-55 ms in 5 of 5, and 0x07 draws
 # 0x0052 x2 + 0x004A in 3 of 3, across five independent quest ids. The English
 # words are OURS -- RECONSTRUCTION on top of an OBSERVED consequence.
-SERVICE_OFFER = 0x03        # opens the offer; no quest-family reply, 2 of 2
+# CORRECTED 2026-08-16, and the correction is structural: a dialogue option is
+# the quest NAME and an ENTRY POINT, not the accept. Selecting it opens a SECOND
+# screen carrying the description, the reward and accept/decline. Our server
+# collapsed the two, so `SERVICE_OFFER` was misnamed -- code 0x03 means "show me
+# this quest", and the accept happens one screen later.
 SERVICE_ACCEPT = 0x01
-SERVICE_STEP = 0x04         # objectives update + marker move, n=1
+SERVICE_DECLINE = 0x02
+SERVICE_SHOW = 0x03         # was SERVICE_OFFER; renamed for what it does
+SERVICE_ADVANCE = 0x04
+SERVICE_IN_PROGRESS = 0x05
 SERVICE_TURN_IN = 0x07
-# NOT FOUND: a DECLINE code. No 0x003B value in the corpus produces a refusal,
-# because the operator never declined. Do not invent one.
+
+# DECLINE IS NO LONGER NOT_FOUND, and how it hid is worth one sentence: it is
+# OFFERED in a 0x007E beside every accept line (11 of 11, same burst, same
+# timestamp, same quest id) and was never CLICKED, so a search over what players
+# sent could not see it. The OFFER is OBSERVED; the CONSEQUENCE is not -- GWW
+# says a declined quest stays available, the wire is silent, and the arm that
+# handles it must say so rather than replicate a guess.
+
+# The option KIND is bound to the code ONE-TO-ONE, 41 of 41 across both keyed
+# sessions. This is not decoration: our server sent kind 18 with codes 0x01 and
+# 0x07, and NEITHER PAIR OCCURS ON ARENANET'S WIRE (0 of 41). Pick the kind from
+# the code rather than hardcoding one.
+OPTION_KIND = {
+    SERVICE_ACCEPT: 16,
+    SERVICE_DECLINE: 17,
+    SERVICE_SHOW: 18,
+    SERVICE_ADVANCE: 21,
+    SERVICE_IN_PROGRESS: 22,
+    SERVICE_TURN_IN: 23,
+}
+
+# Kind 15 exists (n=2, never clicked) and carries tag 0x00000080 -- the 0x800000
+# bit CLEAR, so `decode_service_select` refuses it by design and
+# `encode_service_select` cannot express it. Do not emit one until 0x003B has a
+# non-quest arm; a click on it would hit the None branch.
 
 
 def decode_service_select(value):
@@ -163,14 +193,26 @@ def encode_service_select(quest_id, code):
     return SERVICE_TAG_BIT | (quest_id << 8) | code
 
 
-# GAME_SMSG 0x007E's first field, an option KIND. It takes 15, 16, 17, 18, 21,
-# 22 and 23 across the corpus and none of them is named anywhere; 18 is what
-# every quest offer uses, which is the only reason this constant has a value.
-OPTION_KIND_QUEST = 18
-# Field 4, 0xFFFFFFFF in 37 of 37 samples. Never seen taking another value, so
-# what it MEANS is UNVERIFIED -- this name says where it came from, not what it
-# does.
+# Field 4, 0xFFFFFFFF in 41 of 41 samples (the earlier "37 of 37" was a floor
+# from a partial census). Never seen taking another value, so what it MEANS is
+# UNVERIFIED -- this name says where it came from, not what it does.
 OPTION_NO_ICON = 0xFFFFFFFF
+
+
+def option_kind(code):
+    """The 0x007E kind that goes with a 0x003B code. Raises on an unknown one.
+
+    Raising rather than defaulting is the point: a default would silently
+    reproduce the bug this table was written to fix, where every option went out
+    as kind 18 including the two pairings ArenaNet never sends.
+    """
+    try:
+        return OPTION_KIND[code]
+    except KeyError:
+        raise ValueError(
+            f"no observed 0x007E kind for 0x003B code 0x{code:02X}; the corpus "
+            f"binds kinds to codes 1:1 in 41 of 41 and this code is not among "
+            f"them. Measure one before sending it.")
 
 
 def load(world=None):
