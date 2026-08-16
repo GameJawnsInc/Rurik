@@ -814,6 +814,41 @@ Every one of these, in the order they were written:
   (the mandatory core is 53; the corpus sabotage and order-control pools
   can legitimately empty on another sample and declare skips). ~25 s;
   `--all` reads every head row, ~25-45 min),
+  `toolkit/mapdata/test_mdlrefs.py` (the model's REFERENCE-LIST chunks
+  `0xFA5/0xFA6/0xFA8/0xFAD/0xFAE` -- rung U3 of `studies/unitmodels/PLAN.md`,
+  the one generic reader all five go through (`0x00796DE0`, exactly five call
+  sites) decoded under the client's own record rule, read from the nine
+  instructions of the scanner at `0x00908260`: a record is u16 words ended by
+  the FIRST ZERO WORD, variable length, NOT fixed 6 bytes. **The headline
+  control is a rival that must fail**: the fixed-6 reading closes on every
+  FA6/FA8/FAD chunk in the archive (every record there happens to be 2
+  wchars), so the test builds the discriminating shape -- FA5's null slots --
+  from its own byte literals AND requires the rival to fail on the corpus
+  null-slot population in BOTH directions (fails exactly where a null slot
+  exists, 104 chunks at the default stride 53; full population 5,393 of
+  20,661 FA5 chunks / 11,894 slots). Closure is OUR assertion: the client
+  copies exactly the consumed bytes with no cursor-vs-end compare
+  (`0x00794B70`) and silently loads an EMPTY list on a malformed record
+  (error path `0x00794C27`), where the module raises at a named gate --
+  refusals for the no-terminator record, the count overrun, the odd trailing
+  byte, and the scanner's end-1 edge (a zero BYTE on the last byte is not a
+  zero WORD, `0x0090826B`) are each pinned beside a passing control.
+  `--all` decodes every reference chunk on every flags=515 head -- 30,722
+  chunks, zero failures -- and pins the population literals: FA6-first
+  exactly 388 (reproducing the recon's independent prefix sweep), FA8 252
+  chunks / 2,467 records / 394 distinct targets all ffna type-2 with FA1 and
+  without FA0 (the §5.3 claims widened 10x past the 25-chunk caveat), FAE
+  exactly 6, and every 2-wchar record resolving in `file_id_table(raw=True)`
+  via the dependency-pair formula. **The sound-chain oracle** re-runs the
+  study's FA6 -> ffna type-8 -> MPEG identification through the committed
+  module: the three anchors' 60 distinct type-8 descriptors' own chunk-0x1
+  entries, 231/231 valid MPEG-1 Layer III frame headers by field values
+  only (nothing copied), with the header oracle itself refused in seven
+  synthetic directions first. Anchors: 116228 FA6=30/FA8=15 with first link
+  15018, 116366 FA5=5/FA6=16, 116703 FA5=3 and NOTHING else -- the hatcher
+  body's FA6-lessness is the composite split's other half. 52 checks
+  against a floor of 45 (the FA8/FAE-dependent sections declare skips on a
+  sample that misses them). ~25 s; `--all` ~15-20 min),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against
