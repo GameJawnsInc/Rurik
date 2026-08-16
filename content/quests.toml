@@ -56,27 +56,36 @@ in_progress_dialogue = "The gate guard is by the arch. Speak with him, then come
 # silent no-op that looks exactly like the client ignoring us.
 objectives_done = "Return to the guard. [done]"
 
-# WHO GIVES IT AND WHO COMPLETES IT. Two agent ids, and they are AGENT ids
-# rather than content keys, which is crude: an agent id is per-connection and
-# per-spawn, so this binds the quest to the probe world rather than to a
-# character in a place. A real binding needs a spawn row with a stable key and
-# a `content/world.toml` entry to point at, which is rung R5's job. Written
-# this way so the state machine can be exercised at all, and named here so the
-# next session does not mistake it for a schema decision.
+# WHO GIVES IT AND WHO COMPLETES IT -- TWO NPCs, deliberately. The owner asked
+# for two: a quest that is entirely walked through its giver is a degenerate
+# case that never exercises going somewhere, and "speak to the gate guard, then
+# return" is the shape both mandatory Pre-Searing quests have.
+#
+# THEY MUST LOOK DIFFERENT, and the first version's did not: both bodies carried
+# definition 1480 and rendered as two identical "Ascalonian Guard" nameplates
+# with nothing on screen to tell the giver from the objective. The guard now
+# takes definition 1473 -- a different model id and a different profession, from
+# the same live capture -- so a screenshot is never ambiguous about which NPC is
+# which. That is a measurement property, not decoration: an ambiguous frame is
+# an unreadable result.
+#
+# AGENT ids, still, and still crude: per-connection and per-spawn, so this binds
+# to the probe world rather than to characters in a place. R5's job.
 giver_agent     = 99
 objective_agent = 98
-# The clickable lines, sent as 0x007E AFTER the window opens. Our words. The
-# option's TAG carries the 0x003B code the click returns, and the option's KIND
-# is bound to that code 1:1 -- accept 0x01/16, decline 0x02/17, turn in 0x07/23.
+
+# THE REWARD. Ours, and small on purpose. ArenaNet renders a reward as `Reward:`
+# followed by one line per slot, INSIDE the description string -- there is no
+# reward message. `reward_gold` is commented out rather than set to 0 because a
+# zero draws a line reading zero; omitting the key omits the line, exactly as
+# the stock "A Personal Vault" screen does with its lone `500 Experience`.
 #
-# ArenaNet uses ONE generic string for every accept, decline and turn-in line
-# (identical code units across five quests), so these are really UI labels
-# rather than quest content. They are per-row here because our text is ours and
-# a row is where our words live; if a second quest ever repeats them verbatim,
-# move them to one place rather than copying.
-accept_label = "Accept"
-decline_label = "Decline"
-turn_in_label = "I spoke to the gate guard."
+# NOTHING IS GRANTED. The reward GRANT protocol is 0 of 23,495 messages in the
+# corpus -- the operator never completed a quest on a live capture -- so this
+# draws a promise the server cannot yet honour. Named in FINDINGS rather than
+# hidden behind a plausible-looking number.
+reward_experience = 100
+# reward_gold = 10
 
 [quest.rurik_first_errand.provenance]
 source = "invented"
