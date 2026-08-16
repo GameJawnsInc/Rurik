@@ -117,10 +117,10 @@ Answered at the reading level:
 - **Not observed anywhere:** no capture in the vault contains 234–237 (the
   live sessions are Pre-Searing; faction UI is Factions/Nightfall content).
 
-**Probe** (extends `probes.py attr_legend`, one packet each): send
-`0x00EA`–`0x00ED` with four distinct values and re-open the faction panel.
-Four bars with our denominators = OBSERVED; also decides whether the maxima
-messages alone suffice or the numerators must arrive first.
+**Probe — built 2026-08-16: `--probe faction_max`.** The attr_legend vector
+paints the numerators, then the four maxima land with distinct values (so a
+swapped opcode→faction mapping names itself), and a final `0x00EA` re-send
+asks whether a cap can move mid-session. Four filled denominators = OBSERVED.
 
 ## 3. Titles: the `0x00F3`–`0x00F6` cluster (new)
 
@@ -165,14 +165,16 @@ The mirrors know a four-message SMSG cluster and two CMSGs:
   send site (`GameSrv.c:1472` `// GameSrv_SendPlayerTitles`). GWLP-R has the
   three protocol shells and no table. Nobody persists a title anywhere.
 
-**Probes**, cheapest first: (1) send one `0x00F6` with a synthetic track and
-open the Hero panel's Titles tab — if a track row renders, the message and
-the tab are both settled in one packet; (2) `0x00F5` afterwards to see
-whether an update alone can *create* a track entry or only modify one;
-(3) `0x00F4` against our own agent id with a rank from (1), looking for the
-under-name title. The client's title UI is data-driven from a 48-row compiled
-table, so id-space errors should assert loudly rather than silently render
-(`GmCtlSkList:3294 title < TITLES`).
+**Probe — built 2026-08-16: `--probe title_track`.** Five steps: a `0x00F3`
+tier seed, a coherent `0x00F6` track (field 2 = current points under both
+rival namings; the two possible denominators distinct so whichever renders
+names its lineage), a `0x00F5` update, a `0x00F4` display attempt against our
+own nameplate (staging-area caveat noted in the probe), and LAST a
+deliberately out-of-range legend track — the client's title UI bound-checks
+its 48-row table (`GmCtlSkList:3294 title < TITLES`), so an assert there
+names an unchecked tier index without costing the earlier readings. The
+sharpest cheap question: whether the track row's *name* is our literal string
+or a real title resolved from the compiled catalog.
 
 ## 4. What the reference servers actually persist
 
@@ -246,8 +248,9 @@ honest design, given everything above:
 
 ## 7. Open items
 
-- Run the two probes (§2, §3). Both are one-packet `probes.py` additions with
-  stated predictions; both convert reading-level claims into OBSERVED.
+- Run `--probe faction_max` and `--probe title_track` (§2, §3 — built
+  2026-08-16, encode-checked, predictions stated). Both convert reading-level
+  claims into OBSERVED on the next client run.
 - `0x00E9` fields 7/8 stay unnamed in every lineage; field 10 "morale" is a
   name our own probe already refuted as a display. Park them.
 - Whether the account/character title scope split is visible on the wire
