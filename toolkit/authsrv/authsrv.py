@@ -133,24 +133,61 @@ def _quest_lines(state):
     and a turn-in line for the same quest 0.83 s apart because an objective
     completed in between.
 
-    Every quest row speaks at every NPC, which is cruder than a real giver
-    binding and stays that way deliberately -- `content/quests.toml` has no
-    npc->quest column, and inventing one here would put a schema decision in a
-    dispatch arm. It is honest for a one-quest, one-giver world and nothing
-    more.
+    THREE STATES, not two, and the middle one is why this exists. A quest that
+    is HELD but whose objective is not met is offered as SERVICE_IN_PROGRESS
+    (code 0x05, option kind 22), which draws the gold '?'. Until 2026-08-16
+    this function returned SERVICE_TURN_IN the moment a quest was held, so kind
+    22 was unreachable and a quest went straight from '!' to the turn-in bag.
+
+    Bound to the agent being talked to, via the row's `giver_agent`. That is a
+    real binding where the old one was "every quest speaks at every NPC" -- but
+    it binds to an AGENT ID, which is per-connection and per-spawn, so it is a
+    probe-world binding rather than a content one. Said here and in the row.
     """
     held = state.setdefault("quests", set())
+    done = state.setdefault("objectives_done", set())
+    agent = state.get("interacting")
     out = []
     for qid in sorted(quest_rows()):
         row = quest_rows()[qid]
         if not row.get("giver_dialogue"):
             continue
-        # Turn-in-able the moment it is held: this quest's objective is "speak
-        # to the guard", so accept and completion coincide. A quest with real
-        # objectives would gate this on their state, which we do not track.
-        out.append((qid, questdefs.SERVICE_TURN_IN if qid in held
-                    else questdefs.SERVICE_SHOW, row))
+        if row.get("giver_agent") not in (None, agent):
+            continue
+        if qid not in held:
+            code = questdefs.SERVICE_SHOW
+        elif qid in done:
+            code = questdefs.SERVICE_TURN_IN
+        else:
+            code = questdefs.SERVICE_IN_PROGRESS
+        out.append((qid, code, row))
     return out
+
+
+def _objective_quests(state, agent):
+    """[(quest_id, row)] this agent COMPLETES, and that the player is mid-way in.
+
+    Separate from `_quest_lines` on purpose: the objective NPC is not a giver
+    and must not offer the quest. Talking to it is an EVENT, not a menu.
+    """
+    held = state.setdefault("quests", set())
+    done = state.setdefault("objectives_done", set())
+    return [(qid, quest_rows()[qid]) for qid in sorted(held)
+            if qid not in done
+            and quest_rows().get(qid, {}).get("objective_agent") == agent]
+
+
+def _send_description(send, state, qid, row):
+    """0x004C for one quest, and remember that we sent it.
+
+    The bookkeeping is not decoration: 0x0054 is a silent no-op until this has
+    gone out for the same quest, so the objective path needs to know whether it
+    can rely on the client having asked.
+    """
+    desc, obj = questdefs.description_fields(row)
+    send(GAME_SMSG_QUEST_DESCRIPTION, [qid, desc, obj],
+         f"QUEST_DESCRIPTION[{qid} {row.get('wire_framing', 'template')}]")
+    state.setdefault("desc_sent", set()).add(qid)
 
 
 def _quest_screen(send, agent_id, qid, code, row):
@@ -164,6 +201,21 @@ def _quest_screen(send, agent_id, qid, code, row):
     corpus and is a separate arc.
     """
     framing = row.get("wire_framing", "template")
+    if code == questdefs.SERVICE_IN_PROGRESS:
+        # THE MIDDLE SCREEN, and the one kind 22 exists for. RECONSTRUCTION on
+        # the options: code 0x05 is OFFERED 3 times in the corpus and CLICKED
+        # zero, so what a player gets after selecting an in-progress quest is
+        # unmeasured. A reminder of what is left to do, with no action to take,
+        # is the least invented thing available -- the quest is already held,
+        # so there is nothing to accept, and it is not complete, so there is
+        # nothing to turn in. The window's own X is the way out.
+        _dialog_window(
+            send, agent_id,
+            questdefs.coded_literal(row.get("in_progress_dialogue") or
+                                    row["giver_dialogue"], framing,
+                                    limit=questdefs.DIALOG_UNITS),
+            [])
+        return
     if code == questdefs.SERVICE_TURN_IN:
         _dialog_window(
             send, agent_id,
@@ -1575,6 +1627,12 @@ GAME_CMSG_INTERACT_AGENT = 0x0039
 # message that unlocks the other.
 GAME_CMSG_REQUEST_QUEST_INFO = 0x0012
 GAME_SMSG_QUEST_DESCRIPTION = 0x004C
+# The objectives line. A SILENT NO-OP unless 0x004C has been sent for the
+# same quest first: 0x004C's body sets flag bit 0 (DESC_FILLED) at
+# 0x0080F2D0 and 0x0054's body returns immediately without it at
+# 0x0080F9CD. ArenaNet trips its own gate twice in the corpus, so the
+# ordering is not folklore.
+GAME_SMSG_QUEST_OBJECTIVES_UPDATE = 0x0054
 
 # The NPC dialog window, and it is a PAIR with an order that is not arbitrary.
 #
@@ -5395,6 +5453,32 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # WINDOW testable without inventing that binding first.
                         # Q5 is where the id actually has to matter, and this
                         # comment is what says the two are not the same rung.
+                        # TALKING TO THE OBJECTIVE NPC IS AN EVENT, not a menu.
+                        # It fires before the menu below so that a giver which
+                        # is also its own objective NPC completes first and then
+                        # offers the turn-in, rather than showing '?' one
+                        # interaction late.
+                        for oqid, orow in _objective_quests(state, values[1]):
+                            state.setdefault("objectives_done", set()).add(oqid)
+                            print(f"[c{conn_id}] objective for quest {oqid} met "
+                                  f"at agent {values[1]}")
+                            # 0x0054 IS A SILENT NO-OP unless 0x004C has been
+                            # sent for this quest: flag bit 0 (DESC_FILLED) is
+                            # set by 0x004C's body and gates 0x0054's entirely
+                            # at 0x0080F9CD. The client asks for the
+                            # description on accept in 4 of 4, so it normally
+                            # has been -- but "normally" is not a guarantee, so
+                            # send it if we have not, rather than emit an
+                            # update that vanishes and looks like the client
+                            # ignoring us.
+                            if oqid not in state.setdefault("desc_sent", set()):
+                                _send_description(send, state, oqid, orow)
+                            ofr = orow.get("wire_framing", "template")
+                            send(GAME_SMSG_QUEST_OBJECTIVES_UPDATE,
+                                 [oqid, questdefs.coded_literal(
+                                     orow.get("objectives_done")
+                                     or orow.get("objectives", ""), ofr)],
+                                 f"QUEST_OBJECTIVES_UPDATE[{oqid}]")
                         lines = _quest_lines(state)
                         if len(lines) == 1:
                             # THE SINGLE-QUEST SHORTCUT, 7 of 7 on ArenaNet's
@@ -5482,6 +5566,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                 # name got a dead window.
                                 _quest_screen(send, state["interacting"],
                                               qid, questdefs.SERVICE_SHOW, row)
+                            elif row and code == questdefs.SERVICE_IN_PROGRESS:
+                                # Clicking the '?' line. RECONSTRUCTION: offered
+                                # 3 times in the corpus and clicked 0, so the
+                                # consequence is unmeasured and this shows the
+                                # reminder screen rather than inventing a state
+                                # change on a quest already held.
+                                print(f"[c{conn_id}]   code 0x05 IN PROGRESS: "
+                                      f"showing the reminder. Offered 3 times "
+                                      f"in the corpus, clicked 0 -- the "
+                                      f"consequence is ours, not measured.")
+                                _quest_screen(send, state["interacting"], qid,
+                                              questdefs.SERVICE_IN_PROGRESS, row)
                             elif row and code == questdefs.SERVICE_DECLINE:
                                 # CHANGES NOTHING, DELIBERATELY. GWW says a
                                 # declined quest stays available; the wire is
@@ -5520,10 +5616,7 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                   f"hold -- not answering (an empty 0x004C "
                                   f"would set DESC_FILLED on an unknown entry)")
                         else:
-                            desc, obj = questdefs.description_fields(row)
-                            send(GAME_SMSG_QUEST_DESCRIPTION, [qid, desc, obj],
-                                 f"QUEST_DESCRIPTION[{qid} "
-                                 f"{row.get('wire_framing', 'template')}]")
+                            _send_description(send, state, qid, row)
                     elif opcode == GAME_CMSG_TARGET_SELECT:
                         # The client TELLS us the selection; it does not ask.
                         # Measured on ArenaNet's wire: nothing target-shaped

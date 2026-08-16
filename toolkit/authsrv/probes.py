@@ -2786,6 +2786,48 @@ def _quest_reward_steps():
 _MARKER_SWEEP = (5, 0, 1, 2, 6, 7, 8, 9)
 
 
+_OBJECTIVE_AGENT = 98
+
+
+def _quest_objective_steps(origin):
+    """Two NPCs: the giver, and the gate guard who completes the objective.
+
+    The whole point is the MIDDLE state. With one NPC and no objective the
+    quest goes '!' -> bag and kind 22 never fires; with a second NPC to walk to,
+    the giver shows '?' between accept and completion, which is what a real
+    quest looks like and what our server could not express until now.
+
+    Both bodies share definition 1480 -- the live giver's -- because what is
+    under test is the option kind, not the model, and a second definition would
+    be a second variable.
+    """
+    ox, oy, plane = origin
+    return [
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
+        Step(2.0, 0x0020,
+             create_agent(_GIVER_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 150, oy - 130, plane),
+             f"WORLD_CREATE_AGENT({_GIVER_AGENT}) -- THE GIVER",
+             "a body ahead and to one side."),
+        Step(1.0, 0x0020,
+             create_agent(_OBJECTIVE_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 150, oy + 130, plane),
+             f"WORLD_CREATE_AGENT({_OBJECTIVE_AGENT}) -- THE GATE GUARD",
+             "a second body BESIDE the first rather than opposite it. The first "
+             "placement put them 150u east and west, which is the camera's own "
+             "axis -- they stacked vertically on screen and no pair of clicks "
+             "could be unambiguous. Same distance, perpendicular."),
+        Step(2.0, GENERIC_VALUE,
+             [PROP_QUEST_MARKER, _GIVER_AGENT, QUEST_MARKER_OFFER],
+             f"property 11 = 5 on the giver", "a green '!' over the giver."),
+    ]
+
+
 def _dialog_icons_steps(origin):
     """One option of EVERY kind in one window, each labelled with its own kind.
 
@@ -3122,6 +3164,29 @@ def _quest_offer_steps():
 
 
 PROBES = {
+    "quest_objective": lambda a, o: Probe(
+        question="Does a quest with a real objective show the gold '?' between "
+                 "accept and completion?",
+        predicts="THREE DIFFERENT SCREENS FROM THE SAME NPC, in order. Talk to "
+                 "the giver: kind 18, a gold '!', accept/decline. Accept, then "
+                 "talk to it again: kind 22, a gold '?', because the objective "
+                 "is not met. Walk to the gate guard and talk: the objective "
+                 "completes and 0x0054 rewrites the tracker line. Talk to the "
+                 "giver a third time: kind 23, the bag. Until now our server "
+                 "returned the bag the instant a quest was held, so kind 22 "
+                 "was unreachable -- the state existed on the wire and had no "
+                 "way to happen. If the '?' screen does not appear, the "
+                 "objective state is not reaching _quest_lines; if 0x0054 "
+                 "changes nothing on screen, DESC_FILLED was not set and the "
+                 "update was swallowed by the gate at 0x0080F9CD.",
+        steps=_quest_objective_steps(o),
+        note="RUN ON --map 449 with --shots 2. The giver is 150u EAST and the "
+             "gate guard 150u WEST, so no screenshot is ambiguous about which "
+             "is which. Click the giver, accept, click the giver again to see "
+             "the '?', then the guard, then the giver once more. The interact "
+             "click lands near (0.499, 0.625) and dialog options around "
+             "(0.491, 0.52-0.55).",
+    ),
     "dialog_icons": lambda a, o: Probe(
         question="The '?' is in the DIALOG, not over the NPC. Does it come from "
                  "0x007E's option KIND?",

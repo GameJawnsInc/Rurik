@@ -224,6 +224,22 @@ On screen afterwards: **Active Quests empty, Quest Summary empty, and the tracke
 
 **A gap this exposes in our own server, unbuilt:** `_quest_lines` returns `SERVICE_TURN_IN` the moment a quest is held, so we emit kind 23 and **never kind 22**. That is honest for `rurik_first_errand`, whose objective completes on acceptance, but it means a quest with real objectives would show a bag rather than a `?` while it was still in progress. The state to send is 22 until the objective completes and 23 after — and we have no objective state to make that turn on.
 
+**The objective state, built 2026-08-16 so kind 22 can fire.**
+
+`_quest_lines` used to return `SERVICE_TURN_IN` the instant a quest was held, so the option kind went 18 → 23 and **kind 22 was unreachable** — the state existed on the wire and had no way to happen on our server. It now returns three states, bound to the agent being spoken to:
+
+| player's state | code | kind | icon |
+|---|---|---|---|
+| not held | `0x03` SHOW | 18 | gold `!` |
+| held, objective unmet | `0x05` IN_PROGRESS | 22 | gold **`?`** |
+| held, objective met | `0x07` TURN_IN | 23 | bag |
+
+The quest gains a second NPC. `giver_agent` offers it; `objective_agent` — the gate guard — completes it, and talking to that agent is an **event, not a menu**: `_objective_quests` is separate from `_quest_lines` precisely so the guard never offers the quest it finishes. Completion sends `0x0054` with the row's `objectives_done` line, and sends `0x004C` first if the client never asked, because `0x0054` is a silent no-op until `DESC_FILLED` is set (§8, the gate at `0x0080F9CD`).
+
+**Verified as logic, not on screen, and the distinction matters.** Kind 22's *rendering* is measured — `dialog_icons` drew the gold `?`. What was unverified is that our server ever *emits* it, which is pure state and is driven end to end by `test_quests.py` §14: SHOW before accepting, IN_PROGRESS once held, TURN_IN once the guard is visited, the guard offering nothing in any state, and the objective refusing to re-fire. **A five-click live sequence against two NPCs was attempted three times and produced no interaction at all** — the harness cannot reliably hit an NPC's screen position, and the camera faces a different way each run. That is a harness limit, not a protocol unknown, and it is the honest reason this rung has a unit test where the others have a capture.
+
+**Two things in the new path are RECONSTRUCTION and labelled so in the code.** What a code-`0x05` click does — offered 3 times in the corpus, clicked 0 — so our arm shows a reminder screen with no options rather than inventing a state change. And `objective_agent` binds by **agent id**, which is per-connection and per-spawn: a probe-world binding, not a content one. A real binding needs a spawn row with a stable key, which is rung R5.
+
 **Still not settled: the compass marker.** This run was on **map 449**, not 148, so it says nothing about §7.3 — map 148 cannot load at all right now (see below), and the marker coordinates are 148's. The free rider went unclaimed and §7.3's test is still open.
 
 **Not settled, and it blocked this run first: map 148 is unloadable.** `contentids.py` refuses it, correctly — no client archive in the vault binds `0x1B97D` the way the server's `dat_study` copy does. Four run dirs hold it only under the bit-31 mid-replacement spelling; the 38833 copy binds it to a file 8 bytes larger, written by the terrain arc's allocation work. This is archive state, not a quest question, and it is why Q0 ran on 449.
