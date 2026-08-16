@@ -1342,6 +1342,62 @@ player number out of step with the client's internal one, and the visible sympto
 narrow and misleading: the roster row and the commander binding become mutually exclusive.
 The default (1) is the value that satisfies both, and it is the default for that reason.
 
+## 22. What writes `ctx[0x44][0x2ac]`: `0x0199` INSTANCE_LOAD_INFO, field 1
+
+§21.2 left the client's own "my id" unnamed. Desk work, no client:
+
+- **`ctx[0x44]` is the MISSION subsystem.** The accessor `0x0084DD70` sits in **MsCliApi**
+  (its neighbours assert `MsCliApi:387/396/406/821`).
+- **`codescan.py --field 0x2AC --writes`** finds eleven stores image-wide; three are in the
+  MsCliApi range, and two of those are real writes rather than an init-zero:
+  `0x0084EF13` and `0x0084F24F`. Both take a message struct as `[ebp+8]` and copy **`[msg+4]`
+  — field 1** — into `mission_ctx[0x2ac]`; the second bulk-copies a dozen more fields
+  alongside it, which is what a message handler looks like.
+- Neither has a `call` xref: each VA sits in **one aligned `.rdata` word** (`0x00BCB2B4`,
+  `0x00BCB368`) — dispatch-table entries. `msgshape.py --all` matches them to opcodes:
+
+| opcode | handler | shape |
+|---|---|---|
+| **`0x0199` INSTANCE_LOAD_INFO** | `0x0084EF00` | `[agent_id, u16, u8, u32, u8, u8]`, 15 B |
+| `0x01A4` | `0x0084F230` | `[agent_id, u16, u8, u32, u8, u8, u32, vec2, u16, u8, u8, string16(20), blob(8)]`, 81 B |
+
+**`ctx[0x44][0x2ac]` is `0x0199`'s field 1** — the message this server has sent at every
+instance load since the beginning, whose field 1 the client's own descriptor types
+`agent_id` and which we fill with the player's agent id. `0x01A4` writes the same slot from
+its own field 1 and we never send it.
+
+### 22.1 This explains §21's mirror exactly
+
+The two filters read the same `entry+4` and compare it against different things:
+
+- the **roster UI** against the value we used as `PLAYER_NUMBER` (which also feeds `0x0059`,
+  `0x00B0`/`0x00B1`, `0x01CB`'s party member and the player's `model_id`, so "player number"
+  is the coherent label but not fully isolated),
+- the **`GmHeroCommander` scan** against `ctx[0x44][0x2ac]` = **`0x0199` field 1** = the
+  player's **agent id**.
+
+`--player-number 2` moved the first and left the second at 1, so exactly one of the two could
+match at a time. In the default rig `PLAYER_NUMBER` and `PLAYER_AGENT_ID` are both 1, both
+filters see 1, and the hero binds — which is why every earlier run worked and why the
+mirror only appeared once the two were forced apart.
+
+### 22.2 A trap removed
+
+`0x0199`'s field 1 was a **literal `1`** at the send site, not `PLAYER_AGENT_ID`. Harmless
+today because the constant is also 1 — and exactly the kind of thing this repo keeps
+recording after it bites: the value now demonstrably feeds a filter three subsystems away,
+so a literal that silently stops tracking the constant is worth closing before it matters.
+Now `PLAYER_AGENT_ID`, with the reason attached.
+
+### 22.3 The confirming experiment, and why it was not run
+
+The prediction is clean: set `0x0199` field 1 **and** `msg+8` to the same value and both
+consumers agree again. It was not run because that field is the player's own agent id — the
+body is created at `PLAYER_AGENT_ID`, so moving one without the other desynchronises the
+player rather than the hero, and the run would measure our own inconsistency. The honest
+version of the test is to move `PLAYER_AGENT_ID` itself, which touches the spawn path and
+deserves its own arm rather than a footnote to this one.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

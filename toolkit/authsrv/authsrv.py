@@ -5355,7 +5355,15 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
             # Still worth setting for any combat test, but only so a silent drop
             # at the send leaf cannot be confused with the switch's choice.
             send(GAME_SMSG_INSTANCE_LOAD_INFO,
-                 [1,          # agent_id -- the player's own agent, 1 for the first
+                 [PLAYER_AGENT_ID,   # the player's own agent. A LITERAL 1 sat
+                              # here until 2026-08-16, which is a trap rather
+                              # than a bug while the constant is also 1: this
+                              # field is what the client stores at
+                              # ctx[0x44][0x2ac] (handler 0x0084EF00), and
+                              # GmHeroCommander's scan filters hero entries by
+                              # comparing that value against 0x01C2's msg+8.
+                              # A literal here silently stops tracking the
+                              # constant. studies/heroes/FINDINGS.md 22.
                   map_id,     # echoed from the version frame, not guessed
                   # The map's own kind, not a global switch. The client's
                   # AreaInfo type says which is which -- 2 explorable, 10
