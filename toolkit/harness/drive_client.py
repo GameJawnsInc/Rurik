@@ -893,7 +893,8 @@ def main():
     # character select -- comes up fast, and the old delays just sat idle.
     ap.add_argument("--actions", default="5:enter 4:enter 4:enter",
                     help="Whitespace-separated '<delay>:<kind>[:args]' steps. "
-                         "kind is enter | key:<char> | click:<fx>,<fy> | shot. Fractions are of "
+                         "kind is enter | key:<char> | click:<fx>,<fy> | interact:<agent_id> | "
+                         "shot. Fractions are of "
                          "the window, so scripts survive a resize.")
     ap.add_argument("--linger", type=int, default=25,
                     help="Seconds to keep sampling after the last Enter.")
@@ -998,7 +999,20 @@ def main():
         if not hwnd:
             print(f"  t+{now:6.1f}s  NO WINDOW, skipped {spec}", flush=True)
             continue
-        if kind == "click":
+        if kind == "interact":
+            # NOT INPUT. Asks the SERVER to run its own INTERACT arm for a named
+            # agent, because the harness cannot aim: projecting an agent's world
+            # position to a screen pixel needs a camera yaw it does not have, and
+            # a blind click at a guessed spot failed three runs in a row without
+            # producing one interaction. Everything downstream is real -- real
+            # messages, real client, real screen. What did not happen is a click,
+            # and both this line and the gamesrv say so.
+            import control
+            control.request_interact(int(parts[2]))
+            print(f"  t+{now:6.1f}s  interact:{parts[2]} -> asked the SERVER "
+                  f"(no click was synthesised)", flush=True)
+            ok = True
+        elif kind == "click":
             fx, fy = (float(v) for v in parts[2].split(","))
             ok = click(hwnd, proc.pid, fx, fy)
         elif kind == "enter":

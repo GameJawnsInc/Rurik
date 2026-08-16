@@ -52,6 +52,9 @@ import labelrun  # noqa: E402
 import agents  # noqa: E402
 import origin  # noqa: E402
 import questdefs  # noqa: E402
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "harness"))
+import control  # noqa: E402
 
 _QUEST_ROWS = None
 
@@ -177,6 +180,83 @@ def _objective_quests(state, agent):
             and quest_rows().get(qid, {}).get("objective_agent") == agent]
 
 
+def _handle_interact(send, state, conn_id, agent_id, interact_byte=0):
+    """Everything an INTERACT does, whichever side asked for it.
+
+    Lifted out of the dispatch arm so harness/control.py can drive it
+    without synthesising a click. A caller off the WIRE passes the
+    client's own trailing byte; the harness passes 0, which is what all
+    four samples in the corpus carry anyway.
+
+    The split is the honest one: this function is the CONSEQUENCE of an
+    interact and is identical either way, so a harness-driven run
+    exercises exactly the code a click does. What it does not exercise is
+    the client deciding to send 0x0039, which is separately OBSERVED.
+    """
+    state["interacting"] = agent_id
+    state["interact_byte"] = interact_byte
+    # ANSWER IT. The comment above used to end "until an
+    # NPC-service study says what an interaction should
+    # ANSWER" -- studies/quests/ is that study, and the
+    # answer is the 0x0080/0x0081 pair.
+    #
+    # Every quest row with a giver line speaks here, which
+    # is deliberately cruder than a real giver binding: we
+    # have no npc->quest column yet (AUTHORING's [server]
+    # block is a proposal, not a schema), so this makes the
+    # WINDOW testable without inventing that binding first.
+    # Q5 is where the id actually has to matter, and this
+    # comment is what says the two are not the same rung.
+    # TALKING TO THE OBJECTIVE NPC IS AN EVENT, not a menu.
+    # It fires before the menu below so that a giver which
+    # is also its own objective NPC completes first and then
+    # offers the turn-in, rather than showing '?' one
+    # interaction late.
+    for oqid, orow in _objective_quests(state, agent_id):
+        state.setdefault("objectives_done", set()).add(oqid)
+        print(f"[c{conn_id}] objective for quest {oqid} met "
+              f"at agent {agent_id}")
+        # 0x0054 IS A SILENT NO-OP unless 0x004C has been
+        # sent for this quest: flag bit 0 (DESC_FILLED) is
+        # set by 0x004C's body and gates 0x0054's entirely
+        # at 0x0080F9CD. The client asks for the
+        # description on accept in 4 of 4, so it normally
+        # has been -- but "normally" is not a guarantee, so
+        # send it if we have not, rather than emit an
+        # update that vanishes and looks like the client
+        # ignoring us.
+        if oqid not in state.setdefault("desc_sent", set()):
+            _send_description(send, state, oqid, orow)
+        ofr = orow.get("wire_framing", "template")
+        send(GAME_SMSG_QUEST_OBJECTIVES_UPDATE,
+             [oqid, questdefs.coded_literal(
+                 orow.get("objectives_done")
+                 or orow.get("objectives", ""), ofr)],
+             f"QUEST_OBJECTIVES_UPDATE[{oqid}]")
+    lines = _quest_lines(state)
+    if len(lines) == 1 and lines[0][1] != questdefs.SERVICE_IN_PROGRESS:
+        # THE SINGLE-QUEST SHORTCUT, 7 of 7 on ArenaNet's wire and the common
+        # path for us: one actionable line means the list screen is skipped and
+        # the DESCRIPTION screen opens on the interact itself.
+        #
+        # IT DOES NOT APPLY TO IN_PROGRESS, and the corpus says why: screen 2
+        # only ever carries kinds 16, 17 and 23, while 15, 18, 21 and 22 appear
+        # ONLY on the 10-unit menu -- 41 of 41, zero crossovers. A lone SHOW
+        # collapses because its kind-18 line is REPLACED by the 16/17 pair on
+        # the way; a lone TURN_IN is already a screen-2 kind. Kind 22 has no
+        # screen-2 form at all, so shortcutting it drops the option entirely.
+        #
+        # MEASURED by doing it. The first version shortcut every single line and
+        # sent an options-free screen for in-progress. The run drove the whole
+        # lifecycle and emitted 0 of kind 22: the state existed, the screen
+        # opened, and the one option it was built for was never on it.
+        _quest_screen(send, agent_id, *lines[0])
+    elif lines:
+        _list_screen(send, agent_id, lines)
+    if lines:
+        _send_marker(send, state, agent_id)
+
+
 def _send_description(send, state, qid, row):
     """0x004C for one quest, and remember that we sent it.
 
@@ -258,15 +338,21 @@ def _list_screen(send, agent_id, lines):
     send(GAME_SMSG_NPC_DIALOG_SHOW, [agent_id],
          f"NPC_DIALOG_SHOW(agent {agent_id})")
     for qid, code, row in lines:
-        show = (questdefs.SERVICE_TURN_IN if code == questdefs.SERVICE_TURN_IN
-                else questdefs.SERVICE_SHOW)
+        # THE CODE GOES ON AS IT IS. This used to squash everything that was not
+        # TURN_IN down to SHOW, which silently rewrote the in-progress state
+        # into "quest available" -- the menu drew kind 18 and a gold '!' for a
+        # quest the player was already carrying. Found by running the lifecycle
+        # and watching for kind 22, which never appeared even after the
+        # shortcut was fixed to let the menu render at all. Two separate bugs,
+        # both invisible without a run, both between a correct state machine and
+        # the wire.
         send(GAME_SMSG_NPC_DIALOG_OPTION,
-             [questdefs.option_kind(show),
+             [questdefs.option_kind(code),
               questdefs.enc_string(row.get("enc_name") or []),
-              questdefs.encode_service_select(qid, show),
+              questdefs.encode_service_select(qid, code),
               questdefs.OPTION_FIELD4_ALWAYS],
-             f"DIALOG_OPTION(quest {qid} code 0x{show:02X} "
-             f"kind {questdefs.option_kind(show)})")
+             f"DIALOG_OPTION(quest {qid} code 0x{code:02X} "
+             f"kind {questdefs.option_kind(code)})")
 
 
 def _quest_marker_value(state):
@@ -5126,6 +5212,30 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  "WORLD_SIMULATION_TICK", quiet=True)
                         except OSError:
                             return
+                    # THE HARNESS CONTROL SLOT. Polled here rather than given a
+                    # thread of its own because this loop already runs 20 times
+                    # a second and holds the send lock's usual context -- a
+                    # second thread calling `send` would interleave a dialog
+                    # burst with a simulation tick for no gain.
+                    #
+                    # NOT A CLICK, and the log line says so every time: the
+                    # client sent nothing. See harness/control.py for why the
+                    # distinction is the whole point of the module.
+                    try:
+                        want = control.take_interact()
+                    except OSError:
+                        want = None
+                    if want is not None:
+                        print(f"[c{conn_id}] HARNESS INTERACT with agent "
+                              f"{want} -- driven by the action script, NOT by "
+                              f"a client click. Everything downstream is real.",
+                              flush=True)
+                        try:
+                            _handle_interact(send, state, conn_id, want)
+                        except Exception as exc:      # a probe must not die here
+                            print(f"[c{conn_id}] harness interact failed: "
+                                  f"{type(exc).__name__}: {exc}", flush=True)
+
                     # Anything the world owes on a timer goes here. Bodies get
                     # back up whether or not the player is moving, so this must
                     # be above the destination check that skips the rest.
@@ -5462,57 +5572,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # with its values, so the count is in the capture; what
                         # belongs in `state` is the CURRENT interaction, not a
                         # statistic about how many there have been.
-                        state["interacting"] = values[1]
-                        state["interact_byte"] = values[2]
-                        # ANSWER IT. The comment above used to end "until an
-                        # NPC-service study says what an interaction should
-                        # ANSWER" -- studies/quests/ is that study, and the
-                        # answer is the 0x0080/0x0081 pair.
-                        #
-                        # Every quest row with a giver line speaks here, which
-                        # is deliberately cruder than a real giver binding: we
-                        # have no npc->quest column yet (AUTHORING's [server]
-                        # block is a proposal, not a schema), so this makes the
-                        # WINDOW testable without inventing that binding first.
-                        # Q5 is where the id actually has to matter, and this
-                        # comment is what says the two are not the same rung.
-                        # TALKING TO THE OBJECTIVE NPC IS AN EVENT, not a menu.
-                        # It fires before the menu below so that a giver which
-                        # is also its own objective NPC completes first and then
-                        # offers the turn-in, rather than showing '?' one
-                        # interaction late.
-                        for oqid, orow in _objective_quests(state, values[1]):
-                            state.setdefault("objectives_done", set()).add(oqid)
-                            print(f"[c{conn_id}] objective for quest {oqid} met "
-                                  f"at agent {values[1]}")
-                            # 0x0054 IS A SILENT NO-OP unless 0x004C has been
-                            # sent for this quest: flag bit 0 (DESC_FILLED) is
-                            # set by 0x004C's body and gates 0x0054's entirely
-                            # at 0x0080F9CD. The client asks for the
-                            # description on accept in 4 of 4, so it normally
-                            # has been -- but "normally" is not a guarantee, so
-                            # send it if we have not, rather than emit an
-                            # update that vanishes and looks like the client
-                            # ignoring us.
-                            if oqid not in state.setdefault("desc_sent", set()):
-                                _send_description(send, state, oqid, orow)
-                            ofr = orow.get("wire_framing", "template")
-                            send(GAME_SMSG_QUEST_OBJECTIVES_UPDATE,
-                                 [oqid, questdefs.coded_literal(
-                                     orow.get("objectives_done")
-                                     or orow.get("objectives", ""), ofr)],
-                                 f"QUEST_OBJECTIVES_UPDATE[{oqid}]")
-                        lines = _quest_lines(state)
-                        if len(lines) == 1:
-                            # THE SINGLE-QUEST SHORTCUT, 7 of 7 on ArenaNet's
-                            # wire and the common path for us: one actionable
-                            # line means the list screen is skipped and the
-                            # DESCRIPTION screen opens on the interact itself.
-                            _quest_screen(send, values[1], *lines[0])
-                        elif lines:
-                            _list_screen(send, values[1], lines)
-                        if lines:
-                            _send_marker(send, state, values[1])
+                        _handle_interact(send, state, conn_id,
+                                         values[1], values[2])
                     elif opcode == GAME_CMSG_NPC_SERVICE_SELECT:
                         # Closes test_dispatch's other recorded drop, whose
                         # reason was "blocked behind 0x0039: this server does

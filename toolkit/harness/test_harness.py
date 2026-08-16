@@ -322,6 +322,63 @@ def test_served_maps():
               got is None or got)
 
 
+def test_interact_control():
+    """The one-slot mailbox behind the `interact:` action verb.
+
+    It exists because the harness cannot aim: projecting an agent's world
+    position to a screen pixel needs a camera yaw nothing tracks, and a blind
+    click failed three runs running without producing one interaction. So the
+    verb asks the SERVER to run its own interact arm. Everything downstream is
+    real; the click is what did not happen, and both halves say so out loud.
+    """
+    import control
+    control.clear()
+    check("an empty slot reads as None", control.take_interact() is None)
+
+    control.request_interact(99)
+    check("a request round-trips", control.take_interact() == 99)
+    check("and the slot is EMPTY afterwards -- read-and-clear",
+          control.take_interact() is None)
+
+    # Last write wins. A queue would let an action script get ahead of a server
+    # that is mid-dialog and deliver a burst with no relation to the screen.
+    control.request_interact(1)
+    control.request_interact(2)
+    check("two requests before a read leave the LAST one, not a queue",
+          control.take_interact() == 2)
+    check("and nothing behind it", control.take_interact() is None)
+
+    control.request_interact(7)
+    control.clear()
+    check("clear() drops a pending request",
+          control.take_interact() is None,
+          "a slot left by a killed run would otherwise fire into the next "
+          "session's first seconds and get blamed on the protocol")
+
+    # The verb has to be REACHABLE, not merely implemented: an action kind the
+    # dispatcher does not know is silently skipped, which is the same shape of
+    # failure as the blind click this replaces.
+    here = os.path.dirname(os.path.abspath(__file__))
+    src = open(os.path.join(here, "drive_client.py"),
+               encoding="utf-8").read()
+    check('kind == "interact"' in src,
+          "drive_client dispatches the `interact` kind")
+    check("interact:<agent_id>" in src,
+          "and --actions' own help lists it",
+          "a verb nobody can discover is one nobody uses")
+    srv = open(os.path.join(os.path.dirname(here), "authsrv",
+                            "authsrv.py"), encoding="utf-8").read()
+    check("control.take_interact()" in srv and "_handle_interact" in srv,
+          "and the gamesrv polls the slot into its real interact arm",
+          "the same function the wire path calls, so a harness-driven run "
+          "exercises exactly the code a click does")
+    check("NOT by " in srv or "NOT a click" in srv or "not by a client" in srv.lower(),
+          "and says on every fire that no click happened",
+          "the upstream half is synthetic and a run that forgets to say so is "
+          "evidence with a missing caveat")
+    control.clear()
+
+
 def test_crash_capture_always():
     """The crash dialog is read on EVERY run, not just --keep-open ones.
 
@@ -546,6 +603,7 @@ if __name__ == "__main__":
     test_game_args()
     test_enemy_default()
     test_served_maps()
+    test_interact_control()
     test_crash_capture_always()
     test_stack()
     test_select_run_exe()

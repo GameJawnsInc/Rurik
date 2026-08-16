@@ -55,6 +55,7 @@ from tcptable import connections  # noqa: E402
 from vaultpath import vault_path  # noqa: E402
 from livecapture import CaptureTail, by  # noqa: E402
 import drive_client as dc  # noqa: E402
+import control  # noqa: E402
 import cage  # noqa: E402
 import accounts  # noqa: E402
 
@@ -1173,7 +1174,18 @@ def run_client(a, outdir):
                 sent.append({"spec": spec, "sent": False})
                 print(f"  action {spec}: NO WINDOW", flush=True)
                 continue
-            if kind == "click":
+            if kind == "interact":
+                # NOT INPUT. Asks the SERVER to run its own INTERACT arm for a
+                # named agent, because this harness cannot aim: projecting an
+                # agent's world position to a screen pixel needs a camera yaw
+                # nothing here tracks, and a blind click at a guessed spot
+                # failed three runs running without producing one interaction.
+                # Everything downstream is real -- real messages, real client,
+                # real screen. The click is what did not happen, and the
+                # gamesrv prints the same caveat when it fires.
+                control.request_interact(int(parts[2]))
+                delivered = True
+            elif kind == "click":
                 fx, fy = (float(v) for v in parts[2].split(","))
                 delivered = dc.click(hwnd, proc.pid, fx, fy)
             elif kind == "enter":
