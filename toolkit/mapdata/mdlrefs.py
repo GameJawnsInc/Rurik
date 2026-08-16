@@ -40,7 +40,8 @@ this module, 2026-08-16):
                                             bearing model (FA0+FA1+FA5+FAD)
                                             -- the inverse of FA8's targets
 
-THE RECORD RULE, read from the scanner at `0x00908260` (nine instructions):
+THE RECORD RULE, read from the scanner at `0x00908260` (an 11-instruction
+scan body -- the U3 review re-counted it):
 a chunk is `u32 count` then `count` records, each a run of u16 words ENDED BY
 THE FIRST ZERO WORD (terminator consumed, `cmp word ptr [eax], 0` at
 0x00908274). Records are VARIABLE length. ArenaNet's own name for a record is

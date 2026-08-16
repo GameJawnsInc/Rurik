@@ -110,9 +110,11 @@ replicates or deliberately tightens, each stated in its docstring:
   blob). So `cursor == len(payload)` is OUR closure assertion, and §3's
   30,722 green walks are real checks, the same posture `skelfile.py` takes.
 
-The scanner `0x00908260` itself has five callers (`0x0071554C`,
-`0x00771C22`, ours, `0x0079D9C8`, `0x0082C696`) — it is a generic Riff.cpp
-wide-string scanner; only the `0x00794B70` path is this module's subject.
+The scanner `0x00908260` itself has SIX callers (`0x007154C2`,
+`0x0071554C`, `0x00771C22`, ours at `0x00794BA8`, `0x0079D9C8`,
+`0x0082C696` — the review's xref recount; the first draft said five) — it
+is a generic Riff.cpp wide-string scanner; only the `0x00794B70` path is
+this module's subject.
 The chunk helpers' TU is ArenaNet's `Base\Services\Riff.cpp` (assert sweep
 at `0x00907905`: Riff.cpp 22 sites), the reader/loader TU is MdlLoad.cpp.
 
@@ -140,9 +142,9 @@ chunk on all 21,421 flags=515 heads through the committed module.
 | # | prediction | result |
 |---|---|---|
 | P1 | every FA6/FA8/FAD/FAE chunk closes; FA6-first is exactly 388 | **HELD** — 0 decode failures anywhere; FA6-first 388, closing 388/388 |
-| P2 | fixed-6 closes all FA6/FA8/FAD/FAE; fails exactly on FA5's null-slot chunks | **HELD** — rival/null agreement 30,722/30,722 both directions |
+| P2 | fixed-6 closes all FA6/FA8/FAD/FAE; fails exactly on FA5's null-slot chunks | **HELD, with the review's reframing**: given the record-length law (every record 0 or 2 wchars — its own measured result), rival-death ⟺ null-presence is a THEOREM, so the 30,722/30,722 agreement is a regression tripwire on the arithmetic, not an independent discrimination. What separates the framings is the scanner disassembly (§2.1) and the synthetic null-slot fixture — the corpus adds population, not proof |
 | P3 | every 2-wchar id resolves in `file_id_table(raw=True)` | **HELD** — 0 unresolved of 107,747 records |
-| P4 | FA8 population ≈ the stride-4 estimate (~232); targets all type-2, no FA0, all FA1 | **HELD with a corrected count** — 252 chunks (estimate was low), targets 394/394 clean |
+| P4 | FA8 population ≈ the stride-4 estimate (~232); targets all type-2, no FA0, all FA1 | **magnitude MISSED, claims HELD** — 252 chunks against the ≈232 predicted (+8.6%; the probe discipline scores the miss as a miss); targets 394/394 clean |
 | P5 | the head signature census lands near UM §2.3's ×4.0002 estimates | **HELD** (§3.4), with FAE at 6 vs "≈8" and one signature the estimate could not see (FA9) |
 
 ### 3.2 The populations (MEASURED, exact)
@@ -234,9 +236,18 @@ looks up a **{kind, name}** key and holds TWO kinds per name:
   +0x48..+0x6C — three vec3 slots — from constants at
   `0x955828`/`0xA77AC4`/zero. Call it **class B**.
 
-Distinct sizes, distinct vtables, one shared partial-init and a common
-flags dword at +0x38 on both (a shared base; `0x007945D5` sets bit 6 of
-A+0x38, the FA1 parser sets bits of B+0x38 = `m_skeletonFlags`).
+Distinct sizes, distinct vtables, one shared partial-init — and the review
+measured the shared base at **0x38 bytes exactly** (the base vtable
+`0xA7761C`'s deleting dtor `0x00779F20` frees 0x38; the shared init's
+highest write is +0x30). So the flags dword at +0x38 on each class is the
+first DERIVED field at a coincidentally shared displacement — this
+document's first draft called it "a shared base" field, which is the
+layouts-compared-by-number error §5.3 dissolves, in miniature; the review
+struck it. Both writes are real (`0x007945D5` sets bit 6 of A+0x38; the
+FA1 parser sets bits of B+0x38 = `m_skeletonFlags`) — they are two fields.
+The review also found the sharpest identity evidence: the two DELETING
+DESTRUCTORS free different sizes (A: `0x00779EF0` frees 0x15C; B:
+`0x00779FC0` frees 0x11C).
 
 ### 5.2 The wiring: which parser writes which object
 
@@ -347,7 +358,7 @@ to reconstruct the authoring-side model file:
 | 0xBBC | table slot 1 (`0x0079D070`) | 0xFA6 | table slot 1 (`0x0079D08C`) |
 | 0xBBD | `0x0079D957` | none — walked directly (8-byte header + data, `0x0079D97E`) in the fn carrying MdlDecomp:2739/2740 `PathIsRelative(filename)` / `!PathIsRelative(relativeTo)` — a FILENAME/path chunk |
 | 0xBBE | `0x0079D14C` | **0xFA9** | `0x0079D151` |
-| 0xBBF | `0x0079D60A` | 0xFAB (a TAIL chunk) | `0x0079D617` |
+| 0xBBF | `0x0079D612` (push at `0x0079D60A`) | 0xFAB (a TAIL chunk) | `0x0079D617` |
 | 0xBC0 | table slot 2 (`0x0079D077`) | 0xFAD | table slot 2 (`0x0079D093`) |
 | 0xBC1 | table slot 3 (`0x0079D07E`) | 0xFAE | table slot 3 (`0x0079D09A`) |
 | 0xFA3 | `0x0079C125` | fetched directly from the mid container in a helper beside MdlDecomp:2819/2831 (`seq->sequence`, `seqInfoCount`) — sequence-adjacent |

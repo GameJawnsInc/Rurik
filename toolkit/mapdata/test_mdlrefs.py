@@ -360,9 +360,17 @@ def section2(check, led, ar, idt_raw, stride):
             led.skip(f"{name} rival discrimination",
                      f"no {name} chunk in this sample")
             continue
+        # HONESTY NOTE (U3 review, F1): given the record-length law checked
+        # above (every record 0 or 2 wchars), rival_dead == bool(nulls) is
+        # a THEOREM -- len = 4 + 6(n-k) + 2k, and fixed-6 closes iff k == 0
+        # -- so this check cannot fail independently once the length law is
+        # green. It stays as a regression tripwire on the arithmetic, but
+        # the INDEPENDENT discrimination of the framings is the scanner
+        # disassembly (0x00908260) plus the synthetic null-slot fixture in
+        # section 0, not this corpus agreement.
         check(P["rival_null_agree"] == P["chunks"],
-              f"{name}: the fixed-6 rival fails EXACTLY on the null-slot "
-              f"chunks, both directions ({P['rival_fail']} failures / "
+              f"{name}: rival-vs-null agreement (entailed by the record-"
+              f"length law; see comment) ({P['rival_fail']} failures / "
               f"{P['null_chunks']} null chunks of {P['chunks']})")
 
     # FA8 target classification -- the linked-model claims, widened
@@ -415,7 +423,8 @@ def section3(check, ar, idt_raw):
             for dep in type8_deps(bytes(t[off:off + size])):
                 total += 1
                 row = idt_raw.get(dep)
-                head = bytes(ar.read(ar.row(row))[:4]) if row else b""
+                head = (bytes(ar.read(ar.row(row))[:4])
+                        if row is not None else b"")
                 if mpeg_frame_header(head):
                     mpeg += 1
                 else:
