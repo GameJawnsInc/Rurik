@@ -396,7 +396,43 @@ def main():
           "it is an objective, not a second giver -- talking to it is an "
           "event, not a menu")
 
-    print("\n15. the enc_* columns are WIRE code units, not archive string ids")
+    print("\n15. the marker MOVES to the objective, and off the giver")
+    # The defect this pins, in the owner's words: "the giver tells you to talk
+    # to the giver." The mark stayed on the giver after accept, so a quest that
+    # sends you elsewhere pointed back at whoever had just spoken, and the NPC
+    # the quest is actually about wore nothing at all.
+    import authsrv                                          # noqa: E402
+    grow = questdefs.load()[1463]
+    giver, objective = grow.get("giver_agent"), grow.get("objective_agent")
+    check(giver is not None and objective is not None and giver != objective,
+          "the row binds TWO different agents",
+          f"giver {giver}, objective {objective} -- one agent for both is the "
+          f"nonsense case, not a simplification")
+
+    def marks(held=(), done=()):
+        return authsrv._quest_markers({"quests": set(held),
+                                       "objectives_done": set(done)})
+
+    m = marks()
+    check(m.get(giver) == authsrv.QUEST_MARKER_OFFER
+          and m.get(objective) is None,
+          "unheld: the giver offers, the objective is bare")
+    m = marks(held=[1463])
+    check(m.get(giver) is None
+          and m.get(objective) == authsrv.QUEST_MARKER_TURN_IN,
+          "ACCEPTED: the giver's mark clears AND the arrow moves to the objective",
+          "both halves -- a test that only checked the new arrow would pass "
+          "with the giver still marked, which is exactly the bug")
+    m = marks(held=[1463], done=[1463])
+    check(m.get(objective) is None
+          and m.get(giver) == authsrv.QUEST_MARKER_TURN_IN,
+          "objective met: the arrow comes back to the giver")
+    check(marks(held=[1463]).get(giver) is None,
+          "a cleared mark is None, never 0",
+          "no property-11 value removes a marker -- the clear is property 12, "
+          "and [11, agent, 0] would invent a value that never occurs")
+
+    print("\n16. the enc_* columns are WIRE code units, not archive string ids")
     # The trap FINDINGS 3.5 names: 0x3D64 on the wire denotes archive id 15460.
     # Conflating them resolves to 15716, an encrypted record returning None.
     for qid, row in sorted(rows.items()):
