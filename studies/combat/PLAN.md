@@ -601,13 +601,26 @@ only the timing moved.
 Damage now follows E5 and is emitted from the world tick. Before this it was
 sent inside `handle_skill_press`, synchronously, ahead of E5.
 
-**An honest limit on this demonstration.** 322's activation is **0.0 s**, so
-the 48 ms gap in cycle 2 is world-tick latency, not an activation window —
-cycle 1's gap is ~1.2 ms, where the tick happened to fire at once. The change
-is proven (the damage is no longer synchronous with the press, and comes from
-the other thread), but **a skill with a nonzero activation on the player's bar
-would show the real window**, and the Warrior test bar has none. That is the
-cheap follow-up: put a 1–2 s activation skill in a slot and re-run.
+**The first run could not show the WINDOW, and the second one does.** 322's
+activation is 0.0 s — every skill on the Warrior test bar is instant — so that
+48 ms was world-tick latency and nothing more. Re-run with casting skills in
+the bar via `--skills` (`authsrv-20260816T145726-c1.jsonl`, PASS):
+
+| skill | declared activation | press → E5+damage | error |
+|---|---|---|---|
+| 105 Deathly Swarm | **2.0 s** | **+2.048 s** | +48 ms |
+| 153 Vampiric Gaze | **1.0 s** | **+1.017 s** | +17 ms |
+
+**Two different activations, each tracked** — so the gap is the cast time, not
+a constant latency, which one skill alone could never have shown. The rest of
+the cycle follows from the same instant: E3 at activation + 0.75 s aftercast
+(+2.780, +1.786) and E6 at activation + recharge (+8.007 against 6 s, +9.039
+against 8 s). The residual ~17–48 ms is tick latency on top.
+
+Damage reads 15 rather than 49 in this run because neither skill has a
+`skill_effect` row, so the bonus is 0 and what lands is the plain swing —
+correct, and a reminder that an undeclared skill resolves to no bonus rather
+than to a guess.
 
 **What it bought beyond fidelity**, both now asserted rather than argued:
 
