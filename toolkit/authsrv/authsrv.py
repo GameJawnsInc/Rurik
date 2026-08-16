@@ -2251,6 +2251,21 @@ HERO_DIAGNOSTIC = False
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
 # hypothesis. --no-hero-info drops it so the arm can ask whether it was needed.
 HERO_INFO = True
+# Send the 0x0037 + 0x003A pair for the HERO's agent. DEFAULT OFF, and the
+# default is the finding: this pair DOES clear the attribState gate (the assert
+# moves on, measured), but it then takes the client down on
+#   profession < arrsize(s_profChapter)   ConstChar.cpp(1296)
+# and it does so with or without the trailing 0x0072 -- so as constructed it
+# REGRESSES a hero that otherwise renders fine. Opt in with --hero-attribs to
+# continue the investigation; leave it off to keep a working hero.
+# studies/heroes/FINDINGS.md 13.
+# 0x0074's ten unexplained dwords, and the u32 flag that gates the client's
+# CONDITIONAL third copy of the second group to record+0x74. Both exist to test
+# one hypothesis and to let it FAIL: if the trailing 0x0072 still asserts
+# attribState no matter what rides here, the chunk is not the attribute block.
+HERO_CHUNK = None
+HERO_FLAG = 0
+HERO_BYTES = None
 
 # Set from --netgraph. One byte of UI-overlay flags sent once, after the
 # instance loads, as GAME_SMSG_UI_OVERLAY_FLAGS. None means send nothing at
@@ -6459,7 +6474,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # have for the thing 0x0072's gate wants to exist.
                             # An ordering hypothesis, stated as one.
                             if HERO_INFO:
-                                send(*agents.mercenary_info(HERO))
+                                _hb = HERO_BYTES or (0, 0, 0)
+                                send(*agents.mercenary_info(
+                                    HERO, b1=_hb[0], b2=_hb[1], b3=_hb[2],
+                                    d3=HERO_FLAG, chunk=HERO_CHUNK))
                             # word_a is msg+8 (-> entry+0x4), word_b is msg+0xc
                             # (-> entry+0x0). Which is the agent id is exactly
                             # what this arm asks, so the two carry DIFFERENT
@@ -6762,6 +6780,28 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                                  "attacks_back": False,
                                  "skills": [], "skill_ready": []},
                                 "hero body", conn_id=conn_id)
+                        # THE HERO'S ATTRIBUTE STATE, and it is not a new
+                        # mechanism -- it is the pair the PLAYER's own agent
+                        # already gets, addressed to the hero's agent instead.
+                        # 0x0037 is what CREATES the attribState record
+                        # (handler 0x0091D8C0 -> 0x0080EAA0 -> the ChCliAttrib
+                        # creator 0x008199C0, whose own guard is ChCliAttrib:313
+                        # `!attribState`); 0x003A then fills attrib[] through
+                        # the per-attribute setter. Both are keyed by AGENT id,
+                        # which is why a hero can have one at all.
+                        # This is the message the arc spent two refuted
+                        # hypotheses looking for, and we already had it.
+                        if HERO is not None and HERO_ATTRIBS:
+                            send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS,
+                                 [HERO_AGENT_ID, ATTRIBUTE_POINTS,
+                                  ATTRIBUTE_POINTS],
+                                 f"AGENT_ATTRIBUTE_POINTS(hero agent "
+                                 f"{HERO_AGENT_ID})")
+                            _hcols = attribute_columns()
+                            send(GAME_SMSG_AGENT_UPDATE_ATTRIBUTES,
+                                 [HERO_AGENT_ID, _hcols],
+                                 f"AGENT_UPDATE_ATTRIBUTES(hero agent "
+                                 f"{HERO_AGENT_ID}, {len(_hcols) // 3} attrs)")
                         # LAST, and it is a question rather than payload. It
                         # asserted all-zero on 2026-08-12 under this same
                         # client state minus our messages; if it now completes
@@ -7365,6 +7405,31 @@ def main():
                     help="Drop the leading 0x0074. The route sends it first on "
                          "the hypothesis that it creates the data-cache "
                          "record; this asks whether it was needed.")
+    ap.add_argument("--hero-attribs", action="store_true",
+                    help="Send the 0x0037 + 0x003A pair for the hero's agent. "
+                         "0x0037 CREATES the attribState record whose absence "
+                         "asserted at ChCliAttrib.cpp:156 and 0x003A fills it "
+                         "-- measured, the gate moves. But the client then "
+                         "dies on ConstChar.cpp:1296, with or without the "
+                         "0x0072 diagnostic, so this is OFF by default: it "
+                         "regresses a hero that otherwise renders.")
+    ap.add_argument("--hero-chunk", default=None, metavar="LIST|N",
+                    help="0x0074's ten trailing dwords: one int fills all "
+                         "ten, or a comma list of up to ten. The client "
+                         "copies them as TWO 5-dword groups to record +0x4c "
+                         "and +0x60, and 5 dwords is exactly one "
+                         "attribState->attrib entry — which is the hypothesis "
+                         "this flag exists to TEST, and to let fail.")
+    ap.add_argument("--hero-flag", type=lambda s: int(s, 0), default=0,
+                    metavar="N",
+                    help="The u32 before the chunk. Non-zero makes the client "
+                         "take its CONDITIONAL third copy of the second group "
+                         "to record+0x74, so this is the only way to exercise "
+                         "that branch at all.")
+    ap.add_argument("--hero-bytes", default=None, metavar="A,B,C",
+                    help="0x0074's three leading u8s (record +8/+0xc/+0x10). "
+                         "Upstream guesses level/primary/secondary; unnamed "
+                         "here because no consumer was traced to a bound.")
     ap.add_argument("--henchman-wire-name", default=None, metavar="NPC_KEY",
                     help="Put a DIFFERENT row's enc_name on 0x01BF than the "
                          "one the body's 0x0056 carries. With --henchman-body "
@@ -7573,6 +7638,28 @@ def main():
         HERO_SWAP = a.hero_swap
         HERO_DIAGNOSTIC = a.hero_diagnostic
         HERO_INFO = not a.no_hero_info
+        global HERO_ATTRIBS
+        HERO_ATTRIBS = a.hero_attribs
+        global HERO_CHUNK, HERO_FLAG, HERO_BYTES
+        HERO_FLAG = a.hero_flag
+        if a.hero_chunk:
+            _p = [int(x, 0) for x in a.hero_chunk.split(",")]
+            HERO_CHUNK = (_p * 10)[:10] if len(_p) == 1 else _p + [0] * (10 - len(_p))
+            if len(_p) > 10:
+                raise SystemExit("--hero-chunk takes at most ten dwords")
+        if a.hero_bytes:
+            HERO_BYTES = [int(x, 0) for x in a.hero_bytes.split(",")]
+            if len(HERO_BYTES) != 3:
+                raise SystemExit("--hero-bytes takes exactly three: A,B,C")
+        agents.mercenary_info(HERO, d3=HERO_FLAG, chunk=HERO_CHUNK)
+        if HERO_CHUNK or HERO_FLAG or HERO_BYTES:
+            print(f"HERO 0x0074 PAYLOAD: bytes={HERO_BYTES} flag={HERO_FLAG} "
+                  f"chunk={HERO_CHUNK}. PREDICTION ON RECORD: the trailing "
+                  f"0x0072 still asserts attribState, because attribState is "
+                  f"a separate 0x43c-stride keyed record holding attrib[51] "
+                  f"of 5 dwords (1020 B) and this chunk is 40 B into a "
+                  f"different structure. If the assert MOVES, that prediction "
+                  f"is wrong and the chunk is load-bearing.")
         if HERO_BODY:
             agents.npc_template(HERO_BODY_NPC)
         _wa, _wb = (HERO, HERO_AGENT_ID) if HERO_SWAP else (HERO_AGENT_ID, HERO)

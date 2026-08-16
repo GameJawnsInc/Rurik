@@ -627,10 +627,15 @@ skill bars and attributes have **no known delivery mechanism** on the wire, and
 
 So §4 is no longer only an absence in our scans. The client has told us what the next message
 must carry, and the next question is concrete rather than open-ended: **what writes a HERO's
-attribute record?** The `0x0074` chunk is the first place to look — it has ten unexplained
-dwords the client splits into two 5-dword groups at record `+0x4c` and `+0x60` (§1.3), and a
-20-byte group is the right size for an attribute block. That is a hypothesis with a shape,
-and the arm that tests it is cheap: vary the chunk and re-send the diagnostic.
+attribute record?** The `0x0074` chunk was the first place to look — ten unexplained dwords
+the client splits into two 5-dword groups at record `+0x4c` and `+0x60` (§1.3), and 20 bytes
+is exactly one attribute entry.
+
+> **That hypothesis was tested the same day and is REFUTED — §12.** The chunk is 40 bytes
+> written into the wrong structure: `attribState` is a separate `0x43c`-stride record,
+> binary-searched by a key, holding `attrib[51]` of 20 bytes each. The live lead is now the
+> **template system** (§12.3), which has `attribCount` + `attrib[]` + `attribValue[]` and
+> named asserts to find it by.
 
 ### 11.5 What is now closed, and what is not
 
@@ -639,6 +644,171 @@ and the arm that tests it is cheap: vary the chunk and re-send the diagnostic.
 **Still open and unchanged:** hero **skill-bar** delivery (§4) — now with a named next gate;
 the **c2s** direction (§3.3); `0x0074`'s remaining 17 fields; and whether a hero needs
 anything beyond attributes before it is a working party member.
+
+## 12. The attribute-chunk hypothesis — REFUTED, with the prediction on record
+
+§11.4 proposed that `0x0074`'s two unexplained 5-dword groups (record `+0x4c`/`+0x60`) are
+the hero's attribute block, on the strength of a size coincidence. **It is wrong, and the
+static read said so before the run.**
+
+### 12.1 What `attribState` actually is
+
+Reading `ChCliAttrib.cpp:156` (`0x00818c77`, build 38833) rather than guessing at it:
+
+- The asserting function `0x00818C60` calls a resolver `0x00819430`, asserts the result
+  non-null, then returns `[esi+0x434]`.
+- The resolver is a **binary search** over an array of **stride `0x43c` (1084 B)**, keyed by
+  a dword at record `+0x0`. It is a pure lookup — all four of its callers are ChCliAttrib's
+  own getters (lines 133/146/156/166), so nothing here creates a record.
+- The `attrib[]` bound is `cmp ebx, 0x33` = **51** (`ChCliAttrib:177`,
+  `attrib < arrsize(attribState->attrib)`), and the caller's index math
+  `lea eax,[eax+eax*4]; lea eax,[eax+1]; lea eax,[esi+eax*4]` = `20*i + 4` gives
+  **20 bytes per attribute entry, array starting at record+4**. 51 × 20 = 1020, and
+  `1084 − 1024 = 60` bytes of tail — which is where `+0x434` lives.
+
+The structure's own field names come from its asserts:
+`attribState->attrib[attrib].baseValue >= 0` (`:42`) and `attribState->attribPointsAvail >= 0`
+(`:43`).
+
+### 12.2 The prediction, and the arm that could have refuted it
+
+> **Stated before the run:** the assert will stay `attribState`, because attribState is a
+> separate `0x43c`-stride keyed record holding 1020 bytes of attribute array, while
+> `0x0074`'s chunk is **40 bytes written into a different structure**. If the assert moves,
+> the prediction is wrong and the chunk is load-bearing.
+
+The arm loaded every byte the hypothesis could want: chunk = ten dwords of `12` (the
+attribute rank cap named by `AcctTemplate:441`), the **flag set non-zero** so the client
+takes its *conditional third copy* of the second group to record `+0x74` — a branch no
+previous run had exercised at all — and the three leading `u8`s at 20/3/6.
+
+**Result: `Assertion: attribState  ChCliAttrib.cpp(156)`, unchanged.** Byte-identical
+outcome to the all-zero arm. The chunk is not the attribute block, and the third-copy branch
+does not reach attribState either.
+
+### 12.3 What the refutation bought
+
+Three new measurements and a better lead, which is why a stated-and-failed prediction is
+worth more than an unstated one:
+
+- **`attribState` geometry** (§12.1) — stride, key, 51-entry array, 20-byte entries. This is
+  the shape any future "author a hero build" work has to fill.
+- **The attribute count is 51** and the **rank cap is 12** (`AcctTemplate:441`
+  `data.attribValue[index] <= 12`), both OBSERVED.
+- **The next candidate is the TEMPLATE system, and it now has named asserts.**
+  `AcctTemplate:422/423` bound a `data.attribCount` against `arrsize(data.attrib)` and
+  against **16**; `:440` bounds `data.attrib[index] < CHAR_ATTRIBS`; and
+  `TemplatesCode:168` / `TemplatesHelpers:368` both bound
+  `m_skillTemplateData.attribCount` against `marrsize(AccountTemplateDataSkill, attrib)`.
+  A struct carrying `attribCount` + `attrib[]` + `attribValue[]` **is** a build — which is
+  exactly §4's "packed template blob" candidate, no longer a guess about where to look.
+
+### 12.4 `s_attribPoints` — a clean two-witness corroboration
+
+Chased from `CharData:202` (`level < arrsize(s_attribPoints)`), which bounds at
+`cmp esi,0xd` = **13**, and the access `mov eax,[esi*4 + 0xbc8b24]` gives a dword table at
+**`0x00BC8B24`**. It **closes**: index 13 is `0xFFFFFFFF`, a sentinel sitting exactly where
+the assert's bound stops — a check the artifact could have refuted and did not.
+
+| rank | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| **client** `s_attribPoints[rank]` | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 9 | 11 | 13 | 16 | 20 |
+| **WIKI** cost to reach rank | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 9 | 11 | 13 | 16 | 20 |
+
+WIKI (GWW, *Attribute point* §Points required to increase rank, read 2026-08-16): the same
+twelve numbers, totalling **97** to reach rank 12. **CORROBORATED** — a table read out of the
+binary and twenty years of player observation agreeing exactly, and the two share no author,
+code or ancestry, which is the kind of agreement the `ldufr`/GWCA cluster cannot give.
+
+Index `[0]` is `5`, which does **not** fit the cost curve; the dword before the table is also
+`5`, so `[0]` is most likely a neighbour's tail or unused. Flagged rather than explained —
+**NOT FOUND**.
+
+Two more WIKI facts that pin the frame: attribute rank **12 is the maximum obtainable by
+spending points** (corroborating `AcctTemplate:441` `attribValue[index] <= 12` from the
+player-visible side), and a character has at most **200 attribute points** at level 20 with
+both attribute quests — which is what `attribState->attribPointsAvail` (`ChCliAttrib:43`)
+counts down from. The profession table also sums to ~42 attributes plus 8 PvE title tracks,
+consistent with `CHAR_ATTRIBS` = **51**.
+
+**What is still NOT FOUND:** what creates an `attribState` entry. The only stride-`0x43c`
+site outside ChCliAttrib resolves to generic `Array.cpp` growth code, so the insert path is a
+vector push with no message traced into it — the same wall §4 hit, now one structure closer
+and with the array's exact shape known.
+
+## 13. The template system is a RED HERRING — and the real mechanism was already in our tree
+
+The lead from §12.3 was the template system. **It is the wrong door, and that is now
+CONFIRMED rather than suspected.** `AccountTemplateDataSkill` is **140 bytes (`0x8c`)** —
+`profPrimary`, `profSecondary`, `attribCount`, `attrib[12]`, `attribValue[12]`, `skill[8]` —
+and it is **account-local**: the in-memory form of the base64 build-code / saved-template
+feature. A reachability closure from its functions contains **zero message handlers**. It is
+the player's "save my build" UI, not a delivery mechanism, and it never was.
+
+### 13.1 The real pair: `0x0037` creates, `0x003A` fills
+
+**OBSERVED, and verified from both ends.**
+
+| | shape | role |
+|---|---|---|
+| `0x0037` / 55 | `[agent_id, u8, u8]`, 8 B, handler `0x0091d8c0` | **CREATES** the attribState record |
+| `0x003A` / 58 | `[agent_id, array32[48]]`, 8–200 B, handler `0x0091d920` | **FILLS** `attrib[]` |
+
+The create chain is `0x0091D8C0` → thunk `0x0080EAA0` → ChCliAttrib creator `0x008199C0` →
+array insert `0x00819540`, and the creator's own guard is `ChCliAttrib:313` **`!attribState`**
+— the mirror image of the `:156` null check that started this. Both messages live in table
+`0x00bc8f68`, the same table as `0x0072` and `0x0074`. Every link has exactly one caller and
+appears in no data word, so it is in no vtable.
+
+**Both are keyed by AGENT id — which is precisely why a hero can have attributes at all.**
+
+> **And we already had them.** `authsrv.py` has carried
+> `GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037` and
+> `GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A` since the combat/profession arc, with a
+> measured column-major builder. The arc spent two refuted hypotheses hunting for a message
+> that was already in the tree, sent to the player's agent every session. This is the
+> `PLAN.md`-§3 failure in miniature: the thing was known, in a neighbouring study, and not
+> connected.
+
+The record layout is now fully mapped: `+0x000` key (agent id), `+0x004..+0x3FF` `attrib[51]`
+× 20 B, three `Array` headers at `+0x400`/`+0x410`/`+0x424`, `+0x434` `attribPointsAvail`,
+`+0x438` the third `0x0037` field. `ChCliAttrib:42`'s own text
+(`attribState->attrib[attrib].baseValue >= 0`) lands on `record + i*20 + 8`, and `:43`
+(`attribPointsAvail`) on `+0x434` — the source's own field names landing on our offsets,
+which is a check the artifact could have refuted.
+
+### 13.2 The gate moved a third time, and then bit
+
+Sending the pair for the hero's agent **does clear the attribState gate** — measured, the
+assert moves:
+
+```
+charHeroData   ChCliHero.cpp(199)     -> fixed by 0x0074          (§11.3)
+attribState    ChCliAttrib.cpp(156)   -> fixed by 0x0037 + 0x003A (this section)
+profession < arrsize(s_profChapter)   ConstChar.cpp(1296)          <- now here
+```
+
+The new bound is `cmp esi,0xb` = **11** (getter `0x005AB800`, table `0x00A384F0`), so a
+profession must be 0..10. **Two fixes were tried and both are REFUTED:**
+
+1. **`0x0074`'s `b2`/`b3` are not it.** Setting them to 1/2 — the fields upstream names
+   `primary`/`secondary` — changed nothing. That is a measured negative against the upstream
+   naming on this path, and it is the second time this arc has failed to confirm those names.
+2. **Nor is a profession/attribute mismatch.** The hero's agent was `AGENT_SET_PROFESSION
+   (200, 3)` (Monk, from the body's content row) while the attributes we send are 17–21
+   (Warrior, copied from the player). Matching them — a Warrior body, profession 1 — produced
+   the **identical** assert.
+
+**And it regresses a working hero.** The crash fires with *or without* the trailing `0x0072`,
+so it is the attribute pair itself. A hero that renders perfectly well without attributes
+(§11.2) dies with them. `--hero-attribs` is therefore **OFF by default**: a default-on flag
+that crashes is worse than no flag.
+
+**Two failed fixes is the repo's own stop-and-study line, so this stops here.** The next
+session's first move is static, not another run: the profession getter `0x005AB800` has 12
+callers, and three of them — `0x00819FF2`, `0x0081A092`, `0x0081A261` — sit in the attribute
+code the pair activates. Read those three and find where the out-of-range `profession` is
+loaded from. That is a desk task needing no client.
 
 ## 9. Defects and corrections this arc produced
 
