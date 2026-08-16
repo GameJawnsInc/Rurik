@@ -246,6 +246,79 @@ def description_fields(row):
             coded_literal(row.get("objectives", ""), framing))
 
 
+# THE REWARD BLOCK. There is no reward message and no reward string: the reward
+# is a 19-code-unit SUFFIX inside the same coded string as the description,
+# byte-identical between the 0x0080 dialog line and 0x004C's description slot in
+# 17 of 17 (screen, quest) pairs. So a reward costs us three of ArenaNet's
+# generic string ids and two numbers of our own, and no authored text from
+# either side -- CLAUDE.md's "commit the id, resolve the string at run time"
+# exactly.
+#
+# All three ids are needs_key = True: ArenaNet's own encrypted generics, shared
+# by every quest. We cannot read them and do not need to.
+REWARD_HEADER = (0x2AE8, 0xE7D4, 0xE5CC, 0x3672)    # ref 10728
+REWARD_SLOT_A = (0x2AEA, 0x8C3F, 0xB519, 0x6611)    # ref 10730, one numeric arg
+REWARD_SLOT_B = (0x2AEC, 0xDAC7, 0x81AE, 0x3482)    # ref 10732, one numeric arg
+RUN_SEPARATOR = 0x0002
+NUMERIC_ARG = 0x0101
+# Separator + `\n[b]` (archive id 2). A run separator alone joins; this breaks.
+PARAGRAPH_BREAK = chr(0x0002) + chr(0x0102)
+
+# WHICH SLOT IS WHICH -- OBSERVED 2026-08-16, and it had to be a probe.
+# The magnitudes across seven quests fit "A is experience, B is gold"
+# -- (100,10), (250,25), (500,25), (500,100) -- but both templates are
+# encrypted and the RC4 key is NOT FOUND, so neither the wire nor the archive
+# could settle it and a plausibility argument is not a measurement.
+# `probes.py --probe quest_reward` fed slot A 111 and slot B 222, values outside
+# every observed number so no reading could be ambiguous, and the rendered pane
+# read "111 Experience" / "222 Gold" in BOTH the quest log and the dialog
+# window. vault/captures/harness/20260816T103824.
+REWARD_SLOT_NAMES = ("experience (ref 10730)", "gold (ref 10732)")
+
+
+def reward_run(slot_a, slot_b):
+    """The 19-code-unit reward suffix, as a codec-ready str.
+
+    `0101 <word>` is a numeric argument whose value is `word - 0x100`
+    (CORROBORATED: quest 62's fourth run feeds the PLAIN template 2438,
+    `%str1%: %num1%`, exactly `0101 0104`). So each number is bounded by what
+    fits one u16 after the bias.
+    """
+    for n in (slot_a, slot_b):
+        if not isinstance(n, int) or not (0 <= n <= 0xFFFF - 0x100):
+            raise ValueError(
+                f"reward slot {n!r} does not fit a 0x100-biased u16 argument; "
+                f"the range is 0..{0xFFFF - 0x100}")
+    units = ([RUN_SEPARATOR] + list(REWARD_HEADER)
+             + [RUN_SEPARATOR] + list(REWARD_SLOT_A)
+             + [NUMERIC_ARG, 0x100 + slot_a]
+             + [RUN_SEPARATOR] + list(REWARD_SLOT_B)
+             + [NUMERIC_ARG, 0x100 + slot_b])
+    return "".join(chr(u) for u in units)
+
+
+def with_reward(text, slot_a, slot_b, framing="template", limit=FIELD_UNITS):
+    """A description with its reward block appended, length-checked AFTER.
+
+    The order matters and is the whole reason this is not two calls at the call
+    site: the reward costs 19 units, so a description that passes a 122-unit
+    check on its own can overflow once the block is on. Check the total.
+    """
+    # THE PARAGRAPH BREAK IS NOT COSMETIC, and the first run without it proved
+    # so on screen: the pane read "...then return to me.Reward:" with our last
+    # sentence and ArenaNet's reward header welded together. The reward run
+    # opens with a bare 0x0002 SEPARATOR, which joins runs without starting a
+    # line; 0x0102 is archive id 2, `\n[b]`, and is what actually breaks one.
+    # MEASURED 2026-08-16, vault/captures/harness/20260816T103824.
+    body = coded_literal(text, framing, limit=limit)
+    out = body + PARAGRAPH_BREAK + reward_run(slot_a, slot_b)
+    if len(out) > limit:
+        raise ValueError(
+            f"{len(body)} units of text plus a 19-unit reward block is "
+            f"{len(out)}, over the {limit}-unit field. Shorten the text.")
+    return out
+
+
 def dialogue_field(row):
     """The giver's spoken line, for GAME_SMSG 0x0080 -- or None if the row has none.
 

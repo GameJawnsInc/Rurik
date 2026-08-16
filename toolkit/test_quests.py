@@ -270,7 +270,54 @@ def main():
           "0 of 11 offers were ever clicked; GWW says declined quests stay "
           "available and the wire cannot confirm it")
 
-    print("\n11. the enc_* columns are WIRE code units, not archive string ids")
+    print("\n11. the reward block, and which slot is which")
+    run = questdefs.reward_run(111, 222)
+    words = [ord(c) for c in run]
+    check(len(words) == 19, "the reward run is 19 code units", str(len(words)))
+    check(words[:5] == [0x0002, 0x2AE8, 0xE7D4, 0xE5CC, 0x3672],
+          "it opens with the separator and ref 10728, the Reward: header")
+    check(words[10] == 0x0101 and words[11] == 0x100 + 111,
+          "slot A's numeric argument is 0x100-biased",
+          "111 -> 0x016F; MEASURED on screen as '111 Experience'")
+    check(words[17] == 0x0101 and words[18] == 0x100 + 222,
+          "and slot B's likewise",
+          "222 -> 0x01DE; MEASURED on screen as '222 Gold'")
+    # OBSERVED 2026-08-16 (vault/captures/harness/20260816T103824): fed 111 and
+    # 222, the pane rendered '111 Experience' and '222 Gold'. Before that run
+    # this was a magnitude argument and could have come out reversed.
+    check(questdefs.REWARD_SLOT_NAMES[0].startswith("experience")
+          and questdefs.REWARD_SLOT_NAMES[1].startswith("gold"),
+          "and the slots are NAMED, because a probe measured them",
+          "ref 10730 = experience, ref 10732 = gold")
+    for bad_n in (-1, 0x10000, 0xFF00, "x"):
+        raised = False
+        try:
+            questdefs.reward_run(bad_n, 1)
+        except (ValueError, TypeError):
+            raised = True
+        check(raised, f"a slot value of {bad_n!r} is refused",
+              "it would not survive the 0x100 bias in one u16")
+
+    print("\n12. the reward block is a PARAGRAPH away from the description")
+    joined = questdefs.with_reward("Hello.", 1, 2, "template")
+    body = questdefs.coded_literal("Hello.", "template")
+    check(joined[:len(body)] == body, "the description is carried verbatim")
+    check([ord(c) for c in joined[len(body):len(body) + 2]] == [0x0002, 0x0102],
+          "and a 0x0002 0x0102 paragraph break separates it from the reward",
+          "without it the pane renders '...return to me.Reward:' welded "
+          "together -- MEASURED, and the reason this check exists")
+    over = False
+    try:
+        questdefs.with_reward("x" * 120, 1, 2, "template",
+                              limit=questdefs.DIALOG_UNITS)
+    except ValueError:
+        over = True
+    check(over,
+          "and the length check runs AFTER the append, not before",
+          "120 units of text passes on its own and overflows once the "
+          "21-unit block is on; checking first would ship the overflow")
+
+    print("\n13. the enc_* columns are WIRE code units, not archive string ids")
     # The trap FINDINGS 3.5 names: 0x3D64 on the wire denotes archive id 15460.
     # Conflating them resolves to 15716, an encrypted record returning None.
     for qid, row in sorted(rows.items()):
