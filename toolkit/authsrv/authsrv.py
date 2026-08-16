@@ -1745,6 +1745,29 @@ FILE_ID_OVERRIDE = None
 # arm rather than a disabled feature.
 PLAYER_FLAGS = None
 
+# Set from --henchman <npc key>. The content key whose enc_name rides one extra
+# GAME_SMSG 0x01BF inside the party build window, plus PLAYER_PARTY_SIZE raised
+# to 2 so the per-player display array agrees with a two-member roster. None is
+# the CONTROL ARM -- this server's behaviour up to 2026-08-16, one roster row --
+# and it is the default for the same reason PLAYER_FLAGS is: a default-on flag
+# leaves nothing to diff against. studies/heroes/FINDINGS.md 7.1.
+HENCHMAN = None
+
+# Clear of everything already allocated -- 1 is the player, 2..7 the probes, 10
+# the standing enemy, 20..22 the world NPCs. Reusing an id would leave the
+# client holding one agent's state under another's name, which is the same
+# collision ENEMY_AGENT_ID's comment is about.
+HENCHMAN_AGENT_ID = 30
+# Clear of ENEMY_DEFINITION and the probes' definition 2, for the same reason
+# the agent id is: a definition index is a raw array index on the client.
+HENCHMAN_DEFINITION = 9
+# Set from --henchman-body. Arm two: the roster row alone is arm one.
+HENCHMAN_BODY = False
+# Wire-side-only overrides, so 0x01BF can disagree with the body's 0x0056.
+HENCHMAN_WIRE_NAME = None
+HENCHMAN_WIRE_PROF = None
+HENCHMAN_WIRE_LEVEL = None
+
 # Set from --netgraph. One byte of UI-overlay flags sent once, after the
 # instance loads, as GAME_SMSG_UI_OVERLAY_FLAGS. None means send nothing at
 # all, which is deliberately distinct from sending 0: the handler CLEARS three
@@ -5881,9 +5904,11 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # fires only on a LEADER CHANGE, so leader-first makes
                         # the change a no-op against the default and nothing is
                         # notified.
+                        _party_size = 1 if HENCHMAN is None else 2
                         send(GAME_SMSG_PLAYER_PARTY_SIZE,
-                             agents.player_party_size(PLAYER_NUMBER, 1),
-                             "PLAYER_PARTY_SIZE(1)")
+                             agents.player_party_size(PLAYER_NUMBER,
+                                                      _party_size),
+                             f"PLAYER_PARTY_SIZE({_party_size})")
                         send(GAME_SMSG_PLAYER_SET_PARTY,
                              agents.player_set_party(PLAYER_NUMBER, PLAYER_NUMBER),
                              "PLAYER_SET_PARTY(self is leader)")
@@ -5895,8 +5920,35 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # key router before its arm ever ran. Retail's own
                         # four-message sequence, in retail's own position,
                         # 8 of 8 live connections.
+                        # The roster row rides INSIDE that window when
+                        # --henchman is set (studies/heroes/FINDINGS.md 7.1).
+                        # No world body: this deliberately isolates the roster
+                        # question from the agent question, because if the row
+                        # draws with no agent behind it then PtRoster:602's
+                        # frame lookup by agentId is not a precondition, and if
+                        # it does not, adding the body is the next arm rather
+                        # than a confound already baked in.
+                        _inside = ()
+                        if HENCHMAN is not None:
+                            _hench = agents.npc_template(HENCHMAN)
+                            # THE DISCRIMINATOR. With the defaults, 0x01BF and
+                            # the body's 0x0056 carry the SAME name/prof/level,
+                            # so a rendered row cannot say which one it read --
+                            # a confound, not a result. These three override
+                            # the WIRE side only, leaving the body alone, so
+                            # the row's own text names its source field by
+                            # field. studies/heroes/FINDINGS.md §7.1.
+                            _wname = (agents.npc_template(HENCHMAN_WIRE_NAME)
+                                      ["enc_name"] if HENCHMAN_WIRE_NAME
+                                      else _hench["enc_name"])
+                            _inside = (agents.party_henchman_add(
+                                1, HENCHMAN_AGENT_ID, _wname,
+                                _hench["profession"] if HENCHMAN_WIRE_PROF
+                                is None else HENCHMAN_WIRE_PROF,
+                                _hench["level"] if HENCHMAN_WIRE_LEVEL
+                                is None else HENCHMAN_WIRE_LEVEL),)
                         for op, vals, label in agents.party_build(
-                                1, PLAYER_NUMBER):
+                                1, PLAYER_NUMBER, inside_window=_inside):
                             send(op, vals, label)
                         # ...and the player-record flag word, in retail's own
                         # position: BEFORE the agent create, 423 sends over 12 of
@@ -6133,6 +6185,36 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         elif SPAWN_ENEMY:
                             spawn_enemy(send, state,
                                         (pos[0], pos[1], cfg[2]), conn_id)
+                        # The henchman's BODY, at the id its roster row names.
+                        # Arm two of the staged demo: arm one sent 0x01BF with
+                        # no body and MEASURED that the row draws anyway --
+                        # standalone, so PtRoster:602's frame lookup is not a
+                        # precondition for the row existing -- but the row came
+                        # up "Lvl 255 ..." with no name. This arm asks whether
+                        # the CONTENT is what needs the agent. ~150 units out,
+                        # because a body at the spawn point reads as "nothing
+                        # appeared" (studies/enemy/PLAN.md's probe distance).
+                        if HENCHMAN is not None and HENCHMAN_BODY:
+                            _hn = agents.npc_template(HENCHMAN)
+                            _hx, _hy = pos[0] + 150.0, pos[1]
+                            create_agent_world(
+                                send, state, HENCHMAN_AGENT_ID,
+                                {"pos": (_hx, _hy), "plane": cfg[2],
+                                 "health": 100.0, "max_health": 100.0,
+                                 "dead": False, "name": _hn["name"],
+                                 "npc": _hn,
+                                 "definition": HENCHMAN_DEFINITION,
+                                 "allegiance": agents.ALLEGIANCE_PLAYER,
+                                 "effects": 0,
+                                 # create_agent_world reads these; leaving one
+                                 # out killed the WORLD TICK THREAD, and the
+                                 # client's Code=007 named it "connection
+                                 # lost" -- our crash, not its refusal.
+                                 "attack_speed": ENEMY_ATTACK_SPEED,
+                                 "resend_definition": True,
+                                 "attacks_back": False,
+                                 "skills": [], "skill_ready": []},
+                                "henchman body", conn_id=conn_id)
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -6677,6 +6759,36 @@ def main():
                          "1 -> +0x58, studies/minimap/FINDINGS.md §3.3), so on a row "
                          "where those differ this is a real lever on the picture. "
                          "Refused together with --explorable: they contradict.")
+    ap.add_argument("--henchman", default=None, metavar="NPC_KEY",
+                    help="Add one henchman row to the party roster: send "
+                         "GAME_SMSG 0x01BF inside the party build window "
+                         "carrying NPC_KEY's enc_name, and raise "
+                         "PLAYER_PARTY_SIZE to 2. NO world body is created — "
+                         "this isolates the roster question from the agent "
+                         "question. Omit for the control arm (one roster row). "
+                         "The 2026-08-12 sweep scored this opcode SILENT, but "
+                         "with an all-zero payload whose party_id=0 resolved a "
+                         "NULL party; the server has since learned to build "
+                         "one, which is the condition that changed. "
+                         "studies/heroes/FINDINGS.md §7.1")
+    ap.add_argument("--henchman-body", action="store_true",
+                    help="With --henchman, also create the henchman's world "
+                         "body at the SAME agent id its roster row names, "
+                         "~150 units from spawn. Arm two of the staged demo: "
+                         "arm one measured that the row draws with no body at "
+                         "all, but with no name and 'Lvl 255'. This asks "
+                         "whether the row's CONTENT is what needs the agent.")
+    ap.add_argument("--henchman-wire-name", default=None, metavar="NPC_KEY",
+                    help="Put a DIFFERENT row's enc_name on 0x01BF than the "
+                         "one the body's 0x0056 carries. With --henchman-body "
+                         "the two otherwise agree, so the rendered row cannot "
+                         "say which it read.")
+    ap.add_argument("--henchman-wire-prof", type=int, default=None,
+                    metavar="N", help="Override 0x01BF's first trailing byte "
+                                      "only (upstream calls it profession).")
+    ap.add_argument("--henchman-wire-level", type=int, default=None,
+                    metavar="N", help="Override 0x01BF's second trailing byte "
+                                      "only (upstream calls it level).")
     ap.add_argument("--player-flags", type=lambda s: int(s, 0), default=None,
                     metavar="VALUE",
                     help="Send GAME_SMSG 0x003C (player number, VALUE, mask 7) "
@@ -6860,6 +6972,50 @@ def main():
               f"once after the instance loads"
               + (f" -- {', '.join(bits)}" if bits else
                  " -- no bits set, which CLEARS all three"))
+
+    if a.henchman is not None:
+        global HENCHMAN
+        try:
+            _h = agents.npc_template(a.henchman)
+        except Exception as exc:
+            raise SystemExit(
+                f"--henchman {a.henchman!r}: no such NPC row in content "
+                f"({exc}). The name must be an EncString from the content "
+                f"store -- string ids the client resolves against the owner's "
+                f"own archive -- because text cannot be invented for this "
+                f"field and a wrong row is a silent absent name.")
+        # Fail here, not inside instance bring-up: the 2026-08-13 lesson is
+        # that a codec throw during the load still lets the harness report
+        # PASS with the body simply missing.
+        agents.party_henchman_add(1, HENCHMAN_AGENT_ID, _h["enc_name"],
+                                  _h["profession"], _h["level"])
+        HENCHMAN = a.henchman
+        if (a.henchman_wire_name or a.henchman_wire_prof is not None
+                or a.henchman_wire_level is not None):
+            global HENCHMAN_WIRE_NAME, HENCHMAN_WIRE_PROF, HENCHMAN_WIRE_LEVEL
+            HENCHMAN_WIRE_NAME = a.henchman_wire_name
+            HENCHMAN_WIRE_PROF = a.henchman_wire_prof
+            HENCHMAN_WIRE_LEVEL = a.henchman_wire_level
+            if HENCHMAN_WIRE_NAME:
+                agents.npc_template(HENCHMAN_WIRE_NAME)   # fail here, not later
+            print(f"HENCHMAN WIRE OVERRIDE: 0x01BF carries name="
+                  f"{HENCHMAN_WIRE_NAME or HENCHMAN}, prof="
+                  f"{HENCHMAN_WIRE_PROF}, level={HENCHMAN_WIRE_LEVEL} while "
+                  f"the body keeps '{HENCHMAN}'s own. The rendered row now "
+                  f"names its SOURCE field by field.")
+        if a.henchman_body:
+            global HENCHMAN_BODY
+            HENCHMAN_BODY = True
+            print(f"HENCHMAN BODY: also creating agent {HENCHMAN_AGENT_ID} "
+                  f"(definition {HENCHMAN_DEFINITION}, ALLEGIANCE_PLAYER) "
+                  f"~150u from spawn, at the id the roster row names.")
+        print(f"HENCHMAN: sending 0x01BF (party 1, agent "
+              f"{HENCHMAN_AGENT_ID}, {len(_h['enc_name'])} name ids from "
+              f"'{a.henchman}') inside the party build window, and "
+              f"PLAYER_PARTY_SIZE(2). The two trailing bytes carry "
+              f"{_h['profession']}/{_h['level']} — upstream calls them "
+              f"profession/level and NO ASSERT NAMES THEM, so the rendered "
+              f"row is the readout.")
 
     if a.player_flags is not None:
         global PLAYER_FLAGS

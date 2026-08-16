@@ -424,8 +424,11 @@ replay, so any `0x01BF` we send is necessarily authored.
    arms; retail's own placement is unknowable from our corpus (0 live hits).
 3. **What creates the `charHeroData` record?** The trailing `0x0072` diagnostic answers it
    cheapest.
-4. **Which `0x01C2` `u16` is the agent id?** Two arms with distinct values.
-5. **What do `0x01BF`'s two trailing `u8`s mean?** Distinguishable values, read the row.
+4. ~~**Does the roster row require a matching live world agent?**~~ **ANSWERED §10.1: no.**
+   The row draws standalone; it is its CONTENT that needs the agent.
+5. ~~**What do `0x01BF`'s two trailing `u8`s mean?**~~ **PARTIALLY ANSWERED §10.2** — not
+   what the roster row renders, which is the reading upstream's names invite. Purpose still
+   NOT FOUND; the untested candidate is the outpost hiring UI.
 6. **Where do hero skill bars come from?** Needs either a targeted search of blob-shaped
    message shapes or a live capture that recruits a hero.
 7. **Retry the family under `--encstring`** — never done; it flipped six other opcodes.
@@ -434,6 +437,111 @@ replay, so any `0x01BF` we send is necessarily authored.
    (§6) — that is the shopping list.
 
 ---
+
+## 10. THE CAGED RUN — R4c-H passes, and the roster row is a POINTER
+
+**Run 2026-08-16, caged loopback, four arms, build 38833 (`2026-08-13_64fae3b1369b`),
+map 90 Lornar's Pass, explorable.** Owner's go-ahead. Every arm reached "body is in the
+map"; the readout is the client's own screen with the operator reading the row, exactly as
+§7.3 requires.
+
+| arm | `0x01BF` | body at agent 30 | rows | second row reads |
+|---|---|---|---|---|
+| control | — | — | **1** | — |
+| roster-only | ✔ | — | **2** | `Lvl 255  ...` |
+| body | ✔ | ✔ | **2** | `Mo1 Hatcher [Collector]` |
+| **discriminator** | ✔ *(worm name, prof 6, lvl 20)* | ✔ *(Hatcher, prof 3, lvl 1)* | **2** | `Mo1 Hatcher [Collector]` |
+
+**R4c-H PASSES.** Two roster rows against the control's one, the difference being exactly
+one `0x01BF`, the second row bearing the archive-resolved name `Hatcher [Collector]`
+prefixed `Mo1` — Monk, level 1. The name never rode the wire as text: the server sent four
+string ids and the client resolved them against the owner's own archive.
+
+### 10.1 The row draws with NO body — but it draws EMPTY
+
+Staging the roster-only arm first paid. The row **rendered with no world agent at all**, so
+`PtRoster:602`'s frame lookup by `agentId` is **not a precondition for the row existing** —
+that closes §8's question 4. But its content was `Lvl 255  ...`: no name, and level `255`
+= `0xFF`, a sentinel. The row is a container the client fills from somewhere else.
+
+### 10.2 The discriminator — it overturns the natural reading
+
+The body arm alone **could not settle anything**, and saying so is the point: its `0x0056`
+carried the *same* name, profession and level as the `0x01BF`, so the rendered row could not
+name its source. A confound, not a result.
+
+A fourth arm made the two disagree — wire carrying the **worm's** name ids, profession **6**,
+level **20**; body keeping Hatcher/Monk/1. Proven from the captured plaintext, not a log line:
+
+```
+bf01 0100 1e00 0400 | 410f 66be 2af2 d404 | 06 | 14
+ 447   p1  ag30 len4|  = lakeside_worm, NOT hatcher |  6 | 20
+```
+
+**The row rendered `Mo1 Hatcher [Collector]` — the BODY's values, every field.**
+
+> **`0x01BF`'s name string and its two trailing bytes do not drive the roster row.** The
+> row's name, profession and level all come from the AGENT the row points at. `0x01BF` binds
+> a roster SLOT to an `agent_id`; the client reads what it displays from that agent.
+
+**CORROBORATED from a prior session, independently and from the other direction.**
+`test_agentlife.py`'s `section_party_of_one` already records that `0x00A6` is "the SOLE
+write path to the agent's profession bytes, which is what the **party/roster label builder**
+reads — so the profession ABBREVIATION had nothing to draw from and has never appeared in
+any session." That was measured about the **player's own** row via `0x00A6`; this arm
+measures the same thing about a **henchman's** row via `0x01BF`, and extends it from
+profession to name and level. Two sessions, two different messages, one conclusion: **the
+roster label builder reads the AGENT.** It also explains the control arm's `W0 Test Warrior`
+— the `W` is the player agent's own profession byte, not anything the party messages carried.
+
+This **refines the upstream claim rather than confirming it.** GWCA and OpenTyria name the
+trailing bytes `profession` and `level`; the body arm *looked* like a confirmation and was
+not. The client stores them to entry `+0x2c`/`+0x30` (§1.1) and **renders neither**. Their
+purpose stays **NOT FOUND**, now with a measured negative attached rather than only a missing
+assert. Same for the wire name: a real `string16(20)` the roster ignores. The obvious
+untested candidate for both is the **hiring UI**, where a henchman is listed *before* it has
+a body — which is an OUTPOST, and the party window will not open in one (RESKIN §18.1's
+explorable gate). That is the next experiment and it needs the gate solved first.
+
+### 10.3 An unpredicted second readout: the compass flag widget
+
+The control arm's compass has **no flag strip at all**; both henchman arms grow one — a
+**green "all" flag** (drawn with three dots), **three greyed numbered flags 1/2/3**, and a
+**clear (X)**.
+
+Four controls, one group plus three individual, from **one `0x01BF`** — and present in the
+**roster-only** arm too, so the widget is driven by the roster entry, not the agent. It
+independently corroborates two readings that were previously inference: the wiki's "three
+individual plus one all heroes and henchmen" (§6), and §3.1's RECONSTRUCTION that the 8-way
+`AI_COMMAND_FLAGS` dispatch keeps henchmen-as-a-group off the numbered slots. The numbered
+flags are greyed because there are no heroes.
+
+### 10.4 What it cost, so the next session does not re-pay it
+
+- **`Code=007` is usually OUR crash, not the client's refusal.** The first body arm died with
+  the client showing "connection lost"; the cause was `KeyError: 'attack_speed'` in
+  `create_agent_world`, which killed the world-tick thread. Read `gamesrv.log` for a
+  traceback before believing the dialog.
+- **The 38797 pin cannot currently run.** Its run-dir archive has map 146/148 mid-replacement
+  (row 7982 renamed `0x8001B97D`); on 38833 those maps bind to *different files* than
+  `dat_study`. Clean explorable maps on the 38833 pair are **90, 474, 558** — Lakeside County
+  is not one. `contentids.py` refuses correctly; this is archive state, not a bug, and it was
+  not repaired here.
+- **`0x01BF` holds its shape on 38833**: same table `0x00bcb788`, same
+  `[u16,u16,string16(20),u8,u8]`, same 50 bytes; only the handler moves
+  (`0x00856b00` → `0x00856bc0`). A two-build corroboration of §1.1.
+- **`--exe` needs an absolute path**, and `--game-args` needs the `=` form
+  (`--game-args="--map 90"`) or argparse eats the leading `--`.
+- **`reskin-roster/` is still armed** with 125 rewritten icon rows and it **sorts last**, so
+  any "newest/last wins" exe pick grabs the one build whose archive is deliberately modified.
+
+### 10.5 Buildable now, and still not
+
+Authoring a henchman is **done as a mechanism**: `agents.party_henchman_add()` +
+`party_build(inside_window=...)` + the body, flag-gated (`--henchman`, `--henchman-body`,
+and the three `--henchman-wire-*` discriminator flags). Unchanged by this run: **follow AI**
+(movement messages exist, so it is work rather than an unknown), the **c2s** direction
+(§3.3), and the whole **hero** route, whose blockers are in §7.2.
 
 ## 9. Defects and corrections this arc produced
 

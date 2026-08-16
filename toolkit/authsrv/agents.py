@@ -366,7 +366,7 @@ def secondary_bits(*professions):
 ALL_SECONDARIES = secondary_bits(*range(1, CHAR_PROFESSIONS))
 
 
-def party_build(party_id=1, player_number=None):
+def party_build(party_id=1, player_number=None, inside_window=()):
     """The four messages that BUILD a party and make it yours.
 
     THE PARTY WINDOW'S GATE, and it is one value read in two places
@@ -399,6 +399,15 @@ def party_build(party_id=1, player_number=None):
         documented no-op at 0x0085879E, so a zero here fails SILENTLY, which
         is the one failure mode we cannot see.
 
+    `inside_window` is any extra roster rows -- party_henchman_add() results --
+    to send BETWEEN add-member and commit. They go here rather than at the call
+    site because the window is where the asserts above live, and a caller that
+    places them itself has to re-derive the same three constraints. Whether
+    0x01BF must sit inside the window or also works post-commit is UNTESTED:
+    its worker never READS the [record+0x78] build flag, it SETS it, exactly as
+    0x01CB's worker does -- which leans "post-commit works too" without closing
+    it. Inside is the position that matches the sibling we have measured.
+
     Returns [(opcode, values, label)] in the order they must be sent.
     """
     if not 1 <= party_id <= 20:
@@ -409,13 +418,89 @@ def party_build(party_id=1, player_number=None):
     if player_number is None:
         raise ValueError("player_number is required: it must match the value "
                          "0x00B0/0x00B1 carry, or the member added is not you")
+    for msg in inside_window:
+        if msg[1][0] != party_id:
+            raise ValueError(
+                f"{msg[2]} names party {msg[1][0]} but the window being "
+                f"opened is party {party_id}: the roster row would index a "
+                f"different manager slot, and 0x01BF fails SILENTLY when the "
+                f"slot is empty -- no assert, no reply, nothing to see")
     return [
         (0x01D2, [party_id], f"PARTY_BUILD_BEGIN({party_id})"),
         (0x01CB, [party_id, player_number, 1],
          f"PARTY_ADD_MEMBER({party_id}, player {player_number})"),
+        *inside_window,
         (0x01D3, [party_id], f"PARTY_BUILD_COMMIT({party_id})"),
         (0x01B2, [party_id, 1], f"PARTY_SET_MINE({party_id})"),
     ]
+
+
+def party_henchman_add(party_id, agent_id, enc_name, unk_a=0, unk_b=0):
+    """GAME_SMSG 0x01BF / 447 -- one henchman row in the party roster.
+
+    THE SHAPE IS THE CLIENT'S OWN, not an upstream's: read from descriptor
+    table 0x00bcb788, handler 0x00856b00, worker 0x00858cb0, traced
+    store-by-store (studies/heroes/FINDINGS.md 1.1). `[u16, u16,
+    string16(20), u8, u8]`, 50 bytes. This CORROBORATES GWCA's published
+    shape from an independent witness -- and `schema/messages.json` "447"
+    carries the same string16 cap of 20, a third agreement.
+
+    THE FIELDS, by what the client DOES with them rather than by name:
+      * party_id indexes the party manager's pointer array at [this+0x3c],
+        bound-checked against [this+0x44]. THE PARTY MUST BE BUILT FIRST.
+        This is the gate the 2026-08-12 sweep hit: an all-zero 0x01BF takes
+        the party_id==0 branch at 0x00858CD0, which resolves the "current
+        party" slot from [this+0x50] -- NULL, because nothing had been
+        built -- and returns SILENTLY. Zero is the one failure we cannot
+        see, exactly as for 0x01B2, so it is refused here.
+      * agent_id is the DEDUPE KEY: the worker scans existing 0x34-byte
+        entries for it (loop 0x858D06-0x858D3C) before appending, then
+        stores it as the entry's first dword.
+      * enc_name is a REAL WIRE STRING, and it is the whole reason the
+        henchman is easier than the hero: a henchman carries its identity
+        with it, while 0x01C2 carries no name and must resolve through
+        s_heroClientData. Pre-encoded string ids, never text.
+
+    THE TWO TRAILING BYTES ARE NOT FOUND. GWCA and OpenTyria call them
+    profession and level; the client stores them to entry+0x2c and
+    entry+0x30 and NO ASSERT ANYWHERE NAMES THEM (`asserts.py --grep
+    henchman` returns four sites, none about a level or a profession). They
+    are unk_a/unk_b here on purpose -- naming them after one lineage's word
+    is how UPSTREAM becomes fact by repetition. Send distinguishable values
+    and read the rendered row.
+
+    Returns (opcode, values, label).
+    """
+    if not 1 <= party_id <= 20:
+        raise ValueError(
+            f"party id {party_id} outside 1..20: same manager bound as "
+            f"party_build (`cmp [esi+8], 0x14`), and 0 is the silent "
+            f"'current party' branch at 0x00858CD0 -- with no party built it "
+            f"resolves NULL and the message vanishes with no assert, which "
+            f"is exactly the 2026-08-12 sweep's SILENT result")
+    if not isinstance(agent_id, int) or agent_id <= 0:
+        raise ValueError(
+            f"agent_id {agent_id!r} must be a positive int: it is the "
+            f"worker's dedupe key and the entry's first dword, and "
+            f"PtRoster:602 looks the roster row's frame up BY it")
+    if not isinstance(enc_name, str):
+        raise ValueError(
+            f"enc_name must be an ENCODED string (see _encstring), not "
+            f"{type(enc_name).__name__}: the content store holds string ids "
+            f"as a list of ints and the codec refuses the raw list")
+    if len(enc_name) > 20:
+        raise ValueError(
+            f"enc_name is {len(enc_name)} code units, over 0x01BF's cap of "
+            f"20 -- the client's own descriptor says string16(20) and so "
+            f"does schema/messages.json. The measured failure mode is the "
+            f"2026-08-13 one: the codec throws inside instance bring-up, the "
+            f"harness still reports PASS, and the row is simply absent")
+    for nm, v in (("unk_a", unk_a), ("unk_b", unk_b)):
+        if not 0 <= v <= 255:
+            raise ValueError(f"{nm}={v} does not fit the u8 the client reads")
+    return (0x01BF, [party_id, agent_id, enc_name, unk_a, unk_b],
+            f"PARTY_HENCHMAN_ADD(party {party_id}, agent {agent_id}, "
+            f"{len(enc_name)} name ids, {unk_a}, {unk_b})")
 
 
 def player_flags(player_number, value, mask=7):
