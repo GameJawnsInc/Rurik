@@ -736,6 +736,80 @@ site outside ChCliAttrib resolves to generic `Array.cpp` growth code, so the ins
 vector push with no message traced into it — the same wall §4 hit, now one structure closer
 and with the array's exact shape known.
 
+## 13. The template system is a RED HERRING — and the real mechanism was already in our tree
+
+The lead from §12.3 was the template system. **It is the wrong door, and that is now
+CONFIRMED rather than suspected.** `AccountTemplateDataSkill` is **140 bytes (`0x8c`)** —
+`profPrimary`, `profSecondary`, `attribCount`, `attrib[12]`, `attribValue[12]`, `skill[8]` —
+and it is **account-local**: the in-memory form of the base64 build-code / saved-template
+feature. A reachability closure from its functions contains **zero message handlers**. It is
+the player's "save my build" UI, not a delivery mechanism, and it never was.
+
+### 13.1 The real pair: `0x0037` creates, `0x003A` fills
+
+**OBSERVED, and verified from both ends.**
+
+| | shape | role |
+|---|---|---|
+| `0x0037` / 55 | `[agent_id, u8, u8]`, 8 B, handler `0x0091d8c0` | **CREATES** the attribState record |
+| `0x003A` / 58 | `[agent_id, array32[48]]`, 8–200 B, handler `0x0091d920` | **FILLS** `attrib[]` |
+
+The create chain is `0x0091D8C0` → thunk `0x0080EAA0` → ChCliAttrib creator `0x008199C0` →
+array insert `0x00819540`, and the creator's own guard is `ChCliAttrib:313` **`!attribState`**
+— the mirror image of the `:156` null check that started this. Both messages live in table
+`0x00bc8f68`, the same table as `0x0072` and `0x0074`. Every link has exactly one caller and
+appears in no data word, so it is in no vtable.
+
+**Both are keyed by AGENT id — which is precisely why a hero can have attributes at all.**
+
+> **And we already had them.** `authsrv.py` has carried
+> `GAME_SMSG_AGENT_UPDATE_ATTRIBUTE_POINTS = 0x0037` and
+> `GAME_SMSG_AGENT_UPDATE_ATTRIBUTES = 0x003A` since the combat/profession arc, with a
+> measured column-major builder. The arc spent two refuted hypotheses hunting for a message
+> that was already in the tree, sent to the player's agent every session. This is the
+> `PLAN.md`-§3 failure in miniature: the thing was known, in a neighbouring study, and not
+> connected.
+
+The record layout is now fully mapped: `+0x000` key (agent id), `+0x004..+0x3FF` `attrib[51]`
+× 20 B, three `Array` headers at `+0x400`/`+0x410`/`+0x424`, `+0x434` `attribPointsAvail`,
+`+0x438` the third `0x0037` field. `ChCliAttrib:42`'s own text
+(`attribState->attrib[attrib].baseValue >= 0`) lands on `record + i*20 + 8`, and `:43`
+(`attribPointsAvail`) on `+0x434` — the source's own field names landing on our offsets,
+which is a check the artifact could have refuted.
+
+### 13.2 The gate moved a third time, and then bit
+
+Sending the pair for the hero's agent **does clear the attribState gate** — measured, the
+assert moves:
+
+```
+charHeroData   ChCliHero.cpp(199)     -> fixed by 0x0074          (§11.3)
+attribState    ChCliAttrib.cpp(156)   -> fixed by 0x0037 + 0x003A (this section)
+profession < arrsize(s_profChapter)   ConstChar.cpp(1296)          <- now here
+```
+
+The new bound is `cmp esi,0xb` = **11** (getter `0x005AB800`, table `0x00A384F0`), so a
+profession must be 0..10. **Two fixes were tried and both are REFUTED:**
+
+1. **`0x0074`'s `b2`/`b3` are not it.** Setting them to 1/2 — the fields upstream names
+   `primary`/`secondary` — changed nothing. That is a measured negative against the upstream
+   naming on this path, and it is the second time this arc has failed to confirm those names.
+2. **Nor is a profession/attribute mismatch.** The hero's agent was `AGENT_SET_PROFESSION
+   (200, 3)` (Monk, from the body's content row) while the attributes we send are 17–21
+   (Warrior, copied from the player). Matching them — a Warrior body, profession 1 — produced
+   the **identical** assert.
+
+**And it regresses a working hero.** The crash fires with *or without* the trailing `0x0072`,
+so it is the attribute pair itself. A hero that renders perfectly well without attributes
+(§11.2) dies with them. `--hero-attribs` is therefore **OFF by default**: a default-on flag
+that crashes is worse than no flag.
+
+**Two failed fixes is the repo's own stop-and-study line, so this stops here.** The next
+session's first move is static, not another run: the profession getter `0x005AB800` has 12
+callers, and three of them — `0x00819FF2`, `0x0081A092`, `0x0081A261` — sit in the attribute
+code the pair activates. Read those three and find where the out-of-range `profession` is
+loaded from. That is a desk task needing no client.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows
