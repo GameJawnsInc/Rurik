@@ -181,7 +181,29 @@ def main():
           "126 fits bare and does not fit template -- an off-by-three here "
           "would only ever show up on screen")
 
-    print("\n7. the enc_* columns are WIRE code units, not archive string ids")
+    print("\n7. the giver's line is checked against 0x0080's OWN width")
+    # 0x0080 is string16(122) and 0x004C is string16(128). Six units apart, and
+    # a shared constant would put that error somewhere only a screen could find.
+    check(questdefs.DIALOG_UNITS == 122 and questdefs.FIELD_UNITS == 128,
+          "the two field widths are distinct constants",
+          f"dialog {questdefs.DIALOG_UNITS}, description "
+          f"{questdefs.FIELD_UNITS} -- from the client's own RECV descriptors")
+    check(refused(questdefs.coded_literal, "x" * 124, "template",
+                  questdefs.DIALOG_UNITS),
+          "a line that fits the DESCRIPTION field is refused for the DIALOG one",
+          "124 + 3 framing units fits 128 and does not fit 122; this is the "
+          "check that a shared constant would silently pass")
+    for qid, row in sorted(rows.items()):
+        line = questdefs.dialogue_field(row)
+        if line is None:
+            LEDGER.skip(f"quest {qid}'s giver line",
+                        "the row carries no giver_dialogue")
+            continue
+        check(ord(line[0]) >= 0x100 and len(line) <= questdefs.DIALOG_UNITS,
+              f"quest {qid}'s giver line is framed and fits 0x0080",
+              f"{len(line)} of {questdefs.DIALOG_UNITS} code units")
+
+    print("\n8. the enc_* columns are WIRE code units, not archive string ids")
     # The trap FINDINGS 3.5 names: 0x3D64 on the wire denotes archive id 15460.
     # Conflating them resolves to 15716, an encrypted record returning None.
     for qid, row in sorted(rows.items()):

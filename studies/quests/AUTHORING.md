@@ -29,6 +29,14 @@ So the brief's literal question is settled OBSERVED. The question that decides w
 >
 > **What Q3 did NOT settle:** the client composes part of the heading itself (*"Ascalon (Kamadan, Jewel of Istan):"* — the map name is not ours), and the **name** slot is still ArenaNet's id `0x3D64`. Authoring our own name is still rung **Q2b** and still needs `textwrite.py`.
 >
+> ### Q4 RAN THE SAME DAY, AND IT IS GREEN — THE GATE IS OPEN
+>
+> **`0x0080` + `0x0081` opens the NPC dialog window.** Titled *"Hatcher [Collector]"* — the client resolved the speaker's name from the bare `agent_id` — carrying our authored line. Capture `vault/captures/harness/20260815T211339`. The frame between the two messages shows **no window**, so §2.5's accumulator/flush split is confirmed, not just the pair.
+>
+> **This was the rung the whole ladder sat behind**, and §6 called it right: EXPENSIVE, not BLOCKED. `test_dispatch`'s gate on `0x003B` (*"blocked behind 0x0039"*) is closed, and `authsrv.py`'s deferral to *"an NPC-service study"* is retired.
+>
+> **What it did not settle:** the server answers *any* interaction with *every* quest's giver line, because there is still no npc→quest binding — §3's `[quest.X.server]` block remains a proposal. And `0x003B` is still unanswered, so nothing can be *accepted* yet. **That is Q5, and it is now the only thing between here and a quest a player can take.**
+>
 > **Three things Q0 did NOT settle, stated so the green does not spread further than it earned:**
 > 1. **The compass free rider went unclaimed.** The run was on map 449, so the marker fields were 449's and §7.3 is untouched. Map **148 cannot load at all**: no client archive in the vault binds `0x1B97D` as the server's does — four run dirs hold only the bit-31 mid-replacement spelling and the 38833 copy binds a rewritten file. That is archive state from the terrain arc, not a quest problem, and it is the first thing to fix before the compass question can be asked.
 > 2. **`0x004C` was never sent**, so no authored *prose* has reached a client — only an 8-unit name slot. Route B's claim that description and objectives hold ~125 characters is still RECONSTRUCTION, and rung Q3 is still its test.
