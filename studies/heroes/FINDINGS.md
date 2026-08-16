@@ -1006,6 +1006,68 @@ attack next, and it is the reason §15.1's limit stands.
 17 fields, the **c2s** direction proper (§3.3 — placing a flag, changing stance from the
 client), and follow AI.
 
+## 16. `inventoryId` — REFUTED as the cause, twice, and the real one is named
+
+§15.3 nominated `inventoryId` (HeroActivate field 3, sent as 0) as the suspect behind the
+commander-panel click crash. **It is not, and the suspicion was mine to retract.**
+
+### 16.1 The click crash is `commander`, not inventory
+
+Naming the assert should have come first. It is:
+
+```
+Assertion: commander        P:\Code\Gw\Ui\Game\GmView.cpp(5890)
+```
+
+Not one of the eight inventory asserts — `ItCliApi:1194`
+`context->inventoryTable.Get(inventoryId)` was the plausible one. `asserts.py` does not read
+line 5890; it is one of the 371 sites its fixed patterns miss, a live reminder that its
+answers are floors. The site is `0x004E38EB`, `push 0x1702` = 5890.
+
+### 16.2 And a non-zero `inventoryId` changes nothing
+
+Two runs with `inventoryId = 1`:
+
+- **On the activation path:** accepted, no assert. It does **not** trip `ItCliApi:1194`, so
+  the field is not validated anywhere this arc can reach.
+- **With the commander click:** the **identical** `commander` / `GmView.cpp(5890)` assert.
+
+So `inventoryId` is **inert on every reachable path** and is **not** what the click wants.
+Both outcomes the experiment allowed came back negative — the field's meaning stays NOT
+FOUND, but the crash is no longer mis-attributed to it.
+
+### 16.3 What the click actually wants
+
+Read statically this time, rather than guessed:
+
+- Commander objects live in a **container at `ctx+0x20`**. `heroCommanderSlot[7]` at
+  `ctx+0x30..+0x4c` holds **keys into it**, not the objects: the slot version
+  (`0x00524DD0`) bound-checks `cmp ecx,7`, reads `[eax + ecx*4 + 0x30]`, and looks *that* up
+  in `ctx+0x20`.
+- **`0x00524C40` is a GET-OR-CREATE** — it looks up `ctx+0x20` and, on a miss, walks the
+  7-slot array to make one. `GmHeroCommander:81`'s `slotIndex < arrsize(...)` lives inside it.
+- **`0x00524DB0`, the one the click uses, does NOT create.** It looks up and asserts. That
+  asymmetry is the whole bug: our hero has no entry in `ctx+0x20`, and the click takes the
+  non-creating path.
+- The creator's second caller, `0x00524FA4`, sits in a **loop over 12-byte entries at
+  `ebp-0x58`** — the `activeHeroes` stack buffer built by scanning the party's agents
+  (`GmHeroCommander:214`, `cmp ebx,7`).
+
+**So the next question is precise:** the party-agent scan that fills `activeHeroes` and
+creates a commander per entry either never runs for our hero, or registers it under a key
+different from the one `GmView:5890` looks up. Deciding which is desk work on `0x00524F80`'s
+scan filter and its key — no client needed.
+
+*(One tension worth carrying: commander **flag 1 is enabled on screen**, so part of this
+machinery did bind, while the container lookup still misses. A key mismatch fits that better
+than "the scan never ran".)*
+
+### 16.4 Also wired, and NOT tested
+
+`--hero-ai-mode` now sets HeroActivate's field 4, the Fight/Guard/Avoid-Combat stance. It is
+**untested**: no run has varied it, and nothing here is evidence that the stance takes
+effect. It exists so the next session can ask.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

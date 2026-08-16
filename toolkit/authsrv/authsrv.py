@@ -2258,6 +2258,14 @@ HERO_SWAP = False
 # is what makes the client resolve the hero's NAME from s_heroClientData and
 # enable its commander-slot flag. studies/heroes/FINDINGS.md 15.
 HERO_ACTIVATE = False
+# HeroActivate's field 3. Zero is what every run so far has sent. A NON-zero id
+# is a refutable question rather than a fix: ItCliApi:1194 asserts
+# `context->inventoryTable.Get(inventoryId)`, so if field 3 really is an
+# inventory-table key, an id naming no inventory should trip THAT assert and
+# name the field by experiment. Silence means it is inert on this path.
+HERO_INVENTORY = 0
+# HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
+HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
 # hypothesis. --no-hero-info drops it so the arm can ask whether it was needed.
 HERO_INFO = True
@@ -6871,7 +6879,8 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # and an EARLY assert (before this line) would itself
                         # name the commander-binding trigger.
                         if HERO is not None and HERO_ACTIVATE:
-                            send(*agents.hero_activate(HERO, HERO_AGENT_ID))
+                            send(*agents.hero_activate(HERO, HERO_AGENT_ID,
+                                                 HERO_INVENTORY, HERO_AI_MODE))
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -7483,6 +7492,15 @@ def main():
                          "labelled from the BODY's agent instead of resolving "
                          "the hero's own name from s_heroClientData. The "
                          "control arm for section 14.")
+    ap.add_argument("--hero-inventory", type=lambda x: int(x,0), default=0,
+                    metavar="N",
+                    help="HeroActivate's inventoryId (field 3), 0 so far. "
+                         "ItCliApi:1194 asserts inventoryTable.Get(inventoryId), "
+                         "so a non-zero id naming no inventory should trip that "
+                         "assert and NAME the field by experiment.")
+    ap.add_argument("--hero-ai-mode", type=int, default=0, metavar="N",
+                    help="HeroActivate's aiMode (field 4): 0/1/2 = the three "
+                         "CHAR_AI_MODES stances Fight/Guard/Avoid Combat.")
     ap.add_argument("--hero-chunk", default=None, metavar="LIST|N",
                     help="0x0074's ten trailing dwords: one int fills all "
                          "ten, or a comma list of up to ten. The client "
@@ -7707,6 +7725,9 @@ def main():
         HERO_BODY_NPC = a.hero_body_npc
         HERO_SWAP = a.hero_swap
         HERO_ACTIVATE = a.hero_activate
+        global HERO_INVENTORY, HERO_AI_MODE
+        HERO_INVENTORY = a.hero_inventory
+        HERO_AI_MODE = a.hero_ai_mode
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS
         HERO_ATTRIBS = not a.no_hero_attribs
