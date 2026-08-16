@@ -163,6 +163,16 @@ def encode_service_select(quest_id, code):
     return SERVICE_TAG_BIT | (quest_id << 8) | code
 
 
+# GAME_SMSG 0x007E's first field, an option KIND. It takes 15, 16, 17, 18, 21,
+# 22 and 23 across the corpus and none of them is named anywhere; 18 is what
+# every quest offer uses, which is the only reason this constant has a value.
+OPTION_KIND_QUEST = 18
+# Field 4, 0xFFFFFFFF in 37 of 37 samples. Never seen taking another value, so
+# what it MEANS is UNVERIFIED -- this name says where it came from, not what it
+# does.
+OPTION_NO_ICON = 0xFFFFFFFF
+
+
 def load(world=None):
     """{quest_id: row} for every content quest row.
 
