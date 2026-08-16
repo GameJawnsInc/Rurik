@@ -459,7 +459,7 @@ def section0b(check):
     check(a["base"] == (1.5, 2.5, 3.5),
           "anims(): the record's first 12 bytes are the base vec3")
     check(a["flags"] == 0x10000000 and a["emitter_count"] == 0
-          and not a["light_attach"],
+          and not a["light_attach"] and a["link"] == 0,
           "anims(): flags dword and its named bit-fields round-trip")
     check(a["trans"] == ([0, 100000],
                          [(0.0, 0.0, 0.0), (10.0, 20.0, 30.0)]),
@@ -554,6 +554,10 @@ def section1(check, ar, idt):
           and all(e["seq"] < sk.seq_count for e in ev),
           "worm: 6 sound events, seq-index prefix sorted (the client "
           "binary-searches it) and in range")
+    check(all(a["link"] < len(an) and a["link"] <= i
+              for i, a in enumerate(an)),
+          "worm: every node's link byte references an earlier-or-self "
+          "node (the hierarchy invariant, 121,532/121,532 corpus-wide)")
 
 
 def section2(check, led, ar, stride):
@@ -744,13 +748,13 @@ def main():
                          "decompresses every head row, ~45 min)")
     args = ap.parse_args()
 
-    # Floor from the real green default run, 2026-08-16: 88 checks executed
+    # Floor from the real green default run, 2026-08-16: 89 checks executed
     # (stride 89, the study archive; 71 before the U2 typed-layer section
-    # 0b and its four anchor checks landed later the same day). Set below
+    # 0b and its five anchor checks landed later the same day). Set below
     # that only by the checks whose pools can legitimately empty on a
     # different sample (the 16 corpus sabotage variants and the two
-    # order-control halves declare skips); the mandatory core is 70.
-    led = checks.Ledger("skeleton chunk (0xFA1)", floor=80)
+    # order-control halves declare skips); the mandatory core is 71.
+    led = checks.Ledger("skeleton chunk (0xFA1)", floor=81)
     check = checks.adopt(led)
 
     section0(check)

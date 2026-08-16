@@ -821,13 +821,16 @@ Every one of these, in the order they were written:
   bodies sound events, n3E's {type, param} event track, and the sequence
   record's start/end clamp window (MdlSeq 0x00792F56) -- and `anims()`/
   `tracks()`/`sound_events()`/`event_track()`/`sequences()` must read it
-  all back, plus four worm-anchor checks of the invariants the decoder
+  all back, plus five worm-anchor checks of the invariants the decoder
   cannot force (emitter-attach bits summing to n34, the invariant
   MdlAnim:1121 enforces at runtime, measured 14,571/14,571; 3,919/3,919
-  unit quaternions; the sorted sound-event index prefix). 88 checks
-  against a floor of 80 (the mandatory core is 70; the corpus sabotage
-  and order-control pools can legitimately empty on another sample and
-  declare skips). ~25 s; `--all` reads every head row, ~25-45 min),
+  unit quaternions; the sorted sound-event index prefix; every node's
+  link byte referencing an earlier-or-self node -- the hierarchy
+  invariant, 121,532/121,532 corpus-wide with zero violations). 89
+  checks against a floor of 81 (the mandatory core is 71; the corpus
+  sabotage and order-control pools can legitimately empty on another
+  sample and declare skips). ~25 s; `--all` reads every head row,
+  ~25-45 min),
   `toolkit/mapdata/test_datmove.py` (the RELOCATION verb `datwrite` refuses on
   purpose, and the wall FINDINGS 38 ran into: `--replace` writes uncompressed and
   will not move a row, so authoring only worked where the stream SHRANK. Against

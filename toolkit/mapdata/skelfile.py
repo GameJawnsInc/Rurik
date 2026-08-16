@@ -85,11 +85,17 @@ WHAT IS DECODED, and what stays bytes:
         emitter-attachment records bind to this node (sum == n34 on
         14,571/14,571), bit 26 = node carries the next block-A light
         (sum == the FA0's light count on 13,812/13,812 measurable files),
-        bit 28 = skip the node's Gr commit, bits 30/31 = mirror transform;
-        low byte and the rest UNNAMED. `anims()` returns all of it.
+        bit 28 = skip the node's Gr commit, bits 30/31 = mirror
+        transform; bits 0-7 = the node's LINK (parent/attach reference:
+        always < n2C and always <= the record's own index --
+        121,532/121,532 each, zero violations -- consumed per node at
+        0x006737C0 as a GrTrans stream-2 slot selection); the remaining
+        bits UNNAMED. `anims()` returns all of it.
       - blk48: {f32 base[3]; u32 flags; u32 u10} + {u16 w0,w2} and TWO
         vec3 channel sections of the same SoA shape, applied to a second
-        Gr channel-set; flags bit 27 = LOOPING (time = global 1e-5 s
+        GrTrans transform stream (stream 3; blk2C drives stream 2 --
+        GrTrans.cpp:1622 `transform < GR_TRANSFORMS`, 5 streams);
+        flags bit 27 = LOOPING (time = global 1e-5 s
         clock modulo the record's own last key time) and is the ONLY bit
         set anywhere in the corpus (1,300 of 1,794 records).
         `tracks()` returns them.
@@ -551,7 +557,9 @@ class Skeleton:
 
         Returns dicts: base (f32 x3), flags (u32), emitter_count (flags
         bits 8-12 -- n34 records bound to this node; corpus sum == n34 on
-        14,571/14,571), light_attach (bit 26), trans/rot/aux -- each None
+        14,571/14,571), light_attach (bit 26), link (bits 0-7: the
+        node this record hangs from, topologically ordered -- < n2C and
+        <= own index on 121,532/121,532), trans/rot/aux -- each None
         or (times, values): trans/aux values are vec3 f32, rot values are
         float4 quaternions (nlerp'd by the client, 100.000% unit-norm in
         the corpus). Times are int32 in 1e-5 s.
@@ -565,6 +573,7 @@ class Skeleton:
             w0, w2, w4 = struct.unpack_from("<3H", blk, off)
             off += 6
             rec = {"base": base, "flags": flags,
+                   "link": flags & 0xFF,
                    "emitter_count": (flags >> 8) & 0x1F,
                    "light_attach": bool(flags >> 26 & 1),
                    "trans": None, "rot": None, "aux": None}
@@ -581,7 +590,7 @@ class Skeleton:
         return out
 
     def tracks(self):
-        """The blk48 records (channel-set-3 tracks; 0x0078032A).
+        """The blk48 records (GrTrans stream-3 tracks; 0x0078032A).
 
         Dicts: base, flags, u10 (disk +0x10, no located consumer),
         looping (flags bit 27 -- the only bit the corpus ever sets),
@@ -614,7 +623,9 @@ class Skeleton:
     def sound_events(self):
         """The n40 region of the n40n44 blob, in the CLIENT's framing
         (0x00780C70): n40 SORTED u32 sequence indices, then n40 18-byte
-        bodies {i32 time; u32 path_index; 10 raw bytes}. path_index is
+        bodies {i32 time; u32 path_index; 10 raw bytes}. `time` is
+        SEQUENCE-RELATIVE (0 <= t <= end-start on 11,588/11,632 corpus
+        events; the absolute reading was refuted). path_index is
         MdlAnim:2040's `pathIndex < m_skel->m_soundPathCount` and indexes
         the FA6 (m_soundPaths) array. Returns dicts with seq, time,
         path_index, raw_tail.
