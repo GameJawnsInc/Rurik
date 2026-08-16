@@ -2718,6 +2718,54 @@ QUEST_MARKER_OFFER = 5
 QUEST_MARKER_TURN_IN = 4
 
 
+# 111 and 222 are chosen to be UNMISTAKABLE and outside every observed value.
+# ArenaNet's slot A takes 100/250/500 and slot B takes 10/25/100, so a rendered
+# pane showing 100 or 25 would be ambiguous about which slot drew it. Nothing in
+# the corpus takes 111 or 222, they are different lengths on screen, and neither
+# is a prefix of the other.
+_REWARD_A, _REWARD_B = 111, 222
+_REWARD_QUEST = 1463
+
+
+def _quest_reward_steps():
+    row = questdefs.load()[_REWARD_QUEST]
+    framing = row.get("wire_framing", "template")
+    body = questdefs.with_reward(row["description"], _REWARD_A, _REWARD_B,
+                                 framing)
+    return [
+        Step(4.0, 0x0049,
+             [_REWARD_QUEST, _SPAWN_WORLD, 0, 148, 32,
+              questdefs.enc_string(row.get("enc_name") or []),
+              questdefs.enc_string(row.get("enc_name") or []),
+              questdefs.enc_string(row.get("enc_name") or []), 148],
+             f"0x0049 QUEST_ADD[{_REWARD_QUEST}] so there is a log entry to "
+             f"describe",
+             "a quest in the log, as Q0 already established."),
+        Step(3.0, 0x004C,
+             [_REWARD_QUEST, body,
+              questdefs.coded_literal(row["objectives"], framing)],
+             f"0x004C description + a REWARD BLOCK carrying A={_REWARD_A} and "
+             f"B={_REWARD_B}",
+             "the log's detail pane shows our description followed by TWO "
+             "reward lines. THE MEASUREMENT IS WHICH LINE CARRIES WHICH "
+             "NUMBER: ref 10730 is fed 111 and ref 10732 is fed 222, so "
+             "whichever line reads 111 is slot A. If one says '111 experience' "
+             "and the other '222 gold', the seven-quest magnitude argument was "
+             "right; if it is the other way round, a RECONSTRUCTION that has "
+             "looked obvious all week was backwards."),
+        Step(3.0, 0x0080, [body],
+             "the SAME string on the dialog line, which is where ArenaNet puts "
+             "it too -- byte-identical in 17 of 17 (screen, quest) pairs",
+             "nothing yet; 0x0080 accumulates."),
+        Step(2.0, 0x0081, [_GIVER_AGENT],
+             f"0x0081 flush at agent {_GIVER_AGENT}",
+             "the reward lines rendered in a DIALOG WINDOW as well, which needs "
+             "no clicking and no log keypress to read. Two independent views of "
+             "the same string is the point: if they disagree, the suffix is not "
+             "position-independent and that is its own finding."),
+    ]
+
+
 def _quest_giver_mark_steps(origin):
     ox, oy, plane = origin
     return [
@@ -2885,6 +2933,30 @@ def _quest_offer_steps():
 
 
 PROBES = {
+    "quest_reward": lambda a, o: Probe(
+        question="Which of the reward block's two numeric slots is experience "
+                 "and which is gold?",
+        predicts="TWO REWARD LINES render under our description, one reading "
+                 "111 and one reading 222. The seven-quest magnitude argument "
+                 "says slot A (ref 10730) is experience and slot B (ref 10732) "
+                 "is gold -- A takes 100/250/500 and B takes 10/25/100 across "
+                 "the corpus -- but that is PLAUSIBILITY, not measurement: both "
+                 "templates are encrypted and the RC4 key is NOT FOUND, so "
+                 "neither the wire nor the archive can settle it and only a "
+                 "rendered pane can. 111 and 222 sit outside every observed "
+                 "value on purpose, so no reading is ambiguous. A THIRD "
+                 "outcome is live and worth naming: if only ONE line renders, "
+                 "or the numbers come out as anything other than 111 and 222, "
+                 "then `0101 <word>` is not a 0x100-biased numeric argument and "
+                 "a CORROBORATED reading falls with it.",
+        steps=_quest_reward_steps(),
+        note="RUN ON --map 449 with a hold long enough for all four steps, and "
+             "press L. Two views of the same string are produced deliberately "
+             "-- the log's detail pane and a dialog window -- because ArenaNet "
+             "puts the identical suffix in both (17 of 17), and a disagreement "
+             "between them would itself be the finding. The dialog needs no "
+             "keypress, so read that one first.",
+    ),
     "quest_turnin": lambda a, o: Probe(
         question="Does a quest LEAVE the log on turn-in -- and is ArenaNet's "
                  "DOUBLED 0x0052 a protocol requirement or a party broadcast?",
