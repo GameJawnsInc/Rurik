@@ -1390,6 +1390,27 @@ GAME_CMSG_INTERACT_AGENT = 0x0039
 GAME_CMSG_REQUEST_QUEST_INFO = 0x0012
 GAME_SMSG_QUEST_DESCRIPTION = 0x004C
 
+# The NPC dialog window, and it is a PAIR with an order that is not arbitrary.
+#
+# RECONSTRUCTION, from the two handler bodies (studies/quests/FINDINGS.md 2.5):
+# 0x0080's body at 0x00811740 APPENDS its one string16 into an array at
+# charContext+0x2C,+0x14 bounded by the count at +0x1C -- it is a text
+# ACCUMULATOR, one line per message. 0x0081's body at 0x008117B0 builds
+# {1, agent_id, text_ptr} pointing at that same buffer, posts UI frame message
+# 0x100000A6, and then ZEROES the count. It is the FLUSH, tagged with who is
+# speaking.
+#
+# So: one or more 0x0080, then one 0x0081. ArenaNet's own wire agrees --
+# `s2c 0x80 [str<43u>]` then `s2c 0x81 [99]`, 11 of 11 times in each keyed
+# session. AUTHORING.md's Q4 line says "0x0081 then 0x0080"; that is the
+# document being loose, and the bodies are the authority.
+#
+# Naming these closes what test_dispatch called the gate on 0x003B: "blocked
+# behind 0x0039 -- this server does not answer an interaction, so no window is
+# ever open and no selection can be made."
+GAME_SMSG_NPC_DIALOG_TEXT = 0x0080
+GAME_SMSG_NPC_DIALOG_SHOW = 0x0081
+
 # The client asks to use a skill and then WAITS to be told it worked. Pressing a
 # skill plays the bar animation and never casts, which is the same shape as every
 # other bug this project has had: the client asks, we say nothing.
@@ -5136,6 +5157,32 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # statistic about how many there have been.
                         state["interacting"] = values[1]
                         state["interact_byte"] = values[2]
+                        # ANSWER IT. The comment above used to end "until an
+                        # NPC-service study says what an interaction should
+                        # ANSWER" -- studies/quests/ is that study, and the
+                        # answer is the 0x0080/0x0081 pair.
+                        #
+                        # Every quest row with a giver line speaks here, which
+                        # is deliberately cruder than a real giver binding: we
+                        # have no npc->quest column yet (AUTHORING's [server]
+                        # block is a proposal, not a schema), so this makes the
+                        # WINDOW testable without inventing that binding first.
+                        # Q5 is where the id actually has to matter, and this
+                        # comment is what says the two are not the same rung.
+                        spoke = False
+                        for qid in sorted(quest_rows()):
+                            line = questdefs.dialogue_field(quest_rows()[qid])
+                            if line:
+                                send(GAME_SMSG_NPC_DIALOG_TEXT, [line],
+                                     f"NPC_DIALOG_TEXT(quest {qid})")
+                                spoke = True
+                        if spoke:
+                            # The FLUSH, and it must come last: 0x0081 zeroes
+                            # the accumulator it displays, so sending it first
+                            # would show an empty window and clear the lines
+                            # that followed.
+                            send(GAME_SMSG_NPC_DIALOG_SHOW, [values[1]],
+                                 f"NPC_DIALOG_SHOW(agent {values[1]})")
                     elif opcode == GAME_CMSG_REQUEST_QUEST_INFO:
                         # Closes test_dispatch's recorded drop, whose reason was
                         # "answering it needs a quest table this repo does not

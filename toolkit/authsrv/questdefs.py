@@ -58,10 +58,16 @@ LITERAL_END = 0x0001        # terminator
 # agree. 128 CODE UNITS, and the framing spends 3 of them.
 FIELD_UNITS = 128
 
+# GAME_SMSG 0x0080, the NPC dialog line, is NARROWER -- string16(122) in both
+# the client's own RECV descriptor and schema/messages.json. Six units less than
+# 0x004C's, which is exactly the kind of difference that would be found on
+# screen rather than in code if the two shared one constant.
+DIALOG_UNITS = 122
+
 FRAMINGS = ("bare", "template")
 
 
-def coded_literal(text, framing="template"):
+def coded_literal(text, framing="template", limit=FIELD_UNITS):
     """Our prose as the code-unit string `codec.encode` wants for a string16.
 
     Returns a `str`, not a list: `codec.py` takes a `str` and encodes it as
@@ -103,9 +109,9 @@ def coded_literal(text, framing="template"):
             f"(TextApi.cpp:585) and dies -- MEASURED, not predicted. Use "
             f"wire_framing = \"template\"; `bare` is only for a payload that "
             f"already starts with a string id.")
-    if len(units) > FIELD_UNITS:
+    if len(units) > limit:
         raise ValueError(
-            f"{len(units)} code units exceeds the client's {FIELD_UNITS}-unit "
+            f"{len(units)} code units exceeds the client's {limit}-unit "
             f"field ({framing} framing spends "
             f"{3 if framing == 'template' else 0} on the framing itself). "
             f"Shorten the text; do not truncate it here.")
@@ -146,6 +152,20 @@ def description_fields(row):
     framing = row.get("wire_framing", "template")
     return (coded_literal(row.get("description", ""), framing),
             coded_literal(row.get("objectives", ""), framing))
+
+
+def dialogue_field(row):
+    """The giver's spoken line, for GAME_SMSG 0x0080 -- or None if the row has none.
+
+    A NARROWER field than the description's, and the width is checked against
+    0x0080's own 122 rather than 0x004C's 128. Sharing one constant between the
+    two would put a six-unit error where only a screen could find it.
+    """
+    text = row.get("giver_dialogue")
+    if not text:
+        return None
+    return coded_literal(text, row.get("wire_framing", "template"),
+                         limit=DIALOG_UNITS)
 
 
 def main():

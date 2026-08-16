@@ -30,6 +30,7 @@ import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import questdefs                                            # noqa: E402
 from agents import (                                        # noqa: E402
     AGENT_KIND_NPC, AGENT_KIND_PLAYER, AGENT_TYPE_LIVING, APPEARANCE_WARRIOR,
     CHAR_CLASS_MONSTER_BASE, CHAR_CLASS_PLAYER_BASE, DEFAULT_RUN_SPEED,
@@ -2566,7 +2567,68 @@ def _quest_description_steps(origin):
     ]
 
 
+# The standing test NPC's agent id (content/world.toml, spawn.test_enemy). It is
+# placed 300 units from the player's arrival point on whatever map loads, which
+# is why this probe needs no per-map coordinates -- and why it needs --enemy,
+# since the harness defaults a probe run to an empty world.
+_TEST_NPC_AGENT = 10
+
+
+def _npc_dialog_steps():
+    """Q4: does the 0x0080/0x0081 pair open an NPC dialog window?
+
+    Sends the pair UNSOLICITED rather than waiting for a click. The window is
+    what is under test, and making it depend on the harness landing a mouse
+    click on a body 300 units away would confound "the messages do not work"
+    with "the click missed" -- two failures with one appearance.
+    """
+    line = questdefs.coded_literal(
+        "Well met, traveller. This window is ours.",
+        limit=questdefs.DIALOG_UNITS)
+    return [
+        Step(6.0, 0x0080, [line],
+             "0x0080 NPC_DIALOG_TEXT -- one line into the accumulator",
+             "NOTHING YET, predicted. 0x0080's body appends into a buffer at "
+             "charContext+0x2C and posts no frame message, so a window here "
+             "would refute the accumulator reading outright."),
+        Step(10.0, 0x0081, [_TEST_NPC_AGENT],
+             f"0x0081 NPC_DIALOG_SHOW -- flush, attributed to agent "
+             f"{_TEST_NPC_AGENT}",
+             "A DIALOG WINDOW OPENS carrying the line above, attributed to the "
+             "standing NPC. 0x0081's body builds {1, agent_id, text_ptr} over "
+             "that same buffer, posts UI frame 0x100000A6 -- whose ONE "
+             "subscriber is at 0x004ECEAF -- and zeroes the count. If nothing "
+             "opens, the pair is not the dialog mechanism and 2.5's naming is "
+             "wrong; if a window opens but names the wrong speaker, the agent "
+             "field is not the speaker."),
+    ]
+
+
 PROBES = {
+    "npc_dialog": lambda a, o: Probe(
+        question="Is GAME_SMSG 0x0080 + 0x0081 the NPC dialog window -- the "
+                 "reply to INTERACT that test_dispatch called this server's "
+                 "missing gate?",
+        predicts="THE PAIR OPENS A DIALOG WINDOW, and the order matters: the "
+                 "0x0080 alone shows NOTHING and the 0x0081 is what displays "
+                 "it. Named in FINDINGS 2.5 from the two handler bodies plus a "
+                 "correlation on ArenaNet's wire (0x0080 precedes 11 of 11 "
+                 "quest selects per session against a 0.13% background rate, "
+                 "0x0081 names the interacted agent 23 of 23), and the "
+                 "clincher: a 0x0080 string at t=27.719 is byte-identical for "
+                 "22 code units to the 0x004C description that follows it. But "
+                 "NEITHER HAS EVER BEEN SENT TO A CLIENT -- the whole naming is "
+                 "read-side, and this is the first time either goes out.",
+        steps=_npc_dialog_steps(),
+        note="RUN WITH --enemy --practice-target --map 449. The NPC only needs "
+             "to EXIST for 0x0081 to name it; nothing here requires the player "
+             "to reach or click it. Without --enemy the world is empty, agent "
+             "10 does not exist, and a window naming a missing agent is a "
+             "different experiment than the one intended.\n"
+             "The line is framed, because a bare literal starting below 0x100 "
+             "crashes the client on TextApi.cpp:585 -- MEASURED on 2026-08-15, "
+             "and questdefs refuses to build one now.",
+    ),
     "quest_description": lambda a, o: Probe(
         question="Does OUR OWN PROSE render in a real client's quest log -- and "
                  "does a literal have to carry ArenaNet's framing to do it?",

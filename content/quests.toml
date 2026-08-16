@@ -33,6 +33,10 @@ enc_name     = [0x3D64]
 description  = "Speak to the gate guard, then return to me."
 objectives   = "Return to the guard."
 wire_framing = "template"
+# What the giver SAYS when the player interacts, sent as GAME_SMSG 0x0080 and
+# flushed by 0x0081. A narrower field than the two above -- string16(122), not
+# 128 -- and questdefs checks it against its own width for that reason.
+giver_dialogue = "Well met, traveller. Speak to the gate guard for me, and I will see you rewarded."
 
 [quest.rurik_first_errand.provenance]
 source = "invented"

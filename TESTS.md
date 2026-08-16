@@ -2720,10 +2720,15 @@ Every one of these, in the order they were written:
   **What it deliberately does NOT assert is which framing is correct**: only a
   client can say, and asserting one here would be two of our own components
   agreeing and calling it evidence. No vault, no client, no socket, so nothing
-  can skip. Floor 17 against a healthy 21, and the derivation is in the file:
-  13 checks are row-count independent and each quest row adds 4, so 17 is what
-  the smallest table that can exist executes; §0 already catches an empty one.
-  ~2 s),
+  can skip. §7 pins the two field widths APART -- `0x0080`'s dialog line is
+  `string16(122)` and `0x004C`'s description is `string16(128)`, six units
+  distant, and the check that earns its place is the one asserting a line which
+  FITS the description field is REFUSED for the dialog one; a single shared
+  constant would pass everything else and put that error where only a screen
+  could find it. Floor 17 against a healthy 22, and the derivation is in the
+  file: 13 checks are row-count independent and each quest row adds 4 (5 with a
+  `giver_dialogue`), so 17 is what the smallest table that can exist executes;
+  §0 already catches an empty one. ~2 s),
   `toolkit/test_provlint.py` (an ACCUMULATION TRIPWIRE on assert citations in prose,
   and the story of why it is only that is worth more than the file. `content.py`
   enforced the provenance gate's permitted side from the day it was written; the same
