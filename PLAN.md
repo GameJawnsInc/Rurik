@@ -2079,7 +2079,7 @@ predicting before it is tried.
 and `studies/crossbuild/FINDINGS.md` on `main` is the live record). Read the
 deliverable list below as the state of the TOOLING, not of the research.
 
-*1,927 is **derived, not re-summed**, and says so: the 1,878 below was measured over 50 files, and this session added `test_behaviourrun.py` (35, new) and took `test_wirecapture.py` from 28 to 42 — both counted from real green runs. 1,878 − 28 + 42 + 35 = 1,927. The suite runner reports 51/51 green in 611 s; its per-file log truncates, which is what made the earlier 965 wrong, so the arithmetic is shown rather than a figure quoted from a partial log. The 1,878 figure's own method:* Method, because the gap is
+*1,927 is **derived, not re-summed**, and says so: the 1,878 below was measured over 50 files, and this session added `test_behaviourrun.py` (35, new — the file has been **36 since `1598f61`**, 2026-08-12, which added the both-clocks MARK check; the 35 is the count this arithmetic actually summed, kept so the sum stays checkable) and took `test_wirecapture.py` from 28 to 42 — both counted from real green runs. 1,878 − 28 + 42 + 35 = 1,927. The suite runner reports 51/51 green in 611 s; its per-file log truncates, which is what made the earlier 965 wrong, so the arithmetic is shown rather than a figure quoted from a partial log. The 1,878 figure's own method:* Method, because the gap is
 large enough to want one: run each of the 50 files in `toolkit/**/test_*.py` as its own
 process, take the `ALL CHECKS PASSED (N checks` line, sum N, and require every exit code to
 be 0 — 50 of 50 green. This is a **default** run, so the three tests with an `--all` mode
