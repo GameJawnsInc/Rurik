@@ -317,7 +317,26 @@ def main():
           "120 units of text passes on its own and overflows once the "
           "21-unit block is on; checking first would ship the overflow")
 
-    print("\n13. the enc_* columns are WIRE code units, not archive string ids")
+    print("\n13. every kind we can send has a measured icon")
+    # MEASURED 2026-08-16 (vault/captures/harness/20260816T111948): one option
+    # of every kind in one window drew six distinct icons. The '?' the owner
+    # described is kind 22 and the '!' is kind 18 -- one mechanism, not two,
+    # and neither of them is over the NPC's head where three runs looked first.
+    check(questdefs.OPTION_ICONS[18] == "gold !"
+          and questdefs.OPTION_ICONS[22] == "gold ?",
+          "kind 18 is the '!' and kind 22 is the '?'",
+          "the pair the owner described, and they are option KINDS")
+    check(set(questdefs.OPTION_ICONS) == set(questdefs.OPTION_KIND.values()),
+          "and every kind the code can emit has an icon recorded",
+          "a kind we can send with no measured icon is one whose meaning on "
+          "screen nobody has looked at")
+    check(len(set(questdefs.OPTION_ICONS.values()))
+          == len(questdefs.OPTION_ICONS),
+          "the six icons are distinct",
+          "two kinds sharing an icon would be indistinguishable to a player, "
+          "which is what the property-11 sweep kept producing")
+
+    print("\n14. the enc_* columns are WIRE code units, not archive string ids")
     # The trap FINDINGS 3.5 names: 0x3D64 on the wire denotes archive id 15460.
     # Conflating them resolves to 15716, an encrypted record returning None.
     for qid, row in sorted(rows.items()):

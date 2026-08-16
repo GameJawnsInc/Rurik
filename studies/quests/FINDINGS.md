@@ -205,6 +205,25 @@ On screen afterwards: **Active Quests empty, Quest Summary empty, and the tracke
 
 **Where the `?` might still be, neither checked:** the **quest tracker** under the level bar — `studies/minimap/FINDINGS.md:721` recorded a `?` there when `0x0049` fired with EMPTY strings, which reads as a missing-text placeholder rather than a state marker, and our reward run showed real text in that slot with no `?` — and the **dialog window**. Both are surfaces no run in this arc has interrogated.
 
+**THE `?` IS THE OPTION KIND. Found 2026-08-16, in the dialog, after three runs looked for it over the NPC's head.**
+
+`--probe dialog_icons` put one `0x007E` of every kind into a single window, each line labelled with its own kind number, so the icons are compared inside one frame rather than across six screenshots. `vault/captures/harness/20260816T111948`.
+
+| kind | code | icon | reading |
+|---|---|---|---|
+| 16 | `0x01` | green **tick** | accept |
+| 17 | `0x02` | red **prohibition** | decline |
+| 18 | `0x03` | gold **`!`** | a quest available to take |
+| 21 | `0x04` | green **dot** | advance |
+| 22 | `0x05` | gold **`?`** | a quest already in progress |
+| 23 | `0x07` | a **bag** | turn in |
+
+**So the `!` and the `?` are one mechanism — the option kind — and the kind is bound 1:1 to the `0x003B` code (§8.2, 41 of 41).** The owner's description maps exactly: kind 18 while the quest is available, kind 22 once it is in progress. Every icon is a distinct, legible glyph, and the bag on the turn-in line is the reward the completion panel would pay.
+
+**A name this repo invented and carried for three weeks was wrong.** `0x007E`'s field 4 is `0xFFFFFFFF` in 41 of 41 and was called `OPTION_NO_ICON` on that and nothing else. The icons come from the **kind**; every field 4 in this run was `0xFFFFFFFF` while six different icons drew. Renamed `OPTION_FIELD4_ALWAYS`, which says only what is known. Two readings survive and neither is testable from the corpus: an icon *override* whose `0xFFFFFFFF` means "use the kind's own", or something unrelated to icons.
+
+**A gap this exposes in our own server, unbuilt:** `_quest_lines` returns `SERVICE_TURN_IN` the moment a quest is held, so we emit kind 23 and **never kind 22**. That is honest for `rurik_first_errand`, whose objective completes on acceptance, but it means a quest with real objectives would show a bag rather than a `?` while it was still in progress. The state to send is 22 until the objective completes and 23 after — and we have no objective state to make that turn on.
+
 **Still not settled: the compass marker.** This run was on **map 449**, not 148, so it says nothing about §7.3 — map 148 cannot load at all right now (see below), and the marker coordinates are 148's. The free rider went unclaimed and §7.3's test is still open.
 
 **Not settled, and it blocked this run first: map 148 is unloadable.** `contentids.py` refuses it, correctly — no client archive in the vault binds `0x1B97D` the way the server's `dat_study` copy does. Four run dirs hold it only under the bit-31 mid-replacement spelling; the 38833 copy binds it to a file 8 bytes larger, written by the terrain arc's allocation work. This is archive state, not a quest question, and it is why Q0 ran on 449.

@@ -2786,6 +2786,66 @@ def _quest_reward_steps():
 _MARKER_SWEEP = (5, 0, 1, 2, 6, 7, 8, 9)
 
 
+def _dialog_icons_steps(origin):
+    """One option of EVERY kind in one window, each labelled with its own kind.
+
+    The '?' is in the dialog, not over the NPC's head -- so the candidates are
+    0x007E's two unexplained fields. Field 4 is 0xFFFFFFFF in 41 of 41 and this
+    repo named it OPTION_FIELD4_ALWAYS on that evidence alone, which was a guess
+    dressed as a name. The KIND field is the other candidate and it is the
+    better one: kind 22 IS the in-progress code (0x05) and kind 18 IS the
+    available one (0x03), which is exactly the '!' / '?' distinction the owner
+    describes.
+
+    Every kind in ONE window so the icons are compared side by side in a single
+    frame -- six separate runs would compare six screenshots, and this arc has
+    already learned what that costs.
+
+    Kind 15 is omitted: its tag carries the 0x800000 bit CLEAR, so
+    encode_service_select cannot express it and a click would hit
+    decode_service_select's None branch.
+    """
+    ox, oy, plane = origin
+    row = questdefs.load()[1463]
+    framing = row.get("wire_framing", "template")
+    kinds = [(questdefs.SERVICE_ACCEPT, 16), (questdefs.SERVICE_DECLINE, 17),
+             (questdefs.SERVICE_SHOW, 18), (questdefs.SERVICE_ADVANCE, 21),
+             (questdefs.SERVICE_IN_PROGRESS, 22), (questdefs.SERVICE_TURN_IN, 23)]
+    steps = [
+        Step(2.0, 0x0056, npc_properties(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_PROPERTIES def {GIVER_DEFINITION}", "nothing yet."),
+        Step(1.0, 0x0057, npc_model(GIVER_DEFINITION, GIVER_NPC),
+             f"NPC_UPDATE_MODEL def {GIVER_DEFINITION}", "still nothing."),
+        Step(3.0, 0x0020,
+             create_agent(_GIVER_AGENT,
+                          CHAR_CLASS_MONSTER_BASE | GIVER_DEFINITION,
+                          AGENT_KIND_NPC, ox + 150, oy, plane),
+             f"WORLD_CREATE_AGENT({_GIVER_AGENT})", "a body."),
+        Step(3.0, 0x0080,
+             [questdefs.coded_literal("Every option kind, one per line.",
+                                      framing,
+                                      limit=questdefs.DIALOG_UNITS)],
+             "0x0080, the window's text", "nothing yet; it accumulates."),
+        Step(2.0, 0x0081, [_GIVER_AGENT],
+             f"0x0081 flush at agent {_GIVER_AGENT}",
+             "a window with text and no options yet."),
+    ]
+    for code, kind in kinds:
+        steps.append(Step(
+            1.0, 0x007E,
+            [kind, questdefs.coded_literal(f"kind {kind} code {code}", framing),
+             questdefs.encode_service_select(1463, code),
+             questdefs.OPTION_FIELD4_ALWAYS],
+            f"0x007E kind {kind} (code 0x{code:02X}), labelled with its own kind",
+            "one more line in the open window. THE MEASUREMENT IS THE ICON TO "
+            "THE LEFT OF EACH LABEL. If kind 18 draws a '!' and kind 22 a '?', "
+            "the owner's description is the kind field and this is the answer. "
+            "If every line has the same icon, or none, the '?' is not the kind "
+            "and field 4 -- 0xFFFFFFFF in 41 of 41, which this repo named "
+            "OPTION_FIELD4_ALWAYS on no other evidence -- is the next suspect."))
+    return steps
+
+
 def _quest_marker_sweep_steps(origin):
     """Walk property 11 across the values the corpus never showed us.
 
@@ -2960,7 +3020,7 @@ DIALOG_OPTION = 0x007E
 # constant exists because the quest_option probe below predates the table and is
 # kept as the record of that run.
 OPTION_KIND_QUEST = 18
-OPTION_NO_ICON = 0xFFFFFFFF
+OPTION_FIELD4_ALWAYS = 0xFFFFFFFF
 
 
 def _quest_turnin_steps(origin):
@@ -3033,7 +3093,7 @@ def _quest_option_steps(origin):
              [OPTION_KIND_QUEST,
               questdefs.coded_literal("Accept: A First Errand",
                                       "template", limit=128),
-              tag, OPTION_NO_ICON],
+              tag, OPTION_FIELD4_ALWAYS],
              f"0x007E DIALOG OPTION -- our label, tag 0x{tag:06X} "
              f"(quest 1463, code 0x{questdefs.SERVICE_ACCEPT:02X} ACCEPT)",
              "THE WHOLE LOOP: a CLICKABLE LINE appended to the open window. "
@@ -3062,6 +3122,27 @@ def _quest_offer_steps():
 
 
 PROBES = {
+    "dialog_icons": lambda a, o: Probe(
+        question="The '?' is in the DIALOG, not over the NPC. Does it come from "
+                 "0x007E's option KIND?",
+        predicts="KIND 18 DRAWS A '!' AND KIND 22 DRAWS A '?'. Kind is bound to "
+                 "the 0x003B code 1:1, and the two codes are exactly the states "
+                 "the owner describes -- 18 goes with 0x03 (a quest available "
+                 "to take) and 22 with 0x05 (one already in progress). Three "
+                 "runs looked for this over the NPC's head, where property 11 "
+                 "turned out to draw eight glyphs and no '?' at all; the dialog "
+                 "is where it was all along. If every line shows the same icon "
+                 "or none, the kind is not it, and the suspect becomes field 4 "
+                 "-- 0xFFFFFFFF in 41 of 41, which this repo named "
+                 "OPTION_FIELD4_ALWAYS on that and nothing else.",
+        steps=_dialog_icons_steps(o),
+        note="RUN ON --map 449 with --shots 1. Every kind lands in ONE window, "
+             "each line labelled with its own kind number, so the icons are "
+             "compared in a single frame rather than across six screenshots. "
+             "No clicks: the whole measurement is the left edge of the option "
+             "lines. Kind 15 is omitted -- its tag has the 0x800000 bit clear "
+             "and our encoder cannot express it.",
+    ),
     "quest_marker_sweep": lambda a, o: Probe(
         question="Where does the '?' over a quest NPC's head actually come "
                  "from? Is it a property-11 value the corpus never showed us?",
