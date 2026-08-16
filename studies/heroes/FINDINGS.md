@@ -1243,6 +1243,56 @@ supplies the identity is undetermined. The same trick splits them — give `0x00
 hero id from `0x0074`'s — with the caveat that `0x0072` is the activation and may simply
 assert rather than render, which would itself be an answer.
 
+## 20. Splitting `0x0074` and `0x0072` — they are two halves of one keyed record
+
+The last confound. Three outcomes were named before the run: the name follows `0x0074`
+(Goren), the name follows `0x0072` (Tahlkora), or `0x0072` asserts `charHeroData` because its
+field 1 *selects* the record `0x0074` made.
+
+```
+0x0074  MERCENARY_INFO (hero 2)      <- creates a record for 2
+0x01C2  PARTY_HERO_ADD (..., 2, 0)
+0x0072  HERO_ACTIVATE  (hero 3, ...) <- activates 3, for which no record exists
+```
+
+**Outcome C.** `Assertion: charHeroData  P:\Code\Gw\Char\Cli\ChCliHero.cpp(199)` — the
+**identical** assert §11.3 got by omitting `0x0074` entirely.
+
+### 20.1 The result, and why it is better than an A/B answer
+
+**`0x0074`'s field 1 is the record KEY; `0x0072`'s field 1 is a SELECTOR into the same
+namespace, and the two must agree.** A mismatched selector is indistinguishable — same
+assert, same line — from the record never having been created at all.
+
+So the question "which message supplies the hero's identity" was subtly malformed, and the
+run says so rather than picking a side. Neither supplies it independently: **`0x0074` creates
+a keyed record that carries the identity, and `0x0072` activates the record under that key.**
+The name the roster renders is the *record's*, reached through a key both messages must name
+identically. That is a cleaner mechanism than either branch of the A/B would have described.
+
+It also **re-confirms §11.3 from a new direction**: that section established `0x0074` creates
+the `charHeroData` record by removing it. This reproduces the same assert by *keeping* the
+message and mismatching its key — a different manipulation reaching the same gate, which is
+the kind of agreement worth more than a repeat of the same arm.
+
+### 20.2 The hero family, as a whole, now reads
+
+| message | field 1 | role |
+|---|---|---|
+| `0x0074` MERCENARY_INFO | hero id | **creates** the `charHeroData` record (the identity lives here) |
+| `0x01C2` PARTY_HERO_ADD | owner-ish word (UNVERIFIED) | roster slot → agent id at `msg+0xc`; **carries no identity** (§19) |
+| `0x0072` HERO_ACTIVATE | hero id | **selects** that record and activates it; also `agentId`, `inventoryId`, `aiMode` |
+
+Three arcs of confound-splitting, each one field at a time, and the shape that emerges is:
+**identity is the data-cache record's, the party message only binds a slot to an agent.**
+
+### 20.3 Still open
+
+`0x01C2`'s `msg+8` (owner-player vs owner-agent — both 1 in this rig), its `msg+0x14`,
+`0x0074`'s other 17 fields, `msg+0x10`'s real role (§19.2 — inert on everything observable),
+the commander-panel click (§17.4 — probably a client-side UI event, not a message), the
+untested `aiMode`, and follow AI.
+
 ## 9. Defects and corrections this arc produced
 
 - **`msgshape.py` prints `string16(0)` for every wide-string field.** `Field.__repr__` shows

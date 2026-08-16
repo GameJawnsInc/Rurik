@@ -2269,6 +2269,11 @@ HERO_INVENTORY = 0
 # 0x0072's hero id, which is the only way to tell which message supplies the
 # hero's identity. studies/heroes/FINDINGS.md 19.
 HERO_ROSTER_ID = None
+# 0x0072's hero id, overridable so ACTIVATE can name a different hero from the
+# one 0x0074 created a record for. Three outcomes, all informative: the name
+# follows 0x0074, or it follows 0x0072, or 0x0072 asserts charHeroData because
+# its field 1 selects the record 0x0074 made. studies/heroes/FINDINGS.md 20.
+HERO_ACTIVATE_ID = None
 # HeroActivate's field 4 -- the Fight/Guard/Avoid stance, CHAR_AI_MODES == 3.
 HERO_AI_MODE = 0
 # Send 0x0074 first to populate the data cache -- the route's whole ordering
@@ -6900,8 +6905,10 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                         # and an EARLY assert (before this line) would itself
                         # name the commander-binding trigger.
                         if HERO is not None and HERO_ACTIVATE:
-                            send(*agents.hero_activate(HERO, HERO_AGENT_ID,
-                                                 HERO_INVENTORY, HERO_AI_MODE))
+                            send(*agents.hero_activate(
+                                HERO if HERO_ACTIVATE_ID is None
+                                else HERO_ACTIVATE_ID,
+                                HERO_AGENT_ID, HERO_INVENTORY, HERO_AI_MODE))
                         if PROBE_NAME:
                             run_probe(PROBE_NAME, send, conn_id, stop,
                                       origin=(pos[0], pos[1], cfg[2]))
@@ -7513,6 +7520,10 @@ def main():
                          "labelled from the BODY's agent instead of resolving "
                          "the hero's own name from s_heroClientData. The "
                          "control arm for section 14.")
+    ap.add_argument("--hero-activate-id", type=int, default=None, metavar="N",
+                    help="Override 0x0072's hero id only, leaving 0x0074 on "
+                         "--hero's value. Splits the last confound: which of "
+                         "the two data-cache messages supplies the identity.")
     ap.add_argument("--hero-roster-id", type=int, default=None, metavar="N",
                     help="Override 0x01C2's msg+0x10 only, leaving 0x0074 and "
                          "0x0072 on --hero's value. Three fields normally "
@@ -7755,6 +7766,8 @@ def main():
         HERO_INVENTORY = a.hero_inventory
         global HERO_ROSTER_ID
         HERO_ROSTER_ID = a.hero_roster_id
+        global HERO_ACTIVATE_ID
+        HERO_ACTIVATE_ID = a.hero_activate_id
         HERO_AI_MODE = a.hero_ai_mode
         HERO_INFO = not a.no_hero_info
         global HERO_ATTRIBS
