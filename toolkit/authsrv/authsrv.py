@@ -2251,13 +2251,14 @@ HERO_DEFINITION = 10
 HERO_BODY = False
 # Swap 0x01C2's two u16s. This flag used to BE the experiment -- one word is
 # an agent id and one is something else, and the client's own code does not
-# say which is which. Where it stands after two rounds the same day
+# say which is which. Where it stands after three rounds the same day
 # (2026-08-16): msg+0xc is the AGENT ID -- solid, H1/H2's one real settlement
-# (studies/heroes/FINDINGS.md 11.1 as narrowed by 17.3) -- and msg+8 is
-# UNVERIFIED, owner-leaning (the commander scan filters it against a "my id"
-# accessor, but player number, hero index and owner agent id were ALL 1 in
-# every rig that rendered). The default sends PLAYER_NUMBER there; this flag
-# exchanges the words, i.e. re-sends H1, the order that rendered nothing.
+# (studies/heroes/FINDINGS.md 11.1 as narrowed by 17.3) -- and msg+8 is NOT
+# the hero index, by experiment (18: it carried 1 while the hero was 2 and
+# the row rendered Goren). What it IS stays UNVERIFIED but owner-shaped; the
+# remaining tie is owner player number vs owner agent id, both 1 in every
+# rig so far. The default sends PLAYER_NUMBER there; this flag exchanges the
+# words, i.e. re-sends H1, the order that rendered nothing.
 HERO_SWAP = False
 # 0x0072 is HERO ACTIVATE, not a diagnostic -- that was its working name for
 # one day. Its four fields are exactly the client's own format string,
@@ -6506,16 +6507,17 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             # What 0x01C2's identity words mean, per
                             # GmHeroCommander's own party scan
                             # (studies/heroes/FINDINGS.md 17, superseding
-                            # 11.1's overstatement):
-                            #   msg+8    -> entry+0x4 : filtered against
-                            #               ctx[0x44][0x2ac], a "my id"
-                            #               accessor -- OWNER-leaning but
-                            #               UNVERIFIED (only ever accepted 1,
-                            #               and player number, hero index and
-                            #               owner agent id are ALL 1 in every
-                            #               rig that rendered -- 17.3's
-                            #               confound). We send PLAYER_NUMBER
-                            #               as the better-founded value.
+                            # 11.1's overstatement) and the hero-2 rig (18):
+                            #   msg+8    -> entry+0x4 : NOT the hero index --
+                            #               it carried 1 while the hero was 2
+                            #               and the row rendered Goren (18).
+                            #               Filtered against ctx[0x44][0x2ac],
+                            #               a "my id" accessor, so OWNER-shaped
+                            #               but still UNVERIFIED between owner
+                            #               player number and owner agent id
+                            #               (both 1 in every rig so far). We
+                            #               send PLAYER_NUMBER as the
+                            #               better-founded value.
                             #   msg+0xc  -> entry+0x0 : the AGENT ID -- solid,
                             #               the one word H1/H2 actually settled
                             #               (200 rendered only here).
@@ -7492,10 +7494,10 @@ def main():
     ap.add_argument("--hero-swap", action="store_true",
                     help="Exchange 0x01C2's two identity words, i.e. send "
                          "the H1 order (agent id at msg+8), which rendered "
-                         "nothing. msg+0xc = agent id is solid; msg+8 is "
-                         "UNVERIFIED, owner-leaning, and the default sends "
-                         "the player number there. heroes FINDINGS 11.1 as "
-                         "narrowed by 17.3. This flag is the control arm.")
+                         "nothing. msg+0xc = agent id is solid; msg+8 is NOT "
+                         "the hero index (heroes FINDINGS 18, the Goren rig) "
+                         "and the default sends the player number there. "
+                         "This flag is the control arm.")
     ap.add_argument("--hero-activate", "--hero-diagnostic", action="store_true",
                     dest="hero_activate",
                     help="Send 0x0072 HeroActivate last. Its four fields are "
@@ -7792,9 +7794,10 @@ def main():
               f"0x0074 first={HERO_INFO}; "
               f"body={'agent %d' % HERO_AGENT_ID if HERO_BODY else 'NONE'}; "
               f"0x0072 activate={HERO_ACTIVATE}. "
-              f"msg+0xc = agent id is MEASURED; msg+8 is UNVERIFIED, "
-              f"owner-leaning; msg+0x10 is the commander-scan key, hero id "
-              f"there is RECONSTRUCTION (heroes FINDINGS 11.1, 17).")
+              f"msg+0xc = agent id is MEASURED; msg+8 is NOT the hero index "
+              f"(the Goren rig) and owner-shaped; msg+0x10 is the "
+              f"commander-scan key, hero id there is RECONSTRUCTION "
+              f"(heroes FINDINGS 11.1, 17, 18).")
 
     if a.henchman is not None:
         global HENCHMAN

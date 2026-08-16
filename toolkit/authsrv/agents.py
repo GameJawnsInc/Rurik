@@ -523,14 +523,16 @@ def party_hero_add(party_id, word_a, agent_id, hero_key=0, unk_b=0):
     * `agent_id` is msg+0xc (stored to entry+0x0). MEASURED, the one thing
       H1/H2 truly settled: the body lived at agent 200, outside every other
       candidate range, and the row rendered only with 200 here (11.1).
-    * `word_a` is msg+8 (stored to entry+0x4). UNVERIFIED, owner-leaning --
-      it was 'hero index' for a few hours on 11.1's overstatement, but it
-      was only ever shown to accept 1 and reject 200, and player number,
-      hero index and owner agent id are ALL 1 in every rig that rendered.
+    * `word_a` is msg+8 (stored to entry+0x4). NOT the hero index -- by
+      experiment (18): it carried 1 while the hero was 2 and the row still
+      rendered as Goren. It was 'hero index' for a few hours on 11.1's
+      overstatement. What it IS stays UNVERIFIED but owner-shaped:
       GmHeroCommander's scan filters this field against ctx[0x44][0x2ac],
-      a "my id" accessor with 45 call sites, which suggests OWNER (17.3).
-      Separating the three needs a rig where they differ. The positional
-      name is back on purpose: naming it would bake the confound in.
+      a "my id" accessor with 45 call sites (17.3), and owner-player-number
+      vs owner-agent-id are still indistinguishable because both are 1 in
+      every rig so far -- separating THOSE needs a player number differing
+      from the player's agent id. The positional name is back on purpose:
+      naming it would bake the remaining confound in.
     * `hero_key` is msg+0x10 (stored to entry+0x8). What the commander
       scan reads as its container key is SOURCED (17.1); that the HERO ID
       belongs in it is RECONSTRUCTION -- sending it did NOT fix the
