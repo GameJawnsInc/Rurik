@@ -2452,6 +2452,33 @@ Every one of these, in the order they were written:
   goes red on a rebuild rather than letting the tool read a stale address, and
   SKIPs with its reason when the vault is absent; §4 pins that a NULL context
   is reported rather than dereferenced. Floor 7, instant),
+  `toolkit/clientscan/test_commandertrap.py` (the hardware-breakpoint trap, and
+  the section that matters CAUGHT A DEAD TOOL BEFORE IT PUBLISHED A FINDING.
+  `commandertrap.py` answers "does instruction X ever execute", and the
+  interesting answer is NO — the worst possible shape for a silent break,
+  because a trap that arms nothing produces exactly the same output as the
+  result. So §3 spawns a real 32-bit `cmd.exe` under the debugger, arms an
+  execute breakpoint on the entry point the OS itself supplies, and REQUIRES
+  the hit. First run: no hit. The debug registers were armed correctly (read
+  back: `Dr0` = the entry point, `Dr7` = 1) and the processor did trap — but a
+  64-bit debugger receives a WOW64 target's exceptions as
+  `STATUS_WX86_SINGLE_STEP` (`0x4000001E`) and `STATUS_WX86_BREAKPOINT`
+  (`0x4000001F`), not `0x80000004`/`0x80000003`, so every hit was being handed
+  back to the target as somebody else's exception. Without this section that
+  would have run against the client and reported the arc's headline — "the
+  commander event is never raised" — as a measurement. §1 pins the DR7
+  encoding, including that bits 16+ are ZERO: a nonzero R/W field is a *data*
+  breakpoint wearing the same address, which does not error and never fires on
+  execution. §2 checks all seven site addresses against the 38833 image ON
+  DISK, so a typo'd address is caught with no client at all. §4 proves
+  `verify_sites` accepts bytes that match and REFUSES bytes that do not — the
+  cross-build guard, and this arc read a 38797 address in a 38833 binary once
+  already. §5 breaks the verdict's control gate both ways. §6 pins the capture
+  decoders, including the filter's PASSES/REJECTS string, which is the run's
+  headline, and that an unreadable entry decodes to `None` rather than to a row
+  of zeros that would read as a real measurement. §§2-4 need the vault and a
+  32-bit Windows and SKIP with their reason. Floor 14 = the mandatory core
+  (§1+§5+§6); a whole green run is 29, instant),
   `toolkit/clientscan/test_msgshape.py` (the client's message-format tables,
   DERIVED from the image instead of remembered — `studies/crossbuild/PLAN.md` §3,
   and the reason that plan put this file first. `msgshape` underpins
