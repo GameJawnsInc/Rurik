@@ -2497,6 +2497,50 @@ eight sites belong to UI that our session never constructs. That is now a bounde
 static question: name the eight, and the two that DO run tell us what must exist before a
 hero-add can bind a commander. No further client runs are needed to enumerate them.
 
+### 36.5 The eight subscribers, NAMED
+
+Each site attributed by the asserts in its enclosing function (`asserts.py --at <va> --span`):
+
+| site | module | what it is |
+|---|---|---|
+| `0x00539380` | **GmPosseRoster** | the party roster window -- the hero row's own UI |
+| `0x008BB6B0` | **Compass** | the compass, which draws the hero flag widget |
+| `0x005749BB` | **PtPlayer** / PtSearchParty | party player rows (`PtPlayer:332` is 23.2's 7-hero cap) |
+| `0x004ED055` | **GmView** | the main game view |
+| `0x00562D94` | **PtSearch** | party search |
+| `0x00567AB8` | CtlInstance / **PtSearchDescription** | party search description |
+| `0x0056ABC9` | **PtInvite** / CtlInstance | party invite |
+| `0x0056DEB6` | CtlInstance / **PtButtons** | party window buttons |
+
+**The split is exactly the one this arc already knows.** The two UIs our session demonstrably
+builds are the roster (23: the hero row renders) and the compass (10.2: the flag widget
+appears, unpredicted at the time) -- and both subscribe here. The six that do not run are
+**party search, invite, description, buttons** -- the outpost party-formation UI, which is the
+same surface 32 recorded as blocked behind RESKIN 18.1's explorable gate. So the commander
+event is registered by the party-formation UI as a family, and an explorable-map session
+constructs only the two members that draw the party once it exists.
+
+**RECONSTRUCTION, and flagged because the census cannot confirm it -- see 36.6.**
+
+### 36.6 A capture defect: `caller(retaddr)` names the WRAPPER, not the subscriber
+
+The census captured `caller(retaddr)` at `0x0064CDA4` from `[ebp+4]`, intending "who
+subscribed". Every row came back with the SAME value, `0x00843C07`, which un-slides
+(-0x210000) to **`0x00633C07` -- inside the subscribe wrapper `0x00633BD0` itself**. The
+trapped function is the wrapper's callee, so `[ebp+4]` is the wrapper's return address and is
+constant by construction. It identifies nothing.
+
+**The enumeration in 36.4/36.5 does not depend on it** -- that came from scanning `.text` for
+the immediate `push 0x1000011E` and decoding the following `call`, which is independent of the
+census. What is NOT established is **which two of the eight ran in our session**: that needs
+one frame further up (`[[ebp]+4]`), and 36.5's roster+compass attribution is RECONSTRUCTION
+from which UI our session visibly builds, not a measurement.
+
+Third address-arithmetic slip in this arc, all the same shape: 24 read a 38797 address in a
+38833 image, 36.1 anchored on relocated bytes, and this un-slid a pointer whose frame was the
+wrong one. The lesson is narrower than "be careful with addresses" -- it is that a captured
+pointer needs its FRAME justified, not just its base.
+
 **Next, and it is one clean run:** the same site, on a client this run started, with the
 wait-for-exit guard restored. Then resolve the caller addresses statically -- `codescan
 --xrefs` on each -- to name the UI construction that registers `0x1000011E`.
