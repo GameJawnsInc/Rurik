@@ -921,6 +921,29 @@ their mtimes move during runs) is the prime suspect, with the character-data
 session's 19:57–20:20 experimental runs muddying the exact onset. That work is
 another session's and may be mid-debug — the probes run the moment any session
 survives past ~30 s.
+
+> **SUPERSEDED the same night, and the matrix is worth keeping.** Fourteen launches
+> completed the elimination: **the vault is exonerated too.** Survivor code
+> (`6d7eeeb`) + survivor flags (`--hero`) + current vault dies; a **pristine-snapshot
+> restore of the 38833 run archive** (suspect set aside as
+> `Gw.dat.dead-sessions-20260816`) dies; map 449 dies; no-enemy dies; `--hero` on
+> current code dies. Also exonerated en route: the relink (its backup and journal are
+> intact and the restored-pristine test failed identically), the client's
+> "Failed to store credentials" line (present in survivors too), `vault/state`
+> (session tokens only), and the auth-side goodbye (the survivor's clean hold-expiry
+> teardown shows the IDENTICAL `0x8009` → Offline sequence — it is normal client
+> shutdown, not a cause). **What the wire actually shows:** the survivor's client ran
+> its 5-second ping cycle for 100 s; every death client sends ONE ping reply then
+> shuts itself down at **3.5 ± 0.4 s after the game channel opens** — a deterministic,
+> client-internal timer, present in every run since 17:53 and in none before, across
+> two client builds, two archives (one pristine), three server trees, and every flag
+> combination. Two hypotheses survive: (a) something environmental OUTSIDE the vault
+> and repo (cage/firewall state, OS-level) changed ~18:00–19:57; (b) cross-session
+> interference — the owner confirms other sessions are running concurrently, and
+> parallel harness activity (`--replace` port claims, cage re-arms cutting established
+> flows) could kill a client's connections mid-session, though the death's tight
+> timing argues for a timer, not async interference. The next discriminating step
+> needs the owner: one run with all other sessions' harness activity paused.
 The `0x0042` condition render via `probes.py:1962` with skills 478/480/482; the lone
 property-17 render (now a presentation question only — B6 settled the ledger half:
 17 replaces 16); the coded-string round-trip + role-binding probe (B8: send a known
