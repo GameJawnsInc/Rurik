@@ -76,7 +76,7 @@ What a unit has when nothing overrides it. "OURS/placeholder" below means RECONS
 | health semantics (prop 42) | `health += (new_max − old_max)` — a delta grant, **not** set-and-refill | `agents.py:118-132`; [../profession/RESKIN.md](../profession/RESKIN.md):1489-1533 | OBSERVED (harness 20260813T215004). **Supersedes** [../enemy/PLAN.md](../enemy/PLAN.md):577-583 and [../agentprops/FINDINGS.md](../agentprops/FINDINGS.md):175-178 — see §7, resolution 1 |
 | attack speed | NPC 1.33 (axe), player 1.75 (hammer) | `authsrv.py:2353,711` | RECONSTRUCTION — "has to be non-zero rather than right"; the non-zero requirement is OBSERVED (client asserts `m_attackInterval`); 1.75 is UPSTREAM (wiki, formula CORROBORATED) |
 | level | **never sent per-agent at spawn** (0x009F prop 36 unsent for everyone); player gets per-player level 1 via 0x00E9 field 9 only | `authsrv.py:6603-6606`; no prop-36 send site in the spawn paths | OBSERVED; consequences in §2b |
-| effects / initial status | `0`, so no `0x00F0` at all | `authsrv.py:4283,4333,3919-3921` | OBSERVED code; a measured divergence from retail's 472/472 — §6d |
+| effects / initial status | `0x00F0` payload 0 (row `effects` if set), unconditional preamble since 2026-08-17 | `authsrv.py` create paths; was gated until §6d's closure | OBSERVED — retail's 472/472 idiom, now ours |
 | profession | NPC: only if the content row carries one; player: Warrior | `authsrv.py:3940-3943,876` | OBSERVED code |
 | equipment | player: one weapon (item id 1) if `EQUIP_WEAPON`; NPC: none, ever | `authsrv.py:6660-6702` | OBSERVED code |
 | attacks_back | **False** for population rows; True only for the legacy test enemy | `authsrv.py:4285` vs `:2334` | OBSERVED code — most spawned units are inert by default (§4) |
@@ -178,6 +178,15 @@ An unrecognised allegiance FourCC renders hostile, by fall-through rather than b
 ### 6d. The 0x00F0 gap — our largest known omission at create time
 
 Retail: `0x00F0` before **every** kind-5 and kind-9 create, exceptionless, majority payload 0x0000 ([../smsg/FINDINGS.md](../smsg/FINDINGS.md):224,1162-1183, OBSERVED). Us: the only send site is gated `if entry.get("effects"):` (`authsrv.py:3919-3921`), and every default spawn sets `effects = 0` (`:4283,4333`) — so NPCs get it only mid-burrow, and the player burst contains **no** 0x00F0 send at all (whole-file check: one declaration at `:1228`, one send site). Tracked as divergence D2 ([../divergence/FINDINGS.md](../divergence/FINDINGS.md):167-186,731), but D2's "≈0.93 per-agent ratio" framing predates the exceptionless per-kind correction, and neither D2 nor `PLAN.md`'s burrow note calls out the player-side 0/N violation — the sharper picture exists only across two documents and is connected here (OBSERVED in each part; the connection is this synthesis').
+
+> **CLOSED 2026-08-17, the day after it was written.** Q2's census supplied the payload
+> model the fix was waiting on, and the gamesrv now sends `0x00F0` unconditionally as
+> the create's immediate preamble on both paths — `create_agent_world` (payload from the
+> row's `effects`, else 0; heroes and henchmen inherit through the funnel) and the
+> player burst (payload 0, the 342/366 kind-5 majority). `test_burrow` pins the new
+> `56 57 F0 20` head; caged validation harness `20260817T152952`. The non-zero payload
+> tail (kind 5's combat values, kind 9's `0x1000` ambient flag) remains future work,
+> recorded at D2's closure note. The table row in §2a describes the pre-fix server.
 
 ---
 

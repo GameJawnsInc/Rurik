@@ -4077,9 +4077,19 @@ def create_agent_world(send, state, agent_id, entry, why,
     # a burst by filling its unknown fields with guesses would make every later
     # observation un-attributable -- which is the whole lesson of the first agent_removal
     # probe, whose bare 0x0020 produced a negative that meant nothing.
-    if entry.get("effects"):
-        send(GAME_SMSG_AGENT_INITIAL_STATUS, [agent_id, int(entry["effects"])],
-             f"AGENT_INITIAL_EFFECTS({agent_id}, 0x{int(entry['effects']):04X})")
+    # UNCONDITIONAL since 2026-08-17, and that closed divergence D2's larger
+    # half. Retail sends 0x00F0 immediately before EVERY kind-5 and kind-9
+    # create -- 472/472 in the smsg corpus, and the createburst census
+    # (unitsetup Q2, 951 paired sends over all three keyed captures) put the
+    # payload split on the record: kind 9 is 0x0000 x357 / 0x1000 x202, so
+    # zero is the retail-majority birth state and `effects` still carries
+    # burrow's non-zero when a row declares one. This send was gated on
+    # `if entry.get("effects")` until the census -- "the single most frequent
+    # thing we never send", 139 per retail session, 0 from us.
+    send(GAME_SMSG_AGENT_INITIAL_STATUS,
+         [agent_id, int(entry.get("effects") or 0)],
+         f"AGENT_INITIAL_EFFECTS({agent_id}, "
+         f"0x{int(entry.get('effects') or 0):04X})")
 
     send(GAME_SMSG_WORLD_CREATE_AGENT,
          agents.create_agent(agent_id,
@@ -6850,6 +6860,18 @@ def handle(sock, addr, keys, vault, conn_id, stop, store, allow_any):
                             send(GAME_SMSG_PLAYER_FLAGS,
                                  agents.player_flags(PLAYER_NUMBER, PLAYER_FLAGS),
                                  f"PLAYER_FLAGS(value {PLAYER_FLAGS}, mask 7)")
+                        # The create's preamble, retail's exceptionless idiom:
+                        # 0x00F0 immediately precedes every kind-5 create,
+                        # 130/130 in the smsg corpus, and the player burst sent
+                        # NOTHING here until 2026-08-17 (divergence D2's
+                        # player-side 0/N, connected in unitsetup 6d). Payload
+                        # 0 is the measured kind-5 majority -- 342/366 in the
+                        # createburst census; the 24 non-zero (0x2000 and the
+                        # high-word combat values) are a payload MODEL nobody
+                        # has yet, not a default.
+                        send(GAME_SMSG_AGENT_INITIAL_STATUS,
+                             [PLAYER_AGENT_ID, 0],
+                             "AGENT_INITIAL_EFFECTS(player, 0x0000)")
                         # Field names carrying hex offsets (h000B, h001E, h0023,
                         # h0027, h003B, h004B, h0059) let the 23 schema fields be
                         # aligned to the struct by offset rather than by counting:
