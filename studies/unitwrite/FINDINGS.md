@@ -2,8 +2,8 @@
 
 **2026-08-16.** Deliverables: `toolkit/mapdata/skelwrite.py` (the FA1 and
 container writer, the modification seam, the vault-only write path) and
-`toolkit/mapdata/test_skelwrite.py` (66 checks, floor 66; TESTS.md entry in
-the same commit). Labels are the project vocabulary
+`toolkit/mapdata/test_skelwrite.py` (69 checks, floor 69 after the
+adversarial review's fixes -- §6.1; TESTS.md entry in the same commit). Labels are the project vocabulary
 ([../character/FINDINGS.md](../character/FINDINGS.md)). Artifacts:
 `vault/research/unitwrite/2026-08-16-u6/`. The reader this inverts is
 `skelfile.py` (U1/U2); the archive discipline is `datwrite.py`/`datmove.py`
@@ -19,12 +19,21 @@ the same commit). Labels are the project vocabulary
   **byte-identical to the source for the complete corpus**:
   **14,571/14,571 FA1 chunks and 21,420/21,420 whole containers, zero
   failures** (MEASURED 2026-08-16, 775 s; `fullpop_census.json`, and the
-  committed test reproduces the same numbers under `--all` — 68 checks
-  green, 848 s — while its default stride pins 241/241 + 160/160). On the anchors
-  the representation carries ~1% of the payload as bytes (worm 823 of
-  82,169; shell 559 of 29,495; corpus-wide 0.49%, maximum 83.0% on the
-  tiny row 98848) — pinned in the test, because a writer that drifted back
-  toward carrying typed regions as bytes is the memcpy-loader defect (§3).
+  committed test reproduces the same numbers under `--all` — 71 checks
+  green post-review, REVIEWALLTIME — while its default stride pins
+  241/241 + 160/160). The carried-bytes truth, by the review's RECURSIVE
+  LEAF WALK (§6.1 RISK-1/2): worm 883 of 82,169 (1.07%); shell 1,179 of
+  29,495 (4.00% — the shell is the n40-heavy anchor, and 620 of its
+  carried bytes are its 62 sound-event raw tails); corpus-wide 1,951,827
+  of 371,998,300 = 0.52% (the declared regions alone are 1,827,597 =
+  0.49%; the gap is exactly the 12,423 raw tails) — pinned in the test,
+  because a writer that drifted back toward carrying typed regions as
+  bytes is the memcpy-loader defect (§3). And stated so the container
+  number is not over-read: 6,849 of the 21,420 containers carry no FA1
+  at all, so their identity tests the framing re-derivation plus
+  verbatim chunk copy only; on the FA1 carriers the through-the-typed-
+  writer share varies — the worm's container is 63.5% FA1+framing /
+  36.5% verbatim other chunks, the shell's 99.0% / 0.9%.
 - **One field was caught by the attempt, before identity ever ran**: header
   bytes **+0x09..+0x0B are not padding**. The parser never reads them
   (unitmodels §3.3) and the natural writer design — pack the named fields,
@@ -80,19 +89,23 @@ Notes the run forced:
   extending anim P5 (0 non-finite in 16.2M channel values) to every f32
   the writer repacks (header f20/f28, sequence f32_13, record bases,
   every blk2C/blk48 channel value).
-- **`skelfile.sound_events()` crashes on files with no n40n44 span.** The
-  first strided writer run found it: on n40 == n44 == 0 files (most
-  prop-class FA1s — 116 of the 160 in the default sample) `_span("n40n44")`
-  returns None and the accessor unpacks it. U6's permission boundary is
-  "existing API behavior must not change", so the guard lives in
-  `skelwrite.extract()` and the latent edge is recorded here for
-  skelfile's next opening (§6).
+- **`skelfile.sound_events()` crashed on files with no n40n44 span.** The
+  first strided writer run found it: on n40 == n44 == 0 files (72.5% of
+  the corpus — 116 of the 160 in the default sample) `_span("n40n44")`
+  returned None and the accessor unpacked it. U6 first guarded it in
+  `skelwrite.extract()` (its permission boundary was "existing API
+  behavior must not change"); the review then granted scoped permission
+  and the accessor itself is FIXED — it returns [] and wraps raw_tail in
+  `bytes()` — with the regression pinned in `test_skelfile.py` section 2
+  (91 checks, floor 83) and the extract guard simplified to match (§6.1).
 - **pad09.** See §1. The census artifact keeps the value histogram:
   5,208 of 14,571 files non-zero, 39 distinct patterns, top values
   `06`, `02`, `04`, `03`, `41`, `01`, `07`, `40`, `43` (all at +0x09).
-- The opaque fraction over the whole corpus is **0.49%** of all FA1 bytes
-  (1,827,597 of 371,998,300); everything else is re-derived from typed
-  values.
+- The opaque fraction over the whole corpus is **0.52%** of all FA1 bytes
+  by the review's leaf walk (1,951,827 of 371,998,300; the census's
+  declared-regions figure is 1,827,597 = 0.49%, and the difference is
+  exactly the n40 bodies' 12,423 ten-byte raw tails); everything else is
+  re-derived from typed values.
 
 ## 3. Why this identity is not vacuous (the memcpy-loader lesson)
 
@@ -108,9 +121,14 @@ that door from three sides:
    and requires the output to equal `test_skelfile.synth_anim()`'s bytes —
    two derivations meeting byte-for-byte, and an input a
    spans-concatenating encoder cannot process at all.
-2. **The opaque carry is pinned.** Worm 823 B of 82,169, shell 559 of
-   29,495, measured and asserted. A regression that quietly carried blk2C
-   as bytes moves a number two files must agree on.
+2. **The opaque carry is pinned by a recursive leaf walk.** Worm 883 B of
+   82,169, shell 1,179 of 29,495, measured and asserted, with the
+   declared/undeclared split checked as exactly 10 x n40 beside it. (The
+   first pin summed the DECLARED regions only — the review struck it: a
+   writer stashing bytes under a NEW key would have moved it by zero, a
+   check that could not fail in the direction it advertised.) A
+   regression that quietly carried blk2C as bytes — under any key —
+   moves a number two files must agree on.
 3. **The modification seam uses the same `encode()`.** A memcpy writer
    would emit the unmodified original; the byte-diff check (§5.1) goes
    red.
@@ -205,6 +223,19 @@ different sequences may overlap — the worm runs 10 sequences over 3 keys
 sequence can move a key another sequence shares, and U7's operator should
 pick the target with that in view.)
 
+**ATOMIC since the review (BUG-1), and it matters because this is what
+U7 fires.** The first version wrote each key as it validated it, so a
+refusal part-way through a span left the repr half-retimed — and still
+serializing. The review found the reachable case: the shell's sequence
+16 spans two keys [66666, 116666], and scaling by 1/3 refused on the
+second with the first already rewritten 66666 → 22222. The fix computes
+and validates the WHOLE span before any of it commits, and the test now
+pins the property from both sides: a synthetic two-key span with a
+non-zero first key, and the shell case itself — each must refuse AND
+still encode to the SOURCE bytes afterwards (identity after refusal is
+the atomicity proof; the pre-review refusal fixtures were structurally
+blind, spanning either a leading zero time or a single key).
+
 Nothing was deployed: no run directory, no client, no archive outside
 `vault/exports/`. U7 is the owner's run.
 
@@ -223,10 +254,12 @@ Nothing was deployed: no run directory, no client, no archive outside
   holds, so if U7's load fails, the gate that fired is the result — the
   contract's kill/keep already frames this, and the stored-form question
   now sits beside the mid/tail suspects as the two named candidates.
-- **`skelfile.sound_events()`'s latent crash** on n40 == n44 == 0 files
-  (TypeError, not a named gate). Guarded in `skelwrite.extract()`; fixing
-  the accessor itself was outside U6's permission ("existing API behavior
-  must not change"). One-line guard + one check when skelfile next opens.
+- ~~`skelfile.sound_events()`'s latent crash~~ — RESOLVED under the
+  review's scoped permission (§6.1): the accessor returns [] on the
+  spanless majority, raw_tail is always `bytes`, and the regression is
+  pinned in `test_skelfile.py`. Kept visible because the first version of
+  this bullet recorded it as blocked on permission, and the record of a
+  boundary moving belongs next to the boundary.
 - **blk48 coverage at the default stride is 9 files** (deterministic;
   the full population runs under `--all`; the synthetic carries the shape
   regardless). n56 remains corpus-zero: the writer's n56 path, like the
@@ -240,6 +273,43 @@ Nothing was deployed: no run directory, no client, no archive outside
 - The rebuilt-archive fixture writes its journals beside the archive under
   `vault/exports/unitwrite/`; each test run rebuilds from the pinned study
   archive, so the artifacts there are throwaway by construction.
+
+## 6.1 The adversarial review (2026-08-16) — accepted, with fixes
+
+The review's hardest attack CONFIRMED the central claim: 51 mutation
+classes over 8 payloads with zero surviving mutants; `encode()`
+reproducing both anchors from a deepcopied representation with the
+source `Skeleton` deleted; and the full-population identity
+independently reproduced at 21,420/21,420 + 14,571/14,571. What it
+changed is recorded in place, and summarized:
+
+- **BUG-1 (the one that mattered — U7 fires this code):**
+  `scale_sequence_keytimes` was not atomic; a mid-span refusal left a
+  half-retimed repr that still serialized, reachable on the shell's
+  sequence 16. Fixed by validate-all-then-commit; pinned by
+  refusal-then-source-identity checks, synthetic and real (§5.1).
+- **BUG-2:** the module docstring called the n40 bodies typed; they are
+  8 typed bytes + a 10-byte raw tail, and the raw tails are a fourth
+  opaque place. Corrected, and the figures moved with it (below).
+- **RISK-1/2:** the opaque-carry pin summed declared regions only and
+  could not catch a stash under a new key; replaced by a recursive leaf
+  walk, and every published figure restated against the leaf truth —
+  worm 883 (1.07%), shell 1,179 (4.00%, not ~1%), corpus 0.52% (§1, §2,
+  §3). The declared/undeclared split stays visible everywhere.
+- **RISK-3:** the container-identity headline now states the no-FA1
+  population (6,849 of 21,420) and the per-anchor typed/verbatim split
+  (§1).
+- **NITs:** seam byte-diffs asserted as SET EQUALITY against the value
+  change, not subset; the resolve_outdir delegation proven by
+  monkeypatch instead of docstring prose; three entailed checks folded
+  or struck; the chain-corruption control upgraded to corrupt the
+  rebuilt archive's own MFT bytes.
+- **Scoped skelfile permission**, exercised exactly: the sound_events
+  crash fix + `bytes()` raw_tail, regression-pinned in test_skelfile
+  (90 → 91 checks, floor 82 → 83).
+
+Post-review counts: default 69 checks green (floor 69), `--all` 71
+green, vault-less 33 + declared skip, red by design.
 
 ## 7. Provenance
 

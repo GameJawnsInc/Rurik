@@ -22,10 +22,15 @@ proving nothing -- the memcpy-loader defect class (`studies/models/FINDINGS.md`
      A spans-concatenating encoder cannot run at all on an input that has no
      spans; two builders meeting byte-for-byte is the same two-derivations
      discipline `test_skelfile` uses for the walk.
-  2. **The opaque-byte pins** (section 1): on the anchors the representation's
-     total carried bytes are pinned at their measured values (worm 823 of
-     82,169; shell 559 of 29,495 -- about 1%). A rewrite that quietly carried
-     a typed region as bytes moves a number two files must agree on.
+  2. **The opaque-byte pins** (section 1): a RECURSIVE LEAF WALK counts
+     every bytes-like leaf anywhere in the representation, pinned at its
+     measured values -- worm 883 of 82,169 (1.07%), shell 1,179 of 29,495
+     (4.00%: the shell is the n40-heavy anchor, and 620 of its carried
+     bytes are its 62 sound-event raw tails). The declared/undeclared
+     split is asserted beside it (undeclared == 10 x n40, the raw tails
+     exactly). The review struck the first version, which summed the
+     DECLARED regions only and so could not catch a writer stashing bytes
+     under a new key -- the one direction the pin advertises.
   3. **The U7 seam** (sections 0b and 1): a modification made to TYPED VALUES
      must land in the output at the predicted bytes. An encoder that copied
      stored bytes would emit the unmodified original and the byte-diff check
@@ -73,14 +78,13 @@ still names the mid, the mid's the tail, and both partners are byte-identical
 -- with a corrupted-chain control proving the checker can report.
 
 DEGRADATION, measured like `test_unitexport.py` documents: a vault-less run
-executes sections 0/0b/0c only -- MEASURED 32 checks plus a declared skip,
+executes sections 0/0b/0c only -- MEASURED 33 checks plus a declared skip,
 RED on the floor by design (plumbing verified, nothing about ArenaNet's
-bytes). A full green run executes 66.
+bytes). A full green run executes 69 (71 under --all).
 """
 
 import argparse
 import contextlib
-import copy
 import io
 import os
 import struct
@@ -111,13 +115,18 @@ ANCHOR_SHELL = 116228
 ANCHOR_WORM = 116366
 ANCHOR_BODY = 116703
 
-#: MEASURED 2026-08-16 through skelwrite.extract on the study archive: the
-#: bytes the representation carries opaque (pad09 + n14/n34 + var-arrays +
-#: n44 tail). Pinned so a writer that regresses to carrying a typed region
-#: as bytes moves a number this file must agree on.
-WORM_OPAQUE = 823
+#: MEASURED 2026-08-16 on the study archive: every byte the representation
+#: carries as bytes, counted by a RECURSIVE LEAF WALK over the whole repr
+#: (the U6 review's correction -- the first pin summed the DECLARED regions
+#: only, so a regression stashing bytes under a NEW key would have moved it
+#: by zero: a check that could not fail in the direction it advertised).
+#: LEAF = pad09 + n14/n34 + var-arrays + n44 tail + the n40 bodies' 10-byte
+#: raw tails; DECLARED is the same minus the raw tails, kept so the split
+#: stays visible: worm 883 = 823 + 6x10, shell 1,179 = 559 + 62x10 -- the
+#: shell is the n40-heavy anchor and its true carry is 4.0%, not ~1%.
+WORM_LEAF, WORM_DECLARED = 883, 823
 WORM_FA1 = 82169
-SHELL_OPAQUE = 559
+SHELL_LEAF, SHELL_DECLARED = 1179, 559
 SHELL_FA1 = 29495
 
 #: MEASURED 2026-08-16: the parser-unread header bytes +0x09..+0x0B are NOT
@@ -137,6 +146,12 @@ CHAIN_FLAGS = (515, 1, 2817)
 #: deterministic inexactness refusal.
 SEAM_SEQ, SEAM_KEY, SEAM_OLD, SEAM_NEW = 2, 2, 200000, 400000
 INEXACT_SEQ, INEXACT_DEN = 4, 4
+
+#: The review's reachable half-retime (BUG-1), MEASURED: shell sequence 16
+#: spans keys[3:5) = [66666, 116666]; scaling by 1/3 divides the first key
+#: exactly and refuses the second -- the pre-fix writer left key 3 already
+#: rewritten 66666 -> 22222, a repr that still serialized.
+ATOMIC_SEQ, ATOMIC_SPAN = 16, [66666, 116666]
 
 # -- the mini-archive layout (this file's own literals; test_datmove's shape,
 #    loader-legal chain indices >= 16) ---------------------------------------
@@ -176,6 +191,26 @@ def swap_n14_n34(payload):
 def diff_offsets(a, b):
     """Every byte offset where two equal-length byte strings differ."""
     return [i for i in range(len(a)) if a[i] != b[i]]
+
+
+def leaf_bytes(o):
+    """Every bytes-like leaf anywhere in a typed repr, recursively.
+
+    The instrument behind the opaque-carry pin. Summing the DECLARED
+    regions (pad09 + the opaque dict) was the first version, and the U6
+    review struck it: a writer regressing to stash bytes under a NEW key
+    would move that sum by zero, so it could not fail in the direction it
+    advertised. This walks every dict value, list and tuple, so bytes are
+    counted wherever they hide -- including the n40 raw tails the declared
+    sum missed.
+    """
+    if isinstance(o, (bytes, bytearray, memoryview)):
+        return len(o)
+    if isinstance(o, dict):
+        return sum(leaf_bytes(v) for v in o.values())
+    if isinstance(o, (list, tuple)):
+        return sum(leaf_bytes(v) for v in o)
+    return 0
 
 
 def refuses(fn, *args, **kw):
@@ -307,12 +342,13 @@ def section0(check):
     r = walk(swapped)
     check(r["ok"], "the BLOCK-SWAPPED writer variant's output RE-PARSES "
                    "GREEN -- header intact, every gate passes, closure exact")
-    check(swapped != p, "...and fails byte-identity, which is therefore the "
-                        "criterion re-parse equivalence cannot replace")
     d = diff_offsets(p, swapped)
     check(d and all(0x58 <= i < 0x58 + 40 for i in d),
-          "...with the diff confined to the two swapped fixed-size blocks "
-          "(the exact zone closure cannot pin)",
+          "...and fails byte-identity -- the criterion re-parse "
+          "equivalence cannot replace -- with the diff confined to the "
+          "two swapped fixed-size blocks (a non-empty diff IS the "
+          "inequality; the separate != check the review struck was "
+          "entailed by this one)",
           f"{len(d)} bytes in [{hex(min(d))}, {hex(max(d))}]" if d else "")
 
 
@@ -328,10 +364,14 @@ def section0b(check):
           "scaling seq 0 x2 changes exactly key 1 (key 0 is time 0)")
     mod = encode(t)
     d = set(diff_offsets(anim, mod))
-    check(d and d <= set(range(keys_off + 4, keys_off + 8)),
-          "the modified output differs from the source ONLY inside the "
-          "predicted key-time bytes (key 1's int32 slot)",
-          f"diff at {sorted(hex(i) for i in d)}")
+    old_b, new_b = struct.pack("<i", 100000), struct.pack("<i", 200000)
+    expect = {keys_off + 4 + i for i in range(4) if old_b[i] != new_b[i]}
+    check(d == expect,
+          "the modified output differs from the source at EXACTLY the "
+          "bytes 100000 -> 200000 changes inside key 1's int32 slot "
+          "(equality, not subset -- the review's sharpening)",
+          f"diff {sorted(hex(i) for i in d)} expected "
+          f"{sorted(hex(i) for i in expect)}")
     sk2 = Skeleton.decode(mod)
     check(sk2.key_times_raw() == [0, 200000],
           "re-decoding the modified output yields the scaled times")
@@ -349,6 +389,22 @@ def section0b(check):
     check(refuses(scale_sequence_keytimes, extract(src), 0, 1.5),
           "a non-integer factor is refused -- key times are int32 "
           "measurements")
+
+    # ATOMICITY (review BUG-1). The refusal cases above are structurally
+    # blind to a half-retime: synth_anim's span starts at time 0 (scales
+    # to itself) and the worm's spans are single-key. This span is two
+    # keys with a NON-ZERO first, scaled by 1/3: the first divides
+    # exactly, the second refuses -- the pre-fix writer had already
+    # committed 3000 -> 1000 when it raised, and the repr still encoded.
+    p2 = synth(keys=((3000, 2), (5000, 6)), seqs=((0, 2),))
+    t2 = extract(Skeleton.decode(p2))
+    check(refuses(scale_sequence_keytimes, t2, 0, 1, 3),
+          "a two-key span refuses on its SECOND key (3000/3 exact, "
+          "5000/3 not)")
+    check(encode(t2) == p2,
+          "...and the refused repr still encodes to the SOURCE bytes -- "
+          "the whole span is validated before any of it is committed, "
+          "which is the property U7 fires this seam under")
 
 
 def section_outdir(check, tmp):
@@ -372,12 +428,18 @@ def section_outdir(check, tmp):
           "a scratch directory outside the tree is allowed (positive "
           "control -- a guard that refuses everything proves nothing)")
     import mapexport
-    check(skelwrite.resolve_outdir.__module__ == "skelwrite"
-          and "mapexport.resolve_outdir" in
-          (skelwrite.resolve_outdir.__doc__ or "")
-          and raises(mapexport.resolve_outdir, tree),
-          "the guard delegates to mapexport's single copy of the rule, "
-          "which refuses the same tree")
+    sentinel = os.path.join(tmp, "sentinel-answer")
+    real = mapexport.resolve_outdir
+    try:
+        mapexport.resolve_outdir = lambda outdir=None: sentinel
+        delegated = skelwrite.resolve_outdir("anything")
+    finally:
+        mapexport.resolve_outdir = real
+    check(delegated == sentinel and raises(mapexport.resolve_outdir, tree),
+          "the guard DELEGATES to mapexport's single copy of the rule -- "
+          "patching mapexport's changes skelwrite's answer (refutable, "
+          "where the docstring-prose check the review struck was not) -- "
+          "and that copy refuses the same tree")
     p = skelwrite.write_bytes(b"selftest", "selftest.bin", tmp)
     check(os.path.isfile(p) and open(p, "rb").read() == b"selftest",
           "write_bytes writes through the resolved directory")
@@ -396,20 +458,27 @@ def section1(check, ar, idt):
               f"{name}: container re-emits byte-identically "
               f"({len(data):,} B)")
 
-    for name, data, size, opq, pad in (
-            ("shell", shell, SHELL_FA1, SHELL_OPAQUE, SHELL_PAD09),
-            ("worm", worm, WORM_FA1, WORM_OPAQUE, WORM_PAD09)):
+    for name, data, size, leaf, declared, pad in (
+            ("shell", shell, SHELL_FA1, SHELL_LEAF, SHELL_DECLARED,
+             SHELL_PAD09),
+            ("worm", worm, WORM_FA1, WORM_LEAF, WORM_DECLARED, WORM_PAD09)):
         sk = Skeleton.from_container(data)
         t = extract(sk)
         check(encode(t) == sk.payload and len(sk.payload) == size,
               f"{name}: FA1 rebuilt from typed values is byte-identical "
               f"({size:,} B)")
-        carried = len(t["pad09"]) + sum(len(v) for v in t["opaque"].values())
-        check(carried == opq,
-              f"{name}: the repr carries exactly {opq} opaque bytes of "
-              f"{size:,} ({opq / size:.1%}) -- the pin that catches a "
-              f"writer regressing toward spans-concatenation",
-              f"got {carried}")
+        got_leaf = leaf_bytes(t)
+        got_decl = len(t["pad09"]) + sum(len(v)
+                                         for v in t["opaque"].values())
+        check(got_leaf == leaf and got_leaf - got_decl
+              == 10 * t["header"]["n40"],
+              f"{name}: the LEAF WALK finds exactly {leaf} carried bytes "
+              f"of {size:,} ({leaf / size:.1%}), and every undeclared "
+              f"byte is an n40 raw tail -- the pin that catches a writer "
+              f"regressing toward spans-concatenation, wherever it "
+              f"stashes the bytes",
+              f"leaf {got_leaf}, declared {got_decl}, "
+              f"n40 {t['header']['n40']}")
         check(t["pad09"] == pad,
               f"{name}: header bytes +0x09..+0x0B are {pad.hex()} -- "
               "NOT zero; the parser never reads them and the typed layer "
@@ -439,12 +508,14 @@ def section1(check, ar, idt):
           f"worm: scaling sequence {SEAM_SEQ} x2 changes exactly key "
           f"{SEAM_KEY} ({SEAM_OLD} -> {SEAM_NEW})")
     keys_off = dict((n, o) for n, o, s in sk.spans)["keys"]
-    predicted = set(range(keys_off + 4 * SEAM_KEY, keys_off + 4 * SEAM_KEY + 4))
+    old_b, new_b = struct.pack("<i", SEAM_OLD), struct.pack("<i", SEAM_NEW)
+    predicted = {keys_off + 4 * SEAM_KEY + i for i in range(4)
+                 if old_b[i] != new_b[i]}
     mod = encode(t)
     d = set(diff_offsets(sk.payload, mod))
-    check(d and d <= predicted,
-          "worm: the modified FA1 differs from the source only at the "
-          "predicted key-time bytes",
+    check(d == predicted,
+          "worm: the modified FA1 differs from the source at EXACTLY the "
+          "bytes the value change predicts (equality, not subset)",
           f"diff {sorted(hex(i) for i in d)} predicted "
           f"{sorted(hex(i) for i in predicted)}")
     check(Skeleton.decode(mod).key_times_raw()[SEAM_KEY] == SEAM_NEW,
@@ -461,6 +532,21 @@ def section1(check, ar, idt):
                   INEXACT_DEN),
           f"worm: sequence {INEXACT_SEQ}'s 86666 / {INEXACT_DEN} is "
           "inexact and refused -- the seam never rounds a measurement")
+
+    # ATOMICITY on real bytes -- the review's reachable case (BUG-1)
+    ssk = Skeleton.from_container(shell)
+    st = extract(ssk)
+    s16 = st["sequences"][ATOMIC_SEQ]
+    span = st["key_times"][s16["lo"]:s16["hi"]]
+    check(span == ATOMIC_SPAN and span[0] % 3 == 0 and span[1] % 3 != 0,
+          f"shell sequence {ATOMIC_SEQ} spans {ATOMIC_SPAN}: /3 divides "
+          "the first key and not the second -- the reachable half-retime "
+          "the review found", f"span {span}")
+    check(refuses(scale_sequence_keytimes, st, ATOMIC_SEQ, 1, 3)
+          and encode(st) == ssk.payload,
+          "the refusal leaves the shell repr encoding to the SOURCE "
+          "bytes -- atomic, where the pre-fix writer had committed "
+          "66666 -> 22222 before raising")
 
 
 def section2(check, ar, stride):
@@ -698,11 +784,12 @@ def section3(check, led, ar, idt):
           "the row read back out of the rebuilt archive equals the source "
           "container (identity level: decompressed row payload, EXACT)")
     check(rows[ROW_ROOT]["comp"] == 0
-          and rows[ROW_ROOT]["size"] == WORM_CONTAINER != WORM_STORED,
+          and rows[ROW_ROOT]["size"] == WORM_CONTAINER,
           "the STORED form legitimately differs: compression 8 x "
           f"{WORM_STORED:,} B became stored x {WORM_CONTAINER:,} B -- "
           "datwrite writes uncompressed and no compression-8 encoder "
-          "exists (identity level: stored bytes, NOT claimed)")
+          "exists (identity level: stored bytes, NOT claimed; the old "
+          "!= sub-clause compared two literals and was struck)")
     check(chain_problems(rows) == [],
           "the nextStream chain survives the move intact: root(515) -> "
           "mid(1) -> tail(2817) -> 0, flags preserved",
@@ -732,12 +819,19 @@ def section3(check, led, ar, idt):
           "all three checksum rules hold after the move and no two "
           "reservations intersect")
 
-    # the checker's own failing control: a corrupted chain must be reported
-    bad = copy.deepcopy(rows)
-    bad[ROW_ROOT]["next"] = 9
-    check(chain_problems(bad) != [],
-          "CONTROL: the chain checker reports a corrupted nextStream -- a "
-          "'0 problems' that has never reported one is not a check")
+    # The checker's own failing control, ON THE DISK FORMAT (review
+    # upgrade): corrupt the rebuilt archive's actual MFT bytes -- root's
+    # nextStream and the mid row's flags -- and require the checker to
+    # report both through the real on-disk layout, not a mutated parse.
+    bad_raw = bytearray(raw)
+    struct.pack_into("<I", bad_raw, mft_off + ROW_ROOT * ENTRY_SIZE + 16, 9)
+    struct.pack_into("<H", bad_raw, mft_off + ROW_MID * ENTRY_SIZE + 14, 3)
+    probs = chain_problems(read_chain(bytes(bad_raw)))
+    check(len(probs) == 2,
+          "CONTROL: corrupting the archive's own MFT bytes (root "
+          "nextStream, mid flags) is reported, both faults by name -- a "
+          "'0 problems' that has never reported one is not a check",
+          "; ".join(probs))
 
 
 def main():
@@ -747,13 +841,16 @@ def main():
                          "(slow, ~25-45 min)")
     args = ap.parse_args()
 
-    # FLOOR: 66, MEASURED from the green default run of 2026-08-16 (stride
-    # 89, the study archive). --all runs 68: section 2 adds its two
-    # stride-1-only pins (the row-8316 anomaly check and the exact
-    # 21,420/14,571 population counts). Vault-less runs execute sections
-    # 0/0b/0c only -- MEASURED 32 checks, RED on the floor by design;
-    # --no-vault does not exist, the shortfall IS the report.
-    led = checks.Ledger("skeleton writer (U6)", floor=66)
+    # FLOOR: 69, MEASURED from the green default run of 2026-08-16 (stride
+    # 89, the study archive; 66 before the U6 review's fixes -- the
+    # atomicity checks and the shell span pin added four, the entailed
+    # order-control != check folded into its diff neighbour). --all runs
+    # 71: section 2 adds its two stride-1-only pins (the row-8316 anomaly
+    # check and the exact 21,420/14,571 population counts). Vault-less
+    # runs execute sections 0/0b/0c only -- MEASURED 33 checks, RED on the
+    # floor by design; --no-vault does not exist, the shortfall IS the
+    # report.
+    led = checks.Ledger("skeleton writer (U6)", floor=69)
     check = checks.adopt(led)
 
     import tempfile

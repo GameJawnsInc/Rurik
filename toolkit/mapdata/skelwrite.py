@@ -19,13 +19,17 @@ decoded values, because then it proves the typed layer is COMPLETE -- nothing
 the decoder names is lossy. So `extract()` deliberately returns a structure
 with NO reference to the source payload: typed regions exist only as numbers
 (header fields, sequence records, key times/tags, blk2C/blk48 records and
-their channel arrays, n40 sound events, n3E event track), and bytes survive
-only where the typed layer is genuinely opaque:
+their channel arrays, the n40 sound events' named fields, n3E event track),
+and bytes survive only where the typed layer is genuinely opaque:
 
   * the n14/n34 fixed-stride records and the n38/n52/n50/n54/n55/n56/n57
     var-arrays (elements NOT DECODED -- `skelfile.py`'s posture, kept);
-  * the n44 tail of the n40n44 region (n40's 18-byte bodies are typed;
-    n44's 12-byte records are not);
+  * the n44 tail of the n40n44 region (n44's 12-byte records are not
+    decoded);
+  * the 10-byte `raw_tail` of EACH n40 sound-event body -- a body is 8
+    typed bytes ({i32 time; u32 path_index}) plus 10 the typed layer has
+    not named, so on an n40-heavy file the raw tails dominate the carry
+    (the shell: 620 of its 1,179 carried bytes are 62 raw tails);
   * header bytes +0x09..+0x0B -- the parser provably never reads them
     (`studies/unitmodels/FINDINGS.md` §3.3) and U6's first measurement is
     that they are NOT zero (0x42 on the hatcher shell, 0x07 on the worm),
@@ -121,20 +125,17 @@ def extract(sk):
     for name in OPAQUE_BLOCKS:
         b = sk.block_bytes(name)
         t["opaque"][name] = bytes(b) if b is not None else b""
-    # The n40n44 span exists only when either count is non-zero, and
-    # `sound_events()` assumes it does -- so the n40 == n44 == 0 majority
-    # (every prop-control FA1) is guarded here rather than crashed on.
-    if h["n40"] or h["n44"]:
-        t["sound_events"] = sk.sound_events()
-        blob = sk.block_bytes("n40n44")
-        t["opaque"]["n44_tail"] = bytes(blob[h["n40"] * TERMS["n40_elem"]:])
-    else:
-        t["sound_events"] = []
-        t["opaque"]["n44_tail"] = b""
+    # sound_events() returns [] itself on the n40 == n44 == 0 majority
+    # since the U6 review's scoped skelfile fix; only the n44 tail's slice
+    # still needs the span guard (no span, no tail).
+    t["sound_events"] = sk.sound_events()
+    blob = sk.block_bytes("n40n44")
+    t["opaque"]["n44_tail"] = bytes(blob[h["n40"] * TERMS["n40_elem"]:]) \
+        if blob is not None else b""
     return t
 
 
-def _channel_bytes(ch, vfmt, vbytes, what):
+def _channel_bytes(ch, vfmt, what):
     """One times-prefix SoA channel back to bytes: N int32 times, N values."""
     times, vals = ch
     _need(len(times) == len(vals),
@@ -142,7 +143,8 @@ def _channel_bytes(ch, vfmt, vbytes, what):
     out = bytearray(struct.pack(f"<{len(times)}i", *times))
     for v in vals:
         out += struct.pack(vfmt, *v)
-    _need(len(out) == len(times) * (4 + vbytes), f"{what}: channel size")
+    # No length re-check here: the output's size is entailed by the two
+    # packs above, so asserting it was a check that cannot fail (review).
     return bytes(out)
 
 
@@ -205,11 +207,11 @@ def encode(t):
         w4 = len(a["aux"][0]) if a["aux"] else 0
         var += struct.pack("<3H", w0, w2, w4)
         if w0:
-            var += _channel_bytes(a["trans"], "<3f", 12, f"anim {i} trans")
+            var += _channel_bytes(a["trans"], "<3f", f"anim {i} trans")
         if w2:
-            var += _channel_bytes(a["rot"], "<4f", 16, f"anim {i} rot")
+            var += _channel_bytes(a["rot"], "<4f", f"anim {i} rot")
         if w4:
-            var += _channel_bytes(a["aux"], "<3f", 12, f"anim {i} aux")
+            var += _channel_bytes(a["aux"], "<3f", f"anim {i} aux")
     out += var
 
     # -- 4. n38 var-array (opaque, tiling-checked)
@@ -267,9 +269,9 @@ def encode(t):
         w2 = len(r["ch1"][0]) if r["ch1"] else 0
         var += struct.pack("<2H", w0, w2)
         if w0:
-            var += _channel_bytes(r["ch0"], "<3f", 12, f"track {i} ch0")
+            var += _channel_bytes(r["ch0"], "<3f", f"track {i} ch0")
         if w2:
-            var += _channel_bytes(r["ch1"], "<3f", 12, f"track {i} ch1")
+            var += _channel_bytes(r["ch1"], "<3f", f"track {i} ch1")
     out += var
 
     # -- 10..14. the five 8-byte var-arrays (opaque)
@@ -342,6 +344,15 @@ def scale_sequence_keytimes(t, seq_index, num, den=1):
     nothing else. (Spans of different sequences may overlap -- the worm has
     10 sequences over 3 keys -- so a scaled key can be another sequence's
     too; the return names table slots, not ownership.)
+
+    ATOMIC: the whole span is computed and validated BEFORE the
+    representation changes, so a refusal leaves `t` exactly as it was and
+    it still encodes to the source bytes. The first version wrote each key
+    as it went, and the U6 review found the reachable half-retime: the
+    shell's sequence 16 spans two keys [66666, 116666], and scaling by 1/3
+    refused on the second with the first already rewritten -- a repr that
+    still serialized, carrying half an experiment. This function is what
+    U7 fires, so partial states are refused BY CONSTRUCTION, not by care.
     """
     if not (isinstance(num, int) and isinstance(den, int) and den > 0):
         raise Unwritable("num/den must be ints, den > 0 -- key times are "
@@ -350,7 +361,7 @@ def scale_sequence_keytimes(t, seq_index, num, den=1):
     if not 0 <= seq_index < len(seqs):
         raise Unwritable(f"sequence {seq_index} of {len(seqs)}")
     lo, hi = seqs[seq_index]["lo"], seqs[seq_index]["hi"]
-    changed = []
+    staged, changed = [], []
     for k in range(lo, hi):
         v = t["key_times"][k]
         nv = v * num
@@ -360,9 +371,10 @@ def scale_sequence_keytimes(t, seq_index, num, den=1):
         nv //= den
         if not -0x80000000 <= nv <= 0x7FFFFFFF:
             raise Unwritable(f"key {k}: scaled time {nv} overflows int32")
+        staged.append(nv)
         if nv != v:
             changed.append(k)
-        t["key_times"][k] = nv
+    t["key_times"][lo:hi] = staged      # every key validated; commit once
     return changed
 
 

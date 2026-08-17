@@ -845,10 +845,14 @@ Every one of these, in the order they were written:
   near-identity quaternions make any misaligned window score ~35% on
   this anchor), and a deterministic link rotation that must violate the
   `<= own index` half (the `< n2C` half is a multiset property a shuffle
-  cannot refute). 90 checks against a floor of 82 (the mandatory core is
-  72; the corpus sabotage and order-control pools can legitimately empty
-  on another sample and declare skips). ~25 s; `--all` reads every head
-  row, ~25-45 min),
+  cannot refute). Since the U6 review's scoped skelfile fix, section 2
+  also regression-pins `sound_events()` answering [] on every sampled
+  no-n40n44-span file (the 72.5% majority class) -- it raised a
+  TypeError there until 2026-08-16, found by the U6 writer's first
+  strided corpus run. 91 checks against a floor of 83 (the mandatory
+  core is 73; the corpus sabotage and order-control pools can
+  legitimately empty on another sample and declare skips). ~25 s;
+  `--all` reads every head row, ~25-45 min),
   `toolkit/mapdata/test_mdlrefs.py` (the model's REFERENCE-LIST chunks
   `0xFA5/0xFA6/0xFA8/0xFAD/0xFAE` -- rung U3 of `studies/unitmodels/PLAN.md`,
   the one generic reader all five go through (`0x00796DE0`, exactly five call
@@ -3303,12 +3307,21 @@ Every one of these, in the order they were written:
   repr HAND-BUILT from the test's own literals -- never decoded from any
   payload, so a spans-concatenating encoder cannot even run on it -- must
   encode to `synth_anim()`'s exact bytes; the anchors' opaque-carry totals
-  are pinned at their measured values (worm 823 of 82,169 B, shell 559 of
-  29,495 -- ~1%: everything else is re-derived from typed values); and the
-  U7 seam (`scale_sequence_keytimes`, pure int32, inexactness and overflow
-  REFUSED) must land its modification at byte offsets PREDICTED before
-  serializing -- worm sequence 2 x2 flips exactly key 2's int32 slot, at
-  chunk and at container level, and re-decodes to the scaled time. U6's
+  are pinned by a RECURSIVE LEAF WALK over every bytes-like leaf in the
+  repr (worm 883 of 82,169 B = 1.07%, shell 1,179 of 29,495 = 4.00% --
+  the shell is n40-heavy, 620 of its bytes the 62 sound-event raw tails;
+  the declared/undeclared split is asserted as exactly 10 x n40 beside
+  it. The U6 review struck the first version, which summed the DECLARED
+  regions only and so could not catch a writer stashing bytes under a
+  new key); and the U7 seam (`scale_sequence_keytimes`, pure int32,
+  inexactness and overflow REFUSED, and since the review ATOMIC -- the
+  whole span validates before any key commits, with the refusal-then-
+  identity check on a two-key span pinning it: the pre-fix writer left
+  the shell's seq 16 half-retimed 66666 -> 22222 and still serialized)
+  must land its modification at EXACTLY the byte set the value change
+  predicts (set equality, not subset) -- worm sequence 2 x2 flips key
+  2's int32 slot, at chunk and at container level, and re-decodes to
+  the scaled time. U6's
   measured finding is recorded as a pin: header bytes +0x09..+0x0B, which
   the parser never reads, are NOT zero (shell 0x42, worm 0x07; 5,208 of
   14,571 corpus FA1s non-zero, 39 distinct patterns), so the typed layer
@@ -3333,16 +3346,21 @@ Every one of these, in the order they were written:
   (>= 16): the 515 -> 1 -> 2817 `alloc.nextStream` chain, whose survival
   is the load-bearing check because U7's kill/keep names the untouched
   mid/tail rows as prime suspects -- after the move the chain links, the
-  flags, and both partners' bytes are unchanged (corrupted-chain control
-  beside it), the file-id table still names the same row, all three
-  checksum rules hold, and no two reservations intersect. The recorded
-  WALL is exhibited, not just cited: `datwrite.replace` refuses the
-  129,368-B payload naming the relocation, and `datmove` -- the verb built
-  for exactly that refusal -- succeeds beside it. Floor 66 MEASURED from
-  the green default run; --all runs 68, its two stride-1-only
-  population pins added; vault-less runs
-  execute the synthetic sections only, 32 checks plus a declared skip, RED
-  on the floor by design -- and the first vault-less run DIED with no
+  flags, and both partners' bytes are unchanged (the failing control
+  corrupts the rebuilt archive's OWN MFT bytes -- root nextStream and
+  mid flags -- and requires both faults reported by name through the
+  real on-disk layout, the review's upgrade over mutating a parse), the
+  file-id table still names the same row, all three checksum rules hold,
+  and no two reservations intersect. The recorded WALL is exhibited, not
+  just cited: `datwrite.replace` refuses the 129,368-B payload naming
+  the relocation, and `datmove` -- the verb built for exactly that
+  refusal -- succeeds beside it. The resolve_outdir delegation is proven
+  by monkeypatch (patching mapexport's changes skelwrite's answer),
+  refutable where the struck docstring-prose check was not. Floor 69
+  MEASURED from the green default run (66 pre-review); --all runs 71,
+  its two stride-1-only population pins added; vault-less runs execute
+  the synthetic sections only, 33 checks plus a declared skip, RED on
+  the floor by design -- and the first vault-less run DIED with no
   verdict because `require_dir` raises SystemExit past `except Exception`,
   the exact unguarded-exception failure the models-arc review named, now
   guarded and commented. ~40 s default; nothing outside the vault is ever
