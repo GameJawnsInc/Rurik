@@ -1507,7 +1507,24 @@ sorted for the client's `lower_bound`, and the FA8 list is positional so a link 
 appended rather than inserted — so the test inserts at the front, middle and end of the
 table and unsorts it by hand to prove the refusal fires. 30 checks, floor 30.
 
-**NOT ESTABLISHED, and it is the whole remaining risk: no client has been launched.**
+**THE RUN HAPPENED, 2026-08-17, and the client ACCEPTS the addition.** Study §9.3c.
+`RUN VERDICT: PASS (target: map)`, exit 0, eight of eight capture-derived checkpoints, body
+in the map at t+16.3s, **no `MdlLoad`/`MdlSeq`/`MdlAnim` assert**. The retail client loads an
+archive carrying a **16th FA8 link and a 243-record sequence table**, with the relocated
+29,831 B **stored** shell and a newly allocated row at file id 389632. Every named rejection
+risk for the additive path is REFUTED, and A4's criterion is met **at the client**.
+
+**What is NOT settled is whether our record was ever PICKED.** The owner's report —
+*"sometimes it feels altered but I'm not sure"* — is not a verdict, and that is the
+experiment's fault: the variant sat on **1 key of 224** and its content was a duplicate of a
+working file, so even when picked it looks plausible. Worse, `--shots` skipped **every**
+screenshot (`client not foreground`), so no measurable record exists. **Next run: scale the
+linked file's node bases and attach the variant to every single-variant key** — U7 proved
+that changing SHAPE is unmissable where changing timing is not. Standing instruction from the
+owner, adopted: spawn anything to be looked at **~150u to the player's left or right**, never
+in front, because the player model occludes it.
+
+**Previously recorded as the remaining risk, now closed by the run above:**
 Everything above is archive-legal and self-consistent, which is exactly the state the two
 dangerous defects would also produce. `datcheck.py` has zero references to compression
 codes and nothing we own can refute a conforming-but-wrong result. **The client is the

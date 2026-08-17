@@ -885,6 +885,53 @@ It is no longer a spare — it is USED and named in the file-id table — so the
 allocator's LIFO spare stack cannot hand it out again. Not a conflict, but the
 next diff of that archive will show a row that document already discusses.
 
+### 9.3c THE RUN HAPPENED — 2026-08-17. The client ACCEPTS the addition. The visual half is UNRESOLVED
+
+**Owner-driven, watched remotely over RustDesk. `RUN VERDICT: PASS (target: map)`,
+exit 0.** Capture-derived checkpoints, all eight green:
+
+```
+client: build 38797, 2026-07-29_221c13772c7a
+        (chosen by BUILD and name, never by mtime; skipped 2026-08-13_64fae3b1369b)
+cage:   ours build, cleared for 127.0.0.1
+[PASS] t+ 14.5s  keyed / PORTAL_ACCOUNT_LOGIN / login accepted / game instance
+[PASS] t+ 15.8s  client requested its spawn
+[PASS] t+ 16.3s  body is in the map
+```
+
+**WHAT IS SETTLED, and it is the rung's whole point.** The retail client **loads an
+archive carrying a 16th FA8 link and a 243-record sequence table, reaches the map, and
+spawns**, with **no `MdlLoad`/`MdlSeq`/`MdlAnim` assert and no crash**. The hatcher rendered
+and animated throughout. Every named rejection risk for the additive path is **REFUTED**:
+the 16th link is accepted, the enlarged sequence table is accepted, the relocated 29,831 B
+**stored** shell is accepted, and the newly allocated row at file id 389632 resolves. A4's
+acceptance criterion is met **at the client**, not merely on disk.
+
+**WHAT IS NOT SETTLED.** Whether our record was ever *picked*. The owner's report is *"mostly
+the hatcher doing the raised-arm cast animation; sometimes it feels altered but I'm not sure"*
+— which is **not a verdict**, and the fault is the experiment's, not the observer's.
+
+**Two design errors, both mine, both recorded so the next run does not repeat them.**
+
+1. **The signal was too small to see.** The variant sat on **1 key of 224**, so the creature
+   had to happen to play that one animation, and the replacement was a *duplicate of another
+   working file* — motion that looks broadly plausible even when picked. U7 made the same
+   mistake in the opposite direction and the fix is known: **change SHAPE, not timing or
+   motion.** Scaling every node base is what produced U7's one-word report, *"deformed"*.
+2. **The machine-readable half was lost.** `--shots` skipped **every** screenshot with
+   `client not foreground`, so nothing was captured to measure against. A run whose visual
+   evidence rests only on an impression has no evidence. **Check the shots actually landed.**
+
+**Owner's instruction for every future visual rung, adopted:** spawn anything that must be
+looked at **~150 units to the LEFT or RIGHT of the player, never in front** — the player's
+own character model occludes it.
+
+**THE NEXT RUN, designed but NOT run** (the session was stopped for RustDesk lag): make the
+linked file a copy whose **node bases are scaled**, and attach the variant to **every
+single-variant key** rather than one. Then whatever the creature plays, roughly half of
+plays are ours and the difference is a gross deformation rather than a nuance. That is a
+yes/no a viewer can call in one second over a laggy link.
+
 ### 9.4 The run, when it is authorized
 
 Written now so the design is fixed before anyone is at the keyboard, per the standing rule
