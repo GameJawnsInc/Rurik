@@ -15,12 +15,22 @@ One mechanic bites both runs: **the Hero window does not live-refresh.** A
 panel open while a packet lands keeps showing the old state. Close and reopen
 it at every read point.
 
+**Both runs must pass `--map 449`** (Kamadan, our authored area). The first
+attempt (2026-08-16) was refused by the content-id preflight: maps 146/148
+currently load from NO client archive in the vault — the 38797 run dirs hold
+`0x1B97D` only in its bit-31 mid-replacement spelling, and the 38833 copy
+binds a file the terrain arc rewrote (`studies/quests/AUTHORING.md` §"free
+riders", where fixing it is already named prior work). Map 449 agrees across
+both archives — preflight verified green with `served={449}` against the
+exact archive the harness selects. Kamadan is an outpost in the client's own
+area table, so the title-display step keeps its staging-area chance.
+
 ---
 
 ## Run 1 — `faction_max`
 
 ```bash
-python toolkit/harness/session.py --keep-open --shots 5 --game-args '--probe faction_max'
+python toolkit/harness/session.py --keep-open --shots 5 --game-args '--probe faction_max --map 449'
 ```
 
 Ignore the "a --probe is running in a world with NO HOSTILE" warning — this
@@ -56,12 +66,13 @@ directory the harness prints, then close the client.
 ## Run 2 — `title_track`
 
 ```bash
-python toolkit/harness/session.py --keep-open --shots 5 --game-args '--probe title_track'
+python toolkit/harness/session.py --keep-open --shots 5 --game-args '--probe title_track --map 449'
 ```
 
-**Do not pass `--map`.** The default drops the character in Ascalon City — an
-outpost, i.e. a *staging area*, which is the one place GWW says a displayed
-title renders under a nameplate, so step 4 gets its best chance for free.
+Kamadan is an outpost — a *staging area*, which is the one place GWW says a
+displayed title renders under a nameplate — so step 4 keeps its best chance.
+(The original sheet said to use the default map, Ascalon City; that map
+cannot load from any current client archive, see above.)
 
 Steps land at ~+3s (`0x00F3` tier seed — nothing visible predicted), ~+11s
 (`0x00F6` track for title 7), ~+21s (`0x00F5` update to 6000), ~+31s
